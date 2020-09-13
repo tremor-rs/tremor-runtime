@@ -28,94 +28,72 @@ fn gen_doc(
     dest_path: &Option<String>,
     path: &Path,
 ) -> Result<()> {
-    if let Some(rel_path) = *rel_path {
-        if let Some(dest_path) = dest_path {
-            let mut raw = String::new();
-            let mut input = crate::open_file(path, None)?;
-            input.read_to_string(&mut raw)?;
+    let rel_path = rel_path.ok_or_else(|| Error::from("Bad relative path"))?;
+    let dest_path = dest_path
+        .as_ref()
+        .ok_or_else(|| Error::from("Bad destination path"))?;
 
-            #[allow(unused_mut)]
-            let mut reg: Registry = registry::registry();
+    let mut raw = String::new();
+    let mut input = crate::open_file(path, None)?;
+    input.read_to_string(&mut raw)?;
 
-            let mp = load_module_path();
+    #[allow(unused_mut)]
+    let mut reg: Registry = registry::registry();
 
-            match rel_path.to_string_lossy().to_string().rsplit('/').next() {
-                Some(name) => {
-                    let name = name.replace(".tremor", "");
-                    if let Some(path) = path.to_str() {
-                        match Script::parse(&mp, &path, raw, &reg) {
-                            Ok(runnable) => {
-                                let docs = runnable.docs();
-                                let consts = &docs.consts;
-                                let fns = &docs.fns;
+    let mp = load_module_path();
+    let name = rel_path
+        .to_string_lossy()
+        .to_string()
+        .rsplit('/')
+        .next()
+        .ok_or_else(|| Error::from("Could not isolate relative path"))?
+        .replace(".tremor", "");
 
-                                let mut gen = String::new();
-                                if let Some(m) = &docs.module {
-                                    gen.push_str(&m.print_with_name(&name));
-                                }
-                                if !consts.is_empty() {
-                                    gen.push_str("## Constants");
-                                    for c in consts {
-                                        gen.push_str(&c.to_string())
-                                    }
-                                }
+    let path = path.to_str().ok_or_else(|| Error::from("Bad path"))?;
 
-                                if !fns.is_empty() {
-                                    gen.push_str("## Functions");
-                                    for f in fns {
-                                        gen.push_str(&f.to_string())
-                                    }
-                                }
+    let runnable = Script::parse(&mp, &path, raw, &reg)?;
+    let docs = runnable.docs();
+    let consts = &docs.consts;
+    let fns = &docs.fns;
 
-                                if is_interactive {
-                                    println!("{}", &gen);
-                                }
-
-                                let mut dest_file = PathBuf::new();
-                                dest_file.push(dest_path);
-                                dest_file.push(&rel_path);
-
-                                if let Some(parent) = dest_file.parent() {
-                                    if let Err(e) =
-                                        std::fs::create_dir_all(parent.to_string_lossy().as_ref())
-                                    {
-                                        return Err(format!(
-                                            "Unable to generate output module folder: {}",
-                                            &e.to_string()
-                                        )
-                                        .into());
-                                    };
-                                    if let Err(e) = std::fs::write(
-                                        &dest_file.to_string_lossy().replace(".tremor", ".md"),
-                                        &gen,
-                                    ) {
-                                        return Err(format!(
-                                            "Unable to generate output: {}",
-                                            &e.to_string()
-                                        )
-                                        .into());
-                                    }
-                                }
-
-                                Ok(())
-                            }
-                            Err(_error) => {
-                                // ALLOW: main.rs
-                                std::process::exit(1);
-                            }
-                        }
-                    } else {
-                        Err("Bad path".into())
-                    }
-                }
-                None => Err("Could not isolate relative path".into()),
-            }
-        } else {
-            Err("Bad destination path".into())
-        }
-    } else {
-        Err("Bad relative path".into())
+    let mut gen = String::new();
+    if let Some(m) = &docs.module {
+        gen.push_str(&m.print_with_name(&name));
     }
+    if !consts.is_empty() {
+        gen.push_str("## Constants");
+        for c in consts {
+            gen.push_str(&c.to_string())
+        }
+    }
+
+    if !fns.is_empty() {
+        gen.push_str("## Functions");
+        for f in fns {
+            gen.push_str(&f.to_string())
+        }
+    }
+
+    if is_interactive {
+        println!("{}", &gen);
+    }
+
+    let mut dest_file = PathBuf::new();
+    dest_file.push(dest_path);
+    dest_file.push(&rel_path);
+    dest_file.set_extension("md");
+    let parent = dest_file.parent().and_then(Path::to_str).ok_or_else(|| {
+        Error::from(format!(
+            "Could not get output path for {}",
+            dest_file.to_string_lossy()
+        ))
+    })?;
+    std::fs::create_dir_all(parent)
+        .map_err(|e| Error::from(format!("Unable to generate output module folder: {}", e)))?;
+    std::fs::write(dest_file, &gen)
+        .map_err(|e| Error::from(format!("Unable to generate output: {}", e)))?;
+
+    Ok(())
 }
 
 pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
