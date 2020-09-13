@@ -32,6 +32,6 @@
 		"--memory-reservation",
 		"12g",
 		"--security-opt",
-		"seccomp=${localWorkspaceFolder}/.devcontainer/seccomp_perf.json"
+		"seccomp=unconfined"
 	]
 }
