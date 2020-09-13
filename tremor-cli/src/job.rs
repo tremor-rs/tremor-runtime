@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::Result;
+use crate::errors::{Error, Result};
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::Path;
@@ -22,22 +22,37 @@ use std::sync::mpsc::TryRecvError;
 use std::sync::mpsc;
 use std::{env, process, thread};
 
-pub(crate) fn which<P>(exe_name: P) -> Option<String>
+pub(crate) fn which<P>(exe_name: P) -> Result<String>
 where
     P: AsRef<Path>,
 {
-    env::var_os("PATH").and_then(|paths| {
+    let name: &Path = exe_name.as_ref();
+    let name = name.to_string_lossy();
+    let e = Error::from(format!("Unable to find suitable `{}` binary on path", name));
+    let path = env::var_os("PATH").and_then(|paths| {
         env::split_paths(&paths)
             .filter_map(|dir| {
                 let path = dir.join(&exe_name);
                 if path.is_file() {
-                    Some(path.to_string_lossy().to_string())
+                    Some(path)
                 } else {
                     None
                 }
             })
             .next()
-    })
+    });
+    if path.is_none() && name == "tremor" {
+        Some(env::current_exe().map_err(|e| {
+            Error::from(format!(
+                "Unable to find suitable `{}` binary on path: {}",
+                name, e
+            ))
+        })?)
+    } else {
+        path
+    }
+    .and_then(|p| p.as_path().to_str().map(String::from))
+    .ok_or_else(|| e)
 }
 
 /// Read until EOF.

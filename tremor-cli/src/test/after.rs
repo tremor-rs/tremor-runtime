@@ -26,11 +26,9 @@ pub(crate) struct After {
 
 impl After {
     pub(crate) fn spawn(&self, _base: &str) -> Result<Option<TargetProcess>> {
-        let cmd = job::which(&self.cmd).ok_or_else(|| {
-            Error::from(format!("Could not find executable {} on path", &self.cmd,))
-        });
+        let cmd = job::which(&self.cmd)?;
 
-        let mut process = job::TargetProcess::new_with_stderr(&cmd?, &self.args)?;
+        let mut process = job::TargetProcess::new_with_stderr(&cmd, &self.args)?;
         process.wait_with_output()?;
         Ok(Some(process))
     }
