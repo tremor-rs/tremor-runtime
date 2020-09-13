@@ -75,52 +75,43 @@ impl TargetProcess {
 
     /// Spawn target process and pipe IO
     fn new(cmd: &str, args: &[String]) -> Result<Self> {
-        let target_cmd = Command::new(cmd)
+        let mut target_cmd = Command::new(cmd)
             .args(args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
-            .spawn()
-            .ok();
+            .spawn()?;
 
-        if let Some(mut target_cmd) = target_cmd {
-            let stdout = target_cmd.stdout.take();
-            let stderr = target_cmd.stderr.take();
+        let stdout = target_cmd.stdout.take();
+        let stderr = target_cmd.stderr.take();
 
-            if let Some(stdout) = stdout {
-                if let Some(stderr) = stderr {
-                    let (stdout_tx, stdout_rx) = mpsc::channel();
-                    let (stderr_tx, stderr_rx) = mpsc::channel();
+        if let Some(stdout) = stdout {
+            if let Some(stderr) = stderr {
+                let (stdout_tx, stdout_rx) = mpsc::channel();
+                let (stderr_tx, stderr_rx) = mpsc::channel();
 
-                    let stdout_thread = Some(thread::spawn(move || -> Result<()> {
-                        // Redirect target process stdout
-                        readlines_until_eof(stdout, |resp| {
-                            stdout_tx.send(resp).map_err(|e| e.into())
-                        })
-                    }));
+                let stdout_thread = Some(thread::spawn(move || -> Result<()> {
+                    // Redirect target process stdout
+                    readlines_until_eof(stdout, |resp| stdout_tx.send(resp).map_err(|e| e.into()))
+                }));
 
-                    let stderr_thread = Some(thread::spawn(move || -> Result<()> {
-                        // Redirect target process stderr
-                        readlines_until_eof(stderr, |resp| {
-                            stderr_tx.send(resp).map_err(|e| e.into())
-                        })
-                    }));
+                let stderr_thread = Some(thread::spawn(move || -> Result<()> {
+                    // Redirect target process stderr
+                    readlines_until_eof(stderr, |resp| stderr_tx.send(resp).map_err(|e| e.into()))
+                }));
 
-                    Ok(Self {
-                        process: target_cmd,
-                        stdout_thread,
-                        stderr_thread,
-                        stdout_receiver: stdout_rx,
-                        stderr_receiver: stderr_rx,
-                    })
-                } else {
-                    Err("Unable to create error stream from target process".into())
-                }
+                Ok(Self {
+                    process: target_cmd,
+                    stdout_thread,
+                    stderr_thread,
+                    stdout_receiver: stdout_rx,
+                    stderr_receiver: stderr_rx,
+                })
             } else {
-                Err("Unable to create output stream from target process".into())
+                Err("Unable to create error stream from target process".into())
             }
         } else {
-            Err("Unable to create target process".into())
+            Err("Unable to create output stream from target process".into())
         }
     }
 

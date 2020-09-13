@@ -21,8 +21,7 @@ use tremor_script::highlighter::{Highlighter, Term as TermHighlighter};
 
 macro_rules! fg_bold {
     ($h:ident, $c:ident) => {
-        $h.set_color(ColorSpec::new().set_fg(Some(Color::$c)).set_bold(true))
-            .ok();
+        $h.set_color(ColorSpec::new().set_fg(Some(Color::$c)).set_bold(true))?;
     };
 }
 

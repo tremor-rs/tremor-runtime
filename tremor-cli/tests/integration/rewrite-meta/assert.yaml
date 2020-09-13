@@ -1,7 +1,8 @@
 status: 0
 name: Query exit with non zero status code
 asserts:
-  - source: ./tests/integration/rewrite-meta/events.log
+  - source: events.log
+    equals_file: expected.json
     contains:
       - |
         {"about":"Excepteur consectetur veniam pariatur elit

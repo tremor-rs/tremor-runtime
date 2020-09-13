@@ -54,7 +54,7 @@ impl Ingress {
 
         let buffer: Box<dyn BufRead> = match matches.value_of("INFILE") {
             None | Some("-") => Box::new(BufReader::new(io::stdin())),
-            Some(data) => Box::new(BufReader::new(File::open(data)?)),
+            Some(data) => Box::new(BufReader::new(crate::open_file(data, None)?)),
         };
 
         let codec = tremor_runtime::codec::lookup(codec_decoder);

@@ -16,7 +16,6 @@ use crate::errors::{Error, Result};
 use crate::util::{get_source_kind, SourceKind};
 use clap::ArgMatches;
 use lexer::Tokenizer;
-use std::fs::File;
 use std::io::Read;
 use std::io::Write;
 use termcolor::{Color, ColorSpec};
@@ -233,13 +232,8 @@ where
     W: Highlighter,
 {
     let mut raw = String::new();
-    let input = File::open(&src);
-    if let Err(e) = input {
-        eprintln!("Error processing file {}: {}", &src, e);
-        // ALLOW: main.rs
-        std::process::exit(1);
-    }
-    input?.read_to_string(&mut raw)?;
+    let mut input = crate::open_file(&src, None)?;
+    input.read_to_string(&mut raw)?;
     println!();
     raw.push('\n'); // Ensure last token is whitespace
 
@@ -279,13 +273,8 @@ where
     W: Highlighter,
 {
     let mut raw = String::new();
-    let input = File::open(&src);
-    if let Err(e) = input {
-        eprintln!("Error processing file {}: {}", &src, e);
-        // ALLOW: main.rs
-        std::process::exit(1);
-    }
-    input?.read_to_string(&mut raw)?;
+    let mut input = crate::open_file(&src, None)?;
+    input.read_to_string(&mut raw)?;
     println!();
     raw.push('\n'); // Ensure last token is whitespace
 

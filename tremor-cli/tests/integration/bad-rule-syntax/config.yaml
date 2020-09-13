@@ -2,7 +2,7 @@ onramp:
   - id: in
     type: file
     config:
-      source: "tests/integration/empty_line/in.json.xz"
+      source: "tests/integration/bad-rule-syntax/in.json.xz"
       close_on_done: true
       sleep_on_done: 500
 
@@ -10,7 +10,7 @@ offramp:
   - id: out
     type: file
     config:
-      file: "tests/integration/empty_line/events.log"
+      file: "tests/integration/bad-rule-syntax/events.log"
 
 pipeline:
   - id: main
@@ -24,18 +24,17 @@ pipeline:
         op: runtime::tremor
         config:
           script: |
-            let $class = "default";
-            let $rate = 100;
-            event;
-      - id: b
-        op: grouper::bucket
+            42bad {{
     links:
       in: [r]
-      r: [b]
-      b: [out]
+      r: [out]
 
 binding:
   - id: test
     links:
       "/onramp/in/{instance}/out": ["/pipeline/main/{instance}/in"]
       "/pipeline/main/{instance}/out": ["/offramp/out/{instance}/in"]
+
+mapping:
+  /binding/test/1:
+    instance: "1"

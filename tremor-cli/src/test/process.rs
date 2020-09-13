@@ -71,12 +71,14 @@ pub(crate) fn run_process(
         let fg = std::thread::spawn(move || -> Result<std::process::ExitStatus> {
             let fg_out_file = format!("{}/fg.out.log", bench_rootx.clone());
             let fg_err_file = format!("{}/fg.err.log", bench_rootx.clone());
-            process.tail(&fg_out_file, &fg_err_file).ok();
+            process.tail(&fg_out_file, &fg_err_file)?;
             Ok(process.wait_with_output()?)
         });
 
         std::thread::spawn(move || {
-            before.capture(before_process).ok();
+            if let Err(e) = before.capture(before_process) {
+                eprintln!("Failed to capture input from before thread: {}", e);
+            };
         });
 
         match fg.join() {
@@ -88,19 +90,20 @@ pub(crate) fn run_process(
 
         // As our primary process is finished, check for after hooks
         let mut after = after::AfterController::new(&bench_root);
-        after.spawn().ok();
-        after::update_evidence(&bench_root, &mut evidence).ok();
+        after.spawn()?;
+        after::update_evidence(&bench_root, &mut evidence)?;
         // Assertions
         let assert_str = &format!("{}/assert.yaml", bench_root);
-        let assert_yaml = assert::load_assert(assert_str);
-        let report = match assert_yaml {
-            Ok(assert_yaml) => Some(assert::process(
+        let report = if Path::new(assert_str).is_file() {
+            let assert_yaml = assert::load_assert(assert_str)?;
+            Some(assert::process(
                 &fg_out_file,
                 &fg_err_file,
                 process_status?.code(),
                 &assert_yaml,
-            )?),
-            _not_found => None,
+            )?)
+        } else {
+            None
         };
         evidence.insert("test: stdout".to_string(), slurp_string(&fg_out_file)?);
         evidence.insert("test: stderr".to_string(), slurp_string(&fg_err_file)?);

@@ -101,7 +101,7 @@ impl BeforeController {
         match before_json {
             Ok(before_json) => {
                 let ret = before_json.spawn();
-                before_json.block_on().ok();
+                before_json.block_on()?;
                 ret
             }
             _not_found => Ok(None),
@@ -113,7 +113,7 @@ impl BeforeController {
         let bg_out_file = format!("{}/bg.out.log", &root);
         let bg_err_file = format!("{}/bg.err.log", &root);
         if let Some(mut process) = process {
-            process.tail(&bg_out_file, &bg_err_file).ok();
+            process.tail(&bg_out_file, &bg_err_file)?;
         };
         Ok(())
     }

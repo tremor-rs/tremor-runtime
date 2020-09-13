@@ -1,7 +1,8 @@
 status: 0
 name: Test string codec
 asserts:
-  - source: tests/integration/string-codec/events.log
+  - source: events.log
+    equals_file: expected.json
     contains:
       - |
         {"first":"Sander","last":"Daelman"}

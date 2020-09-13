@@ -40,3 +40,8 @@ binding:
     links:
       "/onramp/in/{instance}/out": ["/pipeline/main/{instance}/in"]
       "/pipeline/main/{instance}/out": ["/offramp/out/{instance}/in"]
+
+mapping:
+  /binding/test/1:
+    instance: "1"
+      

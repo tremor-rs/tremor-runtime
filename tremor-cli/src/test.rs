@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::{ErrorKind, Result};
+use crate::errors::{Error, ErrorKind, Result};
 use crate::job;
 use crate::report;
 use crate::status;
@@ -64,8 +64,8 @@ fn suite_bench(
             if let (_matched, true) = by_tag.matches(&tags) {
                 status::h1("Benchmark", &format!("Running {}", &basename(&bench_root)))?;
                 let test_report = process::run_process("bench", root, by_tag)?;
-                status::duration(test_report.duration).ok();
-                status::tags(&by_tag, Some(&tags)).ok();
+                status::duration(test_report.duration)?;
+                status::tags(&by_tag, Some(&tags))?;
                 suite.push(test_report);
                 stats.pass(); // FIXME invent a better way of capturing benchmark status
             } else {
@@ -107,9 +107,9 @@ fn suite_integration(
                 )?;
                 let test_report = process::run_process("integration", root, by_tag)?;
                 stats.merge(&test_report.stats);
-                status::stats(&test_report.stats).ok();
-                status::duration(test_report.duration).ok();
-                status::tags(&by_tag, Some(&tags)).ok();
+                status::stats(&test_report.stats)?;
+                status::duration(test_report.duration)?;
+                status::tags(&by_tag, Some(&tags))?;
                 suite.push(test_report);
             } else {
                 stats.skip();
@@ -120,7 +120,7 @@ fn suite_integration(
             }
         }
 
-        status::rollups("\nIntegration", &stats).ok();
+        status::rollups("\nIntegration", &stats)?;
 
         Ok((stats, suite))
     } else {
@@ -144,12 +144,12 @@ fn suite_unit(
         for suite in suites {
             let report = unit::run_suite(&suite.path(), by_tag)?;
             stats.merge(&report.stats);
-            status::stats(&report.stats).ok();
-            status::duration(report.duration).ok();
+            status::stats(&report.stats)?;
+            status::duration(report.duration)?;
             reports.push(report);
         }
 
-        status::rollups("\nUnit", &stats).ok();
+        status::rollups("\nUnit", &stats)?;
 
         Ok((stats, reports))
     } else {
@@ -186,7 +186,7 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
     let found = GlobWalkerBuilder::new(Path::new(&path).canonicalize()?, "meta.json")
         .case_insensitive(true)
         .build()
-        .ok();
+        .map_err(|e| Error::from(format!("failed to walk directory `{}`: {}", path, e)))?;
 
     let mut reports = HashMap::new();
     let mut bench_stats = stats::Stats::new();
@@ -195,78 +195,68 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
     let mut integration_stats = stats::Stats::new();
     let mut elapsed = 0;
 
-    if let Some(found) = found {
-        let found = found.filter_map(std::result::Result::ok);
-        let start = nanotime();
-        for meta in found {
-            let root = meta.path().parent();
-            if let Some(root) = root {
-                if let Ok(meta_str) = slurp_string(&meta.path().to_string_lossy()) {
-                    let meta: Option<Meta> = serde_json::from_str(&meta_str).ok();
-                    if let Some(meta) = meta {
-                        if meta.kind == TestKind::Bench
-                            && (kind == TestKind::All || kind == TestKind::Bench)
-                        {
-                            let (stats, test_reports) = suite_bench(root, &meta, &filter_by_tags)?;
-                            reports.insert("bench".to_string(), test_reports);
-                            bench_stats.merge(&stats);
-                            status::hr().ok();
-                        }
+    let found = found.filter_map(std::result::Result::ok);
+    let start = nanotime();
+    for meta in found {
+        if let Some(root) = meta.path().parent() {
+            let mut meta_str = slurp_string(&meta.path().to_string_lossy())?;
+            let meta: Meta = simd_json::from_str(meta_str.as_mut_str())?;
 
-                        if meta.kind == TestKind::Integration
-                            && (kind == TestKind::All || kind == TestKind::Integration)
-                        {
-                            let (stats, test_reports) =
-                                suite_integration(root, &meta, &filter_by_tags)?;
-                            reports.insert("integration".to_string(), test_reports);
-                            integration_stats.merge(&stats);
-                            status::hr().ok();
-                        }
+            if meta.kind == TestKind::Bench && (kind == TestKind::All || kind == TestKind::Bench) {
+                let (stats, test_reports) = suite_bench(root, &meta, &filter_by_tags)?;
+                reports.insert("bench".to_string(), test_reports);
+                bench_stats.merge(&stats);
+                status::hr()?;
+            }
 
-                        if meta.kind == TestKind::Command
-                            && (kind == TestKind::All || kind == TestKind::Command)
-                        {
-                            let (stats, test_reports) =
-                                command::suite_command(root, &meta, &filter_by_tags)?;
-                            reports.insert("api".to_string(), test_reports);
-                            cmd_stats.merge(&stats);
-                            status::hr().ok();
-                        }
+            if meta.kind == TestKind::Integration
+                && (kind == TestKind::All || kind == TestKind::Integration)
+            {
+                let (stats, test_reports) = suite_integration(root, &meta, &filter_by_tags)?;
+                reports.insert("integration".to_string(), test_reports);
+                integration_stats.merge(&stats);
+                status::hr()?;
+            }
 
-                        if meta.kind == TestKind::Unit
-                            && (kind == TestKind::All || kind == TestKind::Unit)
-                        {
-                            let (stats, test_reports) = suite_unit(root, &meta, &filter_by_tags)?;
-                            reports.insert("unit".to_string(), test_reports);
-                            unit_stats.merge(&stats);
-                            status::hr().ok();
-                        }
-                    }
-                }
+            if meta.kind == TestKind::Command
+                && (kind == TestKind::All || kind == TestKind::Command)
+            {
+                let (stats, test_reports) = command::suite_command(root, &meta, &filter_by_tags)?;
+                reports.insert("api".to_string(), test_reports);
+                cmd_stats.merge(&stats);
+                status::hr()?;
+            }
+
+            if meta.kind == TestKind::Unit && (kind == TestKind::All || kind == TestKind::Unit) {
+                let (stats, test_reports) = suite_unit(root, &meta, &filter_by_tags)?;
+                reports.insert("unit".to_string(), test_reports);
+                unit_stats.merge(&stats);
+                status::hr()?;
             }
         }
+
         elapsed = nanotime() - start;
     }
 
-    status::hr().ok();
-    status::hr().ok();
-    status::rollups("All Benchmark Stats", &bench_stats).ok();
-    status::rollups("All Integration Stats", &integration_stats).ok();
-    status::rollups("All Command Stats", &cmd_stats).ok();
-    status::rollups("All Unit Stats", &unit_stats).ok();
+    status::hr()?;
+    status::hr()?;
+    status::rollups("All Benchmark Stats", &bench_stats)?;
+    status::rollups("All Integration Stats", &integration_stats)?;
+    status::rollups("All Command Stats", &cmd_stats)?;
+    status::rollups("All Unit Stats", &unit_stats)?;
     let mut all_stats = stats::Stats::new();
     all_stats.merge(&bench_stats);
     all_stats.merge(&integration_stats);
     all_stats.merge(&cmd_stats);
     all_stats.merge(&unit_stats);
-    status::rollups("Total Stats", &all_stats).ok();
+    status::rollups("Total Stats", &all_stats)?;
     let mut stats_map = HashMap::new();
     stats_map.insert("all".to_string(), all_stats.clone());
     stats_map.insert("bench".to_string(), bench_stats);
     stats_map.insert("integration".to_string(), integration_stats);
     stats_map.insert("command".to_string(), cmd_stats);
     stats_map.insert("unit".to_string(), unit_stats);
-    status::total_duration(elapsed).ok();
+    status::total_duration(elapsed)?;
 
     let test_run = report::TestRun {
         metadata: report::metadata(),
@@ -275,12 +265,13 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
         reports,
         stats: stats_map,
     };
-    let file = File::create("report.txt").ok();
-    if let Some(mut file) = file {
-        if let Ok(result) = serde_json::to_string(&test_run) {
-            file.write_all(&result.as_bytes()).ok();
-        }
-    };
+    let mut file = File::create("report.txt")
+        .map_err(|e| Error::from(format!("Failed to create `report.txt`: {}", e)))?;
+
+    if let Ok(result) = serde_json::to_string(&test_run) {
+        file.write_all(&result.as_bytes())
+            .map_err(|e| Error::from(format!("Failed to create `report.txt`: {}", e)))?;
+    }
 
     if all_stats.fail > 0 {
         Err(ErrorKind::TestFailures(all_stats).into())
