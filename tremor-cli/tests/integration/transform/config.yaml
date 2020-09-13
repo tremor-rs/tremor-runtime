@@ -19,6 +19,10 @@ pipeline:
       outputs:
         - out
         - error
+    links:
+      in: [runtime]
+      runtime: [out]
+      runtime/err: [error]
     nodes:
       - id: runtime
         op: runtime::tremor
@@ -999,3 +1003,10 @@ binding:
     links:
       "/onramp/in/{instance}/out": ["/pipeline/main/{instance}/in"]
       "/pipeline/main/{instance}/out": ["/offramp/out/{instance}/in"]
+      "/pipeline/main/{instance}/error": ["/offramp/out/{instance}/in"]
+
+
+mapping:
+  /binding/test/1:
+    instance: "1"
+      

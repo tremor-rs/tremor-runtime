@@ -20,3 +20,8 @@ binding:
       "/onramp/in/{instance}/out": ["/pipeline/query/{instance}/in"]
       "/pipeline/query/{instance}/out": ["/offramp/out/{instance}/in"]
       "/pipeline/query/{instance}/done": ["/offramp/exit/{instance}/in"]
+      
+mapping:
+  /binding/test/1:
+    instance: "1"
+      

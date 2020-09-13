@@ -35,17 +35,11 @@ pub(crate) fn get_filename_extension(path: &str) -> Option<&str> {
 }
 
 pub(crate) fn slurp_string(file: &str) -> Result<String> {
-    match File::open(file) {
-        Ok(data) => {
-            let mut buffered_reader = BufReader::new(data);
-            let mut data = String::new();
-            buffered_reader.read_to_string(&mut data)?;
-            Ok(data)
-        }
-        Err(std::io::Error { .. }) => {
-            Err(format!("File `{}` not found or not readable", file.to_string()).into())
-        }
-    }
+    let data = crate::open_file(file, None)?;
+    let mut buffered_reader = BufReader::new(data);
+    let mut data = String::new();
+    buffered_reader.read_to_string(&mut data)?;
+    Ok(data)
 }
 
 #[derive(Deserialize, Debug, Serialize)]
@@ -91,7 +85,7 @@ pub(crate) fn load_config() -> Result<TargetConfig> {
                 match meta {
                     Ok(meta) => {
                         if meta.is_file() {
-                            let mut source = File::open(&dot_config)?;
+                            let mut source = crate::open_file(&dot_config, None)?;
                             let mut raw = vec![];
                             source.read_to_end(&mut raw)?;
                             Ok(serde_yaml::from_slice(raw.as_slice())?)
@@ -126,7 +120,7 @@ pub(crate) fn nanotime() -> u64 {
 }
 
 pub(crate) fn load(path_to_file: &str) -> Result<simd_json::OwnedValue> {
-    let mut source = File::open(path_to_file)?;
+    let mut source = crate::open_file(path_to_file, None)?;
     let ext = Path::new(path_to_file)
         .extension()
         .and_then(OsStr::to_str)

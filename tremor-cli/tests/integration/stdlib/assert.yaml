@@ -1,7 +1,8 @@
 status: 0
 name: Test stdlib is usable
 asserts:
-  - source: tests/integration/stdlib/events.log
+  - source: events.log
     contains:
       - |
         ["Excepteur consectetur veniam pariatur
+    equals_file: expected.json

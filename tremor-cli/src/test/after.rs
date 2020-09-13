@@ -15,7 +15,7 @@
 use crate::errors::{Error, Result};
 use crate::job;
 use crate::{job::TargetProcess, util::slurp_string};
-use std::{collections::HashMap, fs};
+use std::{collections::HashMap, fs, path::Path};
 
 #[derive(Deserialize, Debug)]
 pub(crate) struct After {
@@ -61,17 +61,22 @@ impl AfterController {
     pub(crate) fn spawn(&mut self) -> Result<()> {
         let root = &self.base;
         let after_str = &format!("{}/after.json", root);
-        let after_json = load_after(after_str)?;
-        let after_process = after_json.spawn(root)?;
-        if let Some(mut process) = after_process {
-            let after_out_file = format!("{}/after.out.log", root);
-            let after_err_file = format!("{}/after.err.log", root);
-            let after_process = std::thread::spawn(move || {
-                process.tail(&after_out_file, &after_err_file).ok();
-            });
+        // This is optional
+        if Path::new(after_str).is_file() {
+            let after_json = load_after(after_str)?;
+            let after_process = after_json.spawn(root)?;
+            if let Some(mut process) = after_process {
+                let after_out_file = format!("{}/after.out.log", root);
+                let after_err_file = format!("{}/after.err.log", root);
+                let after_process = std::thread::spawn(move || {
+                    if let Err(e) = process.tail(&after_out_file, &after_err_file) {
+                        eprintln!("failed to tail tremor process: {}", e);
+                    }
+                });
 
-            if after_process.join().is_err() {
-                return Err("Failed to join test after thread/process error".into());
+                if after_process.join().is_err() {
+                    return Err("Failed to join test after thread/process error".into());
+                }
             }
         }
         Ok(())

@@ -24,7 +24,6 @@
     clippy::pedantic
 )]
 #![allow(
-    clippy::must_use_candidate,
     // TODO clippy claims some filter_map uses are hard to read - investigate
     clippy::unnecessary_filter_map,
     clippy::filter_map_next,
@@ -45,7 +44,9 @@ extern crate log;
 
 extern crate rental;
 
-use crate::errors::Result;
+use std::{ffi::OsStr, fs::File, path::Path};
+
+use crate::errors::{Error, Result};
 use crate::util::{load_config, FormatKind, TremorApp};
 use async_std::task;
 use clap::App;
@@ -66,6 +67,30 @@ mod server;
 pub(crate) mod status;
 mod test;
 mod util;
+
+pub(crate) fn open_file<S>(path: &S, base: Option<&String>) -> Result<File>
+where
+    S: AsRef<OsStr> + ?Sized,
+{
+    let path = Path::new(path);
+    match File::open(path) {
+        Ok(f) => Ok(f),
+        Err(e) => {
+            if let Some(base) = base {
+                let mut p = Path::new(base).to_path_buf();
+                p.push(path);
+                if let Ok(f) = File::open(p) {
+                    return Ok(f);
+                }
+            }
+            Err(Error::from(format!(
+                "Failed to open {}: {}",
+                path.to_str().unwrap_or("<unknown>"),
+                e
+            )))
+        }
+    }
+}
 
 #[cfg_attr(tarpaulin, skip)]
 fn main() -> Result<()> {
@@ -111,7 +136,7 @@ fn run(mut app: App, cmd: &ArgMatches) -> Result<()> {
     } else if let Some(matches) = cmd.subcommand_matches("test") {
         test::run_cmd(&matches)
     } else {
-        app.print_long_help().ok();
-        Ok(())
+        app.print_long_help()
+            .map_err(|e| Error::from(format!("failed to print help: {}", e)))
     }
 }

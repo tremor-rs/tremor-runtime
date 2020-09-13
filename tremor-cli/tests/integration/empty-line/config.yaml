@@ -2,7 +2,7 @@ onramp:
   - id: in
     type: file
     config:
-      source: "tests/integration/no_rules/in.json.xz"
+      source: "tests/integration/empty-line/in.json.xz"
       close_on_done: true
       sleep_on_done: 500
 
@@ -10,7 +10,7 @@ offramp:
   - id: out
     type: file
     config:
-      file: "tests/integration/no_rules/gen.json"
+      file: "tests/integration/empty-line/events.log"
 
 pipeline:
   - id: main
@@ -23,13 +23,23 @@ pipeline:
       - id: r
         op: runtime::tremor
         config:
-          script: ""
+          script: |
+            let $class = "default";
+            let $rate = 100;
+            event;
+      - id: b
+        op: grouper::bucket
     links:
       in: [r]
-      r: [out]
+      r: [b]
+      b: [out]
 
 binding:
   - id: test
     links:
       "/onramp/in/{instance}/out": ["/pipeline/main/{instance}/in"]
       "/pipeline/main/{instance}/out": ["/offramp/out/{instance}/in"]
+
+mapping:
+  /binding/test/1:
+    instance: "1"

@@ -1,2 +1,6 @@
 status: 0
 name: A complex transformation pipeline
+asserts:
+    - source: events.log
+      equals_file: expected.json
+  

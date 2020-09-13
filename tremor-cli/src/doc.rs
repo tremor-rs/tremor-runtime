@@ -15,7 +15,6 @@
 use crate::errors::{Error, Result};
 use crate::util::visit_path_str;
 use clap::ArgMatches;
-use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use tremor_script::path::load as load_module_path;
@@ -29,16 +28,11 @@ fn gen_doc(
     dest_path: &Option<String>,
     path: &Path,
 ) -> Result<()> {
-    let mut raw = String::new();
-    let input = File::open(&path);
     if let Some(rel_path) = *rel_path {
         if let Some(dest_path) = dest_path {
-            if let Err(e) = input {
-                eprintln!("Error processing file {}: {}", &path.to_string_lossy(), e);
-                // ALLOW: main.rs
-                std::process::exit(1);
-            }
-            input?.read_to_string(&mut raw)?;
+            let mut raw = String::new();
+            let mut input = crate::open_file(path, None)?;
+            input.read_to_string(&mut raw)?;
 
             #[allow(unused_mut)]
             let mut reg: Registry = registry::registry();

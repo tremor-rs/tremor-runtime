@@ -1,6 +1,9 @@
 status: 0
 name: Empty lines in file onramp should be ignored / handled gracefully
 asserts:
-  - source: tests/integration/empty_line/fg.err.log
+  - source: fg.err.log
     contains:
       - EOF at character 0
+  - source: events.log
+    equals_file: expected.json
+  

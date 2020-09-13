@@ -16,7 +16,6 @@ use crate::errors::{Error, Result};
 use crate::util::{get_source_kind, SourceKind};
 use async_std::task;
 use clap::{App, ArgMatches};
-use std::fs::File;
 use std::io::BufReader;
 use std::mem;
 use std::path::Path;
@@ -32,8 +31,7 @@ use tremor_runtime::{self, config, functions, metrics, version};
 pub(crate) async fn load_file(world: &World, file_name: &str) -> Result<usize> {
     info!("Loading configuration from {}", file_name);
     let mut count = 0;
-    let file = File::open(file_name)
-        .map_err(|e| Error::from(format!("Could not open file {} => {}", file_name, e)))?;
+    let file = crate::open_file(file_name, None)?;
     let buffered_reader = BufReader::new(file);
     let config: config::Config = serde_yaml::from_reader(buffered_reader)?;
     let config = tremor_runtime::incarnate(config)?;
@@ -92,8 +90,7 @@ pub(crate) async fn load_query_file(world: &World, file_name: &str) -> Result<us
         .file_stem()
         .unwrap_or_else(|| OsStr::new(file_name))
         .to_string_lossy();
-    let mut file = File::open(path)
-        .map_err(|e| Error::from(format!("Could not open file {} => {}", file_name, e)))?;
+    let mut file = crate::open_file(path, None)?;
     let mut raw = String::new();
 
     file.read_to_string(&mut raw)
@@ -162,8 +159,11 @@ pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
         // this makes it allowable to use unsafe here.
         let l: u32 = matches
             .value_of("recursion-limit")
-            .and_then(|l| l.parse().ok())
-            .ok_or_else(|| Error::from("invalid recursion limit"))?;
+            .ok_or_else(|| Error::from("recursion not set"))
+            .and_then(|l| {
+                l.parse()
+                    .map_err(|e| Error::from(format!("invalid recursion limit: {}", e)))
+            })?;
         tremor_script::RECURSION_LIMIT = l;
     }
 
@@ -274,7 +274,8 @@ pub(crate) fn run_cmd(mut app: App, cmd: &ArgMatches) -> Result<()> {
     if let Some(matches) = cmd.subcommand_matches("run") {
         server_run(matches)
     } else {
-        app.print_long_help().ok();
+        app.print_long_help()
+            .map_err(|e| Error::from(format!("Failed to print help: {}", e)))?;
         // ALLOW: main.rs
         ::std::process::exit(1);
     }
