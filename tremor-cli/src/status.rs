@@ -141,10 +141,12 @@ pub(crate) fn assert_has(label: &str, what: &str, ok: bool) -> Result<()> {
     let mut h = TermHighlighter::new();
     if ok {
         fg_bold!(h, Green);
+        write!(h.get_writer(), "  (+) ")?;
     } else {
+        write!(h.get_writer(), "  (-) ")?;
         fg_bold!(h, Red);
     }
-    write!(h.get_writer(), "  {}", &label)?;
+    write!(h.get_writer(), "{}", &label)?;
     h.reset()?;
     write!(h.get_writer(), ": ")?;
     writeln!(h.get_writer(), "{}", &what)?;
