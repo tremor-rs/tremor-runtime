@@ -188,9 +188,9 @@ async fn conductor_binding_activate_cmd(app: &TremorApp, cmd: &ArgMatches) -> Re
     let json = load(path_to_file)?;
     let ser = ser(&app, &json)?;
     let response = surf::post(&endpoint)
-        .set_header(headers::CONTENT_TYPE, content_type(app))
-        .set_header(headers::ACCEPT, accept(app))
-        .body_string(ser)
+        .header(headers::CONTENT_TYPE, content_type(app))
+        .header(headers::ACCEPT, accept(app))
+        .body(ser)
         .await?;
     handle_response(response).await
 }
@@ -286,9 +286,9 @@ async fn conductor_create_cmd(app: &TremorApp, cmd: &ArgMatches, endpoint: &str)
     let ser = ser(&app, &json)?;
     let endpoint = format!("{}{}", base_url, endpoint);
     let response = surf::post(&endpoint)
-        .set_header(http_types::headers::CONTENT_TYPE, content_type(app))
-        .set_header("accept", accept(app))
-        .body_string(ser)
+        .header(http_types::headers::CONTENT_TYPE, content_type(app))
+        .header("accept", accept(app))
+        .body(ser)
         .await;
     handle_response(response?).await
 }
