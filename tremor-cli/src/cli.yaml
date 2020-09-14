@@ -98,7 +98,7 @@ subcommands:
             long: report
             required: false
             takes_value: true
-            default_value: "tests/reports"
+            default_value: "report.json"
         - INCLUDES:
             help: Optional tags to filter test executions by
             short: i
