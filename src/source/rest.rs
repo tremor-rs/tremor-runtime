@@ -35,6 +35,9 @@ pub struct Config {
     /// port to listen to, defaults to 8000
     #[serde(default = "dflt_port")]
     pub port: u16,
+    /// whether to enable linked transport (return response based on pipeline output)
+    // TODO remove and auto-infer this based on succesful binding for linked onramps
+    pub link: Option<bool>,
 }
 
 // TODO possible to do this in source trait?
