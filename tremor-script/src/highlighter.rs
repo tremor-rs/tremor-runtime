@@ -156,7 +156,7 @@ pub trait Highlighter {
         file: Option<&str>,
         tokens: &[TokenSpan],
     ) -> std::result::Result<(), std::io::Error> {
-        self.highlight_errors2(false, file, &tokens.iter().collect::<Vec<_>>(), None)
+        self.highlight_errors(false, file, &tokens.iter().collect::<Vec<_>>(), None)
     }
 
     /// highlights a token stream with line numbers
@@ -165,8 +165,7 @@ pub trait Highlighter {
         file: Option<&str>,
         tokens: &[TokenSpan],
     ) -> std::result::Result<(), std::io::Error> {
-        self.highlight_errors(file, &tokens.iter().collect::<Vec<_>>(), None)?;
-        self.finalize()
+        self.highlight_errors(true, file, &tokens.iter().collect::<Vec<_>>(), None)
     }
 
     /// highlights a runtime error
@@ -179,7 +178,7 @@ pub trait Highlighter {
         error: Option<Error>,
     ) -> std::result::Result<(), std::io::Error> {
         let extracted = extract(tokens, expr_start, expr_end);
-        self.highlight_errors(file, &extracted, error)
+        self.highlight_errors(true, file, &extracted, error)
     }
 
     /// highlights compile time errors
