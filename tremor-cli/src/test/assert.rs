@@ -278,7 +278,7 @@ pub(crate) fn process_filebased_asserts(
                     let condition = changeset.distance == 0;
                     status::assert_has(
                         &format!("Assert {}", counter),
-                        &format!("Fille `{}` equals `{}`", &file, equals_file),
+                        &format!("File `{}` equals `{}`", &file, equals_file),
                         info.as_ref(),
                         condition,
                     )?;
