@@ -1,0 +1,59 @@
+onramp:
+  - id: rest
+    type: rest
+    config:
+      host: localhost
+      port: 9139
+      # TODO eliminate the need for this config item
+      link: true
+
+pipeline:
+  - id: main
+    interface:
+      inputs:
+        - in
+        - from-offramp
+      outputs:
+        - out
+        - to-onramp
+    links:
+      in: [ out ]
+      from-offramp: [ to-onramp ]
+
+offramp:
+  - id: upstream
+    type: rest
+    config:
+      link: true
+      # TODO make this optional too
+      endpoints:
+       - http://localhost:8139/
+      #put: true
+      #headers:
+      #  "Client": "Tremor"
+
+binding:
+  - id: default
+    links:
+      '/onramp/rest/{instance}/out': [ '/pipeline/main/{instance}/in' ]
+      '/pipeline/main/{instance}/out': [
+        '/offramp/upstream/{instance}/in',
+        #'/offramp/system::stdout/system/in' # for debugging
+      ]
+
+      '/pipeline/main/{instance}/error': [ '/offramp/system::stderr/system/in' ]
+
+      # TODO implement linked offramps this way?
+      #'/offramp/upstream/{instance}/out': [ '/pipeline/main/{instance}/from-offramp' ]
+      '/pipeline/main/{instance}/to-onramp': [
+        # linked onramp that can respond based on pipeline output
+        '/onramp/rest/{instance}/in',
+        # for debugging purposes
+        '/offramp/system::stdout/system/in'
+      ]
+
+      # tremor metrics
+      #'/pipeline/system::metrics/system/out': [ '/offramp/system::stdout/system/in' ]
+mapping:
+  /binding/default/01:
+    instance: '01'
