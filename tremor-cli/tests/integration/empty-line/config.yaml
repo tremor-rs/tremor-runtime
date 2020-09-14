@@ -2,7 +2,7 @@ onramp:
   - id: in
     type: file
     config:
-      source: "tests/integration/empty-line/in.json.xz"
+      source: "in.json.xz"
       close_on_done: true
       sleep_on_done: 500
 
@@ -10,7 +10,7 @@ offramp:
   - id: out
     type: file
     config:
-      file: "tests/integration/empty-line/events.log"
+      file: "events.log"
 
 pipeline:
   - id: main

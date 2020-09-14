@@ -2,7 +2,7 @@ onramp:
   - id: in
     type: file
     config:
-      source: "tests/integration/query-exit-nonzero/in.json.xz"
+      source: "in.json.xz"
       close_on_done: false
       sleep_on_done: 1000
 
@@ -10,7 +10,7 @@ offramp:
   - id: out
     type: file
     config:
-      file: "tests/integration/query-exit-nonzero/events.log"
+      file: "events.log"
   - id: exit
     type: exit
 
