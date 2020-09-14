@@ -200,7 +200,6 @@ impl Int {
         let origin_uri = EventOriginUri {
             uid,
             scheme: "tremor-kafka".to_string(),
-            // picking the first host for these
             host: "not-connected".to_string(),
             port: None,
             path: vec![],

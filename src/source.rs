@@ -22,6 +22,7 @@ use crate::utils::nanotime;
 use crate::Result;
 use async_channel::{self, unbounded, Receiver, Sender};
 use async_std::task;
+use halfbrown::HashMap;
 use std::time::Duration;
 use tremor_pipeline::{CBAction, Event, EventOriginUri, Ids};
 use tremor_script::LineValue;
@@ -61,6 +62,14 @@ pub(crate) enum SourceReply {
     Structured {
         origin_uri: EventOriginUri,
         data: LineValue,
+    },
+    /// Allow for passthrough of already structured (request-style) events where
+    /// response is expected (for linked onramps)
+    // add similar DataRequest variant when needed
+    StructuredRequest {
+        origin_uri: EventOriginUri,
+        data: LineValue,
+        response_tx: Sender<Event>,
     },
     /// A stream is opened
     StartStream(usize),
@@ -123,6 +132,8 @@ where
     is_transactional: bool,
     /// Unique Id for the source
     uid: u64,
+    // TODO better way to manage this?
+    response_txes: HashMap<u64, Sender<Event>>,
 }
 
 impl<T> SourceManager<T>
@@ -251,8 +262,16 @@ where
                     self.source.restore_breaker();
                     self.triggered = false;
                 }
-
                 onramp::Msg::Cb(CBAction::None, _ids) => {}
+
+                onramp::Msg::Response(event) => {
+                    // TODO send errors here if eid/tx are not found
+                    if let Some(eid) = event.id.get(self.uid) {
+                        if let Some(tx) = self.response_txes.remove(&eid) {
+                            tx.send(event).await?;
+                        }
+                    }
+                }
             }
         }
     }
@@ -356,6 +375,7 @@ where
                 pipelines: Vec::new(),
                 uid,
                 is_transactional,
+                response_txes: HashMap::new(),
             },
             tx,
         ))
@@ -405,6 +425,16 @@ where
                     Ok(SourceReply::Structured { origin_uri, data }) => {
                         let ingest_ns = nanotime();
 
+                        self.transmit_event(data, ingest_ns, origin_uri).await;
+                    }
+                    Ok(SourceReply::StructuredRequest {
+                        origin_uri,
+                        data,
+                        response_tx,
+                    }) => {
+                        let ingest_ns = nanotime();
+
+                        self.response_txes.insert(self.id, response_tx);
                         self.transmit_event(data, ingest_ns, origin_uri).await;
                     }
                     Ok(SourceReply::Data {

@@ -16,7 +16,6 @@
 
 use crate::source::prelude::*;
 use async_channel::{Sender, TryRecvError};
-use tide::http::Method;
 use tide::{Body, Request, Response};
 use tremor_script::Value;
 
@@ -28,6 +27,9 @@ pub struct Config {
     /// port to listen to, defaults to 8000
     #[serde(default = "dflt_port")]
     pub port: u16,
+    /// whether to enable linked transport (return response based on pipeline output)
+    // TODO remove and auto-infer this based on succesful binding for linked onramps
+    pub link: Option<bool>,
 }
 
 // TODO possible to do this in source trait?
@@ -91,6 +93,7 @@ impl Int {
 struct ServerState {
     tx: Sender<SourceReply>,
     uid: u64,
+    link: bool,
 }
 
 async fn handle_request(mut req: Request<ServerState>) -> tide::Result<Response> {
@@ -126,13 +129,14 @@ async fn handle_request(mut req: Request<ServerState>) -> tide::Result<Response>
         .collect::<Value>();
 
     // request metadata
+    // TODO namespace these better?
     let mut meta = Value::object_with_capacity(4);
-    meta.insert("method", req.method().to_string())?;
-    meta.insert("path", url.path().to_string())?;
+    meta.insert("request_method", req.method().to_string())?;
+    meta.insert("request_path", url.path().to_string())?;
     // TODO introduce config param to pass this as a hashmap (useful when needed)
     // also document duplicate query key behavior in that case
-    meta.insert("query", url.query().unwrap_or("").to_string())?;
-    meta.insert("headers", headers)?;
+    meta.insert("request_query", url.query().unwrap_or("").to_string())?;
+    meta.insert("request_headers", headers)?;
 
     // TODO need to ultimately decode the body based on the request content-type
     //
@@ -158,25 +162,79 @@ async fn handle_request(mut req: Request<ServerState>) -> tide::Result<Response>
     //})
     //.map_err(|e| e.0)?;
 
-    req.state()
-        .tx
-        .send(SourceReply::Structured {
-            origin_uri,
-            data: (data, meta).into(),
-            //data,
-        })
-        .await?;
+    // TODO pass as function arg and turn on only when linking is on for the onramp
+    //let wait_for_response = true;
 
-    // TODO should throw 500 on any internal error when handling request?
-    let status = match req.method() {
-        Method::Post | Method::Put => 201,
-        Method::Delete => 200,
-        _ => 204,
+    if req.state().link {
+        let (response_tx, response_rx) = bounded(1);
+
+        // TODO check how tide handles request timeouts here
+        req.state()
+            .tx
+            .send(SourceReply::StructuredRequest {
+                origin_uri,
+                data: (data, meta).into(),
+                //data,
+                response_tx,
+            })
+            .await?;
+
+        make_response(response_rx.recv().await?)
+    } else {
+        req.state()
+            .tx
+            .send(SourceReply::Structured {
+                origin_uri,
+                data: (data, meta).into(),
+                //data,
+            })
+            .await?;
+
+        Ok(Response::builder(202)
+            .body(Body::from_string("".to_string()))
+            .build())
+    }
+}
+
+fn make_response(event: tremor_pipeline::Event) -> tide::Result<Response> {
+    // TODO reject batched events and handle only single event here
+    let (response_data, response_meta) = event.value_meta_iter().next().unwrap();
+
+    // TODO need to ultimately encode the body based on the content-type header
+    // set (if any). otherwise fall back to accept header, then to onramp codec,
+    // setting response headers appropriately
+    //
+    // as json
+    //let mut response_bytes = Vec::new();
+    //response_data.write(&mut response_bytes)?;
+    //
+    // as string
+    let response_bytes = if let Some(s) = response_data.as_str() {
+        s.as_bytes().to_vec()
+    } else {
+        simd_json::to_vec(&response_data)?
     };
 
-    Ok(Response::builder(status)
-        .body(Body::from_string("".to_string()))
-        .build())
+    let status = response_meta
+        .get("response_status")
+        .and_then(|s| s.as_u16())
+        // TODO better default status?
+        .unwrap_or(200);
+
+    let mut response = Response::builder(status)
+        .body(Body::from_bytes(response_bytes))
+        .build();
+
+    if let Some(headers) = response_meta.get("response_headers") {
+        // TODO remove unwraps here
+        for (name, values) in headers.as_object().unwrap() {
+            for value in values.as_array().unwrap() {
+                response.insert_header(name.as_ref(), value.as_str().unwrap());
+            }
+        }
+    }
+
+    Ok(response)
 }
 
 #[async_trait::async_trait()]
@@ -202,11 +260,14 @@ impl Source for Int {
         let mut server = tide::Server::with_state(ServerState {
             tx: tx.clone(),
             uid: self.uid,
+            link: self.config.link.unwrap_or(false),
         });
         // TODO add override for path and method from config (defaulting to
         // all paths and methods like below if not provided)
         server.at("/").all(handle_request);
         server.at("/*").all(handle_request);
+        // alt method without relying on server state
+        //server.at("/*").all(|r| handle_request(r, self.uid, self.config.link.unwrap_or(false)));
 
         let addr = format!("{}:{}", self.config.host, self.config.port);
 

@@ -159,6 +159,23 @@ impl Artefact for Pipeline {
                             return Err(format!("Pipeline {:?} not found", to).into());
                         }
                     }
+                    Some(ResourceType::Onramp) => {
+                        if let Some(onramp) = system.reg.find_onramp(&to).await? {
+                            // TODO validate that this onramp supports linked transport before
+                            pipeline
+                                .send_mgmt(pipeline::MgmtMsg::ConnectLinkedOnramp(
+                                    from.clone().into(),
+                                    to.clone(),
+                                    onramp,
+                                ))
+                                .await
+                                .map_err(|e| -> Error {
+                                    format!("Could not send to pipeline: {}", e).into()
+                                })?;
+                        } else {
+                            return Err(format!("Onramp {} not found", to).into());
+                        }
+                    }
                     _ => {
                         return Err("Source isn't a Offramp or pipeline".into());
                     }
@@ -351,7 +368,7 @@ impl Artefact for OnrampArtefact {
 
         world
             .system
-            .send(system::ManagerMsg::CreateOnrampt(
+            .send(system::ManagerMsg::CreateOnramp(
                 tx,
                 onramp::Create {
                     id: servant_id,
@@ -495,12 +512,13 @@ impl Artefact for Binding {
                                 onramps.push((from.clone(), to))
                             }
                             (Some(ResourceType::Pipeline), Some(ResourceType::Offramp))
-                            | (Some(ResourceType::Pipeline), Some(ResourceType::Pipeline)) => {
+                            | (Some(ResourceType::Pipeline), Some(ResourceType::Pipeline))
+                            | (Some(ResourceType::Pipeline), Some(ResourceType::Onramp)) => {
                                 pipelines.push((from.clone(), to))
                             }
                             (_, _) => {
                                 return Err(
-                                    "links require the form of onramp -> pipeline or pipeline -> offramp or pipeline -> pipeline"
+                                    "links require the form of onramp -> pipeline or pipeline -> offramp or pipeline -> pipeline or pipeline -> onramp"
                                         .into(),
                                 );
                             }
@@ -516,6 +534,7 @@ impl Artefact for Binding {
             match to.resource_type() {
                 Some(ResourceType::Offramp) => system.ensure_offramp(&to).await?,
                 Some(ResourceType::Pipeline) => system.ensure_pipeline(&to).await?,
+                Some(ResourceType::Onramp) => system.ensure_onramp(&to).await?,
                 _ => (),
             };
             system.ensure_pipeline(&from).await?;
