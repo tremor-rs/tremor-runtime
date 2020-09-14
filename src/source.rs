@@ -79,6 +79,14 @@ pub(crate) enum SourceReply {
         origin_uri: EventOriginUri,
         data: LineValue,
     },
+    /// Allow for passthrough of already structured (request-style) events where
+    /// response is expected (for linked onramps)
+    // add similar DataRequest variant when needed
+    StructuredRequest {
+        origin_uri: EventOriginUri,
+        data: LineValue,
+        response_tx: Sender<Event>,
+    },
     /// A stream is opened
     StartStream(usize, Option<Sender<Event>>),
     /// A stream is closed
@@ -156,6 +164,8 @@ where
     is_transactional: bool,
     /// Unique Id for the source
     uid: u64,
+    // TODO better way to manage this?
+    response_txes: HashMap<u64, Sender<Event>>,
 }
 
 impl<T> SourceManager<T>
@@ -462,6 +472,7 @@ where
                 pipelines_err: Vec::new(),
                 uid,
                 is_transactional,
+                response_txes: HashMap::new(),
             },
             tx,
         ))
@@ -524,6 +535,16 @@ where
                         let ingest_ns = nanotime();
 
                         self.transmit_event(data, ingest_ns, origin_uri, OUT).await;
+                    }
+                    Ok(SourceReply::StructuredRequest {
+                        origin_uri,
+                        data,
+                        response_tx,
+                    }) => {
+                        let ingest_ns = nanotime();
+
+                        self.response_txes.insert(self.id, response_tx);
+                        self.transmit_event(data, ingest_ns, origin_uri).await;
                     }
                     Ok(SourceReply::Data {
                         mut origin_uri,
