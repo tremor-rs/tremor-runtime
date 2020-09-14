@@ -42,3 +42,4 @@ logger-*
 tremor.log
 docs
 /packaging/out/
+report.txt
