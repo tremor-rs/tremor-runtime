@@ -172,6 +172,7 @@ fn suite_unit(
 pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
     let kind: test::TestKind = matches.value_of("MODE").unwrap_or_default().try_into()?;
     let path = matches.value_of("PATH").unwrap_or_default();
+    let report = matches.value_of("REPORT").unwrap_or_default();
     let includes: Vec<String> = if matches.is_present("INCLUDES") {
         if let Some(matches) = matches.values_of("INCLUDES") {
             matches.map(std::string::ToString::to_string).collect()
@@ -276,12 +277,12 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
         reports,
         stats: stats_map,
     };
-    let mut file = File::create("report.txt")
-        .map_err(|e| Error::from(format!("Failed to create `report.txt`: {}", e)))?;
+    let mut file = File::create(report)
+        .map_err(|e| Error::from(format!("Failed to create `{}`: {}", report, e)))?;
 
     if let Ok(result) = serde_json::to_string(&test_run) {
         file.write_all(&result.as_bytes())
-            .map_err(|e| Error::from(format!("Failed to create `report.txt`: {}", e)))?;
+            .map_err(|e| Error::from(format!("Failed to write report to `{}`: {}", report, e)))?;
     }
 
     if all_stats.fail > 0 {
