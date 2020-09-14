@@ -154,8 +154,9 @@ pub(crate) fn process(
     let mut s = stats::Stats::new();
     if let Some(code) = status {
         let success = code == spec.status;
+        let prefix = if success { "(+)" } else { "(-)" };
         status::assert(
-            "Assert 0",
+            &format!("{} Assert 0", prefix),
             &format!("Status {}", &spec.name,),
             success,
             &spec.status.to_string(),
@@ -180,7 +181,7 @@ pub(crate) fn process(
     } else {
         let success = false;
         status::assert(
-            "Assert 0",
+            "(-) Assert 0",
             &format!("Status {}", &spec.name,),
             success,
             &spec.status.to_string(),
