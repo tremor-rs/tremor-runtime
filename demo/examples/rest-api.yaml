@@ -1,0 +1,83 @@
+onramp:
+  - id: rest
+    type: rest
+    config:
+      host: localhost
+      port: 8139
+      # TODO eliminate the need for this config item
+      link: true
+
+pipeline:
+  - id: main
+    interface:
+      inputs:
+        - in
+      outputs:
+        - out
+        - error
+        - to-onramp
+    nodes:
+      - id: runtime
+        op: runtime::tremor
+        config:
+          script: |
+            # for default api response
+            let $response_status = 200;
+            let $response_headers = {
+              "x-powered-by": [ "Tremor" ]
+            };
+
+            # short-circuit for non GET/POST requests
+            match $request_method of
+              case "GET"  =>
+                null
+              default =>
+                let $response_status = 501,
+                emit ""
+            end;
+
+            # content based on path
+            match $request_path of
+              case "/echo" =>
+                {
+                  "method": $request_method,
+                  "path": $request_path,
+                  "query": $request_query,
+                  "headers": $request_headers,
+                  "body": event,
+                }
+              case "/snot" =>
+                "badger"
+              case "/ping" =>
+                let $response_status = 204,
+                ""
+              default =>
+                let $response_status = 404,
+                "Error: path {$request_path} not found"
+            end;
+    links:
+      in: [ runtime ]
+      runtime: [ out, to-onramp ]
+      # TODO this should bubble up as 500 response for linked onramps
+      runtime/error: [ error, to-onramp ]
+
+binding:
+  - id: default
+    links:
+      '/onramp/rest/{instance}/out': [ '/pipeline/main/{instance}/in' ]
+
+      '/pipeline/main/{instance}/out': [
+        # linked onramp that can respond based on pipeline output
+        '/onramp/rest/{instance}/in',
+
+        # for api debugging purposes
+        '/offramp/system::stdout/system/in'
+      ]
+
+      '/pipeline/main/{instance}/error': [ '/offramp/system::stderr/system/in' ]
+
+      # tremor metrics
+      #'/pipeline/system::metrics/system/out': [ '/offramp/system::stdout/system/in' ]
+mapping:
+  /binding/default/01:
+    instance: '01'

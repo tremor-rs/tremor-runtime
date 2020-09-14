@@ -78,12 +78,13 @@ pub(crate) enum CfMsg {
 #[derive(Debug)]
 pub(crate) enum MgmtMsg {
     ConnectOfframp(Cow<'static, str>, TremorURL, offramp::Addr),
+    ConnectPipeline(Cow<'static, str>, TremorURL, Box<Addr>),
+    ConnectLinkedOnramp(Cow<'static, str>, TremorURL, onramp::Addr),
     ConnectOnramp {
         id: TremorURL,
         addr: onramp::Addr,
         reply: bool,
     },
-    ConnectPipeline(Cow<'static, str>, TremorURL, Box<Addr>),
     DisconnectOutput(Cow<'static, str>, TremorURL),
     DisconnectInput(TremorURL),
 }
@@ -101,6 +102,7 @@ pub(crate) enum Msg {
 pub enum Dest {
     Offramp(async_channel::Sender<offramp::Msg>),
     Pipeline(Addr),
+    LinkedOnramp(async_channel::Sender<onramp::Msg>),
 }
 
 impl Dest {
@@ -108,6 +110,7 @@ impl Dest {
         match self {
             Self::Offramp(addr) => addr.send(offramp::Msg::Event { input, event }).await?,
             Self::Pipeline(addr) => addr.send(Msg::Event { input, event }).await?,
+            Self::LinkedOnramp(addr) => addr.send(onramp::Msg::Response(event)).await?,
         }
         Ok(())
     }
@@ -120,6 +123,11 @@ impl Dest {
                 if signal.kind != Some(SignalKind::Tick) {
                     addr.send(Msg::Signal(signal)).await?
                 }
+            }
+            Self::LinkedOnramp(_addr) => {
+                // TODO implement?
+                //addr.send(onramp::Msg::Signal(signal)).await?
+                ()
             }
         }
         Ok(())
@@ -291,8 +299,8 @@ async fn pipeline_task(
                     "[Pipeline:{}] connecting {} to offramp {}",
                     id, output, offramp_id
                 );
-                if let Some(offramps) = dests.get_mut(&output) {
-                    offramps.push((offramp_id, Dest::Offramp(offramp)));
+                if let Some(output_dests) = dests.get_mut(&output) {
+                    output_dests.push((offramp_id, Dest::Offramp(offramp)));
                 } else {
                     dests.insert(output, vec![(offramp_id, Dest::Offramp(offramp))]);
                 }
@@ -302,10 +310,21 @@ async fn pipeline_task(
                     "[Pipeline:{}] connecting {} to pipeline {}",
                     id, output, pipeline_id
                 );
-                if let Some(offramps) = dests.get_mut(&output) {
-                    offramps.push((pipeline_id, Dest::Pipeline(*pipeline)));
+                if let Some(output_dests) = dests.get_mut(&output) {
+                    output_dests.push((pipeline_id, Dest::Pipeline(*pipeline)));
                 } else {
                     dests.insert(output, vec![(pipeline_id, Dest::Pipeline(*pipeline))]);
+                }
+            }
+            M::M(MgmtMsg::ConnectLinkedOnramp(output, onramp_id, onramp)) => {
+                info!(
+                    "[Pipeline:{}] connecting {} to linked onramp {}",
+                    id, output, onramp_id
+                );
+                if let Some(output_dests) = dests.get_mut(&output) {
+                    output_dests.push((onramp_id, Dest::LinkedOnramp(onramp)));
+                } else {
+                    dests.insert(output, vec![(onramp_id, Dest::LinkedOnramp(onramp))]);
                 }
             }
             M::M(MgmtMsg::ConnectOnramp { id, addr, reply }) => {

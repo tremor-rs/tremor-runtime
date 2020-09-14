@@ -19,10 +19,10 @@ pipeline:
         config:
           script: |
             {
-              "method": $method,
-              "path": $path,
-              "query": $query,
-              "headers": $headers,
+              "method": $request_method,
+              "path": $request_path,
+              "query": $request_query,
+              "headers": $request_headers,
               "body": event,
             }
     links:

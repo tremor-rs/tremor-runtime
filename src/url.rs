@@ -21,9 +21,9 @@ use std::fmt;
 pub enum ResourceType {
     /// This is a pipeline
     Pipeline,
-    /// This is a onramp
+    /// This is an onramp
     Onramp,
-    /// This is a offramop
+    /// This is an offramp
     Offramp,
     /// This is a binding
     Binding,

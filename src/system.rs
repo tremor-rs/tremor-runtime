@@ -57,7 +57,7 @@ pub(crate) enum ManagerMsg {
         async_channel::Sender<Result<pipeline::Addr>>,
         pipeline::Create,
     ),
-    CreateOnrampt(async_channel::Sender<Result<onramp::Addr>>, onramp::Create),
+    CreateOnramp(async_channel::Sender<Result<onramp::Addr>>, onramp::Create),
     CreateOfframp(
         async_channel::Sender<Result<offramp::Addr>>,
         offramp::Create,
@@ -89,7 +89,7 @@ impl Manager {
                             .send(pipeline::ManagerMsg::Create(r, c))
                             .await?
                     }
-                    ManagerMsg::CreateOnrampt(r, c) => {
+                    ManagerMsg::CreateOnramp(r, c) => {
                         self.onramp
                             .send(onramp::ManagerMsg::Create(r, Box::new(c)))
                             .await?

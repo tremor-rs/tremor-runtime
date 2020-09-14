@@ -36,6 +36,8 @@ pub enum Msg {
         tx: async_channel::Sender<bool>,
     },
     Cb(CBAction, Ids),
+    // TODO pick good naming here: LinkedEvent / Response / Result?
+    Response(tremor_pipeline::Event),
 }
 
 pub type Addr = async_channel::Sender<Msg>;
