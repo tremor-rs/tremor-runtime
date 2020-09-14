@@ -79,15 +79,22 @@ where
             if let Some(base) = base {
                 let mut p = Path::new(base).to_path_buf();
                 p.push(path);
-                if let Ok(f) = File::open(p) {
+                if let Ok(f) = File::open(&p) {
                     return Ok(f);
                 }
+                Err(Error::from(format!(
+                    "Failed to open `{}` (or  `{}`): {}",
+                    path.to_str().unwrap_or("<unknown>"),
+                    p.to_str().unwrap_or("<unknown>"),
+                    e
+                )))
+            } else {
+                Err(Error::from(format!(
+                    "Failed to open {}: {}",
+                    path.to_str().unwrap_or("<unknown>"),
+                    e
+                )))
             }
-            Err(Error::from(format!(
-                "Failed to open {}: {}",
-                path.to_str().unwrap_or("<unknown>"),
-                e
-            )))
         }
     }
 }
