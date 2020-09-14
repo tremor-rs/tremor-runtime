@@ -240,7 +240,7 @@ where
                         self.source.ack(id);
                     }
                 }
-                // Circuit breaker soure failure -triggers close
+                // Circuit breaker source failure - triggers close
                 onramp::Msg::Cb(CBAction::Close, _ids) => {
                     self.source.trigger_breaker();
                     self.triggered = true;
