@@ -6,7 +6,7 @@ offramp:
   - id: out
     type: file
     config:
-      file: "tests/integration/unknown_onramp/gen.json"
+      file: "gen.json"
 
 pipeline:
   - id: main

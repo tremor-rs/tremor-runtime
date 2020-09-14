@@ -11,7 +11,7 @@ offramp:
     type: file
     codec: json
     config:
-      file: "tests/integration/ws/gen.log"
+      file: "gen.log"
   - id: exit
     type: exit
 

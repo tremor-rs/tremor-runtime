@@ -3,7 +3,7 @@ onramp:
     type: file
     codec: string
     config:
-      source: "tests/integration/string-codec/in.json.xz"
+      source: "in.json.xz"
       close_on_done: true
       sleep_on_done: 500
 
@@ -11,7 +11,7 @@ offramp:
   - id: out
     type: file
     config:
-      file: "tests/integration/string-codec/events.log"
+      file: "events.log"
 
 pipeline:
   - id: main

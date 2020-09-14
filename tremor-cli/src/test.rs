@@ -94,8 +94,10 @@ fn suite_integration(
 
         let mut suite = vec![];
         let mut stats = stats::Stats::new();
+
         for test in tests {
             let root = test.path();
+            let base = root.to_string_lossy().to_string();
             let bench_root = root.to_string_lossy();
             let tags_str = &format!("{}/tags.json", bench_root);
             let tags = tag::maybe_slurp_tags(tags_str)?;
@@ -105,7 +107,16 @@ fn suite_integration(
                     "Integration",
                     &format!("Running {}", &basename(&bench_root)),
                 )?;
+                // Set cwd to test root
+                let cwd = std::env::current_dir()?;
+                std::env::set_current_dir(Path::new(&base))?;
+
+                // Run integration tests
                 let test_report = process::run_process("integration", root, by_tag)?;
+
+                // Restore cwd
+                std::env::set_current_dir(cwd)?;
+
                 stats.merge(&test_report.stats);
                 status::stats(&test_report.stats)?;
                 status::duration(test_report.duration)?;
