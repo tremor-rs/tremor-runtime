@@ -161,10 +161,23 @@ pub(crate) fn assert_has(label: &str, what: &str, info: Option<&String>, ok: boo
     Ok(())
 }
 
-pub(crate) fn executing_unit_testcase(i: usize, n: usize) -> Result<()> {
+pub(crate) fn executing_unit_testcase(i: usize, n: usize, success: bool) -> Result<()> {
     let mut h = TermHighlighter::new();
     fg_bold!(h, Green);
-    writeln!(h.get_writer(), "  Executing test {} of {}", i + 1, n)?;
+    let prefix = if success {
+        fg_bold!(h, Green);
+        "(+)"
+    } else {
+        fg_bold!(h, Red);
+        "(-)"
+    };
+    writeln!(
+        h.get_writer(),
+        "  {} Executing test {} of {}",
+        prefix,
+        i + 1,
+        n
+    )?;
     h.reset()?;
     h.finalize()?;
     drop(h);

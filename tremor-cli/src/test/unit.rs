@@ -150,9 +150,15 @@ fn eval_suite_tests(
                                     script, extent, &mut hh,
                                 )?;
 
+                                let prefix = if status { "(+)" } else { "(-)" };
                                 // Test record
                                 elements.push(report::TestElement {
-                                    description: format!("Executing test {} of {}", i + 1, ll),
+                                    description: format!(
+                                        "{} Executing test {} of {}",
+                                        prefix,
+                                        i + 1,
+                                        ll
+                                    ),
                                     keyword: report::KeywordKind::Test,
                                     result: report::ResultKind {
                                         status: if status {
@@ -170,7 +176,7 @@ fn eval_suite_tests(
                                 drop(hh);
 
                                 // Interactive console report
-                                status::executing_unit_testcase(i, ll)?;
+                                status::executing_unit_testcase(i, ll, status)?;
                                 let mut h = TermHighlighter::new();
                                 tremor_script::Script::highlight_script_with_range(
                                     script, extent, &mut h,
@@ -189,10 +195,11 @@ fn eval_suite_tests(
                 let extent = suite_spec.exprs[i].extent(node_metas);
                 let mut hh = DumbHighlighter::new();
                 tremor_script::Script::highlight_script_with_range(script, extent, &mut hh)?;
+                let prefix = if *status { "(+)" } else { "(-)" };
 
                 // Test record
                 elements.push(report::TestElement {
-                    description: format!("Executing test {} of {}", i + 1, al),
+                    description: format!("{} Executing test {} of {}", prefix, i + 1, al),
                     keyword: report::KeywordKind::Predicate,
                     result: report::ResultKind {
                         status: if *status {
@@ -210,7 +217,7 @@ fn eval_suite_tests(
                 drop(hh);
 
                 // Interactive console report
-                status::executing_unit_testcase(i, ll)?;
+                status::executing_unit_testcase(i, ll, *status)?;
                 let mut h = TermHighlighter::new();
                 tremor_script::Script::highlight_script_with_range(script, extent, &mut h)?;
                 h.finalize()?;
