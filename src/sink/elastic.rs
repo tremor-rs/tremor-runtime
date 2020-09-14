@@ -252,6 +252,6 @@ impl Sink for Elastic {
         false
     }
     fn default_codec(&self) -> &str {
-        todo!()
+        "json"
     }
 }

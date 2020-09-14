@@ -127,7 +127,7 @@ depends = "libc6 (>= 2.17), libstdc++6, libatomic1"
 maintainer-scripts = "packaging/distribution/debian/maintainer-scripts/"
 assets = [
   # target path will be automatically corrected when cross-compiling
-  ["target/release/tremor-server", "/usr/bin/", "755"],
+  ["target/release/tremor", "/usr/bin/", "755"],
   ["README.md", "/usr/share/doc/tremor/", "644"],
   ["LICENSE", "/usr/share/doc/tremor/", "644"],
   # need to specify each directory contents since only actual file entries are allowed here
@@ -162,7 +162,7 @@ package = "tremor"
 buildflags = ["--release"]
 profile = "release"
 [package.metadata.rpm.targets]
-tremor-server = { path = "/usr/bin/tremor-server" }
+tremor = { path = "/usr/bin/tremor" }
 # The LHS paths here are relative to the rpm config dir (.rpm at project root).
 # If you add new files here, please make sure to add them to %files section in
 # the rpm spec file (inside .rpm) -- otherwise the rpm packaging will fail.

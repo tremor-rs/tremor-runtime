@@ -55,7 +55,7 @@ Requires(postun): systemd
 %setup -q
 
 %build
-# we rely on binaries pre-built alrady in the Source0 tar file
+# we rely on binaries pre-built already in the Source0 tar file
 # so this section is empty for us.
 
 %install
