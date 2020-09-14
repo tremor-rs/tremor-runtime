@@ -43,3 +43,4 @@ tremor.log
 docs
 /packaging/out/
 report.txt
+report.json
