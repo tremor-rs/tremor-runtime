@@ -17,7 +17,7 @@ RUN yum install --assumeyes cmake3 \
 
 # install other system deps
 RUN yum install --assumeyes \
-    clang                        `# for onig_sys (via the regex crate)` \
+    llvm-toolset-7.0             `# for onig_sys (via the regex crate)` \
     devtoolset-9-libatomic-devel `# for snmalloc` \
     openssl-devel                `# for dynamically linking against libssl1.0 (as part of openssl crate)` \
     perl                         `# for compiling & statically linking openssl (as part of openssl crate's vendored feature)`
