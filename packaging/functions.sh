@@ -105,6 +105,7 @@ function package_rpm {
   fi
 
   echo "Creating rpm file in directory: ${PACKAGES_DIR}"
+  echo "$TARGET $PACKAGES_DIR"
   cargo rpm build --verbose --no-cargo-build \
     --target "$TARGET" \
     --output "$PACKAGES_DIR"

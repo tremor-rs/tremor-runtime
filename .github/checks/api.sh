@@ -8,7 +8,7 @@ code sanity checker
   -h         show this help
   -a         run all chekcs
   -c         curl
-  -t         tremor-tool
+  -t         tremor
   -e         eqc
 EOF
 }
@@ -58,6 +58,5 @@ while getopts hacte opt; do
             help
             exit 0
             ;;
-        
     esac
 done

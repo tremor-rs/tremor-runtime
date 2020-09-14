@@ -46,7 +46,7 @@ echo "TARGET_ROOT: ${TARGET_ROOT}"
 
 if [ -d ${BENCH_ROOT}/$1 ]
 then
-  TREMOR_PATH="${BENCH_ROOT}/../tremor-script/lib" ${BENCH_EXTRA} ${TARGET_ROOT}/${TARGET_MODE}/tremor-server --no-api -c $file bench/link.yaml --query ./bench/$1/*.trickle
+  TREMOR_PATH="${BENCH_ROOT}/../tremor-script/lib" ${BENCH_EXTRA} ${TARGET_ROOT}/${TARGET_MODE}/tremor server run --no-api -f $file bench/link.yaml ./bench/$1/*.trickle
 else
-  TREMOR_PATH="${BENCH_ROOT}/../tremor-script/lib" ${BENCH_EXTRA} ${TARGET_ROOT}/${TARGET_MODE}/tremor-server --no-api -c $file bench/link.yaml
+  TREMOR_PATH="${BENCH_ROOT}/../tremor-script/lib" ${BENCH_EXTRA} ${TARGET_ROOT}/${TARGET_MODE}/tremor server run --no-api -f $file bench/link.yaml
 fi

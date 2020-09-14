@@ -314,11 +314,11 @@
     {
       "type": "lldb",
       "request": "launch",
-      "name": "Debug executable 'tremor-server'",
+      "name": "Debug executable 'tremor'",
       "cargo": {
-        "args": ["build", "--bin=tremor-server", "--package=tremor-server"],
+        "args": ["build", "--bin=tremor", "--package=tremor-cli"],
         "filter": {
-          "name": "tremor-server",
+          "name": "tremor",
           "kind": "bin"
         }
       },
@@ -331,9 +331,9 @@
       "request": "launch",
       "name": "Debug real-workflow-throughput-json",
       "cargo": {
-        "args": ["build", "--bin=tremor-server", "--package=tremor-server"],
+        "args": ["build", "--bin=tremor", "--package=tremor-cli"],
         "filter": {
-          "name": "tremor-server",
+          "name": "tremor",
           "kind": "bin"
         }
       },
@@ -350,14 +350,9 @@
       "request": "launch",
       "name": "Release real-workflow-throughput-json",
       "cargo": {
-        "args": [
-          "build",
-          "--bin=tremor-server",
-          "--package=tremor-server",
-          "--release"
-        ],
+        "args": ["build", "--bin=tremor", "--package=tremor-cli", "--release"],
         "filter": {
-          "name": "tremor-server",
+          "name": "tremor",
           "kind": "bin"
         }
       },
@@ -372,16 +367,11 @@
     {
       "type": "lldb",
       "request": "launch",
-      "name": "Debug unit tests in executable 'tremor-server'",
+      "name": "Debug unit tests in executable 'tremor'",
       "cargo": {
-        "args": [
-          "test",
-          "--no-run",
-          "--bin=tremor-server",
-          "--package=tremor-server"
-        ],
+        "args": ["test", "--no-run", "--bin=tremor", "--package=tremor-cli"],
         "filter": {
-          "name": "tremor-server",
+          "name": "tremor",
           "kind": "bin"
         }
       },

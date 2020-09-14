@@ -5,8 +5,8 @@ VSN=$(DOCKER_VSN)
 YEAR=2018-2020
 
 RELEASE_TARGETS := \
-	x86_64-unknown-linux-gnu \
 	x86_64-alpine-linux-musl \
+	# x86_64-unknown-linux-gnu
 	# fails on snmalloc builds currently so disabled
 	# TODO if we fix this, we don't need the alpine specifc target above for musl builds
 	#x86_64-unknown-linux-musl \
@@ -61,7 +61,7 @@ it:
 	cd tremor-cli && TREMOR_PATH=../tremor-script/lib tremor test integration tests -i integration -e ws
 
 bench: force
-	cargo build --release -p tremor-server
+	cargo build --release -p tremor
 	./bench/all.sh | tee bench-`date +%s`.txt
 
 force:

@@ -1,4 +1,5 @@
 # Contributing to Tremor
+
 [contributing-to-tremor]: #contributing-to-tremor
 
 Thank you for your interest in contributing to the Tremor project! There are many ways to
@@ -27,6 +28,7 @@ any guidance or assistance.
 [code-of-conduct]: https://docs.tremor.rs/CodeOfConduct
 
 ## Feature Requests
+
 [feature-requests]: #feature-requests
 
 To request a change to the way that Tremor works, please head over
@@ -35,6 +37,7 @@ to the [RFCs repository](https://github.com/tremor-rs/tremor-rfcs) and view the
 for instructions.
 
 ## Bug Reports
+
 [bug-reports]: #bug-reports
 
 While bugs are unfortunate, they're a reality in software. We can't fix what we
@@ -80,16 +83,16 @@ use it exactly:
 ```
 
 All three components are important: what you did, what you expected, what
-happened instead. Please include the output of `tremor-server --version`,
+happened instead. Please include the output of `tremor --version`,
 which includes important information about what platform you're on, what
 version of Rust you're using, etc.
 
 Sometimes, a backtrace is helpful, and so including that is nice. To get
 a backtrace, set the `RUST_BACKTRACE` environment variable to a value
-other than `0`. The easiest way to do this is to invoke `tremor-server` like this:
+other than `0`. The easiest way to do this is to invoke `tremor` like this:
 
 ```bash
-$ RUST_BACKTRACE=1 tremor-server...
+$ RUST_BACKTRACE=1 tremor...
 ```
 
 ## The Build System
@@ -101,6 +104,7 @@ really useful commands to the build system, which could save you a lot of time.
 [tremor-build-guide]: http://docs.tremor.rs/development/quick-start/
 
 ## Pull Requests
+
 [pull-requests]: #pull-requests
 
 Pull requests are the primary mechanism we use to change Tremor. GitHub itself
@@ -164,8 +168,8 @@ it can be found [here][https://github.com/tremor-rs/tremor-www-docs/blob/main/do
 
 Currently building the Tremor project will also build the following external projects:
 
-* [clippy](https://github.com/rust-lang/rust-clippy)
-* [rustfmt](https://github.com/rust-lang/rustfmt)
+- [clippy](https://github.com/rust-lang/rust-clippy)
+- [rustfmt](https://github.com/rust-lang/rustfmt)
 
 Breakage is not allowed in released branches and must be addressed before a PR is merged.
 
@@ -205,6 +209,7 @@ Answer questions in the _Get Help!_ channels from the [Tremor Chat][tremor-chat]
 Participate in the [RFC process](https://github.com/tremor-rs/tremor-rfcs).
 
 ## Tremor Chat
+
 [tremor-chat]: #tremor-chat
 
 Join the tremor community [slack](https://join.slack.com/t/tremor-debs/shared_invite/enQtOTMxNzY3NDg0MjI2LTQ4MTU4NjlkZDk0MmJmNmIwYjU0ZDc1OTNjMGRmNzUwZTdlZGVkMWFmNGFkZTAwOWJlYjlkMDZkNGNiMjQ2NzI)
