@@ -20,6 +20,7 @@ use simd_json::prelude::*;
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::{self, BufReader, BufWriter, Read, Write};
+use tremor_pipeline::{Event, Ids};
 use tremor_runtime::codec::Codec;
 use tremor_runtime::postprocessor::Postprocessor;
 use tremor_runtime::preprocessor::Preprocessor;
@@ -310,7 +311,8 @@ fn run_trickle_source(matches: &ArgMatches, src: &str) -> Result<()> {
     let mut egress = Egress::from_args(&matches)?;
 
     let runnable = tremor_pipeline::query::Query(runnable);
-    let mut pipeline = runnable.to_pipe()?;
+    let mut uid = 0u64;
+    let mut pipeline = runnable.to_pipe(&mut uid)?;
     let id = 0_u64;
 
     ingress.process(
@@ -326,13 +328,11 @@ fn run_trickle_source(matches: &ArgMatches, src: &str) -> Result<()> {
 
             runnable.enqueue(
                 "in",
-                tremor_pipeline::Event {
-                    id: *id,
-                    ingest_ns: at,
-                    origin_uri: None,
-                    is_batch: false,
-                    kind: None,
+                Event {
+                    id: Ids::new(0, *id),
                     data: value.clone(),
+                    ingest_ns: at,
+                    ..Event::default()
                 },
                 &mut continuation,
             )?;
@@ -362,7 +362,8 @@ fn run_pipeline_source(matches: &ArgMatches, src: &str) -> Result<()> {
     let config: tremor_runtime::config::Config = serde_yaml::from_str(&slurp_string(&src)?)?;
     let runtime = tremor_runtime::incarnate(config)?;
     let pipeline = &runtime.pipes[0];
-    let mut pipeline = pipeline.to_executable_graph(tremor_pipeline::buildin_ops)?;
+    let mut uid = 0u64;
+    let mut pipeline = pipeline.to_executable_graph(&mut uid, tremor_pipeline::buildin_ops)?;
 
     let mut ingress = Ingress::from_args(&matches)?;
     let mut egress = Egress::from_args(&matches)?;
@@ -381,13 +382,11 @@ fn run_pipeline_source(matches: &ArgMatches, src: &str) -> Result<()> {
 
             runnable.enqueue(
                 "in",
-                tremor_pipeline::Event {
-                    id: *id,
-                    ingest_ns: at,
-                    origin_uri: None,
-                    is_batch: false,
-                    kind: None,
+                Event {
+                    id: Ids::new(0, *id),
                     data: value.clone(),
+                    ingest_ns: at,
+                    ..Event::default()
                 },
                 &mut continuation,
             )?;

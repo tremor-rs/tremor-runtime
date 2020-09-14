@@ -12,43 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![forbid(warnings)]
-// This isn't a external crate so we don't worry about docs
-// #![deny(missing_docs)]
-#![recursion_limit = "1024"]
-#![deny(
-    clippy::all,
-    clippy::unwrap_used,
-    clippy::unnecessary_unwrap,
-    clippy::pedantic
-)]
-#![allow(clippy::must_use_candidate)]
-
-#[cfg(feature = "allocator-mimalloc")]
-#[global_allocator]
-static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
-#[cfg(feature = "allocator-snmalloc")]
-#[global_allocator]
-static ALLOC: snmalloc_rs::SnMalloc = snmalloc_rs::SnMalloc;
-#[cfg(feature = "allocator-jemalloc")]
-#[global_allocator]
-static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
-
 use crate::errors::{Error, Result};
 use crate::util::{get_source_kind, SourceKind};
 use async_std::task;
 use clap::{App, ArgMatches};
-use globwalk::glob;
-use std::io::BufReader;
 use std::mem;
-use std::{path::Path, sync::atomic::Ordering};
+use std::path::Path;
+use std::{io::BufReader, sync::atomic::Ordering};
 use tremor_api as api;
 use tremor_pipeline::query::Query;
 use tremor_pipeline::FN_REGISTRY;
 use tremor_runtime::repository::{BindingArtefact, PipelineArtefact};
 use tremor_runtime::system::World;
 use tremor_runtime::url::TremorURL;
-use tremor_runtime::{self, config, functions, metrics, version, QSIZE};
+use tremor_runtime::{self, config, functions, metrics, version};
 
 #[cfg_attr(tarpaulin, skip)]
 pub(crate) async fn load_file(world: &World, file_name: &str) -> Result<usize> {
@@ -148,6 +125,7 @@ fn fix_tide(r: api::Result<tide::Response>) -> tide::Result {
     })
 }
 
+#[cfg_attr(tarpaulin, skip)]
 #[allow(clippy::too_many_lines)]
 pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
     functions::load()?;
@@ -185,36 +163,21 @@ pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
         .value_of("storage-directory")
         .map(std::string::ToString::to_string);
     // TODO: Allow configuring this for offramps and pipelines
-    let (world, handle) = World::start(QSIZE, storage_directory).await?;
+    let (world, handle) = World::start(64, storage_directory).await?;
 
-    // We load queries first since those are only pipelines.
-    let query_files: Vec<String> = match matches.values_of("query") {
-        Some(files) => files.map(String::from).collect(),
-        // read from default query file(s) now (returns empty if these paths don't exist too)
-        None => glob("/etc/tremor/config/*.trickle")?
-            .filter_map(|p| p.ok().map(|p| p.display().to_string()))
-            .collect(),
-    };
-    if !query_files.is_empty() {
-        info!("Reading the query files: {}", query_files.join(","));
-        for query_file in query_files {
-            load_query_file(&world, &query_file).await?;
+    if let Some(config_files) = matches.values_of("artefacts") {
+        // We process trickle files first
+        for config_file in config_files.clone() {
+            match get_source_kind(config_file) {
+                SourceKind::Trickle => load_query_file(&world, config_file).await?,
+                _ => continue,
+            };
         }
-    }
-
-    let config_files: Vec<String> = match matches.values_of("config") {
-        Some(files) => files.map(String::from).collect(),
-        // read from default config file(s) now (returns empty if these paths don't exist too)
-        None => glob("/etc/tremor/config/*.yaml")?
-            .filter_map(|p| p.ok().map(|p| p.display().to_string()))
-            .collect(),
-    };
-    if !config_files.is_empty() {
-        info!("Reading the config files: {}", config_files.join(","));
+        // We process config files thereafter
         for config_file in config_files {
-            match get_source_kind(&config_file) {
+            match get_source_kind(config_file) {
                 SourceKind::Trickle | SourceKind::Tremor => continue,
-                _ => load_file(&world, &config_file).await?,
+                _ => load_file(&world, config_file).await?,
             };
         }
     }
@@ -301,12 +264,11 @@ fn server_run(matches: &ArgMatches) -> Result<()> {
 #[cfg_attr(tarpaulin, skip)]
 pub(crate) fn run_cmd(mut app: App, cmd: &ArgMatches) -> Result<()> {
     if let Some(matches) = cmd.subcommand_matches("run") {
-        server_run(matches)?;
+        server_run(matches)
     } else {
         app.print_long_help()
             .map_err(|e| Error::from(format!("Failed to print help: {}", e)))?;
         // ALLOW: main.rs
         ::std::process::exit(1);
     }
-    Ok(())
 }
