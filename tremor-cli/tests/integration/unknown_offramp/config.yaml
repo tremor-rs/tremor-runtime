@@ -2,7 +2,7 @@ onramp:
   - id: in
     type: file
     config:
-      source: "tests/integration/unknown_offramp/in.json.xz"
+      source: "in.json.xz"
       close_on_done: true
       sleep_on_done: 500
 

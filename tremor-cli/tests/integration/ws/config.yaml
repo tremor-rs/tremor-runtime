@@ -3,7 +3,7 @@ onramp:
     type: file
     codec: json
     config:
-      source: "tests/integration/ws/in.json"
+      source: "in.json"
       close_on_done: true
       sleep_on_done: 1000
 
