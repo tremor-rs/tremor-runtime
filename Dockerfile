@@ -1,4 +1,4 @@
-FROM rust:1.43.1 as builder
+FROM rust:1.45.0 as builder
 
 # Avoid warnings by switching to noninteractive
 ENV DEBIAN_FRONTEND=noninteractive
