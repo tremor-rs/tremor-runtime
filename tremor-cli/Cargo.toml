@@ -34,7 +34,7 @@ clap = { git = "https://github.com/clap-rs/clap", rev = "29df5c2", features = [ 
 clap_generate = { git = "https://github.com/clap-rs/clap", rev = "29df5c2"}
 simd-json = {version = "0.3", features = ["known-key"]}
 serde_yaml = "0.8"
-dirs = "2"
+dirs = "3"
 serde = "1"
 halfbrown="0.1"
 async-std = { version = "1.6", features = ["unstable"] }

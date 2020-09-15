@@ -1333,11 +1333,10 @@ dependencies = [
 
 [[package]]
 name = "dirs"
-version = "2.0.2"
+version = "3.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "13aea89a5c93364a98e9b37b2fa237effbb694d5cfe01c5b70941f7eb087d5e3"
+checksum = "142995ed02755914747cc6ca76fc7e4583cd18578746716d0508ea6ed558b9ff"
 dependencies = [
- "cfg-if",
  "dirs-sys",
 ]
 
@@ -5117,7 +5116,7 @@ dependencies = [
  "clap_generate",
  "criterion",
  "difference",
- "dirs 2.0.2",
+ "dirs 3.0.1",
  "env_logger",
  "error-chain 0.12.4",
  "float-cmp 0.8.0",
