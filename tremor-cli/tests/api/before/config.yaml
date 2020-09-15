@@ -11,7 +11,7 @@ offramp:
     type: file
     codec: json
     config:
-      file: "tests/api/before.log"
+      file: "../before.log"
   - id: exit
     type: exit
 

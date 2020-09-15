@@ -68,15 +68,6 @@ pub(crate) fn suite_command(
 
     let mut evidence = HashMap::new();
     let mut stats = stats::Stats::new();
-    let api_test_root = root.to_string_lossy();
-    let mut before = before::BeforeController::new(&api_test_root);
-    let before_process = before.spawn()?;
-
-    std::thread::spawn(move || {
-        if let Err(e) = before.capture(before_process) {
-            eprint!("Can't capture results from 'before' process: {}", e)
-        };
-    });
 
     let mut suites: HashMap<String, report::TestSuite> = HashMap::new();
     let mut counter = 0;
@@ -84,6 +75,22 @@ pub(crate) fn suite_command(
     let report_start = nanotime();
     let api_suites = api_suites.filter_map(std::result::Result::ok);
     for suite in api_suites {
+        // ALLOW: unwrap
+        let root = suite.path().parent().unwrap();
+        let base = root.to_string_lossy().to_string();
+
+        // Set cwd to test root
+        let cwd = std::env::current_dir()?;
+        std::env::set_current_dir(Path::new(&base))?;
+
+        let mut before = before::BeforeController::new(&base);
+        let before_process = before.spawn()?;
+        std::thread::spawn(move || {
+            if let Err(e) = before.capture(before_process) {
+                eprint!("Can't capture results from 'before' process: {}", e)
+            };
+        });
+
         let suite_start = nanotime();
         let command_str = slurp_string(&suite.path().to_string_lossy())?;
         let suite = serde_yaml::from_str::<CommandRun>(&command_str)?;
@@ -109,8 +116,8 @@ pub(crate) fn suite_command(
                 let mut fg_process = job::TargetProcess::new_with_stderr("/usr/bin/env", &args)?;
                 let exit_status = fg_process.wait_with_output();
 
-                let fg_out_file = format!("{}/fg.{}.out.log", api_test_root.clone(), counter);
-                let fg_err_file = format!("{}/fg.{}.err.log", api_test_root.clone(), counter);
+                let fg_out_file = format!("{}/fg.{}.out.log", base.clone(), counter);
+                let fg_err_file = format!("{}/fg.{}.err.log", base.clone(), counter);
                 let start = nanotime();
                 fg_process.tail(&fg_out_file, &fg_err_file)?;
                 let elapsed = nanotime() - start;
@@ -139,15 +146,18 @@ pub(crate) fn suite_command(
             api_stats.merge(&stats);
             status::stats(&api_stats)?;
         }
+
+        before::update_evidence(&base, &mut evidence)?;
+
+        let mut after = after::AfterController::new(&base);
+        after.spawn()?;
+        after::update_evidence(&base, &mut evidence)?;
+
+        // Reset cwd
+        std::env::set_current_dir(Path::new(&cwd))?;
     }
 
     status::rollups("\nCommand", &api_stats)?;
-
-    before::update_evidence(&api_test_root, &mut evidence)?;
-
-    let mut after = after::AfterController::new(&api_test_root);
-    after.spawn()?;
-    after::update_evidence(&api_test_root, &mut evidence)?;
 
     let elapsed = nanotime() - report_start;
     status::duration(elapsed)?;
