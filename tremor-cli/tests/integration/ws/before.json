@@ -6,9 +6,9 @@
     "run",
     "-n",
     "-f",
-    "tests/integration/ws/before/ws.trickle",
-    "tests/integration/ws/before/config.yaml",
-    "tests/integration/ws/before/server.yaml"
+    "before/ws.trickle",
+    "before/config.yaml",
+    "before/server.yaml"
   ],
   "await": {
     "port-open": [
