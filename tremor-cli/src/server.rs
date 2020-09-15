@@ -27,7 +27,7 @@ use tremor_runtime::system::World;
 use tremor_runtime::url::TremorURL;
 use tremor_runtime::{self, config, functions, metrics, version};
 
-#[cfg_attr(tarpaulin, skip)]
+#[cfg(not(tarpaulin_include))]
 pub(crate) async fn load_file(world: &World, file_name: &str) -> Result<usize> {
     info!("Loading configuration from {}", file_name);
     let mut count = 0;
@@ -80,7 +80,7 @@ pub(crate) async fn load_file(world: &World, file_name: &str) -> Result<usize> {
     Ok(count)
 }
 
-#[cfg_attr(tarpaulin, skip)]
+#[cfg(not(tarpaulin_include))]
 pub(crate) async fn load_query_file(world: &World, file_name: &str) -> Result<usize> {
     use std::ffi::OsStr;
     use std::io::Read;
@@ -125,7 +125,7 @@ fn fix_tide(r: api::Result<tide::Response>) -> tide::Result {
     })
 }
 
-#[cfg_attr(tarpaulin, skip)]
+#[cfg(not(tarpaulin_include))]
 #[allow(clippy::too_many_lines)]
 pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
     functions::load()?;
@@ -261,7 +261,7 @@ fn server_run(matches: &ArgMatches) -> Result<()> {
     }
 }
 
-#[cfg_attr(tarpaulin, skip)]
+#[cfg(not(tarpaulin_include))]
 pub(crate) fn run_cmd(mut app: App, cmd: &ArgMatches) -> Result<()> {
     if let Some(matches) = cmd.subcommand_matches("run") {
         server_run(matches)

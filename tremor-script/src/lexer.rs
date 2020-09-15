@@ -333,7 +333,7 @@ impl<'input> Token<'input> {
     }
     /// Is the token ignorable except when syntax or error highlighting.
     /// Is the token insignificant when parsing ( a correct ... ) source.
-    #[cfg_attr(tarpaulin, skip)]
+    #[cfg(not(tarpaulin_include))]
     pub(crate) fn is_ignorable(&self) -> bool {
         match *self {
             Token::SingleLineComment(_)

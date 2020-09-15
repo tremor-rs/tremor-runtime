@@ -98,7 +98,7 @@ where
     }
 }
 
-#[cfg_attr(tarpaulin, skip)]
+#[cfg(not(tarpaulin_include))]
 fn main() -> Result<()> {
     let yaml = load_yaml!("./cli.yaml");
     let app = App::from(yaml);

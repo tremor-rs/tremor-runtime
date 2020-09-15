@@ -38,7 +38,7 @@ pub trait Postprocessor: Send {
 /// # Errors
 ///
 ///   * Errors if the postprocessor is not known
-#[cfg_attr(tarpaulin, skip)]
+#[cfg(not(tarpaulin_include))]
 pub fn lookup(name: &str) -> Result<Box<dyn Postprocessor>> {
     match name {
         "lines" => Ok(Box::new(Lines::default())),
