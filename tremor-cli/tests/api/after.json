@@ -2,6 +2,6 @@
   "run": "tests/api/after",
   "cmd": "bash",
   "args": [
-    "./tests/api/after/stop.sh"
+    "after/stop.sh"
   ]
 }

@@ -58,14 +58,14 @@ suites:
               - OPTIONS
               - SUBCOMMANDS
               - api            Tremor API client
-              - completions    Shell completions
+              - completions    Generate shell completions to stdout. Tries to guess the shell if no
               - dbg            Advanced debugging commands
-              - doc            Run tremor script or query files against stdin or a json data archive, the data will be read from
+              - doc            Generates documention from tremor script files
               - STDIN or an archive and written to STDOUT.
               - explain
               - help           Prints this message or the help of the given subcommand(s)
-              - run            Run tremor script or query files against stdin or a json data archive, the data will be read from
-              - STDIN or an archive and written to STDOUT.
+              - run            Run tremor script or query files against stdin or a json data archive, the
+              -                data will be read from STDIN or an archive and written to STDOUT.
               - server         Tremor server
               - test           Testing facilities
       - name: |
@@ -163,8 +163,8 @@ suites:
           - shell
           - zsh
           - bug
-        status: 101
+        status: 0
         expects:
-          - source: stderr
+          - source: stdout
             contains:
-              - thread 'main' panicked at 'Fatal internal error.
+              - "#compdef tremor"

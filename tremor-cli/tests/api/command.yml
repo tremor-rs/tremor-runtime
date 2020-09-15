@@ -15,14 +15,14 @@ suites:
             - source: stdout
               contains:
                 - HTTP/1.1 200 OK
-                - '{"version":"0.8.0"}'
+                - '{"version":"0.9.0"}'
         - name: GET /onramp
           command: curl -vs --stderr - http://localhost:9898/onramp
           tags:
             - get
           status: 0
           expects:
-            - source: tests/api/fg.1.out.log
+            - source: fg.1.out.log
               contains:
                 - HTTP/1.1 200 OK
                 - '["ws-in"]'
