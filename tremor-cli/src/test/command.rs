@@ -75,86 +75,89 @@ pub(crate) fn suite_command(
     let report_start = nanotime();
     let api_suites = api_suites.filter_map(std::result::Result::ok);
     for suite in api_suites {
-        // ALLOW: unwrap
-        let root = suite.path().parent().unwrap();
-        let base = root.to_string_lossy().to_string();
+        if let Some(root) = suite.path().parent() {
+            let base = root.to_string_lossy().to_string();
 
-        // Set cwd to test root
-        let cwd = std::env::current_dir()?;
-        std::env::set_current_dir(Path::new(&base))?;
+            // Set cwd to test root
+            let cwd = std::env::current_dir()?;
+            std::env::set_current_dir(Path::new(&base))?;
 
-        let mut before = before::BeforeController::new(&base);
-        let before_process = before.spawn()?;
-        std::thread::spawn(move || {
-            if let Err(e) = before.capture(before_process) {
-                eprint!("Can't capture results from 'before' process: {}", e)
-            };
-        });
-
-        let suite_start = nanotime();
-        let command_str = slurp_string(&suite.path().to_string_lossy())?;
-        let suite = serde_yaml::from_str::<CommandRun>(&command_str)?;
-
-        match &suite.tags {
-            Some(tags) => {
-                if let (_, false) = by_tag.matches(&tags) {
-                    status::skip(&suite.name)?;
-                    continue; // SKIP
-                } else {
-                    status::tags(&by_tag, Some(&tags))?;
-                }
-            }
-            None => (),
-        }
-
-        for suite in suite.suites {
-            for case in suite.cases {
-                status::h1("Command Test", &case.name)?;
-
-                let args = shell_words::split(&case.command).unwrap_or_default();
-                // FIXME wintel
-                let mut fg_process = job::TargetProcess::new_with_stderr("/usr/bin/env", &args)?;
-                let exit_status = fg_process.wait_with_output();
-
-                let fg_out_file = format!("{}/fg.{}.out.log", base.clone(), counter);
-                let fg_err_file = format!("{}/fg.{}.err.log", base.clone(), counter);
-                let start = nanotime();
-                fg_process.tail(&fg_out_file, &fg_err_file)?;
-                let elapsed = nanotime() - start;
-
-                counter += 1;
-
-                let (case_stats, elements) = process_testcase(
-                    &fg_out_file,
-                    &fg_err_file,
-                    exit_status?.code(),
-                    elapsed,
-                    &case,
-                )?;
-
-                stats.merge(&case_stats);
-                let suite = report::TestSuite {
-                    name: case.name.trim().into(),
-                    description: "Command-driven test".to_string(),
-                    elements,
-                    evidence: None,
-                    stats: case_stats,
-                    duration: nanotime() - suite_start,
+            let mut before = before::BeforeController::new(&base);
+            let before_process = before.spawn()?;
+            std::thread::spawn(move || {
+                if let Err(e) = before.capture(before_process) {
+                    eprint!("Can't capture results from 'before' process: {}", e)
                 };
-                suites.insert(case.name, suite);
+            });
+
+            let suite_start = nanotime();
+            let command_str = slurp_string(&suite.path().to_string_lossy())?;
+            let suite = serde_yaml::from_str::<CommandRun>(&command_str)?;
+
+            match &suite.tags {
+                Some(tags) => {
+                    if let (_, false) = by_tag.matches(&tags) {
+                        status::skip(&suite.name)?;
+                        continue; // SKIP
+                    } else {
+                        status::tags(&by_tag, Some(&tags))?;
+                    }
+                }
+                None => (),
             }
-            api_stats.merge(&stats);
-            status::stats(&api_stats)?;
+
+            for suite in suite.suites {
+                for case in suite.cases {
+                    status::h1("Command Test", &case.name)?;
+
+                    let args = shell_words::split(&case.command).unwrap_or_default();
+                    // FIXME wintel
+                    let mut fg_process =
+                        job::TargetProcess::new_with_stderr("/usr/bin/env", &args)?;
+                    let exit_status = fg_process.wait_with_output();
+
+                    let fg_out_file = format!("{}/fg.{}.out.log", base.clone(), counter);
+                    let fg_err_file = format!("{}/fg.{}.err.log", base.clone(), counter);
+                    let start = nanotime();
+                    fg_process.tail(&fg_out_file, &fg_err_file)?;
+                    let elapsed = nanotime() - start;
+
+                    counter += 1;
+
+                    let (case_stats, elements) = process_testcase(
+                        &fg_out_file,
+                        &fg_err_file,
+                        exit_status?.code(),
+                        elapsed,
+                        &case,
+                    )?;
+
+                    stats.merge(&case_stats);
+                    let suite = report::TestSuite {
+                        name: case.name.trim().into(),
+                        description: "Command-driven test".to_string(),
+                        elements,
+                        evidence: None,
+                        stats: case_stats,
+                        duration: nanotime() - suite_start,
+                    };
+                    suites.insert(case.name, suite);
+                }
+                api_stats.merge(&stats);
+                status::stats(&api_stats)?;
+            }
+
+            before::update_evidence(&base, &mut evidence)?;
+
+            let mut after = after::AfterController::new(&base);
+            after.spawn()?;
+            after::update_evidence(&base, &mut evidence)?;
+
+            // Reset cwd
+            std::env::set_current_dir(Path::new(&cwd))?;
+        } else {
+            return Err("Could not get parent of base path in command driven test walker".into());
         }
-
-        before::update_evidence(&base, &mut evidence)?;
-
-        let mut after = after::AfterController::new(&base);
-        after.spawn()?;
-        after::update_evidence(&base, &mut evidence)?;
-
-        // Reset cwd
-        std::env::set_current_dir(Path::new(&cwd))?;
     }
 
     status::rollups("\nCommand", &api_stats)?;
