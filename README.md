@@ -51,7 +51,7 @@ Note: Some of those restrictions are subject to change as tremor is a growing pr
 
 ### Example use cases
 
-We provide some usage examples of this in the `docs/workshop` folder. Those examples include a `docker-compose.yaml` for running them and can serve as a starting point for deploying tremor.
+We provide usage examples of this in the `docs/workshop` folder. Those examples include a `docker-compose.yaml` for running them and can serve as a starting point for deploying tremor.
 
 ## Building
 
