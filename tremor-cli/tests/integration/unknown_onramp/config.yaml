@@ -1,7 +1,6 @@
 onramp:
   - id: in
     type: bad_onramp
-    sleep_on_done: 1000
 
 offramp:
   - id: out
