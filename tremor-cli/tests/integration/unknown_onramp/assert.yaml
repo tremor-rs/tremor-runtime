@@ -1,7 +1,7 @@
 status: 1
 name: Crash on unknown onramp type
 asserts:
-  - source: fg.err.log
+  - source: STDERR
     contains:
-      - | 
-        error: Onramp bad_onramp not known
+      - |
+        bad_onramp not known
