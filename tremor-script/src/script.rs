@@ -177,7 +177,7 @@ where
     }
 
     /// Highlights a script range with a given highlighter.
-    #[cfg_attr(tarpaulin, skip)]
+    #[cfg(not(tarpaulin_include))]
     pub fn highlight_script_with_range<H: Highlighter>(
         script: &str,
         r: Range,
@@ -216,7 +216,7 @@ where
     }
 
     /// Preprocesses and highlights a script with a given highlighter.
-    #[cfg_attr(tarpaulin, skip)]
+    #[cfg(not(tarpaulin_include))]
     pub fn highlight_preprocess_script_with<H: Highlighter>(
         file_name: &str,
         script: &'script str,

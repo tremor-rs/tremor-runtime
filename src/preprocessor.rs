@@ -45,7 +45,7 @@ pub trait Preprocessor: Sync + Send {
 /// # Errors
 ///
 ///   * Errors if the preprocessor is not known
-#[cfg_attr(tarpaulin, skip)]
+#[cfg(not(tarpaulin_include))]
 pub fn lookup(name: &str) -> Result<Box<dyn Preprocessor>> {
     match name {
         // TODO once preprocessors allow configuration, remove multiple entries for lines here
