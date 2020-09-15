@@ -1,7 +1,7 @@
 status: 0
 name: WS
 asserts:
-  - source: tests/integration/ws/gen.log
+  - source: gen.log
     contains:
       - |
         {"done":true}
