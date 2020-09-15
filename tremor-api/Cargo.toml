@@ -1,6 +1,6 @@
 [package]
 name = "tremor-api"
-version = "0.8.0"
+version = "0.9.0"
 description = "Tremor Api Callbacks"
 authors = ["The Tremor Team"]
 edition = "2018"
