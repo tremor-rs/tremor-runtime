@@ -195,7 +195,11 @@ pub(crate) fn visit_path<'a>(base: &Path, path: &Path, visitor: &'a PathVisitor)
                         visitor(Some(Path::new(&rel_path)), path.as_path())?;
                     }
                 }
-                _otherwise => (), // FIXME emit warning?
+                Err(e) => error!(
+                    "could not create relative path for `{}`: {}",
+                    path.to_string_lossy(),
+                    e
+                ),
             }
         }
 

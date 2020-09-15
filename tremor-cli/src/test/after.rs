@@ -38,7 +38,7 @@ pub(crate) fn load_after(path_str: &str) -> Result<After> {
     let tags_data = slurp_string(path_str)?;
     match serde_json::from_str(&tags_data) {
         Ok(s) => Ok(s),
-        _not_well_formed => Err(Error::from(format!(
+        Err(_not_well_formed) => Err(Error::from(format!(
             "Unable to load `after.json` from path: {}",
             path_str
         ))),
