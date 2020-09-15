@@ -144,7 +144,7 @@ impl rentals::MessageStream {
     #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr, clippy::mut_from_ref)]
     unsafe fn mut_suffix(
         &self,
-    ) -> &mut stream_consumer::MessageStream<'static, LoggingConsumerContext> {
+    ) -> &mut stream_consumer::MessageStream<'static, LoggingConsumerContext, SmolRuntime> {
         transmute(&self.suffix().stream)
     }
 
