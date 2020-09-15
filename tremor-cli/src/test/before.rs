@@ -102,7 +102,7 @@ impl BeforeController {
                 before_json.block_on()?;
                 ret
             }
-            _not_found => Ok(None),
+            Err(_not_found) => Ok(None),
         }
     }
 

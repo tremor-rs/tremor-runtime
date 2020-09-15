@@ -33,10 +33,18 @@ pub trait Preprocessor: Sync + Send {
     /// Canonical name for this preprocessor
     fn name(&self) -> String;
     /// process data
+    ///
+    /// # Errors
+    ///
+    /// * Errors if the data can not processed
     fn process(&mut self, ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>>;
 }
 
 /// Lookup a preprocessor implementation via its unique id
+///
+/// # Errors
+///
+///   * Errors if the preprocessor is not known
 #[cfg_attr(tarpaulin, skip)]
 pub fn lookup(name: &str) -> Result<Box<dyn Preprocessor>> {
     match name {

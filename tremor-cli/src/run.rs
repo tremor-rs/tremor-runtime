@@ -311,7 +311,7 @@ fn run_trickle_source(matches: &ArgMatches, src: &str) -> Result<()> {
     let mut egress = Egress::from_args(&matches)?;
 
     let runnable = tremor_pipeline::query::Query(runnable);
-    let mut uid = 0u64;
+    let mut uid = 0_u64;
     let mut pipeline = runnable.to_pipe(&mut uid)?;
     let id = 0_u64;
 
@@ -362,7 +362,7 @@ fn run_pipeline_source(matches: &ArgMatches, src: &str) -> Result<()> {
     let config: tremor_runtime::config::Config = serde_yaml::from_str(&slurp_string(&src)?)?;
     let runtime = tremor_runtime::incarnate(config)?;
     let pipeline = &runtime.pipes[0];
-    let mut uid = 0u64;
+    let mut uid = 0_u64;
     let mut pipeline = pipeline.to_executable_graph(&mut uid, tremor_pipeline::buildin_ops)?;
 
     let mut ingress = Ingress::from_args(&matches)?;

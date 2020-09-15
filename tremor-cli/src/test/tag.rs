@@ -30,9 +30,9 @@ pub(crate) fn maybe_slurp_tags(path: &str) -> Result<Tags> {
     match tags_data {
         Ok(tags_data) => match serde_json::from_str(&tags_data) {
             Ok(s) => Ok(s),
-            _not_well_formed => Ok(vec![]),
+            Err(_not_well_formed) => Ok(vec![]),
         },
-        _not_found => Ok(vec![]),
+        Err(_not_found) => Ok(vec![]),
     }
 }
 

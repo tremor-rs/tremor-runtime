@@ -27,10 +27,17 @@ pub trait Postprocessor: Send {
     /// Canonical name of the postprocessor
     fn name(&self) -> String;
     /// process data
+    ///
+    /// # Errors
+    ///
+    ///   * Errors if the data could not be processed
     fn process(&mut self, ingres_ns: u64, egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>>;
 }
 
 /// Lookup a postprocessor via its unique id
+/// # Errors
+///
+///   * Errors if the postprocessor is not known
 #[cfg_attr(tarpaulin, skip)]
 pub fn lookup(name: &str) -> Result<Box<dyn Postprocessor>> {
     match name {
