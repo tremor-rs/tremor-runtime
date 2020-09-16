@@ -49,7 +49,7 @@ offramp:
       link: true
       # TODO make this optional too
       endpoints:
-       - http://localhost:8139/
+       - http://localhost:8139/snot
       #put: true
       #headers:
       #  "Client": "Tremor"
