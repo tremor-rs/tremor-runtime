@@ -31,7 +31,7 @@ async-trait = "0.1"
 async-channel = "1"
 async-compression = {version = "0.3", features = ["xz", "futures-bufread", "stream"]}
 smol = "1.0"
-async-io = "0.2"
+async-io = "1.1"
 async-compat = "0.1"
 base64 = "0.12"
 bytes = "0.5"
