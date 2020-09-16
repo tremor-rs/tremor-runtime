@@ -680,12 +680,11 @@ where
 /// in order to not expose temporary states of the patched object to intermittent operations
 /// example:
 ///
-/// ```
 /// patch event of
 ///   insert "trollolol" event.key
 ///   insert "snot" event.badger
 /// end
-/// ```
+///
 enum PreEvaluatedPatchOperation<'event, 'precomp> {
     Insert {
         ident: Cow<'event, str>,
