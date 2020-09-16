@@ -4,6 +4,8 @@
   "args": [
     "server",
     "run",
+    "-p",
+    "before.pid",
     "-n",
     "-f",
     "before/ws.trickle",
