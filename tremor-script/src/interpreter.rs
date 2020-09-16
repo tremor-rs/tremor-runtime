@@ -674,6 +674,54 @@ where
     Ok(())
 }
 
+/// enum mirroring PatchOperation carrying evaluated elements
+/// as we need to evaluate expressions in patch operations
+/// in one go, before we do the actual in-place manipulations
+/// in order to not expose temporary states of the patched object to intermittent operations
+/// example:
+///
+/// ```
+/// patch event of
+///   insert "trollolol" event.key
+///   insert "snot" event.badger
+/// end
+/// ```
+enum PreEvaluatedPatchOperation<'event, 'precomp> {
+    Insert {
+        ident: Cow<'event, str>,
+        ident_expr: &'precomp ImutExprInt<'event>,
+        value: Value<'event>,
+    },
+    Update {
+        ident: Cow<'event, str>,
+        ident_expr: &'precomp ImutExprInt<'event>,
+        value: Value<'event>,
+    },
+    Upsert {
+        ident: Cow<'event, str>,
+        value: Value<'event>,
+    },
+    Erase {
+        ident: Cow<'event, str>,
+    },
+    Copy {
+        from: Cow<'event, str>,
+        to: Cow<'event, str>,
+    },
+    Move {
+        from: Cow<'event, str>,
+        to: Cow<'event, str>,
+    },
+    Merge {
+        ident: Cow<'event, str>,
+        ident_expr: &'precomp ImutExprInt<'event>,
+        merge_value: Value<'event>,
+    },
+    TupleMerge {
+        merge_value: Value<'event>,
+    },
+}
+
 #[inline]
 fn patch_value<'run, 'event, 'script, Expr>(
     _outer: &'script Expr,
@@ -693,63 +741,97 @@ where
     'event: 'run,
 {
     let patch_expr = expr;
+    let mut evaluated: Vec<PreEvaluatedPatchOperation> = Vec::with_capacity(expr.operations.len());
+    // first pass over the operations, evaluating them
+    // and (IMPORTANT) get it into an owned, possibly cloned value, so we reference
+    // the target value in the state before any patch operation has been executed.
     for op in &expr.operations {
-        // NOTE: This if is inside the for loop to prevent obj to be updated
-        // between iterations and possibly lead to dangling pointers
+        evaluated.push(match op {
+            PatchOperation::Insert { ident, expr } => PreEvaluatedPatchOperation::Insert {
+                ident: stry!(ident.eval_to_string(opts, env, event, state, meta, local)),
+                ident_expr: ident,
+                value: stry!(expr.run(opts, env, event, state, meta, local)).into_owned(),
+            },
+            PatchOperation::Update { ident, expr } => PreEvaluatedPatchOperation::Update {
+                ident: stry!(ident.eval_to_string(opts, env, event, state, meta, local)),
+                ident_expr: ident,
+                value: stry!(expr.run(opts, env, event, state, meta, local)).into_owned(),
+            },
+            PatchOperation::Upsert { ident, expr } => PreEvaluatedPatchOperation::Upsert {
+                ident: stry!(ident.eval_to_string(opts, env, event, state, meta, local)),
+                value: stry!(expr.run(opts, env, event, state, meta, local)).into_owned(),
+            },
+            PatchOperation::Erase { ident } => PreEvaluatedPatchOperation::Erase {
+                ident: stry!(ident.eval_to_string(opts, env, event, state, meta, local)),
+            },
+            PatchOperation::Copy { from, to } => PreEvaluatedPatchOperation::Copy {
+                from: stry!(from.eval_to_string(opts, env, event, state, meta, local)),
+                to: stry!(to.eval_to_string(opts, env, event, state, meta, local)),
+            },
+            PatchOperation::Move { from, to } => PreEvaluatedPatchOperation::Move {
+                from: stry!(from.eval_to_string(opts, env, event, state, meta, local)),
+                to: stry!(to.eval_to_string(opts, env, event, state, meta, local)),
+            },
+            PatchOperation::Merge { ident, expr } => PreEvaluatedPatchOperation::Merge {
+                ident: stry!(ident.eval_to_string(opts, env, event, state, meta, local)),
+                ident_expr: ident,
+                merge_value: stry!(expr.run(opts, env, event, state, meta, local)).into_owned(),
+            },
+            PatchOperation::TupleMerge { expr } => PreEvaluatedPatchOperation::TupleMerge {
+                merge_value: stry!(expr.run(opts, env, event, state, meta, local)).into_owned(),
+            },
+        })
+    }
+
+    // second pass over pre-evaluated operations
+    // executing them against the actual target value
+    for const_op in evaluated.drain(..) {
+        // moved inside the loop as we need to borrow it mutably in the tuple-merge case
+        // patch event of
+        //  insert some.value => 1
+        //  insert some.other_value => 1
+        // end
         if let Some(ref mut obj) = value.as_object_mut() {
-            match op {
-                PatchOperation::Insert { ident, expr } => {
-                    let new_key = stry!(ident.eval_to_string(opts, env, event, state, meta, local));
-                    let new_value = stry!(expr.run(opts, env, event, state, meta, local));
-                    if obj.contains_key(&new_key) {
+            match const_op {
+                PreEvaluatedPatchOperation::Insert {
+                    ident,
+                    ident_expr,
+                    value,
+                } => {
+                    if obj.contains_key(&ident) {
                         return error_patch_key_exists(
                             patch_expr,
-                            ident,
-                            new_key.to_string(),
+                            ident_expr,
+                            ident.to_string(),
                             &env.meta,
                         );
                     } else {
-                        obj.insert(new_key, new_value.into_owned());
+                        obj.insert(ident, value);
                     }
                 }
-                PatchOperation::Update { ident, expr } => {
-                    let new_key = stry!(ident.eval_to_string(opts, env, event, state, meta, local));
-                    let new_value = stry!(expr.run(opts, env, event, state, meta, local));
-                    if obj.contains_key(&new_key) {
-                        obj.insert(new_key, new_value.into_owned());
+                PreEvaluatedPatchOperation::Update {
+                    ident,
+                    ident_expr,
+                    value,
+                } => {
+                    if obj.contains_key(&ident) {
+                        obj.insert(ident, value);
                     } else {
                         return error_patch_update_key_missing(
                             patch_expr,
-                            expr,
-                            new_key.to_string(),
+                            ident_expr,
+                            ident.to_string(),
                             &env.meta,
                         );
                     }
                 }
-                PatchOperation::Upsert { ident, expr } => {
-                    let new_key = stry!(ident.eval_to_string(opts, env, event, state, meta, local));
-                    let new_value = stry!(expr.run(opts, env, event, state, meta, local));
-                    obj.insert(new_key, new_value.into_owned());
+                PreEvaluatedPatchOperation::Upsert { ident, value } => {
+                    obj.insert(ident, value);
                 }
-                PatchOperation::Erase { ident } => {
-                    let new_key = stry!(ident.eval_to_string(opts, env, event, state, meta, local));
-                    obj.remove(&new_key);
+                PreEvaluatedPatchOperation::Erase { ident } => {
+                    obj.remove(&ident);
                 }
-                PatchOperation::Move { from, to } => {
-                    let from = stry!(from.eval_to_string(opts, env, event, state, meta, local));
-                    let to = stry!(to.eval_to_string(opts, env, event, state, meta, local));
-
-                    if obj.contains_key(&to) {
-                        return error_patch_key_exists(patch_expr, expr, to.to_string(), &env.meta);
-                    }
-                    if let Some(old) = obj.remove(&from) {
-                        obj.insert(to, old);
-                    }
-                }
-                PatchOperation::Copy { from, to } => {
-                    let from = stry!(from.eval_to_string(opts, env, event, state, meta, local));
-                    let to = stry!(to.eval_to_string(opts, env, event, state, meta, local));
-
+                PreEvaluatedPatchOperation::Copy { from, to } => {
                     if obj.contains_key(&to) {
                         return error_patch_key_exists(patch_expr, expr, to.to_string(), &env.meta);
                     }
@@ -758,34 +840,39 @@ where
                         obj.insert(to, old);
                     }
                 }
-                PatchOperation::Merge { ident, expr } => {
-                    let new_key = stry!(ident.eval_to_string(opts, env, event, state, meta, local));
-                    let merge_spec = stry!(expr.run(opts, env, event, state, meta, local));
-
-                    match obj.get_mut(&new_key) {
-                        Some(value @ Value::Object(_)) => {
-                            stry!(merge_values(patch_expr, expr, value, &merge_spec));
-                        }
-                        Some(other) => {
-                            return error_patch_merge_type_conflict(
-                                patch_expr,
-                                ident,
-                                new_key.to_string(),
-                                &other,
-                                &env.meta,
-                            );
-                        }
-                        None => {
-                            let mut new_value = Value::object();
-                            stry!(merge_values(patch_expr, expr, &mut new_value, &merge_spec));
-                            obj.insert(new_key, new_value);
-                        }
+                PreEvaluatedPatchOperation::Move { from, to } => {
+                    if obj.contains_key(&to) {
+                        return error_patch_key_exists(patch_expr, expr, to.to_string(), &env.meta);
+                    }
+                    if let Some(old) = obj.remove(&from) {
+                        obj.insert(to, old);
                     }
                 }
-                PatchOperation::TupleMerge { expr } => {
-                    let merge_spec = stry!(expr.run(opts, env, event, state, meta, local));
-
-                    stry!(merge_values(patch_expr, expr, value, &merge_spec));
+                PreEvaluatedPatchOperation::Merge {
+                    ident,
+                    ident_expr,
+                    merge_value,
+                } => match obj.get_mut(&ident) {
+                    Some(value @ Value::Object(_)) => {
+                        stry!(merge_values(patch_expr, expr, value, &merge_value));
+                    }
+                    Some(other) => {
+                        return error_patch_merge_type_conflict(
+                            patch_expr,
+                            ident_expr,
+                            ident.to_string(),
+                            &other,
+                            &env.meta,
+                        );
+                    }
+                    None => {
+                        let mut new_value = Value::object();
+                        stry!(merge_values(patch_expr, expr, &mut new_value, &merge_value));
+                        obj.insert(ident, new_value);
+                    }
+                },
+                PreEvaluatedPatchOperation::TupleMerge { merge_value } => {
+                    stry!(merge_values(patch_expr, expr, value, &merge_value));
                 }
             }
         } else {

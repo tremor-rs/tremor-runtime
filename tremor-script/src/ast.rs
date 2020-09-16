@@ -793,7 +793,7 @@ pub enum ImutExprInt<'script> {
     Merge(Box<Merge<'script>>),
     /// Path
     Path(Path<'script>),
-    /// Local
+    /// Local - local variable
     Local {
         /// Local Index
         idx: usize,

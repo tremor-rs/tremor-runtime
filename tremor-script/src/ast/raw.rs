@@ -1228,7 +1228,7 @@ impl<'script> Upable<'script> for ComprehensionRaw<'script> {
 
         let target = self.target.up(helper)?;
 
-        // We know that each case wiull have a key and a value as a shadowed
+        // We know that each case will have a key and a value as a shadowed
         // variable so we reserve two ahead of time so we know what id's those
         // will be.
         let (key_id, val_id) = helper.reserve_2_shadow();
