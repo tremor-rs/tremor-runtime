@@ -16,7 +16,7 @@ use crate::errors::{Error, Result};
 use crate::job;
 use crate::util::nanotime;
 use crate::{job::TargetProcess, util::slurp_string};
-use std::{collections::HashMap, fs};
+use std::{collections::HashMap, fs, time::Duration};
 
 #[derive(Deserialize, Debug)]
 pub(crate) struct Before {
@@ -27,6 +27,8 @@ pub(crate) struct Before {
     conditionals: Option<HashMap<String, Vec<String>>>,
     #[serde(rename = "max-await-secs", default = "default_max_await_secs")]
     until: u16,
+    #[serde(rename = "min-await-secs", default = "default_min_await_secs")]
+    before_start_delay: u16,
 }
 
 impl Before {
@@ -40,34 +42,40 @@ impl Before {
 
     #[allow(clippy::cast_possible_truncation)]
     pub(crate) fn block_on(&self) -> Result<()> {
+        let epoch = nanotime();
+
         if let Some(conditions) = &self.conditionals {
             for (k, v) in conditions.iter() {
-                match k.as_str() {
-                    "port-open" => {
-                        let epoch = nanotime();
-                        for port in v {
-                            loop {
-                                let now = nanotime();
-                                if ((now - epoch) / 1_000_000_000) as u16 > self.until {
-                                    return Err("Upper bound exceeded error".into());
-                                }
-                                if let Ok(port) = port.parse::<u16>() {
-                                    if !port_scanner::scan_port(port) {
-                                        break;
-                                    }
+                if "port-open" == k.as_str() {
+                    for port in v {
+                        loop {
+                            let now = nanotime();
+                            if ((now - epoch) / 1_000_000_000) as u16 > self.until {
+                                return Err("Upper bound exceeded error".into());
+                            }
+                            if let Ok(port) = port.parse::<u16>() {
+                                if !port_scanner::scan_port(port) {
+                                    break;
                                 }
                             }
                         }
                     }
-                    _default => (),
                 }
             }
         }
+
+        std::thread::sleep(Duration::from_secs(self.before_start_delay as u64));
+
         Ok(())
     }
 }
+
 fn default_max_await_secs() -> u16 {
     0 // No delay by default as many tests won't depend on conditional resource allocation
+}
+
+fn default_min_await_secs() -> u16 {
+    0 // Wait for at least 1 seconds before starting tests that depend on background process
 }
 
 pub(crate) fn load_before(path_str: &str) -> Result<Before> {
