@@ -234,7 +234,7 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
                 && (kind == TestKind::All || kind == TestKind::Command)
             {
                 let (stats, test_reports) = command::suite_command(root, &meta, &filter_by_tags)?;
-                reports.insert("api".to_string(), test_reports);
+                reports.insert("command".to_string(), test_reports);
                 cmd_stats.merge(&stats);
                 status::hr()?;
             }

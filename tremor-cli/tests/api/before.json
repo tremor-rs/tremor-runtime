@@ -4,6 +4,8 @@
   "args": [
     "server",
     "run",
+    "-p",
+    "before.pid",
     "-f",
     "before/ws.trickle",
     "before/config.yaml",
@@ -15,5 +17,6 @@
       "4242"
     ]
   },
-  "max-await-secs": 15
+  "max-await-secs": 15,
+  "min-await-secs": 2
 }

@@ -49,6 +49,11 @@ subcommands:
                   short: d
                   takes_value: true
                   required: false
+              - pid:
+                  help: Captures process id if set and stores in a file
+                  short: p
+                  takes_value: true
+                  required: false
               - no-api:
                   help: Disable the API
                   takes_value: false
