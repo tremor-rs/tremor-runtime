@@ -680,20 +680,21 @@ where
 /// in order to not expose temporary states of the patched object to intermittent operations
 /// example:
 ///
-/// patch event of
-///   insert "trollolol" event.key
-///   insert "snot" event.badger
+/// let event = patch event of
+///   insert "a" => event
+///   insert "b" => event
+///   insert "c" => event
 /// end
 ///
-enum PreEvaluatedPatchOperation<'event, 'precomp> {
+enum PreEvaluatedPatchOperation<'event, 'script> {
     Insert {
         ident: Cow<'event, str>,
-        ident_expr: &'precomp ImutExprInt<'event>,
+        ident_expr: &'script ImutExprInt<'event>,
         value: Value<'event>,
     },
     Update {
         ident: Cow<'event, str>,
-        ident_expr: &'precomp ImutExprInt<'event>,
+        ident_expr: &'script ImutExprInt<'event>,
         value: Value<'event>,
     },
     Upsert {
@@ -713,7 +714,7 @@ enum PreEvaluatedPatchOperation<'event, 'precomp> {
     },
     Merge {
         ident: Cow<'event, str>,
-        ident_expr: &'precomp ImutExprInt<'event>,
+        ident_expr: &'script ImutExprInt<'event>,
         merge_value: Value<'event>,
     },
     TupleMerge {
@@ -721,32 +722,22 @@ enum PreEvaluatedPatchOperation<'event, 'precomp> {
     },
 }
 
-#[inline]
-#[allow(clippy::too_many_lines)]
-fn patch_value<'run, 'event, 'script, Expr>(
-    _outer: &'script Expr,
-    opts: ExecOpts,
-    env: &'run Env<'run, 'event, 'script>,
-    event: &'run Value<'event>,
-    state: &'run Value<'static>,
-    meta: &'run Value<'event>,
-    local: &'run LocalStack<'event>,
-    value: &'run mut Value<'event>,
-    expr: &'script Patch,
-) -> Result<()>
-where
-    Expr: BaseExpr,
-
-    'script: 'event,
-    'event: 'run,
-{
-    let patch_expr = expr;
-    let mut evaluated: Vec<PreEvaluatedPatchOperation> = Vec::with_capacity(expr.operations.len());
-    // first pass over the operations, evaluating them
-    // and (IMPORTANT) get it into an owned, possibly cloned value, so we reference
-    // the target value in the state before any patch operation has been executed.
-    for op in &expr.operations {
-        evaluated.push(match op {
+impl<'event, 'script> PreEvaluatedPatchOperation<'event, 'script> {
+    /// evaulate the `PatchOperation` into constant parts
+    fn from<'run>(
+        patch_op: &'script PatchOperation,
+        opts: ExecOpts,
+        env: &'run Env<'run, 'event, 'script>,
+        event: &'run Value<'event>,
+        state: &'run Value<'static>,
+        meta: &'run Value<'event>,
+        local: &'run LocalStack<'event>,
+    ) -> Result<Self>
+    where
+        'script: 'event,
+        'event: 'run,
+    {
+        Ok(match patch_op {
             PatchOperation::Insert { ident, expr } => PreEvaluatedPatchOperation::Insert {
                 ident: stry!(ident.eval_to_string(opts, env, event, state, meta, local)),
                 ident_expr: ident,
@@ -782,15 +773,41 @@ where
             },
         })
     }
+}
+
+#[inline]
+fn patch_value<'run, 'event, 'script, Expr>(
+    _outer: &'script Expr,
+    opts: ExecOpts,
+    env: &'run Env<'run, 'event, 'script>,
+    event: &'run Value<'event>,
+    state: &'run Value<'static>,
+    meta: &'run Value<'event>,
+    local: &'run LocalStack<'event>,
+    value: &'run mut Value<'event>,
+    expr: &'script Patch,
+) -> Result<()>
+where
+    Expr: BaseExpr,
+
+    'script: 'event,
+    'event: 'run,
+{
+    let patch_expr = expr;
+    let mut evaluated: Vec<PreEvaluatedPatchOperation> = Vec::with_capacity(expr.operations.len());
+    // first pass over the operations, evaluating them
+    // and (IMPORTANT) get it into an owned, possibly cloned value, so we reference
+    // the target value in the state before any patch operation has been executed.
+    for op in &expr.operations {
+        evaluated.push(stry!(PreEvaluatedPatchOperation::from(
+            op, opts, env, event, state, meta, local,
+        )))
+    }
 
     // second pass over pre-evaluated operations
     // executing them against the actual target value
-    for const_op in evaluated.drain(..) {
+    for const_op in evaluated {
         // moved inside the loop as we need to borrow it mutably in the tuple-merge case
-        // patch event of
-        //  insert some.value => 1
-        //  insert some.other_value => 1
-        // end
         if let Some(ref mut obj) = value.as_object_mut() {
             match const_op {
                 PreEvaluatedPatchOperation::Insert {
