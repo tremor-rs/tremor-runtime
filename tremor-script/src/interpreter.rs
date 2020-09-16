@@ -674,7 +674,7 @@ where
     Ok(())
 }
 
-/// enum mirroring PatchOperation carrying evaluated elements
+/// enum mirroring `PatchOperation` carrying evaluated elements
 /// as we need to evaluate expressions in patch operations
 /// in one go, before we do the actual in-place manipulations
 /// in order to not expose temporary states of the patched object to intermittent operations
@@ -723,6 +723,7 @@ enum PreEvaluatedPatchOperation<'event, 'precomp> {
 }
 
 #[inline]
+#[allow(clippy::too_many_lines)]
 fn patch_value<'run, 'event, 'script, Expr>(
     _outer: &'script Expr,
     opts: ExecOpts,
