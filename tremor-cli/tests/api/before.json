@@ -18,5 +18,5 @@
     ]
   },
   "max-await-secs": 15,
-  "min-await-secs": 2
+  "min-await-secs": 0
 }
