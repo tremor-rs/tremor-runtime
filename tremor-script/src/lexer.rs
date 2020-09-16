@@ -1532,6 +1532,8 @@ impl<'input> Lexer<'input> {
             Some((_, '\'')) => Ok(Some('\'')),
             Some((_, '"')) => Ok(Some('"')),
             Some((_, '\\')) => Ok(Some('\\')),
+            Some((_, '{')) => Ok(Some('{')),
+            Some((_, '}')) => Ok(Some('}')),
             Some((_, '/')) => Ok(Some('/')),
             Some((_, 'b')) => Ok(Some('\u{8}')), // Backspace
             Some((_, 'f')) => Ok(Some('\u{c}')), // Form Feed
@@ -2428,6 +2430,18 @@ mod tests {
             r#" "\"" "#,
             r#" ~    "# => Token::DQuote,
             r#"  ~~  "# => Token::StringLiteral("\"".into()),
+            r#"    ~ "# => Token::DQuote,
+        };
+        lex_ok! {
+            r#" "\{" "#,
+            r#" ~    "# => Token::DQuote,
+            r#"  ~~  "# => Token::StringLiteral("{".into()),
+            r#"    ~ "# => Token::DQuote,
+        };
+        lex_ok! {
+            r#" "\}" "#,
+            r#" ~    "# => Token::DQuote,
+            r#"  ~~  "# => Token::StringLiteral("}".into()),
             r#"    ~ "# => Token::DQuote,
         };
 
