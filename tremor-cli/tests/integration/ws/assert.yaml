@@ -2,6 +2,7 @@ status: 0
 name: WS
 asserts:
   - source: gen.log
+    equals_file: expected.json
 #    contains:
 #       - |
 #         {"done":true}
