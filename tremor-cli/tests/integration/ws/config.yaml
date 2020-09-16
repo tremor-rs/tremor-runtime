@@ -3,7 +3,7 @@ onramp:
     type: file
     codec: json
     config:
-      source: "in.json"
+      source: "in.json.xz"
       close_on_done: true
       sleep_on_done: 1000
 
@@ -22,8 +22,8 @@ pipeline:
       outputs:
         - out
     links:
-      in: [ out ]
-      
+      in: [out]
+
 binding:
   - id: main
     links:
