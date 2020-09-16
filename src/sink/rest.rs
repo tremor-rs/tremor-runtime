@@ -46,6 +46,13 @@ pub struct Config {
     #[serde(default = "Default::default")]
     // TODO make header values a vector here?
     pub headers: HashMap<String, String>,
+    /// whether to enable linked transport (return offramp response to pipeline)
+    // TODO remove and auto-infer this based on succesful binding for linked offramps
+    pub link: Option<bool>,
+}
+
+fn dflt_method() -> String {
+    "POST".to_string()
 }
 
 fn dflt_method() -> Method {
