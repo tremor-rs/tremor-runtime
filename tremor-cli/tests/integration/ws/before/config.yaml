@@ -11,7 +11,7 @@ offramp:
     type: file
     codec: json
     config:
-      file: "../gen.log"
+      file: "gen.log"
   - id: exit
     type: exit
 
