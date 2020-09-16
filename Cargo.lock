@@ -270,28 +270,6 @@ dependencies = [
 
 [[package]]
 name = "async-io"
-version = "0.2.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c9424bb88867b003ca32a1d99cf64595c5a310c7322891795f38aa061860d0af"
-dependencies = [
- "cfg-if",
- "concurrent-queue",
- "fastrand",
- "futures-lite 1.4.0",
- "libc",
- "log",
- "once_cell",
- "parking 2.0.0",
- "polling 0.1.9",
- "socket2",
- "vec-arena 0.5.2",
- "waker-fn",
- "wepoll-sys-stjepang",
- "winapi 0.3.9",
-]
-
-[[package]]
-name = "async-io"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba0529565cae1f732d469f06fedff0f75d0e27eb22129ddf5707cef8bd7a2cfe"
@@ -5192,7 +5170,7 @@ dependencies = [
  "async-channel",
  "async-compat",
  "async-compression",
- "async-io 0.2.7",
+ "async-io 1.1.1",
  "async-std",
  "async-trait",
  "async-tungstenite",
