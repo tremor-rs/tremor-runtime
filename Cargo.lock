@@ -5208,7 +5208,7 @@ dependencies = [
  "async-channel",
  "async-compat",
  "async-compression",
- "async-io 0.2.7",
+ "async-io 1.0.2",
  "async-std",
  "async-trait",
  "async-tungstenite",
