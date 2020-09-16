@@ -5,7 +5,7 @@ onramp:
     config:
       source: "in.json.xz"
       close_on_done: true
-      sleep_on_done: 1000
+      sleep_on_done: 10000
 
 offramp:
   - id: ws-out
@@ -21,8 +21,19 @@ pipeline:
         - in
       outputs:
         - out
+    nodes:
+      # We add a wal here since we are not guaranteed
+      # that the server side is up and ready when we start
+      # sending messags.
+      - id: wal
+        op: qos::wal
+        config:
+          read_count: 20
+          max_elements: 1000
+          max_bytes: 10485760
     links:
-      in: [out]
+      in: [wal]
+      wal: [out]
 
 binding:
   - id: main
