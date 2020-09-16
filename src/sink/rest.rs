@@ -17,19 +17,30 @@ use async_channel::{bounded, Receiver, Sender};
 use halfbrown::HashMap;
 use std::str;
 use std::time::Instant;
+use surf::Response;
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct Config {
     /// list of endpoint urls
     pub endpoints: Vec<String>,
-    /// maximum number of paralel in flight batches (default: 4)
+    /// maximum number of parallel in flight batches (default: 4)
     #[serde(default = "dflt::d_4")]
+    // TODO adjust for linking
     pub concurrency: usize,
-    /// If put should be used instead of post.
+    // TODO add scheme, host, path, query
+    /// HTTP method to use (default: POST)
+    #[serde(default = "dflt_method")]
+    pub method: String,
     #[serde(default = "dflt::d")]
-    pub put: bool,
-    #[serde(default = "dflt::d")]
+    // TODO make header values a vector here?
     pub headers: HashMap<String, String>,
+    /// whether to enable linked transport (return offramp response to pipeline)
+    // TODO remove and auto-infer this based on succesful binding for linked offramps
+    pub link: Option<bool>,
+}
+
+fn dflt_method() -> String {
+    "POST".to_string()
 }
 
 impl ConfigImpl for Config {}
@@ -41,6 +52,7 @@ pub struct Rest {
     postprocessors: Postprocessors,
     tx: Sender<Event>,
     rx: Receiver<Event>,
+    has_link: bool,
 }
 
 impl offramp::Impl for Rest {
@@ -53,6 +65,7 @@ impl offramp::Impl for Rest {
             Ok(SinkManager::new_box(Self {
                 client_idx: 0,
                 postprocessors: vec![],
+                has_link: config.link.clone().unwrap_or(false),
                 config,
                 queue,
                 rx,
@@ -65,55 +78,124 @@ impl offramp::Impl for Rest {
 }
 
 impl Rest {
-    async fn flush(endpoint: &str, config: Config, payload: Vec<u8>) -> Result<u64> {
+    async fn request(
+        //endpoint: &str,
+        //config: Config,
+        payload: Vec<u8>,
+        meta: RestRequestMeta,
+    ) -> Result<(u64, Response)> {
         let start = Instant::now();
-        let mut c = if config.put {
-            surf::put(endpoint)
-        } else {
-            surf::post(endpoint)
+
+        // TODO would be nice if surf had a generic function to handle a given method
+        // also use enums (or static strings) here instead of matching on strings
+        let mut c = match meta.method.as_str() {
+            "POST" => surf::post(meta.endpoint),
+            "PUT" => surf::put(meta.endpoint),
+            "GET" => surf::get(meta.endpoint),
+            // TODO handle other methods
+            _ => surf::post(meta.endpoint),
         };
+
         c = c.body(payload);
-        for (k, v) in config.headers {
-            use http_types::headers::HeaderName;
-            match HeaderName::from_bytes(k.as_str().as_bytes().to_vec()) {
-                Ok(h) => {
-                    c = c.header(h, v.as_str());
+        if let Some(headers) = meta.headers {
+            for (name, values) in headers {
+                use http_types::headers::HeaderName;
+                match HeaderName::from_bytes(name.as_str().as_bytes().to_vec()) {
+                    Ok(h) => {
+                        for v in &values {
+                            c = c.header(h.clone(), v.as_str());
+                        }
+                    }
+                    Err(e) => error!("Bad header name: {}", e),
                 }
-                Err(e) => error!("Bad header name: {}", e),
             }
         }
 
-        let mut reply = c.await?;
-        let status = reply.status();
+        let mut response = c.await?;
+        let status = response.status();
         if status.is_client_error() || status.is_server_error() {
-            if let Ok(body) = reply.body_string().await {
+            if let Ok(body) = response.body_string().await {
                 error!("HTTP request failed: {} => {}", status, body)
             } else {
                 error!("HTTP request failed: {}", status)
             }
         }
 
-        let d = duration_to_millis(start.elapsed());
-        Ok(d)
+        Ok((duration_to_millis(start.elapsed()), response))
     }
 
-    fn enqueue_send_future(&mut self, id: Ids, op_meta: OpMeta, payload: Vec<u8>) -> Result<()> {
-        self.client_idx = (self.client_idx + 1) % self.config.endpoints.len();
-        let destination = self.config.endpoints[self.client_idx].clone();
+    async fn make_event(id: Ids, mut response: Response) -> Result<Event> {
+        let data = response.body_string().await?;
+
+        // TODO add response_headers
+        let mut meta = Value::object_with_capacity(2);
+        meta.insert("response_status", response.status() as u64)?;
+
+        // TODO apply proper codec based on response mime and body bytes
+        // also allow pass-through without decoding
+        //
+        //let body = response.body_bytes().await?;
+        //
+        //let data = LineValue::new(vec![body], |_| Value::null().into());
+        //let response = LineValue::try_new(vec![data], |data| {
+        //    Value::from(std::str::from_utf8(data[0].as_slice())?).into()
+        //})?;
+        //
+        // as json
+        //let data = LineValue::try_new(vec![body], |data| {
+        //    simd_json::to_borrowed_value(&mut data[0])
+        //        .map(|v| ValueAndMeta::from_parts(v, event_meta))
+        //});
+        //
+        // as string
+        //let data = LineValue::try_new(vec![body], |data| {
+        //    std::str::from_utf8(data[0].as_slice())
+        //        .map(|v| ValueAndMeta::from_parts(Value::from(v), meta))
+        //})
+        //.map_err(|e| e.0)?;
+
+        Ok(Event {
+            id,
+            //data,
+            data: (data, meta).into(),
+            ingest_ns: nanotime(),
+            // TODO
+            origin_uri: None,
+            ..Event::default()
+        })
+    }
+
+    fn enqueue_send_future(
+        &mut self,
+        id: Ids,
+        op_meta: OpMeta,
+        payload: Vec<u8>,
+        request_meta: RestRequestMeta,
+    ) -> Result<()> {
         let (tx, rx) = bounded(1);
-        let config = self.config.clone();
+        //let config = self.config.clone();
         let insight_tx = self.tx.clone();
+        let has_link = self.has_link;
 
         task::spawn::<_, Result<()>>(async move {
-            let r = Self::flush(&destination, config, payload).await;
+            let r = Self::request(payload, request_meta).await;
             let mut m = Value::object_with_capacity(1);
 
-            let cb = if let Ok(t) = r {
-                m.insert("time", t)?;
-                CBAction::Ack
-            } else {
-                error!("REST offramp error: {:?}", r);
-                CBAction::Fail
+            let (cb, d) = match r {
+                Ok((t, response)) => {
+                    m.insert("time", t)?;
+
+                    if has_link {
+                        let response_event = Self::make_event(id.clone(), response).await?;
+                        dbg!(&response_event);
+                    }
+
+                    (CBAction::Ack, Ok(t))
+                }
+                Err(e) => {
+                    error!("REST offramp error: {:?}", e);
+                    (CBAction::Fail, Err(e))
+                }
             };
 
             if let Err(e) = insight_tx
@@ -130,7 +212,7 @@ impl Rest {
                 error!("Failed to send reply: {}", e)
             };
 
-            if let Err(e) = tx.send(r).await {
+            if let Err(e) = tx.send(d).await {
                 error!("Failed to send reply: {}", e)
             }
             Ok(())
@@ -138,7 +220,13 @@ impl Rest {
         self.queue.enqueue(rx)?;
         Ok(())
     }
-    async fn maybe_enque(&mut self, id: Ids, op_meta: OpMeta, payload: Vec<u8>) -> Result<()> {
+    async fn maybe_enque(
+        &mut self,
+        id: Ids,
+        op_meta: OpMeta,
+        payload: Vec<u8>,
+        request_meta: RestRequestMeta,
+    ) -> Result<()> {
         match self.queue.dequeue() {
             Err(SinkDequeueError::NotReady) if !self.queue.has_capacity() => {
                 if let Err(e) = self
@@ -159,7 +247,10 @@ impl Rest {
                 Err("Dropped data due to overload".into())
             }
             _ => {
-                if self.enqueue_send_future(id, op_meta, payload).is_err() {
+                if self
+                    .enqueue_send_future(id, op_meta, payload, request_meta)
+                    .is_err()
+                {
                     // TODO: handle reply to the pipeline
                     error!("Failed to enqueue send request");
                     Err("Failed to enqueue send request".into())
@@ -178,17 +269,85 @@ impl Rest {
     }
 }
 
+struct RestRequestMeta {
+    // TODO support this layout
+    //scheme: String,
+    //host: String,
+    //path: String,
+    //query: Option<String>,
+    endpoint: String,
+    method: String,
+    headers: Option<HashMap<String, Vec<String>>>,
+}
+
+impl RestRequestMeta {
+    fn new(config: Config, event_meta: Value, client_index: usize) -> Self {
+        // TODO consolidate logic here
+        RestRequestMeta {
+            endpoint: event_meta
+                .get("endpoint")
+                .and_then(Value::as_str)
+                .unwrap_or(&config.endpoints[client_index])
+                .into(),
+            method: event_meta
+                .get("request_method")
+                .and_then(Value::as_str)
+                .unwrap_or(&config.method)
+                .into(),
+            // TODO
+            //query: None,
+            headers: None,
+        }
+    }
+}
+
 #[async_trait::async_trait]
 impl Sink for Rest {
     #[allow(clippy::used_underscore_binding)]
     async fn on_event(&mut self, _input: &str, codec: &dyn Codec, event: Event) -> ResultVec {
+        if self.has_link && event.is_batch {
+            return Err("Batched events are not supported for linked rest offramps".into());
+        }
+
         let mut payload = Vec::with_capacity(4096);
-        for value in event.value_iter() {
+        let mut payload_meta = Value::null();
+
+        // TODO this behaviour should be made configurable
+        // payload_meta does not make sense here currently for a batched payload
+        for (value, meta) in event.value_meta_iter() {
             let mut raw = codec.encode(value)?;
             payload.append(&mut raw);
             payload.push(b'\n');
+
+            if !event.is_batch {
+                // TODO avoid this clone
+                payload_meta = meta.clone();
+            }
         }
-        self.maybe_enque(event.id, event.op_meta, payload).await?;
+
+        // TODO this should also happen inside RestRequestMeta::new
+        self.client_idx = (self.client_idx + 1) % self.config.endpoints.len();
+
+        // TODO avoid clone here
+        let request_meta = RestRequestMeta::new(self.config.clone(), payload_meta, self.client_idx);
+        //let request_meta = RestRequestMeta {
+        //    endpoint: payload_meta
+        //        .get("endpoint")
+        //        .and_then(Value::as_str)
+        //        .unwrap_or(&self.config.endpoints[self.client_idx])
+        //        .into(),
+        //    method: payload_meta
+        //        .get("request_method")
+        //        .and_then(Value::as_str)
+        //        .unwrap_or(&self.config.method)
+        //        .into(),
+        //    // TODO
+        //    //query: None,
+        //    headers: None,
+        //};
+
+        self.maybe_enque(event.id, event.op_meta, payload, request_meta)
+            .await?;
         self.drain_insights().await
     }
 
