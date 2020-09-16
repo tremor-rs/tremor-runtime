@@ -314,7 +314,7 @@ DocComment_: Vec<Cow<'input, str>> = {
 
 ////////////////////////////// Expr (mutable) //////////////////////////////
 // Expressions are the fundamental building block of the language
-// starting form binary operators to more complex things like match
+// starting from binary operators to more complex things like match
 // statements
 
 /// Expression root
@@ -782,7 +782,7 @@ LocalPath: PathRaw<'input> = {
     },
 }
 
-/// Local path
+/// Const path - absolute path prefixed with module
 ConstPath: PathRaw<'input> = {
     <start:@L> <module:ModPath> "::" <path:LocalPath> <end:@L> => {
         if let PathRaw::Local(LocalPathRaw { segments, .. }) = path {

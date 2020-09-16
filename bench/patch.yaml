@@ -37,8 +37,8 @@ pipeline:
         op: runtime::tremor
         config:
           script: |
-            let . = patch . of insert merged => "true" end;
-            .;
+            let event = patch event of insert "merged" => "true" end;
+            event;
     links:
       in: [ runtime ]
       runtime: [ out ]
