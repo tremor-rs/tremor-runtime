@@ -544,7 +544,7 @@ where
                         let ingest_ns = nanotime();
 
                         self.response_txes.insert(self.id, response_tx);
-                        self.transmit_event(data, ingest_ns, origin_uri).await;
+                        self.transmit_event(data, ingest_ns, origin_uri, OUT).await;
                     }
                     Ok(SourceReply::Data {
                         mut origin_uri,

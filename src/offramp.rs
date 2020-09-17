@@ -85,6 +85,8 @@ pub trait Offramp: Send {
     async fn terminate(&mut self) {}
     fn default_codec(&self) -> &str;
     fn add_pipeline(&mut self, id: TremorURL, addr: pipeline::Addr);
+    // TODO handle removal as well
+    fn add_dest_pipeline(&mut self, id: TremorURL, addr: pipeline::Addr);
     fn remove_pipeline(&mut self, id: TremorURL) -> bool;
     // TODO handle removal as well
     fn add_dest_pipeline(&mut self, port: Cow<'static, str>, id: TremorURL, addr: pipeline::Addr);
