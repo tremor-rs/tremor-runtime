@@ -11,6 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+use std::time::Duration;
 
 /// Fetches a hostname with `tremor-host.local` being the default
 #[must_use]
@@ -19,4 +20,25 @@ pub fn hostname() -> String {
         .map_err(|_| ())
         .and_then(|s| s.into_string().map_err(|_| ()))
         .unwrap_or_else(|_| "tremor-host.local".to_string())
+}
+
+pub(crate) fn duration_to_millis(at: Duration) -> u64 {
+    (at.as_secs() as u64 * 1_000) + (u64::from(at.subsec_nanos()) / 1_000_000)
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::errors::*;
+
+    #[test]
+    fn test_duration_to_millis() -> Result<()> {
+        let d = duration_to_millis(Duration::from_secs(1));
+        assert_eq!(d, 1000u64);
+
+        let d = duration_to_millis(Duration::from_millis(1));
+        assert_eq!(d, 1u64);
+
+        Ok(())
+    }
 }
