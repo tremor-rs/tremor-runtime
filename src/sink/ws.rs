@@ -117,14 +117,18 @@ impl Ws {
             match self.rx.recv().await? {
                 WSResult::Connected(addr) => {
                     self.addr = Some(addr);
-                    v.push(Event::cb_restore(ingest_ns));
+                    v.push(SinkReply::Insight(Event::cb_restore(ingest_ns)));
                 }
                 WSResult::Disconnected => {
                     self.addr = None;
-                    v.push(Event::cb_trigger(ingest_ns));
+                    v.push(SinkReply::Insight(Event::cb_trigger(ingest_ns)));
                 }
-                WSResult::Ack(id) => v.push(Event::cb_ack(ingest_ns, id.clone())),
-                WSResult::Fail(id) => v.push(Event::cb_fail(ingest_ns, id.clone())),
+                WSResult::Ack(id) => {
+                    v.push(SinkReply::Insight(Event::cb_ack(ingest_ns, id.clone())))
+                }
+                WSResult::Fail(id) => {
+                    v.push(SinkReply::Insight(Event::cb_fail(ingest_ns, id.clone())))
+                }
             }
         }
         Ok(Some(v))

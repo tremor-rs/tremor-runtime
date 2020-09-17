@@ -7,6 +7,8 @@ onramp:
       # TODO eliminate the need for this config item
       link: true
 
+# TODO once we support request path directly in rest offramp (right now
+# relies on $endpoint), this will work
 pipeline:
   - id: main
     interface:
@@ -27,7 +29,7 @@ offramp:
       link: true
       # TODO make this optional too
       endpoints:
-       - http://localhost:8139/
+       - http://localhost:8139/snot
       #put: true
       #headers:
       #  "Client": "Tremor"
@@ -44,7 +46,7 @@ binding:
       '/pipeline/main/{instance}/error': [ '/offramp/system::stderr/system/in' ]
 
       # TODO implement linked offramps this way?
-      #'/offramp/upstream/{instance}/out': [ '/pipeline/main/{instance}/from-offramp' ]
+      '/offramp/upstream/{instance}/out': [ '/pipeline/main/{instance}/from-offramp' ]
       '/pipeline/main/{instance}/to-onramp': [
         # linked onramp that can respond based on pipeline output
         '/onramp/rest/{instance}/in',

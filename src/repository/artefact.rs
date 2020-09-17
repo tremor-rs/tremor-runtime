@@ -283,16 +283,31 @@ impl Artefact for OfframpArtefact {
     ) -> Result<Self::LinkResult> {
         info!("Linking offramp {} ..", id);
         if let Some(offramp) = system.reg.find_offramp(id).await? {
-            for (pipeline_id, _this) in mappings {
-                info!("Linking offramp {} to {}", id, pipeline_id);
-                if let Some(pipeline) = system.reg.find_pipeline(&pipeline_id).await? {
-                    offramp
-                        .send(offramp::Msg::Connect {
-                            id: pipeline_id,
-                            addr: Box::new(pipeline),
-                        })
-                        .await?;
-                };
+            // linked offramps use "out" port by convention for data out
+            if id.instance_port().unwrap_or("") == "out" {
+                for (_this, pipeline_id) in mappings {
+                    info!("Linking linked offramp {} to {}", id, pipeline_id);
+                    if let Some(pipeline) = system.reg.find_pipeline(&pipeline_id).await? {
+                        offramp
+                            .send(offramp::Msg::ConnectLinked {
+                                id: pipeline_id,
+                                addr: Box::new(pipeline),
+                            })
+                            .await?;
+                    };
+                }
+            } else {
+                for (pipeline_id, _this) in mappings {
+                    info!("Linking offramp {} to {}", id, pipeline_id);
+                    if let Some(pipeline) = system.reg.find_pipeline(&pipeline_id).await? {
+                        offramp
+                            .send(offramp::Msg::Connect {
+                                id: pipeline_id,
+                                addr: Box::new(pipeline),
+                            })
+                            .await?;
+                    };
+                }
             }
             Ok(true)
         } else {
@@ -479,6 +494,7 @@ impl Artefact for Binding {
     ) -> Result<Self::LinkResult> {
         let mut pipelines: Vec<(TremorURL, TremorURL)> = Vec::new();
         let mut onramps: Vec<(TremorURL, TremorURL)> = Vec::new();
+        let mut offramps: Vec<(TremorURL, TremorURL)> = Vec::new();
         let mut res = self.clone();
         res.binding.links.clear();
         for (src, dsts) in self.binding.links.clone() {
@@ -498,7 +514,7 @@ impl Artefact for Binding {
                     if let Some(inst) = dst.instance() {
                         let mut instance = String::new();
 
-                        // Thisbecause it is an URL we have to use escape codes
+                        // This is because it is an URL and we have to use escape codes
                         for (map_name, map_replace) in &mappings {
                             instance =
                                 inst.replace(&format!("%7B{}%7D", map_name), map_replace.as_str());
@@ -516,9 +532,15 @@ impl Artefact for Binding {
                             | (Some(ResourceType::Pipeline), Some(ResourceType::Onramp)) => {
                                 pipelines.push((from.clone(), to))
                             }
+                            // for linked offramps
+                            // TODO improve this process: this should really be treated as onramps,
+                            // or as a separate resource
+                            (Some(ResourceType::Offramp), Some(ResourceType::Pipeline)) => {
+                                offramps.push((from.clone(), to))
+                            }
                             (_, _) => {
                                 return Err(
-                                    "links require the form of onramp -> pipeline or pipeline -> offramp or pipeline -> pipeline or pipeline -> onramp"
+                                    "links require the form of onramp -> pipeline or pipeline -> offramp or pipeline -> pipeline or pipeline -> onramp or offramp -> pipeline"
                                         .into(),
                                 );
                             }
@@ -573,6 +595,15 @@ impl Artefact for Binding {
                 )
                 .await?;
         }
+
+        for (from, to) in offramps {
+            system.ensure_pipeline(&to).await?;
+            system.ensure_offramp(&from).await?;
+            system
+                .link_offramp(&from, vec![(from.clone(), to)].into_iter().collect())
+                .await?;
+        }
+
         res.mapping = Some(vec![(id.clone(), mappings)].into_iter().collect());
         Ok(res)
     }

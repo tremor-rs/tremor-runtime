@@ -78,7 +78,7 @@ impl Sink for File {
             }
             file.flush().await?
         }
-        Ok(Some(vec![event.insight_ack()]))
+        Ok(Some(vec![SinkReply::Insight(event.insight_ack())]))
     }
     fn default_codec(&self) -> &str {
         "json"

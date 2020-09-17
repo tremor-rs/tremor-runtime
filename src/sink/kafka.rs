@@ -179,7 +179,7 @@ impl Sink for Kafka {
                 }
             }
         }
-        Ok(Some(vec![event.insight(success)]))
+        Ok(Some(vec![SinkReply::Insight(event.insight(success))]))
     }
     fn default_codec(&self) -> &str {
         "json"

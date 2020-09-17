@@ -17,7 +17,7 @@ pub(crate) use crate::dflt::{self};
 pub(crate) use crate::errors::*;
 pub(crate) use crate::offramp::{self, Offramp};
 pub(crate) use crate::postprocessor::{self, Postprocessor, Postprocessors};
-pub(crate) use crate::sink::{ResultVec, Sink, SinkManager};
+pub(crate) use crate::sink::{ResultVec, Sink, SinkManager, SinkReply};
 pub(crate) use crate::utils::ConfigImpl;
 pub(crate) use crate::utils::{duration_to_millis, hostname, nanotime};
 pub(crate) use crate::{Event, OpConfig};

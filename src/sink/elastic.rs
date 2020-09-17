@@ -56,8 +56,8 @@ pub struct Elastic {
     client: SyncClient,
     queue: AsyncSink<u64>,
     postprocessors: Postprocessors,
-    tx: Sender<Event>,
-    rx: Receiver<Event>,
+    tx: Sender<SinkReply>,
+    rx: Receiver<SinkReply>,
 }
 
 impl offramp::Impl for Elastic {
@@ -138,7 +138,7 @@ impl Elastic {
                 ..Event::default()
             };
             task::block_on(async {
-                if insight_tx.send(insight).await.is_err() {
+                if insight_tx.send(SinkReply::Insight(insight)).await.is_err() {
                     error!("Failed to send insight")
                 };
 
@@ -164,7 +164,7 @@ impl Elastic {
                     ..Event::default()
                 };
 
-                if self.tx.send(insight.clone()).await.is_err() {
+                if self.tx.send(SinkReply::Insight(insight)).await.is_err() {
                     error!("Failed to send insight")
                 };
 
