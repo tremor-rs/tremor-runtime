@@ -71,12 +71,12 @@ impl Sink for Udp {
             success = false
         };
         if success {
-            Ok(Some(vec![event.insight_ack()]))
+            Ok(Some(vec![SinkReply::Insight(event.insight_ack())]))
         } else {
             Ok(event
                 .insight_trigger()
                 .and_then(|e1| event.insight_fail().map(|e2| (e1, e2)))
-                .map(|(e1, e2)| vec![e1, e2]))
+                .map(|(e1, e2)| vec![SinkReply::Insight(e1), SinkReply::Insight(e2)]))
         }
     }
     fn default_codec(&self) -> &str {
@@ -99,7 +99,9 @@ impl Sink for Udp {
                 .connect((self.config.dst_host.as_str(), self.config.dst_port))
                 .await?;
             self.socket = Some(socket);
-            Ok(Some(vec![Event::cb_restore(signal.ingest_ns)]))
+            Ok(Some(vec![SinkReply::Insight(Event::cb_restore(
+                signal.ingest_ns,
+            ))]))
         } else {
             Ok(None)
         }

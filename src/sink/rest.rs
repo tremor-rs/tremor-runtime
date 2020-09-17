@@ -50,8 +50,8 @@ pub struct Rest {
     config: Config,
     queue: AsyncSink<u64>,
     postprocessors: Postprocessors,
-    tx: Sender<Event>,
-    rx: Receiver<Event>,
+    tx: Sender<SinkReply>,
+    rx: Receiver<SinkReply>,
     has_link: bool,
 }
 
@@ -155,7 +155,7 @@ impl Rest {
         //.map_err(|e| e.0)?;
 
         Ok(Event {
-            id,
+            id, // TODO only eid should be preserved for this?
             //data,
             data: (data, meta).into(),
             ingest_ns: nanotime(),
@@ -174,7 +174,7 @@ impl Rest {
     ) -> Result<()> {
         let (tx, rx) = bounded(1);
         //let config = self.config.clone();
-        let insight_tx = self.tx.clone();
+        let reply_tx = self.tx.clone();
         let has_link = self.has_link;
 
         task::spawn::<_, Result<()>>(async move {
@@ -187,7 +187,9 @@ impl Rest {
 
                     if has_link {
                         let response_event = Self::make_event(id.clone(), response).await?;
-                        dbg!(&response_event);
+                        if let Err(e) = reply_tx.send(SinkReply::Response(response_event)).await {
+                            error!("Failed to send response reply: {}", e)
+                        };
                     }
 
                     (CBAction::Ack, Ok(t))
@@ -198,15 +200,15 @@ impl Rest {
                 }
             };
 
-            if let Err(e) = insight_tx
-                .send(Event {
+            if let Err(e) = reply_tx
+                .send(SinkReply::Insight(Event {
                     id,
                     op_meta,
                     data: (Value::null(), m).into(),
                     cb,
                     ingest_ns: nanotime(),
                     ..Event::default()
-                })
+                }))
                 .await
             {
                 error!("Failed to send reply: {}", e)
@@ -231,13 +233,13 @@ impl Rest {
             Err(SinkDequeueError::NotReady) if !self.queue.has_capacity() => {
                 if let Err(e) = self
                     .tx
-                    .send(Event {
+                    .send(SinkReply::Insight(Event {
                         id,
                         op_meta,
                         cb: CBAction::Fail,
                         ingest_ns: nanotime(),
                         ..Event::default()
-                    })
+                    }))
                     .await
                 {
                     error!("Failed to send reply: {}", e)
@@ -269,6 +271,7 @@ impl Rest {
     }
 }
 
+#[derive(Debug)]
 struct RestRequestMeta {
     // TODO support this layout
     //scheme: String,
@@ -276,6 +279,7 @@ struct RestRequestMeta {
     //path: String,
     //query: Option<String>,
     endpoint: String,
+    // TODO make this enum
     method: String,
     headers: Option<HashMap<String, Vec<String>>>,
 }

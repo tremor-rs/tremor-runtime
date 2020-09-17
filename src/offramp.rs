@@ -41,6 +41,10 @@ pub enum Msg {
         id: TremorURL,
         addr: Box<pipeline::Addr>,
     },
+    ConnectLinked {
+        id: TremorURL,
+        addr: Box<pipeline::Addr>,
+    },
     Disconnect {
         id: TremorURL,
         tx: async_channel::Sender<bool>,
@@ -61,6 +65,8 @@ pub trait Offramp: Send {
     async fn terminate(&mut self) {}
     fn default_codec(&self) -> &str;
     fn add_pipeline(&mut self, id: TremorURL, addr: pipeline::Addr);
+    // TODO handle removal as well
+    fn add_dest_pipeline(&mut self, id: TremorURL, addr: pipeline::Addr);
     fn remove_pipeline(&mut self, id: TremorURL) -> bool;
     fn is_active(&self) -> bool {
         true
@@ -164,6 +170,11 @@ impl Manager {
         let offramp_id = id.clone();
         task::spawn::<_, Result<()>>(async move {
             let mut pipelines: HashMap<TremorURL, pipeline::Addr> = HashMap::new();
+
+            // for linked offramp output
+            // TODO make this hashmap as well
+            let mut dest_pipelines: Vec<(TremorURL, pipeline::Addr)> = Vec::new();
+
             info!("[Offramp::{}] started", offramp_id);
 
             while let Ok(m) = rx.recv().await {
@@ -226,6 +237,15 @@ impl Manager {
                             pipelines.insert(id.clone(), (*addr).clone());
                             offramp.add_pipeline(id, *addr);
                         }
+                    }
+                    Msg::ConnectLinked { id, addr } => {
+                        // TODO fix offramp_id here for display
+                        info!(
+                            "[Offramp::{}] Connecting out to pipeline {}",
+                            offramp_id, id
+                        );
+                        dest_pipelines.push((id.clone(), (*addr).clone()));
+                        offramp.add_dest_pipeline(id, *addr);
                     }
                     Msg::Disconnect { id, tx } => {
                         info!("[Offramp::{}] Disconnecting pipeline {}", offramp_id, id);

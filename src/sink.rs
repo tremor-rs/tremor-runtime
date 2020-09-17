@@ -32,13 +32,22 @@ pub(crate) mod tcp;
 pub(crate) mod udp;
 pub(crate) mod ws;
 
-/// Result for a sink function that may provide insights.
+#[derive(Debug)]
+pub(crate) enum SinkReply {
+    Insight(Event),
+    // TODO better name for this?
+    Response(Event),
+}
+
+/// Result for a sink function that may provide insights or response.
 ///
-/// It can return None or Some(vec![]) if no insights were generated.
+/// It can return None or Some(vec![]) if no insights/response were generated.
 ///
 /// An insight is a contraflowevent containing control information for the runtime like
 /// circuit breaker events, guaranteed delivery events, etc.
-pub(crate) type ResultVec = Result<Option<Vec<Event>>>;
+///
+/// A response is an event generated from the sink delivery.
+pub(crate) type ResultVec = Result<Option<Vec<SinkReply>>>;
 
 #[async_trait::async_trait]
 pub(crate) trait Sink {
@@ -67,6 +76,8 @@ where
 {
     sink: T,
     pipelines: HashMap<TremorURL, pipeline::Addr>,
+    // for linked offramps
+    dest_pipelines: Vec<(TremorURL, pipeline::Addr)>,
 }
 
 impl<T> SinkManager<T>
@@ -77,6 +88,7 @@ where
         Self {
             sink,
             pipelines: HashMap::new(),
+            dest_pipelines: Vec::new(),
         }
     }
 
@@ -99,18 +111,51 @@ where
     }
 
     async fn on_event(&mut self, codec: &dyn Codec, input: &str, event: Event) -> Result<()> {
-        if let Some(mut insights) = self.sink.on_event(input, codec, event).await? {
-            for insight in insights.drain(..) {
-                let mut i = self.pipelines.values_mut();
-                if let Some(first) = i.next() {
-                    for p in i {
-                        if let Err(e) = p.send_insight(insight.clone()).await {
-                            error!("Error: {}", e)
-                        };
+        if let Some(mut replies) = self.sink.on_event(input, codec, event).await? {
+            for reply in replies.drain(..) {
+                match reply {
+                    SinkReply::Insight(e) => {
+                        let mut i = self.pipelines.values_mut();
+                        if let Some(first) = i.next() {
+                            for p in i {
+                                if let Err(e) = p.send_insight(e.clone()).await {
+                                    error!("Error: {}", e)
+                                };
+                            }
+                            if let Err(e) = first.send_insight(e).await {
+                                error!("Error: {}", e)
+                            };
+                        }
                     }
-                    if let Err(e) = first.send_insight(insight).await {
-                        error!("Error: {}", e)
-                    };
+                    SinkReply::Response(e) => {
+                        let mut i = self.dest_pipelines.iter();
+                        if let Some((first_id, first_addr)) = i.next() {
+                            for (id, addr) in i {
+                                // TODO alt way here?
+                                // pre-save this already in dest_pipelines?
+                                let port = id.instance_port_required()?.to_owned();
+                                if let Err(e) = addr
+                                    .send(pipeline::Msg::Event {
+                                        event: e.clone(),
+                                        input: port.into(),
+                                    })
+                                    .await
+                                {
+                                    error!("Error: {}", e)
+                                };
+                            }
+                            let first_port = first_id.instance_port_required()?.to_owned();
+                            if let Err(e) = first_addr
+                                .send(pipeline::Msg::Event {
+                                    event: e,
+                                    input: first_port.into(),
+                                })
+                                .await
+                            {
+                                error!("Error: {}", e)
+                            };
+                        }
+                    }
                 }
             }
         }
@@ -125,24 +170,61 @@ where
         self.pipelines.insert(id, addr);
     }
 
+    fn add_dest_pipeline(&mut self, id: TremorURL, addr: pipeline::Addr) {
+        self.dest_pipelines.push((id, addr));
+    }
+
     fn remove_pipeline(&mut self, id: TremorURL) -> bool {
         self.pipelines.remove(&id);
         self.pipelines.is_empty()
     }
 
     async fn on_signal(&mut self, signal: Event) -> Option<Event> {
-        let insights = self.sink.on_signal(signal).await.ok()??;
-        for insight in insights {
-            let mut i = self.pipelines.values_mut();
-            if let Some(first) = i.next() {
-                for p in i {
-                    if let Err(e) = p.send_insight(insight.clone()).await {
-                        error!("Error: {}", e)
-                    };
+        let replies = self.sink.on_signal(signal).await.ok()??;
+        for reply in replies {
+            match reply {
+                SinkReply::Insight(e) => {
+                    let mut i = self.pipelines.values_mut();
+                    if let Some(first) = i.next() {
+                        for p in i {
+                            if let Err(e) = p.send_insight(e.clone()).await {
+                                error!("Error: {}", e)
+                            };
+                        }
+                        if let Err(e) = first.send_insight(e).await {
+                            error!("Error: {}", e)
+                        };
+                    }
                 }
-                if let Err(e) = first.send_insight(insight).await {
-                    error!("Error: {}", e)
-                };
+                SinkReply::Response(e) => {
+                    let mut i = self.dest_pipelines.iter();
+                    if let Some((first_id, first_addr)) = i.next() {
+                        for (id, addr) in i {
+                            // TODO alt way here?
+                            // pre-save this already in dest_pipelines?
+                            let port = id.instance_port_required().unwrap().to_owned();
+                            if let Err(e) = addr
+                                .send(pipeline::Msg::Event {
+                                    event: e.clone(),
+                                    input: port.into(),
+                                })
+                                .await
+                            {
+                                error!("Error: {}", e)
+                            };
+                        }
+                        let first_port = first_id.instance_port_required().unwrap().to_owned();
+                        if let Err(e) = first_addr
+                            .send(pipeline::Msg::Event {
+                                event: e,
+                                input: first_port.into(),
+                            })
+                            .await
+                        {
+                            error!("Error: {}", e)
+                        };
+                    }
+                }
             }
         }
         None

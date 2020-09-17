@@ -22,6 +22,9 @@ pipeline:
         op: runtime::tremor
         config:
           script: |
+            # TODO need for this will go away once we support path attribute directly
+            # for rest offramp
+            let $endpoint = "http://localhost:8139{$request_path}";
             event;
       - id: response-processing
         op: runtime::tremor
@@ -29,7 +32,8 @@ pipeline:
           script: |
             # TODO append
             let $response_headers = {
-              "x-powered-by": [ "Tremor" ]
+              "content-type": [ "text/plain" ],
+              "x-powered-by": [ "Tremor" ],
             };
             event;
     links:
@@ -65,8 +69,7 @@ binding:
 
       '/pipeline/main/{instance}/error': [ '/offramp/system::stderr/system/in' ]
 
-      # TODO implement linked offramps this way?
-      #'/offramp/upstream/{instance}/out': [ '/pipeline/main/{instance}/from-offramp' ]
+      '/offramp/upstream/{instance}/out': [ '/pipeline/main/{instance}/from-offramp' ]
       '/pipeline/main/{instance}/to-onramp': [
         # linked onramp that can respond based on pipeline output
         '/onramp/rest/{instance}/in',

@@ -166,7 +166,6 @@ where
         Ok(data)
     }
 
-    // We are borrowing a dyn box as we don't want to pass ownership.
     async fn send_event(
         &mut self,
         stream: usize,

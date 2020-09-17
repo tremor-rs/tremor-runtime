@@ -79,13 +79,13 @@ impl Sink for Tcp {
             success = false
         };
         if success {
-            Ok(Some(vec![event.insight_ack()]))
+            Ok(Some(vec![SinkReply::Insight(event.insight_ack())]))
         } else {
             self.stream = None;
             Ok(event
                 .insight_trigger()
                 .and_then(|e1| event.insight_fail().map(|e2| (e1, e2)))
-                .map(|(e1, e2)| vec![e1, e2]))
+                .map(|(e1, e2)| vec![SinkReply::Insight(e1), SinkReply::Insight(e2)]))
         }
     }
     fn default_codec(&self) -> &str {
@@ -107,12 +107,16 @@ impl Sink for Tcp {
             {
                 stream
             } else {
-                return Ok(Some(vec![Event::cb_trigger(signal.ingest_ns)]));
+                return Ok(Some(vec![SinkReply::Insight(Event::cb_trigger(
+                    signal.ingest_ns,
+                ))]));
             };
             stream.set_ttl(self.config.ttl)?;
             stream.set_nodelay(self.config.is_no_delay)?;
             self.stream = Some(stream);
-            Ok(Some(vec![Event::cb_restore(signal.ingest_ns)]))
+            Ok(Some(vec![SinkReply::Insight(Event::cb_restore(
+                signal.ingest_ns,
+            ))]))
         } else {
             Ok(None)
         }
