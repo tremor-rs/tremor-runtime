@@ -270,22 +270,20 @@ dependencies = [
 
 [[package]]
 name = "async-io"
-version = "1.1.1"
+version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba0529565cae1f732d469f06fedff0f75d0e27eb22129ddf5707cef8bd7a2cfe"
+checksum = "64c629684e697f58c0e99e5e2d84a840e3b336afbcfdbac7b44c3b1e222c2fd8"
 dependencies = [
  "concurrent-queue",
  "fastrand",
  "futures-lite 1.4.0",
- "libc",
  "log",
+ "nb-connect",
  "once_cell",
  "parking 2.0.0",
  "polling 1.0.1",
  "vec-arena 1.0.0",
  "waker-fn",
- "wepoll-sys-stjepang",
- "winapi 0.3.9",
 ]
 
 [[package]]
@@ -327,7 +325,7 @@ version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a48af5438be856056bdeb6c5d895148a715be5915fccee49d1e5b50851dc9b8b"
 dependencies = [
- "async-io 1.1.1",
+ "async-io 1.1.2",
  "blocking 1.0.0",
  "futures-lite 1.4.0",
 ]
@@ -338,7 +336,7 @@ version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0bb915df28b8309139bd9c9c700d84c20e5c21385d05378caa84912332d0f6a1"
 dependencies = [
- "async-io 1.1.1",
+ "async-io 1.1.2",
  "blocking 1.0.0",
  "cfg-if",
  "event-listener",
@@ -2819,6 +2817,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "nb-connect"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e847c76b390f44529c2071ef06d0b52fbb4bdb04cc8987a5cfa63954c000abca"
+dependencies = [
+ "libc",
+ "winapi 0.3.9",
+]
+
+[[package]]
 name = "net2"
 version = "0.2.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4280,7 +4288,7 @@ dependencies = [
  "async-channel",
  "async-executor 1.1.1",
  "async-fs",
- "async-io 1.1.1",
+ "async-io 1.1.2",
  "async-lock",
  "async-net",
  "async-process",
@@ -5170,7 +5178,7 @@ dependencies = [
  "async-channel",
  "async-compat",
  "async-compression",
- "async-io 1.1.1",
+ "async-io 1.1.2",
  "async-std",
  "async-trait",
  "async-tungstenite",
