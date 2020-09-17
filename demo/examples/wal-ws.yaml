@@ -1,0 +1,50 @@
+onramp:
+  - id: metronome
+    type: metronome
+    config:
+      interval: 1000
+
+pipeline:
+  - id: main
+    interface:
+      inputs:
+        - in
+      outputs:
+        - out
+        - outliers
+    nodes:
+      - id: r
+        op: runtime::tremor
+        config:
+          script: |
+            use tremor::system;
+            let event.hostname = system::hostname();
+            event
+      - id: wal
+        op: qos::wal
+        config:
+          dir: ./wal
+          read_count: 20
+          max_elements: 1000
+          max_bytes: 10485760
+
+    links:
+      in: [r]
+      r: [wal]
+      wal: [out]
+
+offramp:
+  - id: ws
+    type: ws
+    config:
+      url: ws://localhost:8080/
+
+binding:
+  - id: default
+    links:
+      "/onramp/metronome/{instance}/out": ["/pipeline/main/{instance}/in"]
+      "/pipeline/main/{instance}/out": ["/offramp/ws/{instance}/in"]
+
+mapping:
+  /binding/default/01:
+    instance: "01"
