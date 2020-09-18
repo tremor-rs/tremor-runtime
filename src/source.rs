@@ -338,6 +338,10 @@ where
                             self.source_id, e
                         );
                     }
+                    if let Err(e) = self.source.reply_event(event).await {
+                        // TODO better error message
+                        error!("Error replying event from source: {}", e);
+                    }
                 }
             }
         }
