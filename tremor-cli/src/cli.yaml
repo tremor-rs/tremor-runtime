@@ -122,25 +122,39 @@ subcommands:
   - dbg:
       about: Advanced debugging commands
       args:
-        - preprocess:
-            short: p
-            long: preprocess
-        - lex:
-            short: l
-            long: lex
-        - src:
-            short: s
-            long: src
-        - ast:
-            short: a
-            long: ast
+        - no-banner:
+            help: do not print the banner
+            short: b
+            long: no-banner
         - no-highlight:
             help: do not highlight output
             short: n
             long: no-highlight
-        - SCRIPT:
-            help: tremor/json/trickle script filename
-            required: true
+      subcommands:
+        - ast:
+            about: prints the AST of the source
+            args:
+              - SCRIPT:
+                  help: tremor/json/trickle script filename
+                  required: true
+        - preprocess:
+            about: prints the preprocessed source
+            args:
+              - SCRIPT:
+                  help: tremor/json/trickle script filename
+                  required: true
+        - lex:
+            about: prints lexemes
+            args:
+              - SCRIPT:
+                  help: tremor/json/trickle script filename
+                  required: true
+        - src:
+            about: prints source
+            args:
+              - SCRIPT:
+                  help: tremor/json/trickle script filename
+                  required: true
   - run:
       about: >
         Run tremor script or query files against stdin or a json data archive,

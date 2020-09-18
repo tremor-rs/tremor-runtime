@@ -215,6 +215,7 @@ pub(crate) fn visit_path<'a>(base: &Path, path: &Path, visitor: &'a PathVisitor)
     Ok(())
 }
 
+#[derive(Copy, Clone)]
 pub(crate) enum SourceKind {
     Pipeline,
     Tremor,

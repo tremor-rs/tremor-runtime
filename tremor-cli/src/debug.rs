@@ -29,29 +29,45 @@ use tremor_script::registry;
 use tremor_script::registry::Registry;
 use tremor_script::script::Script;
 
-fn banner<W>(h: &mut W, section: &str, detail: &str) -> Result<()>
+struct Opts<'src> {
+    banner: bool,
+    highlight: bool,
+    kind: SourceKind,
+    src: &'src str,
+    raw: String,
+}
+
+fn banner<W>(h: &mut W, opts: &Opts, section: &str, detail: &str) -> Result<()>
 where
     W: Highlighter,
 {
-    let mut banner = ColorSpec::new();
-    let mut banner = banner.set_fg(Some(Color::Green));
+    if opts.banner {
+        let mut banner = ColorSpec::new();
+        let mut banner = banner.set_fg(Some(Color::Green));
 
-    h.set_color(&mut banner)?;
-    let spec = format!(
-        "\n\n****************\n* {} - {}\n****************\n\n",
-        section, detail
-    );
-    write!(h.get_writer(), "{}", spec,)?;
-
+        h.set_color(&mut banner)?;
+        let spec = format!(
+            "\n\n****************\n* {} - {}\n****************\n\n",
+            section, detail
+        );
+        write!(h.get_writer(), "{}", spec,)?;
+    }
     Ok(())
 }
 
-fn dbg_src<W>(h: &mut W, _src_file: &str, src_raw: &mut str) -> Result<()>
+fn dbg_src<W>(h: &mut W, opts: &Opts) -> Result<()>
 where
     W: Highlighter,
 {
-    banner(h, "Source", "Source code listing")?;
-    Script::highlight_script_with(&src_raw, h)?;
+    banner(h, opts, "Source", "Source code listing")?;
+    match opts.kind {
+        SourceKind::Tremor | SourceKind::Json => Script::highlight_script_with(&opts.raw, h)?,
+        SourceKind::Trickle => Query::highlight_script_with(&opts.raw, h)?,
+        SourceKind::Unsupported | SourceKind::Pipeline => {
+            eprintln!("Unsupported");
+        }
+    }
+
     Ok(())
 }
 
@@ -125,13 +141,19 @@ where
 
     Ok(())
 }
-fn dbg_pp<W>(h: &mut W, _src_file: &str, src_raw: &mut str) -> Result<()>
+
+fn dbg_pp<W>(h: &mut W, opts: &Opts) -> Result<()>
 where
     W: Highlighter,
 {
-    banner(h, "Lexemes", "Lexical token stream after preprocessing")?;
+    banner(
+        h,
+        opts,
+        "Lexemes",
+        "Lexical token stream after preprocessing",
+    )?;
 
-    let lexemes: Vec<Result<Spanned<Token>>> = Tokenizer::new(&src_raw)
+    let lexemes: Vec<Result<Spanned<Token>>> = Tokenizer::new(&opts.raw)
         .filter_map(std::result::Result::ok)
         .map(Ok)
         .collect();
@@ -143,19 +165,24 @@ where
     Ok(())
 }
 
-fn dbg_lex<W>(h: &mut W, src_file: &str, src_raw: &mut str) -> Result<()>
+fn dbg_lex<W>(h: &mut W, opts: &Opts) -> Result<()>
 where
     W: Highlighter,
 {
-    banner(h, "Lexemes", "Lexical token stream before preprocessing")?;
+    banner(
+        h,
+        opts,
+        "Lexemes",
+        "Lexical token stream before preprocessing",
+    )?;
 
     let mut include_stack = lexer::IncludeStack::default();
-    let cu = include_stack.push(src_raw)?;
-    let mut src_raw_string = (*src_raw).to_string();
+    let cu = include_stack.push(&opts.src)?;
+    let mut src_raw_string = opts.raw.clone();
 
     let lexemes: Vec<Result<Spanned<Token>>> = lexer::Preprocessor::preprocess(
         &tremor_script::path::load(),
-        &src_file,
+        opts.src,
         &mut src_raw_string,
         cu,
         &mut include_stack,
@@ -172,24 +199,24 @@ where
     Ok(())
 }
 
-fn dbg_ast<W>(h: &mut W, _should_preprocess: bool, src_file: &str, src_raw: &mut str) -> Result<()>
+fn dbg_ast<'src, W>(h: &mut W, opts: &Opts<'src>) -> Result<()>
 where
     W: Highlighter,
 {
-    banner(h, "AST", "Abstract Syntax Tree")?;
+    banner(h, &opts, "AST", "Abstract Syntax Tree")?;
 
     let mp = load_module_path();
     let reg: Registry = registry::registry();
-    match get_source_kind(src_file) {
+    match opts.kind {
         SourceKind::Tremor | SourceKind::Json => {
-            match Script::parse(&mp, src_file, (*src_raw).to_string(), &reg) {
+            match Script::parse(&mp, opts.src, opts.raw.clone(), &reg) {
                 Ok(runnable) => {
                     let ast = simd_json::to_string_pretty(&runnable.script.suffix())?;
                     println!();
                     Script::highlight_script_with(&ast, h)?;
                 }
                 Err(e) => {
-                    if let Err(e) = Script::format_error_from_script(&src_raw, h, &e) {
+                    if let Err(e) = Script::format_error_from_script(&opts.raw, h, &e) {
                         eprintln!("Error: {}", e);
                     };
                 }
@@ -197,27 +224,20 @@ where
         }
         SourceKind::Trickle => {
             let aggr_reg = registry::aggr();
-            match Query::parse(
-                &mp,
-                src_file,
-                &(*src_raw).to_string(),
-                vec![],
-                &reg,
-                &aggr_reg,
-            ) {
+            match Query::parse(&mp, opts.src, &opts.raw, vec![], &reg, &aggr_reg) {
                 Ok(runnable) => {
                     let ast = simd_json::to_string_pretty(&runnable.query.suffix())?;
                     println!();
                     Script::highlight_script_with(&ast, h)?;
                 }
                 Err(e) => {
-                    if let Err(e) = Script::format_error_from_script(&src_raw, h, &e) {
+                    if let Err(e) = Script::format_error_from_script(&opts.raw, h, &e) {
                         eprintln!("Error: {}", e);
                     };
                 }
             };
         }
-        _otherwise => {
+        SourceKind::Unsupported | SourceKind::Pipeline => {
             eprintln!("Unsupported");
         }
     };
@@ -227,124 +247,73 @@ where
     Ok(())
 }
 
-fn dbg_tremor_source<W>(h: &mut W, matches: &ArgMatches, src: &str) -> Result<()>
-where
-    W: Highlighter,
-{
+fn script_opts(matches: &ArgMatches, no_highlight: bool, no_banner: bool) -> Result<Opts> {
+    let src = matches
+        .value_of("SCRIPT")
+        .ok_or_else(|| Error::from("No script file provided"))?;
+    let kind = get_source_kind(src);
+
     let mut raw = String::new();
-    let mut input = crate::open_file(&src, None)?;
+    let mut input = crate::open_file(src, None)?;
     input.read_to_string(&mut raw)?;
     println!();
     raw.push('\n'); // Ensure last token is whitespace
-
-    h.reset()?;
-    if matches.is_present("src") {
-        if let Err(e) = dbg_src(h, src, &mut raw) {
-            return Err(e);
-        }
-    }
-    h.reset()?;
-
-    if matches.is_present("preprocess") {
-        if let Err(e) = dbg_pp(h, src, &mut raw) {
-            return Err(e);
-        }
-    }
-    h.reset()?;
-
-    if matches.is_present("lex") {
-        if let Err(e) = dbg_lex(h, src, &mut raw) {
-            return Err(e);
-        }
-    }
-    h.reset()?;
-
-    if matches.is_present("ast") {
-        if let Err(e) = dbg_ast(h, !matches.is_present("no-highlight"), src, &mut raw) {
-            return Err(e);
-        }
-    }
-
-    Ok(())
-}
-
-fn dbg_trickle_source<W>(h: &mut W, matches: &ArgMatches, src: &str) -> Result<()>
-where
-    W: Highlighter,
-{
-    let mut raw = String::new();
-    let mut input = crate::open_file(&src, None)?;
-    input.read_to_string(&mut raw)?;
-    println!();
-    raw.push('\n'); // Ensure last token is whitespace
-
-    if matches.is_present("src") {
-        if let Err(e) = dbg_src(h, src, &mut raw) {
-            return Err(e);
-        }
-    }
-    h.reset()?;
-
-    if matches.is_present("preprocess") {
-        if let Err(e) = dbg_pp(h, src, &mut raw) {
-            return Err(e);
-        }
-    }
-    h.reset()?;
-
-    if matches.is_present("lex") {
-        if let Err(e) = dbg_lex(h, src, &mut raw) {
-            return Err(e);
-        }
-    }
-    h.reset()?;
-
-    if matches.is_present("ast") {
-        if let Err(e) = dbg_ast(h, !matches.is_present("no-highlight"), src, &mut raw) {
-            return Err(e);
-        }
-    }
-    h.reset()?;
-
-    Ok(())
-}
-
-fn run_debug<W>(script_file: &str, h: &mut W, matches: &ArgMatches) -> Result<()>
-where
-    W: Highlighter,
-{
-    match get_source_kind(&script_file) {
-        SourceKind::Tremor | SourceKind::Json => dbg_tremor_source(h, matches, &script_file)?,
-        SourceKind::Trickle => dbg_trickle_source(h, matches, &script_file)?,
-        _otherwise => {
-            eprintln!("Error: Unable to execute source: {}", &script_file);
-            // ALLOW: main.rs
-            std::process::exit(1);
-        }
+    let opts = Opts {
+        banner: !no_banner,
+        highlight: !no_highlight,
+        src,
+        kind,
+        raw,
     };
 
-    Ok(())
+    Ok(opts)
 }
 
 pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
-    let script_file = matches
-        .value_of("SCRIPT")
-        .ok_or_else(|| Error::from("No script file provided"))?;
+    let no_highlight = matches.is_present("no-highlight");
+    let no_banner = matches.is_present("no_banner");
 
-    if matches.is_present("no-highlight") {
+    if no_highlight {
         let mut h = TermNoHighlighter::new();
-        match run_debug(script_file, &mut h, matches) {
-            Ok(()) => println!("{}", h.to_string()),
-            Err(_e) => {}
+        let r = if let Some(args) = matches.subcommand_matches("ast") {
+            let opts = script_opts(args, no_highlight, no_banner)?;
+            dbg_ast(&mut h, &opts)
+        } else if let Some(args) = matches.subcommand_matches("preprocess") {
+            let opts = script_opts(args, no_highlight, no_banner)?;
+            dbg_pp(&mut h, &opts)
+        } else if let Some(args) = matches.subcommand_matches("lex") {
+            let opts = script_opts(args, no_highlight, no_banner)?;
+            dbg_lex(&mut h, &opts)
+        } else if let Some(args) = matches.subcommand_matches("src") {
+            let opts = script_opts(args, no_highlight, no_banner)?;
+            dbg_src(&mut h, &opts)
+        } else {
+            Err("Missing subcommand".into())
         };
+        h.finalize()?;
+        h.reset()?;
+        println!("{}", h.to_string());
+        r?
     } else {
         let mut h = TermHighlighter::new();
-        match run_debug(script_file, &mut h, matches) {
-            Ok(()) => {
-                h.finalize()?;
-            }
-            Err(_e) => {}
+        let r = if let Some(args) = matches.subcommand_matches("ast") {
+            let opts = script_opts(args, no_highlight, no_banner)?;
+            dbg_ast(&mut h, &opts)
+        } else if let Some(args) = matches.subcommand_matches("preprocess") {
+            let opts = script_opts(args, no_highlight, no_banner)?;
+            dbg_pp(&mut h, &opts)
+        } else if let Some(args) = matches.subcommand_matches("lex") {
+            let opts = script_opts(args, no_highlight, no_banner)?;
+            dbg_lex(&mut h, &opts)
+        } else if let Some(args) = matches.subcommand_matches("src") {
+            let opts = script_opts(args, no_highlight, no_banner)?;
+            dbg_src(&mut h, &opts)
+        } else {
+            Err("Missing subcommand".into())
         };
+        h.finalize()?;
+        h.reset()?;
+        r?
     };
 
     Ok(())
