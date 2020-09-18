@@ -72,7 +72,7 @@ pub(crate) enum SourceReply {
         response_tx: Sender<Event>,
     },
     /// A stream is opened
-    StartStream(usize),
+    StartStream(usize, Option<Sender<Event>>),
     /// A stream is closed
     EndStream(usize),
     /// We change the connection state of the source
@@ -86,6 +86,12 @@ pub(crate) enum SourceReply {
 pub(crate) trait Source {
     /// Pulls an event from the source if one exists
     async fn pull_event(&mut self, id: u64) -> Result<SourceReply>;
+
+    /// Send event back from source (for linked onramps)
+    async fn reply_event(&mut self, event: Event) -> Result<()> {
+        Ok(())
+    }
+
     /// Pulls metrics from the source
     fn metrics(&mut self, t: u64) -> Vec<Event> {
         vec![]
@@ -265,10 +271,15 @@ where
 
                 onramp::Msg::Response(event) => {
                     // TODO send errors here if eid/tx are not found
+                    // move this implementation to be rest source specific
                     if let Some(eid) = event.id.get(self.uid) {
                         if let Some(tx) = self.response_txes.remove(&eid) {
-                            tx.send(event).await?;
+                            tx.send(event.clone()).await?;
                         }
+                    }
+                    if let Err(e) = self.source.reply_event(event).await {
+                        // TODO better error message
+                        error!("Error replying event from source: {}", e);
                     }
                 }
             }
@@ -404,7 +415,7 @@ where
 
             if !self.triggered && !pipelines_empty {
                 match self.source.pull_event(self.id).await {
-                    Ok(SourceReply::StartStream(id)) => {
+                    Ok(SourceReply::StartStream(id, _)) => {
                         while self.preprocessors.len() <= id {
                             self.preprocessors.push(None)
                         }

@@ -112,7 +112,7 @@ impl Source for Int {
                 task::spawn(async move {
                     //let (reader, writer) = &mut (&stream, &stream);
                     let mut buffer = [0; BUFFER_SIZE_BYTES];
-                    if let Err(e) = tx.send(SourceReply::StartStream(stream_id)).await {
+                    if let Err(e) = tx.send(SourceReply::StartStream(stream_id, None)).await {
                         error!("TCP Error: {}", e);
                         return;
                     }
