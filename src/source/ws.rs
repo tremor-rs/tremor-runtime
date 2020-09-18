@@ -16,7 +16,8 @@ use crate::source::prelude::*;
 use async_channel::{Sender, TryRecvError};
 use async_std::net::{TcpListener, TcpStream};
 use async_std::task;
-use futures::StreamExt;
+use futures::{SinkExt, StreamExt};
+use std::collections::BTreeMap;
 use tungstenite::protocol::Message;
 
 #[derive(Deserialize, Debug, Clone)]
@@ -25,6 +26,8 @@ pub struct Config {
     pub port: u16,
     /// Host to listen on
     pub host: String,
+    // TODO move to root onramp config. or auto-infer based on linking
+    pub link: Option<bool>,
 }
 
 impl ConfigImpl for Config {}
@@ -53,6 +56,11 @@ pub struct Int {
     config: Config,
     listener: Option<Receiver<SourceReply>>,
     onramp_id: TremorURL,
+    // mapping of event id to stream id
+    messages: BTreeMap<u64, usize>,
+    // mapping of stream id to the stream sender
+    // TODO alternative to this? possible to store actual ws_tream refs here?
+    streams: BTreeMap<usize, Sender<Event>>,
 }
 
 impl std::fmt::Debug for Int {
@@ -70,7 +78,23 @@ impl Int {
             config,
             listener: None,
             onramp_id,
+            messages: BTreeMap::new(),
+            streams: BTreeMap::new(),
         })
+    }
+
+    fn get_stream_sender_for_id(&mut self, id: u64) -> Option<&Sender<Event>> {
+        // TODO improve the way stream_id is retrieved -- this works as long as a
+        // previous event id is used by pipelines/offramps (which is suitable only
+        // for request/response style flow), but for websocket, arbitrary events can
+        // come in here.
+        // also messages keeps growing as events come in right now
+        // .unwrap()
+        if let Some(stream_id) = self.messages.get(&id) {
+            self.streams.get(&stream_id)
+        } else {
+            None
+        }
     }
 }
 
@@ -79,21 +103,41 @@ async fn handle_connection(
     tx: Sender<SourceReply>,
     raw_stream: TcpStream,
     stream: usize,
+    link: bool,
 ) -> Result<()> {
-    let mut ws_stream = async_tungstenite::accept_async(raw_stream).await?;
+    let ws_stream = async_tungstenite::accept_async(raw_stream).await?;
 
     let uri = EventOriginUri {
         uid,
         scheme: "tremor-ws".to_string(),
+        // TODO set ws client ip here
         host: "tremor-ws-client-host.remote".to_string(),
         port: None,
         // TODO add server port here (like for tcp onramp) -- can be done via WsServerState
         path: vec![String::default()],
     };
 
-    tx.send(SourceReply::StartStream(stream)).await?;
+    let (mut ws_write, mut ws_read) = ws_stream.split();
 
-    while let Some(msg) = ws_stream.next().await {
+    // TODO maybe send ws_write from tx and get rid of this task + extra channel?
+    let stream_sender = if link {
+        let (stream_tx, stream_rx): (Sender<Event>, Receiver<Event>) = bounded(crate::QSIZE);
+        task::spawn::<_, Result<()>>(async move {
+            while let Ok(event) = stream_rx.recv().await {
+                let message = make_message(event).await?;
+                ws_write.send(message).await?;
+            }
+            Ok(())
+        });
+        Some(stream_tx)
+    } else {
+        None
+    };
+
+    tx.send(SourceReply::StartStream(stream, stream_sender))
+        .await?;
+
+    while let Some(msg) = ws_read.next().await {
         match msg {
             Ok(Message::Text(t)) => {
                 tx.send(SourceReply::Data {
@@ -122,13 +166,50 @@ async fn handle_connection(
     Ok(())
 }
 
+async fn make_message(event: Event) -> Result<Message> {
+    // TODO reject batched events and handle only single event here
+    let (value, _meta) = event.value_meta_iter().next().unwrap();
+
+    // TODO make this decision based on meta value?
+    let send_as_text = true;
+
+    if send_as_text {
+        let data = value
+            .as_str()
+            .ok_or_else(|| Error::from("Could not get event value as string"))?;
+
+        Ok(Message::Text(data.into()))
+    } else {
+        // TODO consolidate this duplicate logic from string codec
+        let data = if let Some(s) = value.as_str() {
+            s.as_bytes().to_vec()
+        } else {
+            simd_json::to_vec(&value)?
+        };
+        Ok(Message::Binary(data))
+    }
+}
+
 #[async_trait::async_trait()]
 impl Source for Int {
     #[allow(unused_variables)]
     async fn pull_event(&mut self, id: u64) -> Result<SourceReply> {
         if let Some(listener) = self.listener.as_ref() {
             match listener.try_recv() {
-                Ok(r) => Ok(r),
+                Ok(r) => {
+                    match r {
+                        SourceReply::Data { stream, .. } => {
+                            self.messages.insert(id, stream);
+                        }
+                        SourceReply::StartStream(stream, ref sender) => {
+                            if let Some(tx) = sender {
+                                self.streams.insert(stream, tx.clone());
+                            }
+                        }
+                        _ => (),
+                    }
+                    Ok(r)
+                }
                 Err(TryRecvError::Empty) => Ok(SourceReply::Empty(10)),
                 Err(TryRecvError::Closed) => {
                     Ok(SourceReply::StateChange(SourceState::Disconnected))
@@ -138,16 +219,27 @@ impl Source for Int {
             Ok(SourceReply::StateChange(SourceState::Disconnected))
         }
     }
+    async fn reply_event(&mut self, event: Event) -> Result<()> {
+        // TODO report errors as well
+        if let Some(eid) = event.id.get(self.uid) {
+            if let Some(tx) = self.get_stream_sender_for_id(eid) {
+                tx.send(event).await?;
+            }
+        }
+        Ok(())
+    }
     async fn init(&mut self) -> Result<SourceState> {
         let listener = TcpListener::bind((self.config.host.as_str(), self.config.port)).await?;
         let (tx, rx) = bounded(crate::QSIZE);
         let uid = self.uid;
 
+        let link = self.config.link.unwrap_or(false);
+
         task::spawn(async move {
             let mut stream_id = 0;
             while let Ok((stream, _socket)) = listener.accept().await {
                 stream_id += 1;
-                task::spawn(handle_connection(uid, tx.clone(), stream, stream_id));
+                task::spawn(handle_connection(uid, tx.clone(), stream, stream_id, link));
             }
         });
 
