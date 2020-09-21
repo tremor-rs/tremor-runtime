@@ -70,7 +70,7 @@ where
     Ok(())
 }
 
-fn dbg_tokens<W>(h: &mut W, lexemes: Vec<Result<Spanned<Token>>>) -> Result<()>
+fn dbg_tokens<W>(h: &mut W, lexemes: Vec<Spanned<Token>>) -> Result<()>
 where
     W: Highlighter,
 {
@@ -81,11 +81,11 @@ where
     let mut directive = directive.set_fg(Some(Color::White));
 
     for l in lexemes {
-        match l {
-            Ok(Spanned {
-                span: Span { start, end },
-                value,
-            }) => match &value {
+        let Spanned {
+            span: Span { start, end },
+            value,
+        } = l;
+        match &value {
                 // We ignore whitespace and newlines
                 Token::Whitespace(_)
                 | Token::NewLine
@@ -133,9 +133,7 @@ where
                         }],
                     )?;
                 }
-            },
-            Err(e) => println!("ERR> {}", e),
-        }
+            }
     }
 
     Ok(())
@@ -152,9 +150,8 @@ where
         "Lexical token stream after preprocessing",
     )?;
 
-    let lexemes: Vec<Result<Spanned<Token>>> = Tokenizer::new(&opts.raw)
+    let lexemes: Vec<_> = Tokenizer::new(&opts.raw)
         .filter_map(std::result::Result::ok)
-        .map(Ok)
         .collect();
 
     dbg_tokens(h, lexemes)?;
@@ -179,7 +176,7 @@ where
     let cu = include_stack.push(&opts.src)?;
     let mut src_raw_string = opts.raw.clone();
 
-    let lexemes: Vec<Result<Spanned<Token>>> = lexer::Preprocessor::preprocess(
+    let lexemes: Vec<_> = lexer::Preprocessor::preprocess(
         &tremor_script::path::load(),
         opts.src,
         &mut src_raw_string,
@@ -188,7 +185,6 @@ where
     )?
     .into_iter()
     .filter_map(std::result::Result::ok)
-    .map(Ok)
     .collect();
 
     dbg_tokens(h, lexemes)?;

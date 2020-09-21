@@ -22,12 +22,6 @@
     clippy::unnecessary_unwrap,
     clippy::pedantic
 )]
-#![allow(
-    // TODO clippy claims some filter_map uses are hard to read - investigate
-    clippy::unnecessary_filter_map,
-    clippy::filter_map_next,
-    clippy::filter_map
-)]
 
 #[macro_use]
 extern crate serde_derive;
