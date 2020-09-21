@@ -37,8 +37,7 @@ fn gen_doc(
     let mut input = crate::open_file(path, None)?;
     input.read_to_string(&mut raw)?;
 
-    #[allow(unused_mut)]
-    let mut reg: Registry = registry::registry();
+    let reg: Registry = registry::registry();
 
     let mp = load_module_path();
     let name = rel_path

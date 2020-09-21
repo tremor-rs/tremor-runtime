@@ -26,9 +26,9 @@ pub(crate) struct Before {
     #[serde(rename = "await")]
     conditionals: Option<HashMap<String, Vec<String>>>,
     #[serde(rename = "max-await-secs", default = "default_max_await_secs")]
-    until: u16,
+    until: u64,
     #[serde(rename = "min-await-secs", default = "default_min_await_secs")]
-    before_start_delay: u16,
+    before_start_delay: u64,
 }
 
 impl Before {
@@ -40,7 +40,6 @@ impl Before {
         Ok(Some(process))
     }
 
-    #[allow(clippy::cast_possible_truncation)]
     pub(crate) fn block_on(&self) -> Result<()> {
         let epoch = nanotime();
 
@@ -50,7 +49,7 @@ impl Before {
                     for port in v {
                         loop {
                             let now = nanotime();
-                            if ((now - epoch) / 1_000_000_000) as u16 > self.until {
+                            if ((now - epoch) / 1_000_000_000) > self.until {
                                 return Err("Upper bound exceeded error".into());
                             }
                             if let Ok(port) = port.parse::<u16>() {
@@ -64,17 +63,17 @@ impl Before {
             }
         }
 
-        std::thread::sleep(Duration::from_secs(self.before_start_delay as u64));
+        std::thread::sleep(Duration::from_secs(self.before_start_delay));
 
         Ok(())
     }
 }
 
-fn default_max_await_secs() -> u16 {
+fn default_max_await_secs() -> u64 {
     0 // No delay by default as many tests won't depend on conditional resource allocation
 }
 
-fn default_min_await_secs() -> u16 {
+fn default_min_await_secs() -> u64 {
     0 // Wait for at least 1 seconds before starting tests that depend on background process
 }
 
