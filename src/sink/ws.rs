@@ -18,11 +18,12 @@ use async_tungstenite::async_std::connect_async;
 use futures::SinkExt;
 use halfbrown::HashMap;
 use std::time::Duration;
+use tremor_pipeline::OpMeta;
 use tungstenite::protocol::Message;
 use url::Url;
 
-type WsSender = Sender<(Ids, WsMessage)>;
-type WsReceiver = Receiver<(Ids, WsMessage)>;
+type WsAddr = Sender<(Ids, OpMeta, WsMessage)>;
+type WsReceiver = Receiver<(Ids, OpMeta, WsMessage)>;
 type WsUrl = String;
 
 enum WsMessage {
@@ -45,28 +46,28 @@ pub struct Config {
     pub binary: bool,
 }
 
+enum WsResult {
+    Connected(WsUrl, WsAddr),
+    Disconnected(WsUrl),
+    Ack(Ids, OpMeta),
+    Fail(Ids, OpMeta),
+    Response(Ids, WsMessage),
+}
+
 /// An offramp that writes to a websocket endpoint
 pub struct Ws {
     config: Config,
     postprocessors: Postprocessors,
     tx: Sender<WsResult>,
     rx: Receiver<WsResult>,
-    connections: HashMap<WsUrl, Option<WsSender>>,
+    connections: HashMap<WsUrl, Option<WsAddr>>,
     is_linked: bool,
+    merged_meta: OpMeta,
 }
-
-enum WsResult {
-    Connected(WsUrl, WsSender),
-    Disconnected(WsUrl),
-    Ack(Ids),
-    Fail(Ids),
-    Response(Ids, WsMessage),
-}
-
 async fn ws_loop(
     url: String,
     offramp_tx: Sender<WsResult>,
-    tx: WsSender,
+    tx: WsAddr,
     rx: WsReceiver,
     has_link: bool,
 ) -> Result<()> {
@@ -83,7 +84,7 @@ async fn ws_loop(
             .send(WsResult::Connected(url.clone(), tx.clone()))
             .await?;
 
-        while let Ok((id, msg)) = rx.recv().await {
+        while let Ok((id, meta, msg)) = rx.recv().await {
             // test code to simulate slow connection
             // TODO remove
             //if &url == "ws://localhost:8139" {
@@ -101,10 +102,10 @@ async fn ws_loop(
                     e, url
                 );
                 // TODO avoid these clones for non linked-transport usecase
-                offramp_tx.send(WsResult::Fail(id.clone())).await?;
+                offramp_tx.send(WsResult::Fail(id.clone(), meta)).await?;
                 break;
             } else {
-                offramp_tx.send(WsResult::Ack(id.clone())).await?;
+                offramp_tx.send(WsResult::Ack(id.clone(), meta)).await?;
             }
 
             // TODO should we async this (async_sink?) so that a slow request on a
@@ -153,6 +154,7 @@ impl offramp::Impl for Ws {
                 config,
                 tx,
                 rx,
+                merged_meta: OpMeta::default(),
             }))
         } else {
             Err("[WS Offramp] Offramp requires a config".into())
@@ -167,25 +169,33 @@ impl Ws {
         let mut v = Vec::with_capacity(len);
         for _ in 0..len {
             match self.rx.recv().await? {
-                WsResult::Connected(url, tx) => {
+                WsResult::Connected(url, addr) => {
                     // TODO trigger per url/connection (only resuming events with that url)
                     if url == self.config.url {
-                        v.push(SinkReply::Insight(Event::cb_restore(ingest_ns)));
+                        let mut e = Event::cb_restore(ingest_ns);
+                        e.op_meta = self.merged_meta.clone();
+                        v.push(SinkReply::Insight(e));
                     }
-                    self.connections.insert(url, Some(tx));
+                    self.connections.insert(url, Some(addr));
                 }
                 WsResult::Disconnected(url) => {
                     // TODO trigger per url/connection (only events with that url should be paused)
                     if url == self.config.url {
-                        v.push(SinkReply::Insight(Event::cb_trigger(ingest_ns)));
+                        let mut e = Event::cb_trigger(ingest_ns);
+                        e.op_meta = self.merged_meta.clone();
+                        v.push(SinkReply::Insight(e));
                     }
                     self.connections.insert(url, None);
                 }
-                WsResult::Ack(id) => {
-                    v.push(SinkReply::Insight(Event::cb_ack(ingest_ns, id.clone())))
+                WsResult::Ack(id, op_meta) => {
+                    let mut e = Event::cb_ack(ingest_ns, id.clone());
+                    e.op_meta = op_meta;
+                    v.push(SinkReply::Insight(e));
                 }
-                WsResult::Fail(id) => {
-                    v.push(SinkReply::Insight(Event::cb_fail(ingest_ns, id.clone())))
+                WsResult::Fail(id, op_meta) => {
+                    let mut e = Event::cb_fail(ingest_ns, id.clone());
+                    e.op_meta = op_meta;
+                    v.push(SinkReply::Insight(e));
                 }
                 WsResult::Response(id, msg) => {
                     v.push(SinkReply::Response(RESPONSE, Self::make_event(id, msg)?))
@@ -297,11 +307,19 @@ impl Sink for Ws {
                 for raw in datas {
                     if msg_meta.binary {
                         conn_tx
-                            .send((event.id.clone(), WsMessage::Binary(raw)))
+                            .send((
+                                event.id.clone(),
+                                event.op_meta.clone(),
+                                WsMessage::Binary(raw),
+                            ))
                             .await?;
                     } else if let Ok(txt) = String::from_utf8(raw) {
                         conn_tx
-                            .send((event.id.clone(), WsMessage::Text(txt)))
+                            .send((
+                                event.id.clone(),
+                                event.op_meta.clone(),
+                                WsMessage::Text(txt),
+                            ))
                             .await?;
                     } else {
                         // TODO send these to offramp error port

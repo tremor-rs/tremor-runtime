@@ -51,10 +51,6 @@ pub struct Config {
     pub link: Option<bool>,
 }
 
-fn dflt_method() -> String {
-    "POST".to_string()
-}
-
 fn dflt_method() -> Method {
     Method::Get
 }
