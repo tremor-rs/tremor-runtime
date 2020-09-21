@@ -32,6 +32,7 @@ use tremor_script::Value;
 #[derive(Default, Clone)]
 pub struct EventAndInsights {
     /// Events being returned
+    /// tuples of (port, event)
     pub events: Vec<(Cow<'static, str>, Event)>,
     /// Insights being returned
     pub insights: Vec<Event>,
