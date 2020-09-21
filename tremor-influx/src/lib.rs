@@ -1,4 +1,4 @@
-// Copyright 2018-2020, Wayfair GmbH
+// Copyright 2020, The Tremor Team
 //
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
