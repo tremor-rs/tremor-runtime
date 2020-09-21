@@ -79,14 +79,6 @@ pub(crate) enum SourceReply {
         origin_uri: EventOriginUri,
         data: LineValue,
     },
-    /// Allow for passthrough of already structured (request-style) events where
-    /// response is expected (for linked onramps)
-    // add similar DataRequest variant when needed
-    StructuredRequest {
-        origin_uri: EventOriginUri,
-        data: LineValue,
-        response_tx: Sender<Event>,
-    },
     /// A stream is opened
     StartStream(usize, Option<Sender<Event>>),
     /// A stream is closed
@@ -337,10 +329,6 @@ where
                             "[Source::{}] [Onramp] failed to reply event from source: {}",
                             self.source_id, e
                         );
-                    }
-                    if let Err(e) = self.source.reply_event(event).await {
-                        // TODO better error message
-                        error!("Error replying event from source: {}", e);
                     }
                 }
             }
