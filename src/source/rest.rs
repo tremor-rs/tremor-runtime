@@ -14,9 +14,9 @@
 
 // TODO add tests
 
-use crate::codec::Codec;
 use std::str::FromStr;
 
+use crate::codec::Codec;
 use crate::source::prelude::*;
 use async_channel::unbounded;
 use async_channel::{Sender, TryRecvError};
@@ -266,6 +266,7 @@ fn make_response(
         .get("response_headers")
         .and_then(|hs| hs.as_object())
     {
+        // TODO: set Host header
         for (name, values) in headers {
             // TODO standardize on string type for header values (even with multiple entries)?
             if let Some(header_values) = values.as_array() {

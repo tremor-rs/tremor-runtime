@@ -525,6 +525,7 @@ where
 
                         self.transmit_event(data, ingest_ns, origin_uri, OUT).await;
                     }
+                    // TODO: remove
                     Ok(SourceReply::Data {
                         mut origin_uri,
                         data,
