@@ -70,7 +70,7 @@ impl TremorAggrFn for Count {
         }
         Ok(())
     }
-    fn snot_clone(&self) -> Box<dyn TremorAggrFn> {
+    fn boxed_clone(&self) -> Box<dyn TremorAggrFn> {
         Box::new(self.clone())
     }
     fn arity(&self) -> RangeInclusive<usize> {
@@ -115,7 +115,7 @@ impl TremorAggrFn for Sum {
         }
         Ok(())
     }
-    fn snot_clone(&self) -> Box<dyn TremorAggrFn> {
+    fn boxed_clone(&self) -> Box<dyn TremorAggrFn> {
         Box::new(self.clone())
     }
     fn arity(&self) -> RangeInclusive<usize> {
@@ -168,7 +168,7 @@ impl TremorAggrFn for Mean {
         }
         Ok(())
     }
-    fn snot_clone(&self) -> Box<dyn TremorAggrFn> {
+    fn boxed_clone(&self) -> Box<dyn TremorAggrFn> {
         Box::new(self.clone())
     }
     fn arity(&self) -> RangeInclusive<usize> {
@@ -225,7 +225,7 @@ impl TremorAggrFn for Min {
         }
         Ok(())
     }
-    fn snot_clone(&self) -> Box<dyn TremorAggrFn> {
+    fn boxed_clone(&self) -> Box<dyn TremorAggrFn> {
         Box::new(self.clone())
     }
     fn arity(&self) -> RangeInclusive<usize> {
@@ -268,7 +268,7 @@ impl TremorAggrFn for Max {
         }
         Ok(())
     }
-    fn snot_clone(&self) -> Box<dyn TremorAggrFn> {
+    fn boxed_clone(&self) -> Box<dyn TremorAggrFn> {
         Box::new(self.clone())
     }
     fn arity(&self) -> RangeInclusive<usize> {
@@ -337,7 +337,7 @@ impl TremorAggrFn for Var {
         }
         Ok(())
     }
-    fn snot_clone(&self) -> Box<dyn TremorAggrFn> {
+    fn boxed_clone(&self) -> Box<dyn TremorAggrFn> {
         Box::new(self.clone())
     }
     fn arity(&self) -> RangeInclusive<usize> {
@@ -375,7 +375,7 @@ impl TremorAggrFn for Stdev {
         }
         Ok(())
     }
-    fn snot_clone(&self) -> Box<dyn TremorAggrFn> {
+    fn boxed_clone(&self) -> Box<dyn TremorAggrFn> {
         Box::new(self.clone())
     }
     fn arity(&self) -> RangeInclusive<usize> {
@@ -595,7 +595,7 @@ impl TremorAggrFn for Dds {
         self.histo = None;
         self.cache.clear();
     }
-    fn snot_clone(&self) -> Box<dyn TremorAggrFn> {
+    fn boxed_clone(&self) -> Box<dyn TremorAggrFn> {
         Box::new(self.clone())
     }
     fn arity(&self) -> RangeInclusive<usize> {
@@ -833,7 +833,7 @@ impl TremorAggrFn for Hdr {
         self.max = 0;
         self.cache.clear();
     }
-    fn snot_clone(&self) -> Box<dyn TremorAggrFn> {
+    fn boxed_clone(&self) -> Box<dyn TremorAggrFn> {
         Box::new(self.clone())
     }
     fn arity(&self) -> RangeInclusive<usize> {

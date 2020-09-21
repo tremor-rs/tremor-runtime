@@ -48,7 +48,7 @@ pub trait TremorAggrFn: DowncastSync + Sync + Send {
     fn merge(&mut self, src: &dyn TremorAggrFn) -> FResult<()>;
     /// allows cloning the functions without implementing
     /// `Clone` to avoid rust complaining
-    fn snot_clone(&self) -> Box<dyn TremorAggrFn>;
+    fn boxed_clone(&self) -> Box<dyn TremorAggrFn>;
     /// The arity of the function
     fn arity(&self) -> RangeInclusive<usize>;
     /// Tests if a given arity is valid
@@ -69,7 +69,7 @@ pub trait TremorFn: Sync + Send {
         -> FResult<Value<'event>>;
     /// allows cloning the functions without implementing
     /// `Clone` to avoid rust complaining
-    fn snot_clone(&self) -> Box<dyn TremorFn>;
+    fn boxed_clone(&self) -> Box<dyn TremorFn>;
     /// The arity of the function
     fn arity(&self) -> RangeInclusive<usize>;
     /// Tests if a given arity is valid
@@ -289,7 +289,7 @@ impl Clone for TremorFnWrapper {
         Self {
             module: self.module.clone(),
             name: self.name.clone(),
-            fun: self.fun.snot_clone(),
+            fun: self.fun.boxed_clone(),
         }
     }
 }
@@ -407,7 +407,7 @@ macro_rules! tremor_fn_ {
                     }
                 }
 
-                fn snot_clone(&self) -> Box<dyn TremorFn> {
+                fn boxed_clone(&self) -> Box<dyn TremorFn> {
                     Box::new(self.clone())
                 }
                 fn arity(&self) -> std::ops::RangeInclusive<usize> {
@@ -474,7 +474,7 @@ macro_rules! tremor_fn_ {
                         })
                     }
                 }
-                fn snot_clone(&self) -> Box<dyn TremorFn> {
+                fn boxed_clone(&self) -> Box<dyn TremorFn> {
                     Box::new(self.clone())
                 }
                 fn arity(&self) -> std::ops::RangeInclusive<usize> {
@@ -530,7 +530,7 @@ macro_rules! tremor_fn_ {
                         })
                     }
                 }
-                fn snot_clone(&self) -> Box<dyn TremorFn> {
+                fn boxed_clone(&self) -> Box<dyn TremorFn> {
                     Box::new(self.clone())
                 }
                 fn arity(&self) -> std::ops::RangeInclusive<usize> {
@@ -612,7 +612,7 @@ impl Clone for TremorAggrFnWrapper {
         Self {
             module: self.module.clone(),
             name: self.name.clone(),
-            fun: self.fun.snot_clone(),
+            fun: self.fun.boxed_clone(),
         }
     }
 }

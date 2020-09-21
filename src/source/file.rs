@@ -121,6 +121,8 @@ impl Source for Int {
             Ok(SourceReply::Data {
                 origin_uri: self.origin_uri.clone(),
                 data: line.as_bytes().to_vec(),
+                meta: None,           // TODO: add linenum and filename here?
+                codec_override: None, // TODO overwrite codec based on file ending or magic bytes
                 stream: 0,
             })
         } else if self.config.sleep_on_done == 0 {
@@ -149,12 +151,21 @@ impl Onramp for File {
         &mut self,
         onramp_uid: u64,
         codec: &str,
+        codec_map: halfbrown::HashMap<String, String>,
         preprocessors: &[String],
         metrics_reporter: RampReporter,
     ) -> Result<onramp::Addr> {
         let source =
             Int::from_config(onramp_uid, self.onramp_id.clone(), self.config.clone()).await?;
-        SourceManager::start(onramp_uid, source, codec, preprocessors, metrics_reporter).await
+        SourceManager::start(
+            onramp_uid,
+            source,
+            codec,
+            codec_map,
+            preprocessors,
+            metrics_reporter,
+        )
+        .await
     }
     fn default_codec(&self) -> &str {
         "json"

@@ -26,7 +26,8 @@ macro_rules! cant_error {
     };
 }
 
-/// Tries to parse a striung as an influx line protocl message
+/// Tries to parse a string as an influx line protocol message
+/// See: [Influx docs](https://docs.influxdata.com/influxdb/v2.0/reference/syntax/line-protocol/)
 pub fn decode<'input, V>(data: &'input str, ingest_ns: u64) -> Result<Option<V>>
 where
     V: ValueTrait + Mutable + Builder<'input> + 'input + std::fmt::Debug,

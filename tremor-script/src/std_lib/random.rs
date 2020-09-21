@@ -74,7 +74,7 @@ impl TremorFn for RandomInteger {
             }),
         }
     }
-    fn snot_clone(&self) -> Box<dyn TremorFn> {
+    fn boxed_clone(&self) -> Box<dyn TremorFn> {
         Box::new(self.clone())
     }
     fn arity(&self) -> std::ops::RangeInclusive<usize> {
@@ -133,7 +133,7 @@ impl TremorFn for RandomFloat {
         }
     }
 
-    fn snot_clone(&self) -> Box<dyn TremorFn> {
+    fn boxed_clone(&self) -> Box<dyn TremorFn> {
         Box::new(self.clone())
     }
     fn arity(&self) -> std::ops::RangeInclusive<usize> {

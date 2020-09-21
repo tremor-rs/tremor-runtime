@@ -48,6 +48,7 @@ pub(crate) trait Onramp: Send {
         &mut self,
         onramp_uid: u64,
         codec: &str,
+        codec_map: halfbrown::HashMap<String, String>,
         preprocessors: &[String],
         metrics_reporter: RampReporter,
     ) -> Result<Addr>;
@@ -80,6 +81,7 @@ pub(crate) struct Create {
     pub id: ServantId,
     pub stream: Box<dyn Onramp>,
     pub codec: String,
+    pub codec_map: halfbrown::HashMap<String, String>,
     pub preprocessors: Vec<String>,
     pub metrics_reporter: RampReporter,
 }
@@ -120,6 +122,7 @@ impl Manager {
                     Ok(ManagerMsg::Create(r, c)) => {
                         let Create {
                             codec,
+                            codec_map,
                             mut stream,
                             preprocessors,
                             metrics_reporter,
@@ -127,7 +130,13 @@ impl Manager {
                         } = *c;
                         onramp_uid += 1;
                         match stream
-                            .start(onramp_uid, &codec, &preprocessors, metrics_reporter)
+                            .start(
+                                onramp_uid,
+                                &codec,
+                                codec_map,
+                                &preprocessors,
+                                metrics_reporter,
+                            )
                             .await
                         {
                             Ok(addr) => {

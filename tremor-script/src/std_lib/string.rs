@@ -89,7 +89,7 @@ impl TremorFn for StringFormat {
         }
     }
 
-    fn snot_clone(&self) -> Box<dyn TremorFn> {
+    fn boxed_clone(&self) -> Box<dyn TremorFn> {
         Box::new(self.clone())
     }
     fn arity(&self) -> std::ops::RangeInclusive<usize> {

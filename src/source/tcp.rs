@@ -128,6 +128,8 @@ impl Source for Int {
                             .send(SourceReply::Data {
                                 origin_uri: origin_uri.clone(),
                                 data: buffer[0..n].to_vec(),
+                                meta: None, // TODO: add peer address etc. to meta
+                                codec_override: None,
                                 stream: stream_id,
                             })
                             .await
@@ -151,11 +153,20 @@ impl Onramp for Tcp {
         &mut self,
         onramp_uid: u64,
         codec: &str,
+        codec_map: halfbrown::HashMap<String, String>,
         preprocessors: &[String],
         metrics_reporter: RampReporter,
     ) -> Result<onramp::Addr> {
         let source = Int::from_config(onramp_uid, self.onramp_id.clone(), &self.config)?;
-        SourceManager::start(onramp_uid, source, codec, preprocessors, metrics_reporter).await
+        SourceManager::start(
+            onramp_uid,
+            source,
+            codec,
+            codec_map,
+            preprocessors,
+            metrics_reporter,
+        )
+        .await
     }
 
     fn default_codec(&self) -> &str {

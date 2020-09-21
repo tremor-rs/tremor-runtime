@@ -87,6 +87,7 @@ impl Onramp for Metronome {
         &mut self,
         onramp_uid: u64,
         codec: &str,
+        codec_map: halfbrown::HashMap<String, String>,
         preprocessors: &[String],
         metrics_reporter: RampReporter,
     ) -> Result<onramp::Addr> {
@@ -94,6 +95,7 @@ impl Onramp for Metronome {
             onramp_uid,
             self.clone(),
             codec,
+            codec_map,
             preprocessors,
             metrics_reporter,
         )

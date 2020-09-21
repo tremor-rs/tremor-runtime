@@ -53,6 +53,8 @@ pub struct OnRamp {
     #[serde(default = "Default::default", skip_serializing_if = "Option::is_none")]
     pub(crate) codec: Option<String>,
     #[serde(default = "Default::default", skip_serializing_if = "Option::is_none")]
+    pub(crate) codec_map: Option<halfbrown::HashMap<String, String>>,
+    #[serde(default = "Default::default", skip_serializing_if = "Option::is_none")]
     pub(crate) preprocessors: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) metrics_interval_s: Option<u64>,

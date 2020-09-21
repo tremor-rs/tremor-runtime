@@ -24,16 +24,20 @@ impl Codec for StatsD {
         "statsd".to_string()
     }
 
-    fn decode(&mut self, data: Vec<u8>, ingest_ns: u64) -> Result<Option<LineValue>> {
-        LineValue::try_new(vec![data], |raw| {
-            decode(&raw[0], ingest_ns).map(ValueAndMeta::from)
-        })
-        .map_err(|e| e.0)
-        .map(Some)
+    fn decode<'input>(
+        &mut self,
+        data: &'input mut [u8],
+        ingest_ns: u64,
+    ) -> Result<Option<Value<'input>>> {
+        decode(data, ingest_ns).map(Some)
     }
 
     fn encode(&self, data: &simd_json::BorrowedValue) -> Result<Vec<u8>> {
         encode(data)
+    }
+
+    fn boxed_clone(&self) -> Box<dyn Codec> {
+        Box::new(self.clone())
     }
 }
 
@@ -198,7 +202,7 @@ mod test {
         .into();
         assert_eq!(parsed, expected);
         let encoded = encode(&parsed).expect("failed to encode");
-        assert_eq!(encoded, data);
+        assert_eq!(encoded.as_slice(), data);
     }
     // glork:320|ms
     #[test]

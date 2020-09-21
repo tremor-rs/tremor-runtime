@@ -43,48 +43,31 @@ use tremor_influx as influx;
 #[derive(Clone)]
 pub struct Influx {}
 
-// This is ugly but we need to handle comments, thanks rental!
-pub(crate) enum RentalSnot {
-    Error(Error),
-    Skip,
-}
-
-impl From<std::str::Utf8Error> for RentalSnot {
-    fn from(e: std::str::Utf8Error) -> Self {
-        Self::Error(e.into())
-    }
-}
-
 impl Codec for Influx {
     fn name(&self) -> String {
         "influx".to_string()
     }
 
-    fn decode(&mut self, data: Vec<u8>, ingest_ns: u64) -> Result<Option<LineValue>> {
-        let r: std::result::Result<LineValue, RentalSnot> = LineValue::try_new(vec![data], |raw| {
-            // This is safe as from_utf8 does not change the memory locaiton
-            // of the bytes, simply validatges that it's UTF8 and if so
-            // change the type.
-            let s: &str = unsafe { mem::transmute(str::from_utf8(&raw[0])?) };
-            match influx::decode::<'static, Value<'static>>(s, ingest_ns) {
-                Ok(None) => Err(RentalSnot::Skip),
-                Ok(Some(v)) => Ok(v.into()),
-                Err(e) => Err(RentalSnot::Error(
-                    ErrorKind::InvalidInfluxData(String::from_utf8_lossy(&raw[0]).to_string(), e)
-                        .into(),
-                )),
-            }
+    fn decode<'input>(
+        &mut self,
+        data: &'input mut [u8],
+        ingest_ns: u64,
+    ) -> Result<Option<Value<'input>>> {
+        // This is safe as from_utf8 does not change the memory location
+        // of the bytes, simply validates that it is UTF8 and if so
+        // change the type.
+        let s: &str = unsafe { mem::transmute(str::from_utf8(data)?) };
+        influx::decode::<'static, Value<'static>>(s, ingest_ns).map_err(|e| {
+            ErrorKind::InvalidInfluxData(String::from_utf8_lossy(data).to_string(), e).into()
         })
-        .map_err(|e| e.0);
-        match r {
-            Ok(v) => Ok(Some(v)),
-            Err(RentalSnot::Skip) => Ok(None),
-            Err(RentalSnot::Error(e)) => Err(e),
-        }
     }
 
     fn encode(&self, data: &simd_json::BorrowedValue) -> Result<Vec<u8>> {
         Ok(influx::encode(data)?)
+    }
+
+    fn boxed_clone(&self) -> Box<dyn Codec> {
+        Box::new(self.clone())
     }
 }
 
@@ -138,11 +121,11 @@ mod tests {
     }
     #[test]
     pub fn decode_test() {
-        let s = b"weather,location=us-midwest temperature=82 1465839830100400200".to_vec();
+        let mut s = b"weather,location=us-midwest temperature=82 1465839830100400200".to_vec();
         let mut codec = Influx {};
 
         let decoded = codec
-            .decode(s, 0)
+            .decode(s.as_mut_slice(), 0)
             .expect("failed to decode")
             .expect("failed to decode");
 
@@ -153,7 +136,7 @@ mod tests {
             "timestamp": 1_465_839_830_100_400_200i64
         })
         .into();
-        assert_eq!(decoded.suffix().value(), &e)
+        assert_eq!(decoded, &e)
     }
 
     fn get_data_for_tests() -> [(Vec<u8>, Value<'static>, &'static str); 13] {
@@ -325,13 +308,15 @@ mod tests {
         for case in &pairs {
             let mut codec = Influx {};
             let v = case.1.clone();
-            let encoded = codec.encode(&v)?;
+            let mut encoded = codec.encode(&v)?;
 
-            let decoded = codec.decode(encoded.clone(), 0)?.expect("failed to decode");
+            let decoded = codec
+                .decode(encoded.as_mut_slice(), 0)?
+                .expect("failed to decode");
             let expected: Value = case.1.clone();
-            let got = decoded.suffix().value();
+            let got = decoded;
             let bin = BInflux::encode(&expected)?;
-            if *got != &expected {
+            if got != &expected {
                 println!("{} fails while decoding", &case.2);
                 assert_eq!(got.encode(), expected.encode());
             }
@@ -344,13 +329,13 @@ mod tests {
 
     #[test]
     pub fn parse_simple3() {
-        let s =
+        let mut s =
             b"weather,location=us-midwest temperature=82,bug_concentration=98 1465839830100400200"
                 .to_vec();
         let mut codec = Influx {};
 
         let decoded = codec
-            .decode(s, 0)
+            .decode(s.as_mut_slice(), 0)
             .expect("failed to decode")
             .expect("failed to decode");
 
@@ -362,16 +347,16 @@ mod tests {
             "timestamp": 1_465_839_830_100_400_200i64
         })
         .into();
-        assert_eq!(decoded.suffix().value(), &e)
+        assert_eq!(decoded, &e)
     }
 
     #[test]
     pub fn parse_int_value() {
-        let s = b"weather,location=us-midwest temperature=82i 1465839830100400200".to_vec();
+        let mut s = b"weather,location=us-midwest temperature=82i 1465839830100400200".to_vec();
         let mut codec = Influx {};
 
         let decoded = codec
-            .decode(s, 0)
+            .decode(s.as_mut_slice(), 0)
             .expect("failed to decode")
             .expect("failed to decode");
 
@@ -382,12 +367,13 @@ mod tests {
             "timestamp": 1_465_839_830_100_400_200i64
         })
         .into();
-        assert_eq!(decoded.suffix().value(), &e)
+        assert_eq!(decoded, &e)
     }
 
     #[test]
     pub fn live_usecase() {
-        let s = b"kafka_BrokerTopicMetrics,agent=jmxtrans,dc=iad1,host_name=kafka-iad1-g4-1,junk=kafka_topic,kafka_type=server,metric_type=counter,topic_name=customerEmailServiceMessage BytesInPerSec=0i,BytesOutPerSec=0i,FailedFetchRequestsPerSec=0i,FetchMessageConversionsPerSec=0i,TotalFetchRequestsPerSec=1993153i 1562179275506000000".to_vec();
+        let mut s = b"kafka_BrokerTopicMetrics,agent=jmxtrans,dc=iad1,host_name=kafka-iad1-g4-1,junk=kafka_topic,kafka_type=server,metric_type=counter,topic_name=customerEmailServiceMessage BytesInPerSec=0i,BytesOutPerSec=0i,FailedFetchRequestsPerSec=0i,FetchMessageConversionsPerSec=0i,TotalFetchRequestsPerSec=1993153i 1562179275506000000".to_vec();
+        let expected = s.clone();
 
         let mut codec = Influx {};
 
@@ -413,18 +399,16 @@ mod tests {
         })
         .into();
         let decoded = codec
-            .decode(s.clone(), 0)
+            .decode(s.as_mut_slice(), 0)
             .expect("failed to decode")
             .expect("failed to decode");
-        let encoded = codec
-            .encode(&decoded.suffix().value())
-            .expect("failed to encode");
+        let encoded = codec.encode(&decoded).expect("failed to encode");
 
-        assert_eq!(decoded.suffix().value(), &e);
+        assert_eq!(decoded, &e);
         unsafe {
             assert_eq!(
                 str::from_utf8_unchecked(&encoded),
-                str::from_utf8_unchecked(&s)
+                str::from_utf8_unchecked(expected.as_slice())
             );
         }
     }

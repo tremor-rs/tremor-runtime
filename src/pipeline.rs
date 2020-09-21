@@ -127,7 +127,6 @@ impl Dest {
             Self::LinkedOnramp(_addr) => {
                 // TODO implement?
                 //addr.send(onramp::Msg::Signal(signal)).await?
-                ()
             }
         }
         Ok(())
