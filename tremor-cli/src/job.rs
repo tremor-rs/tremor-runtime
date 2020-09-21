@@ -30,16 +30,14 @@ where
     let name = name.to_string_lossy();
     let e = Error::from(format!("Unable to find suitable `{}` binary on path", name));
     let path = env::var_os("PATH").and_then(|paths| {
-        env::split_paths(&paths)
-            .filter_map(|dir| {
-                let path = dir.join(&exe_name);
-                if path.is_file() {
-                    Some(path)
-                } else {
-                    None
-                }
-            })
-            .next()
+        env::split_paths(&paths).find_map(|dir| {
+            let path = dir.join(&exe_name);
+            if path.is_file() {
+                Some(path)
+            } else {
+                None
+            }
+        })
     });
     if path.is_none() && name == "tremor" {
         Some(env::current_exe().map_err(|e| {
