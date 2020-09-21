@@ -2,7 +2,7 @@
 /// of the runtime system.
 /// This is used to allow runing tremor-script on full
 /// scripts outside of the runtime.
-// Copyright 2018-2020, Wayfair GmbH
+// Copyright 2020, The Tremor Team
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
