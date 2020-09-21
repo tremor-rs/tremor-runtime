@@ -44,10 +44,11 @@ impl Sink for StdErr {
         for value in event.value_iter() {
             let raw = codec.encode(value)?;
             if let Ok(s) = std::str::from_utf8(&raw) {
-                self.stderr.write_all(s.as_bytes()).await?
+                self.stderr.write_all(s.as_bytes()).await?;
+                self.stderr.write_all(b"\n").await?;
             } else {
                 self.stderr
-                    .write_all(format!("{:?}", raw).as_bytes())
+                    .write_all(format!("{:?}\n", raw).as_bytes())
                     .await?
             }
         }
