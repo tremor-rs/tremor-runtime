@@ -15,8 +15,8 @@ args:
       multiple: true
       help: Sets the level of verbosity
 subcommands:
-  - explain:
-    about: Explains supported commands
+  #  - explain:
+  #    about: Explains supported commands
   - completions:
       about: Generate shell completions to stdout. Tries to guess the shell if no subcommand is given.
       subcommands:
