@@ -45,7 +45,11 @@ binding:
       '/pipeline/main/{instance}/error': [ '/offramp/system::stderr/system/in' ]
 
       # linked offramp that send responses to a pipeline
+<<<<<<< HEAD
       '/offramp/upstream/{instance}/response': [ '/pipeline/main/{instance}/from-offramp' ]
+=======
+      '/offramp/upstream/{instance}/out': [ '/pipeline/main/{instance}/from-offramp' ]
+>>>>>>> 3a4aa4c... Support linked transport for websocket offramp
       '/pipeline/main/{instance}/to-onramp': [
         # linked onramp that can respond based on pipeline output
         '/onramp/rest/{instance}/response',
