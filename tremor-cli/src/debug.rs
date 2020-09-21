@@ -31,7 +31,6 @@ use tremor_script::script::Script;
 
 struct Opts<'src> {
     banner: bool,
-    highlight: bool,
     kind: SourceKind,
     src: &'src str,
     raw: String,
@@ -247,7 +246,7 @@ where
     Ok(())
 }
 
-fn script_opts(matches: &ArgMatches, no_highlight: bool, no_banner: bool) -> Result<Opts> {
+fn script_opts(matches: &ArgMatches, no_banner: bool) -> Result<Opts> {
     let src = matches
         .value_of("SCRIPT")
         .ok_or_else(|| Error::from("No script file provided"))?;
@@ -260,7 +259,6 @@ fn script_opts(matches: &ArgMatches, no_highlight: bool, no_banner: bool) -> Res
     raw.push('\n'); // Ensure last token is whitespace
     let opts = Opts {
         banner: !no_banner,
-        highlight: !no_highlight,
         src,
         kind,
         raw,
@@ -276,16 +274,16 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
     if no_highlight {
         let mut h = TermNoHighlighter::new();
         let r = if let Some(args) = matches.subcommand_matches("ast") {
-            let opts = script_opts(args, no_highlight, no_banner)?;
+            let opts = script_opts(args, no_banner)?;
             dbg_ast(&mut h, &opts)
         } else if let Some(args) = matches.subcommand_matches("preprocess") {
-            let opts = script_opts(args, no_highlight, no_banner)?;
+            let opts = script_opts(args, no_banner)?;
             dbg_pp(&mut h, &opts)
         } else if let Some(args) = matches.subcommand_matches("lex") {
-            let opts = script_opts(args, no_highlight, no_banner)?;
+            let opts = script_opts(args, no_banner)?;
             dbg_lex(&mut h, &opts)
         } else if let Some(args) = matches.subcommand_matches("src") {
-            let opts = script_opts(args, no_highlight, no_banner)?;
+            let opts = script_opts(args, no_banner)?;
             dbg_src(&mut h, &opts)
         } else {
             Err("Missing subcommand".into())
@@ -297,16 +295,16 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
     } else {
         let mut h = TermHighlighter::new();
         let r = if let Some(args) = matches.subcommand_matches("ast") {
-            let opts = script_opts(args, no_highlight, no_banner)?;
+            let opts = script_opts(args, no_banner)?;
             dbg_ast(&mut h, &opts)
         } else if let Some(args) = matches.subcommand_matches("preprocess") {
-            let opts = script_opts(args, no_highlight, no_banner)?;
+            let opts = script_opts(args, no_banner)?;
             dbg_pp(&mut h, &opts)
         } else if let Some(args) = matches.subcommand_matches("lex") {
-            let opts = script_opts(args, no_highlight, no_banner)?;
+            let opts = script_opts(args, no_banner)?;
             dbg_lex(&mut h, &opts)
         } else if let Some(args) = matches.subcommand_matches("src") {
-            let opts = script_opts(args, no_highlight, no_banner)?;
+            let opts = script_opts(args, no_banner)?;
             dbg_src(&mut h, &opts)
         } else {
             Err("Missing subcommand".into())
