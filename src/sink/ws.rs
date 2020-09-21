@@ -16,11 +16,14 @@ use crate::sink::prelude::*;
 use async_channel::{bounded, unbounded, Receiver, Sender};
 use async_tungstenite::async_std::connect_async;
 use futures::SinkExt;
+use halfbrown::HashMap;
 use std::time::Duration;
 use tungstenite::protocol::Message;
 use url::Url;
 
-type WsAddr = Sender<(Ids, WsMessage)>;
+type WsSender = Sender<(Ids, WsMessage)>;
+type WsReceiver = Receiver<(Ids, WsMessage)>;
+type WsUrl = String;
 
 enum WsMessage {
     Binary(Vec<u8>),
@@ -37,38 +40,47 @@ pub struct Config {
 
 /// An offramp that writes to a websocket endpoint
 pub struct Ws {
-    addr: Option<WsAddr>,
     config: Config,
     postprocessors: Postprocessors,
-    rx: Receiver<WSResult>,
+    tx: Sender<WsResult>,
+    rx: Receiver<WsResult>,
+    connections: HashMap<WsUrl, Option<WsSender>>,
 }
 
-enum WSResult {
-    Connected(WsAddr),
-    Disconnected,
+enum WsResult {
+    Connected(WsUrl, WsSender),
+    Disconnected(WsUrl),
     Ack(Ids),
     Fail(Ids),
 }
 
-impl Default for WSResult {
-    fn default() -> Self {
-        WSResult::Disconnected
-    }
-}
-async fn ws_loop(url: String, offramp_tx: Sender<WSResult>) -> Result<()> {
+async fn ws_loop(
+    url: String,
+    offramp_tx: Sender<WsResult>,
+    tx: WsSender,
+    rx: WsReceiver,
+) -> Result<()> {
     loop {
         let mut ws_stream = if let Ok((ws_stream, _)) = connect_async(&url).await {
             ws_stream
         } else {
             error!("Failed to connect to {}, retrying in 1s", url);
-            offramp_tx.send(WSResult::Disconnected).await?;
+            offramp_tx.send(WsResult::Disconnected(url.clone())).await?;
             task::sleep(Duration::from_secs(1)).await;
             continue;
         };
-        let (tx, rx) = bounded(crate::QSIZE);
-        offramp_tx.send(WSResult::Connected(tx)).await?;
+        offramp_tx
+            .send(WsResult::Connected(url.clone(), tx.clone()))
+            .await?;
 
         while let Ok((id, msg)) = rx.recv().await {
+            // test code to simulate slow connection
+            // TODO remove
+            //if &url == "ws://localhost:8139" {
+            //    dbg!("sleeping...");
+            //    std::thread::sleep(Duration::from_secs(5));
+            //}
+
             let r = match msg {
                 WsMessage::Text(t) => ws_stream.send(Message::Text(t)).await,
                 WsMessage::Binary(t) => ws_stream.send(Message::Binary(t)).await,
@@ -78,10 +90,10 @@ async fn ws_loop(url: String, offramp_tx: Sender<WSResult>) -> Result<()> {
                     "Websocket send error: {} for endppoint {}, reconnecting",
                     e, url
                 );
-                offramp_tx.send(WSResult::Fail(id)).await?;
+                offramp_tx.send(WsResult::Fail(id)).await?;
                 break;
             } else {
-                offramp_tx.send(WSResult::Ack(id)).await?;
+                offramp_tx.send(WsResult::Ack(id)).await?;
             }
         }
     }
@@ -91,17 +103,23 @@ impl offramp::Impl for Ws {
     fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         if let Some(config) = config {
             let config: Config = serde_yaml::from_value(config.clone())?;
-            // Ensure we have valid url
+            // ensure we have valid url
             Url::parse(&config.url)?;
+
             let (tx, rx) = unbounded();
 
-            task::spawn(ws_loop(config.url.clone(), tx));
+            // handle connection for the offramp config url (as default)
+            let mut connections = HashMap::new();
+            let (conn_tx, conn_rx) = bounded(crate::QSIZE);
+            connections.insert(config.url.clone(), None);
+            task::spawn(ws_loop(config.url.clone(), tx.clone(), conn_tx, conn_rx));
 
             Ok(SinkManager::new_box(Self {
-                addr: None,
                 config,
                 postprocessors: vec![],
+                tx,
                 rx,
+                connections,
             }))
         } else {
             Err("[WS Offramp] Offramp requires a config".into())
@@ -115,23 +133,44 @@ impl Ws {
         let mut v = Vec::with_capacity(len);
         for _ in 0..len {
             match self.rx.recv().await? {
-                WSResult::Connected(addr) => {
-                    self.addr = Some(addr);
-                    v.push(SinkReply::Insight(Event::cb_restore(ingest_ns)));
+                WsResult::Connected(url, tx) => {
+                    // TODO trigger per url/connection (only resuming events with that url)
+                    if url == self.config.url {
+                        v.push(SinkReply::Insight(Event::cb_restore(ingest_ns)));
+                    }
+                    self.connections.insert(url, Some(tx));
                 }
-                WSResult::Disconnected => {
-                    self.addr = None;
-                    v.push(SinkReply::Insight(Event::cb_trigger(ingest_ns)));
+                WsResult::Disconnected(url) => {
+                    // TODO trigger per url/connection (only events with that url should be paused)
+                    if url == self.config.url {
+                        v.push(SinkReply::Insight(Event::cb_trigger(ingest_ns)));
+                    }
+                    self.connections.insert(url, None);
                 }
-                WSResult::Ack(id) => {
+                WsResult::Ack(id) => {
                     v.push(SinkReply::Insight(Event::cb_ack(ingest_ns, id.clone())))
                 }
-                WSResult::Fail(id) => {
+                WsResult::Fail(id) => {
                     v.push(SinkReply::Insight(Event::cb_fail(ingest_ns, id.clone())))
                 }
             }
         }
         Ok(Some(v))
+    }
+
+    fn get_message_config(&self, meta: &Value) -> Config {
+        Config {
+            url: meta
+                .get("url")
+                // TODO simplify
+                .and_then(Value::as_str)
+                .unwrap_or(&self.config.url)
+                .into(),
+            binary: meta
+                .get("binary")
+                .and_then(Value::as_bool)
+                .unwrap_or(self.config.binary),
+        }
     }
 }
 
@@ -142,7 +181,10 @@ impl Sink for Ws {
     }
 
     fn is_active(&self) -> bool {
-        self.addr.is_some()
+        // TODO track per url/connection (instead of just using default config url)
+        self.connections
+            .get(&self.config.url)
+            .map_or(false, |c| c.is_some())
     }
 
     async fn on_signal(&mut self, signal: Event) -> ResultVec {
@@ -151,23 +193,53 @@ impl Sink for Ws {
 
     #[allow(clippy::used_underscore_binding)]
     async fn on_event(&mut self, _input: &str, codec: &dyn Codec, event: Event) -> ResultVec {
-        if let Some(addr) = &self.addr {
-            for value in event.value_iter() {
+        for (value, meta) in event.value_meta_iter() {
+            let msg_config = self.get_message_config(meta);
+
+            // actually used when we have new connection to make (overriden from event-meta)
+            #[allow(unused_assignments)]
+            let mut temp_conn_tx = None;
+            let ws_conn_tx = match self.connections.get(&msg_config.url) {
+                Some(v) => v,
+                None => {
+                    let (conn_tx, conn_rx) = bounded(crate::QSIZE);
+                    // separate task to handle new url connection
+                    task::spawn(ws_loop(
+                        msg_config.url.clone(),
+                        self.tx.clone(),
+                        conn_tx.clone(),
+                        conn_rx,
+                    ));
+                    // TODO default to None for initial connection? (like what happens for
+                    // default offramp config url). if we do circuit-breakers-per-url
+                    // connection, this will be handled better.
+                    self.connections
+                        .insert(msg_config.url.clone(), Some(conn_tx.clone()));
+                    // sender here ensures we don't drop the current in-flight event
+                    temp_conn_tx = Some(conn_tx);
+                    &temp_conn_tx
+                }
+            };
+
+            if let Some(conn_tx) = ws_conn_tx {
                 let raw = codec.encode(value)?;
                 let datas = postprocess(&mut self.postprocessors, event.ingest_ns, raw)?;
                 for raw in datas {
-                    if self.config.binary {
-                        addr.send((event.id.clone(), WsMessage::Binary(raw)))
+                    if msg_config.binary {
+                        conn_tx
+                            .send((event.id.clone(), WsMessage::Binary(raw)))
                             .await?;
                     } else if let Ok(txt) = String::from_utf8(raw) {
-                        addr.send((event.id.clone(), WsMessage::Text(txt))).await?;
+                        conn_tx
+                            .send((event.id.clone(), WsMessage::Text(txt)))
+                            .await?;
                     } else {
                         error!("[WS Offramp] Invalid utf8 data for text message");
                         return Err(Error::from("Invalid utf8 data for text message"));
                     }
                 }
             }
-        };
+        }
         self.drain_insights(event.ingest_ns).await
     }
 
