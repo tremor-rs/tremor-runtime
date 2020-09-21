@@ -748,32 +748,13 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "3.0.0-beta.1"
-source = "git+https://github.com/clap-rs/clap?rev=29df5c2#29df5c2d16ca261528e17abcf4414e94aaff46f4"
-dependencies = [
- "atty",
- "bitflags",
- "clap_derive 3.0.0-beta.1",
- "indexmap",
- "lazy_static",
- "os_str_bytes",
- "strsim 0.10.0",
- "termcolor",
- "textwrap 0.12.1",
- "unicode-width",
- "vec_map",
- "yaml-rust",
-]
-
-[[package]]
-name = "clap"
 version = "3.0.0-beta.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4bd1061998a501ee7d4b6d449020df3266ca3124b941ec56cf2005c3779ca142"
 dependencies = [
  "atty",
  "bitflags",
- "clap_derive 3.0.0-beta.2",
+ "clap_derive",
  "indexmap",
  "lazy_static",
  "os_str_bytes",
@@ -783,18 +764,6 @@ dependencies = [
  "unicode-width",
  "vec_map",
  "yaml-rust",
-]
-
-[[package]]
-name = "clap_derive"
-version = "3.0.0-beta.1"
-source = "git+https://github.com/clap-rs/clap?rev=29df5c2#29df5c2d16ca261528e17abcf4414e94aaff46f4"
-dependencies = [
- "heck",
- "proc-macro-error",
- "proc-macro2",
- "quote 1.0.7",
- "syn 1.0.41",
 ]
 
 [[package]]
@@ -812,10 +781,11 @@ dependencies = [
 
 [[package]]
 name = "clap_generate"
-version = "3.0.0-beta.1"
-source = "git+https://github.com/clap-rs/clap?rev=29df5c2#29df5c2d16ca261528e17abcf4414e94aaff46f4"
+version = "3.0.0-beta.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "adf420f8b687b628d2915ccfd43a660c437a170432e3fbcb66944e8717a0d68f"
 dependencies = [
- "clap 3.0.0-beta.1",
+ "clap 3.0.0-beta.2",
 ]
 
 [[package]]
@@ -5251,7 +5221,7 @@ version = "0.9.0"
 dependencies = [
  "async-std",
  "chrono",
- "clap 3.0.0-beta.1",
+ "clap 3.0.0-beta.2",
  "clap_generate",
  "criterion",
  "difference",
