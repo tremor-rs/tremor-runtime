@@ -1,14 +1,16 @@
 onramp:
-  - id: rest
-    type: rest
+  - id: ws
+    type: ws
+    codec: string
+    preprocessors:
+      # TODO lines pre-processor no longer working here (for first connection). investigate
+      - lines
     config:
       host: localhost
       port: 9139
-      # TODO eliminate the need for this config item
+      # TODO move this to top level
       link: true
 
-# TODO once we support request path directly in rest offramp (right now
-# relies on $endpoint), this will work
 pipeline:
   - id: main
     interface:
@@ -24,20 +26,20 @@ pipeline:
 
 offramp:
   - id: upstream
-    type: rest
+    type: ws
+    codec: string
+    postprocessors:
+      - lines
     config:
       link: true
-      # TODO make this optional too
-      endpoints:
-       - http://localhost:8139/snot
-      #put: true
-      #headers:
-      #  "Client": "Tremor"
+      url: "ws://echo.websocket.org"
+      # with local server
+      #url: "ws://localhost:8139"
 
 binding:
   - id: default
     links:
-      '/onramp/rest/{instance}/out': [ '/pipeline/main/{instance}/in' ]
+      '/onramp/ws/{instance}/out': [ '/pipeline/main/{instance}/in' ]
       '/pipeline/main/{instance}/out': [
         '/offramp/upstream/{instance}/in',
         #'/offramp/system::stdout/system/in' # for debugging
@@ -49,13 +51,14 @@ binding:
       '/offramp/upstream/{instance}/out': [ '/pipeline/main/{instance}/from-offramp' ]
       '/pipeline/main/{instance}/to-onramp': [
         # linked onramp that can respond based on pipeline output
-        '/onramp/rest/{instance}/in',
+        '/onramp/ws/{instance}/in',
         # for debugging purposes
         '/offramp/system::stdout/system/in'
       ]
 
       # tremor metrics
       #'/pipeline/system::metrics/system/out': [ '/offramp/system::stdout/system/in' ]
+
 mapping:
   /binding/default/01:
     instance: '01'

@@ -1,12 +1,17 @@
 onramp:
-  - id: rest
-    type: rest
+  - id: ws
+    type: ws
+    codec: string
+    preprocessors:
+      # TODO lines pre-processor no longer working here (for first connection). investigate
+      - lines
     config:
       host: localhost
       port: 9139
-      # TODO eliminate the need for this config item
+      # TODO move this to top level
       link: true
 
+# TODO switch to trickle for this
 pipeline:
   - id: main
     interface:
@@ -22,20 +27,30 @@ pipeline:
         op: runtime::tremor
         config:
           script: |
-            # TODO need for this will go away once we support path attribute directly
-            # for rest offramp
-            let $endpoint = "http://localhost:8139{$request_path}";
+            match event of
+              case "ping" =>
+                # TODO need to support this usecase
+                # don't proxy for ping messages
+                emit "pong" => "to-onramp"
+              case "snot\n" =>
+                # use local (snot-aware) websocket server here
+                let $url = "ws://localhost:8139"
+              default =>
+                null
+            end;
+
             event;
       - id: response-processing
         op: runtime::tremor
         config:
           script: |
-            # TODO append
-            let $response_headers = {
-              "content-type": [ "text/plain" ],
-              "x-powered-by": [ "Tremor" ],
-            };
-            event;
+            # TODO use event origin uri to set url
+            #{
+            #  "url": $url,
+            #  "data": event
+            #}
+            event
+
     links:
       # TODO error output here should bubble up as 500 response for linked onramps
       in: [ request-processing ]
@@ -48,20 +63,18 @@ pipeline:
 
 offramp:
   - id: upstream
-    type: rest
+    type: ws
+    codec: string
+    postprocessors:
+      - lines
     config:
       link: true
-      # TODO make this optional too
-      endpoints:
-       - http://localhost:8139/snot
-      #put: true
-      #headers:
-      #  "Client": "Tremor"
+      url: "ws://echo.websocket.org"
 
 binding:
   - id: default
     links:
-      '/onramp/rest/{instance}/out': [ '/pipeline/main/{instance}/in' ]
+      '/onramp/ws/{instance}/out': [ '/pipeline/main/{instance}/in' ]
       '/pipeline/main/{instance}/out': [
         '/offramp/upstream/{instance}/in',
         #'/offramp/system::stdout/system/in' # for debugging
@@ -69,17 +82,18 @@ binding:
 
       '/pipeline/main/{instance}/error': [ '/offramp/system::stderr/system/in' ]
 
-      # linked offramp that send responses to a pipeline
+      # linked offramp that send replies to a pipeline
       '/offramp/upstream/{instance}/out': [ '/pipeline/main/{instance}/from-offramp' ]
       '/pipeline/main/{instance}/to-onramp': [
-        # linked onramp that can respond based on pipeline output
-        '/onramp/rest/{instance}/in',
+        # linked onramp that can reply based on pipeline output
+        '/onramp/ws/{instance}/in',
         # for debugging purposes
         '/offramp/system::stdout/system/in'
       ]
 
       # tremor metrics
       #'/pipeline/system::metrics/system/out': [ '/offramp/system::stdout/system/in' ]
+
 mapping:
   /binding/default/01:
     instance: '01'

@@ -1,10 +1,10 @@
 onramp:
   - id: ws
     type: ws
+    codec: string
     preprocessors:
       # TODO lines pre-processor no longer working here (for first connection). investigate
       - lines
-    codec: string
     config:
       host: localhost
       port: 8139
@@ -28,7 +28,9 @@ pipeline:
             match event of
               # snot is a special snowflake
               case "snot\n" => "badger"
-              default => event
+              # TODO remove after resolving preprocessor issue for above
+              default => "hello from local proxy"
+              #default => event
             end
     links:
       in: [ runtime ]
