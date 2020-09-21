@@ -234,11 +234,14 @@ impl WAL {
         // The maximum number of entries we read
         let mut events = Vec::with_capacity(self.config.read_count as usize);
 
-        for e in self
-            .events_tree
-            .range(self.read..(self.read + self.config.read_count))
-        {
-            let (_idx, mut e) = e?;
+        let mut num_read = 0usize;
+        for e in self.events_tree.range(self.read..) {
+            num_read += 1;
+            if num_read > self.config.read_count {
+                break;
+            }
+            let (idx, mut e) = e?;
+            self.read = idx.into();
             self.read += 1;
             let e_slice: &mut [u8] = &mut e;
             let mut event = Event::from_slice(e_slice)?;
@@ -253,7 +256,7 @@ impl WAL {
     fn store_event(&mut self, uid: u64, mut event: Event) -> Result<()> {
         let id = self.wal.generate_id()?;
         let write: [u8; 8] = unsafe { mem::transmute(id.to_be()) };
-        event.id = Ids::new(uid, id);
+        event.id.add_id(uid, id); // = Ids::new(uid, id);
 
         // Sieralize and write the event
         let event_buf = event.json_vec()?;
