@@ -196,6 +196,7 @@ where
                         };
                     }
                 }
+                // TODO we should not rely on sending response as part of signal processing
                 SinkReply::Response(e) => {
                     let mut i = self.dest_pipelines.iter();
                     if let Some((first_id, first_addr)) = i.next() {

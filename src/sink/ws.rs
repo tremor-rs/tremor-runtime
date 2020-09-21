@@ -30,12 +30,22 @@ enum WsMessage {
     Text(String),
 }
 
+// TODO once we get rid of link option in offramp config,
+// we can just align this with offramp Config
+struct WsMessageMeta {
+    url: String,
+    binary: bool,
+}
+
 #[derive(Deserialize, Debug)]
 pub struct Config {
     /// Host to use as source
     pub url: String,
     #[serde(default)]
     pub binary: bool,
+    /// whether to enable linked transport (return offramp response to pipeline)
+    // TODO remove and auto-infer this based on succesful binding for linked offramps
+    pub link: Option<bool>,
 }
 
 /// An offramp that writes to a websocket endpoint
@@ -45,6 +55,7 @@ pub struct Ws {
     tx: Sender<WsResult>,
     rx: Receiver<WsResult>,
     connections: HashMap<WsUrl, Option<WsSender>>,
+    has_link: bool,
 }
 
 enum WsResult {
@@ -52,6 +63,7 @@ enum WsResult {
     Disconnected(WsUrl),
     Ack(Ids),
     Fail(Ids),
+    Response(Ids, WsMessage),
 }
 
 async fn ws_loop(
@@ -59,6 +71,7 @@ async fn ws_loop(
     offramp_tx: Sender<WsResult>,
     tx: WsSender,
     rx: WsReceiver,
+    has_link: bool,
 ) -> Result<()> {
     loop {
         let mut ws_stream = if let Ok((ws_stream, _)) = connect_async(&url).await {
@@ -90,10 +103,38 @@ async fn ws_loop(
                     "Websocket send error: {} for endppoint {}, reconnecting",
                     e, url
                 );
-                offramp_tx.send(WsResult::Fail(id)).await?;
+                // TODO avoid these clones for non linked-transport usecase
+                offramp_tx.send(WsResult::Fail(id.clone())).await?;
                 break;
             } else {
-                offramp_tx.send(WsResult::Ack(id)).await?;
+                offramp_tx.send(WsResult::Ack(id.clone())).await?;
+            }
+
+            // TODO should we async this (async_sink?) so that a slow request on a
+            // single connection does not block subsequent requests (for that connection)
+            // (over separate connections, it is already async)
+            if has_link {
+                if let Some(msg) = ws_stream.next().await {
+                    match msg {
+                        Ok(Message::Text(t)) => {
+                            offramp_tx
+                                .send(WsResult::Response(id, WsMessage::Text(t)))
+                                .await?;
+                        }
+                        Ok(Message::Binary(t)) => {
+                            offramp_tx
+                                .send(WsResult::Response(id, WsMessage::Binary(t)))
+                                .await?;
+                        }
+                        Ok(Message::Ping(_)) | Ok(Message::Pong(_)) => {}
+                        Ok(Message::Close(_)) => {
+                            error!("Server {} closed websocket connection", url);
+                            offramp_tx.send(WsResult::Disconnected(url.clone())).await?;
+                            break;
+                        }
+                        Err(e) => error!("WS error returned while waiting for client data: {}", e),
+                    }
+                }
             }
         }
     }
@@ -103,6 +144,7 @@ impl offramp::Impl for Ws {
     fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         if let Some(config) = config {
             let config: Config = serde_yaml::from_value(config.clone())?;
+            let has_link = config.link.unwrap_or(false);
             // ensure we have valid url
             Url::parse(&config.url)?;
 
@@ -112,14 +154,21 @@ impl offramp::Impl for Ws {
             let mut connections = HashMap::new();
             let (conn_tx, conn_rx) = bounded(crate::QSIZE);
             connections.insert(config.url.clone(), None);
-            task::spawn(ws_loop(config.url.clone(), tx.clone(), conn_tx, conn_rx));
+            task::spawn(ws_loop(
+                config.url.clone(),
+                tx.clone(),
+                conn_tx,
+                conn_rx,
+                has_link,
+            ));
 
             Ok(SinkManager::new_box(Self {
-                config,
                 postprocessors: vec![],
+                config,
                 tx,
                 rx,
                 connections,
+                has_link,
             }))
         } else {
             Err("[WS Offramp] Offramp requires a config".into())
@@ -153,13 +202,39 @@ impl Ws {
                 WsResult::Fail(id) => {
                     v.push(SinkReply::Insight(Event::cb_fail(ingest_ns, id.clone())))
                 }
+                WsResult::Response(id, msg) => {
+                    v.push(SinkReply::Response(Self::make_event(id, msg)?))
+                }
             }
         }
         Ok(Some(v))
     }
 
-    fn get_message_config(&self, meta: &Value) -> Config {
-        Config {
+    fn make_event(id: Ids, msg: WsMessage) -> Result<Event> {
+        let mut meta = Value::object_with_capacity(1);
+        let data = match msg {
+            WsMessage::Text(d) => {
+                meta.insert("binary", false)?;
+                d
+            }
+            WsMessage::Binary(d) => {
+                meta.insert("binary", true)?;
+                String::from_utf8(d)?
+            }
+        };
+        Ok(Event {
+            id, // TODO only eid should be preserved for this?
+            //data,
+            data: (data, meta).into(),
+            ingest_ns: nanotime(),
+            // TODO implement origin_uri
+            origin_uri: None,
+            ..Event::default()
+        })
+    }
+
+    fn get_message_config(&self, meta: &Value) -> WsMessageMeta {
+        WsMessageMeta {
             url: meta
                 .get("url")
                 // TODO simplify
@@ -193,6 +268,10 @@ impl Sink for Ws {
 
     #[allow(clippy::used_underscore_binding)]
     async fn on_event(&mut self, _input: &str, codec: &dyn Codec, event: Event) -> ResultVec {
+        if self.has_link && event.is_batch {
+            return Err("Batched events are not supported for linked websocket offramps".into());
+        }
+
         for (value, meta) in event.value_meta_iter() {
             let msg_config = self.get_message_config(meta);
 
@@ -209,6 +288,7 @@ impl Sink for Ws {
                         self.tx.clone(),
                         conn_tx.clone(),
                         conn_rx,
+                        self.has_link,
                     ));
                     // TODO default to None for initial connection? (like what happens for
                     // default offramp config url). if we do circuit-breakers-per-url
