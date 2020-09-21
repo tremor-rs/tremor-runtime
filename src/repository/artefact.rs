@@ -373,6 +373,11 @@ impl Artefact for OnrampArtefact {
         } else {
             stream.default_codec().to_string()
         };
+        let codec_map = if let Some(codec_map) = &self.codec_map {
+            codec_map.clone()
+        } else {
+            halfbrown::HashMap::with_capacity(0)
+        };
         let preprocessors = if let Some(preprocessors) = &self.preprocessors {
             preprocessors.clone()
         } else {
@@ -389,6 +394,7 @@ impl Artefact for OnrampArtefact {
                     id: servant_id,
                     preprocessors,
                     codec,
+                    codec_map,
                     stream,
                     metrics_reporter,
                 },

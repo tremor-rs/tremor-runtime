@@ -14,8 +14,15 @@
 
 // TODO add tests
 
+use std::str::FromStr;
+
+use crate::codec::Codec;
 use crate::source::prelude::*;
 use async_channel::{Sender, TryRecvError};
+use halfbrown::HashMap;
+use http_types::headers::HeaderValues;
+use http_types::mime::BYTE_STREAM;
+use http_types::Mime;
 use tide::{Body, Request, Response};
 use tremor_script::Value;
 
@@ -62,12 +69,22 @@ impl onramp::Impl for Rest {
     }
 }
 
+struct RestSourceReply(Option<Sender<Event>>, SourceReply);
+
+impl From<SourceReply> for RestSourceReply {
+    fn from(reply: SourceReply) -> Self {
+        Self(None, reply)
+    }
+}
+
 // TODO possible to do this in source trait?
 pub struct Int {
     uid: u64,
     config: Config,
-    listener: Option<Receiver<SourceReply>>,
+    listener: Option<Receiver<RestSourceReply>>,
     onramp_id: TremorURL,
+    // TODO better way to manage this?
+    response_txes: HashMap<u64, Sender<Event>>,
 }
 
 impl std::fmt::Debug for Int {
@@ -85,13 +102,34 @@ impl Int {
             config,
             listener: None,
             onramp_id,
+            response_txes: HashMap::new(),
         })
+    }
+}
+
+struct BoxedCodec(Box<dyn Codec>);
+
+impl Clone for BoxedCodec {
+    fn clone(&self) -> Self {
+        Self(self.0.boxed_clone())
+    }
+}
+
+impl From<Box<dyn Codec>> for BoxedCodec {
+    fn from(bc: Box<dyn Codec>) -> Self {
+        Self(bc)
+    }
+}
+
+impl AsRef<Box<dyn Codec>> for BoxedCodec {
+    fn as_ref(&self) -> &Box<dyn Codec> {
+        &self.0
     }
 }
 
 #[derive(Clone)]
 struct ServerState {
-    tx: Sender<SourceReply>,
+    tx: Sender<RestSourceReply>,
     uid: u64,
     link: bool,
 }
@@ -128,75 +166,65 @@ async fn handle_request(mut req: Request<ServerState>) -> tide::Result<Response>
         })
         .collect::<Value>();
 
-    // request metadata
-    // TODO namespace these better?
-    let mut meta = Value::object_with_capacity(4);
+    let ct: Option<Mime> = req.content_type(); // TODO: consider stuff like charset here?
+                                               // request metadata
+                                               // TODO namespace these better?
+    let mut meta = Value::object_with_capacity(5);
     meta.insert("request_method", req.method().to_string())?;
     meta.insert("request_path", url.path().to_string())?;
     // TODO introduce config param to pass this as a hashmap (useful when needed)
     // also document duplicate query key behavior in that case
     meta.insert("request_query", url.query().unwrap_or("").to_string())?;
     meta.insert("request_headers", headers)?;
+    if let Some(content_type) = &ct {
+        meta.insert("request_content_type", content_type.essence().to_string())?;
+    }
 
-    // TODO need to ultimately decode the body based on the request content-type
-    //
-    // alt strategy than the current one(s) here:
-    // modify current codec and still pass data as SourceReply::Data
-    // (adding capability there for meta). or can pass codec name along with the data
-    let data = req.body_string().await?;
-    //
-    //let body = req.body_bytes().await?;
-    //
-    // need rental for this to work
-    //let data = Value::from(std::str::from_utf8(&body)?);
-    //
-    // this does not allow us to pass meta
-    //use crate::codec::Codec;
-    //let codec = crate::codec::string::String {};
-    //let data = codec.decode(body, 0)?.unwrap();
-    //
-    // works but is same logic as codecs, duplicated
-    //let data = tremor_script::LineValue::try_new(vec![body], |data| {
-    //    std::str::from_utf8(data[0].as_slice())
-    //        .map(|v| tremor_script::ValueAndMeta::from_parts(Value::from(v), meta))
-    //})
-    //.map_err(|e| e.0)?;
-
-    // TODO pass as function arg and turn on only when linking is on for the onramp
-    //let wait_for_response = true;
-
+    let data = req.body_bytes().await?;
+    let codec_override = ct.map(|ct| ct.essence().to_string());
     if req.state().link {
         let (response_tx, response_rx) = bounded(1);
 
         // TODO check how tide handles request timeouts here
         req.state()
             .tx
-            .send(SourceReply::StructuredRequest {
-                origin_uri,
-                data: (data, meta).into(),
-                //data,
-                response_tx,
-            })
+            .send(RestSourceReply(
+                Some(response_tx),
+                SourceReply::Data {
+                    origin_uri,
+                    data,
+                    meta: Some(meta),
+                    codec_override,
+                    stream: 0,
+                },
+            ))
             .await?;
 
-        make_response(response_rx.recv().await?)
+        make_response(req.header("Accept"), response_rx.recv().await?)
     } else {
         req.state()
             .tx
-            .send(SourceReply::Structured {
-                origin_uri,
-                data: (data, meta).into(),
-                //data,
-            })
+            .send(
+                SourceReply::Data {
+                    origin_uri,
+                    data,
+                    meta: Some(meta),
+                    codec_override,
+                    stream: 0,
+                }
+                .into(),
+            )
             .await?;
 
-        Ok(Response::builder(202)
-            .body(Body::from_string("".to_string()))
-            .build())
+        // TODO set proper content-type
+        Ok(Response::builder(202).body(Body::empty()).build())
     }
 }
 
-fn make_response(event: tremor_pipeline::Event) -> tide::Result<Response> {
+fn make_response(
+    _accept_headers: Option<&HeaderValues>,
+    event: tremor_pipeline::Event,
+) -> tide::Result<Response> {
     // TODO reject batched events and handle only single event here
     let (response_data, response_meta) = event.value_meta_iter().next().unwrap();
 
@@ -218,23 +246,47 @@ fn make_response(event: tremor_pipeline::Event) -> tide::Result<Response> {
     let status = response_meta
         .get("response_status")
         .and_then(|s| s.as_u16())
-        // TODO better default status?
         .unwrap_or(200);
 
-    let mut response = Response::builder(status)
-        .body(Body::from_bytes(response_bytes))
-        .build();
+    let mut builder = Response::builder(status).body(Body::from_bytes(response_bytes));
 
-    if let Some(headers) = response_meta.get("response_headers") {
-        // TODO remove unwraps here
-        for (name, values) in headers.as_object().unwrap() {
-            for value in values.as_array().unwrap() {
-                response.insert_header(name.as_ref(), value.as_str().unwrap());
+    // extract headers
+    let mut header_content_type: Option<&str> = None;
+    if let Some(headers) = response_meta
+        .get("response_headers")
+        .and_then(|hs| hs.as_object())
+    {
+        for (name, values) in headers {
+            if name.eq_ignore_ascii_case("content-type") {
+                header_content_type = Some(name.as_ref());
+            }
+            if let Some(header_values) = values.as_array() {
+                for value in header_values {
+                    if let Some(header_value) = value.as_str() {
+                        builder = builder.header(name.as_ref(), header_value);
+                    }
+                }
             }
         }
     }
 
-    Ok(response)
+    // extract content_type
+    // give content type from headers precedence
+    // TODO: maybe ditch response_content_type meta stuff
+    let content_type = match (
+        header_content_type,
+        response_meta
+            .get("response_content_type")
+            .and_then(|ct| ct.as_str()),
+    ) {
+        (None, None) => Ok(BYTE_STREAM),
+        (None, Some(ct)) | (Some(ct), _) => Mime::from_str(ct),
+    }?;
+
+    //
+    builder.content_type(content_type);
+
+    Ok(builder.build())
 }
 
 #[async_trait::async_trait()]
@@ -244,7 +296,12 @@ impl Source for Int {
     async fn pull_event(&mut self, id: u64) -> Result<SourceReply> {
         if let Some(listener) = self.listener.as_ref() {
             match listener.try_recv() {
-                Ok(r) => Ok(r),
+                Ok(RestSourceReply(Some(response_tx), source_reply)) => {
+                    // store a sender here to be able to send the response later
+                    self.response_txes.insert(id, response_tx);
+                    Ok(source_reply)
+                }
+                Ok(r) => Ok(r.1),
                 Err(TryRecvError::Empty) => Ok(SourceReply::Empty(10)),
                 Err(TryRecvError::Closed) => {
                     Ok(SourceReply::StateChange(SourceState::Disconnected))
@@ -252,6 +309,17 @@ impl Source for Int {
             }
         } else {
             Ok(SourceReply::StateChange(SourceState::Disconnected))
+        }
+    }
+
+    async fn reply_event(
+        &mut self,
+        event: Event,
+        codec: &dyn Codec,
+        codec_map: &HashMap<String, Box<dyn Codec>>,
+    ) -> Result<()> {
+        if let Some(event_id) = event.id.get(self.uid) {
+            self.response_txes.get(event_id)
         }
     }
     async fn init(&mut self) -> Result<SourceState> {
@@ -279,7 +347,7 @@ impl Source for Int {
             warn!("[REST Onramp] Server stopped");
 
             // TODO better statechange here?
-            tx.send(SourceReply::StateChange(SourceState::Disconnected))
+            tx.send(SourceReply::StateChange(SourceState::Disconnected).into())
                 .await?;
 
             Ok(())
@@ -301,11 +369,20 @@ impl Onramp for Rest {
         &mut self,
         onramp_uid: u64,
         codec: &str,
+        codec_map: halfbrown::HashMap<String, String>,
         preprocessors: &[String],
         metrics_reporter: RampReporter,
     ) -> Result<onramp::Addr> {
         let source = Int::from_config(onramp_uid, self.onramp_id.clone(), &self.config)?;
-        SourceManager::start(onramp_uid, source, codec, preprocessors, metrics_reporter).await
+        SourceManager::start(
+            onramp_uid,
+            source,
+            codec,
+            codec_map,
+            preprocessors,
+            metrics_reporter,
+        )
+        .await
     }
 
     fn default_codec(&self) -> &str {

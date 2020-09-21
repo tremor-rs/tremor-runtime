@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::influx::RentalSnot;
 use super::prelude::*;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use simd_json::borrowed::Object;
@@ -28,6 +27,7 @@ const TYPE_TRUE: u8 = 3;
 const TYPE_FALSE: u8 = 4;
 
 #[allow(clippy::module_name_repetitions)]
+#[derive(Clone)]
 pub struct BInflux {}
 
 impl BInflux {
@@ -166,21 +166,19 @@ impl Codec for BInflux {
         "binflux".to_string()
     }
 
-    fn decode(&mut self, data: Vec<u8>, _ingest_ns: u64) -> Result<Option<LineValue>> {
-        let r: std::result::Result<LineValue, RentalSnot> = LineValue::try_new(vec![data], |raw| {
-            Self::decode(&raw[0])
-                .map(ValueAndMeta::from)
-                .map_err(RentalSnot::Error)
-        })
-        .map_err(|e| e.0);
-        match r {
-            Ok(v) => Ok(Some(v)),
-            Err(RentalSnot::Skip) => Ok(None),
-            Err(RentalSnot::Error(e)) => Err(e),
-        }
+    fn decode<'input>(
+        &mut self,
+        data: &'input mut [u8],
+        _ingest_ns: u64,
+    ) -> Result<Option<Value<'input>>> {
+        Self::decode(data).map(Some)
     }
 
     fn encode(&self, data: &simd_json::BorrowedValue) -> Result<Vec<u8>> {
         Self::encode(data)
+    }
+
+    fn boxed_clone(&self) -> Box<dyn Codec> {
+        Box::new(self.clone())
     }
 }

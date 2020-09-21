@@ -143,6 +143,8 @@ async fn handle_connection(
                 tx.send(SourceReply::Data {
                     origin_uri: uri.clone(),
                     data: t.into_bytes(),
+                    meta: None,
+                    codec_override: None,
                     stream,
                 })
                 .await?;
@@ -151,6 +153,8 @@ async fn handle_connection(
                 tx.send(SourceReply::Data {
                     origin_uri: uri.clone(),
                     data,
+                    meta: None,
+                    codec_override: None,
                     stream,
                 })
                 .await?;
@@ -258,11 +262,20 @@ impl Onramp for Ws {
         &mut self,
         onramp_uid: u64,
         codec: &str,
+        codec_map: halfbrown::HashMap<String, String>,
         preprocessors: &[String],
         metrics_reporter: RampReporter,
     ) -> Result<onramp::Addr> {
         let source = Int::from_config(onramp_uid, self.onramp_id.clone(), &self.config)?;
-        SourceManager::start(onramp_uid, source, codec, preprocessors, metrics_reporter).await
+        SourceManager::start(
+            onramp_uid,
+            source,
+            codec,
+            codec_map,
+            preprocessors,
+            metrics_reporter,
+        )
+        .await
     }
 
     fn default_codec(&self) -> &str {

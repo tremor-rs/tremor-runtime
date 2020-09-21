@@ -118,6 +118,8 @@ impl Source for Blaster {
         Ok(SourceReply::Data {
             origin_uri: self.origin_uri.clone(),
             data: self.acc.next(),
+            meta: None,
+            codec_override: None,
             stream: 0,
         })
     }
@@ -143,6 +145,7 @@ impl Onramp for Blaster {
         &mut self,
         onramp_uid: u64,
         codec: &str,
+        codec_map: halfbrown::HashMap<String, String>,
         preprocessors: &[String],
         metrics_reporter: RampReporter,
     ) -> Result<onramp::Addr> {
@@ -150,6 +153,7 @@ impl Onramp for Blaster {
             onramp_uid,
             self.clone(),
             codec,
+            codec_map,
             preprocessors,
             metrics_reporter,
         )

@@ -14,7 +14,7 @@
 
 use crate::errors::Result;
 use simd_json::BorrowedValue;
-use tremor_script::LineValue;
+use tremor_script::Value;
 pub(crate) mod binflux;
 pub(crate) mod influx;
 pub(crate) mod json;
@@ -35,11 +35,17 @@ mod prelude {
 pub trait Codec: Send + Sync {
     /// The canonical name for this codec
     fn name(&self) -> std::string::String;
+
     /// Decode a binary, into an Value
+    /// If `None` is returned, no data could be encoded, but we don't exactly triggered an error condition.
     ///
     /// # Errors
-    ///  * if we cna't decode the data
-    fn decode(&mut self, data: Vec<u8>, ingest_ns: u64) -> Result<Option<LineValue>>;
+    ///  * if we can't decode the data
+    fn decode<'input>(
+        &mut self,
+        data: &'input mut [u8],
+        ingest_ns: u64,
+    ) -> Result<Option<Value<'input>>>;
     /// Encodes a Value into a binary
     ///
     /// # Errors
@@ -54,6 +60,12 @@ pub trait Codec: Send + Sync {
         std::mem::swap(&mut res, dst);
         Ok(())
     }
+
+    /// special clone method for getting clone functionality
+    /// into a this trait referenced as trait object
+    /// otherwise we cannot use this type inside structs that need to be `Clone`.
+    /// See: `crate::codec::rest::BoxedCodec`
+    fn boxed_clone(&self) -> Box<dyn Codec>;
 }
 
 /// Codec lookup function
@@ -71,5 +83,45 @@ pub fn lookup(name: &str) -> Result<Box<dyn Codec>> {
         "statsd" => Ok(Box::new(statsd::StatsD {})),
         "yaml" => Ok(Box::new(yaml::YAML {})),
         _ => Err(format!("Codec '{}' not found.", name).into()),
+    }
+}
+
+/// Map from Mime types to codecs for all builtin codecs mappable to Mime types
+pub fn builtin_codec_map() -> halfbrown::HashMap<String, Box<dyn Codec>> {
+    let mut codecs: halfbrown::HashMap<String, Box<dyn Codec>> =
+        halfbrown::HashMap::with_capacity(7);
+    codecs.insert_nocheck("application/json".to_string(), Box::new(json::JSON {}));
+    codecs.insert_nocheck("application/yaml".to_string(), Box::new(yaml::YAML {}));
+    codecs.insert_nocheck("text/plain".to_string(), Box::new(string::String {}));
+    codecs.insert_nocheck(
+        "application/msgpack".to_string(),
+        Box::new(msgpack::MsgPack {}),
+    );
+    codecs.insert_nocheck(
+        "application/x-msgpack".to_string(),
+        Box::new(msgpack::MsgPack {}),
+    );
+    codecs.insert_nocheck(
+        "application/vnd.msgpack".to_string(),
+        Box::new(msgpack::MsgPack {}),
+    );
+    // TODO: add more codecs
+    codecs
+}
+
+#[must_use]
+/// lookup a codec by mime type
+///
+/// # Errors
+/// if no codec could be found for the given mime type
+pub fn by_mime_type(mime: &str) -> Result<Box<dyn Codec>> {
+    match mime {
+        "application/json" => Ok(Box::new(json::JSON {})),
+        "application/yaml" => Ok(Box::new(yaml::YAML {})),
+        "text/plain" => Ok(Box::new(string::String {})),
+        "application/msgpack" | "application/x-msgpack" | "application/vnd.msgpack" => {
+            Ok(Box::new(msgpack::MsgPack {}))
+        }
+        _ => Err(format!("No codec found for mime type '{}'", mime).into()),
     }
 }

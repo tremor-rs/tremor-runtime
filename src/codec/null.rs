@@ -22,11 +22,19 @@ impl Codec for Null {
         "null".to_string()
     }
 
-    fn decode(&mut self, data: Vec<u8>, _ingest_ns: u64) -> Result<Option<LineValue>> {
-        Ok(Some(LineValue::new(vec![data], |_| Value::null().into())))
+    fn decode<'input>(
+        &mut self,
+        _data: &'input mut [u8],
+        _ingest_ns: u64,
+    ) -> Result<Option<Value<'input>>> {
+        Ok(Some(Value::null()))
     }
     fn encode(&self, _data: &simd_json::BorrowedValue) -> Result<Vec<u8>> {
         Ok(vec![])
+    }
+
+    fn boxed_clone(&self) -> Box<dyn Codec> {
+        Box::new(self.clone())
     }
 }
 
@@ -42,8 +50,8 @@ mod test {
         let seed: BorrowedValue = seed.into();
 
         let mut codec = Null {};
-        let as_raw = codec.encode(&seed)?;
-        let as_json = codec.decode(as_raw, 0);
+        let mut as_raw = codec.encode(&seed)?;
+        let as_json = codec.decode(as_raw.as_mut_slice(), 0);
         assert!(as_json.is_ok());
         as_json?;
 

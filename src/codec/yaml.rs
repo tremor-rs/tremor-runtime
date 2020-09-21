@@ -22,17 +22,22 @@ impl Codec for YAML {
         "yaml".to_string()
     }
 
-    fn decode(&mut self, data: Vec<u8>, _ingest_ns: u64) -> Result<Option<LineValue>> {
-        LineValue::try_new(vec![data], |data| {
-            serde_yaml::from_slice::<simd_json::OwnedValue>(&data[0])
-                .map(Value::from)
-                .map(ValueAndMeta::from)
-        })
-        .map(Some)
-        .map_err(|e| e.0.into())
+    fn decode<'input>(
+        &mut self,
+        data: &'input mut [u8],
+        _ingest_ns: u64,
+    ) -> Result<Option<Value<'input>>> {
+        serde_yaml::from_slice::<simd_json::OwnedValue>(data)
+            .map(Value::from)
+            .map(Some)
+            .map_err(|e| e.into())
     }
     fn encode(&self, data: &simd_json::BorrowedValue) -> Result<Vec<u8>> {
         Ok(serde_yaml::to_vec(data)?)
+    }
+
+    fn boxed_clone(&self) -> Box<dyn Codec> {
+        Box::new(self.clone())
     }
 }
 
@@ -49,8 +54,8 @@ mod test {
         let seed: BorrowedValue = seed.into();
 
         let mut codec = YAML {};
-        let as_raw = codec.encode(&seed)?;
-        let as_json = codec.decode(as_raw, 0);
+        let mut as_raw = codec.encode(&seed)?;
+        let as_json = codec.decode(as_raw.as_mut_slice(), 0);
 
         let _ = dbg!(as_json);
 

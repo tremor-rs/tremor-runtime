@@ -23,9 +23,11 @@ use crate::Result;
 use async_channel::{self, unbounded, Receiver, Sender};
 use async_std::task;
 use halfbrown::HashMap;
+use prelude::*;
+use simd_json::Builder;
 use std::time::Duration;
 use tremor_pipeline::{CBAction, Event, EventOriginUri, Ids};
-use tremor_script::LineValue;
+use tremor_script::{LineValue, Value, ValueAndMeta};
 
 pub(crate) mod blaster;
 pub(crate) mod crononome;
@@ -38,6 +40,19 @@ pub(crate) mod rest;
 pub(crate) mod tcp;
 pub(crate) mod udp;
 pub(crate) mod ws;
+
+struct StaticValue(Value<'static>);
+// This is ugly but we need to handle comments, thanks rental!
+pub(crate) enum RentalSnot {
+    Error(Error),
+    Skip,
+}
+
+impl From<std::str::Utf8Error> for RentalSnot {
+    fn from(e: std::str::Utf8Error) -> Self {
+        Self::Error(e.into())
+    }
+}
 
 pub fn make_preprocessors(preprocessors: &[String]) -> Result<Preprocessors> {
     preprocessors
@@ -56,20 +71,25 @@ pub(crate) enum SourceReply {
     Data {
         origin_uri: EventOriginUri,
         data: Vec<u8>,
+        meta: Option<Value<'static>>,
+        /// allow source to override codec when pulling event
+        /// the given string must be configured in the `config-map` as part of the source config
+        codec_override: Option<String>,
         stream: usize,
+    },
+    DataRequest {
+        origin_uri: EventOriginUri,
+        data: Vec<u8>,
+        meta: Value<'static>, // metadata stuff
+        /// allow source to override codec when pulling event
+        /// the given string must be configured in the `config-map` as part of the source config
+        codec_override: Option<String>,
+        response_tx: Sender<Event>,
     },
     /// Allow for passthrough of already structured events
     Structured {
         origin_uri: EventOriginUri,
         data: LineValue,
-    },
-    /// Allow for passthrough of already structured (request-style) events where
-    /// response is expected (for linked onramps)
-    // add similar DataRequest variant when needed
-    StructuredRequest {
-        origin_uri: EventOriginUri,
-        data: LineValue,
-        response_tx: Sender<Event>,
     },
     /// A stream is opened
     StartStream(usize, Option<Sender<Event>>),
@@ -85,10 +105,16 @@ pub(crate) enum SourceReply {
 #[allow(unused_variables)]
 pub(crate) trait Source {
     /// Pulls an event from the source if one exists
+    /// determine the codec to be used
     async fn pull_event(&mut self, id: u64) -> Result<SourceReply>;
 
     /// Send event back from source (for linked onramps)
-    async fn reply_event(&mut self, event: Event) -> Result<()> {
+    async fn reply_event(
+        &mut self,
+        event: Event,
+        codec: &dyn Codec,
+        codec_map: &HashMap<String, Box<dyn Codec>>,
+    ) -> Result<()> {
         Ok(())
     }
 
@@ -131,6 +157,7 @@ where
     pp_template: Vec<String>,
     preprocessors: Vec<Option<Preprocessors>>,
     codec: Box<dyn Codec>,
+    codec_map: HashMap<String, Box<dyn Codec>>,
     metrics_reporter: RampReporter,
     triggered: bool,
     pipelines: Vec<(TremorURL, pipeline::Addr)>,
@@ -138,8 +165,6 @@ where
     is_transactional: bool,
     /// Unique Id for the source
     uid: u64,
-    // TODO better way to manage this?
-    response_txes: HashMap<u64, Sender<Event>>,
 }
 
 impl<T> SourceManager<T>
@@ -177,20 +202,48 @@ where
         stream: usize,
         ingest_ns: &mut u64,
         origin_uri: &tremor_pipeline::EventOriginUri,
+        codec_override: Option<String>,
         data: Vec<u8>,
+        meta: Option<StaticValue>, // See: https://github.com/rust-lang/rust/issues/63033
     ) {
         let original_id = self.id;
         let mut error = false;
         if let Ok(data) = self.handle_pp(stream, ingest_ns, data) {
+            let meta_value = meta.map(|m| Value::from(m.0)).unwrap_or(Value::null());
             for d in data {
-                match self.codec.decode(d, *ingest_ns) {
-                    Ok(Some(data)) => {
+                let line_value = LineValue::try_new(vec![d], |mutd| {
+                    // this is safe, because we get the vec we created in the previous argument and we now it has 1 element
+                    // so it will never panic.
+                    // take this, rustc!
+                    let mut_data = mutd[0].as_mut_slice();
+                    let decoded = if let Some(doh) = &codec_override {
+                        if let Some(c) = self.codec_map.get_mut(doh) {
+                            c.decode(mut_data, *ingest_ns)
+                        } else {
+                            self.codec.decode(mut_data, *ingest_ns)
+                        }
+                    } else {
+                        self.codec.decode(mut_data, *ingest_ns)
+                    };
+                    match decoded {
+                        Ok(None) => Err(RentalSnot::Skip),
+                        Err(e) => Err(RentalSnot::Error(e)),
+                        Ok(Some(decoded)) => {
+                            Ok(ValueAndMeta::from_parts(decoded, meta_value.clone()))
+                        }
+                    }
+                })
+                .map_err(|e| e.0);
+
+                match line_value {
+                    Ok(decoded) => {
+                        // produce event
                         error |= self
-                            .transmit_event(data, *ingest_ns, origin_uri.clone())
+                            .transmit_event(decoded, *ingest_ns, origin_uri.clone())
                             .await;
                     }
-                    Ok(None) => (),
-                    Err(e) => {
+                    Err(RentalSnot::Skip) => (),
+                    Err(RentalSnot::Error(e)) => {
                         self.metrics_reporter.increment_error();
                         error!("[Codec] {}", e);
                     }
@@ -270,14 +323,11 @@ where
                 onramp::Msg::Cb(CBAction::None, _ids) => {}
 
                 onramp::Msg::Response(event) => {
-                    // TODO send errors here if eid/tx are not found
-                    // move this implementation to be rest source specific
-                    if let Some(eid) = event.id.get(self.uid) {
-                        if let Some(tx) = self.response_txes.remove(&eid) {
-                            tx.send(event.clone()).await?;
-                        }
-                    }
-                    if let Err(e) = self.source.reply_event(event).await {
+                    if let Err(e) = self
+                        .source
+                        .reply_event(event, self.codec.as_ref(), &self.codec_map)
+                        .await
+                    {
                         // TODO better error message
                         error!("Error replying event from source: {}", e);
                     }
@@ -346,6 +396,7 @@ where
         mut source: T,
         preprocessors: &[String],
         codec: &str,
+        codec_map: HashMap<String, String>,
         metrics_reporter: RampReporter,
     ) -> Result<(Self, Sender<onramp::Msg>)> {
         // We use a unbounded channel for counterflow, while an unbounded channel seems dangerous
@@ -366,6 +417,11 @@ where
         // N is normally < 1.
         let (tx, rx) = unbounded();
         let codec = codec::lookup(&codec)?;
+        let mut resolved_codec_map = codec::builtin_codec_map();
+        // override the builtin map
+        for (k, v) in codec_map {
+            resolved_codec_map.insert_nocheck(k, codec::lookup(&v)?);
+        }
         let pp_template = preprocessors.to_vec();
         let preprocessors = vec![Some(make_preprocessors(&pp_template)?)];
         source.init().await?;
@@ -379,13 +435,13 @@ where
                 tx: tx.clone(),
                 preprocessors,
                 codec,
+                codec_map: resolved_codec_map,
                 metrics_reporter,
                 triggered: false,
                 id: 0,
                 pipelines: Vec::new(),
                 uid,
                 is_transactional,
-                response_txes: HashMap::new(),
             },
             tx,
         ))
@@ -395,12 +451,20 @@ where
         uid: u64,
         source: T,
         codec: &str,
+        codec_map: HashMap<String, String>,
         preprocessors: &[String],
         metrics_reporter: RampReporter,
     ) -> Result<onramp::Addr> {
         let name = source.id().short_id("src");
-        let (manager, tx) =
-            SourceManager::new(uid, source, preprocessors, codec, metrics_reporter).await?;
+        let (manager, tx) = SourceManager::new(
+            uid,
+            source,
+            preprocessors,
+            codec,
+            codec_map,
+            metrics_reporter,
+        )
+        .await?;
         task::Builder::new().name(name).spawn(manager.run())?;
         Ok(tx)
     }
@@ -437,25 +501,46 @@ where
 
                         self.transmit_event(data, ingest_ns, origin_uri).await;
                     }
-                    Ok(SourceReply::StructuredRequest {
-                        origin_uri,
-                        data,
-                        response_tx,
-                    }) => {
-                        let ingest_ns = nanotime();
-
-                        self.response_txes.insert(self.id, response_tx);
-                        self.transmit_event(data, ingest_ns, origin_uri).await;
-                    }
                     Ok(SourceReply::Data {
                         mut origin_uri,
                         data,
+                        meta,
+                        codec_override,
                         stream,
                     }) => {
                         origin_uri.maybe_set_uid(self.uid);
                         let mut ingest_ns = nanotime();
-                        self.send_event(stream, &mut ingest_ns, &origin_uri, data)
-                            .await;
+                        self.send_event(
+                            stream,
+                            &mut ingest_ns,
+                            &origin_uri,
+                            codec_override,
+                            data,
+                            meta.map(|v| StaticValue(v)),
+                        )
+                        .await;
+                    }
+                    // TODO: remove
+                    Ok(SourceReply::DataRequest {
+                        mut origin_uri,
+                        data,
+                        meta,
+                        codec_override,
+                        response_tx,
+                    }) => {
+                        origin_uri.maybe_set_uid(self.uid);
+                        let mut ingest_ns = nanotime();
+                        //self.response_txes.insert(self.id, response_tx);
+                        // TODO: is it safe to use stream 0 as default?
+                        self.send_event(
+                            0,
+                            &mut ingest_ns,
+                            &origin_uri,
+                            codec_override,
+                            data,
+                            Some(StaticValue(meta)),
+                        )
+                        .await;
                     }
                     Ok(SourceReply::StateChange(SourceState::Disconnected)) => return Ok(()),
                     Ok(SourceReply::StateChange(SourceState::Connected)) => (),
