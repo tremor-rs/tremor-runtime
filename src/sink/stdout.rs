@@ -71,9 +71,10 @@ impl Sink for StdOut {
             if let Ok(s) = std::str::from_utf8(&raw) {
                 self.stdout.write_all(self.config.prefix.as_bytes()).await?;
                 self.stdout.write_all(s.as_bytes()).await?;
+                self.stdout.write_all(b"\n").await?;
             } else {
                 self.stdout
-                    .write_all(format!("{}{:?}", self.config.prefix, raw).as_bytes())
+                    .write_all(format!("{}{:?}\n", self.config.prefix, raw).as_bytes())
                     .await?
             }
         }
