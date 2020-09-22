@@ -38,7 +38,7 @@ pub struct Config {
     #[serde(default = "concurrency")]
     pub concurrency: usize,
     // TODO add scheme, host, path, query
-    // HTTP method to use (default: POST)
+    /// HTTP method to use (default: POST)
     // TODO implement Deserialize for http_types::Method
     // https://docs.rs/http-types/2.4.0/http_types/enum.Method.html
     #[serde(skip_deserializing, default = "dflt_method")]
@@ -82,18 +82,6 @@ pub struct Rest {
     reply_channel: Option<Sender<SinkReply>>,
     codec_task_handle: Option<JoinHandle<Result<()>>>,
     codec_task_tx: Option<Sender<CodecTaskInMsg>>,
-}
-
-#[derive(Debug)]
-struct RestRequestMeta {
-    // TODO support this layout
-    //scheme: String,
-    //host: String,
-    //path: String,
-    //query: Option<String>,
-    endpoint: String,
-    method: Method,
-    headers: Option<HashMap<String, Vec<String>>>,
 }
 
 impl offramp::Impl for Rest {
