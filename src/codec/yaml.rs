@@ -21,9 +21,12 @@ impl Codec for YAML {
     fn name(&self) -> String {
         "yaml".to_string()
     }
+    fn mime_types(&self) -> Vec<&str> {
+        vec!["application/yaml"]
+    }
 
     fn decode<'input>(
-        &mut self,
+        &self,
         data: &'input mut [u8],
         _ingest_ns: u64,
     ) -> Result<Option<Value<'input>>> {
@@ -53,7 +56,7 @@ mod test {
         let seed: OwnedValue = json!({ "snot": "badger" });
         let seed: BorrowedValue = seed.into();
 
-        let mut codec = YAML {};
+        let codec = YAML {};
         let mut as_raw = codec.encode(&seed)?;
         let as_json = codec.decode(as_raw.as_mut_slice(), 0);
 

@@ -25,7 +25,7 @@ impl Codec for StatsD {
     }
 
     fn decode<'input>(
-        &mut self,
+        &self,
         data: &'input mut [u8],
         ingest_ns: u64,
     ) -> Result<Option<Value<'input>>> {

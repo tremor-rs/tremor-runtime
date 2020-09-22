@@ -77,15 +77,6 @@ pub(crate) enum SourceReply {
         codec_override: Option<String>,
         stream: usize,
     },
-    DataRequest {
-        origin_uri: EventOriginUri,
-        data: Vec<u8>,
-        meta: Value<'static>, // metadata stuff
-        /// allow source to override codec when pulling event
-        /// the given string must be configured in the `config-map` as part of the source config
-        codec_override: Option<String>,
-        response_tx: Sender<Event>,
-    },
     /// Allow for passthrough of already structured events
     Structured {
         origin_uri: EventOriginUri,
@@ -517,28 +508,6 @@ where
                             codec_override,
                             data,
                             meta.map(|v| StaticValue(v)),
-                        )
-                        .await;
-                    }
-                    // TODO: remove
-                    Ok(SourceReply::DataRequest {
-                        mut origin_uri,
-                        data,
-                        meta,
-                        codec_override,
-                        response_tx,
-                    }) => {
-                        origin_uri.maybe_set_uid(self.uid);
-                        let mut ingest_ns = nanotime();
-                        //self.response_txes.insert(self.id, response_tx);
-                        // TODO: is it safe to use stream 0 as default?
-                        self.send_event(
-                            0,
-                            &mut ingest_ns,
-                            &origin_uri,
-                            codec_override,
-                            data,
-                            Some(StaticValue(meta)),
                         )
                         .await;
                     }

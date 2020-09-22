@@ -36,13 +36,23 @@ pub trait Codec: Send + Sync {
     /// The canonical name for this codec
     fn name(&self) -> std::string::String;
 
+    /// supported mime types
+    /// as <base>/<subtype>
+    ///
+    /// e.g. application/json
+    ///
+    /// The returned mime types should be unique to this codec
+    fn mime_types(&self) -> Vec<&str> {
+        vec![]
+    }
+
     /// Decode a binary, into an Value
     /// If `None` is returned, no data could be encoded, but we don't exactly triggered an error condition.
     ///
     /// # Errors
     ///  * if we can't decode the data
     fn decode<'input>(
-        &mut self,
+        &self,
         data: &'input mut [u8],
         ingest_ns: u64,
     ) -> Result<Option<Value<'input>>>;
@@ -87,6 +97,10 @@ pub fn lookup(name: &str) -> Result<Box<dyn Codec>> {
 }
 
 /// Map from Mime types to codecs for all builtin codecs mappable to Mime types
+/// these are all safe mappings
+/// if you have a specific codec to be used for a more unspecific mime type
+/// like statsd for text/plain
+/// these must be specified in a source specific codec_map
 pub fn builtin_codec_map() -> halfbrown::HashMap<String, Box<dyn Codec>> {
     let mut codecs: halfbrown::HashMap<String, Box<dyn Codec>> =
         halfbrown::HashMap::with_capacity(7);

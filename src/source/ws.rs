@@ -12,11 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::source::prelude::*;
+use crate::{codec::Codec, source::prelude::*};
 use async_channel::{Sender, TryRecvError};
 use async_std::net::{TcpListener, TcpStream};
 use async_std::task;
 use futures::{SinkExt, StreamExt};
+use halfbrown::HashMap;
 use std::collections::BTreeMap;
 use tungstenite::protocol::Message;
 
@@ -223,7 +224,13 @@ impl Source for Int {
             Ok(SourceReply::StateChange(SourceState::Disconnected))
         }
     }
-    async fn reply_event(&mut self, event: Event) -> Result<()> {
+    async fn reply_event(
+        &mut self,
+        event: Event,
+        // TODO: use this
+        _codec: &dyn Codec,
+        _codec_map: &HashMap<String, Box<dyn Codec>>,
+    ) -> Result<()> {
         // TODO report errors as well
         if let Some(eid) = event.id.get(self.uid) {
             if let Some(tx) = self.get_stream_sender_for_id(eid) {
@@ -253,6 +260,24 @@ impl Source for Int {
     }
     fn id(&self) -> &TremorURL {
         &self.onramp_id
+    }
+
+    fn metrics(&mut self, _t: u64) -> Vec<Event> {
+        vec![]
+    }
+
+    async fn terminate(&mut self) {}
+
+    fn trigger_breaker(&mut self) {}
+
+    fn restore_breaker(&mut self) {}
+
+    fn ack(&mut self, _id: u64) {}
+
+    fn fail(&mut self, _id: u64) {}
+
+    fn is_transactional(&self) -> bool {
+        false
     }
 }
 
