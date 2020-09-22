@@ -99,13 +99,13 @@ impl Ingress {
                 Ok(n) => {
                     let mut at = nanotime();
                     let x = self.preprocessor.process(&mut at, &self.buf[0..n])?;
-                    for data in x {
-                        let event = match self.codec.decode(data, at) {
+                    for mut data in x {
+                        let event = match self.codec.decode(data.as_mut_slice(), at) {
                             Ok(Some(data)) => data,
                             Ok(None) => continue,
                             Err(e) => return Err(e.into()),
                         };
-                        let event = event.suffix().value().clone();
+                        let event = event.clone();
 
                         if self.is_interactive {
                             eprintln!(

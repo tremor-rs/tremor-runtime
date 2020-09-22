@@ -23,8 +23,12 @@ impl Codec for String {
         "string".to_string()
     }
 
+    fn mime_types(&self) -> Vec<&str> {
+        vec!["text/plain"]
+    }
+
     fn decode<'input>(
-        &mut self,
+        &self,
         data: &'input mut [u8],
         _ingest_ns: u64,
     ) -> Result<Option<Value<'input>>> {
@@ -59,7 +63,7 @@ mod test {
         let seed: OwnedValue = json!("snot badger");
         let seed: BorrowedValue = seed.into();
 
-        let mut codec = String {};
+        let codec = String {};
         let mut as_raw = codec.encode(&seed)?;
         let as_json = codec.decode(as_raw.as_mut_slice(), 0);
         assert!(as_json.is_ok());

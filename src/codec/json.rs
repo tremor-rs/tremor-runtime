@@ -22,8 +22,13 @@ impl Codec for JSON {
         "json".to_string()
     }
 
+    fn mime_types(&self) -> Vec<&str> {
+        vec!["application/json"]
+        // TODO: application/json-seq for one json doc per line?
+    }
+
     fn decode<'input>(
-        &mut self,
+        &self,
         data: &'input mut [u8],
         _ingest_ns: u64,
     ) -> Result<Option<Value<'input>>> {
@@ -58,7 +63,7 @@ mod test {
         let seed: OwnedValue = json!({ "snot": "badger" });
         let seed: BorrowedValue = seed.into();
 
-        let mut codec = JSON {};
+        let codec = JSON {};
         let mut as_raw = codec.encode(&seed)?;
         let as_json = codec.decode(as_raw.as_mut_slice(), 0);
 

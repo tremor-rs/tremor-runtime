@@ -20,8 +20,6 @@ use crate::codec::Codec;
 use crate::source::prelude::*;
 use async_channel::{Sender, TryRecvError};
 use halfbrown::HashMap;
-use http_types::headers::HeaderValues;
-use http_types::mime::BYTE_STREAM;
 use http_types::Mime;
 use tide::{Body, Request, Response};
 use tremor_script::Value;
@@ -69,7 +67,7 @@ impl onramp::Impl for Rest {
     }
 }
 
-struct RestSourceReply(Option<Sender<Event>>, SourceReply);
+struct RestSourceReply(Option<Sender<Response>>, SourceReply);
 
 impl From<SourceReply> for RestSourceReply {
     fn from(reply: SourceReply) -> Self {
@@ -84,7 +82,7 @@ pub struct Int {
     listener: Option<Receiver<RestSourceReply>>,
     onramp_id: TremorURL,
     // TODO better way to manage this?
-    response_txes: HashMap<u64, Sender<Event>>,
+    response_txes: HashMap<u64, Sender<Response>>,
 }
 
 impl std::fmt::Debug for Int {
@@ -199,8 +197,8 @@ async fn handle_request(mut req: Request<ServerState>) -> tide::Result<Response>
                 },
             ))
             .await?;
-
-        make_response(req.header("Accept"), response_rx.recv().await?)
+        // TODO honor accept header
+        Ok(response_rx.recv().await?)
     } else {
         req.state()
             .tx
@@ -222,9 +220,10 @@ async fn handle_request(mut req: Request<ServerState>) -> tide::Result<Response>
 }
 
 fn make_response(
-    _accept_headers: Option<&HeaderValues>,
+    default_codec: &dyn Codec,
+    codec_map: &HashMap<String, Box<dyn Codec>>,
     event: tremor_pipeline::Event,
-) -> tide::Result<Response> {
+) -> Result<Response> {
     // TODO reject batched events and handle only single event here
     let (response_data, response_meta) = event.value_meta_iter().next().unwrap();
 
@@ -237,19 +236,12 @@ fn make_response(
     //response_data.write(&mut response_bytes)?;
     //
     // as string
-    let response_bytes = if let Some(s) = response_data.as_str() {
-        s.as_bytes().to_vec()
-    } else {
-        simd_json::to_vec(&response_data)?
-    };
-
     let status = response_meta
         .get("response_status")
         .and_then(|s| s.as_u16())
         .unwrap_or(200);
 
-    let mut builder = Response::builder(status).body(Body::from_bytes(response_bytes));
-
+    let mut builder = Response::builder(status);
     // extract headers
     let mut header_content_type: Option<&str> = None;
     if let Some(headers) = response_meta
@@ -273,19 +265,35 @@ fn make_response(
     // extract content_type
     // give content type from headers precedence
     // TODO: maybe ditch response_content_type meta stuff
-    let content_type = match (
+    let maybe_content_type = match (
         header_content_type,
         response_meta
             .get("response_content_type")
             .and_then(|ct| ct.as_str()),
     ) {
-        (None, None) => Ok(BYTE_STREAM),
-        (None, Some(ct)) | (Some(ct), _) => Mime::from_str(ct),
-    }?;
-
-    //
-    builder.content_type(content_type);
-
+        (None, None) => None,
+        (None, Some(ct)) | (Some(ct), _) => Some(Mime::from_str(ct)?),
+    };
+    if let Some((mime, dynamic_codec)) = maybe_content_type
+        .and_then(|mime| codec_map.get(mime.essence()).map(|c| (mime, c.as_ref())))
+    {
+        let mut body = Body::from_bytes(dynamic_codec.encode(response_data)?);
+        body.set_mime(mime);
+        builder = builder.body(body);
+    } else {
+        // fallback to default codec
+        let mut body = Body::from_bytes(default_codec.encode(response_data)?);
+        // set mime type for default codec
+        // TODO: cache mime type for default codec
+        if let Some(mime) = default_codec
+            .mime_types()
+            .drain(..)
+            .find_map(|mstr| Mime::from_str(mstr).ok())
+        {
+            body.set_mime(mime);
+        }
+        builder = builder.body(body);
+    }
     Ok(builder.build())
 }
 
@@ -319,8 +327,12 @@ impl Source for Int {
         codec_map: &HashMap<String, Box<dyn Codec>>,
     ) -> Result<()> {
         if let Some(event_id) = event.id.get(self.uid) {
-            self.response_txes.get(event_id)
+            if let Some(response_tx) = self.response_txes.get(&event_id) {
+                let res = make_response(codec, codec_map, event)?;
+                response_tx.send(res).await?
+            }
         }
+        Ok(())
     }
     async fn init(&mut self) -> Result<SourceState> {
         let (tx, rx) = bounded(crate::QSIZE);
