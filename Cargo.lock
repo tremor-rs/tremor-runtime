@@ -268,9 +268,9 @@ dependencies = [
 
 [[package]]
 name = "async-lock"
-version = "2.1.2"
+version = "2.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2b123db9bf64e4c4840d5b1985fdb4f69fbe50a4fc95e895d11ff49931ce9802"
+checksum = "ab3ad7fb4345397e57c19566844b0eba274b92e5d2d2791bb0664cc441697b95"
 dependencies = [
  "async-barrier",
  "async-mutex",
@@ -301,12 +301,13 @@ dependencies = [
 
 [[package]]
 name = "async-net"
-version = "1.3.0"
+version = "1.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a48af5438be856056bdeb6c5d895148a715be5915fccee49d1e5b50851dc9b8b"
+checksum = "fb04482b77baa38d59d56aee0a7b4266600ab28e2b8be7af03508f6a30ecbdcf"
 dependencies = [
  "async-io",
  "blocking",
+ "fastrand",
  "futures-lite",
 ]
 
@@ -1678,9 +1679,9 @@ checksum = "de27142b013a8e869c14957e6d2edeef89e97c289e69d042ee3a49acd8b51789"
 
 [[package]]
 name = "futures-lite"
-version = "1.4.0"
+version = "1.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba659a67bd5ac00896b31e1f4095174134a31e448893d73256f1d51b81abbd62"
+checksum = "5b77e08e656f472d8ea84c472fa8b0a7a917883048e1cf2d4e34a323cd0aaf63"
 dependencies = [
  "fastrand",
  "futures-core",
@@ -4181,9 +4182,9 @@ checksum = "fbee7696b84bbf3d89a1c2eccff0850e3047ed46bfcd2e92c29a2d074d57e252"
 
 [[package]]
 name = "smol"
-version = "1.0.1"
+version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "712d02afa6ac9e7b8c777fd181aff476d009280b54b8c28703d10fa5d7e80d83"
+checksum = "d41237ba3e3ada55ff3515d37becc8fa90e5e4af2b13a011ec3f932d9f1b2405"
 dependencies = [
  "async-channel",
  "async-executor",
