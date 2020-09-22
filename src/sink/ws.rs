@@ -128,11 +128,11 @@ async fn ws_loop(
                         }
                         Ok(Message::Ping(_)) | Ok(Message::Pong(_)) => {}
                         Ok(Message::Close(_)) => {
-                            error!("Server {} closed websocket connection", url);
+                            warn!("Server {} closed websocket connection", url);
                             offramp_tx.send(WsResult::Disconnected(url.clone())).await?;
                             break;
                         }
-                        Err(e) => error!("WS error returned while waiting for client data: {}", e),
+                        Err(e) => error!("WS error returned while waiting for server data: {}", e),
                     }
                 }
             }
@@ -233,7 +233,7 @@ impl Ws {
         })
     }
 
-    fn get_message_config(&self, meta: &Value) -> WsMessageMeta {
+    fn get_message_meta(&self, meta: &Value) -> WsMessageMeta {
         WsMessageMeta {
             url: meta
                 .get("url")
@@ -273,18 +273,18 @@ impl Sink for Ws {
         }
 
         for (value, meta) in event.value_meta_iter() {
-            let msg_config = self.get_message_config(meta);
+            let msg_meta = self.get_message_meta(meta);
 
             // actually used when we have new connection to make (overriden from event-meta)
             #[allow(unused_assignments)]
             let mut temp_conn_tx = None;
-            let ws_conn_tx = match self.connections.get(&msg_config.url) {
+            let ws_conn_tx = match self.connections.get(&msg_meta.url) {
                 Some(v) => v,
                 None => {
                     let (conn_tx, conn_rx) = bounded(crate::QSIZE);
                     // separate task to handle new url connection
                     task::spawn(ws_loop(
-                        msg_config.url.clone(),
+                        msg_meta.url.clone(),
                         self.tx.clone(),
                         conn_tx.clone(),
                         conn_rx,
@@ -294,7 +294,7 @@ impl Sink for Ws {
                     // default offramp config url). if we do circuit-breakers-per-url
                     // connection, this will be handled better.
                     self.connections
-                        .insert(msg_config.url.clone(), Some(conn_tx.clone()));
+                        .insert(msg_meta.url.clone(), Some(conn_tx.clone()));
                     // sender here ensures we don't drop the current in-flight event
                     temp_conn_tx = Some(conn_tx);
                     &temp_conn_tx
@@ -305,7 +305,7 @@ impl Sink for Ws {
                 let raw = codec.encode(value)?;
                 let datas = postprocess(&mut self.postprocessors, event.ingest_ns, raw)?;
                 for raw in datas {
-                    if msg_config.binary {
+                    if msg_meta.binary {
                         conn_tx
                             .send((event.id.clone(), WsMessage::Binary(raw)))
                             .await?;
