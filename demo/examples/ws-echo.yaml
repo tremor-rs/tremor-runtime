@@ -1,10 +1,6 @@
 onramp:
   - id: ws
     type: ws
-<<<<<<< HEAD
-    linked: true
-=======
->>>>>>> 3a4aa4c... Support linked transport for websocket offramp
     codec: string
     preprocessors:
       # TODO lines pre-processor no longer working here (for first connection). investigate

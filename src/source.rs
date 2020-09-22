@@ -156,8 +156,6 @@ where
     is_transactional: bool,
     /// Unique Id for the source
     uid: u64,
-    // TODO better way to manage this?
-    response_txes: HashMap<u64, Sender<Event>>,
 }
 
 impl<T> SourceManager<T>
@@ -464,7 +462,6 @@ where
                 pipelines_err: Vec::new(),
                 uid,
                 is_transactional,
-                response_txes: HashMap::new(),
             },
             tx,
         ))
@@ -526,16 +523,6 @@ where
                     Ok(SourceReply::Structured { origin_uri, data }) => {
                         let ingest_ns = nanotime();
 
-                        self.transmit_event(data, ingest_ns, origin_uri, OUT).await;
-                    }
-                    Ok(SourceReply::StructuredRequest {
-                        origin_uri,
-                        data,
-                        response_tx,
-                    }) => {
-                        let ingest_ns = nanotime();
-
-                        self.response_txes.insert(self.id, response_tx);
                         self.transmit_event(data, ingest_ns, origin_uri, OUT).await;
                     }
                     Ok(SourceReply::Data {

@@ -1,10 +1,6 @@
 onramp:
   - id: ws
     type: ws
-<<<<<<< HEAD
-    linked: true
-=======
->>>>>>> 3a4aa4c... Support linked transport for websocket offramp
     codec: string
     preprocessors:
       # TODO lines pre-processor no longer working here (for first connection). investigate
@@ -12,11 +8,8 @@ onramp:
     config:
       host: localhost
       port: 9139
-<<<<<<< HEAD
-=======
       # TODO move this to top level
       link: true
->>>>>>> 3a4aa4c... Support linked transport for websocket offramp
 
 pipeline:
   - id: main
@@ -34,18 +27,11 @@ pipeline:
 offramp:
   - id: upstream
     type: ws
-<<<<<<< HEAD
-    linked: true
-=======
->>>>>>> 3a4aa4c... Support linked transport for websocket offramp
     codec: string
     postprocessors:
       - lines
     config:
-<<<<<<< HEAD
-=======
       link: true
->>>>>>> 3a4aa4c... Support linked transport for websocket offramp
       url: "ws://echo.websocket.org"
       # with local server
       #url: "ws://localhost:8139"
@@ -62,17 +48,10 @@ binding:
       '/pipeline/main/{instance}/error': [ '/offramp/system::stderr/system/in' ]
 
       # linked offramp that send responses to a pipeline
-<<<<<<< HEAD
-      '/offramp/upstream/{instance}/response': [ '/pipeline/main/{instance}/from-offramp' ]
-      '/pipeline/main/{instance}/to-onramp': [
-        # linked onramp that can respond based on pipeline output
-        '/onramp/ws/{instance}/response',
-=======
       '/offramp/upstream/{instance}/out': [ '/pipeline/main/{instance}/from-offramp' ]
       '/pipeline/main/{instance}/to-onramp': [
         # linked onramp that can respond based on pipeline output
         '/onramp/ws/{instance}/in',
->>>>>>> 3a4aa4c... Support linked transport for websocket offramp
         # for debugging purposes
         '/offramp/system::stdout/system/in'
       ]

@@ -129,11 +129,11 @@ async fn ws_loop(
                         }
                         Ok(Message::Ping(_)) | Ok(Message::Pong(_)) => {}
                         Ok(Message::Close(_)) => {
-                            error!("Server {} closed websocket connection", url);
+                            warn!("Server {} closed websocket connection", url);
                             offramp_tx.send(WsResult::Disconnected(url.clone())).await?;
                             break;
                         }
-                        Err(e) => error!("WS error returned while waiting for client data: {}", e),
+                        Err(e) => error!("WS error returned while waiting for server data: {}", e),
                     }
                 }
             }
@@ -212,11 +212,7 @@ impl Ws {
                     v.push(SinkReply::Insight(e));
                 }
                 WsResult::Response(id, msg) => {
-<<<<<<< HEAD
                     v.push(SinkReply::Response(RESPONSE, Self::make_event(id, msg)?))
-=======
-                    v.push(SinkReply::Response(Self::make_event(id, msg)?))
->>>>>>> 3a4aa4c... Support linked transport for websocket offramp
                 }
             }
         }
@@ -246,11 +242,7 @@ impl Ws {
         })
     }
 
-<<<<<<< HEAD
     fn get_message_meta(&self, meta: &Value) -> WsMessageMeta {
-=======
-    fn get_message_config(&self, meta: &Value) -> WsMessageMeta {
->>>>>>> 3a4aa4c... Support linked transport for websocket offramp
         WsMessageMeta {
             url: meta
                 .get("url")
@@ -284,7 +276,6 @@ impl Sink for Ws {
     }
 
     #[allow(clippy::used_underscore_binding)]
-<<<<<<< HEAD
     async fn on_event(
         &mut self,
         _input: &str,
@@ -293,13 +284,10 @@ impl Sink for Ws {
         event: Event,
     ) -> ResultVec {
         if self.is_linked && event.is_batch {
-=======
-    async fn on_event(&mut self, _input: &str, codec: &dyn Codec, event: Event) -> ResultVec {
-        self.merged_meta.merge(event.op_meta.clone());
-        if self.has_link && event.is_batch {
->>>>>>> 3a4aa4c... Support linked transport for websocket offramp
             return Err("Batched events are not supported for linked websocket offramps".into());
         }
+
+        self.merged_meta.merge(event.op_meta.clone());
 
         for (value, meta) in event.value_meta_iter() {
             let msg_meta = self.get_message_meta(meta);
@@ -307,7 +295,6 @@ impl Sink for Ws {
             // actually used when we have new connection to make (overriden from event-meta)
             #[allow(unused_assignments)]
             let mut temp_conn_tx = None;
-<<<<<<< HEAD
             let ws_conn_tx = if let Some(ws_conn_tx) = self.connections.get(&msg_meta.url) {
                 ws_conn_tx
             } else {
@@ -328,29 +315,6 @@ impl Sink for Ws {
                 // sender here ensures we don't drop the current in-flight event
                 temp_conn_tx = Some(conn_tx);
                 &temp_conn_tx
-=======
-            let ws_conn_tx = match self.connections.get(&msg_config.url) {
-                Some(v) => v,
-                None => {
-                    let (conn_tx, conn_rx) = bounded(crate::QSIZE);
-                    // separate task to handle new url connection
-                    task::spawn(ws_loop(
-                        msg_config.url.clone(),
-                        self.tx.clone(),
-                        conn_tx.clone(),
-                        conn_rx,
-                        self.has_link,
-                    ));
-                    // TODO default to None for initial connection? (like what happens for
-                    // default offramp config url). if we do circuit-breakers-per-url
-                    // connection, this will be handled better.
-                    self.connections
-                        .insert(msg_config.url.clone(), Some(conn_tx.clone()));
-                    // sender here ensures we don't drop the current in-flight event
-                    temp_conn_tx = Some(conn_tx);
-                    &temp_conn_tx
-                }
->>>>>>> 3a4aa4c... Support linked transport for websocket offramp
             };
 
             if let Some(conn_tx) = ws_conn_tx {
