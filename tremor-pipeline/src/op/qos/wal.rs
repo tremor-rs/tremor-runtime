@@ -234,9 +234,7 @@ impl WAL {
         // The maximum number of entries we read
         let mut events = Vec::with_capacity(self.config.read_count as usize);
 
-        let mut num_read = 0usize;
-        for e in self.events_tree.range(self.read..) {
-            num_read += 1;
+        for (num_read, e) in self.events_tree.range(self.read..).enumerate() {
             if num_read > self.config.read_count {
                 break;
             }
@@ -406,6 +404,8 @@ impl Operator for WAL {
 #[cfg(test)]
 mod test {
     use super::*;
+    use tempfile::Builder as TempDirBuilder;
+
     #[test]
     fn rw() -> Result<()> {
         let c = Config {
@@ -460,6 +460,65 @@ mod test {
         // since we failed before we should see 4 events, 4 and the retransmit
         // of 1-3
         assert_eq!(r.len(), 4);
+
+        Ok(())
+    }
+
+    #[test]
+    // tests that the wal works fine
+    // after a restart of the tremor server
+    fn restart_wal_regression() -> Result<()> {
+        let temp_dir = TempDirBuilder::new()
+            .prefix("tremor-pipeline-wal")
+            .tempdir()?;
+        let read_count = 100;
+        let c = Config {
+            read_count,
+            dir: Some(temp_dir.path().to_string_lossy().into_owned()),
+            max_elements: 10,
+            max_bytes: 1024 * 1024,
+        };
+
+        let mut v = Value::null();
+        let e = Event::default();
+
+        {
+            // create the operator - first time
+            let mut o1 =
+                WalFactory::new().from_node(&NodeConfig::from_config("wal-test-1", c.clone())?)?;
+
+            // Restore the CB
+            let mut i = Event::cb_restore(0);
+            o1.on_contraflow(0, &mut i);
+
+            // send a first event - not acked. so it lingers around in our WAL
+            let r = o1.on_event(0, "in", &mut v, e.clone())?;
+            assert_eq!(r.events.len(), 1);
+            assert_eq!(r.insights.len(), 0);
+        }
+
+        {
+            // create the operator - second time
+            // simulating a tremor restart
+            let mut o2 = WalFactory::new().from_node(&NodeConfig::from_config("wal-test-2", c)?)?;
+
+            // Restore the CB
+            let mut i = Event::cb_restore(1);
+            o2.on_contraflow(0, &mut i);
+
+            // send a first event - not acked. so it lingers around in our
+            let r = o2.on_event(0, "in", &mut v, e.clone())?;
+            assert_eq!(r.events.len(), 2);
+            let id1 = &r.events[0].1.id;
+            let id2 = &r.events[1].1.id;
+            assert_eq!(id1.get(0).unwrap(), 0);
+            // ensure we actually had a gap bigger than read count, which triggers the error condition
+            assert!(id2.get(0).unwrap() - id1.get(0).unwrap() > read_count as u64);
+            assert_eq!(r.insights.len(), 0);
+
+            let r = o2.on_event(0, "in", &mut v, e.clone())?;
+            assert_eq!(r.events.len(), 1);
+        }
 
         Ok(())
     }
