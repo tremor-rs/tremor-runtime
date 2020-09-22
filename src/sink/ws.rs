@@ -85,13 +85,6 @@ async fn ws_loop(
             .await?;
 
         while let Ok((id, meta, msg)) = rx.recv().await {
-            // test code to simulate slow connection
-            // TODO remove
-            //if &url == "ws://localhost:8139" {
-            //    debug!("sleeping...");
-            //    std::thread::sleep(Duration::from_secs(5));
-            //}
-
             let r = match msg {
                 WsMessage::Text(t) => ws_stream.send(Message::Text(t)).await,
                 WsMessage::Binary(t) => ws_stream.send(Message::Binary(t)).await,
