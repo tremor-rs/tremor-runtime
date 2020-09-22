@@ -49,6 +49,7 @@ pub struct RoundRobin {
     pub config: Config,
     pub outputs: Vec<Output>,
     pub next: usize,
+    first: bool,
 }
 
 impl From<Config> for RoundRobin {
@@ -58,6 +59,7 @@ impl From<Config> for RoundRobin {
             config,
             outputs,
             next: 0,
+            first: true,
         }
     }
 }
@@ -113,6 +115,26 @@ impl Operator for RoundRobin {
         }
     }
 
+    fn handles_signal(&self) -> bool {
+        true
+    }
+    fn on_signal(&mut self, _uid: u64, signal: &mut Event) -> Result<EventAndInsights> {
+        if self.first && self.outputs.iter().any(|o| o.open) {
+            let mut e = Event::cb_restore(signal.ingest_ns);
+            e.origin_uri = None;
+            self.first = false;
+
+            Ok(EventAndInsights {
+                insights: vec![e],
+                events: vec![],
+            })
+        } else {
+            Ok(EventAndInsights {
+                insights: vec![],
+                events: vec![],
+            })
+        }
+    }
     fn handles_contraflow(&self) -> bool {
         true
     }
@@ -144,7 +166,9 @@ impl Operator for RoundRobin {
             insight.cb = CBAction::Close;
             error!("Failed to trigger circuit breaker");
         } else {
-            insight.cb = CBAction::None;
+            if insight.cb.is_cb() {
+                insight.cb = CBAction::None;
+            }
         };
     }
 }

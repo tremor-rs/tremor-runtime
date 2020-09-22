@@ -156,6 +156,11 @@ impl OpMeta {
     pub fn contains_key(&self, key: u64) -> bool {
         self.0.contains_key(&PrimStr(key))
     }
+
+    /// Merges two op meta maps, overwriting values with `other` on duplicates
+    pub fn merge(&mut self, mut other: Self) {
+        self.0.append(&mut other.0);
+    }
 }
 
 lazy_static! {
