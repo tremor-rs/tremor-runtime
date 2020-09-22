@@ -54,7 +54,7 @@ offramp:
       # TODO make this optional too
       endpoints:
        - http://localhost:8139/snot
-      #put: true
+      #method: "PUT"
       #headers:
       #  "Client": "Tremor"
 

@@ -15,7 +15,8 @@
 use crate::sink::prelude::*;
 use async_channel::{bounded, Receiver, Sender};
 use halfbrown::HashMap;
-use std::str;
+use http_types::Method;
+use std::str::FromStr;
 use std::time::Instant;
 use surf::Response;
 
@@ -29,8 +30,10 @@ pub struct Config {
     pub concurrency: usize,
     // TODO add scheme, host, path, query
     /// HTTP method to use (default: POST)
-    #[serde(default = "dflt_method")]
-    pub method: String,
+    // TODO implement Deserialize for http_types::Method
+    // https://docs.rs/http-types/2.4.0/http_types/enum.Method.html
+    #[serde(skip_deserializing, default = "dflt_method")]
+    pub method: Method,
     #[serde(default = "dflt::d")]
     // TODO make header values a vector here?
     pub headers: HashMap<String, String>,
@@ -39,8 +42,8 @@ pub struct Config {
     pub link: Option<bool>,
 }
 
-fn dflt_method() -> String {
-    "POST".to_string()
+fn dflt_method() -> Method {
+    Method::Post
 }
 
 impl ConfigImpl for Config {}
@@ -53,6 +56,18 @@ pub struct Rest {
     tx: Sender<SinkReply>,
     rx: Receiver<SinkReply>,
     has_link: bool,
+}
+
+#[derive(Debug)]
+struct RestRequestMeta {
+    // TODO support this layout
+    //scheme: String,
+    //host: String,
+    //path: String,
+    //query: Option<String>,
+    endpoint: String,
+    method: Method,
+    headers: Option<HashMap<String, Vec<String>>>,
 }
 
 impl offramp::Impl for Rest {
@@ -78,22 +93,20 @@ impl offramp::Impl for Rest {
 }
 
 impl Rest {
-    async fn request(
-        //endpoint: &str,
-        //config: Config,
-        payload: Vec<u8>,
-        meta: RestRequestMeta,
-    ) -> Result<(u64, Response)> {
+    async fn request(payload: Vec<u8>, meta: RestRequestMeta) -> Result<(u64, Response)> {
         let start = Instant::now();
 
-        // TODO would be nice if surf had a generic function to handle a given method
-        // also use enums (or static strings) here instead of matching on strings
-        let mut c = match meta.method.as_str() {
-            "POST" => surf::post(meta.endpoint),
-            "PUT" => surf::put(meta.endpoint),
-            "GET" => surf::get(meta.endpoint),
-            // TODO handle other methods
-            _ => surf::post(meta.endpoint),
+        // would be nice if surf had a generic function to handle passed http method
+        let mut c = match meta.method {
+            Method::Post => surf::post(meta.endpoint),
+            Method::Put => surf::put(meta.endpoint),
+            Method::Get => surf::get(meta.endpoint),
+            Method::Connect => surf::connect(meta.endpoint),
+            Method::Delete => surf::delete(meta.endpoint),
+            Method::Head => surf::head(meta.endpoint),
+            Method::Options => surf::options(meta.endpoint),
+            Method::Patch => surf::patch(meta.endpoint),
+            Method::Trace => surf::trace(meta.endpoint),
         };
 
         c = c.body(payload);
@@ -159,10 +172,32 @@ impl Rest {
             //data,
             data: (data, meta).into(),
             ingest_ns: nanotime(),
-            // TODO
+            // TODO implement origin_uri
             origin_uri: None,
             ..Event::default()
         })
+    }
+
+    fn get_request_meta(&mut self, meta: &Value) -> RestRequestMeta {
+        self.client_idx = (self.client_idx + 1) % self.config.endpoints.len();
+
+        // TODO consolidate logic here
+        // also add scheme, host, path, query
+        RestRequestMeta {
+            endpoint: meta
+                .get("endpoint")
+                .and_then(Value::as_str)
+                .unwrap_or(&self.config.endpoints[self.client_idx])
+                .into(),
+            method: meta
+                .get("request_method")
+                // TODO simplify and bubble up error if the conversion here does not work
+                .and_then(Value::as_str)
+                .map(|v| Method::from_str(&v.to_uppercase()).unwrap_or(dflt_method()))
+                .unwrap_or(self.config.method),
+            // TODO implement
+            headers: None,
+        }
     }
 
     fn enqueue_send_future(
@@ -173,7 +208,6 @@ impl Rest {
         request_meta: RestRequestMeta,
     ) -> Result<()> {
         let (tx, rx) = bounded(1);
-        //let config = self.config.clone();
         let reply_tx = self.tx.clone();
         let has_link = self.has_link;
 
@@ -271,40 +305,6 @@ impl Rest {
     }
 }
 
-#[derive(Debug)]
-struct RestRequestMeta {
-    // TODO support this layout
-    //scheme: String,
-    //host: String,
-    //path: String,
-    //query: Option<String>,
-    endpoint: String,
-    // TODO make this enum
-    method: String,
-    headers: Option<HashMap<String, Vec<String>>>,
-}
-
-impl RestRequestMeta {
-    fn new(config: Config, event_meta: Value, client_index: usize) -> Self {
-        // TODO consolidate logic here
-        RestRequestMeta {
-            endpoint: event_meta
-                .get("endpoint")
-                .and_then(Value::as_str)
-                .unwrap_or(&config.endpoints[client_index])
-                .into(),
-            method: event_meta
-                .get("request_method")
-                .and_then(Value::as_str)
-                .unwrap_or(&config.method)
-                .into(),
-            // TODO
-            //query: None,
-            headers: None,
-        }
-    }
-}
-
 #[async_trait::async_trait]
 impl Sink for Rest {
     #[allow(clippy::used_underscore_binding)]
@@ -314,7 +314,7 @@ impl Sink for Rest {
         }
 
         let mut payload = Vec::with_capacity(4096);
-        let mut payload_meta = Value::null();
+        let mut payload_meta = &Value::null();
 
         // TODO this behaviour should be made configurable
         // payload_meta does not make sense here currently for a batched payload
@@ -324,34 +324,19 @@ impl Sink for Rest {
             payload.push(b'\n');
 
             if !event.is_batch {
-                // TODO avoid this clone
-                payload_meta = meta.clone();
+                payload_meta = meta;
             }
         }
+        let request_meta = self.get_request_meta(payload_meta);
 
-        // TODO this should also happen inside RestRequestMeta::new
-        self.client_idx = (self.client_idx + 1) % self.config.endpoints.len();
-
-        // TODO avoid clone here
-        let request_meta = RestRequestMeta::new(self.config.clone(), payload_meta, self.client_idx);
-        //let request_meta = RestRequestMeta {
-        //    endpoint: payload_meta
-        //        .get("endpoint")
-        //        .and_then(Value::as_str)
-        //        .unwrap_or(&self.config.endpoints[self.client_idx])
-        //        .into(),
-        //    method: payload_meta
-        //        .get("request_method")
-        //        .and_then(Value::as_str)
-        //        .unwrap_or(&self.config.method)
-        //        .into(),
-        //    // TODO
-        //    //query: None,
-        //    headers: None,
-        //};
-
-        self.maybe_enque(event.id, event.op_meta, payload, request_meta)
-            .await?;
+        self.maybe_enque(
+            // TODO avoid these clones
+            event.id.clone(),
+            event.op_meta.clone(),
+            payload,
+            request_meta,
+        )
+        .await?;
         self.drain_insights().await
     }
 
