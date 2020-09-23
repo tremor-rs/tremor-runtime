@@ -113,7 +113,7 @@ async fn conductor_target_delete_cmd(app: &mut TremorApp, cmd: &ArgMatches) -> R
 
 async fn conductor_version_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
     let base_url = &app.config.instances[&"default".to_string()][0];
-    let endpoint = &format!("{}version", base_url);
+    let endpoint = &format!("{}/version", base_url);
     let mut response = surf::get(endpoint).await?;
     let version: Version = response.body_json().await?;
     println!(
@@ -179,7 +179,7 @@ async fn conductor_binding_activate_cmd(app: &TremorApp, cmd: &ArgMatches) -> Re
         .value_of("INSTANCE_ID")
         .ok_or("INSTANCE_ID not provided")?;
     let endpoint = format!(
-        "{url}binding/{id}/{instance}",
+        "{url}/binding/{id}/{instance}",
         url = base_url,
         id = a_id,
         instance = s_id
@@ -274,7 +274,7 @@ async fn conductor_get_cmd(app: &TremorApp, cmd: &ArgMatches, endpoint: &str) ->
 
 async fn conductor_list_cmd(app: &TremorApp, endpoint: &str) -> Result<()> {
     let base_url = &app.config.instances[&"default".to_string()][0];
-    let endpoint = format!("{}{}", base_url, endpoint);
+    let endpoint = format!("{}/{}", base_url, endpoint);
     let response = surf::get(&endpoint).await?;
     handle_response(response).await
 }
@@ -284,7 +284,7 @@ async fn conductor_create_cmd(app: &TremorApp, cmd: &ArgMatches, endpoint: &str)
     let path_to_file = cmd.value_of("SOURCE").ok_or("SOURCE not provided")?;
     let json = load(path_to_file)?;
     let ser = ser(&app, &json)?;
-    let endpoint = format!("{}{}", base_url, endpoint);
+    let endpoint = format!("{}/{}", base_url, endpoint);
     let response = surf::post(&endpoint)
         .header(http_types::headers::CONTENT_TYPE, content_type(app))
         .header("accept", accept(app))
