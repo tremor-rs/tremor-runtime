@@ -75,7 +75,7 @@ pub(crate) fn load_config() -> Result<TargetConfig> {
     };
     default.instances.insert(
         "default".to_string(),
-        vec!["http://localhost:9898/".to_string()],
+        vec!["http://localhost:9898".to_string()],
     );
     let meta = fs::metadata(&tremor_root);
     match meta {

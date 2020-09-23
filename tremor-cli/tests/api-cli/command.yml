@@ -1,0 +1,690 @@
+name: Tremor cli validation of API tests
+tags:
+  - cli
+  - api-cli
+  - rest
+  - api
+suites:
+
+ - name: REST API - Initial state after empty deployment
+   cases:
+     - name: GET /version
+       command: tremor api -f json version
+       tags:
+         - get
+       status: 0
+       expects:
+         - source: stdout
+           contains:
+             - '{"version":"0.9.0"}'
+     - name: GET /onramp
+       command: tremor api -f json onramp list
+       tags:
+         - get
+       status: 0
+       expects:
+         - source: stdout
+           contains:
+             - '["ws-in"]'
+     - name: GET /offramp
+       command: tremor api -f json offramp  list
+       tags:
+         - get
+       status: 0
+       expects:
+         - source: stdout
+           contains:
+           - "system::stdout"
+           - "system::stderr"
+     - name: GET /pipeline
+       command: tremor api -f json pipeline list
+       tags:
+         - get
+       status: 0
+       expects:
+         - source: stdout
+           contains:
+             - "system::metrics"
+     - name: GET /binding
+       command: tremor api -f json binding list
+       tags:
+         - get
+       status: 0
+       expects:
+         - source: stdout
+           contains:
+             - "main"
+
+ - name: REST API - Interactive deploy/undeploy of a pipeline YAML
+   cases:
+      - name: GET /pipeline/main should 404 before publish
+        command: tremor api -f yaml pipeline fetch main
+        tags:
+          - get
+        status: 0
+        expects:
+          - source: stderr
+            contains:
+              - Not found
+      - name: GET /pipeline should return an empty list
+        command: tremor api -f yaml pipeline list
+        tags:
+          - get
+        status: 0
+        expects:
+          - source: stdout
+            contains:
+              - system::metrics
+      - name: Publish pipeline ( YAML )
+        command: tremor api -f yaml pipeline create data/bench-pipeline.json
+        tags:
+          - post
+        status: 0
+        expects:
+          - source: stdout
+            contains:
+              - main
+              - interface
+              - inputs
+              - outputs
+              - links
+      - name: Publish pipeline already exists ( JSON )
+        command: tremor api -f json pipeline create data/bench-pipeline.yaml
+        tags:
+          - post
+        status: 0
+        expects:
+          - source: stderr
+            contains:
+              - Conflict
+      - name: Get /pipeline should return a list of 1 element
+        command: "tremor api pipeline list"
+        tags:
+          - get
+        status: 0
+        expects:
+          - source: stdout
+            contains:
+              - "main"
+              - "system::metrics"
+      - name: GET /pipeline/main should 200 after publish
+        command: tremor api pipeline fetch main
+        tags:
+          - get
+        status: 0
+        expects:
+          - source: stdout
+            contains:
+              - main
+              - interface
+              - inputs
+              - outputs
+              - links
+      - name: DELETE /pipeline/main should
+        command: tremor api pipeline delete main
+        tags:
+          - delete
+        status: 0
+        expects:
+          - source: stdout
+            contains:
+              - main
+              - interface
+              - inputs
+              - outputs
+              - links
+      - name: Get /pipeline should return an empty list
+        command: tremor api pipeline list
+        tags:
+          - get
+        status: 0
+        expects:
+          - source: stdout
+            contains:
+              - "system::metrics"
+              - "ws"
+ - name: REST API - Interactive deploy/undeploy of a pipeline ( JSON )
+   cases:
+    - name: GET /pipeline/main should 404 before publish
+      command: tremor api -f json pipeline fetch main
+      tags:
+        - get
+      status: 0
+      expects:
+        - source: stderr
+          contains:
+            - Not found
+    - name: GET /pipeline should return an empty list
+      command: tremor api -f json pipeline list
+      tags:
+        - get
+      status: 0
+      expects:
+        - source: stdout
+          contains:
+            - system::metrics
+    - name: Publish pipeline ( JSON )
+      command: tremor api -f json pipeline create data/bench-pipeline.yaml
+      tags:
+        - get
+      status: 0
+      expects:
+        - source: stdout
+          contains:
+            - main
+            - interface
+            - inputs
+            - outputs
+            - links
+    - name: Publish pipeline already exists ( JSON )
+      command: tremor api -f json pipeline create data/bench-pipeline.json
+      tags:
+        - post
+      status: 0
+      expects:
+        - source: stderr
+          contains:
+            - Conflict
+    - name: Get /pipeline should return a list of 1 element
+      command: tremor api pipeline list
+      tags:
+        - get
+      status: 0
+      expects:
+        - source: stdout
+          contains:
+            - "system::metrics"
+            - "main"
+    - name: GET /pipeline/main should 200 after publish
+      command: tremor api pipeline fetch main
+      tags:
+        - get
+      status: 0
+      expects:
+        - source: stdout
+          contains:
+            - main
+            - interface
+            - inputs
+            - outputs
+            - links
+    - name: DELETE /pipeline/main should
+      command: tremor api pipeline delete main
+      tags:
+        - delete
+      status: 0
+      expects:
+        - source: stdout
+          contains:
+            - main
+            - interface
+            - inputs
+            - outputs
+            - links
+    - name: Get /pipeline should return an empty list
+      command: tremor api pipeline list
+      tags:
+        - get
+      status: 0
+      expects:
+        - source: stdout
+          contains:
+            - "system::metrics"
+
+ - name: REST API - Interactive deploy/undeploy of an onramp ( YAML )
+   cases:
+    - name: GET /onramp/main should 404 before publish
+      command: tremor api -f yaml onramp fetch blaster
+      tags:
+        - get
+      status: 0
+      expects:
+        - source: stderr
+          contains:
+            - Not found
+    - name: GET /onramp should return an empty list
+      command: tremor api -f yaml onramp list
+      tags:
+        - get
+      status: 0
+      expects:
+        - source: stdout
+          contains:
+            - '["ws-in"]'
+    - name: Publish onramp ( YAML )
+      command: tremor api -f yaml onramp create data/bench-onramp.json
+      tags:
+        - post
+      status: 0
+      expects:
+        - source: stdout
+          contains:
+            - blaster
+    - name: Publish onramp already exists ( JSON )
+      command: tremor api -f json onramp create data/bench-onramp.yaml
+      tags:
+        - post
+      status: 0
+      expects:
+        - source: stderr
+          contains:
+            - Conflict
+    - name: Get /onramp should return a list of 1 element
+      command: tremor api onramp list
+      tags:
+        - get
+      status: 0
+      expects:
+        - source: stdout
+          contains:
+            - "blaster"
+    - name: GET /onramp/main should 200 after publish
+      command: tremor api onramp fetch blaster
+      tags:
+        - get
+      status: 0
+      expects:
+        - source: stdout
+          contains:
+            - blaster
+    - name: DELETE /onramp/blaster should
+      command: tremor api onramp delete blaster
+      tags:
+        - get
+      status: 0
+      expects:
+        - source: stdout
+          contains:
+            - blaster
+    - name: Get /onramp should return an empty list
+      command: tremor api onramp list
+      tags:
+        - get
+      status: 0
+      expects:
+        - source: stdout
+          contains:
+            - '["ws-in"]'
+
+ - name: REST API - Interactive deploy/undeploy of an onramp ( JSON )
+   cases:
+    - name: GET /onramp/blaster should 404 before publish
+      command: tremor api -f json onramp fetch blaster
+      tags:
+        - get
+      status: 0
+      expects:
+        - source: stderr
+          contains:
+            - Not found
+    - name: GET /onramp should return an empty list
+      command: tremor api -f json onramp list
+      tags:
+        - get
+      status: 0
+      expects:
+        - source: stdout
+          contains:
+            - '["ws-in"]'
+    - name: Publish onramp ( JSON )
+      command: tremor api -f json onramp create data/bench-onramp.yaml
+      tags:
+        - post
+      status: 0
+      expects:
+        - source: stdout
+          contains:
+            - blaster
+    - name: Publish onramp already exists ( JSON )
+      command: tremor api -f json onramp create data/bench-onramp.json
+      tags:
+        - post
+      status: 0
+      expects:
+        - source: stderr
+          contains:
+            - Conflict
+    - name: Get /onramp should return a list of 1 element
+      command: tremor api onramp list
+      tags:
+        - get
+      status: 0
+      expects:
+        - source: stdout
+          contains:
+            - "blaster"
+    - name: GET /onramp/blaster should 200 after publish
+      command: tremor api onramp fetch blaster
+      tags:
+        - get
+      status: 0
+      expects:
+        - source: stdout
+          contains:
+            - blaster
+    - name: DELETE /onramp/blaster should
+      command: tremor api onramp delete blaster
+      tags:
+        - delete
+      status: 0
+      expects:
+        - source: stdout
+          contains:
+            - blaster
+    - name: Get /onramp should return an empty list
+      command: tremor api onramp list
+      tags:
+        - get
+      status: 0
+      expects:
+        - source: stdout
+          contains:
+            - '["ws-in"]'
+
+ - name: REST API - Interactive deploy/undeploy of an offramp ( YAML )
+   cases:
+    - name: GET /offramp/blackhole should 404 before publish
+      command: tremor api -f yaml offramp fetch blackhole
+      tags:
+        - get
+      status: 0
+      expects:
+        - source: stderr
+          contains:
+            - Not found
+    - name: GET /offramp should return an empty list
+      command: tremor api -f yaml offramp list
+      tags:
+        - get
+      status: 0
+      expects:
+        - source: stdout
+          contains:
+            - "system::stdout"
+            - "system::stderr"
+    - name: Publish offramp ( YAML )
+      command: tremor api -f yaml offramp create data/bench-offramp.json
+      tags:
+        - post
+      status: 0
+      expects:
+        - source: stdout
+          contains:
+            - blackhole
+    - name: Publish offramp already exists ( JSON )
+      command: tremor api -f json offramp create data/bench-offramp.yaml
+      tags:
+        - post
+      status: 0
+      expects:
+        - source: stderr
+          contains:
+            - Conflict
+    - name: Get /offramp should return a list of 1 element
+      command: tremor api offramp list
+      tags:
+        - get
+      status: 0
+      expects:
+        - source: stdout
+          contains:
+            - "system::stdout"
+            - "blackhole"
+            - "system::stderr"
+    - name: GET /offramp/main should 200 after publish
+      command: tremor api offramp fetch blackhole
+      tags:
+        - get
+      status: 0
+      expects:
+        - source: stdout
+          contains:
+            - blackhole
+    - name: DELETE /offramp/blackhole should
+      command: tremor api offramp delete blackhole
+      tags:
+        - delete
+      status: 0
+      expects:
+        - source: stdout
+          contains:
+            - blackhole
+    - name: Get /offramp should return an empty list
+      command: tremor api offramp list
+      tags:
+        - get
+      status: 0
+      expects:
+        - source: stdout
+          contains:
+            - "system::stdout"
+            - "system::stderr"
+
+ - name: REST API - Interactive deploy/undeploy of an offramp ( JSON )
+   cases:
+    - name: GET /offramp/blackhole should 404 before publish
+      command: tremor api -f json offramp fetch blackhole
+      tags:
+        - get
+      status: 0
+      expects:
+        - source: stderr
+          contains:
+            - Not found
+    - name: GET /offramp should return an empty list
+      command: tremor api -f json offramp list
+      tags:
+        - get
+      status: 0
+      expects:
+        - source: stdout
+          contains:
+            - "system::stdout"
+            - "system::stderr"
+    - name: Publish offramp ( JSON )
+      command: tremor api -f json offramp create data/bench-offramp.yaml
+      tags:
+        - post
+      status: 0
+      expects:
+        - source: stdout
+          contains:
+            - blackhole
+    - name: Publish offramp already exists ( JSON )
+      command: tremor api -f json offramp create data/bench-offramp.json
+      tags:
+        - post
+      status: 0
+      expects:
+        - source: stderr
+          contains:
+          - Conflict
+    - name: Get /offramp should return a list of 1 element
+      command: tremor api offramp list
+      tags:
+        - get
+      status: 0
+      expects:
+        - source: stdout
+          contains:
+            - "system::stdout"
+            - "blackhole"
+            - "system::stderr"
+    - name: GET /offramp/blackhole should 200 after publish
+      command: tremor api offramp fetch blackhole
+      tags:
+        - get
+      status: 0
+      expects:
+        - source: stdout
+          contains:
+            - blackhole
+    - name: DELETE /offramp/blackhole should
+      command: tremor api offramp delete blackhole
+      tags:
+        - delete
+      status: 0
+      expects:
+        - source: stdout
+          contains:
+            - blackhole
+    - name: Get /offramp should return an empty list
+      command: tremor api offramp list
+      tags:
+        - get
+      status: 0
+      expects:
+        - source: stdout
+          contains:
+            - "system::stdout"
+            - "system::stderr"
+
+ - name: REST API - Interactive deploy/undeploy of an binding ( YAML )
+   cases:
+    - name: GET /binding/default should 404 before publish
+      command: tremor api -f yaml binding fetch default
+      tags:
+        - get
+      status: 0
+      expects:
+        - source: stderr
+          contains:
+          - Not found
+    - name: GET /binding should return an empty list
+      command: tremor api -f yaml binding list
+      tags:
+        - get
+      status: 0
+      expects:
+        - source: stdout
+          contains:
+            - '["main"]'
+    - name: Publish binding ( YAML )
+      command: tremor api -f yaml binding create data/bench-binding.json
+      tags:
+        - post
+      status: 0
+      expects:
+        - source: stdout
+          contains:
+            - default
+    - name: Publish binding already exists ( JSON )
+      command: tremor api -f json binding create data/bench-binding.yaml
+      tags:
+        - post
+      status: 0
+      expects:
+        - source: stderr
+          contains:
+            - Conflict
+    - name: Get /binding should return a list of 1 element
+      command: tremor api binding list
+      tags:
+        - get
+      status: 0
+      expects:
+        - source: stdout
+          contains:
+            - default
+    - name: GET /binding/main should 200 after publish
+      command: tremor api binding fetch default
+      tags:
+        - get
+      status: 0
+      expects:
+        - source: stdout
+          contains:
+            - default
+    - name: DELETE /binding/default should
+      command: tremor api binding delete default
+      tags:
+        - delete
+      status: 0
+      expects:
+        - source: stdout
+          contains:
+            - default
+    - name: Get /binding should return an empty list
+      command: tremor api binding list
+      tags:
+        - get
+      status: 0
+      expects:
+        - source: stdout
+          contains:
+            - '["main"]'
+
+ - name: REST API - Interactive deploy/undeploy of an binding ( JSON )
+   cases:
+    - name: GET /binding/default should 404 before publish
+      command: tremor api -f json binding fetch default
+      tags:
+        - get
+      status: 0
+      expects:
+        - source: stderr
+          contains:
+            - Not found
+    - name: GET /binding should return an empty list
+      command: tremor api -f json binding list
+      tags:
+        - get
+      status: 0
+      expects:
+        - source: stdout
+          contains:
+            - '["main"]'
+    - name: Publish binding ( JSON )
+      command: tremor api -f json binding create data/bench-binding.yaml
+      tags:
+        - post
+      status: 0
+      expects:
+        - source: stdout
+          contains:
+            - default
+    - name: Publish binding already exists ( JSON )
+      command: tremor api -f json binding create data/bench-binding.json
+      tags:
+        - post
+      status: 0
+      expects:
+        - source: stderr
+          contains:
+            - Conflict
+    - name: Get /binding should return a list of 1 element
+      command: tremor api binding list
+      tags:
+        - get
+      status: 0
+      expects:
+        - source: stdout
+          contains:
+            - default
+    - name: GET /binding/default should 200 after publish
+      command: tremor api binding fetch default
+      tags:
+        - get
+      status: 0
+      expects:
+        - source: stdout
+          contains:
+            - default
+    - name: DELETE /binding/default should
+      command: tremor api binding delete default
+      tags:
+        - delete
+      status: 0
+      expects:
+        - source: stdout
+          contains:
+            - default
+    - name: Get /binding should return an empty list
+      command: tremor api binding list
+      tags:
+        - get
+      status: 0
+      expects:
+        - source: stdout
+          contains:
+            - '["main"]'
