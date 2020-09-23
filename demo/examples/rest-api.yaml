@@ -1,6 +1,8 @@
 onramp:
   - id: rest
     type: rest
+    # TODO switch to json after improving responses on invalid json
+    codec: string
     config:
       host: localhost
       port: 8139
@@ -21,15 +23,18 @@ pipeline:
         op: runtime::tremor
         config:
           script: |
+            use std::array;
+
             # for default api response
             let $response_status = 200;
             let $response_headers = {
               "x-powered-by": [ "Tremor" ]
             };
 
-            # short-circuit for non GET/POST requests
-            match $request_method of
-              case "GET"  =>
+            # short-circuit for non valid requests
+            let valid_methods = ["GET", "POST"];
+            match array::contains(valid_methods, $request_method) of
+              case true  =>
                 null
               default =>
                 let $response_status = 501,

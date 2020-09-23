@@ -178,7 +178,10 @@ where
                     match pp.process(ingest_ns, d) {
                         Ok(mut r) => data1.append(&mut r),
                         Err(e) => {
-                            error!("Preprocessor[{}] error {}", i, e);
+                            error!(
+                                "[Source::{}] Preprocessor[{}] error {}",
+                                self.source_id, i, e
+                            );
                             return Err(e);
                         }
                     }
@@ -237,7 +240,7 @@ where
                     Err(RentalSnot::Skip) => (),
                     Err(RentalSnot::Error(e)) => {
                         self.metrics_reporter.increment_error();
-                        error!("[Codec] {}", e);
+                        error!("[Source::{}] [Codec] {}", self.source_id, e);
                     }
                 }
             }
@@ -320,8 +323,10 @@ where
                         .reply_event(event, self.codec.as_ref(), &self.codec_map)
                         .await
                     {
-                        // TODO better error message
-                        error!("Error replying event from source: {}", e);
+                        error!(
+                            "[Source::{}] [Onramp] failed to reply event from source: {}",
+                            self.source_id, e
+                        );
                     }
                 }
             }
@@ -361,7 +366,10 @@ where
                         })
                         .await
                     {
-                        error!("[Onramp] failed to send to pipeline: {}", e);
+                        error!(
+                            "[Source::{}] [Onramp] failed to send to pipeline: {}",
+                            self.source_id, e
+                        );
                         error = true;
                     }
                 }
@@ -375,7 +383,10 @@ where
                     })
                     .await
                 {
-                    error!("[Onramp] failed to send to pipeline: {}", e);
+                    error!(
+                        "[Source::{}] [Onramp] failed to send to pipeline: {}",
+                        self.source_id, e
+                    );
                     error = true;
                 }
             }
@@ -518,7 +529,7 @@ where
                         task::sleep(Duration::from_millis(sleep_ms)).await
                     }
                     Err(e) => {
-                        warn!("Source Error: {}", e);
+                        warn!("[Source::{}] Error: {}", self.source_id, e);
                         self.metrics_reporter.increment_error();
                     }
                 }
