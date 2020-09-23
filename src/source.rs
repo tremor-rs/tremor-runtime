@@ -11,7 +11,9 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 use crate::codec::{self, Codec};
+use crate::errors::*;
 use crate::metrics::RampReporter;
 use crate::onramp;
 use crate::pipeline;
@@ -23,7 +25,6 @@ use crate::Result;
 use async_channel::{self, unbounded, Receiver, Sender};
 use async_std::task;
 use halfbrown::HashMap;
-use prelude::*;
 use simd_json::Builder;
 use std::time::Duration;
 use tremor_pipeline::{CBAction, Event, EventOriginUri, Ids};
@@ -200,7 +201,7 @@ where
         let original_id = self.id;
         let mut error = false;
         if let Ok(data) = self.handle_pp(stream, ingest_ns, data) {
-            let meta_value = meta.map(|m| Value::from(m.0)).unwrap_or(Value::null());
+            let meta_value = meta.map(|m| Value::from(m.0)).unwrap_or(Value::object());
             for d in data {
                 let line_value = LineValue::try_new(vec![d], |mutd| {
                     // this is safe, because we get the vec we created in the previous argument and we now it has 1 element
