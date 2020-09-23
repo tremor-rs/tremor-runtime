@@ -164,9 +164,11 @@ async fn handle_request(mut req: Request<ServerState>) -> tide::Result<Response>
         })
         .collect::<Value>();
 
-    let ct: Option<Mime> = req.content_type(); // TODO: consider stuff like charset here?
-                                               // request metadata
-                                               // TODO namespace these better?
+    // TODO: consider stuff like charset here?
+    let ct: Option<Mime> = req.content_type();
+
+    // request metadata
+    // TODO namespace these better?
     let mut meta = Value::object_with_capacity(5);
     meta.insert("request_method", req.method().to_string())?;
     meta.insert("request_path", url.path().to_string())?;
@@ -184,6 +186,14 @@ async fn handle_request(mut req: Request<ServerState>) -> tide::Result<Response>
         let (response_tx, response_rx) = bounded(1);
 
         // TODO check how tide handles request timeouts here
+        //
+        // also figure out best way to bubble up errors (to the end user)
+        // during processing of this data, that may occur before a valid
+        // event is sent back from the pipeline.
+        // eg: in case of invalid json input with json content-type/codec,
+        // event processing fails at the codec decoding stage, even before
+        // this event reaches pipeline, but the rest source request just
+        // hangs (until it times out).
         req.state()
             .tx
             .send(RestSourceReply(
@@ -227,15 +237,8 @@ fn make_response(
     // TODO reject batched events and handle only single event here
     let (response_data, response_meta) = event.value_meta_iter().next().unwrap();
 
-    // TODO need to ultimately encode the body based on the content-type header
-    // set (if any). otherwise fall back to accept header, then to onramp codec,
-    // setting response headers appropriately
-    //
-    // as json
-    //let mut response_bytes = Vec::new();
-    //response_data.write(&mut response_bytes)?;
-    //
-    // as string
+    // TODO status should change if there's any errors here (eg: during
+    // content-type encoding). maybe include the error string in the response too
     let status = response_meta
         .get("response_status")
         .and_then(|s| s.as_u16())
@@ -334,6 +337,7 @@ impl Source for Int {
         }
         Ok(())
     }
+
     async fn init(&mut self) -> Result<SourceState> {
         let (tx, rx) = bounded(crate::QSIZE);
 
@@ -370,6 +374,7 @@ impl Source for Int {
         // TODO ideally should happen only on successful server listen?
         Ok(SourceState::Connected)
     }
+
     fn id(&self) -> &TremorURL {
         &self.onramp_id
     }

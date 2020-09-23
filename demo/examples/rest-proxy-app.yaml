@@ -1,6 +1,7 @@
 onramp:
   - id: rest
     type: rest
+    codec: string
     config:
       host: localhost
       port: 9139
@@ -49,6 +50,7 @@ pipeline:
 offramp:
   - id: upstream
     type: rest
+    codec: string
     config:
       link: true
       # TODO make this optional too
