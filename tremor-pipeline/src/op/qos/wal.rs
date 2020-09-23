@@ -138,6 +138,10 @@ pub struct Config {
     /// Maximum number of bytes the WAL is alloed to take on disk,
     /// note this is a soft maximum and might be overshot slighty
     pub max_bytes: u64,
+
+    /// Flush to disk on every write
+    #[serde(default = "Default::default")]
+    flush_on_evnt: bool,
 }
 
 impl ConfigImpl for Config {}
@@ -261,6 +265,9 @@ impl WAL {
         // Sieralize and write the event
         let event_buf = event.json_vec()?;
         self.events_tree.insert(write, event_buf.as_slice())?;
+        if self.config.flush_on_evnt {
+            self.events_tree.flush()?;
+        }
         self.cnt += 1;
         Ok(())
     }
