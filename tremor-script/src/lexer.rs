@@ -710,7 +710,7 @@ impl<'input> Tokenizer<'input> {
             //cu: 0,
             eos: false,
             iter: lexer.peekable(),
-            pos: span(start, end),
+            pos: span(start, end, start, end),
         }
     }
 }
@@ -1222,7 +1222,7 @@ impl<'input> Lexer<'input> {
         start.unit_id = self.cu;
         end.unit_id = self.cu;
         Spanned {
-            span: span(start - self.file_offset, end - self.file_offset),
+            span: span(start - self.file_offset, end - self.file_offset, start, end),
             value,
         }
     }
@@ -1748,7 +1748,7 @@ impl<'input> Lexer<'input> {
                         let s = s?;
                         match &s.value {
                             Token::RBrace if pcount == 0 => {
-                                start = s.span.start();
+                                start = s.span.pp_start;
                                 res.push(s);
                                 break;
                             }
@@ -1876,7 +1876,7 @@ impl<'input> Lexer<'input> {
                         let s = s?;
                         match &s.value {
                             Token::RBrace if pcount == 0 => {
-                                start = s.span.start();
+                                start = s.span.pp_start;
                                 res.push(s);
                                 break;
                             }
