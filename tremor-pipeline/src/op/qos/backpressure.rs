@@ -184,6 +184,8 @@ impl Operator for Backpressure {
 
         if self.config.circuit_breaker && was_open && output.backoff > 0 {
             insight.cb = CBAction::Close;
+        } else if insight.cb == CBAction::Close {
+            insight.cb = CBAction::None;
         };
     }
 }
