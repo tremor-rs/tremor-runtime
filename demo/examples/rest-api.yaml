@@ -17,18 +17,19 @@ pipeline:
       outputs:
         - out
         - error
-        - to-onramp
     nodes:
-      - id: runtime
+      - id: request-processing
         op: runtime::tremor
         config:
           script: |
             use std::array;
 
             # for default api response
-            let $response_status = 200;
+            let $response_content_type = "application/json";
             let $response_headers = {
-              "x-powered-by": [ "Tremor" ]
+              # TODO see why this approach throws an error
+              #"content-type": "application/json",
+              "x-powered-by": [ "Tremor" ],
             };
 
             # short-circuit for non valid requests
@@ -38,11 +39,21 @@ pipeline:
                 null
               default =>
                 let $response_status = 501,
-                emit ""
+                # can also name the emit port here "error" and handle
+                # it same as runtime errors (which goes to "error" port too)
+                #
+                # or even emit to the default port ("out"). approach here
+                # is useful to track application errors though.
+                emit {
+                  # can use string interpolation here after this issue is resolved:
+                  # https://github.com/tremor-rs/tremor-runtime/issues/445
+                  "error": "Method " + $request_method + " not implemented",
+                  "event": event,
+                } => "app-error"
             end;
 
             # content based on path
-            match $request_path of
+            let event = match $request_path of
               case "/echo" =>
                 {
                   "method": $request_method,
@@ -56,15 +67,47 @@ pipeline:
               case "/ping" =>
                 let $response_status = 204,
                 ""
+              case "/error-test" =>
+                # will throw a runtime error here
+                non_existent_var
               default =>
                 let $response_status = 404,
-                "Error: path {$request_path} not found"
+                emit {
+                  "error": "Path " + $request_path + " not found",
+                  "event": event,
+                } => "app-error"
             end;
+
+            let $response_status = 200;
+            emit event;
+      - id: internal-error-processing
+        op: runtime::tremor
+        config:
+          script: |
+            let $response_status = 500;
+
+            # can choose to not include the actual event error here, if we don't want
+            # to send it back to the client
+            let event.error = "Oh no, we ran into something unexpected :(\n {event.error}";
+
+            event;
     links:
-      in: [ runtime ]
-      runtime: [ out, to-onramp ]
-      # TODO this should bubble up as 500 response for linked onramps
-      runtime/error: [ error, to-onramp ]
+      in: [ request-processing ]
+
+      # main request processing
+      request-processing: [ out ]
+      # application errors (but still succesful processing from tremor perspective)
+      request-processing/app-error: [ out ]
+
+      # tremor runtime errors
+      # TODO maybe as a default, bake simple error processing directly in onramp
+      # so that we can get rid of this phase and directly send errors here to onramp
+      request-processing/error: [ internal-error-processing ]
+      internal-error-processing: [ error ]
+
+      # errors from the error-processing script itself
+      # turtles all the way down
+      internal-error-processing/error: [ error ]
 
 binding:
   - id: default
@@ -76,10 +119,18 @@ binding:
         '/onramp/rest/{instance}/in',
 
         # for api debugging purposes
-        '/offramp/system::stdout/system/in'
+        #'/offramp/system::stdout/system/in'
       ]
 
-      '/pipeline/main/{instance}/error': [ '/offramp/system::stderr/system/in' ]
+      '/pipeline/main/{instance}/error': [
+        # linked onramp that can respond based on pipeline output
+        # TODO once onramps have error ports, link back to it to better distinguish
+        # error events from onramp itself?
+        '/onramp/rest/{instance}/in',
+
+        # for debugging
+        '/offramp/system::stderr/system/in'
+      ]
 
       # tremor metrics
       #'/pipeline/system::metrics/system/out': [ '/offramp/system::stdout/system/in' ]
