@@ -82,7 +82,13 @@ where
 
     for l in lexemes {
         let Spanned {
-            span: Span { start, end },
+            span:
+                Span {
+                    start,
+                    end,
+                    pp_start,
+                    pp_end,
+                },
             value,
         } = l;
         match &value {
@@ -128,7 +134,7 @@ where
                     h.highlight_no_linenos(
                         None,
                         &[Spanned {
-                            span: Span { start, end },
+                            span: Span { start, end, pp_start, pp_end },
                             value,
                         }],
                     )?;

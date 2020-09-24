@@ -53,11 +53,25 @@ pub struct Span {
     pub start: Location,
     /// The end location
     pub end: Location,
+    /// start location without pp adjustment
+    pub pp_start: Location,
+    /// end location without pp adjustment
+    pub pp_end: Location,
 }
 
 impl Span {
-    pub(crate) fn new(start: Location, end: Location) -> Self {
-        Self { start, end }
+    pub(crate) fn new(
+        start: Location,
+        end: Location,
+        pp_start: Location,
+        pp_end: Location,
+    ) -> Self {
+        Self {
+            start,
+            end,
+            pp_start,
+            pp_end,
+        }
     }
     pub(crate) fn start(&self) -> Location {
         self.start
@@ -67,8 +81,8 @@ impl Span {
     }
 }
 
-pub(crate) fn span(start: Location, end: Location) -> Span {
-    Span::new(start, end)
+pub(crate) fn span(start: Location, end: Location, pp_start: Location, pp_end: Location) -> Span {
+    Span::new(start, end, pp_start, pp_end)
 }
 
 /// A Spanned element, position plus element
