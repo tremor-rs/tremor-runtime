@@ -14,9 +14,9 @@
 
 // TODO add tests
 
+use crate::codec::Codec;
 use std::str::FromStr;
 
-use crate::codec::Codec;
 use crate::source::prelude::*;
 use async_channel::unbounded;
 use async_channel::{Sender, TryRecvError};

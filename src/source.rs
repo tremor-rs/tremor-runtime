@@ -13,11 +13,7 @@
 // limitations under the License.
 
 use crate::codec::{self, Codec};
-<<<<<<< HEAD
-use crate::errors::Error;
-=======
 use crate::errors::*;
->>>>>>> 31705b8... Pass default meta as object instead of null from source
 use crate::metrics::RampReporter;
 use crate::onramp;
 use crate::pipeline;
@@ -191,7 +187,6 @@ where
         codec_override: Option<String>,
         data: Vec<u8>,
         meta: Option<StaticValue>, // See: https://github.com/rust-lang/rust/issues/63033
-<<<<<<< HEAD
     ) -> Vec<Result<LineValue>> {
         let mut results = vec![];
         match self.handle_pp(stream, ingest_ns, data) {
@@ -209,22 +204,6 @@ where
                             } else {
                                 self.codec.decode(mut_data, *ingest_ns)
                             }
-=======
-    ) {
-        let original_id = self.id;
-        let mut error = false;
-        if let Ok(data) = self.handle_pp(stream, ingest_ns, data) {
-            let meta_value = meta.map(|m| Value::from(m.0)).unwrap_or(Value::object());
-            for d in data {
-                let line_value = LineValue::try_new(vec![d], |mutd| {
-                    // this is safe, because we get the vec we created in the previous argument and we now it has 1 element
-                    // so it will never panic.
-                    // take this, rustc!
-                    let mut_data = mutd[0].as_mut_slice();
-                    let decoded = if let Some(doh) = &codec_override {
-                        if let Some(c) = self.codec_map.get_mut(doh) {
-                            c.decode(mut_data, *ingest_ns)
->>>>>>> 31705b8... Pass default meta as object instead of null from source
                         } else {
                             self.codec.decode(mut_data, *ingest_ns)
                         };

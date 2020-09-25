@@ -38,7 +38,7 @@ pub struct Config {
     #[serde(default = "concurrency")]
     pub concurrency: usize,
     // TODO add scheme, host, path, query
-    /// HTTP method to use (default: POST)
+    // HTTP method to use (default: POST)
     // TODO implement Deserialize for http_types::Method
     // https://docs.rs/http-types/2.4.0/http_types/enum.Method.html
     #[serde(skip_deserializing, default = "dflt_method")]
@@ -46,6 +46,21 @@ pub struct Config {
     #[serde(default = "Default::default")]
     // TODO make header values a vector here?
     pub headers: HashMap<String, String>,
+
+    // TODO: better name?
+    /// mapping from mime-type to codec used to handle requests/responses
+    /// with this mime-type
+    ///
+    /// e.g.:
+    ///       codec_map:
+    ///         "application/json": "json"
+    ///         "text/plain": "string"
+    ///
+    /// A default builtin codec mapping is defined
+    /// for msgpack, json, yaml and plaintext codecs with the common mime-types
+    #[serde(default = "Default::default", skip_serializing_if = "Option::is_none")]
+    pub(crate) codec_map: Option<HashMap<String, String>>,
+
     /// whether to enable linked transport (return offramp response to pipeline)
     // TODO remove and auto-infer this based on succesful binding for linked offramps
     pub link: Option<bool>,
