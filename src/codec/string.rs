@@ -24,7 +24,7 @@ impl Codec for String {
     }
 
     fn mime_types(&self) -> Vec<&str> {
-        vec!["text/plain"]
+        vec!["text/plain", "text/html"]
     }
 
     fn decode<'input>(

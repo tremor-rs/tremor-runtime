@@ -18,6 +18,7 @@ use std::str::FromStr;
 
 use crate::codec::Codec;
 use crate::source::prelude::*;
+use async_channel::unbounded;
 use async_channel::{Sender, TryRecvError};
 use halfbrown::HashMap;
 use http_types::Mime;
@@ -146,7 +147,6 @@ async fn handle_request(mut req: Request<ServerState>) -> tide::Result<Response>
         path: vec![String::default()],
     };
 
-    let url = req.url();
     let headers = req
         .header_names()
         .map(|name| {
@@ -166,24 +166,32 @@ async fn handle_request(mut req: Request<ServerState>) -> tide::Result<Response>
 
     // TODO: consider stuff like charset here?
     let ct: Option<Mime> = req.content_type();
+    let codec_override = ct.map(|ct| ct.essence().to_string());
 
     // request metadata
     // TODO namespace these better?
-    let mut meta = Value::object_with_capacity(5);
+    let mut meta = Value::object_with_capacity(4);
     meta.insert("request_method", req.method().to_string())?;
-    meta.insert("request_path", url.path().to_string())?;
+    meta.insert("request_url", req.url().as_str().to_string())?;
+    // TODO introduce config param to pass url parts as a hashmap (useful when needed)
+    // right now, users can parse these from tremor-script as needed
+    //let url = req.url();
+    // need to add username, port and fragment as well
+    //meta.insert("request_scheme", url.scheme().to_string())?;
+    //meta.insert("request_host", url.host_str().unwrap_or("").to_string())?;
+    //meta.insert("request_path", url.path().to_string())?;
     // TODO introduce config param to pass this as a hashmap (useful when needed)
     // also document duplicate query key behavior in that case
-    meta.insert("request_query", url.query().unwrap_or("").to_string())?;
+    //meta.insert("request_query", url.query().unwrap_or("").to_string())?;
     meta.insert("request_headers", headers)?;
-    if let Some(content_type) = &ct {
-        meta.insert("request_content_type", content_type.essence().to_string())?;
-    }
+    meta.insert(
+        "request_content_type",
+        codec_override.clone().map_or(Value::null(), |s| s.into()),
+    )?;
 
     let data = req.body_bytes().await?;
-    let codec_override = ct.map(|ct| ct.essence().to_string());
     if req.state().link {
-        let (response_tx, response_rx) = bounded(1);
+        let (response_tx, response_rx) = unbounded();
 
         // TODO check how tide handles request timeouts here
         //

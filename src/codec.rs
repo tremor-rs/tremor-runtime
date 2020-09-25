@@ -107,6 +107,7 @@ pub fn builtin_codec_map() -> halfbrown::HashMap<String, Box<dyn Codec>> {
     codecs.insert_nocheck("application/json".to_string(), Box::new(json::JSON {}));
     codecs.insert_nocheck("application/yaml".to_string(), Box::new(yaml::YAML {}));
     codecs.insert_nocheck("text/plain".to_string(), Box::new(string::String {}));
+    codecs.insert_nocheck("text/html".to_string(), Box::new(string::String {}));
     codecs.insert_nocheck(
         "application/msgpack".to_string(),
         Box::new(msgpack::MsgPack {}),
@@ -133,6 +134,7 @@ pub fn by_mime_type(mime: &str) -> Result<Box<dyn Codec>> {
         "application/json" => Ok(Box::new(json::JSON {})),
         "application/yaml" => Ok(Box::new(yaml::YAML {})),
         "text/plain" => Ok(Box::new(string::String {})),
+        "text/html" => Ok(Box::new(string::String {})),
         "application/msgpack" | "application/x-msgpack" | "application/vnd.msgpack" => {
             Ok(Box::new(msgpack::MsgPack {}))
         }

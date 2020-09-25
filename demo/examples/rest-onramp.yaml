@@ -1,6 +1,7 @@
 onramp:
   - id: rest
     type: rest
+    codec: "string"
     config:
       host: localhost
       port: 8139
@@ -20,9 +21,9 @@ pipeline:
           script: |
             {
               "method": $request_method,
-              "path": $request_path,
-              "query": $request_query,
+              "url": $request_url,
               "headers": $request_headers,
+              "content_type": $request_content_type,
               "body": event,
             }
     links:
