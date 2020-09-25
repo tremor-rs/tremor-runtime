@@ -259,6 +259,7 @@ fn make_response(
         .and_then(|hs| hs.as_object())
     {
         for (name, values) in headers {
+            // TODO standardize on string type for header values (even with multiple entries)?
             if let Some(header_values) = values.as_array() {
                 if name.eq_ignore_ascii_case("content-type") {
                     // pick first value in case of multiple content-type headers
@@ -269,6 +270,11 @@ fn make_response(
                         builder = builder.header(name.as_ref(), header_value);
                     }
                 }
+            } else if let Some(header_value) = values.as_str() {
+                if name.eq_ignore_ascii_case("content-type") {
+                    header_content_type = Some(header_value);
+                }
+                builder = builder.header(name.as_ref(), header_value);
             }
         }
     }
