@@ -260,10 +260,11 @@ fn make_response(
         .and_then(|hs| hs.as_object())
     {
         for (name, values) in headers {
-            if name.eq_ignore_ascii_case("content-type") {
-                header_content_type = Some(name.as_ref());
-            }
             if let Some(header_values) = values.as_array() {
+                if name.eq_ignore_ascii_case("content-type") {
+                    // pick first value in case of multiple content-type headers
+                    header_content_type = header_values[0].as_str();
+                }
                 for value in header_values {
                     if let Some(header_value) = value.as_str() {
                         builder = builder.header(name.as_ref(), header_value);
