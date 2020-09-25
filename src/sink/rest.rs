@@ -97,6 +97,7 @@ impl Rest {
         let start = Instant::now();
 
         // would be nice if surf had a generic function to handle passed http method
+        // also implement connection reuse
         let mut c = match meta.method {
             Method::Post => surf::post(meta.endpoint),
             Method::Put => surf::put(meta.endpoint),
@@ -139,10 +140,27 @@ impl Rest {
 
     async fn make_event(id: Ids, mut response: Response) -> Result<Event> {
         let data = response.body_string().await?;
+        let headers = response
+            .header_names()
+            .map(|name| {
+                (
+                    name.to_string(),
+                    // a header name has the potential to take multiple values:
+                    // https://tools.ietf.org/html/rfc7230#section-3.2.2
+                    // tide does not seem to guarantee the order of values though --
+                    // look into it later
+                    response
+                        .header(name)
+                        .iter()
+                        .map(|value| value.as_str().to_string())
+                        .collect::<Value>(),
+                )
+            })
+            .collect::<Value>();
 
-        // TODO add response_headers
         let mut meta = Value::object_with_capacity(2);
         meta.insert("response_status", response.status() as u64)?;
+        meta.insert("response_headers", headers)?;
 
         // TODO apply proper codec based on response mime and body bytes
         // also allow pass-through without decoding
@@ -195,8 +213,25 @@ impl Rest {
                 .and_then(Value::as_str)
                 .map(|v| Method::from_str(&v.to_uppercase()).unwrap_or(dflt_method()))
                 .unwrap_or(self.config.method),
-            // TODO implement
-            headers: None,
+            headers: meta
+                .get("request_headers")
+                .and_then(Value::as_object)
+                .map(|headers| {
+                    let mut converted_headers: HashMap<String, Vec<String>> = HashMap::new();
+                    for (name, values) in headers {
+                        if let Some(values) = values.as_array() {
+                            converted_headers.insert(
+                                name.to_string(),
+                                values
+                                    .iter()
+                                    // TODO bubble up error if the conversion here does not work
+                                    .map(|value| value.as_str().unwrap_or("").to_string())
+                                    .collect(),
+                            );
+                        }
+                    }
+                    converted_headers
+                }),
         }
     }
 

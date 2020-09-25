@@ -23,19 +23,32 @@ pipeline:
         op: runtime::tremor
         config:
           script: |
-            # TODO need for this will go away once we support path attribute directly
-            # for rest offramp
-            let $endpoint = "http://localhost:8139{$request_path}";
+            # TODO if we provide parsed uri parts as meta variables, this logic will be
+            # simpler here (just need to override request_host)
+            match {"test": $request_url} of
+              case r = %{test ~= dissect|%{scheme}://%{host}/%{path_and_rest}|} =>
+                let $endpoint = "{r.test.scheme}://localhost:8139/{r.test.path_and_rest}"
+              default =>
+                null
+            end;
             event;
       - id: response-processing
         op: runtime::tremor
         config:
           script: |
-            # TODO append
-            let $response_headers = {
-              "content-type": [ "text/plain" ],
-              "x-powered-by": [ "Tremor" ],
-            };
+            use std::array;
+
+            let $response_headers.x-powered-by = match $response_headers of
+              case %{present x-powered-by} =>
+                array::push($response_headers.x-powered-by, "Tremor (As Proxy)")
+              default =>
+                let $response_headers.x-powered-by = [ "Tremor (As Proxy)" ]
+            end;
+
+            # if we want to overide the content-type sent as part of the offramp response
+            # TODO currently content type in headers has more priority. revisit?
+            #let $response_content_type = "text/plain";
+
             event;
     links:
       # TODO error output here should bubble up as 500 response for linked onramps
