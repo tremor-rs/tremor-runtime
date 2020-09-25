@@ -83,7 +83,11 @@ impl Sink for File {
     fn default_codec(&self) -> &str {
         "json"
     }
-    async fn init(&mut self, postprocessors: &[String]) -> Result<()> {
+    async fn init(
+        &mut self,
+        postprocessors: &[String],
+        _reply_channel: Sender<SinkReply>,
+    ) -> Result<()> {
         self.postprocessors = make_postprocessors(postprocessors)?;
         let file = FSFile::create(&self.config.file).await?;
         self.file = Some(file);

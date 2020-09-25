@@ -236,7 +236,11 @@ impl Sink for Elastic {
         self.drain_insights().await
     }
 
-    async fn init(&mut self, postprocessors: &[String]) -> Result<()> {
+    async fn init(
+        &mut self,
+        postprocessors: &[String],
+        _reply_channel: Sender<SinkReply>,
+    ) -> Result<()> {
         self.postprocessors = make_postprocessors(postprocessors)?;
         Ok(())
     }

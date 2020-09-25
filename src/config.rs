@@ -52,6 +52,16 @@ pub struct OnRamp {
     pub(crate) description: String,
     #[serde(default = "Default::default", skip_serializing_if = "Option::is_none")]
     pub(crate) codec: Option<String>,
+    /// mapping from mime-type to codec used to handle requests/responses
+    /// with this mime-type
+    ///
+    /// e.g.:
+    ///       codec_map:
+    ///         "application/json": "json"
+    ///         "text/plain": "string"
+    ///
+    /// A default builtin codec mapping is defined
+    /// for msgpack, json, yaml and plaintext codecs with the common mime-types
     #[serde(default = "Default::default", skip_serializing_if = "Option::is_none")]
     pub(crate) codec_map: Option<halfbrown::HashMap<String, String>>,
     #[serde(default = "Default::default", skip_serializing_if = "Option::is_none")]
@@ -74,6 +84,18 @@ pub struct OffRamp {
     pub(crate) description: String,
     #[serde(default = "Default::default", skip_serializing_if = "Option::is_none")]
     pub(crate) codec: Option<String>,
+    /// mapping from mime-type to codec used to handle requests/responses
+    /// with this mime-type
+    ///
+    /// e.g.:
+    ///       codec_map:
+    ///         "application/json": "json"
+    ///         "text/plain": "string"
+    ///
+    /// A default builtin codec mapping is defined
+    /// for msgpack, json, yaml and plaintext codecs with the common mime-types
+    #[serde(default = "Default::default", skip_serializing_if = "Option::is_none")]
+    pub(crate) codec_map: Option<halfbrown::HashMap<String, String>>,
     #[serde(default = "Default::default", skip_serializing_if = "Option::is_none")]
     pub(crate) postprocessors: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]

@@ -184,7 +184,11 @@ impl Sink for Kafka {
     fn default_codec(&self) -> &str {
         "json"
     }
-    async fn init(&mut self, postprocessors: &[String]) -> Result<()> {
+    async fn init(
+        &mut self,
+        postprocessors: &[String],
+        _reply_channel: Sender<SinkReply>,
+    ) -> Result<()> {
         self.postprocessors = make_postprocessors(postprocessors)?;
         Ok(())
     }

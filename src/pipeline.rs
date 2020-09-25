@@ -48,7 +48,7 @@ impl Addr {
         &self.id
     }
 
-    pub(crate) async fn send_insight(&mut self, event: Event) -> Result<()> {
+    pub(crate) async fn send_insight(&self, event: Event) -> Result<()> {
         Ok(self.cf_addr.send(CfMsg::Insight(event)).await?)
     }
 

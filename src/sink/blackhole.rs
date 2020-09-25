@@ -86,7 +86,11 @@ impl offramp::Impl for Blackhole {
 
 #[async_trait::async_trait]
 impl Sink for Blackhole {
-    async fn init(&mut self, postprocessors: &[String]) -> Result<()> {
+    async fn init(
+        &mut self,
+        postprocessors: &[String],
+        _reply_channel: Sender<SinkReply>,
+    ) -> Result<()> {
         self.postprocessors = make_postprocessors(postprocessors)?;
         Ok(())
     }
