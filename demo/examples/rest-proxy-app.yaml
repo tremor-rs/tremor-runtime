@@ -39,16 +39,11 @@ pipeline:
             use std::array;
 
             let $response_headers.x-powered-by = match $response_headers of
-<<<<<<< HEAD
               # TODO standardize on string type for header values (even with multiple entries)?
               case %{present x-powered-by, x-powered-by ~= %[]}  =>
                 array::push($response_headers.x-powered-by, "Tremor (As Proxy)")
               case %{present x-powered-by}  =>
                 let $response_headers.x-powered-by = [ $response_headers.x-powered-by, "Tremor (As Proxy)" ]
-=======
-              case %{present x-powered-by} =>
-                array::push($response_headers.x-powered-by, "Tremor (As Proxy)")
->>>>>>> 54caeb5... Improve metadata reads/writes for rest linked ramps
               default =>
                 let $response_headers.x-powered-by = [ "Tremor (As Proxy)" ]
             end;
