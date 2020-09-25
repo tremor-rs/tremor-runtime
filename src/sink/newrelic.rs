@@ -120,7 +120,11 @@ impl Sink for NewRelic {
     }
 
     #[allow(clippy::used_underscore_binding)]
-    async fn init(&mut self, _postprocessors: &[String]) -> Result<()> {
+    async fn init(
+        &mut self,
+        _postprocessors: &[String],
+        _reply_channel: Sender<SinkReply>,
+    ) -> Result<()> {
         Ok(())
     }
     #[allow(clippy::used_underscore_binding)]

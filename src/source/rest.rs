@@ -14,9 +14,9 @@
 
 // TODO add tests
 
+use crate::codec::Codec;
 use std::str::FromStr;
 
-use crate::codec::Codec;
 use crate::source::prelude::*;
 use async_channel::unbounded;
 use async_channel::{Sender, TryRecvError};
@@ -95,7 +95,6 @@ impl std::fmt::Debug for Int {
 impl Int {
     fn from_config(uid: u64, onramp_id: TremorURL, config: &Config) -> Result<Self> {
         let config = config.clone();
-
         Ok(Self {
             uid,
             config,
@@ -348,6 +347,7 @@ impl Source for Int {
     }
 
     async fn init(&mut self) -> Result<SourceState> {
+        // override the builtin map with onramp-instance specific config
         let (tx, rx) = bounded(crate::QSIZE);
 
         let mut server = tide::Server::with_state(ServerState {

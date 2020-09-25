@@ -21,11 +21,12 @@ pub(crate) use crate::sink::{ResultVec, Sink, SinkManager, SinkReply};
 pub(crate) use crate::utils::ConfigImpl;
 pub(crate) use crate::utils::{duration_to_millis, hostname, nanotime};
 pub(crate) use crate::{Event, OpConfig};
+pub(crate) use async_channel::Sender;
 pub(crate) use async_std::prelude::*;
 pub(crate) use async_std::task;
 pub(crate) use simd_json::prelude::*;
+pub(crate) use tremor_pipeline::CBAction;
 pub(crate) use tremor_pipeline::Ids;
-pub(crate) use tremor_pipeline::{CBAction, OpMeta};
 pub(crate) use tremor_script::prelude::*;
 
 use std::mem;

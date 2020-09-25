@@ -18,14 +18,17 @@ use crate::metrics::RampReporter;
 use crate::pipeline;
 use crate::registry::ServantId;
 use crate::sink::{
-    blackhole, debug, elastic, exit, file, kafka, newrelic, postgres, rest, stderr, stdout, tcp,
-    udp, ws,
+    blackhole, debug, elastic, exit, file, handle_response, kafka, newrelic, postgres, rest,
+    stderr, stdout, tcp, udp, ws, SinkReply,
 };
+
+use crate::permge::PriorityMerge;
 use crate::system::METRICS_PIPELINE;
 use crate::url::TremorURL;
 use crate::utils::nanotime;
 use crate::{Event, OpConfig};
-use async_channel::{self, bounded};
+use async_channel::{self, bounded, unbounded};
+use async_std::stream::StreamExt; // for .next() on PriorityMerge
 use async_std::task::{self, JoinHandle};
 use hashbrown::HashMap;
 use std::borrow::{Borrow, Cow};
@@ -56,7 +59,12 @@ pub type Addr = async_channel::Sender<Msg>;
 
 #[async_trait::async_trait]
 pub trait Offramp: Send {
-    async fn start(&mut self, codec: &dyn Codec, postprocessors: &[String]) -> Result<()>;
+    async fn start(
+        &mut self,
+        codec: &dyn Codec,
+        postprocessors: &[String],
+        reply_channel: async_channel::Sender<SinkReply>,
+    ) -> Result<()>;
     async fn on_event(&mut self, codec: &dyn Codec, input: &str, event: Event) -> Result<()>;
     #[allow(unused_variables)]
     async fn on_signal(&mut self, signal: Event) -> Option<Event> {
@@ -145,6 +153,11 @@ async fn send_to_pipelines(
     }
 }
 
+pub(crate) enum OfframpMsg {
+    Msg(Msg),
+    Reply(SinkReply),
+}
+
 impl Manager {
     pub fn new(qsize: usize) -> Self {
         Self { qsize }
@@ -161,12 +174,21 @@ impl Manager {
             id,
         }: Create,
     ) -> Result<()> {
-        if let Err(e) = offramp.start(codec.borrow(), &postprocessors).await {
+        let (msg_tx, msg_rx) = bounded::<Msg>(self.qsize);
+        let (cf_tx, cf_rx) = unbounded::<SinkReply>(); // we might need to wrap that somehow, but *shrug*
+
+        if let Err(e) = offramp
+            .start(codec.borrow(), &postprocessors, cf_tx.clone())
+            .await
+        {
             error!("Failed to create onramp {}: {}", id, e);
             return Err(e);
         }
+        // merge channels and prioritize contraflow/insight events
+        let m_rx = msg_rx.map(OfframpMsg::Msg);
+        let c_rx = cf_rx.map(OfframpMsg::Reply);
+        let mut to_and_from_offramp_rx = PriorityMerge::new(c_rx, m_rx);
 
-        let (tx, rx) = bounded::<Msg>(self.qsize);
         let offramp_id = id.clone();
         task::spawn::<_, Result<()>>(async move {
             let mut pipelines: HashMap<TremorURL, pipeline::Addr> = HashMap::new();
@@ -177,93 +199,105 @@ impl Manager {
 
             info!("[Offramp::{}] started", offramp_id);
 
-            while let Ok(m) = rx.recv().await {
-                match m {
-                    Msg::Signal(signal) => {
-                        if let Some(insight) = offramp.on_signal(signal).await {
-                            send_to_pipelines(&offramp_id, &mut pipelines, insight).await;
-                        }
-                    }
-                    Msg::Event { event, input } => {
-                        let ingest_ns = event.ingest_ns;
-                        let transactional = event.transactional;
-                        let ids = event.id.clone();
+            while let Some(offramp_msg) = to_and_from_offramp_rx.next().await {
+                match offramp_msg {
+                    OfframpMsg::Msg(m) => {
+                        match m {
+                            Msg::Signal(signal) => {
+                                if let Some(insight) = offramp.on_signal(signal).await {
+                                    send_to_pipelines(&offramp_id, &mut pipelines, insight).await;
+                                }
+                            }
+                            Msg::Event { event, input } => {
+                                let ingest_ns = event.ingest_ns;
+                                let transactional = event.transactional;
+                                let ids = event.id.clone();
 
-                        metrics_reporter.periodic_flush(ingest_ns);
-                        metrics_reporter.increment_in();
+                                metrics_reporter.periodic_flush(ingest_ns);
+                                metrics_reporter.increment_in();
 
-                        // TODO FIXME implement postprocessors
-                        let fial = if let Err(err) = offramp
-                            .on_event(codec.borrow(), input.borrow(), event)
-                            .await
-                        {
-                            error!("[Offramp::{}] On Event error: {}", offramp_id, err);
-                            metrics_reporter.increment_error();
-                            true
-                        } else {
-                            metrics_reporter.increment_out();
-                            false
-                        };
-                        if offramp.auto_ack() && transactional {
-                            let e = if fial {
-                                Event::cb_fail(ingest_ns, ids)
-                            } else {
-                                Event::cb_ack(ingest_ns, ids)
-                            };
-                            send_to_pipelines(&offramp_id, &mut pipelines, e).await;
-                        }
-                    }
-                    Msg::Connect { id, mut addr } => {
-                        if id == *METRICS_PIPELINE {
-                            info!(
-                                "[Offramp::{}] Connecting system metrics pipeline {}",
-                                offramp_id, id
-                            );
-                            metrics_reporter.set_metrics_pipeline((id, *addr));
-                        } else {
-                            info!("[Offramp::{}] Connecting pipeline {}", offramp_id, id);
-                            let insight = if offramp.is_active() {
-                                Event::cb_restore(nanotime())
-                            } else {
-                                Event::cb_trigger(nanotime())
-                            };
-                            if let Err(e) = addr.send_insight(insight).await {
-                                error!(
-                                    "[Offramp::{}] Could not send initial insight to {}: {}",
-                                    offramp_id, id, e
+                                // TODO FIXME implement postprocessors
+                                let fail = if let Err(err) = offramp
+                                    .on_event(codec.borrow(), input.borrow(), event)
+                                    .await
+                                {
+                                    error!("[Offramp::{}] On Event error: {}", offramp_id, err);
+                                    metrics_reporter.increment_error();
+                                    true
+                                } else {
+                                    metrics_reporter.increment_out();
+                                    false
+                                };
+                                if offramp.auto_ack() && transactional {
+                                    let e = if fail {
+                                        Event::cb_fail(ingest_ns, ids)
+                                    } else {
+                                        Event::cb_ack(ingest_ns, ids)
+                                    };
+                                    send_to_pipelines(&offramp_id, &mut pipelines, e).await;
+                                }
+                            }
+                            Msg::Connect { id, addr } => {
+                                if id == *METRICS_PIPELINE {
+                                    info!(
+                                        "[Offramp::{}] Connecting system metrics pipeline {}",
+                                        offramp_id, id
+                                    );
+                                    metrics_reporter.set_metrics_pipeline((id, *addr));
+                                } else {
+                                    info!("[Offramp::{}] Connecting pipeline {}", offramp_id, id);
+                                    let insight = if offramp.is_active() {
+                                        Event::cb_restore(nanotime())
+                                    } else {
+                                        Event::cb_trigger(nanotime())
+                                    };
+                                    if let Err(e) = addr.send_insight(insight).await {
+                                        error!(
+                                            "[Offramp::{}] Could not send initial insight to {}: {}",
+                                            offramp_id, id, e
+                                        );
+                                    };
+
+                                    pipelines.insert(id.clone(), (*addr).clone());
+                                    offramp.add_pipeline(id, *addr);
+                                }
+                            }
+                            Msg::ConnectLinked { id, addr } => {
+                                // TODO fix offramp_id here for display
+                                info!(
+                                    "[Offramp::{}] Connecting out to pipeline {}",
+                                    offramp_id, id
                                 );
-                            };
-
-                            pipelines.insert(id.clone(), (*addr).clone());
-                            offramp.add_pipeline(id, *addr);
+                                dest_pipelines.push((id.clone(), (*addr).clone()));
+                                offramp.add_dest_pipeline(id, *addr);
+                            }
+                            Msg::Disconnect { id, tx } => {
+                                info!("[Offramp::{}] Disconnecting pipeline {}", offramp_id, id);
+                                pipelines.remove(&id);
+                                let r = offramp.remove_pipeline(id.clone());
+                                info!("[Offramp::{}] Pipeline {} disconnected", offramp_id, id);
+                                if r {
+                                    info!("[Offramp::{}] Marked as done ", offramp_id);
+                                    offramp.terminate().await
+                                }
+                                tx.send(r).await?
+                            }
                         }
                     }
-                    Msg::ConnectLinked { id, addr } => {
-                        // TODO fix offramp_id here for display
-                        info!(
-                            "[Offramp::{}] Connecting out to pipeline {}",
-                            offramp_id, id
-                        );
-                        dest_pipelines.push((id.clone(), (*addr).clone()));
-                        offramp.add_dest_pipeline(id, *addr);
+                    OfframpMsg::Reply(SinkReply::Insight(event)) => {
+                        send_to_pipelines(&offramp_id, &mut pipelines, event).await
                     }
-                    Msg::Disconnect { id, tx } => {
-                        info!("[Offramp::{}] Disconnecting pipeline {}", offramp_id, id);
-                        pipelines.remove(&id);
-                        let r = offramp.remove_pipeline(id.clone());
-                        info!("[Offramp::{}] Pipeline {} disconnected", offramp_id, id);
-                        if r {
-                            info!("[Offramp::{}] Marked as done ", offramp_id);
-                            offramp.terminate().await
+                    OfframpMsg::Reply(SinkReply::Response(event)) => {
+                        if let Err(e) = handle_response(event, dest_pipelines.iter()).await {
+                            error!("[Offramp::{}] Response error: {}", offramp_id, e)
                         }
-                        tx.send(r).await?
                     }
                 }
             }
             info!("[Offramp::{}] stopped", offramp_id);
             Ok(())
         });
-        r.send(Ok(tx)).await?;
+        r.send(Ok(msg_tx)).await?;
         Ok(())
     }
 

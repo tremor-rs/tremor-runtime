@@ -92,7 +92,11 @@ impl Sink for Tcp {
         "json"
     }
     #[allow(clippy::used_underscore_binding)]
-    async fn init(&mut self, postprocessors: &[String]) -> Result<()> {
+    async fn init(
+        &mut self,
+        postprocessors: &[String],
+        _reply_channel: Sender<SinkReply>,
+    ) -> Result<()> {
         self.postprocessors = make_postprocessors(postprocessors)?;
         let stream = TcpStream::connect((self.config.host.as_str(), self.config.port)).await?;
         stream.set_ttl(self.config.ttl)?;

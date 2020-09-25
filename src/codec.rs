@@ -100,7 +100,8 @@ pub fn lookup(name: &str) -> Result<Box<dyn Codec>> {
 /// these are all safe mappings
 /// if you have a specific codec to be used for a more unspecific mime type
 /// like statsd for text/plain
-/// these must be specified in a source specific codec_map
+/// these must be specified in a source specific `codec_map`
+#[must_use]
 pub fn builtin_codec_map() -> halfbrown::HashMap<String, Box<dyn Codec>> {
     let mut codecs: halfbrown::HashMap<String, Box<dyn Codec>> =
         halfbrown::HashMap::with_capacity(7);

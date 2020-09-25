@@ -12,13 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::codec::Codec;
 use crate::sink::prelude::*;
-use async_channel::{bounded, Receiver, Sender};
+use async_channel::Sender;
 use halfbrown::HashMap;
 use http_types::Method;
 use std::str::FromStr;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
 use surf::Response;
+use tremor_pipeline::OpMeta;
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct Config {
@@ -29,7 +32,7 @@ pub struct Config {
     // TODO adjust for linking
     pub concurrency: usize,
     // TODO add scheme, host, path, query
-    /// HTTP method to use (default: POST)
+    // HTTP method to use (default: POST)
     // TODO implement Deserialize for http_types::Method
     // https://docs.rs/http-types/2.4.0/http_types/enum.Method.html
     #[serde(skip_deserializing, default = "dflt_method")]
@@ -37,6 +40,21 @@ pub struct Config {
     #[serde(default = "dflt::d")]
     // TODO make header values a vector here?
     pub headers: HashMap<String, String>,
+
+    // TODO: better name?
+    /// mapping from mime-type to codec used to handle requests/responses
+    /// with this mime-type
+    ///
+    /// e.g.:
+    ///       codec_map:
+    ///         "application/json": "json"
+    ///         "text/plain": "string"
+    ///
+    /// A default builtin codec mapping is defined
+    /// for msgpack, json, yaml and plaintext codecs with the common mime-types
+    #[serde(default = "Default::default", skip_serializing_if = "Option::is_none")]
+    pub(crate) codec_map: Option<HashMap<String, String>>,
+
     /// whether to enable linked transport (return offramp response to pipeline)
     // TODO remove and auto-infer this based on succesful binding for linked offramps
     pub link: Option<bool>,
@@ -51,10 +69,10 @@ impl ConfigImpl for Config {}
 pub struct Rest {
     client_idx: usize,
     config: Config,
-    queue: AsyncSink<u64>,
+    num_inflight_requests: AtomicMaxCounter,
     postprocessors: Postprocessors,
-    tx: Sender<SinkReply>,
-    rx: Receiver<SinkReply>,
+    //codec_map: HashMap<String, Box<dyn Codec>>,
+    reply_channel: Option<Sender<SinkReply>>,
     has_link: bool,
 }
 
@@ -74,17 +92,15 @@ impl offramp::Impl for Rest {
     fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
-
-            let queue = AsyncSink::new(config.concurrency);
-            let (tx, rx) = bounded(crate::QSIZE);
+            let num_inflight_requests = AtomicMaxCounter::new(config.concurrency);
             Ok(SinkManager::new_box(Self {
                 client_idx: 0,
                 postprocessors: vec![],
                 has_link: config.link.clone().unwrap_or(false),
                 config,
-                queue,
-                rx,
-                tx,
+                num_inflight_requests,
+                //codec_map: codec::builtin_codec_map(),
+                reply_channel: None,
             }))
         } else {
             Err("Rest offramp requires a configuration.".into())
@@ -93,250 +109,174 @@ impl offramp::Impl for Rest {
 }
 
 impl Rest {
-    async fn request(payload: Vec<u8>, meta: RestRequestMeta) -> Result<(u64, Response)> {
-        let start = Instant::now();
+    fn get_endpoint(&mut self) -> Option<&str> {
+        self.client_idx = (self.client_idx + 1) % self.config.endpoints.len();
+        self.config
+            .endpoints
+            .get(self.client_idx)
+            .map(|s| s.as_str())
+    }
 
-        // would be nice if surf had a generic function to handle passed http method
-        // also implement connection reuse
-        let mut c = match meta.method {
-            Method::Post => surf::post(meta.endpoint),
-            Method::Put => surf::put(meta.endpoint),
-            Method::Get => surf::get(meta.endpoint),
-            Method::Connect => surf::connect(meta.endpoint),
-            Method::Delete => surf::delete(meta.endpoint),
-            Method::Head => surf::head(meta.endpoint),
-            Method::Options => surf::options(meta.endpoint),
-            Method::Patch => surf::patch(meta.endpoint),
-            Method::Trace => surf::trace(meta.endpoint),
-        };
-
-        c = c.body(payload);
-        if let Some(headers) = meta.headers {
-            for (name, values) in headers {
-                use http_types::headers::HeaderName;
-                match HeaderName::from_bytes(name.as_str().as_bytes().to_vec()) {
-                    Ok(h) => {
-                        for v in &values {
-                            c = c.header(h.clone(), v.as_str());
+    fn build_request(&mut self, event: &Event, codec: &dyn Codec) -> Result<surf::RequestBuilder> {
+        let mut body = vec![];
+        let mut method = None;
+        let mut url = None;
+        let mut headers = Vec::with_capacity(8);
+        for (data, meta) in event.value_meta_iter() {
+            // TODO: enable dynamic codec selection
+            let encoded = codec.encode(data)?;
+            let mut processed = postprocess(&mut self.postprocessors, event.ingest_ns, encoded)?;
+            for processed_elem in processed.iter_mut() {
+                body.append(processed_elem);
+            }
+            // use method from first event
+            if method.is_none() {
+                method = Some(
+                    match meta
+                        .get("request_value")
+                        .and_then(Value::as_str)
+                        .map(|m| Method::from_str(&m.trim().to_uppercase()))
+                    {
+                        Some(Ok(method)) => method,
+                        Some(Err(e)) => return Err(e.into()), // method parsing failed
+                        None => self.config.method,
+                    },
+                );
+            }
+            // use url from first event
+            if url.is_none() {
+                url = match meta
+                    .get("endpoint")
+                    .and_then(Value::as_str)
+                    .or_else(|| self.get_endpoint())
+                {
+                    Some(url_str) => Some(url_str.parse::<surf::url::Url>()?),
+                    None => None,
+                };
+            }
+            if headers.is_empty() {
+                if let Some(map) = meta.get("request_headers").and_then(Value::as_object) {
+                    for (k, v) in map {
+                        if let Some(value) = v.as_str() {
+                            headers.push((k, value));
                         }
                     }
-                    Err(e) => error!("Bad header name: {}", e),
                 }
             }
         }
+        let url = url.ok_or::<Error>("Unable to determine and endpoint for this event".into())?;
+        let mut request_builder =
+            surf::RequestBuilder::new(method.unwrap_or(self.config.method), url);
 
-        let mut response = c.await?;
-        let status = response.status();
-        if status.is_client_error() || status.is_server_error() {
-            if let Ok(body) = response.body_string().await {
+        // build headers
+        for (k, v) in headers {
+            request_builder = request_builder.header(k.to_string().as_str(), v);
+        }
+        Ok(request_builder)
+    }
+
+    async fn send_request(&mut self, event: Event, codec: &dyn Codec) -> ResultVec {
+        let start = Instant::now();
+        let request_builder = self.build_request(&event, codec)?;
+        // send request & receive response
+        // TODO: keep surf clients around for maintaining persistent connections
+        let mut res = request_builder.await?;
+        // send ack if status < 400
+        // send fail if status >= 400
+        // if linked - send response
+
+        let status = res.status();
+        let mut meta = Value::object_with_capacity(1);
+        let cb = if status.is_client_error() || status.is_server_error() {
+            if let Ok(body) = res.body_string().await {
                 error!("HTTP request failed: {} => {}", status, body)
             } else {
                 error!("HTTP request failed: {}", status)
             }
-        }
+            let duration = duration_to_millis(start.elapsed());
+            meta.insert("time", duration)?;
+            CBAction::Fail
+        } else {
+            CBAction::Ack
+        };
 
-        Ok((duration_to_millis(start.elapsed()), response))
-    }
-
-    async fn make_event(id: Ids, mut response: Response) -> Result<Event> {
-        let data = response.body_string().await?;
-        let headers = response
-            .header_names()
-            .map(|name| {
-                (
-                    name.to_string(),
-                    // a header name has the potential to take multiple values:
-                    // https://tools.ietf.org/html/rfc7230#section-3.2.2
-                    // tide does not seem to guarantee the order of values though --
-                    // look into it later
-                    response
-                        .header(name)
-                        .iter()
-                        .map(|value| value.as_str().to_string())
-                        .collect::<Value>(),
-                )
-            })
-            .collect::<Value>();
-
-        let mut meta = Value::object_with_capacity(2);
-        meta.insert("response_status", response.status() as u64)?;
-        meta.insert("response_headers", headers)?;
-
-        // TODO apply proper codec based on response mime and body bytes
-        // also allow pass-through without decoding
-        //
-        //let body = response.body_bytes().await?;
-        //
-        //let data = LineValue::new(vec![body], |_| Value::null().into());
-        //let response = LineValue::try_new(vec![data], |data| {
-        //    Value::from(std::str::from_utf8(data[0].as_slice())?).into()
-        //})?;
-        //
-        // as json
-        //let data = LineValue::try_new(vec![body], |data| {
-        //    simd_json::to_borrowed_value(&mut data[0])
-        //        .map(|v| ValueAndMeta::from_parts(v, event_meta))
-        //});
-        //
-        // as string
-        //let data = LineValue::try_new(vec![body], |data| {
-        //    std::str::from_utf8(data[0].as_slice())
-        //        .map(|v| ValueAndMeta::from_parts(Value::from(v), meta))
-        //})
-        //.map_err(|e| e.0)?;
-
-        Ok(Event {
-            id, // TODO only eid should be preserved for this?
-            //data,
-            data: (data, meta).into(),
-            ingest_ns: nanotime(),
-            // TODO implement origin_uri
-            origin_uri: None,
-            ..Event::default()
-        })
-    }
-
-    fn get_request_meta(&mut self, meta: &Value) -> RestRequestMeta {
-        self.client_idx = (self.client_idx + 1) % self.config.endpoints.len();
-
-        // TODO consolidate logic here
-        // also add scheme, host, path, query
-        RestRequestMeta {
-            endpoint: meta
-                .get("endpoint")
-                .and_then(Value::as_str)
-                .unwrap_or(&self.config.endpoints[self.client_idx])
-                .into(),
-            method: meta
-                .get("request_method")
-                // TODO simplify and bubble up error if the conversion here does not work
-                .and_then(Value::as_str)
-                .map(|v| Method::from_str(&v.to_uppercase()).unwrap_or(dflt_method()))
-                .unwrap_or(self.config.method),
-            headers: meta
-                .get("request_headers")
-                .and_then(Value::as_object)
-                .map(|headers| {
-                    let mut converted_headers: HashMap<String, Vec<String>> = HashMap::new();
-                    for (name, values) in headers {
-                        if let Some(values) = values.as_array() {
-                            converted_headers.insert(
-                                name.to_string(),
-                                values
-                                    .iter()
-                                    // TODO bubble up error if the conversion here does not work
-                                    .map(|value| value.as_str().unwrap_or("").to_string())
-                                    .collect(),
-                            );
-                        }
-                    }
-                    converted_headers
-                }),
-        }
-    }
-
-    fn enqueue_send_future(
-        &mut self,
-        id: Ids,
-        op_meta: OpMeta,
-        payload: Vec<u8>,
-        request_meta: RestRequestMeta,
-    ) -> Result<()> {
-        let (tx, rx) = bounded(1);
-        let reply_tx = self.tx.clone();
-        let has_link = self.has_link;
-
-        task::spawn::<_, Result<()>>(async move {
-            let r = Self::request(payload, request_meta).await;
-            let mut m = Value::object_with_capacity(1);
-
-            let (cb, d) = match r {
-                Ok((t, response)) => {
-                    m.insert("time", t)?;
-
-                    if has_link {
-                        let response_event = Self::make_event(id.clone(), response).await?;
-                        if let Err(e) = reply_tx.send(SinkReply::Response(response_event)).await {
-                            error!("Failed to send response reply: {}", e)
-                        };
-                    }
-
-                    (CBAction::Ack, Ok(t))
-                }
-                Err(e) => {
-                    error!("REST offramp error: {:?}", e);
-                    (CBAction::Fail, Err(e))
-                }
-            };
-
-            if let Err(e) = reply_tx
+        if let Some(reply_channel) = &self.reply_channel {
+            let send_res = reply_channel
                 .send(SinkReply::Insight(Event {
-                    id,
-                    op_meta,
-                    data: (Value::null(), m).into(),
+                    id: event.id.clone(),
+                    op_meta: event.op_meta.clone(),
+                    data: (Value::null(), meta).into(),
                     cb,
                     ingest_ns: nanotime(),
                     ..Event::default()
                 }))
-                .await
-            {
-                error!("Failed to send reply: {}", e)
+                .await;
+
+            if let Err(e) = send_res {
+                error!("Failed to send insight eply: {}", e) // do not fail and trigger cb::fail here
             };
 
-            if let Err(e) = tx.send(d).await {
-                error!("Failed to send reply: {}", e)
-            }
-            Ok(())
-        });
-        self.queue.enqueue(rx)?;
-        Ok(())
-    }
-    async fn maybe_enque(
-        &mut self,
-        id: Ids,
-        op_meta: OpMeta,
-        payload: Vec<u8>,
-        request_meta: RestRequestMeta,
-    ) -> Result<()> {
-        match self.queue.dequeue() {
-            Err(SinkDequeueError::NotReady) if !self.queue.has_capacity() => {
-                if let Err(e) = self
-                    .tx
-                    .send(SinkReply::Insight(Event {
-                        id,
-                        op_meta,
-                        cb: CBAction::Fail,
-                        ingest_ns: nanotime(),
-                        ..Event::default()
-                    }))
-                    .await
+            // send response if we are linked
+            if self.has_link {
+                // TODO: how to handle errors creating or sending the response?
+                if let Ok(response_event) =
+                    Self::make_response_event(event.id.clone(), event.op_meta.clone(), res, codec)
+                        .await
                 {
-                    error!("Failed to send reply: {}", e)
-                };
-
-                error!("Dropped data due to overload");
-                Err("Dropped data due to overload".into())
-            }
-            _ => {
-                if self
-                    .enqueue_send_future(id, op_meta, payload, request_meta)
-                    .is_err()
-                {
-                    // TODO: handle reply to the pipeline
-                    error!("Failed to enqueue send request");
-                    Err("Failed to enqueue send request".into())
-                } else {
-                    Ok(())
+                    if let Err(e) = reply_channel
+                        .send(SinkReply::Response(response_event))
+                        .await
+                    {
+                        error!("Failed to send response reply: {}", e) // do not fail and trigger cb::fail here
+                    }
                 }
             }
         }
+
+        Ok(None)
     }
-    async fn drain_insights(&mut self) -> ResultVec {
-        let mut v = Vec::with_capacity(self.rx.len() + 1);
-        while let Ok(e) = self.rx.try_recv() {
-            v.push(e)
+
+    async fn make_response_event(
+        id: Ids,
+        op_meta: OpMeta,
+        mut response: Response,
+        codec: &dyn Codec,
+    ) -> Result<Event> {
+        let mut meta = Value::object_with_capacity(8);
+        let numeric_status: u16 = response.status().into();
+        meta.insert("response_status", numeric_status)?;
+
+        let mut headers = Value::object_with_capacity(8);
+        {
+            let mut iter: http_types::headers::Iter<'_> = response.iter();
+            while let Some((name, values)) = iter.next() {
+                let mut header_value = String::new();
+                for value in values {
+                    header_value.push_str(value.to_string().as_str());
+                }
+                headers.insert(name.to_string(), header_value)?;
+            }
         }
-        Ok(Some(v))
+        meta.insert("response_headers", headers)?;
+
+        // body
+        let response_bytes = response.body_bytes().await?;
+        LineValue::try_new(vec![response_bytes], |mutd| {
+            let mut_data = mutd[0].as_mut_slice();
+            let body = codec
+                .decode(mut_data, nanotime())?
+                .unwrap_or(Value::object());
+
+            Ok(ValueAndMeta::from_parts(body, meta))
+        })
+        .map_err(|e| e.0)
+        .map(|data| Event {
+            id,
+            data,
+            op_meta,
+            origin_uri: None, // TODO
+            ..Event::default()
+        })
     }
 }
 
@@ -347,51 +287,100 @@ impl Sink for Rest {
         if self.has_link && event.is_batch {
             return Err("Batched events are not supported for linked rest offramps".into());
         }
-
-        let mut payload = Vec::with_capacity(4096);
-        let mut payload_meta = &Value::null();
-
-        // TODO this behaviour should be made configurable
-        // payload_meta does not make sense here currently for a batched payload
-        for (value, meta) in event.value_meta_iter() {
-            let mut raw = codec.encode(value)?;
-            payload.append(&mut raw);
-            payload.push(b'\n');
-
-            if !event.is_batch {
-                payload_meta = meta;
-            }
+        // limit concurrency
+        if let Ok(current_inflights) = self.num_inflight_requests.inc() {
+            let result_vec = self.send_request(event, codec).await;
+            self.num_inflight_requests.dec_from(current_inflights); // never forget
+            result_vec
+        } else {
+            error!("Dropped data due to overload");
+            Err("Dropped data due to overload".into())
         }
-        let request_meta = self.get_request_meta(payload_meta);
-
-        self.maybe_enque(
-            // TODO avoid these clones
-            event.id.clone(),
-            event.op_meta.clone(),
-            payload,
-            request_meta,
-        )
-        .await?;
-        self.drain_insights().await
     }
 
     fn default_codec(&self) -> &str {
         "json"
     }
 
-    async fn init(&mut self, postprocessors: &[String]) -> Result<()> {
+    async fn init(
+        &mut self,
+        postprocessors: &[String],
+        reply_channel: Sender<SinkReply>,
+    ) -> Result<()> {
         self.postprocessors = make_postprocessors(postprocessors)?;
+        self.reply_channel = Some(reply_channel);
         Ok(())
     }
 
-    #[allow(clippy::used_underscore_binding)]
     async fn on_signal(&mut self, _signal: Event) -> ResultVec {
-        self.drain_insights().await
+        Ok(None)
     }
     fn is_active(&self) -> bool {
         true
     }
     fn auto_ack(&self) -> bool {
         true
+    }
+}
+
+/// atomically count up from 0 to a given max
+/// and fail incrementing further if that max is reached.
+struct AtomicMaxCounter {
+    counter: AtomicUsize,
+    max: usize,
+}
+
+impl AtomicMaxCounter {
+    fn new(max: usize) -> Self {
+        Self {
+            counter: AtomicUsize::new(0),
+            max,
+        }
+    }
+
+    fn load(&self) -> usize {
+        self.counter.load(Ordering::Acquire)
+    }
+
+    fn inc_from(&self, cur: usize) -> Result<usize> {
+        let mut real_cur = cur;
+        if (real_cur + 1) > self.max {
+            return Err("max value reached".into());
+        }
+        while self
+            .counter
+            .compare_and_swap(real_cur, real_cur + 1, Ordering::AcqRel)
+            != real_cur
+        {
+            real_cur = self.load();
+            if (real_cur + 1) > self.max {
+                return Err("max value reached".into());
+            }
+        }
+        Ok(real_cur + 1)
+    }
+
+    fn inc(&self) -> Result<usize> {
+        self.inc_from(self.load())
+    }
+
+    fn dec_from(&self, cur: usize) -> usize {
+        let mut real_cur = cur;
+        if real_cur <= 0 {
+            // avoid underflow
+            return real_cur;
+        }
+        while self
+            .counter
+            .compare_and_swap(real_cur, real_cur - 1, Ordering::AcqRel)
+            != real_cur
+        {
+            real_cur = self.load();
+            if real_cur <= 0 {
+                // avoid underflow
+                return real_cur;
+            }
+        }
+        real_cur - 1
     }
 }

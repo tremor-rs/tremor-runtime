@@ -82,7 +82,11 @@ impl Sink for Udp {
     fn default_codec(&self) -> &str {
         "json"
     }
-    async fn init(&mut self, postprocessors: &[String]) -> Result<()> {
+    async fn init(
+        &mut self,
+        postprocessors: &[String],
+        _reply_channel: Sender<SinkReply>,
+    ) -> Result<()> {
         self.postprocessors = make_postprocessors(postprocessors)?;
         let socket = UdpSocket::bind((self.config.host.as_str(), self.config.port)).await?;
         socket
