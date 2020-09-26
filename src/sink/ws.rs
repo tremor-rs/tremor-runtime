@@ -146,26 +146,13 @@ impl offramp::Impl for Ws {
 
             let (tx, rx) = unbounded();
 
-            // handle connection for the offramp config url (as default)
-            let mut connections = HashMap::new();
-            let (conn_tx, conn_rx) = bounded(crate::QSIZE);
-            connections.insert(config.url.clone(), None);
-            task::spawn(ws_loop(
-                config.url.clone(),
-                tx.clone(),
-                conn_tx,
-                conn_rx,
-                // TODO this should be aligned with self.is_linked
-                false,
-            ));
-
             Ok(SinkManager::new_box(Self {
                 postprocessors: vec![],
                 is_linked: false,
+                connections: HashMap::new(),
                 config,
                 tx,
                 rx,
-                connections,
             }))
         } else {
             Err("[WS Offramp] Offramp requires a config".into())
@@ -332,6 +319,18 @@ impl Sink for Ws {
         self.postprocessors = make_postprocessors(postprocessors)?;
         self.is_linked = is_linked;
         // TODO use reply_channel here too (like for rest)
+
+        // handle connection for the offramp config url (as default)
+        let (conn_tx, conn_rx) = bounded(crate::QSIZE);
+        self.connections.insert(self.config.url.clone(), None);
+        task::spawn(ws_loop(
+            self.config.url.clone(),
+            self.tx.clone(),
+            conn_tx,
+            conn_rx,
+            is_linked,
+        ));
+
         Ok(())
     }
 }
