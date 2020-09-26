@@ -1,6 +1,7 @@
 onramp:
   - id: ws
     type: ws
+    linked: true
     codec: string
     preprocessors:
       # TODO lines pre-processor no longer working here (for first connection). investigate
