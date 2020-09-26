@@ -44,9 +44,6 @@ pub struct Config {
     pub url: String,
     #[serde(default)]
     pub binary: bool,
-    /// whether to enable linked transport (return offramp response to pipeline)
-    // TODO remove and auto-infer this based on succesful binding for linked offramps
-    pub link: Option<bool>,
 }
 
 enum WsResult {
@@ -145,7 +142,6 @@ impl offramp::Impl for Ws {
     fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         if let Some(config) = config {
             let config: Config = serde_yaml::from_value(config.clone())?;
-            let has_link = config.link.unwrap_or(false);
             // ensure we have valid url
             Url::parse(&config.url)?;
 
@@ -158,17 +154,18 @@ impl offramp::Impl for Ws {
                 tx.clone(),
                 conn_tx,
                 conn_rx,
-                has_link,
+                // TODO this should be aligned with self.is_linked
+                false,
             ));
 
             Ok(SinkManager::new_box(Self {
                 postprocessors: vec![],
+                is_linked: false,
                 config,
                 tx,
                 rx,
                 merged_meta: OpMeta::default(),
                 connections: HashMap::new(),
-                is_linked: has_link,
             }))
         } else {
             Err("[WS Offramp] Offramp requires a config".into())
