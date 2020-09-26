@@ -283,8 +283,10 @@ impl Artefact for OfframpArtefact {
     ) -> Result<Self::LinkResult> {
         info!("Linking offramp {} ..", id);
         if let Some(offramp) = system.reg.find_offramp(id).await? {
-            // linked offramps use "out" port by convention for data out
-            if id.instance_port().unwrap_or("") == "out" {
+            // linked offramps use "response" port by convention for data out
+            // TODO we can use standard "in" port naming for this once we have different artefact
+            // to handle linked transports
+            if id.instance_port().unwrap_or("") == "response" {
                 for (_this, pipeline_id) in mappings {
                     info!("Linking linked offramp {} to {}", id, pipeline_id);
                     if let Some(pipeline) = system.reg.find_pipeline(&pipeline_id).await? {

@@ -44,7 +44,7 @@ binding:
 
       '/pipeline/main/{instance}/out': [
         # linked onramp that can reply based on pipeline output
-        '/onramp/ws/{instance}/in',
+        '/onramp/ws/{instance}/response',
 
         # for api debugging purposes
         '/offramp/system::stdout/system/in'

@@ -83,10 +83,10 @@ binding:
       '/pipeline/main/{instance}/error': [ '/offramp/system::stderr/system/in' ]
 
       # linked offramp that send replies to a pipeline
-      '/offramp/upstream/{instance}/out': [ '/pipeline/main/{instance}/from-offramp' ]
+      '/offramp/upstream/{instance}/response': [ '/pipeline/main/{instance}/from-offramp' ]
       '/pipeline/main/{instance}/to-onramp': [
         # linked onramp that can reply based on pipeline output
-        '/onramp/ws/{instance}/in',
+        '/onramp/ws/{instance}/response',
         # for debugging purposes
         '/offramp/system::stdout/system/in'
       ]

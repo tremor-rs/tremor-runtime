@@ -204,7 +204,7 @@ binding:
 
       '/pipeline/main/{instance}/out': [
         # linked onramp that can respond based on pipeline output
-        '/onramp/rest/{instance}/in',
+        '/onramp/rest/{instance}/response',
 
         # for api debugging purposes
         #'/offramp/system::stdout/system/in'
@@ -214,7 +214,7 @@ binding:
         # linked onramp that can respond based on pipeline output
         # TODO once onramps have error ports, link back to it to better distinguish
         # error events from onramp itself?
-        '/onramp/rest/{instance}/in',
+        '/onramp/rest/{instance}/response',
 
         # for debugging
         '/offramp/system::stderr/system/in'
