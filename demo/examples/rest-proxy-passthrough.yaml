@@ -1,11 +1,10 @@
 onramp:
   - id: rest
     type: rest
+    linked: true
     config:
       host: localhost
       port: 9139
-      # TODO eliminate the need for this config item
-      link: true
 
 # TODO once we support request path directly in rest offramp (right now
 # relies on $endpoint), this will work
@@ -25,8 +24,8 @@ pipeline:
 offramp:
   - id: upstream
     type: rest
+    linked: true
     config:
-      link: true
       # TODO make this optional too
       endpoints:
        - http://localhost:8139/snot

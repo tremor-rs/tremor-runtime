@@ -43,9 +43,6 @@ pub struct Config {
     pub url: String,
     #[serde(default)]
     pub binary: bool,
-    /// whether to enable linked transport (return offramp response to pipeline)
-    // TODO remove and auto-infer this based on succesful binding for linked offramps
-    pub link: Option<bool>,
 }
 
 /// An offramp that writes to a websocket endpoint
@@ -55,7 +52,7 @@ pub struct Ws {
     tx: Sender<WsResult>,
     rx: Receiver<WsResult>,
     connections: HashMap<WsUrl, Option<WsSender>>,
-    has_link: bool,
+    is_linked: bool,
 }
 
 enum WsResult {
@@ -144,7 +141,6 @@ impl offramp::Impl for Ws {
     fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         if let Some(config) = config {
             let config: Config = serde_yaml::from_value(config.clone())?;
-            let has_link = config.link.unwrap_or(false);
             // ensure we have valid url
             Url::parse(&config.url)?;
 
@@ -159,16 +155,17 @@ impl offramp::Impl for Ws {
                 tx.clone(),
                 conn_tx,
                 conn_rx,
-                has_link,
+                // TODO this should be aligned with self.is_linked
+                false,
             ));
 
             Ok(SinkManager::new_box(Self {
                 postprocessors: vec![],
+                is_linked: false,
                 config,
                 tx,
                 rx,
                 connections,
-                has_link,
             }))
         } else {
             Err("[WS Offramp] Offramp requires a config".into())
@@ -268,7 +265,7 @@ impl Sink for Ws {
 
     #[allow(clippy::used_underscore_binding)]
     async fn on_event(&mut self, _input: &str, codec: &dyn Codec, event: Event) -> ResultVec {
-        if self.has_link && event.is_batch {
+        if self.is_linked && event.is_batch {
             return Err("Batched events are not supported for linked websocket offramps".into());
         }
 
@@ -288,7 +285,7 @@ impl Sink for Ws {
                         self.tx.clone(),
                         conn_tx.clone(),
                         conn_rx,
-                        self.has_link,
+                        self.is_linked,
                     ));
                     // TODO default to None for initial connection? (like what happens for
                     // default offramp config url). if we do circuit-breakers-per-url
@@ -329,9 +326,12 @@ impl Sink for Ws {
     async fn init(
         &mut self,
         postprocessors: &[String],
+        is_linked: bool,
         _reply_channel: Sender<SinkReply>,
     ) -> Result<()> {
         self.postprocessors = make_postprocessors(postprocessors)?;
+        self.is_linked = is_linked;
+        // TODO use reply_channel here too (like for rest)
         Ok(())
     }
 }

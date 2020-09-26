@@ -90,6 +90,7 @@ impl Onramp for Metronome {
         codec_map: halfbrown::HashMap<String, String>,
         preprocessors: &[String],
         metrics_reporter: RampReporter,
+        _is_linked: bool,
     ) -> Result<onramp::Addr> {
         SourceManager::start(
             onramp_uid,

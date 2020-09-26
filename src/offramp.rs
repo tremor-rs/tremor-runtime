@@ -63,6 +63,7 @@ pub trait Offramp: Send {
         &mut self,
         codec: &dyn Codec,
         postprocessors: &[String],
+        is_linked: bool,
         reply_channel: async_channel::Sender<SinkReply>,
     ) -> Result<()>;
     async fn on_event(&mut self, codec: &dyn Codec, input: &str, event: Event) -> Result<()>;
@@ -116,6 +117,7 @@ pub(crate) struct Create {
     pub codec: Box<dyn Codec>,
     pub postprocessors: Vec<String>,
     pub metrics_reporter: RampReporter,
+    pub is_linked: bool,
 }
 
 impl fmt::Debug for Create {
@@ -171,6 +173,7 @@ impl Manager {
             mut offramp,
             postprocessors,
             mut metrics_reporter,
+            is_linked,
             id,
         }: Create,
     ) -> Result<()> {
@@ -178,7 +181,7 @@ impl Manager {
         let (cf_tx, cf_rx) = unbounded::<SinkReply>(); // we might need to wrap that somehow, but *shrug*
 
         if let Err(e) = offramp
-            .start(codec.borrow(), &postprocessors, cf_tx.clone())
+            .start(codec.borrow(), &postprocessors, is_linked, cf_tx.clone())
             .await
         {
             error!("Failed to create onramp {}: {}", id, e);

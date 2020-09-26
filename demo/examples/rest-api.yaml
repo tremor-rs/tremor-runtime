@@ -1,13 +1,12 @@
 onramp:
   - id: rest
     type: rest
+    linked: true
     # TODO switch to json after improving responses on invalid json
     codec: string
     config:
       host: localhost
       port: 8139
-      # TODO eliminate the need for this config item
-      link: true
 
 pipeline:
   - id: main

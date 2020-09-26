@@ -63,6 +63,7 @@ pub(crate) trait Sink {
     async fn init(
         &mut self,
         postprocessors: &[String],
+        is_linked: bool,
         reply_channel: Sender<SinkReply>,
     ) -> Result<()>;
 
@@ -119,9 +120,12 @@ where
         &mut self,
         _codec: &dyn Codec,
         postprocessors: &[String],
+        is_linked: bool,
         reply_channel: Sender<SinkReply>,
     ) -> Result<()> {
-        self.sink.init(postprocessors, reply_channel).await
+        self.sink
+            .init(postprocessors, is_linked, reply_channel)
+            .await
     }
 
     async fn on_event(&mut self, codec: &dyn Codec, input: &str, event: Event) -> Result<()> {

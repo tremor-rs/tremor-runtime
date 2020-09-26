@@ -55,6 +55,7 @@ impl Sink for Exit {
     async fn init(
         &mut self,
         _postprocessors: &[String],
+        _is_linked: bool,
         _reply_channel: Sender<SinkReply>,
     ) -> Result<()> {
         Ok(())

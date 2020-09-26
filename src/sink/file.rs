@@ -86,6 +86,7 @@ impl Sink for File {
     async fn init(
         &mut self,
         postprocessors: &[String],
+        _is_linked: bool,
         _reply_channel: Sender<SinkReply>,
     ) -> Result<()> {
         self.postprocessors = make_postprocessors(postprocessors)?;

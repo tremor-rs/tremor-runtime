@@ -238,6 +238,7 @@ impl Onramp for Postgres {
         codec_map: halfbrown::HashMap<String, String>,
         preprocessors: &[String],
         metrics_reporter: RampReporter,
+        _is_linked: bool,
     ) -> Result<onramp::Addr> {
         let source = Int::from_config(onramp_uid, self.onramp_id.clone(), &self.config).await?;
         SourceManager::start(

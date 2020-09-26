@@ -270,6 +270,7 @@ impl Artefact for OfframpArtefact {
                     offramp,
                     postprocessors,
                     metrics_reporter,
+                    is_linked: self.is_linked,
                 },
             ))
             .await?;
@@ -398,6 +399,7 @@ impl Artefact for OnrampArtefact {
                     codec_map,
                     stream,
                     metrics_reporter,
+                    is_linked: self.is_linked,
                 },
             ))
             .await?;

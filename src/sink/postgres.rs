@@ -138,6 +138,7 @@ impl Sink for Postgres {
     async fn init(
         &mut self,
         _postprocessors: &[String],
+        _is_linked: bool,
         _reply_channel: Sender<SinkReply>,
     ) -> Result<()> {
         Ok(())

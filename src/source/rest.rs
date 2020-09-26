@@ -33,9 +33,6 @@ pub struct Config {
     /// port to listen to, defaults to 8000
     #[serde(default = "dflt_port")]
     pub port: u16,
-    /// whether to enable linked transport (return response based on pipeline output)
-    // TODO remove and auto-infer this based on succesful binding for linked onramps
-    pub link: Option<bool>,
 }
 
 // TODO possible to do this in source trait?
@@ -82,6 +79,7 @@ pub struct Int {
     config: Config,
     listener: Option<Receiver<RestSourceReply>>,
     onramp_id: TremorURL,
+    is_linked: bool,
     // TODO better way to manage this?
     response_txes: HashMap<u64, Sender<Response>>,
 }
@@ -93,13 +91,19 @@ impl std::fmt::Debug for Int {
 }
 
 impl Int {
-    fn from_config(uid: u64, onramp_id: TremorURL, config: &Config) -> Result<Self> {
+    fn from_config(
+        uid: u64,
+        onramp_id: TremorURL,
+        config: &Config,
+        is_linked: bool,
+    ) -> Result<Self> {
         let config = config.clone();
         Ok(Self {
             uid,
             config,
             listener: None,
             onramp_id,
+            is_linked,
             response_txes: HashMap::new(),
         })
     }
@@ -359,14 +363,14 @@ impl Source for Int {
         let mut server = tide::Server::with_state(ServerState {
             tx: tx.clone(),
             uid: self.uid,
-            link: self.config.link.unwrap_or(false),
+            link: self.is_linked,
         });
         // TODO add override for path and method from config (defaulting to
         // all paths and methods like below if not provided)
         server.at("/").all(handle_request);
         server.at("/*").all(handle_request);
         // alt method without relying on server state
-        //server.at("/*").all(|r| handle_request(r, self.uid, self.config.link.unwrap_or(false)));
+        //server.at("/*").all(|r| handle_request(r, self.uid, self.is_linked));
 
         let addr = format!("{}:{}", self.config.host, self.config.port);
 
@@ -404,8 +408,9 @@ impl Onramp for Rest {
         codec_map: halfbrown::HashMap<String, String>,
         preprocessors: &[String],
         metrics_reporter: RampReporter,
+        is_linked: bool,
     ) -> Result<onramp::Addr> {
-        let source = Int::from_config(onramp_uid, self.onramp_id.clone(), &self.config)?;
+        let source = Int::from_config(onramp_uid, self.onramp_id.clone(), &self.config, is_linked)?;
         SourceManager::start(
             onramp_uid,
             source,

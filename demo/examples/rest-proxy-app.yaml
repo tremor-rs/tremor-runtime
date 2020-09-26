@@ -1,12 +1,11 @@
 onramp:
   - id: rest
     type: rest
+    linked: true
     codec: string
     config:
       host: localhost
       port: 9139
-      # TODO eliminate the need for this config item
-      link: true
 
 pipeline:
   - id: main
@@ -66,9 +65,9 @@ pipeline:
 offramp:
   - id: upstream
     type: rest
+    linked: true
     codec: string
     config:
-      link: true
       # TODO make this optional too
       endpoints:
        - http://localhost:8139/snot

@@ -57,6 +57,7 @@ pub struct Int {
     config: Config,
     listener: Option<Receiver<SourceReply>>,
     onramp_id: TremorURL,
+    is_linked: bool,
     // mapping of event id to stream id
     messages: BTreeMap<u64, usize>,
     // mapping of stream id to the stream sender
@@ -71,7 +72,12 @@ impl std::fmt::Debug for Int {
 }
 
 impl Int {
-    fn from_config(uid: u64, onramp_id: TremorURL, config: &Config) -> Result<Self> {
+    fn from_config(
+        uid: u64,
+        onramp_id: TremorURL,
+        config: &Config,
+        is_linked: bool,
+    ) -> Result<Self> {
         let config = config.clone();
 
         Ok(Self {
@@ -79,6 +85,7 @@ impl Int {
             config,
             listener: None,
             onramp_id,
+            is_linked,
             messages: BTreeMap::new(),
             streams: BTreeMap::new(),
         })
@@ -244,7 +251,7 @@ impl Source for Int {
         let (tx, rx) = bounded(crate::QSIZE);
         let uid = self.uid;
 
-        let link = self.config.link.unwrap_or(false);
+        let link = self.is_linked;
 
         task::spawn(async move {
             let mut stream_id = 0;
@@ -261,24 +268,6 @@ impl Source for Int {
     fn id(&self) -> &TremorURL {
         &self.onramp_id
     }
-
-    fn metrics(&mut self, _t: u64) -> Vec<Event> {
-        vec![]
-    }
-
-    async fn terminate(&mut self) {}
-
-    fn trigger_breaker(&mut self) {}
-
-    fn restore_breaker(&mut self) {}
-
-    fn ack(&mut self, _id: u64) {}
-
-    fn fail(&mut self, _id: u64) {}
-
-    fn is_transactional(&self) -> bool {
-        false
-    }
 }
 
 #[async_trait::async_trait]
@@ -290,8 +279,9 @@ impl Onramp for Ws {
         codec_map: halfbrown::HashMap<String, String>,
         preprocessors: &[String],
         metrics_reporter: RampReporter,
+        is_linked: bool,
     ) -> Result<onramp::Addr> {
-        let source = Int::from_config(onramp_uid, self.onramp_id.clone(), &self.config)?;
+        let source = Int::from_config(onramp_uid, self.onramp_id.clone(), &self.config, is_linked)?;
         SourceManager::start(
             onramp_uid,
             source,

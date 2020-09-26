@@ -50,6 +50,9 @@ pub struct OnRamp {
     pub(crate) binding_type: String,
     #[serde(default = "Default::default")]
     pub(crate) description: String,
+    /// whether to enable linked transport
+    #[serde(rename = "linked", default = "Default::default")]
+    pub(crate) is_linked: bool,
     #[serde(default = "Default::default", skip_serializing_if = "Option::is_none")]
     pub(crate) codec: Option<String>,
     /// mapping from mime-type to codec used to handle requests/responses
@@ -82,6 +85,9 @@ pub struct OffRamp {
     pub(crate) binding_type: String,
     #[serde(default = "Default::default")]
     pub(crate) description: String,
+    /// whether to enable linked transport
+    #[serde(rename = "linked", default = "Default::default")]
+    pub(crate) is_linked: bool,
     #[serde(default = "Default::default", skip_serializing_if = "Option::is_none")]
     pub(crate) codec: Option<String>,
     /// mapping from mime-type to codec used to handle requests/responses

@@ -54,10 +54,6 @@ pub struct Config {
     /// for msgpack, json, yaml and plaintext codecs with the common mime-types
     #[serde(default = "Default::default", skip_serializing_if = "Option::is_none")]
     pub(crate) codec_map: Option<HashMap<String, String>>,
-
-    /// whether to enable linked transport (return offramp response to pipeline)
-    // TODO remove and auto-infer this based on succesful binding for linked offramps
-    pub link: Option<bool>,
 }
 
 fn dflt_method() -> Method {
@@ -72,8 +68,8 @@ pub struct Rest {
     num_inflight_requests: AtomicMaxCounter,
     postprocessors: Postprocessors,
     //codec_map: HashMap<String, Box<dyn Codec>>,
+    is_linked: bool,
     reply_channel: Option<Sender<SinkReply>>,
-    has_link: bool,
 }
 
 #[derive(Debug)]
@@ -96,7 +92,7 @@ impl offramp::Impl for Rest {
             Ok(SinkManager::new_box(Self {
                 client_idx: 0,
                 postprocessors: vec![],
-                has_link: config.link.clone().unwrap_or(false),
+                is_linked: false,
                 config,
                 num_inflight_requests,
                 //codec_map: codec::builtin_codec_map(),
@@ -217,7 +213,7 @@ impl Rest {
             };
 
             // send response if we are linked
-            if self.has_link {
+            if self.is_linked {
                 // TODO: how to handle errors creating or sending the response?
                 if let Ok(response_event) =
                     Self::make_response_event(event.id.clone(), event.op_meta.clone(), res, codec)
@@ -284,7 +280,7 @@ impl Rest {
 impl Sink for Rest {
     #[allow(clippy::used_underscore_binding)]
     async fn on_event(&mut self, _input: &str, codec: &dyn Codec, event: Event) -> ResultVec {
-        if self.has_link && event.is_batch {
+        if self.is_linked && event.is_batch {
             return Err("Batched events are not supported for linked rest offramps".into());
         }
         // limit concurrency
@@ -305,9 +301,11 @@ impl Sink for Rest {
     async fn init(
         &mut self,
         postprocessors: &[String],
+        is_linked: bool,
         reply_channel: Sender<SinkReply>,
     ) -> Result<()> {
         self.postprocessors = make_postprocessors(postprocessors)?;
+        self.is_linked = is_linked;
         self.reply_channel = Some(reply_channel);
         Ok(())
     }

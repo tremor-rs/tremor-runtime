@@ -67,6 +67,7 @@ pub(crate) enum SourceState {
     Disconnected,
 }
 
+// TODO rename without reply keyword to avoid confusion with linked transport "reply"
 pub(crate) enum SourceReply {
     /// A normal data event with a `Vec<u8>` for data
     Data {
