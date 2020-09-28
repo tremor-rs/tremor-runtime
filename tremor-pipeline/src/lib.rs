@@ -33,22 +33,19 @@ extern crate log;
 #[macro_use]
 extern crate rental;
 
-use crate::errors::{Error, ErrorKind, Result};
+use crate::errors::{ErrorKind, Result};
 use crate::op::prelude::*;
 use halfbrown::HashMap;
 use lazy_static::lazy_static;
 use op::trickle::select::WindowImpl;
-use petgraph::algo::is_cyclic_directed;
-use petgraph::dot::{Config, Dot};
 use petgraph::graph::{self, NodeIndex};
-use petgraph::visit::EdgeRef;
 use serde::Serialize;
 use simd_json::prelude::*;
 use simd_json::{json, BorrowedValue, OwnedValue};
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fmt::Display;
-use std::iter::{self, Iterator};
+use std::iter::Iterator;
 use std::str::FromStr;
 use std::{
     fmt,
@@ -58,8 +55,6 @@ use std::{
 use tremor_script::prelude::*;
 use tremor_script::query::StmtRentalWrapper;
 
-/// Pipeline Configuration
-pub mod config;
 /// Pipeline Errors
 pub mod errors;
 #[macro_use]
@@ -75,6 +70,10 @@ pub(crate) type PortIndexMap =
     HashMap<(NodeIndex, Cow<'static, str>), Vec<(NodeIndex, Cow<'static, str>)>>;
 pub(crate) type ExecPortIndexMap =
     HashMap<(usize, Cow<'static, str>), Vec<(usize, Cow<'static, str>)>>;
+
+/// A configuration map
+pub type ConfigMap = Option<serde_yaml::Value>;
+
 /// A lookup function to used to look up operators
 pub type NodeLookupFn = fn(
     config: &NodeConfig,
@@ -83,7 +82,6 @@ pub type NodeLookupFn = fn(
     node: Option<StmtRentalWrapper>,
     windows: Option<HashMap<String, WindowImpl>>,
 ) -> Result<OperatorNode>;
-pub(crate) type NodeMap = HashMap<Cow<'static, str>, NodeIndex>;
 
 /// Stringified numeric key
 /// from <https://github.com/serde-rs/json-benchmark/blob/master/src/prim_str.rs>
@@ -183,20 +181,6 @@ pub(crate) fn common_cow(s: &str) -> Cow<'static, str> {
         };
     }
     cows!(s, "in", "out", "err", "main")
-}
-
-/// A non yet compiled pipeline
-#[derive(Clone, Debug)]
-pub struct Pipeline {
-    /// ID of the Pipeline
-    pub id: config::ID,
-    pub(crate) inputs: HashMap<Cow<'static, str>, NodeIndex>,
-    pub(crate) port_indexes: PortIndexMap,
-    pub(crate) outputs: Vec<NodeIndex>,
-    /// Configuration of the pipeline
-    pub config: config::Pipeline,
-    pub(crate) nodes: NodeMap,
-    pub(crate) graph: ConfigGraph,
 }
 
 /// Type of nodes
@@ -544,7 +528,7 @@ pub struct NodeConfig {
     pub(crate) id: Cow<'static, str>,
     pub(crate) kind: NodeKind,
     pub(crate) op_type: String,
-    pub(crate) config: config::ConfigMap,
+    pub(crate) config: ConfigMap,
     pub(crate) defn: Option<Arc<StmtRentalWrapper>>,
     pub(crate) node: Option<Arc<StmtRentalWrapper>>,
 }
@@ -724,104 +708,6 @@ impl NodeConfig {
 
 type Weightless = ();
 pub(crate) type ConfigGraph = graph::DiGraph<NodeConfig, Weightless>;
-
-/// Builds an pipelinefrom a configuration
-pub fn build_pipeline(config: config::Pipeline) -> Result<Pipeline> {
-    let mut graph = ConfigGraph::new();
-    let mut nodes: HashMap<Cow<'static, str>, _> = HashMap::new(); // <String, NodeIndex>
-    let mut inputs: HashMap<Cow<'static, str>, _> = HashMap::new();
-    let mut outputs = Vec::new();
-    let mut port_indexes: PortIndexMap = HashMap::new();
-    for stream in &config.interface.inputs {
-        let stream = common_cow(&stream);
-        let id = graph.add_node(NodeConfig {
-            id: stream.clone(),
-            kind: NodeKind::Input,
-            op_type: "passthrough".to_string(),
-            config: None, // passthrough has no config
-            defn: None,
-            node: None,
-        });
-        nodes.insert(stream.clone(), id);
-        inputs.insert(stream, id);
-    }
-
-    for node in &config.nodes {
-        let node_id = common_cow(&node.id);
-        let id = graph.add_node(NodeConfig {
-            id: node_id.clone(),
-            kind: NodeKind::Operator,
-            op_type: node.node_type.clone(),
-            config: node.config.clone(),
-            defn: None,
-            node: None,
-        });
-        nodes.insert(node_id, id);
-    }
-
-    for stream in &config.interface.outputs {
-        let stream = common_cow(&stream);
-        let id = graph.add_node(NodeConfig {
-            id: stream.clone(),
-            kind: NodeKind::Output,
-            op_type: "passthrough".into(),
-            config: None, // passthrough has no config
-            defn: None,
-            node: None,
-        });
-        nodes.insert(stream, id);
-        outputs.push(id);
-    }
-
-    // Add metrics output port
-    let id = graph.add_node(NodeConfig {
-        id: "metrics".into(),
-        kind: NodeKind::Output,
-        op_type: "passthrough".to_string(),
-        config: None, // passthrough has no config
-        defn: None,
-        node: None,
-    });
-    nodes.insert("metrics".into(), id);
-    outputs.push(id);
-
-    for (from, tos) in &config.links {
-        for to in tos {
-            let from_idx = nodes[&from.id];
-            let to_idx = nodes[&to.id];
-
-            let from_tpl = (from_idx, from.port.clone());
-            let to_tpl = (to_idx, to.port.clone());
-            match port_indexes.get_mut(&from_tpl) {
-                None => {
-                    port_indexes.insert(from_tpl, vec![to_tpl]);
-                }
-                Some(ports) => {
-                    ports.push(to_tpl);
-                }
-            }
-            graph.add_edge(from_idx, to_idx, ());
-        }
-    }
-
-    if is_cyclic_directed(&graph) {
-        Err(ErrorKind::CyclicGraphError(format!(
-            "{:?}",
-            Dot::with_config(&graph, &[Config::EdgeNoLabel])
-        ))
-        .into())
-    } else {
-        Ok(Pipeline {
-            id: config.id.clone(),
-            graph,
-            nodes,
-            inputs,
-            outputs,
-            config,
-            port_indexes,
-        })
-    }
-}
 
 #[derive(Debug, Default, Clone)]
 pub(crate) struct NodeMetrics {
@@ -1223,296 +1109,5 @@ impl ExecutableGraph {
             // self.run(returns)?
         }
         Ok(has_events)
-    }
-}
-
-impl Pipeline {
-    /// Print the pipeline as a .dot file
-    pub fn to_dot(&self) -> String {
-        let mut res = "digraph{\n".to_string();
-        let mut edges = String::new();
-        for nx in self.graph.node_indices() {
-            let n = &self.graph[nx];
-            res.push_str(format!(r#"  {:?}[label="{}"]"#, nx.index(), n.id).as_str());
-            res.push('\n');
-            for e in self.graph.edges(nx) {
-                edges.push_str(format!(r#"  {}->{}"#, nx.index(), e.target().index()).as_str());
-                edges.push('\n');
-            }
-        }
-        res.push_str(edges.as_str());
-        res.push('}');
-        res
-    }
-
-    /// Turns a pipeline into its executable form
-    pub fn to_executable_graph(
-        &self,
-        uid: &mut u64,
-        resolver: NodeLookupFn,
-    ) -> Result<ExecutableGraph> {
-        let mut i2pos = HashMap::new();
-        let mut graph = Vec::new();
-        // Nodes that handle contraflow
-        let mut contraflow = Vec::new();
-        // Nodes that handle signals
-        let mut signalflow = Vec::new();
-        for (i, nx) in self.graph.node_indices().enumerate() {
-            *uid += 1;
-            i2pos.insert(nx, i);
-            let op = self.graph[nx].to_op(*uid, resolver, None, None, None)?;
-            if op.handles_contraflow() {
-                contraflow.push(i);
-            }
-            if op.handles_signal() {
-                signalflow.push(i);
-            }
-            graph.push(op);
-        }
-        // since contraflow is the reverse we need to reverse it.
-        contraflow.reverse();
-        //pub type PortIndexMap = HashMap<(NodeIndex, String), Vec<(NodeIndex, String)>>;
-
-        let mut port_indexes = HashMap::new();
-        for ((i1, s1), connections) in &self.port_indexes {
-            let connections = connections
-                .iter()
-                .map(|(i, s)| (i2pos[&i], s.clone()))
-                .collect();
-            port_indexes.insert((i2pos[&i1], s1.clone()), connections);
-        }
-
-        let mut inputs = HashMap::new();
-        for (k, idx) in &self.inputs {
-            inputs.insert(k.clone(), i2pos[&idx]);
-        }
-
-        let metric_interval = self.config.metrics_interval_s.map(|s| s * 1_000_000_000);
-        Ok(ExecutableGraph {
-            metrics: iter::repeat(NodeMetrics::default())
-                .take(graph.len())
-                .collect(),
-            stack: Vec::with_capacity(graph.len()),
-            id: self.id.clone(),
-            metrics_idx: i2pos[&self
-                .nodes
-                .get("metrics")
-                .ok_or_else(|| Error::from("metrics node missing"))?],
-            last_metrics: 0,
-            state: State {
-                ops: iter::repeat(Value::null()).take(graph.len()).collect(),
-            },
-            graph,
-            inputs,
-            port_indexes,
-            contraflow,
-            signalflow,
-            metric_interval,
-            insights: Vec::new(),
-        })
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-    use crate::config;
-    use serde_yaml;
-    use simd_json::json;
-    use std::fs::File;
-    use std::io::BufReader;
-
-    fn slurp(file: &str) -> config::Pipeline {
-        let file = File::open(file).expect("could not open file");
-        let buffered_reader = BufReader::new(file);
-        serde_yaml::from_reader(buffered_reader).expect("failed to read config")
-    }
-
-    #[test]
-    fn distsys_exec() {
-        // FIXME check/fix and move to integration tests - this is out of place as a unit test
-        let c = slurp("tests/configs/distsys.yaml");
-        let p: Pipeline = build_pipeline(c).expect("failed to build pipeline");
-        let mut uid = 0;
-        let mut e = p
-            .to_executable_graph(&mut uid, buildin_ops)
-            .expect("failed to build executable graph");
-        let event1 = Event {
-            ingest_ns: 1,
-            data: Value::from(json!({"snot": "badger"})).into(),
-            ..Event::default()
-        };
-        let mut results = Vec::new();
-        e.enqueue("in", event1, &mut results)
-            .expect("failed to enqueue event");
-        dbg!(&results);
-        assert_eq!(results.len(), 1);
-        assert_eq!(results[0].0, "out");
-        assert_eq!(results[0].1.data.suffix().meta()["class"], "default");
-        dbg!(&e.metrics);
-        // We ignore the first, and the last three nodes because:
-        // * The first one is the input, handled separately
-        assert_eq!(e.metrics[0].inputs.get("in"), None);
-        assert_eq!(e.metrics[0].outputs.get("out"), Some(&1));
-        // * The last-2 is the output, handled separately
-        assert_eq!(e.metrics[e.metrics.len() - 3].inputs.get("in"), Some(&1));
-        assert_eq!(e.metrics[e.metrics.len() - 3].outputs.get("out"), Some(&1));
-        // * the last-1 is the error output
-        // assert_eq!(e.metrics[e.metrics.len() - 2].inputs.get("in"), None);
-        // assert_eq!(e.metrics[e.metrics.len() - 2].outputs.get("out"), None);
-        // * last is the metrics output
-        // assert_eq!(e.metrics[e.metrics.len() - 1].inputs.get("in"), None);
-        // assert_eq!(e.metrics[e.metrics.len() - 1].outputs.get("out"), None);
-
-        // Now for the normal case
-        for m in &e.metrics[1..e.metrics.len() - 3] {
-            assert_eq!(m.inputs["in"], 1);
-            assert_eq!(m.outputs["out"], 1);
-        }
-    }
-
-    #[test]
-    fn simple_graph_exec() {
-        let c = slurp("tests/configs/simple_graph.yaml");
-        let p: Pipeline = build_pipeline(c).expect("failed to build pipeline");
-        let mut uid = 0;
-        let mut e = p
-            .to_executable_graph(&mut uid, buildin_ops)
-            .expect("failed to build executable graph");
-        let event1 = Event {
-            id: Ids::new(0, 1),
-            ingest_ns: 1,
-            data: Value::null().into(),
-            ..Event::default()
-        };
-        let mut results = Vec::new();
-        e.enqueue("in", event1, &mut results)
-            .expect("failed to enqueue");
-        assert_eq!(results.len(), 1);
-        assert_eq!(results[0].0, "out");
-        assert_eq!(results[0].1.id, Ids::new(0, 1));
-    }
-
-    #[test]
-    fn complex_graph_exec() {
-        let c = slurp("tests/configs/two_input_complex_graph.yaml");
-        let p: Pipeline = build_pipeline(c).expect("failed to build pipeline");
-        println!("{}", p.to_dot());
-        let mut uid = 0;
-
-        let mut e = p
-            .to_executable_graph(&mut uid, buildin_ops)
-            .expect("failed to build executable graph");
-        let event1 = Event {
-            id: Ids::new(0, 1),
-            ingest_ns: 1,
-            ..Event::default()
-        };
-        let event2 = Event {
-            id: Ids::new(0, 2),
-            ingest_ns: 2,
-            ..Event::default()
-        };
-        let mut results = Vec::new();
-        e.enqueue("in1", event1, &mut results)
-            .expect("failed to enqueue event");
-        assert_eq!(results.len(), 6);
-        for r in &results {
-            assert_eq!(r.0, "out");
-            assert_eq!(r.1.id, Ids::new(0, 1));
-        }
-        assert_eq!(
-            results[0].1.data.suffix().meta()["debug::history"],
-            Value::from(json!([
-                "evt: branch(0: 1)",
-                "evt: m1(0: 1)",
-                "evt: combine(0: 1)"
-            ]))
-        );
-        assert_eq!(
-            results[1].1.data.suffix().meta()["debug::history"],
-            Value::from(json!([
-                "evt: branch(0: 1)",
-                "evt: m1(0: 1)",
-                "evt: m2(0: 1)",
-                "evt: combine(0: 1)"
-            ]))
-        );
-        assert_eq!(
-            results[2].1.data.suffix().meta()["debug::history"],
-            Value::from(json!([
-                "evt: branch(0: 1)",
-                "evt: m1(0: 1)",
-                "evt: m2(0: 1)",
-                "evt: m3(0: 1)",
-                "evt: combine(0: 1)"
-            ]))
-        );
-        assert_eq!(
-            results[3].1.data.suffix().meta()["debug::history"],
-            Value::from(json!([
-                "evt: branch(0: 1)",
-                "evt: m2(0: 1)",
-                "evt: combine(0: 1)"
-            ]))
-        );
-        assert_eq!(
-            results[4].1.data.suffix().meta()["debug::history"],
-            Value::from(json!([
-                "evt: branch(0: 1)",
-                "evt: m2(0: 1)",
-                "evt: m3(0: 1)",
-                "evt: combine(0: 1)"
-            ]))
-        );
-        assert_eq!(
-            results[5].1.data.suffix().meta()["debug::history"],
-            Value::from(json!([
-                "evt: branch(0: 1)",
-                "evt: m3(0: 1)",
-                "evt: combine(0: 1)"
-            ]))
-        );
-
-        let mut results = Vec::new();
-        e.enqueue("in2", event2, &mut results)
-            .expect("failed to enqueue event");
-        assert_eq!(results.len(), 3);
-        for r in &results {
-            assert_eq!(r.0, "out");
-            assert_eq!(r.1.id, Ids::new(0, 2));
-        }
-        assert_eq!(
-            results[0].1.data.suffix().meta()["debug::history"],
-            Value::from(json!(["evt: m1(0: 2)", "evt: combine(0: 2)"]))
-        );
-        assert_eq!(
-            results[1].1.data.suffix().meta()["debug::history"],
-            Value::from(json!([
-                "evt: m1(0: 2)",
-                "evt: m2(0: 2)",
-                "evt: combine(0: 2)"
-            ]))
-        );
-        assert_eq!(
-            results[2].1.data.suffix().meta()["debug::history"],
-            Value::from(json!([
-                "evt: m1(0: 2)",
-                "evt: m2(0: 2)",
-                "evt: m3(0: 2)",
-                "evt: combine(0: 2)"
-            ]))
-        );
-    }
-
-    #[test]
-    fn load_simple() {
-        let c = slurp("tests/configs/pipe.simple.yaml");
-        let p: Pipeline = build_pipeline(c).expect("failed to build pipeline");
-        let l = p.config.links.iter().next().expect("no links");
-        assert_eq!(
-            (&IN, vec![OUT]),
-            (&l.0.id, l.1.iter().map(|u| u.id.clone()).collect())
-        );
     }
 }

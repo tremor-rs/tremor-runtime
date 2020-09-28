@@ -14,7 +14,6 @@
 
 use crate::url::TremorURL;
 use hashbrown::HashMap;
-use tremor_pipeline::config as dynaconfig;
 
 pub(crate) type ID = String;
 pub(crate) type OnRampVec = Vec<OnRamp>;
@@ -72,7 +71,7 @@ pub struct OnRamp {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) metrics_interval_s: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) config: dynaconfig::ConfigMap,
+    pub(crate) config: tremor_pipeline::ConfigMap,
 }
 
 /// Configuration of an offramp
@@ -110,7 +109,7 @@ pub struct OffRamp {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) metrics_interval_s: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) config: dynaconfig::ConfigMap,
+    pub(crate) config: tremor_pipeline::ConfigMap,
 }
 
 /// Configuration for a Binding
@@ -122,22 +121,4 @@ pub struct Binding {
     #[serde(default = "Default::default")]
     pub(crate) description: String,
     pub(crate) links: BindingMap, // is this right? this should be url to url?
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-    use std::fs::File;
-    use std::io::BufReader;
-    fn slurp(file: &str) -> Config {
-        let file = File::open(file).expect("could not open file");
-        let buffered_reader = BufReader::new(file);
-        serde_yaml::from_reader(buffered_reader).expect("could parse file")
-    }
-
-    #[test]
-    fn load() {
-        let c = slurp("tests/configs/config.yaml");
-        assert_eq!(&c.offramp[0].id, "blackhole");
-    }
 }
