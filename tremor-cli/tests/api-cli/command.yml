@@ -679,7 +679,7 @@ suites:
         - source: stdout
           contains:
             - default
-    - name: Get /binding should return an empty list
+    - name: Get /binding should return main
       command: tremor api binding list
       tags:
         - get

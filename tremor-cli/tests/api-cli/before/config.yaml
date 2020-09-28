@@ -11,14 +11,14 @@ offramp:
     type: file
     codec: json
     config:
-      file: "../before.log"
+      file: "before.log"
   - id: exit
     type: exit
 
 binding:
   - id: main
     links:
-      "/onramp/ws-in/{instance}/out": ["/pipeline/ws/{instance}/in"]
-      "/pipeline/ws/{instance}/out": ["/offramp/out/{instance}/in" ]
-      "/pipeline/ws/{instance}/exit": ["/offramp/exit/{instance}/in" ]
+      "/onramp/ws-in/{instance}/out": [ "/pipeline/ws/{instance}/in" ]
+      "/pipeline/ws/{instance}/out": [ "/offramp/out/{instance}/in" ]
+      "/pipeline/ws/{instance}/exit": [ "/offramp/exit/{instance}/in" ]
 

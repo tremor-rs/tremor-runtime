@@ -13,6 +13,11 @@
 // limitations under the License.
 
 use crate::errors::Result;
+use crate::report;
+use crate::test;
+use crate::test::stats;
+use crate::test::status;
+use crate::util::nanotime;
 use halfbrown::hashmap;
 use report::TestSuite;
 use simd_json::{
@@ -28,12 +33,6 @@ use tremor_script::highlighter::{Dumb as DumbHighlighter, Highlighter, Term as T
 use tremor_script::interpreter::{AggrType, Env, ExecOpts, LocalStack};
 use tremor_script::path::load as load_module_path;
 use tremor_script::{registry, Registry};
-
-use crate::report;
-use crate::test;
-use crate::test::stats;
-use crate::test::status;
-use crate::util::nanotime;
 
 const EXEC_OPTS: ExecOpts = ExecOpts {
     result_needed: true,
@@ -149,6 +148,7 @@ fn eval_suite_tests(
                                 tremor_script::Script::highlight_script_with_range(
                                     script, extent, &mut hh,
                                 )?;
+                                println!();
 
                                 let prefix = if status { "(+)" } else { "(-)" };
                                 // Test record
@@ -174,15 +174,17 @@ fn eval_suite_tests(
                                     hidden: false,
                                 });
                                 drop(hh);
+                                stats.assert();
 
                                 // Interactive console report
                                 status::executing_unit_testcase(i, ll, status)?;
-                                let mut h = TermHighlighter::new();
-                                tremor_script::Script::highlight_script_with_range(
-                                    script, extent, &mut h,
+                                let mut hh: TermHighlighter = TermHighlighter::new();
+                                tremor_script::Script::highlight_script_with_range_indent(
+                                    " ", script, extent, &mut hh,
                                 )?;
-                                h.finalize()?;
-                                drop(h);
+                                hh.finalize()?;
+                                drop(hh);
+                                println!();
                             }
                             continue;
                         }
@@ -216,10 +218,14 @@ fn eval_suite_tests(
                 });
                 drop(hh);
 
+                stats.assert();
+
                 // Interactive console report
                 status::executing_unit_testcase(i, ll, *status)?;
                 let mut h = TermHighlighter::new();
-                tremor_script::Script::highlight_script_with_range(script, extent, &mut h)?;
+                tremor_script::Script::highlight_script_with_range_indent(
+                    " ", script, extent, &mut h,
+                )?;
                 h.finalize()?;
                 drop(h);
             }
@@ -231,8 +237,6 @@ fn eval_suite_tests(
 
 #[allow(clippy::too_many_lines)]
 pub(crate) fn run_suite(path: &Path, by_tag: &test::TagFilter) -> Result<report::TestReport> {
-    println!();
-    println!();
     println!();
 
     let mut suites: HashMap<String, TestSuite> = HashMap::new();
@@ -265,7 +269,7 @@ pub(crate) fn run_suite(path: &Path, by_tag: &test::TagFilter) -> Result<report:
                 recursion_limit: tremor_script::recursion_limit(),
             };
 
-            //                let suite_start = nanotime();
+            let mut stat_s = stats::Stats::new();
             for expr in &script.exprs {
                 let mut suite_name = String::from("Unknown Suite");
                 let state = Value::Object(Box::new(hashmap! {}));
@@ -286,8 +290,6 @@ pub(crate) fn run_suite(path: &Path, by_tag: &test::TagFilter) -> Result<report:
                             specs.push(value.into_owned());
                         }
                         if let ImutExpr(ImutExprInt::Record(Record { fields, .. })) = &args[0] {
-                            let mut stat_s = stats::Stats::new();
-
                             let suite_spec_index = fields.iter().position(|f| {
                                 if let ImutExprInt::Literal(Literal { value, .. }) = &f.name {
                                     value == "suite"
@@ -369,7 +371,6 @@ pub(crate) fn run_suite(path: &Path, by_tag: &test::TagFilter) -> Result<report:
                                         }
                                     }
                                 }
-                                // }
                             }
                             suites.insert(
                                 suite_name.clone(),
@@ -378,7 +379,7 @@ pub(crate) fn run_suite(path: &Path, by_tag: &test::TagFilter) -> Result<report:
                                     description: "A suite".into(),
                                     elements: vec![],
                                     evidence: None,
-                                    stats: stat_s,
+                                    stats: stat_s.clone(),
                                     duration: 0,
                                 },
                             );

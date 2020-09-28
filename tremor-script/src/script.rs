@@ -176,9 +176,20 @@ where
         io::Result::Ok(())
     }
 
-    /// Highlights a script range with a given highlighter.
+    /// Highlights a script range with a given highlighter and line indents.
     #[cfg(not(tarpaulin_include))]
     pub fn highlight_script_with_range<H: Highlighter>(
+        script: &str,
+        r: Range,
+        h: &mut H,
+    ) -> io::Result<()> {
+        Self::highlight_script_with_range_indent("", script, r, h)
+    }
+
+    /// Highlights a script range with a given highlighter.
+    #[cfg(not(tarpaulin_include))]
+    pub fn highlight_script_with_range_indent<H: Highlighter>(
+        line_prefix: &str,
         script: &str,
         r: Range,
         h: &mut H,
@@ -211,7 +222,7 @@ where
             })
             .collect::<Vec<Spanned<lexer::Token>>>();
 
-        h.highlight(None, &tokens[..])?;
+        h.highlight_indent(line_prefix, None, &tokens[..])?;
         io::Result::Ok(())
     }
 

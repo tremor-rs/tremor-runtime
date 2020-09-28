@@ -132,7 +132,13 @@ pub(crate) fn suite_command(
                         &case,
                     )?;
 
-                    stats.merge(&case_stats);
+                    if case_stats.fail > 0 {
+                        stats.fail();
+                    } else {
+                        stats.pass();
+                    }
+                    stats.assert += case_stats.assert;
+
                     let suite = report::TestSuite {
                         name: case.name.trim().into(),
                         description: "Command-driven test".to_string(),
@@ -144,7 +150,7 @@ pub(crate) fn suite_command(
                     suites.insert(case.name, suite);
                 }
                 api_stats.merge(&stats);
-                status::stats(&api_stats)?;
+                status::stats(&api_stats, "")?;
             }
 
             before::update_evidence(&base, &mut evidence)?;
@@ -163,7 +169,7 @@ pub(crate) fn suite_command(
     status::rollups("\nCommand", &api_stats)?;
 
     let elapsed = nanotime() - report_start;
-    status::duration(elapsed)?;
+    status::duration(elapsed, "  ")?;
     Ok((
         stats.clone(),
         vec![report::TestReport {
