@@ -1,0 +1,18 @@
+define script runtime
+script
+  use tremor::system;
+  let event.tags.host = system::hostname();
+  emit
+end;
+
+define generic::batch operator batch
+with
+  count = 50
+end;
+
+create script runtime;
+create operator batch;
+
+select event from in into runtime;
+select event from runtime into batch;
+select event from batch into out;

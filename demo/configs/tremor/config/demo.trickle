@@ -1,0 +1,45 @@
+define script runtime
+script
+  let $index = "tremor";
+  let $doc_type = "log";
+  # The first class we define is named `info`,
+  # it matches if `short_message`  contains the string `"info"`
+  # we configure it to have a rate of 10 events/s
+  match event of
+    case %{ short_message ~= glob|*info*| } => let $class = "info", let $rate = 10, emit
+  # The second class we define is `error`, it matches
+  # if  `short_message` contains the string `"ERROR`
+  # we configure it to have a rate of 100 events/s 
+    case %{ short_message ~= glob|*ERROR*| } => let $class = "error", let $rate = 100, emit
+    default => drop
+  end;
+  # Since we use 'emit' in the previous rules we know that only events that didn't match another
+  # rule will arrive here. We're setting class and rate here to 'defaut' and
+  # 90 rates.
+  let $class = "default";
+  let $rate = 90;
+  emit
+end;
+
+define grouper::bucket operator bucket;
+
+define qos::backpressure operator bp
+with
+  timeout = 100
+end;
+
+define generic::batch operator batch
+with
+  count = 50
+end;
+
+create script runtime;
+create operator bucket;
+create operator bp;
+create operator batch;
+
+select event from in into runtime;
+select event from runtime into bucket;
+select event from bucket into bp;
+select event from bp into batch;
+select event from batch into out;
