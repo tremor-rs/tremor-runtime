@@ -23,15 +23,18 @@ use std::path::Path;
 const ERR_MSG: &str =
     "Unable to guess your shell, please provide an explicit shell to create completions for.";
 
-pub(crate) fn run_cmd(app: clap::App, matches: &ArgMatches) -> Result<()> {
-    match matches.subcommand() {
-        Some((shell, _)) => generate_for_shell(app, shell),
-        None => guess_shell(app),
+pub(crate) fn run_cmd(mut app: clap::App, matches: &ArgMatches) -> Result<()> {
+    if let Some((shell, _)) = matches.subcommand() {
+        generate_for_shell(app, shell)
+    } else {
+        // FIXME There is no way in standard clap to narrow help to the subcommand
+        app.print_long_help().map_err(|e| e.into())
     }
 }
 
 fn generate_for_shell(mut app: clap::App, shell: &str) -> Result<()> {
     match shell {
+        "guess" => guess_shell(app),
         "bash" => {
             generate::<Bash, _>(&mut app, "tremor", &mut std::io::stdout());
             Ok(())

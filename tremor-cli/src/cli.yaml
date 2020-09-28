@@ -20,6 +20,8 @@ subcommands:
   - completions:
       about: Generate shell completions to stdout. Tries to guess the shell if no subcommand is given.
       subcommands:
+        - guess:
+            about: Generate completion based on active shell
         - bash:
             about: Generate bash shell completions
         - zsh:
