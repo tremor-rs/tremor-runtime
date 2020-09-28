@@ -1,0 +1,11 @@
+define script runtime
+script
+            use tremor::system;
+            let event.hostname = system::hostname();
+            event
+end;
+
+create script runtime;
+
+select event from in into runtime;
+select event from runtime into out;
