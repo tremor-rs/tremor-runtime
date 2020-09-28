@@ -5213,6 +5213,7 @@ dependencies = [
  "tide",
  "tremor-pipeline",
  "tremor-runtime",
+ "tremor-script",
 ]
 
 [[package]]

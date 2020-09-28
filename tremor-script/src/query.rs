@@ -81,7 +81,7 @@ impl PartialOrd for rentals::Stmt {
 #[derive(Debug, Clone)]
 pub struct Query {
     /// The query
-    pub query: Arc<rentals::Query>,
+    pub query: Arc<QueryRental>,
     /// Source of the query
     pub source: String,
     /// Warnings emitted by the script

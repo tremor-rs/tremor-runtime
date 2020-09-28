@@ -12,13 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub use http_types::headers;
-pub use http_types::StatusCode;
+use std::sync::{MutexGuard, PoisonError};
+
+pub use http_types::{headers, StatusCode};
 use serde::{Deserialize, Serialize};
 pub use tide::Response;
 use tremor_runtime::errors::{Error as TremorError, ErrorKind};
 use tremor_runtime::system::World;
 use tremor_runtime::url::TremorURL;
+use tremor_script::prelude::CompilerError;
 
 pub mod binding;
 pub mod offramp;
@@ -78,7 +80,7 @@ impl Into<Response> for Error {
             }
             Error::JSON(c, d) => {
                 let mut r = Response::new(c);
-                r.insert_header(headers::CONTENT_TYPE, ResourceType::Json.to_string());
+                r.insert_header(headers::CONTENT_TYPE, ResourceType::Json.as_str());
                 r.set_body(d);
                 r
             }
@@ -115,6 +117,7 @@ impl From<tremor_pipeline::errors::Error> for Error {
         Self::generic(StatusCode::BadRequest, &format!("Pipeline error: {}", e))
     }
 }
+
 impl From<http_types::Error> for Error {
     fn from(e: http_types::Error) -> Self {
         Self::generic(
@@ -124,17 +127,34 @@ impl From<http_types::Error> for Error {
     }
 }
 
+impl From<CompilerError> for Error {
+    fn from(e: CompilerError) -> Self {
+        Self::generic(
+            StatusCode::InternalServerError,
+            &format!("Compiler Error: {:?}", e),
+        )
+    }
+}
+impl From<PoisonError<MutexGuard<'_, tremor_script::Registry>>> for Error {
+    fn from(e: PoisonError<MutexGuard<tremor_script::Registry>>) -> Self {
+        Self::generic(
+            StatusCode::InternalServerError,
+            &format!("locking error: {}", e),
+        )
+    }
+}
 #[derive(Clone, Copy)]
 pub enum ResourceType {
     Json,
     Yaml,
+    Trickle,
 }
-
-impl ToString for ResourceType {
-    fn to_string(&self) -> String {
+impl ResourceType {
+    fn as_str(&self) -> &'static str {
         match self {
-            Self::Yaml => "application/yaml".to_string(),
-            Self::Json => "application/json".to_string(),
+            Self::Yaml => "application/yaml",
+            Self::Json => "application/json",
+            Self::Trickle => "application/trickle",
         }
     }
 }
@@ -147,6 +167,7 @@ pub fn content_type(req: &Request) -> Option<ResourceType> {
     {
         Some("application/yaml") => Some(ResourceType::Yaml),
         Some("application/json") => Some(ResourceType::Json),
+        Some("application/trickle") => Some(ResourceType::Trickle),
         _ => None,
     }
 }
@@ -198,17 +219,21 @@ pub fn serialize<T: Serialize>(
     match t {
         ResourceType::Yaml => {
             let mut r = Response::new(ok_code);
-            r.insert_header(headers::CONTENT_TYPE, t.to_string());
+            r.insert_header(headers::CONTENT_TYPE, t.as_str());
             r.set_body(serde_yaml::to_string(d)?);
             Ok(r)
         }
 
         ResourceType::Json => {
             let mut r = Response::new(ok_code);
-            r.insert_header(headers::CONTENT_TYPE, t.to_string());
+            r.insert_header(headers::CONTENT_TYPE, t.as_str());
             r.set_body(simd_json::to_string(d)?);
             Ok(r)
         }
+        ResourceType::Trickle => Err(Error::generic(
+            StatusCode::InternalServerError,
+            &"Unsuported formating as trickle",
+        )),
     }
 }
 
@@ -247,7 +272,7 @@ where
                 )
             })
             .map(|data| (req, data)),
-        None => Err(Error::Generic(
+        Some(ResourceType::Trickle) | None => Err(Error::Generic(
             StatusCode::UnsupportedMediaType,
             "No content type provided".into(),
         )),

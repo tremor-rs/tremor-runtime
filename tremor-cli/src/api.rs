@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::{Error, Result};
+use crate::{
+    errors::{Error, Result},
+    util::load_trickle,
+};
 use clap::{self, ArgMatches};
 use halfbrown::HashMap;
 use http_types::{headers, StatusCode};
@@ -282,11 +285,10 @@ async fn conductor_list_cmd(app: &TremorApp, endpoint: &str) -> Result<()> {
 async fn conductor_create_cmd(app: &TremorApp, cmd: &ArgMatches, endpoint: &str) -> Result<()> {
     let base_url = &app.config.instances[&"default".to_string()][0];
     let path_to_file = cmd.value_of("SOURCE").ok_or("SOURCE not provided")?;
-    let json = load(path_to_file)?;
-    let ser = ser(&app, &json)?;
+    let ser = load_trickle(path_to_file)?;
     let endpoint = format!("{}/{}", base_url, endpoint);
     let response = surf::post(&endpoint)
-        .header(http_types::headers::CONTENT_TYPE, content_type(app))
+        .header(http_types::headers::CONTENT_TYPE, "application/trickle")
         .header("accept", accept(app))
         .body(ser)
         .await;

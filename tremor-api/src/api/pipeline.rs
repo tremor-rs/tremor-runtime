@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use tremor_pipeline::{query::Query, FN_REGISTRY};
+
 use crate::api::prelude::*;
 
 #[derive(Serialize)]
@@ -32,23 +34,42 @@ pub async fn list_artefact(req: Request) -> Result<Response> {
     reply(req, result, false, StatusCode::Ok).await
 }
 
-pub async fn publish_artefact(_req: Request) -> Result<Response> {
-    panic!("FIXME .unwrap()")
-    //     let (req, decoded_data): (_, tremor_pipeline::config::Pipeline) = decode(req).await?;
+pub async fn publish_artefact(mut req: Request) -> Result<Response> {
+    match content_type(&req) {
+        Some(ResourceType::Trickle) => {
+            let body = req.body_string().await?;
+            let aggr_reg = tremor_script::registry::aggr();
+            let module_path = tremor_script::path::load();
 
-    //     let url = build_url(&["pipeline", &decoded_data.id])?;
-    //     let pipeline = tremor_pipeline::build_pipeline(decoded_data)?;
+            let query = Query::parse(
+                &module_path,
+                &body,
+                "<API>",
+                vec![],
+                &*FN_REGISTRY.lock()?,
+                &aggr_reg,
+            )?;
 
-    //     let repo = &req.state().world.repo;
-    //     let result = repo
-    //         .publish_pipeline(&url, false, PipelineArtefact::Pipeline(Box::new(pipeline)))
-    //         .await
-    //         .map(|result| match result {
-    //             PipelineArtefact::Pipeline(p) => p.config,
-    //             //ALLOW:  We publish a pipeline we can't ever get anything else back
-    //             PipelineArtefact::Query(_) => unreachable!(),
-    //         })?;
-    //     reply(req, result, true, StatusCode::Created).await
+            let id = query.id().ok_or_else(|| {
+                Error::generic(
+                    StatusCode::UnprocessableEntity,
+                    &r#"no `#!config id = "trickle-id"` directive provided"#,
+                )
+            })?;
+
+            let url = build_url(&["pipeline", &id])?;
+            let repo = &req.state().world.repo;
+            let result = repo
+                .publish_pipeline(&url, false, query)
+                .await
+                .map(|result| result.source().to_string())?;
+            reply(req, result, true, StatusCode::Created).await
+        }
+        Some(_) | None => Err(Error::Generic(
+            StatusCode::UnsupportedMediaType,
+            "No content type provided".into(),
+        )),
+    }
 }
 
 pub async fn unpublish_artefact(req: Request) -> Result<Response> {
@@ -58,7 +79,7 @@ pub async fn unpublish_artefact(req: Request) -> Result<Response> {
     let result = repo
         .unpublish_pipeline(&url)
         .await
-        .and_then(|result| Ok(result.source().to_string()))?;
+        .map(|result| result.source().to_string())?;
     reply(req, result, true, StatusCode::Ok).await
 }
 

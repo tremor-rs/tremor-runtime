@@ -7,7 +7,7 @@
       command: curl -vs --stderr - http://localhost:9898/version
       stdout_has:
         - HTTP/1.1 200 OK
-        - '{"version":"0.8.0"}'
+        - '{"version":"0.9.0"}'
     - name: GET /onramp
       command: curl -vs --stderr - http://localhost:9898/onramp
       stdout_has:
@@ -477,7 +477,7 @@
       stderr_has:
         - HTTP/1.1 204 No Content
         - "content-type: application/yaml"
-    - name:  Unpublish Onramp  ( YAML )
+    - name: Unpublish Onramp  ( YAML )
       command: >
         curl -vs -stderr -XDELETE -H "Content-type: application/yaml" -H "Accept: application/yaml" http://localhost:9898/onramp/metronome
       stderr_has:

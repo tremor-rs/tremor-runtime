@@ -100,6 +100,15 @@ impl From<tremor_script::query::Query> for Query {
     }
 }
 impl Query {
+    /// Fetches the ID of the query if it was provided
+    pub fn id(&self) -> Option<&str> {
+        self.0
+            .query
+            .suffix()
+            .config
+            .get("id")
+            .and_then(ValueTrait::as_str)
+    }
     /// Source of the query
     pub fn source(&self) -> &str {
         &self.0.source
@@ -145,6 +154,12 @@ impl Query {
             .get("metrics_interval_s")
             .and_then(Value::as_u64)
             .map(|i| i * 1_000_000_000);
+
+        let pipeline_id = query
+            .config
+            .get("id")
+            .and_then(Value::as_str)
+            .unwrap_or("<generated>");
 
         // FIXME compute public streams - do not hardcode
         let id = pipe_graph.add_node(NodeConfig {
@@ -529,7 +544,7 @@ impl Query {
                     .take(graph.len())
                     .collect(),
                 stack: Vec::with_capacity(graph.len()),
-                id: "generated".to_string(), // FIXME make configurable
+                id: pipeline_id.to_string(), // FIXME make configurable
                 metrics_idx: i2pos[&nodes
                     .get("metrics")
                     .ok_or_else(|| Error::from("metrics node missing"))?],
