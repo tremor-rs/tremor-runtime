@@ -1,0 +1,17 @@
+define script timestamp
+script
+  use tremor::system;
+  let event.timestamp = system::ingest_ns();
+  event
+end;
+
+define generic::batch operator batch with
+  count = 8000
+end;
+
+create script timestamp;
+create operator batch;
+
+select event from in into timestamp;
+select event from timestamp into batch;
+select event from batch into out;

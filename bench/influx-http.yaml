@@ -7,8 +7,6 @@ onramp:
     codec: influx
     config:
       source: ./demo/data/data.influx.xz
-      #source: ../pocs/data.influx
-      #interval: 500 # 1_000_000 / s
 
 offramp:
   - id: blackhole
@@ -17,38 +15,12 @@ offramp:
     config:
       concurrency: 8
       endpoints:
-#        - http://localhost:8080/
         - http://localhost:8086/write?db=metrics
       headers:
-        'Client': 'Tremor'
+        "Client": "Tremor"
 
 binding:
   - id: bench
     links:
-      '/onramp/blaster/{instance}/out': [ '/pipeline/main/{instance}/in' ]
-      '/pipeline/main/{instance}/out': [ '/offramp/blackhole/{instance}/in' ]
-
-pipeline:
-  - id: main
-    interface:
-      inputs:
-        - in
-      outputs:
-        - out
-    nodes:
-      - id: retime
-        op: runtime::tremor
-        config:
-          script: |
-            use tremor::system;
-            let event.timestamp = system::ingest_ns();
-            event
-      - id: batch
-        op: generic::batch
-        config:
-          count: 8000
-
-    links:
-      in: [ retime ]
-      retime: [ batch ]
-      batch: [ out ]
+      "/onramp/blaster/{instance}/out": ["/pipeline/main/{instance}/in"]
+      "/pipeline/main/{instance}/out": ["/offramp/blackhole/{instance}/in"]
