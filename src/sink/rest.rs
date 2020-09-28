@@ -157,6 +157,13 @@ impl Rest {
                         if let Some(value) = v.as_str() {
                             headers.push((k, value));
                         }
+                        if let Some(array) = v.as_array() {
+                            for header in array {
+                                if let Some(value) = header.as_str() {
+                                    headers.push((k, value));
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -309,7 +316,9 @@ impl Sink for Rest {
                 None => return Err("Offramp in invalid state: No reply channel available.".into()),
             };
             let is_linked = self.is_linked;
-            let cloned = codec.boxed_clone(); // TODO: remove that clone here (although it just clones an empty struct)
+            // TODO: remove that clone here (although it just clones an empty struct)
+            // we need to clone here as we have to pass it into the task
+            let cloned = codec.boxed_clone();
 
             // TODO: keep track of the join handle - in order to cancel operations
             task::spawn(async move {
