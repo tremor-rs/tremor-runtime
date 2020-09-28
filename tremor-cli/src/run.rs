@@ -358,58 +358,6 @@ fn run_trickle_source(matches: &ArgMatches, src: &str) -> Result<()> {
     Ok(())
 }
 
-fn run_pipeline_source(matches: &ArgMatches, src: &str) -> Result<()> {
-    let config: tremor_runtime::config::Config = serde_yaml::from_str(&slurp_string(&src)?)?;
-    let runtime = tremor_runtime::incarnate(config)?;
-    let pipeline = &runtime.pipes[0];
-    let mut uid = 0_u64;
-    let mut pipeline = pipeline.to_executable_graph(&mut uid, tremor_pipeline::buildin_ops)?;
-
-    let mut ingress = Ingress::from_args(&matches)?;
-    let mut egress = Egress::from_args(&matches)?;
-    let id = 0_u64;
-
-    ingress.process(
-        &mut pipeline,
-        id,
-        &mut egress,
-        &move |runnable, id, egress, at, event| {
-            let value = LineValue::new(vec![], |_| unsafe {
-                std::mem::transmute(ValueAndMeta::from(event.clone()))
-            });
-
-            let mut continuation = vec![];
-
-            runnable.enqueue(
-                "in",
-                Event {
-                    id: Ids::new(0, *id),
-                    data: value.clone(),
-                    ingest_ns: at,
-                    ..Event::default()
-                },
-                &mut continuation,
-            )?;
-            *id += 1;
-
-            for (port, rvalue) in continuation.drain(..) {
-                egress.process(
-                    &simd_json::to_string_pretty(&value.suffix().value())?,
-                    &event,
-                    Ok(Return::Emit {
-                        value: rvalue.data.suffix().value().clone_static(),
-                        port: Some(port.to_string()),
-                    }),
-                )?;
-            }
-
-            Ok(())
-        },
-    )?;
-
-    Ok(())
-}
-
 pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
     let script_file = matches
         .value_of("SCRIPT")
@@ -418,8 +366,7 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
     match get_source_kind(&script_file) {
         SourceKind::Tremor | SourceKind::Json => run_tremor_source(&matches, script_file),
         SourceKind::Trickle => run_trickle_source(&matches, &script_file),
-        SourceKind::Pipeline => run_pipeline_source(&matches, &script_file),
-        SourceKind::Unsupported => {
+        SourceKind::Pipeline | SourceKind::Unsupported => {
             eprintln!("Error: Unable to execute source: {}", &script_file);
             // ALLOW: main.rs
             std::process::exit(1);

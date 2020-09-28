@@ -77,7 +77,6 @@ use crate::errors::Result;
 pub(crate) type OnRampVec = Vec<OnRamp>;
 pub(crate) type OffRampVec = Vec<OffRamp>;
 pub(crate) type BindingVec = config::BindingVec;
-pub(crate) type PipelineVec = Vec<tremor_pipeline::Pipeline>;
 pub(crate) type MappingMap = config::MappingMap;
 
 pub(crate) use crate::config::Binding;
@@ -99,8 +98,6 @@ pub struct IncarnatedConfig {
     pub offramps: OffRampVec,
     /// Bindings
     pub bindings: BindingVec,
-    /// Pipelines
-    pub pipes: PipelineVec,
     /// Mappings
     pub mappings: MappingMap,
 }
@@ -113,12 +110,10 @@ pub fn incarnate(config: config::Config) -> Result<IncarnatedConfig> {
     let onramps = incarnate_onramps(config.onramp.clone());
     let offramps = incarnate_offramps(config.offramp.clone());
     let bindings = incarnate_links(&config.binding);
-    let pipes = incarnate_pipes(config.pipeline)?;
     Ok(IncarnatedConfig {
         onramps,
         offramps,
         bindings,
-        pipes,
         mappings: config.mapping,
     })
 }
@@ -133,13 +128,6 @@ fn incarnate_offramps(config: config::OffRampVec) -> OffRampVec {
 
 fn incarnate_links(config: &[Binding]) -> BindingVec {
     config.to_owned()
-}
-
-fn incarnate_pipes(config: config::PipelineVec) -> Result<PipelineVec> {
-    config
-        .into_iter()
-        .map(|d| Ok(tremor_pipeline::build_pipeline(d)?))
-        .collect()
 }
 
 #[cfg(test)]

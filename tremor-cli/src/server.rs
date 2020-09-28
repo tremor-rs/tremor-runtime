@@ -23,7 +23,7 @@ use std::{io::BufReader, sync::atomic::Ordering};
 use tremor_api as api;
 use tremor_pipeline::query::Query;
 use tremor_pipeline::FN_REGISTRY;
-use tremor_runtime::repository::{BindingArtefact, PipelineArtefact};
+use tremor_runtime::repository::BindingArtefact;
 use tremor_runtime::system::World;
 use tremor_runtime::url::TremorURL;
 use tremor_runtime::{self, config, functions, metrics, version};
@@ -43,15 +43,7 @@ pub(crate) async fn load_file(world: &World, file_name: &str) -> Result<usize> {
         world.repo.publish_offramp(&id, false, o).await?;
         count += 1;
     }
-    for pipeline in config.pipes {
-        let id = TremorURL::parse(&format!("/pipeline/{}", pipeline.id))?;
-        warn!("The pipeline {} is defined in the YAML file {}, this functionality is deprecated please migrate to trickle pipelines.", id, file_name);
-        world
-            .repo
-            .publish_pipeline(&id, false, PipelineArtefact::Pipeline(Box::new(pipeline)))
-            .await?;
-        count += 1;
-    }
+
     for o in config.onramps {
         let id = TremorURL::parse(&format!("/onramp/{}", o.id))?;
         info!("Loading {} from file.", id);
@@ -111,10 +103,7 @@ pub(crate) async fn load_query_file(world: &World, file_name: &str) -> Result<us
 
     let id = TremorURL::parse(&format!("/pipeline/{}", id))?;
     info!("Loading {} from file.", id);
-    world
-        .repo
-        .publish_pipeline(&id, false, PipelineArtefact::Query(query))
-        .await?;
+    world.repo.publish_pipeline(&id, false, query).await?;
 
     Ok(1)
 }

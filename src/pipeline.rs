@@ -385,7 +385,7 @@ impl Manager {
 
     fn start_pipeline(&mut self, req: Create) -> Result<Addr> {
         let config = req.config;
-        let pipeline = config.to_executable_graph(&mut self.uid, tremor_pipeline::buildin_ops)?;
+        let pipeline = config.to_pipe(&mut self.uid)?;
 
         let id = req.id.clone();
 

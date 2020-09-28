@@ -139,67 +139,6 @@ mod test {
     }
 
     #[async_std::test]
-    async fn pipeline_activation_lifecycle() {
-        let (world, _) = World::start(10, None).await.expect("failed to start world");
-
-        let config = slurp("tests/configs/ut.passthrough.yaml");
-        let mut runtime = incarnate(config).expect("failed to incarnate runtime");
-        let pipeline = runtime.pipes.pop().expect("artefact not found");
-        let id = TremorURL::parse("/pipeline/test/snot").expect("failed to parse id");
-
-        assert!(world
-            .repo
-            .find_pipeline(&id)
-            .await
-            .expect("failed to communicate to repository")
-            .is_none());
-
-        // Legal <initial> -> Deactivated
-        assert_eq!(
-            Ok(ActivationState::Deactivated),
-            world
-                .bind_pipeline_from_artefact(&id, pipeline.into())
-                .await
-        );
-
-        // Legal Deactivated -> Activated
-        assert_eq!(
-            Ok(ActivationState::Activated),
-            world
-                .reg
-                .transition_pipeline(&id, ActivationState::Activated)
-                .await
-        );
-
-        // Legal Activated -> Zombie ( via hidden transition trampoline )
-        assert_eq!(
-            Ok(ActivationState::Zombie),
-            world
-                .reg
-                .transition_pipeline(&id, ActivationState::Zombie)
-                .await
-        );
-
-        // Zombies don't return from the dead
-        assert_eq!(
-            Ok(ActivationState::Zombie),
-            world
-                .reg
-                .transition_pipeline(&id, ActivationState::Deactivated)
-                .await
-        );
-
-        // Zombies don't return from the deady
-        assert_eq!(
-            Ok(ActivationState::Zombie),
-            world
-                .reg
-                .transition_pipeline(&id, ActivationState::Activated)
-                .await
-        );
-    }
-
-    #[async_std::test]
     async fn onramp_activation_lifecycle() {
         let (world, _) = World::start(10, None).await.expect("failed to start world");
 

@@ -88,6 +88,10 @@ impl From<tremor_script::query::Query> for Query {
     }
 }
 impl Query {
+    /// Source of the query
+    pub fn source(&self) -> &str {
+        &self.0.source
+    }
     /// Parse a query
     pub fn parse(
         module_path: &ModulePath,

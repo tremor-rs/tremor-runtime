@@ -13,11 +13,10 @@
 // limitations under the License.
 
 use crate::api::prelude::*;
-use tremor_runtime::repository::PipelineArtefact;
 
 #[derive(Serialize)]
 struct PipelineWrap {
-    pub artefact: tremor_pipeline::config::Pipeline,
+    pub query: String,
     instances: Vec<String>,
 }
 
@@ -33,22 +32,23 @@ pub async fn list_artefact(req: Request) -> Result<Response> {
     reply(req, result, false, StatusCode::Ok).await
 }
 
-pub async fn publish_artefact(req: Request) -> Result<Response> {
-    let (req, decoded_data): (_, tremor_pipeline::config::Pipeline) = decode(req).await?;
+pub async fn publish_artefact(_req: Request) -> Result<Response> {
+    panic!("FIXME .unwrap()")
+    //     let (req, decoded_data): (_, tremor_pipeline::config::Pipeline) = decode(req).await?;
 
-    let url = build_url(&["pipeline", &decoded_data.id])?;
-    let pipeline = tremor_pipeline::build_pipeline(decoded_data)?;
+    //     let url = build_url(&["pipeline", &decoded_data.id])?;
+    //     let pipeline = tremor_pipeline::build_pipeline(decoded_data)?;
 
-    let repo = &req.state().world.repo;
-    let result = repo
-        .publish_pipeline(&url, false, PipelineArtefact::Pipeline(Box::new(pipeline)))
-        .await
-        .map(|result| match result {
-            PipelineArtefact::Pipeline(p) => p.config,
-            //ALLOW:  We publish a pipeline we can't ever get anything else back
-            PipelineArtefact::Query(_) => unreachable!(),
-        })?;
-    reply(req, result, true, StatusCode::Created).await
+    //     let repo = &req.state().world.repo;
+    //     let result = repo
+    //         .publish_pipeline(&url, false, PipelineArtefact::Pipeline(Box::new(pipeline)))
+    //         .await
+    //         .map(|result| match result {
+    //             PipelineArtefact::Pipeline(p) => p.config,
+    //             //ALLOW:  We publish a pipeline we can't ever get anything else back
+    //             PipelineArtefact::Query(_) => unreachable!(),
+    //         })?;
+    //     reply(req, result, true, StatusCode::Created).await
 }
 
 pub async fn unpublish_artefact(req: Request) -> Result<Response> {
@@ -58,10 +58,7 @@ pub async fn unpublish_artefact(req: Request) -> Result<Response> {
     let result = repo
         .unpublish_pipeline(&url)
         .await
-        .and_then(|result| match result {
-            PipelineArtefact::Pipeline(p) => Ok(p.config),
-            PipelineArtefact::Query(_) => Err("This is a query".into()), // FIXME
-        })?;
+        .and_then(|result| Ok(result.source().to_string()))?;
     reply(req, result, true, StatusCode::Ok).await
 }
 
@@ -73,26 +70,18 @@ pub async fn get_artefact(req: Request) -> Result<Response> {
         .find_pipeline(&url)
         .await?
         .ok_or_else(Error::not_found)?;
-    match result.artefact {
-        PipelineArtefact::Pipeline(p) => {
-            reply(
-                req,
-                PipelineWrap {
-                    artefact: p.config,
-                    instances: result
-                        .instances
-                        .iter()
-                        .filter_map(|v| v.instance().map(String::from))
-                        .collect(),
-                },
-                false,
-                StatusCode::Ok,
-            )
-            .await
-        }
-        PipelineArtefact::Query(_) => Err(Error::json(
-            StatusCode::BadRequest,
-            &r#"{"error": "Artefact is a query"}"#,
-        )),
-    }
+    reply(
+        req,
+        PipelineWrap {
+            query: result.artefact.source().to_string(),
+            instances: result
+                .instances
+                .iter()
+                .filter_map(|v| v.instance().map(String::from))
+                .collect(),
+        },
+        false,
+        StatusCode::Ok,
+    )
+    .await
 }
