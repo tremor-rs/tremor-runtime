@@ -12,37 +12,6 @@ offramp:
     config:
       file: "events.log"
 
-pipeline:
-  - id: main
-    interface:
-      inputs:
-        - in
-      outputs:
-        - out
-    nodes:
-      - id: r
-        op: runtime::tremor
-        config:
-          script: |
-            let $class = "default";
-            let $rate = 100;
-            event;
-      - id: b
-        op: grouper::bucket
-    links:
-      in: [r]
-      r: [b]
-      b: [out]
-  - id: pass
-    interface:
-      inputs:
-        - in
-      outputs:
-        - out
-    links:
-      in: [ out ]
-
-
 binding:
   - id: test
     links:

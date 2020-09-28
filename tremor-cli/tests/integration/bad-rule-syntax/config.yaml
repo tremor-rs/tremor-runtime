@@ -12,23 +12,6 @@ offramp:
     config:
       file: "events.log"
 
-pipeline:
-  - id: main
-    interface:
-      inputs:
-        - in
-      outputs:
-        - out
-    nodes:
-      - id: r
-        op: runtime::tremor
-        config:
-          script: |
-            42bad {{
-    links:
-      in: [r]
-      r: [out]
-
 binding:
   - id: test
     links:

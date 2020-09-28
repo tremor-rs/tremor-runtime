@@ -1,0 +1,9 @@
+define script runtime
+script
+  42bad {{
+end;
+
+create script runtime;
+
+select event from in into runtime;
+select event from runtime into out;

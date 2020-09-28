@@ -3,5 +3,4 @@ name: Bad syntax in configuration
 asserts:
   - source: fg.err.log
     contains:
-      - bad {{
       - An unexpected character 'b' was found

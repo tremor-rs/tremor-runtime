@@ -1,0 +1,11 @@
+define script runtime
+script
+  let $ = {"new": "data"};
+  $
+end;
+
+create script runtime;
+
+select event from in into runtime;
+select event from runtime into out;
+select event from runtime/error into out;

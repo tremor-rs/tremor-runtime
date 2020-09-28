@@ -3,6 +3,4 @@ name: With no rules no data passes
 asserts:
   - source: fg.err.log
     contains:
-      - '1 | '
-      - '^ Found the token `` but expected one of `!`, `\``, `$`, `(`, `+`, `-`, `<doc-comment>`, `<ident>`, `<mod-comment>`, `[`, `absent`, `args`, `bool`, `const`, `drop`, `emit`, `event`, `float`, `fn`, `for`, `group`, `heredoc`, `int`, `intrinsic`, `let`, `match`, `merge`, `mod`, `nil`, `not`, `patch`, `present`, `recur`, `state`, `window`, `{`'
-      - 'NOTE: It looks like a `;` is missing at the end of the script'
+      - und the token `end` but expected one of

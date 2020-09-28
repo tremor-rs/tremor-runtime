@@ -12,33 +12,12 @@ offramp:
     config:
       file: "events.log"
 
-pipeline:
-  - id: main
-    interface:
-      inputs:
-        - in
-      outputs:
-        - out
-    nodes:
-      - id: r
-        op: runtime::tremor
-        config:
-          script: |
-            let $ = {"new": "data"};
-            $;
-    links:
-      in: [r]
-      r: [out]
-      r/error: [out]
-
 binding:
   - id: test
     links:
       "/onramp/in/{instance}/out": ["/pipeline/main/{instance}/in"]
       "/pipeline/main/{instance}/out": ["/offramp/out/{instance}/in"]
 
-
 mapping:
   /binding/test/1:
     instance: "1"
-      
