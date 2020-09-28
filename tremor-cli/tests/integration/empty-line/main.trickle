@@ -1,0 +1,15 @@
+define script runtime
+script
+  let $class = "default";
+  let $rate = 100;
+  event
+end;
+
+define grouper::bucket operator bucket;
+
+create script runtime;
+create operator bucket;
+
+select event from in into runtime;
+select event from runtime into bucket;
+select event from bucket into out;

@@ -12,22 +12,6 @@ offramp:
     config:
       file: "gen.json"
 
-pipeline:
-  - id: main
-    interface:
-      inputs:
-        - in
-      outputs:
-        - out
-    nodes:
-      - id: r
-        op: runtime::tremor
-        config:
-          script: ""
-    links:
-      in: [r]
-      r: [out]
-
 binding:
   - id: test
     links:

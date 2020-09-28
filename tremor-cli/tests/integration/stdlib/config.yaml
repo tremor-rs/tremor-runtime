@@ -12,24 +12,6 @@ offramp:
     config:
       file: "events.log"
 
-pipeline:
-  - id: main
-    interface:
-      inputs:
-        - in
-      outputs:
-        - out
-    nodes:
-      - id: r
-        op: runtime::tremor
-        config:
-          script: |
-            use std::record;
-            record::values(event)
-    links:
-      in: [r]
-      r: [out]
-
 binding:
   - id: test
     links:
@@ -39,4 +21,3 @@ binding:
 mapping:
   /binding/test/1:
     instance: "1"
-      

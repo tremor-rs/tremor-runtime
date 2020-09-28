@@ -10,20 +10,6 @@ offramp:
   - id: out
     type: bad_offramp
 
-pipeline:
-  - id: main
-    interface:
-      inputs:
-        - in
-      outputs:
-        - out
-    nodes:
-      - id: p
-        op: passthrough
-    links:
-      in: [p]
-      p: [out]
-
 binding:
   - id: test
     links:
@@ -33,4 +19,3 @@ binding:
 mapping:
   /binding/test/1:
     instance: "1"
-      

@@ -1,0 +1,14 @@
+define script runtime
+script
+  let in = {"message": event};
+  let event =  match in of
+    case r = %{ message ~= dissect|%{first} %{last}| } => r.message
+    default => drop
+  end;
+  event
+end;
+
+create script runtime;
+
+select event from in into runtime;
+select event from runtime into out;
