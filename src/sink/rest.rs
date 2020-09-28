@@ -167,6 +167,8 @@ impl Sink for Rest {
                 // send request
                 // TODO reuse client
                 if let Ok(response) = surf::client().send(request).await {
+                    #[allow(clippy::cast_possible_truncation)]
+                    // we dont care about the upper 64 bit
                     let duration = start.elapsed().as_millis() as u64; // measure response duration
                     codec_task_channel
                         .send(CodecTaskInMsg::ToEvent {
