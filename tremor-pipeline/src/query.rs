@@ -12,13 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::config::{InputPort, OutputPort};
 use crate::errors::{Error, ErrorKind, Result};
-use crate::op;
 use crate::op::prelude::{IN, OUT};
 use crate::op::trickle::select::WindowImpl;
-use crate::OperatorNode;
-use crate::{common_cow, ConfigGraph, NodeConfig, NodeKind, Operator, PortIndexMap};
+use crate::{
+    common_cow, op, ConfigGraph, NodeConfig, NodeKind, Operator, OperatorNode, PortIndexMap,
+};
 use halfbrown::HashMap;
 use indexmap::IndexMap;
 use op::identity::PassthroughFactory;
@@ -40,6 +39,19 @@ use tremor_script::highlighter::Dumb as DumbHighlighter;
 use tremor_script::path::ModulePath;
 use tremor_script::query::{StmtRental, StmtRentalWrapper};
 use tremor_script::{AggrRegistry, Registry, Value};
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+struct InputPort {
+    pub id: Cow<'static, str>,
+    pub port: Cow<'static, str>,
+    pub had_port: bool,
+}
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+struct OutputPort {
+    pub id: Cow<'static, str>,
+    pub port: Cow<'static, str>,
+    pub had_port: bool,
+}
 
 fn resolve_input_port(port: &(Ident, Ident)) -> InputPort {
     InputPort {

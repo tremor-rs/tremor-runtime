@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::config::dflt;
 use crate::op::prelude::*;
 use std::mem::swap;
 use tremor_script::prelude::*;
@@ -22,7 +21,7 @@ pub struct Config {
     /// Name of the event history ( path ) to track
     pub count: usize,
     /// The amount time between messags to flush
-    #[serde(default = "dflt")]
+    #[serde(default = "Default::default")]
     pub timeout: Option<u64>,
 }
 
