@@ -1,0 +1,10 @@
+define script s
+script
+  let event.merged = "true";
+  event
+end;
+
+create script s;
+
+select event from in into s;
+select event from s into out;

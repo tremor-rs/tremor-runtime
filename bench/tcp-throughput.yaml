@@ -34,30 +34,12 @@ offramp:
 binding:
   - id: bench
     links:
-      '/onramp/blaster/{instance}/out': [ '/pipeline/blaster/{instance}/in' ]
-      '/pipeline/blaster/{instance}/out': [ '/offramp/tcp-out/{instance}/in' ]
+      "/onramp/blaster/{instance}/out": ["/pipeline/blaster/{instance}/in"]
+      "/pipeline/blaster/{instance}/out": ["/offramp/tcp-out/{instance}/in"]
   - id: bench2
     links:
-      '/onramp/tcp-in/{instance}/out': [ '/pipeline/blackhole/{instance}/in' ]
-      '/pipeline/blackhole/{instance}/out': [ '/offramp/blackhole/{instance}/in' ]
-
-pipeline:
-  - id: blaster
-    interface:
-      inputs:
-        - in
-      outputs:
-        - out
-    links:
-      in: [ out ]
-  - id: blackhole
-    interface:
-      inputs:
-        - in
-      outputs:
-        - out
-    links:
-      in: [ out ]
+      "/onramp/tcp-in/{instance}/out": ["/pipeline/blackhole/{instance}/in"]
+      "/pipeline/blackhole/{instance}/out": ["/offramp/blackhole/{instance}/in"]
 
 mapping:
   # mapping for binding "bench" comes via the common link.yaml

@@ -18,27 +18,8 @@ offramp:
       stop_after_secs: 100
       significant_figures: 2
 
-
 binding:
   - id: bench
     links:
-      '/onramp/blaster/{instance}/out': [ '/pipeline/main/{instance}/in' ]
-      '/pipeline/main/{instance}/out': [ '/offramp/blackhole/{instance}/in' ]
-
-pipeline:
-  - id: main
-    interface:
-      inputs:
-        - in
-      outputs:
-        - out
-    nodes:
-      - id: runtime
-        op: runtime::tremor
-        config:
-          script: |
-            emit | let .merged = "true";
-            .;
-    links:
-      in: [ runtime ]
-      runtime: [ out ]
+      "/onramp/blaster/{instance}/out": ["/pipeline/main/{instance}/in"]
+      "/pipeline/main/{instance}/out": ["/offramp/blackhole/{instance}/in"]

@@ -32,28 +32,16 @@ offramp:
       stop_after_secs: 100
       significant_figures: 3
 
-
 binding:
   - id: bench
     links:
-      '/onramp/blaster/{instance}/out': [ '/pipeline/main/{instance}/in' ]
-      '/pipeline/main/{instance}/out': [ '/offramp/ws-out/{instance}/in' ]
+      "/onramp/blaster/{instance}/out": ["/pipeline/main/{instance}/in"]
+      "/pipeline/main/{instance}/out": ["/offramp/ws-out/{instance}/in"]
   - id: blackhole
     links:
-      '/onramp/ws-in/{instance}/out': [ '/pipeline/main/{instance}/in' ]
-      '/pipeline/main/{instance}/out': [ '/offramp/blackhole/{instance}/in' ]
+      "/onramp/ws-in/{instance}/out": ["/pipeline/main/{instance}/in"]
+      "/pipeline/main/{instance}/out": ["/offramp/blackhole/{instance}/in"]
 
-pipeline:
-  - id: main
-    interface:
-      inputs:
-        - in
-      outputs:
-        - out
-    links:
-      in: [ out ]
-
-  
 mapping:
   /binding/blackhole/01:
     instance: "01"
