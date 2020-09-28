@@ -79,7 +79,7 @@ pub(crate) async fn load_query_file(world: &World, file_name: &str) -> Result<us
     use std::io::Read;
     info!("Loading configuration from {}", file_name);
     let path = Path::new(file_name);
-    let id = path
+    let file_id = path
         .file_stem()
         .unwrap_or_else(|| OsStr::new(file_name))
         .to_string_lossy();
@@ -100,9 +100,10 @@ pub(crate) async fn load_query_file(world: &World, file_name: &str) -> Result<us
         &*FN_REGISTRY.lock()?,
         &aggr_reg,
     )?;
+    let id = query.id().unwrap_or_else(|| &file_id);
 
     let id = TremorURL::parse(&format!("/pipeline/{}", id))?;
-    info!("Loading {} from file.", id);
+    info!("Loading {} from file {}.", id, file_id);
     world.repo.publish_pipeline(&id, false, query).await?;
 
     Ok(1)

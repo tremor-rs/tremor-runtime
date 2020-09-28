@@ -137,6 +137,22 @@ pub(crate) fn load(path_to_file: &str) -> Result<simd_json::OwnedValue> {
     }
 }
 
+pub(crate) fn load_trickle(path_to_file: &str) -> Result<String> {
+    let mut source = crate::open_file(path_to_file, None)?;
+    let ext = Path::new(path_to_file)
+        .extension()
+        .and_then(OsStr::to_str)
+        .ok_or("Could not create fail path")?;
+    let mut raw = String::new();
+    source.read_to_string(&mut raw)?;
+
+    if ext == "trickle" {
+        Ok(raw)
+    } else {
+        Err(Error::from(format!("Unsupported format: {}", ext)))
+    }
+}
+
 pub(crate) fn content_type(app: &TremorApp) -> &'static str {
     match app.format {
         FormatKind::Json => "application/json",
