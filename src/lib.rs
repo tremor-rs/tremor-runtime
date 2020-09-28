@@ -163,18 +163,6 @@ mod test {
         assert_eq!(1, runtime.onramps.len());
         assert_eq!(1, runtime.offramps.len());
         assert_eq!(0, runtime.bindings.len());
-        assert_eq!(0, runtime.pipes.len());
-    }
-
-    #[test]
-    fn load_simple_pipes() {
-        let config = slurp("tests/configs/pipe.simple.yaml");
-        println!("{:?}", &config);
-        let runtime = incarnate(config).expect("Failed to incarnate config");
-        assert_eq!(0, runtime.onramps.len());
-        assert_eq!(0, runtime.offramps.len());
-        assert_eq!(0, runtime.bindings.len());
-        assert_eq!(1, runtime.pipes.len());
     }
 
     #[test]
@@ -185,51 +173,5 @@ mod test {
         assert_eq!(1, runtime.onramps.len());
         assert_eq!(1, runtime.offramps.len());
         assert_eq!(2, runtime.bindings[0].links.len());
-        assert_eq!(1, runtime.pipes.len());
     }
-
-    #[test]
-    fn load_passthrough_op() {
-        let config = slurp("tests/configs/ut.single-op.yaml");
-        println!("{:?}", &config);
-        assert!(incarnate(config).is_ok());
-    }
-
-    #[test]
-    fn load_branch_op() {
-        let config = slurp("tests/configs/ut.branch-op.yaml");
-        println!("{:?}", &config);
-        assert!(incarnate(config).is_ok());
-    }
-
-    #[test]
-    fn load_combine_op() {
-        let config = slurp("tests/configs/ut.combine-op.yaml");
-        println!("{:?}", &config);
-        assert!(incarnate(config).is_ok());
-    }
-
-    #[test]
-    fn load_combine2_op() {
-        let config = slurp("tests/configs/ut.combine2-op.yaml");
-        println!("{:?}", &config);
-        assert!(incarnate(config).is_ok());
-    }
-
-    #[test]
-    fn load_combine3_op() {
-        let config = slurp("tests/configs/ut.combine3-op.yaml");
-        println!("{:?}", &config);
-        assert!(incarnate(config).is_ok());
-    }
-
-    #[test]
-    fn load_combine4_op_cycle_error() {
-        let config = slurp("tests/configs/ut.combine4-op.yaml");
-        println!("{:?}", &config);
-        assert!(incarnate(config).is_err());
-    }
-
-    #[test]
-    fn pipeline_to_runner() {}
 }
