@@ -152,6 +152,7 @@ pub(crate) fn process(
 ) -> Result<(stats::Stats, Vec<report::TestElement>)> {
     let mut elements = Vec::new();
     let mut s = stats::Stats::new();
+    s.assert(); // status code
     if let Some(code) = status {
         let success = code == spec.status;
         let prefix = if success { "(+)" } else { "(-)" };
@@ -187,7 +188,6 @@ pub(crate) fn process(
             &spec.status.to_string(),
             "signal",
         )?;
-        s.fail();
         elements.push(report::TestElement {
             description: format!("Process expected to exit with status code {}", spec.status),
             info: Some("terminated by signal".into()),
@@ -219,6 +219,7 @@ pub(crate) fn process_filebased_asserts(
     let mut elements = Vec::new();
     let mut stats = stats::Stats::new();
     for assert in asserts {
+        stats.assert();
         match assert {
             FileBasedAssert {
                 contains: None,

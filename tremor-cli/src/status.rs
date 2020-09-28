@@ -25,10 +25,22 @@ macro_rules! fg_bold {
     };
 }
 
-pub(crate) fn h1(label: &str, what: &str) -> Result<()> {
+pub(crate) fn h0(label: &str, what: &str) -> Result<()> {
     let mut h = TermHighlighter::new();
     fg_bold!(h, White);
     write!(h.get_writer(), "{}", &label)?;
+    h.reset()?;
+    writeln!(h.get_writer(), ": {}", &what)?;
+    h.reset()?;
+    h.finalize()?;
+    drop(h);
+    Ok(())
+}
+
+pub(crate) fn h1(label: &str, what: &str) -> Result<()> {
+    let mut h = TermHighlighter::new();
+    fg_bold!(h, White);
+    write!(h.get_writer(), "  {}", &label)?;
     h.reset()?;
     writeln!(h.get_writer(), ": {}", &what)?;
     h.reset()?;
@@ -80,10 +92,10 @@ fn humanize(ts: u64) -> String {
     }
 }
 
-pub(crate) fn duration(what: u64) -> Result<()> {
+pub(crate) fn duration(what: u64, prefix: &str) -> Result<()> {
     let mut h = TermHighlighter::new();
     fg_bold!(h, Blue);
-    write!(h.get_writer(), "  Elapsed")?;
+    write!(h.get_writer(), "{}Elapsed", prefix)?;
     h.reset()?;
     writeln!(h.get_writer(), ": {}", &humanize(what))?;
     h.reset()?;
@@ -93,15 +105,7 @@ pub(crate) fn duration(what: u64) -> Result<()> {
 }
 
 pub(crate) fn total_duration(what: u64) -> Result<()> {
-    let mut h = TermHighlighter::new();
-    fg_bold!(h, Blue);
-    write!(h.get_writer(), "Total Elapsed")?;
-    h.reset()?;
-    writeln!(h.get_writer(), ": {}", &humanize(what))?;
-    h.reset()?;
-    h.finalize()?;
-    drop(h);
-    Ok(())
+    duration(what, "Total ")
 }
 
 pub(crate) fn assert(
@@ -117,7 +121,7 @@ pub(crate) fn assert(
     } else {
         fg_bold!(h, Red);
     }
-    write!(h.get_writer(), "  {}", &label)?;
+    write!(h.get_writer(), "    {}", &label)?;
     h.reset()?;
     write!(h.get_writer(), ": ")?;
     write!(h.get_writer(), "{} ", &what)?;
@@ -141,9 +145,9 @@ pub(crate) fn assert_has(label: &str, what: &str, info: Option<&String>, ok: boo
     let mut h = TermHighlighter::new();
     if ok {
         fg_bold!(h, Green);
-        write!(h.get_writer(), "  (+) ")?;
+        write!(h.get_writer(), "    (+) ")?;
     } else {
-        write!(h.get_writer(), "  (-) ")?;
+        write!(h.get_writer(), "    (-) ")?;
         fg_bold!(h, Red);
     }
     write!(h.get_writer(), "{}", &label)?;
@@ -166,10 +170,10 @@ pub(crate) fn executing_unit_testcase(i: usize, n: usize, success: bool) -> Resu
     fg_bold!(h, Green);
     let prefix = if success {
         fg_bold!(h, Green);
-        "(+)"
+        "  (+)"
     } else {
         fg_bold!(h, Red);
-        "(-)"
+        "  (-)"
     };
     writeln!(
         h.get_writer(),
@@ -184,20 +188,34 @@ pub(crate) fn executing_unit_testcase(i: usize, n: usize, success: bool) -> Resu
     Ok(())
 }
 
-pub(crate) fn stats(stats: &stats::Stats) -> Result<()> {
+pub(crate) fn stats(stats: &stats::Stats, prefix: &str) -> Result<()> {
+    if stats.is_zero() {
+        return Ok(());
+    }
+
     let mut h = TermHighlighter::new();
     fg_bold!(h, Blue);
-    write!(h.get_writer(), "  Stats: ")?;
+    write!(h.get_writer(), "{}  Stats: ", prefix)?;
     fg_bold!(h, Green);
     write!(h.get_writer(), "Pass ")?;
     write!(h.get_writer(), "{} ", stats.pass)?;
-    fg_bold!(h, Red);
+    if stats.fail > 0 {
+        fg_bold!(h, Red);
+    } else {
+        fg_bold!(h, Black);
+    }
     write!(h.get_writer(), "Fail ")?;
     write!(h.get_writer(), "{} ", stats.fail)?;
-    fg_bold!(h, Yellow);
+    if stats.skip > 0 {
+        fg_bold!(h, Yellow);
+    } else {
+        fg_bold!(h, Black);
+    }
     write!(h.get_writer(), "Skip ")?;
     write!(h.get_writer(), "{} ", stats.skip)?;
-    writeln!(h.get_writer())?;
+    fg_bold!(h, Yellow);
+    write!(h.get_writer(), " Asserts ")?;
+    writeln!(h.get_writer(), "{} ", stats.assert)?;
     h.reset()?;
     h.finalize()?;
     drop(h);
@@ -210,19 +228,33 @@ pub(crate) fn hr() -> Result<()> {
 }
 
 pub(crate) fn rollups(label: &str, stats: &stats::Stats) -> Result<()> {
+    if stats.is_zero() {
+        return Ok(());
+    }
+
     let mut h = TermHighlighter::new();
     fg_bold!(h, Blue);
     write!(h.get_writer(), "{} Stats: ", label)?;
     fg_bold!(h, Green);
     write!(h.get_writer(), "Pass ")?;
     write!(h.get_writer(), "{} ", stats.pass)?;
-    fg_bold!(h, Red);
+    if stats.fail > 0 {
+        fg_bold!(h, Red);
+    } else {
+        fg_bold!(h, Black);
+    }
     write!(h.get_writer(), "Fail ")?;
     write!(h.get_writer(), "{} ", stats.fail)?;
-    fg_bold!(h, Yellow);
+    if stats.skip > 0 {
+        fg_bold!(h, Yellow);
+    } else {
+        fg_bold!(h, Black);
+    }
     write!(h.get_writer(), "Skip ")?;
     write!(h.get_writer(), "{} ", stats.skip)?;
-    writeln!(h.get_writer())?;
+    fg_bold!(h, Yellow);
+    write!(h.get_writer(), " Asserts ")?;
+    writeln!(h.get_writer(), "{} ", stats.assert)?;
     h.reset()?;
     h.finalize()?;
     drop(h);
@@ -234,7 +266,7 @@ pub(crate) fn tags(filter: &TagFilter, tags: Option<&Vec<String>>) -> Result<()>
         let (active, _status) = filter.matches(&tags);
         let mut h = TermHighlighter::new();
         fg_bold!(h, Yellow);
-        write!(h.get_writer(), "  Tags: ")?;
+        write!(h.get_writer(), "    Tags: ")?;
         for tag in tags {
             if active.contains(&tag) {
                 fg_bold!(h, Green);

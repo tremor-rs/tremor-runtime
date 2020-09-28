@@ -11,8 +11,8 @@ do
   fi
 done;
 
-echo "If a pid file exists, hard kill"
 if test -f before.pid; then
+    echo "A pid file exists, no more mr nice test framework"
     kill -9 $( cat before.pid )
     # Remove pid file
     rm -f before.pid

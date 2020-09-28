@@ -55,6 +55,9 @@ fn suite_bench(
 
         let mut suite = vec![];
         let mut stats = stats::Stats::new();
+
+        status::h0("Framework", "Finding benchmark test suites")?;
+
         for bench in benches {
             let root = bench.path();
             let bench_root = root.to_string_lossy();
@@ -63,14 +66,17 @@ fn suite_bench(
 
             if let (_matched, true) = by_tag.matches(&tags) {
                 status::h1("Benchmark", &format!("Running {}", &basename(&bench_root)))?;
-                let test_report = process::run_process("bench", root, by_tag)?;
-                status::duration(test_report.duration)?;
                 status::tags(&by_tag, Some(&tags))?;
+                let test_report = process::run_process("bench", root, by_tag)?;
+                status::duration(test_report.duration, "  ")?;
                 suite.push(test_report);
                 stats.pass(); // FIXME invent a better way of capturing benchmark status
             } else {
                 stats.skip();
-                status::h1("Benchmark", &format!("Skipping {}", &basename(&bench_root)))?;
+                status::h1(
+                    "  Benchmark",
+                    &format!("Skipping {}", &basename(&bench_root)),
+                )?;
             }
         }
 
@@ -95,6 +101,8 @@ fn suite_integration(
         let mut suite = vec![];
         let mut stats = stats::Stats::new();
 
+        status::h0("Framework", "Finding integration test suites")?;
+
         for test in tests {
             let root = test.path();
             let base = root.to_string_lossy().to_string();
@@ -112,26 +120,32 @@ fn suite_integration(
                 std::env::set_current_dir(Path::new(&base))?;
 
                 // Run integration tests
+                status::tags(&by_tag, Some(&tags))?;
                 let test_report = process::run_process("integration", root, by_tag)?;
 
                 // Restore cwd
                 std::env::set_current_dir(cwd)?;
 
-                stats.merge(&test_report.stats);
-                status::stats(&test_report.stats)?;
-                status::duration(test_report.duration)?;
-                status::tags(&by_tag, Some(&tags))?;
+                if test_report.stats.is_pass() {
+                    stats.pass();
+                } else {
+                    stats.fail();
+                }
+                stats.assert += &test_report.stats.assert;
+
+                status::stats(&test_report.stats, "")?;
+                status::duration(test_report.duration, "  ")?;
                 suite.push(test_report);
             } else {
                 stats.skip();
                 status::h1(
-                    "Integration",
+                    "  Integration",
                     &format!("Skipping {}", &basename(&bench_root)),
                 )?;
             }
         }
 
-        status::rollups("\nIntegration", &stats)?;
+        status::rollups("\n  Integration", &stats)?;
 
         Ok((stats, suite))
     } else {
@@ -152,15 +166,21 @@ fn suite_unit(
         let suites = suites.filter_map(std::result::Result::ok);
         let mut reports = vec![];
         let mut stats = stats::Stats::new();
+
+        status::h0("Framework", "Finding unit test suites")?;
+
         for suite in suites {
             let report = unit::run_suite(&suite.path(), by_tag)?;
+
+            status::h0("Unit Tests", &suite.into_path().to_string_lossy())?;
+
             stats.merge(&report.stats);
-            status::stats(&report.stats)?;
-            status::duration(report.duration)?;
+            status::stats(&report.stats, "  ")?;
+            status::duration(report.duration, "    ")?;
             reports.push(report);
         }
 
-        status::rollups("\nUnit", &stats)?;
+        // status::rollups("  Unit", &stats)?;
 
         Ok((stats, reports))
     } else {
@@ -252,16 +272,16 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
 
     status::hr()?;
     status::hr()?;
-    status::rollups("All Benchmark Stats", &bench_stats)?;
-    status::rollups("All Integration Stats", &integration_stats)?;
-    status::rollups("All Command Stats", &cmd_stats)?;
-    status::rollups("All Unit Stats", &unit_stats)?;
+    status::rollups("All Benchmark", &bench_stats)?;
+    status::rollups("All Integration", &integration_stats)?;
+    status::rollups("All Command", &cmd_stats)?;
+    status::rollups("All Unit", &unit_stats)?;
     let mut all_stats = stats::Stats::new();
     all_stats.merge(&bench_stats);
     all_stats.merge(&integration_stats);
     all_stats.merge(&cmd_stats);
     all_stats.merge(&unit_stats);
-    status::rollups("Total Stats", &all_stats)?;
+    status::rollups("Total", &all_stats)?;
     let mut stats_map = HashMap::new();
     stats_map.insert("all".to_string(), all_stats.clone());
     stats_map.insert("bench".to_string(), bench_stats);

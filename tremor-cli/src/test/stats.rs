@@ -18,6 +18,7 @@ pub struct Stats {
     pub(crate) pass: u32,
     pub(crate) fail: u32,
     pub(crate) skip: u32,
+    pub(crate) assert: u32,
 }
 
 impl Stats {
@@ -26,6 +27,7 @@ impl Stats {
             pass: 0,
             fail: 0,
             skip: 0,
+            assert: 0,
         }
     }
 
@@ -41,9 +43,22 @@ impl Stats {
         self.skip += 1;
     }
 
+    pub(crate) fn assert(&mut self) {
+        self.assert += 1;
+    }
+
+    pub(crate) fn is_zero(&self) -> bool {
+        self.pass == 0 && self.fail == 0 && self.skip == 0 && self.assert == 0
+    }
+
+    pub(crate) fn is_pass(&self) -> bool {
+        self.fail == 0
+    }
+
     pub(crate) fn merge(&mut self, other: &Stats) {
         self.pass += other.pass;
         self.fail += other.fail;
         self.skip += other.skip;
+        self.assert += other.assert;
     }
 }

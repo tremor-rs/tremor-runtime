@@ -168,6 +168,22 @@ pub trait Highlighter {
         self.highlight_errors(true, file, &tokens.iter().collect::<Vec<_>>(), None)
     }
 
+    /// highlights a token stream with line numbers
+    fn highlight_indent(
+        &mut self,
+        line_prefix: &str,
+        file: Option<&str>,
+        tokens: &[TokenSpan],
+    ) -> std::result::Result<(), std::io::Error> {
+        self.highlight_errors_indent(
+            line_prefix,
+            true,
+            file,
+            &tokens.iter().collect::<Vec<_>>(),
+            None,
+        )
+    }
+
     /// highlights a runtime error
     fn highlight_runtime_error(
         &mut self,
@@ -185,6 +201,19 @@ pub trait Highlighter {
     #[allow(clippy::cast_possible_truncation, clippy::too_many_lines)]
     fn highlight_errors(
         &mut self,
+        emit_linenos: bool,
+        file: Option<&str>,
+        tokens: &[&TokenSpan],
+        error: Option<Error>,
+    ) -> std::result::Result<(), std::io::Error> {
+        self.highlight_errors_indent("", emit_linenos, file, tokens, error)
+    }
+
+    /// highlights compile time errors with indentation
+    #[allow(clippy::cast_possible_truncation, clippy::too_many_lines)]
+    fn highlight_errors_indent(
+        &mut self,
+        line_prefix: &str,
         emit_linenos: bool,
         file: Option<&str>,
         tokens: &[&TokenSpan],
@@ -270,9 +299,9 @@ pub trait Highlighter {
                 }
                 self.set_color(ColorSpec::new().set_bold(true))?;
                 if emit_linenos {
-                    write!(self.get_writer(), "{:5} | ", line)?;
+                    write!(self.get_writer(), "{}{:5} | ", line_prefix, line)?;
                 } else {
-                    write!(self.get_writer(), "      | ")?;
+                    write!(self.get_writer(), "{}      | ", line_prefix)?;
                 }
                 self.reset()?;
             }
@@ -444,7 +473,8 @@ impl ToString for Dumb {
 /// Highlights data colorized and directly to the terminal
 pub struct Term {
     bufwtr: BufferWriter,
-    buff: Buffer,
+    /// Internal buffer
+    pub buff: Buffer,
 }
 
 // This is a terminal highlighter it simply adds colors
