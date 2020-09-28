@@ -66,6 +66,7 @@ pub struct Rest {
     client_idx: usize,
     config: Config,
     num_inflight_requests: AtomicMaxCounter,
+
     postprocessors: Postprocessors,
     //codec_map: HashMap<String, Box<dyn Codec>>,
     is_linked: bool,
@@ -91,11 +92,11 @@ impl offramp::Impl for Rest {
             let num_inflight_requests = AtomicMaxCounter::new(config.concurrency);
             Ok(SinkManager::new_box(Self {
                 client_idx: 0,
-                postprocessors: vec![],
-                is_linked: false,
                 config,
                 num_inflight_requests,
+                postprocessors: vec![],
                 //codec_map: codec::builtin_codec_map(),
+                is_linked: false,
                 reply_channel: None,
             }))
         } else {
@@ -171,72 +172,11 @@ impl Rest {
         Ok(request_builder)
     }
 
-    async fn send_request(&mut self, event: Event, codec: &dyn Codec) -> ResultVec {
-        let start = Instant::now();
-        let request_builder = self.build_request(&event, codec)?;
-        // send request & receive response
-        // TODO: keep surf clients around for maintaining persistent connections
-        let mut res = request_builder.await?;
-        // send ack if status < 400
-        // send fail if status >= 400
-        // if linked - send response
-
-        let status = res.status();
-        let mut meta = Value::object_with_capacity(1);
-        let cb = if status.is_client_error() || status.is_server_error() {
-            if let Ok(body) = res.body_string().await {
-                error!("HTTP request failed: {} => {}", status, body)
-            } else {
-                error!("HTTP request failed: {}", status)
-            }
-            let duration = duration_to_millis(start.elapsed());
-            meta.insert("time", duration)?;
-            CBAction::Fail
-        } else {
-            CBAction::Ack
-        };
-
-        if let Some(reply_channel) = &self.reply_channel {
-            let send_res = reply_channel
-                .send(SinkReply::Insight(Event {
-                    id: event.id.clone(),
-                    op_meta: event.op_meta.clone(),
-                    data: (Value::null(), meta).into(),
-                    cb,
-                    ingest_ns: nanotime(),
-                    ..Event::default()
-                }))
-                .await;
-
-            if let Err(e) = send_res {
-                error!("Failed to send insight eply: {}", e) // do not fail and trigger cb::fail here
-            };
-
-            // send response if we are linked
-            if self.is_linked {
-                // TODO: how to handle errors creating or sending the response?
-                if let Ok(response_event) =
-                    Self::make_response_event(event.id.clone(), event.op_meta.clone(), res, codec)
-                        .await
-                {
-                    if let Err(e) = reply_channel
-                        .send(SinkReply::Response(response_event))
-                        .await
-                    {
-                        error!("Failed to send response reply: {}", e) // do not fail and trigger cb::fail here
-                    }
-                }
-            }
-        }
-
-        Ok(None)
-    }
-
     async fn make_response_event(
         id: Ids,
         op_meta: OpMeta,
         mut response: Response,
-        codec: &dyn Codec,
+        codec: Box<dyn Codec>,
     ) -> Result<Event> {
         let mut meta = Value::object_with_capacity(8);
         let numeric_status: u16 = response.status().into();
@@ -259,6 +199,7 @@ impl Rest {
         let response_bytes = response.body_bytes().await?;
         LineValue::try_new(vec![response_bytes], |mutd| {
             let mut_data = mutd[0].as_mut_slice();
+            // TODO preprocess
             let body = codec
                 .decode(mut_data, nanotime())?
                 .unwrap_or(Value::object());
@@ -274,6 +215,83 @@ impl Rest {
             ..Event::default()
         })
     }
+
+    async fn on_response(
+        event_id: Ids,
+        event_op_meta: OpMeta,
+        mut response: Response,
+        duration: u64,
+        codec: Box<dyn Codec>,
+        is_linked: bool,
+    ) -> Vec<SinkReply> {
+        let status = response.status();
+        let cap = if is_linked { 2usize } else { 1usize };
+        let mut insights = Vec::with_capacity(cap);
+
+        let mut meta = simd_json::borrowed::Object::with_capacity(1);
+        let cb = if status.is_client_error() || status.is_server_error() {
+            if let Ok(body) = response.body_string().await {
+                error!("HTTP request failed: {} => {}", status, body)
+            } else {
+                error!("HTTP request failed: {}", status)
+            }
+            meta.insert("time".into(), Value::from(duration));
+            CBAction::Fail
+        } else {
+            CBAction::Ack
+        };
+        insights.push(SinkReply::Insight(Event {
+            id: event_id.clone(),
+            op_meta: event_op_meta.clone(),
+            data: (Value::null(), Value::from(meta)).into(),
+            cb,
+            ingest_ns: nanotime(),
+            ..Event::default()
+        }));
+
+        // send response if we are linked
+        if is_linked {
+            // TODO: how to handle errors creating or sending the response?
+            let response_event = match Self::make_response_event(
+                event_id.clone(),
+                event_op_meta.clone(),
+                response,
+                codec,
+            )
+            .await
+            {
+                Ok(response_event) => response_event,
+                Err(e) => {
+                    error!(
+                        "Error: Unable to create an event from the given response: {}",
+                        e
+                    );
+                    Self::create_error_response(event_id.clone(), event_op_meta.clone(), e)
+                }
+            };
+            insights.push(SinkReply::Response(response_event));
+        }
+        insights
+    }
+
+    fn create_error_response(id: Ids, op_meta: OpMeta, e: Error) -> Event {
+        let mut error_data = simd_json::value::borrowed::Object::with_capacity(1);
+        let mut meta = simd_json::value::borrowed::Object::with_capacity(2);
+        meta.insert_nocheck("response_status".into(), Value::from(500));
+        let err_str = e.to_string();
+        let mut headers = simd_json::value::borrowed::Object::with_capacity(3);
+        headers.insert_nocheck("Content-Type".into(), Value::from("application/json"));
+        headers.insert_nocheck("Content-Type".into(), Value::from(err_str.len() + 10)); // len of `{"error": err_str}`
+        headers.insert_nocheck("Server".into(), Value::from("Tremor"));
+        meta.insert_nocheck("response_headers".into(), Value::from(headers));
+        error_data.insert_nocheck("error".into(), Value::from(err_str));
+        Event {
+            id: id,
+            op_meta: op_meta,
+            data: (error_data, meta).into(),
+            ..Event::default()
+        }
+    }
 }
 
 #[async_trait::async_trait]
@@ -285,9 +303,38 @@ impl Sink for Rest {
         }
         // limit concurrency
         if let Ok(current_inflights) = self.num_inflight_requests.inc() {
-            let result_vec = self.send_request(event, codec).await;
-            self.num_inflight_requests.dec_from(current_inflights); // never forget
-            result_vec
+            let request_builder = self.build_request(&event, codec)?;
+            let reply_channel: Sender<SinkReply> = match &self.reply_channel {
+                Some(reply_channel) => reply_channel.clone(),
+                None => return Err("Offramp in invalid state: No reply channel available.".into()),
+            };
+            let is_linked = self.is_linked;
+            let cloned = codec.boxed_clone(); // TODO: remove that clone here (although it just clones an empty struct)
+
+            // TODO: keep track of the join handle - in order to cancel operations
+            task::spawn(async move {
+                let start = Instant::now();
+                if let Ok(res) = request_builder.await {
+                    let duration = duration_to_millis(start.elapsed()); // measure response duration
+                    let mut result_vec = Self::on_response(
+                        event.id,
+                        event.op_meta,
+                        res,
+                        duration,
+                        cloned,
+                        is_linked,
+                    )
+                    .await;
+                    for reply in result_vec.drain(..) {
+                        if let Err(e) = reply_channel.send(reply).await {
+                            error!("Error sending insight from Offramp: {}", e);
+                        }
+                    }
+                }
+            });
+
+            self.num_inflight_requests.dec_from(current_inflights);
+            Ok(None)
         } else {
             error!("Dropped data due to overload");
             Err("Dropped data due to overload".into())
