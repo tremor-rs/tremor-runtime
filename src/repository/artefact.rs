@@ -379,7 +379,7 @@ impl Artefact for OnrampArtefact {
         let codec_map = self
             .codec_map
             .clone()
-            .unwrap_or(halfbrown::HashMap::with_capacity(0));
+            .unwrap_or_else(|| halfbrown::HashMap::with_capacity(0));
         let preprocessors = if let Some(preprocessors) = &self.preprocessors {
             preprocessors.clone()
         } else {

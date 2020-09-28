@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::codec::{self, Codec};
-use crate::errors::*;
+use crate::errors::Error;
 use crate::metrics::RampReporter;
 use crate::onramp;
 use crate::pipeline;
@@ -205,7 +205,7 @@ where
         let original_id = self.id;
         let mut error = false;
         if let Ok(data) = self.handle_pp(stream, ingest_ns, data) {
-            let meta_value = meta.map(|m| Value::from(m.0)).unwrap_or(Value::object());
+            let meta_value = meta.map_or_else(Value::object, |m| m.0);
             for d in data {
                 let line_value = LineValue::try_new(vec![d], |mutd| {
                     // this is safe, because we get the vec we created in the previous argument and we now it has 1 element
@@ -520,7 +520,7 @@ where
                             &origin_uri,
                             codec_override,
                             data,
-                            meta.map(|v| StaticValue(v)),
+                            meta.map(StaticValue),
                         )
                         .await;
                     }
