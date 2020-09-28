@@ -1,7 +1,0 @@
-pipeline:
-  - id: main
-    interface:
-      inputs: [ in ]
-      outputs: [ out ]
-    links:
-      in: [ out ]
