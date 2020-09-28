@@ -104,7 +104,11 @@ pub(crate) async fn load_query_file(world: &World, file_name: &str) -> Result<us
     let id = query.id().unwrap_or_else(|| &file_id);
 
     let id = TremorURL::parse(&format!("/pipeline/{}", id))?;
+<<<<<<< HEAD
     info!("Loading {} from file {}.", id, file_id);
+=======
+    info!("Loading {} from file.", id);
+>>>>>>> 7a250f9... Remove pipeline from external API
     world.repo.publish_pipeline(&id, false, query).await?;
 
     Ok(1)
