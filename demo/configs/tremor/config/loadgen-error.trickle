@@ -1,0 +1,12 @@
+define script runtime
+script
+  match event of
+    case %{ short_message ~= glob|*ERROR*| } => emit
+    default => drop
+  end
+end;
+
+create script runtime;
+
+select event from in into runtime;
+select event from runtime into out;

@@ -1,0 +1,20 @@
+define script runtime
+script
+  emit;
+  match event of
+    case %{ short_message ~= glob|*info*| } => emit
+    default => drop
+  end
+end;
+
+define qos::backpressure operator bp
+with
+  timeout = 100
+end;
+
+create script runtime;
+create operator bp;
+
+select event from in into runtime;
+select event from runtime into bp;
+select event from bp into out;
