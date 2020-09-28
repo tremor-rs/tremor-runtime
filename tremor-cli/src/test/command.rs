@@ -49,6 +49,7 @@ pub(crate) struct CommandTest {
     pub(crate) expects: assert::Asserts,
 }
 
+#[allow(clippy::too_many_lines)]
 pub(crate) fn suite_command(
     root: &Path,
     _meta: &Meta,
