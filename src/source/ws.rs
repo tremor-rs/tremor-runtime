@@ -180,7 +180,8 @@ async fn handle_connection(
 
 async fn make_message(event: Event) -> Result<Message> {
     // TODO reject batched events and handle only single event here
-    let (value, _meta) = event.value_meta_iter().next().unwrap();
+    let err: Error = "Empty event".into();
+    let (value, _meta) = event.value_meta_iter().next().ok_or(err)?;
 
     // TODO make this decision based on meta value?
     let send_as_text = true;

@@ -57,7 +57,7 @@ pub struct Config {
 }
 
 fn dflt_method() -> Method {
-    Method::Post
+    Method::Get
 }
 
 impl ConfigImpl for Config {}
@@ -115,7 +115,7 @@ impl Rest {
     }
 
     fn build_request(&mut self, event: &Event, codec: &dyn Codec) -> Result<surf::RequestBuilder> {
-        let mut body = vec![];
+        let mut body: Vec<u8> = vec![];
         let mut method = None;
         let mut url = None;
         let mut headers = Vec::with_capacity(8);
@@ -130,7 +130,7 @@ impl Rest {
             if method.is_none() {
                 method = Some(
                     match meta
-                        .get("request_value")
+                        .get("request_method")
                         .and_then(Value::as_str)
                         .map(|m| Method::from_str(&m.trim().to_uppercase()))
                     {
@@ -143,7 +143,7 @@ impl Rest {
             // use url from first event
             if url.is_none() {
                 url = match meta
-                    .get("endpoint")
+                    .get("request_url")
                     .and_then(Value::as_str)
                     .or_else(|| self.get_endpoint())
                 {
@@ -168,7 +168,8 @@ impl Rest {
                 }
             }
         }
-        let url = url.ok_or::<Error>("Unable to determine and endpoint for this event".into())?;
+        let url = url
+            .ok_or_else(|| -> Error { "Unable to determine and endpoint for this event".into() })?;
         let mut request_builder =
             surf::RequestBuilder::new(method.unwrap_or(self.config.method), url);
 
@@ -191,8 +192,7 @@ impl Rest {
 
         let mut headers = Value::object_with_capacity(8);
         {
-            let mut iter: http_types::headers::Iter<'_> = response.iter();
-            while let Some((name, values)) = iter.next() {
+            for (name, values) in response.iter() {
                 let mut header_value = String::new();
                 for value in values {
                     header_value.push_str(value.to_string().as_str());
@@ -209,7 +209,7 @@ impl Rest {
             // TODO preprocess
             let body = codec
                 .decode(mut_data, nanotime())?
-                .unwrap_or(Value::object());
+                .unwrap_or_else(Value::object);
 
             Ok(ValueAndMeta::from_parts(body, meta))
         })
@@ -232,7 +232,7 @@ impl Rest {
         is_linked: bool,
     ) -> Vec<SinkReply> {
         let status = response.status();
-        let cap = if is_linked { 2usize } else { 1usize };
+        let cap: usize = if is_linked { 2 } else { 1 };
         let mut insights = Vec::with_capacity(cap);
 
         let mut meta = simd_json::borrowed::Object::with_capacity(1);
@@ -273,7 +273,7 @@ impl Rest {
                         "Error: Unable to create an event from the given response: {}",
                         e
                     );
-                    Self::create_error_response(event_id.clone(), event_op_meta.clone(), e)
+                    Self::create_error_response(event_id.clone(), event_op_meta.clone(), &e)
                 }
             };
             insights.push(SinkReply::Response(response_event));
@@ -281,7 +281,7 @@ impl Rest {
         insights
     }
 
-    fn create_error_response(id: Ids, op_meta: OpMeta, e: Error) -> Event {
+    fn create_error_response(id: Ids, op_meta: OpMeta, e: &Error) -> Event {
         let mut error_data = simd_json::value::borrowed::Object::with_capacity(1);
         let mut meta = simd_json::value::borrowed::Object::with_capacity(2);
         meta.insert_nocheck("response_status".into(), Value::from(500));
@@ -293,8 +293,8 @@ impl Rest {
         meta.insert_nocheck("response_headers".into(), Value::from(headers));
         error_data.insert_nocheck("error".into(), Value::from(err_str));
         Event {
-            id: id,
-            op_meta: op_meta,
+            id,
+            op_meta,
             data: (error_data, meta).into(),
             ..Event::default()
         }
@@ -420,7 +420,7 @@ impl AtomicMaxCounter {
 
     fn dec_from(&self, cur: usize) -> usize {
         let mut real_cur = cur;
-        if real_cur <= 0 {
+        if real_cur == 0 {
             // avoid underflow
             return real_cur;
         }
@@ -430,7 +430,7 @@ impl AtomicMaxCounter {
             != real_cur
         {
             real_cur = self.load();
-            if real_cur <= 0 {
+            if real_cur == 0 {
                 // avoid underflow
                 return real_cur;
             }

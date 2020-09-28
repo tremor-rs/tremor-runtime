@@ -165,6 +165,7 @@ impl Manager {
         Self { qsize }
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn offramp_task(
         &self,
         r: async_channel::Sender<Result<Addr>>,

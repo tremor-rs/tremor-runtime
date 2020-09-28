@@ -243,7 +243,7 @@ impl Sink for Ws {
         // TODO track per url/connection (instead of just using default config url)
         self.connections
             .get(&self.config.url)
-            .map_or(false, |c| c.is_some())
+            .map_or(false, Option::is_some)
     }
 
     async fn on_signal(&mut self, signal: Event) -> ResultVec {
@@ -262,27 +262,26 @@ impl Sink for Ws {
             // actually used when we have new connection to make (overriden from event-meta)
             #[allow(unused_assignments)]
             let mut temp_conn_tx = None;
-            let ws_conn_tx = match self.connections.get(&msg_meta.url) {
-                Some(v) => v,
-                None => {
-                    let (conn_tx, conn_rx) = bounded(crate::QSIZE);
-                    // separate task to handle new url connection
-                    task::spawn(ws_loop(
-                        msg_meta.url.clone(),
-                        self.tx.clone(),
-                        conn_tx.clone(),
-                        conn_rx,
-                        self.is_linked,
-                    ));
-                    // TODO default to None for initial connection? (like what happens for
-                    // default offramp config url). if we do circuit-breakers-per-url
-                    // connection, this will be handled better.
-                    self.connections
-                        .insert(msg_meta.url.clone(), Some(conn_tx.clone()));
-                    // sender here ensures we don't drop the current in-flight event
-                    temp_conn_tx = Some(conn_tx);
-                    &temp_conn_tx
-                }
+            let ws_conn_tx = if let Some(ws_conn_tx) = self.connections.get(&msg_meta.url) {
+                ws_conn_tx
+            } else {
+                let (conn_tx, conn_rx) = bounded(crate::QSIZE);
+                // separate task to handle new url connection
+                task::spawn(ws_loop(
+                    msg_meta.url.clone(),
+                    self.tx.clone(),
+                    conn_tx.clone(),
+                    conn_rx,
+                    self.is_linked,
+                ));
+                // TODO default to None for initial connection? (like what happens for
+                // default offramp config url). if we do circuit-breakers-per-url
+                // connection, this will be handled better.
+                self.connections
+                    .insert(msg_meta.url.clone(), Some(conn_tx.clone()));
+                // sender here ensures we don't drop the current in-flight event
+                temp_conn_tx = Some(conn_tx);
+                &temp_conn_tx
             };
 
             if let Some(conn_tx) = ws_conn_tx {

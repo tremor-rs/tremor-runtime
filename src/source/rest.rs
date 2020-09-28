@@ -243,10 +243,11 @@ async fn handle_request(mut req: Request<ServerState>) -> tide::Result<Response>
 fn make_response(
     default_codec: &dyn Codec,
     codec_map: &HashMap<String, Box<dyn Codec>>,
-    event: tremor_pipeline::Event,
+    event: &tremor_pipeline::Event,
 ) -> Result<Response> {
     // TODO reject batched events and handle only single event here
-    let (response_data, response_meta) = event.value_meta_iter().next().unwrap();
+    let err: Error = "Empty event.".into();
+    let (response_data, response_meta) = event.value_meta_iter().next().ok_or(err)?;
 
     // TODO status should change if there's any errors here (eg: during
     // content-type encoding). maybe include the error string in the response too
@@ -349,7 +350,7 @@ impl Source for Int {
     ) -> Result<()> {
         if let Some(event_id) = event.id.get(self.uid) {
             if let Some(response_tx) = self.response_txes.get(&event_id) {
-                let res = make_response(codec, codec_map, event)?;
+                let res = make_response(codec, codec_map, &event)?;
                 response_tx.send(res).await?
             }
         }

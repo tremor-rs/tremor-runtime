@@ -26,7 +26,7 @@ pipeline:
             # simpler here (just need to override request_host)
             match {"test": $request_url} of
               case r = %{test ~= dissect|%{scheme}://%{host}/%{path_and_rest}|} =>
-                let $endpoint = "{r.test.scheme}://localhost:8139/{r.test.path_and_rest}"
+                let $request_url = "{r.test.scheme}://localhost:8139/{r.test.path_and_rest}"
               default =>
                 null
             end;
