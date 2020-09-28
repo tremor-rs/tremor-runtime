@@ -176,7 +176,6 @@ mod test {
     use crate::config::Binding;
     use crate::config::MappingMap;
     use crate::repository::BindingArtefact;
-    use crate::repository::PipelineArtefact;
     use crate::system;
     use crate::url::TremorURL;
     use simd_json::json;
@@ -275,20 +274,16 @@ mod test {
 
             let id = TremorURL::parse(&format!("/pipeline/{}", "test"))?;
 
-            let test_pipeline_config: tremor_pipeline::config::Pipeline = serde_yaml::from_str(
-                r#"
-id: test
-description: 'Test pipeline'
-interface:
-  inputs: [ in ]
-  outputs: [ out ]
-links:
-  in: [ out ]
-"#,
+            let module_path = &tremor_script::path::ModulePath { mounts: Vec::new() };
+            let aggr_reg = tremor_script::aggr_registry();
+            let artefact = tremor_pipeline::query::Query::parse(
+                &module_path,
+                "select event from in into out;",
+                "<test>",
+                Vec::new(),
+                &*tremor_pipeline::FN_REGISTRY.lock()?,
+                &aggr_reg,
             )?;
-            let artefact = PipelineArtefact::Pipeline(Box::new(tremor_pipeline::build_pipeline(
-                test_pipeline_config,
-            )?));
             world.repo.publish_pipeline(&id, false, artefact).await?;
 
             let binding: Binding = serde_yaml::from_str(

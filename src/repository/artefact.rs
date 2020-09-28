@@ -40,40 +40,7 @@ pub struct Binding {
 }
 
 /// A Pipeline
-#[derive(Clone)]
-pub enum Pipeline {
-    /// A normal pipeline
-    Pipeline(Box<tremor_pipeline::Pipeline>),
-    /// A query based pipeline
-    Query(query::Query),
-}
-
-impl Pipeline {
-    pub(crate) fn to_executable_graph(
-        &self,
-        uid: &mut u64,
-        resolver: tremor_pipeline::NodeLookupFn,
-    ) -> Result<tremor_pipeline::ExecutableGraph> {
-        let mut g = match self {
-            Self::Pipeline(p) => p.to_executable_graph(uid, resolver)?,
-            Self::Query(q) => q.to_pipe(uid)?,
-        };
-        g.optimize();
-        Ok(g)
-    }
-}
-
-impl From<tremor_pipeline::Pipeline> for Pipeline {
-    fn from(pipeline: tremor_pipeline::Pipeline) -> Self {
-        Self::Pipeline(Box::new(pipeline))
-    }
-}
-
-impl From<query::Query> for Pipeline {
-    fn from(query: query::Query) -> Self {
-        Self::Query(query)
-    }
-}
+pub type Pipeline = query::Query;
 
 #[async_trait]
 pub trait Artefact: Clone {

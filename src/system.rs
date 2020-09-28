@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::config::{BindingVec, Config, MappingMap, OffRampVec, OnRampVec, PipelineVec};
+use crate::config::{BindingVec, Config, MappingMap, OffRampVec, OnRampVec};
 use crate::errors::{Error, Result};
 use crate::lifecycle::{ActivationState, ActivatorLifecycleFsm};
 use crate::registry::{Registries, ServantId};
@@ -578,16 +578,6 @@ impl World {
     /// # Errors
     ///  * If the systems configuration can't be stored
     pub async fn to_config(&self) -> Result<Config> {
-        let pipeline: PipelineVec = self
-            .repo
-            .serialize_pipelines()
-            .await?
-            .into_iter()
-            .filter_map(|p| match p {
-                PipelineArtefact::Pipeline(p) => Some(p.config),
-                PipelineArtefact::Query(_q) => None, // FIXME
-            })
-            .collect();
         let onramp: OnRampVec = self.repo.serialize_onramps().await?;
         let offramp: OffRampVec = self.repo.serialize_offramps().await?;
         let binding: BindingVec = self
@@ -599,7 +589,6 @@ impl World {
             .collect();
         let mapping: MappingMap = self.reg.serialize_mappings().await?;
         let config = crate::config::Config {
-            pipeline,
             onramp,
             offramp,
             binding,
@@ -694,19 +683,17 @@ impl World {
 
     async fn register_system(&mut self) -> Result<()> {
         // register metrics pipeline
-        let metric_config: tremor_pipeline::config::Pipeline = serde_yaml::from_str(
-            r#"
-id: system::metrics
-description: 'System metrics pipeline'
-interface:
-  inputs: [ in ]
-  outputs: [ out ]
-links:
-  in: [ out ]
-"#,
+
+        let module_path = &tremor_script::path::ModulePath { mounts: Vec::new() };
+        let aggr_reg = tremor_script::aggr_registry();
+        let artefact = tremor_pipeline::query::Query::parse(
+            &module_path,
+            "select event from in into out;",
+            "<metrics>",
+            Vec::new(),
+            &*tremor_pipeline::FN_REGISTRY.lock()?,
+            &aggr_reg,
         )?;
-        let artefact =
-            PipelineArtefact::Pipeline(Box::new(tremor_pipeline::build_pipeline(metric_config)?));
         self.repo
             .publish_pipeline(&METRICS_PIPELINE, true, artefact)
             .await?;

@@ -19,7 +19,6 @@ use tremor_pipeline::config as dynaconfig;
 pub(crate) type ID = String;
 pub(crate) type OnRampVec = Vec<OnRamp>;
 pub(crate) type OffRampVec = Vec<OffRamp>;
-pub(crate) type PipelineVec = Vec<dynaconfig::Pipeline>;
 pub(crate) type BindingVec = Vec<Binding>;
 pub(crate) type BindingMap = HashMap<TremorURL, Vec<TremorURL>>;
 pub(crate) type MappingMap = HashMap<TremorURL, HashMap<String, String>>;
@@ -34,8 +33,6 @@ pub struct Config {
     pub(crate) offramp: OffRampVec,
     #[serde(default = "Default::default")]
     pub(crate) binding: Vec<Binding>,
-    #[serde(default = "Default::default")]
-    pub(crate) pipeline: PipelineVec,
     #[serde(default = "Default::default")]
     pub(crate) mapping: MappingMap,
 }
@@ -142,6 +139,5 @@ mod test {
     fn load() {
         let c = slurp("tests/configs/config.yaml");
         assert_eq!(&c.offramp[0].id, "blackhole");
-        assert_eq!(&c.pipeline[0].id, "main");
     }
 }
