@@ -30,7 +30,7 @@ pub(crate) fn h0(label: &str, what: &str) -> Result<()> {
     fg_bold!(h, White);
     write!(h.get_writer(), "{}", &label)?;
     h.reset()?;
-    writeln!(h.get_writer(), ": {}", &what)?;
+    writeln!(h.get_writer(), ": {}", &what.trim())?;
     h.reset()?;
     h.finalize()?;
     drop(h);
@@ -42,7 +42,7 @@ pub(crate) fn h1(label: &str, what: &str) -> Result<()> {
     fg_bold!(h, White);
     write!(h.get_writer(), "  {}", &label)?;
     h.reset()?;
-    writeln!(h.get_writer(), ": {}", &what)?;
+    writeln!(h.get_writer(), ": {}", &what.trim())?;
     h.reset()?;
     h.finalize()?;
     drop(h);
@@ -118,10 +118,12 @@ pub(crate) fn assert(
     let mut h = TermHighlighter::new();
     if ok {
         fg_bold!(h, Green);
+        write!(h.get_writer(), "    (+) {}", &label)?;
     } else {
         fg_bold!(h, Red);
+        write!(h.get_writer(), "    (-) {}", &label)?;
     }
-    write!(h.get_writer(), "    {}", &label)?;
+
     h.reset()?;
     write!(h.get_writer(), ": ")?;
     write!(h.get_writer(), "{} ", &what)?;
@@ -147,8 +149,8 @@ pub(crate) fn assert_has(label: &str, what: &str, info: Option<&String>, ok: boo
         fg_bold!(h, Green);
         write!(h.get_writer(), "    (+) ")?;
     } else {
-        write!(h.get_writer(), "    (-) ")?;
         fg_bold!(h, Red);
+        write!(h.get_writer(), "    (-) ")?;
     }
     write!(h.get_writer(), "{}", &label)?;
     h.reset()?;
@@ -195,7 +197,7 @@ pub(crate) fn stats(stats: &stats::Stats, prefix: &str) -> Result<()> {
 
     let mut h = TermHighlighter::new();
     fg_bold!(h, Blue);
-    write!(h.get_writer(), "{}  Stats: ", prefix)?;
+    write!(h.get_writer(), "{} Stats: ", prefix)?;
     fg_bold!(h, Green);
     write!(h.get_writer(), "Pass ")?;
     write!(h.get_writer(), "{} ", stats.pass)?;

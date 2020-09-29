@@ -6,55 +6,55 @@ tags:
 suites:
   - name: REST API - Initial state after empty deployment
     cases:
-        - name: GET /version
-          command: curl -vs --stderr - http://localhost:9898/version
-          tags:
-            - get
-          status: 0
-          expects:
-            - source: stdout
-              contains:
-                - HTTP/1.1 200 OK
-                - '{"version":"0.9.0"}'
-        - name: GET /onramp
-          command: curl -vs --stderr - http://localhost:9898/onramp
-          tags:
-            - get
-          status: 0
-          expects:
-            - source: fg.1.out.log
-              contains:
-                - HTTP/1.1 200 OK
-                - '["ws-in"]'
-        - name: GET /offramp
-          command: curl -vs --stderr - http://localhost:9898/offramp
-          tags:
-            - get
-          status: 0
-          expects:
-            - source: stdout
-              contains:
-                - HTTP/1.1 200 OK
-                - "system::stdout"
-                - "system::stderr"
-        - name: GET /pipeline
-          command: curl -vs --stderr - http://localhost:9898/pipeline
-          tags:
-            - get
-          status: 0
-          expects:
-            - source: stdout
-              contains:
+      - name: GET /version
+        command: curl -vs --stderr - http://localhost:9898/version
+        tags:
+          - get
+        status: 0
+        expects:
+          - source: stdout
+            contains:
+              - HTTP/1.1 200 OK
+              - '{"version":"0.9.0"}'
+      - name: GET /onramp
+        command: curl -vs --stderr - http://localhost:9898/onramp
+        tags:
+          - get
+        status: 0
+        expects:
+          - source: fg.1.out.log
+            contains:
+              - HTTP/1.1 200 OK
+              - '["ws-in"]'
+      - name: GET /offramp
+        command: curl -vs --stderr - http://localhost:9898/offramp
+        tags:
+          - get
+        status: 0
+        expects:
+          - source: stdout
+            contains:
+              - HTTP/1.1 200 OK
+              - "system::stdout"
+              - "system::stderr"
+      - name: GET /pipeline
+        command: curl -vs --stderr - http://localhost:9898/pipeline
+        tags:
+          - get
+        status: 0
+        expects:
+          - source: stdout
+            contains:
               - HTTP/1.1 200 OK
               - "system::metrics"
-        - name: GET /binding
-          command: curl -vs --stderr - http://localhost:9898/binding
-          tags:
-            - get
-          status: 0
-          expects:
-            - source: stdout
-              contains:
+      - name: GET /binding
+        command: curl -vs --stderr - http://localhost:9898/binding
+        tags:
+          - get
+        status: 0
+        expects:
+          - source: stdout
+            contains:
               - HTTP/1.1 200 OK
               - '["main"]'
   - name: REST API - Interactive deploy/undeploy of a pipeline ( YAML )
@@ -78,11 +78,11 @@ suites:
             contains:
               - HTTP/1.1 200 OK
               - "system::metrics"
-      - name: Publish pipeline ( JSON )
+      - name: Publish pipeline ( JSON ) (1)
         command: >
-          curl -vs -stderr -X POST --data-binary @data/bench-pipeline.yaml -H "Content-type: application/yaml" http://localhost:9898/pipeline
+          curl -vs -stderr -X POST --data-binary @data/bench-pipeline.trickle -H "Content-type: application/vnd.trickle" http://localhost:9898/pipeline
         tags:
-          - get
+          - post
         status: 0
         expects:
           - source: stderr
@@ -91,7 +91,7 @@ suites:
               - "content-type: application/json"
       - name: Publish pipeline already exists ( JSON )
         command: >
-          curl -vs -stderr -X POST --data-binary @data/bench-pipeline.json -H "Content-type: application/json" http://localhost:9898/pipeline
+          curl -vs -stderr -X POST --data-binary @data/bench-pipeline.trickle -H "Content-type: application/vnd.trickle" http://localhost:9898/pipeline
         tags:
           - post
         status: 0
@@ -120,7 +120,7 @@ suites:
           - source: stdout
             contains:
               - HTTP/1.1 200 OK
-      - name: DELETE /pipeline/main should
+      - name: DELETE /pipeline/main should delete the pipeline (1)
         command: curl -vs --stderr - -X DELETE http://localhost:9898/pipeline/main
         tags:
           - delete
@@ -160,9 +160,9 @@ suites:
             contains:
               - HTTP/1.1 200 OK
               - "system::metrics"
-      - name: Publish pipeline ( JSON )
+      - name: Publish pipeline ( JSON ) (2)
         command: >
-          curl -vs -stderr -X POST --data-binary @data/bench-pipeline.json -H "Content-type: application/json" -H "Accept: application/yaml" http://localhost:9898/pipeline
+          curl -vs -stderr -X POST --data-binary @data/bench-pipeline.trickle -H "Content-type: application/vnd.trickle" -H "Accept: application/yaml" http://localhost:9898/pipeline
         tags:
           - post
         status: 0
@@ -173,7 +173,7 @@ suites:
               - "content-type: application/yaml"
       - name: Publish pipeline already exists ( YAML )
         command: >
-          curl -vs -stderr -X POST --data-binary @data/bench-pipeline.yaml -H "Content-type: application/yaml" http://localhost:9898/pipeline
+          curl -vs -stderr -X POST --data-binary @data/bench-pipeline.trickle -H "Content-type: application/vnd.trickle" http://localhost:9898/pipeline
         tags:
           - post
         status: 0
@@ -193,7 +193,7 @@ suites:
               - HTTP/1.1 200 OK
               - "- main"
               - '- "system::metrics"'
-              - '- ws'
+              - "- ws"
       - name: GET /pipeline/main should 200 after publish
         command: >
           curl -vs --stderr - -H "Accept: application/yaml" http://localhost:9898/pipeline/main
@@ -204,7 +204,7 @@ suites:
           - source: stdout
             contains:
               - HTTP/1.1 200 OK
-      - name: DELETE /pipeline/main should
+      - name: DELETE /pipeline/main should delete the pipeline (2)
         command: >
           curl -vs --stderr - -X DELETE  -H "Accept: application/yaml" http://localhost:9898/pipeline/main
         tags:
@@ -213,7 +213,7 @@ suites:
         expects:
           - source: stdout
             contains:
-             - HTTP/1.1 200 OK
+              - HTTP/1.1 200 OK
       - name: Get /pipeline should return an empty list
         command: curl -vs --stderr - http://localhost:9898/pipeline
         tags:
@@ -459,7 +459,7 @@ suites:
         expects:
           - source: stdout
             contains:
-            - HTTP/1.1 200 OK
+              - HTTP/1.1 200 OK
       - name: Get /offramp should return an empty list
         command: curl -vs --stderr - http://localhost:9898/offramp
         tags:
@@ -546,7 +546,7 @@ suites:
         expects:
           - source: stdout
             contains:
-             - HTTP/1.1 200 OK
+              - HTTP/1.1 200 OK
       - name: Get /offramp should return an empty list
         command: curl -vs --stderr - http://localhost:9898/offramp
         tags:
@@ -722,23 +722,38 @@ suites:
               - HTTP/1.1 200 OK
               - '["main"]'
   - name: REST API - Deployment acceptance tests (metronome)
+    tags:
+      - deployment
     cases:
       - name: Publish passthrough pipeline
         command: >
-          curl -vs -stderr -X POST --data-binary @data/metronome-pipeline.yaml -H "Content-type: application/yaml" -H "Accept: application/yaml" http://localhost:9898/pipeline
+          curl -vs -stderr -X POST --data-binary @data/metronome-pipeline.trickle -H "Content-type: application/vnd.trickle" -H "Accept: application/yaml" http://localhost:9898/pipeline
         tags:
           - post
+          - deployment
         status: 0
         expects:
           - source: stderr
             contains:
               - HTTP/1.1 201 Created
               - "content-type: application/yaml"
+      - name: Check passthrough pipeline
+        command: >
+          curl -vs -stderr -H "Accept: application/yaml" http://localhost:9898/pipeline
+        tags:
+          - post
+          - deployment
+        status: 0
+        expects:
+          - source: stdout
+            contains:
+              - main
       - name: Publish blaster onramp
         command: >
           curl -vs -stderr -X POST --data-binary @data/metronome-onramp.yaml -H "Content-type: application/yaml" -H "Accept: application/yaml" http://localhost:9898/onramp
         tags:
           - post
+          - deployment
         status: 0
         expects:
           - source: stderr
@@ -750,6 +765,7 @@ suites:
           curl -vs -stderr -X POST --data-binary @data/metronome-offramp.yaml -H "Content-type: application/yaml" -H "Accept: application/yaml" http://localhost:9898/offramp
         tags:
           - post
+          - deployment
         status: 0
         expects:
           - source: stderr
@@ -761,6 +777,7 @@ suites:
           curl -vs -stderr -X POST --data-binary @data/metronome-binding.yaml -H "Content-type: application/yaml" -H "Accept: application/yaml" http://localhost:9898/binding
         tags:
           - post
+          - deployment
         status: 0
         expects:
           - source: stderr
@@ -772,6 +789,7 @@ suites:
           curl -vs -stderr -X POST --data-binary @data/metronome-mapping.yaml -H "Content-type: application/yaml" -H "Accept: application/yaml" http://localhost:9898/binding/default/01
         tags:
           - post
+          - deployment
         status: 0
         expects:
           - source: stderr
@@ -783,6 +801,7 @@ suites:
           curl -vs -stderr http://localhost:9898/binding/default/01
         tags:
           - get
+          - deployment
         status: 0
         expects:
           - source: stderr
@@ -793,6 +812,7 @@ suites:
           curl -vs -stderr -XDELETE -H "Content-type: application/yaml" -H "Accept: application/yaml" http://localhost:9898/onramp/metronome
         tags:
           - delete
+          - deployment
         status: 0
         expects:
           - source: stderr
@@ -803,6 +823,7 @@ suites:
           curl -vs -stderr -XDELETE -H "Content-type: application/yaml" -H "Accept: application/yaml" http://localhost:9898/pipeline/main
         tags:
           - delete
+          - deployment
         status: 0
         expects:
           - source: stderr
@@ -813,6 +834,7 @@ suites:
           curl -vs -stderr -XDELETE -H "Content-type: application/yaml" -H "Accept: application/yaml" http://localhost:9898/offramp/stdout
         tags:
           - delete
+          - deployment
         status: 0
         expects:
           - source: stderr
@@ -823,6 +845,7 @@ suites:
           curl -vs -stderr -XDELETE -H "Content-type: application/yaml" -H "Accept: application/yaml" http://localhost:9898/binding/default
         tags:
           - delete
+          - deployment
         status: 0
         expects:
           - source: stderr
@@ -833,17 +856,19 @@ suites:
           curl -vs -stderr -XDELETE  -H "Content-type: application/yaml" -H "Accept: application/yaml" http://localhost:9898/binding/default/01
         tags:
           - delete
+          - deployment
         status: 0
         expects:
           - source: stderr
             contains:
               - HTTP/1.1 204 No Content
               - "content-type: application/yaml"
-      - name:  Unpublish Onramp  ( YAML )
+      - name: Unpublish Onramp  ( YAML )
         command: >
           curl -vs -stderr -XDELETE -H "Content-type: application/yaml" -H "Accept: application/yaml" http://localhost:9898/onramp/metronome
         tags:
           - delete
+          - deployment
         status: 0
         expects:
           - source: stderr
@@ -854,6 +879,7 @@ suites:
           curl -vs -stderr -XDELETE -H "Content-type: application/yaml" -H "Accept: application/yaml" http://localhost:9898/pipeline/main
         tags:
           - delete
+          - deployment
         status: 0
         expects:
           - source: stderr
@@ -864,6 +890,7 @@ suites:
           curl -vs -stderr -XDELETE -H "Content-type: application/yaml" -H "Accept: application/yaml" http://localhost:9898/offramp/stdout
         tags:
           - delete
+          - deployment
         status: 0
         expects:
           - source: stderr
@@ -874,6 +901,7 @@ suites:
           curl -vs -stderr -XDELETE -H "Content-type: application/yaml" -H "Accept: application/yaml" http://localhost:9898/binding/default
         tags:
           - delete
+          - deployment
         status: 0
         expects:
           - source: stderr

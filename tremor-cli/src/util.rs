@@ -52,6 +52,52 @@ pub(crate) struct TremorApp {
     pub(crate) config: TargetConfig,
 }
 
+impl TremorApp {
+    fn default_url(&self) -> Result<url::Url> {
+        self.config
+            .instances
+            .get("default")
+            .and_then(|v| v.get(0))
+            .ok_or_else(|| Error::from("No default api endpoint provided in ~/.tremor/config"))
+            .and_then(|s| Ok(url::Url::parse(s)?))
+    }
+
+    pub(crate) fn endpoint(&self, endpoint: &str) -> Result<url::Url> {
+        self.default_url().and_then(|mut url| {
+            url.path_segments_mut()
+                .map_err(|_| Error::from("Bad endpoint api"))?
+                .push(endpoint);
+            Ok(url)
+        })
+    }
+
+    pub(crate) fn endpoint_id(&self, endpoint: &str, id: &str) -> Result<url::Url> {
+        self.default_url().and_then(|mut url| {
+            url.path_segments_mut()
+                .map_err(|_| Error::from("Bad endpoint api"))?
+                .push(endpoint)
+                .push(id);
+            Ok(url)
+        })
+    }
+
+    pub(crate) fn endpoint_id_instance(
+        &self,
+        endpoint: &str,
+        id: &str,
+        instance: &str,
+    ) -> Result<url::Url> {
+        self.default_url().and_then(|mut url| {
+            url.path_segments_mut()
+                .map_err(|_| Error::from("Bad endpoint api"))?
+                .push(endpoint)
+                .push(id)
+                .push(instance);
+            Ok(url)
+        })
+    }
+}
+
 pub(crate) fn tremor_home_dir() -> Result<String> {
     dirs::home_dir()
         .and_then(|s| s.to_str().map(ToString::to_string))

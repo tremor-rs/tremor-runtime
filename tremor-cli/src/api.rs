@@ -115,8 +115,7 @@ async fn conductor_target_delete_cmd(app: &mut TremorApp, cmd: &ArgMatches) -> R
 //////////////////
 
 async fn conductor_version_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
-    let base_url = &app.config.instances[&"default".to_string()][0];
-    let endpoint = &format!("{}/version", base_url);
+    let endpoint = app.endpoint("version")?;
     let mut response = surf::get(endpoint).await?;
     let version: Version = response.body_json().await?;
     println!(
@@ -141,7 +140,7 @@ async fn conductor_pipeline_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()>
     } else if let Some(matches) = cmd.subcommand_matches("delete") {
         conductor_delete_cmd(app, &matches, "pipeline").await
     } else if let Some(matches) = cmd.subcommand_matches("create") {
-        conductor_create_cmd(app, &matches, "pipeline").await
+        conductor_create_cmd_trickle(app, &matches, "pipeline").await
     } else if let Some(matches) = cmd.subcommand_matches("instance") {
         conductor_instance_cmd(app, &matches, "pipeline").await
     } else {
@@ -174,19 +173,13 @@ async fn conductor_binding_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> 
 }
 
 async fn conductor_binding_activate_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
-    let base_url = &app.config.instances[&"default".to_string()][0];
     let a_id = cmd
         .value_of("ARTEFACT_ID")
         .ok_or("ARTEFACT_ID not provided")?;
     let s_id = cmd
         .value_of("INSTANCE_ID")
         .ok_or("INSTANCE_ID not provided")?;
-    let endpoint = format!(
-        "{url}/binding/{id}/{instance}",
-        url = base_url,
-        id = a_id,
-        instance = s_id
-    );
+    let endpoint = app.endpoint_id_instance("binding", a_id, s_id)?;
     let path_to_file = cmd.value_of("SOURCE").ok_or("SOURCE not provided")?;
     let json = load(path_to_file)?;
     let ser = ser(&app, &json)?;
@@ -199,19 +192,14 @@ async fn conductor_binding_activate_cmd(app: &TremorApp, cmd: &ArgMatches) -> Re
 }
 
 async fn conductor_binding_deactivate_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
-    let base_url = &app.config.instances[&"default".to_string()][0];
     let a_id = cmd
         .value_of("ARTEFACT_ID")
         .ok_or("ARTEFACT_ID not provided")?;
     let s_id = cmd
         .value_of("INSTANCE_ID")
         .ok_or("INSTANCE_ID not provided")?;
-    let endpoint = format!(
-        "{url}binding/{id}/{instance}",
-        url = base_url,
-        id = a_id,
-        instance = s_id
-    );
+    let endpoint = app.endpoint_id_instance("binding", a_id, s_id)?;
+
     let response = surf::delete(&endpoint).await?;
     handle_response(response).await
 }
@@ -261,34 +249,44 @@ async fn conductor_onramp_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
 /////////////////
 
 async fn conductor_get_cmd(app: &TremorApp, cmd: &ArgMatches, endpoint: &str) -> Result<()> {
-    let base_url = &app.config.instances[&"default".to_string()][0];
     let id = cmd
         .value_of("ARTEFACT_ID")
         .ok_or("ARTEFACT_ID not provided")?;
-    let endpoint = format!(
-        "{url}/{endpoint}/{id}",
-        url = base_url,
-        endpoint = endpoint,
-        id = id
-    );
+    let endpoint = app.endpoint_id(endpoint, id)?;
+
     let response = surf::get(&endpoint).await?;
     handle_response(response).await
 }
 
 async fn conductor_list_cmd(app: &TremorApp, endpoint: &str) -> Result<()> {
-    let base_url = &app.config.instances[&"default".to_string()][0];
-    let endpoint = format!("{}/{}", base_url, endpoint);
+    let endpoint = app.endpoint(endpoint)?;
     let response = surf::get(&endpoint).await?;
     handle_response(response).await
 }
 
 async fn conductor_create_cmd(app: &TremorApp, cmd: &ArgMatches, endpoint: &str) -> Result<()> {
-    let base_url = &app.config.instances[&"default".to_string()][0];
+    let endpoint = app.endpoint(endpoint)?;
+    let path_to_file = cmd.value_of("SOURCE").ok_or("SOURCE not provided")?;
+    let json = load(path_to_file)?;
+    let ser = ser(&app, &json)?;
+    let response = surf::post(&endpoint)
+        .header(http_types::headers::CONTENT_TYPE, content_type(app))
+        .header("accept", accept(app))
+        .body(ser)
+        .await;
+    handle_response(response?).await
+}
+
+async fn conductor_create_cmd_trickle(
+    app: &TremorApp,
+    cmd: &ArgMatches,
+    endpoint: &str,
+) -> Result<()> {
+    let endpoint = app.endpoint(endpoint)?;
     let path_to_file = cmd.value_of("SOURCE").ok_or("SOURCE not provided")?;
     let ser = load_trickle(path_to_file)?;
-    let endpoint = format!("{}/{}", base_url, endpoint);
     let response = surf::post(&endpoint)
-        .header(http_types::headers::CONTENT_TYPE, "application/trickle")
+        .header(http_types::headers::CONTENT_TYPE, "application/vnd.trickle")
         .header("accept", accept(app))
         .body(ser)
         .await;
@@ -296,35 +294,22 @@ async fn conductor_create_cmd(app: &TremorApp, cmd: &ArgMatches, endpoint: &str)
 }
 
 async fn conductor_delete_cmd(app: &TremorApp, cmd: &ArgMatches, endpoint: &str) -> Result<()> {
-    let base_url = &app.config.instances[&"default".to_string()][0];
     let id = cmd
         .value_of("ARTEFACT_ID")
         .ok_or("ARTEFACT_ID not provided")?;
-    let endpoint = format!(
-        "{url}/{endpoint}/{id}",
-        url = base_url,
-        endpoint = endpoint,
-        id = id
-    );
+    let endpoint = app.endpoint_id(endpoint, id)?;
     let response = surf::delete(&endpoint).await?;
     handle_response(response).await
 }
 
 async fn conductor_instance_cmd(app: &TremorApp, cmd: &ArgMatches, endpoint: &str) -> Result<()> {
-    let base_url = &app.config.instances[&"default".to_string()][0];
     let a_id = cmd
         .value_of("ARTEFACT_ID")
         .ok_or("ARTEFACT_ID not provided")?;
     let s_id = cmd
         .value_of("INSTANCE_ID")
         .ok_or("INSTANCE_ID not provided")?;
-    let endpoint = format!(
-        "{url}/{endpoint}/{id}/{instance}",
-        url = base_url,
-        endpoint = endpoint,
-        id = a_id,
-        instance = s_id
-    );
+    let endpoint = app.endpoint_id_instance(endpoint, a_id, s_id)?;
     let response = surf::get(&endpoint).await?;
     handle_response(response).await
 }
