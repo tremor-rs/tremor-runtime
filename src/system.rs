@@ -688,7 +688,7 @@ impl World {
         let aggr_reg = tremor_script::aggr_registry();
         let artefact = tremor_pipeline::query::Query::parse(
             &module_path,
-            "select event from in into out;",
+            "#!config id = \"system::metrics\"\nselect event from in into out;",
             "<metrics>",
             Vec::new(),
             &*tremor_pipeline::FN_REGISTRY.lock()?,
