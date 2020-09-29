@@ -3,7 +3,7 @@ name: Integration tests
 on: [push, pull_request]
 
 jobs:
-  integration-tests:
+  cli-test-harness:
     strategy:
       matrix:
         os:
@@ -23,27 +23,10 @@ jobs:
       - name: Build test runner
         run: cd tremor-cli && cargo build
       - name: Run Integration Tests
-        run: cd tremor-cli && TREMOR_PATH=../tremor-script/lib cargo run -- test integration tests -i integration -e ws
-  api-tests:
-    strategy:
-      matrix:
-        os:
-          - ubuntu-latest
-          #- windows-latest
-          - macOS-latest
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v1
-      - name: Install deps
-        if: matrix.os == 'ubuntu-latest'
-        run: sudo apt-get -qy update && sudo apt-get install -y libssl1.0-dev libssl1.0
-      - name: Install coyote
-        run: go get github.com/landoop/coyote
-      - uses: actions-rs/toolchain@v1
-        with:
-          override: true
-          profile: minimal
-      - name: Build
-        run: cargo build --all
-      - name: Run curl tests
-        run: ./.github/checks/api.sh -c
+        run: cd tremor-cli && TREMOR_PATH=../tremor-script/lib cargo run -- test integration tests
+      - name: Run API Tests
+        run: cd tremor-cli && TREMOR_PATH=../tremor-script/lib cargo run -- test api tests
+      - name: Run Unit Tests
+        run: cd tremor-cli && TREMOR_PATH=../tremor-script/lib cargo run -- test unit tests
+      - name: Run Command Tests
+        run: cd tremor-cli && TREMOR_PATH=../tremor-script/lib cargo run -- test command tests
