@@ -21,6 +21,7 @@
 //! This operator takes no configuration
 
 use crate::sink::prelude::*;
+use halfbrown::HashMap;
 use std::time::Duration;
 
 pub struct Exit {}
@@ -34,7 +35,13 @@ impl offramp::Impl for Exit {
 #[async_trait::async_trait]
 impl Sink for Exit {
     #[allow(clippy::used_underscore_binding)]
-    async fn on_event(&mut self, _input: &str, _codec: &dyn Codec, event: Event) -> ResultVec {
+    async fn on_event(
+        &mut self,
+        _input: &str,
+        _codec: &dyn Codec,
+        _codec_map: &HashMap<String, Box<dyn Codec>>,
+        event: Event,
+    ) -> ResultVec {
         for (value, _meta) in event.value_meta_iter() {
             if let Some(status) = value.get("exit").and_then(Value::as_i32) {
                 if let Some(delay) = value.get("delay").and_then(Value::as_u64) {
@@ -54,6 +61,10 @@ impl Sink for Exit {
     #[allow(clippy::used_underscore_binding)]
     async fn init(
         &mut self,
+        _sink_uid: u64,
+        _codec: &dyn Codec,
+        _codec_map: &HashMap<String, Box<dyn Codec>>,
+        _preprocessors: &[String],
         _postprocessors: &[String],
         _is_linked: bool,
         _reply_channel: Sender<SinkReply>,

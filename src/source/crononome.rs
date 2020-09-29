@@ -326,6 +326,7 @@ impl Onramp for Crononome {
         codec: &str,
         codec_map: halfbrown::HashMap<String, String>,
         preprocessors: &[String],
+        postprocessors: &[String],
         metrics_reporter: RampReporter,
         _is_linked: bool,
     ) -> Result<onramp::Addr> {
@@ -335,6 +336,7 @@ impl Onramp for Crononome {
             codec,
             codec_map,
             preprocessors,
+            postprocessors,
             metrics_reporter,
         )
         .await

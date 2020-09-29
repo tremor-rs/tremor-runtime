@@ -22,6 +22,7 @@
 
 use crate::ramp::postgres::{json_to_record, Record};
 use crate::sink::prelude::*;
+use halfbrown::HashMap;
 use postgres::{Client, NoTls};
 
 pub struct Postgres {
@@ -69,7 +70,13 @@ fn init_cli(config: &Config) -> std::result::Result<postgres::Client, postgres::
 #[async_trait::async_trait]
 impl Sink for Postgres {
     #[allow(clippy::used_underscore_binding)]
-    async fn on_event(&mut self, _input: &str, _codec: &dyn Codec, event: Event) -> ResultVec {
+    async fn on_event(
+        &mut self,
+        _input: &str,
+        _codec: &dyn Codec,
+        _codec_map: &HashMap<String, Box<dyn Codec>>,
+        event: Event,
+    ) -> ResultVec {
         for val in event.value_iter() {
             let obj = val.as_object();
             if let Some(kv) = obj {
@@ -137,6 +144,10 @@ impl Sink for Postgres {
     #[allow(clippy::used_underscore_binding)]
     async fn init(
         &mut self,
+        _sink_uid: u64,
+        _codec: &dyn Codec,
+        _codec_map: &HashMap<String, Box<dyn Codec>>,
+        _preprocessors: &[String],
         _postprocessors: &[String],
         _is_linked: bool,
         _reply_channel: Sender<SinkReply>,

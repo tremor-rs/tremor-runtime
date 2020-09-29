@@ -22,6 +22,7 @@
 use std::io::{Cursor, Read, Write};
 
 use chrono::prelude::Utc;
+use halfbrown::HashMap;
 use http_types::headers::{CONTENT_ENCODING, CONTENT_TYPE};
 use libflate::{finish, gzip};
 use log::debug;
@@ -99,7 +100,13 @@ impl offramp::Impl for NewRelic {
 #[async_trait::async_trait]
 impl Sink for NewRelic {
     #[allow(clippy::used_underscore_binding)]
-    async fn on_event(&mut self, _input: &str, _codec: &dyn Codec, event: Event) -> ResultVec {
+    async fn on_event(
+        &mut self,
+        _input: &str,
+        _codec: &dyn Codec,
+        _codec_map: &HashMap<String, Box<dyn Codec>>,
+        event: Event,
+    ) -> ResultVec {
         // TODO: Document this, if one of the log entries cannot be decoded, the whole batch will be lost because
         // of the collect::<Result<_>>
         let payload = NewRelicPayload {
@@ -122,6 +129,10 @@ impl Sink for NewRelic {
     #[allow(clippy::used_underscore_binding)]
     async fn init(
         &mut self,
+        _sink_uid: u64,
+        _codec: &dyn Codec,
+        _codec_map: &HashMap<String, Box<dyn Codec>>,
+        _preprocessors: &[String],
         _postprocessors: &[String],
         _is_linked: bool,
         _reply_channel: Sender<SinkReply>,

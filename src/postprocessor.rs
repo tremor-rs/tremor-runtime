@@ -16,11 +16,13 @@ mod gelf;
 pub(crate) use gelf::GELF;
 
 use crate::errors::{Error, Result};
+use crate::utils::nanotime;
 use byteorder::{BigEndian, WriteBytesExt};
 use std::default::Default;
 /// Set of Postprocessors
 pub type Postprocessors = Vec<Box<dyn Postprocessor>>;
 use std::io::Write;
+use std::mem;
 
 /// Postprocessor trait
 pub trait Postprocessor: Send {
@@ -53,6 +55,45 @@ pub fn lookup(name: &str) -> Result<Box<dyn Postprocessor>> {
         "gelf-chunking" => Ok(Box::new(GELF::default())),
         _ => Err(format!("Postprocessor '{}' not found.", name).into()),
     }
+}
+
+/// Given the slice of postprocessor names: Lookup each of them and return them as `Postprocessors`
+///
+/// # Errors
+///
+///   * If any postprocessor is not known.
+pub fn make_postprocessors(postprocessors: &[String]) -> Result<Postprocessors> {
+    postprocessors.iter().map(|n| lookup(&n)).collect()
+}
+
+/// canonical way to process encoded data passed from a `Codec`
+///
+/// # Errors
+///
+///   * If a `Postprocessor` fails
+pub fn postprocess(
+    postprocessors: &mut [Box<dyn Postprocessor>], // We are borrowing a dyn box as we don't want to pass ownership.
+    ingres_ns: u64,
+    data: Vec<u8>,
+) -> Result<Vec<Vec<u8>>> {
+    let egress_ns = nanotime();
+    let mut data = vec![data];
+    let mut data1 = Vec::new();
+
+    for pp in postprocessors {
+        data1.clear();
+        for d in &data {
+            match pp.process(ingres_ns, egress_ns, d) {
+                Ok(mut r) => data1.append(&mut r),
+                Err(e) => {
+                    return Err(format!("Postprocessor error {}", e).into());
+                }
+            }
+        }
+        mem::swap(&mut data, &mut data1);
+    }
+
+    Ok(data)
 }
 
 #[derive(Default)]

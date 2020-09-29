@@ -30,7 +30,7 @@ use crate::{Event, OpConfig};
 use async_channel::{self, bounded, unbounded};
 use async_std::stream::StreamExt; // for .next() on PriorityMerge
 use async_std::task::{self, JoinHandle};
-use hashbrown::HashMap;
+use halfbrown::HashMap;
 use std::borrow::{Borrow, Cow};
 use std::fmt;
 
@@ -61,12 +61,21 @@ pub type Addr = async_channel::Sender<Msg>;
 pub trait Offramp: Send {
     async fn start(
         &mut self,
+        offramp_uid: u64,
         codec: &dyn Codec,
+        codec_map: &HashMap<String, Box<dyn Codec>>,
+        preprocessors: &[String],
         postprocessors: &[String],
         is_linked: bool,
         reply_channel: async_channel::Sender<SinkReply>,
     ) -> Result<()>;
-    async fn on_event(&mut self, codec: &dyn Codec, input: &str, event: Event) -> Result<()>;
+    async fn on_event(
+        &mut self,
+        codec: &dyn Codec,
+        codec_map: &HashMap<String, Box<dyn Codec>>,
+        input: &str,
+        event: Event,
+    ) -> Result<()>;
     #[allow(unused_variables)]
     async fn on_signal(&mut self, signal: Event) -> Option<Event> {
         None
@@ -115,6 +124,8 @@ pub(crate) struct Create {
     pub id: ServantId,
     pub offramp: Box<dyn Offramp>,
     pub codec: Box<dyn Codec>,
+    pub codec_map: halfbrown::HashMap<String, Box<dyn Codec>>,
+    pub preprocessors: Vec<String>,
     pub postprocessors: Vec<String>,
     pub metrics_reporter: RampReporter,
     pub is_linked: bool,
@@ -171,18 +182,29 @@ impl Manager {
         r: async_channel::Sender<Result<Addr>>,
         Create {
             codec,
+            codec_map,
             mut offramp,
+            preprocessors,
             postprocessors,
             mut metrics_reporter,
             is_linked,
             id,
         }: Create,
+        offramp_uid: u64,
     ) -> Result<()> {
         let (msg_tx, msg_rx) = bounded::<Msg>(self.qsize);
         let (cf_tx, cf_rx) = unbounded::<SinkReply>(); // we might need to wrap that somehow, but *shrug*
 
         if let Err(e) = offramp
-            .start(codec.borrow(), &postprocessors, is_linked, cf_tx.clone())
+            .start(
+                offramp_uid,
+                codec.borrow(),
+                &codec_map,
+                &preprocessors,
+                &postprocessors,
+                is_linked,
+                cf_tx.clone(),
+            )
             .await
         {
             error!("Failed to create onramp {}: {}", id, e);
@@ -193,7 +215,7 @@ impl Manager {
         let c_rx = cf_rx.map(OfframpMsg::Reply);
         let mut to_and_from_offramp_rx = PriorityMerge::new(c_rx, m_rx);
 
-        let offramp_id = id.clone();
+        let offramp_url = id.clone();
         task::spawn::<_, Result<()>>(async move {
             let mut pipelines: HashMap<TremorURL, pipeline::Addr> = HashMap::new();
 
@@ -201,7 +223,7 @@ impl Manager {
             // TODO make this hashmap as well
             let mut dest_pipelines: Vec<(TremorURL, pipeline::Addr)> = Vec::new();
 
-            info!("[Offramp::{}] started", offramp_id);
+            info!("[Offramp::{}] started", offramp_url);
 
             while let Some(offramp_msg) = to_and_from_offramp_rx.next().await {
                 match offramp_msg {
@@ -209,7 +231,7 @@ impl Manager {
                         match m {
                             Msg::Signal(signal) => {
                                 if let Some(insight) = offramp.on_signal(signal).await {
-                                    send_to_pipelines(&offramp_id, &mut pipelines, insight).await;
+                                    send_to_pipelines(&offramp_url, &mut pipelines, insight).await;
                                 }
                             }
                             Msg::Event { event, input } => {
@@ -222,10 +244,10 @@ impl Manager {
 
                                 // TODO FIXME implement postprocessors
                                 let fail = if let Err(err) = offramp
-                                    .on_event(codec.borrow(), input.borrow(), event)
+                                    .on_event(codec.borrow(), &codec_map, input.borrow(), event)
                                     .await
                                 {
-                                    error!("[Offramp::{}] On Event error: {}", offramp_id, err);
+                                    error!("[Offramp::{}] On Event error: {}", offramp_url, err);
                                     metrics_reporter.increment_error();
                                     true
                                 } else {
@@ -238,18 +260,18 @@ impl Manager {
                                     } else {
                                         Event::cb_ack(ingest_ns, ids)
                                     };
-                                    send_to_pipelines(&offramp_id, &mut pipelines, e).await;
+                                    send_to_pipelines(&offramp_url, &mut pipelines, e).await;
                                 }
                             }
                             Msg::Connect { id, addr } => {
                                 if id == *METRICS_PIPELINE {
                                     info!(
                                         "[Offramp::{}] Connecting system metrics pipeline {}",
-                                        offramp_id, id
+                                        offramp_url, id
                                     );
                                     metrics_reporter.set_metrics_pipeline((id, *addr));
                                 } else {
-                                    info!("[Offramp::{}] Connecting pipeline {}", offramp_id, id);
+                                    info!("[Offramp::{}] Connecting pipeline {}", offramp_url, id);
                                     let insight = if offramp.is_active() {
                                         Event::cb_restore(nanotime())
                                     } else {
@@ -258,7 +280,7 @@ impl Manager {
                                     if let Err(e) = addr.send_insight(insight).await {
                                         error!(
                                             "[Offramp::{}] Could not send initial insight to {}: {}",
-                                            offramp_id, id, e
+                                            offramp_url, id, e
                                         );
                                     };
 
@@ -270,18 +292,18 @@ impl Manager {
                                 // TODO fix offramp_id here for display
                                 info!(
                                     "[Offramp::{}] Connecting out to pipeline {}",
-                                    offramp_id, id
+                                    offramp_url, id
                                 );
                                 dest_pipelines.push((id.clone(), (*addr).clone()));
                                 offramp.add_dest_pipeline(id, *addr);
                             }
                             Msg::Disconnect { id, tx } => {
-                                info!("[Offramp::{}] Disconnecting pipeline {}", offramp_id, id);
+                                info!("[Offramp::{}] Disconnecting pipeline {}", offramp_url, id);
                                 pipelines.remove(&id);
                                 let r = offramp.remove_pipeline(id.clone());
-                                info!("[Offramp::{}] Pipeline {} disconnected", offramp_id, id);
+                                info!("[Offramp::{}] Pipeline {} disconnected", offramp_url, id);
                                 if r {
-                                    info!("[Offramp::{}] Marked as done ", offramp_id);
+                                    info!("[Offramp::{}] Marked as done ", offramp_url);
                                     offramp.terminate().await
                                 }
                                 tx.send(r).await?
@@ -289,16 +311,16 @@ impl Manager {
                         }
                     }
                     OfframpMsg::Reply(SinkReply::Insight(event)) => {
-                        send_to_pipelines(&offramp_id, &mut pipelines, event).await
+                        send_to_pipelines(&offramp_url, &mut pipelines, event).await
                     }
                     OfframpMsg::Reply(SinkReply::Response(event)) => {
                         if let Err(e) = handle_response(event, dest_pipelines.iter()).await {
-                            error!("[Offramp::{}] Response error: {}", offramp_id, e)
+                            error!("[Offramp::{}] Response error: {}", offramp_url, e)
                         }
                     }
                 }
             }
-            info!("[Offramp::{}] stopped", offramp_id);
+            info!("[Offramp::{}] stopped", offramp_url);
             Ok(())
         });
         r.send(Ok(msg_tx)).await?;
@@ -309,17 +331,21 @@ impl Manager {
         let (tx, rx) = bounded(crate::QSIZE);
         let h = task::spawn(async move {
             info!("Onramp manager started");
+            let mut offramp_uid: u64 = 0;
             while let Ok(msg) = rx.recv().await {
                 match msg {
                     ManagerMsg::Stop => {
                         info!("Stopping onramps...");
                         break;
                     }
-                    ManagerMsg::Create(r, c) => self.offramp_task(r, *c).await?,
+                    ManagerMsg::Create(r, c) => {
+                        offramp_uid += 1;
+                        self.offramp_task(r, *c, offramp_uid).await?
+                    }
                 };
-                info!("Stopping onramps...");
+                info!("Stopping offramps...");
             }
-            info!("Onramp manager stopped.");
+            info!("Offramp manager stopped.");
             Ok(())
         });
 

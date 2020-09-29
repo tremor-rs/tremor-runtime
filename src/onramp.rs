@@ -51,6 +51,7 @@ pub(crate) trait Onramp: Send {
         codec: &str,
         codec_map: halfbrown::HashMap<String, String>,
         preprocessors: &[String],
+        postprocessors: &[String],
         metrics_reporter: RampReporter,
         is_linked: bool,
     ) -> Result<Addr>;
@@ -85,6 +86,7 @@ pub(crate) struct Create {
     pub codec: String,
     pub codec_map: halfbrown::HashMap<String, String>,
     pub preprocessors: Vec<String>,
+    pub postprocessors: Vec<String>,
     pub metrics_reporter: RampReporter,
     pub is_linked: bool,
 }
@@ -128,6 +130,7 @@ impl Manager {
                             codec_map,
                             mut stream,
                             preprocessors,
+                            postprocessors,
                             metrics_reporter,
                             is_linked,
                             id,
@@ -139,6 +142,7 @@ impl Manager {
                                 &codec,
                                 codec_map,
                                 &preprocessors,
+                                &postprocessors,
                                 metrics_reporter,
                                 is_linked,
                             )

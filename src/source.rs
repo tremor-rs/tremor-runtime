@@ -17,7 +17,7 @@ use crate::errors::Error;
 use crate::metrics::RampReporter;
 use crate::onramp;
 use crate::pipeline;
-use crate::preprocessor::{self, Preprocessors};
+use crate::preprocessor::{make_preprocessors, preprocess, Preprocessors};
 use crate::ramp::{ERROR, OUT};
 use crate::system::METRICS_PIPELINE;
 use crate::url::TremorURL;
@@ -55,13 +55,6 @@ impl From<std::str::Utf8Error> for RentalSnot {
     fn from(e: std::str::Utf8Error) -> Self {
         Self::Error(e.into())
     }
-}
-
-pub fn make_preprocessors(preprocessors: &[String]) -> Result<Preprocessors> {
-    preprocessors
-        .iter()
-        .map(|n| preprocessor::lookup(&n))
-        .collect()
 }
 
 pub(crate) enum SourceState {
@@ -175,23 +168,16 @@ where
         ingest_ns: &mut u64,
         data: Vec<u8>,
     ) -> Result<Vec<Vec<u8>>> {
-        let mut data = vec![data];
-        let mut data1 = Vec::new();
-        if let Some(pps) = self.preprocessors.get_mut(stream).and_then(Option::as_mut) {
-            for pp in pps {
-                data1.clear();
-                for (i, d) in data.iter().enumerate() {
-                    match pp.process(ingest_ns, d) {
-                        Ok(mut r) => data1.append(&mut r),
-                        Err(e) => {
-                            return Err(format!("Preprocessor[{}] error {}", i, e).into());
-                        }
-                    }
-                }
-                std::mem::swap(&mut data, &mut data1);
-            }
+        if let Some(Some(preprocessors)) = self.preprocessors.get_mut(stream) {
+            preprocess(
+                preprocessors.as_mut_slice(),
+                ingest_ns,
+                data,
+                &self.source_id,
+            )
+        } else {
+            Ok(vec![])
         }
-        Ok(data)
     }
 
     async fn make_event_data(
@@ -415,6 +401,7 @@ where
         uid: u64,
         mut source: T,
         preprocessors: &[String],
+        _postprocessors: &[String],
         codec: &str,
         codec_map: HashMap<String, String>,
         metrics_reporter: RampReporter,
@@ -440,7 +427,7 @@ where
         let mut resolved_codec_map = codec::builtin_codec_map();
         // override the builtin map
         for (k, v) in codec_map {
-            resolved_codec_map.insert_nocheck(k, codec::lookup(&v)?);
+            resolved_codec_map.insert(k, codec::lookup(&v)?);
         }
         let pp_template = preprocessors.to_vec();
         let preprocessors = vec![Some(make_preprocessors(&pp_template)?)];
@@ -454,6 +441,7 @@ where
                 rx,
                 tx: tx.clone(),
                 preprocessors,
+                //postprocessors,
                 codec,
                 codec_map: resolved_codec_map,
                 metrics_reporter,
@@ -473,6 +461,7 @@ where
         codec: &str,
         codec_map: HashMap<String, String>,
         preprocessors: &[String],
+        postprocessors: &[String],
         metrics_reporter: RampReporter,
     ) -> Result<onramp::Addr> {
         let name = source.id().short_id("src");
@@ -480,6 +469,7 @@ where
             uid,
             source,
             preprocessors,
+            postprocessors,
             codec,
             codec_map,
             metrics_reporter,

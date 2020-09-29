@@ -53,7 +53,13 @@ pub(crate) type ResultVec = Result<Option<Vec<SinkReply>>>;
 
 #[async_trait::async_trait]
 pub(crate) trait Sink {
-    async fn on_event(&mut self, input: &str, codec: &dyn Codec, event: Event) -> ResultVec;
+    async fn on_event(
+        &mut self,
+        input: &str,
+        codec: &dyn Codec,
+        codec_map: &HashMap<String, Box<dyn Codec>>,
+        event: Event,
+    ) -> ResultVec;
     async fn on_signal(&mut self, signal: Event) -> ResultVec;
 
     /// This function should be implemented to be idempotent
@@ -62,6 +68,10 @@ pub(crate) trait Sink {
     /// It is an additional way to returning them in a ResultVec via on_event, on_signal.
     async fn init(
         &mut self,
+        sink_uid: u64,
+        codec: &dyn Codec,
+        codec_map: &HashMap<String, Box<dyn Codec>>,
+        preprocessors: &[String],
         postprocessors: &[String],
         is_linked: bool,
         reply_channel: Sender<SinkReply>,
@@ -118,18 +128,35 @@ where
     #[allow(clippy::used_underscore_binding)]
     async fn start(
         &mut self,
-        _codec: &dyn Codec,
+        offramp_uid: u64,
+        codec: &dyn Codec,
+        codec_map: &HashMap<String, Box<dyn Codec>>,
+        preprocessors: &[String],
         postprocessors: &[String],
         is_linked: bool,
         reply_channel: Sender<SinkReply>,
     ) -> Result<()> {
         self.sink
-            .init(postprocessors, is_linked, reply_channel)
+            .init(
+                offramp_uid, // we treat offramp_uid and sink_uid as the same thing
+                codec,
+                codec_map,
+                preprocessors,
+                postprocessors,
+                is_linked,
+                reply_channel,
+            )
             .await
     }
 
-    async fn on_event(&mut self, codec: &dyn Codec, input: &str, event: Event) -> Result<()> {
-        if let Some(mut replies) = self.sink.on_event(input, codec, event).await? {
+    async fn on_event(
+        &mut self,
+        codec: &dyn Codec,
+        codec_map: &HashMap<String, Box<dyn Codec>>,
+        input: &str,
+        event: Event,
+    ) -> Result<()> {
+        if let Some(mut replies) = self.sink.on_event(input, codec, codec_map, event).await? {
             for reply in replies.drain(..) {
                 match reply {
                     SinkReply::Insight(e) => handle_insight(e, self.pipelines.values()).await?,
@@ -207,6 +234,8 @@ where
     Ok(())
 }
 
+/// handle response back from sink e.g. in linked transport case
+///
 /// we explicitly do not fail upon send errors, just log errors
 pub(crate) async fn handle_response<'iter, T>(response: Event, mut pipelines: T) -> Result<()>
 where
