@@ -143,7 +143,7 @@ impl From<PoisonError<MutexGuard<'_, tremor_script::Registry>>> for Error {
         )
     }
 }
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum ResourceType {
     Json,
     Yaml,
@@ -154,7 +154,7 @@ impl ResourceType {
         match self {
             Self::Yaml => "application/yaml",
             Self::Json => "application/json",
-            Self::Trickle => "application/trickle",
+            Self::Trickle => "application/vnd.trickle",
         }
     }
 }
@@ -167,7 +167,7 @@ pub fn content_type(req: &Request) -> Option<ResourceType> {
     {
         Some("application/yaml") => Some(ResourceType::Yaml),
         Some("application/json") => Some(ResourceType::Json),
-        Some("application/trickle") => Some(ResourceType::Trickle),
+        Some("application/vnd.trickle") => Some(ResourceType::Trickle),
         _ => None,
     }
 }
@@ -180,6 +180,7 @@ pub fn accept(req: &Request) -> ResourceType {
         .map(headers::HeaderValue::as_str)
     {
         Some("application/yaml") => ResourceType::Yaml,
+        Some("application/vnd.trickle") => ResourceType::Trickle,
         _ => ResourceType::Json,
     }
 }
