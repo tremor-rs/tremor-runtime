@@ -12,12 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::{Error, Result};
+use crate::errors::Result;
 use crate::util::{get_source_kind, SourceKind};
 use clap::ArgMatches;
+use io::BufReader;
 use lexer::Tokenizer;
-use std::io::Read;
 use std::io::Write;
+use std::io::{self, Read};
 use termcolor::{Color, ColorSpec};
 use tremor_script::highlighter::{Dumb as TermNoHighlighter, Highlighter, Term as TermHighlighter};
 use tremor_script::lexer;
@@ -249,14 +250,23 @@ where
 }
 
 fn script_opts(matches: &ArgMatches, no_banner: bool) -> Result<Opts> {
-    let src = matches
-        .value_of("SCRIPT")
-        .ok_or_else(|| Error::from("No script file provided"))?;
-    let kind = get_source_kind(src);
-
+    let src = matches.value_of("SCRIPT");
     let mut raw = String::new();
-    let mut input = crate::open_file(src, None)?;
-    input.read_to_string(&mut raw)?;
+
+    let mut buffer: Box<dyn Read> = match src {
+        None | Some("-") => Box::new(BufReader::new(io::stdin())),
+        Some(data) => Box::new(BufReader::new(crate::open_file(data, None)?)),
+    };
+    let kind = match src {
+        None | Some("-") => SourceKind::Tremor,
+        Some(data) => get_source_kind(data),
+    };
+    let src = match src {
+        None | Some("-") => "<stdin>",
+        Some(data) => data,
+    };
+    buffer.read_to_string(&mut raw)?;
+
     println!();
     raw.push('\n'); // Ensure last token is whitespace
     let opts = Opts {
@@ -271,7 +281,7 @@ fn script_opts(matches: &ArgMatches, no_banner: bool) -> Result<Opts> {
 
 pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
     let no_highlight = matches.is_present("no-highlight");
-    let no_banner = matches.is_present("no_banner");
+    let no_banner = matches.is_present("no-banner");
 
     if no_highlight {
         let mut h = TermNoHighlighter::new();
