@@ -145,7 +145,13 @@ where
 #[async_trait::async_trait]
 impl Sink for Kafka {
     #[allow(clippy::used_underscore_binding)]
-    async fn on_event(&mut self, _input: &str, codec: &dyn Codec, event: Event) -> ResultVec {
+    async fn on_event(
+        &mut self,
+        _input: &str,
+        codec: &dyn Codec,
+        _codec_map: &HashMap<String, Box<dyn Codec>>,
+        event: Event,
+    ) -> ResultVec {
         let mut success = true;
         for value in event.value_iter() {
             let raw = codec.encode(value)?;
@@ -186,6 +192,10 @@ impl Sink for Kafka {
     }
     async fn init(
         &mut self,
+        _sink_uid: u64,
+        _codec: &dyn Codec,
+        _codec_map: &HashMap<String, Box<dyn Codec>>,
+        _preprocessors: &[String],
         postprocessors: &[String],
         _is_linked: bool,
         _reply_channel: Sender<SinkReply>,

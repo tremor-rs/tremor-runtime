@@ -408,6 +408,7 @@ impl Onramp for Rest {
         codec: &str,
         codec_map: halfbrown::HashMap<String, String>,
         preprocessors: &[String],
+        postprocessors: &[String],
         metrics_reporter: RampReporter,
         is_linked: bool,
     ) -> Result<onramp::Addr> {
@@ -418,6 +419,7 @@ impl Onramp for Rest {
             codec,
             codec_map,
             preprocessors,
+            postprocessors,
             metrics_reporter,
         )
         .await

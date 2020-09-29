@@ -125,7 +125,6 @@ pub fn builtin_codec_map() -> halfbrown::HashMap<String, Box<dyn Codec>> {
     codecs
 }
 
-#[must_use]
 /// lookup a codec by mime type
 ///
 /// # Errors

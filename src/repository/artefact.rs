@@ -246,11 +246,27 @@ impl Artefact for OfframpArtefact {
     async fn spawn(&self, world: &World, servant_id: ServantId) -> Result<Self::SpawnResult> {
         //TODO: define offramp by config!
         let offramp = offramp::lookup(&self.binding_type, &self.config)?;
+        // lookup codecs already here
+        // this will bail out early if something is mistyped or so
         let codec = if let Some(codec) = &self.codec {
             codec::lookup(&codec)?
         } else {
             codec::lookup(offramp.default_codec())?
         };
+        let mut resolved_codec_map = codec::builtin_codec_map();
+        // override the builtin map
+        if let Some(codec_map) = &self.codec_map {
+            for (k, v) in codec_map {
+                resolved_codec_map.insert(k.to_string(), codec::lookup(v.as_str())?);
+            }
+        }
+
+        let preprocessors = if let Some(preprocessors) = &self.preprocessors {
+            preprocessors.clone()
+        } else {
+            vec![]
+        };
+
         let postprocessors = if let Some(postprocessors) = &self.postprocessors {
             postprocessors.clone()
         } else {
@@ -267,7 +283,9 @@ impl Artefact for OfframpArtefact {
                 offramp::Create {
                     id: servant_id,
                     codec,
+                    codec_map: resolved_codec_map,
                     offramp,
+                    preprocessors,
                     postprocessors,
                     metrics_reporter,
                     is_linked: self.is_linked,
@@ -385,6 +403,12 @@ impl Artefact for OnrampArtefact {
         } else {
             vec![]
         };
+        let postprocessors = if let Some(postprocessors) = &self.postprocessors {
+            postprocessors.clone()
+        } else {
+            vec![]
+        };
+
         let metrics_reporter = RampReporter::new(servant_id.clone(), self.metrics_interval_s);
         let (tx, rx) = bounded(1);
 
@@ -395,6 +419,7 @@ impl Artefact for OnrampArtefact {
                 onramp::Create {
                     id: servant_id,
                     preprocessors,
+                    postprocessors,
                     codec,
                     codec_map,
                     stream,

@@ -22,6 +22,7 @@
 
 use crate::sink::prelude::*;
 use async_std::net::TcpStream;
+use halfbrown::HashMap;
 
 /// An offramp streams over TCP/IP
 pub struct Tcp {
@@ -65,7 +66,13 @@ impl Sink for Tcp {
     }
 
     #[allow(clippy::used_underscore_binding)]
-    async fn on_event(&mut self, _input: &str, codec: &dyn Codec, mut event: Event) -> ResultVec {
+    async fn on_event(
+        &mut self,
+        _input: &str,
+        codec: &dyn Codec,
+        _codec_map: &HashMap<String, Box<dyn Codec>>,
+        mut event: Event,
+    ) -> ResultVec {
         let mut success = true;
         if let Some(stream) = &mut self.stream {
             for value in event.value_iter() {
@@ -94,6 +101,10 @@ impl Sink for Tcp {
     #[allow(clippy::used_underscore_binding)]
     async fn init(
         &mut self,
+        _sink_uid: u64,
+        _codec: &dyn Codec,
+        _codec_map: &HashMap<String, Box<dyn Codec>>,
+        _preprocessors: &[String],
         postprocessors: &[String],
         _is_linked: bool,
         _reply_channel: Sender<SinkReply>,

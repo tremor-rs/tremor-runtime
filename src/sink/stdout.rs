@@ -23,6 +23,7 @@
 
 use crate::sink::prelude::*;
 use async_std::io;
+use halfbrown::HashMap;
 
 pub struct StdOut {
     postprocessors: Postprocessors,
@@ -40,7 +41,13 @@ impl offramp::Impl for StdOut {
 #[async_trait::async_trait]
 impl Sink for StdOut {
     #[allow(clippy::used_underscore_binding)]
-    async fn on_event(&mut self, _input: &str, codec: &dyn Codec, event: Event) -> ResultVec {
+    async fn on_event(
+        &mut self,
+        _input: &str,
+        codec: &dyn Codec,
+        _codec_map: &HashMap<String, Box<dyn Codec>>,
+        event: Event,
+    ) -> ResultVec {
         for value in event.value_iter() {
             let raw = codec.encode(value)?;
             if let Ok(s) = std::str::from_utf8(&raw) {
@@ -56,6 +63,10 @@ impl Sink for StdOut {
     }
     async fn init(
         &mut self,
+        _sink_uid: u64,
+        _codec: &dyn Codec,
+        _codec_map: &HashMap<String, Box<dyn Codec>>,
+        _preprocessors: &[String],
         postprocessors: &[String],
         _is_linked: bool,
         _reply_channel: Sender<SinkReply>,

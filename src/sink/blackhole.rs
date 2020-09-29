@@ -24,6 +24,7 @@
 #![allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
 
 use crate::sink::prelude::*;
+use halfbrown::HashMap;
 use hdrhistogram::serialization::{Deserializer, Serializer, V2Serializer};
 use hdrhistogram::Histogram;
 use std::fmt::Display;
@@ -88,6 +89,10 @@ impl offramp::Impl for Blackhole {
 impl Sink for Blackhole {
     async fn init(
         &mut self,
+        _sink_uid: u64,
+        _codec: &dyn Codec,
+        _codec_map: &HashMap<String, Box<dyn Codec>>,
+        _preprocessors: &[String],
         postprocessors: &[String],
         _is_linked: bool,
         _reply_channel: Sender<SinkReply>,
@@ -97,7 +102,13 @@ impl Sink for Blackhole {
     }
 
     #[allow(clippy::used_underscore_binding)]
-    async fn on_event(&mut self, _input: &str, codec: &dyn Codec, event: Event) -> ResultVec {
+    async fn on_event(
+        &mut self,
+        _input: &str,
+        codec: &dyn Codec,
+        _codec_map: &HashMap<String, Box<dyn Codec>>,
+        event: Event,
+    ) -> ResultVec {
         let now_ns = nanotime();
         if self.has_stop_limit && now_ns > self.stop_after {
             let mut buf = Vec::new();

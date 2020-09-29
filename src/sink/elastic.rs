@@ -34,6 +34,7 @@ use crate::postprocessor::Postprocessors;
 use crate::sink::prelude::*;
 use async_channel::{bounded, Receiver, Sender};
 use elastic::prelude::*;
+use halfbrown::HashMap;
 use simd_json::borrowed::Object;
 use simd_json::json;
 use std::str;
@@ -191,13 +192,20 @@ impl Elastic {
 impl Sink for Elastic {
     // We enforce json here!
     #[allow(clippy::used_underscore_binding)]
-    async fn on_event(&mut self, _input: &str, _codec: &dyn Codec, event: Event) -> ResultVec {
+    async fn on_event(
+        &mut self,
+        _input: &str,
+        _codec: &dyn Codec,
+        _codec_map: &HashMap<String, Box<dyn Codec>>,
+        event: Event,
+    ) -> ResultVec {
         // We estimate a single message is 512 byte on everage, might be off but it's
         // a guess
         let mut payload = Vec::with_capacity(4096);
         let mut output = None;
         let op_meta = event.op_meta.clone();
 
+        // TODO: make proper use of postprocessors here
         for (value, meta) in event.value_meta_iter() {
             if output.is_none() {
                 output = meta.get("backpressure-output").map(Value::clone_static);
@@ -238,6 +246,10 @@ impl Sink for Elastic {
 
     async fn init(
         &mut self,
+        _sink_uid: u64,
+        _codec: &dyn Codec,
+        _codec_map: &HashMap<String, Box<dyn Codec>>,
+        _preprocessors: &[String],
         postprocessors: &[String],
         _is_linked: bool,
         _reply_channel: Sender<SinkReply>,

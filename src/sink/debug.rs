@@ -53,7 +53,13 @@ impl offramp::Impl for Debug {
 #[async_trait::async_trait]
 impl Sink for Debug {
     #[allow(clippy::used_underscore_binding)]
-    async fn on_event(&mut self, _input: &str, _codec: &dyn Codec, event: Event) -> ResultVec {
+    async fn on_event(
+        &mut self,
+        _input: &str,
+        _codec: &dyn Codec,
+        _codec_map: &HashMap<String, Box<dyn Codec>>,
+        event: Event,
+    ) -> ResultVec {
         for (_value, meta) in event.value_meta_iter() {
             if self.last.elapsed() > self.update_time {
                 self.last = Instant::now();
@@ -98,6 +104,10 @@ impl Sink for Debug {
     #[allow(clippy::used_underscore_binding)]
     async fn init(
         &mut self,
+        _sink_uid: u64,
+        _codec: &dyn Codec,
+        _codec_map: &HashMap<String, Box<dyn Codec>>,
+        _preprocessors: &[String],
         _postprocessors: &[String],
         _is_linked: bool,
         _reply_channel: Sender<SinkReply>,

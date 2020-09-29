@@ -17,6 +17,7 @@ pub(crate) use gelf::GELF;
 pub(crate) mod lines;
 
 use crate::errors::Result;
+use crate::url::TremorURL;
 use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
 use bytes::buf::Buf;
 use bytes::BytesMut;
@@ -68,6 +69,47 @@ pub fn lookup(name: &str) -> Result<Box<dyn Preprocessor>> {
         "length-prefixed" => Ok(Box::new(LengthPrefix::default())),
         _ => Err(format!("Preprocessor '{}' not found.", name).into()),
     }
+}
+
+/// Given the slice of preprocessor names: Look them up and return them as `Preprocessors`.
+///
+/// # Errors
+///
+///   * If the preprocessor is not known.
+pub fn make_preprocessors(preprocessors: &[String]) -> Result<Preprocessors> {
+    preprocessors.iter().map(|n| lookup(&n)).collect()
+}
+
+/// Canonical way to preprocess data before it is fed to a codec for decoding.
+///
+/// Preprocessors might split up the given data in multiple chunks. Each of those
+/// chunks must be seperately decoded by a `Codec`.
+///
+/// # Errors
+///
+///   * If a preprocessor failed
+pub fn preprocess(
+    preprocessors: &mut [Box<dyn Preprocessor>],
+    ingest_ns: &mut u64,
+    data: Vec<u8>,
+    instance_id: &TremorURL,
+) -> Result<Vec<Vec<u8>>> {
+    let mut data = vec![data];
+    let mut data1 = Vec::new();
+    for pp in preprocessors {
+        data1.clear();
+        for (i, d) in data.iter().enumerate() {
+            match pp.process(ingest_ns, d) {
+                Ok(mut r) => data1.append(&mut r),
+                Err(e) => {
+                    error!("[{}] Preprocessor[{}] error {}", instance_id, i, e);
+                    return Err(e);
+                }
+            }
+        }
+        std::mem::swap(&mut data, &mut data1);
+    }
+    Ok(data)
 }
 
 trait SliceTrim {

@@ -251,7 +251,13 @@ impl Sink for Ws {
     }
 
     #[allow(clippy::used_underscore_binding)]
-    async fn on_event(&mut self, _input: &str, codec: &dyn Codec, event: Event) -> ResultVec {
+    async fn on_event(
+        &mut self,
+        _input: &str,
+        codec: &dyn Codec,
+        _codec_map: &HashMap<String, Box<dyn Codec>>,
+        event: Event,
+    ) -> ResultVec {
         if self.is_linked && event.is_batch {
             return Err("Batched events are not supported for linked websocket offramps".into());
         }
@@ -311,6 +317,10 @@ impl Sink for Ws {
     }
     async fn init(
         &mut self,
+        _sink_uid: u64,
+        _codec: &dyn Codec,
+        _codec_map: &HashMap<String, Box<dyn Codec>>,
+        _preprocessors: &[String],
         postprocessors: &[String],
         is_linked: bool,
         _reply_channel: Sender<SinkReply>,
