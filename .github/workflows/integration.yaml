@@ -21,12 +21,20 @@ jobs:
           override: true
           profile: minimal
       - name: Build test runner
-        run: cd tremor-cli && cargo build
+        run: cargo build -p tremor-cli
       - name: Run Integration Tests
-        run: cd tremor-cli && TREMOR_PATH=../tremor-script/lib cargo run -- test integration tests
+        env:
+          TREMOR_PATH: ../tremor-script/lib
+        run: cd tremor-cli && PATH=$PATH:../target/debug tremor test integration tests
       - name: Run API Tests
-        run: cd tremor-cli && TREMOR_PATH=../tremor-script/lib cargo run -- test api tests
+        env:
+          TREMOR_PATH: ../tremor-script/lib
+        run: cd tremor-cli && PATH=$PATH:../target/debug tremor test api tests
       - name: Run Unit Tests
-        run: cd tremor-cli && TREMOR_PATH=../tremor-script/lib cargo run -- test unit tests
+        env:
+          TREMOR_PATH: ../tremor-script/lib
+        run: cd tremor-cli && PATH=$PATH:../target/debug tremor test unit tests
       - name: Run Command Tests
-        run: cd tremor-cli && TREMOR_PATH=../tremor-script/lib cargo run -- test command tests
+        env:
+          TREMOR_PATH: ../tremor-script/lib
+        run: cd tremor-cli && PATH=$PATH:../target/debug tremor test command tests
