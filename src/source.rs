@@ -564,6 +564,7 @@ where
                                         "source_id".into(),
                                         self.source_id.to_string().into(),
                                     );
+
                                     (ERROR, Value::from(error_data).into())
                                 }
                             };
