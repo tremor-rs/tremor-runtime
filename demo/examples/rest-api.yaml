@@ -13,6 +13,7 @@ pipeline:
     interface:
       inputs:
         - in
+        - in-errors
       outputs:
         - out
         - error
@@ -180,6 +181,7 @@ pipeline:
             event;
     links:
       in: [ request-processing ]
+      in-errors: [ internal-error-processing ]
 
       # main request processing
       request-processing: [ out ]
@@ -200,6 +202,8 @@ binding:
   - id: default
     links:
       '/onramp/rest/{instance}/out': [ '/pipeline/main/{instance}/in' ]
+      # this can go to a separate pipeline too
+      '/onramp/rest/{instance}/error': [ '/pipeline/main/{instance}/in-errors' ]
 
       '/pipeline/main/{instance}/out': [
         # linked onramp that can respond based on pipeline output
