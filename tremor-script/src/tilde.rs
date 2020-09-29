@@ -173,6 +173,12 @@ pub enum Extractor {
         #[serde(skip)]
         compiled: Regex,
     },
+    /// PCRE with repeats recognizer
+    Reg {
+        rule: String,
+        #[serde(skip)]
+        compiled: Regex,
+    },
     /// Base64 recognizer
     Base64,
     /// KV ( Key/Value ) recognizer
@@ -273,6 +279,10 @@ impl Extractor {
                 compiled: Regex::new(&rule_text)?,
                 rule: rule_text.to_string(),
             },
+            "reg" => Extractor::Reg {
+                compiled: Regex::new(&rule_text)?,
+                rule: rule_text.to_string(),
+            },
             "base64" => Extractor::Base64,
             "kv" => Extractor::Kv(kv::Pattern::compile(rule_text)?),
             "json" => Extractor::Json,
@@ -365,6 +375,36 @@ impl Extractor {
                             msg: "regular expression didn't match'".into(),
                         })
                     }
+                }
+                Self::Reg { compiled: re, .. } => {
+                    if !result_needed {
+                        return Ok(Value::null());
+                    }
+
+                    let names: Vec<&str> = re.capture_names().into_iter().flatten().collect();
+                    let mut results = Value::object_with_capacity(names.len());
+                    let captures = re.captures_iter(s);
+                    for c in captures {
+                        for name in &names {
+                            if let Some(cap) = c.name(name) {
+                                match results.get_mut((*name).into()) {
+                                    Some(Value::Array(a)) => {
+                                        a.push(cap.as_str().into());
+                                    }
+                                    Some(_other) => {
+                                        // error by construction - we always expect Value::array here
+                                        // make compiler happy - silently ignore and continue
+                                    }
+                                    None => {
+                                        let mut value = Value::array();
+                                        value.push(cap.as_str())?;
+                                        results.insert(*name, value)?;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Ok(results.into_static())
                 }
                 Self::Glob { compiled: glob, .. } => {
                     if glob.matches(s) {
@@ -566,15 +606,34 @@ mod test {
     use halfbrown::hashmap;
     use simd_json::{borrowed::Value, json};
     #[test]
+    fn test_reg_extractor() {
+        let ex = Extractor::new("reg", "(?P<key>[^=]+)=(?P<val>[^&]+)&").expect("bad extractor");
+        match ex {
+            Extractor::Reg { .. } => {
+                assert_eq!(
+                    ex.extract(
+                        true,
+                        &Value::from("foo=bar&baz=bat&"),
+                        &EventContext::new(0, None)
+                    ),
+                    Ok(Value::from(hashmap! {
+                        "key".into() => Value::from(vec!["foo", "baz"]),
+                        "val".into() => Value::from(vec!["bar", "bat"])
+                    }))
+                );
+            }
+            _ => unreachable!(),
+        };
+    }
+    #[test]
     fn test_re_extractor() {
         let ex = Extractor::new("re", "(snot)?foo(?P<snot>.*)").expect("bad extractor");
         match ex {
             Extractor::Re { .. } => {
                 assert_eq!(
                     ex.extract(true, &Value::from("foobar"), &EventContext::new(0, None)),
-                    Ok(Value::from(
-                        hashmap! { "snot".into() => Value::from("bar") }
-                    ))
+                    Ok(Value::from(hashmap! {
+                    "snot".into() => Value::from("bar") }))
                 );
             }
             _ => unreachable!(),
