@@ -63,12 +63,58 @@ pub async fn publish_artefact(mut req: Request) -> Result<Response> {
                 .publish_pipeline(&url, false, query)
                 .await
                 .map(|result| result.source().to_string())?;
-            reply(req, result, true, StatusCode::Created).await
+            reply_trickle_flat(req, result, true, StatusCode::Created).await
         }
         Some(_) | None => Err(Error::Generic(
             StatusCode::UnsupportedMediaType,
             "No content type provided".into(),
         )),
+    }
+}
+
+pub async fn reply_trickle_flat(
+    req: Request,
+    result_in: String,
+    persist: bool,
+    ok_code: StatusCode,
+) -> std::result::Result<Response, crate::Error> {
+    if persist {
+        let world = &req.state().world;
+        world.save_config().await?;
+    }
+    match accept(&req) {
+        ResourceType::Json | ResourceType::Yaml => serialize(accept(&req), &result_in, ok_code),
+        ResourceType::Trickle => {
+            let mut r = Response::new(ok_code);
+            r.insert_header(headers::CONTENT_TYPE, ResourceType::Trickle.as_str());
+            r.set_body(result_in);
+            Ok(r)
+        }
+    }
+}
+
+pub async fn reply_trickle_instanced(
+    req: Request,
+    mut result_in: String,
+    instances: Vec<String>,
+    persist: bool,
+    ok_code: StatusCode,
+) -> std::result::Result<Response, crate::Error> {
+    if persist {
+        let world = &req.state().world;
+        world.save_config().await?;
+    }
+    match dbg!(accept(&req)) {
+        ResourceType::Json | ResourceType::Yaml => serialize(accept(&req), &result_in, ok_code),
+        ResourceType::Trickle => {
+            let mut r = Response::new(ok_code);
+            r.insert_header(headers::CONTENT_TYPE, ResourceType::Trickle.as_str());
+            let instances = instances.join("#  * ");
+            result_in.push_str("\n# Instances:\n#  * ");
+            result_in.push_str(&instances);
+            r.set_body(result_in);
+            Ok(r)
+        }
     }
 }
 
@@ -80,7 +126,7 @@ pub async fn unpublish_artefact(req: Request) -> Result<Response> {
         .unpublish_pipeline(&url)
         .await
         .map(|result| result.source().to_string())?;
-    reply(req, result, true, StatusCode::Ok).await
+    reply_trickle_flat(req, result, true, StatusCode::Ok).await
 }
 
 pub async fn get_artefact(req: Request) -> Result<Response> {
@@ -91,16 +137,15 @@ pub async fn get_artefact(req: Request) -> Result<Response> {
         .find_pipeline(&url)
         .await?
         .ok_or_else(Error::not_found)?;
-    reply(
+
+    reply_trickle_instanced(
         req,
-        PipelineWrap {
-            query: result.artefact.source().to_string(),
-            instances: result
-                .instances
-                .iter()
-                .filter_map(|v| v.instance().map(String::from))
-                .collect(),
-        },
+        result.artefact.source().to_string(),
+        result
+            .instances
+            .iter()
+            .filter_map(|v| v.instance().map(String::from))
+            .collect(),
         false,
         StatusCode::Ok,
     )

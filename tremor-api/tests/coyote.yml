@@ -42,13 +42,13 @@
         - "system::metrics"
     - name: Publish pipeline ( JSON )
       command: >
-        curl -vs -stderr -X POST --data-binary @tests/bench-pipeline.trickle -H "Content-type: application/trickle" http://localhost:9898/pipeline
+        curl -vs -stderr -X POST --data-binary @tests/bench-pipeline.trickle -H "Content-type: application/vnd.trickle" http://localhost:9898/pipeline
       stderr_has:
         - HTTP/1.1 201 Created
         - "content-type: application/json"
     - name: Publish pipeline already exists ( JSON )
       command: >
-        curl -vs -stderr -X POST --data-binary @tests/bench-pipeline.trickle -H "Content-type: application/trickle" http://localhost:9898/pipeline
+        curl -vs -stderr -X POST --data-binary @tests/bench-pipeline.trickle -H "Content-type: application/vnd.trickle" http://localhost:9898/pipeline
       stderr_has:
         - HTTP/1.1 409 Conflict
     - name: Get /pipeline should return a list of 2 elements
@@ -83,13 +83,13 @@
         - "system::metrics"
     - name: Publish pipeline ( JSON )
       command: >
-        curl -vs -stderr -X POST --data-binary @tests/bench-pipeline.trickle -H "Content-type: application/trickle" -H "Accept: application/yaml" http://localhost:9898/pipeline
+        curl -vs -stderr -X POST --data-binary @tests/bench-pipeline.trickle -H "Content-type: application/vnd.trickle" -H "Accept: application/yaml" http://localhost:9898/pipeline
       stderr_has:
         - HTTP/1.1 201 Created
         - "content-type: application/yaml"
     - name: Publish pipeline already exists ( YAML )
       command: >
-        curl -vs -stderr -X POST --data-binary @tests/bench-pipeline.trickle -H "Content-type: application/trickle" http://localhost:9898/pipeline
+        curl -vs -stderr -X POST --data-binary @tests/bench-pipeline.trickle -H "Content-type: application/vnd.trickle" http://localhost:9898/pipeline
       stderr_has:
         - HTTP/1.1 409 Conflict
     - name: Get /pipeline should return a list of 2 elements
@@ -418,7 +418,7 @@
   entries:
     - name: Publish passthrough pipeline
       command: >
-        curl -vs -stderr -X POST --data-binary @tests/metronome-pipeline.trickle -H "Content-type: application/trickle" -H "Accept: application/yaml" http://localhost:9898/pipeline
+        curl -vs -stderr -X POST --data-binary @tests/metronome-pipeline.trickle -H "Content-type: application/vnd.trickle" -H "Accept: application/yaml" http://localhost:9898/pipeline
       stderr_has:
         - HTTP/1.1 201 Created
         - "content-type: application/yaml"
