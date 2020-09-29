@@ -134,6 +134,7 @@ mod test {
     use super::*;
     use crate::config;
     use serde_yaml;
+    use std::fs::File;
     use std::io::BufReader;
     use tremor_common::file as cfile;
 
