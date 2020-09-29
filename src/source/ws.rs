@@ -97,7 +97,6 @@ impl Int {
         // for request/response style flow), but for websocket, arbitrary events can
         // come in here.
         // also messages keeps growing as events come in right now
-        // .unwrap()
         if let Some(stream_id) = self.messages.get(&id) {
             self.streams.get(&stream_id)
         } else {

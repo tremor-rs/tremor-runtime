@@ -26,7 +26,7 @@ use crate::Result;
 use async_channel::{self, unbounded, Receiver, Sender};
 use async_std::task;
 use halfbrown::HashMap;
-use simd_json::{Builder, Mutable};
+use simd_json::Builder;
 use std::borrow::Cow;
 use std::time::Duration;
 use tremor_pipeline::{CBAction, Event, EventOriginUri, Ids};
@@ -539,10 +539,13 @@ where
                                     // also pass meta alongside which can be useful for
                                     // errors too [will probably need to return (port, data)
                                     // as part of results itself]
-                                    let mut error_data = Value::object_with_capacity(2);
-                                    error_data.insert("error", e.to_string()).unwrap();
-                                    error_data.insert("event_id", original_id).unwrap();
-                                    (ERROR, error_data.into())
+
+                                    let mut error_data =
+                                        simd_json::borrowed::Object::with_capacity(2);
+                                    error_data.insert_nocheck("error".into(), e.to_string().into());
+                                    error_data
+                                        .insert_nocheck("event_id".into(), original_id.into());
+                                    (ERROR, Value::from(error_data).into())
                                 }
                             };
                             error |= self

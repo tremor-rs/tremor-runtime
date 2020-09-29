@@ -87,7 +87,7 @@ async fn ws_loop(
             // test code to simulate slow connection
             // TODO remove
             //if &url == "ws://localhost:8139" {
-            //    dbg!("sleeping...");
+            //    debug!("sleeping...");
             //    std::thread::sleep(Duration::from_secs(5));
             //}
 
