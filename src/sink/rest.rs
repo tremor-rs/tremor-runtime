@@ -36,7 +36,7 @@ pub struct Config {
     /// maximum number of parallel in flight batches (default: 4)
     /// this avoids blocking further events from progressing while waiting for upstream responses.
     #[serde(default = "concurrency")]
-    pub concurrency: usize,
+    pub concurrency: usize, // TODO adjust for linking
     // TODO add scheme, host, path, query
     // HTTP method to use (default: POST)
     // TODO implement Deserialize for http_types::Method
@@ -46,20 +46,6 @@ pub struct Config {
     #[serde(default = "Default::default")]
     // TODO make header values a vector here?
     pub headers: HashMap<String, String>,
-
-    // TODO: better name?
-    /// mapping from mime-type to codec used to handle requests/responses
-    /// with this mime-type
-    ///
-    /// e.g.:
-    ///       codec_map:
-    ///         "application/json": "json"
-    ///         "text/plain": "string"
-    ///
-    /// A default builtin codec mapping is defined
-    /// for msgpack, json, yaml and plaintext codecs with the common mime-types
-    #[serde(default = "Default::default", skip_serializing_if = "Option::is_none")]
-    pub(crate) codec_map: Option<HashMap<String, String>>,
 }
 
 fn dflt_method() -> Method {
