@@ -20,6 +20,7 @@ use crate::source::{blaster, crononome, file, kafka, metronome, postgres, rest, 
 use crate::url::TremorURL;
 use async_std::task::{self, JoinHandle};
 use serde_yaml::Value;
+use std::borrow::Cow;
 use std::fmt;
 
 pub(crate) type Sender = async_channel::Sender<ManagerMsg>;
@@ -30,7 +31,7 @@ pub(crate) trait Impl {
 
 #[derive(Clone, Debug)]
 pub enum Msg {
-    Connect(Vec<(TremorURL, pipeline::Addr)>),
+    Connect(Cow<'static, str>, Vec<(TremorURL, pipeline::Addr)>),
     Disconnect {
         id: TremorURL,
         tx: async_channel::Sender<bool>,

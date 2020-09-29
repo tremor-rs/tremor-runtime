@@ -414,12 +414,16 @@ impl Artefact for OnrampArtefact {
     ) -> Result<Self::LinkResult> {
         if let Some(onramp) = system.reg.find_onramp(id).await? {
             // TODO: Make this a two step 'transactional' process where all pipelines are gathered and then send
-            for (_from, to) in mappings {
+            for (from, to) in mappings {
                 //TODO: Check that we really have the right onramp!
                 if let Some(ResourceType::Pipeline) = to.resource_type() {
                     if let Some(pipeline) = system.reg.find_pipeline(&to).await? {
                         onramp
-                            .send(onramp::Msg::Connect(vec![(to.clone(), pipeline)]))
+                            // TODO validate that from is one of OUT or ERROR
+                            .send(onramp::Msg::Connect(
+                                from.into(),
+                                vec![(to.clone(), pipeline)],
+                            ))
                             .await?;
                     } else {
                         return Err(format!("Pipeline {:?} not found", to).into());

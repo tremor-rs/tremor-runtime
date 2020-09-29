@@ -18,6 +18,7 @@ use crate::metrics::RampReporter;
 use crate::onramp;
 use crate::pipeline;
 use crate::preprocessor::{self, Preprocessors};
+use crate::ramp::{ERROR, OUT};
 use crate::system::METRICS_PIPELINE;
 use crate::url::TremorURL;
 use crate::utils::nanotime;
@@ -25,7 +26,8 @@ use crate::Result;
 use async_channel::{self, unbounded, Receiver, Sender};
 use async_std::task;
 use halfbrown::HashMap;
-use simd_json::Builder;
+use simd_json::{Builder, Mutable};
+use std::borrow::Cow;
 use std::time::Duration;
 use tremor_pipeline::{CBAction, Event, EventOriginUri, Ids};
 use tremor_script::{LineValue, Value, ValueAndMeta};
@@ -153,7 +155,10 @@ where
     codec_map: HashMap<String, Box<dyn Codec>>,
     metrics_reporter: RampReporter,
     triggered: bool,
-    pipelines: Vec<(TremorURL, pipeline::Addr)>,
+    // TODO maybe just have out_pipelines and error_pipelines as Vec
+    // instead of port -> pipelines mapping here
+    pipelines: HashMap<Cow<'static, str>, Vec<(TremorURL, pipeline::Addr)>>,
+    //pipelines_out: Vec<(TremorURL, pipeline::Addr)>,
     id: u64,
     is_transactional: bool,
     /// Unique Id for the source
@@ -179,11 +184,7 @@ where
                     match pp.process(ingest_ns, d) {
                         Ok(mut r) => data1.append(&mut r),
                         Err(e) => {
-                            error!(
-                                "[Source::{}] Preprocessor[{}] error {}",
-                                self.source_id, i, e
-                            );
-                            return Err(e);
+                            return Err(format!("Preprocessor[{}] error {}", i, e).into());
                         }
                     }
                 }
@@ -193,67 +194,58 @@ where
         Ok(data)
     }
 
-    async fn send_event(
+    async fn make_event_data(
         &mut self,
         stream: usize,
         ingest_ns: &mut u64,
-        origin_uri: &tremor_pipeline::EventOriginUri,
         codec_override: Option<String>,
         data: Vec<u8>,
         meta: Option<StaticValue>, // See: https://github.com/rust-lang/rust/issues/63033
-    ) {
-        let original_id = self.id;
-        let mut error = false;
-        if let Ok(data) = self.handle_pp(stream, ingest_ns, data) {
-            let meta_value = meta.map_or_else(Value::object, |m| m.0);
-            for d in data {
-                let line_value = LineValue::try_new(vec![d], |mutd| {
-                    // this is safe, because we get the vec we created in the previous argument and we now it has 1 element
-                    // so it will never panic.
-                    // take this, rustc!
-                    let mut_data = mutd[0].as_mut_slice();
-                    let decoded = if let Some(doh) = &codec_override {
-                        if let Some(c) = self.codec_map.get_mut(doh) {
-                            c.decode(mut_data, *ingest_ns)
+    ) -> Vec<Result<LineValue>> {
+        let mut results = vec![];
+        match self.handle_pp(stream, ingest_ns, data) {
+            Ok(data) => {
+                let meta_value = meta.map_or_else(Value::object, |m| m.0);
+                for d in data {
+                    let line_value = LineValue::try_new(vec![d], |mutd| {
+                        // this is safe, because we get the vec we created in the previous argument and we now it has 1 element
+                        // so it will never panic.
+                        // take this, rustc!
+                        let mut_data = mutd[0].as_mut_slice();
+                        let decoded = if let Some(doh) = &codec_override {
+                            if let Some(c) = self.codec_map.get_mut(doh) {
+                                c.decode(mut_data, *ingest_ns)
+                            } else {
+                                self.codec.decode(mut_data, *ingest_ns)
+                            }
                         } else {
                             self.codec.decode(mut_data, *ingest_ns)
+                        };
+                        match decoded {
+                            Ok(None) => Err(RentalSnot::Skip),
+                            Err(e) => Err(RentalSnot::Error(e)),
+                            Ok(Some(decoded)) => {
+                                Ok(ValueAndMeta::from_parts(decoded, meta_value.clone()))
+                            }
                         }
-                    } else {
-                        self.codec.decode(mut_data, *ingest_ns)
-                    };
-                    match decoded {
-                        Ok(None) => Err(RentalSnot::Skip),
-                        Err(e) => Err(RentalSnot::Error(e)),
-                        Ok(Some(decoded)) => {
-                            Ok(ValueAndMeta::from_parts(decoded, meta_value.clone()))
-                        }
-                    }
-                })
-                .map_err(|e| e.0);
+                    })
+                    .map_err(|e| e.0);
 
-                match line_value {
-                    Ok(decoded) => {
-                        // produce event
-                        error |= self
-                            .transmit_event(decoded, *ingest_ns, origin_uri.clone())
-                            .await;
-                    }
-                    Err(RentalSnot::Skip) => (),
-                    Err(RentalSnot::Error(e)) => {
-                        self.metrics_reporter.increment_error();
-                        error!("[Source::{}] [Codec] {}", self.source_id, e);
+                    match line_value {
+                        Ok(decoded) => results.push(Ok(decoded)),
+                        Err(RentalSnot::Skip) => (),
+                        Err(RentalSnot::Error(e)) => {
+                            results.push(Err(format!("[Codec] {}", e).into()));
+                        }
                     }
                 }
             }
-        } else {
-            // record preprocessor failures too
-            self.metrics_reporter.increment_error();
-        };
-        // We ONLY fail on transmit errors as preprocessor errors might be
-        // problematic
-        if error {
-            self.source.fail(original_id);
+            Err(e) => {
+                // record preprocessor failures too
+                results.push(Err(e));
+            }
         }
+        results
     }
 
     async fn handle_pipelines(&mut self) -> Result<bool> {
@@ -265,7 +257,7 @@ where
             };
 
             match msg {
-                onramp::Msg::Connect(ps) => {
+                onramp::Msg::Connect(port, ps) => {
                     for p in ps {
                         if p.0 == *METRICS_PIPELINE {
                             self.metrics_reporter.set_metrics_pipeline(p);
@@ -276,18 +268,31 @@ where
                                 reply: self.is_transactional,
                             };
                             p.1.send_mgmt(msg).await?;
-                            self.pipelines.push(p);
+                            if let Some(port_ps) = self.pipelines.get_mut(&port) {
+                                port_ps.push(p);
+                            } else {
+                                self.pipelines.insert(port.clone(), vec![p]);
+                            }
                         }
                     }
                 }
                 onramp::Msg::Disconnect { id, tx } => {
-                    if let Some((_, p)) = self.pipelines.iter().find(|(pid, _)| pid == &id) {
+                    if let Some((_, p)) = self
+                        .pipelines
+                        .values()
+                        .flatten()
+                        .find(|(pid, _)| pid == &id)
+                    {
                         p.send_mgmt(pipeline::MgmtMsg::DisconnectInput(id.clone()))
                             .await?;
                     }
 
-                    self.pipelines.retain(|(pipeline, _)| pipeline != &id);
-                    if self.pipelines.is_empty() {
+                    let mut empty_pipelines = false;
+                    for (_, ps) in self.pipelines.iter_mut() {
+                        ps.retain(|(pipeline, _)| pipeline != &id);
+                        empty_pipelines &= ps.is_empty();
+                    }
+                    if empty_pipelines {
                         tx.send(true).await?;
                         self.source.terminate().await;
                         return Ok(true);
@@ -339,6 +344,7 @@ where
         data: LineValue,
         ingest_ns: u64,
         origin_uri: EventOriginUri,
+        port: Cow<'static, str>,
     ) -> bool {
         let event = Event {
             id: Ids::new(self.uid, self.id),
@@ -350,13 +356,23 @@ where
         };
         let mut error = false;
         self.id += 1;
-        if let Some((last, pipelines)) = self.pipelines.split_last_mut() {
+        if let Some((last, pipelines)) = self
+            .pipelines
+            .get_mut(&port)
+            .and_then(|ps| ps.split_last_mut())
+        {
             if let Some(t) = self.metrics_reporter.periodic_flush(ingest_ns) {
                 for e in self.source.metrics(t) {
                     self.metrics_reporter.send(e)
                 }
             }
-            self.metrics_reporter.increment_out();
+
+            // TODO refactor metrics_reporter to do this by port now
+            if port == "error" {
+                self.metrics_reporter.increment_error();
+            } else {
+                self.metrics_reporter.increment_out();
+            }
 
             for (input, addr) in pipelines {
                 if let Some(input) = input.instance_port() {
@@ -443,7 +459,7 @@ where
                 metrics_reporter,
                 triggered: false,
                 id: 0,
-                pipelines: Vec::new(),
+                pipelines: HashMap::new(),
                 uid,
                 is_transactional,
             },
@@ -503,7 +519,7 @@ where
                     Ok(SourceReply::Structured { origin_uri, data }) => {
                         let ingest_ns = nanotime();
 
-                        self.transmit_event(data, ingest_ns, origin_uri).await;
+                        self.transmit_event(data, ingest_ns, origin_uri, OUT).await;
                     }
                     Ok(SourceReply::Data {
                         mut origin_uri,
@@ -514,15 +530,40 @@ where
                     }) => {
                         origin_uri.maybe_set_uid(self.uid);
                         let mut ingest_ns = nanotime();
-                        self.send_event(
-                            stream,
-                            &mut ingest_ns,
-                            &origin_uri,
-                            codec_override,
-                            data,
-                            meta.map(StaticValue),
-                        )
-                        .await;
+                        let mut error = false;
+                        let original_id = self.id;
+                        let results = self
+                            .make_event_data(
+                                stream,
+                                &mut ingest_ns,
+                                codec_override,
+                                data,
+                                meta.map(StaticValue),
+                            )
+                            .await;
+                        for result in results {
+                            let (port, data) = match result {
+                                Ok(d) => (OUT, d),
+                                Err(e) => {
+                                    // TODO remove unwraps here
+                                    // also pass meta alongside which can be useful for
+                                    // errors too [will probably need to return (port, data)
+                                    // as part of results itself]
+                                    let mut error_data = Value::object_with_capacity(2);
+                                    error_data.insert("error", e.to_string()).unwrap();
+                                    error_data.insert("event_id", original_id).unwrap();
+                                    (ERROR, error_data.into())
+                                }
+                            };
+                            error |= self
+                                .transmit_event(data, ingest_ns, origin_uri.clone(), port)
+                                .await;
+                        }
+                        // We ONLY fail on transmit errors as preprocessor errors might be
+                        // problematic
+                        if error {
+                            self.source.fail(original_id);
+                        }
                     }
                     Ok(SourceReply::StateChange(SourceState::Disconnected)) => return Ok(()),
                     Ok(SourceReply::StateChange(SourceState::Connected)) => (),

@@ -15,6 +15,7 @@ use crate::errors::Result;
 use crate::utils::ConfigImpl;
 use memmap::MmapOptions;
 use simd_json::prelude::*;
+use std::borrow::Cow;
 use std::cmp;
 use std::fs::OpenOptions;
 use std::io;
@@ -23,6 +24,11 @@ use std::ops::DerefMut;
 use std::path::Path;
 
 pub mod postgres;
+
+// TODO reuse these from tremor pipeline operator?
+//pub const IN: Cow<'static, str> = Cow::Borrowed("in");
+pub const OUT: Cow<'static, str> = Cow::Borrowed("out");
+pub const ERROR: Cow<'static, str> = Cow::Borrowed("error");
 
 pub trait KV {
     fn get(&mut self) -> Result<simd_json::OwnedValue>;
