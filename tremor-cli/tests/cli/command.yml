@@ -62,10 +62,9 @@ suites:
               - dbg            Advanced debugging commands
               - doc            Generates documention from tremor script files
               - STDIN or an archive and written to STDOUT.
-              - explain
               - help           Prints this message or the help of the given subcommand(s)
               - run            Run tremor script or query files against stdin or a json data archive, the
-              -                data will be read from STDIN or an archive and written to STDOUT.
+              - data will be read from STDIN or an archive and written to STDOUT.
               - server         Tremor server
               - test           Testing facilities
       - name: |

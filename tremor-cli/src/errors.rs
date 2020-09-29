@@ -51,6 +51,7 @@ error_chain! {
         SendError(std::sync::mpsc::SendError<String>);
         LoggingError(log4rs::Error);
         TestKindError(crate::test::UnknownKind);
+        Url(url::ParseError) #[doc = "Error while parsing a url"];
     }
     errors {
         TestFailures(stats: crate::test::stats::Stats) {

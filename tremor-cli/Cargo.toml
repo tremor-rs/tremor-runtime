@@ -33,6 +33,7 @@ clap_generate = "3.0.0-beta.2"
 simd-json = {version = "0.3", features = ["known-key"]}
 serde_yaml = "0.8"
 dirs = "3"
+url = "2"
 serde = "1"
 halfbrown="0.1"
 async-std = { version = "1.6", features = ["unstable"] }

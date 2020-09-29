@@ -118,7 +118,7 @@ suites:
               - in
               - into
               - out
-      - name: DELETE /pipeline/main should
+      - name: DELETE /pipeline/main should delete the pipeline (3)
         command: tremor api pipeline delete main
         tags:
           - delete
@@ -197,7 +197,7 @@ suites:
             contains:
               - main
               - select
-      - name: DELETE /pipeline/main should
+      - name: DELETE /pipeline/main should delete the pipeline (4)
         command: tremor api pipeline delete main
         tags:
           - delete

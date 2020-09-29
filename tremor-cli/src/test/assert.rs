@@ -155,9 +155,8 @@ pub(crate) fn process(
     s.assert(); // status code
     if let Some(code) = status {
         let success = code == spec.status;
-        let prefix = if success { "(+)" } else { "(-)" };
         status::assert(
-            &format!("{} Assert 0", prefix),
+            "Assert 0",
             &format!("Status {}", &spec.name,),
             success,
             &spec.status.to_string(),
@@ -182,7 +181,7 @@ pub(crate) fn process(
     } else {
         let success = false;
         status::assert(
-            "(-) Assert 0",
+            "Assert 0",
             &format!("Status {}", &spec.name,),
             success,
             &spec.status.to_string(),
@@ -219,7 +218,6 @@ pub(crate) fn process_filebased_asserts(
     let mut elements = Vec::new();
     let mut stats = stats::Stats::new();
     for assert in asserts {
-        stats.assert();
         match assert {
             FileBasedAssert {
                 contains: None,
@@ -245,6 +243,7 @@ pub(crate) fn process_filebased_asserts(
                     let mut total_condition = true;
                     // By line reporting
                     for c in contains {
+                        stats.assert();
                         counter += 1;
                         let condition = file_contains(&file, &[c.to_string()], base.as_ref())?;
                         total_condition &= condition;
@@ -275,6 +274,7 @@ pub(crate) fn process_filebased_asserts(
                 if let Some(equals_file) = equals_file {
                     // By line reporting
                     counter += 1;
+                    stats.assert();
                     let changeset = file_equals(&file, &equals_file, base.as_ref())?;
                     let info = Some(changeset.to_string());
                     let condition = changeset.distance == 0;

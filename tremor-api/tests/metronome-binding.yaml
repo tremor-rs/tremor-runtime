@@ -1,5 +1,5 @@
 # Binding specification
 id: default
 links:
-  '/onramp/metronome/{instance}/out': [ '/pipeline/main/{instance}/in' ]
-  '/pipeline/main/{instance}/out': [ '/offramp/stdout/{instance}/in' ]
+  "/onramp/metronome/{instance}/out": ["/pipeline/main/{instance}/in"]
+  "/pipeline/main/{instance}/out": ["/offramp/stdout/{instance}/in"]

@@ -12,11 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use time::Instant;
+
 use crate::errors::{Error, Result};
 use crate::job;
-use crate::util::nanotime;
 use crate::{job::TargetProcess, util::slurp_string};
-use std::{collections::HashMap, fs, time::Duration};
+use std::{
+    collections::HashMap,
+    fs,
+    time::{self, Duration},
+};
 
 #[derive(Deserialize, Debug)]
 pub(crate) struct Before {
@@ -41,30 +46,29 @@ impl Before {
     }
 
     pub(crate) fn block_on(&self) -> Result<()> {
-        let epoch = nanotime();
-
+        let start = Instant::now();
         if let Some(conditions) = &self.conditionals {
-            for (k, v) in conditions.iter() {
-                if "port-open" == k.as_str() {
-                    for port in v {
-                        loop {
-                            let now = nanotime();
-                            if ((now - epoch) / 1_000_000_000) > self.until {
-                                return Err("Upper bound exceeded error".into());
-                            }
+            loop {
+                let mut success = true;
+
+                if start.elapsed() > Duration::from_secs(self.until) {
+                    return Err("Upper bound exceeded error".into());
+                }
+                for (k, v) in conditions.iter() {
+                    if "port-open" == k.as_str() {
+                        for port in v {
                             if let Ok(port) = port.parse::<u16>() {
-                                if !port_scanner::scan_port(port) {
-                                    break;
-                                }
+                                success &= port_scanner::scan_port(port);
                             }
                         }
                     }
                 }
+                if success {
+                    break;
+                }
             }
         }
-
         std::thread::sleep(Duration::from_secs(self.before_start_delay));
-
         Ok(())
     }
 }
@@ -104,11 +108,7 @@ impl BeforeController {
         let before_str = &format!("{}/before.json", root);
         let before_json = load_before(before_str);
         match before_json {
-            Ok(before_json) => {
-                let ret = before_json.spawn();
-                before_json.block_on()?;
-                ret
-            }
+            Ok(before_json) => before_json.spawn(),
             Err(_not_found) => Ok(None),
         }
     }

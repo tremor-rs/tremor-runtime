@@ -68,7 +68,6 @@ pub(crate) fn suite_command(
         })?;
 
     let mut evidence = HashMap::new();
-    let mut stats = stats::Stats::new();
 
     let mut suites: HashMap<String, report::TestSuite> = HashMap::new();
     let mut counter = 0;
@@ -108,6 +107,9 @@ pub(crate) fn suite_command(
             }
 
             for suite in suite.suites {
+                status::h0("Command Suite: ", &suite.name)?;
+                status::hr()?;
+                let mut casex = stats::Stats::new();
                 for case in suite.cases {
                     status::h1("Command Test", &case.name)?;
 
@@ -132,14 +134,17 @@ pub(crate) fn suite_command(
                         elapsed,
                         &case,
                     )?;
+                    casex.merge(&case_stats);
 
                     if case_stats.fail > 0 {
-                        stats.fail();
+                        casex.fail();
                     } else {
-                        stats.pass();
+                        casex.pass();
                     }
-                    stats.assert += case_stats.assert;
+                    casex.assert += case_stats.assert;
 
+                    status::stats(&case_stats, "    Test")?;
+                    status::hr()?;
                     let suite = report::TestSuite {
                         name: case.name.trim().into(),
                         description: "Command-driven test".to_string(),
@@ -150,8 +155,9 @@ pub(crate) fn suite_command(
                     };
                     suites.insert(case.name, suite);
                 }
-                api_stats.merge(&stats);
-                status::stats(&api_stats, "")?;
+                api_stats.merge(&casex); // BEEP BOOP
+                status::stats(&casex, "Suite")?;
+                status::hr()?;
             }
 
             before::update_evidence(&base, &mut evidence)?;
@@ -167,16 +173,18 @@ pub(crate) fn suite_command(
         }
     }
 
-    status::rollups("\nCommand", &api_stats)?;
+    status::rollups("Command", &api_stats)?;
 
     let elapsed = nanotime() - report_start;
-    status::duration(elapsed, "  ")?;
+    status::duration(elapsed, "")?;
+    status::hr()?;
+
     Ok((
-        stats.clone(),
+        api_stats.clone(),
         vec![report::TestReport {
             description: "Command-based test suite".into(),
             elements: suites,
-            stats,
+            stats: api_stats,
             duration: elapsed,
         }],
     ))
@@ -193,6 +201,7 @@ fn process_testcase(
     let mut stat_s = stats::Stats::new();
     if let Some(code) = process_status {
         let success = code == spec.status;
+        stat_s.assert();
         status::assert(
             "Assert 0",
             &format!("Status {}", &spec.name.trim()),
@@ -218,8 +227,9 @@ fn process_testcase(
         });
     };
 
-    let (stat_s, mut filebased_assert_elements) =
+    let (stat_assert, mut filebased_assert_elements) =
         assert::process_filebased_asserts(stdout_path, stderr_path, &spec.expects, &None)?;
+    stat_s.assert += stat_assert.assert;
     elements.append(&mut filebased_assert_elements);
 
     Ok((stat_s, elements))

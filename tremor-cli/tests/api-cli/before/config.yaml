@@ -18,7 +18,6 @@ offramp:
 binding:
   - id: main
     links:
-      "/onramp/ws-in/{instance}/out": [ "/pipeline/ws/{instance}/in" ]
-      "/pipeline/ws/{instance}/out": [ "/offramp/out/{instance}/in" ]
-      "/pipeline/ws/{instance}/exit": [ "/offramp/exit/{instance}/in" ]
-
+      "/onramp/ws-in/{instance}/out": ["/pipeline/test::ws/{instance}/in"]
+      "/pipeline/test::ws/{instance}/out": ["/offramp/out/{instance}/in"]
+      "/pipeline/test::ws/{instance}/exit": ["/offramp/exit/{instance}/in"]

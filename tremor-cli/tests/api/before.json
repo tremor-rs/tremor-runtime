@@ -12,10 +12,7 @@
     "before/server.yaml"
   ],
   "await": {
-    "port-open": [
-      "9898",
-      "4242"
-    ]
+    "port-open": ["9898", "4242"]
   },
   "max-await-secs": 15,
   "min-await-secs": 0
