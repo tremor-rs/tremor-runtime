@@ -104,7 +104,7 @@ pub async fn reply_trickle_instanced(
         let world = &req.state().world;
         world.save_config().await?;
     }
-    match dbg!(accept(&req)) {
+    match accept(&req) {
         ResourceType::Json | ResourceType::Yaml => serialize(accept(&req), &result_in, ok_code),
         ResourceType::Trickle => {
             let mut r = Response::new(ok_code);
