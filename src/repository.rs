@@ -588,7 +588,6 @@ mod test {
     use crate::config;
     use crate::errors::Error;
     use crate::url::TremorURL;
-    use serde_yaml;
 
     use crate::incarnate;
     use matches::assert_matches;

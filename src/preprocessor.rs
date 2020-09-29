@@ -385,7 +385,7 @@ mod test {
         Ok(())
     }
 
-    const LOOKUP_TABLE: [&'static str; 15] = [
+    const LOOKUP_TABLE: [&str; 15] = [
         "lines",
         "lines-null",
         "lines-pipe",
@@ -416,14 +416,14 @@ mod test {
     #[test]
     fn test_filter_empty() -> Result<()> {
         let mut pre = FilterEmpty::default();
-        assert_eq!(Ok(vec![]), pre.process(&mut 0u64, &vec![]));
+        assert_eq!(Ok(vec![]), pre.process(&mut 0_u64, &vec![]));
         Ok(())
     }
 
     #[test]
     fn test_filter_null() -> Result<()> {
         let mut pre = FilterEmpty::default();
-        assert_eq!(Ok(vec![]), pre.process(&mut 0u64, &vec![]));
+        assert_eq!(Ok(vec![]), pre.process(&mut 0_u64, &vec![]));
         Ok(())
     }
 
@@ -434,8 +434,8 @@ mod test {
             let mut outbound = crate::postprocessor::$which::default();
 
             // Fake ingest_ns and egress_ns
-            let mut ingest_ns = 0u64;
-            let egress_ns = 1u64;
+            let mut ingest_ns = 0_u64;
+            let egress_ns = 1_u64;
 
             let r = outbound.process(ingest_ns, egress_ns, $internal);
             let ext = &r?[0];
@@ -457,8 +457,8 @@ mod test {
             let mut outbound = crate::postprocessor::$which::default();
 
             // Fake ingest_ns and egress_ns
-            let mut ingest_ns = 0u64;
-            let egress_ns = 1u64;
+            let mut ingest_ns = 0_u64;
+            let egress_ns = 1_u64;
 
             let r = outbound.process(ingest_ns, egress_ns, $internal);
             let ext = &r?[0];
@@ -481,8 +481,8 @@ mod test {
             let mut outbound = crate::postprocessor::$which::default();
 
             // Fake ingest_ns and egress_ns
-            let mut ingest_ns = 0u64;
-            let egress_ns = 1u64;
+            let mut ingest_ns = 0_u64;
+            let egress_ns = 1_u64;
 
             let enc = $outbound.clone();
             let r = outbound.process(ingest_ns, egress_ns, $inbound);
@@ -506,8 +506,8 @@ mod test {
             let mut outbound = crate::postprocessor::$which::default();
 
             // Fake ingest_ns and egress_ns
-            let mut ingest_ns = 0u64;
-            let egress_ns = 1u64;
+            let mut ingest_ns = 0_u64;
+            let egress_ns = 1_u64;
 
             let enc = $internal.clone();
             let r = outbound.process(ingest_ns, egress_ns, $inbound);
@@ -547,7 +547,7 @@ mod test {
 
     macro_rules! assert_no_buffer {
         ($inbound:expr, $outbound1:expr, $outbound2:expr, $case_number:expr, $separator:expr) => {
-            let mut ingest_ns = 0u64;
+            let mut ingest_ns = 0_u64;
             let r = crate::preprocessor::Lines::new($separator, 0, false)
                 .process(&mut ingest_ns, $inbound);
 

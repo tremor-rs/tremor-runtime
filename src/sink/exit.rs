@@ -58,7 +58,7 @@ impl Sink for Exit {
     fn default_codec(&self) -> &str {
         "json"
     }
-    #[allow(clippy::used_underscore_binding)]
+    #[allow(clippy::used_underscore_binding, clippy::too_many_arguments)]
     async fn init(
         &mut self,
         _sink_uid: u64,

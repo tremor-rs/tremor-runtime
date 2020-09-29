@@ -146,7 +146,6 @@ fn incarnate_pipes(config: config::PipelineVec) -> Result<PipelineVec> {
 mod test {
     use super::*;
     use crate::config;
-    use serde_yaml;
     use std::fs::File;
     use std::io::BufReader;
 

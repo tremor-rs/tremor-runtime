@@ -61,6 +61,7 @@ impl Sink for StdOut {
         self.stdout.flush().await?;
         Ok(None)
     }
+    #[allow(clippy::too_many_arguments, clippy::used_underscore_binding)]
     async fn init(
         &mut self,
         _sink_uid: u64,

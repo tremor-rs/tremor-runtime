@@ -128,7 +128,6 @@ pub struct Binding {
 #[cfg(test)]
 mod test {
     use super::*;
-    use serde_yaml;
     use std::fs::File;
     use std::io::BufReader;
     fn slurp(file: &str) -> Config {

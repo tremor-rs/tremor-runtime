@@ -402,6 +402,7 @@ impl Source for Int {
 
 #[async_trait::async_trait]
 impl Onramp for Rest {
+    #[allow(clippy::too_many_arguments)]
     async fn start(
         &mut self,
         onramp_uid: u64,
