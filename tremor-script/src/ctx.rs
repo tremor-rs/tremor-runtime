@@ -23,7 +23,7 @@ use url::Url;
     Debug, Clone, PartialEq, Eq, Hash, simd_json_derive::Serialize, simd_json_derive::Deserialize,
 )]
 pub struct EventOriginUri {
-    /// UID of the onramp
+    /// UID of the sink/source
     pub uid: u64,
     /// schema part
     pub scheme: String,

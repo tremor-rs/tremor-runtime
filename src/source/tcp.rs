@@ -149,6 +149,7 @@ impl Source for Int {
 
 #[async_trait::async_trait]
 impl Onramp for Tcp {
+    #[allow(clippy::used_underscore_binding, clippy::too_many_arguments)]
     async fn start(
         &mut self,
         onramp_uid: u64,

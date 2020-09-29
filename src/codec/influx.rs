@@ -98,7 +98,7 @@ mod tests {
             "measurement": r#"wea,\ ther"#,
             "tags": {},
             "fields": {"temp=erature": 82.0, r#"too\ \\\"hot""#: true},
-            "timestamp": 1_465_839_830_100_400_200i64
+            "timestamp": 1_465_839_830_100_400_200_i64
         })
         .into();
 
@@ -133,12 +133,13 @@ mod tests {
             "measurement": "weather",
             "tags": {"location": "us-midwest"},
             "fields": {"temperature": 82.0},
-            "timestamp": 1_465_839_830_100_400_200i64
+            "timestamp": 1_465_839_830_100_400_200_i64
         })
         .into();
         assert_eq!(decoded, &e)
     }
 
+    #[allow(clippy::too_many_lines)]
     fn get_data_for_tests() -> [(Vec<u8>, Value<'static>, &'static str); 13] {
         [
             (
@@ -148,7 +149,7 @@ mod tests {
                     "measurement": "weather",
                     "tags": {"location": "us,midwest"},
                     "fields": {"temperature": 82.0},
-                    "timestamp": 1_465_839_830_100_400_200i64
+                    "timestamp": 1_465_839_830_100_400_200_i64
                 }).into(),
                 "case 0"
             ),
@@ -160,7 +161,7 @@ mod tests {
                 "measurement": "weather",
                 "tags": {"location_place": "us-midwest"},
                 "fields": {"temp=erature": 82.0},
-                "timestamp": 1_465_839_830_100_400_200i64
+                "timestamp": 1_465_839_830_100_400_200_i64
             }).into(),
                 "case 1"
 
@@ -173,7 +174,7 @@ mod tests {
                 "measurement": "weather",
                 "tags": {"location place": "us-midwest"},
                 "fields": {"temperature": 82.0},
-                "timestamp": 1_465_839_830_100_400_200i64
+                "timestamp": 1_465_839_830_100_400_200_i64
             }).into(),
                 "case 2"
 
@@ -186,7 +187,7 @@ mod tests {
                 "measurement": "wea,ther",
                 "tags": {"location": "us-midwest"},
                 "fields": {"temperature": 82.0},
-                "timestamp": 1_465_839_830_100_400_200i64
+                "timestamp": 1_465_839_830_100_400_200_i64
             }).into(),
                 "case 3"
             ),
@@ -199,7 +200,7 @@ mod tests {
                     "measurement": "wea ther",
                     "tags": {"location": "us-midwest"},
                     "fields": {"temperature": 82.0},
-                    "timestamp": 1_465_839_830_100_400_200i64
+                    "timestamp": 1_465_839_830_100_400_200_i64
                 }).into(),
                 "case 4"
             ),
@@ -211,7 +212,7 @@ mod tests {
                       "measurement": "weather",
                      "tags": {"location": "us-midwest"} ,
                      "fields": {"temperature_str": "too\\ hot\\cold"},
-                     "timestamp": 1_465_839_830_100_400_200i64
+                     "timestamp": 1_465_839_830_100_400_200_i64
                  }).into(),
                  "case 5"
              ),
@@ -222,7 +223,7 @@ mod tests {
                     "measurement": "weather",
                     "tags": {"location": "us-midwest"},
                     "fields": {"temperature_str": r#"too hot/cold"#},
-                    "timestamp": 1_465_839_830_100_400_200i64
+                    "timestamp": 1_465_839_830_100_400_200_i64
                 }).into(),
                 "case 6"
             ),
@@ -234,7 +235,7 @@ mod tests {
                     "measurement": "weather",
                     "tags": {"location": "us-midwest"},
                     "fields": {"temperature_str": r#"too hot\cold"#},
-                    "timestamp": 1_465_839_830_100_400_200i64
+                    "timestamp": 1_465_839_830_100_400_200_i64
                 }).into(),
                 "case 7"
 
@@ -246,7 +247,7 @@ mod tests {
                     "measurement": "weather",
                     "tags": {"location": "us-midwest"},
                     "fields": {"temperature_str": r#"too hot\\cold"#},
-                    "timestamp": 1_465_839_830_100_400_204i64
+                    "timestamp": 1_465_839_830_100_400_204_i64
                 }).into(),
                 "case 8"
 
@@ -259,7 +260,7 @@ mod tests {
                     "measurement": "weather",
                     "tags": {"location": "us-midwest"},
                     "fields": {"temperature_str": "too hot\\\\cold"},
-                    "timestamp": 1_465_839_830_100_400_205i64
+                    "timestamp": 1_465_839_830_100_400_205_i64
                 }).into(),
                 "case 9"
 
@@ -271,7 +272,7 @@ mod tests {
                     "measurement": "weather",
                     "tags": {"location": "us-midwest"},
                     "fields": {"temperature_str": "too hot\\\\\\cold"},
-                    "timestamp": 1_465_839_830_100_400_206i64
+                    "timestamp": 1_465_839_830_100_400_206_i64
                 }).into(),
                 "case 10"
             ),
@@ -282,7 +283,7 @@ mod tests {
             "measurement": "weather",
             "tags" :   { "location": "us-midwest" },
             "fields": {"temperature": 82.0, "bug_concentration": 98.0},
-            "timestamp": 1_465_839_830_100_400_200i64
+            "timestamp": 1_465_839_830_100_400_200_i64
         }).into(),
         "case 11"
         ),
@@ -294,7 +295,7 @@ mod tests {
             "measurement": "weather",
             "tags" :   { "location": "us-midwest" },
             "fields": {"temperature": 82},
-            "timestamp": 1_465_839_830_100_400_200i64
+            "timestamp": 1_465_839_830_100_400_200_i64
         }).into(),
         "case 12"
 )
@@ -344,7 +345,7 @@ mod tests {
             "tags" :   { "location": "us-midwest" },
             "fields": {"temperature": 82.0, "bug_concentration": 98.0},
 
-            "timestamp": 1_465_839_830_100_400_200i64
+            "timestamp": 1_465_839_830_100_400_200_i64
         })
         .into();
         assert_eq!(decoded, &e)
@@ -364,7 +365,7 @@ mod tests {
             "measurement": "weather",
             "tags" :   { "location": "us-midwest" },
             "fields": {"temperature": 82},
-            "timestamp": 1_465_839_830_100_400_200i64
+            "timestamp": 1_465_839_830_100_400_200_i64
         })
         .into();
         assert_eq!(decoded, &e)
@@ -395,7 +396,7 @@ mod tests {
                         "FailedFetchRequestsPerSec": 0,
                         "FetchMessageConversionsPerSec": 0
                        },
-                    "timestamp" : 1_562_179_275_506_000_000i64
+                    "timestamp" : 1_562_179_275_506_000_000_i64
         })
         .into();
         let decoded = codec

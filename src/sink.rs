@@ -66,6 +66,7 @@ pub(crate) trait Sink {
     ///
     /// The passed reply_channel is for fast-tracking sink-replies going back to the connected pipelines.
     /// It is an additional way to returning them in a ResultVec via on_event, on_signal.
+    #[allow(clippy::too_many_arguments)]
     async fn init(
         &mut self,
         sink_uid: u64,
@@ -125,7 +126,7 @@ where
     async fn terminate(&mut self) {
         self.sink.terminate().await
     }
-    #[allow(clippy::used_underscore_binding)]
+    #[allow(clippy::too_many_arguments, clippy::used_underscore_binding)]
     async fn start(
         &mut self,
         offramp_uid: u64,

@@ -315,6 +315,7 @@ impl Sink for Ws {
     fn default_codec(&self) -> &str {
         "json"
     }
+    #[allow(clippy::too_many_arguments, clippy::used_underscore_binding)]
     async fn init(
         &mut self,
         _sink_uid: u64,

@@ -45,6 +45,7 @@ pub type Addr = async_channel::Sender<Msg>;
 
 #[async_trait::async_trait]
 pub(crate) trait Onramp: Send {
+    #[allow(clippy::too_many_arguments)]
     async fn start(
         &mut self,
         onramp_uid: u64,

@@ -87,6 +87,7 @@ impl offramp::Impl for Blackhole {
 
 #[async_trait::async_trait]
 impl Sink for Blackhole {
+    #[allow(clippy::too_many_arguments, clippy::used_underscore_binding)]
     async fn init(
         &mut self,
         _sink_uid: u64,

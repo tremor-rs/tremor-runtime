@@ -48,10 +48,10 @@ mod test {
     #[test]
     fn test_duration_to_millis() -> Result<()> {
         let d = duration_to_millis(Duration::from_secs(1));
-        assert_eq!(d, 1000u64);
+        assert_eq!(d, 1000_u64);
 
         let d = duration_to_millis(Duration::from_millis(1));
-        assert_eq!(d, 1u64);
+        assert_eq!(d, 1_u64);
 
         Ok(())
     }

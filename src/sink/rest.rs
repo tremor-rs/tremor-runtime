@@ -56,7 +56,13 @@ impl ConfigImpl for Config {}
 
 enum CodecTaskInMsg {
     ToRequest(Event, Sender<SendTaskInMsg>),
-    ToEvent(Ids, EventOriginUri, OpMeta, Response, u64),
+    ToEvent {
+        id: Ids,
+        origin_uri: Box<EventOriginUri>, // box to avoid becoming the struct too big
+        op_meta: OpMeta,
+        response: Response,
+        duration: u64,
+    },
 }
 
 struct SendTaskInMsg(Request);
@@ -67,7 +73,7 @@ pub struct Rest {
     num_inflight_requests: Arc<AtomicMaxCounter>,
     is_linked: bool,
     reply_channel: Option<Sender<SinkReply>>,
-    codec_task: Option<JoinHandle<Result<()>>>,
+    codec_task_handle: Option<JoinHandle<Result<()>>>,
     codec_task_tx: Option<Sender<CodecTaskInMsg>>,
 }
 
@@ -94,7 +100,7 @@ impl offramp::Impl for Rest {
                 num_inflight_requests,
                 is_linked: false,
                 reply_channel: None,
-                codec_task: None,
+                codec_task_handle: None,
                 codec_task_tx: None,
             }))
         } else {
@@ -128,6 +134,7 @@ impl Sink for Rest {
             };
             let (tx, rx) = bounded::<SendTaskInMsg>(1);
             let max_counter = self.num_inflight_requests.clone();
+            let sink_uid = self.uid;
 
             // TODO: keep track of the join handle - in order to cancel operations
             // spawn send task
@@ -145,34 +152,30 @@ impl Sink for Rest {
 
                 let url = request.url();
                 let event_origin_uri = EventOriginUri {
-                    uid: 0,
+                    uid: sink_uid,
                     scheme: url.scheme().to_string(),
-                    host: url
-                        .host_str()
-                        .map(|x| x.to_string())
-                        .unwrap_or(String::new()),
+                    host: url.host_str().map_or(String::new(), ToString::to_string),
                     port: url.port(),
                     path: url
                         .path_segments()
-                        .map(|segments| segments.map(String::from).collect())
-                        .unwrap_or_else(|| vec![]),
+                        .map_or_else(Vec::new, |segments| segments.map(String::from).collect()),
                 };
                 // send request
                 // TODO reuse client
-                if let Ok(res) = surf::client().send(request).await {
+                if let Ok(response) = surf::client().send(request).await {
                     let duration = duration_to_millis(start.elapsed()); // measure response duration
                     codec_task_channel
-                        .send(CodecTaskInMsg::ToEvent(
+                        .send(CodecTaskInMsg::ToEvent {
                             id,
-                            event_origin_uri,
+                            origin_uri: Box::new(event_origin_uri),
                             op_meta,
-                            res,
+                            response,
                             duration,
-                        ))
+                        })
                         .await?
                 }
 
-                max_counter.dec_from(current_inflights);
+                max_counter.dec_from(current_inflights); // be fair to others and free our spot
                 Ok::<(), Error>(())
             });
 
@@ -187,6 +190,7 @@ impl Sink for Rest {
         "json"
     }
 
+    #[allow(clippy::too_many_arguments, clippy::used_underscore_binding)]
     async fn init(
         &mut self,
         sink_uid: u64,
@@ -215,7 +219,7 @@ impl Sink for Rest {
         // channel for sending shit back to the connected pipelines
         let reply_tx = reply_channel.clone();
         // start the codec task
-        self.codec_task = Some(task::spawn(async move {
+        self.codec_task_handle = Some(task::spawn(async move {
             codec_task(
                 postprocessors,
                 preprocessors,
@@ -236,6 +240,7 @@ impl Sink for Rest {
         Ok(())
     }
 
+    #[allow(clippy::used_underscore_binding)]
     async fn on_signal(&mut self, _signal: Event) -> ResultVec {
         Ok(None)
     }
@@ -248,11 +253,12 @@ impl Sink for Rest {
 }
 
 #[inline]
-fn get_endpoint<'eps>(mut endpoint_idx: usize, endpoints: &'eps [String]) -> Option<&'eps str> {
+fn get_endpoint(mut endpoint_idx: usize, endpoints: &[String]) -> Option<&str> {
     endpoint_idx = (endpoint_idx + 1) % endpoints.len();
-    endpoints.get(endpoint_idx).map(|s| s.as_str())
+    endpoints.get(endpoint_idx).map(String::as_str)
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn codec_task(
     mut postprocessors: Vec<Box<dyn Postprocessor>>,
     mut preprocessors: Vec<Box<dyn Preprocessor>>,
@@ -286,7 +292,13 @@ async fn codec_task(
                     Err(_e) => {} // TODO: send CB Fail, error port
                 }
             }
-            CodecTaskInMsg::ToEvent(id, origin_uri, op_meta, mut response, duration) => {
+            CodecTaskInMsg::ToEvent {
+                id,
+                origin_uri,
+                op_meta,
+                mut response,
+                duration,
+            } => {
                 // send CB insight -> handle status >= 400
                 let status = response.status();
 
@@ -397,8 +409,7 @@ fn build_request(
                                 Mime::from_str(value)
                                     .ok()
                                     .and_then(|m| codec_map.get(m.essence()))
-                                    .map(|c| c.borrow())
-                                    .unwrap_or(codec),
+                                    .map_or(codec, |c| c.borrow()),
                             );
                         }
                     }
@@ -414,8 +425,7 @@ fn build_request(
                                         Mime::from_str(value)
                                             .ok()
                                             .and_then(|m| codec_map.get(m.essence()))
-                                            .map(|c| c.borrow())
-                                            .unwrap_or(codec),
+                                            .map_or(codec, |c| c.borrow()),
                                     );
                                 }
                             }
@@ -428,13 +438,19 @@ fn build_request(
         if let Some(codec) = codec_in_use {
             let encoded = codec.encode(data)?;
             let mut processed = postprocess(postprocessors, event.ingest_ns, encoded)?;
-            for processed_elem in processed.iter_mut() {
+            for processed_elem in &mut processed {
                 body.append(processed_elem);
             }
         };
     }
     let url =
         url.ok_or_else(|| -> Error { "Unable to determine and endpoint for this event".into() })?;
+    let host = match (url.host(), url.port()) {
+        (Some(host), Some(port)) => Some(format!("{}:{}", host, port)),
+        (Some(host), _) => Some(host.to_string()),
+        _ => None,
+    };
+
     let mut request_builder = surf::RequestBuilder::new(method.unwrap_or(default_method), url);
 
     // build headers
@@ -446,13 +462,18 @@ fn build_request(
         }
         request_builder = request_builder.header(k.to_string().as_str(), v);
     }
+    // overwrite Host header
+    // otherwise we might run into trouble when overwriting the endpoint.
+    if let Some(host) = host {
+        request_builder = request_builder.header("Host", host);
+    }
     request_builder = request_builder.body(Body::from_bytes(body));
     Ok(request_builder.build())
 }
 
 async fn build_response_events(
     id: Ids,
-    event_origin_uri: EventOriginUri,
+    event_origin_uri: Box<EventOriginUri>,
     mut response: Response,
     codec: &dyn Codec,
     codec_map: &HashMap<String, Box<dyn Codec>>,
@@ -477,8 +498,7 @@ async fn build_response_events(
     let the_chosen_one = response
         .content_type()
         .and_then(|mime| codec_map.get(mime.essence()))
-        .map(|c| c.borrow())
-        .unwrap_or(codec);
+        .map_or(codec, |c| c.borrow());
 
     // extract one or multiple events from the body
     let response_bytes = response.body_bytes().await?;
@@ -504,7 +524,7 @@ async fn build_response_events(
             .map_err(|e: rental::RentalError<Error, _>| e.0)
             .map(|data| Event {
                 id: id.clone(),
-                origin_uri: Some(event_origin_uri.clone()),
+                origin_uri: Some(event_origin_uri.as_ref().clone()),
                 data,
                 ..Event::default()
             })?,

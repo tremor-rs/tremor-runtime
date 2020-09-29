@@ -133,8 +133,7 @@ pub fn by_mime_type(mime: &str) -> Result<Box<dyn Codec>> {
     match mime {
         "application/json" => Ok(Box::new(json::JSON {})),
         "application/yaml" => Ok(Box::new(yaml::YAML {})),
-        "text/plain" => Ok(Box::new(string::String {})),
-        "text/html" => Ok(Box::new(string::String {})),
+        "text/plain" | "text/html" => Ok(Box::new(string::String {})),
         "application/msgpack" | "application/x-msgpack" | "application/vnd.msgpack" => {
             Ok(Box::new(msgpack::MsgPack {}))
         }

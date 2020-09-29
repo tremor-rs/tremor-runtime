@@ -320,6 +320,7 @@ impl Source for Crononome {
 
 #[async_trait::async_trait]
 impl Onramp for Crononome {
+    #[allow(clippy::too_many_arguments, clippy::used_underscore_binding)]
     async fn start(
         &mut self,
         onramp_uid: u64,
