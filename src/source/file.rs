@@ -18,7 +18,6 @@ use async_std::fs::File as FSFile;
 use async_std::io::prelude::*;
 use async_std::io::{BufReader, Lines};
 use async_std::prelude::*;
-use std::path::Path;
 use std::process;
 use tremor_common::asy::file;
 
@@ -68,10 +67,8 @@ impl std::fmt::Debug for Int {
 impl Int {
     async fn from_config(uid: u64, onramp_id: TremorURL, config: Config) -> Result<Self> {
         let source_data_file = BufReader::new(file::open(&config.source).await?);
-        let ext = Path::new(&config.source)
-            .extension()
-            .map(std::ffi::OsStr::to_str);
-        let lines = if ext == Some(Some("xz")) {
+        let ext = file::extension(&config.source);
+        let lines = if ext == Some("xz") {
             let r = BufReader::new(XzDecoder::new(source_data_file));
             ArghDyn::Xz(r.lines())
         } else {

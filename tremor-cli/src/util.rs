@@ -30,10 +30,6 @@ pub(crate) enum FormatKind {
     Yaml,
 }
 
-pub(crate) fn get_filename_extension(path: &str) -> Option<&str> {
-    Path::new(path).extension().and_then(OsStr::to_str)
-}
-
 pub(crate) fn slurp_string(file: &str) -> Result<String> {
     let data = crate::open_file(file, None)?;
     let mut buffered_reader = BufReader::new(data);
@@ -157,7 +153,7 @@ pub(crate) fn load_config() -> Result<TargetConfig> {
 
 pub(crate) fn load(path_to_file: &str) -> Result<simd_json::OwnedValue> {
     let mut source = crate::open_file(path_to_file, None)?;
-    let ext = get_filename_extension(path_to_file)
+    let ext = cfile::extension(path_to_file)
         .ok_or_else(|| format!("Could not open fail path {}", path_to_file))?;
     let mut raw = vec![];
     source.read_to_end(&mut raw)?;
@@ -173,7 +169,7 @@ pub(crate) fn load(path_to_file: &str) -> Result<simd_json::OwnedValue> {
 
 pub(crate) fn load_trickle(path_to_file: &str) -> Result<String> {
     let mut source = crate::open_file(path_to_file, None)?;
-    let ext = get_filename_extension(path_to_file)
+    let ext = cfile::extension(path_to_file)
         .ok_or_else(|| format!("Could not open fail path {}", path_to_file))?;
     let mut raw = String::new();
     source.read_to_string(&mut raw)?;
@@ -273,7 +269,7 @@ pub(crate) enum SourceKind {
 }
 
 pub(crate) fn get_source_kind(path: &str) -> SourceKind {
-    match get_filename_extension(path) {
+    match cfile::extension(path) {
         Some("json") => SourceKind::Json,
         Some("tremor") => SourceKind::Tremor,
         Some("trickle") => SourceKind::Trickle,
