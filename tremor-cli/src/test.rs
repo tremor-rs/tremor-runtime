@@ -216,10 +216,15 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
 
     let filter_by_tags = TagFilter::new(excludes.clone(), includes.clone());
 
-    let found = GlobWalkerBuilder::new(Path::new(&path).canonicalize()?, "meta.json")
-        .case_insensitive(true)
-        .build()
-        .map_err(|e| Error::from(format!("failed to walk directory `{}`: {}", path, e)))?;
+    let found = GlobWalkerBuilder::new(
+        Path::new(&path)
+            .canonicalize()
+            .map_err(|e| Error::from(format!("Invalid path `{}`: {}", path, e)))?,
+        "meta.json",
+    )
+    .case_insensitive(true)
+    .build()
+    .map_err(|e| Error::from(format!("failed to walk directory `{}`: {}", path, e)))?;
 
     let mut reports = HashMap::new();
     let mut bench_stats = stats::Stats::new();
