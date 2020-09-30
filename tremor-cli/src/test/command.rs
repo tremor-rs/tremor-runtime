@@ -114,46 +114,57 @@ pub(crate) fn suite_command(
                     status::h1("Command Test", &case.name)?;
 
                     let args = shell_words::split(&case.command).unwrap_or_default();
-                    // FIXME wintel
-                    let mut fg_process =
-                        job::TargetProcess::new_with_stderr("/usr/bin/env", &args)?;
-                    let exit_status = fg_process.wait_with_output();
 
-                    let fg_out_file = format!("{}/fg.{}.out.log", base.clone(), counter);
-                    let fg_err_file = format!("{}/fg.{}.err.log", base.clone(), counter);
-                    let start = nanotime();
-                    fg_process.tail(&fg_out_file, &fg_err_file)?;
-                    let elapsed = nanotime() - start;
+                    if let Some((cmd, args)) = args.split_first() {
+                        let cmd = job::which(&cmd)?;
 
-                    counter += 1;
+                        // FIXME wintel
+                        let mut fg_process = job::TargetProcess::new_with_stderr(&cmd, &args)?;
+                        let exit_status = fg_process.wait_with_output();
 
-                    let (case_stats, elements) = process_testcase(
-                        &fg_out_file,
-                        &fg_err_file,
-                        exit_status?.code(),
-                        elapsed,
-                        &case,
-                    )?;
-                    casex.merge(&case_stats);
+                        let fg_out_file = format!("{}/fg.{}.out.log", base.clone(), counter);
+                        let fg_err_file = format!("{}/fg.{}.err.log", base.clone(), counter);
+                        let start = nanotime();
+                        fg_process.tail(&fg_out_file, &fg_err_file)?;
+                        let elapsed = nanotime() - start;
 
-                    if case_stats.fail > 0 {
-                        casex.fail();
+                        counter += 1;
+
+                        let (case_stats, elements) = process_testcase(
+                            &fg_out_file,
+                            &fg_err_file,
+                            exit_status?.code(),
+                            elapsed,
+                            &case,
+                        )?;
+                        casex.merge(&case_stats);
+
+                        if case_stats.fail > 0 {
+                            casex.fail();
+                        } else {
+                            casex.pass();
+                        }
+                        casex.assert += case_stats.assert;
+
+                        status::stats(&case_stats, "    Test")?;
+                        status::hr()?;
+                        let suite = report::TestSuite {
+                            name: case.name.trim().into(),
+                            description: "Command-driven test".to_string(),
+                            elements,
+                            evidence: None,
+                            stats: case_stats,
+                            duration: nanotime() - suite_start,
+                        };
+                        suites.insert(case.name, suite);
                     } else {
-                        casex.pass();
+                        eprintln!(
+                            "Failed {} / {} since the case command could not be parsed",
+                            suite.name, case.name
+                        );
+                        casex.fail();
+                        casex.assert += 1;
                     }
-                    casex.assert += case_stats.assert;
-
-                    status::stats(&case_stats, "    Test")?;
-                    status::hr()?;
-                    let suite = report::TestSuite {
-                        name: case.name.trim().into(),
-                        description: "Command-driven test".to_string(),
-                        elements,
-                        evidence: None,
-                        stats: case_stats,
-                        duration: nanotime() - suite_start,
-                    };
-                    suites.insert(case.name, suite);
                 }
                 api_stats.merge(&casex); // BEEP BOOP
                 status::stats(&casex, "Suite")?;
