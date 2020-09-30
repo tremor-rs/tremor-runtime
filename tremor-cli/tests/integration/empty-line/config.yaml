@@ -33,12 +33,29 @@ pipeline:
       in: [r]
       r: [b]
       b: [out]
+  - id: pass
+    interface:
+      inputs:
+        - in
+      outputs:
+        - out
+    links:
+      in: [ out ]
+
 
 binding:
   - id: test
     links:
       "/onramp/in/{instance}/out": ["/pipeline/main/{instance}/in"]
       "/pipeline/main/{instance}/out": ["/offramp/out/{instance}/in"]
+
+      # logging onramp errors (eg: codec failures) to stderr as well
+      # we also log the same as part of tremor logging right now but if
+      # we choose to remove that, this will give us visibility for the same
+      # (not relying on this only right now, since the asserts for this test
+      # don't pass consistently with this only currently)
+      "/onramp/in/{instance}/error": ["/pipeline/pass/{instance}/in"]
+      "/pipeline/pass/{instance}/out": ["/offramp/system::stderr/system/in"]
 
 mapping:
   /binding/test/1:

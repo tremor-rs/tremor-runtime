@@ -6,4 +6,4 @@ asserts:
       - EOF at character 0
   - source: events.log
     equals_file: expected.json
-  
+
