@@ -40,7 +40,7 @@ pub struct Config {
     /// number of events in each batch
     pub batch_size: usize,
     /// Timeout before a batch is always send
-    #[serde(default = "dflt::d_0")]
+    #[serde(default = "Default::default")]
     pub timeout: u64,
 }
 

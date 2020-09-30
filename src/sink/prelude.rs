@@ -13,7 +13,6 @@
 // limitations under the License.
 pub(crate) use crate::async_sink::{AsyncSink, SinkDequeueError};
 pub(crate) use crate::codec::Codec;
-pub(crate) use crate::dflt;
 pub(crate) use crate::errors::*;
 pub(crate) use crate::offramp::{self, Offramp};
 pub(crate) use crate::postprocessor::{
@@ -22,13 +21,14 @@ pub(crate) use crate::postprocessor::{
 pub(crate) use crate::preprocessor::{make_preprocessors, preprocess, Preprocessor};
 pub(crate) use crate::ramp::{ERROR, RESPONSE};
 pub(crate) use crate::sink::{ResultVec, Sink, SinkManager, SinkReply};
-pub(crate) use crate::utils::ConfigImpl;
-pub(crate) use crate::utils::{duration_to_millis, hostname, nanotime};
+pub(crate) use crate::utils::hostname;
 pub(crate) use crate::{Event, OpConfig};
 pub(crate) use async_channel::Sender;
 pub(crate) use async_std::prelude::*;
 pub(crate) use async_std::task;
 pub(crate) use simd_json::prelude::*;
+pub(crate) use tremor_common::time::nanotime;
 pub(crate) use tremor_pipeline::CBAction;
+pub(crate) use tremor_pipeline::ConfigImpl;
 pub(crate) use tremor_pipeline::Ids;
 pub(crate) use tremor_script::prelude::*;

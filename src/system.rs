@@ -20,13 +20,13 @@ use crate::repository::{
     Artefact, BindingArtefact, OfframpArtefact, OnrampArtefact, PipelineArtefact, Repositories,
 };
 use crate::url::TremorURL;
-use crate::utils::nanotime;
 use async_channel::bounded;
 use async_std::fs::File;
 use async_std::io::prelude::*;
 use async_std::path::Path;
 use async_std::task::{self, JoinHandle};
 use hashbrown::HashMap;
+use tremor_common::time::nanotime;
 
 pub(crate) use crate::offramp;
 pub(crate) use crate::onramp;

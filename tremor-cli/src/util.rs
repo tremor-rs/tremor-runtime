@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use crate::errors::{Error, Result};
-use chrono::{Timelike, Utc};
 use halfbrown::HashMap;
 use serde::Deserialize;
 use simd_json::BorrowedValue as Value;
@@ -153,16 +152,6 @@ pub(crate) fn load_config() -> Result<TargetConfig> {
             load_config()
         }
     }
-}
-
-/// Get a nanosecond timestamp
-#[allow(clippy::cast_sign_loss)]
-pub(crate) fn nanotime() -> u64 {
-    let now = Utc::now();
-    let seconds: u64 = now.timestamp() as u64;
-    let nanoseconds: u64 = u64::from(now.nanosecond());
-
-    (seconds * 1_000_000_000) + nanoseconds
 }
 
 pub(crate) fn load(path_to_file: &str) -> Result<simd_json::OwnedValue> {
@@ -320,10 +309,9 @@ pub(crate) fn highlight(is_pretty: bool, value: &Value) -> Result<()> {
 }
 
 pub(crate) fn basename(path: &str) -> String {
-    // FIXME wintel
-    let mut pieces = path.rsplit('/');
-    match pieces.next() {
-        Some(p) => p.into(),
-        None => path.into(),
-    }
+    Path::new(path)
+        .file_name()
+        .map(OsStr::to_string_lossy)
+        .map(String::from)
+        .unwrap_or_else(|| path.to_string())
 }

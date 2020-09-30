@@ -129,11 +129,11 @@ mod test {
     use crate::repository::BindingArtefact;
     use crate::system::World;
     use crate::url::TremorURL;
-    use std::fs::File;
     use std::io::BufReader;
+    use tremor_common::file as cfile;
 
     fn slurp(file: &str) -> config::Config {
-        let file = File::open(file).expect("could not open file");
+        let file = cfile::open(file).expect("could not open file");
         let buffered_reader = BufReader::new(file);
         serde_yaml::from_reader(buffered_reader).expect("failed to parse file")
     }

@@ -22,10 +22,11 @@ use crate::test::report;
 use crate::test::stats;
 use crate::test::tag::{TagFilter, Tags};
 use crate::test::Meta;
-use crate::util::{nanotime, slurp_string};
+use crate::util::slurp_string;
 use globwalk::{FileType, GlobWalkerBuilder};
 use std::collections::HashMap;
 use std::path::Path;
+use tremor_common::time::nanotime;
 
 #[derive(Deserialize, Debug)]
 pub(crate) struct CommandRun {

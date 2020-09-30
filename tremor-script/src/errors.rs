@@ -157,7 +157,7 @@ impl ErrorKind {
         use ErrorKind::{
             AggrInAggr, ArrayOutOfRange, AssignIntoArray, AssignToConst, BadAccessInEvent,
             BadAccessInGlobal, BadAccessInLocal, BadAccessInState, BadArity, BadArrayIndex,
-            BadType, BinaryDrop, BinaryEmit, DecreasingRange, DoubleConst, DoubleStream,
+            BadType, BinaryDrop, BinaryEmit, Common, DecreasingRange, DoubleConst, DoubleStream,
             EmptyScript, ExtraToken, Generic, Grok, InvalidAssign, InvalidBinary, InvalidBitshift,
             InvalidConst, InvalidDrop, InvalidEmit, InvalidExtractor, InvalidFloatLiteral,
             InvalidFn, InvalidHexLiteral, InvalidInfluxData, InvalidIntLiteral, InvalidMod,
@@ -227,13 +227,14 @@ impl ErrorKind {
             | NotConstant(outer, inner) => (Some(*outer), Some(*inner)),
             // Special cases
             EmptyScript
-            | NoObjectError(_)
-            | NotFound
+            | Common(_)
             | Grok(_)
             | InvalidInfluxData(_, _)
             | Io(_)
             | JSONError(_)
             | Msg(_)
+            | NoObjectError(_)
+            | NotFound
             | ParseIntError(_)
             | ParserError(_)
             | PreprocessorError(_)
@@ -354,6 +355,7 @@ error_chain! {
         ParseIntError(num::ParseIntError);
         Utf8Error(std::str::Utf8Error);
         NoObjectError(simd_json::KnownKeyError);
+        Common(tremor_common::Error);
     }
     errors {
         /*

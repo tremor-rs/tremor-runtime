@@ -27,8 +27,21 @@ jobs:
       - name: Install deps
         run: sudo snap install --classic ripgrep
       - uses: actions/checkout@v1
-      - name: Check for unused dependencies
+      - name: Check for unused dependencies (tremor-runtime)
         run: ./.github/checks/deps.sh .
+      - name: Check for unused dependencies (tremor-api)
+        run: ./.github/checks/deps.sh tremor-api
+      - name: Check for unused dependencies (tremor-influx)
+        run: ./.github/checks/deps.sh tremor-influx
+      - name: Check for unused dependencies (tremor-pipeline)
+        run: ./.github/checks/deps.sh tremor-pipeline
+      - name: Check for unused dependencies (tremor-script)
+        run: ./.github/checks/deps.sh tremor-script
+      - name: Check for unused dependencies (tremor-cli)
+        run: ./.github/checks/deps.sh tremor-cli
+      - name: Check for unused dependencies (tremor-common)
+        run: ./.github/checks/deps.sh tremor-common
+
   format:
     runs-on: ubuntu-latest
     steps:

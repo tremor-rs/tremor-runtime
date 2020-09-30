@@ -16,9 +16,9 @@ use crate::errors::Result;
 use grok::Grok;
 use simd_json::{json, owned::Value};
 use std::collections::HashMap;
-use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::str;
+use tremor_common::file;
 
 const PATTERNS_FILE_TUPLE: &str = "%{NOTSPACE:alias} %{GREEDYDATA:pattern}";
 pub(crate) const PATTERNS_FILE_DEFAULT_PATH: &str = "/etc/tremor/grok.patterns";
@@ -33,7 +33,7 @@ pub struct Pattern {
 impl Pattern {
     /// Reads a pattern from a file
     pub fn from_file(file_path: &str, definition: &str) -> Result<Self> {
-        let file = File::open(file_path)?;
+        let file = file::open(file_path)?;
         let input: Box<dyn BufRead> = Box::new(BufReader::new(file));
 
         let mut grok = Grok::default();

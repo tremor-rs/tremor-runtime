@@ -20,10 +20,11 @@ use super::stats;
 use super::tag;
 use crate::errors::{Error, Result};
 use crate::report;
-use crate::util::{nanotime, slurp_string};
+use crate::util::slurp_string;
 use globwalk::GlobWalkerBuilder;
 use std::collections::HashMap;
 use std::path::Path;
+use tremor_common::time::nanotime;
 
 #[allow(clippy::too_many_lines)]
 pub(crate) fn run_process(

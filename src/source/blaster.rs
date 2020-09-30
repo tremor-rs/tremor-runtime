@@ -12,12 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::dflt;
 use crate::source::prelude::*;
-use std::fs::File;
 use std::io::{BufRead as StdBufRead, BufReader, Read};
 use std::path::Path;
 use std::time::Duration;
+use tremor_common::file;
 use xz2::read::XzDecoder;
 
 #[derive(Deserialize, Debug, Clone)]
@@ -29,7 +28,7 @@ pub struct Config {
     pub interval: Option<u64>,
     /// Number of iterations to stop after
     pub iters: Option<u64>,
-    #[serde(default = "dflt::d_false")]
+    #[serde(default = "Default::default")]
     pub base64: bool,
 }
 
@@ -53,7 +52,7 @@ impl onramp::Impl for Blaster {
     fn from_config(id: &TremorURL, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
-            let mut source_data_file = File::open(&config.source)?;
+            let mut source_data_file = file::open(&config.source)?;
             let mut data = vec![];
             let ext = Path::new(&config.source)
                 .extension()

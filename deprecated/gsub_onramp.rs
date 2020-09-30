@@ -38,7 +38,7 @@ pub struct GSub {
 pub struct Config {
     pub service_account: String,
     pub subscription: String,
-    #[serde(default = "dflt::d_false")]
+    #[serde(default = "Default::default")]
     pub sync: bool,
 }
 impl ConfigImpl for Config {}

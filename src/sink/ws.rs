@@ -153,7 +153,6 @@ impl offramp::Impl for Ws {
                 config,
                 tx,
                 rx,
-                merged_meta: OpMeta::default(),
             }))
         } else {
             Err("[WS Offramp] Offramp requires a config".into())

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use crate::errors::Result;
-use crate::utils::ConfigImpl;
 use memmap::MmapOptions;
 use simd_json::prelude::*;
 use std::borrow::Cow;
@@ -22,6 +21,7 @@ use std::io;
 use std::io::Write;
 use std::ops::DerefMut;
 use std::path::Path;
+use tremor_pipeline::ConfigImpl;
 
 pub mod postgres;
 

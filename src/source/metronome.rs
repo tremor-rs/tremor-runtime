@@ -14,9 +14,9 @@
 
 use crate::source::prelude::*;
 //NOTE: This is required for StreamHander's stream
-use crate::utils::nanotime;
 use simd_json::BorrowedValue;
 use std::time::Duration;
+use tremor_common::time::nanotime;
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Config {

@@ -143,6 +143,7 @@ error_chain! {
         JSONAccessError(value_trait::AccessError);
         CronError(cron::error::Error);
         Postgres(postgres::Error);
+        Common(tremor_common::Error);
     }
 
     errors {

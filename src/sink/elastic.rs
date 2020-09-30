@@ -47,10 +47,12 @@ pub struct Config {
     /// list of endpoint urls
     pub endpoints: Vec<String>,
     /// maximum number of paralel in flight batches (default: 4)
-    #[serde(default = "dflt::d_4")]
+    #[serde(default = "concurrency")]
     pub concurrency: usize,
 }
-
+fn concurrency() -> usize {
+    4
+}
 impl ConfigImpl for Config {}
 
 pub struct Elastic {
@@ -113,8 +115,8 @@ impl Elastic {
                     error!("Elastic Search item error: {:?}", item);
                 }
                 let d = start.elapsed();
-                let d = duration_to_millis(d);
-                Ok(d)
+                let d = d.as_millis();
+                Ok(d as u64)
             })();
 
             let mut m = Value::object_with_capacity(2);
