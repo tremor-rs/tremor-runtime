@@ -104,7 +104,7 @@ impl onramp::Impl for File {
                 onramp_id: id.clone(),
             }))
         } else {
-            Err("Missing config for blaster onramp".into())
+            Err("Missing config for file onramp".into())
         }
     }
 }

@@ -150,7 +150,8 @@ where
     triggered: bool,
     // TODO maybe just have pipelines_out and pipelines_error as Vec
     // instead of port -> pipelines mapping here
-    pipelines: HashMap<Cow<'static, str>, Vec<(TremorURL, pipeline::Addr)>>,
+    pipelines_out: Vec<(TremorURL, pipeline::Addr)>,
+    pipelines_err: Vec<(TremorURL, pipeline::Addr)>,
     id: u64,
     is_transactional: bool,
     /// Unique Id for the source
@@ -235,7 +236,7 @@ where
 
     async fn handle_pipelines(&mut self) -> Result<bool> {
         loop {
-            let msg = if self.pipelines.is_empty() || self.triggered || !self.rx.is_empty() {
+            let msg = if self.pipelines_out.is_empty() || self.triggered || !self.rx.is_empty() {
                 self.rx.recv().await?
             } else {
                 return Ok(false);
@@ -247,36 +248,44 @@ where
                         if p.0 == *METRICS_PIPELINE {
                             self.metrics_reporter.set_metrics_pipeline(p);
                         } else {
+                            let pipelines = if port == OUT {
+                                &mut self.pipelines_out
+                            } else if port == ERROR {
+                                &mut self.pipelines_err
+                            } else {
+                                return Err(format!(
+                                    "Invalid Onramp Port: {}. Cannot connect.",
+                                    port
+                                )
+                                .into());
+                            };
                             let msg = pipeline::MgmtMsg::ConnectOnramp {
                                 id: self.source_id.clone(),
                                 addr: self.tx.clone(),
                                 reply: self.is_transactional,
                             };
                             p.1.send_mgmt(msg).await?;
-                            if let Some(port_ps) = self.pipelines.get_mut(&port) {
-                                port_ps.push(p);
-                            } else {
-                                self.pipelines.insert(port.clone(), vec![p]);
-                            }
+                            pipelines.push(p);
                         }
                     }
                 }
                 onramp::Msg::Disconnect { id, tx } => {
-                    if let Some((_, p)) = self
-                        .pipelines
-                        .values()
-                        .flatten()
-                        .find(|(pid, _)| pid == &id)
+                    for (_, p) in self
+                        .pipelines_out
+                        .iter()
+                        .chain(self.pipelines_err.iter())
+                        .filter(|(pid, _)| pid == &id)
                     {
                         p.send_mgmt(pipeline::MgmtMsg::DisconnectInput(id.clone()))
                             .await?;
                     }
 
-                    let mut empty_pipelines = false;
-                    for (_, ps) in self.pipelines.iter_mut() {
-                        ps.retain(|(pipeline, _)| pipeline != &id);
-                        empty_pipelines &= ps.is_empty();
-                    }
+                    let mut empty_pipelines = true;
+                    self.pipelines_out.retain(|(pipeline, _)| pipeline != &id);
+                    empty_pipelines &= self.pipelines_out.is_empty();
+                    self.pipelines_err.retain(|(pipeline, _)| pipeline != &id);
+                    empty_pipelines &= self.pipelines_err.is_empty();
+
                     if empty_pipelines {
                         tx.send(true).await?;
                         self.source.terminate().await;
@@ -341,11 +350,14 @@ where
         };
         let mut error = false;
         self.id += 1;
-        if let Some((last, pipelines)) = self
-            .pipelines
-            .get_mut(&port)
-            .and_then(|ps| ps.split_last_mut())
-        {
+        let pipelines = if port == OUT {
+            &mut self.pipelines_out
+        } else if port == ERROR {
+            &mut self.pipelines_err
+        } else {
+            return false;
+        };
+        if let Some((last, pipelines)) = pipelines.split_last_mut() {
             if let Some(t) = self.metrics_reporter.periodic_flush(ingest_ns) {
                 for e in self.source.metrics(t) {
                     self.metrics_reporter.send(e)
@@ -446,7 +458,8 @@ where
                 metrics_reporter,
                 triggered: false,
                 id: 0,
-                pipelines: HashMap::new(),
+                pipelines_out: Vec::new(),
+                pipelines_err: Vec::new(),
                 uid,
                 is_transactional,
             },
@@ -484,9 +497,11 @@ where
                 return Ok(());
             }
 
-            let pipelines_empty = self.pipelines.is_empty();
+            let pipelines_out_empty = self.pipelines_out.is_empty();
 
-            if !self.triggered && !pipelines_empty {
+            // TODO: add a flag to the onramp to wait for the error pipelines to be populated as well
+            //       lets call it `wait_for_error_pipelines` (horrible name)
+            if !self.triggered && !pipelines_out_empty {
                 match self.source.pull_event(self.id).await {
                     Ok(SourceReply::StartStream(id, _)) => {
                         while self.preprocessors.len() <= id {
