@@ -16,6 +16,7 @@ use crate::sink::prelude::*;
 use crate::url::TremorURL;
 use async_channel::Sender;
 use halfbrown::HashMap;
+use std::borrow::Cow;
 
 pub(crate) mod blackhole;
 pub(crate) mod debug;
@@ -37,8 +38,9 @@ pub(crate) mod ws;
 #[allow(clippy::module_name_repetitions)]
 pub enum SinkReply {
     Insight(Event),
+    // out port and the event
     // TODO better name for this?
-    Response(Event),
+    Response(Cow<'static, str>, Event),
 }
 
 /// Result for a sink function that may provide insights or response.
@@ -98,7 +100,7 @@ where
     sink: T,
     pipelines: HashMap<TremorURL, pipeline::Addr>,
     // for linked offramps
-    dest_pipelines: Vec<(TremorURL, pipeline::Addr)>,
+    dest_pipelines: HashMap<Cow<'static, str>, Vec<(TremorURL, pipeline::Addr)>>,
 }
 
 impl<T> SinkManager<T>
@@ -109,7 +111,7 @@ where
         Self {
             sink,
             pipelines: HashMap::new(),
-            dest_pipelines: Vec::new(),
+            dest_pipelines: HashMap::new(),
         }
     }
 
@@ -161,8 +163,10 @@ where
             for reply in replies.drain(..) {
                 match reply {
                     SinkReply::Insight(e) => handle_insight(e, self.pipelines.values()).await?,
-                    SinkReply::Response(e) => {
-                        handle_response(e, self.dest_pipelines.iter()).await?
+                    SinkReply::Response(port, event) => {
+                        if let Some(pipelines) = self.dest_pipelines.get_mut(&port) {
+                            handle_response(event, pipelines.iter()).await?
+                        }
                     }
                 }
             }
@@ -178,8 +182,13 @@ where
         self.pipelines.insert(id, addr);
     }
 
-    fn add_dest_pipeline(&mut self, id: TremorURL, addr: pipeline::Addr) {
-        self.dest_pipelines.push((id, addr));
+    fn add_dest_pipeline(&mut self, port: Cow<'static, str>, id: TremorURL, addr: pipeline::Addr) {
+        let p = (id, addr);
+        if let Some(port_ps) = self.dest_pipelines.get_mut(&port) {
+            port_ps.push(p);
+        } else {
+            self.dest_pipelines.insert(port, vec![p]);
+        }
     }
 
     fn remove_pipeline(&mut self, id: TremorURL) -> bool {
@@ -196,10 +205,11 @@ where
                         error!("Error handling insight in sink: {}", e)
                     }
                 }
-                // TODO we should not rely on sending response as part of signal processing
-                SinkReply::Response(e) => {
-                    if let Err(e) = handle_response(e, self.dest_pipelines.iter()).await {
-                        error!("Error handling response in sink: {}", e)
+                SinkReply::Response(port, event) => {
+                    if let Some(pipelines) = self.dest_pipelines.get_mut(&port) {
+                        if let Err(e) = handle_response(event, pipelines.iter()).await {
+                            error!("Error handling response in sink: {}", e)
+                        }
                     }
                 }
             }

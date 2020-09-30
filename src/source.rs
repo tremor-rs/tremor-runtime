@@ -148,10 +148,9 @@ where
     codec_map: HashMap<String, Box<dyn Codec>>,
     metrics_reporter: RampReporter,
     triggered: bool,
-    // TODO maybe just have out_pipelines and error_pipelines as Vec
+    // TODO maybe just have pipelines_out and pipelines_error as Vec
     // instead of port -> pipelines mapping here
     pipelines: HashMap<Cow<'static, str>, Vec<(TremorURL, pipeline::Addr)>>,
-    //pipelines_out: Vec<(TremorURL, pipeline::Addr)>,
     id: u64,
     is_transactional: bool,
     /// Unique Id for the source

@@ -12,6 +12,7 @@ pipeline:
     interface:
       inputs:
         - in
+        - in-errors
         - from-offramp
       outputs:
         - out
@@ -26,7 +27,7 @@ pipeline:
             # simpler here (just need to override request_host)
             match {"test": $request_url} of
               case r = %{test ~= dissect|%{scheme}://%{host}/%{path_and_rest}|} =>
-                let $request_url = "{r.test.scheme}://localhost:8139/{r.test.path_and_rest}"
+                let $endpoint = "{r.test.scheme}://localhost:8139/{r.test.path_and_rest}"
               default =>
                 null
             end;
@@ -52,15 +53,34 @@ pipeline:
             #let $response_content_type = "text/plain";
 
             event;
-    links:
-      # TODO error output here should bubble up as 500 response for linked onramps
-      in: [ request-processing ]
-      request-processing: [ out ]
-      request-processing/error: [ error ]
+      - id: internal-error-processing
+        op: runtime::tremor
+        config:
+          script: |
+            let $response_status = 500;
 
+            # can choose to not include the actual event error here, if we don't want
+            # to send it back to the client
+            let event.error = "Oh no, we ran into something unexpected :(\n {event.error}";
+
+            event;
+
+    links:
+      # all pipeline inputs
+      in: [ request-processing ]
+      in-errors: [ internal-error-processing ]
       from-offramp: [ response-processing ]
+
+      request-processing: [ out ]
+
       response-processing: [ to-onramp ]
-      response-processing/error: [ error ]
+
+      # tremor runtime errors
+      # TODO maybe as a default, bake simple error processing directly in onramp
+      # so that we can get rid of this phase and directly send errors here to onramp
+      request-processing/error: [ internal-error-processing ]
+      response-processing/error: [ internal-error-processing ]
+      internal-error-processing: [ error ]
 
 offramp:
   - id: upstream
@@ -79,21 +99,35 @@ binding:
   - id: default
     links:
       '/onramp/rest/{instance}/out': [ '/pipeline/main/{instance}/in' ]
+      # this can go to a separate pipeline too
+      '/onramp/rest/{instance}/error': [ '/pipeline/main/{instance}/in-errors' ]
+
       '/pipeline/main/{instance}/out': [
         '/offramp/upstream/{instance}/in',
         #'/offramp/system::stdout/system/in' # for debugging
       ]
 
-      '/pipeline/main/{instance}/error': [ '/offramp/system::stderr/system/in' ]
-
-      # linked offramp that send responses to a pipeline
-      '/offramp/upstream/{instance}/response': [ '/pipeline/main/{instance}/from-offramp' ]
       '/pipeline/main/{instance}/to-onramp': [
         # linked onramp that can respond based on pipeline output
         '/onramp/rest/{instance}/response',
         # for debugging purposes
         '/offramp/system::stdout/system/in'
       ]
+
+      '/pipeline/main/{instance}/error': [
+        # linked onramp that can respond based on pipeline output
+        # TODO once onramps have error ports, link back to it to better distinguish
+        # error events from onramp itself?
+        '/onramp/rest/{instance}/response',
+
+        # for debugging
+        '/offramp/system::stderr/system/in'
+      ]
+
+      # linked offramp that send responses to a pipeline
+      '/offramp/upstream/{instance}/response': [ '/pipeline/main/{instance}/from-offramp' ]
+      # this can go to a separate pipeline too
+      '/offramp/upstream/{instance}/error': [ '/pipeline/main/{instance}/in-errors' ]
 
       # tremor metrics
       #'/pipeline/system::metrics/system/out': [ '/offramp/system::stdout/system/in' ]

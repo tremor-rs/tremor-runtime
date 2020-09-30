@@ -18,6 +18,7 @@ use crate::metrics::RampReporter;
 use crate::offramp;
 use crate::onramp;
 use crate::pipeline;
+use crate::ramp::{ERROR, RESPONSE};
 use crate::registry::ServantId;
 use crate::system::{self, World};
 use crate::url::{ResourceType, TremorURL};
@@ -302,15 +303,19 @@ impl Artefact for OfframpArtefact {
     ) -> Result<Self::LinkResult> {
         info!("Linking offramp {} ..", id);
         if let Some(offramp) = system.reg.find_offramp(id).await? {
-            // linked offramps use "response" port by convention for data out
+            let port = id.instance_port_required()?;
+            // linked offramps use "response" port by convention for data out (and "error" for
+            // error events).
             // TODO we can use standard "in" port naming for this once we have different artefact
-            // to handle linked transports
-            if id.instance_port().unwrap_or("") == "response" {
+            // to handle linked transports (and as part of that cleanup, this special handling for
+            // linked offramps will go away as well).
+            if port == RESPONSE || port == ERROR {
                 for (_this, pipeline_id) in mappings {
                     info!("Linking linked offramp {} to {}", id, pipeline_id);
                     if let Some(pipeline) = system.reg.find_pipeline(&pipeline_id).await? {
                         offramp
                             .send(offramp::Msg::ConnectLinked {
+                                port: port.to_string().into(),
                                 id: pipeline_id,
                                 addr: Box::new(pipeline),
                             })

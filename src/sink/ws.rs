@@ -161,6 +161,7 @@ impl offramp::Impl for Ws {
 }
 
 impl Ws {
+    // TODO adopt similar reply mechanism as rest sink
     async fn drain_insights(&mut self, ingest_ns: u64) -> ResultVec {
         let len = self.rx.len();
         let mut v = Vec::with_capacity(len);
@@ -187,7 +188,7 @@ impl Ws {
                     v.push(SinkReply::Insight(Event::cb_fail(ingest_ns, id.clone())))
                 }
                 WsResult::Response(id, msg) => {
-                    v.push(SinkReply::Response(Self::make_event(id, msg)?))
+                    v.push(SinkReply::Response(RESPONSE, Self::make_event(id, msg)?))
                 }
             }
         }
@@ -303,6 +304,7 @@ impl Sink for Ws {
                             .send((event.id.clone(), WsMessage::Text(txt)))
                             .await?;
                     } else {
+                        // TODO send these to offramp error port
                         error!("[WS Offramp] Invalid utf8 data for text message");
                         return Err(Error::from("Invalid utf8 data for text message"));
                     }

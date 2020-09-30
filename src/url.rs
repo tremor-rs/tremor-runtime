@@ -273,7 +273,7 @@ impl TremorURL {
     ///  * if the URL has no port
     pub fn instance_port_required(&self) -> Result<&str> {
         self.instance_port()
-            .ok_or_else(|| Error::from(format!("{} is missing an instnace port", self)))
+            .ok_or_else(|| Error::from(format!("{} is missing an instance port", self)))
     }
     /// Retrives the type
     #[must_use]
