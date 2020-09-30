@@ -14,8 +14,8 @@
 use pretty_assertions::assert_eq;
 use simd_json::prelude::*;
 use simd_json::value::borrowed::{Object, Value};
-use std::fs::File;
 use std::io::prelude::*;
+use tremor_common::file;
 use tremor_pipeline::FN_REGISTRY;
 use tremor_runtime;
 use tremor_runtime::errors::*;
@@ -37,7 +37,7 @@ macro_rules! test_cases {
                 let out_file = concat!("tests/scripts/", stringify!($file), "/out.xz");
 
                 println!("Loading script: {}", script_file);
-                let mut file = File::open(script_file)?;
+                let mut file = file::open(script_file)?;
                 let mut contents = String::new();
                 file.read_to_string(&mut contents)?;
                 let contents2 = contents.clone();

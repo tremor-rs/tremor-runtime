@@ -13,11 +13,12 @@ version = "0.9.0"
 [workspace]
 
 members = [
-  "tremor-api",
-  "tremor-influx",
-  "tremor-pipeline",
-  "tremor-script",
-  "tremor-cli",
+    "tremor-api",
+    "tremor-influx",
+    "tremor-pipeline",
+    "tremor-script",
+    "tremor-cli",
+    "tremor-common"
 ]
 
 [profile.release]
@@ -55,7 +56,8 @@ serde_yaml = "0.8"
 simd-json = {version = "0.3", features = ["known-key"]}
 simd-json-derive = "0.1.11"
 surf = "=2.0.0"
-tremor-pipeline = {path = "tremor-pipeline"}
+tremor-pipeline = { path = "tremor-pipeline" }
+tremor-common = { path = "tremor-common" }
 url = "2.1"
 value-trait = "0.1"
 

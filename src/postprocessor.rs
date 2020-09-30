@@ -16,9 +16,9 @@ mod gelf;
 pub(crate) use gelf::GELF;
 
 use crate::errors::{Error, Result};
-use crate::utils::nanotime;
 use byteorder::{BigEndian, WriteBytesExt};
 use std::default::Default;
+use tremor_common::time::nanotime;
 /// Set of Postprocessors
 pub type Postprocessors = Vec<Box<dyn Postprocessor>>;
 use std::io::Write;

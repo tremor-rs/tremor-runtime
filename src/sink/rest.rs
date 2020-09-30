@@ -32,10 +32,10 @@ use tremor_pipeline::{Ids, OpMeta};
 pub struct Config {
     /// list of endpoint urls
     pub endpoints: Vec<String>,
+
     /// maximum number of parallel in flight batches (default: 4)
     /// this avoids blocking further events from progressing while waiting for upstream responses.
-    #[serde(default = "dflt::d_4")]
-    // TODO adjust for linking
+    #[serde(default = "concurrency")]
     pub concurrency: usize,
     // TODO add scheme, host, path, query
     // HTTP method to use (default: POST)
@@ -43,13 +43,17 @@ pub struct Config {
     // https://docs.rs/http-types/2.4.0/http_types/enum.Method.html
     #[serde(skip_deserializing, default = "dflt_method")]
     pub method: Method,
-    #[serde(default = "dflt::d")]
+    #[serde(default = "Default::default")]
     // TODO make header values a vector here?
     pub headers: HashMap<String, String>,
 }
 
 fn dflt_method() -> Method {
     Method::Get
+}
+
+fn concurrency() -> usize {
+    4
 }
 
 impl ConfigImpl for Config {}
@@ -163,7 +167,7 @@ impl Sink for Rest {
                 // send request
                 // TODO reuse client
                 if let Ok(response) = surf::client().send(request).await {
-                    let duration = duration_to_millis(start.elapsed()); // measure response duration
+                    let duration = start.elapsed().as_millis() as u64; // measure response duration
                     codec_task_channel
                         .send(CodecTaskInMsg::ToEvent {
                             id,

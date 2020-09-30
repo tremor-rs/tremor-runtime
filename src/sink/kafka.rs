@@ -45,12 +45,12 @@ pub struct Config {
     /// * `bootstrap.servers` - `brokers` from the config concatinated by `,`
     /// * `message.timeout.ms` - `"5000"`
     /// * `queue.buffering.max.ms` - `"0"` - don't buffer for lower latency (high)
-    #[serde(default = "dflt::d")]
+    #[serde(default = "Default::default")]
     pub rdkafka_options: HashMap<String, String>,
     /// hostname to use, defaults to the hostname of the system
     #[serde(default = "d_host")]
     pub hostname: String,
-    #[serde(default = "dflt::d")]
+    #[serde(default = "Default::default")]
     pub key: Option<String>,
 }
 

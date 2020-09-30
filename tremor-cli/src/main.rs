@@ -37,13 +37,13 @@ extern crate log;
 
 extern crate rental;
 
-use std::{ffi::OsStr, fs::File, path::Path};
-
 use crate::errors::{Error, Result};
 use crate::util::{load_config, FormatKind, TremorApp};
 use async_std::task;
 use clap::App;
 use clap::{load_yaml, AppSettings, ArgMatches};
+use std::{ffi::OsStr, path::Path};
+use tremor_common::file;
 // use tremor_runtime::errors;
 
 mod alloc;
@@ -60,19 +60,20 @@ mod server;
 pub(crate) mod status;
 mod test;
 mod util;
+use std::fs::File;
 
 pub(crate) fn open_file<S>(path: &S, base: Option<&String>) -> Result<File>
 where
     S: AsRef<OsStr> + ?Sized,
 {
     let path = Path::new(path);
-    match File::open(path) {
+    match file::open(path) {
         Ok(f) => Ok(f),
         Err(e) => {
             if let Some(base) = base {
                 let mut p = Path::new(base).to_path_buf();
                 p.push(path);
-                if let Ok(f) = File::open(&p) {
+                if let Ok(f) = file::open(&p) {
                     return Ok(f);
                 }
                 Err(Error::from(format!(

@@ -79,13 +79,13 @@ fn sorted_serialize_<'v, W: Write>(j: &Value<'v>, w: &mut W) -> Result<()> {
     Ok(())
 }
 
-/// Loads an event file
+/// Loads an event file required for tests
 pub fn load_event_file(name: &str) -> crate::errors::Result<Vec<Value<'static>>> {
     use simd_json::to_borrowed_value;
-    use std::fs::File;
+    use tremor_common::file as cfile;
     use xz2::read::XzDecoder;
 
-    let file = File::open(name)?;
+    let file = cfile::open(name)?;
     let mut in_data = Vec::new();
     XzDecoder::new(file).read_to_end(&mut in_data)?;
     let mut in_lines = in_data

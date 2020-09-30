@@ -13,13 +13,14 @@
 // limitations under the License.
 
 use crate::errors::{Error, Result};
-use crate::util::{get_source_kind, highlight, nanotime, slurp_string, SourceKind};
+use crate::util::{get_source_kind, highlight, slurp_string, SourceKind};
 use clap::ArgMatches;
 use simd_json::borrowed::Value;
 use simd_json::prelude::*;
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::{self, BufReader, BufWriter, Read, Write};
+use tremor_common::time::nanotime;
 use tremor_pipeline::{Event, Ids};
 use tremor_runtime::codec::Codec;
 use tremor_runtime::postprocessor::Postprocessor;

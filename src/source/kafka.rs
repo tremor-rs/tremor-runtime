@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::dflt;
 use crate::errors::Result;
 use crate::source::prelude::*;
 
@@ -62,7 +61,7 @@ pub struct Config {
     /// If sync is set to true the kafka onramp will wait for an event
     /// to be fully acknowledged before fetching the next one. Defaults
     /// to `false`. Do not use in combination with batching offramps!
-    #[serde(default = "dflt::d_false")]
+    #[serde(default = "Default::default")]
     pub sync: bool,
     /// Optional rdkafka configuration
     ///

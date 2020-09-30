@@ -17,12 +17,13 @@ use crate::job;
 use crate::report;
 use crate::status;
 use crate::test;
-use crate::util::{basename, nanotime, slurp_string};
+use crate::util::{basename, slurp_string};
 use clap::ArgMatches;
 use globwalk::{FileType, GlobWalkerBuilder};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::path::Path;
+use tremor_common::time::nanotime;
 
 mod after;
 mod assert;

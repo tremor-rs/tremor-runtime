@@ -13,9 +13,9 @@
 // limitations under the License.
 use pretty_assertions::assert_eq;
 use regex::Regex;
-use std::fs::File;
 use std::io::prelude::*;
 use std::path::Path;
+use tremor_common::file;
 use tremor_pipeline;
 use tremor_pipeline::query::Query;
 use tremor_pipeline::ExecutableGraph;
@@ -55,13 +55,13 @@ macro_rules! test_cases {
                 let module_path = &ModulePath { mounts: vec![query_dir] };
 
                 println!("Loading query: {}", query_file);
-                let mut file = File::open(query_file)?;
+                let mut file = file::open(query_file)?;
                 let mut contents = String::new();
                 file.read_to_string(&mut contents)?;
 
                 if Path::new(err_re_file).exists() {
                     println!("Loading error: {}", err_re_file);
-                    let mut file = File::open(err_re_file)?;
+                    let mut file = file::open(err_re_file)?;
                     let mut err = String::new();
                     file.read_to_string(&mut err)?;
                     let err = err.trim();
@@ -77,7 +77,7 @@ macro_rules! test_cases {
                     }
                 } else {
                     println!("Loading error: {}", err_file);
-                    let mut file = File::open(err_file)?;
+                    let mut file = file::open(err_file)?;
                     let mut err = String::new();
                     file.read_to_string(&mut err)?;
                     let err = err.trim();

@@ -35,10 +35,18 @@ pub struct Tcp {
 pub struct Config {
     pub host: String,
     pub port: u16,
-    #[serde(default = "dflt::d_ttl")]
+    #[serde(default = "ttl")]
     pub ttl: u32,
-    #[serde(default = "dflt::d_true")]
+    #[serde(default = "t")]
     pub is_no_delay: bool,
+}
+
+fn t() -> bool {
+    true
+}
+
+fn ttl() -> u32 {
+    64
 }
 
 impl ConfigImpl for Config {}

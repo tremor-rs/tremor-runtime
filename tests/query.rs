@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use pretty_assertions::assert_eq;
-use std::fs::File;
 use std::io::prelude::*;
+use tremor_common::file;
 use tremor_pipeline;
 use tremor_pipeline::query::Query;
 use tremor_pipeline::ExecutableGraph;
@@ -53,7 +53,7 @@ macro_rules! test_cases {
                 let module_path = ModulePath { mounts: vec![query_dir, "tremor-script/lib/".to_string()] };
 
                 println!("Loading query: {}", query_file);
-                let mut file = File::open(query_file)?;
+                let mut file = file::open(query_file)?;
                 let mut contents = String::new();
                 file.read_to_string(&mut contents)?;
                 let mut pipeline = to_pipe(&module_path, query_file, &contents)?;

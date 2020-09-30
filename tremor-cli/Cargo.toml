@@ -25,7 +25,7 @@ tremor-runtime = { path = "../" }
 tremor-api = { path = "../tremor-api" }
 tremor-script = { path = "../tremor-script" }
 tremor-pipeline = { path = "../tremor-pipeline" }
-tremor-influx = { path = "../tremor-influx" }
+tremor-common = { path = "../tremor-common" }
 serde_derive = "1"
 difference = "2"
 clap = { version = "3.0.0-beta.2", features = [ "yaml", "color" ] }
@@ -47,9 +47,7 @@ mimalloc-rs = { version = "0.1", default-features = false, optional = true }
 jemallocator = { version = "0.3", optional = true }
 snmalloc-rs = { version = "0.2", optional = true }
 rental = "0.5"
-chrono = "0.4"
 termcolor = "1.1"
-regex = "1.3"
 serde_json = "1.0"
 globwalk = "0.8"
 shell-words = "1.0"

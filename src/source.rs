@@ -21,7 +21,6 @@ use crate::preprocessor::{make_preprocessors, preprocess, Preprocessors};
 use crate::ramp::{ERROR, OUT};
 use crate::system::METRICS_PIPELINE;
 use crate::url::TremorURL;
-use crate::utils::nanotime;
 use crate::Result;
 use async_channel::{self, unbounded, Receiver, Sender};
 use async_std::task;
@@ -29,6 +28,7 @@ use halfbrown::HashMap;
 use simd_json::Builder;
 use std::borrow::Cow;
 use std::time::Duration;
+use tremor_common::time::nanotime;
 use tremor_pipeline::{CBAction, Event, EventOriginUri, Ids};
 use tremor_script::{LineValue, Value, ValueAndMeta};
 

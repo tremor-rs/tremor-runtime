@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use crate::source::prelude::*;
-use crate::utils::nanotime;
 use chrono::{DateTime, Utc};
 use cron::Schedule;
 use simd_json::prelude::*;
@@ -25,6 +24,7 @@ use std::collections::BinaryHeap;
 use std::convert::TryFrom;
 use std::fmt;
 use std::str::FromStr;
+use tremor_common::time::nanotime;
 
 #[derive(Deserialize, Clone)]
 pub struct CronEntry {

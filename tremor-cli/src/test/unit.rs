@@ -17,7 +17,6 @@ use crate::report;
 use crate::test;
 use crate::test::stats;
 use crate::test::status;
-use crate::util::nanotime;
 use halfbrown::hashmap;
 use report::TestSuite;
 use simd_json::{
@@ -26,6 +25,7 @@ use simd_json::{
 };
 use std::io::Read;
 use std::{collections::HashMap, path::Path};
+use tremor_common::time::nanotime;
 use tremor_script::ast::base_expr::BaseExpr;
 use tremor_script::ast::{Expr, ImutExpr, ImutExprInt, Invoke, List, Literal, NodeMetas, Record};
 use tremor_script::ctx::{EventContext, EventOriginUri};

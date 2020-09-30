@@ -18,7 +18,7 @@ static ALLOC: snmalloc_rs::SnMalloc = snmalloc_rs::SnMalloc;
 
 #[cfg(feature = "mimalloc")]
 #[global_allocator]
-static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
+static ALLOC: mimalloc_rs::MiMalloc = mimalloc::MiMalloc;
 
 #[cfg(feature = "jemalloc")]
 #[global_allocator]

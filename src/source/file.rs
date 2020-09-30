@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::dflt;
 use crate::source::prelude::*;
 use async_compression::futures::bufread::XzDecoder;
 use async_std::fs::File as FSFile;
@@ -21,15 +20,16 @@ use async_std::io::{BufReader, Lines};
 use async_std::prelude::*;
 use std::path::Path;
 use std::process;
+use tremor_common::asy::file;
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Config {
     /// source file to read data from, it will be iterated over repeatedly,
     /// can be xz compressed
     pub source: String,
-    #[serde(default = "dflt::d_false")]
+    #[serde(default = "Default::default")]
     pub close_on_done: bool,
-    #[serde(default = "dflt::d")]
+    #[serde(default = "Default::default")]
     pub sleep_on_done: u64,
 }
 
@@ -67,7 +67,7 @@ impl std::fmt::Debug for Int {
 }
 impl Int {
     async fn from_config(uid: u64, onramp_id: TremorURL, config: Config) -> Result<Self> {
-        let source_data_file = BufReader::new(FSFile::open(&config.source).await?);
+        let source_data_file = BufReader::new(file::open(&config.source).await?);
         let ext = Path::new(&config.source)
             .extension()
             .map(std::ffi::OsStr::to_str);

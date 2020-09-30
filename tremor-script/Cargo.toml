@@ -40,7 +40,6 @@ tremor-kv = "0.1"
 dissect = "0.1"
 distance = "0.4"
 chrono = "0.4"
-clap = { version = "3.0.0-beta.1", features = [ "yaml", "color" ] }
 grok = "1"
 cidr-utils = "0.5"
 jumphash = "0.1"
@@ -50,6 +49,7 @@ sketches-ddsketch = "0.1.2"
 xz2 = "0.1"
 url = "2"
 tremor-influx = { path = "../tremor-influx" } # FIXME tremor-influx v0.2
+tremor-common = { path = "../tremor-common" } # FIXME tremor-influx v0.2
 percent-encoding = "2.1"
 matches = "0.1.8"
 

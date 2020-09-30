@@ -16,7 +16,6 @@ use crate::permge::{PriorityMerge, M};
 use crate::registry::ServantId;
 use crate::repository::PipelineArtefact;
 use crate::url::TremorURL;
-use crate::utils::nanotime;
 use crate::{offramp, onramp};
 use async_channel::{bounded, unbounded};
 use async_std::stream::StreamExt;
@@ -24,6 +23,7 @@ use async_std::task::{self, JoinHandle};
 use std::borrow::Cow;
 use std::fmt;
 use std::time::Duration;
+use tremor_common::time::nanotime;
 use tremor_pipeline::{CBAction, Event, ExecutableGraph, SignalKind};
 
 const TICK_MS: u64 = 100;

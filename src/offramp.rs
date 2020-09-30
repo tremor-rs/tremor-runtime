@@ -25,7 +25,6 @@ use crate::sink::{
 use crate::permge::PriorityMerge;
 use crate::system::METRICS_PIPELINE;
 use crate::url::TremorURL;
-use crate::utils::nanotime;
 use crate::{Event, OpConfig};
 use async_channel::{self, bounded, unbounded};
 use async_std::stream::StreamExt; // for .next() on PriorityMerge
@@ -33,6 +32,7 @@ use async_std::task::{self, JoinHandle};
 use halfbrown::HashMap;
 use std::borrow::{Borrow, Cow};
 use std::fmt;
+use tremor_common::time::nanotime;
 
 pub enum Msg {
     Event {

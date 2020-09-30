@@ -25,11 +25,11 @@ use std::borrow::Cow;
 use std::collections::VecDeque;
 use std::ffi::OsStr;
 use std::fmt;
-use std::fs;
 use std::io::Read;
 use std::iter::Peekable;
 use std::path::{Path, PathBuf};
 use std::str::Chars;
+use tremor_common::file;
 use unicode_xid::UnicodeXID;
 
 /// Source for a parser
@@ -1122,7 +1122,7 @@ impl<'input> Preprocessor {
                         )?;
                         let file_path2 = file_path.clone();
 
-                        match fs::File::open(&file_path) {
+                        match file::open(&file_path) {
                             Ok(mut file) => {
                                 let mut s = String::new();
                                 file.read_to_string(&mut s)?;

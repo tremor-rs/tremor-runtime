@@ -40,7 +40,6 @@ pub(crate) mod async_sink;
 pub mod codec;
 /// Tremor runtime configuration
 pub mod config;
-pub(crate) mod dflt;
 /// Tremor runtime errors
 pub mod errors;
 /// Tremor function library
@@ -134,11 +133,12 @@ fn incarnate_links(config: &[Binding]) -> BindingVec {
 mod test {
     use super::*;
     use crate::config;
-    use std::fs::File;
+    use serde_yaml;
     use std::io::BufReader;
+    use tremor_common::file as cfile;
 
     fn slurp(file: &str) -> config::Config {
-        let file = File::open(file).expect("could not open file");
+        let file = cfile::open(file).expect("could not open file");
         let buffered_reader = BufReader::new(file);
         serde_yaml::from_reader(buffered_reader).expect("Failed to read config.")
     }
