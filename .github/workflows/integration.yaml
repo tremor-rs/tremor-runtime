@@ -28,19 +28,19 @@ jobs:
         run: cargo build -p tremor-cli
       - name: Run Integration Tests
         env:
-          TREMOR_PATH: /home/runner/work/tremor-runtime/tremor-script/lib
+          TREMOR_PATH: /home/runner/work/tremor-runtime/tremor-runtime/tremor-script/lib
         run: ./target/debug/tremor test integration tremor-cli/tests
       - name: Run API Tests
         env:
-          TREMOR_PATH: /home/runner/work/tremor-runtime/tremor-script/lib
+          TREMOR_PATH: /home/runner/work/tremor-runtime/tremor-runtime/tremor-script/lib
         run: ./target/debug/tremor test api tremor-cli/tests
       - name: Run Unit Tests
         env:
-          TREMOR_PATH: /home/runner/work/tremor-runtime/tremor-script/lib
+          TREMOR_PATH: /home/runner/work/tremor-runtime/tremor-runtime/tremor-script/lib
         run: ./target/debug/tremor test unit tremor-cli/tests
       - name: Run Command Tests
         env:
-          TREMOR_PATH: /home/runner/work/tremor-runtime/tremor-script/lib
+          TREMOR_PATH: /home/runner/work/tremor-runtime/tremor-runtime/tremor-script/lib
         run: ./target/debug/tremor test command tremor-cli/tests
       - name: Upload error logs
         uses: actions/upload-artifact@v2
