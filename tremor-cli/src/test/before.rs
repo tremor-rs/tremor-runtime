@@ -15,8 +15,7 @@
 use time::Instant;
 
 use crate::errors::{Error, Result};
-use crate::job;
-use crate::{job::TargetProcess, util::slurp_string};
+use crate::{job, job::TargetProcess, util::slurp_string};
 use std::{
     collections::HashMap,
     fs,
