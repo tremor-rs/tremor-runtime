@@ -304,10 +304,14 @@ async fn codec_task(
 
                 let mut meta = simd_json::borrowed::Object::with_capacity(1);
                 let cb = if status.is_client_error() || status.is_server_error() {
-                    if let Ok(body) = response.body_string().await {
-                        error!("HTTP request failed: {} => {}", status, body)
-                    } else {
-                        error!("HTTP request failed: {}", status)
+                    // when the offramp is linked to pipeline, we want to send
+                    // the response back and not consume it yet (or log about it)
+                    if !is_linked {
+                        if let Ok(body) = response.body_string().await {
+                            error!("HTTP request failed: {} => {}", status, body)
+                        } else {
+                            error!("HTTP request failed: {}", status)
+                        }
                     }
                     meta.insert("time".into(), Value::from(duration));
                     CBAction::Fail
