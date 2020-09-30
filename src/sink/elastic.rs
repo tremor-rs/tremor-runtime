@@ -108,6 +108,8 @@ impl Elastic {
         let req = self.client.request(BulkRequest::new(payload));
 
         task::spawn_blocking(move || {
+            // The truncation we do is sensible since we're only looking at a short timeframe
+            #[allow(clippy::cast_possible_truncation)]
             let r = (move || {
                 let start = Instant::now();
                 for item in req.send()?.into_response::<BulkErrorsResponse>()? {

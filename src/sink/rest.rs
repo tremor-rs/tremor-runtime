@@ -113,8 +113,6 @@ impl offramp::Impl for Rest {
     }
 }
 
-impl Rest {}
-
 #[async_trait::async_trait]
 impl Sink for Rest {
     #[allow(clippy::used_underscore_binding)]

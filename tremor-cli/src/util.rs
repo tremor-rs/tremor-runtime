@@ -312,6 +312,5 @@ pub(crate) fn basename(path: &str) -> String {
     Path::new(path)
         .file_name()
         .map(OsStr::to_string_lossy)
-        .map(String::from)
-        .unwrap_or_else(|| path.to_string())
+        .map_or_else(|| path.to_string(), String::from)
 }
