@@ -203,8 +203,8 @@ pub fn lookup(
 mod tests {
 
     use super::{Config, MmapAnon, MmapFile};
-    use std::fs::File;
     use tempfile::tempdir;
+    use tremor_common::file;
 
     #[test]
     fn test_mmap_anon() {
@@ -235,7 +235,7 @@ mod tests {
     fn test_mmap_file() {
         let dir = tempdir().unwrap();
         let file_path = dir.path().join("storage.json");
-        let file = File::create(file_path.clone()).unwrap();
+        let file = file::create(&file_path).unwrap();
         let config = Config {
             path: file_path.as_path().to_string_lossy().to_string(),
             size: 12,

@@ -65,7 +65,7 @@ fn guess_shell(app: clap::App) -> Result<()> {
     } else if std::env::var_os("PSModulePath").is_some() {
         generate_for_shell(app, "powershell")
     } else if let Some(shell) = std::env::var_os("SHELL") {
-        if let Some(shell_str) = Path::new(&shell.into_string().map_err(|_| "")?).file_name() {
+        if let Some(shell_str) = Path::new(&shell).file_name() {
             generate_for_shell(app, &shell_str.to_string_lossy()).map_err(|_| ERR_MSG.into())
         } else {
             Err(ERR_MSG.into())

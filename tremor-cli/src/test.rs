@@ -20,9 +20,15 @@ use crate::test;
 use crate::util::{basename, slurp_string};
 use clap::ArgMatches;
 use globwalk::{FileType, GlobWalkerBuilder};
+use kind::TestKind;
+pub(crate) use kind::UnknownKind;
+use metadata::Meta;
 use std::collections::HashMap;
 use std::convert::TryInto;
+use std::io::Write;
 use std::path::Path;
+use tag::TagFilter;
+use tremor_common::file;
 use tremor_common::time::nanotime;
 
 mod after;
@@ -35,12 +41,6 @@ mod process;
 pub mod stats;
 pub mod tag;
 mod unit;
-
-use kind::TestKind;
-pub(crate) use kind::UnknownKind;
-use metadata::Meta;
-use std::{fs::File, io::Write};
-use tag::TagFilter;
 
 fn suite_bench(
     root: &Path,
@@ -118,14 +118,14 @@ fn suite_integration(
                 )?;
                 // Set cwd to test root
                 let cwd = std::env::current_dir()?;
-                std::env::set_current_dir(Path::new(&base))?;
+                file::set_current_dir(&base)?;
 
                 // Run integration tests
                 status::tags(&by_tag, Some(&tags))?;
                 let test_report = process::run_process("integration", root, by_tag)?;
 
                 // Restore cwd
-                std::env::set_current_dir(cwd)?;
+                file::set_current_dir(&cwd)?;
 
                 if test_report.stats.is_pass() {
                     stats.pass();
@@ -216,15 +216,10 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
 
     let filter_by_tags = TagFilter::new(excludes.clone(), includes.clone());
 
-    let found = GlobWalkerBuilder::new(
-        Path::new(&path)
-            .canonicalize()
-            .map_err(|e| Error::from(format!("Invalid path `{}`: {}", path, e)))?,
-        "meta.json",
-    )
-    .case_insensitive(true)
-    .build()
-    .map_err(|e| Error::from(format!("failed to walk directory `{}`: {}", path, e)))?;
+    let found = GlobWalkerBuilder::new(file::canonicalize(&path)?, "meta.json")
+        .case_insensitive(true)
+        .build()
+        .map_err(|e| Error::from(format!("failed to walk directory `{}`: {}", path, e)))?;
 
     let mut reports = HashMap::new();
     let mut bench_stats = stats::Stats::new();
@@ -303,8 +298,7 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
         reports,
         stats: stats_map,
     };
-    let mut file = File::create(report)
-        .map_err(|e| Error::from(format!("Failed to create `{}`: {}", report, e)))?;
+    let mut file = file::create(report)?;
 
     if let Ok(result) = serde_json::to_string(&test_run) {
         file.write_all(&result.as_bytes())

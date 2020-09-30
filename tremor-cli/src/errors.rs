@@ -52,6 +52,7 @@ error_chain! {
         LoggingError(log4rs::Error);
         TestKindError(crate::test::UnknownKind);
         Url(url::ParseError) #[doc = "Error while parsing a url"];
+        Common(tremor_common::Error);
     }
     errors {
         TestFailures(stats: crate::test::stats::Stats) {

@@ -17,10 +17,11 @@ use halfbrown::HashMap;
 use serde::Deserialize;
 use simd_json::BorrowedValue as Value;
 use std::ffi::OsStr;
-use std::fs::{self, File};
+use std::fs;
 use std::io::prelude::*;
 use std::io::BufReader;
 use std::path::Path;
+use tremor_common::file as cfile;
 use tremor_script::highlighter::{Highlighter, Term as TermHighlighter};
 use tremor_script::lexer;
 
@@ -108,7 +109,7 @@ pub(crate) fn save_config(config: &TargetConfig) -> Result<()> {
     let tremor_root = tremor_home_dir()?;
     let dot_config = format!("{}/config.yaml", tremor_root);
     let raw = serde_yaml::to_vec(&config)?;
-    let mut file = File::create(&dot_config)?;
+    let mut file = cfile::create(&dot_config)?;
     Ok(file.write_all(&raw)?)
 }
 
@@ -156,10 +157,8 @@ pub(crate) fn load_config() -> Result<TargetConfig> {
 
 pub(crate) fn load(path_to_file: &str) -> Result<simd_json::OwnedValue> {
     let mut source = crate::open_file(path_to_file, None)?;
-    let ext = Path::new(path_to_file)
-        .extension()
-        .and_then(OsStr::to_str)
-        .ok_or("Could not create fail path")?;
+    let ext = get_filename_extension(path_to_file)
+        .ok_or_else(|| format!("Could not open fail path {}", path_to_file))?;
     let mut raw = vec![];
     source.read_to_end(&mut raw)?;
 
@@ -174,10 +173,8 @@ pub(crate) fn load(path_to_file: &str) -> Result<simd_json::OwnedValue> {
 
 pub(crate) fn load_trickle(path_to_file: &str) -> Result<String> {
     let mut source = crate::open_file(path_to_file, None)?;
-    let ext = Path::new(path_to_file)
-        .extension()
-        .and_then(OsStr::to_str)
-        .ok_or("Could not create fail path")?;
+    let ext = get_filename_extension(path_to_file)
+        .ok_or_else(|| format!("Could not open fail path {}", path_to_file))?;
     let mut raw = String::new();
     source.read_to_string(&mut raw)?;
 

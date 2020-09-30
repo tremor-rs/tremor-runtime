@@ -24,6 +24,7 @@ use crate::sink::prelude::*;
 use async_std::fs::File as FSFile;
 use async_std::io::prelude::*;
 use halfbrown::HashMap;
+use tremor_common::asy::file as cfile;
 
 /// An offramp that write a given file
 pub struct File {
@@ -102,7 +103,7 @@ impl Sink for File {
         _reply_channel: Sender<SinkReply>,
     ) -> Result<()> {
         self.postprocessors = make_postprocessors(postprocessors)?;
-        let file = FSFile::create(&self.config.file).await?;
+        let file = cfile::create(&self.config.file).await?;
         self.file = Some(file);
         Ok(())
     }

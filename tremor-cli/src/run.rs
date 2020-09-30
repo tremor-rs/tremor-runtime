@@ -17,9 +17,9 @@ use crate::util::{get_source_kind, highlight, slurp_string, SourceKind};
 use clap::ArgMatches;
 use simd_json::borrowed::Value;
 use simd_json::prelude::*;
-use std::fs::File;
 use std::io::prelude::*;
 use std::io::{self, BufReader, BufWriter, Read, Write};
+use tremor_common::file;
 use tremor_common::time::nanotime;
 use tremor_pipeline::{Event, Ids};
 use tremor_runtime::codec::Codec;
@@ -34,7 +34,6 @@ use tremor_script::registry::Registry;
 use tremor_script::script::{AggrType, Return, Script};
 use tremor_script::LineValue;
 use tremor_script::ValueAndMeta;
-
 struct Ingress {
     is_interactive: bool,
     is_pretty: bool,
@@ -144,7 +143,7 @@ impl Egress {
 
         let buffer: Box<dyn Write> = match matches.value_of("OUTFILE") {
             None | Some("-") => Box::new(BufWriter::new(io::stdout())),
-            Some(data) => Box::new(BufWriter::new(File::create(data)?)),
+            Some(data) => Box::new(BufWriter::new(file::create(data)?)),
         };
 
         let codec = tremor_runtime::codec::lookup(codec_encoder);
