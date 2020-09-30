@@ -29,6 +29,8 @@ pub mod postgres;
 //pub const IN: Cow<'static, str> = Cow::Borrowed("in");
 pub const OUT: Cow<'static, str> = Cow::Borrowed("out");
 pub const ERROR: Cow<'static, str> = Cow::Borrowed("error");
+// this will go away as part of 0.9.1 cleanup
+pub const RESPONSE: Cow<'static, str> = Cow::Borrowed("response");
 
 pub trait KV {
     fn get(&mut self) -> Result<simd_json::OwnedValue>;

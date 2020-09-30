@@ -327,7 +327,7 @@ async fn codec_task(
 
                 if is_linked {
                     match build_response_events(
-                        id,
+                        id.clone(),
                         origin_uri,
                         response,
                         codec.borrow(),
@@ -338,14 +338,34 @@ async fn codec_task(
                     {
                         Ok(response_events) => {
                             for response_event in response_events {
-                                if let Err(e) =
-                                    reply_tx.send(SinkReply::Response(response_event)).await
+                                if let Err(e) = reply_tx
+                                    .send(SinkReply::Response(RESPONSE, response_event))
+                                    .await
                                 {
                                     error!("Error sending response event: {}", e);
                                 }
                             }
                         }
-                        Err(_e) => {} // TODO: send to error port
+                        Err(e) => {
+                            let mut data = simd_json::borrowed::Object::with_capacity(1);
+                            // TODO should also include event_id and offramp (as url string) here
+                            data.insert_nocheck("error".into(), e.to_string().into());
+
+                            // TODO also pass response meta alongside which can be useful for
+                            // errors too [will probably need to return (port, data)
+                            // as part of response_events]
+                            let error_event = Event {
+                                id,
+                                origin_uri: None, // TODO create new origin uri for this
+                                data: Value::from(data).into(),
+                                ..Event::default()
+                            };
+                            if let Err(e) =
+                                reply_tx.send(SinkReply::Response(ERROR, error_event)).await
+                            {
+                                error!("Error sending error event: {}", e);
+                            }
+                        }
                     }
                 }
             }

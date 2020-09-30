@@ -45,6 +45,7 @@ pub enum Msg {
         addr: Box<pipeline::Addr>,
     },
     ConnectLinked {
+        port: Cow<'static, str>,
         id: TremorURL,
         addr: Box<pipeline::Addr>,
     },
@@ -84,9 +85,9 @@ pub trait Offramp: Send {
     async fn terminate(&mut self) {}
     fn default_codec(&self) -> &str;
     fn add_pipeline(&mut self, id: TremorURL, addr: pipeline::Addr);
-    // TODO handle removal as well
-    fn add_dest_pipeline(&mut self, id: TremorURL, addr: pipeline::Addr);
     fn remove_pipeline(&mut self, id: TremorURL) -> bool;
+    // TODO handle removal as well
+    fn add_dest_pipeline(&mut self, port: Cow<'static, str>, id: TremorURL, addr: pipeline::Addr);
     fn is_active(&self) -> bool {
         true
     }
@@ -220,9 +221,9 @@ impl Manager {
         task::spawn::<_, Result<()>>(async move {
             let mut pipelines: HashMap<TremorURL, pipeline::Addr> = HashMap::new();
 
-            // for linked offramp output
-            // TODO make this hashmap as well
-            let mut dest_pipelines: Vec<(TremorURL, pipeline::Addr)> = Vec::new();
+            // for linked offramp output (port to pipeline(s) mapping)
+            let mut dest_pipelines: HashMap<Cow<'static, str>, Vec<(TremorURL, pipeline::Addr)>> =
+                HashMap::new();
 
             info!("[Offramp::{}] started", offramp_url);
 
@@ -289,14 +290,19 @@ impl Manager {
                                     offramp.add_pipeline(id, *addr);
                                 }
                             }
-                            Msg::ConnectLinked { id, addr } => {
-                                // TODO fix offramp_id here for display
+                            Msg::ConnectLinked { port, id, addr } => {
+                                // TODO fix offramp_url here for display
                                 info!(
-                                    "[Offramp::{}] Connecting out to pipeline {}",
-                                    offramp_url, id
+                                    "[Offramp::{}] Connecting {} to pipeline {}",
+                                    port, offramp_url, id
                                 );
-                                dest_pipelines.push((id.clone(), (*addr).clone()));
-                                offramp.add_dest_pipeline(id, *addr);
+                                let p = (id.clone(), (*addr).clone());
+                                if let Some(port_ps) = dest_pipelines.get_mut(&port) {
+                                    port_ps.push(p);
+                                } else {
+                                    dest_pipelines.insert(port.clone(), vec![p]);
+                                }
+                                offramp.add_dest_pipeline(port, id, *addr);
                             }
                             Msg::Disconnect { id, tx } => {
                                 info!("[Offramp::{}] Disconnecting pipeline {}", offramp_url, id);
@@ -314,9 +320,11 @@ impl Manager {
                     OfframpMsg::Reply(SinkReply::Insight(event)) => {
                         send_to_pipelines(&offramp_url, &mut pipelines, event).await
                     }
-                    OfframpMsg::Reply(SinkReply::Response(event)) => {
-                        if let Err(e) = handle_response(event, dest_pipelines.iter()).await {
-                            error!("[Offramp::{}] Response error: {}", offramp_url, e)
+                    OfframpMsg::Reply(SinkReply::Response(port, event)) => {
+                        if let Some(pipelines) = dest_pipelines.get_mut(&port) {
+                            if let Err(e) = handle_response(event, pipelines.iter()).await {
+                                error!("[Offramp::{}] Response error: {}", offramp_url, e)
+                            }
                         }
                     }
                 }

@@ -13,13 +13,14 @@
 // limitations under the License.
 pub(crate) use crate::async_sink::{AsyncSink, SinkDequeueError};
 pub(crate) use crate::codec::Codec;
-pub(crate) use crate::dflt::{self};
+pub(crate) use crate::dflt;
 pub(crate) use crate::errors::*;
 pub(crate) use crate::offramp::{self, Offramp};
 pub(crate) use crate::postprocessor::{
     make_postprocessors, postprocess, Postprocessor, Postprocessors,
 };
 pub(crate) use crate::preprocessor::{make_preprocessors, preprocess, Preprocessor};
+pub(crate) use crate::ramp::{ERROR, RESPONSE};
 pub(crate) use crate::sink::{ResultVec, Sink, SinkManager, SinkReply};
 pub(crate) use crate::utils::ConfigImpl;
 pub(crate) use crate::utils::{duration_to_millis, hostname, nanotime};
