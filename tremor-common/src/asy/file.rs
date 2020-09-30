@@ -56,3 +56,5 @@ where
         Error::FileCanonicalize(e, p.to_string_lossy().to_string())
     })
 }
+
+pub use crate::file::extension;

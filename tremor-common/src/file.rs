@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-use std::{fs::File, path::Path, path::PathBuf};
+use std::{ffi::OsStr, fs::File, path::Path, path::PathBuf};
 
 use crate::errors::Error;
 
@@ -69,4 +69,8 @@ where
         let p: &Path = path.as_ref();
         Error::CWD(e, p.to_string_lossy().to_string())
     })
+}
+/// Gets the extesion for a filename
+pub fn extension(path: &str) -> Option<&str> {
+    Path::new(path).extension().and_then(OsStr::to_str)
 }

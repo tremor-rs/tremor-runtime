@@ -14,7 +14,6 @@
 
 use crate::source::prelude::*;
 use std::io::{BufRead as StdBufRead, BufReader, Read};
-use std::path::Path;
 use std::time::Duration;
 use tremor_common::file;
 use xz2::read::XzDecoder;
@@ -54,10 +53,8 @@ impl onramp::Impl for Blaster {
             let config: Config = Config::new(config)?;
             let mut source_data_file = file::open(&config.source)?;
             let mut data = vec![];
-            let ext = Path::new(&config.source)
-                .extension()
-                .map(std::ffi::OsStr::to_str);
-            if ext == Some(Some("xz")) {
+            let ext = file::extension(&config.source);
+            if ext == Some("xz") {
                 XzDecoder::new(source_data_file).read_to_end(&mut data)?;
             } else {
                 source_data_file.read_to_end(&mut data)?;
