@@ -28,7 +28,5 @@ pub(crate) use async_std::prelude::*;
 pub(crate) use async_std::task;
 pub(crate) use simd_json::prelude::*;
 pub(crate) use tremor_common::time::nanotime;
-pub(crate) use tremor_pipeline::CBAction;
-pub(crate) use tremor_pipeline::ConfigImpl;
-pub(crate) use tremor_pipeline::Ids;
+pub(crate) use tremor_pipeline::{CBAction, ConfigImpl, Ids};
 pub(crate) use tremor_script::prelude::*;
