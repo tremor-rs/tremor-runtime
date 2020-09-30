@@ -351,6 +351,7 @@ async fn codec_task(
                             }
                         }
                         Err(e) => {
+                            // TODO log the error here as well?
                             let mut data = simd_json::borrowed::Object::with_capacity(1);
                             // TODO should also include event_id and offramp (as url string) here
                             data.insert_nocheck("error".into(), e.to_string().into());

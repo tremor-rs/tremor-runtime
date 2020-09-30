@@ -353,7 +353,7 @@ where
             }
 
             // TODO refactor metrics_reporter to do this by port now
-            if port == "error" {
+            if port == ERROR {
                 self.metrics_reporter.increment_error();
             } else {
                 self.metrics_reporter.increment_out();
@@ -534,16 +534,20 @@ where
                             let (port, data) = match result {
                                 Ok(d) => (OUT, d),
                                 Err(e) => {
-                                    // TODO remove unwraps here
-                                    // also pass meta alongside which can be useful for
+                                    // TODO do not log these now that we have error events here?
+                                    error!("[Source::{}] Error: {}", self.source_id, e);
+                                    // TODO pass meta alongside which can be useful for
                                     // errors too [will probably need to return (port, data)
                                     // as part of results itself]
-
                                     let mut error_data =
-                                        simd_json::borrowed::Object::with_capacity(2);
+                                        simd_json::borrowed::Object::with_capacity(3);
                                     error_data.insert_nocheck("error".into(), e.to_string().into());
                                     error_data
                                         .insert_nocheck("event_id".into(), original_id.into());
+                                    error_data.insert_nocheck(
+                                        "source_id".into(),
+                                        self.source_id.to_string().into(),
+                                    );
                                     (ERROR, Value::from(error_data).into())
                                 }
                             };
