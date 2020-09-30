@@ -52,6 +52,7 @@ pub struct OnRamp {
     pub(crate) description: String,
     /// whether to enable linked transport
     #[serde(rename = "linked", default = "Default::default")]
+    // TODO validate that this is turned on only for supported onramps (rest, ws)
     pub(crate) is_linked: bool,
     #[serde(default = "Default::default", skip_serializing_if = "Option::is_none")]
     pub(crate) codec: Option<String>,
@@ -89,6 +90,7 @@ pub struct OffRamp {
     pub(crate) description: String,
     /// whether to enable linked transport
     #[serde(rename = "linked", default = "Default::default")]
+    // TODO validate that this is turned on only for supported offramps (rest, ws)
     pub(crate) is_linked: bool,
     #[serde(default = "Default::default", skip_serializing_if = "Option::is_none")]
     pub(crate) codec: Option<String>,
