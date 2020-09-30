@@ -100,7 +100,6 @@ impl From<tremor_script::query::Query> for Query {
     }
 }
 impl Query {
-<<<<<<< HEAD
     /// Fetches the ID of the query if it was provided
     pub fn id(&self) -> Option<&str> {
         self.0
@@ -110,8 +109,6 @@ impl Query {
             .get("id")
             .and_then(ValueTrait::as_str)
     }
-=======
->>>>>>> 7a250f9... Remove pipeline from external API
     /// Source of the query
     pub fn source(&self) -> &str {
         &self.0.source
