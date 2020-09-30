@@ -13,8 +13,9 @@
 // limitations under the License.
 
 use crate::errors::{Error, Result};
-use std::fs::File;
 use std::io::{BufRead, BufReader, Read, Write};
+use tremor_common::file;
+
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::sync::mpsc::TryRecvError;
@@ -133,8 +134,8 @@ impl TargetProcess {
     }
 
     pub(crate) fn tail(&mut self, stdout_path: &str, stderr_path: &str) -> Result<()> {
-        let mut tailout = File::create(stdout_path)?;
-        let mut tailerr = File::create(stderr_path)?;
+        let mut tailout = file::create(stdout_path)?;
+        let mut tailerr = file::create(stderr_path)?;
 
         self.wait_with_output()?;
 

@@ -24,8 +24,9 @@ use crate::test::tag::{TagFilter, Tags};
 use crate::test::Meta;
 use crate::util::slurp_string;
 use globwalk::{FileType, GlobWalkerBuilder};
-use std::collections::HashMap;
 use std::path::Path;
+use std::{collections::HashMap, thread};
+use tremor_common::file;
 use tremor_common::time::nanotime;
 
 #[derive(Deserialize, Debug)]
@@ -81,11 +82,11 @@ pub(crate) fn suite_command(
 
             // Set cwd to test root
             let cwd = std::env::current_dir()?;
-            std::env::set_current_dir(Path::new(&base))?;
+            file::set_current_dir(&base)?;
 
             let mut before = before::BeforeController::new(&base);
             let before_process = before.spawn()?;
-            std::thread::spawn(move || {
+            thread::spawn(move || {
                 if let Err(e) = before.capture(before_process) {
                     eprint!("Can't capture results from 'before' process: {}", e)
                 };
@@ -180,7 +181,7 @@ pub(crate) fn suite_command(
             after::update_evidence(&base, &mut evidence)?;
 
             // Reset cwd
-            std::env::set_current_dir(Path::new(&cwd))?;
+            file::set_current_dir(&cwd)?;
         } else {
             return Err("Could not get parent of base path in command driven test walker".into());
         }

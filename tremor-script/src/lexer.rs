@@ -817,7 +817,14 @@ impl IncludeStack {
 
     /// Pushes a a compilation unit onto the include stack
     pub fn push<S: AsRef<OsStr> + ?Sized>(&mut self, file: &S) -> Result<usize> {
-        let e = CompilationUnit::from_file(Path::new(file))?;
+        let e = CompilationUnit::from_file(Path::new(file)).map_err(|e| {
+            let file: &OsStr = file.as_ref();
+            Error::from(format!(
+                "Could not open compilation unit `{}`: {}",
+                file.to_string_lossy(),
+                e
+            ))
+        })?;
         if self.contains(&e) {
             Err(format!(
                 "Cyclic dependency detected: {} -> {}",

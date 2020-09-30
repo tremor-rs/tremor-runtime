@@ -244,7 +244,7 @@ pub(crate) fn run_suite(path: &Path, by_tag: &test::TagFilter) -> Result<report:
     let script = path.to_string_lossy().to_string();
 
     let mut raw = String::new();
-    let mut input = crate::open_file(&script, None)?;
+    let mut input = crate::open_file(&path, None)?;
     input.read_to_string(&mut raw)?;
 
     let module_path = load_module_path();

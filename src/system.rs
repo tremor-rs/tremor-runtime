@@ -21,11 +21,11 @@ use crate::repository::{
 };
 use crate::url::TremorURL;
 use async_channel::bounded;
-use async_std::fs::File;
 use async_std::io::prelude::*;
 use async_std::path::Path;
 use async_std::task::{self, JoinHandle};
 use hashbrown::HashMap;
+use tremor_common::asy::file;
 use tremor_common::time::nanotime;
 
 pub(crate) use crate::offramp;
@@ -612,7 +612,7 @@ impl World {
                 "Serializing configuration to file {}",
                 file_path.to_string_lossy()
             );
-            let mut f = File::create(file_path.clone()).await?;
+            let mut f = file::create(&file_path).await?;
             f.write_all(&serde_yaml::to_vec(&config)?).await?;
             // lets really sync this!
             f.sync_all().await?;

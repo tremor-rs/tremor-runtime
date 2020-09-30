@@ -124,7 +124,7 @@ fn run(mut app: App, cmd: &ArgMatches) -> Result<()> {
     if let Ok(tremor_path) = std::env::var("TREMOR_PATH") {
         let tremor_path = Path::new(&tremor_path);
         if tremor_path.is_relative() {
-            let canonical = std::fs::canonicalize(tremor_path)?;
+            let canonical = file::canonicalize(tremor_path)?;
             std::env::set_var("TREMOR_PATH", canonical);
         }
     }

@@ -17,10 +17,11 @@ use crate::util::{get_source_kind, SourceKind};
 use async_std::task;
 use clap::{App, ArgMatches};
 use std::io::Write;
+use std::mem;
 use std::path::Path;
-use std::{fs::File, mem};
 use std::{io::BufReader, sync::atomic::Ordering};
 use tremor_api as api;
+use tremor_common::file;
 use tremor_pipeline::query::Query;
 use tremor_pipeline::FN_REGISTRY;
 use tremor_runtime::repository::BindingArtefact;
@@ -140,7 +141,7 @@ pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
         }
     }
     if let Some(pid_file) = matches.value_of("pid") {
-        let mut file = File::create(pid_file)
+        let mut file = file::create(pid_file)
             .map_err(|e| Error::from(format!("Failed to create pid file `{}`: {}", pid_file, e)))?;
 
         file.write(format!("{}\n", std::process::id()).as_ref())
