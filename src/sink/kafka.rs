@@ -153,12 +153,15 @@ impl Sink for Kafka {
         event: Event,
     ) -> ResultVec {
         let mut success = true;
-        for value in event.value_iter() {
+        //for value in event.value_iter() {
+        for (value, meta) in event.value_meta_iter() {
             let raw = codec.encode(value)?;
             let mut record = FutureRecord::to(&self.config.topic);
             record = record.payload(&raw);
 
-            let record = if let Some(ref k) = self.config.key {
+            let record = if let Some(k) = meta.get("kafka_key").and_then(Value::as_str) {
+                record.key(k)
+            } else if let Some(ref k) = self.config.key {
                 record.key(k.as_str())
             } else {
                 record
