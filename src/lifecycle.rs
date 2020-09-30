@@ -270,7 +270,7 @@ mod test {
         let config = slurp("tests/configs/ut.passthrough.yaml");
         let mut runtime = incarnate(config).expect("failed to incarnate runtime");
         let artefact = runtime.offramps.pop().expect("artefact not found");
-        let id = TremorURL::parse("/offramp/test/00").expect("artefact not found");
+        let id = TremorURL::parse("/offramp/test/out/00").expect("artefact not found");
         assert!(world
             .repo
             .find_offramp(&id)
