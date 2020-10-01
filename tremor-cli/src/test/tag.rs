@@ -13,14 +13,15 @@
 // limitations under the License.
 
 use crate::errors::Result;
+use crate::util;
 use crate::util::slurp_string;
-use std::collections::HashSet;
 use std::iter::FromIterator;
+use std::{collections::HashSet, path::Path};
 
 #[derive(Serialize, Debug)]
 pub(crate) struct TagFilter {
-    includes: HashSet<String>,
-    excludes: HashSet<String>,
+    pub(crate) includes: HashSet<String>,
+    pub(crate) excludes: HashSet<String>,
 }
 
 pub(crate) type Tags = Vec<String>;
@@ -44,14 +45,22 @@ impl TagFilter {
         }
     }
 
-    pub(crate) fn matches(&self, tags: &[String]) -> (Vec<String>, bool) {
-        let tags: HashSet<String> = HashSet::from_iter(tags.iter().cloned());
-        let includes: HashSet<String> = HashSet::from_iter(self.includes.iter().cloned());
-        let excludes: HashSet<String> = HashSet::from_iter(self.excludes.iter().cloned());
-        let accepted: Vec<&String> = tags.intersection(&includes).collect();
-        let redacted: Vec<&String> = tags.intersection(&excludes).collect();
+    pub(crate) fn includes(&self) -> Vec<String> {
+        self.includes.iter().map(|x| x.to_string()).collect()
+    }
 
-        if self.is_empty() {
+    pub(crate) fn excludes(&self) -> Vec<String> {
+        self.excludes.iter().map(|x| x.to_string()).collect()
+    }
+
+    pub(crate) fn matches(&self, allowing: &[String], denying: &[String]) -> (Vec<String>, bool) {
+        let allowing: HashSet<String> = HashSet::from_iter(allowing.iter().cloned());
+        let denying: HashSet<String> = HashSet::from_iter(denying.iter().cloned());
+        let includes: HashSet<String> = HashSet::from_iter(self.includes.iter().cloned());
+        let accepted: Vec<&String> = includes.intersection(&allowing).collect();
+        let redacted: Vec<&String> = includes.intersection(&denying).collect();
+
+        if allowing.is_empty() {
             // if there are no inclusions/exclusions we match
             // regardless of current tags
             //
@@ -62,21 +71,39 @@ impl TagFilter {
             // we have a match
             (
                 accepted.iter().map(|x| (*x).to_string()).collect(),
-                !accepted.is_empty() && redacted.is_empty(),
+                accepted.len() > 0 && redacted.len() == 0,
             )
         }
     }
 
-    pub(crate) fn is_empty(&self) -> bool {
-        self.includes.len() == 0 && self.excludes.len() == 0
+    pub(crate) fn join(&self, tags: Option<Vec<String>>) -> TagFilter {
+        let mut includes: Vec<String> = Vec::from_iter(self.includes.iter().cloned());
+        let excludes: Vec<String> = Vec::from_iter(self.excludes.iter().cloned());
+        if let Some(mut tags) = tags {
+            includes.append(&mut tags);
+        }
+        TagFilter::new(excludes, includes)
     }
+}
 
-    // pub(crate) fn join(&self, tags: Option<Vec<String>>) -> TagFilter {
-    //     let mut includes: Vec<String> = Vec::from_iter(self.includes.iter().cloned());
-    //     let excludes: Vec<String> = Vec::from_iter(self.excludes.iter().cloned());
-    //     if let Some(mut tags) = tags {
-    //         includes.append(&mut tags);
-    //     }
-    //     TagFilter::new(includes, excludes)
-    // }
+pub(crate) fn resolve(base: &Path, other: &Path) -> Result<TagFilter> {
+    let _rel = util::relative_path(base, other);
+    if let Ok(rel) = util::relative_path(base, other) {
+        let mut base = base.to_string_lossy().to_string();
+        let tags_file = format!("{}/tags.json", &base);
+        let mut tags = TagFilter::new(vec![], vec![]);
+        tags = tags.join(Some(maybe_slurp_tags(&tags_file)?));
+        for dirname in rel.split("/") {
+            base = format!("{}/{}", base, dirname);
+            let tags_file = format!("{}/tags.json", &base);
+            tags = tags.join(Some(maybe_slurp_tags(&tags_file)?));
+        }
+        Ok(tags)
+    } else {
+        Err(format!(
+            "Unexpected error resolving tags for test: {}",
+            other.to_string_lossy()
+        )
+        .into())
+    }
 }

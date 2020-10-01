@@ -29,6 +29,7 @@ use tremor_common::time::nanotime;
 #[allow(clippy::too_many_lines)]
 pub(crate) fn run_process(
     kind: &str,
+    _test_root: &Path,
     bench_root: &Path,
     _by_tag: &tag::TagFilter,
 ) -> Result<report::TestReport> {
@@ -51,11 +52,8 @@ pub(crate) fn run_process(
         .collect();
     let process_start = nanotime();
     let bench_root = bench_root.to_string_lossy();
-    // let tags_str = &format!("{}/tags.json", bench_root);
-    // let tags = tag::maybe_slurp_tags(tags_str);
     let mut before = before::BeforeController::new(&bench_root);
     let before_process = before.spawn()?;
-    // FIXME consider using current exe
     let bench_rootx = bench_root.to_string();
 
     let mut process = job::TargetProcess::new_with_stderr(&job::which("tremor")?, &args)?;

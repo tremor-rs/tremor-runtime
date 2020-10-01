@@ -1,5 +1,4 @@
 [
-    "bench",
     "throughput",
     "logging",
     "msgpack"

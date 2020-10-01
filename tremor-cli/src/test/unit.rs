@@ -19,12 +19,10 @@ use crate::test::stats;
 use crate::test::status;
 use halfbrown::hashmap;
 use report::TestSuite;
-use simd_json::{
-    borrowed::{Value, Value::Array},
-    StaticNode,
-};
+use simd_json::{borrowed::Value, StaticNode};
 use std::io::Read;
 use std::{collections::HashMap, path::Path};
+use test::tag;
 use tremor_common::time::nanotime;
 use tremor_script::ast::base_expr::BaseExpr;
 use tremor_script::ast::{Expr, ImutExpr, ImutExprInt, Invoke, List, Literal, NodeMetas, Record};
@@ -33,7 +31,6 @@ use tremor_script::highlighter::{Dumb as DumbHighlighter, Highlighter, Term as T
 use tremor_script::interpreter::{AggrType, Env, ExecOpts, LocalStack};
 use tremor_script::path::load as load_module_path;
 use tremor_script::{registry, Registry};
-
 const EXEC_OPTS: ExecOpts = ExecOpts {
     result_needed: true,
     aggr: AggrType::Tick,
@@ -46,15 +43,16 @@ fn eval_suite_entrypoint(
     meta: &NodeMetas,
     suite_spec: &Record<'_>,
     suite_result: &[Value<'_>],
-    by_tag: &test::TagFilter,
+    tags: &tag::TagFilter,
+
+    by_tag: &(Vec<String>, Vec<String>),
 ) -> Result<(stats::Stats, Vec<report::TestElement>)> {
     let mut elements = Vec::new();
     let mut stats = stats::Stats::new();
     // TODO FIXME handle zero-args case
     if let Value::Object(o) = &suite_result[0] {
         let suite_name = o.get("name");
-        if let Some(suite_name) = suite_name {
-            status::h1("Suite", &suite_name.to_string())?;
+        if let Some(_suite_name) = suite_name {
             let suite_spec_index = suite_spec.fields.iter().position(|f| {
                 if let ImutExprInt::Literal(Literal { value, .. }) = &f.name {
                     value == "tests"
@@ -79,7 +77,7 @@ fn eval_suite_entrypoint(
                                 if let Value::Object(suite) = suite {
                                     if let Some(tests) = suite.get("tests") {
                                         let (s, mut e) = eval_suite_tests(
-                                            &env, &local, script, meta, l, tests, by_tag,
+                                            &env, &local, script, meta, l, tests, tags, by_tag,
                                         )?;
                                         elements.append(&mut e);
                                         stats.merge(&s);
@@ -104,7 +102,8 @@ fn eval_suite_tests(
     node_metas: &NodeMetas,
     suite_spec: &List,
     suite_result: &Value,
-    _by_tag: &test::TagFilter,
+    suite_tags: &test::TagFilter,
+    by_tag: &(Vec<String>, Vec<String>),
 ) -> Result<(stats::Stats, Vec<report::TestElement>)> {
     let mut elements = Vec::new();
     let mut stats = stats::Stats::new();
@@ -128,13 +127,41 @@ fn eval_suite_tests(
                             }
                         });
 
+                        let tag_spec_index = fields.iter().position(|f| {
+                            if let ImutExprInt::Literal(Literal { value, .. }) = &f.name {
+                                value == "tags"
+                            } else {
+                                false
+                            }
+                        });
+
+                        let mut found_tags = Vec::new();
+                        match tag_spec_index {
+                            None => (),
+                            Some(tag_spec_index) => {
+                                let tags = &fields[tag_spec_index].value;
+                                let tag_state = Value::Object(Box::new(hashmap! {}));
+                                let meta = Value::Object(Box::new(hashmap! {}));
+                                let event = Value::Object(Box::new(hashmap! {}));
+                                let tag_value =
+                                    tags.run(EXEC_OPTS, &env, &event, &tag_state, &meta, &local)?;
+                                if let Value::Array(tags) = tag_value.as_ref() {
+                                    let mut inner_tags = tags
+                                        .iter()
+                                        .map(|x| (*x).to_string())
+                                        .collect::<Vec<String>>();
+                                    found_tags.append(&mut inner_tags);
+                                }
+                            }
+                        };
+
+                        let case_tags = suite_tags.join(Some(found_tags));
+
                         if let Some(test_spec_index) = test_spec_index {
                             let item = &fields[test_spec_index].value;
                             let test_state = Value::Object(Box::new(hashmap! {}));
                             let event = Value::Object(Box::new(hashmap! {}));
                             let meta = Value::Object(Box::new(hashmap! {}));
-
-                            // FIXME revisit tag filtering inside unit tests
 
                             let start = nanotime();
                             let value =
@@ -148,7 +175,26 @@ fn eval_suite_tests(
                                 tremor_script::Script::highlight_script_with_range(
                                     script, extent, &mut hh,
                                 )?;
-                                println!();
+
+                                if let (matched, false) = case_tags.matches(&by_tag.0, &by_tag.1) {
+                                    status::h1("    Test ( Skipping )", "")?;
+                                    status::tagsx(
+                                        "        ",
+                                        &case_tags,
+                                        Some(&matched),
+                                        Some(&by_tag.1),
+                                    )?;
+                                    stats.skip();
+                                    continue;
+                                } else {
+                                    status::h1("    Test", "")?;
+                                    status::tagsx(
+                                        "        ",
+                                        &case_tags,
+                                        Some(&by_tag.0),
+                                        Some(&by_tag.1),
+                                    )?;
+                                }
 
                                 let prefix = if status { "(+)" } else { "(-)" };
                                 // Test record
@@ -180,7 +226,7 @@ fn eval_suite_tests(
                                 status::executing_unit_testcase(i, ll, status)?;
                                 let mut hh: TermHighlighter = TermHighlighter::new();
                                 tremor_script::Script::highlight_script_with_range_indent(
-                                    " ", script, extent, &mut hh,
+                                    "       ", script, extent, &mut hh,
                                 )?;
                                 hh.finalize()?;
                                 drop(hh);
@@ -193,15 +239,29 @@ fn eval_suite_tests(
             }
 
             if let Value::Static(StaticNode::Bool(status)) = &suite_result[i] {
+                // Predicate tests do not have tags support
+
                 // Non colorized test source extent for json report capture
                 let extent = suite_spec.exprs[i].extent(node_metas);
                 let mut hh = DumbHighlighter::new();
                 tremor_script::Script::highlight_script_with_range(script, extent, &mut hh)?;
                 let prefix = if *status { "(+)" } else { "(-)" };
 
+                let case_tags = suite_tags;
+
+                let (matched, is_match) = case_tags.matches(&by_tag.0, &by_tag.1);
+                if !is_match {
+                    status::h1("    Test ( Skipping )", "")?;
+                    status::tagsx("        ", &case_tags, Some(&matched), Some(&by_tag.1))?;
+                    continue;
+                } else {
+                    status::h1("    Test", "")?;
+                    status::tagsx("        ", &case_tags, Some(&matched), Some(&by_tag.1))?;
+                }
+
                 // Test record
                 elements.push(report::TestElement {
-                    description: format!("{} Executing test {} of {}", prefix, i + 1, al),
+                    description: format!("    {} Executing test {} of {}", prefix, i + 1, al),
                     keyword: report::KeywordKind::Predicate,
                     result: report::ResultKind {
                         status: if *status {
@@ -224,7 +284,7 @@ fn eval_suite_tests(
                 status::executing_unit_testcase(i, ll, *status)?;
                 let mut h = TermHighlighter::new();
                 tremor_script::Script::highlight_script_with_range_indent(
-                    " ", script, extent, &mut h,
+                    "      ", script, extent, &mut h,
                 )?;
                 h.finalize()?;
                 drop(h);
@@ -236,11 +296,14 @@ fn eval_suite_tests(
 }
 
 #[allow(clippy::too_many_lines)]
-pub(crate) fn run_suite(path: &Path, by_tag: &test::TagFilter) -> Result<report::TestReport> {
+pub(crate) fn run_suite(
+    path: &Path,
+    scenario_tags: &tag::TagFilter,
+    by_tag: (Vec<String>, Vec<String>),
+) -> Result<report::TestReport> {
     println!();
 
     let mut suites: HashMap<String, TestSuite> = HashMap::new();
-
     let script = path.to_string_lossy().to_string();
 
     let mut raw = String::new();
@@ -254,7 +317,6 @@ pub(crate) fn run_suite(path: &Path, by_tag: &test::TagFilter) -> Result<report:
     match tremor_script::Script::parse(&module_path, &script, raw.clone(), &reg) {
         Ok(runnable) => {
             let local = LocalStack::default();
-
             let mut h = TermHighlighter::new();
             runnable.format_warnings_with(&mut h)?;
 
@@ -271,11 +333,11 @@ pub(crate) fn run_suite(path: &Path, by_tag: &test::TagFilter) -> Result<report:
 
             let mut stat_s = stats::Stats::new();
             for expr in &script.exprs {
-                let mut suite_name = String::from("Unknown Suite");
                 let state = Value::Object(Box::new(hashmap! {}));
                 let event = Value::Object(Box::new(hashmap! {}));
                 let meta = Value::Object(Box::new(hashmap! {}));
                 let mut elements = Vec::new();
+                let mut suite_name = "".to_string();
 
                 if let Expr::Imut(ImutExprInt::Invoke1(Invoke {
                     module, fun, args, ..
@@ -308,8 +370,10 @@ pub(crate) fn run_suite(path: &Path, by_tag: &test::TagFilter) -> Result<report:
                                 });
                                 let name_spec_index = fields.iter().position(|f| {
                                     if let ImutExprInt::Literal(Literal { value, .. }) = &f.name {
+                                        suite_name.push_str(&value.to_string());
                                         value == "name"
                                     } else {
+                                        suite_name = "Unknown Suite".to_string();
                                         false
                                     }
                                 });
@@ -323,61 +387,72 @@ pub(crate) fn run_suite(path: &Path, by_tag: &test::TagFilter) -> Result<report:
                                         };
                                     }
                                 }
+
+                                let mut found_tags = Vec::new();
                                 match tag_spec_index {
-                                    None => {
-                                        if let ImutExprInt::Record(r) = item {
-                                            let (test_stats, mut test_reports) =
-                                                eval_suite_entrypoint(
-                                                    &env,
-                                                    &local,
-                                                    &runnable.source,
-                                                    &script.node_meta,
-                                                    r,
-                                                    &specs,
-                                                    by_tag,
-                                                )?;
-                                            elements.append(&mut test_reports);
-                                            stat_s.merge(&test_stats);
-                                        }
-                                    }
+                                    None => (),
                                     Some(tag_spec_index) => {
                                         let tags = &fields[tag_spec_index].value;
-                                        if let ImutExprInt::Record(r) = item {
-                                            if let ImutExprInt::Literal(Literal {
-                                                value: Array(arr),
-                                                ..
-                                            }) = tags
-                                            {
-                                                let arr = arr
-                                                    .iter()
-                                                    .map(std::string::ToString::to_string)
-                                                    .collect::<Vec<String>>();
-                                                // FIXME revisit tags in unit tests
-                                                if let (_matched, true) = by_tag.matches(&arr) {
-                                                    let (test_stats, mut test_reports) =
-                                                        eval_suite_entrypoint(
-                                                            &env,
-                                                            &local,
-                                                            &runnable.source,
-                                                            &script.node_meta,
-                                                            r,
-                                                            &specs,
-                                                            by_tag,
-                                                        )?;
-                                                    stat_s.merge(&test_stats);
-                                                    elements.append(&mut test_reports);
-                                                }
-                                            }
+                                        let tag_state = Value::Object(Box::new(hashmap! {}));
+                                        let tag_value = tags.run(
+                                            EXEC_OPTS, &env, &event, &tag_state, &meta, &local,
+                                        )?;
+                                        if let Value::Array(tags) = tag_value.as_ref() {
+                                            let mut inner_tags = tags
+                                                .iter()
+                                                .map(|x| (*x).to_string())
+                                                .collect::<Vec<String>>();
+                                            found_tags.append(&mut inner_tags);
                                         }
                                     }
+                                };
+
+                                let suite_tags = scenario_tags.join(Some(found_tags));
+                                if let ImutExprInt::Record(r) = item {
+                                    // FIXME revisit tags in unit tests
+                                    if let (_matched, true) =
+                                        suite_tags.matches(&by_tag.0, &by_tag.1)
+                                    {
+                                        status::h1("  Suite", &suite_name.to_string())?;
+                                        status::tagsx(
+                                            "      ",
+                                            &suite_tags,
+                                            Some(&by_tag.0),
+                                            Some(&by_tag.1),
+                                        )?;
+
+                                        let (test_stats, mut test_reports) = eval_suite_entrypoint(
+                                            &env,
+                                            &local,
+                                            &runnable.source,
+                                            &script.node_meta,
+                                            r,
+                                            &specs,
+                                            &suite_tags,
+                                            &by_tag,
+                                        )?;
+                                        stat_s.merge(&test_stats);
+                                        elements.append(&mut test_reports);
+                                    }
+                                } else {
+                                    stat_s.skip();
+
+                                    status::h1("  Suite", &suite_name.to_string())?;
+                                    status::tagsx(
+                                        "      ",
+                                        &suite_tags,
+                                        Some(&by_tag.0),
+                                        Some(&by_tag.1),
+                                    )?;
                                 }
                             }
+
                             suites.insert(
                                 suite_name.clone(),
                                 TestSuite {
-                                    name: suite_name,
-                                    description: "A suite".into(),
-                                    elements: vec![],
+                                    name: suite_name.to_string(),
+                                    description: suite_name,
+                                    elements,
                                     evidence: None,
                                     stats: stat_s.clone(),
                                     duration: 0,
@@ -396,15 +471,15 @@ pub(crate) fn run_suite(path: &Path, by_tag: &test::TagFilter) -> Result<report:
         }
     }
 
-    let mut stat_s = stats::Stats::new();
+    let mut stat_x = stats::Stats::new();
     for v in suites.values() {
-        stat_s.merge(&v.stats)
+        stat_x.merge(&v.stats)
     }
 
     Ok(report::TestReport {
         description: "unit test suites".into(),
         elements: suites,
-        stats: stat_s,
+        stats: stat_x,
         duration: nanotime() - report_start,
     })
 }

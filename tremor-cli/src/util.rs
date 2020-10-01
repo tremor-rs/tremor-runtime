@@ -209,7 +209,7 @@ pub(crate) fn visit_path_str(path: &str, visitor: &PathVisitor) -> Result<()> {
     visit_path(&path, &path, visitor)
 }
 
-fn relative_path(
+pub(crate) fn relative_path(
     base: &Path,
     path: &Path,
 ) -> std::result::Result<String, std::path::StripPrefixError> {

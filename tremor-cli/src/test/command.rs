@@ -20,7 +20,7 @@ use crate::test::assert;
 use crate::test::before;
 use crate::test::report;
 use crate::test::stats;
-use crate::test::tag::{TagFilter, Tags};
+use crate::test::tag::Tags;
 use crate::test::Meta;
 use crate::util::slurp_string;
 use globwalk::{FileType, GlobWalkerBuilder};
@@ -54,8 +54,8 @@ pub(crate) struct CommandTest {
 #[allow(clippy::too_many_lines)]
 pub(crate) fn suite_command(
     root: &Path,
-    _meta: &Meta,
-    by_tag: &TagFilter,
+    meta: &Meta,
+    by_tag: &(Vec<String>, Vec<String>),
 ) -> Result<(stats::Stats, Vec<report::TestReport>)> {
     let api_suites = GlobWalkerBuilder::new(root, "**/command.yml")
         .case_insensitive(true)
@@ -216,7 +216,8 @@ fn process_testcase(
     if let Some(code) = process_status {
         let success = code == spec.status;
         stat_s.assert();
-        status::assert(
+        status::assert_has(
+            "  ",
             "Assert 0",
             &format!("Status {}", &spec.name.trim()),
             success,

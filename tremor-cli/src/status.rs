@@ -108,47 +108,19 @@ pub(crate) fn total_duration(what: u64) -> Result<()> {
     duration(what, "Total ")
 }
 
-pub(crate) fn assert(
+pub(crate) fn assert_has(
+    prefix: &str,
     label: &str,
     what: &str,
+    info: Option<&String>,
     ok: bool,
-    expected: &str,
-    actual: &str,
 ) -> Result<()> {
     let mut h = TermHighlighter::new();
     if ok {
         fg_bold!(h, Green);
-        write!(h.get_writer(), "    (+) {}", &label)?;
+        write!(h.get_writer(), "{}    (+) ", prefix)?;
     } else {
-        fg_bold!(h, Red);
-        write!(h.get_writer(), "    (-) {}", &label)?;
-    }
-
-    h.reset()?;
-    write!(h.get_writer(), ": ")?;
-    write!(h.get_writer(), "{} ", &what)?;
-    if ok {
-        fg_bold!(h, Green);
-        write!(h.get_writer(), "{}", expected)?;
-    } else {
-        fg_bold!(h, Green);
-        write!(h.get_writer(), "{}", expected)?;
-        fg_bold!(h, Red);
-        write!(h.get_writer(), " != {}", actual)?;
-    }
-    writeln!(h.get_writer())?;
-    h.reset()?;
-    h.finalize()?;
-    drop(h);
-    Ok(())
-}
-
-pub(crate) fn assert_has(label: &str, what: &str, info: Option<&String>, ok: bool) -> Result<()> {
-    let mut h = TermHighlighter::new();
-    if ok {
-        fg_bold!(h, Green);
-        write!(h.get_writer(), "    (+) ")?;
-    } else {
+        write!(h.get_writer(), "{}    (-) ", prefix)?;
         fg_bold!(h, Red);
         write!(h.get_writer(), "    (-) ")?;
     }
@@ -172,14 +144,14 @@ pub(crate) fn executing_unit_testcase(i: usize, n: usize, success: bool) -> Resu
     fg_bold!(h, Green);
     let prefix = if success {
         fg_bold!(h, Green);
-        "  (+)"
+        "   (+)"
     } else {
         fg_bold!(h, Red);
-        "  (-)"
+        "   (-)"
     };
     writeln!(
         h.get_writer(),
-        "  {} Executing test {} of {}",
+        "     {} Executing test {} of {}",
         prefix,
         i + 1,
         n
@@ -263,23 +235,45 @@ pub(crate) fn rollups(label: &str, stats: &stats::Stats) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn tags(filter: &TagFilter, tags: Option<&Vec<String>>) -> Result<()> {
-    if let Some(tags) = tags {
-        let (active, _status) = filter.matches(&tags);
-        let mut h = TermHighlighter::new();
-        fg_bold!(h, Yellow);
-        write!(h.get_writer(), "    Tags: ")?;
-        for tag in tags {
-            if active.contains(&tag) {
-                fg_bold!(h, Green);
-            } else {
-                h.reset()?;
-            }
-            write!(h.get_writer(), " {}", tag)?;
+pub(crate) fn tags(
+    filter: &TagFilter,
+    allowing: Option<&[String]>,
+    denying: Option<&[String]>,
+) -> Result<()> {
+    tagsx("    ", filter, allowing, denying)
+}
+
+pub(crate) fn tagsx(
+    prefix: &str,
+    filter: &TagFilter,
+    allowing: Option<&[String]>,
+    denying: Option<&[String]>,
+) -> Result<()> {
+    const EMPTY: &[String] = &[];
+    let config = match (allowing, denying) {
+        (Some(allowing), Some(denying)) => (allowing, denying),
+        (Some(allowing), None) => (allowing, EMPTY),
+        (None, Some(denying)) => (EMPTY, denying),
+        (None, None) => (EMPTY, EMPTY),
+    };
+
+    //    if let (Some(allowing), Some(denying)) = (allowing,denying) {
+    let (active, _status) = filter.matches(&config.0, &config.1);
+    let mut h = TermHighlighter::new();
+    fg_bold!(h, Yellow);
+    write!(h.get_writer(), "{}Tags: ", prefix)?;
+    for tag in filter.includes() {
+        if config.1.contains(&tag) {
+            fg_bold!(h, Red);
+        } else if active.contains(&tag) {
+            fg_bold!(h, Green);
+        } else {
+            fg_bold!(h, Black);
         }
-        writeln!(h.get_writer())?;
-        h.finalize()?;
-        drop(h);
+        write!(h.get_writer(), " {}", tag)?;
     }
+    writeln!(h.get_writer())?;
+    h.finalize()?;
+    drop(h);
     Ok(())
 }

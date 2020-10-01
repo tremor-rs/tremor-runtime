@@ -1,5 +1,6 @@
 {
     "kind": "Command",
+    "about": "Tremor CLI acceptance test suite",
     "tags": [
         "cli", "acceptance"
     ],
