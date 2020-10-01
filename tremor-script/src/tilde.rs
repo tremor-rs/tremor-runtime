@@ -174,7 +174,7 @@ pub enum Extractor {
         compiled: Regex,
     },
     /// PCRE with repeats recognizer
-    Reg {
+    Rerg {
         rule: String,
         #[serde(skip)]
         compiled: Regex,
@@ -279,7 +279,7 @@ impl Extractor {
                 compiled: Regex::new(&rule_text)?,
                 rule: rule_text.to_string(),
             },
-            "reg" => Extractor::Reg {
+            "rerg" => Extractor::Rerg {
                 compiled: Regex::new(&rule_text)?,
                 rule: rule_text.to_string(),
             },
@@ -376,18 +376,18 @@ impl Extractor {
                         })
                     }
                 }
-                Self::Reg { compiled: re, .. } => {
+                Self::Rerg { compiled: re, .. } => {
                     if !result_needed {
                         return Ok(Value::null());
                     }
 
-                    let names: Vec<&str> = re.capture_names().into_iter().flatten().collect();
+                    let names: Vec<&str> = re.capture_names().flatten().collect();
                     let mut results = Value::object_with_capacity(names.len());
                     let captures = re.captures_iter(s);
                     for c in captures {
                         for name in &names {
                             if let Some(cap) = c.name(name) {
-                                match results.get_mut((*name).into()) {
+                                match results.get_mut(*name) {
                                     Some(Value::Array(a)) => {
                                         a.push(cap.as_str().into());
                                     }
@@ -607,9 +607,9 @@ mod test {
     use simd_json::{borrowed::Value, json};
     #[test]
     fn test_reg_extractor() {
-        let ex = Extractor::new("reg", "(?P<key>[^=]+)=(?P<val>[^&]+)&").expect("bad extractor");
+        let ex = Extractor::new("rerg", "(?P<key>[^=]+)=(?P<val>[^&]+)&").expect("bad extractor");
         match ex {
-            Extractor::Reg { .. } => {
+            Extractor::Rerg { .. } => {
                 assert_eq!(
                     ex.extract(
                         true,
