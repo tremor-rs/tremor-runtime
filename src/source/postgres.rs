@@ -230,14 +230,12 @@ impl Source for Int {
 
 #[async_trait::async_trait]
 impl Onramp for Postgres {
-    #[allow(clippy::too_many_arguments)]
     async fn start(
         &mut self,
         onramp_uid: u64,
         codec: &str,
         codec_map: halfbrown::HashMap<String, String>,
-        preprocessors: &[String],
-        postprocessors: &[String],
+        processors: Processors<'_>,
         metrics_reporter: RampReporter,
         _is_linked: bool,
     ) -> Result<onramp::Addr> {
@@ -247,8 +245,7 @@ impl Onramp for Postgres {
             source,
             codec,
             codec_map,
-            preprocessors,
-            postprocessors,
+            processors,
             metrics_reporter,
         )
         .await

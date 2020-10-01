@@ -36,12 +36,12 @@ use dissect::Pattern;
 use regex::Regex;
 use simd_json::borrowed::{Object, Value};
 use simd_json::prelude::*;
-use std::borrow::Cow;
 use std::fmt;
 use std::iter::{Iterator, Peekable};
 use std::net::{IpAddr, Ipv4Addr};
 use std::slice::Iter;
 use std::str::FromStr;
+use std::{borrow::Cow, hash::BuildHasherDefault};
 use tremor_influx as influx;
 use tremor_kv as kv;
 
@@ -536,23 +536,20 @@ impl<T: std::error::Error> From<T> for ExtractorError {
 }
 
 impl PartialEq<Extractor> for Extractor {
-    #[allow(clippy::match_same_arms)]
     fn eq(&self, other: &Self) -> bool {
         match (&self, other) {
             (Self::Base64, Self::Base64)
             | (Self::Json, Self::Json)
             | (Self::Influx, Self::Influx) => true,
+            (Self::Re { rule: rule_l, .. }, Self::Re { rule: rule_r, .. })
+            | (Self::Glob { rule: rule_l, .. }, Self::Glob { rule: rule_r, .. })
+            | (Self::Dissect { rule: rule_l, .. }, Self::Dissect { rule: rule_r, .. })
+            | (Self::Grok { rule: rule_l, .. }, Self::Grok { rule: rule_r, .. })
+            | (Self::Datetime { format: rule_l, .. }, Self::Datetime { format: rule_r, .. }) => {
+                rule_l == rule_r
+            }
             (Self::Kv(rule_l), Self::Kv(rule_r)) => rule_l == rule_r,
-            (Self::Re { rule: rule_l, .. }, Self::Re { rule: rule_r, .. }) => rule_l == rule_r,
-            (Self::Glob { rule: rule_l, .. }, Self::Glob { rule: rule_r, .. }) => rule_l == rule_r,
-            (Self::Dissect { rule: rule_l, .. }, Self::Dissect { rule: rule_r, .. }) => {
-                rule_l == rule_r
-            }
-            (Self::Grok { rule: rule_l, .. }, Self::Grok { rule: rule_r, .. }) => rule_l == rule_r,
             (Self::Cidr { range: rule_l, .. }, Self::Cidr { range: rule_r, .. }) => {
-                rule_l == rule_r
-            }
-            (Self::Datetime { format: rule_l, .. }, Self::Datetime { format: rule_r, .. }) => {
                 rule_l == rule_r
             }
             _ => false,
@@ -583,9 +580,9 @@ impl std::ops::Deref for Cidr {
     }
 }
 
-#[allow(clippy::implicit_hasher, clippy::use_self)]
-// ^ we will not be using this with custom hashers, so we do not need to generalise the function over all hashers
-impl<'cidr> From<Cidr> for HashMap<Cow<'cidr, str>, Value<'cidr>> {
+impl<'cidr> From<Cidr>
+    for HashMap<Cow<'cidr, str>, Value<'cidr>, BuildHasherDefault<fxhash::FxHasher>>
+{
     fn from(x: Cidr) -> Self {
         match x.0 {
             IpCidr::V4(y) => hashmap!(

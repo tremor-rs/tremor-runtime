@@ -96,6 +96,7 @@ pub enum SelectType {
 
 impl SelectStmt<'_> {
     /// Determin how complex a select statment is
+    #[must_use]
     pub fn complexity(&self) -> SelectType {
         if self.stmt.target.0
             == ImutExprInt::Path(Path::Event(EventPath {
@@ -149,6 +150,7 @@ impl_expr2!(OperatorDecl);
 
 impl<'script> OperatorDecl<'script> {
     /// Calculate the fully qualified name
+    #[must_use]
     pub fn fqon(&self, module: &[String]) -> String {
         if module.is_empty() {
             self.id.clone()
@@ -189,6 +191,7 @@ impl_expr2!(ScriptDecl);
 
 impl<'script> ScriptDecl<'script> {
     /// Calculate the fully qualified name
+    #[must_use]
     pub fn fqsn(&self, module: &[String]) -> String {
         if module.is_empty() {
             self.id.clone()
@@ -241,6 +244,7 @@ impl_expr2!(WindowDecl);
 
 impl<'script> WindowDecl<'script> {
     /// Calculate the fully qualified window name
+    #[must_use]
     pub fn fqwn(&self, module: &[String]) -> String {
         if module.is_empty() {
             self.id.clone()

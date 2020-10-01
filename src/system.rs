@@ -56,16 +56,18 @@ lazy_static! {
 }
 
 /// This is control plane
-#[allow(clippy::large_enum_variant)]
 pub(crate) enum ManagerMsg {
     CreatePipeline(
         async_channel::Sender<Result<pipeline::Addr>>,
         pipeline::Create,
     ),
-    CreateOnramp(async_channel::Sender<Result<onramp::Addr>>, onramp::Create),
+    CreateOnramp(
+        async_channel::Sender<Result<onramp::Addr>>,
+        Box<onramp::Create>,
+    ),
     CreateOfframp(
         async_channel::Sender<Result<offramp::Addr>>,
-        offramp::Create,
+        Box<offramp::Create>,
     ),
     Stop,
 }
@@ -95,14 +97,10 @@ impl Manager {
                             .await?
                     }
                     ManagerMsg::CreateOnramp(r, c) => {
-                        self.onramp
-                            .send(onramp::ManagerMsg::Create(r, Box::new(c)))
-                            .await?
+                        self.onramp.send(onramp::ManagerMsg::Create(r, c)).await?
                     }
                     ManagerMsg::CreateOfframp(r, c) => {
-                        self.offramp
-                            .send(offramp::ManagerMsg::Create(r, Box::new(c)))
-                            .await?
+                        self.offramp.send(offramp::ManagerMsg::Create(r, c)).await?
                     }
                     ManagerMsg::Stop => {
                         info!("Stopping offramps...");

@@ -26,7 +26,6 @@ const TYPE_STRING: u8 = 2;
 const TYPE_TRUE: u8 = 3;
 const TYPE_FALSE: u8 = 4;
 
-#[allow(clippy::module_name_repetitions)]
 #[derive(Clone)]
 pub struct BInflux {}
 

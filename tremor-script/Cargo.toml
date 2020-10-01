@@ -52,6 +52,7 @@ tremor-influx = { path = "../tremor-influx" } # FIXME tremor-influx v0.2
 tremor-common = { path = "../tremor-common" } # FIXME tremor-influx v0.2
 percent-encoding = "2.1"
 matches = "0.1.8"
+fxhash = "0.2"
 
 [build-dependencies]
 lalrpop = "0.19"

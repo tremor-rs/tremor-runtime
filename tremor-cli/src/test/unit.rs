@@ -226,7 +226,7 @@ fn eval_suite_tests(
 
                                 // Interactive console report
                                 status::executing_unit_testcase(i, ll, status)?;
-                                let mut hh: TermHighlighter = TermHighlighter::new();
+                                let mut hh: TermHighlighter = TermHighlighter::default();
                                 tremor_script::Script::highlight_script_with_range_indent(
                                     "       ", script, extent, &mut hh,
                                 )?;
@@ -284,7 +284,7 @@ fn eval_suite_tests(
 
                 // Interactive console report
                 status::executing_unit_testcase(i, ll, *status)?;
-                let mut h = TermHighlighter::new();
+                let mut h = TermHighlighter::default();
                 tremor_script::Script::highlight_script_with_range_indent(
                     "      ", script, extent, &mut h,
                 )?;
@@ -319,7 +319,8 @@ pub(crate) fn run_suite(
     match tremor_script::Script::parse(&module_path, &script, raw.clone(), &reg) {
         Ok(runnable) => {
             let local = LocalStack::default();
-            let mut h = TermHighlighter::new();
+
+            let mut h = TermHighlighter::default();
             runnable.format_warnings_with(&mut h)?;
 
             let script = runnable.script.suffix();
@@ -466,7 +467,7 @@ pub(crate) fn run_suite(
             }
         }
         Err(e) => {
-            let mut h = TermHighlighter::new();
+            let mut h = TermHighlighter::default();
             if let Err(e) = tremor_script::Script::format_error_from_script(&raw, &mut h, &e) {
                 eprintln!("Error: {}", e);
             };

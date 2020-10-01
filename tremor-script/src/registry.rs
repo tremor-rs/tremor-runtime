@@ -88,6 +88,7 @@ pub type FResult<T> = std::result::Result<T, FunctionError>;
 
 /// Creates a new function registry and inserts some placeholder
 /// functions.
+#[must_use]
 pub fn registry() -> Registry {
     let mut registry = Registry::default();
 
@@ -107,6 +108,7 @@ pub fn registry() -> Registry {
 }
 
 /// Creates a new aggregate function registry
+#[must_use]
 pub fn aggr() -> Aggr {
     let mut registry = Aggr::default();
     crate::std_lib::load_aggr(&mut registry);
@@ -123,6 +125,7 @@ pub struct MFA {
 
 impl MFA {
     /// creates a MFA
+    #[must_use]
     pub fn new(m: &str, f: &str, a: usize) -> Self {
         MFA {
             m: m.to_string(),
@@ -133,6 +136,7 @@ impl MFA {
 }
 
 /// creates a MFA
+#[must_use]
 pub fn mfa(m: &str, f: &str, a: usize) -> MFA {
     MFA::new(m, f, a)
 }
@@ -257,6 +261,7 @@ pub struct TremorFnWrapper {
 
 impl TremorFnWrapper {
     /// Creates a new wrapper
+    #[must_use]
     pub fn new(module: String, name: String, fun: Box<dyn TremorFn>) -> Self {
         Self { module, name, fun }
     }
@@ -270,15 +275,18 @@ impl TremorFnWrapper {
     }
 
     /// Check if a given arity is valit for the function
+    #[must_use]
     pub fn valid_arity(&self, n: usize) -> bool {
         self.fun.valid_arity(n)
     }
     /// Returns the functions arity
+    #[must_use]
     pub fn arity(&self) -> RangeInclusive<usize> {
         self.fun.arity()
     }
 
     /// Returns if the function is considered const
+    #[must_use]
     pub fn is_const(&self) -> bool {
         self.fun.is_const()
     }
@@ -595,6 +603,7 @@ impl Registry {
     }
 
     /// Finds a module in the registry
+    #[must_use]
     pub fn find_module(&self, module: &str) -> Option<&HashMap<String, TremorFnWrapper>> {
         self.functions.get(module)
     }
@@ -619,6 +628,7 @@ impl Clone for TremorAggrFnWrapper {
 
 impl TremorAggrFnWrapper {
     /// Creates a new wrapper
+    #[must_use]
     pub fn new(module: String, name: String, fun: Box<dyn TremorAggrFn>) -> Self {
         Self { module, name, fun }
     }
@@ -644,16 +654,19 @@ impl TremorAggrFnWrapper {
     }
 
     /// Tests if a given arity is valid
+    #[must_use]
     pub fn valid_arity(&self, n: usize) -> bool {
         self.fun.valid_arity(n)
     }
 
     /// The arity of the function
+    #[must_use]
     pub fn arity(&self) -> RangeInclusive<usize> {
         self.fun.arity()
     }
 
     /// A possible warnings the use of this function should cause
+    #[must_use]
     pub fn warning(&self) -> Option<String> {
         self.fun.warning()
     }
@@ -727,6 +740,7 @@ impl Aggr {
     }
 
     /// Finds a module in the registry
+    #[must_use]
     pub fn find_module(&self, module: &str) -> Option<&HashMap<String, TremorAggrFnWrapper>> {
         self.functions.get(module)
     }

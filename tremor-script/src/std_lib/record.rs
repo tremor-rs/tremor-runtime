@@ -44,7 +44,6 @@ pub fn load(registry: &mut Registry) {
             ))
         }))
         .insert(tremor_const_fn! (record::from_array(_context, _input: Array) {
-        #[allow(clippy::option_unwrap_used)]
         let r: FResult<Object> = _input.iter().map(|a| match a {
             Value::Array(a) => if a.len() == 2 {
                 let mut a = a.clone(); // TODO: this is silly.

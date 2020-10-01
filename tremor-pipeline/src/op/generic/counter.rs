@@ -23,7 +23,6 @@ op!(CounterFactory(_node) {
     Ok(Box::new(Counter{}))
 });
 
-#[allow(unused_mut)]
 impl Operator for Counter {
     fn on_event(
         &mut self,

@@ -26,7 +26,7 @@ macro_rules! fg_bold {
 }
 
 pub(crate) fn h0(label: &str, what: &str) -> Result<()> {
-    let mut h = TermHighlighter::new();
+    let mut h = TermHighlighter::default();
     fg_bold!(h, White);
     write!(h.get_writer(), "{}", &label)?;
     h.reset()?;
@@ -38,7 +38,7 @@ pub(crate) fn h0(label: &str, what: &str) -> Result<()> {
 }
 
 pub(crate) fn h1(label: &str, what: &str) -> Result<()> {
-    let mut h = TermHighlighter::new();
+    let mut h = TermHighlighter::default();
     fg_bold!(h, White);
     write!(h.get_writer(), "  {}", &label)?;
     h.reset()?;
@@ -81,7 +81,7 @@ fn humanize(ts: u64) -> String {
 }
 
 pub(crate) fn duration(what: u64, prefix: &str) -> Result<()> {
-    let mut h = TermHighlighter::new();
+    let mut h = TermHighlighter::default();
     fg_bold!(h, Blue);
     write!(h.get_writer(), "{}Elapsed", prefix)?;
     h.reset()?;
@@ -103,7 +103,7 @@ pub(crate) fn assert_has(
     info: Option<&String>,
     ok: bool,
 ) -> Result<()> {
-    let mut h = TermHighlighter::new();
+    let mut h = TermHighlighter::default();
     if ok {
         fg_bold!(h, Green);
         write!(h.get_writer(), "{}    (+) ", prefix)?;
@@ -128,7 +128,7 @@ pub(crate) fn assert_has(
 }
 
 pub(crate) fn executing_unit_testcase(i: usize, n: usize, success: bool) -> Result<()> {
-    let mut h = TermHighlighter::new();
+    let mut h = TermHighlighter::default();
     fg_bold!(h, Green);
     let prefix = if success {
         fg_bold!(h, Green);
@@ -155,7 +155,7 @@ pub(crate) fn stats(stats: &stats::Stats, prefix: &str) -> Result<()> {
         return Ok(());
     }
 
-    let mut h = TermHighlighter::new();
+    let mut h = TermHighlighter::default();
     fg_bold!(h, Blue);
     write!(h.get_writer(), "{} Stats: ", prefix)?;
     fg_bold!(h, Green);
@@ -194,7 +194,7 @@ pub(crate) fn rollups(label: &str, stats: &stats::Stats) -> Result<()> {
         return Ok(());
     }
 
-    let mut h = TermHighlighter::new();
+    let mut h = TermHighlighter::default();
     fg_bold!(h, Blue);
     write!(h.get_writer(), "{} Stats: ", label)?;
     fg_bold!(h, Green);
@@ -247,7 +247,7 @@ pub(crate) fn tagsx(
 
     //    if let (Some(allowing), Some(denying)) = (allowing,denying) {
     let (active, _status) = filter.matches(&config.0, &config.1);
-    let mut h = TermHighlighter::new();
+    let mut h = TermHighlighter::default();
     fg_bold!(h, Yellow);
     write!(h.get_writer(), "{}Tags: ", prefix)?;
     for tag in filter.includes() {

@@ -305,7 +305,7 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
         println!("{}", h.to_string());
         r?
     } else {
-        let mut h = TermHighlighter::new();
+        let mut h = TermHighlighter::default();
         let r = if let Some(args) = matches.subcommand_matches("ast") {
             let opts = script_opts(args, no_banner)?;
             dbg_ast(&mut h, &opts)

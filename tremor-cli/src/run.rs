@@ -237,7 +237,7 @@ fn run_tremor_source(matches: &ArgMatches, src: String) -> Result<()> {
 
     let reg: Registry = registry::registry();
     let mp = load_module_path();
-    let mut h = TermHighlighter::new();
+    let mut h = TermHighlighter::default();
 
     match Script::parse(&mp, &src, raw.clone(), &reg) {
         Ok(mut script) => {
@@ -292,7 +292,7 @@ fn run_trickle_source(matches: &ArgMatches, src: &str) -> Result<()> {
     let reg: Registry = registry::registry();
     let aggr = registry::aggr();
     let mp = load_module_path();
-    let mut h = TermHighlighter::new();
+    let mut h = TermHighlighter::default();
 
     let runnable = match Query::parse(&mp, &src, &raw, vec![], &reg, &aggr) {
         Ok(runnable) => runnable,

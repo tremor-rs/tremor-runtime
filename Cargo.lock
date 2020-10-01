@@ -5379,6 +5379,7 @@ dependencies = [
  "downcast-rs",
  "error-chain 0.12.4",
  "float-cmp 0.8.0",
+ "fxhash",
  "glob",
  "grok",
  "halfbrown",

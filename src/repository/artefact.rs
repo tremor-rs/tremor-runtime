@@ -248,7 +248,7 @@ impl Artefact for OfframpArtefact {
             .system
             .send(system::ManagerMsg::CreateOfframp(
                 tx,
-                offramp::Create {
+                Box::new(offramp::Create {
                     id: servant_id,
                     codec,
                     codec_map: resolved_codec_map,
@@ -257,7 +257,7 @@ impl Artefact for OfframpArtefact {
                     postprocessors,
                     metrics_reporter,
                     is_linked: self.is_linked,
-                },
+                }),
             ))
             .await?;
         rx.recv().await?
@@ -388,7 +388,7 @@ impl Artefact for OnrampArtefact {
             .system
             .send(system::ManagerMsg::CreateOnramp(
                 tx,
-                onramp::Create {
+                Box::new(onramp::Create {
                     id: servant_id,
                     preprocessors,
                     postprocessors,
@@ -397,7 +397,7 @@ impl Artefact for OnrampArtefact {
                     stream,
                     metrics_reporter,
                     is_linked: self.is_linked,
-                },
+                }),
             ))
             .await?;
         rx.recv().await?

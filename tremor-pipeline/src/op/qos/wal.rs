@@ -223,17 +223,12 @@ op!(WalFactory(node) {
 });
 
 impl WAL {
-    #[allow(clippy::unused_self)]
-    fn auto_commit(&self, _now: u64) -> Result<bool> {
-        Ok(true)
-    }
-
     fn limit_reached(&self) -> Result<bool> {
         Ok(self.cnt >= self.config.max_elements
             || self.wal.size_on_disk()? >= self.config.max_bytes)
     }
 
-    fn read_events(&mut self, now: u64) -> Result<Vec<(Cow<'static, str>, Event)>> {
+    fn read_events(&mut self, _now: u64) -> Result<Vec<(Cow<'static, str>, Event)>> {
         // The maximum number of entries we read
         let mut events = Vec::with_capacity(self.config.read_count as usize);
 
@@ -251,7 +246,6 @@ impl WAL {
             event.transactional = true;
             events.push((OUT, event))
         }
-        self.auto_commit(now)?;
         self.gc()?;
         Ok(events)
     }
@@ -288,7 +282,6 @@ fn maybe_parse_ivec(e: Option<IVec>) -> Option<Event> {
     Event::from_slice(e_slice).ok()
 }
 
-#[allow(unused_mut)]
 impl Operator for WAL {
     fn handles_contraflow(&self) -> bool {
         true

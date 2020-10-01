@@ -29,7 +29,7 @@ impl ConfigImpl for Config {}
 op!(EventHistoryFactory(node) {
 if let Some(map) = &node.config {
     let config: Config = Config::new(map)?;
-    Ok(Box::new(EventHistory {
+    Ok(Box::new(History {
         config,
         id: node.id.clone(),
     }))
@@ -39,13 +39,12 @@ if let Some(map) = &node.config {
 }});
 
 #[derive(Debug, Clone)]
-#[allow(clippy::module_name_repetitions)]
-pub struct EventHistory {
+pub struct History {
     pub config: Config,
     pub id: Cow<'static, str>,
 }
 
-impl Operator for EventHistory {
+impl Operator for History {
     fn on_event(
         &mut self,
         _uid: u64,
@@ -116,7 +115,7 @@ mod test {
     use super::*;
     #[test]
     fn history_op_test() {
-        let mut op = EventHistory {
+        let mut op = History {
             config: Config {
                 op: "green".to_string(),
                 name: "snot".to_string(),

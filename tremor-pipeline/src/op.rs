@@ -68,7 +68,6 @@ impl EventAndInsights {
 
 /// The operator trait, this reflects the functionality of an operator in the
 /// pipeline graph
-#[allow(unused_variables)]
 pub trait Operator: std::fmt::Debug + Send {
     /// Called on every Event. The event and input port are passed in,
     /// a vector of events is passed out.
@@ -86,7 +85,7 @@ pub trait Operator: std::fmt::Debug + Send {
         false
     }
     /// Handle singal events, defaults to returning an empty vector.
-    fn on_signal(&mut self, uid: u64, signal: &mut Event) -> Result<EventAndInsights> {
+    fn on_signal(&mut self, _uid: u64, _signal: &mut Event) -> Result<EventAndInsights> {
         // Make the trait signature nicer
         Ok(EventAndInsights::default())
     }
@@ -98,15 +97,15 @@ pub trait Operator: std::fmt::Debug + Send {
     }
 
     /// Handles contraflow events - defaults to a noop
-    fn on_contraflow(&mut self, uid: u64, insight: &mut Event) {
+    fn on_contraflow(&mut self, _uid: u64, _insight: &mut Event) {
         // Make the trait signature nicer
     }
 
     /// Returns metrics for this operator, defaults to no extra metrics.
     fn metrics(
         &self,
-        tags: HashMap<Cow<'static, str>, Value<'static>>,
-        timestamp: u64,
+        _tags: HashMap<Cow<'static, str>, Value<'static>>,
+        _timestamp: u64,
     ) -> Result<Vec<Value<'static>>> {
         // Make the trait signature nicer
         Ok(Vec::new())

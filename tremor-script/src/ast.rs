@@ -72,6 +72,7 @@ pub struct NodeMetas {
 
 impl<'script> NodeMetas {
     /// Initializes meta noes with a given set of
+    #[must_use]
     pub fn new(cus: Vec<CompilationUnit>) -> Self {
         Self {
             nodes: Vec::new(),
@@ -203,6 +204,7 @@ pub struct ModDoc<'script> {
 
 impl<'script> ModDoc<'script> {
     /// Prints the module documentation
+    #[must_use]
     pub fn print_with_name(&self, name: &str) -> String {
         format!(
             r#"
@@ -389,7 +391,6 @@ where
         }
     }
 
-    #[allow(dead_code)]
     fn register_fun(&mut self, f: CustomFn<'script>) -> Result<usize> {
         let i = self.func_vec.len();
         let mut mf = self.module.clone();
@@ -1205,7 +1206,6 @@ pub struct ImutComprehensionCase<'script> {
 }
 impl_expr2!(ImutComprehensionCase);
 
-#[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulates predicate pattern form
 pub enum Pattern<'script> {
@@ -1309,6 +1309,7 @@ pub enum PredicatePattern<'script> {
 
 impl<'script> PredicatePattern<'script> {
     /// Get key
+    #[must_use]
     pub fn key(&self) -> &KnownKey<'script> {
         use PredicatePattern::{
             ArrayPatternEq, Bin, FieldAbsent, FieldPresent, RecordPatternEq, TildeEq,
@@ -1411,6 +1412,7 @@ pub enum Path<'script> {
 
 impl<'script> Path<'script> {
     /// Get segments as slice
+    #[must_use]
     pub fn segments(&self) -> &[Segment] {
         match self {
             Path::Const(path) | Path::Local(path) => &path.segments,

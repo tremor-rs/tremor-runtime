@@ -20,7 +20,8 @@ pub(crate) use crate::postprocessor::{
 };
 pub(crate) use crate::preprocessor::{make_preprocessors, preprocess, Preprocessor};
 pub(crate) use crate::ramp::{ERROR, RESPONSE};
-pub(crate) use crate::sink::{ResultVec, Sink, SinkManager, SinkReply};
+pub(crate) use crate::sink::{self, ResultVec, Sink, SinkManager};
+pub(crate) use crate::source::Processors;
 pub(crate) use crate::utils::hostname;
 pub(crate) use crate::{Event, OpConfig};
 pub(crate) use async_channel::Sender;

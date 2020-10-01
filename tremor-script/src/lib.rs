@@ -24,8 +24,7 @@
     clippy::pedantic
 )]
 // FIXME We need this for simd-json-derive
-#![allow(clippy::forget_copy)]
-#![allow(clippy::must_use_candidate, clippy::missing_errors_doc)]
+#![allow(clippy::missing_errors_doc)]
 
 /// The Tremor Script AST
 pub mod ast;
@@ -129,10 +128,12 @@ impl<'input> simd_json_derive::Deserialize<'input> for LineValue {
 
 impl<'event> ValueAndMeta<'event> {
     /// A value from it's parts
+    #[must_use]
     pub fn from_parts(v: Value<'event>, m: Value<'event>) -> Self {
         Self { v, m }
     }
     /// Event value
+    #[must_use]
     pub fn value(&self) -> &Value<'event> {
         &self.v
     }
@@ -141,18 +142,22 @@ impl<'event> ValueAndMeta<'event> {
     /// # Safety
     /// This isn't save, use with care and reason about mutability!
     #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr, clippy::mut_from_ref)]
+    #[must_use]
     pub unsafe fn force_value_mut(&self) -> &mut Value<'event> {
         std::mem::transmute(&self.v)
     }
     /// Event value
+    #[must_use]
     pub fn value_mut(&mut self) -> &mut Value<'event> {
         &mut self.v
     }
     /// Event metadata
+    #[must_use]
     pub fn meta(&self) -> &Value<'event> {
         &self.m
     }
     /// Deconstruicts the value into it's parts
+    #[must_use]
     pub fn into_parts(self) -> (Value<'event>, Value<'event>) {
         (self.v, self.m)
     }
@@ -200,6 +205,7 @@ impl rentals::Value {
     /// This borrows the data as immutable and then transmutes it
     /// to be mutable.
     #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
+    #[must_use]
     pub fn parts<'value, 'borrow>(
         &'borrow self,
     ) -> (&'borrow mut Value<'value>, &'borrow mut Value<'value>)

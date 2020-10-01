@@ -15,7 +15,6 @@
 use crate::op::prelude::*;
 use tremor_script::prelude::*;
 
-#[allow(clippy::module_name_repetitions)]
 #[derive(Debug)]
 pub(crate) struct TrickleOperator {
     pub id: String,

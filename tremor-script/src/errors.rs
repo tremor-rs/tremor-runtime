@@ -43,6 +43,7 @@ pub struct CompilerError {
 
 impl CompilerError {
     /// Turns this into the underlying error
+    #[must_use]
     pub fn error(self) -> Error {
         self.error
     }
@@ -313,10 +314,12 @@ impl ErrorKind {
 
 impl Error {
     /// the context of the error
+    #[must_use]
     pub fn context(&self) -> ErrorLocation {
         self.0.expr()
     }
     /// The compilation unit
+    #[must_use]
     pub fn cu(&self) -> usize {
         self.0.cu()
     }

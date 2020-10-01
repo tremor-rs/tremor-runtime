@@ -13,9 +13,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! Influx line protocol decoder to `simd_json::Value`
+//!
+//! The translate is done to the following schema:
+//!
+//! ```json
+//! {
+//!    "measurement": "<name>",
+//!    "tags": {
+//!      "tag1": "<value>"
+//!    },
+//!    "fields": {
+//!      "field1": 123
+//!    },
+//!    "timestamp": 456
+//! }
+//! ```
+
 #![forbid(warnings)]
 #![deny(missing_docs)]
-#![allow(missing_docs)]
 #![recursion_limit = "1024"]
 #![deny(
     clippy::all,
@@ -23,10 +39,10 @@
     clippy::unnecessary_unwrap,
     clippy::pedantic
 )]
-#![allow(clippy::must_use_candidate, clippy::missing_errors_doc)]
 
 mod decoder;
 mod encoder;
+/// Errors
 pub mod errors;
 
 pub use decoder::decode;

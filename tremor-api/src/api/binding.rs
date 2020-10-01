@@ -99,9 +99,8 @@ pub async fn get_servant(req: Request) -> Result<Response> {
 }
 
 // We really don't want to deal with that!
-#[allow(clippy::implicit_hasher)]
 pub async fn link_servant(req: Request) -> Result<Response> {
-    let (req, decoded_data): (_, HashMap<String, String>) = decode(req).await?;
+    let (req, decoded_data): (_, HashMap<String, String, _>) = decode(req).await?;
 
     let a_id: String = req.param("aid").unwrap_or_default();
     let s_id: String = req.param("sid").unwrap_or_default();

@@ -53,33 +53,39 @@ pub struct Error {
 
 impl Error {
     /// Get start location of the error
+    #[must_use]
     pub fn start(&self) -> Location {
         self.start
     }
 
     /// Get end location of the error
+    #[must_use]
     pub fn end(&self) -> Location {
         self.end
     }
 
     /// Get end location of the error
-    pub fn callout(&self) -> &String {
+    #[must_use]
+    pub fn callout(&self) -> &str {
         &self.callout
     }
 
     /// Get hint on how to fix the error
-    pub fn hint(&self) -> Option<&String> {
-        self.hint.as_ref()
+    #[must_use]
+    pub fn hint(&self) -> Option<&str> {
+        self.hint.as_deref()
     }
 
     /// Get the level of the error. See `ErrorLevel` for possible values.
+    #[must_use]
     pub fn level(&self) -> &ErrorLevel {
         &self.level
     }
 
     /// Get error token
-    pub fn token(&self) -> Option<&String> {
-        self.token.as_ref()
+    #[must_use]
+    pub fn token(&self) -> Option<&str> {
+        self.token.as_deref()
     }
 }
 
@@ -198,7 +204,6 @@ pub trait Highlighter {
     }
 
     /// highlights compile time errors
-    #[allow(clippy::cast_possible_truncation, clippy::too_many_lines)]
     fn highlight_errors(
         &mut self,
         emit_linenos: bool,
@@ -452,6 +457,7 @@ pub struct Dumb {
 }
 impl Dumb {
     /// Creates a new highlighter
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -480,10 +486,9 @@ pub struct Term {
 // This is a terminal highlighter it simply adds colors
 // so we skip it in tests.
 
-#[allow(clippy::new_without_default)]
-impl Term {
+impl Default for Term {
     /// Creates a new highlighter
-    pub fn new() -> Self {
+    fn default() -> Self {
         let bufwtr = BufferWriter::stdout(ColorChoice::Auto);
         let buff = bufwtr.buffer();
         Self { bufwtr, buff }

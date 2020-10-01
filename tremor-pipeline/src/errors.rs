@@ -136,6 +136,7 @@ error_chain! {
 }
 
 /// Creates a missing config field error
+#[must_use]
 pub fn missing_config(f: &str) -> Error {
     ErrorKind::MissingOpConfig(format!("missing field {}", f)).into()
 }

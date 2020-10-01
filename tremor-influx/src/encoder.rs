@@ -20,6 +20,10 @@ use std::hash::Hash;
 use std::io::Write;
 
 /// Tries to compile a value to a influx line value
+///
+/// # Errors
+///
+///  * if the input doesn't follow the expected schema
 pub fn encode<'input, V>(v: &V) -> Result<Vec<u8>>
 where
     V: ValueTrait + Writable + 'input,

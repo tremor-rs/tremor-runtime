@@ -23,9 +23,9 @@ use indexmap::IndexMap;
 use op::identity::PassthroughFactory;
 use op::trickle::{
     operator::TrickleOperator,
-    script::TrickleScript,
+    script::Trickle,
     select::{Dims, TrickleSelect},
-    simple_select::TrickleSimpleSelect,
+    simple_select::SimpleSelect,
 };
 use petgraph::algo::is_cyclic_directed;
 use petgraph::dot::{Config, Dot};
@@ -110,6 +110,7 @@ impl Query {
             .and_then(ValueTrait::as_str)
     }
     /// Source of the query
+    #[must_use]
     pub fn source(&self) -> &str {
         &self.0.source
     }
@@ -593,7 +594,7 @@ fn select(
             let op = PassthroughFactory::new_boxed();
             op.from_node(config)
         }
-        SelectType::Simple => Ok(Box::new(TrickleSimpleSelect::with_stmt(
+        SelectType::Simple => Ok(Box::new(SimpleSelect::with_stmt(
             config.id.clone().to_string(),
             &node,
         )?)),
@@ -665,7 +666,7 @@ fn script(
             ErrorKind::MissingOpConfig("trickle operators require a statement".into()).into(),
         );
     };
-    Ok(Box::new(TrickleScript::with_stmt(
+    Ok(Box::new(Trickle::with_stmt(
         config.id.clone().to_string(),
         defn.ok_or_else(|| Error::from("Script definition missing"))?,
         node,

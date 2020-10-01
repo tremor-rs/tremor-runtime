@@ -167,7 +167,7 @@ impl Ws {
                     if url == self.config.url {
                         let mut e = Event::cb_restore(ingest_ns);
                         e.op_meta = self.merged_meta.clone();
-                        v.push(SinkReply::Insight(e));
+                        v.push(sink::Reply::Insight(e));
                     }
                     self.connections.insert(url, Some(addr));
                 }
@@ -176,22 +176,22 @@ impl Ws {
                     if url == self.config.url {
                         let mut e = Event::cb_trigger(ingest_ns);
                         e.op_meta = self.merged_meta.clone();
-                        v.push(SinkReply::Insight(e));
+                        v.push(sink::Reply::Insight(e));
                     }
                     self.connections.insert(url, None);
                 }
                 WsResult::Ack(id, op_meta) => {
                     let mut e = Event::cb_ack(ingest_ns, id.clone());
                     e.op_meta = op_meta;
-                    v.push(SinkReply::Insight(e));
+                    v.push(sink::Reply::Insight(e));
                 }
                 WsResult::Fail(id, op_meta) => {
                     let mut e = Event::cb_fail(ingest_ns, id.clone());
                     e.op_meta = op_meta;
-                    v.push(SinkReply::Insight(e));
+                    v.push(sink::Reply::Insight(e));
                 }
                 WsResult::Response(id, msg) => {
-                    v.push(SinkReply::Response(RESPONSE, Self::make_event(id, msg)?))
+                    v.push(sink::Reply::Response(RESPONSE, Self::make_event(id, msg)?))
                 }
             }
         }
@@ -272,8 +272,7 @@ impl Sink for Ws {
             let msg_meta = self.get_message_meta(meta);
 
             // actually used when we have new connection to make (overriden from event-meta)
-            #[allow(unused_assignments)]
-            let mut temp_conn_tx = None;
+            let temp_conn_tx;
             let ws_conn_tx = if let Some(ws_conn_tx) = self.connections.get(&msg_meta.url) {
                 ws_conn_tx
             } else {
@@ -330,18 +329,16 @@ impl Sink for Ws {
     fn default_codec(&self) -> &str {
         "json"
     }
-    #[allow(clippy::too_many_arguments)]
     async fn init(
         &mut self,
         _sink_uid: u64,
         _codec: &dyn Codec,
         _codec_map: &HashMap<String, Box<dyn Codec>>,
-        _preprocessors: &[String],
-        postprocessors: &[String],
+        processors: Processors<'_>,
         is_linked: bool,
-        _reply_channel: Sender<SinkReply>,
+        _reply_channel: Sender<sink::Reply>,
     ) -> Result<()> {
-        self.postprocessors = make_postprocessors(postprocessors)?;
+        self.postprocessors = make_postprocessors(processors.post)?;
         self.is_linked = is_linked;
         // TODO use reply_channel here too (like for rest)
 

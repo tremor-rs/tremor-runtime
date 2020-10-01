@@ -39,16 +39,15 @@ rental! {
     }
 }
 
-#[allow(clippy::module_name_repetitions)]
 #[derive(Debug)]
-pub struct TrickleSimpleSelect {
+pub struct SimpleSelect {
     pub id: String,
     pub select: rentals::Select,
 }
 
 const NO_AGGRS: [InvokeAggrFn<'static>; 0] = [];
 
-impl TrickleSimpleSelect {
+impl SimpleSelect {
     pub fn with_stmt(
         id: String,
         stmt_rentwrapped: &tremor_script::query::StmtRentalWrapper,
@@ -80,7 +79,7 @@ impl TrickleSimpleSelect {
     }
 }
 
-impl Operator for TrickleSimpleSelect {
+impl Operator for SimpleSelect {
     #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
     fn on_event(
         &mut self,

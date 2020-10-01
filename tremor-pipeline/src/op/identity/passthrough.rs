@@ -21,7 +21,6 @@ op!(PassthroughFactory (_node) {
     Ok(Box::new(Passthrough{}))
 });
 
-#[allow(unused_mut)]
 impl Operator for Passthrough {
     fn on_event(
         &mut self,

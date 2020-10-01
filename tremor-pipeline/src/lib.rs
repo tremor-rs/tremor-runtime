@@ -24,7 +24,7 @@
     clippy::pedantic
 )]
 #![allow(clippy::forget_copy)] // FIXME needed for simd json derive
-#![allow(clippy::must_use_candidate, clippy::missing_errors_doc)]
+#![allow(clippy::missing_errors_doc)]
 
 #[macro_use]
 extern crate serde_derive;
@@ -151,6 +151,7 @@ impl OpMeta {
         self.0.get(&PrimStr(key))
     }
     /// checks existance of a key
+    #[must_use]
     pub fn contains_key(&self, key: u64) -> bool {
         self.0.contains_key(&PrimStr(key))
     }
@@ -229,10 +230,12 @@ impl From<bool> for CBAction {
 
 impl CBAction {
     /// This is a Circuit Breaker related message
+    #[must_use]
     pub fn is_cb(self) -> bool {
         self == CBAction::Close || self == CBAction::Open
     }
     /// This is a Guaranteed Delivery related message
+    #[must_use]
     pub fn is_gd(self) -> bool {
         self == CBAction::Ack || self == CBAction::Fail
     }
@@ -262,6 +265,7 @@ impl fmt::Display for Ids {
 
 impl Ids {
     /// Fetches the registered eid for a given source
+    #[must_use]
     pub fn get(&self, uid: u64) -> Option<u64> {
         self.0
             .iter()
@@ -286,6 +290,7 @@ impl Ids {
         self.0.push((u_id, e_id))
     }
     /// Creates a new Id map
+    #[must_use]
     pub fn new(u_id: u64, e_id: u64) -> Self {
         let mut m = Vec::with_capacity(4);
         m.push((u_id, e_id));
@@ -334,6 +339,7 @@ pub struct Event {
 
 impl Event {
     /// turns the event in an insight given it's success
+    #[must_use]
     pub fn insight(self, success: bool) -> Event {
         Event {
             cb: success.into(),
@@ -346,6 +352,7 @@ impl Event {
     }
 
     /// Creates either a restore or trigger event
+    #[must_use]
     pub fn restore_or_break(restore: bool, ingest_ns: u64) -> Self {
         if restore {
             Event::cb_restore(ingest_ns)
@@ -355,6 +362,7 @@ impl Event {
     }
 
     /// Creates either a ack or fail event
+    #[must_use]
     pub fn ack_or_fail(ack: bool, ingest_ns: u64, ids: Ids) -> Self {
         if ack {
             Event::cb_ack(ingest_ns, ids)
@@ -401,6 +409,7 @@ impl Event {
     /// allows to iterate over the values and metadatas
     /// in an event, if it is batched this can be multiple
     /// otherwise it's a singular event
+    #[must_use]
     pub fn value_meta_iter(&self) -> ValueMetaIter {
         ValueMetaIter {
             event: self,
@@ -408,6 +417,7 @@ impl Event {
         }
     }
     /// Creates a new event to restore a CB
+    #[must_use]
     pub fn cb_restore(ingest_ns: u64) -> Self {
         Event {
             ingest_ns,
@@ -417,6 +427,7 @@ impl Event {
     }
 
     /// Creates a new event to trigger a CB
+    #[must_use]
     pub fn cb_trigger(ingest_ns: u64) -> Self {
         Event {
             ingest_ns,
@@ -426,6 +437,7 @@ impl Event {
     }
 
     /// Creates a new event to trigger a CB
+    #[must_use]
     pub fn cb_ack(ingest_ns: u64, id: Ids) -> Self {
         Event {
             ingest_ns,
@@ -436,6 +448,7 @@ impl Event {
     }
 
     /// Creates a new event to trigger a CB
+    #[must_use]
     pub fn cb_fail(ingest_ns: u64, id: Ids) -> Self {
         Event {
             ingest_ns,
@@ -483,6 +496,7 @@ impl Event {
     /// this will result in multiple entries
     /// if the event was batched otherwise
     /// have only a single element
+    #[must_use]
     pub fn value_iter(&self) -> ValueIter {
         ValueIter {
             event: self,

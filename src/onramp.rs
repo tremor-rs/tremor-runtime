@@ -45,14 +45,12 @@ pub type Addr = async_channel::Sender<Msg>;
 
 #[async_trait::async_trait]
 pub(crate) trait Onramp: Send {
-    #[allow(clippy::too_many_arguments)]
     async fn start(
         &mut self,
         onramp_uid: u64,
         codec: &str,
         codec_map: halfbrown::HashMap<String, String>,
-        preprocessors: &[String],
-        postprocessors: &[String],
+        processors: Processors<'_>,
         metrics_reporter: RampReporter,
         is_linked: bool,
     ) -> Result<Addr>;
@@ -142,8 +140,10 @@ impl Manager {
                                 onramp_uid,
                                 &codec,
                                 codec_map,
-                                &preprocessors,
-                                &postprocessors,
+                                Processors {
+                                    pre: &preprocessors,
+                                    post: &postprocessors,
+                                },
                                 metrics_reporter,
                                 is_linked,
                             )
@@ -194,24 +194,6 @@ mod test {
 
     fn find_free_port(mut range: Range<u16>) -> Option<u16> {
         range.find(|port| port_is_free(*port))
-    }
-
-    #[allow(dead_code)]
-    struct TcpRecorder {
-        port: u16,
-        listener: TcpListener,
-    }
-
-    impl TcpRecorder {
-        #[allow(dead_code)]
-        fn new() -> Self {
-            let port = find_free_port(9000..10000).expect("could not find free port");
-            TcpRecorder {
-                port,
-                listener: TcpListener::bind(format!("localhost:{}", port))
-                    .expect("could not bind listener"),
-            }
-        }
     }
 
     struct TcpInjector {

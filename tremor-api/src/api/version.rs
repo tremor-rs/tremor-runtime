@@ -20,8 +20,9 @@ pub struct Version {
     version: &'static str,
     debug: bool,
 }
-impl Version {
-    pub fn default() -> Self {
+
+impl Default for Version {
+    fn default() -> Self {
         Self {
             version: VERSION,
             debug: DEBUG,

@@ -93,7 +93,6 @@ impl TagFilter {
 }
 
 pub(crate) fn resolve(base: &Path, other: &Path) -> Result<TagFilter> {
-    let _rel = util::relative_path(base, other);
     if let Ok(rel) = util::relative_path(base, other) {
         let mut base = base.to_string_lossy().to_string();
         let tags_file = format!("{}/tags.json", &base);

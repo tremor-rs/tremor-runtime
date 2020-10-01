@@ -106,6 +106,7 @@ impl Range {
         new
     }
     /// The compilation unit associated with this range
+    #[must_use]
     pub fn cu(self) -> usize {
         self.0.unit_id
     }
@@ -119,6 +120,7 @@ impl From<(Location, Location)> for Range {
 
 impl Location {
     /// Creates a new location
+    #[must_use]
     pub fn new(line: usize, column: usize, absolute: usize) -> Self {
         Self {
             line,
@@ -133,6 +135,7 @@ impl Location {
     }
 
     /// Location for line directives
+    #[must_use]
     pub fn for_line_directive() -> Self {
         Self {
             line: 0,
