@@ -257,11 +257,7 @@ impl Manager {
                                     false
                                 };
                                 if offramp.auto_ack() && transactional {
-                                    let e = if fail {
-                                        Event::cb_fail(ingest_ns, ids)
-                                    } else {
-                                        Event::cb_ack(ingest_ns, ids)
-                                    };
+                                    let e = Event::ack_or_fail(!fail, ingest_ns, ids);
                                     send_to_pipelines(&offramp_url, &mut pipelines, e).await;
                                 }
                             }
@@ -274,11 +270,8 @@ impl Manager {
                                     metrics_reporter.set_metrics_pipeline((id, *addr));
                                 } else {
                                     info!("[Offramp::{}] Connecting pipeline {}", offramp_url, id);
-                                    let insight = if offramp.is_active() {
-                                        Event::cb_restore(nanotime())
-                                    } else {
-                                        Event::cb_trigger(nanotime())
-                                    };
+                                    let insight =
+                                        Event::restore_or_break(offramp.is_active(), nanotime());
                                     if let Err(e) = addr.send_insight(insight).await {
                                         error!(
                                             "[Offramp::{}] Could not send initial insight to {}: {}",

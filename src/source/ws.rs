@@ -231,7 +231,6 @@ impl Source for Int {
             Ok(SourceReply::StateChange(SourceState::Disconnected))
         }
     }
-    #[allow(clippy::used_underscore_binding)]
     async fn reply_event(
         &mut self,
         event: Event,

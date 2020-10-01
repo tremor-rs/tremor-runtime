@@ -69,7 +69,6 @@ fn init_cli(config: &Config) -> std::result::Result<postgres::Client, postgres::
 
 #[async_trait::async_trait]
 impl Sink for Postgres {
-    #[allow(clippy::used_underscore_binding)]
     async fn on_event(
         &mut self,
         _input: &str,
@@ -141,7 +140,7 @@ impl Sink for Postgres {
     fn default_codec(&self) -> &str {
         "json"
     }
-    #[allow(clippy::used_underscore_binding, clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments)]
     async fn init(
         &mut self,
         _sink_uid: u64,
@@ -154,7 +153,6 @@ impl Sink for Postgres {
     ) -> Result<()> {
         Ok(())
     }
-    #[allow(clippy::used_underscore_binding)]
     async fn on_signal(&mut self, _signal: Event) -> ResultVec {
         Ok(None)
     }

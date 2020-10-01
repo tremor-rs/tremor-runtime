@@ -101,7 +101,6 @@ impl Source for Blaster {
         &self.onramp_id
     }
 
-    #[allow(clippy::used_underscore_binding)]
     async fn pull_event(&mut self, _id: u64) -> Result<SourceReply> {
         // TODO better sleep perhaps
         if let Some(ival) = self.config.interval {
@@ -137,7 +136,7 @@ impl Source for Blaster {
 
 #[async_trait::async_trait]
 impl Onramp for Blaster {
-    #[allow(clippy::used_underscore_binding, clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments)]
     async fn start(
         &mut self,
         onramp_uid: u64,

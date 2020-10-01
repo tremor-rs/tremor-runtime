@@ -34,7 +34,6 @@ impl offramp::Impl for Exit {
 
 #[async_trait::async_trait]
 impl Sink for Exit {
-    #[allow(clippy::used_underscore_binding)]
     async fn on_event(
         &mut self,
         _input: &str,
@@ -58,7 +57,7 @@ impl Sink for Exit {
     fn default_codec(&self) -> &str {
         "json"
     }
-    #[allow(clippy::used_underscore_binding, clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments)]
     async fn init(
         &mut self,
         _sink_uid: u64,
@@ -71,7 +70,6 @@ impl Sink for Exit {
     ) -> Result<()> {
         Ok(())
     }
-    #[allow(clippy::used_underscore_binding)]
     async fn on_signal(&mut self, _signal: Event) -> ResultVec {
         Ok(None)
     }

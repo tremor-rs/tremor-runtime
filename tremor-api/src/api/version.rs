@@ -13,16 +13,18 @@
 // limitations under the License.
 
 use crate::api::prelude::*;
-use tremor_runtime::version::VERSION;
+use tremor_runtime::version::{DEBUG, VERSION};
 
 #[derive(Serialize, Deserialize)]
 pub struct Version {
-    version: String,
+    version: &'static str,
+    debug: bool,
 }
 impl Version {
     pub fn default() -> Self {
         Self {
-            version: VERSION.to_string(),
+            version: VERSION,
+            debug: DEBUG,
         }
     }
 }

@@ -40,7 +40,6 @@ impl offramp::Impl for StdErr {
 }
 #[async_trait::async_trait]
 impl Sink for StdErr {
-    #[allow(clippy::used_underscore_binding)]
     async fn on_event(
         &mut self,
         _input: &str,
@@ -62,7 +61,7 @@ impl Sink for StdErr {
         self.stderr.flush().await?;
         Ok(None)
     }
-    #[allow(clippy::too_many_arguments, clippy::used_underscore_binding)]
+    #[allow(clippy::too_many_arguments)]
     async fn init(
         &mut self,
         _sink_uid: u64,
@@ -79,7 +78,6 @@ impl Sink for StdErr {
     fn default_codec(&self) -> &str {
         "json"
     }
-    #[allow(clippy::used_underscore_binding)]
     async fn on_signal(&mut self, _signal: Event) -> ResultVec {
         Ok(None)
     }

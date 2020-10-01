@@ -344,6 +344,24 @@ impl Event {
             ..Event::default()
         }
     }
+
+    /// Creates either a restore or trigger event
+    pub fn restore_or_break(restore: bool, ingest_ns: u64) -> Self {
+        if restore {
+            Event::cb_restore(ingest_ns)
+        } else {
+            Event::cb_trigger(ingest_ns)
+        }
+    }
+
+    /// Creates either a ack or fail event
+    pub fn ack_or_fail(ack: bool, ingest_ns: u64, ids: Ids) -> Self {
+        if ack {
+            Event::cb_ack(ingest_ns, ids)
+        } else {
+            Event::cb_fail(ingest_ns, ids)
+        }
+    }
     /// Creates a new ack insight from the event, consums the `op_meta` and
     /// `origin_uri` of the event may return None if no insight is needed
     pub fn insight_ack(&mut self) -> Event {

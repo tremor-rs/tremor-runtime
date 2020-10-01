@@ -139,7 +139,6 @@ impl Int {
 
 #[async_trait::async_trait]
 impl Source for Int {
-    #[allow(clippy::used_underscore_binding)]
     async fn pull_event(&mut self, _id: u64) -> Result<SourceReply> {
         if let Some(row) = self.rows.pop() {
             return Ok(SourceReply::Structured {
@@ -231,7 +230,7 @@ impl Source for Int {
 
 #[async_trait::async_trait]
 impl Onramp for Postgres {
-    #[allow(clippy::used_underscore_binding, clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments)]
     async fn start(
         &mut self,
         onramp_uid: u64,

@@ -96,10 +96,7 @@ pub(crate) fn metadata() -> HashMap<String, String> {
         "allocator".into(),
         crate::alloc::get_allocator_name().into(),
     );
-    meta.insert(
-        "librdkafka".into(),
-        tremor_runtime::version::rdkafka_version(),
-    );
+    meta.insert("librdkafka".into(), tremor_runtime::version::rdkafka());
 
     meta
 }
