@@ -251,7 +251,8 @@ impl Sink for Ws {
     }
 
     async fn on_signal(&mut self, signal: Event) -> ResultVec {
-        self.drain_insights(signal.ingest_ns).await
+        let res = self.drain_insights(signal.ingest_ns);
+        res.await
     }
 
     #[allow(clippy::used_underscore_binding)]
@@ -304,7 +305,7 @@ impl Sink for Ws {
                         conn_tx
                             .send((
                                 event.id.clone(),
-                                event.op_meta.clone(),
+                                self.merged_meta.clone(),
                                 WsMessage::Binary(raw),
                             ))
                             .await?;
@@ -312,7 +313,7 @@ impl Sink for Ws {
                         conn_tx
                             .send((
                                 event.id.clone(),
-                                event.op_meta.clone(),
+                                self.merged_meta.clone(),
                                 WsMessage::Text(txt),
                             ))
                             .await?;

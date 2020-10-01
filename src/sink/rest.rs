@@ -35,8 +35,9 @@ pub struct Config {
 
     /// maximum number of parallel in flight batches (default: 4)
     /// this avoids blocking further events from progressing while waiting for upstream responses.
-    #[serde(default = "concurrency")]
-    pub concurrency: usize, // TODO adjust for linking
+    #[serde(default = "dflt_concurrency")]
+    // TODO adjust for linking
+    pub concurrency: usize,
     // TODO add scheme, host, path, query
     // HTTP method to use (default: POST)
     // TODO implement Deserialize for http_types::Method
@@ -48,12 +49,12 @@ pub struct Config {
     pub headers: HashMap<String, String>,
 }
 
-fn dflt_method() -> Method {
-    Method::Get
+fn dflt_concurrency() -> usize {
+    4
 }
 
-fn concurrency() -> usize {
-    4
+fn dflt_method() -> Method {
+    Method::Get
 }
 
 impl ConfigImpl for Config {}

@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::time::Duration;
 /// Fetches a hostname with `tremor-host.local` being the default
 #[must_use]
 pub fn hostname() -> String {
