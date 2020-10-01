@@ -27,6 +27,7 @@ use async_std::task;
 use halfbrown::HashMap;
 use simd_json::Builder;
 use std::borrow::Cow;
+use std::collections::BTreeMap;
 use std::time::Duration;
 use tremor_common::time::nanotime;
 use tremor_pipeline::{CBAction, Event, EventOriginUri, Ids};
@@ -57,11 +58,13 @@ impl From<std::str::Utf8Error> for RentalSnot {
     }
 }
 
+#[derive(Debug)]
 pub(crate) enum SourceState {
     Connected,
     Disconnected,
 }
 
+#[derive(Debug)]
 // TODO rename without reply keyword to avoid confusion with linked transport "reply"
 pub(crate) enum SourceReply {
     /// A normal data event with a `Vec<u8>` for data
@@ -143,7 +146,7 @@ where
     rx: Receiver<onramp::Msg>,
     tx: Sender<onramp::Msg>,
     pp_template: Vec<String>,
-    preprocessors: Vec<Option<Preprocessors>>,
+    preprocessors: BTreeMap<usize, Preprocessors>,
     codec: Box<dyn Codec>,
     codec_map: HashMap<String, Box<dyn Codec>>,
     metrics_reporter: RampReporter,
@@ -168,7 +171,7 @@ where
         ingest_ns: &mut u64,
         data: Vec<u8>,
     ) -> Result<Vec<Vec<u8>>> {
-        if let Some(Some(preprocessors)) = self.preprocessors.get_mut(stream) {
+        if let Some(preprocessors) = self.preprocessors.get_mut(&stream) {
             preprocess(
                 preprocessors.as_mut_slice(),
                 ingest_ns,
@@ -176,7 +179,11 @@ where
                 &self.source_id,
             )
         } else {
-            Ok(vec![])
+            Err(format!(
+                "[Source:{}] Failed to fetch preprocessors for stream {}",
+                self.source_id, stream,
+            )
+            .into())
         }
     }
 
@@ -441,7 +448,9 @@ where
             resolved_codec_map.insert(k, codec::lookup(&v)?);
         }
         let pp_template = preprocessors.to_vec();
-        let preprocessors = vec![Some(make_preprocessors(&pp_template)?)];
+        let mut preprocessors = BTreeMap::new();
+        preprocessors.insert(0, make_preprocessors(&&pp_template)?);
+
         source.init().await?;
         let is_transactional = source.is_transactional();
         Ok((
@@ -504,21 +513,11 @@ where
             if !self.triggered && !pipelines_out_empty {
                 match self.source.pull_event(self.id).await {
                     Ok(SourceReply::StartStream(id, _)) => {
-                        while self.preprocessors.len() <= id {
-                            self.preprocessors.push(None)
-                        }
-
                         self.preprocessors
-                            .push(Some(make_preprocessors(&self.pp_template)?));
+                            .insert(id, make_preprocessors(&self.pp_template)?);
                     }
                     Ok(SourceReply::EndStream(id)) => {
-                        if let Some(v) = self.preprocessors.get_mut(id) {
-                            *v = None
-                        }
-
-                        while let Some(None) = self.preprocessors.last() {
-                            self.preprocessors.pop();
-                        }
+                        self.preprocessors.remove(&id);
                     }
                     Ok(SourceReply::Structured { origin_uri, data }) => {
                         let ingest_ns = nanotime();

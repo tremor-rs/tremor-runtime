@@ -38,6 +38,11 @@ lazy_static! {
             //ALLOW: We want this to panic, it only happens at startup time
             .expect("Failed to initialize id for metrics piepline")
     };
+    pub(crate) static ref PASSTHROUGH_PIPELINE: TremorURL = {
+        TremorURL::parse("/pipeline/system::passthrough/system/in")
+            //ALLOW: We want this to panic, it only happens at startup time
+            .expect("Failed to initialize id for metrics piepline")
+    };
     pub(crate) static ref STDOUT_OFFRAMP: TremorURL = {
         TremorURL::parse("/offramp/system::stdout/system/in")
             //ALLOW: We want this to panic, it only happens at startup time
@@ -686,7 +691,7 @@ impl World {
 
         let module_path = &tremor_script::path::ModulePath { mounts: Vec::new() };
         let aggr_reg = tremor_script::aggr_registry();
-        let artefact = tremor_pipeline::query::Query::parse(
+        let artefact_metrics = tremor_pipeline::query::Query::parse(
             &module_path,
             "#!config id = \"system::metrics\"\nselect event from in into out;",
             "<metrics>",
@@ -695,7 +700,7 @@ impl World {
             &aggr_reg,
         )?;
         self.repo
-            .publish_pipeline(&METRICS_PIPELINE, true, artefact)
+            .publish_pipeline(&METRICS_PIPELINE, true, artefact_metrics)
             .await?;
         self.bind_pipeline(&METRICS_PIPELINE).await?;
 
@@ -704,6 +709,17 @@ impl World {
             .await?
             .ok_or_else(|| Error::from("Failed to initialize metrics pipeline."))?;
 
+        let artefact_passthrough = tremor_pipeline::query::Query::parse(
+            &module_path,
+            "#!config id = \"system::passthrough\"\nselect event from in into out;",
+            "<metrics>",
+            Vec::new(),
+            &*tremor_pipeline::FN_REGISTRY.lock()?,
+            &aggr_reg,
+        )?;
+        self.repo
+            .publish_pipeline(&PASSTHROUGH_PIPELINE, true, artefact_passthrough)
+            .await?;
         // Register stdout offramp
         let artefact: OfframpArtefact = serde_yaml::from_str(
             r#"
