@@ -31,4 +31,4 @@ sled = "0.34"
 [dev-dependencies]
 criterion = "0.3"
 xz2 = "0.1"
-base64 = "0.12"
+base64 = "0.13"

@@ -32,7 +32,7 @@ async-channel = "1"
 async-compression = {version = "0.3", features = ["xz", "futures-bufread", "stream"]}
 async-io = "1.1"
 async-compat = "0.1"
-base64 = "0.12"
+base64 = "0.13"
 bytes = "0.5"
 byteorder = "1"
 chrono = "0.4"
