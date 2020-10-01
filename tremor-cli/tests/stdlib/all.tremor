@@ -8,7 +8,6 @@ test::suite({
   "tags": [ "snot" ],
   "suite": {
         "name": "Assert style unit tests",
-        "tags": [ "badger" ],
         "tests": [
           test::assert("addition ok 1/7", 3, add(2,1)),
           test::assert("addition ok 2/7", 4, add(3,1)),
@@ -23,6 +22,7 @@ test::suite({
 
 test::suite({
   "name": "Suite of predicate tests",
+  "tags": [ "badger" ],
   "suite": {
     "name": "Predicate style unit tests",
     "tests": [
@@ -38,10 +38,11 @@ test::suite({
   "name": "Suite of embedded tests",
   "suite": {
     "name": "Predicate style unit tests",
+    "tags": [ "snot" ],
     "tests": [
       test::test({
         "name": "Test subtraction by zero",
-#        "tags": [ "snot" ],
+        "tags": [ "badger" ],
         "test": test::assert("subtraction ok 1/2", 2, sub(2,0))
       }),
     ],

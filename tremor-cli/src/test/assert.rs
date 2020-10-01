@@ -155,12 +155,14 @@ pub(crate) fn process(
     s.assert(); // status code
     if let Some(code) = status {
         let success = code == spec.status;
-        status::assert(
-            "Assert 0",
+        let prefix = if success { "(+)" } else { "(-)" };
+        status::assert_has(
+            "   ",
+            &format!("{} Assert 0", prefix),
             &format!("Status {}", &spec.name,),
+            Some(&spec.status.to_string()),
             success,
-            &spec.status.to_string(),
-            &code.to_string(),
+            //            &code.to_string(),
         )?;
         elements.push(report::TestElement {
             description: format!("Process expected to exit with status code {}", spec.status),
@@ -180,12 +182,12 @@ pub(crate) fn process(
         });
     } else {
         let success = false;
-        status::assert(
-            "Assert 0",
-            &format!("Status {}", &spec.name,),
-            success,
+        status::assert_has(
+            "    ",
+            &format!("Assert Status {}", &spec.name,),
             &spec.status.to_string(),
-            "signal",
+            Some(&"signal".to_string()),
+            success,
         )?;
         elements.push(report::TestElement {
             description: format!("Process expected to exit with status code {}", spec.status),
@@ -201,7 +203,7 @@ pub(crate) fn process(
     };
 
     let (assert_stats, mut filebased_assert_elements) =
-        process_filebased_asserts(stdout_path, stderr_path, &spec.asserts, &spec.base)?;
+        process_filebased_asserts("   ", stdout_path, stderr_path, &spec.asserts, &spec.base)?;
     s.merge(&assert_stats);
     elements.append(&mut filebased_assert_elements);
 
@@ -209,6 +211,7 @@ pub(crate) fn process(
 }
 
 pub(crate) fn process_filebased_asserts(
+    prefix: &str,
     stdout_path: &str,
     stderr_path: &str,
     asserts: &[FileBasedAssert],
@@ -248,8 +251,9 @@ pub(crate) fn process_filebased_asserts(
                         let condition = file_contains(&file, &[c.to_string()], base.as_ref())?;
                         total_condition &= condition;
                         status::assert_has(
+                            prefix,
                             &format!("Assert {}", counter),
-                            &format!("Contains `{}` in `{}`", &c.trim(), &file),
+                            &format!("  Contains `{}` in `{}`", &c.trim(), &file),
                             None,
                             condition,
                         )?;
@@ -279,6 +283,7 @@ pub(crate) fn process_filebased_asserts(
                     let info = Some(changeset.to_string());
                     let condition = changeset.distance == 0;
                     status::assert_has(
+                        prefix,
                         &format!("Assert {}", counter),
                         &format!("File `{}` equals `{}`", &file, equals_file),
                         info.as_ref(),

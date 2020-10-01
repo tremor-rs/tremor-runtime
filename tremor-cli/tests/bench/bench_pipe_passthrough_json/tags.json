@@ -1,5 +1,4 @@
 [
-    "bench",
     "pipeline",
     "passthrough",
     "json"
