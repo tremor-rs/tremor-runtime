@@ -128,7 +128,7 @@ where
     async fn terminate(&mut self) {
         self.sink.terminate().await
     }
-    #[allow(clippy::too_many_arguments, clippy::used_underscore_binding)]
+    #[allow(clippy::too_many_arguments)]
     async fn start(
         &mut self,
         offramp_uid: u64,

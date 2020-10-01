@@ -99,7 +99,6 @@ impl offramp::Impl for NewRelic {
 
 #[async_trait::async_trait]
 impl Sink for NewRelic {
-    #[allow(clippy::used_underscore_binding)]
     async fn on_event(
         &mut self,
         _input: &str,
@@ -126,7 +125,7 @@ impl Sink for NewRelic {
         "json"
     }
 
-    #[allow(clippy::used_underscore_binding, clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments)]
     async fn init(
         &mut self,
         _sink_uid: u64,
@@ -139,7 +138,6 @@ impl Sink for NewRelic {
     ) -> Result<()> {
         Ok(())
     }
-    #[allow(clippy::used_underscore_binding)]
     async fn on_signal(&mut self, _signal: Event) -> ResultVec {
         Ok(None)
     }

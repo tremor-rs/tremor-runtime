@@ -59,7 +59,6 @@ impl offramp::Impl for Udp {
 #[async_trait::async_trait]
 impl Sink for Udp {
     // TODO
-    #[allow(clippy::used_underscore_binding)]
     async fn on_event(
         &mut self,
         _input: &str,
@@ -89,7 +88,7 @@ impl Sink for Udp {
     fn default_codec(&self) -> &str {
         "json"
     }
-    #[allow(clippy::too_many_arguments, clippy::used_underscore_binding)]
+    #[allow(clippy::too_many_arguments)]
     async fn init(
         &mut self,
         _sink_uid: u64,
@@ -108,7 +107,6 @@ impl Sink for Udp {
         self.socket = Some(socket);
         Ok(())
     }
-    #[allow(clippy::used_underscore_binding)]
     async fn on_signal(&mut self, signal: Event) -> ResultVec {
         if self.socket.is_none() {
             let socket = UdpSocket::bind((self.config.host.as_str(), self.config.port)).await?;

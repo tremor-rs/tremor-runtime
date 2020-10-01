@@ -87,7 +87,7 @@ impl offramp::Impl for Blackhole {
 
 #[async_trait::async_trait]
 impl Sink for Blackhole {
-    #[allow(clippy::too_many_arguments, clippy::used_underscore_binding)]
+    #[allow(clippy::too_many_arguments)]
     async fn init(
         &mut self,
         _sink_uid: u64,
@@ -102,7 +102,6 @@ impl Sink for Blackhole {
         Ok(())
     }
 
-    #[allow(clippy::used_underscore_binding)]
     async fn on_event(
         &mut self,
         _input: &str,
@@ -144,13 +143,15 @@ impl Sink for Blackhole {
     fn default_codec(&self) -> &str {
         "null"
     }
-    #[allow(clippy::used_underscore_binding)]
+
     async fn on_signal(&mut self, _signal: Event) -> ResultVec {
         Ok(None)
     }
+
     fn is_active(&self) -> bool {
         true
     }
+
     fn auto_ack(&self) -> bool {
         true
     }

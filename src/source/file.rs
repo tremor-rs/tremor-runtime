@@ -112,7 +112,6 @@ impl Source for Int {
         &self.onramp_id
     }
 
-    #[allow(clippy::used_underscore_binding)]
     async fn pull_event(&mut self, _id: u64) -> Result<SourceReply> {
         if let Some(Ok(line)) = self.lines.next().await {
             Ok(SourceReply::Data {
@@ -144,7 +143,7 @@ impl Source for Int {
 
 #[async_trait::async_trait]
 impl Onramp for File {
-    #[allow(clippy::used_underscore_binding, clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments)]
     async fn start(
         &mut self,
         onramp_uid: u64,

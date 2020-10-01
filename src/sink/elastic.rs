@@ -195,7 +195,6 @@ impl Elastic {
 #[async_trait::async_trait]
 impl Sink for Elastic {
     // We enforce json here!
-    #[allow(clippy::used_underscore_binding)]
     async fn on_event(
         &mut self,
         _input: &str,
@@ -248,7 +247,7 @@ impl Sink for Elastic {
         self.drain_insights().await
     }
 
-    #[allow(clippy::used_underscore_binding, clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments)]
     async fn init(
         &mut self,
         _sink_uid: u64,
@@ -263,7 +262,6 @@ impl Sink for Elastic {
         Ok(())
     }
 
-    #[allow(clippy::used_underscore_binding)]
     async fn on_signal(&mut self, _signal: Event) -> ResultVec {
         self.drain_insights().await
     }

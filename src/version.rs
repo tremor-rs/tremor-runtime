@@ -17,24 +17,38 @@ use rdkafka::util::get_rdkafka_version;
 /// Version of the tremor crate;
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
+#[cfg(not(debug_assertions))]
+/// Checks if a we are in a debug build
+pub const DEBUG: bool = false;
+#[cfg(debug_assertions)]
+/// Checks if a we are in a debug build
+pub const DEBUG: bool = true;
+
 /// Prints tremor and librdkafka version.
 pub fn print() {
-    eprintln!("tremor version: {}", VERSION);
+    if DEBUG {
+        eprintln!("tremor version: {} (DEBUG)", VERSION);
+    } else {
+        eprintln!("tremor version: {}", VERSION);
+    }
     let (version_n, version_s) = get_rdkafka_version();
     eprintln!("rd_kafka version: 0x{:08x}, {}", version_n, version_s);
 }
 
 /// Logs tremor and librdkafka version.
 pub fn log() {
-    info!("tremor version: {}", VERSION);
+    if DEBUG {
+        info!("tremor version: {} (DEBUG)", VERSION);
+    } else {
+        info!("tremor version: {}", VERSION);
+    }
     let (version_n, version_s) = get_rdkafka_version();
     info!("rd_kafka version: 0x{:08x}, {}", version_n, version_s);
 }
 
 /// Gets the librdkafka version string
 #[must_use]
-#[allow(clippy::module_name_repetitions)]
-pub fn rdkafka_version() -> String {
+pub fn rdkafka() -> String {
     let (_, version) = get_rdkafka_version();
     version
 }

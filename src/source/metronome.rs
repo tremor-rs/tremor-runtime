@@ -83,7 +83,7 @@ impl Source for Metronome {
 
 #[async_trait::async_trait]
 impl Onramp for Metronome {
-    #[allow(clippy::too_many_arguments, clippy::used_underscore_binding)]
+    #[allow(clippy::too_many_arguments)]
     async fn start(
         &mut self,
         onramp_uid: u64,

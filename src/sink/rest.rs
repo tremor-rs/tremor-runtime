@@ -104,7 +104,6 @@ impl offramp::Impl for Rest {
 
 #[async_trait::async_trait]
 impl Sink for Rest {
-    #[allow(clippy::used_underscore_binding)]
     async fn on_event(
         &mut self,
         _input: &str,
@@ -183,7 +182,7 @@ impl Sink for Rest {
         "json"
     }
 
-    #[allow(clippy::too_many_arguments, clippy::used_underscore_binding)]
+    #[allow(clippy::too_many_arguments)]
     async fn init(
         &mut self,
         sink_uid: u64,
@@ -233,7 +232,6 @@ impl Sink for Rest {
         Ok(())
     }
 
-    #[allow(clippy::used_underscore_binding)]
     async fn on_signal(&mut self, _signal: Event) -> ResultVec {
         Ok(None)
     }
