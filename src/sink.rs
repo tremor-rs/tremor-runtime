@@ -35,8 +35,7 @@ pub(crate) mod udp;
 pub(crate) mod ws;
 
 #[derive(Debug)]
-#[allow(clippy::module_name_repetitions)]
-pub enum SinkReply {
+pub enum Reply {
     Insight(Event),
     // out port and the event
     // TODO better name for this?
@@ -51,7 +50,7 @@ pub enum SinkReply {
 /// circuit breaker events, guaranteed delivery events, etc.
 ///
 /// A response is an event generated from the sink delivery.
-pub(crate) type ResultVec = Result<Option<Vec<SinkReply>>>;
+pub(crate) type ResultVec = Result<Option<Vec<Reply>>>;
 
 #[async_trait::async_trait]
 pub(crate) trait Sink {
@@ -68,16 +67,14 @@ pub(crate) trait Sink {
     ///
     /// The passed reply_channel is for fast-tracking sink-replies going back to the connected pipelines.
     /// It is an additional way to returning them in a ResultVec via on_event, on_signal.
-    #[allow(clippy::too_many_arguments)]
     async fn init(
         &mut self,
         sink_uid: u64,
         codec: &dyn Codec,
         codec_map: &HashMap<String, Box<dyn Codec>>,
-        preprocessors: &[String],
-        postprocessors: &[String],
+        processors: Processors<'_>,
         is_linked: bool,
-        reply_channel: Sender<SinkReply>,
+        reply_channel: Sender<Reply>,
     ) -> Result<()>;
 
     /// Callback for graceful shutdown (default behaviour: do nothing)
@@ -128,24 +125,21 @@ where
     async fn terminate(&mut self) {
         self.sink.terminate().await
     }
-    #[allow(clippy::too_many_arguments)]
     async fn start(
         &mut self,
         offramp_uid: u64,
         codec: &dyn Codec,
         codec_map: &HashMap<String, Box<dyn Codec>>,
-        preprocessors: &[String],
-        postprocessors: &[String],
+        processors: Processors<'_>,
         is_linked: bool,
-        reply_channel: Sender<SinkReply>,
+        reply_channel: Sender<Reply>,
     ) -> Result<()> {
         self.sink
             .init(
                 offramp_uid, // we treat offramp_uid and sink_uid as the same thing
                 codec,
                 codec_map,
-                preprocessors,
-                postprocessors,
+                processors,
                 is_linked,
                 reply_channel,
             )
@@ -162,8 +156,8 @@ where
         if let Some(mut replies) = self.sink.on_event(input, codec, codec_map, event).await? {
             for reply in replies.drain(..) {
                 match reply {
-                    SinkReply::Insight(e) => handle_insight(e, self.pipelines.values()).await?,
-                    SinkReply::Response(port, event) => {
+                    Reply::Insight(e) => handle_insight(e, self.pipelines.values()).await?,
+                    Reply::Response(port, event) => {
                         if let Some(pipelines) = self.dest_pipelines.get_mut(&port) {
                             handle_response(event, pipelines.iter()).await?
                         }
@@ -200,12 +194,12 @@ where
         let replies = self.sink.on_signal(signal).await.ok()??;
         for reply in replies {
             match reply {
-                SinkReply::Insight(e) => {
+                Reply::Insight(e) => {
                     if let Err(e) = handle_insight(e, self.pipelines.values()).await {
                         error!("Error handling insight in sink: {}", e)
                     }
                 }
-                SinkReply::Response(port, event) => {
+                Reply::Response(port, event) => {
                     if let Some(pipelines) = self.dest_pipelines.get_mut(&port) {
                         if let Err(e) = handle_response(event, pipelines.iter()).await {
                             error!("Error handling response in sink: {}", e)

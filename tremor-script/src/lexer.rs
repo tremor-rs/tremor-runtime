@@ -324,6 +324,7 @@ pub enum Token<'input> {
 
 impl<'input> Token<'input> {
     /// a prettified version of the token
+    #[must_use]
     pub fn prettify(&self) -> String {
         if self.is_keyword() || self.is_symbol() || self.is_ignorable() {
             format!("{}", self)
@@ -702,6 +703,7 @@ pub struct Tokenizer<'input> {
 
 impl<'input> Tokenizer<'input> {
     /// Creates a new tokeniser
+    #[must_use]
     pub fn new(input: &'input str) -> Self {
         let lexer = Lexer::new(input);
         let start = Location::default();
@@ -771,10 +773,12 @@ impl CompilationUnit {
         })
     }
     /// String representation of the computational unit
+    #[must_use]
     pub fn to_str(&self) -> Option<&str> {
         self.file_path.to_str()
     }
     /// Returns the path of the file for this
+    #[must_use]
     pub fn file_path(&self) -> &Path {
         &self.file_path
     }
@@ -811,6 +815,7 @@ impl IncludeStack {
     }
 
     /// Returns set of compilation units
+    #[must_use]
     pub fn into_cus(self) -> Vec<CompilationUnit> {
         self.cus
     }

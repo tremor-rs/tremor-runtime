@@ -74,8 +74,7 @@ impl onramp::Impl for Udp {
 
 #[async_trait::async_trait]
 impl Source for Int {
-    #[allow(unused_variables)]
-    async fn pull_event(&mut self, id: u64) -> Result<SourceReply> {
+    async fn pull_event(&mut self, _id: u64) -> Result<SourceReply> {
         let mut buf = [0; 65535];
 
         if let Some(socket) = self.socket.as_mut() {
@@ -128,15 +127,12 @@ impl Source for Int {
 
 #[async_trait::async_trait]
 impl Onramp for Udp {
-    #[allow(clippy::too_many_arguments)]
     async fn start(
         &mut self,
         onramp_uid: u64,
         codec: &str,
         codec_map: halfbrown::HashMap<String, String>,
-        preprocessors: &[String],
-
-        postprocessors: &[String],
+        processors: Processors<'_>,
         metrics_reporter: RampReporter,
         _is_linked: bool,
     ) -> Result<onramp::Addr> {
@@ -146,8 +142,7 @@ impl Onramp for Udp {
             source,
             codec,
             codec_map,
-            preprocessors,
-            postprocessors,
+            processors,
             metrics_reporter,
         )
         .await

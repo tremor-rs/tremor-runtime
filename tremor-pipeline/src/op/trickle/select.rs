@@ -122,7 +122,6 @@ impl Window {
 }
 
 // We allow this since No is barely ever used.
-#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone)]
 pub enum WindowImpl {
     TumblingCountBased(TumblingWindowOnNumber),

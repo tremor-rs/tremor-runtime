@@ -94,7 +94,6 @@ impl<'script> ScriptRaw<'script> {
                     helper.const_values.push(v);
                     helper.add_const_doc(name, comment, value_type);
                 }
-                #[allow(unreachable_code, unused_variables)]
                 ExprRaw::FnDecl(f) => {
                     helper.docs.fns.push(f.doc());
                     let f = f.up(&mut helper)?;
@@ -397,7 +396,6 @@ impl<'script> ImutExprInt<'script> {
 }
 
 /// we're forced to make this pub because of lalrpop
-#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum ExprRaw<'script> {
     /// we're forced to make this pub because of lalrpop

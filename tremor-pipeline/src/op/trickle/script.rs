@@ -35,15 +35,14 @@ rental! {
 }
 
 #[derive(Debug)]
-#[allow(clippy::module_name_repetitions)]
-pub struct TrickleScript {
+pub struct Trickle {
     pub id: String,
     pub defn: Arc<tremor_script::query::StmtRental>,
     pub node: Arc<tremor_script::query::StmtRental>,
     script: rentals::Script,
 }
 
-impl TrickleScript {
+impl Trickle {
     pub fn with_stmt(
         id: String,
         defn_rentwrapped: tremor_script::query::StmtRentalWrapper,
@@ -129,7 +128,7 @@ impl TrickleScript {
     }
 }
 
-impl Operator for TrickleScript {
+impl Operator for Trickle {
     #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
     fn on_event(
         &mut self,

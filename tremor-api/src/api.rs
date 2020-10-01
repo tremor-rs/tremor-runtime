@@ -53,6 +53,7 @@ impl std::fmt::Display for Error {
 impl std::error::Error for Error {}
 
 impl Error {
+    #[must_use]
     pub fn into_http_error(self) -> http_types::Error {
         match &self {
             Error::Generic(c, _d) | Error::JSON(c, _d) => http_types::Error::new(*c, self),
@@ -159,6 +160,7 @@ impl ResourceType {
     }
 }
 
+#[must_use]
 pub fn content_type(req: &Request) -> Option<ResourceType> {
     match req
         .header(&headers::CONTENT_TYPE)
@@ -172,6 +174,7 @@ pub fn content_type(req: &Request) -> Option<ResourceType> {
     }
 }
 
+#[must_use]
 pub fn accept(req: &Request) -> ResourceType {
     // TODO implement correctly / RFC compliance
     match req

@@ -93,30 +93,28 @@ impl Sink for Tcp {
             success = false
         };
         if success {
-            Ok(Some(vec![SinkReply::Insight(event.insight_ack())]))
+            Ok(Some(vec![sink::Reply::Insight(event.insight_ack())]))
         } else {
             self.stream = None;
             Ok(event
                 .insight_trigger()
                 .and_then(|e1| event.insight_fail().map(|e2| (e1, e2)))
-                .map(|(e1, e2)| vec![SinkReply::Insight(e1), SinkReply::Insight(e2)]))
+                .map(|(e1, e2)| vec![sink::Reply::Insight(e1), sink::Reply::Insight(e2)]))
         }
     }
     fn default_codec(&self) -> &str {
         "json"
     }
-    #[allow(clippy::too_many_arguments)]
     async fn init(
         &mut self,
         _sink_uid: u64,
         _codec: &dyn Codec,
         _codec_map: &HashMap<String, Box<dyn Codec>>,
-        _preprocessors: &[String],
-        postprocessors: &[String],
+        processors: Processors<'_>,
         _is_linked: bool,
-        _reply_channel: Sender<SinkReply>,
+        _reply_channel: Sender<sink::Reply>,
     ) -> Result<()> {
-        self.postprocessors = make_postprocessors(postprocessors)?;
+        self.postprocessors = make_postprocessors(processors.post)?;
         let stream = TcpStream::connect((self.config.host.as_str(), self.config.port)).await?;
         stream.set_ttl(self.config.ttl)?;
         stream.set_nodelay(self.config.is_no_delay)?;
@@ -130,14 +128,14 @@ impl Sink for Tcp {
             {
                 stream
             } else {
-                return Ok(Some(vec![SinkReply::Insight(Event::cb_trigger(
+                return Ok(Some(vec![sink::Reply::Insight(Event::cb_trigger(
                     signal.ingest_ns,
                 ))]));
             };
             stream.set_ttl(self.config.ttl)?;
             stream.set_nodelay(self.config.is_no_delay)?;
             self.stream = Some(stream);
-            Ok(Some(vec![SinkReply::Insight(Event::cb_restore(
+            Ok(Some(vec![sink::Reply::Insight(Event::cb_restore(
                 signal.ingest_ns,
             ))]))
         } else {

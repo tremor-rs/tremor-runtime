@@ -46,6 +46,15 @@ pub(crate) mod udp;
 pub(crate) mod ws;
 
 struct StaticValue(Value<'static>);
+
+/// Set of pre and postprocessors
+pub struct Processors<'processor> {
+    /// preprocessors
+    pub pre: &'processor [String],
+    /// postprocessors
+    pub post: &'processor [String],
+}
+
 // This is ugly but we need to handle comments, thanks rental!
 pub(crate) enum RentalSnot {
     Error(Error),
@@ -93,7 +102,6 @@ pub(crate) enum SourceReply {
 }
 
 #[async_trait::async_trait]
-#[allow(unused_variables)]
 pub(crate) trait Source {
     /// Pulls an event from the source if one exists
     /// determine the codec to be used
@@ -102,15 +110,15 @@ pub(crate) trait Source {
     /// Send event back from source (for linked onramps)
     async fn reply_event(
         &mut self,
-        event: Event,
-        codec: &dyn Codec,
-        codec_map: &HashMap<String, Box<dyn Codec>>,
+        _event: Event,
+        _codec: &dyn Codec,
+        _codec_map: &HashMap<String, Box<dyn Codec>>,
     ) -> Result<()> {
         Ok(())
     }
 
     /// Pulls metrics from the source
-    fn metrics(&mut self, t: u64) -> Vec<Event> {
+    fn metrics(&mut self, _t: u64) -> Vec<Event> {
         vec![]
     }
 
@@ -125,9 +133,9 @@ pub(crate) trait Source {
     fn restore_breaker(&mut self) {}
 
     /// Acknowledge an event
-    fn ack(&mut self, id: u64) {}
+    fn ack(&mut self, _id: u64) {}
     /// Fail an event
-    fn fail(&mut self, id: u64) {}
+    fn fail(&mut self, _id: u64) {}
 
     /// Gives a human readable ID for the source
     fn id(&self) -> &TremorURL;
@@ -418,8 +426,7 @@ where
     async fn new(
         uid: u64,
         mut source: T,
-        preprocessors: &[String],
-        _postprocessors: &[String],
+        processors: Processors<'_>,
         codec: &str,
         codec_map: HashMap<String, String>,
         metrics_reporter: RampReporter,
@@ -447,7 +454,7 @@ where
         for (k, v) in codec_map {
             resolved_codec_map.insert(k, codec::lookup(&v)?);
         }
-        let pp_template = preprocessors.to_vec();
+        let pp_template = processors.pre.to_vec();
         let mut preprocessors = BTreeMap::new();
         preprocessors.insert(0, make_preprocessors(&&pp_template)?);
 
@@ -481,21 +488,12 @@ where
         source: T,
         codec: &str,
         codec_map: HashMap<String, String>,
-        preprocessors: &[String],
-        postprocessors: &[String],
+        processors: Processors<'_>,
         metrics_reporter: RampReporter,
     ) -> Result<onramp::Addr> {
         let name = source.id().short_id("src");
-        let (manager, tx) = SourceManager::new(
-            uid,
-            source,
-            preprocessors,
-            postprocessors,
-            codec,
-            codec_map,
-            metrics_reporter,
-        )
-        .await?;
+        let (manager, tx) =
+            SourceManager::new(uid, source, processors, codec, codec_map, metrics_reporter).await?;
         task::Builder::new().name(name).spawn(manager.run())?;
         Ok(tx)
     }

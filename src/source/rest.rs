@@ -323,7 +323,6 @@ fn make_response(
 #[async_trait::async_trait()]
 impl Source for Int {
     // TODO possible to do this in source trait?
-    #[allow(unused_variables)]
     async fn pull_event(&mut self, id: u64) -> Result<SourceReply> {
         if let Some(listener) = self.listener.as_ref() {
             match listener.try_recv() {
@@ -402,14 +401,12 @@ impl Source for Int {
 
 #[async_trait::async_trait]
 impl Onramp for Rest {
-    #[allow(clippy::too_many_arguments)]
     async fn start(
         &mut self,
         onramp_uid: u64,
         codec: &str,
         codec_map: halfbrown::HashMap<String, String>,
-        preprocessors: &[String],
-        postprocessors: &[String],
+        processors: Processors<'_>,
         metrics_reporter: RampReporter,
         is_linked: bool,
     ) -> Result<onramp::Addr> {
@@ -419,8 +416,7 @@ impl Onramp for Rest {
             source,
             codec,
             codec_map,
-            preprocessors,
-            postprocessors,
+            processors,
             metrics_reporter,
         )
         .await

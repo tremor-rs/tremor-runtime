@@ -85,23 +85,21 @@ impl Sink for File {
             }
             file.flush().await?
         }
-        Ok(Some(vec![SinkReply::Insight(event.insight_ack())]))
+        Ok(Some(vec![sink::Reply::Insight(event.insight_ack())]))
     }
     fn default_codec(&self) -> &str {
         "json"
     }
-    #[allow(clippy::too_many_arguments)]
     async fn init(
         &mut self,
         _sink_uid: u64,
         _codec: &dyn Codec,
         _codec_map: &HashMap<String, Box<dyn Codec>>,
-        _preprocessors: &[String],
-        postprocessors: &[String],
+        processors: Processors<'_>,
         _is_linked: bool,
-        _reply_channel: Sender<SinkReply>,
+        _reply_channel: Sender<sink::Reply>,
     ) -> Result<()> {
-        self.postprocessors = make_postprocessors(postprocessors)?;
+        self.postprocessors = make_postprocessors(processors.post)?;
         let file = cfile::create(&self.config.file).await?;
         self.file = Some(file);
         Ok(())

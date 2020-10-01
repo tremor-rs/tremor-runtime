@@ -82,6 +82,7 @@ pub struct Script {
 
 impl Script {
     /// Get script warnings
+    #[must_use]
     pub fn warnings(&self) -> &Vec<Warning> {
         &self.warnings
     }
@@ -162,6 +163,7 @@ where
     }
 
     /// Returns the documentation for the script
+    #[must_use]
     pub fn docs(&self) -> &Docs<'_> {
         &self.script.suffix().docs
     }
@@ -309,6 +311,7 @@ where
     }
 
     /// Formats an error within this script
+    #[must_use]
     pub fn format_error(&self, e: &Error) -> String {
         let mut h = DumbHighlighter::default();
         if self.format_error_with(&mut h, &e).is_ok() {

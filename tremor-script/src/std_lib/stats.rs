@@ -842,6 +842,7 @@ impl TremorAggrFn for Hdr {
 }
 
 pub fn load_aggr(registry: &mut AggrRegistry) {
+    // Allow: this is ok because we must use the result of insert
     registry
         .insert(TremorAggrFnWrapper::new(
             "stats".to_string(),

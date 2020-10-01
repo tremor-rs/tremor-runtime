@@ -18,6 +18,7 @@ use simd_json::BorrowedValue as Value;
 use std::io::prelude::*;
 
 /// Fetches a hostname with `tremor-host.local` being the default
+#[must_use]
 pub fn hostname() -> String {
     hostname::get()
         .map_err(|_| ())

@@ -138,8 +138,6 @@ impl<A: Artefact> Repository<A> {
     }
 }
 
-/// This is control plane
-#[allow(clippy::large_enum_variant)]
 pub(crate) enum Msg<A: Artefact> {
     ListArtefacts(async_channel::Sender<Vec<ArtefactId>>),
     SerializeArtefacts(async_channel::Sender<Vec<A>>),

@@ -80,18 +80,16 @@ impl Sink for StdOut {
         self.stdout.flush().await?;
         Ok(None)
     }
-    #[allow(clippy::too_many_arguments)]
     async fn init(
         &mut self,
         _sink_uid: u64,
         _codec: &dyn Codec,
         _codec_map: &HashMap<String, Box<dyn Codec>>,
-        _preprocessors: &[String],
-        postprocessors: &[String],
+        processors: Processors<'_>,
         _is_linked: bool,
-        _reply_channel: Sender<SinkReply>,
+        _reply_channel: Sender<sink::Reply>,
     ) -> Result<()> {
-        self.postprocessors = make_postprocessors(postprocessors)?;
+        self.postprocessors = make_postprocessors(processors.post)?;
         Ok(())
     }
     fn default_codec(&self) -> &str {

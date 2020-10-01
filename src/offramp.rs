@@ -15,14 +15,14 @@
 use crate::codec::Codec;
 use crate::errors::Result;
 use crate::metrics::RampReporter;
+use crate::permge::PriorityMerge;
 use crate::pipeline;
 use crate::registry::ServantId;
 use crate::sink::{
-    blackhole, debug, elastic, exit, file, handle_response, kafka, newrelic, postgres, rest,
-    stderr, stdout, tcp, udp, ws, SinkReply,
+    self, blackhole, debug, elastic, exit, file, handle_response, kafka, newrelic, postgres, rest,
+    stderr, stdout, tcp, udp, ws,
 };
-
-use crate::permge::PriorityMerge;
+use crate::source::Processors;
 use crate::system::METRICS_PIPELINE;
 use crate::url::TremorURL;
 use crate::{Event, OpConfig};
@@ -60,16 +60,14 @@ pub type Addr = async_channel::Sender<Msg>;
 
 #[async_trait::async_trait]
 pub trait Offramp: Send {
-    #[allow(clippy::too_many_arguments)]
     async fn start(
         &mut self,
         offramp_uid: u64,
         codec: &dyn Codec,
         codec_map: &HashMap<String, Box<dyn Codec>>,
-        preprocessors: &[String],
-        postprocessors: &[String],
+        processors: Processors<'_>,
         is_linked: bool,
-        reply_channel: async_channel::Sender<SinkReply>,
+        reply_channel: async_channel::Sender<sink::Reply>,
     ) -> Result<()>;
     async fn on_event(
         &mut self,
@@ -78,8 +76,7 @@ pub trait Offramp: Send {
         input: &str,
         event: Event,
     ) -> Result<()>;
-    #[allow(unused_variables)]
-    async fn on_signal(&mut self, signal: Event) -> Option<Event> {
+    async fn on_signal(&mut self, _signal: Event) -> Option<Event> {
         None
     }
     async fn terminate(&mut self) {}
@@ -170,7 +167,7 @@ async fn send_to_pipelines(
 
 pub(crate) enum OfframpMsg {
     Msg(Msg),
-    Reply(SinkReply),
+    Reply(sink::Reply),
 }
 
 impl Manager {
@@ -195,15 +192,17 @@ impl Manager {
         offramp_uid: u64,
     ) -> Result<()> {
         let (msg_tx, msg_rx) = bounded::<Msg>(self.qsize);
-        let (cf_tx, cf_rx) = unbounded::<SinkReply>(); // we might need to wrap that somehow, but *shrug*
+        let (cf_tx, cf_rx) = unbounded::<sink::Reply>(); // we might need to wrap that somehow, but *shrug*
 
         if let Err(e) = offramp
             .start(
                 offramp_uid,
                 codec.borrow(),
                 &codec_map,
-                &preprocessors,
-                &postprocessors,
+                Processors {
+                    pre: &preprocessors,
+                    post: &postprocessors,
+                },
                 is_linked,
                 cf_tx.clone(),
             )
@@ -310,10 +309,10 @@ impl Manager {
                             }
                         }
                     }
-                    OfframpMsg::Reply(SinkReply::Insight(event)) => {
+                    OfframpMsg::Reply(sink::Reply::Insight(event)) => {
                         send_to_pipelines(&offramp_url, &mut pipelines, event).await
                     }
-                    OfframpMsg::Reply(SinkReply::Response(port, event)) => {
+                    OfframpMsg::Reply(sink::Reply::Response(port, event)) => {
                         if let Some(pipelines) = dest_pipelines.get_mut(&port) {
                             if let Err(e) = handle_response(event, pipelines.iter()).await {
                                 error!("[Offramp::{}] Response error: {}", offramp_url, e)

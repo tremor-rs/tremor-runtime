@@ -15,7 +15,7 @@
 pub(crate) use crate::errors::*;
 pub(crate) use crate::metrics::RampReporter;
 pub(crate) use crate::onramp::{self, Onramp};
-pub(crate) use crate::source::{Source, SourceManager, SourceReply, SourceState};
+pub(crate) use crate::source::{Processors, Source, SourceManager, SourceReply, SourceState};
 pub(crate) use crate::url::TremorURL;
 pub(crate) use crate::utils::hostname;
 pub(crate) use async_channel::{bounded, Receiver};

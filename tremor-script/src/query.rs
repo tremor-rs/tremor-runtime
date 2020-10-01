@@ -32,6 +32,7 @@ pub struct StmtRentalWrapper {
 }
 impl StmtRentalWrapper {
     /// Gets the wrapped statement
+    #[must_use]
     pub fn suffix(&self) -> &ast::Stmt {
         self.stmt.suffix()
     }
@@ -96,6 +97,7 @@ where
     'event: 'run,
 {
     /// Borrows the query
+    #[must_use]
     pub fn suffix(&self) -> &ast::Query {
         self.query.suffix()
     }
@@ -232,6 +234,7 @@ where
     }
 
     /// Formats an error within this script
+    #[must_use]
     pub fn format_error(&self, e: &Error) -> String {
         let mut h = DumbHighlighter::default();
         if self.format_error_with(&mut h, &e).is_ok() {

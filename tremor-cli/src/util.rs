@@ -291,7 +291,7 @@ pub(crate) fn highlight(is_pretty: bool, value: &Value) -> Result<()> {
         .filter_map(std::result::Result::ok)
         .collect();
 
-    let mut h = TermHighlighter::new();
+    let mut h = TermHighlighter::default();
     if let Err(e) = h.highlight(Some(&result), &lexed_tokens) {
         return Err(e.into());
     };

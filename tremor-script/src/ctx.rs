@@ -67,26 +67,31 @@ impl EventOriginUri {
     }
 
     /// return the schema
+    #[must_use]
     pub fn scheme(&self) -> &str {
         &self.scheme
     }
 
     /// return the host
+    #[must_use]
     pub fn host(&self) -> &str {
         &self.host
     }
 
     /// return the port
+    #[must_use]
     pub fn port(&self) -> Option<u16> {
         self.port
     }
 
     /// return the path
+    #[must_use]
     pub fn path(&self) -> &[String] {
         &self.path
     }
 
     /// Format as host and port
+    #[must_use]
     pub fn host_port(&self) -> String {
         if let Some(port) = self.port() {
             format!("{}:{}", self.host(), port)
@@ -133,6 +138,7 @@ pub struct EventContext {
 
 impl EventContext {
     /// Creates a new context
+    #[must_use]
     pub fn new(ingest_ns: u64, origin_uri: Option<EventOriginUri>) -> Self {
         Self {
             at: ingest_ns,
@@ -142,11 +148,13 @@ impl EventContext {
     }
 
     /// returns the events `ingest_ns`
+    #[must_use]
     pub fn ingest_ns(&self) -> u64 {
         self.at
     }
 
     /// returns the events origin uri
+    #[must_use]
     pub fn origin_uri(&self) -> &Option<EventOriginUri> {
         &self.origin_uri
     }

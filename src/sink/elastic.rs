@@ -59,8 +59,8 @@ pub struct Elastic {
     client: SyncClient,
     queue: AsyncSink<u64>,
     postprocessors: Postprocessors,
-    tx: Sender<SinkReply>,
-    rx: Receiver<SinkReply>,
+    tx: Sender<sink::Reply>,
+    rx: Receiver<sink::Reply>,
 }
 
 impl offramp::Impl for Elastic {
@@ -143,7 +143,11 @@ impl Elastic {
                 ..Event::default()
             };
             task::block_on(async {
-                if insight_tx.send(SinkReply::Insight(insight)).await.is_err() {
+                if insight_tx
+                    .send(sink::Reply::Insight(insight))
+                    .await
+                    .is_err()
+                {
                     error!("Failed to send insight")
                 };
 
@@ -169,7 +173,7 @@ impl Elastic {
                     ..Event::default()
                 };
 
-                if self.tx.send(SinkReply::Insight(insight)).await.is_err() {
+                if self.tx.send(sink::Reply::Insight(insight)).await.is_err() {
                     error!("Failed to send insight")
                 };
 
@@ -247,18 +251,16 @@ impl Sink for Elastic {
         self.drain_insights().await
     }
 
-    #[allow(clippy::too_many_arguments)]
     async fn init(
         &mut self,
         _sink_uid: u64,
         _codec: &dyn Codec,
         _codec_map: &HashMap<String, Box<dyn Codec>>,
-        _preprocessors: &[String],
-        postprocessors: &[String],
+        processors: Processors<'_>,
         _is_linked: bool,
-        _reply_channel: Sender<SinkReply>,
+        _reply_channel: Sender<sink::Reply>,
     ) -> Result<()> {
-        self.postprocessors = make_postprocessors(postprocessors)?;
+        self.postprocessors = make_postprocessors(processors.post)?;
         Ok(())
     }
 

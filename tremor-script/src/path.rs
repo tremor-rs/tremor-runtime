@@ -44,6 +44,7 @@ impl ModulePath {
     }
 
     /// Convert a relative file path to a module reference
+    #[must_use]
     pub fn file_to_module(rel_file: &str) -> String {
         rel_file
             .to_string()
@@ -51,6 +52,7 @@ impl ModulePath {
             .replace("/", "::")
     }
     /// Load module path
+    #[must_use]
     pub fn load() -> Self {
         load_(
             &std::env::var("TREMOR_PATH")
@@ -60,6 +62,7 @@ impl ModulePath {
 }
 
 /// Load module path
+#[must_use]
 pub fn load() -> ModulePath {
     ModulePath::load()
 }

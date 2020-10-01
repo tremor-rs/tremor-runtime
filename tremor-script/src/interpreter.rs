@@ -119,6 +119,7 @@ pub struct LocalStack<'stack> {
 
 impl<'stack> LocalStack<'stack> {
     /// Creates a stack with a given size
+    #[must_use]
     pub fn with_size(size: usize) -> Self {
         Self {
             values: vec![None; size],

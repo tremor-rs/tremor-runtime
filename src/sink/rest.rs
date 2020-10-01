@@ -77,7 +77,7 @@ pub struct Rest {
     config: Config,
     num_inflight_requests: Arc<AtomicMaxCounter>,
     is_linked: bool,
-    reply_channel: Option<Sender<SinkReply>>,
+    reply_channel: Option<Sender<sink::Reply>>,
     codec_task_handle: Option<JoinHandle<Result<()>>>,
     codec_task_tx: Option<Sender<CodecTaskInMsg>>,
 }
@@ -182,20 +182,18 @@ impl Sink for Rest {
         "json"
     }
 
-    #[allow(clippy::too_many_arguments)]
     async fn init(
         &mut self,
         sink_uid: u64,
         codec: &dyn Codec,
         codec_map: &HashMap<String, Box<dyn Codec>>,
-        preprocessors: &[String],
-        postprocessors: &[String],
+        processors: Processors<'_>,
         is_linked: bool,
-        reply_channel: Sender<SinkReply>,
+        reply_channel: Sender<sink::Reply>,
     ) -> Result<()> {
         // clone the hell out of all the shit
-        let postprocessors = make_postprocessors(postprocessors)?;
-        let preprocessors = make_preprocessors(preprocessors)?;
+        let postprocessors = make_postprocessors(processors.post)?;
+        let preprocessors = make_preprocessors(processors.pre)?;
         let my_codec = codec.boxed_clone();
         let my_codec_map = codec_map
             .iter()
@@ -257,7 +255,7 @@ async fn codec_task(
     codec_map: HashMap<String, Box<dyn Codec>>,
     endpoints: Vec<String>,
     default_method: Method,
-    reply_tx: Sender<SinkReply>,
+    reply_tx: Sender<sink::Reply>,
     in_rx: Receiver<CodecTaskInMsg>,
     is_linked: bool,
 ) -> Result<()> {
@@ -310,7 +308,7 @@ async fn codec_task(
                     CBAction::Ack
                 };
                 reply_tx
-                    .send(SinkReply::Insight(Event {
+                    .send(sink::Reply::Insight(Event {
                         id: id.clone(),
                         op_meta,
                         data: (Value::null(), Value::from(meta)).into(),
@@ -334,7 +332,7 @@ async fn codec_task(
                         Ok(response_events) => {
                             for response_event in response_events {
                                 if let Err(e) = reply_tx
-                                    .send(SinkReply::Response(RESPONSE, response_event))
+                                    .send(sink::Reply::Response(RESPONSE, response_event))
                                     .await
                                 {
                                     error!("Error sending response event: {}", e);
@@ -356,8 +354,9 @@ async fn codec_task(
                                 data: Value::from(data).into(),
                                 ..Event::default()
                             };
-                            if let Err(e) =
-                                reply_tx.send(SinkReply::Response(ERROR, error_event)).await
+                            if let Err(e) = reply_tx
+                                .send(sink::Reply::Response(ERROR, error_event))
+                                .await
                             {
                                 error!("Error sending error event: {}", e);
                             }
