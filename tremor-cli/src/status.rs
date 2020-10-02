@@ -49,6 +49,18 @@ pub(crate) fn h1(label: &str, what: &str) -> Result<()> {
     Ok(())
 }
 
+pub(crate) fn text(prefix: &str, data: &str) -> Result<()> {
+    let mut h = TermHighlighter::default();
+    h.reset()?;
+    writeln!(h.get_writer())?;
+    for line in data.lines() {
+        writeln!(h.get_writer(), "{} | {}", &prefix, &line.trim())?;
+    }
+    writeln!(h.get_writer())?;
+    h.finalize()?;
+    Ok(())
+}
+
 fn humanize(ts: u64) -> String {
     let mut ns = ts;
     if ns > 999 {

@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use super::super::status;
 use super::after;
 use super::assert;
 use super::before;
@@ -129,6 +130,7 @@ pub(crate) fn run_process(
     } else {
         // There were no assertions which is typical of benchmarks
         //
+        status::text("      ", &slurp_string(&fg_out_file)?)?;
         let mut report = HashMap::new();
         let elapsed = nanotime() - process_start;
         report.insert(
