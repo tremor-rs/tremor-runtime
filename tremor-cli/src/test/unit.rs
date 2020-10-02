@@ -36,6 +36,7 @@ const EXEC_OPTS: ExecOpts = ExecOpts {
     aggr: AggrType::Tick,
 };
 
+#[allow(clippy::too_many_arguments)]
 fn eval_suite_entrypoint(
     env: &Env,
     local: &LocalStack,
@@ -45,7 +46,7 @@ fn eval_suite_entrypoint(
     suite_result: &[Value<'_>],
     tags: &tag::TagFilter,
 
-    by_tag: &(Vec<String>, Vec<String>),
+    by_tag: (&[String], &[String]),
 ) -> Result<(stats::Stats, Vec<report::TestElement>)> {
     let mut elements = Vec::new();
     let mut stats = stats::Stats::new();
@@ -77,7 +78,7 @@ fn eval_suite_entrypoint(
                                 if let Value::Object(suite) = suite {
                                     if let Some(tests) = suite.get("tests") {
                                         let (s, mut e) = eval_suite_tests(
-                                            &env, &local, script, meta, l, tests, tags, by_tag,
+                                            &env, &local, script, meta, l, tests, &tags, by_tag,
                                         )?;
                                         elements.append(&mut e);
                                         stats.merge(&s);
@@ -95,6 +96,7 @@ fn eval_suite_entrypoint(
 }
 
 #[allow(clippy::too_many_lines)]
+#[allow(clippy::too_many_arguments)]
 fn eval_suite_tests(
     env: &Env,
     local: &LocalStack,
@@ -103,7 +105,7 @@ fn eval_suite_tests(
     suite_spec: &List,
     suite_result: &Value,
     suite_tags: &test::TagFilter,
-    by_tag: &(Vec<String>, Vec<String>),
+    by_tag: (&[String], &[String]),
 ) -> Result<(stats::Stats, Vec<report::TestElement>)> {
     let mut elements = Vec::new();
     let mut stats = stats::Stats::new();
@@ -250,13 +252,13 @@ fn eval_suite_tests(
                 let case_tags = suite_tags;
 
                 let (matched, is_match) = case_tags.matches(&by_tag.0, &by_tag.1);
-                if !is_match {
+                if is_match {
+                    status::h1("    Test", "")?;
+                    status::tagsx("        ", &case_tags, Some(&matched), Some(&by_tag.1))?;
+                } else {
                     status::h1("    Test ( Skipping )", "")?;
                     status::tagsx("        ", &case_tags, Some(&matched), Some(&by_tag.1))?;
                     continue;
-                } else {
-                    status::h1("    Test", "")?;
-                    status::tagsx("        ", &case_tags, Some(&matched), Some(&by_tag.1))?;
                 }
 
                 // Test record
@@ -299,7 +301,7 @@ fn eval_suite_tests(
 pub(crate) fn run_suite(
     path: &Path,
     scenario_tags: &tag::TagFilter,
-    by_tag: (Vec<String>, Vec<String>),
+    by_tag: (&[String], &[String]),
 ) -> Result<report::TestReport> {
     println!();
 
@@ -429,7 +431,7 @@ pub(crate) fn run_suite(
                                             r,
                                             &specs,
                                             &suite_tags,
-                                            &by_tag,
+                                            by_tag,
                                         )?;
                                         stat_s.merge(&test_stats);
                                         elements.append(&mut test_reports);

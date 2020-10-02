@@ -46,7 +46,7 @@ fn suite_bench(
     base: &Path,
     root: &Path,
     meta: &Meta,
-    by_tag: (Vec<String>, Vec<String>),
+    by_tag: (&[String], &[String]),
 ) -> Result<(stats::Stats, Vec<report::TestReport>)> {
     if let Ok(benches) = GlobWalkerBuilder::new(root, &meta.includes)
         .case_insensitive(true)
@@ -93,7 +93,7 @@ fn suite_integration(
     base: &Path,
     root: &Path,
     meta: &Meta,
-    by_tag: (Vec<String>, Vec<String>),
+    by_tag: (&[String], &[String]),
 ) -> Result<(stats::Stats, Vec<report::TestReport>)> {
     if let Ok(tests) = GlobWalkerBuilder::new(root, &meta.includes)
         .case_insensitive(true)
@@ -109,7 +109,6 @@ fn suite_integration(
 
         for test in tests {
             let root = test.path();
-            let root_str = root.to_string_lossy().to_string();
             let bench_root = root.to_string_lossy();
             let tags = tag::resolve(base, root)?;
 
@@ -121,8 +120,7 @@ fn suite_integration(
                 )?;
                 // Set cwd to test root
                 let cwd = std::env::current_dir()?;
-                file::set_current_dir(&base)?;
-                // std::env::set_current_dir(Path::new(&root_str))?;
+                std::env::set_current_dir(Path::new(&root))?;
                 status::tags(&tags, Some(&matched), Some(&by_tag.1))?;
 
                 // Run integration tests
@@ -163,7 +161,7 @@ fn suite_unit(
     base: &Path,
     root: &Path,
     _meta: &Meta,
-    by_tag: (Vec<String>, Vec<String>),
+    by_tag: (&[String], &[String]),
 ) -> Result<(stats::Stats, Vec<report::TestReport>)> {
     if let Ok(suites) = GlobWalkerBuilder::new(root, "all.tremor")
         .case_insensitive(true)
@@ -176,16 +174,16 @@ fn suite_unit(
 
         status::h0("Framework", "Finding unit test scenarios")?;
 
-        let filter = by_tag.clone();
+        let filter = by_tag;
         for suite in suites {
             status::h0("  Unit Test Scenario", &suite.path().to_string_lossy())?;
             let scenario_tags = tag::resolve(base, root)?;
             let (matched, _is_match) =
                 scenario_tags.matches(&scenario_tags.includes(), &scenario_tags.excludes());
-            let denying = filter.1.clone();
+            let denying = filter.1;
             status::tags(&scenario_tags, Some(&matched), Some(&denying))?;
 
-            let report = unit::run_suite(&suite.path(), &scenario_tags, by_tag.clone())?;
+            let report = unit::run_suite(&suite.path(), &scenario_tags, by_tag)?;
             stats.merge(&report.stats);
             status::stats(&report.stats, "  ")?;
             status::duration(report.duration, "    ")?;
@@ -205,7 +203,7 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
     let kind: test::TestKind = matches.value_of("MODE").unwrap_or_default().try_into()?;
     let path = matches.value_of("PATH").unwrap_or_default();
     let report = matches.value_of("REPORT").unwrap_or_default();
-    let includes: Vec<String> = if matches.is_present("INCLUDES") {
+    let mut includes: Vec<String> = if matches.is_present("INCLUDES") {
         if let Some(matches) = matches.values_of("INCLUDES") {
             matches.map(std::string::ToString::to_string).collect()
         } else {
@@ -247,8 +245,13 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
             let mut meta_str = slurp_string(&meta.path().to_string_lossy())?;
             let meta: Meta = simd_json::from_str(meta_str.as_mut_str())?;
 
+            if meta.kind == TestKind::All {
+                includes.push("all".into());
+            }
+
             if meta.kind == TestKind::Bench && (kind == TestKind::All || kind == TestKind::Bench) {
-                let tag_filter = (includes.clone(), excludes.clone());
+                includes.push("bench".into());
+                let tag_filter = (includes.as_slice(), excludes.as_slice());
                 let (stats, test_reports) = suite_bench(base, root, &meta, tag_filter)?;
                 reports.insert("bench".to_string(), test_reports);
                 bench_stats.merge(&stats);
@@ -258,7 +261,8 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
             if meta.kind == TestKind::Integration
                 && (kind == TestKind::All || kind == TestKind::Integration)
             {
-                let tag_filter = (includes.clone(), excludes.clone());
+                includes.push("integration".into());
+                let tag_filter = (includes.as_slice(), excludes.as_slice());
                 let (stats, test_reports) = suite_integration(base, root, &meta, tag_filter)?;
                 reports.insert("integration".to_string(), test_reports);
                 integration_stats.merge(&stats);
@@ -268,15 +272,17 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
             if meta.kind == TestKind::Command
                 && (kind == TestKind::All || kind == TestKind::Command)
             {
-                let tag_filter = (includes.clone(), excludes.clone());
-                let (stats, test_reports) = command::suite_command(root, &meta, &tag_filter)?;
+                includes.push("command".into());
+                let tag_filter = (includes.as_slice(), excludes.as_slice());
+                let (stats, test_reports) = command::suite_command(base, root, &meta, tag_filter)?;
                 reports.insert("command".to_string(), test_reports);
                 cmd_stats.merge(&stats);
                 status::hr()?;
             }
 
             if meta.kind == TestKind::Unit && (kind == TestKind::All || kind == TestKind::Unit) {
-                let tag_filter = (includes.clone(), excludes.clone());
+                includes.push("unit".into());
+                let tag_filter = (includes.as_slice(), excludes.as_slice());
                 let (stats, test_reports) = suite_unit(base, root, &meta, tag_filter)?;
                 reports.insert("unit".to_string(), test_reports);
                 unit_stats.merge(&stats);

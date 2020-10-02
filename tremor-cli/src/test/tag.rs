@@ -46,11 +46,17 @@ impl TagFilter {
     }
 
     pub(crate) fn includes(&self) -> Vec<String> {
-        self.includes.iter().map(|x| x.to_string()).collect()
+        self.includes
+            .iter()
+            .map(std::string::ToString::to_string)
+            .collect()
     }
 
     pub(crate) fn excludes(&self) -> Vec<String> {
-        self.excludes.iter().map(|x| x.to_string()).collect()
+        self.excludes
+            .iter()
+            .map(std::string::ToString::to_string)
+            .collect()
     }
 
     pub(crate) fn matches(&self, allowing: &[String], denying: &[String]) -> (Vec<String>, bool) {
@@ -71,7 +77,7 @@ impl TagFilter {
             // we have a match
             (
                 accepted.iter().map(|x| (*x).to_string()).collect(),
-                accepted.len() > 0 && redacted.len() == 0,
+                !accepted.is_empty() && redacted.is_empty(),
             )
         }
     }
@@ -93,7 +99,7 @@ pub(crate) fn resolve(base: &Path, other: &Path) -> Result<TagFilter> {
         let tags_file = format!("{}/tags.json", &base);
         let mut tags = TagFilter::new(vec![], vec![]);
         tags = tags.join(Some(maybe_slurp_tags(&tags_file)?));
-        for dirname in rel.split("/") {
+        for dirname in rel.split('/') {
             base = format!("{}/{}", base, dirname);
             let tags_file = format!("{}/tags.json", &base);
             tags = tags.join(Some(maybe_slurp_tags(&tags_file)?));
