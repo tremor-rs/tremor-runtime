@@ -279,9 +279,9 @@ dependencies = [
 
 [[package]]
 name = "async-sse"
-version = "4.0.0"
+version = "4.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "885fb340b166aff3a3b16dd49ef169d8ee34428aa10c0432c61fff584aa222b9"
+checksum = "2a127da64eb321f5b698a43fb9b976d1e5fc1fd3c2f961322d6cc06ce721b47b"
 dependencies = [
  "async-channel",
  "async-std",
