@@ -97,7 +97,7 @@ where
 fn main() -> Result<()> {
     let yaml = load_yaml!("./cli.yaml");
     let app = App::from(yaml);
-    let app = app.version(option_env!("CARGO_PKG_VERSION").unwrap_or(""));
+    let app = app.version(tremor_runtime::version::VERSION_LONG);
     let app = app.global_setting(AppSettings::ColoredHelp);
     let app = app.global_setting(AppSettings::ColorAlways);
     let matches = app.clone().get_matches();
