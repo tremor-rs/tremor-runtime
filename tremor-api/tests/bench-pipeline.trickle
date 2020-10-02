@@ -1,2 +1,0 @@
-#!config id = "main"
-select event from in into out;
