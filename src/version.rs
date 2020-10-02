@@ -18,6 +18,13 @@ use rdkafka::util::get_rdkafka_version;
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg(not(debug_assertions))]
+/// Long version include build info
+pub const VERSION_LONG: &str = env!("CARGO_PKG_VERSION");
+#[cfg(debug_assertions)]
+/// Long version include build info
+pub const VERSION_LONG: &str = concat!(env!("CARGO_PKG_VERSION"), " (DEBUG)");
+
+#[cfg(not(debug_assertions))]
 /// Checks if a we are in a debug build
 pub const DEBUG: bool = false;
 #[cfg(debug_assertions)]
@@ -26,22 +33,14 @@ pub const DEBUG: bool = true;
 
 /// Prints tremor and librdkafka version.
 pub fn print() {
-    if DEBUG {
-        eprintln!("tremor version: {} (DEBUG)", VERSION);
-    } else {
-        eprintln!("tremor version: {}", VERSION);
-    }
+    eprintln!("tremor version: {}", VERSION_LONG);
     let (version_n, version_s) = get_rdkafka_version();
     eprintln!("rd_kafka version: 0x{:08x}, {}", version_n, version_s);
 }
 
 /// Logs tremor and librdkafka version.
 pub fn log() {
-    if DEBUG {
-        info!("tremor version: {} (DEBUG)", VERSION);
-    } else {
-        info!("tremor version: {}", VERSION);
-    }
+    info!("tremor version: {}", VERSION_LONG);
     let (version_n, version_s) = get_rdkafka_version();
     info!("rd_kafka version: 0x{:08x}, {}", version_n, version_s);
 }
