@@ -49,18 +49,6 @@ pub(crate) fn h1(label: &str, what: &str) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn skip(what: &str) -> Result<()> {
-    let mut h = TermHighlighter::new();
-    fg_bold!(h, Black);
-    write!(h.get_writer(), "Skipping")?;
-    h.reset()?;
-    writeln!(h.get_writer(), ": {}", &what)?;
-    h.reset()?;
-    h.finalize()?;
-    drop(h);
-    Ok(())
-}
-
 fn humanize(ts: u64) -> String {
     let mut ns = ts;
     if ns > 999 {

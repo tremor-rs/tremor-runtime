@@ -20,7 +20,7 @@ use crate::test::assert;
 use crate::test::before;
 use crate::test::report;
 use crate::test::stats;
-use crate::test::tag::Tags;
+use crate::test::tag::{self, Tags};
 use crate::test::Meta;
 use crate::util::slurp_string;
 use globwalk::{FileType, GlobWalkerBuilder};
@@ -39,6 +39,7 @@ pub(crate) struct CommandRun {
 #[derive(Deserialize, Debug)]
 pub(crate) struct CommandSuite {
     pub(crate) name: String,
+    pub(crate) tags: Option<Tags>,
     pub(crate) cases: Vec<CommandTest>,
 }
 
@@ -53,9 +54,10 @@ pub(crate) struct CommandTest {
 
 #[allow(clippy::too_many_lines)]
 pub(crate) fn suite_command(
+    base: &Path,
     root: &Path,
-    meta: &Meta,
-    by_tag: &(Vec<String>, Vec<String>),
+    _meta: &Meta,
+    by_tag: (&[String], &[String]),
 ) -> Result<(stats::Stats, Vec<report::TestReport>)> {
     let api_suites = GlobWalkerBuilder::new(root, "**/command.yml")
         .case_insensitive(true)
@@ -69,6 +71,8 @@ pub(crate) fn suite_command(
             ))
         })?;
 
+    status::h0("Framework", "Finding command-driven test scenarios")?;
+
     let mut evidence = HashMap::new();
 
     let mut suites: HashMap<String, report::TestSuite> = HashMap::new();
@@ -77,14 +81,15 @@ pub(crate) fn suite_command(
     let report_start = nanotime();
     let api_suites = api_suites.filter_map(std::result::Result::ok);
     for suite in api_suites {
-        if let Some(root) = suite.path().parent() {
-            let base = root.to_string_lossy().to_string();
+        if let Some(suite_root) = suite.path().parent() {
+            let base_str = suite_root.to_str().unwrap_or_default();
+            let base_tags = tag::resolve(base, suite_root)?;
 
             // Set cwd to test root
             let cwd = std::env::current_dir()?;
-            file::set_current_dir(&base)?;
+            file::set_current_dir(&suite_root)?;
 
-            let mut before = before::BeforeController::new(&base);
+            let mut before = before::BeforeController::new(base_str);
             let before_process = before.spawn()?;
             thread::spawn(move || {
                 if let Err(e) = before.capture(before_process) {
@@ -95,26 +100,21 @@ pub(crate) fn suite_command(
             let suite_start = nanotime();
             let command_str = slurp_string(&suite.path().to_string_lossy())?;
             let suite = serde_yaml::from_str::<CommandRun>(&command_str)?;
-
-            match &suite.tags {
-                Some(tags) => {
-                    if let (_, false) = by_tag.matches(&tags) {
-                        status::skip(&suite.name)?;
-                        continue; // SKIP
-                    } else {
-                        status::tags(&by_tag, Some(&tags))?;
-                    }
-                }
-                None => (),
-            }
-
             for suite in suite.suites {
                 status::h0("Command Suite: ", &suite.name)?;
                 status::hr()?;
+                let suite_tags = base_tags.join(suite.tags);
                 let mut casex = stats::Stats::new();
                 for case in suite.cases {
-                    status::h1("Command Test", &case.name)?;
-
+                    let current_tags = suite_tags.join(case.tags.clone());
+                    if let (_, false) = current_tags.matches(&by_tag.0, &by_tag.1) {
+                        status::h1("Command Test ( Skipping )", &case.name)?;
+                        status::tags(&current_tags, Some(&by_tag.0), Some(&by_tag.1))?;
+                        continue; // SKIP
+                    } else {
+                        status::h1("Command Test", &case.name)?;
+                        status::tags(&current_tags, Some(&by_tag.0), Some(&by_tag.1))?;
+                    }
                     let args = shell_words::split(&case.command).unwrap_or_default();
 
                     if let Some((cmd, args)) = args.split_first() {
@@ -125,8 +125,8 @@ pub(crate) fn suite_command(
                             job::TargetProcess::new_with_stderr(&resolved_cmd, &args)?;
                         let exit_status = fg_process.wait_with_output();
 
-                        let fg_out_file = format!("{}/fg.{}.out.log", base.clone(), counter);
-                        let fg_err_file = format!("{}/fg.{}.err.log", base.clone(), counter);
+                        let fg_out_file = format!("{}/fg.{}.out.log", base_str, counter);
+                        let fg_err_file = format!("{}/fg.{}.err.log", base_str, counter);
                         let start = nanotime();
                         fg_process.tail(&fg_out_file, &fg_err_file)?;
                         let elapsed = nanotime() - start;
@@ -174,11 +174,11 @@ pub(crate) fn suite_command(
                 status::hr()?;
             }
 
-            before::update_evidence(&base, &mut evidence)?;
+            before::update_evidence(base_str, &mut evidence)?;
 
-            let mut after = after::AfterController::new(&base);
+            let mut after = after::AfterController::new(base_str);
             after.spawn()?;
-            after::update_evidence(&base, &mut evidence)?;
+            after::update_evidence(base_str, &mut evidence)?;
 
             // Reset cwd
             file::set_current_dir(&cwd)?;
@@ -220,9 +220,8 @@ fn process_testcase(
             "  ",
             "Assert 0",
             &format!("Status {}", &spec.name.trim()),
+            Some(&spec.status.to_string()),
             success,
-            &spec.status.to_string(),
-            &code.to_string(),
         )?;
         elements.push(report::TestElement {
             description: format!("Process expected to exit with status code {}", spec.status),
@@ -243,7 +242,7 @@ fn process_testcase(
     };
 
     let (stat_assert, mut filebased_assert_elements) =
-        assert::process_filebased_asserts(stdout_path, stderr_path, &spec.expects, &None)?;
+        assert::process_filebased_asserts("  ", stdout_path, stderr_path, &spec.expects, &None)?;
     stat_s.assert += stat_assert.assert;
     elements.append(&mut filebased_assert_elements);
 
