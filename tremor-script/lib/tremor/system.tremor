@@ -15,3 +15,6 @@ intrinsic fn ingest_ns() as system::ingest_ns;
 ##
 ## Returns a `string`
 intrinsic fn instance() as system::instance;
+
+## Returns the current time in epoch nanoseconds
+intrinsic fn nanotime() as system::nanotime;

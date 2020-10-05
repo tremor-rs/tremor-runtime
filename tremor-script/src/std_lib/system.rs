@@ -13,5 +13,29 @@
 // limitations under the License.
 
 use crate::registry::Registry;
+use crate::tremor_fn;
+use tremor_common::time::nanotime;
 
-pub fn load(_registry: &mut Registry) {}
+pub fn load(registry: &mut Registry) {
+    registry.insert(tremor_fn!(system::nanotime(_context) {
+      Ok(Value::from(nanotime()))
+    }));
+}
+
+#[cfg(test)]
+mod test {
+    use crate::registry::fun;
+    use simd_json::BorrowedValue as Value;
+    use tremor_common::time::nanotime;
+    #[test]
+    fn system_nanotime() {
+        let f = fun("system", "nanotime");
+        let r = f(&[]);
+        if let Ok(Value::Static(simd_json::StaticNode::U64(x))) = r {
+            let status = x <= nanotime();
+            assert!(status);
+        } else {
+            unreachable!("test failed")
+        }
+    }
+}

@@ -159,4 +159,6 @@ test_cases!(
     fn_nest2_fib,
     fn_nest2_abs_fib,
     pp_fn_fib,
+    heredoc_interpolation,
+    heredoc_usefn_interpolation,
 );
