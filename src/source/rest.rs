@@ -167,7 +167,6 @@ async fn handle_request(mut req: Request<ServerState>) -> tide::Result<Response>
         })
         .collect::<Value>();
 
-    // TODO: consider stuff like charset here?
     let ct: Option<Mime> = req.content_type();
     let codec_override = ct.map(|ct| ct.essence().to_string());
 
@@ -192,7 +191,7 @@ async fn handle_request(mut req: Request<ServerState>) -> tide::Result<Response>
         codec_override.clone().map_or(Value::null(), |s| s.into()),
     )?;
 
-    let data = req.body_bytes().await?;
+    let data = dbg!(req.body_bytes().await?);
     if req.state().link {
         let (response_tx, response_rx) = unbounded();
 
@@ -297,6 +296,7 @@ fn make_response(
         (None, None) => None,
         (None, Some(ct)) | (Some(ct), _) => Some(Mime::from_str(ct)?),
     };
+
     if let Some((mime, dynamic_codec)) = maybe_content_type
         .and_then(|mime| codec_map.get(mime.essence()).map(|c| (mime, c.as_ref())))
     {
@@ -349,6 +349,7 @@ impl Source for Int {
         codec_map: &HashMap<String, Box<dyn Codec>>,
     ) -> Result<()> {
         if let Some(event_id) = event.id.get(self.uid) {
+            dbg!(&event);
             if let Some(response_tx) = self.response_txes.get(&event_id) {
                 let res = make_response(codec, codec_map, &event)?;
                 response_tx.send(res).await?

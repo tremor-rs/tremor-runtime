@@ -159,8 +159,6 @@ where
     codec_map: HashMap<String, Box<dyn Codec>>,
     metrics_reporter: RampReporter,
     triggered: bool,
-    // TODO maybe just have pipelines_out and pipelines_error as Vec
-    // instead of port -> pipelines mapping here
     pipelines_out: Vec<(TremorURL, pipeline::Addr)>,
     pipelines_err: Vec<(TremorURL, pipeline::Addr)>,
     id: u64,
