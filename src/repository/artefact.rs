@@ -200,7 +200,7 @@ impl Artefact for Pipeline {
         id.trim_to_instance();
         match (id.resource_type(), id.instance()) {
             (Some(ResourceType::Pipeline), Some(_id)) => Ok(id),
-            _ => Err("URL does not contain a pipeline servant id".into()),
+            _ => Err(format!("URL does not contain a pipeline servant id: {}", id).into()),
         }
     }
 }
@@ -349,7 +349,7 @@ impl Artefact for OfframpArtefact {
         id.trim_to_instance();
         match (id.resource_type(), id.instance()) {
             (Some(ResourceType::Offramp), Some(_)) => Ok(id),
-            _ => Err("URL does not contain a offramp servant id".into()),
+            _ => Err(format!("URL does not contain a offramp servant id: {}", id).into()),
         }
     }
 }
@@ -480,7 +480,7 @@ impl Artefact for OnrampArtefact {
         id.trim_to_instance();
         match (id.resource_type(), id.instance()) {
             (Some(ResourceType::Onramp), Some(_id)) => Ok(id),
-            _ => Err(format!("URL {} does not contain a onramp servant id", id).into()),
+            _ => Err(format!("URL does not contain a onramp servant id: {}", id).into()),
         }
     }
 }
@@ -677,7 +677,7 @@ impl Artefact for Binding {
         id.trim_to_instance();
         match (id.resource_type(), id.instance()) {
             (Some(ResourceType::Binding), Some(_id)) => Ok(id),
-            _ => Err(format!("URL {} does not contain a binding servant id", id).into()),
+            _ => Err(format!("URL does not contain a binding servant id: {}", id).into()),
         }
     }
 }
