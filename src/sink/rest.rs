@@ -29,7 +29,7 @@ use std::str::FromStr;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
-use surf::{Body, Request, Response};
+use surf::{Body, Client, Request, Response};
 use tremor_pipeline::{Ids, OpMeta};
 
 /// custom Url struct for parsing a url
@@ -231,6 +231,7 @@ enum CodecTaskInMsg {
         response: Response,
         duration: u64,
     },
+    ReportFailure(Ids, EventOriginUri, Error),
 }
 
 enum SendTaskInMsg {
@@ -246,6 +247,7 @@ pub struct Rest {
     reply_channel: Option<Sender<sink::Reply>>,
     codec_task_handle: Option<JoinHandle<Result<()>>>,
     codec_task_tx: Option<Sender<CodecTaskInMsg>>,
+    client: Client,
 }
 
 impl offramp::Impl for Rest {
@@ -253,6 +255,7 @@ impl offramp::Impl for Rest {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
             let num_inflight_requests = Arc::new(AtomicMaxCounter::new(config.concurrency));
+            let client = surf::client();
             Ok(SinkManager::new_box(Self {
                 uid: 0,
                 config,
@@ -261,6 +264,7 @@ impl offramp::Impl for Rest {
                 reply_channel: None,
                 codec_task_handle: None,
                 codec_task_tx: None,
+                client: client,
             }))
         } else {
             Err("Rest offramp requires a configuration.".into())
@@ -291,8 +295,8 @@ impl Sink for Rest {
             let (tx, rx) = bounded::<SendTaskInMsg>(1);
             let max_counter = self.num_inflight_requests.clone();
             let sink_uid = self.uid;
+            let http_client = self.client.clone(); // should be quite cheap, just some Arcs
 
-            // TODO: keep track of the join handle - in order to cancel operations
             // spawn send task
             task::spawn(async move {
                 let id = event.id.clone();
@@ -317,20 +321,30 @@ impl Sink for Rest {
                             }),
                         };
                         // send request
-                        // TODO reuse client
-                        if let Ok(response) = surf::client().send(request).await {
-                            #[allow(clippy::cast_possible_truncation)]
-                            // we dont care about the upper 64 bit
-                            let duration = start.elapsed().as_millis() as u64; // measure response duration
-                            codec_task_channel
-                                .send(CodecTaskInMsg::ToEvent {
-                                    id,
-                                    origin_uri: Box::new(event_origin_uri),
-                                    op_meta,
-                                    response,
-                                    duration,
-                                })
-                                .await?
+                        match http_client.send(request).await {
+                            Ok(response) => {
+                                #[allow(clippy::cast_possible_truncation)]
+                                // we dont care about the upper 64 bit
+                                let duration = start.elapsed().as_millis() as u64; // measure response duration
+                                codec_task_channel
+                                    .send(CodecTaskInMsg::ToEvent {
+                                        id,
+                                        origin_uri: Box::new(event_origin_uri),
+                                        op_meta,
+                                        response,
+                                        duration,
+                                    })
+                                    .await?
+                            }
+                            Err(e) => {
+                                codec_task_channel
+                                    .send(CodecTaskInMsg::ReportFailure(
+                                        id,
+                                        event_origin_uri,
+                                        e.into(),
+                                    ))
+                                    .await?;
+                            }
                         }
                     }
                     SendTaskInMsg::Failed => {} // just stop the task here, error alrady handled and reported in codec_task
@@ -411,6 +425,19 @@ impl Sink for Rest {
     }
 }
 
+struct ResponseIdGenerator(u64);
+impl ResponseIdGenerator {
+    fn next(&mut self) -> u64 {
+        let res = self.0;
+        self.0 += 1;
+        res
+    }
+
+    fn new() -> Self {
+        Self(0)
+    }
+}
+
 // TODO: use headers from config
 #[allow(clippy::too_many_arguments, clippy::too_many_lines)]
 async fn codec_task(
@@ -426,7 +453,7 @@ async fn codec_task(
     is_linked: bool,
 ) -> Result<()> {
     debug!("REST Sink codec task started.");
-    let mut response_id: u64 = 0;
+    let mut response_ids = ResponseIdGenerator::new();
 
     while let Ok(msg) = in_rx.recv().await {
         match msg {
@@ -460,9 +487,8 @@ async fn codec_task(
                             }
                         }
                         // send response through error port
-                        response_id += 1;
                         let error_event = create_error_response(
-                            Ids::new(sink_uid, response_id),
+                            Ids::new(sink_uid, response_ids.next()),
                             &event.id,
                             400,
                             EventOriginUri {
@@ -521,7 +547,9 @@ async fn codec_task(
                     .await
                     {
                         Ok(response_events) => {
-                            for response_event in response_events {
+                            for mut response_event in response_events {
+                                let my_id = Ids::new(sink_uid, response_ids.next());
+                                response_event.id.merge(&my_id);
                                 if let Err(e) = reply_tx
                                     .send(sink::Reply::Response(RESPONSE, response_event))
                                     .await
@@ -536,11 +564,8 @@ async fn codec_task(
                                 "[Rest Offramp {}] Error encoding the request: {}",
                                 sink_uid, &e
                             );
-
-                            response_id += 1;
-
                             let error_event = create_error_response(
-                                Ids::new(sink_uid, response_id),
+                                Ids::new(sink_uid, response_ids.next()),
                                 &id,
                                 500,
                                 origin_uri.as_ref().clone(),
@@ -573,6 +598,34 @@ async fn codec_task(
                 {
                     error!("Error sending CB event {}", e);
                 };
+            }
+            CodecTaskInMsg::ReportFailure(id, event_origin_uri, e) => {
+                // report send error as CB disconnect and response via ERROR port
+                if let Err(send_err) = reply_tx
+                    .send(sink::Reply::Insight(Event::cb_trigger(nanotime())))
+                    .await
+                {
+                    error!(
+                        "Error sending CB trigger event for REST sink {} and event {}: {}",
+                        sink_uid, id, send_err
+                    );
+                }
+                let error_event = create_error_response(
+                    Ids::new(sink_uid, response_ids.next()),
+                    &id,
+                    503,
+                    event_origin_uri,
+                    &e,
+                );
+                if let Err(send_err) = reply_tx
+                    .send(sink::Reply::Response(ERROR, error_event))
+                    .await
+                {
+                    error!(
+                        "Error sending error response for failed request send: {}",
+                        send_err
+                    );
+                }
             }
         }
     }
@@ -634,6 +687,10 @@ fn build_request(
         if headers.is_empty() {
             if let Some(map) = meta.get("request_headers").and_then(Value::as_object) {
                 for (header_name, v) in map {
+                    // filter out content-length (might be carried over from received request), likely to have changed
+                    if "content-length".eq_ignore_ascii_case(header_name) {
+                        continue;
+                    }
                     if let Some(value) = v.as_str() {
                         headers.push((header_name, value));
                         // TODO: deduplicate
@@ -680,6 +737,7 @@ fn build_request(
         };
     }
     let endpoint = endpoint.map_or_else(|| config_endpoint.as_url(), |ep| ep.as_url())?;
+    debug!("endpoint [{}] chosen", &endpoint);
     let host = match (endpoint.host(), endpoint.port()) {
         (Some(host), Some(port)) => Some(format!("{}:{}", host, port)),
         (Some(host), _) => Some(host.to_string()),
@@ -770,7 +828,7 @@ async fn build_response_events(
 
 /// build an error event bearing error information and metadata to be handled as http response
 fn create_error_response(
-    error_id: Ids,
+    mut error_id: Ids,
     event_id: &Ids,
     status: u16,
     origin_uri: EventOriginUri,
@@ -787,6 +845,7 @@ fn create_error_response(
 
     error_data.insert_nocheck("error".into(), Value::from(err_str));
     error_data.insert_nocheck("event_id".into(), Value::from(event_id.to_string()));
+    error_id.merge(event_id); // make sure we carry over the old events ids
     Event {
         id: error_id,
         data: (error_data, meta).into(),
