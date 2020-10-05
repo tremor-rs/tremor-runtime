@@ -26,6 +26,7 @@ COPY tremor-api ./tremor-api
 COPY tremor-influx ./tremor-influx
 # Binaries
 COPY tremor-cli ./tremor-cli
+COPY tremor-common ./tremor-common
 
 RUN cat /proc/cpuinfo
 RUN cargo build --release --all --verbose
