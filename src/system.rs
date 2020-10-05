@@ -431,6 +431,9 @@ impl World {
                 self.repo.bind_offramp(id).await?;
                 // We link to the metrics pipeline
                 let res = self.reg.publish_offramp(id, servant).await?;
+                // FIXME: .unwrap() why does this connect the metrics pipeline to to
+                // it is a 'magic' way to coinnect offramp/metrics to metrics-pipeline/in
+                // we really shouldn't do this
                 let m = vec![(METRICS_PIPELINE.clone(), id.clone())]
                     .into_iter()
                     .collect();

@@ -262,6 +262,7 @@ impl Manager {
                             }
                             Msg::Connect { id, addr } => {
                                 if id == *METRICS_PIPELINE {
+                                    // FIXME: .unwrap() this abuses connect to connect a outoing pipeline
                                     info!(
                                         "[Offramp::{}] Connecting system metrics pipeline {}",
                                         offramp_url, id
@@ -297,6 +298,7 @@ impl Manager {
                                 offramp.add_dest_pipeline(port, id, *addr);
                             }
                             Msg::Disconnect { id, tx } => {
+                                // FIXME: .unwrap() we can't disconnect destination pipelines
                                 info!("[Offramp::{}] Disconnecting pipeline {}", offramp_url, id);
                                 pipelines.remove(&id);
                                 let r = offramp.remove_pipeline(id.clone());
