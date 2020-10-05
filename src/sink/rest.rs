@@ -20,7 +20,11 @@ use async_std::task::JoinHandle;
 use halfbrown::HashMap;
 use http_types::mime::Mime;
 use http_types::Method;
+use serde::de::{self, MapAccess, Visitor};
+use serde::{Deserialize, Deserializer};
 use std::borrow::Borrow;
+use std::fmt;
+use std::marker::PhantomData;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -28,10 +32,170 @@ use std::time::Instant;
 use surf::{Body, Request, Response};
 use tremor_pipeline::{Ids, OpMeta};
 
+/// custom Url struct for parsing a url
+#[derive(Clone, Debug, Deserialize, Default, PartialEq)]
+pub struct Endpoint {
+    scheme: Option<String>,
+    username: Option<String>,
+    password: Option<String>,
+    host: Option<String>,
+    port: Option<u16>,
+    path: Option<String>,
+    query: Option<String>,
+    fragment: Option<String>,
+}
+
+fn none_if_empty(s: &str) -> Option<String> {
+    if s.is_empty() {
+        None
+    } else {
+        Some(s.to_string())
+    }
+}
+
+fn err(s: &str) -> Error {
+    s.into()
+}
+
+impl Endpoint {
+    fn as_url(&self) -> Result<url::Url> {
+        // scheme is the default, and host will be overwritten anyways, as relative http uris are not supported anyways
+        self.as_url_with_base("http://localhost")
+    }
+
+    // expensive but seemingly correct way of populating a url from this struct
+    fn as_url_with_base(&self, base_url: &str) -> Result<url::Url> {
+        let mut res = url::Url::parse(base_url)?; //stupid placeholder, no other way to create a url
+        if let Some(scheme) = &self.scheme {
+            res.set_scheme(scheme.as_str())
+                .map_err(|_| err("Invalid URI scheme"))?;
+        };
+        if let Some(username) = &self.username {
+            res.set_username(username.as_str())
+                .map_err(|_| err("Invalid URI username"))?;
+        };
+        if let Some(password) = &self.password {
+            res.set_password(Some(password.as_str()))
+                .map_err(|_| err("Invalid URI password"))?;
+        };
+
+        if let Some(host) = &self.host {
+            res.set_host(Some(host.as_str()))?;
+        } else {
+            res.set_host(None)?;
+        }
+        res.set_port(self.port)
+            .map_err(|_| err("Invalid URI port"))?;
+        if let Some(path) = &self.path {
+            res.set_path(path.as_str());
+        };
+        if let Some(query) = &self.query {
+            res.set_query(Some(query.as_str()));
+        }
+        if let Some(fragment) = &self.fragment {
+            res.set_fragment(Some(fragment.as_str()));
+        }
+        Ok(res)
+    }
+
+    /// overwrite fields in self with existing properties in `endpoint_value`
+    fn merge(&mut self, endpoint_value: &Value) {
+        if let Some(scheme) = endpoint_value.get("scheme").and_then(|s| s.as_str()) {
+            self.scheme = Some(scheme.to_string());
+        }
+        if let Some(host) = endpoint_value.get("host").and_then(|s| s.as_str()) {
+            self.host = Some(host.to_string());
+        }
+        if let Some(port) = endpoint_value.get("port").and_then(|s| s.as_u16()) {
+            self.port = Some(port);
+        }
+        if let Some(username) = endpoint_value.get("username").and_then(|s| s.as_str()) {
+            self.username = Some(username.to_string());
+        }
+        if let Some(password) = endpoint_value.get("password").and_then(|s| s.as_str()) {
+            self.password = Some(password.to_string());
+        }
+        if let Some(path) = endpoint_value.get("path").and_then(|s| s.as_str()) {
+            self.path = Some(path.to_string());
+        }
+        if let Some(query) = endpoint_value.get("query").and_then(|s| s.as_str()) {
+            self.query = Some(query.to_string());
+        }
+        if let Some(fragment) = endpoint_value.get("fragment").and_then(|s| s.as_str()) {
+            self.fragment = Some(fragment.to_string());
+        }
+    }
+}
+
+impl FromStr for Endpoint {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        let url = url::Url::parse(s)?;
+        Ok(Self {
+            scheme: none_if_empty(url.scheme()),
+            username: none_if_empty(url.username()),
+            password: url.password().map(ToString::to_string),
+            host: url.host_str().map(ToString::to_string),
+            port: url.port(),
+            path: none_if_empty(url.path()),
+            query: url.query().map(ToString::to_string),
+            fragment: url.fragment().map(ToString::to_string),
+        })
+    }
+}
+
+/// serialize with `FromStr` if given a `String`, or with `Deserialize` impl given a map/struct thing.
+/// See <https://serde.rs/string-or-struct.html> for reference.
+fn string_or_struct<'de, T, D>(deserializer: D) -> core::result::Result<T, D::Error>
+where
+    T: Deserialize<'de> + FromStr<Err = Error>,
+    D: Deserializer<'de>,
+{
+    // This is a Visitor that forwards string types to T's `FromStr` impl and
+    // forwards map types to T's `Deserialize` impl. The `PhantomData` is to
+    // keep the compiler from complaining about T being an unused generic type
+    // parameter. We need T in order to know the Value type for the Visitor
+    // impl.
+    struct StringOrStruct<T>(PhantomData<fn() -> T>);
+
+    impl<'de, T> Visitor<'de> for StringOrStruct<T>
+    where
+        T: Deserialize<'de> + FromStr<Err = crate::errors::Error>,
+    {
+        type Value = T;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            formatter.write_str("string or map")
+        }
+
+        fn visit_str<E>(self, value: &str) -> core::result::Result<T, E>
+        where
+            E: de::Error,
+        {
+            FromStr::from_str(value).map_err(de::Error::custom)
+        }
+
+        fn visit_map<M>(self, map: M) -> core::result::Result<T, M::Error>
+        where
+            M: MapAccess<'de>,
+        {
+            // `MapAccessDeserializer` is a wrapper that turns a `MapAccess`
+            // into a `Deserializer`, allowing it to be used as the input to T's
+            // `Deserialize` implementation. T then deserializes itself using
+            // the entries from the map visitor.
+            Deserialize::deserialize(de::value::MapAccessDeserializer::new(map))
+        }
+    }
+
+    deserializer.deserialize_any(StringOrStruct(PhantomData))
+}
+
 #[derive(Clone, Debug, Deserialize)]
 pub struct Config {
-    /// list of endpoint urls
-    pub endpoints: Vec<String>,
+    /// endpoint url - given as String or struct
+    #[serde(deserialize_with = "string_or_struct", default)]
+    pub endpoint: Endpoint,
 
     /// maximum number of parallel in flight batches (default: 4)
     /// this avoids blocking further events from progressing while waiting for upstream responses.
@@ -44,8 +208,7 @@ pub struct Config {
     // https://docs.rs/http-types/2.4.0/http_types/enum.Method.html
     #[serde(skip_deserializing, default = "dflt_method")]
     pub method: Method,
-    #[serde(default = "Default::default")]
-    // TODO make header values a vector here?
+    #[serde(default)]
     pub headers: HashMap<String, String>,
 }
 
@@ -70,7 +233,10 @@ enum CodecTaskInMsg {
     },
 }
 
-struct SendTaskInMsg(Request);
+enum SendTaskInMsg {
+    Request(Request),
+    Failed,
+}
 
 pub struct Rest {
     uid: u64,
@@ -138,33 +304,36 @@ impl Sink for Rest {
                     .send(CodecTaskInMsg::ToRequest(event, tx))
                     .await?;
                 // wait for encoded request to come in
-                let SendTaskInMsg(request) = rx.recv().await?;
-
-                let url = request.url();
-                let event_origin_uri = EventOriginUri {
-                    uid: sink_uid,
-                    scheme: url.scheme().to_string(),
-                    host: url.host_str().map_or(String::new(), ToString::to_string),
-                    port: url.port(),
-                    path: url
-                        .path_segments()
-                        .map_or_else(Vec::new, |segments| segments.map(String::from).collect()),
-                };
-                // send request
-                // TODO reuse client
-                if let Ok(response) = surf::client().send(request).await {
-                    #[allow(clippy::cast_possible_truncation)]
-                    // we dont care about the upper 64 bit
-                    let duration = start.elapsed().as_millis() as u64; // measure response duration
-                    codec_task_channel
-                        .send(CodecTaskInMsg::ToEvent {
-                            id,
-                            origin_uri: Box::new(event_origin_uri),
-                            op_meta,
-                            response,
-                            duration,
-                        })
-                        .await?
+                match rx.recv().await? {
+                    SendTaskInMsg::Request(request) => {
+                        let url = request.url();
+                        let event_origin_uri = EventOriginUri {
+                            uid: sink_uid,
+                            scheme: "tremor-rest".to_string(),
+                            host: url.host_str().map_or(String::new(), ToString::to_string),
+                            port: url.port(),
+                            path: url.path_segments().map_or_else(Vec::new, |segments| {
+                                segments.map(String::from).collect()
+                            }),
+                        };
+                        // send request
+                        // TODO reuse client
+                        if let Ok(response) = surf::client().send(request).await {
+                            #[allow(clippy::cast_possible_truncation)]
+                            // we dont care about the upper 64 bit
+                            let duration = start.elapsed().as_millis() as u64; // measure response duration
+                            codec_task_channel
+                                .send(CodecTaskInMsg::ToEvent {
+                                    id,
+                                    origin_uri: Box::new(event_origin_uri),
+                                    op_meta,
+                                    response,
+                                    duration,
+                                })
+                                .await?
+                        }
+                    }
+                    SendTaskInMsg::Failed => {} // just stop the task here, error alrady handled and reported in codec_task
                 }
 
                 max_counter.dec_from(current_inflights); // be fair to others and free our spot
@@ -200,7 +369,7 @@ impl Sink for Rest {
             .map(|(k, v)| (k.clone(), v.boxed_clone()))
             .collect::<HashMap<String, Box<dyn Codec>>>();
         let default_method = self.config.method;
-        let endpoints = self.config.endpoints.clone();
+        let endpoint = self.config.endpoint.clone();
 
         // inbound channel towards codec task
         // sending events to be turned into requests
@@ -211,11 +380,12 @@ impl Sink for Rest {
         // start the codec task
         self.codec_task_handle = Some(task::spawn(async move {
             codec_task(
+                sink_uid,
                 postprocessors,
                 preprocessors,
                 my_codec,
                 my_codec_map,
-                endpoints,
+                endpoint,
                 default_method,
                 reply_tx,
                 in_rx,
@@ -241,44 +411,73 @@ impl Sink for Rest {
     }
 }
 
-#[inline]
-fn get_endpoint(mut endpoint_idx: usize, endpoints: &[String]) -> Option<&str> {
-    endpoint_idx = (endpoint_idx + 1) % endpoints.len();
-    endpoints.get(endpoint_idx).map(String::as_str)
-}
-
-#[allow(clippy::too_many_arguments)]
+// TODO: use headers from config
+#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
 async fn codec_task(
+    sink_uid: u64,
     mut postprocessors: Vec<Box<dyn Postprocessor>>,
     mut preprocessors: Vec<Box<dyn Preprocessor>>,
     codec: Box<dyn Codec>,
     codec_map: HashMap<String, Box<dyn Codec>>,
-    endpoints: Vec<String>,
+    endpoint: Endpoint,
     default_method: Method,
     reply_tx: Sender<sink::Reply>,
     in_rx: Receiver<CodecTaskInMsg>,
     is_linked: bool,
 ) -> Result<()> {
     debug!("REST Sink codec task started.");
-    let endpoint_idx: usize = 0;
+    let mut response_id: u64 = 0;
 
     while let Ok(msg) = in_rx.recv().await {
         match msg {
-            CodecTaskInMsg::ToRequest(event, tx) => {
+            CodecTaskInMsg::ToRequest(mut event, tx) => {
                 match build_request(
                     &event,
                     codec.borrow(),
                     &codec_map,
                     postprocessors.as_mut_slice(),
                     default_method,
-                    get_endpoint(endpoint_idx, endpoints.as_slice()),
+                    &endpoint,
                 ) {
                     Ok(request) => {
-                        if let Err(e) = tx.send(SendTaskInMsg(request)).await {
+                        if let Err(e) = tx.send(SendTaskInMsg::Request(request)).await {
                             error!("Error sending out encoded request {}", e);
                         }
                     }
-                    Err(_e) => {} // TODO: send CB Fail, error port
+                    Err(e) => {
+                        error!(
+                            "[Rest Offramp {}] Error encoding the request: {}",
+                            sink_uid, &e
+                        );
+                        // send error result to send task
+                        if let Err(e) = tx.send(SendTaskInMsg::Failed).await {
+                            error!("Error sending Failed back to send task: {}", e);
+                        }
+                        // send CB_fail
+                        if let Some(insight) = event.insight_fail() {
+                            if let Err(e) = reply_tx.send(SinkReply::Insight(insight)).await {
+                                error!("Error sending CB fail event {}", e);
+                            }
+                        }
+                        // send response through error port
+                        response_id += 1;
+                        let error_event = create_error_response(
+                            Ids::new(sink_uid, response_id),
+                            &event.id,
+                            400,
+                            EventOriginUri {
+                                uid: sink_uid,
+                                scheme: "tremor-rest".to_string(),
+                                host: hostname(),
+                                ..EventOriginUri::default()
+                            },
+                            &e,
+                        );
+                        if let Err(e) = reply_tx.send(SinkReply::Response(ERROR, error_event)).await
+                        {
+                            error!("Error sending error response event {}", e);
+                        }
+                    }
                 }
             }
             CodecTaskInMsg::ToEvent {
@@ -292,7 +491,7 @@ async fn codec_task(
                 let status = response.status();
 
                 let mut meta = simd_json::borrowed::Object::with_capacity(1);
-                let cb = if status.is_client_error() || status.is_server_error() {
+                let mut cb = if status.is_client_error() || status.is_server_error() {
                     // when the offramp is linked to pipeline, we want to send
                     // the response back and not consume it yet (or log about it)
                     if !is_linked {
@@ -307,6 +506,7 @@ async fn codec_task(
                 } else {
                     CBAction::Ack
                 };
+
                 reply_tx
                     .send(sink::Reply::Insight(Event {
                         id: id.clone(),
@@ -320,8 +520,8 @@ async fn codec_task(
 
                 if is_linked {
                     match build_response_events(
-                        id.clone(),
-                        origin_uri,
+                        &id,
+                        origin_uri.as_ref(),
                         response,
                         codec.borrow(),
                         &codec_map,
@@ -340,29 +540,47 @@ async fn codec_task(
                             }
                         }
                         Err(e) => {
-                            // TODO log the error here as well?
-                            let mut data = simd_json::borrowed::Object::with_capacity(1);
-                            // TODO should also include event_id and offramp (as url string) here
-                            data.insert_nocheck("error".into(), e.to_string().into());
+                            cb = CBAction::Fail;
+                            error!(
+                                "[Rest Offramp {}] Error encoding the request: {}",
+                                sink_uid, &e
+                            );
 
-                            // TODO also pass response meta alongside which can be useful for
-                            // errors too [will probably need to return (port, data)
-                            // as part of response_events]
-                            let error_event = Event {
-                                id,
-                                origin_uri: None, // TODO create new origin uri for this
-                                data: Value::from(data).into(),
-                                ..Event::default()
-                            };
-                            if let Err(e) = reply_tx
-                                .send(sink::Reply::Response(ERROR, error_event))
-                                .await
+                            response_id += 1;
+
+                            let error_event = create_error_response(
+                                Ids::new(sink_uid, response_id),
+                                &id,
+                                500,
+                                origin_uri.as_ref().clone(),
+                                &e,
+                            );
+
+                            if let Err(e) =
+                                reply_tx.send(SinkReply::Response(ERROR, error_event)).await
                             {
-                                error!("Error sending error event: {}", e);
+                                error!(
+                                    "Error sending error event on response decoding error: {}",
+                                    e
+                                );
                             }
                         }
                     }
                 }
+                // wait with sending CB Ack until response has been handled in linked case, might still fail
+                if let Err(e) = reply_tx
+                    .send(SinkReply::Insight(Event {
+                        id: id.clone(),
+                        op_meta,
+                        data: (Value::null(), Value::from(meta)).into(),
+                        cb,
+                        ingest_ns: nanotime(),
+                        ..Event::default()
+                    }))
+                    .await
+                {
+                    error!("Error sending CB event {}", e);
+                };
             }
         }
     }
@@ -370,17 +588,18 @@ async fn codec_task(
     Ok(())
 }
 
+#[allow(clippy::too_many_lines)]
 fn build_request(
     event: &Event,
     codec: &dyn Codec,
     codec_map: &HashMap<String, Box<dyn Codec>>,
     postprocessors: &mut [Box<dyn Postprocessor>],
     default_method: Method,
-    endpoint: Option<&str>,
+    config_endpoint: &Endpoint,
 ) -> Result<surf::Request> {
     let mut body: Vec<u8> = vec![];
     let mut method = None;
-    let mut url = None;
+    let mut endpoint = None;
     let mut headers = Vec::with_capacity(8);
     let mut codec_in_use = None;
     for (data, meta) in event.value_meta_iter() {
@@ -393,21 +612,31 @@ fn build_request(
                     .map(|m| Method::from_str(&m.trim().to_uppercase()))
                 {
                     Some(Ok(method)) => method,
-                    Some(Err(e)) => return Err(e.into()), // method parsing failed
+                    Some(Err(e)) => return Err(e.into()),
                     None => default_method,
                 },
             );
         }
         // use url from first event
-        if url.is_none() {
-            url = match meta
-                .get("endpoint")
-                .and_then(Value::as_str)
-                .or_else(|| endpoint)
-            {
-                Some(url_str) => Some(url_str.parse::<surf::Url>()?),
-                None => None,
-            };
+        if endpoint.is_none() {
+            endpoint = match meta.get("endpoint") {
+                Some(v) if v.is_str() => {
+                    // overwrite the configured endpoint with that is provided as String
+                    if let Some(s) = v.as_str() {
+                        Some(Endpoint::from_str(s)?)
+                    } else {
+                        None // shouldnt happen
+                    }
+                }
+                Some(v) if v.is_object() => {
+                    let mut ep = config_endpoint.clone();
+                    ep.merge(v);
+                    Some(ep)
+                }
+                // invalid type
+                Some(_) => return Err("Invalid $endpoint type. Use String or Map.".into()),
+                None => None, // we use the config endpoint
+            }
         }
         // use headers from event
         if headers.is_empty() {
@@ -449,7 +678,7 @@ fn build_request(
                 }
             }
         }
-        // chose codec based on first event in a batch
+        // apply the given codec, fall back to the configured codec if none is found
         if let Some(codec) = codec_in_use {
             let encoded = codec.encode(data)?;
             let mut processed = postprocess(postprocessors, event.ingest_ns, encoded)?;
@@ -458,15 +687,14 @@ fn build_request(
             }
         };
     }
-    let url =
-        url.ok_or_else(|| -> Error { "Unable to determine and endpoint for this event".into() })?;
-    let host = match (url.host(), url.port()) {
+    let endpoint = endpoint.map_or_else(|| config_endpoint.as_url(), |ep| ep.as_url())?;
+    let host = match (endpoint.host(), endpoint.port()) {
         (Some(host), Some(port)) => Some(format!("{}:{}", host, port)),
         (Some(host), _) => Some(host.to_string()),
         _ => None,
     };
 
-    let mut request_builder = surf::RequestBuilder::new(method.unwrap_or(default_method), url);
+    let mut request_builder = surf::RequestBuilder::new(method.unwrap_or(default_method), endpoint);
 
     // build headers
     for (k, v) in headers {
@@ -487,8 +715,8 @@ fn build_request(
 }
 
 async fn build_response_events(
-    id: Ids,
-    event_origin_uri: Box<EventOriginUri>,
+    id: &Ids,
+    event_origin_uri: &EventOriginUri,
     mut response: Response,
     codec: &dyn Codec,
     codec_map: &HashMap<String, Box<dyn Codec>>,
@@ -539,7 +767,7 @@ async fn build_response_events(
             .map_err(|e: rental::RentalError<Error, _>| e.0)
             .map(|data| Event {
                 id: id.clone(),
-                origin_uri: Some(event_origin_uri.as_ref().clone()),
+                origin_uri: Some(event_origin_uri.clone()),
                 data,
                 ..Event::default()
             })?,
@@ -548,26 +776,33 @@ async fn build_response_events(
     Ok(events)
 }
 
-/*
-fn create_error_response(id: Ids, op_meta: OpMeta, e: &Error) -> Event {
+/// build an error event bearing error information and metadata to be handled as http response
+fn create_error_response(
+    error_id: Ids,
+    event_id: &Ids,
+    status: u16,
+    origin_uri: EventOriginUri,
+    e: &Error,
+) -> Event {
     let mut error_data = simd_json::value::borrowed::Object::with_capacity(1);
     let mut meta = simd_json::value::borrowed::Object::with_capacity(2);
-    meta.insert_nocheck("response_status".into(), Value::from(500));
+    meta.insert_nocheck("response_status".into(), Value::from(status));
     let err_str = e.to_string();
-    let mut headers = simd_json::value::borrowed::Object::with_capacity(3);
+    let mut headers = simd_json::value::borrowed::Object::with_capacity(2);
     headers.insert_nocheck("Content-Type".into(), Value::from("application/json"));
-    headers.insert_nocheck("Content-Length".into(), Value::from(err_str.len() + 12)); // len of `{"error": err_str}`
     headers.insert_nocheck("Server".into(), Value::from("Tremor"));
     meta.insert_nocheck("response_headers".into(), Value::from(headers));
+
     error_data.insert_nocheck("error".into(), Value::from(err_str));
+    error_data.insert_nocheck("event_id".into(), Value::from(event_id.to_string()));
     Event {
-        id,
-        op_meta,
+        id: error_id,
         data: (error_data, meta).into(),
+        origin_uri: Some(origin_uri),
+        ingest_ns: nanotime(),
         ..Event::default()
     }
 }
-*/
 
 /// atomically count up from 0 to a given max
 /// and fail incrementing further if that max is reached.
@@ -628,5 +863,116 @@ impl AtomicMaxCounter {
             }
         }
         real_cur - 1
+    }
+}
+
+#[cfg(test)]
+mod test {
+
+    use super::*;
+
+    #[test]
+    fn deserialize_from_string() -> Result<()> {
+        let config_s = r#"
+            endpoint: "http://localhost:8080/path?query=value#fragment"
+            concurrency: 4
+            method: GET
+            headers:
+                Forwarded: "by=tremor(0.9);"
+        "#;
+        let v: serde_yaml::Value = serde_yaml::from_str(config_s)?;
+        let config = Config::new(&v)?;
+        let _ = config.endpoint.as_url_with_base("http://localhost");
+        assert_eq!(
+            config.endpoint,
+            Endpoint {
+                scheme: Some("http".to_string()),
+                host: Some("localhost".to_string()),
+                port: Some(8080),
+                path: Some("/path".to_string()),
+                query: Some("query=value".to_string()),
+                fragment: Some("fragment".to_string()),
+                ..Endpoint::default()
+            }
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn deserialize_from_object() -> Result<()> {
+        let config_s = r#"
+            endpoint: 
+                host: example.org
+                query: via=tremor
+            concurrency: 4
+            method: OPTIONS
+        "#;
+        let v: serde_yaml::Value = serde_yaml::from_str(config_s)?;
+        let config = Config::new(&v)?;
+        assert_eq!(
+            config.endpoint,
+            Endpoint {
+                host: Some("example.org".to_string()),
+                query: Some("via=tremor".to_string()),
+                ..Endpoint::default()
+            }
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn endpoint_merge() -> Result<()> {
+        let mut ep = Endpoint {
+            scheme: Some("http".to_string()),
+            host: Some("example.org".to_string()),
+            port: Some(80),
+            path: Some("/".to_string()),
+            ..Endpoint::default()
+        };
+        let mut value = Value::object_with_capacity(2);
+        value.insert("host", "tremor.rs")?;
+        value.insert("query", "version=0.9")?;
+        ep.merge(&value);
+        assert_eq!(
+            Endpoint {
+                scheme: Some("http".to_string()),
+                host: Some("tremor.rs".to_string()),
+                port: Some(80),
+                path: Some("/".to_string()),
+                query: Some("version=0.9".to_string()),
+                ..Endpoint::default()
+            },
+            ep
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn endpoint_as_url() -> Result<()> {
+        let ep = Endpoint {
+            scheme: Some("http".to_string()),
+            host: Some("tremor.rs".to_string()),
+            path: Some("/getting-started/".to_string()),
+            ..Endpoint::default()
+        };
+        let url = ep.as_url()?;
+        assert_eq!(
+            url::Url::from_str("http://tremor.rs/getting-started/")?,
+            url
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn endpoint_as_url_fail() -> Result<()> {
+        // endpoint without host
+        let ep = Endpoint {
+            scheme: Some("http".to_string()),
+            path: Some("/getting-started/".to_string()),
+            ..Endpoint::default()
+        };
+        let res = ep.as_url();
+        assert!(res.is_err());
+        Ok(())
     }
 }
