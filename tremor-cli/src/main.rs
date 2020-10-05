@@ -120,15 +120,6 @@ fn run(mut app: App, cmd: &ArgMatches) -> Result<()> {
         config: load_config()?,
     };
 
-    // if env TREMOR_PATH is relative, canonicalize it
-    if let Ok(tremor_path) = std::env::var("TREMOR_PATH") {
-        let tremor_path = Path::new(&tremor_path);
-        if tremor_path.is_relative() {
-            let canonical = file::canonicalize(tremor_path)?;
-            std::env::set_var("TREMOR_PATH", canonical);
-        }
-    }
-
     if let Some(_matches) = cmd.subcommand_matches("explain") {
         Err("Not yet implemented".into())
     } else if let Some(matches) = cmd.subcommand_matches("completions") {
