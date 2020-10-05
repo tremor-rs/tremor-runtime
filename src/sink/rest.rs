@@ -455,7 +455,7 @@ async fn codec_task(
                         }
                         // send CB_fail
                         if let Some(insight) = event.insight_fail() {
-                            if let Err(e) = reply_tx.send(SinkReply::Insight(insight)).await {
+                            if let Err(e) = reply_tx.send(sink::Reply::Insight(insight)).await {
                                 error!("Error sending CB fail event {}", e);
                             }
                         }
@@ -473,7 +473,9 @@ async fn codec_task(
                             },
                             &e,
                         );
-                        if let Err(e) = reply_tx.send(SinkReply::Response(ERROR, error_event)).await
+                        if let Err(e) = reply_tx
+                            .send(sink::Reply::Response(ERROR, error_event))
+                            .await
                         {
                             error!("Error sending error response event {}", e);
                         }
@@ -506,17 +508,6 @@ async fn codec_task(
                 } else {
                     CBAction::Ack
                 };
-
-                reply_tx
-                    .send(sink::Reply::Insight(Event {
-                        id: id.clone(),
-                        op_meta,
-                        data: (Value::null(), Value::from(meta)).into(),
-                        cb,
-                        ingest_ns: nanotime(),
-                        ..Event::default()
-                    }))
-                    .await?;
 
                 if is_linked {
                     match build_response_events(
@@ -556,8 +547,9 @@ async fn codec_task(
                                 &e,
                             );
 
-                            if let Err(e) =
-                                reply_tx.send(SinkReply::Response(ERROR, error_event)).await
+                            if let Err(e) = reply_tx
+                                .send(sink::Reply::Response(ERROR, error_event))
+                                .await
                             {
                                 error!(
                                     "Error sending error event on response decoding error: {}",
@@ -569,7 +561,7 @@ async fn codec_task(
                 }
                 // wait with sending CB Ack until response has been handled in linked case, might still fail
                 if let Err(e) = reply_tx
-                    .send(SinkReply::Insight(Event {
+                    .send(sink::Reply::Insight(Event {
                         id: id.clone(),
                         op_meta,
                         data: (Value::null(), Value::from(meta)).into(),
