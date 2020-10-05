@@ -71,7 +71,21 @@ fn load_(tremor_path: &str) -> ModulePath {
     let mounts: Vec<String> = tremor_path
         .split(':')
         .filter_map(|target| {
+            let target = target.trim();
             if let Ok(meta) = std::fs::metadata(target) {
+                let path = Path::new(&target);
+                let path = path.to_path_buf();
+                let target = if path.is_relative() {
+                    let path = path.canonicalize();
+                    if let Ok(path) = path {
+                        let path_str = path.to_string_lossy().to_string();
+                        path_str
+                    } else {
+                        target.to_string()
+                    }
+                } else {
+                    target.to_string()
+                };
                 if meta.is_dir() {
                     Some(target.replace("//", "/"))
                 } else {
