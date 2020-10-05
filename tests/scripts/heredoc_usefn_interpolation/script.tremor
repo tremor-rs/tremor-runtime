@@ -1,0 +1,10 @@
+use std::string;
+use std::re;
+use tremor::system;
+
+re::replace(
+"1\\d+",
+"""
+  {event.class} {event.answer} { string::format("{}", "foo") } { system::nanotime() }
+  """
+, "<nanotime>")

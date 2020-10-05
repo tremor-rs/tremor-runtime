@@ -95,7 +95,7 @@ pub enum SelectType {
 }
 
 impl SelectStmt<'_> {
-    /// Determin how complex a select statment is
+    /// Determine how complex a select statment is
     #[must_use]
     pub fn complexity(&self) -> SelectType {
         if self.stmt.target.0
