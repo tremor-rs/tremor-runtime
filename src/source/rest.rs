@@ -352,6 +352,8 @@ impl Source for Int {
             if let Some(response_tx) = self.response_txes.get(&event_id) {
                 let res = make_response(codec, codec_map, &event)?;
                 response_tx.send(res).await?
+            } else {
+                debug!("No outstanding HTTP session for event-id {}", event_id);
             }
         }
         Ok(())

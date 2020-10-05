@@ -262,6 +262,7 @@ where
             };
         }
         let first_port = first_id.instance_port_required()?.to_owned();
+
         if let Err(e) = first_addr
             .send(pipeline::Msg::Event {
                 event: response,
