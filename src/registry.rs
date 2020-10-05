@@ -158,8 +158,7 @@ where
 
                     Msg::UnpublishServant(r, id) => {
                         r.send(
-                            dbg!(A::servant_id(&id))
-                                .and_then(|id| self.unpublish(id).map(|p| p.state)),
+                            A::servant_id(&id).and_then(|id| self.unpublish(id).map(|p| p.state)),
                         )
                         .await?
                     }
@@ -236,7 +235,7 @@ impl Registries {
     ) -> Result<Option<<PipelineArtefact as Artefact>::SpawnResult>> {
         let (tx, rx) = bounded(1);
         self.pipeline.send(Msg::FindServant(tx, id.clone())).await?;
-        Ok(rx.recv().await.unwrap().unwrap())
+        rx.recv().await?
     }
     /// Publishes a pipeline
     ///
