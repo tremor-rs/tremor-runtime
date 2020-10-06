@@ -39,7 +39,7 @@ serde = "1"
 halfbrown="0.1"
 async-std = { version = "1.6", features = ["unstable"] }
 tide = "0.13"
-surf = "=2.0.0-alpha.7"
+surf = "=2.0.0"
 http-types = "2.5"
 env_logger = "0.7.1"
 log = "0.4"
