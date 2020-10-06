@@ -185,6 +185,7 @@ async fn handle_request(mut req: Request<ServerState>) -> tide::Result<Response>
     // TODO introduce config param to pass this as a hashmap (useful when needed)
     // also document duplicate query key behavior in that case
     //meta.insert("request_query", url.query().unwrap_or("").to_string())?;
+    // TODO type of headers here should be aligned with $response_headers
     meta.insert("request_headers", headers)?;
     meta.insert(
         "request_content_type",

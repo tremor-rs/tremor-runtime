@@ -50,6 +50,7 @@ pub struct Config {
     /// hostname to use, defaults to the hostname of the system
     #[serde(default = "d_host")]
     pub hostname: String,
+    /// key to use for messages, defaults to none
     #[serde(default = "Default::default")]
     pub key: Option<String>,
 }
@@ -152,7 +153,6 @@ impl Sink for Kafka {
         event: Event,
     ) -> ResultVec {
         let mut success = true;
-        //for value in event.value_iter() {
         for (value, meta) in event.value_meta_iter() {
             let raw = codec.encode(value)?;
             let mut record = FutureRecord::to(&self.config.topic);

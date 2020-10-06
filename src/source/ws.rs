@@ -19,6 +19,7 @@ use async_std::task;
 use futures::{SinkExt, StreamExt};
 use halfbrown::HashMap;
 use std::collections::BTreeMap;
+use tremor_script::Value;
 use tungstenite::protocol::Message;
 
 #[derive(Deserialize, Debug, Clone)]
@@ -27,8 +28,6 @@ pub struct Config {
     pub port: u16,
     /// Host to listen on
     pub host: String,
-    // TODO move to root onramp config. or auto-infer based on linking
-    pub link: Option<bool>,
 }
 
 impl ConfigImpl for Config {}
@@ -145,22 +144,25 @@ async fn handle_connection(
         .await?;
 
     while let Some(msg) = ws_read.next().await {
+        let mut meta = Value::object_with_capacity(1);
         match msg {
             Ok(Message::Text(t)) => {
+                meta.insert("binary", false)?;
                 tx.send(SourceReply::Data {
                     origin_uri: uri.clone(),
                     data: t.into_bytes(),
-                    meta: None,
+                    meta: Some(meta),
                     codec_override: None,
                     stream,
                 })
                 .await?;
             }
             Ok(Message::Binary(data)) => {
+                meta.insert("binary", true)?;
                 tx.send(SourceReply::Data {
                     origin_uri: uri.clone(),
                     data,
-                    meta: None,
+                    meta: Some(meta),
                     codec_override: None,
                     stream,
                 })
@@ -180,18 +182,11 @@ async fn handle_connection(
 async fn make_message(event: Event) -> Result<Message> {
     // TODO reject batched events and handle only single event here
     let err: Error = "Empty event".into();
-    let (value, _meta) = event.value_meta_iter().next().ok_or(err)?;
+    let (value, meta) = event.value_meta_iter().next().ok_or(err)?;
 
-    // TODO make this decision based on meta value?
-    let send_as_text = true;
+    let send_as_binary = meta.get("binary").and_then(Value::as_bool).unwrap_or(false);
 
-    if send_as_text {
-        let data = value
-            .as_str()
-            .ok_or_else(|| Error::from("Could not get event value as string"))?;
-
-        Ok(Message::Text(data.into()))
-    } else {
+    if send_as_binary {
         // TODO consolidate this duplicate logic from string codec
         let data = if let Some(s) = value.as_str() {
             s.as_bytes().to_vec()
@@ -199,6 +194,12 @@ async fn make_message(event: Event) -> Result<Message> {
             simd_json::to_vec(&value)?
         };
         Ok(Message::Binary(data))
+    } else {
+        let data = value
+            .as_str()
+            .ok_or_else(|| Error::from("Could not get event value as string"))?;
+
+        Ok(Message::Text(data.into()))
     }
 }
 
