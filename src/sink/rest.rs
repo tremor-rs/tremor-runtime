@@ -200,15 +200,17 @@ pub struct Config {
     /// maximum number of parallel in flight batches (default: 4)
     /// this avoids blocking further events from progressing while waiting for upstream responses.
     #[serde(default = "dflt_concurrency")]
-    // TODO adjust for linking
     pub concurrency: usize,
-    // TODO add scheme, host, path, query
+
     // HTTP method to use (default: POST)
     // TODO implement Deserialize for http_types::Method
     // https://docs.rs/http-types/2.4.0/http_types/enum.Method.html
+    // or have our own Method enum here and deserialize into it
     #[serde(skip_deserializing, default = "dflt_method")]
     pub method: Method,
+
     #[serde(default)]
+    // TODO utilize this
     pub headers: HashMap<String, String>,
 }
 
@@ -217,7 +219,7 @@ fn dflt_concurrency() -> usize {
 }
 
 fn dflt_method() -> Method {
-    Method::Get
+    Method::Post
 }
 
 impl ConfigImpl for Config {}
@@ -264,7 +266,7 @@ impl offramp::Impl for Rest {
                 reply_channel: None,
                 codec_task_handle: None,
                 codec_task_tx: None,
-                client: client,
+                client,
             }))
         } else {
             Err("Rest offramp requires a configuration.".into())
@@ -781,6 +783,8 @@ async fn build_response_events(
         for (name, values) in response.iter() {
             let mut header_value = String::new();
             for value in values {
+                // TODO join with comma. or align type with request_headers (values is array of
+                // strings)
                 header_value.push_str(value.to_string().as_str());
             }
             headers.insert(name.to_string(), header_value)?;
