@@ -173,19 +173,25 @@ async fn handle_request(mut req: Request<ServerState>) -> tide::Result<Response>
     // request metadata
     // TODO namespace these better .unwrap()
     let mut meta = Value::object_with_capacity(4);
+    let mut url_meta = Value::object_with_capacity(7);
+    let url = req.url();
+    url_meta.insert("scheme", url.scheme().to_string())?;
+    if !url.username().is_empty() {
+        url_meta.insert("username", url.username().to_string())?;
+    }
+    url.password()
+        .and_then(|p| url_meta.insert("password", p.to_string()).ok());
+    url.host_str()
+        .and_then(|h| url_meta.insert("host", h.to_string()).ok());
+    url.port().and_then(|p| url_meta.insert("port", p).ok());
+    url_meta.insert("path", url.path().to_string())?;
+    url.query()
+        .and_then(|q| url_meta.insert("query", q.to_string()).ok());
+    url.fragment()
+        .and_then(|f| url_meta.insert("fragment", f.to_string()).ok());
+
     meta.insert("request_method", req.method().to_string())?;
-    meta.insert("request_url", req.url().as_str().to_string())?;
-    // TODO introduce config param to pass url parts as a hashmap (useful when needed)
-    // right now, users can parse these from tremor-script as needed
-    //let url = req.url();
-    // need to add username, port and fragment as well
-    //meta.insert("request_scheme", url.scheme().to_string())?;
-    //meta.insert("request_host", url.host_str().unwrap_or("").to_string())?;
-    //meta.insert("request_path", url.path().to_string())?;
-    // TODO introduce config param to pass this as a hashmap (useful when needed)
-    // also document duplicate query key behavior in that case
-    //meta.insert("request_query", url.query().unwrap_or("").to_string())?;
-    // TODO type of headers here should be aligned with $response_headers
+    meta.insert("request_url", url_meta)?;
     meta.insert("request_headers", headers)?;
     meta.insert(
         "request_content_type",
