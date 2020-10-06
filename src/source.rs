@@ -544,21 +544,9 @@ where
                             let (port, data) = match result {
                                 Ok(d) => (OUT, d),
                                 Err(e) => {
-                                    // TODO do not log these now that we have error events here?
-                                    error!("[Source::{}] Error: {}", self.source_id, e);
-                                    // TODO pass meta alongside which can be useful for
-                                    // errors too [will probably need to return (port, data)
-                                    // as part of results itself]
                                     let mut error_meta =
-                                        simd_json::borrowed::Object::with_capacity(2);
-                                    let mut response_meta =
                                         simd_json::borrowed::Object::with_capacity(1);
-                                    response_meta.insert_nocheck("status".into(), Value::from(400));
                                     error_meta.insert_nocheck("error".into(), e.to_string().into());
-                                    error_meta.insert_nocheck(
-                                        "response".into(),
-                                        Value::from(response_meta),
-                                    );
 
                                     let mut error_data =
                                         simd_json::borrowed::Object::with_capacity(3);
