@@ -171,7 +171,7 @@ async fn handle_request(mut req: Request<ServerState>) -> tide::Result<Response>
     let codec_override = ct.map(|ct| ct.essence().to_string());
 
     // request metadata
-    // TODO namespace these better?
+    // TODO namespace these better .unwrap()
     let mut meta = Value::object_with_capacity(4);
     meta.insert("request_method", req.method().to_string())?;
     meta.insert("request_url", req.url().as_str().to_string())?;
@@ -251,6 +251,7 @@ fn make_response(
 
     // TODO status should change if there's any errors here (eg: during
     // content-type encoding). maybe include the error string in the response too
+    // .unwrap()
     let status = response_meta
         .get("response_status")
         .and_then(|s| s.as_u16())
