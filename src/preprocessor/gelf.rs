@@ -75,7 +75,7 @@ fn decode_gelf(bin: &[u8]) -> Result<GELFSegment> {
             if bin.len() < 2 {
                 Err(ErrorKind::InvalidGELFHeader(bin.len(), None).into())
             } else {
-                // FIXME: we would allow up to 255 chunks
+                // we would allow up to 255 chunks
                 Ok(GELFSegment {
                     id: rand::rngs::OsRng.next_u64(),
                     seq: 0,
@@ -94,7 +94,7 @@ fn decode_gelf(bin: &[u8]) -> Result<GELFSegment> {
                     Err(ErrorKind::InvalidGELFHeader(bin.len(), None).into())
                 }
             } else {
-                // FIXME: we would allow up to 255 chunks
+                // we would allow up to 255 chunks
                 Ok(GELFSegment {
                     id: (u64::from(bin[2]) << 56)
                         + (u64::from(bin[3]) << 48)

@@ -228,7 +228,7 @@ pub fn row_to_json(
             postgres::types::Type::JSONB => ("JSONB", Value::from(row.get::<_, String>(cid))),
             postgres::types::Type::NAME => ("NAME", Value::from(row.get::<_, String>(cid))),
             postgres::types::Type::TEXT => ("TEXT", Value::from(row.get::<_, String>(cid))),
-            // FIXME: We should specify timezone offset for data in config
+            // TODO: We should specify timezone offset for data in config
             postgres::types::Type::TIMESTAMPTZ => {
                 let ts: DateTime<Utc> = row.get::<_, SystemTime>(cid).into();
                 (
@@ -241,7 +241,7 @@ pub fn row_to_json(
                 ("TIMESTAMP", Value::from(ts.to_string()))
             }
             postgres::types::Type::UNKNOWN => ("UNKNOWN", Value::from(row.get::<_, String>(cid))),
-            // FIXME: Encoding, see UTF-8
+            // TODO: Encoding, see UTF-8
             postgres::types::Type::VARCHAR => ("VARCHAR", Value::from(row.get::<_, String>(cid))),
             _ => return Err(format!("type not supported: {}", col.type_()).into()),
         };

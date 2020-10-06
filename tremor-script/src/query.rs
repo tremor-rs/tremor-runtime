@@ -74,7 +74,7 @@ impl Eq for rentals::Stmt {}
 
 impl PartialOrd for rentals::Stmt {
     fn partial_cmp(&self, _other: &Self) -> Option<std::cmp::Ordering> {
-        None // NOTE Here be dragons FIXME
+        None // NOTE Here be dragons
     }
 }
 
@@ -115,7 +115,7 @@ where
         let mut warnings = vec![];
         let mut locals = 0;
 
-        // FIXME make lexer EOS tolerant to avoid this kludge
+        // TODO make lexer EOS tolerant to avoid this kludge
         source.push('\n');
 
         let mut include_stack = lexer::IncludeStack::default();

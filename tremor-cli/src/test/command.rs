@@ -120,7 +120,7 @@ pub(crate) fn suite_command(
                     if let Some((cmd, args)) = args.split_first() {
                         let resolved_cmd = job::which(&cmd)?;
 
-                        // FIXME wintel
+                        // TODO wintel
                         let mut fg_process =
                             job::TargetProcess::new_with_stderr(&resolved_cmd, &args)?;
                         let exit_status = fg_process.wait_with_output();

@@ -27,7 +27,7 @@ pub(crate) fn run_cmd(mut app: clap::App, matches: &ArgMatches) -> Result<()> {
     if let Some((shell, _)) = matches.subcommand() {
         generate_for_shell(app, shell)
     } else {
-        // FIXME There is no way in standard clap to narrow help to the subcommand
+        // TODO There is no way in standard clap to narrow help to the subcommand
         app.print_long_help().map_err(|e| e.into())
     }
 }

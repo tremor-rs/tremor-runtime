@@ -12,13 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::Result;
+use crate::errors::{Error, Result};
 use crate::report;
 use crate::test;
 use crate::test::stats;
 use crate::test::status;
 use halfbrown::hashmap;
 use report::TestSuite;
+use simd_json::prelude::*;
 use simd_json::{borrowed::Value, StaticNode};
 use std::io::Read;
 use std::{collections::HashMap, path::Path};
@@ -45,52 +46,53 @@ fn eval_suite_entrypoint(
     suite_spec: &Record<'_>,
     suite_result: &[Value<'_>],
     tags: &tag::TagFilter,
-
     by_tag: (&[String], &[String]),
 ) -> Result<(stats::Stats, Vec<report::TestElement>)> {
     let mut elements = Vec::new();
     let mut stats = stats::Stats::new();
-    // TODO FIXME handle zero-args case
-    if let Value::Object(o) = &suite_result[0] {
-        let suite_name = o.get("name");
-        if let Some(_suite_name) = suite_name {
-            let suite_spec_index = suite_spec.fields.iter().position(|f| {
-                if let ImutExprInt::Literal(Literal { value, .. }) = &f.name {
-                    value == "tests"
-                } else {
-                    false
-                }
-            });
-            let suite_name_index = suite_spec.fields.iter().position(|f| {
-                if let ImutExprInt::Literal(Literal { value, .. }) = &f.name {
-                    value == "name"
-                } else {
-                    false
-                }
-            });
 
-            if let Some(suite_spec_index) = suite_spec_index {
-                if let Some(suite_name_index) = suite_name_index {
-                    let name = &suite_spec.fields[suite_name_index].value;
-                    if let ImutExprInt::Literal(Literal { .. }) = name {
-                        if let ImutExprInt::List(l) = &suite_spec.fields[suite_spec_index].value {
-                            if let Some(suite) = o.get("suite") {
-                                if let Value::Object(suite) = suite {
-                                    if let Some(tests) = suite.get("tests") {
-                                        let (s, mut e) = eval_suite_tests(
-                                            &env, &local, script, meta, l, tests, &tags, by_tag,
-                                        )?;
-                                        elements.append(&mut e);
-                                        stats.merge(&s);
-                                    }
+    let o = suite_result
+        .get(0)
+        .and_then(ValueTrait::as_object)
+        .ok_or_else(|| Error::from("bad suite results"))?;
+    let suite_name = o.get("name");
+    if let Some(_suite_name) = suite_name {
+        let suite_spec_index = suite_spec.fields.iter().position(|f| {
+            if let ImutExprInt::Literal(Literal { value, .. }) = &f.name {
+                value == "tests"
+            } else {
+                false
+            }
+        });
+        let suite_name_index = suite_spec.fields.iter().position(|f| {
+            if let ImutExprInt::Literal(Literal { value, .. }) = &f.name {
+                value == "name"
+            } else {
+                false
+            }
+        });
+
+        if let Some(suite_spec_index) = suite_spec_index {
+            if let Some(suite_name_index) = suite_name_index {
+                let name = &suite_spec.fields[suite_name_index].value;
+                if let ImutExprInt::Literal(Literal { .. }) = name {
+                    if let ImutExprInt::List(l) = &suite_spec.fields[suite_spec_index].value {
+                        if let Some(suite) = o.get("suite") {
+                            if let Value::Object(suite) = suite {
+                                if let Some(tests) = suite.get("tests") {
+                                    let (s, mut e) = eval_suite_tests(
+                                        &env, &local, script, meta, l, tests, &tags, by_tag,
+                                    )?;
+                                    elements.append(&mut e);
+                                    stats.merge(&s);
                                 }
                             }
                         }
                     }
                 }
-            } // FIXME error/warning handling when no tests found
-        }
-    };
+            }
+        } // TODO error/warning handling when no tests found
+    }
 
     Ok((stats, elements))
 }
@@ -412,7 +414,7 @@ pub(crate) fn run_suite(
 
                                 let suite_tags = scenario_tags.join(Some(found_tags));
                                 if let ImutExprInt::Record(r) = item {
-                                    // FIXME revisit tags in unit tests
+                                    // TODO revisit tags in unit tests
                                     if let (_matched, true) =
                                         suite_tags.matches(&by_tag.0, &by_tag.1)
                                     {

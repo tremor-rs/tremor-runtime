@@ -14,10 +14,10 @@
 use std::time::SystemTime;
 
 /// Get a nanosecond timestamp
-/// FIXME we want to turn this into u128 eventually
 #[must_use]
 #[allow(clippy::cast_possible_truncation)]
 pub fn nanotime() -> u64 {
+    // TODO we want to turn this into u128 eventually
     SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
         // ALLOW: If this happens, now() is BEFORE the unix epoch, this is so bad panicing is the least of our problems

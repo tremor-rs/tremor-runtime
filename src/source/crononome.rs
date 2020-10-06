@@ -216,7 +216,7 @@ impl<I> TemporalPriorityQueue<I> {
                             Some(Reverse(x)) => {
                                 sched.push(x);
                             }
-                            None => continue, // FIXME should never occur in practice
+                            None => continue, // should never occur in practice
                         }
                     } else {
                         break;

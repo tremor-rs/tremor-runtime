@@ -269,7 +269,7 @@ pub trait Highlighter {
                 {
                     if end.line == line - 1 {
                         printed_error = true;
-                        // FIXME This isn't perfect, there are cases in trickle where more specific
+                        // TODO This isn't perfect, there are cases in trickle where more specific
                         // hygienic errors would be preferable ( eg: for-locals integration test )
                         //
                         let delta = end.column as i64 - start.column as i64;
@@ -355,7 +355,7 @@ pub trait Highlighter {
                 Token::HereDoc => {
                     // (indent, lines) => {
                     writeln!(self.get_writer(), r#"""""#)?;
-                    // FIXME indentation sensing in heredoc's
+                    // TODO indentation sensing in heredoc's
                     // for l in lines {
                     //     line += 1;
                     //     self.reset()?;

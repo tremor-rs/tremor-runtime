@@ -46,7 +46,7 @@ impl Operator for Counter {
 
         *value = Value::from(hashmap! {
             "count".into() => state.clone(),
-            // FIXME build data.map() functionality with rentals to avoid the clone here
+            // TODO build data.map() functionality with rentals to avoid the clone here
             "event".into() => value.clone_static(),
         });
 

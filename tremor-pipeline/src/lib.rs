@@ -23,7 +23,7 @@
     clippy::unnecessary_unwrap,
     clippy::pedantic
 )]
-#![allow(clippy::forget_copy)] // FIXME needed for simd json derive
+#![allow(clippy::forget_copy)] // TODO needed for simd json derive
 #![allow(clippy::missing_errors_doc)]
 
 #[macro_use]

@@ -66,7 +66,7 @@ impl Sink for File {
             };
         }
     }
-    // TODO
+
     async fn on_event(
         &mut self,
         _input: &str,
