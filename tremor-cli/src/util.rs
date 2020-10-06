@@ -259,13 +259,13 @@ pub(crate) fn visit_path<'a>(base: &Path, path: &Path, visitor: &'a PathVisitor)
     Ok(())
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq)]
 pub(crate) enum SourceKind {
-    Pipeline,
     Tremor,
     Trickle,
     Json,
     Unsupported,
+    Default,
 }
 
 pub(crate) fn get_source_kind(path: &str) -> SourceKind {
@@ -273,7 +273,6 @@ pub(crate) fn get_source_kind(path: &str) -> SourceKind {
         Some("json") => SourceKind::Json,
         Some("tremor") => SourceKind::Tremor,
         Some("trickle") => SourceKind::Trickle,
-        Some("yaml") => SourceKind::Pipeline,
         _otherwise => SourceKind::Unsupported,
     }
 }

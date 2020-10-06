@@ -133,6 +133,12 @@ subcommands:
             short: n
             long: no-highlight
       subcommands:
+        - dot:
+            about: prints the .dot representation for a trickle file
+            args:
+              - SCRIPT:
+                  help: trickle script filename
+                  required: true
         - ast:
             about: prints the AST of the source
             args:

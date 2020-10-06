@@ -364,9 +364,11 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
         .ok_or_else(|| Error::from("No script file provided"))?;
     let script_file = script_file.to_string();
     match get_source_kind(&script_file) {
-        SourceKind::Tremor | SourceKind::Json => run_tremor_source(&matches, script_file),
+        SourceKind::Tremor | SourceKind::Json | SourceKind::Default => {
+            run_tremor_source(&matches, script_file)
+        }
         SourceKind::Trickle => run_trickle_source(&matches, &script_file),
-        SourceKind::Pipeline | SourceKind::Unsupported => {
+        SourceKind::Unsupported => {
             eprintln!("Error: Unable to execute source: {}", &script_file);
             // ALLOW: main.rs
             std::process::exit(1);
