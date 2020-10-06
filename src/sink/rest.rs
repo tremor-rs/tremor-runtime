@@ -233,7 +233,7 @@ enum CodecTaskInMsg {
         response: Response,
         duration: u64,
     },
-    ReportFailure(Ids, EventOriginUri, Error),
+    ReportFailure(Ids, OpMeta, EventOriginUri, Error),
 }
 
 enum SendTaskInMsg {
@@ -342,6 +342,7 @@ impl Sink for Rest {
                                 codec_task_channel
                                     .send(CodecTaskInMsg::ReportFailure(
                                         id,
+                                        op_meta,
                                         event_origin_uri,
                                         e.into(),
                                     ))
@@ -483,7 +484,8 @@ async fn codec_task(
                             error!("Error sending Failed back to send task: {}", e);
                         }
                         // send CB_fail
-                        if let Some(insight) = event.insight_fail() {
+                        if let Some(mut insight) = event.insight_fail() {
+                            insight.ingest_ns = nanotime();
                             if let Err(e) = reply_tx.send(sink::Reply::Insight(insight)).await {
                                 error!("Error sending CB fail event {}", e);
                             }
@@ -601,12 +603,12 @@ async fn codec_task(
                     error!("Error sending CB event {}", e);
                 };
             }
-            CodecTaskInMsg::ReportFailure(id, event_origin_uri, e) => {
-                // report send error as CB disconnect and response via ERROR port
-                if let Err(send_err) = reply_tx
-                    .send(sink::Reply::Insight(Event::cb_trigger(nanotime())))
-                    .await
-                {
+            CodecTaskInMsg::ReportFailure(id, op_meta, event_origin_uri, e) => {
+                // report send error as CB fail and response via ERROR port
+                // sending a CB close would mean we need to take measures to reopen - introduce a healthcheck
+                let mut insight = Event::cb_fail(nanotime(), id.clone());
+                insight.op_meta = op_meta;
+                if let Err(send_err) = reply_tx.send(sink::Reply::Insight(insight)).await {
                     error!(
                         "Error sending CB trigger event for REST sink {} and event {}: {}",
                         sink_uid, id, send_err
