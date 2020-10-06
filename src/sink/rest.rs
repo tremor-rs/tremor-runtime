@@ -415,7 +415,7 @@ fn build_request(
                 .and_then(Value::as_str)
                 .or_else(|| endpoint)
             {
-                Some(url_str) => Some(url_str.parse::<surf::url::Url>()?),
+                Some(url_str) => Some(url_str.parse::<surf::Url>()?),
                 None => None,
             };
         }
