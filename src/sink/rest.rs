@@ -387,6 +387,7 @@ impl Sink for Rest {
             .collect::<HashMap<String, Box<dyn Codec>>>();
         let default_method = self.config.method;
         let endpoint = self.config.endpoint.clone();
+        let config_headers = self.config.headers.clone();
 
         // inbound channel towards codec task
         // sending events to be turned into requests
@@ -404,6 +405,7 @@ impl Sink for Rest {
                 my_codec_map,
                 endpoint,
                 default_method,
+                config_headers,
                 reply_tx,
                 in_rx,
                 is_linked,
@@ -451,6 +453,7 @@ async fn codec_task(
     codec_map: HashMap<String, Box<dyn Codec>>,
     endpoint: Endpoint,
     default_method: Method,
+    default_headers: HashMap<String, String>,
     reply_tx: Sender<sink::Reply>,
     in_rx: Receiver<CodecTaskInMsg>,
     is_linked: bool,
@@ -467,6 +470,7 @@ async fn codec_task(
                     &codec_map,
                     postprocessors.as_mut_slice(),
                     default_method,
+                    &default_headers,
                     &endpoint,
                 ) {
                     Ok(request) => {
@@ -644,6 +648,7 @@ fn build_request(
     codec_map: &HashMap<String, Box<dyn Codec>>,
     postprocessors: &mut [Box<dyn Postprocessor>],
     default_method: Method,
+    default_headers: &HashMap<String, String>,
     config_endpoint: &Endpoint,
 ) -> Result<surf::Request> {
     let mut body: Vec<u8> = vec![];
@@ -750,7 +755,12 @@ fn build_request(
 
     let mut request_builder = surf::RequestBuilder::new(method.unwrap_or(default_method), endpoint);
 
-    // build headers
+    // build headers from config
+    for (k, v) in default_headers {
+        request_builder = request_builder.header(k.clone().as_str(), v.clone());
+    }
+
+    // build headers from meta - effectivelty overwrite config headers in case of conflict
     for (k, v) in headers {
         if "content-type".eq_ignore_ascii_case(k) {
             if let Ok(mime) = Mime::from_str(v) {
