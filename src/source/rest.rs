@@ -22,6 +22,7 @@ use async_channel::unbounded;
 use async_channel::{Sender, TryRecvError};
 use halfbrown::HashMap;
 use http_types::Mime;
+use tide::http::headers::HeaderValue;
 use tide::{Body, Request, Response};
 use tremor_script::Value;
 
@@ -171,8 +172,8 @@ async fn handle_request(mut req: Request<ServerState>) -> tide::Result<Response>
     let codec_override = ct.map(|ct| ct.essence().to_string());
 
     // request metadata
-    // TODO namespace these better .unwrap()
-    let mut meta = Value::object_with_capacity(4);
+    let mut meta = Value::object_with_capacity(1);
+    let mut request_meta = Value::object_with_capacity(3);
     let mut url_meta = Value::object_with_capacity(7);
     let url = req.url();
     url_meta.insert("scheme", url.scheme().to_string())?;
@@ -190,13 +191,10 @@ async fn handle_request(mut req: Request<ServerState>) -> tide::Result<Response>
     url.fragment()
         .and_then(|f| url_meta.insert("fragment", f.to_string()).ok());
 
-    meta.insert("request_method", req.method().to_string())?;
-    meta.insert("request_url", url_meta)?;
-    meta.insert("request_headers", headers)?;
-    meta.insert(
-        "request_content_type",
-        codec_override.clone().map_or(Value::null(), |s| s.into()),
-    )?;
+    request_meta.insert("method", req.method().to_string())?;
+    request_meta.insert("headers", headers)?;
+    request_meta.insert("url", url_meta)?;
+    meta.insert("request", request_meta)?;
 
     let data = req.body_bytes().await?;
     if req.state().link {
@@ -251,81 +249,71 @@ fn make_response(
     codec_map: &HashMap<String, Box<dyn Codec>>,
     event: &tremor_pipeline::Event,
 ) -> Result<Response> {
-    // TODO reject batched events and handle only single event here
     let err: Error = "Empty event.".into();
-    let (response_data, response_meta) = event.value_meta_iter().next().ok_or(err)?;
+    let (response_data, meta) = event.value_meta_iter().next().ok_or(err)?;
 
-    // TODO status should change if there's any errors here (eg: during
-    // content-type encoding). maybe include the error string in the response too
-    // .unwrap()
-    let status = response_meta
-        .get("response_status")
-        .and_then(|s| s.as_u16())
-        .unwrap_or(200);
+    if let Some(response_meta) = meta.get("response") {
+        let status = response_meta
+            .get("status")
+            .and_then(|s| s.as_u16())
+            .unwrap_or(200);
 
-    let mut builder = Response::builder(status);
-    // extract headers
-    let mut header_content_type: Option<&str> = None;
-    if let Some(headers) = response_meta
-        .get("response_headers")
-        .and_then(|hs| hs.as_object())
-    {
-        // TODO: set Host header
-        for (name, values) in headers {
-            // TODO standardize on string type for header values (even with multiple entries)?
-            if let Some(header_values) = values.as_array() {
-                if name.eq_ignore_ascii_case("content-type") {
-                    // pick first value in case of multiple content-type headers
-                    header_content_type = header_values[0].as_str();
-                }
-                for value in header_values {
-                    if let Some(header_value) = value.as_str() {
-                        builder = builder.header(name.as_ref(), header_value);
+        // hallo heinz! :)
+        let mut builder = Response::builder(status);
+        // extract headers
+        let mut header_content_type: Option<&str> = None;
+        if let Some(headers) = response_meta.get("headers").and_then(|hs| hs.as_object()) {
+            for (name, values) in headers {
+                if let Some(header_values) = values.as_array() {
+                    if name.eq_ignore_ascii_case("content-type") {
+                        // pick first value in case of multiple content-type headers
+                        header_content_type = header_values[0].as_str();
                     }
+                    let mut v = Vec::with_capacity(header_values.len());
+                    for value in header_values {
+                        if let Some(header_value) = value.as_str() {
+                            v.push(HeaderValue::from_str(header_value)?);
+                        }
+                    }
+                    builder = builder.header(name.as_ref(), v.as_slice());
+                } else if let Some(header_value) = values.as_str() {
+                    if name.eq_ignore_ascii_case("content-type") {
+                        header_content_type = Some(header_value);
+                    }
+                    builder = builder.header(name.as_ref(), header_value);
                 }
-            } else if let Some(header_value) = values.as_str() {
-                if name.eq_ignore_ascii_case("content-type") {
-                    header_content_type = Some(header_value);
-                }
-                builder = builder.header(name.as_ref(), header_value);
             }
         }
-    }
 
-    // extract content_type
-    // give content type from headers precedence
-    // TODO: maybe ditch response_content_type meta stuff
-    let maybe_content_type = match (
-        header_content_type,
-        response_meta
-            .get("response_content_type")
-            .and_then(|ct| ct.as_str()),
-    ) {
-        (None, None) => None,
-        (None, Some(ct)) | (Some(ct), _) => Some(Mime::from_str(ct)?),
-    };
+        let maybe_content_type = match header_content_type {
+            None => None,
+            Some(ct) => Some(Mime::from_str(ct)?),
+        };
 
-    if let Some((mime, dynamic_codec)) = maybe_content_type
-        .and_then(|mime| codec_map.get(mime.essence()).map(|c| (mime, c.as_ref())))
-    {
-        let mut body = Body::from_bytes(dynamic_codec.encode(response_data)?);
-        body.set_mime(mime);
-        builder = builder.body(body);
-    } else {
-        // fallback to default codec
-        let mut body = Body::from_bytes(default_codec.encode(response_data)?);
-        // set mime type for default codec
-        // TODO: cache mime type for default codec
-        if let Some(mime) = default_codec
-            .mime_types()
-            .drain(..)
-            .find_map(|mstr| Mime::from_str(mstr).ok())
+        if let Some((mime, dynamic_codec)) = maybe_content_type
+            .and_then(|mime| codec_map.get(mime.essence()).map(|c| (mime, c.as_ref())))
         {
+            let mut body = Body::from_bytes(dynamic_codec.encode(response_data)?);
             body.set_mime(mime);
+            builder = builder.body(body);
+        } else {
+            // fallback to default codec
+            let mut body = Body::from_bytes(default_codec.encode(response_data)?);
+            // set mime type for default codec
+            // TODO: cache mime type for default codec
+            if let Some(mime) = default_codec
+                .mime_types()
+                .drain(..)
+                .find_map(|mstr| Mime::from_str(mstr).ok())
+            {
+                body.set_mime(mime);
+            }
+            builder = builder.body(body);
         }
-        builder = builder.body(body);
+        Ok(builder.build())
+    } else {
+        Err("No response metadata available.".into())
     }
-    Ok(builder.build())
 }
 
 #[async_trait::async_trait()]
@@ -358,7 +346,30 @@ impl Source for Int {
     ) -> Result<()> {
         if let Some(event_id) = event.id.get(self.uid) {
             if let Some(response_tx) = self.response_txes.get(&event_id) {
-                let res = make_response(codec, codec_map, &event)?;
+                if event.is_batch && self.is_linked {
+                    return Err("Batched events not supported in linked REST source.".into());
+                }
+                let res = match make_response(codec, codec_map, &event) {
+                    Ok(response) => response,
+                    Err(e) => {
+                        // build error response
+                        let mut error_data = Value::object_with_capacity(1);
+                        error_data.insert("error", e.to_string())?;
+                        let mut builder = Response::builder(500).header("Server", "Tremor");
+                        if let Ok(data) = codec.encode(&error_data) {
+                            let mut body = Body::from_bytes(data);
+                            for mime in codec.mime_types() {
+                                if let Ok(mime) = Mime::from_str(mime) {
+                                    body.set_mime(mime);
+                                    break;
+                                }
+                            }
+                        } else {
+                            builder = builder.body(Body::from_string(e.to_string()));
+                        }
+                        builder.build()
+                    }
+                };
                 response_tx.send(res).await?
             } else {
                 debug!("No outstanding HTTP session for event-id {}", event_id);

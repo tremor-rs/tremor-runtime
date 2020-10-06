@@ -657,19 +657,65 @@ fn build_request(
     let mut headers = Vec::with_capacity(8);
     let mut codec_in_use = None;
     for (data, meta) in event.value_meta_iter() {
-        // use method from first event
-        if method.is_none() {
-            method = Some(
-                match meta
-                    .get("request_method")
-                    .and_then(Value::as_str)
-                    .map(|m| Method::from_str(&m.trim().to_uppercase()))
-                {
-                    Some(Ok(method)) => method,
-                    Some(Err(e)) => return Err(e.into()),
-                    None => default_method,
-                },
-            );
+        if let Some(request_meta) = meta.get("request") {
+            // use method from first event
+            if method.is_none() {
+                method = Some(
+                    match request_meta
+                        .get("method")
+                        .and_then(Value::as_str)
+                        .map(|m| Method::from_str(&m.trim().to_uppercase()))
+                    {
+                        Some(Ok(method)) => method,
+                        Some(Err(e)) => return Err(e.into()),
+                        None => default_method,
+                    },
+                );
+            }
+            // use headers from event
+            if headers.is_empty() {
+                if let Some(map) = request_meta.get("headers").and_then(Value::as_object) {
+                    for (header_name, v) in map {
+                        // filter out content-length (might be carried over from received request), likely to have changed
+                        if "content-length".eq_ignore_ascii_case(header_name) {
+                            continue;
+                        }
+                        if let Some(value) = v.as_str() {
+                            headers.push((header_name, value));
+                            // TODO: deduplicate
+                            // try to determine codec
+                            if "content-type".eq_ignore_ascii_case(header_name)
+                                && codec_in_use.is_none()
+                            {
+                                codec_in_use = Some(
+                                    Mime::from_str(value)
+                                        .ok()
+                                        .and_then(|m| codec_map.get(m.essence()))
+                                        .map_or(codec, |c| c.borrow()),
+                                );
+                            }
+                        }
+                        if let Some(array) = v.as_array() {
+                            for header in array {
+                                if let Some(value) = header.as_str() {
+                                    headers.push((header_name, value));
+                                    // try to determine codec
+                                    if "content-type".eq_ignore_ascii_case(header_name)
+                                        && codec_in_use.is_none()
+                                    {
+                                        codec_in_use = Some(
+                                            Mime::from_str(value)
+                                                .ok()
+                                                .and_then(|m| codec_map.get(m.essence()))
+                                                .map_or(codec, |c| c.borrow()),
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
         // use url from first event
         if endpoint.is_none() {
@@ -692,50 +738,7 @@ fn build_request(
                 None => None, // we use the config endpoint
             }
         }
-        // use headers from event
-        if headers.is_empty() {
-            if let Some(map) = meta.get("request_headers").and_then(Value::as_object) {
-                for (header_name, v) in map {
-                    // filter out content-length (might be carried over from received request), likely to have changed
-                    if "content-length".eq_ignore_ascii_case(header_name) {
-                        continue;
-                    }
-                    if let Some(value) = v.as_str() {
-                        headers.push((header_name, value));
-                        // TODO: deduplicate
-                        // try to determine codec
-                        if codec_in_use.is_none()
-                            && "content-type".eq_ignore_ascii_case(header_name)
-                        {
-                            codec_in_use = Some(
-                                Mime::from_str(value)
-                                    .ok()
-                                    .and_then(|m| codec_map.get(m.essence()))
-                                    .map_or(codec, |c| c.borrow()),
-                            );
-                        }
-                    }
-                    if let Some(array) = v.as_array() {
-                        for header in array {
-                            if let Some(value) = header.as_str() {
-                                headers.push((header_name, value));
-                                // try to determine codec
-                                if codec_in_use.is_none()
-                                    && "content-type".eq_ignore_ascii_case(header_name)
-                                {
-                                    codec_in_use = Some(
-                                        Mime::from_str(value)
-                                            .ok()
-                                            .and_then(|m| codec_map.get(m.essence()))
-                                            .map_or(codec, |c| c.borrow()),
-                                    );
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+
         // apply the given codec, fall back to the configured codec if none is found
         if let Some(codec) = codec_in_use {
             let encoded = codec.encode(data)?;
@@ -786,9 +789,11 @@ async fn build_response_events(
     codec_map: &HashMap<String, Box<dyn Codec>>,
     preprocessors: &mut [Box<dyn Preprocessor>],
 ) -> Result<Vec<Event>> {
-    let mut meta = Value::object_with_capacity(8);
+    let mut meta = Value::object_with_capacity(1);
+    let mut response_meta = Value::object_with_capacity(2);
+
     let numeric_status: u16 = response.status().into();
-    meta.insert("response_status", numeric_status)?;
+    response_meta.insert("status", numeric_status)?;
 
     let mut headers = Value::object_with_capacity(8);
     {
@@ -802,7 +807,8 @@ async fn build_response_events(
             headers.insert(name.to_string(), header_value)?;
         }
     }
-    meta.insert("response_headers", headers)?;
+    response_meta.insert("headers", headers)?;
+    meta.insert("response", response_meta)?;
     // chose a codec
     let the_chosen_one = response
         .content_type()
@@ -850,16 +856,19 @@ fn create_error_response(
     origin_uri: EventOriginUri,
     e: &Error,
 ) -> Event {
-    let mut error_data = simd_json::value::borrowed::Object::with_capacity(1);
+    let mut error_data = simd_json::value::borrowed::Object::with_capacity(2);
     let mut meta = simd_json::value::borrowed::Object::with_capacity(2);
-    meta.insert_nocheck("response_status".into(), Value::from(status));
-    let err_str = e.to_string();
+    let mut response_meta = simd_json::value::borrowed::Object::with_capacity(2);
+    response_meta.insert_nocheck("status".into(), Value::from(status));
     let mut headers = simd_json::value::borrowed::Object::with_capacity(2);
     headers.insert_nocheck("Content-Type".into(), Value::from("application/json"));
     headers.insert_nocheck("Server".into(), Value::from("Tremor"));
-    meta.insert_nocheck("response_headers".into(), Value::from(headers));
+    response_meta.insert_nocheck("headers".into(), Value::from(headers));
 
-    error_data.insert_nocheck("error".into(), Value::from(err_str));
+    meta.insert_nocheck("response".into(), Value::from(response_meta));
+    meta.insert_nocheck("error".into(), Value::from(e.to_string()));
+
+    error_data.insert_nocheck("error".into(), Value::from(e.to_string()));
     error_data.insert_nocheck("event_id".into(), Value::from(event_id.to_string()));
     error_id.merge(event_id); // make sure we carry over the old events ids
     Event {
