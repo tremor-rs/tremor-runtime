@@ -126,7 +126,7 @@ mod test {
                 .to_string(),
         };
         let runtime = Script::parse(
-            &ModulePath { mounts: vec![] }, // FIXME config cpp
+            &ModulePath { mounts: vec![] }, // TODO config cpp
             "<test>",
             config.script.clone(),
             &*FN_REGISTRY.lock().expect("could not claim lock"),
@@ -165,7 +165,7 @@ mod test {
             script: r#"match this is invalid code so no match case"#.to_string(),
         };
         let _runtime = Script::parse(
-            &ModulePath { mounts: vec![] }, // FIXME config cpp
+            &ModulePath { mounts: vec![] }, // TODO config cpp
             "<test>",
             config.script,
             &*FN_REGISTRY.lock().expect("could not claim lock"),

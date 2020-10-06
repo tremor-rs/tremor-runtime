@@ -40,7 +40,7 @@ pub(crate) fn slurp_string(file: &str) -> Result<String> {
 
 #[derive(Deserialize, Debug, Serialize)]
 pub(crate) struct TargetConfig {
-    pub(crate) instances: HashMap<String, Vec<String>>, // TODO FIXME TremorURL
+    pub(crate) instances: HashMap<String, Vec<String>>, // TODO TremorURL
 }
 
 pub(crate) struct TremorApp {

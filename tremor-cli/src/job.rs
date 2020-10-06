@@ -175,19 +175,19 @@ impl TargetProcess {
 impl Drop for TargetProcess {
     fn drop(&mut self) {
         if let Some(handle) = self.stdout_thread.take() {
-            handle
-                .join()
-                .unwrap_or_else(|_| {
-                    Ok(()) // FIXME error handling
-                })
-                .ok();
+            if let Err(e) = handle.join() {
+                eprintln!("target process drop error: {:?}", e);
+            }
         }
 
         if let Some(handle) = self.stderr_thread.take() {
-            handle.join().unwrap_or_else(|_| Ok(())).ok(); // FIXME error handling
+            if let Err(e) = handle.join().unwrap_or_else(|_| Ok(())) {
+                eprintln!("target process drop error: {:?}", e);
+            }
         }
 
-        self.process.wait().ok();
-        // FIXME handle errors and exit status better
+        if let Err(e) = self.process.wait() {
+            eprintln!("target process drop error: {:?}", e);
+        }
     }
 }

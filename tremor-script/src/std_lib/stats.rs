@@ -192,7 +192,7 @@ impl TremorAggrFn for Min {
         }
     }
     fn compensate<'event>(&mut self, _args: &[&Value<'event>]) -> FResult<()> {
-        // FIXME: how?
+        // TODO: how?
         // [a, b, c, d, e, f, g, h, i, j];
         // a -> [(0, a)]
         // b -> [(0, a), (1, b)]
@@ -249,7 +249,7 @@ impl TremorAggrFn for Max {
         }
     }
     fn compensate<'event>(&mut self, _args: &[&Value<'event>]) -> FResult<()> {
-        // FIXME: how?
+        // TODO: how?
         Ok(())
     }
     fn emit<'event>(&mut self) -> FResult<Value<'event>> {
@@ -533,7 +533,7 @@ impl TremorAggrFn for Dds {
     }
 
     fn compensate<'event>(&mut self, _args: &[&Value<'event>]) -> FResult<()> {
-        // FIXME there's no facility for this with dds histogram, punt for now
+        // TODO there's no facility for this with dds histogram, punt for now
         Ok(())
     }
 
@@ -669,7 +669,7 @@ impl TremorAggrFn for Hdr {
             }
 
             #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-            let v = v as u64; // FIXME TODO add f64 support to HDR Histogram create -  oss
+            let v = v as u64; // TODO add f64 support to HDR Histogram create -  oss
             if let Some(ref mut histo) = self.histo {
                 histo.record(v).map_err(|e| FunctionError::RuntimeError {
                     mfa: mfa("stats", "hdr", 2),
@@ -775,7 +775,7 @@ impl TremorAggrFn for Hdr {
     }
 
     fn compensate<'event>(&mut self, _args: &[&Value<'event>]) -> FResult<()> {
-        // FIXME there's no facility for this with hdr histogram, punt for now
+        // TODO there's no facility for this with hdr histogram, punt for now
         Ok(())
     }
     fn emit<'event>(&mut self) -> FResult<Value<'event>> {

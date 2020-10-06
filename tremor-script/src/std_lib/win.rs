@@ -29,7 +29,7 @@ impl TremorAggrFn for First {
         Ok(())
     }
     fn compensate<'event>(&mut self, _args: &[&Value<'event>]) -> FResult<()> {
-        // FIXME: how?
+        // TODO: how?
         Ok(())
     }
     fn emit<'event>(&mut self) -> FResult<Value<'event>> {
@@ -77,7 +77,7 @@ impl TremorAggrFn for Last {
         Ok(())
     }
     fn compensate<'event>(&mut self, _args: &[&Value<'event>]) -> FResult<()> {
-        // FIXME: how?
+        // TODO: how?
         Ok(())
     }
     fn emit<'event>(&mut self) -> FResult<Value<'event>> {
@@ -125,7 +125,7 @@ impl TremorAggrFn for CollectFlattened {
         Ok(())
     }
     fn compensate<'event>(&mut self, _args: &[&Value<'event>]) -> FResult<()> {
-        // FIXME: how?
+        // TODO: how?
         Ok(())
     }
     fn emit<'event>(&mut self) -> FResult<Value<'event>> {
@@ -169,7 +169,7 @@ impl TremorAggrFn for CollectNested {
         Ok(())
     }
     fn compensate<'event>(&mut self, _args: &[&Value<'event>]) -> FResult<()> {
-        // FIXME: how?
+        // TODO: how?
         Ok(())
     }
     fn emit<'event>(&mut self) -> FResult<Value<'event>> {

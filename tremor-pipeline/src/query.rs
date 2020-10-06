@@ -162,7 +162,7 @@ impl Query {
             .and_then(Value::as_str)
             .unwrap_or("<generated>");
 
-        // FIXME compute public streams - do not hardcode
+        // TODO compute public streams - do not hardcode
         let id = pipe_graph.add_node(NodeConfig {
             id: IN,
             kind: NodeKind::Input,
@@ -177,7 +177,7 @@ impl Query {
         pipe_ops.insert(id, op);
         inputs.insert(IN, id);
 
-        // FIXME compute public streams - do not hardcode
+        // TODO compute public streams - do not hardcode
         let err: Cow<'static, str> = "err".into();
         let id = pipe_graph.add_node(NodeConfig {
             id: err.clone(),
@@ -193,7 +193,7 @@ impl Query {
         pipe_ops.insert(id, op);
         outputs.push(id);
 
-        // FIXME compute public streams - do not hardcode
+        // TODO compute public streams - do not hardcode
 
         let id = pipe_graph.add_node(NodeConfig {
             id: OUT,
@@ -536,7 +536,7 @@ impl Query {
                     .take(graph.len())
                     .collect(),
                 stack: Vec::with_capacity(graph.len()),
-                id: pipeline_id.to_string(), // FIXME make configurable
+                id: pipeline_id.to_string(), // TODO make configurable
                 metrics_idx: i2pos[&nodes
                     .get("metrics")
                     .ok_or_else(|| Error::from("metrics node missing"))?],

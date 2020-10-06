@@ -90,7 +90,7 @@ pub(crate) async fn load_query_file(world: &World, file_name: &str) -> Result<us
     file.read_to_string(&mut raw)
         .map_err(|e| Error::from(format!("Could not open file {} => {}", file_name, e)))?;
 
-    // FIXME: Should ideally be const'd
+    // TODO: Should ideally be const'd
     let aggr_reg = tremor_script::registry::aggr();
     let module_path = tremor_script::path::load();
     let query = Query::parse(

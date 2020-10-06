@@ -436,7 +436,7 @@ impl Operator for TrickleSelect {
 
         // NOTE We are unwrapping our rental wrapped stmt
 
-        // FIXME: reason about soundness
+        // TODO: reason about soundness
         let SelectStmt {
             stmt,
             aggregates,
@@ -718,7 +718,7 @@ impl Operator for TrickleSelect {
                 // This ensures that in the next iteration of the leep we can clear
                 // the previous window since we already pulled all needed data out here.
                 if let Some(prev) = windows.peek() {
-                    // FIXME: All the data we use mutably is in a pin
+                    // TODO: All the data we use mutably is in a pin
                     let prev: &mut Window = unsafe { std::mem::transmute(&**prev) };
                     let prev_groups = &mut prev.dims.groups;
                     let last_groups = &mut prev.last_dims.groups;
@@ -793,7 +793,7 @@ impl Operator for TrickleSelect {
                     }
 
                     invocable.accumulate(argv1.as_slice()).map_err(|e| {
-                        // FIXME nice error
+                        // TODO nice error
                         let r: Option<&Registry> = None;
                         e.into_err(aggr, aggr, r, &node_meta)
                     })?;

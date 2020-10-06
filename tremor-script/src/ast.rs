@@ -418,7 +418,7 @@ where
         let mut r = None;
         for (i, s) in self.shadowed_vars.iter().enumerate() {
             if s == id {
-                //FIXME: make sure we never overwrite this,
+                //TODO: make sure we never overwrite this,
                 r = Some(shadow_name(i))
             }
         }

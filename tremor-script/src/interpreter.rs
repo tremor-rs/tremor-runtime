@@ -182,7 +182,7 @@ impl ExecOpts {
 #[inline]
 #[allow(clippy::cast_precision_loss)]
 fn val_eq<'event>(lhs: &Value<'event>, rhs: &Value<'event>) -> bool {
-    // FIXME Consider Tony Garnock-Jones perserves w.r.t. forcing a total ordering
+    // TODO Consider Tony Garnock-Jones perserves w.r.t. forcing a total ordering
     // across builtin types if/when extending for 'lt' and 'gt' variants
     //
     use Value::{Array, Object, Static, String};

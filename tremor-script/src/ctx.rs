@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-#![allow(clippy::forget_copy)] // FIXME: we need this fir the derive
+#![allow(clippy::forget_copy)] // TODO: we need this fir the derive
 
 use crate::errors::{Error, Result};
 use std::default;

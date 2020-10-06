@@ -210,7 +210,6 @@ pub struct Config {
     pub method: Method,
 
     #[serde(default)]
-    // TODO utilize this
     pub headers: HashMap<String, String>,
 }
 

@@ -226,7 +226,7 @@ where
         }
     }
 
-    // FIXME: Quite some overlap with `ImutExprInt::comprehension`
+    // TODO: Quite some overlap with `ImutExprInt::comprehension`
     fn comprehension(
         &'script self,
         opts: ExecOpts,

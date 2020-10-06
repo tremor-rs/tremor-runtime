@@ -23,7 +23,7 @@
     clippy::unnecessary_unwrap,
     clippy::pedantic
 )]
-// FIXME We need this for simd-json-derive
+// TODO We need this for simd-json-derive
 #![allow(clippy::missing_errors_doc)]
 
 /// The Tremor Script AST

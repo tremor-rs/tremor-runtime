@@ -927,7 +927,7 @@ pub(crate) fn error_array_out_of_bound<'script, T, O: BaseExpr, I: BaseExpr>(
     meta: &NodeMetas,
 ) -> Result<T> {
     let expr: Range = outer.extent(meta);
-    // FIXME: Why match on `path` when all arms do the same?!
+    // TODO: Why match on `path` when all arms do the same?!
     // -> ideally: put the `path` into the `ErrorKind::ArrayOutOfRange`, handle in display
     //        but: not trivial: `Path` is parametric in non-'static lifetime 'script
     Err(match path {

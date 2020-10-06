@@ -72,7 +72,7 @@ fn suite_bench(
                 let test_report = process::run_process("bench", base, root, &tags)?;
                 status::duration(test_report.duration, "  ")?;
                 suite.push(test_report);
-                stats.pass(); // FIXME invent a better way of capturing benchmark status
+                stats.pass(); // TODO invent a better way of capturing benchmark status
             } else {
                 stats.skip();
                 status::h1(

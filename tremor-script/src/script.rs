@@ -119,7 +119,7 @@ where
         script: String,
         reg: &Registry,
         // args: Option<Vec<&str>>,
-        // aggr_reg: &AggrRegistry, - we really should shadow and provide a nice hygienic error FIXME but not today
+        // aggr_reg: &AggrRegistry, - we really should shadow and provide a nice hygienic error TODO but not today
     ) -> std::result::Result<Self, CompilerError> {
         let mut include_stack = lexer::IncludeStack::default();
         let r = |include_stack: &mut lexer::IncludeStack| -> Result<Self> {
@@ -198,7 +198,7 @@ where
     ) -> io::Result<()> {
         let mut s = script.to_string();
         let mut include_stack = lexer::IncludeStack::default();
-        let cu = include_stack.push("test.tremor")?; // FIXME
+        let cu = include_stack.push("test.tremor")?;
 
         let tokens: Vec<_> = lexer::Preprocessor::preprocess(
             &crate::path::load(),

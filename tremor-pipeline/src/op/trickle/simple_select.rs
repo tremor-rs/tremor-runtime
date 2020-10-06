@@ -92,7 +92,7 @@ impl Operator for SimpleSelect {
         // We guarantee at compile time that select in itself can't have locals, so this is safe
 
         // NOTE We are unwrapping our rental wrapped stmt
-        // FIXME: add soundness reasoning
+        // TODO: add soundness reasoning
         let SelectStmt {
             stmt,
             locals,
