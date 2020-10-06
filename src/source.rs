@@ -549,6 +549,17 @@ where
                                     // TODO pass meta alongside which can be useful for
                                     // errors too [will probably need to return (port, data)
                                     // as part of results itself]
+                                    let mut error_meta =
+                                        simd_json::borrowed::Object::with_capacity(2);
+                                    let mut response_meta =
+                                        simd_json::borrowed::Object::with_capacity(1);
+                                    response_meta.insert_nocheck("status".into(), Value::from(400));
+                                    error_meta.insert_nocheck("error".into(), e.to_string().into());
+                                    error_meta.insert_nocheck(
+                                        "response".into(),
+                                        Value::from(response_meta),
+                                    );
+
                                     let mut error_data =
                                         simd_json::borrowed::Object::with_capacity(3);
                                     error_data.insert_nocheck("error".into(), e.to_string().into());
@@ -558,7 +569,10 @@ where
                                         "source_id".into(),
                                         self.source_id.to_string().into(),
                                     );
-                                    (ERROR, Value::from(error_data).into())
+                                    (
+                                        ERROR,
+                                        (Value::from(error_data), Value::from(error_meta)).into(),
+                                    )
                                 }
                             };
                             error |= self
