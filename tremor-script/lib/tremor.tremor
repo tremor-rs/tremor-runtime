@@ -1,8 +1,8 @@
 ### Tremor runtime related libraries. This provides the following modules:
-### 
-### * [chash](std/chash.md) - functions dealing with consitant hasing
-### * [origin](std/origin.md) - functions providing access to onramp origin data
-### * [system](std/system.md) - functions related to the system running
+###
+### * [chash](tremor/chash.md) - functions dealing with consitant hasing
+### * [origin](tremor/origin.md) - functions providing access to onramp origin data
+### * [system](tremor/system.md) - functions related to the system running
 
 use tremor::chash;
 use tremor::origin;
