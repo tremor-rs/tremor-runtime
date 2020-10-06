@@ -565,6 +565,16 @@ pub struct NodeConfig {
     pub(crate) node: Option<Arc<StmtRentalWrapper>>,
 }
 
+impl Display for NodeConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.kind {
+            NodeKind::Input => write!(f, "--> {}", self.id),
+            NodeKind::Output => write!(f, "{} -->", self.id),
+            NodeKind::Operator => write!(f, "{}", self.id),
+        }
+    }
+}
+
 impl NodeConfig {
     /// Creates a `NodeConfig` from a config struct
     pub fn from_config<C, I>(id: I, config: C) -> Result<Self>
@@ -738,8 +748,7 @@ impl NodeConfig {
     }
 }
 
-type Weightless = ();
-pub(crate) type ConfigGraph = graph::DiGraph<NodeConfig, Weightless>;
+pub(crate) type ConfigGraph = graph::DiGraph<NodeConfig, u8>;
 
 #[derive(Debug, Default, Clone)]
 pub(crate) struct NodeMetrics {
@@ -816,6 +825,8 @@ pub struct ExecutableGraph {
     metric_interval: Option<u64>,
     /// snot
     pub insights: Vec<(usize, Event)>,
+    /// the dot representation of the graph
+    pub dot: String,
 }
 
 /// The return of a graph execution

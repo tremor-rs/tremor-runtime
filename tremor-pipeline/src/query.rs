@@ -28,7 +28,7 @@ use op::trickle::{
     simple_select::SimpleSelect,
 };
 use petgraph::algo::is_cyclic_directed;
-use petgraph::dot::{Config, Dot};
+use petgraph::dot::Config;
 use simd_json::prelude::*;
 use std::borrow::Cow;
 use std::mem;
@@ -480,24 +480,15 @@ impl Query {
                         ports.push(to_tpl);
                     }
                 }
-                pipe_graph.add_edge(from_idx, to_idx, ());
+                pipe_graph.add_edge(from_idx, to_idx, 0);
             }
         }
 
-        /*
-        println!(
-            "{:?}",
-            petgraph::dot::Dot::with_config(&pipe_graph, &[Config::EdgeNoLabel])
-        );
-        */
+        let dot = petgraph::dot::Dot::with_config(&pipe_graph, &[Config::EdgeNoLabel]);
 
         // iff cycles, fail and bail
         if is_cyclic_directed(&pipe_graph) {
-            Err(ErrorKind::CyclicGraphError(format!(
-                "{:?}",
-                Dot::with_config(&pipe_graph, &[Config::EdgeNoLabel])
-            ))
-            .into())
+            Err(ErrorKind::CyclicGraphError(format!("{}", dot)).into())
         } else {
             let mut i2pos = HashMap::new();
             let mut graph = Vec::new();
@@ -560,6 +551,7 @@ impl Query {
                 signalflow,
                 metric_interval,
                 insights: Vec::new(),
+                dot: format!("{}", dot),
             };
             exec.optimize();
 

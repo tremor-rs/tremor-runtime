@@ -61,9 +61,11 @@ where
 {
     banner(h, opts, "Source", "Source code listing")?;
     match opts.kind {
-        SourceKind::Tremor | SourceKind::Json => Script::highlight_script_with(&opts.raw, h)?,
+        SourceKind::Tremor | SourceKind::Json | SourceKind::Default => {
+            Script::highlight_script_with(&opts.raw, h)?
+        }
         SourceKind::Trickle => Query::highlight_script_with(&opts.raw, h)?,
-        SourceKind::Unsupported | SourceKind::Pipeline => {
+        SourceKind::Unsupported => {
             eprintln!("Unsupported");
         }
     }
@@ -210,7 +212,7 @@ where
     let mp = load_module_path();
     let reg: Registry = registry::registry();
     match opts.kind {
-        SourceKind::Tremor | SourceKind::Json => {
+        SourceKind::Tremor | SourceKind::Json | SourceKind::Default => {
             match Script::parse(&mp, opts.src, opts.raw.clone(), &reg) {
                 Ok(runnable) => {
                     let ast = simd_json::to_string_pretty(&runnable.script.suffix())?;
@@ -239,7 +241,7 @@ where
                 }
             };
         }
-        SourceKind::Unsupported | SourceKind::Pipeline => {
+        SourceKind::Unsupported => {
             eprintln!("Unsupported");
         }
     };
@@ -279,6 +281,32 @@ fn script_opts(matches: &ArgMatches, no_banner: bool) -> Result<Opts> {
     Ok(opts)
 }
 
+fn dbg_dot<W>(h: &mut W, opts: &Opts) -> Result<()>
+where
+    W: Highlighter,
+{
+    if opts.kind != SourceKind::Trickle && opts.kind != SourceKind::Default {
+        return Err("Dot visualisation is only supported for trickle files.".into());
+    }
+    let mp = load_module_path();
+    let reg: Registry = registry::registry();
+    let aggr_reg = registry::aggr();
+    match Query::parse(&mp, opts.src, &opts.raw, vec![], &reg, &aggr_reg) {
+        Ok(runnable) => {
+            let mut uid = 0;
+            let g = tremor_pipeline::query::Query::from(runnable).to_pipe(&mut uid)?;
+
+            println!("{}", g.dot)
+        }
+        Err(e) => {
+            if let Err(e) = Script::format_error_from_script(&opts.raw, h, &e) {
+                eprintln!("Error: {}", e);
+            };
+        }
+    };
+    Ok(())
+}
+
 pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
     let no_highlight = matches.is_present("no-highlight");
     let no_banner = matches.is_present("no-banner");
@@ -297,6 +325,9 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
         } else if let Some(args) = matches.subcommand_matches("src") {
             let opts = script_opts(args, no_banner)?;
             dbg_src(&mut h, &opts)
+        } else if let Some(args) = matches.subcommand_matches("dot") {
+            let opts = script_opts(args, no_banner)?;
+            dbg_dot(&mut h, &opts)
         } else {
             Err("Missing subcommand".into())
         };
@@ -318,6 +349,9 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
         } else if let Some(args) = matches.subcommand_matches("src") {
             let opts = script_opts(args, no_banner)?;
             dbg_src(&mut h, &opts)
+        } else if let Some(args) = matches.subcommand_matches("dot") {
+            let opts = script_opts(args, no_banner)?;
+            dbg_dot(&mut h, &opts)
         } else {
             Err("Missing subcommand".into())
         };
