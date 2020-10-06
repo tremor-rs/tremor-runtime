@@ -161,4 +161,5 @@ test_cases!(
     pp_fn_fib,
     heredoc_interpolation,
     heredoc_usefn_interpolation,
+    heredoc_regression,
 );
