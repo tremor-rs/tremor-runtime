@@ -12,17 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// #[cfg(feature = "mimalloc")]
+// #[global_allocator]
+// static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 #[cfg(feature = "snmalloc")]
 #[global_allocator]
 static ALLOC: snmalloc_rs::SnMalloc = snmalloc_rs::SnMalloc;
-
-#[cfg(feature = "mimalloc")]
-#[global_allocator]
-static ALLOC: mimalloc_rs::MiMalloc = mimalloc::MiMalloc;
-
 #[cfg(feature = "jemalloc")]
 #[global_allocator]
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
+#[cfg(feature = "stdalloc")]
+#[global_allocator]
+static ALLOC: std::alloc::System = std::alloc::System;
+#[cfg(not(any(feature = "jemalloc", feature = "snmalloc", feature = "stdalloc")))]
+#[global_allocator]
+static ALLOC: snmalloc_rs::SnMalloc = snmalloc_rs::SnMalloc;
 
 #[allow(clippy::same_functions_in_if_condition)]
 pub(crate) fn get_allocator_name() -> &'static str {
@@ -30,9 +34,11 @@ pub(crate) fn get_allocator_name() -> &'static str {
         "snmalloc"
     } else if cfg!(feature = "jemalloc") {
         "jemalloc"
-    } else if cfg!(feature = "mimalloc") {
-        "mimalloc"
+    } else if cfg!(feature = "stdalloc") {
+        "stdalloc"
+    // } else if cfg!(feature = "mimalloc") {
+    //     "mimalloc"
     } else {
-        "stdalloc" // NOTE The default allocator SHOULD be set in the Cargo.toml default features
+        "snmalloc" // NOTE The default allocator SHOULD be set in the Cargo.toml default features
     }
 }

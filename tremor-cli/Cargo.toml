@@ -43,9 +43,10 @@ http-types = "2.5"
 env_logger = "0.7.1"
 log = "0.4"
 log4rs = "0.12.0"
-mimalloc-rs = { version = "0.1", default-features = false, optional = true }
-jemallocator = { version = "0.3", optional = true }
-snmalloc-rs = { version = "0.2", optional = true }
+mimalloc-rs = { version = "0.1", default-features = true, optional = true }
+jemallocator = { version = "0.3", optional = false }
+snmalloc-rs = { version = "0.2", optional = false }
+allocator_api = "0.6.0"
 rental = "0.5"
 termcolor = "1.1"
 serde_json = "1.0"
@@ -63,8 +64,20 @@ test = false
 
 
 [features]
-default = ["snmalloc"]
-snmalloc = ["snmalloc-rs"]
-jemalloc = ["jemallocator"]
-mimalloc = ["mimalloc-rs"]
+#
+# We use *empty* feature dependencies so that we can switch allocators
+# via feature flags. We *require* no default features so that that mechanism
+# in src/alloc.rs works effectively in practice.
+#
+# It is an error to configure defaults in tremor.cli at this time until rust
+# allows switching allocators at compile time - this is currently not well
+# supported via the global_allocator attribute nor via cfg attributes that
+# levarage features
+#
+
+snmalloc = [ ]
+mimalloc = [ "mimalloc-rs" ]
+jemalloc = [ ]
+stdalloc = [ ]
+default = [ ]
 bert = ["tremor-runtime/bert", "rust-bert", "tch"]
