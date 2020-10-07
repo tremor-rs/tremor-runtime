@@ -150,9 +150,9 @@ dependencies = [
 
 [[package]]
 name = "async-channel"
-version = "1.4.2"
+version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "21279cfaa4f47df10b1816007e738ca3747ef2ee53ffc51cdbf57a8bb266fee3"
+checksum = "55576d57ea9e255e709ea13169645a9427987a6504791cf19b59908d5c922b3d"
 dependencies = [
  "concurrent-queue",
  "event-listener",
