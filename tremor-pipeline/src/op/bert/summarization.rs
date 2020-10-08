@@ -78,8 +78,8 @@ impl Operator for Summerization {
     ) -> Result<EventAndInsights> {
         let (data, meta) = event.data.parts();
         if let Some(s) = data.as_str() {
-            let summary = self.model.summarize(&[s]);
-            if let Some(s) = summary.get(0) {
+            let mut summary = self.model.summarize(&[s]);
+            if let Some(s) = summary.pop() {
                 meta.insert("summary", s)?;
             }
         }
