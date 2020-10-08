@@ -21,7 +21,9 @@ use rust_bert::pipelines::sequence_classification::{
 use tremor_script::prelude::*;
 
 #[derive(Deserialize)]
-struct Config {}
+struct Config {
+    file: String, // just a stupid placeholder
+}
 
 impl ConfigImpl for Config {}
 
@@ -32,7 +34,8 @@ struct SequenceClassification {
 
 op!(SequenceClassificationFactory(node) {
     if let Some(config_map) = &node.config {
-        let _config = Config::new(config_map);
+        let config = Config::new(config_map)?;
+        debug!("{}", config.file);
         let sc_config =SequenceClassificationConfig::default();
         if let Ok(model) = SequenceClassificationModel::new(sc_config) {
             Ok(Box::new(SequenceClassification {
