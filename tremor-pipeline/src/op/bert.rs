@@ -13,5 +13,7 @@
 // limitations under the License.
 
 pub mod sequence_classification;
+pub mod summarization;
 
 pub use sequence_classification::SequenceClassificationFactory;
+pub use summarization::SummerizationFactory;

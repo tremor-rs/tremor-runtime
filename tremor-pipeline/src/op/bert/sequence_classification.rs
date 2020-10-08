@@ -23,7 +23,7 @@ use std::path::PathBuf;
 use tremor_script::prelude::*;
 use url::Url;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Default)]
 struct Config {
     #[serde(default = "dflt_config")]
     config_file: String,

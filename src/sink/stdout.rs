@@ -28,14 +28,32 @@ use halfbrown::HashMap;
 pub struct StdOut {
     postprocessors: Postprocessors,
     stdout: io::Stdout,
+    config: Config,
 }
 
+#[derive(Clone, Debug, Deserialize, Default)]
+struct Config {
+    #[serde(default = "Default::default")]
+    prefix: String,
+}
+
+impl ConfigImpl for Config {}
+
 impl offramp::Impl for StdOut {
-    fn from_config(_config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
-        Ok(SinkManager::new_box(Self {
-            postprocessors: vec![],
-            stdout: io::stdout(),
-        }))
+    fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
+        if let Some(config) = config {
+            Ok(SinkManager::new_box(Self {
+                postprocessors: vec![],
+                stdout: io::stdout(),
+                config: Config::new(config)?,
+            }))
+        } else {
+            Ok(SinkManager::new_box(Self {
+                postprocessors: vec![],
+                stdout: io::stdout(),
+                config: Config::default(),
+            }))
+        }
     }
 }
 #[async_trait::async_trait]
@@ -51,10 +69,11 @@ impl Sink for StdOut {
         for value in event.value_iter() {
             let raw = codec.encode(value)?;
             if let Ok(s) = std::str::from_utf8(&raw) {
-                self.stdout.write_all(s.as_bytes()).await?
+                self.stdout.write_all(self.config.prefix.as_bytes()).await?;
+                self.stdout.write_all(s.as_bytes()).await?;
             } else {
                 self.stdout
-                    .write_all(format!("{:?}", raw).as_bytes())
+                    .write_all(format!("{}{:?}", self.config.prefix, raw).as_bytes())
                     .await?
             }
         }

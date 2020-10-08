@@ -33,8 +33,6 @@ extern crate log;
 #[macro_use]
 extern crate rental;
 
-extern crate rust_bert;
-
 use crate::errors::{Error, ErrorKind, Result};
 use crate::op::prelude::*;
 use halfbrown::HashMap;
@@ -643,7 +641,7 @@ impl Operator for OperatorNode {
 
 fn factory(node: &NodeConfig) -> Result<Box<dyn InitializableOperator>> {
     #[cfg(feature = "tremor-bert")]
-    use op::bert::SequenceClassificationFactory;
+    use op::bert::{SequenceClassificationFactory, SummerizationFactory};
     use op::debug::EventHistoryFactory;
     use op::generic::{BatchFactory, CounterFactory};
     use op::grouper::BucketGrouperFactory;
@@ -668,6 +666,8 @@ fn factory(node: &NodeConfig) -> Result<Box<dyn InitializableOperator>> {
         ["qos", "percentile"] => PercentileFactory::new_boxed(),
         #[cfg(feature = "tremor-bert")]
         ["bert", "sequence_classification"] => SequenceClassificationFactory::new_boxed(),
+        #[cfg(feature = "tremor-bert")]
+        ["bert", "summarization"] => SummerizationFactory::new_boxed(),
         [namespace, name] => {
             return Err(ErrorKind::UnknownOp((*namespace).to_string(), (*name).to_string()).into());
         }
