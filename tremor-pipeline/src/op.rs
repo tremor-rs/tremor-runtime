@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#[cfg(feature = "tremor-bert")]
+pub mod bert;
 pub mod debug;
 pub mod generic;
 pub mod grouper;
@@ -21,6 +23,7 @@ pub mod qos;
 pub mod runtime;
 pub mod trickle;
 
+use self::prelude::OUT;
 use super::{Event, NodeConfig};
 use crate::errors::Result;
 use halfbrown::HashMap;
@@ -41,6 +44,15 @@ impl From<Vec<(Cow<'static, str>, Event)>> for EventAndInsights {
     fn from(events: Vec<(Cow<'static, str>, Event)>) -> Self {
         Self {
             events,
+            ..Self::default()
+        }
+    }
+}
+
+impl From<Event> for EventAndInsights {
+    fn from(event: Event) -> Self {
+        Self {
+            events: vec![(OUT, event)],
             ..Self::default()
         }
     }

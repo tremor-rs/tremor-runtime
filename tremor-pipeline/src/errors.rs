@@ -42,6 +42,7 @@ error_chain! {
     foreign_links {
         YAMLError(serde_yaml::Error) #[doc = "Error during yaml parsing"];
         JSONError(simd_json::Error);
+        JSONAccessError(value_trait::AccessError);
         Io(std::io::Error);
         FromUTF8Error(std::string::FromUtf8Error);
         UTF8Error(std::str::Utf8Error);

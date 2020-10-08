@@ -99,11 +99,6 @@ grok = "1"
 # rest onramp
 tide = "0.13"
 
-# tensorflow
-# features = ["tensorflow_gpu"] doesnt work on osx :(
-rust-bert = {version = "0.10.0", optional = true}
-tensorflow = {version = "0.16.0", optional = true}
-
 [dependencies.tungstenite]
 default-features = false
 version = "0.11"
@@ -120,12 +115,11 @@ default = []
 
 # arm suopport
 neon = ["simd-json/neon"]
-
-bert = ["rust-bert"]
-tensor = ["tensorflow"]
-tensorflow_gpu = ["tensorflow/tensorflow_gpu"]
+tremor-bert = ["tremor-pipeline/tremor-bert"]
 
 [patch.crates-io]
+rust-bert = {git = 'https://github.com/mfelsche/rust-bert.git', rev = '1140989'}
+rust_tokenizers = {git = 'https://github.com/mfelsche/rust-tokenizers.git', rev = '5a7860d'}
 
 # for use during debian packaging, via cargo-deb
 # https://github.com/mmstick/cargo-deb#packagemetadatadeb-options
