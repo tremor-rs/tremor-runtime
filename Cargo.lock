@@ -5336,6 +5336,7 @@ dependencies = [
  "sled",
  "tremor-influx",
  "tremor-script",
+ "url 2.1.1",
  "value-trait",
  "window",
  "xz2",

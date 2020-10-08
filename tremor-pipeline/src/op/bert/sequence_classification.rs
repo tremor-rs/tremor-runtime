@@ -18,11 +18,34 @@ use crate::op::prelude::*;
 use rust_bert::pipelines::sequence_classification::{
     SequenceClassificationConfig, SequenceClassificationModel,
 };
+use rust_bert::resources::{LocalResource, RemoteResource, Resource};
+use std::path::PathBuf;
 use tremor_script::prelude::*;
+use url::Url;
 
 #[derive(Deserialize)]
 struct Config {
-    file: String, // just a stupid placeholder
+    #[serde(default = "dflt_config")]
+    config_file: String,
+    #[serde(default = "dflt_model")]
+    model_file: String,
+    #[serde(default = "dflt_vocabulary")]
+    vocabulary_file: String,
+}
+
+fn dflt_config() -> String {
+    "https://cdn.huggingface.co/distilbert-base-uncased-finetuned-sst-2-english-config.json"
+        .to_string()
+}
+
+fn dflt_model() -> String {
+    "https://cdn.huggingface.co/distilbert-base-uncased-finetuned-sst-2-english-rust_model.ot"
+        .to_string()
+}
+
+fn dflt_vocabulary() -> String {
+    "https://cdn.huggingface.co/distilbert-base-uncased-finetuned-sst-2-english-vocab.txt"
+        .to_string()
 }
 
 impl ConfigImpl for Config {}
@@ -32,21 +55,45 @@ struct SequenceClassification {
     model: SequenceClassificationModel,
 }
 
-op!(SequenceClassificationFactory(node) {
-    if let Some(config_map) = &node.config {
-        let config = Config::new(config_map)?;
-        debug!("{}", config.file);
-        let sc_config =SequenceClassificationConfig::default();
-        if let Ok(model) = SequenceClassificationModel::new(sc_config) {
-            Ok(Box::new(SequenceClassification {
-                model
-            }))
-        } else {
-            Err(ErrorKind::BadOpConfig("Could not instantiate this BERT sequence classification operator.".to_string()).into())
-        }
-
+fn get_resource(resource: &str) -> Result<Resource> {
+    if resource.starts_with("/") {
+        // local
+        Ok(Resource::Local(LocalResource {
+            local_path: PathBuf::from(resource),
+        }))
     } else {
-        Err(ErrorKind::MissingOpConfig(node.id.to_string()).into())
+        let remote_url = Url::parse(resource)?;
+        let err: Error = ErrorKind::BadOpConfig("Invalid URL".to_string()).into();
+        let name = remote_url
+            .path_segments()
+            .and_then(|x| x.last())
+            .and_then(|l| l.split(".").next())
+            .ok_or(err)?;
+        Ok(Resource::Remote(RemoteResource::from_pretrained((
+            name, resource,
+        ))))
+    }
+}
+
+op!(SequenceClassificationFactory(node) {
+    let mapping = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+    let config_map = if let Some(map) = &node.config {
+        map
+    } else {
+        &mapping
+    };
+    let config = Config::new(&config_map)?;
+    let mut sc_config = SequenceClassificationConfig::default();
+    sc_config.config_resource = get_resource(config.config_file.as_str())?; //rust_bert::resources::Resource::Remote(RemoteResource::)
+    sc_config.model_resource = get_resource(config.model_file.as_str())?;
+    sc_config.vocab_resource = get_resource(config.vocabulary_file.as_str())?;
+
+    if let Ok(model) = SequenceClassificationModel::new(sc_config) {
+        Ok(Box::new(SequenceClassification {
+            model
+        }))
+    } else {
+        Err(ErrorKind::BadOpConfig("Could not instantiate this BERT sequence classification operator.".to_string()).into())
     }
 });
 
