@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#[cfg(feature = "tremor-bert")]
+#[cfg(feature = "bert")]
 pub mod bert;
 pub mod debug;
 pub mod generic;

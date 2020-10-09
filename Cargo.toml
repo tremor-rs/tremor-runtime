@@ -115,7 +115,7 @@ default = []
 
 # arm suopport
 neon = ["simd-json/neon"]
-tremor-bert = ["tremor-pipeline/tremor-bert"]
+bert = ["tremor-pipeline/bert"]
 
 [patch.crates-io]
 rust-bert = {git = 'https://github.com/mfelsche/rust-bert.git', rev = '1140989'}

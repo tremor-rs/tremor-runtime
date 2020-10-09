@@ -640,7 +640,7 @@ impl Operator for OperatorNode {
 }
 
 fn factory(node: &NodeConfig) -> Result<Box<dyn InitializableOperator>> {
-    #[cfg(feature = "tremor-bert")]
+    #[cfg(feature = "bert")]
     use op::bert::{SequenceClassificationFactory, SummerizationFactory};
     use op::debug::EventHistoryFactory;
     use op::generic::{BatchFactory, CounterFactory};
@@ -664,9 +664,9 @@ fn factory(node: &NodeConfig) -> Result<Box<dyn InitializableOperator>> {
         ["qos", "roundrobin"] => RoundRobinFactory::new_boxed(),
         ["qos", "wal"] => WalFactory::new_boxed(),
         ["qos", "percentile"] => PercentileFactory::new_boxed(),
-        #[cfg(feature = "tremor-bert")]
+        #[cfg(feature = "bert")]
         ["bert", "sequence_classification"] => SequenceClassificationFactory::new_boxed(),
-        #[cfg(feature = "tremor-bert")]
+        #[cfg(feature = "bert")]
         ["bert", "summarization"] => SummerizationFactory::new_boxed(),
         [namespace, name] => {
             return Err(ErrorKind::UnknownOp((*namespace).to_string(), (*name).to_string()).into());

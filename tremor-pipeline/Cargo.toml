@@ -37,4 +37,4 @@ criterion = "0.3"
 xz2 = "0.1"
 
 [features]
-tremor-bert = ["rust-bert"]
+bert = ["rust-bert"]

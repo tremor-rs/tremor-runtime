@@ -57,7 +57,8 @@ shell-words = "1.0"
 error-chain = "0.12"
 port_scanner = "0.1"
 signal-hook = "0.1"
-
+rust-bert = {version = "0.10.0", optional = true}
+tch = { version = "*", optional = true }
 [[bin]]
 name = "tremor"
 path = "src/main.rs"
@@ -69,3 +70,4 @@ default = ["snmalloc"]
 snmalloc = ["snmalloc-rs"]
 jemalloc = ["jemallocator"]
 mimalloc = ["mimalloc-rs"]
+bert = ["tremor-runtime/bert", "rust-bert", "tch"]
