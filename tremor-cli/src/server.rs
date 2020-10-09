@@ -139,6 +139,16 @@ pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
     version::log();
     eprintln!("allocator: {}", crate::alloc::get_allocator_name());
 
+    #[cfg(feature = "bert")]
+    {
+        let d = tch::Device::cuda_if_available();
+        if d.is_cuda() {
+            eprintln!("CUDA is supported");
+        } else {
+            eprintln!("CUDA is NOT  supported, falling back to the CPU");
+        }
+    }
+
     unsafe {
         // We know that instance will only get set once at
         // the very beginning nothing can access it yet,
