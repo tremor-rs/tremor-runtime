@@ -1727,7 +1727,9 @@ impl<'input> Lexer<'input> {
                 }
                 Some((end_inner, '{')) => {
                     if let Some((e, '}')) = self.lookahead() {
+                        tmp.push('{');
                         tmp.push('}');
+                        self.bump();
                         end = e;
                         continue;
                     }
