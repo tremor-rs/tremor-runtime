@@ -1702,7 +1702,7 @@ impl<'input> Lexer<'input> {
     /// Handle heredoc strings `"""`  ...
     fn hd(
         &mut self,
-        mut start: Location,
+        mut segment_start: Location,
         mut end: Location,
         mut has_escapes: bool,
         _string: &str,
@@ -1715,12 +1715,13 @@ impl<'input> Lexer<'input> {
                 Some((e, '\n')) => {
                     end = e;
                     tmp.push('\n');
-                    res.push(self.spanned2(start, end, Token::StringLiteral(tmp.into())));
+                    res.push(self.spanned2(segment_start, end, Token::StringLiteral(tmp.into())));
+                    segment_start = end;
                     tmp = String::new();
                 }
                 Some((e, '\\')) => {
                     has_escapes = true;
-                    if let Some(c) = self.escape_code(&tmp, start)? {
+                    if let Some(c) = self.escape_code(&tmp, segment_start)? {
                         tmp.push(c);
                     };
                     end = e;
@@ -1734,7 +1735,7 @@ impl<'input> Lexer<'input> {
                         continue;
                     }
                     let e = end_inner;
-                    let mut s = start;
+                    let mut s = segment_start;
                     s.column += 1;
                     s.absolute += 1;
                     if !tmp.is_empty() {
@@ -1747,14 +1748,14 @@ impl<'input> Lexer<'input> {
                             // Invalid start end case :(
                             Token::StringLiteral(tmp.into())
                         };
-                        res.push(self.spanned2(start, end_inner, token));
+                        res.push(self.spanned2(segment_start, end_inner, token));
                         tmp = String::new();
                     }
-                    start = end_inner;
+                    segment_start = end_inner;
                     end = end_inner;
                     end.column += 1;
                     end.absolute += 1;
-                    res.push(self.spanned2(start, end, Token::LBrace));
+                    res.push(self.spanned2(segment_start, end, Token::LBrace));
                     let mut pcount = 0;
                     // We can't use for because of the borrow checker ...
                     #[allow(clippy::while_let_on_iterator)]
@@ -1762,7 +1763,7 @@ impl<'input> Lexer<'input> {
                         let s = s?;
                         match &s.value {
                             Token::RBrace if pcount == 0 => {
-                                start = s.span.pp_start;
+                                segment_start = s.span.pp_start;
                                 res.push(s);
                                 break;
                             }
@@ -1779,7 +1780,7 @@ impl<'input> Lexer<'input> {
                 }
                 Some((_e, '"')) => {
                     // If the current line is just a `"""` then we are at the end of the heardoc
-                    res.push(self.spanned2(start, end, Token::StringLiteral(tmp.into())));
+                    res.push(self.spanned2(segment_start, end, Token::StringLiteral(tmp.into())));
                     tmp = String::new();
                     tmp.push('"');
                     if let Some((_, '"')) = self.lookahead() {
@@ -1790,7 +1791,7 @@ impl<'input> Lexer<'input> {
                             let mut end = end;
                             end.column += 1;
                             end.absolute += 1;
-                            res.push(self.spanned2(start, end, Token::HereDoc)); // (0, vec![])));
+                            res.push(self.spanned2(segment_start, end, Token::HereDoc)); // (0, vec![])));
                             return Ok(res);
                         }
                     }
@@ -1801,8 +1802,8 @@ impl<'input> Lexer<'input> {
 
                 None => {
                     return Err(ErrorKind::UnterminatedHereDoc(
-                        Range::from((start, end)).expand_lines(2),
-                        Range::from((start, end)),
+                        Range::from((segment_start, end)).expand_lines(2),
+                        Range::from((segment_start, end)),
                         format!("\"{}", tmp),
                     )
                     .into())

@@ -1,5 +1,5 @@
 # gives bad output: "Hello, snot! Your name is:\n! Your name is:\n snot\n"
 """
 Hello, {event}! Your name is:
- {event}
+  {event}
 """
