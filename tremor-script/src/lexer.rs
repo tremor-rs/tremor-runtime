@@ -1539,19 +1539,19 @@ impl<'input> Lexer<'input> {
         }
     }
 
-    fn escape_code(&mut self, s: &str, start: Location) -> Result<Option<char>> {
+    fn escape_code(&mut self, s: &str, start: Location) -> Result<(Location, char)> {
         match self.bump() {
-            Some((_, '\'')) => Ok(Some('\'')),
-            Some((_, '"')) => Ok(Some('"')),
-            Some((_, '\\')) => Ok(Some('\\')),
-            Some((_, '{')) => Ok(Some('{')),
-            Some((_, '}')) => Ok(Some('}')),
-            Some((_, '/')) => Ok(Some('/')),
-            Some((_, 'b')) => Ok(Some('\u{8}')), // Backspace
-            Some((_, 'f')) => Ok(Some('\u{c}')), // Form Feed
-            Some((_, 'n')) => Ok(Some('\n')),
-            Some((_, 'r')) => Ok(Some('\r')),
-            Some((_, 't')) => Ok(Some('\t')),
+            Some((e, '\'')) => Ok((e, '\'')),
+            Some((e, '"')) => Ok((e, '"')),
+            Some((e, '\\')) => Ok((e, '\\')),
+            Some((e, '{')) => Ok((e, '{')),
+            Some((e, '}')) => Ok((e, '}')),
+            Some((e, '/')) => Ok((e, '/')),
+            Some((e, 'b')) => Ok((e, '\u{8}')), // Backspace
+            Some((e, 'f')) => Ok((e, '\u{c}')), // Form Feed
+            Some((e, 'n')) => Ok((e, '\n')),
+            Some((e, 'r')) => Ok((e, '\r')),
+            Some((e, 't')) => Ok((e, '\t')),
             // TODO: Unicode escape codes
             Some((end, 'u')) => {
                 let mut end = end;
@@ -1571,7 +1571,7 @@ impl<'input> Lexer<'input> {
                 }
 
                 if let Ok(Some(c)) = u32::from_str_radix(&digits, 16).map(std::char::from_u32) {
-                    Ok(Some(c))
+                    Ok((end, c))
                 } else {
                     Err(ErrorKind::UnexpectedEscapeCode(
                         Range::from((start, end)).expand_lines(2),
@@ -1719,18 +1719,26 @@ impl<'input> Lexer<'input> {
                     segment_start = end;
                     tmp = String::new();
                 }
-                Some((e, '\\')) => {
+                Some((_e, '\\')) => {
                     has_escapes = true;
-                    if let Some(c) = self.escape_code(&tmp, segment_start)? {
-                        tmp.push(c);
-                    };
+                    let (e, c) = self.escape_code(&tmp, segment_start)?;
+                    if c == '{' {
+                        tmp.push('\\');
+                    }
+                    tmp.push(c);
                     end = e;
                 }
                 Some((end_inner, '{')) => {
                     if let Some((e, '}')) = self.lookahead() {
+                        self.bump();
                         tmp.push('{');
                         tmp.push('}');
+                        end = e;
+                        continue;
+                    } else if let Some((e, '{')) = self.lookahead() {
                         self.bump();
+                        tmp.push('{');
+                        tmp.push('{');
                         end = e;
                         continue;
                     }
@@ -1823,11 +1831,13 @@ impl<'input> Lexer<'input> {
     ) -> Result<Vec<TokenSpan<'input>>> {
         loop {
             match self.bump() {
-                Some((e, '\\')) => {
+                Some((_e, '\\')) => {
                     has_escapes = true;
-                    if let Some(c) = self.escape_code(&string, start)? {
-                        string.push(c);
-                    };
+                    let (e, c) = self.escape_code(&string, start)?;
+                    if c == '{' {
+                        string.push('\\');
+                    }
+                    string.push(c);
                     end = e;
                 }
                 Some((mut end, '"')) => {
@@ -1854,11 +1864,19 @@ impl<'input> Lexer<'input> {
                     end.column += 1;
                     end.absolute += 1;
                     res.push(self.spanned2(start, end, Token::DQuote));
-                    return Ok(res);
+                    return Ok(dbg!(res));
                 }
                 Some((end_inner, '{')) => {
                     if let Some((e, '}')) = self.lookahead() {
+                        self.bump();
+                        string.push('{');
                         string.push('}');
+                        end = e;
+                        continue;
+                    } else if let Some((e, '{')) = self.lookahead() {
+                        self.bump();
+                        string.push('{');
+                        string.push('{');
                         end = e;
                         continue;
                     }
