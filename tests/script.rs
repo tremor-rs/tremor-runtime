@@ -145,6 +145,7 @@ test_cases!(
     // TODO
     // const_in_const_lookup,
     //INSERT
+    string_quoted_curly,
     heredoc_quoted_curly,
     string_interpolation_import,
     patch_in_place,
