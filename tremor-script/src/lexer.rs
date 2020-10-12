@@ -123,6 +123,10 @@ pub enum Token<'input> {
     DQuote,
     /// a string literal
     StringLiteral(Cow<'input, str>),
+    /// A quoted `\{`
+    QotedSquigglyOpen,
+    /// A quoted `\}`
+    QotedSquigglyClose,
 
     // Keywords
     /// the `let` keywrod
@@ -512,6 +516,8 @@ impl<'input> fmt::Display for Token<'input> {
             Token::IntLiteral(value) => write!(f, "{}", value),
             Token::FloatLiteral(_, txt) => write!(f, "{}", txt),
             Token::DQuote => write!(f, "\""),
+            Token::QotedSquigglyOpen => write!(f, "\\{{"),
+            Token::QotedSquigglyClose => write!(f, "\\}}"),
             Token::StringLiteral(value) => {
                 // We do thos to ensure proper escaping
                 let value: &str = &value;
@@ -1708,37 +1714,67 @@ impl<'input> Lexer<'input> {
         _string: &str,
         mut res: Vec<TokenSpan<'input>>,
     ) -> Result<Vec<TokenSpan<'input>>> {
-        let mut tmp = String::new();
+        let mut string = String::new();
         loop {
             let ch = self.bump();
             match ch {
                 Some((e, '\n')) => {
                     end = e;
-                    tmp.push('\n');
-                    res.push(self.spanned2(segment_start, end, Token::StringLiteral(tmp.into())));
+                    string.push('\n');
+                    res.push(self.spanned2(
+                        segment_start,
+                        end,
+                        Token::StringLiteral(string.into()),
+                    ));
                     segment_start = end;
-                    tmp = String::new();
+                    string = String::new();
                 }
-                Some((_e, '\\')) => {
-                    has_escapes = true;
-                    let (e, c) = self.escape_code(&tmp, segment_start)?;
-                    if c == '{' {
-                        tmp.push('\\');
+                Some((end_inner, '\\')) => {
+                    let (e, c) = self.escape_code(&string, segment_start)?;
+                    if c == '{' || c == '}' {
+                        let mut s = segment_start;
+                        s.column += 1;
+                        s.absolute += 1;
+                        if !string.is_empty() {
+                            let token = if has_escapes {
+                                // The string was modified so we can't use the slice
+                                Token::StringLiteral(string.into())
+                            } else if let Some(slice) = self.slice(s, end_inner) {
+                                Token::StringLiteral(slice.into())
+                            } else {
+                                // Invalid start end case :(
+                                Token::StringLiteral(string.into())
+                            };
+                            res.push(self.spanned2(segment_start, end_inner, token));
+                            string = String::new();
+                            has_escapes = false;
+                        }
+                        if c == '{' {
+                            res.push(self.spanned2(end_inner, e, Token::QotedSquigglyOpen));
+                        } else {
+                            res.push(self.spanned2(end_inner, e, Token::QotedSquigglyClose));
+                        };
+                        segment_start = e;
+                        end = e;
+                        end.column += 1;
+                        end.absolute += 1;
+                    } else {
+                        has_escapes = true;
+                        string.push(c);
+                        end = e;
                     }
-                    tmp.push(c);
-                    end = e;
                 }
                 Some((end_inner, '{')) => {
                     if let Some((e, '}')) = self.lookahead() {
                         self.bump();
-                        tmp.push('{');
-                        tmp.push('}');
+                        string.push('{');
+                        string.push('}');
                         end = e;
                         continue;
                     } else if let Some((e, '{')) = self.lookahead() {
                         self.bump();
-                        tmp.push('{');
-                        tmp.push('{');
+                        string.push('{');
+                        string.push('{');
                         end = e;
                         continue;
                     }
@@ -1746,18 +1782,19 @@ impl<'input> Lexer<'input> {
                     let mut s = segment_start;
                     s.column += 1;
                     s.absolute += 1;
-                    if !tmp.is_empty() {
+                    if !string.is_empty() {
                         let token = if has_escapes {
                             // The string was modified so we can't use the slice
-                            Token::StringLiteral(tmp.into())
+                            Token::StringLiteral(string.into())
                         } else if let Some(slice) = self.slice(s, e) {
                             Token::StringLiteral(slice.into())
                         } else {
                             // Invalid start end case :(
-                            Token::StringLiteral(tmp.into())
+                            Token::StringLiteral(string.into())
                         };
                         res.push(self.spanned2(segment_start, end_inner, token));
-                        tmp = String::new();
+                        string = String::new();
+                        has_escapes = false;
                     }
                     segment_start = end_inner;
                     end = end_inner;
@@ -1788,12 +1825,16 @@ impl<'input> Lexer<'input> {
                 }
                 Some((_e, '"')) => {
                     // If the current line is just a `"""` then we are at the end of the heardoc
-                    res.push(self.spanned2(segment_start, end, Token::StringLiteral(tmp.into())));
-                    tmp = String::new();
-                    tmp.push('"');
+                    res.push(self.spanned2(
+                        segment_start,
+                        end,
+                        Token::StringLiteral(string.into()),
+                    ));
+                    string = String::new();
+                    string.push('"');
                     if let Some((_, '"')) = self.lookahead() {
                         self.bump();
-                        tmp.push('"');
+                        string.push('"');
                         if let Some((end, '"')) = self.lookahead() {
                             self.bump();
                             let mut end = end;
@@ -1805,14 +1846,14 @@ impl<'input> Lexer<'input> {
                     }
                 }
                 Some((_e, other)) => {
-                    tmp.push(other as char);
+                    string.push(other as char);
                 }
 
                 None => {
                     return Err(ErrorKind::UnterminatedHereDoc(
                         Range::from((segment_start, end)).expand_lines(2),
                         Range::from((segment_start, end)),
-                        format!("\"{}", tmp),
+                        format!("\"{}", string),
                     )
                     .into())
                 }
@@ -1823,7 +1864,7 @@ impl<'input> Lexer<'input> {
     /// Handle quote strings `"`  ...
     fn qs(
         &mut self,
-        mut start: Location,
+        mut segment_start: Location,
         mut end: Location,
         mut has_escapes: bool,
         mut string: String,
@@ -1831,14 +1872,40 @@ impl<'input> Lexer<'input> {
     ) -> Result<Vec<TokenSpan<'input>>> {
         loop {
             match self.bump() {
-                Some((_e, '\\')) => {
-                    has_escapes = true;
-                    let (e, c) = self.escape_code(&string, start)?;
-                    if c == '{' {
-                        string.push('\\');
+                Some((end_inner, '\\')) => {
+                    let (e, c) = self.escape_code(&string, segment_start)?;
+                    if c == '{' || c == '}' {
+                        let mut s = segment_start;
+                        s.column += 1;
+                        s.absolute += 1;
+                        if !string.is_empty() {
+                            let token = if has_escapes {
+                                // The string was modified so we can't use the slice
+                                Token::StringLiteral(string.into())
+                            } else if let Some(slice) = self.slice(s, end_inner) {
+                                Token::StringLiteral(slice.into())
+                            } else {
+                                // Invalid start end case :(
+                                Token::StringLiteral(string.into())
+                            };
+                            res.push(self.spanned2(segment_start, end_inner, token));
+                            string = String::new();
+                            has_escapes = false;
+                        }
+                        if c == '{' {
+                            res.push(self.spanned2(end_inner, e, Token::QotedSquigglyOpen));
+                        } else {
+                            res.push(self.spanned2(end_inner, e, Token::QotedSquigglyClose));
+                        };
+                        segment_start = e;
+                        end = e;
+                        end.column += 1;
+                        end.absolute += 1;
+                    } else {
+                        has_escapes = true;
+                        string.push(c);
+                        end = e;
                     }
-                    string.push(c);
-                    end = e;
                 }
                 Some((mut end, '"')) => {
                     // If the string is empty we kind of don't need it.
@@ -1846,7 +1913,7 @@ impl<'input> Lexer<'input> {
                         // we got to bump end by one so we claim the tailing `"`
 
                         let e = end;
-                        let mut s = start;
+                        let mut s = segment_start;
                         s.column += 1;
                         s.absolute += 1;
                         let token = if has_escapes {
@@ -1858,13 +1925,13 @@ impl<'input> Lexer<'input> {
                             // Invalid start end case :(
                             Token::StringLiteral(string.into())
                         };
-                        res.push(self.spanned2(start, end, token));
+                        res.push(self.spanned2(segment_start, end, token));
                     }
                     let start = end;
                     end.column += 1;
                     end.absolute += 1;
                     res.push(self.spanned2(start, end, Token::DQuote));
-                    return Ok(dbg!(res));
+                    return Ok(res);
                 }
                 Some((end_inner, '{')) => {
                     if let Some((e, '}')) = self.lookahead() {
@@ -1881,7 +1948,7 @@ impl<'input> Lexer<'input> {
                         continue;
                     }
                     let e = end_inner;
-                    let mut s = start;
+                    let mut s = segment_start;
                     s.column += 1;
                     s.absolute += 1;
                     if !string.is_empty() {
@@ -1894,14 +1961,15 @@ impl<'input> Lexer<'input> {
                             // Invalid start end case :(
                             Token::StringLiteral(string.into())
                         };
-                        res.push(self.spanned2(start, end_inner, token));
+                        res.push(self.spanned2(segment_start, end_inner, token));
                         string = String::new();
+                        has_escapes = false;
                     }
-                    start = end_inner;
+                    segment_start = end_inner;
                     end = end_inner;
                     end.column += 1;
                     end.absolute += 1;
-                    res.push(self.spanned2(start, end, Token::LBrace));
+                    res.push(self.spanned2(segment_start, end, Token::LBrace));
                     let mut pcount = 0;
                     // We can't use for because of the borrow checker ...
                     #[allow(clippy::while_let_on_iterator)]
@@ -1909,7 +1977,7 @@ impl<'input> Lexer<'input> {
                         let s = s?;
                         match &s.value {
                             Token::RBrace if pcount == 0 => {
-                                start = s.span.pp_start;
+                                segment_start = s.span.pp_start;
                                 res.push(s);
                                 break;
                             }
@@ -1926,8 +1994,8 @@ impl<'input> Lexer<'input> {
                 }
                 Some((end, '\n')) => {
                     return Err(ErrorKind::UnterminatedStringLiteral(
-                        Range::from((start, end)).expand_lines(2),
-                        Range::from((start, end)),
+                        Range::from((segment_start, end)).expand_lines(2),
+                        Range::from((segment_start, end)),
                         format!("\"{}\n", string),
                     )
                     .into());
@@ -1939,8 +2007,8 @@ impl<'input> Lexer<'input> {
                 }
                 None => {
                     return Err(ErrorKind::UnterminatedStringLiteral(
-                        Range::from((start, end)).expand_lines(2),
-                        Range::from((start, end)),
+                        Range::from((segment_start, end)).expand_lines(2),
+                        Range::from((segment_start, end)),
                         format!("\"{}", string),
                     )
                     .into())
@@ -2468,13 +2536,13 @@ mod tests {
         lex_ok! {
             r#" "\{" "#,
             r#" ~    "# => Token::DQuote,
-            r#"  ~~  "# => Token::StringLiteral("{".into()),
+            r#"  ~~  "# => Token::QotedSquigglyOpen,
             r#"    ~ "# => Token::DQuote,
         };
         lex_ok! {
             r#" "\}" "#,
             r#" ~    "# => Token::DQuote,
-            r#"  ~~  "# => Token::StringLiteral("}".into()),
+            r#"  ~~  "# => Token::QotedSquigglyClose,
             r#"    ~ "# => Token::DQuote,
         };
 

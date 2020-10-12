@@ -36,7 +36,7 @@ ConfigDirectives: WithExprsRaw<'input> = {
     <directive:ConfigDirective> <directives:ConfigDirectives> => {
         let mut directives = directives;
         directives.insert(0, directive);
-        directives 
+        directives
     },
     <directive:ConfigDirective> => vec![directive]
 }
@@ -57,7 +57,6 @@ Stmts: StmtsRaw<'input> = {
 
 ModuleStmt: ModuleStmtRaw<'input> = {
     <start:@L> "mod" <name:Ident> "with" <doc:ModComment> <stmts:ModuleStmts> "end" <end:@L> => ModuleStmtRaw{name, start, end, stmts, doc: doc},
-    
 }
 
 /// List of expressions at the root of the script
@@ -86,7 +85,7 @@ ModuleInnerStmt: StmtRaw<'input> = {
 
     <start:@L> "define" "script" <id:Ident> <params:ScriptWithClause> <script:EmbeddedScript> <end:@L> => StmtRaw::ScriptDecl(ScriptDeclRaw { start, end, id: id.id.to_string(), script, params: Some(params) }),
     <start:@L> "define" "script" <id:Ident> <script:EmbeddedScript> <end:@L> => StmtRaw::ScriptDecl(ScriptDeclRaw { start, end, id: id.id.to_string(), script, params: None }),
-    
+
     Const => StmtRaw::Expr(Box::new(<>)),
     FnDecl => StmtRaw::Expr(Box::new(ExprRaw::FnDecl(<>))),
     Intrinsic => StmtRaw::Expr(Box::new(ExprRaw::FnDecl(<>))),
@@ -126,7 +125,7 @@ Stmt: StmtRaw<'input> = {
 
     <start:@L> "define" "script" <id:Ident> <params:ScriptWithClause> <script:EmbeddedScript> <end:@L> => StmtRaw::ScriptDecl(ScriptDeclRaw { start, end, id: id.id.to_string(), script, params: Some(params) }),
     <start:@L> "define" "script" <id:Ident> <script:EmbeddedScript> <end:@L> => StmtRaw::ScriptDecl(ScriptDeclRaw { start, end, id: id.id.to_string(), script, params: None }),
-    
+
     <start:@L> "create" "stream" <id:Ident> <end:@L> => StmtRaw::Stream(StreamStmtRaw { start, end, id: id.id.to_string() }),
 
     <start:@L> "create" "operator" <id:Ident> "from" <target:ModularTarget> <params:WithClause> <end:@L> => StmtRaw::Operator(OperatorStmtRaw { start, end, id: id.id.to_string(), module: target.0, target: target.1.id.to_string(), params: Some(params) }),
@@ -474,7 +473,7 @@ Intrinsic: AnyFnRaw<'input> = {
         AnyFnRaw::Normal(FnDeclRaw{name, args: vec![], body, start, end, doc, open: false, inline: true})
     },
     <doc:DocComment> <start:@L> "intrinsic" "fn" <name:Ident> "(" <args:FnArgs> ")" "as" <imod:Ident> "::" <ifn:Ident>  <end:@L> => {
-        let invoce_args = args.iter().map(|a|           
+        let invoce_args = args.iter().map(|a|
             ImutExprRaw::Path(
                 PathRaw::Local(
                     LocalPathRaw{start: a.start, end: a.end, segments: vec![SegmentRaw::from_id(a.clone())]}
@@ -490,7 +489,7 @@ Intrinsic: AnyFnRaw<'input> = {
         AnyFnRaw::Normal(FnDeclRaw{name, args, body, start, end, doc, open: false, inline: true})
     },
     <doc:DocComment> <start:@L> "intrinsic" "fn" <name:Ident> "(" <args:FnArgs> "," "." "." "." ")" "as" <imod:Ident> "::" <ifn:Ident>  <end:@L> => {
-        let invoce_args = args.iter().map(|a|           
+        let invoce_args = args.iter().map(|a|
             ImutExprRaw::Path(
                 PathRaw::Local(
                     LocalPathRaw{start: a.start, end: a.end, segments: vec![SegmentRaw::from_id(a.clone())]}
@@ -547,7 +546,7 @@ FnDecl: AnyFnRaw<'input> = {
 
   <doc:DocComment> <start:@L> "fn" <name:Ident> "("  ")" "with" <body:Exprs> "end" <end:@L> => AnyFnRaw::Normal(FnDeclRaw{name, args: vec![], body, start, end, doc, open: false, inline: false}),
   <doc:DocComment> <start:@L> "fn" <name:Ident> "(" <args:FnArgs> ")" "with" <body:Exprs> "end" <end:@L> => AnyFnRaw::Normal(FnDeclRaw{name, args, body, start, end, doc, open: false, inline: false}),
-  
+
   <doc:DocComment> <start:@L> "fn" <name:Ident> "("  ")" "of" <cases:FnCases> "end" <end:@L> => AnyFnRaw::Match(MatchFnDeclRaw{name, args: vec![], start, end, cases, doc, open: false, inline: false}),
   <doc:DocComment> <start:@L> "fn" <name:Ident> "(" <args:FnArgs> ")" "of" <cases:FnCases> "end" <end:@L> => AnyFnRaw::Match(MatchFnDeclRaw{name, args, start, end, cases, doc, open: false, inline: false}),
 }
@@ -670,12 +669,26 @@ StrLitElements: StrLitElements<'input> = {
         es.0.push(literal);
         es
     },
+
+    "\\{" <es:StrLitElements> => {
+        let mut es = es;
+        es.0.push("\\{".into());
+        es
+    },
+
+    "\\}" <es:StrLitElements> => {
+        let mut es = es;
+        es.0.push("\\}".into());
+        es
+    },
+
     "{" <expr:ExprImut> "}" <es:StrLitElements> => {
         let mut es = es;
         es.0.push("{}".into());
         es.1.push(expr);
         es
     },
+
     <literal:StringPart> => StrLitElements(vec![literal], vec![]),
     "{" <expr:ExprImut> "}" => StrLitElements(vec!["{}".into()], vec![expr]),
 }
@@ -997,7 +1010,7 @@ Predicates: PredicatesRaw<'input> = {
     }
 }
 
-/// A case statement 
+/// A case statement
 PredicateClause: PredicateClauseRaw<'input> = {
     <start:@L> "case" <rp:RecordCaseClause> <guard:WhenClause> <exprs:Effectors> <end:@L> => PredicateClauseRaw { pattern: rp, exprs, guard, start, end },
     <start:@L> "case" <ap:ArrayCaseClause> <guard:WhenClause> <exprs:Effectors> <end:@L> => PredicateClauseRaw { pattern: ap, exprs, guard, start, end },
@@ -1040,7 +1053,7 @@ PredicatesImut: ImutPredicatesRaw<'input> = {
     }
 }
 
-/// A case statement 
+/// A case statement
 PredicateClauseImut: ImutPredicateClauseRaw<'input> = {
     <start:@L> "case" <rp:RecordCaseClause> <guard:WhenClause> <exprs:EffectorsImut> <end:@L> => ImutPredicateClauseRaw { pattern: rp, exprs, guard, start, end },
     <start:@L> "case" <ap:ArrayCaseClause> <guard:WhenClause> <exprs:EffectorsImut> <end:@L> => ImutPredicateClauseRaw { pattern: ap, exprs, guard, start, end },
@@ -1308,6 +1321,8 @@ extern {
         "mod" => Token::Module,
         "." => Token::Dot,
         "\"" => Token::DQuote,
+        "\\{" => Token::QotedSquigglyOpen,
+        "\\}" => Token::QotedSquigglyClose,
         ";" => Token::Semi,
         "::" => Token::ColonColon,
         ":" => Token::Colon,
@@ -1356,7 +1371,6 @@ extern {
         "<error>" => Token::Bad(<String>),
         "<end-of-stream>" => Token::EndOfStream,
         "<newline>" => Token::NewLine,
-        
 
         "select" => Token::Select,
         "from" => Token::From,
