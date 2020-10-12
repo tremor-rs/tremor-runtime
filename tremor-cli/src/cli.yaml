@@ -134,7 +134,7 @@ subcommands:
             long: no-highlight
       subcommands:
         - dot:
-            about: prints the .dot representation for a trickle file
+            about: prints the .dot representation for a trickle file (you can use `| dot -Tpng -oout.png` to generate a picture)
             args:
               - SCRIPT:
                   help: trickle script filename
