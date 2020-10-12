@@ -51,9 +51,18 @@ impl TremorFn for StringFormat {
             arg_stack.reverse();
 
             let mut out = String::with_capacity(format.len());
+            dbg!(&format);
             let mut iter = format.chars().enumerate();
             while let Some((pos, char)) = iter.next() {
                 match char {
+                    '\\' => if let Some((_, c)) = iter.next() {
+                         out.push('\\');
+                         out.push(c);
+
+                    } else {
+                        return Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("bad escape sequence at {}", pos)});
+
+                    }
                     '{' => match iter.next() {
                         Some((_, '}')) => if let Some(arg) = arg_stack.pop() {
                             if let Some(s) = arg.as_str() {
