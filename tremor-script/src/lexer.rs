@@ -1705,6 +1705,7 @@ impl<'input> Lexer<'input> {
         }
     }
 
+    #[allow(clippy::too_many_lines)]
     /// Handle heredoc strings `"""`  ...
     fn hd(
         &mut self,
@@ -1714,39 +1715,39 @@ impl<'input> Lexer<'input> {
         _string: &str,
         mut res: Vec<TokenSpan<'input>>,
     ) -> Result<Vec<TokenSpan<'input>>> {
-        let mut string = String::new();
+        let mut heredoc_content = String::new();
         loop {
             let ch = self.bump();
             match ch {
                 Some((e, '\n')) => {
                     end = e;
-                    string.push('\n');
+                    heredoc_content.push('\n');
                     res.push(self.spanned2(
                         segment_start,
                         end,
-                        Token::StringLiteral(string.into()),
+                        Token::StringLiteral(heredoc_content.into()),
                     ));
                     segment_start = end;
-                    string = String::new();
+                    heredoc_content = String::new();
                 }
                 Some((end_inner, '\\')) => {
-                    let (e, c) = self.escape_code(&string, segment_start)?;
+                    let (e, c) = self.escape_code(&heredoc_content, segment_start)?;
                     if c == '{' || c == '}' {
                         let mut s = segment_start;
                         s.column += 1;
                         s.absolute += 1;
-                        if !string.is_empty() {
+                        if !heredoc_content.is_empty() {
                             let token = if has_escapes {
                                 // The string was modified so we can't use the slice
-                                Token::StringLiteral(string.into())
+                                Token::StringLiteral(heredoc_content.into())
                             } else if let Some(slice) = self.slice(s, end_inner) {
                                 Token::StringLiteral(slice.into())
                             } else {
                                 // Invalid start end case :(
-                                Token::StringLiteral(string.into())
+                                Token::StringLiteral(heredoc_content.into())
                             };
                             res.push(self.spanned2(segment_start, end_inner, token));
-                            string = String::new();
+                            heredoc_content = String::new();
                             has_escapes = false;
                         }
                         if c == '{' {
@@ -1760,21 +1761,21 @@ impl<'input> Lexer<'input> {
                         end.absolute += 1;
                     } else {
                         has_escapes = true;
-                        string.push(c);
+                        heredoc_content.push(c);
                         end = e;
                     }
                 }
                 Some((end_inner, '{')) => {
                     if let Some((e, '}')) = self.lookahead() {
                         self.bump();
-                        string.push('{');
-                        string.push('}');
+                        heredoc_content.push('{');
+                        heredoc_content.push('}');
                         end = e;
                         continue;
                     } else if let Some((e, '{')) = self.lookahead() {
                         self.bump();
-                        string.push('{');
-                        string.push('{');
+                        heredoc_content.push('{');
+                        heredoc_content.push('{');
                         end = e;
                         continue;
                     }
@@ -1782,18 +1783,18 @@ impl<'input> Lexer<'input> {
                     let mut s = segment_start;
                     s.column += 1;
                     s.absolute += 1;
-                    if !string.is_empty() {
+                    if !heredoc_content.is_empty() {
                         let token = if has_escapes {
                             // The string was modified so we can't use the slice
-                            Token::StringLiteral(string.into())
+                            Token::StringLiteral(heredoc_content.into())
                         } else if let Some(slice) = self.slice(s, e) {
                             Token::StringLiteral(slice.into())
                         } else {
                             // Invalid start end case :(
-                            Token::StringLiteral(string.into())
+                            Token::StringLiteral(heredoc_content.into())
                         };
                         res.push(self.spanned2(segment_start, end_inner, token));
-                        string = String::new();
+                        heredoc_content = String::new();
                         has_escapes = false;
                     }
                     segment_start = end_inner;
@@ -1828,13 +1829,13 @@ impl<'input> Lexer<'input> {
                     res.push(self.spanned2(
                         segment_start,
                         end,
-                        Token::StringLiteral(string.into()),
+                        Token::StringLiteral(heredoc_content.into()),
                     ));
-                    string = String::new();
-                    string.push('"');
+                    heredoc_content = String::new();
+                    heredoc_content.push('"');
                     if let Some((_, '"')) = self.lookahead() {
                         self.bump();
-                        string.push('"');
+                        heredoc_content.push('"');
                         if let Some((end, '"')) = self.lookahead() {
                             self.bump();
                             let mut end = end;
@@ -1846,14 +1847,14 @@ impl<'input> Lexer<'input> {
                     }
                 }
                 Some((_e, other)) => {
-                    string.push(other as char);
+                    heredoc_content.push(other as char);
                 }
 
                 None => {
                     return Err(ErrorKind::UnterminatedHereDoc(
                         Range::from((segment_start, end)).expand_lines(2),
                         Range::from((segment_start, end)),
-                        format!("\"{}", string),
+                        format!("\"{}", heredoc_content),
                     )
                     .into())
                 }
@@ -1861,6 +1862,7 @@ impl<'input> Lexer<'input> {
         }
     }
 
+    #[allow(clippy::too_many_lines)]
     /// Handle quote strings `"`  ...
     fn qs(
         &mut self,

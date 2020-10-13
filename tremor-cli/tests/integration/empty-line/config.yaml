@@ -23,7 +23,7 @@ binding:
       # we choose to remove that, this will give us visibility for the same
       # (not relying on this only right now, since the asserts for this test
       # don't pass consistently with this only currently)
-      "/onramp/in/{instance}/error": ["/pipeline/pass/{instance}/in"]
+      "/onramp/in/{instance}/err": ["/pipeline/pass/{instance}/in"]
       "/pipeline/pass/{instance}/out": ["/offramp/system::stderr/system/in"]
 
 mapping:

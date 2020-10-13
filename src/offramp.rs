@@ -23,7 +23,7 @@ use crate::sink::{
     stderr, stdout, tcp, udp, ws,
 };
 use crate::source::Processors;
-use crate::system::METRICS_PIPELINE;
+use crate::url::ports::{IN, METRICS};
 use crate::url::TremorURL;
 use crate::{Event, OpConfig};
 use async_channel::{self, bounded, unbounded};
@@ -41,10 +41,6 @@ pub enum Msg {
     },
     Signal(Event),
     Connect {
-        id: TremorURL,
-        addr: Box<pipeline::Addr>,
-    },
-    ConnectLinked {
         port: Cow<'static, str>,
         id: TremorURL,
         addr: Box<pipeline::Addr>,
@@ -259,16 +255,13 @@ impl Manager {
                                     send_to_pipelines(&offramp_url, &mut pipelines, e).await;
                                 }
                             }
-                            Msg::Connect { id, addr } => {
-                                if id == *METRICS_PIPELINE {
-                                    // FIXME this abuses connect to connect a outoing pipeline
+                            Msg::Connect { port, id, addr } => {
+                                if port.eq_ignore_ascii_case(IN.as_ref()) {
+                                    // connect incoming pipeline
                                     info!(
-                                        "[Offramp::{}] Connecting system metrics pipeline {}",
-                                        offramp_url, id
+                                        "[Offramp::{}] Connecting pipeline {} to incoming port {}",
+                                        offramp_url, id, port
                                     );
-                                    metrics_reporter.set_metrics_pipeline((id, *addr));
-                                } else {
-                                    info!("[Offramp::{}] Connecting pipeline {}", offramp_url, id);
                                     let insight =
                                         Event::restore_or_break(offramp.is_active(), nanotime());
                                     if let Err(e) = addr.send_insight(insight).await {
@@ -280,21 +273,26 @@ impl Manager {
 
                                     pipelines.insert(id.clone(), (*addr).clone());
                                     offramp.add_pipeline(id, *addr);
-                                }
-                            }
-                            Msg::ConnectLinked { port, id, addr } => {
-                                // TODO fix offramp_url here for display
-                                info!(
-                                    "[Offramp::{}] Connecting {} to pipeline {}",
-                                    port, offramp_url, id
-                                );
-                                let p = (id.clone(), (*addr).clone());
-                                if let Some(port_ps) = dest_pipelines.get_mut(&port) {
-                                    port_ps.push(p);
+                                } else if port.eq_ignore_ascii_case(METRICS.as_ref()) {
+                                    info!(
+                                        "[Offramp::{}] Connecting system metrics pipeline {}",
+                                        offramp_url, id
+                                    );
+                                    metrics_reporter.set_metrics_pipeline((id, *addr));
                                 } else {
-                                    dest_pipelines.insert(port.clone(), vec![p]);
+                                    // connect pipeline to outgoing port
+                                    info!(
+                                        "[Offramp::{}] Connecting pipeline {} via outgoing port {}",
+                                        offramp_url, id, port
+                                    );
+                                    let p = (id.clone(), (*addr).clone());
+                                    if let Some(port_ps) = dest_pipelines.get_mut(&port) {
+                                        port_ps.push(p);
+                                    } else {
+                                        dest_pipelines.insert(port.clone(), vec![p]);
+                                    }
+                                    offramp.add_dest_pipeline(port, id, *addr);
                                 }
-                                offramp.add_dest_pipeline(port, id, *addr);
                             }
                             Msg::Disconnect { id, tx } => {
                                 //  FIXME we can't disconnect destination pipelines
