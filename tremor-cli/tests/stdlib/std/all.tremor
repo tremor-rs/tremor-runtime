@@ -1,0 +1,621 @@
+use std::array;
+use std::float;
+use std::integer;
+use std::json;
+use std::math;
+use std::random;
+use std::range;
+use std::re;
+use std::record;
+use std::string;
+use std::test;
+use std::type;
+use std::url;
+use tremor::system;
+
+fn as_string(arr) with
+  for arr of
+    case (i,e) => type::as_string(e)
+  end
+end;
+
+fn lenbytes(arr) with
+  for arr of
+    case (i,e) => [ string::len(e), string::bytes(e)]
+  end
+end;
+
+test::suite({
+  "name": "Array library tests",
+  "suite": {
+    "name": "Array library tests",
+    "tags": [ "array" ],
+    "tests": [
+      test::test({
+        "name": "array len 1",
+        "test": test::assert("array len 1", array::len([]),0)
+      }),
+      test::test({
+        "name": "array len 2",
+        "test": test::assert("array len 2", array::len(["snot"]),1)
+      }),
+      test::test({
+        "name": "array len 3",
+        "test": test::assert("array len 3", array::len(["snot", "badger"]),2)
+      }),
+      test::test({
+        "name": "array is empty 1",
+        "test": test::assert("array is empty 1", array::is_empty([]),true)
+      }),
+      test::test({
+        "name": "array is not empty 1",
+        "test": test::assert("array is not empty 1", array::is_empty([1]),false)
+      }),
+      test::test({
+        "name": "array is not empty 2",
+        "test": test::assert("array is not empty 2", array::is_empty([1,2]),false)
+      }),
+      test::test({
+        "name": "array contains 1",
+        "test": test::assert("array contains 1", array::contains([],1),false)
+      }),
+      test::test({
+        "name": "array contains 2",
+        "test": test::assert("array contains 2", array::contains([1],1),true)
+      }),
+      test::test({
+        "name": "array contains 3",
+        "test": test::assert("array contains 3", array::contains([1,2],2),true)
+      }),
+      test::test({
+        "name": "array push 1",
+        "test": test::assert("array push 1", array::push([1,2],3),[1,2,3])
+      }),
+      test::test({
+        "name": "array zip 1",
+        "test": test::assert("array zip 1", array::zip(["a","b"],[1,2]), [["a", 1], ["b", 2]])
+      }),
+      test::test({
+        "name": "array unzip 1",
+        "test": test::assert("array unzip 1", array::unzip([["a", 1], ["b", 2]]), [["a","b"],[1,2]] )
+      }),
+      test::test({
+        "name": "array flatten 1",
+        "test": test::assert("array flatten 1", array::flatten([["a","b"],[1,2]]), [ "a", "b", 1, 2] )
+      }),
+      test::test({
+        "name": "array coalesce 1",
+        "test": test::assert("array coalesce 1", array::coalesce([1,2,null,3]), [ 1, 2, 3] )
+      }),
+      test::test({
+        "name": "array join",
+        "test": test::assert("array join 1", array::join([1,2,3], " "), "1 2 3" )
+      }),
+    ],
+  }
+});
+
+test::suite({
+  "name": "Float library tests",
+  "suite": {
+    "name": "Float library tests",
+    "tags": [ "float", "numeric" ],
+    "tests": [
+      test::test({
+        "name": "float parse",
+        "test": test::assert("integer max", float::parse("42.42"), 42.42)
+      }),
+    ]
+  }
+});
+
+test::suite({
+  "name": "Integer library tests",
+  "suite": {
+    "name": "Integer library tests",
+    "tags": [ "integer", "numeric" ],
+    "tests": [
+      test::test({
+        "name": "integer min",
+        "test": test::assert("integer min", integer::min, -9223372036854775807)
+      }),
+      test::test({
+        "name": "integer max",
+        "test": test::assert("integer max", integer::max, 9223372036854775807)
+      }),
+      test::test({
+        "name": "integer parse",
+        "test": test::assert("integer max", integer::parse("42"), 42)
+      }),
+    ]
+  }
+});
+
+test::suite({
+  "name": "Json library tests",
+  "suite": {
+    "name": "Json library tests",
+    "tags": [ "json" ],
+    "tests": [
+      test::test({
+        "name": "json encode",
+        "test": test::assert("json encode", json::encode(1), "1")
+      }),
+      test::test({
+        "name": "json encode pretty",
+        "test": test::assert("json encode pretty", json::encode_pretty([1,2,3]), "[\n  1,\n  2,\n  3\n]")
+      }),
+      test::test({
+        "name": "json decode",
+        "test": test::assert("json decode", json::decode(json::encode_pretty([3,2,1])), [3,2,1])
+      }),
+    ]
+  }
+});
+
+test::suite({
+  "name": "Math library tests",
+  "suite": {
+    "name": "Math library tests",
+    "tags": [ "math", "numeric" ],
+    "tests": [
+      test::test({
+        "name": "floor",
+        "test": test::assert("math floor", math::floor(42.9), 42)
+      }),
+      test::test({
+        "name": "ceil",
+        "test": test::assert("math ceiling", math::ceil(42.9), 43)
+      }),
+      test::test({
+        "name": "round 1",
+        "test": test::assert("math round 1", math::round(42.4), 42)
+      }),
+      test::test({
+        "name": "trunc",
+        "test": test::assert("math trunc", math::trunc(42.5), 42)
+      }),
+      test::test({
+        "name": "max 2",
+        "test": test::assert("math max", math::max(42.6, 42.5), 42.6)
+      }),
+      test::test({
+        "name": "min 1",
+        "test": test::assert("math min", math::min(42.5, 42.6), 42.5)
+      }),
+      test::test({
+        "name": "min 2",
+        "test": test::assert("math min", math::min(42.6, 42.5), 42.5)
+      }),
+    ]
+  }
+});
+
+test::suite({
+  "name": "Random library tests",
+  "suite": {
+    "name": "Random library tests",
+    "tags": [ "random", "generator" ],
+    "tests": [
+      test::test({
+        "name": "random bool",
+        "test": test::assert("random bool", type::is_bool(random::bool()), true)
+      }),
+      test::test({
+        "name": "random string",
+        "test": test::assert("random string", type::is_string(random::string(16)), true)
+      }),
+      test::test({
+        "name": "random integer",
+        "test": test::assert("random integer", type::is_integer(random::integer(0,100)), true)
+      }),
+      test::test({
+        "name": "random float",
+        "test": test::assert("random float", type::is_float(random::float(0,100)), true)
+      }),
+    ]
+  }
+});
+
+test::suite({
+  "name": "Range generator library tests",
+  "suite": {
+    "name": "Range generator library tests",
+    "tags": [ "range", "generator" ],
+    "tests": [
+      test::test({
+        "name": "range 1",
+        "test": test::assert("range 1", range::range(0, 5), [0,1,2,3,4])
+      }),
+      test::test({
+        "name": "contains 1",
+        "test": test::assert("contains 1", range::contains(range::range(0, 5), -1), false)
+      }),
+      test::test({
+        "name": "contains 2",
+        "test": test::assert("contains 2", range::contains(range::range(0, 5), 3), true)
+      }),
+      test::test({
+        "name": "contains 3",
+        "test": test::assert("contains 3", range::contains(range::range(0, 5), 4), true)
+      }),
+      test::test({
+        "name": "contains 4",
+        "test": test::assert("contains 4", range::contains(range::range(0, 5), 5), false)
+      }),
+    ]
+  }
+});
+
+test::suite({
+  "name": "Regular expression library tests",
+  "suite": {
+    "name": "Regular expression library tests",
+    "tags": [ "regex" ],
+    "tests": [
+      test::test({
+        "name": "regex replace first occurance 1",
+        "test": test::assert("record replace first occurance 1", re::replace("c", "abaca", "b"), "ababa")
+      }),
+      test::test({
+        "name": "regex replace first occurance 2",
+        "test": test::assert("record replace first occurance 2", re::replace("c", "abacacaca", "b"), "ababacaca")
+      }),
+      test::test({
+        "name": "regex replace all occurances 1",
+        "test": test::assert("record replace all occurances 1", re::replace_all("c", "abacacaca", "b"), "ababababa")
+      }),
+      test::test({
+        "name": "regex is match 1",
+        "test": test::assert("record is match 1", re::is_match("(a?)+a?", "abacacaca"), true)
+      }),
+      test::test({
+        "name": "regex split 1",
+        "test": test::assert("record split 1", 
+          re::split(
+            "a[abc]", 
+            "snotabsnotacsnotacsnotacsnotaabadger"), 
+            ["snot", "snot", "snot", "snot", "snot", "badger"]
+          )
+      }),
+    ]
+  }
+});
+
+test::suite({
+  "name": "Record library tests",
+  "suite": {
+    "name": "Record library tests",
+    "tags": [ "record" ],
+    "tests": [
+      test::test({
+        "name": "record length 1",
+        "test": test::assert("record length 1", record::len({}), 0)
+      }),
+      test::test({
+        "name": "record length 2",
+        "test": test::assert("record length 2", record::len({"a": 1}), 1)
+      }),
+      test::test({
+        "name": "record length 3",
+        "test": test::assert("record length 3", record::len({ "a": 1, "b": 2}), 2)
+      }),
+      test::test({
+        "name": "record is empty 1",
+        "test": test::assert("record is empty 1", record::is_empty({}), true)
+      }),
+      test::test({
+        "name": "record is empty 2",
+        "test": test::assert("record is empty 2", record::is_empty({"a": 1}), false)
+      }),
+      test::test({
+        "name": "record contains 1",
+        "test": test::assert("record contains 1", record::contains({}, "snot"), false)
+      }),
+      test::test({
+        "name": "record contains 2",
+        "test": test::assert("record contains 2", record::contains({"a": 1}, "a"), true)
+      }),
+      test::test({
+        "name": "record keys 1",
+        "test": test::assert("record keys 1", record::keys({}), [])
+      }),
+      test::test({
+        "name": "record keys 2",
+        "test": test::assert("record keys 2", record::keys({"a": 1}), ["a"])
+      }),
+      test::test({
+        "name": "record keys 3",
+        "test": test::assert("record keys 3", array::len(record::keys({"a": 1, "b": 2})), 2)
+      }),
+      test::test({
+        "name": "record values 1",
+        "test": test::assert("record values 1", record::values({}), [])
+      }),
+      test::test({
+        "name": "record values 2",
+        "test": test::assert("record values 2", record::values({"a": 1}), [1])
+      }),
+      test::test({
+        "name": "record values 3",
+        "test": test::assert("record values 3", array::len(record::values({"a": 1, "b": 2})), 2)
+      }),
+      test::test({
+        "name": "record to array 1",
+        "test": test::assert("record to array 1", record::to_array({}), [])
+      }),
+      test::test({
+        "name": "record to array 2",
+        "test": test::assert("record to array 2", record::to_array({"a": 1}), [["a", 1]])
+      }),
+      test::test({
+        "name": "record from array 1",
+        "test": test::assert("record from array 1", record::from_array([]), {})
+      }),
+      test::test({
+        "name": "record from array 2",
+        "test": test::assert("record from array 2", record::from_array([["a", 1]]), {"a": 1})
+      }),
+      test::test({
+        "name": "record select 1",
+        "test": test::assert("record select 1", record::`select`({"a": 1}, ["c"]), {})
+      }),
+      test::test({
+        "name": "record select 2",
+        "test": test::assert("record select 2", record::`select`({"a": 1}, ["a"]), {"a": 1})
+      }),
+      test::test({
+        "name": "record merge 1",
+        "test": test::assert("record merge 1", record::`merge`({"a": 1}, {"a": 2}), {"a": 2})
+      }),
+      test::test({
+        "name": "record merge 2",
+        "test": test::assert("record merge 2", record::`merge`({"a": 1}, {"b": 2}), {"a": 1, "b": 2})
+      }),
+      test::test({
+        "name": "record rename 1",
+        "test": test::assert("record rename 1", record::rename({"a": 1}, {"a": "A"}), {"A": 1})
+      }),
+      test::test({
+        "name": "record rename 2",
+        "test": test::assert("record rename 1", record::rename({"a": 1}, {"b": "Badger"}), {"a": 1})
+      }),
+    ]
+  }
+});
+
+test::suite({
+  "name": "String library tests",
+  "suite": {
+    "name": "String library tests",
+    "tags": [ "string" ],
+    "tests": [
+      test::test({
+        "name": "format 1",
+        "test": test::assert("format 1", string::format("blah"), "blah")
+      }),
+      test::test({
+        "name": "format 2",
+        "test": test::assert("format 2", string::format("{}", "snot"), "snot")
+      }),
+      test::test({
+        "name": "format 3",
+        "test": test::assert("format 3", string::format("the {} is {}", "meaning of life", 42), "the meaning of life is 42")
+      }),
+      test::test({
+        "name": "len(string) and bytes(string)",
+        "test": test::assert(
+          "string::len(string) and string::bytes(string)", 
+          lenbytes(["snot", "badger", "💩👻💀👽👾🤖🎃"]),
+          [ [4, 4], [6, 6], [7, 7 * 4] ] # 7 emoji each with 4 bytes per codepoint = 28 bytes
+        ),
+      }),
+      test::test({
+        "name": "replace 1",
+        "test": test::assert("replace 1", string::replace("snot badger", "badger", "snot"), "snot snot")
+      }),
+      test::test({
+        "name": "replace 2",
+        "test": test::assert("replace 2", string::replace("snot snot", "snot", "badger"), "badger badger")
+      }),
+      test::test({
+        "name": "trim 1",
+        "test": test::assert("trim 1", string::trim("    foo    "), "foo")
+      }),
+      test::test({
+        "name": "trim 2",
+        "test": test::assert("trim 2", string::trim("\n\n  foo\n\n  "), "foo")
+      }),
+      test::test({
+        "name": "trim_start 1",
+        "test": test::assert("trim_start 1", string::trim_start("    foo    "), "foo    ")
+      }),
+      test::test({
+        "name": "trim_start 2",
+        "test": test::assert("trim_start 2", string::trim_start("\n\n  foo\n\n  "), "foo\n\n  ")
+      }),
+      test::test({
+        "name": "trim_end 1",
+        "test": test::assert("trim_end 1", string::trim_end("    foo    "), "    foo")
+      }),
+      test::test({
+        "name": "trim_end 2",
+        "test": test::assert("trim_end 2", string::trim_end("\n\n  foo\n\n  "), "\n\n  foo")
+      }),
+      test::test({
+        "name": "lowercase 1",
+        "test": test::assert("lowercase 1", string::lowercase("SnOt BaDgEr"), "snot badger")
+      }),
+      test::test({
+        "name": "lowercase 2",
+        "test": test::assert("lowercase 2", string::lowercase("SNOT BADGER"), "snot badger")
+      }),
+      test::test({
+        "name": "uppercase 1",
+        "test": test::assert("uppercase 1", string::uppercase("SnOt BaDgEr"), "SNOT BADGER")
+      }),
+      test::test({
+        "name": "uppercase 2",
+        "test": test::assert("uppercase 2", string::uppercase("snot badger"), "SNOT BADGER")
+      }),
+      test::test({
+        "name": "capitalize 1",
+        "test": test::assert("capitalize 1", string::capitalize("SnOt BaDgEr"), "SnOt BaDgEr")
+      }),
+      test::test({
+        "name": "capitalize 2",
+        "test": test::assert("capitalize 2", string::capitalize("snot badger"), "Snot badger")
+      }),
+      test::test({
+        "name": "substr 1",
+        "test": test::assert("substr 1", string::substr("SnOt BaDgEr", 0, 4), "SnOt")
+      }),
+      test::test({
+        "name": "substr 2",
+        "test": test::assert("substr 2", string::substr("snot badger", 5, 10), "badge")
+      }),
+      test::test({
+        "name": "split 1",
+        "test": test::assert("split 1", string::split("", " "), [ "" ])
+      }),
+      test::test({
+        "name": "split 2",
+        "test": test::assert("split 2", string::split("snot badger", " "), [ "snot", "badger"])
+      }),
+      test::test({
+        "name": "contains 1",
+        "test": test::assert("contains 1", string::contains("snot badger", "snot"), true)
+      }),
+      test::test({
+        "name": "contains 2",
+        "test": test::assert("contains 2", string::contains("snot badger", "aardvark"), false)
+      }),
+    ],
+  }
+});
+
+test::suite({
+  "name": "Type system tests",
+  "suite": {
+    "name": "Type inspection utility tests",
+    "tags": [ "type" ],
+    "tests": [
+      test::test({
+        "name": "as_string(null)",
+        "test": test::assert("as_string(null)", type::as_string(null), "null"),
+      }),
+      test::test({
+        "name": "as_string(bool)",
+        "test": test::assert("as_string(bool)", as_string([ true, false ]), [ "bool", "bool" ])
+      }),
+      test::test({
+        "name": "as_string(int)",
+        "test": test::assert("as_string(int)", as_string([ -1, 0, 1]), [ "integer", "integer", "integer" ])
+      }),
+      test::test({
+        "name": "as_string(float)",
+        "test": test::assert("as_string(float)", as_string([ -1.01, 0.01, 1.01]), [ "float", "float", "float" ])
+      }),
+      test::test({
+        "name": "as_string(string)",
+        "test": test::assert("as_string(string)", as_string([ "snot", "badger" ]), [ "string", "string" ])
+      }),
+      test::test({
+        "name": "as_string([])",
+        "test": test::assert("as_string([])", as_string([ [], ["snot"] ]), [ "array", "array" ])
+      }),
+      test::test({
+        "name": "as_string({})",
+        "test": test::assert("as_string({})", as_string([ {}, {"snot": "badger" }]), [ "record", "record" ])
+      }),
+      test::test({
+        "name": "is_null(null)",
+        "test": test::assert("is_null(null)", type::is_null(null), true)
+      }),
+      test::test({
+        "name": "is_null(true)",
+        "test": test::assert("is_null(true)", type::is_null(true), false)
+      }),
+      test::test({
+        "name": "is_bool(null)",
+        "test": test::assert("is_bool(null)", type::is_bool(null), false)
+      }),
+      test::test({
+        "name": "is_bool(true)",
+        "test": test::assert("is_bool(true)", type::is_bool(true), true)
+      }),
+      test::test({
+        "name": "is_integer(null)",
+        "test": test::assert("is_integer(null)", type::is_integer(null), false)
+      }),
+      test::test({
+        "name": "is_integer(true)",
+        "test": test::assert("is_integer(1)", type::is_integer(1), true)
+      }),
+      test::test({
+        "name": "is_float(null)",
+        "test": test::assert("is_float(null)", type::is_float(null), false)
+      }),
+      test::test({
+        "name": "is_float(true)",
+        "test": test::assert("is_float(1.0)", type::is_float(1.0), true)
+      }),
+      test::test({
+        "name": "is_number(null)",
+        "test": test::assert("is_number(null)", type::is_number(null), false)
+      }),
+      test::test({
+        "name": "is_number(true)",
+        "test": test::assert("is_number(1.0)", type::is_number(1.0), true)
+      }),
+      test::test({
+        "name": "is_number(true)",
+        "test": test::assert("is_number(1)", type::is_number(1), true)
+      }),
+      test::test({
+        "name": "is_string(null)",
+        "test": test::assert("is_string(null)", type::is_string(null), false)
+      }),
+      test::test({
+        "name": "is_string(true)",
+        "test": test::assert("is_string(\"snot\")", type::is_string("snot"), true)
+      }),
+      test::test({
+        "name": "is_array(null)",
+        "test": test::assert("is_array(null)", type::is_array(null), false)
+      }),
+      test::test({
+        "name": "is_array([])",
+        "test": test::assert("is_array([])", type::is_array([]), true)
+      }),
+      test::test({
+        "name": "is_record(null)",
+        "test": test::assert("is_record(null)", type::is_record(null), false)
+      }),
+      test::test({
+        "name": "is_record({})",
+        "test": test::assert("is_record({})", type::is_record({}), true)
+      }),
+    ]
+  }
+});
+
+test::suite({
+  "name": "URL Encoding and decoding tests",
+  "suite": {
+    "name": "Encoded/Decoded characters",
+    "tags": [ "url", "encode" ],
+    "tests": [
+      test::test({
+        "name": "Test encoded characters in std::url::encode",
+        "test": test::assert("url::encode", url::encode("!*'();:@&=+$,/?#[]"), "%21%2A%27%28%29%3B%3A%40%26%3D%2B%24%2C%2F%3F%23%5B%5D"),
+      }),
+      test::test({
+        "name": "Test decoded characters in std::url::encode",
+        "test": test::assert("url::decode", url::decode("%21%2A%27%28%29%3B%3A%40%26%3D%2B%24%2C%2F%3F%23%5B%5D"), "!*'();:@&=+$,/?#[]"),
+      }),
+    ],
+  }
+});
+
+"snot badger";
