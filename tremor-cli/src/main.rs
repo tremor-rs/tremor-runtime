@@ -100,7 +100,21 @@ fn main() -> Result<()> {
     let app = app.version(tremor_runtime::version::VERSION_LONG);
     let app = app.global_setting(AppSettings::ColoredHelp);
     let app = app.global_setting(AppSettings::ColorAlways);
+
     let matches = app.clone().get_matches();
+    unsafe {
+        // We know that instance will only get set once at
+        // the very beginning nothing can access it yet,
+        // this makes it allowable to use unsafe here.
+        let s = matches
+            .value_of("instance")
+            .ok_or_else(|| Error::from("instance argument missing"))?;
+        let forget_s = std::mem::transmute(&s as &str);
+        // This means we're going to LEAK this memory, however
+        // it is fine since as we do actually need it for the
+        // rest of the program execution.
+        tremor_runtime::metrics::INSTANCE = forget_s;
+    }
     if let Err(e) = run(app, &matches) {
         eprintln!("{}", e);
         // ALLOW: this is supposed to exit
