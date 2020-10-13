@@ -104,7 +104,7 @@ impl Operator for Tremor {
                         // ALLOW: we know this never happens since we swap the event three lines above
                         unreachable!();
                     };
-                    ERROR
+                    ERR
                 }
             }
         };
