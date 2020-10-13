@@ -17,7 +17,6 @@ use crate::util::{get_source_kind, SourceKind};
 use async_std::task;
 use clap::{App, ArgMatches};
 use std::io::Write;
-use std::mem;
 use std::path::Path;
 use std::{io::BufReader, sync::atomic::Ordering};
 use tremor_api as api;
@@ -27,7 +26,7 @@ use tremor_pipeline::FN_REGISTRY;
 use tremor_runtime::repository::BindingArtefact;
 use tremor_runtime::system::World;
 use tremor_runtime::url::TremorURL;
-use tremor_runtime::{self, config, functions, metrics, version};
+use tremor_runtime::{self, config, functions, version};
 
 #[cfg(not(tarpaulin_include))]
 pub(crate) async fn load_file(world: &World, file_name: &str) -> Result<usize> {
@@ -184,20 +183,6 @@ pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
 
         file.write(format!("{}\n", std::process::id()).as_ref())
             .map_err(|e| Error::from(format!("Failed to write pid to `{}`: {}", pid_file, e)))?;
-    }
-
-    unsafe {
-        // We know that instance will only get set once at
-        // the very beginning nothing can access it yet,
-        // this makes it allowable to use unsafe here.
-        let s = matches
-            .value_of("instance")
-            .ok_or_else(|| Error::from("instance argument missing"))?;
-        let forget_s = mem::transmute(&s as &str);
-        // This means we're going to LEAK this memory, however
-        // it is fine since as we do actually need it for the
-        // rest of the program execution.
-        metrics::INSTANCE = forget_s;
     }
 
     let l: u32 = matches

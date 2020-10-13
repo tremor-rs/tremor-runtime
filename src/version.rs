@@ -34,6 +34,7 @@ pub const DEBUG: bool = true;
 /// Prints tremor and librdkafka version.
 pub fn print() {
     eprintln!("tremor version: {}", VERSION_LONG);
+    eprintln!("tremor instance: {}", instance!());
     let (version_n, version_s) = get_rdkafka_version();
     eprintln!("rd_kafka version: 0x{:08x}, {}", version_n, version_s);
 }
