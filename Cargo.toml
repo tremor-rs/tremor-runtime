@@ -32,7 +32,7 @@ async-compression = {version = "0.3", features = ["xz", "futures-bufread", "stre
 async-io = "1.1"
 async-std = {version = "1.6.5", features = ["unstable", "attributes"]}
 async-trait = "0.1"
-async-tungstenite = {version = "0.8.0", features = ["async-std-runtime"]}
+async-tungstenite = {version = "0.9.0", features = ["async-std-runtime"]}
 base64 = "0.13"
 byteorder = "1"
 bytes = "0.5"
