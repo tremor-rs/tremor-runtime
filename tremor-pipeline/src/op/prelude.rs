@@ -23,4 +23,4 @@ pub use value_trait::Value as ValueTrait;
 
 pub const OUT: Cow<'static, str> = Cow::Borrowed("out");
 pub const IN: Cow<'static, str> = Cow::Borrowed("in");
-pub const ERROR: Cow<'static, str> = Cow::Borrowed("error");
+pub const ERR: Cow<'static, str> = Cow::Borrowed("err");

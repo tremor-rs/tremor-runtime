@@ -165,7 +165,7 @@ impl Operator for Grouper {
                     let rate = if let Some(rate) = Rate::from_meta(&meta) {
                         rate
                     } else {
-                        return Ok(vec![(ERROR, event)].into());
+                        return Ok(vec![(ERR, event)].into());
                     };
                     groups.cache.put(
                         dimensions.clone(),
@@ -192,7 +192,7 @@ impl Operator for Grouper {
                 Ok(vec![("overflow".into(), event)].into())
             }
         } else {
-            Ok(vec![(ERROR, event)].into())
+            Ok(vec![(ERR, event)].into())
         }
     }
 

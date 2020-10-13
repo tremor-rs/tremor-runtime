@@ -177,7 +177,7 @@ impl Operator for Trickle {
                 if let Some(error) = unwind_event.as_object_mut() {
                     error.insert("event".into(), o);
                 };
-                Ok(vec![(ERROR, event)].into())
+                Ok(vec![(ERR, event)].into())
             }
         }
     }
