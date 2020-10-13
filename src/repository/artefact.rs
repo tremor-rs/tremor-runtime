@@ -18,11 +18,11 @@ use crate::metrics::RampReporter;
 use crate::offramp;
 use crate::onramp;
 use crate::pipeline;
-use crate::ramp::{ERROR, RESPONSE};
 use crate::registry::ServantId;
 use crate::system::{self, World};
 use crate::url::{ResourceType, TremorURL};
 use hashbrown::HashMap;
+use std::borrow::Cow;
 use tremor_pipeline::query;
 pub(crate) type Id = TremorURL;
 pub(crate) use crate::OffRamp as OfframpArtefact;
@@ -90,22 +90,17 @@ impl Artefact for Pipeline {
         mappings: HashMap<Self::LinkLHS, Self::LinkRHS>,
     ) -> Result<Self::LinkResult> {
         if let Some(pipeline) = system.reg.find_pipeline(id).await? {
-            // TODO: Make this a two step 'transactional' process where all pipelines are gathered and then send
+            let mut msgs = Vec::with_capacity(mappings.len());
             for (from, to) in mappings {
                 match to.resource_type() {
                     //TODO: Check that we really have the right ramp!
                     Some(ResourceType::Offramp) => {
                         if let Some(offramp) = system.reg.find_offramp(&to).await? {
-                            pipeline
-                                .send_mgmt(pipeline::MgmtMsg::ConnectOfframp(
-                                    from.clone().into(),
-                                    to.clone(),
-                                    offramp,
-                                ))
-                                .await
-                                .map_err(|e| -> Error {
-                                    format!("Could not send to pipeline: {}", e).into()
-                                })?;
+                            msgs.push(pipeline::MgmtMsg::ConnectOfframp(
+                                from.clone().into(),
+                                to.clone(),
+                                offramp,
+                            ));
                         } else {
                             return Err(format!("Offramp {} not found", to).into());
                         }
@@ -113,16 +108,11 @@ impl Artefact for Pipeline {
                     Some(ResourceType::Pipeline) => {
                         info!("[Pipeline:{}] Linking port {} to {}", id, from, to);
                         if let Some(p) = system.reg.find_pipeline(&to).await? {
-                            pipeline
-                                .send_mgmt(pipeline::MgmtMsg::ConnectPipeline(
-                                    from.clone().into(),
-                                    to.clone(),
-                                    Box::new(p),
-                                ))
-                                .await
-                                .map_err(|e| -> Error {
-                                    format!("Could not send to pipeline: {:?}", e).into()
-                                })?;
+                            msgs.push(pipeline::MgmtMsg::ConnectPipeline(
+                                from.clone().into(),
+                                to.clone(),
+                                Box::new(p),
+                            ));
                         } else {
                             return Err(format!("Pipeline {:?} not found", to).into());
                         }
@@ -130,24 +120,24 @@ impl Artefact for Pipeline {
                     Some(ResourceType::Onramp) => {
                         if let Some(onramp) = system.reg.find_onramp(&to).await? {
                             // TODO validate that this onramp supports linked transport before
-                            pipeline
-                                .send_mgmt(pipeline::MgmtMsg::ConnectLinkedOnramp(
-                                    from.clone().into(),
-                                    to.clone(),
-                                    onramp,
-                                ))
-                                .await
-                                .map_err(|e| -> Error {
-                                    format!("Could not send to pipeline: {}", e).into()
-                                })?;
+                            msgs.push(pipeline::MgmtMsg::ConnectLinkedOnramp(
+                                from.clone().into(),
+                                to.clone(),
+                                onramp,
+                            ));
                         } else {
                             return Err(format!("Onramp {} not found", to).into());
                         }
                     }
                     _ => {
-                        return Err("Source isn't a Offramp or pipeline".into());
+                        return Err(format!("Cannot link Pipeline to: {}.", to).into());
                     }
                 }
+            }
+            for msg in msgs {
+                pipeline.send_mgmt(msg).await.map_err(|e| -> Error {
+                    format!("Could not send to pipeline: {}", e).into()
+                })?;
             }
             Ok(true)
         } else {
@@ -262,6 +252,7 @@ impl Artefact for OfframpArtefact {
             .await?;
         rx.recv().await?
     }
+
     async fn link(
         &self,
         system: &World,
@@ -270,37 +261,18 @@ impl Artefact for OfframpArtefact {
     ) -> Result<Self::LinkResult> {
         info!("Linking offramp {} ..", id);
         if let Some(offramp) = system.reg.find_offramp(id).await? {
-            let port = id.instance_port_required()?;
-            // linked offramps use "response" port by convention for data out (and "error" for
-            // error events).
-            // TODO we can use standard "in" port naming for this once we have different artefact
-            // to handle linked transports (and as part of that cleanup, this special handling for
-            // linked offramps will go away as well).
-            if port == RESPONSE || port == ERROR {
-                for (_this, pipeline_id) in mappings {
-                    info!("Linking linked offramp {} to {}", id, pipeline_id);
-                    if let Some(pipeline) = system.reg.find_pipeline(&pipeline_id).await? {
-                        offramp
-                            .send(offramp::Msg::ConnectLinked {
-                                port: port.to_string().into(),
-                                id: pipeline_id,
-                                addr: Box::new(pipeline),
-                            })
-                            .await?;
-                    };
-                }
-            } else {
-                for (pipeline_id, _this) in mappings {
-                    info!("Linking offramp {} to {}", id, pipeline_id);
-                    if let Some(pipeline) = system.reg.find_pipeline(&pipeline_id).await? {
-                        offramp
-                            .send(offramp::Msg::Connect {
-                                id: pipeline_id,
-                                addr: Box::new(pipeline),
-                            })
-                            .await?;
-                    };
-                }
+            for (pipeline_id, _this) in mappings {
+                info!("Linking offramp {} to {}", id, pipeline_id);
+                let port = Cow::Owned(id.instance_port_required()?.to_string());
+                if let Some(pipeline) = system.reg.find_pipeline(&pipeline_id).await? {
+                    offramp
+                        .send(offramp::Msg::Connect {
+                            port,
+                            id: pipeline_id,
+                            addr: Box::new(pipeline),
+                        })
+                        .await?;
+                };
             }
             Ok(true)
         } else {
@@ -409,25 +381,35 @@ impl Artefact for OnrampArtefact {
         id: &TremorURL,
         mappings: HashMap<Self::LinkLHS, Self::LinkRHS>,
     ) -> Result<Self::LinkResult> {
+        // check if we have the right onramp
+        if let Some(artefact) = id.artefact() {
+            if self.id.as_str() != artefact {
+                return Err(format!(
+                    "Onramp for linking ({}) is not from this artifact: {}.",
+                    id, self.id
+                )
+                .into());
+            }
+        }
         if let Some(onramp) = system.reg.find_onramp(id).await? {
-            // TODO: Make this a two step 'transactional' process where all pipelines are gathered and then send
+            let mut msgs = Vec::with_capacity(mappings.len());
             for (from, to) in mappings {
-                //TODO: Check that we really have the right onramp!
+                // TODO: validate that `from` - the port name - is valid (OUT, ERR, METRICS)
                 if let Some(ResourceType::Pipeline) = to.resource_type() {
                     if let Some(pipeline) = system.reg.find_pipeline(&to).await? {
-                        onramp
-                            // TODO validate that from is one of OUT or ERROR
-                            .send(onramp::Msg::Connect(
-                                from.into(),
-                                vec![(to.clone(), pipeline)],
-                            ))
-                            .await?;
+                        msgs.push(onramp::Msg::Connect(
+                            from.into(),
+                            vec![(to.clone(), pipeline)],
+                        ));
                     } else {
                         return Err(format!("Pipeline {:?} not found", to).into());
                     }
                 } else {
                     return Err("Destination isn't a Pipeline".into());
                 }
+            }
+            for msg in msgs {
+                onramp.send(msg).await?;
             }
             Ok(true)
         } else {
@@ -533,9 +515,8 @@ impl Artefact for Binding {
                         to.set_instance(instance);
                         tos.push(to.clone());
                         match (from.resource_type(), to.resource_type()) {
-                            //TODO: Check that we really have the right onramp!
                             (Some(ResourceType::Onramp), Some(ResourceType::Pipeline)) => {
-                                onramps.push((from.clone(), to))
+                                onramps.push((from.clone(), to));
                             }
                             (Some(ResourceType::Pipeline), Some(ResourceType::Offramp))
                             | (Some(ResourceType::Pipeline), Some(ResourceType::Pipeline))
@@ -610,7 +591,7 @@ impl Artefact for Binding {
             system.ensure_pipeline(&to).await?;
             system.ensure_offramp(&from).await?;
             system
-                .link_offramp(&from, vec![(from.clone(), to)].into_iter().collect())
+                .link_offramp(&from, vec![(to, from.clone())].into_iter().collect())
                 .await?;
         }
 

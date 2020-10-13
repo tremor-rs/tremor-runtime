@@ -191,7 +191,7 @@ impl Ws {
                     v.push(sink::Reply::Insight(e));
                 }
                 WsResult::Response(id, msg) => {
-                    v.push(sink::Reply::Response(RESPONSE, Self::make_event(id, msg)?))
+                    v.push(sink::Reply::Response(OUT, Self::make_event(id, msg)?))
                 }
             }
         }

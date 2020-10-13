@@ -506,9 +506,7 @@ async fn codec_task(
                             },
                             &e,
                         );
-                        if let Err(e) = reply_tx
-                            .send(sink::Reply::Response(ERROR, error_event))
-                            .await
+                        if let Err(e) = reply_tx.send(sink::Reply::Response(ERR, error_event)).await
                         {
                             error!("Error sending error response event {}", e);
                         }
@@ -558,7 +556,7 @@ async fn codec_task(
                                 let my_id = Ids::new(sink_uid, response_ids.next());
                                 response_event.id.merge(&my_id);
                                 if let Err(e) = reply_tx
-                                    .send(sink::Reply::Response(RESPONSE, response_event))
+                                    .send(sink::Reply::Response(OUT, response_event))
                                     .await
                                 {
                                     error!("Error sending response event: {}", e);
@@ -579,9 +577,8 @@ async fn codec_task(
                                 &e,
                             );
 
-                            if let Err(e) = reply_tx
-                                .send(sink::Reply::Response(ERROR, error_event))
-                                .await
+                            if let Err(e) =
+                                reply_tx.send(sink::Reply::Response(ERR, error_event)).await
                             {
                                 error!(
                                     "Error sending error event on response decoding error: {}",
@@ -624,9 +621,7 @@ async fn codec_task(
                     event_origin_uri,
                     &e,
                 );
-                if let Err(send_err) = reply_tx
-                    .send(sink::Reply::Response(ERROR, error_event))
-                    .await
+                if let Err(send_err) = reply_tx.send(sink::Reply::Response(ERR, error_event)).await
                 {
                     error!(
                         "Error sending error response for failed request send: {}",

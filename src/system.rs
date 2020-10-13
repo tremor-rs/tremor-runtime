@@ -19,6 +19,7 @@ use crate::registry::{Registries, ServantId};
 use crate::repository::{
     Artefact, BindingArtefact, OfframpArtefact, OnrampArtefact, PipelineArtefact, Repositories,
 };
+use crate::url::ports::METRICS;
 use crate::url::TremorURL;
 use async_channel::bounded;
 use async_std::io::prelude::*;
@@ -200,8 +201,8 @@ impl World {
                 // We link to the metrics pipeline
                 let res = self.reg.publish_pipeline(id, servant).await?;
                 let mut id = id.clone();
-                id.set_port("metrics".to_owned());
-                let m = vec![("metrics".to_string(), METRICS_PIPELINE.clone())]
+                id.set_port(METRICS.to_string());
+                let m = vec![(METRICS.to_string(), METRICS_PIPELINE.clone())]
                     .into_iter()
                     .collect();
                 self.link_existing_pipeline(&id, m).await?;
@@ -326,8 +327,8 @@ impl World {
                 // We link to the metrics pipeline
                 let res = self.reg.publish_onramp(id, servant).await?;
                 let mut id = id.clone();
-                id.set_port("metrics".to_owned());
-                let m = vec![("metrics".to_string(), METRICS_PIPELINE.clone())]
+                id.set_port(METRICS.to_string());
+                let m = vec![(METRICS.to_string(), METRICS_PIPELINE.clone())]
                     .into_iter()
                     .collect();
                 self.link_existing_onramp(&id, m).await?;
@@ -431,9 +432,6 @@ impl World {
                 self.repo.bind_offramp(id).await?;
                 // We link to the metrics pipeline
                 let res = self.reg.publish_offramp(id, servant).await?;
-                // FIXME: why does this connect the metrics pipeline to to
-                // it is a 'magic' way to coinnect offramp/metrics to metrics-pipeline/in
-                // we really shouldn't do this
                 let m = vec![(METRICS_PIPELINE.clone(), id.clone())]
                     .into_iter()
                     .collect();

@@ -42,6 +42,23 @@ pub enum Scope {
     Type,
 }
 
+/// module for standard port names
+pub mod ports {
+    use std::borrow::Cow;
+
+    /// standard input port
+    pub const IN: Cow<'static, str> = Cow::Borrowed("in");
+
+    /// standard output port
+    pub const OUT: Cow<'static, str> = Cow::Borrowed("out");
+
+    /// standard err port
+    pub const ERR: Cow<'static, str> = Cow::Borrowed("err");
+
+    /// standard metrics port
+    pub const METRICS: Cow<'static, str> = Cow::Borrowed("metrics");
+}
+
 /// A tremor URL identifying an entity in tremor
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct TremorURL {
@@ -62,6 +79,7 @@ fn decode_type(t: &str) -> Result<ResourceType> {
         other => Err(format!("Bad Resource type: {}", other).into()),
     }
 }
+
 impl fmt::Display for ResourceType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -195,7 +213,6 @@ impl TremorURL {
             } else {
                 "localhost".to_owned()
             };
-
             Ok(Self {
                 host,
                 scope,
@@ -348,7 +365,7 @@ mod test {
         assert_eq!(Some(ResourceType::Pipeline), url.resource_type());
         assert_eq!(Some("main"), url.artefact());
         assert_eq!(Some("01"), url.instance());
-        assert_eq!(Some("in"), url.instance_port());
+        assert_eq!(Some(ports::IN.as_ref()), url.instance_port());
         Ok(())
     }
 
@@ -384,7 +401,7 @@ mod test {
         assert_eq!(None, url.resource_type());
         assert_eq!(None, url.artefact());
         assert_eq!(Some("01"), url.instance());
-        assert_eq!(Some("in"), url.instance_port());
+        assert_eq!(Some(ports::IN.as_ref()), url.instance_port());
         Ok(())
     }
 
@@ -395,7 +412,7 @@ mod test {
         assert_eq!(None, url.resource_type());
         assert_eq!(Some("pipe"), url.artefact());
         assert_eq!(Some("01"), url.instance());
-        assert_eq!(Some("in"), url.instance_port());
+        assert_eq!(Some(ports::IN.as_ref()), url.instance_port());
         Ok(())
     }
 
@@ -406,21 +423,21 @@ mod test {
         assert_eq!(Some(ResourceType::Binding), url.resource_type());
         assert_eq!(Some("pipe"), url.artefact());
         assert_eq!(Some("01"), url.instance());
-        assert_eq!(Some("in"), url.instance_port());
+        assert_eq!(Some(ports::IN.as_ref()), url.instance_port());
 
         let url = TremorURL::parse("onramp/id/01/out")?;
         assert_eq!(Scope::Port, url.scope());
         assert_eq!(Some(ResourceType::Onramp), url.resource_type());
         assert_eq!(Some("id"), url.artefact());
         assert_eq!(Some("01"), url.instance());
-        assert_eq!(Some("out"), url.instance_port());
+        assert_eq!(Some(ports::OUT.as_ref()), url.instance_port());
 
         let url = TremorURL::parse("offramp/id/01/in")?;
         assert_eq!(Scope::Port, url.scope());
         assert_eq!(Some(ResourceType::Offramp), url.resource_type());
         assert_eq!(Some("id"), url.artefact());
         assert_eq!(Some("01"), url.instance());
-        assert_eq!(Some("in"), url.instance_port());
+        assert_eq!(Some(ports::IN.as_ref()), url.instance_port());
 
         Ok(())
     }

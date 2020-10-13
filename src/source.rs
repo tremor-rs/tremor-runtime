@@ -18,9 +18,9 @@ use crate::metrics::RampReporter;
 use crate::onramp;
 use crate::pipeline;
 use crate::preprocessor::{make_preprocessors, preprocess, Preprocessors};
-use crate::ramp::{ERROR, OUT};
-use crate::system::METRICS_PIPELINE;
+use crate::url::ports::{ERR, METRICS, OUT};
 use crate::url::TremorURL;
+
 use crate::Result;
 use async_channel::{self, unbounded, Receiver, Sender};
 use async_std::task;
@@ -257,13 +257,22 @@ where
 
             match msg {
                 onramp::Msg::Connect(port, ps) => {
-                    for p in ps {
-                        if p.0 == *METRICS_PIPELINE {
+                    if port.eq_ignore_ascii_case(METRICS.as_ref()) {
+                        if ps.len() > 1 {
+                            warn!("Connecting more than 1 metrics pipelines will only connect the latest.");
+                        }
+                        for p in ps {
+                            info!(
+                                "[Source::{}] Connecting {} as metrics pipeline.",
+                                self.source_id, p.0
+                            );
                             self.metrics_reporter.set_metrics_pipeline(p);
-                        } else {
+                        }
+                    } else {
+                        for p in ps {
                             let pipelines = if port == OUT {
                                 &mut self.pipelines_out
-                            } else if port == ERROR {
+                            } else if port == ERR {
                                 &mut self.pipelines_err
                             } else {
                                 return Err(format!(
@@ -363,9 +372,9 @@ where
         };
         let mut error = false;
         self.id += 1;
-        let pipelines = if port == OUT {
+        let pipelines = if OUT == port {
             &mut self.pipelines_out
-        } else if port == ERROR {
+        } else if ERR == port {
             &mut self.pipelines_err
         } else {
             return false;
@@ -378,7 +387,7 @@ where
             }
 
             // TODO refactor metrics_reporter to do this by port now
-            if port == ERROR {
+            if ERR == port {
                 self.metrics_reporter.increment_error();
             } else {
                 self.metrics_reporter.increment_out();
@@ -558,7 +567,7 @@ where
                                         self.source_id.to_string().into(),
                                     );
                                     (
-                                        ERROR,
+                                        ERR,
                                         (Value::from(error_data), Value::from(error_meta)).into(),
                                     )
                                 }
