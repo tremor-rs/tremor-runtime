@@ -1,0 +1,94 @@
+use std::test;
+use tremor::system;
+use tremor::origin;
+use tremor::chash;
+
+test::suite({
+  "name": "Tremor system library tests",
+  "suite": {
+    "name": "Tremor system library tests",
+    "tags": [ "system", "internal" ],
+    "tests": [
+      test::test({
+        "name": "hostname",
+        "test": test::assert("hostname", system::hostname() != "localhost", true), # we cannot assert hostname in tests as machines vary
+      }),
+      test::test({
+        "name": "ingest_ns",
+        "test": test::assert("ingest_ns", system::ingest_ns() <= system::ingest_ns(), true), # invariant ( unless someone fiddles with NTP )
+      }),
+      test::test({
+        "name": "instance",
+        "test": test::assert("instance", system::instance(), "tremor-script"),
+      }),
+    ]
+  }
+});
+
+test::suite({
+  "name": "Tremor system origin library tests",
+  "suite": {
+    "name": "Tremor system origin library tests",
+    "tags": [ "system", "origin" ],
+    "tests": [
+      test::test({
+        "name": "origin scheme",
+        "test": test::assert("origin scheme", origin::scheme(), "tremor-script"),
+      }),
+      test::test({
+        "name": "origin host",
+        "test": test::assert("origin host", origin::host(), "localhost"),
+      }),
+      test::test({
+        "name": "origin port",
+        "test": test::assert("origin port", origin::port(), null),
+      }),
+      test::test({
+        "name": "origin path",
+        "test": test::assert("origin path", origin::path(), []),
+      }),
+      test::test({
+        "name": "origin as uri string",
+        "test": test::assert("origin as uri string", origin::as_uri_string(), "tremor-script://localhost"),
+      }),
+      test::test({
+        "name": "origin as uri record",
+        "test": test::assert("origin as uri record", origin::as_uri_record(), {
+          "scheme": "tremor-script",
+          "host": "localhost",
+          "port": null,
+          "path": []
+        }),
+      }),
+    ]
+  }
+});
+
+
+test::suite({
+  "name": "Tremor system consistent hashing library tests",
+  "suite": {
+    "name": "Tremor system consistent hashing library tests",
+    "tags": [ "system", "chash" ],
+    "tests": [
+      test::test({
+        "name": "hash 1",
+        "test": test::assert("hash 1", chash::jump("snot", 9), 8),
+      }),
+      test::test({
+        "name": "hash 2",
+        "test": test::assert("hash 2", chash::jump("badger", 9), 2),
+      }),
+      test::test({
+        "name": "hash 3",
+        "test": test::assert("hash 3", chash::jump_with_keys(8, 2, "badger", 9), 3),
+      }),
+      test::test({
+        "name": "sorted serialize 1",
+        "test": test::assert("sorted serialize 3", chash::sorted_serialize([8, "snot", 2, "badger"]), "[8,\"snot\",2,\"badger\"]"),
+      }),
+    ]
+  }
+});
+
+"snot badger"

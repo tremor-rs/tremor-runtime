@@ -31,9 +31,9 @@ end;
 ## Minimum valid integer value.
 ##
 ## Same as `signed::min`
-const min = 9223372036854775807;
+const min = (-9223372036854775807);
 
 ## Maximum valid integer value.
 ##
 ## Same as `signed::max`
-const max = (-9223372036854775807);
+const max = 9223372036854775807;
