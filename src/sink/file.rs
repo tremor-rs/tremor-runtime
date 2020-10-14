@@ -61,7 +61,7 @@ impl offramp::Impl for File {
 impl Sink for File {
     async fn terminate(&mut self) {
         if let Some(file) = &mut self.file {
-            if file.flush().await.is_ok() {
+            if !file.flush().await.is_ok() {
                 error!("Failed to flush file")
             };
         }

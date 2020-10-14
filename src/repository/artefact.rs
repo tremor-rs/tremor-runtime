@@ -23,6 +23,7 @@ use crate::system::{self, World};
 use crate::url::{ResourceType, TremorURL};
 use hashbrown::HashMap;
 use std::borrow::Cow;
+use std::collections::HashSet;
 use tremor_pipeline::query;
 pub(crate) type Id = TremorURL;
 pub(crate) use crate::OffRamp as OfframpArtefact;
@@ -151,16 +152,13 @@ impl Artefact for Pipeline {
         id: &TremorURL,
         mappings: HashMap<Self::LinkLHS, Self::LinkRHS>,
     ) -> Result<Self::LinkResult> {
+        info!("Unlinking pipeline {} ..", id);
         if let Some(pipeline) = system.reg.find_pipeline(id).await? {
             for (from, to) in mappings {
                 match to.resource_type() {
-                    Some(ResourceType::Offramp) => {
-                        pipeline
-                            .send_mgmt(pipeline::MgmtMsg::DisconnectOutput(from.clone().into(), to))
-                            .await
-                            .map_err(|_e| Error::from("Failed to unlink pipeline"))?;
-                    }
-                    Some(ResourceType::Pipeline) => {
+                    Some(ResourceType::Offramp)
+                    | Some(ResourceType::Pipeline)
+                    | Some(ResourceType::Onramp) => {
                         pipeline
                             .send_mgmt(pipeline::MgmtMsg::DisconnectOutput(from.clone().into(), to))
                             .await
@@ -171,6 +169,7 @@ impl Artefact for Pipeline {
                     }
                 }
             }
+            info!("Pipeline {} unlinked.", id);
             Ok(true)
         } else {
             Err(format!("Pipeline {:?} not found", id).into())
@@ -261,9 +260,9 @@ impl Artefact for OfframpArtefact {
     ) -> Result<Self::LinkResult> {
         info!("Linking offramp {} ..", id);
         if let Some(offramp) = system.reg.find_offramp(id).await? {
-            for (pipeline_id, _this) in mappings {
-                info!("Linking offramp {} to {}", id, pipeline_id);
-                let port = Cow::Owned(id.instance_port_required()?.to_string());
+            for (pipeline_id, this) in mappings {
+                let port = Cow::Owned(this.instance_port_required()?.to_string());
+                info!("Linking offramp {} to {}", this, pipeline_id);
                 if let Some(pipeline) = system.reg.find_pipeline(&pipeline_id).await? {
                     offramp
                         .send(offramp::Msg::Connect {
@@ -286,23 +285,26 @@ impl Artefact for OfframpArtefact {
         id: &TremorURL,
         mappings: HashMap<Self::LinkLHS, Self::LinkRHS>,
     ) -> Result<Self::LinkResult> {
-        info!("Linking offramp {} ..", id);
+        info!("Unlinking offramp {} ..", id);
         if let Some(offramp) = system.reg.find_offramp(id).await? {
             let (tx, rx) = bounded(mappings.len());
+            let mut expect_answers = mappings.len();
             for (_this, pipeline_id) in mappings {
+                let port = Cow::Owned(id.instance_port_required()?.to_string());
                 offramp
                     .send(offramp::Msg::Disconnect {
+                        port,
                         id: pipeline_id,
                         tx: tx.clone(),
                     })
                     .await?;
             }
-            while let Ok(empty) = rx.recv().await {
-                if empty {
-                    return Ok(true);
-                }
+            let mut empty = false;
+            while expect_answers > 0 {
+                empty |= rx.recv().await?;
+                expect_answers -= 1;
             }
-            Ok(false)
+            Ok(empty)
         } else {
             Err(format!("Offramp {} not found for unlinking,", id).into())
         }
@@ -423,6 +425,7 @@ impl Artefact for OnrampArtefact {
         id: &TremorURL,
         mappings: HashMap<Self::LinkLHS, Self::LinkRHS>,
     ) -> Result<bool> {
+        info!("Unlinking onramp {} ..", id);
         if let Some(onramp) = system.reg.find_onramp(id).await? {
             let mut links = Vec::new();
             let (tx, rx) = bounded(mappings.len());
@@ -430,6 +433,7 @@ impl Artefact for OnrampArtefact {
             for to in mappings.values() {
                 links.push(to.to_owned())
             }
+            let mut expect_answers = mappings.len();
             for (_port, pipeline_id) in mappings {
                 onramp
                     .send(onramp::Msg::Disconnect {
@@ -438,12 +442,14 @@ impl Artefact for OnrampArtefact {
                     })
                     .await?;
             }
-            while let Ok(empty) = rx.recv().await {
-                if empty {
-                    return Ok(true);
-                }
+            let mut empty = false;
+            while expect_answers > 0 {
+                empty |= rx.recv().await?;
+                expect_answers -= 1;
             }
-            Ok(false)
+
+            info!("Onramp {} unklinked.", id);
+            Ok(empty)
         } else {
             Err(format!("Unlinking failed Onramp {} not found ", id).into())
         }
@@ -620,28 +626,51 @@ impl Artefact for Binding {
         // we can latch a quiescence condition in the pipeline which unlink or other
         // post-quiescence cleanup logic can hook off / block on etc...
         //
+        info!("Unlinking Binding {}", self.binding.id);
 
-        for (from, to) in &self.binding.links {
-            if from.resource_type() == Some(ResourceType::Onramp) {
+        for (from, tos) in &self.binding.links {
+            if let Some(ResourceType::Onramp) = from.resource_type() {
                 let mut mappings = HashMap::new();
-                for p in to {
+                for p in tos {
                     mappings.insert(from.instance_port_required()?.to_string(), p.clone());
                 }
                 system.unlink_onramp(&from, mappings).await?;
             }
         }
+        // keep track of already handled pipelines, so we dont unlink twice and run into errors
+        let mut unlinked = HashSet::with_capacity(self.binding.links.len());
         for (from, tos) in &self.binding.links {
-            if from.resource_type() == Some(ResourceType::Pipeline) {
-                for to in tos {
-                    let mut mappings = HashMap::new();
-                    mappings.insert(from.instance_port_required()?.to_string(), to.clone());
-                    system.unlink_pipeline(&from, mappings).await?;
-                    let mut mappings = HashMap::new();
-                    mappings.insert(to.clone(), from.clone());
-                    system.unlink_offramp(&to, mappings).await?;
+            let from_instance = from.clone().trim_to_instance();
+            if !unlinked.contains(&from_instance) {
+                if let Some(ResourceType::Pipeline) = from.resource_type() {
+                    for to in tos {
+                        let mut mappings = HashMap::new();
+                        mappings.insert(from.instance_port_required()?.to_string(), to.clone());
+                        system.unlink_pipeline(&from, mappings).await?;
+                        match to.resource_type() {
+                            Some(ResourceType::Offramp) => {
+                                let mut mappings = HashMap::new();
+                                mappings.insert(to.clone(), from.clone());
+                                system.unlink_offramp(&to, mappings).await?;
+                            }
+                            _ => (),
+                        }
+                    }
+                    unlinked.insert(from.clone().trim_to_instance());
                 }
             }
         }
+        for (from, tos) in &self.binding.links {
+            if let Some(ResourceType::Offramp) = from.resource_type() {
+                let mut mappings = HashMap::new();
+                for to in tos {
+                    mappings.insert(from.clone(), to.clone());
+                }
+                system.unlink_offramp(from, mappings).await?;
+            }
+        }
+
+        info!("Binding {} unlinked.", self.binding.id);
         Ok(true)
     }
 

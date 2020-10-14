@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::config::{BindingVec, Config, MappingMap, OffRampVec, OnRampVec};
-use crate::errors::{Error, Result};
+use crate::errors::{Error, ErrorKind, Result};
 use crate::lifecycle::{ActivationState, ActivatorLifecycleFsm};
 use crate::registry::{Registries, ServantId};
 use crate::repository::{
@@ -208,7 +208,7 @@ impl World {
                 self.link_existing_pipeline(&id, m).await?;
                 Ok(res)
             }
-            (None, _) => Err(format!("Artefact not found: {}", id).into()),
+            (None, _) => Err(ErrorKind::ArtifactNotFound(id.to_string()).into()),
             (_, None) => Err(format!("Invalid URI for instance {} ", id).into()),
         }
     }
@@ -225,7 +225,7 @@ impl World {
                 self.repo.unbind_pipeline(id).await?;
                 Ok(r)
             }
-            (None, _) => Err(format!("Artefact not found: {}", id).into()),
+            (None, _) => Err(ErrorKind::ArtifactNotFound(id.to_string()).into()),
             (_, None) => Err(format!("Invalid URI for instance {}", id).into()),
         }
     }
@@ -256,7 +256,7 @@ impl World {
             };
             pipeline_a.artefact.link(self, id, mappings).await
         } else {
-            Err(format!("Pipeline {} not found.", id).into())
+            Err(ErrorKind::ArtifactNotFound(id.to_string()).into())
         }
     }
 
@@ -273,7 +273,7 @@ impl World {
         if let Some(pipeline_a) = self.repo.find_pipeline(id).await? {
             pipeline_a.artefact.link(self, id, mappings).await
         } else {
-            Err(format!("Pipeline {} not found.", id).into())
+            Err(ErrorKind::ArtifactNotFound(id.to_string()).into())
         }
     }
 
@@ -296,7 +296,7 @@ impl World {
             };
             r
         } else {
-            Err(format!("Pipeline {} not found", id).into())
+            Err(ErrorKind::ArtifactNotFound(id.to_string()).into())
         }
     }
 
@@ -334,7 +334,7 @@ impl World {
                 self.link_existing_onramp(&id, m).await?;
                 Ok(res)
             }
-            (None, _) => Err(format!("Artefact not found: {}", id).into()),
+            (None, _) => Err(ErrorKind::ArtifactNotFound(id.to_string()).into()),
             (_, None) => Err(format!("Invalid URI for instance {} ", id).into()),
         }
     }
@@ -350,7 +350,7 @@ impl World {
                 self.repo.unbind_onramp(id).await?;
                 r
             }
-            (None, _) => Err(format!("Artefact not found: {}", id).into()),
+            (None, _) => Err(ErrorKind::ArtifactNotFound(id.to_string()).into()),
             (_, None) => Err(format!("Invalid URI for instance {} ", id).into()),
         }
     }
@@ -373,7 +373,7 @@ impl World {
             };
             onramp_a.artefact.link(self, id, mappings).await
         } else {
-            Err(format!("Onramp {:?} not found.", id).into())
+            Err(ErrorKind::ArtifactNotFound(id.to_string()).into())
         }
     }
 
@@ -388,7 +388,7 @@ impl World {
         if let Some(onramp_a) = self.repo.find_onramp(id).await? {
             onramp_a.artefact.link(self, id, mappings).await
         } else {
-            Err(format!("Onramp {:?} not found.", id).into())
+            Err(ErrorKind::ArtifactNotFound(id.to_string()).into())
         }
     }
 
@@ -411,7 +411,7 @@ impl World {
             };
             Ok(r)
         } else {
-            Err(format!("Onramp {:?} not found.", id).into())
+            Err(ErrorKind::ArtifactNotFound(id.to_string()).into())
         }
     }
 
@@ -432,13 +432,15 @@ impl World {
                 self.repo.bind_offramp(id).await?;
                 // We link to the metrics pipeline
                 let res = self.reg.publish_offramp(id, servant).await?;
-                let m = vec![(METRICS_PIPELINE.clone(), id.clone())]
+                let mut metrics_id = id.clone();
+                metrics_id.set_port(METRICS.to_string());
+                let m = vec![(METRICS_PIPELINE.clone(), metrics_id.clone())]
                     .into_iter()
                     .collect();
                 self.link_existing_offramp(&id, m).await?;
                 Ok(res)
             }
-            (None, _) => Err(format!("Artefact not found: {}", id).into()),
+            (None, _) => Err(ErrorKind::ArtifactNotFound(id.to_string()).into()),
             (_, None) => Err(format!("Invalid URI for instance {} ", id).into()),
         }
     }
@@ -448,14 +450,14 @@ impl World {
     /// # Errors
     ///  * if the id isn't an offramp instance or the offramp can't be unbound
     pub async fn unbind_offramp(&self, id: &TremorURL) -> Result<ActivationState> {
-        info!("Unbinding offramp {}", id);
+        info!("Unbinding offramp {} ..", id);
         match (&self.repo.find_offramp(id).await?, &id.instance()) {
             (Some(_artefact), Some(_instsance_id)) => {
                 let r = self.reg.unpublish_offramp(id).await;
                 self.repo.unbind_offramp(id).await?;
                 r
             }
-            (None, _) => Err(format!("Artefact not found: {}", id).into()),
+            (None, _) => Err(ErrorKind::ArtifactNotFound(id.to_string()).into()),
             (_, None) => Err(format!("Invalid URI for instance {} ", id).into()),
         }
     }
@@ -478,7 +480,7 @@ impl World {
             };
             offramp_a.artefact.link(self, id, mappings).await
         } else {
-            Err(format!("Offramp {:?} not found.", id).into())
+            Err(ErrorKind::ArtifactNotFound(id.to_string()).into())
         }
     }
 
@@ -493,7 +495,7 @@ impl World {
         if let Some(offramp_a) = self.repo.find_offramp(id).await? {
             offramp_a.artefact.link(self, id, mappings).await
         } else {
-            Err(format!("Offramp {:?} not found.", id).into())
+            Err(ErrorKind::ArtifactNotFound(id.to_string()).into())
         }
     }
 
@@ -516,7 +518,7 @@ impl World {
             };
             Ok(r)
         } else {
-            Err(format!("Offramp {:?} not found.", id).into())
+            Err(ErrorKind::ArtifactNotFound(id.to_string()).into())
         }
     }
 
@@ -573,7 +575,7 @@ impl World {
             };
             Ok(r)
         } else {
-            Err(format!("Binding {:?} not found.", id).into())
+            Err(ErrorKind::ArtifactNotFound(id.to_string()).into())
         }
     }
 
@@ -640,13 +642,14 @@ impl World {
             <BindingArtefact as Artefact>::LinkRHS,
         >,
     ) -> Result<<BindingArtefact as Artefact>::LinkResult> {
-        if let Some(mapping) = self.reg.find_binding(id).await? {
-            if mapping.unlink(self, id, mappings).await? {
-                self.unbind_binding_a(id, &mapping).await?;
+        if let Some(binding) = self.reg.find_binding(id).await? {
+            if binding.unlink(self, id, mappings).await? {
+                self.unbind_binding_a(id, &binding).await?;
             }
-            return Ok(mapping);
+            return Ok(binding);
         }
-        Err(format!("Binding {:?} not found.", id).into())
+
+        Err(ErrorKind::ArtifactNotFound(id.to_string()).into())
     }
 
     /// Starts the runtime system

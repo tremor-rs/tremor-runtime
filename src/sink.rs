@@ -187,7 +187,13 @@ where
 
     fn remove_pipeline(&mut self, id: TremorURL) -> bool {
         self.pipelines.remove(&id);
-        self.pipelines.is_empty()
+        self.pipelines.is_empty() && self.dest_pipelines.is_empty()
+    }
+    fn remove_dest_pipeline(&mut self, port: Cow<'static, str>, id: TremorURL) -> bool {
+        if let Some(port_ps) = self.dest_pipelines.get_mut(&port) {
+            port_ps.retain(|(url, _)| url != &id)
+        }
+        self.pipelines.is_empty() && self.dest_pipelines.is_empty()
     }
 
     async fn on_signal(&mut self, signal: Event) -> Option<Event> {

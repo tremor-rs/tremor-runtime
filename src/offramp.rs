@@ -46,6 +46,7 @@ pub enum Msg {
         addr: Box<pipeline::Addr>,
     },
     Disconnect {
+        port: Cow<'static, str>,
         id: TremorURL,
         tx: async_channel::Sender<bool>,
     },
@@ -79,8 +80,8 @@ pub trait Offramp: Send {
     fn default_codec(&self) -> &str;
     fn add_pipeline(&mut self, id: TremorURL, addr: pipeline::Addr);
     fn remove_pipeline(&mut self, id: TremorURL) -> bool;
-    // TODO handle removal as well
     fn add_dest_pipeline(&mut self, port: Cow<'static, str>, id: TremorURL, addr: pipeline::Addr);
+    fn remove_dest_pipeline(&mut self, port: Cow<'static, str>, id: TremorURL) -> bool;
     fn is_active(&self) -> bool {
         true
     }
@@ -294,17 +295,35 @@ impl Manager {
                                     offramp.add_dest_pipeline(port, id, *addr);
                                 }
                             }
-                            Msg::Disconnect { id, tx } => {
-                                //  FIXME we can't disconnect destination pipelines
-                                info!("[Offramp::{}] Disconnecting pipeline {}", offramp_url, id);
-                                pipelines.remove(&id);
-                                let r = offramp.remove_pipeline(id.clone());
-                                info!("[Offramp::{}] Pipeline {} disconnected", offramp_url, id);
-                                if r {
+                            Msg::Disconnect { port, id, tx } => {
+                                info!(
+                                    "[Offramp::{}] Disconnecting pipeline {} on port {}",
+                                    offramp_url, id, port
+                                );
+                                let marked_done = if port.eq_ignore_ascii_case(IN.as_ref()) {
+                                    pipelines.remove(&id);
+                                    offramp.remove_pipeline(id.clone())
+                                } else if !port.eq_ignore_ascii_case(METRICS.as_ref()) {
+                                    if let Some(port_ps) = dest_pipelines.get_mut(&port) {
+                                        port_ps.retain(|(url, _)| url != &id)
+                                    }
+                                    offramp.remove_dest_pipeline(port.clone(), id.clone())
+                                } else {
+                                    warn!(
+                                        "[Offramp::{}] Cannot unlink pipeline {} from port {}",
+                                        offramp_url, &id, &port
+                                    );
+                                    false
+                                };
+                                if marked_done {
                                     info!("[Offramp::{}] Marked as done ", offramp_url);
                                     offramp.terminate().await
                                 }
-                                tx.send(r).await?
+                                tx.send(marked_done).await?;
+                                info!(
+                                    "[Offramp::{}] Pipeline {} disconnected from port {}",
+                                    offramp_url, &id, &port
+                                );
                             }
                         }
                     }
