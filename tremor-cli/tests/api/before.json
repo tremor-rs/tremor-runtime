@@ -9,10 +9,15 @@
     "-f",
     "before/ws.trickle",
     "before/config.yaml",
-    "before/server.yaml"
+    "before/server.yaml",
+    "-l",
+    "before/logger.yaml"
   ],
   "await": {
-    "port-open": ["9898", "4242"]
+    "port-open": [
+      "9898",
+      "4242"
+    ]
   },
   "max-await-secs": 15,
   "min-await-secs": 0

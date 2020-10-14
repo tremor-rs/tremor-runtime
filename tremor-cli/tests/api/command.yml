@@ -15,7 +15,7 @@ suites:
           - source: stdout
             contains:
               - HTTP/1.1 200 OK
-              - '{"version":"0.9.0"}'
+              - '{"version":"0.9.0"'
       - name: GET /onramp
         command: curl -vs --stderr - http://localhost:9898/onramp
         tags:
@@ -47,6 +47,7 @@ suites:
             contains:
               - HTTP/1.1 200 OK
               - "system::metrics"
+              - "system::passthrough"
       - name: GET /binding
         command: curl -vs --stderr - http://localhost:9898/binding
         tags:
@@ -99,7 +100,7 @@ suites:
           - source: stderr
             contains:
               - HTTP/1.1 409 Conflict
-      - name: Get /pipeline should return a list of 3 elements
+      - name: Get /pipeline should return a list of 4 elements
         command: curl -vs --stderr - http://localhost:9898/pipeline
         tags:
           - get
@@ -109,6 +110,7 @@ suites:
             contains:
               - HTTP/1.1 200 OK
               - "system::metrics"
+              - "system::passthrough"
               - "main"
               - "ws"
       - name: GET /pipeline/main should 200 after publish
@@ -863,6 +865,17 @@ suites:
             contains:
               - HTTP/1.1 204 No Content
               - "content-type: application/yaml"
+      - name: Unpublish mapping again ( YAML )
+        command: >
+          curl -vs -stderr -XDELETE  -H "Content-type: application/yaml" -H "Accept: application/yaml" http://localhost:9898/binding/default/01
+        tags:
+          - delete
+          - deployment
+        status: 0
+        expects:
+          - source: stderr
+            contains:
+              - HTTP/1.1 404 Not Found
       - name: Unpublish Onramp  ( YAML )
         command: >
           curl -vs -stderr -XDELETE -H "Content-type: application/yaml" -H "Accept: application/yaml" http://localhost:9898/onramp/metronome
