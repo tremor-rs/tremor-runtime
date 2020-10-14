@@ -131,6 +131,7 @@ impl Location {
     }
 
     /// resets the column to zero
+    #[must_use]
     pub fn start_of_line(&self) -> Self {
         let mut new = *self;
         new.column = 0;
