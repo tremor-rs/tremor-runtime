@@ -303,17 +303,17 @@ impl Manager {
                                 let marked_done = if port.eq_ignore_ascii_case(IN.as_ref()) {
                                     pipelines.remove(&id);
                                     offramp.remove_pipeline(id.clone())
-                                } else if !port.eq_ignore_ascii_case(METRICS.as_ref()) {
-                                    if let Some(port_ps) = dest_pipelines.get_mut(&port) {
-                                        port_ps.retain(|(url, _)| url != &id)
-                                    }
-                                    offramp.remove_dest_pipeline(port.clone(), id.clone())
-                                } else {
+                                } else if port.eq_ignore_ascii_case(METRICS.as_ref()) {
                                     warn!(
                                         "[Offramp::{}] Cannot unlink pipeline {} from port {}",
                                         offramp_url, &id, &port
                                     );
                                     false
+                                } else {
+                                    if let Some(port_ps) = dest_pipelines.get_mut(&port) {
+                                        port_ps.retain(|(url, _)| url != &id)
+                                    }
+                                    offramp.remove_dest_pipeline(port.clone(), id.clone())
                                 };
                                 if marked_done {
                                     info!("[Offramp::{}] Marked as done ", offramp_url);

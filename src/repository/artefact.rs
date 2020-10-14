@@ -640,23 +640,22 @@ impl Artefact for Binding {
         // keep track of already handled pipelines, so we dont unlink twice and run into errors
         let mut unlinked = HashSet::with_capacity(self.binding.links.len());
         for (from, tos) in &self.binding.links {
-            let from_instance = from.clone().trim_to_instance();
-            if !unlinked.contains(&from_instance) {
-                if let Some(ResourceType::Pipeline) = from.resource_type() {
+            let mut from_instance = from.clone();
+            from_instance.trim_to_instance();
+
+            if let Some(ResourceType::Pipeline) = from.resource_type() {
+                if !unlinked.contains(&from_instance) {
                     for to in tos {
                         let mut mappings = HashMap::new();
                         mappings.insert(from.instance_port_required()?.to_string(), to.clone());
                         system.unlink_pipeline(&from, mappings).await?;
-                        match to.resource_type() {
-                            Some(ResourceType::Offramp) => {
-                                let mut mappings = HashMap::new();
-                                mappings.insert(to.clone(), from.clone());
-                                system.unlink_offramp(&to, mappings).await?;
-                            }
-                            _ => (),
+                        if let Some(ResourceType::Offramp) = to.resource_type() {
+                            let mut mappings = HashMap::new();
+                            mappings.insert(to.clone(), from.clone());
+                            system.unlink_offramp(&to, mappings).await?;
                         }
                     }
-                    unlinked.insert(from.clone().trim_to_instance());
+                    unlinked.insert(from_instance);
                 }
             }
         }
