@@ -4235,26 +4235,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7fdf1b9db47230893d76faad238fd6097fd6d6a9245cd7a4d90dbd639536bbd2"
 
 [[package]]
-name = "signal-hook"
-version = "0.1.16"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "604508c1418b99dfe1925ca9224829bb2a8a9a04dda655cc01fcad46f4ab05ed"
-dependencies = [
- "libc",
- "signal-hook-registry",
-]
-
-[[package]]
-name = "signal-hook-registry"
-version = "1.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a3e12110bc539e657a646068aaf5eb5b63af9d0c1f7b29c97113fad80e15f035"
-dependencies = [
- "arc-swap",
- "libc",
-]
-
-[[package]]
 name = "simd-json"
 version = "0.3.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5231,13 +5211,11 @@ dependencies = [
  "port_scanner",
  "pretty_assertions",
  "rental",
- "rust-bert",
  "serde",
  "serde_derive",
  "serde_json",
  "serde_yaml",
  "shell-words",
- "signal-hook",
  "simd-json",
  "snmalloc-rs",
  "surf",
@@ -5303,6 +5281,7 @@ dependencies = [
  "simd-json",
  "simd-json-derive",
  "sled",
+ "tempfile",
  "tremor-influx",
  "tremor-script",
  "url 2.1.1",
