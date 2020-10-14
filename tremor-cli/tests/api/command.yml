@@ -920,3 +920,171 @@ suites:
           - source: stderr
             contains:
               - HTTP/1.1 200 OK
+  - name: Linking and Unlinking of Linked Transport Pipeline
+    tags:
+      - linked
+      - link
+      - unlink
+    cases:
+      - name: GET /binding/linked should 404 before publish
+        command: curl -vs --stderr - http://localhost:9898/binding/linked
+        tags:
+          - get
+          - linked
+        status: 0
+        expects:
+          - source: stdout
+            contains:
+              - HTTP/1.1 404 Not Found
+      - name: Deploy linked WS onramp
+        command: >
+          curl -vs -stderr -X POST --data-binary @data/linked/ws-linked-onramp.yaml -H "Content-type: application/yaml" -H "Accept: application/yaml" http://localhost:9898/onramp
+        tags:
+          - post
+          - linked
+        status: 0
+        expects:
+          - source: stderr
+            contains:
+              - HTTP/1.1 201 Created
+              - "content-type: application/yaml"
+      - name: Deploy linked WS offramp
+        command: >
+          curl -vs -stderr -X POST --data-binary @data/linked/ws-linked-offramp.yaml -H "Content-type: application/yaml" -H "Accept: application/yaml" http://localhost:9898/offramp
+        tags:
+          - post
+          - linked
+        status: 0
+        expects:
+          - source: stderr
+            contains:
+              - HTTP/1.1 201 Created
+              - "content-type: application/yaml"
+      - name: Deploy linked passthrough pipeline
+        command: >
+          curl -vs -stderr -X POST --data-binary @data/linked/passthrough-pipeline.trickle -H "Content-type: application/vnd.trickle" http://localhost:9898/pipeline
+        tags:
+          - post
+          - linked
+        status: 0
+        expects:
+          - source: stderr
+            contains:
+              - HTTP/1.1 201 Created
+      - name: Publish linked binding (YAML)
+        command: >
+          curl -vs -stderr -X POST --data-binary @data/linked/binding.yaml -H "Content-type: application/yaml" -H "Accept: application/yaml" http://localhost:9898/binding
+        tags:
+          - post
+          - linked
+        status: 0
+        expects:
+          - source: stderr
+            contains:
+              - HTTP/1.1 201 Created
+              - "content-type: application/yaml"
+      - name: Publish mapping ( YAML )
+        command: >
+          curl -vs -stderr -X POST --data-binary @data/linked/mapping.yaml -H "Content-type: application/yaml" -H "Accept: application/yaml" http://localhost:9898/binding/linked/01
+        tags:
+          - post
+          - linked
+        status: 0
+        expects:
+          - source: stderr
+            contains:
+              - HTTP/1.1 201 Created
+              - "content-type: application/yaml"
+      - name: GET Binding
+        command: >
+          curl -vs -stderr -H "Accept: application/yaml" -X GET http://localhost:9898/binding/linked/01
+        tags:
+          - get
+          - linked
+        status: 0
+        expects:
+          - source: stderr
+            contains:
+              - HTTP/1.1 200 OK
+          - source: stdout
+            contains:
+              - "id: linked"
+      - name: Unlink Binding (YAML)
+        command: >
+          curl -vs -stderr -X DELETE http://localhost:9898/binding/linked/01
+        tags:
+          - delete
+          - linked
+        status: 0
+        expects:
+          - source: stderr
+            contains:
+              - HTTP/1.1 204 No Content
+      - name: Get Unlinked Binding
+        command: >
+          curl -vs -stderr -X GET -H"Accept: application/yaml" http://localhost:9898/binding/linked/01
+        tags:
+          - get
+          - linked
+        status: 0
+        expects:
+          - source: stderr
+            contains:
+              - HTTP/1.1 404 Not Found
+      - name: Get Linked Binding Artefact
+        command: >
+          curl -vs -stderr -X GET -H"Accept: application/yaml" http://localhost:9898/binding/linked
+        tags:
+          - get
+          - linked
+        status: 0
+        expects:
+          - source: stderr
+            contains:
+              - HTTP/1.1 200 OK
+          - source: stdout
+            contains:
+              - "id: linked"
+              - "instances: []"
+      - name: Get Linked Onramp
+        command: >
+          curl -vs -stderr -X GET -H"Accept: application/yaml" http://localhost:9898/onramp/ws-linked
+        tags:
+          - get
+          - linked
+        status: 0
+        expects:
+          - source: stderr
+            contains:
+              - HTTP/1.1 200 OK
+          - source: stdout
+            contains:
+              - "id: ws-linked"
+              - "instances: []"
+      - name: Get Linked Offramp
+        command: >
+          curl -vs -stderr -X GET -H"Accept: application/yaml" http://localhost:9898/offramp/ws-linked
+        tags:
+          - get
+          - linked
+        status: 0
+        expects:
+          - source: stderr
+            contains:
+              - HTTP/1.1 200 OK
+          - source: stdout
+            contains:
+              - "id: ws-linked"
+              - "instances: []"
+
+
+
+
+        
+        
+
+
+
+
+
+              

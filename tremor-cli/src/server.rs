@@ -26,7 +26,7 @@ use tremor_pipeline::FN_REGISTRY;
 use tremor_runtime::repository::BindingArtefact;
 use tremor_runtime::system::World;
 use tremor_runtime::url::TremorURL;
-use tremor_runtime::{self, config,  version};
+use tremor_runtime::{self, config, version};
 
 #[cfg(not(tarpaulin_include))]
 pub(crate) async fn load_file(world: &World, file_name: &str) -> Result<usize> {

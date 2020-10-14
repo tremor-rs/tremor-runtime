@@ -1,0 +1,6 @@
+id: ws-linked
+type: ws
+codec: json
+linked: true
+config:
+  url: http://127.0.0.1:65535
