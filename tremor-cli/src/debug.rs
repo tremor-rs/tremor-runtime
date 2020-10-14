@@ -105,7 +105,7 @@ where
                     h.set_color(&mut line)?;
                     let line_spec = format!(
                         "{}:{} - {}:{}",
-                        start.line, start.column, end.line, end.column
+                        start.line(), start.column(), end.line(), end.column()
                     );
                     write!(h.get_writer(), "{:^16} \u{2219}    ", line_spec,)?;
                     h.set_color(&mut directive)?;
@@ -115,7 +115,7 @@ where
                     h.set_color(&mut line)?;
                     let line_spec = format!(
                         "{}:{} - {}:{}",
-                        start.line, start.column, end.line, end.column
+                        start.line(), start.column(), end.line(), end.column()
                     );
                     write!(h.get_writer(), "{:^16} \u{2219}    ", line_spec,)?;
                     h.set_color(&mut directive)?;
@@ -125,7 +125,7 @@ where
                     h.set_color(&mut line)?;
                     let line_spec = format!(
                         "{}:{} - {}:{}",
-                        start.line, start.column, end.line, end.column
+                        start.line(), start.column(), end.line(), end.column()
                     );
                     write!(h.get_writer(), "{:^16} \u{2219}    ", line_spec,)?;
                     h.set_color(&mut default)?;

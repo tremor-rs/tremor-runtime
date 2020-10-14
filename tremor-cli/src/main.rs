@@ -101,6 +101,7 @@ fn main() -> Result<()> {
     let app = app.global_setting(AppSettings::ColoredHelp);
     let app = app.global_setting(AppSettings::ColorAlways);
 
+    tremor_runtime::functions::load()?;
     let matches = app.clone().get_matches();
     unsafe {
         // We know that instance will only get set once at

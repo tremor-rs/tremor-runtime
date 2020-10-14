@@ -237,8 +237,8 @@ pub trait Highlighter {
                         self.get_writer(),
                         "Error in {}:{}:{} ",
                         file,
-                        start.line,
-                        start.column
+                        start.line(),
+                        start.column()
                     )?
                 } else {
                     writeln!(self.get_writer(), "Error: ")?
@@ -256,8 +256,8 @@ pub trait Highlighter {
         }
         for t in tokens {
             //            if let Ok(t) = t {
-            if t.span.start().line != line {
-                line = t.span.start().line;
+            if t.span.start().line() != line {
+                line = t.span.start().line();
                 if let Some(Error {
                     start,
                     end,
@@ -267,14 +267,14 @@ pub trait Highlighter {
                     token,
                 }) = &error
                 {
-                    if end.line == line - 1 {
+                    if end.line() == line - 1 {
                         printed_error = true;
                         // TODO This isn't perfect, there are cases in trickle where more specific
                         // hygienic errors would be preferable ( eg: for-locals integration test )
                         //
-                        let delta = end.column as i64 - start.column as i64;
+                        let delta = end.column() as i64 - start.column() as i64;
                         let len = usize::try_from(delta).unwrap_or(1);
-                        let prefix = " ".repeat(start.column.saturating_sub(1));
+                        let prefix = " ".repeat(start.column().saturating_sub(1));
                         let underline = "^".repeat(len);
 
                         if let Some(token) = token {
@@ -291,7 +291,7 @@ pub trait Highlighter {
                         writeln!(self.get_writer(), "{} {}", underline, callout)?;
                         self.reset()?;
                         if let Some(hint) = hint {
-                            let prefix = " ".repeat(start.column + len);
+                            let prefix = " ".repeat(start.column() + len);
                             self.set_color(ColorSpec::new().set_bold(true))?;
                             write!(self.get_writer(), "      | {}", prefix)?;
                             self.set_color(
@@ -406,20 +406,20 @@ pub trait Highlighter {
             token,
         }) = &error
         {
-            if !printed_error || start.line == line {
-                if end.line > line {
+            if !printed_error || start.line() == line {
+                if end.line() > line {
                     line += 1;
                     self.set_color(ColorSpec::new().set_bold(true))?;
                     writeln!(self.get_writer(), "{:5} | ", line)?;
                     self.reset()?;
                 }
 
-                let len = if end.column > start.column {
-                    end.column - start.column
+                let len = if end.column() > start.column() {
+                    end.column() - start.column()
                 } else {
                     1
                 };
-                let prefix = " ".repeat(start.column.saturating_sub(1));
+                let prefix = " ".repeat(start.column().saturating_sub(1));
                 let underline = "^".repeat(len);
                 if let Some(token) = token {
                     write!(self.get_writer(), "{}", token)?;
@@ -434,7 +434,7 @@ pub trait Highlighter {
                 writeln!(self.get_writer(), "{} {}", underline, callout)?;
                 self.reset()?;
                 if let Some(hint) = hint {
-                    let prefix = " ".repeat(start.column + len);
+                    let prefix = " ".repeat(start.column() + len);
                     self.set_color(ColorSpec::new().set_bold(true))?;
                     write!(self.get_writer(), "      | {}", prefix)?;
                     self.set_color(ColorSpec::new().set_bold(false).set_fg(Some(Color::Yellow)))?;
@@ -521,7 +521,7 @@ where
 {
     tokens
         .iter()
-        .skip_while(|t| t.span.end().line < start.line)
-        .take_while(|t| t.span.end().line <= end.line)
+        .skip_while(|t| t.span.end().line() < start.line())
+        .take_while(|t| t.span.end().line() <= end.line())
         .collect()
 }

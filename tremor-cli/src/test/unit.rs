@@ -318,6 +318,7 @@ pub(crate) fn run_suite(
     let reg: Registry = registry::registry();
 
     let report_start = nanotime();
+
     match tremor_script::Script::parse(&module_path, &script, raw.clone(), &reg) {
         Ok(runnable) => {
             let local = LocalStack::default();
