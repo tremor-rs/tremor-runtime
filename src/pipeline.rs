@@ -331,9 +331,9 @@ async fn pipeline_task(
             }
             M::M(MgmtMsg::DisconnectOutput(output, to_delete)) => {
                 let mut remove = false;
-                if let Some(offramp_vec) = dests.get_mut(&output) {
-                    offramp_vec.retain(|(this_id, _)| this_id != &to_delete);
-                    remove = offramp_vec.is_empty();
+                if let Some(output_vec) = dests.get_mut(&output) {
+                    output_vec.retain(|(this_id, _)| this_id != &to_delete);
+                    remove = output_vec.is_empty();
                 }
                 if remove {
                     dests.remove(&output);
