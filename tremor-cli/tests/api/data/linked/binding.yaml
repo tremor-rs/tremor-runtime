@@ -1,0 +1,9 @@
+id: linked
+links:
+  '/onramp/ws-linked/{instance}/out': ['/pipeline/system::passthrough/system/in']
+  '/pipeline/system::passthrough/system/out': ['/offramp/ws-linked/{instance}/in']
+  'offramp/ws-linked/{instance}/out': ['/pipeline/main/{instance}/in']
+  'offramp/ws-linked/{instance}/err': ['/pipeline/main/{instance}/in']
+  '/onramp/ws-linked/{instance}/err': ['/pipeline/main/system/in']
+  '/pipeline/main/{instance}/out': ['/onramp/ws-linked/{instance}/in']
+  '/pipeline/main/{instance}/err': ['/onramp/ws-linked/{instance}/in']
