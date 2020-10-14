@@ -26,7 +26,7 @@ use tremor_pipeline::FN_REGISTRY;
 use tremor_runtime::repository::BindingArtefact;
 use tremor_runtime::system::World;
 use tremor_runtime::url::TremorURL;
-use tremor_runtime::{self, config, functions, version};
+use tremor_runtime::{self, config,  version};
 
 #[cfg(not(tarpaulin_include))]
 pub(crate) async fn load_file(world: &World, file_name: &str) -> Result<usize> {
@@ -157,8 +157,6 @@ fn api_server(world: &World) -> Result<tide::Server<api::State>> {
 
 #[cfg(not(tarpaulin_include))]
 pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
-    functions::load()?;
-
     // Logging
     if let Some(logger_config) = matches.value_of("logger-config") {
         log4rs::init_file(logger_config, log4rs::file::Deserializers::default())?;

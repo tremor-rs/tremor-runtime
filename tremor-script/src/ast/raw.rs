@@ -1850,7 +1850,7 @@ impl<'script> Upable<'script> for ConstPathRaw<'script> {
                     &(self.start, self.end),
                     &(self.start, self.end),
                     &format!(
-                        "The constant {} (absolute path) does is not defined.",
+                        "The constant {} (absolute path) is not defined.",
                         module.join("::")
                     ),
                     &helper.meta,

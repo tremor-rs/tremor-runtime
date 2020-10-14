@@ -27,11 +27,11 @@ pub struct Location {
     /// The compilation unit id
     pub unit_id: usize, // mapping of id -> file ( str )
     /// The Line
-    pub line: usize,
+    line: usize,
     /// The Column
-    pub column: usize,
+    column: usize,
     /// Absolute location in bytes starting from 0
-    pub absolute: usize,
+    absolute: usize,
 }
 
 impl std::ops::Sub for Location {
@@ -121,13 +121,37 @@ impl From<(Location, Location)> for Range {
 impl Location {
     /// Creates a new location
     #[must_use]
-    pub fn new(line: usize, column: usize, absolute: usize) -> Self {
+    pub fn new(line: usize, column: usize, absolute: usize, unit_id: usize) -> Self {
         Self {
             line,
             column,
             absolute,
-            unit_id: 0,
+            unit_id,
         }
+    }
+
+    /// resets the column to zero
+    pub fn start_of_line(&self) -> Self {
+        let mut new = *self;
+        new.column = 0;
+        new
+    }
+    /// absolute position in the source as bytes
+    #[must_use]
+    pub fn absolute(&self) -> usize {
+        self.absolute
+    }
+
+    /// line of the location
+    #[must_use]
+    pub fn line(&self) -> usize {
+        self.line
+    }
+
+    /// column  (character not byte) in the current line
+    #[must_use]
+    pub fn column(&self) -> usize {
+        self.column
     }
 
     pub(crate) fn set_cu(&mut self, cu: usize) {
@@ -164,6 +188,6 @@ impl Location {
         } else {
             self.column += 1;
         }
-        self.absolute += 1;
+        self.absolute += ch.len_utf8();
     }
 }

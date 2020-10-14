@@ -659,7 +659,11 @@ impl<'input> fmt::Display for Token<'input> {
             Token::LineDirective(l, file) => write!(
                 f,
                 "#!line {} {} {} {} {}",
-                l.absolute, l.line, l.column, l.unit_id, file
+                l.absolute(),
+                l.line(),
+                l.column(),
+                l.unit_id,
+                file
             ),
         }
     }
@@ -676,12 +680,7 @@ impl<'input> CharLocations<'input> {
         S: ?Sized + ParserSource,
     {
         CharLocations {
-            location: Location {
-                line: 1,
-                column: 1,
-                absolute: input.start_index().to_usize(),
-                unit_id: 0,
-            },
+            location: Location::new(1, 1, input.start_index().to_usize(), 0),
             chars: input.src().chars().peekable(),
         }
     }
@@ -1173,8 +1172,8 @@ impl<'input> Preprocessor {
                                 input.push_str("end;\n");
                                 input.push_str(&format!(
                                     "#!line {} {} {} {} {}\n",
-                                    span2.end.absolute,
-                                    span2.end.line + 1,
+                                    span2.end.absolute(),
+                                    span2.end.line() + 1,
                                     0,
                                     cu,
                                     file_name.to_string_lossy(),
@@ -1269,8 +1268,9 @@ impl<'input> Lexer<'input> {
 
     fn starts_with(&mut self, start: Location, s: &str) -> Option<(Location, &'input str)> {
         let mut end = start;
-        end.column += s.bytes().len();
-        end.absolute += s.bytes().len();
+        for c in s.chars() {
+            end.shift(c)
+        }
 
         if let Some(head) = self.slice(start, end) {
             if head == s {
@@ -1292,16 +1292,14 @@ impl<'input> Lexer<'input> {
 
     /// Return a slice of the source string
     fn slice(&self, start: Location, end: Location) -> Option<&'input str> {
-        let start = start.absolute - self.start_index.to_usize();
-        let end = end.absolute - self.start_index.to_usize();
+        let start = start.absolute() - self.start_index.to_usize();
+        let end = end.absolute() - self.start_index.to_usize();
 
         // Our indexes are in characters as we are iterating over codepoints
         // string indexes however are in bytes and might lead to either
         // invalid regions or even invalid strings
         // That is terrible, what are you thinking rust!
         // But at lease we can work around it using `indices`
-        let start = self.input.char_indices().nth(start)?.0;
-        let end = self.input.char_indices().nth(end)?.0;
         self.input.get(start..end)
     }
 
@@ -1358,22 +1356,22 @@ impl<'input> Lexer<'input> {
 
                 if let Some(&[absolute, line, column, cu, file]) = splitted.get(0..5) {
                     let cu = cu.parse()?;
-                    let mut l = Location {
-                        unit_id: cu,
-                        line: line.parse()?,
-                        column: column.parse()?,
-                        absolute: absolute.parse()?,
-                    };
-                    l.line -= l.line.saturating_sub(1);
+                    // we need to move up 1 line as the line directive itself occupies its own line
+                    let l = Location::new(line.parse()?, column.parse()?, absolute.parse()?, cu)
+                        .move_up_lines(1);
+
                     let line_directive = Token::LineDirective(l, file.into());
 
-                    let mut l = start - l;
-                    l.column = 0;
-                    self.file_offset = l;
+                    // set the file offset to the difference between the included file (line directive)
+                    // and the current position in the source so we point to the correct location
+                    // in the included file
+                    self.file_offset = (start - l).start_of_line();
+                    // update the cu to the included file
+                    self.file_offset.unit_id = cu;
                     self.cu = cu;
                     Ok(self.spanned2(start, end, line_directive))
                 } else {
-                    Err("Snot!".into())
+                    Err("failed to parse line directive!".into())
                 }
             } else {
                 Ok(self.spanned2(start, end, Token::SingleLineComment(&lexeme[1..])))
@@ -1610,10 +1608,8 @@ impl<'input> Lexer<'input> {
                     // we got to bump end by one so we claim the tailing `"`
                     let e = end;
                     let mut s = start;
-                    s.column += 1;
-                    s.absolute += 1;
-                    end.column += 1;
-                    end.absolute += 1;
+                    s.shift('`');
+                    end.shift('`');
                     if let Some(slice) = self.slice(s, e) {
                         let token = Token::Ident(slice.into(), true);
                         return Ok(self.spanned2(start, end, token));
@@ -1651,8 +1647,8 @@ impl<'input> Lexer<'input> {
 
     fn qs_or_hd(&mut self, start: Location) -> Result<Vec<TokenSpan<'input>>> {
         let mut end = start;
-        end.column += 1;
-        end.absolute += 1;
+        end.shift('"');
+
         let q1 = self.spanned2(start, end, Token::DQuote);
         let mut res = vec![q1];
         let mut string = String::new();
@@ -1689,8 +1685,7 @@ impl<'input> Lexer<'input> {
                     // it is an empty string.
                     //TODO :make slice
                     let start = end;
-                    end.column += 1;
-                    end.absolute += 1;
+                    end.shift('"');
                     res.push(self.spanned2(start, end, Token::DQuote));
                     Ok(res)
                 }
@@ -1734,8 +1729,7 @@ impl<'input> Lexer<'input> {
                     let (e, c) = self.escape_code(&heredoc_content, segment_start)?;
                     if c == '{' || c == '}' {
                         let mut s = segment_start;
-                        s.column += 1;
-                        s.absolute += 1;
+                        s.shift(c);
                         if !heredoc_content.is_empty() {
                             let token = if has_escapes {
                                 // The string was modified so we can't use the slice
@@ -1757,8 +1751,7 @@ impl<'input> Lexer<'input> {
                         };
                         segment_start = e;
                         end = e;
-                        end.column += 1;
-                        end.absolute += 1;
+                        end.shift(c);
                     } else {
                         has_escapes = true;
                         heredoc_content.push(c);
@@ -1781,8 +1774,7 @@ impl<'input> Lexer<'input> {
                     }
                     let e = end_inner;
                     let mut s = segment_start;
-                    s.column += 1;
-                    s.absolute += 1;
+                    s.shift('{');
                     if !heredoc_content.is_empty() {
                         let token = if has_escapes {
                             // The string was modified so we can't use the slice
@@ -1799,8 +1791,7 @@ impl<'input> Lexer<'input> {
                     }
                     segment_start = end_inner;
                     end = end_inner;
-                    end.column += 1;
-                    end.absolute += 1;
+                    end.shift('{');
                     res.push(self.spanned2(segment_start, end, Token::LBrace));
                     let mut pcount = 0;
                     // We can't use for because of the borrow checker ...
@@ -1839,8 +1830,7 @@ impl<'input> Lexer<'input> {
                         if let Some((end, '"')) = self.lookahead() {
                             self.bump();
                             let mut end = end;
-                            end.column += 1;
-                            end.absolute += 1;
+                            end.shift('"');
                             res.push(self.spanned2(segment_start, end, Token::HereDoc)); // (0, vec![])));
                             return Ok(res);
                         }
@@ -1878,8 +1868,7 @@ impl<'input> Lexer<'input> {
                     let (e, c) = self.escape_code(&string, segment_start)?;
                     if c == '{' || c == '}' {
                         let mut s = segment_start;
-                        s.column += 1;
-                        s.absolute += 1;
+                        s.shift(c);
                         if !string.is_empty() {
                             let token = if has_escapes {
                                 // The string was modified so we can't use the slice
@@ -1901,8 +1890,7 @@ impl<'input> Lexer<'input> {
                         };
                         segment_start = e;
                         end = e;
-                        end.column += 1;
-                        end.absolute += 1;
+                        end.shift(c);
                     } else {
                         has_escapes = true;
                         string.push(c);
@@ -1916,8 +1904,7 @@ impl<'input> Lexer<'input> {
 
                         let e = end;
                         let mut s = segment_start;
-                        s.column += 1;
-                        s.absolute += 1;
+                        s.shift('"');
                         let token = if has_escapes {
                             // The string was modified so we can't use the slice
                             Token::StringLiteral(string.into())
@@ -1930,8 +1917,7 @@ impl<'input> Lexer<'input> {
                         res.push(self.spanned2(segment_start, end, token));
                     }
                     let start = end;
-                    end.column += 1;
-                    end.absolute += 1;
+                    end.shift('"');
                     res.push(self.spanned2(start, end, Token::DQuote));
                     return Ok(res);
                 }
@@ -1951,8 +1937,7 @@ impl<'input> Lexer<'input> {
                     }
                     let e = end_inner;
                     let mut s = segment_start;
-                    s.column += 1;
-                    s.absolute += 1;
+                    s.shift('{');
                     if !string.is_empty() {
                         let token = if has_escapes {
                             // The string was modified so we can't use the slice
@@ -1969,8 +1954,7 @@ impl<'input> Lexer<'input> {
                     }
                     segment_start = end_inner;
                     end = end_inner;
-                    end.column += 1;
-                    end.absolute += 1;
+                    end.shift('{');
                     res.push(self.spanned2(segment_start, end, Token::LBrace));
                     let mut pcount = 0;
                     // We can't use for because of the borrow checker ...
@@ -2054,8 +2038,7 @@ impl<'input> Lexer<'input> {
                 }
                 Some((mut end, '|')) => {
                     strings.push(string);
-                    end.absolute += 1;
-                    end.column += 1;
+                    end.shift('|');
                     let indent = indentation(&strings);
                     let strings = strings
                         .iter()
@@ -2231,9 +2214,8 @@ fn i64_from_hex(hex: &str, is_positive: bool) -> Result<i64> {
     Ok(if is_positive { r } else { -r })
 }
 
-fn inc_loc(mut l: Location) -> Location {
-    l.column += 1;
-    l.absolute += 1;
+fn inc_loc(mut l: Location, c: char) -> Location {
+    l.shift(c);
     l
 }
 
@@ -2261,11 +2243,15 @@ impl<'input> Iterator for Lexer<'input> {
                     '*' => Some(Ok(self.spanned2(start, start, Token::Mul))),
                     '\\' => Some(Ok(self.spanned2(start, start, Token::BSlash))),
                     '(' => Some(Ok(self.spanned2(start, start, Token::LParen))),
-                    ')' => Some(Ok(self.spanned2(start, inc_loc(start), Token::RParen))),
+                    ')' => Some(Ok(self.spanned2(start, inc_loc(start, ch), Token::RParen))),
                     '{' => Some(Ok(self.spanned2(start, start, Token::LBrace))),
-                    '}' => Some(Ok(self.spanned2(start, inc_loc(start), Token::RBrace))),
+                    '}' => Some(Ok(self.spanned2(start, inc_loc(start, ch), Token::RBrace))),
                     '[' => Some(Ok(self.spanned2(start, start, Token::LBracket))),
-                    ']' => Some(Ok(self.spanned2(start, inc_loc(start), Token::RBracket))),
+                    ']' => Some(Ok(self.spanned2(
+                        start,
+                        inc_loc(start, ch),
+                        Token::RBracket,
+                    ))),
                     '/' => Some(Ok(self.spanned2(start, start, Token::Div))),
                     // TODO account for extractors which use | to mark format boundaries
                     //'|' => Some(Ok(self.spanned2(start, start, Token::BitOr))),

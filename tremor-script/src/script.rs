@@ -218,9 +218,9 @@ where
                 let e = r.1;
                 // t.span.start.unit_id == s.unit_id && t.span.start.column >=  s.column && t.span.start.line >= s.line &&
                 t.span.start.unit_id == s.unit_id
-                    && t.span.start.line >= s.line
+                    && t.span.start.line() >= s.line()
                     && t.span.end.unit_id == e.unit_id
-                    && t.span.end.line <= e.line
+                    && t.span.end.line() <= e.line()
             })
             .collect::<Vec<Spanned<lexer::Token>>>();
 
