@@ -232,9 +232,7 @@ impl WAL {
         // The maximum number of entries we read
         let mut events = Vec::with_capacity(self.config.read_count as usize);
 
-        let mut num_read = 0usize;
-        for e in self.events_tree.range(self.read..) {
-            num_read += 1;
+        for (num_read, e) in self.events_tree.range(self.read..).enumerate() {
             if num_read > self.config.read_count {
                 break;
             }
@@ -405,6 +403,8 @@ impl Operator for WAL {
 #[cfg(test)]
 mod test {
     use super::*;
+    use tempfile::Builder as TempDirBuilder;
+
     #[test]
     fn rw() -> Result<()> {
         let c = Config {
