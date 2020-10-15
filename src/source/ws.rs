@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::postprocessor::{make_postprocessors, postprocess, Postprocessors};
 use crate::{codec::Codec, source::prelude::*};
 use async_channel::{Sender, TryRecvError};
 use async_std::net::{TcpListener, TcpStream};
@@ -51,17 +52,26 @@ impl onramp::Impl for Ws {
     }
 }
 
+/// encoded response and additional information
+/// for post-processing and assembling WS messages
+pub struct SerializedResponse {
+    data: Vec<u8>,
+    ingest_ns: u64,
+    binary: bool,
+}
+
 pub struct Int {
     uid: u64,
-    config: Config,
-    listener: Option<Receiver<SourceReply>>,
     onramp_id: TremorURL,
+    config: Config,
     is_linked: bool,
+    listener: Option<Receiver<SourceReply<<Int as Source>::SourceReplyStreamExtra>>>,
+    post_processors: Vec<String>,
     // mapping of event id to stream id
     messages: BTreeMap<u64, usize>,
     // mapping of stream id to the stream sender
     // TODO alternative to this? possible to store actual ws_tream refs here?
-    streams: BTreeMap<usize, Sender<Event>>,
+    streams: BTreeMap<usize, <Int as Source>::SourceReplyStreamExtra>,
 }
 
 impl std::fmt::Debug for Int {
@@ -74,6 +84,7 @@ impl Int {
     fn from_config(
         uid: u64,
         onramp_id: TremorURL,
+        post_processors: &[String],
         config: &Config,
         is_linked: bool,
     ) -> Result<Self> {
@@ -83,6 +94,7 @@ impl Int {
             uid,
             config,
             listener: None,
+            post_processors: post_processors.to_vec(),
             onramp_id,
             is_linked,
             messages: BTreeMap::new(),
@@ -90,7 +102,7 @@ impl Int {
         })
     }
 
-    fn get_stream_sender_for_id(&mut self, id: u64) -> Option<&Sender<Event>> {
+    fn get_stream_sender_for_id(&mut self, id: u64) -> Option<&Sender<SerializedResponse>> {
         // TODO improve the way stream_id is retrieved -- this works as long as a
         // previous event id is used by pipelines/offramps (which is suitable only
         // for request/response style flow), but for websocket, arbitrary events can
@@ -105,33 +117,39 @@ impl Int {
 }
 
 async fn handle_connection(
-    uid: u64,
-    tx: Sender<SourceReply>,
+    tx: Sender<SourceReply<Sender<SerializedResponse>>>,
     raw_stream: TcpStream,
+    origin_uri: EventOriginUri,
+    processors: Vec<String>,
     stream: usize,
     link: bool,
 ) -> Result<()> {
     let ws_stream = async_tungstenite::accept_async(raw_stream).await?;
 
-    let uri = EventOriginUri {
-        uid,
-        scheme: "tremor-ws".to_string(),
-        // TODO set ws client ip here
-        host: "tremor-ws-client-host.remote".to_string(),
-        port: None,
-        // TODO add server port here (like for tcp onramp) -- can be done via WsServerState
-        path: vec![String::default()],
-    };
-
     let (mut ws_write, mut ws_read) = ws_stream.split();
 
     // TODO maybe send ws_write from tx and get rid of this task + extra channel?
     let stream_sender = if link {
-        let (stream_tx, stream_rx): (Sender<Event>, Receiver<Event>) = bounded(crate::QSIZE);
+        let (stream_tx, stream_rx): (Sender<SerializedResponse>, Receiver<SerializedResponse>) =
+            bounded(crate::QSIZE);
+        // response handling task
         task::spawn::<_, Result<()>>(async move {
-            while let Ok(event) = stream_rx.recv().await {
-                let message = make_message(event).await?;
-                ws_write.send(message).await?;
+            // create post-processors for this stream
+            let mut post_processors = make_postprocessors(processors.as_slice())
+                .expect("Heck, we verified it works in init, and now? Shitty times, he?");
+            // wait for response messages to arrive (via reply_event)
+            while let Ok(response) = stream_rx.recv().await {
+                let msgs = match make_messages(response, &mut post_processors) {
+                    // post-process
+                    Ok(messages) => messages,
+                    Err(e) => vec![Message::Text(format!(
+                        "Error post-processing messages: {}",
+                        e
+                    ))],
+                };
+                for msg in msgs {
+                    ws_write.send(msg).await?;
+                }
             }
             Ok(())
         });
@@ -149,7 +167,7 @@ async fn handle_connection(
             Ok(Message::Text(t)) => {
                 meta.insert("binary", false)?;
                 tx.send(SourceReply::Data {
-                    origin_uri: uri.clone(),
+                    origin_uri: origin_uri.clone(),
                     data: t.into_bytes(),
                     meta: Some(meta),
                     codec_override: None,
@@ -160,7 +178,7 @@ async fn handle_connection(
             Ok(Message::Binary(data)) => {
                 meta.insert("binary", true)?;
                 tx.send(SourceReply::Data {
-                    origin_uri: uri.clone(),
+                    origin_uri: origin_uri.clone(),
                     data,
                     meta: Some(meta),
                     codec_override: None,
@@ -179,33 +197,30 @@ async fn handle_connection(
     Ok(())
 }
 
-async fn make_message(event: Event) -> Result<Message> {
-    // TODO reject batched events and handle only single event here
-    let err: Error = "Empty event".into();
-    let (value, meta) = event.value_meta_iter().next().ok_or(err)?;
-
-    let send_as_binary = meta.get("binary").and_then(Value::as_bool).unwrap_or(false);
-
-    if send_as_binary {
-        // TODO consolidate this duplicate logic from string codec
-        let data = if let Some(s) = value.as_str() {
-            s.as_bytes().to_vec()
-        } else {
-            simd_json::to_vec(&value)?
-        };
-        Ok(Message::Binary(data))
-    } else {
-        let data = value
-            .as_str()
-            .ok_or_else(|| Error::from("Could not get event value as string"))?;
-
-        Ok(Message::Text(data.into()))
-    }
+fn make_messages(
+    response: SerializedResponse,
+    processors: &mut Postprocessors,
+) -> Result<Vec<Message>> {
+    let send_as_binary = response.binary;
+    let processed = postprocess(processors.as_mut_slice(), response.ingest_ns, response.data)?;
+    Ok(processed
+        .into_iter()
+        .map(|data| {
+            if send_as_binary {
+                Message::Binary(data)
+            } else {
+                let str = String::from_utf8_lossy(&data).to_string();
+                Message::Text(str)
+            }
+        })
+        .collect())
 }
 
 #[async_trait::async_trait()]
 impl Source for Int {
-    async fn pull_event(&mut self, id: u64) -> Result<SourceReply> {
+    type SourceReplyStreamExtra = Sender<SerializedResponse>;
+
+    async fn pull_event(&mut self, id: u64) -> Result<SourceReply<Self::SourceReplyStreamExtra>> {
         if let Some(listener) = self.listener.as_ref() {
             match listener.try_recv() {
                 Ok(r) => {
@@ -217,6 +232,9 @@ impl Source for Int {
                             if let Some(tx) = sender {
                                 self.streams.insert(stream, tx.clone());
                             }
+                        }
+                        SourceReply::EndStream(stream) => {
+                            self.streams.remove(&stream);
                         }
                         _ => (),
                     }
@@ -234,30 +252,60 @@ impl Source for Int {
     async fn reply_event(
         &mut self,
         event: Event,
-        // TODO: use this
-        _codec: &dyn Codec,
+        codec: &dyn Codec,
         _codec_map: &HashMap<String, Box<dyn Codec>>,
     ) -> Result<()> {
-        // TODO report errors as well
         if let Some(eid) = event.id.get(self.uid) {
             if let Some(tx) = self.get_stream_sender_for_id(eid) {
-                tx.send(event).await?;
+                for (value, meta) in event.value_meta_iter() {
+                    let binary = meta.get("binary").and_then(Value::as_bool).unwrap_or(false);
+                    // we do the encoding here, and the post-processing later on the sending task, as this is stream-based
+                    let data = match codec.encode(value) {
+                        Ok(data) => data,
+                        Err(e) => format!("Error encoding message: {}", e).into_bytes(), // for proper error handling
+                    };
+                    let res = SerializedResponse {
+                        data,
+                        ingest_ns: event.ingest_ns,
+                        binary,
+                    };
+                    tx.send(res).await?;
+                }
             }
         }
         Ok(())
     }
+
     async fn init(&mut self) -> Result<SourceState> {
-        let listener = TcpListener::bind((self.config.host.as_str(), self.config.port)).await?;
+        let listen_port = self.config.port;
+        let listener = TcpListener::bind((self.config.host.as_str(), listen_port)).await?;
         let (tx, rx) = bounded(crate::QSIZE);
         let uid = self.uid;
 
         let link = self.is_linked;
 
+        make_postprocessors(self.post_processors.as_slice())?; // just for verification before starting the onramp
+        let processors = self.post_processors.clone();
         task::spawn(async move {
             let mut stream_id = 0;
-            while let Ok((stream, _socket)) = listener.accept().await {
+            while let Ok((stream, socket)) = listener.accept().await {
+                let uri = EventOriginUri {
+                    uid,
+                    scheme: "tremor-ws".to_string(),
+                    host: socket.ip().to_string(),
+                    port: Some(socket.port()),
+                    path: vec![listen_port.to_string()],
+                };
+
                 stream_id += 1;
-                task::spawn(handle_connection(uid, tx.clone(), stream, stream_id, link));
+                task::spawn(handle_connection(
+                    tx.clone(),
+                    stream,
+                    uri,
+                    processors.clone(),
+                    stream_id,
+                    link,
+                ));
             }
         });
 
@@ -281,7 +329,13 @@ impl Onramp for Ws {
         metrics_reporter: RampReporter,
         is_linked: bool,
     ) -> Result<onramp::Addr> {
-        let source = Int::from_config(onramp_uid, self.onramp_id.clone(), &self.config, is_linked)?;
+        let source = Int::from_config(
+            onramp_uid,
+            self.onramp_id.clone(),
+            processors.post,
+            &self.config,
+            is_linked,
+        )?;
         SourceManager::start(
             onramp_uid,
             source,

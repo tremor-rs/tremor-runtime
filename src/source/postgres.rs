@@ -139,7 +139,8 @@ impl Int {
 
 #[async_trait::async_trait]
 impl Source for Int {
-    async fn pull_event(&mut self, _id: u64) -> Result<SourceReply> {
+    type SourceReplyStreamExtra = ();
+    async fn pull_event(&mut self, _id: u64) -> Result<SourceReply<Self::SourceReplyStreamExtra>> {
         if let Some(row) = self.rows.pop() {
             return Ok(SourceReply::Structured {
                 origin_uri: self.origin_uri.clone(),
