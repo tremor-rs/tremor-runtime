@@ -74,8 +74,7 @@ pub(crate) enum SourceState {
 }
 
 #[derive(Debug)]
-// TODO rename without reply keyword to avoid confusion with linked transport "reply"
-pub(crate) enum SourceReply {
+pub(crate) enum SourceReply<T = ()> {
     /// A normal data event with a `Vec<u8>` for data
     Data {
         origin_uri: EventOriginUri,
@@ -92,7 +91,8 @@ pub(crate) enum SourceReply {
         data: LineValue,
     },
     /// A stream is opened
-    StartStream(usize, Option<Sender<Event>>),
+    /// with an optional Sender to answer an event back to the channel
+    StartStream(usize, Option<T>),
     /// A stream is closed
     EndStream(usize),
     /// We change the connection state of the source
@@ -103,9 +103,11 @@ pub(crate) enum SourceReply {
 
 #[async_trait::async_trait]
 pub(crate) trait Source {
+    /// type used in SourceReply::StartStream
+    type SourceReplyStreamExtra: Send;
     /// Pulls an event from the source if one exists
     /// determine the codec to be used
-    async fn pull_event(&mut self, id: u64) -> Result<SourceReply>;
+    async fn pull_event(&mut self, id: u64) -> Result<SourceReply<Self::SourceReplyStreamExtra>>;
 
     /// Send event back from source (for linked onramps)
     async fn reply_event(

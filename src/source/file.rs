@@ -108,11 +108,13 @@ impl onramp::Impl for File {
 
 #[async_trait::async_trait()]
 impl Source for Int {
+    type SourceReplyStreamExtra = ();
+
     fn id(&self) -> &TremorURL {
         &self.onramp_id
     }
 
-    async fn pull_event(&mut self, _id: u64) -> Result<SourceReply> {
+    async fn pull_event(&mut self, _id: u64) -> Result<SourceReply<Self::SourceReplyStreamExtra>> {
         if let Some(Ok(line)) = self.lines.next().await {
             Ok(SourceReply::Data {
                 origin_uri: self.origin_uri.clone(),
