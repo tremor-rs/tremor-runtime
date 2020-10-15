@@ -18,7 +18,7 @@ pub(crate) use crate::offramp::{self, Offramp};
 pub(crate) use crate::postprocessor::{
     make_postprocessors, postprocess, Postprocessor, Postprocessors,
 };
-pub(crate) use crate::preprocessor::{make_preprocessors, preprocess, Preprocessor};
+pub(crate) use crate::preprocessor::{make_preprocessors, preprocess, Preprocessor, Preprocessors};
 pub(crate) use crate::sink::{self, ResultVec, Sink, SinkManager};
 pub(crate) use crate::source::Processors;
 pub(crate) use crate::url::ports::{ERR, OUT};

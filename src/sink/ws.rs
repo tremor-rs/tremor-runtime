@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use crate::sink::prelude::*;
+use crate::source::prelude::*;
 use async_channel::{bounded, unbounded, Receiver, Sender};
 use async_tungstenite::async_std::connect_async;
 use futures::SinkExt;
@@ -58,6 +59,8 @@ enum WsResult {
 pub struct Ws {
     config: Config,
     postprocessors: Postprocessors,
+    preprocessors: Preprocessors,
+    codec: Box<dyn Codec>,
     tx: Sender<WsResult>,
     rx: Receiver<WsResult>,
     connections: HashMap<WsUrl, Option<WsAddr>>,
@@ -141,6 +144,8 @@ impl offramp::Impl for Ws {
             let (tx, rx) = unbounded();
 
             Ok(SinkManager::new_box(Self {
+                codec: Box::new(crate::codec::null::Null {}),
+                preprocessors: vec![],
                 postprocessors: vec![],
                 is_linked: false,
                 connections: HashMap::new(),
@@ -191,34 +196,59 @@ impl Ws {
                     v.push(sink::Reply::Insight(e));
                 }
                 WsResult::Response(id, msg) => {
-                    v.push(sink::Reply::Response(OUT, Self::make_event(id, msg)?))
+                    for e in self.make_event(id, msg)? {
+                        v.push(sink::Reply::Response(OUT, e))
+                    }
                 }
             }
         }
         Ok(Some(v))
     }
 
-    fn make_event(id: Ids, msg: WsMessage) -> Result<Event> {
+    fn make_event(&mut self, id: Ids, msg: WsMessage) -> Result<Vec<Event>> {
         let mut meta = Value::object_with_capacity(1);
-        let data = match msg {
+
+        // FIXME
+        let event_origin_uri = EventOriginUri::default();
+
+        let response_bytes = match msg {
             WsMessage::Text(d) => {
                 meta.insert("binary", false)?;
-                d
+                d.into_bytes()
             }
-            WsMessage::Binary(d) => {
-                meta.insert("binary", true)?;
-                String::from_utf8(d)?
-            }
+            WsMessage::Binary(d) => d,
         };
-        Ok(Event {
-            id, // TODO only eid should be preserved for this?
-            //data,
-            data: (data, meta).into(),
-            ingest_ns: nanotime(),
-            // TODO implement origin_uri
-            origin_uri: None,
-            ..Event::default()
-        })
+
+        let mut ingest_ns = nanotime();
+        let preprocessed = preprocess(
+            &mut self.preprocessors,
+            &mut ingest_ns,
+            response_bytes,
+            &TremorURL::from_offramp_id("ws")?, // FIXME: get proper url from offramp manager
+        )?;
+        let mut events = Vec::with_capacity(preprocessed.len());
+
+        for pp in preprocessed {
+            events.push(
+                LineValue::try_new(vec![pp], |mutd| {
+                    let mut_data = mutd[0].as_mut_slice();
+                    let body = self
+                        .codec
+                        .decode(mut_data, nanotime())?
+                        .unwrap_or_else(Value::object);
+
+                    Ok(ValueAndMeta::from_parts(body, meta.clone())) // TODO: no need to clone the last element?
+                })
+                .map_err(|e: rental::RentalError<Error, _>| e.0)
+                .map(|data| Event {
+                    id: id.clone(),
+                    origin_uri: Some(event_origin_uri.clone()),
+                    data,
+                    ..Event::default()
+                })?,
+            );
+        }
+        Ok(events)
     }
 
     fn get_message_meta(&self, meta: &Value) -> WsMessageMeta {
@@ -332,19 +362,21 @@ impl Sink for Ws {
     async fn init(
         &mut self,
         _sink_uid: u64,
-        _codec: &dyn Codec,
+        codec: &dyn Codec,
         _codec_map: &HashMap<String, Box<dyn Codec>>,
         processors: Processors<'_>,
         is_linked: bool,
         _reply_channel: Sender<sink::Reply>,
     ) -> Result<()> {
         self.postprocessors = make_postprocessors(processors.post)?;
+        self.preprocessors = make_preprocessors(processors.pre)?;
         self.is_linked = is_linked;
         // TODO use reply_channel here too (like for rest)
 
         // handle connection for the offramp config url (as default)
         let (conn_tx, conn_rx) = bounded(crate::QSIZE);
         self.connections.insert(self.config.url.clone(), None);
+        self.codec = codec.boxed_clone();
         task::spawn(ws_loop(
             self.config.url.clone(),
             self.tx.clone(),
