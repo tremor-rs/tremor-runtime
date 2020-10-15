@@ -6,7 +6,7 @@ onramp:
     type: blaster
     codec: string
     config:
-      source: demo/data/data.json.xz
+      source: ./demo/data/data.json.xz
 
 offramp:
   - id: blackhole
