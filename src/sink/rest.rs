@@ -816,7 +816,7 @@ async fn build_response_events(
         preprocessors,
         &mut ingest_ns,
         response_bytes,
-        &TremorURL::from_offramp_id("rest")?, // TODO: get proper url from offramp manager
+        &TremorURL::from_offramp_id("rest")?, // FIXME: get proper url from offramp manager
     )?;
 
     let mut events = Vec::with_capacity(preprocessed.len());
