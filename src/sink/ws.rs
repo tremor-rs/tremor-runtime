@@ -66,6 +66,7 @@ pub struct Ws {
     connections: HashMap<WsUrl, Option<WsAddr>>,
     is_linked: bool,
     merged_meta: OpMeta,
+    reply_tx: Sender<sink::Reply>,
 }
 async fn ws_loop(
     url: String,
@@ -143,6 +144,8 @@ impl offramp::Impl for Ws {
 
             let (tx, rx) = unbounded();
 
+            // This is a dummy so we can set it later
+            let (reply_tx, _) = bounded(1);
             Ok(SinkManager::new_box(Self {
                 codec: Box::new(crate::codec::null::Null {}),
                 preprocessors: vec![],
@@ -153,6 +156,7 @@ impl offramp::Impl for Ws {
                 tx,
                 rx,
                 merged_meta: OpMeta::default(),
+                reply_tx,
             }))
         } else {
             Err("[WS Offramp] Offramp requires a config".into())
@@ -162,9 +166,8 @@ impl offramp::Impl for Ws {
 
 impl Ws {
     // TODO adopt similar reply mechanism as rest sink
-    async fn drain_insights(&mut self, ingest_ns: u64) -> ResultVec {
+    async fn drain_insights(&mut self, ingest_ns: u64) -> Result<()> {
         let len = self.rx.len();
-        let mut v = Vec::with_capacity(len);
         for _ in 0..len {
             match self.rx.recv().await? {
                 WsResult::Connected(url, addr) => {
@@ -172,7 +175,7 @@ impl Ws {
                     if url == self.config.url {
                         let mut e = Event::cb_restore(ingest_ns);
                         e.op_meta = self.merged_meta.clone();
-                        v.push(sink::Reply::Insight(e));
+                        self.reply_tx.send(sink::Reply::Insight(e)).await?;
                     }
                     self.connections.insert(url, Some(addr));
                 }
@@ -181,28 +184,31 @@ impl Ws {
                     if url == self.config.url {
                         let mut e = Event::cb_trigger(ingest_ns);
                         e.op_meta = self.merged_meta.clone();
-                        v.push(sink::Reply::Insight(e));
+                        self.reply_tx.send(sink::Reply::Insight(e)).await?;
                     }
                     self.connections.insert(url, None);
                 }
                 WsResult::Ack(id, op_meta) => {
                     let mut e = Event::cb_ack(ingest_ns, id.clone());
                     e.op_meta = op_meta;
-                    v.push(sink::Reply::Insight(e));
+                    self.reply_tx.send(sink::Reply::Insight(e)).await?;
                 }
                 WsResult::Fail(id, op_meta) => {
                     let mut e = Event::cb_fail(ingest_ns, id.clone());
                     e.op_meta = op_meta;
-                    v.push(sink::Reply::Insight(e));
+                    self.reply_tx.send(sink::Reply::Insight(e)).await?;
                 }
-                WsResult::Response(id, msg) => {
-                    for e in self.make_event(id, msg)? {
-                        v.push(sink::Reply::Response(OUT, e))
+                WsResult::Response(id, msg) => match self.make_event(id, msg) {
+                    Ok(es) => {
+                        for e in es {
+                            self.reply_tx.send(sink::Reply::Response(OUT, e)).await?;
+                        }
                     }
-                }
+                    Err(err) => Err(err)?,
+                },
             }
         }
-        Ok(Some(v))
+        Ok(())
     }
 
     fn make_event(&mut self, id: Ids, msg: WsMessage) -> Result<Vec<Event>> {
@@ -281,8 +287,8 @@ impl Sink for Ws {
     }
 
     async fn on_signal(&mut self, signal: Event) -> ResultVec {
-        let res = self.drain_insights(signal.ingest_ns);
-        res.await
+        self.drain_insights(signal.ingest_ns).await?;
+        Ok(None)
     }
 
     async fn on_event(
@@ -353,7 +359,8 @@ impl Sink for Ws {
                 }
             }
         }
-        self.drain_insights(event.ingest_ns).await
+        self.drain_insights(event.ingest_ns).await?;
+        Ok(None)
     }
 
     fn default_codec(&self) -> &str {
@@ -366,7 +373,7 @@ impl Sink for Ws {
         _codec_map: &HashMap<String, Box<dyn Codec>>,
         processors: Processors<'_>,
         is_linked: bool,
-        _reply_channel: Sender<sink::Reply>,
+        reply_channel: Sender<sink::Reply>,
     ) -> Result<()> {
         self.postprocessors = make_postprocessors(processors.post)?;
         self.preprocessors = make_preprocessors(processors.pre)?;
@@ -377,6 +384,7 @@ impl Sink for Ws {
         let (conn_tx, conn_rx) = bounded(crate::QSIZE);
         self.connections.insert(self.config.url.clone(), None);
         self.codec = codec.boxed_clone();
+        self.reply_tx = reply_channel;
         task::spawn(ws_loop(
             self.config.url.clone(),
             self.tx.clone(),
