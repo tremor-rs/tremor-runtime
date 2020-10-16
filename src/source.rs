@@ -555,6 +555,10 @@ where
                             let (port, data) = match result {
                                 Ok(d) => (OUT, d),
                                 Err(e) => {
+                                    error!(
+                                        "[Source::{}] Error decoding event data: {}",
+                                        self.source_id, e
+                                    );
                                     let mut error_meta =
                                         simd_json::borrowed::Object::with_capacity(1);
                                     error_meta.insert_nocheck("error".into(), e.to_string().into());

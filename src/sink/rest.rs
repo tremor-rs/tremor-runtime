@@ -739,13 +739,12 @@ fn build_request(
         }
 
         // apply the given codec, fall back to the configured codec if none is found
-        if let Some(codec) = codec_in_use {
-            let encoded = codec.encode(data)?;
-            let mut processed = postprocess(postprocessors, event.ingest_ns, encoded)?;
-            for processed_elem in &mut processed {
-                body.append(processed_elem);
-            }
-        };
+        let codec = codec_in_use.unwrap_or(codec);
+        let encoded = codec.encode(data)?;
+        let mut processed = postprocess(postprocessors, event.ingest_ns, encoded)?;
+        for processed_elem in &mut processed {
+            body.append(processed_elem);
+        }
     }
     let endpoint = endpoint.map_or_else(|| config_endpoint.as_url(), |ep| ep.as_url())?;
     debug!("endpoint [{}] chosen", &endpoint);
