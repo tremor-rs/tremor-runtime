@@ -57,9 +57,11 @@ pub type Addr = async_channel::Sender<Msg>;
 
 #[async_trait::async_trait]
 pub trait Offramp: Send {
+    #[allow(clippy::too_many_arguments)]
     async fn start(
         &mut self,
         offramp_uid: u64,
+        offramp_url: &TremorURL,
         codec: &dyn Codec,
         codec_map: &HashMap<String, Box<dyn Codec>>,
         processors: Processors<'_>,
@@ -194,6 +196,7 @@ impl Manager {
         if let Err(e) = offramp
             .start(
                 offramp_uid,
+                &id,
                 codec.borrow(),
                 &codec_map,
                 Processors {
