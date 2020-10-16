@@ -354,6 +354,11 @@ impl Source for Int {
                 let res = match make_response(codec, codec_map, &event) {
                     Ok(response) => response,
                     Err(e) => {
+                        error!(
+                            "[Source::{}] Error encoding reply event: {}",
+                            &self.onramp_id,
+                            e.to_string()
+                        );
                         // build error response
                         let mut error_data = Value::object_with_capacity(1);
                         error_data.insert("error", e.to_string())?;
