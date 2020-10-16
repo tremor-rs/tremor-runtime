@@ -255,6 +255,7 @@ impl Ws {
                             }
                         }
                         Err(err) => {
+                            error!("[Sink:{}] {}", self.sink_url, err);
                             let err_response = Self::create_error_response(&id, err.to_string());
                             self.reply_tx
                                 .send(sink::Reply::Response(ERR, err_response))
@@ -262,6 +263,7 @@ impl Ws {
                         }
                     },
                     Err(err) => {
+                        error!("[Sink:{}] {}", self.sink_url, err);
                         let err_response = Self::create_error_response(&id, err.to_string());
                         self.reply_tx
                             .send(sink::Reply::Response(ERR, err_response))
@@ -407,8 +409,8 @@ impl Sink for Ws {
             };
 
             if let Some(conn_tx) = ws_conn_tx {
-                let raw = codec.encode(value)?;
-                let datas = postprocess(&mut self.postprocessors, event.ingest_ns, raw)?;
+                let raw = codec.encode(value)?; // TODO 001: handle errors with CBFail and response via ERR port, see rest sink l. 487..
+                let datas = postprocess(&mut self.postprocessors, event.ingest_ns, raw)?; // TODO 001: same here
                 for raw in datas {
                     if msg_meta.binary {
                         conn_tx

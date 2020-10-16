@@ -15,13 +15,12 @@
 // TODO add tests
 
 use crate::codec::Codec;
-use std::str::FromStr;
-
+use crate::postprocessor::{make_postprocessors, postprocess, Postprocessors};
 use crate::source::prelude::*;
-use async_channel::unbounded;
-use async_channel::{Sender, TryRecvError};
+use async_channel::{unbounded, Sender, TryRecvError};
 use halfbrown::HashMap;
 use http_types::Mime;
+use std::str::FromStr;
 use tide::http::headers::HeaderValue;
 use tide::{Body, Request, Response};
 use tremor_script::Value;
@@ -79,6 +78,7 @@ pub struct Int {
     uid: u64,
     config: Config,
     listener: Option<Receiver<RestSourceReply>>,
+    post_processors: Postprocessors,
     onramp_id: TremorURL,
     is_linked: bool,
     // TODO better way to manage this?
@@ -96,13 +96,16 @@ impl Int {
         uid: u64,
         onramp_id: TremorURL,
         config: &Config,
+        post_processors: &[String],
         is_linked: bool,
     ) -> Result<Self> {
         let config = config.clone();
+        let post_processors = make_postprocessors(post_processors)?;
         Ok(Self {
             uid,
             config,
             listener: None,
+            post_processors,
             onramp_id,
             is_linked,
             response_txes: HashMap::new(),
@@ -247,9 +250,11 @@ async fn handle_request(mut req: Request<ServerState>) -> tide::Result<Response>
 fn make_response(
     default_codec: &dyn Codec,
     codec_map: &HashMap<String, Box<dyn Codec>>,
+    post_processors: &mut Postprocessors,
     event: &tremor_pipeline::Event,
 ) -> Result<Response> {
     let err: Error = "Empty event.".into();
+    let ingest_ns = event.ingest_ns;
     let (response_data, meta) = event.value_meta_iter().next().ok_or(err)?;
 
     if let Some(response_meta) = meta.get("response") {
@@ -293,12 +298,29 @@ fn make_response(
         if let Some((mime, dynamic_codec)) = maybe_content_type
             .and_then(|mime| codec_map.get(mime.essence()).map(|c| (mime, c.as_ref())))
         {
-            let mut body = Body::from_bytes(dynamic_codec.encode(response_data)?);
+            let processed = postprocess(
+                post_processors.as_mut_slice(),
+                ingest_ns,
+                dynamic_codec.encode(response_data)?,
+            )?;
+
+            // TODO: see if we can use a reader instead of creating a new vector
+            let v: Vec<u8> = processed.into_iter().flatten().collect();
+            let mut body = Body::from_bytes(v);
+
             body.set_mime(mime);
             builder = builder.body(body);
         } else {
             // fallback to default codec
-            let mut body = Body::from_bytes(default_codec.encode(response_data)?);
+            let processed = postprocess(
+                post_processors.as_mut_slice(),
+                ingest_ns,
+                default_codec.encode(response_data)?,
+            )?;
+            // TODO: see if we can use a reader instead of creating a new vector
+            let v: Vec<u8> = processed.into_iter().flatten().collect();
+            let mut body = Body::from_bytes(v);
+
             // set mime type for default codec
             // TODO: cache mime type for default codec
             if let Some(mime) = default_codec
@@ -347,11 +369,11 @@ impl Source for Int {
         codec_map: &HashMap<String, Box<dyn Codec>>,
     ) -> Result<()> {
         if let Some(event_id) = event.id.get(self.uid) {
-            if let Some(response_tx) = self.response_txes.get(&event_id) {
+            if let Some(response_tx) = self.response_txes.remove(&event_id) {
                 if event.is_batch && self.is_linked {
                     return Err("Batched events not supported in linked REST source.".into());
                 }
-                let res = match make_response(codec, codec_map, &event) {
+                let res = match make_response(codec, codec_map, &mut self.post_processors, &event) {
                     Ok(response) => response,
                     Err(e) => {
                         error!(
@@ -385,6 +407,22 @@ impl Source for Int {
         Ok(())
     }
 
+    async fn on_empty_event(&mut self, id: u64, stream: usize) -> Result<()> {
+        debug!(
+            "[Source::{}] on_empty_event(id={}, stream={})",
+            self.onramp_id, id, stream
+        );
+        if let Some(response_tx) = self.response_txes.remove(&id) {
+            // send no-content HTTP response
+            let res = Response::builder(400)
+                .header("Content-Length", "0")
+                .header("Server", "Tremor")
+                .build();
+            response_tx.send(res).await?;
+        }
+        Ok(())
+    }
+
     async fn init(&mut self) -> Result<SourceState> {
         // override the builtin map with onramp-instance specific config
         let (tx, rx) = bounded(crate::QSIZE);
@@ -402,13 +440,14 @@ impl Source for Int {
         //server.at("/*").all(|r| handle_request(r, self.uid, self.is_linked));
 
         let addr = format!("{}:{}", self.config.host, self.config.port);
+        let source_id = self.onramp_id.to_string();
 
         task::spawn::<_, Result<()>>(async move {
-            info!("[REST Onramp] Listening at {}", addr);
+            info!("[Source::{}] Listening at {}", source_id, addr);
             if let Err(e) = server.listen(addr).await {
                 error!("Error while listening from the rest server: {}", e)
             }
-            warn!("[REST Onramp] Server stopped");
+            warn!("[Source::{}] Server stopped", source_id);
 
             // TODO better statechange here?
             tx.send(SourceReply::StateChange(SourceState::Disconnected).into())
@@ -438,7 +477,13 @@ impl Onramp for Rest {
         metrics_reporter: RampReporter,
         is_linked: bool,
     ) -> Result<onramp::Addr> {
-        let source = Int::from_config(onramp_uid, self.onramp_id.clone(), &self.config, is_linked)?;
+        let source = Int::from_config(
+            onramp_uid,
+            self.onramp_id.clone(),
+            &self.config,
+            &processors.post,
+            is_linked,
+        )?;
         SourceManager::start(
             onramp_uid,
             source,
