@@ -146,6 +146,11 @@ async fn handle_connection(
                             // post-process
                             Ok(messages) => messages,
                             Err(e) => {
+                                error!(
+                                    "[Source::{}] Error post-processing response event: {}",
+                                    &source_url,
+                                    e.to_string()
+                                );
                                 let err = create_error_response(
                                     format!("Error post-processing messages: {}", e),
                                     event_id,
@@ -155,7 +160,10 @@ async fn handle_connection(
                                 if let Ok(data) = simd_json::to_vec(&err) {
                                     msgs.push(Message::Binary(data));
                                 } else {
-                                    error!("Error serializing error response to json");
+                                    error!(
+                                        "[Source::{}] Error serializing error response to json.",
+                                        &source_url
+                                    );
                                 }
                                 msgs
                             }
@@ -290,6 +298,11 @@ impl Source for Int {
                     let data = match codec.encode(value) {
                         Ok(data) => data,
                         Err(e) => {
+                            error!(
+                                "[Source::{}] Error encoding reply event: {}",
+                                &self.onramp_id,
+                                e.to_string()
+                            );
                             let err_res = create_error_response(
                                 format!("Error encoding message: {}", e),
                                 event.id.to_string(),
