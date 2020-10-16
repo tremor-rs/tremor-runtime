@@ -90,8 +90,9 @@ pub(crate) enum SourceReply<T = ()> {
         origin_uri: EventOriginUri,
         data: LineValue,
     },
-    /// A stream is opened
-    /// with an optional Sender to answer an event back to the channel
+    /// A stream is opened with an optional Sender to answer an
+    /// event back to the channel
+    /// TODO 002: get rid of this and internalize it to the WS onramp
     StartStream(usize, Option<T>),
     /// A stream is closed
     EndStream(usize),
@@ -108,6 +109,14 @@ pub(crate) trait Source {
     /// Pulls an event from the source if one exists
     /// determine the codec to be used
     async fn pull_event(&mut self, id: u64) -> Result<SourceReply<Self::SourceReplyStreamExtra>>;
+
+    /// This callback is called when the data provided from
+    /// pull_event did not create any events, this is needed for
+    /// linked sources that require a 1:1 mapping between requests
+    /// and responses, we're looking at you REST
+    async fn on_empty_event(&mut self, _id: u64, _stream: usize) -> Result<()> {
+        Ok(())
+    }
 
     /// Send event back from source (for linked onramps)
     async fn reply_event(
@@ -236,14 +245,16 @@ where
                         Ok(decoded) => results.push(Ok(decoded)),
                         Err(RentalSnot::Skip) => (),
                         Err(RentalSnot::Error(e)) => {
-                            results.push(Err(format!("[Codec] {}", e).into()));
+                            // TODO: add error context (with error handling update)
+                            results.push(Err(e));
                         }
                     }
                 }
             }
             Err(e) => {
                 // record preprocessor failures too
-                results.push(Err(e));
+                // TODO: add error context (with error handling update)
+                results.push(Err(e.into()));
             }
         }
         results
@@ -551,6 +562,10 @@ where
                                 meta.map(StaticValue),
                             )
                             .await;
+                        if results.is_empty() {
+                            self.source.on_empty_event(original_id, stream).await?;
+                        }
+
                         for result in results {
                             let (port, data) = match result {
                                 Ok(d) => (OUT, d),
