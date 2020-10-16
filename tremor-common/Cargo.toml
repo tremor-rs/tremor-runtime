@@ -1,7 +1,7 @@
 [package]
 name = "tremor-common"
 version = "0.9.0"
-description = "Tremor Script Interpreter"
+description = "Tremor common functions"
 authors = ["The Tremor Team"]
 edition = "2018"
 license = "Apache-2.0"
