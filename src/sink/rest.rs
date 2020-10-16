@@ -478,23 +478,26 @@ async fn codec_task(
                 ) {
                     Ok(request) => {
                         if let Err(e) = tx.send(SendTaskInMsg::Request(request)).await {
-                            error!("Error sending out encoded request {}", e);
+                            error!(
+                                "[Sink::{}] Error sending out encoded request {}",
+                                &sink_url, e
+                            );
                         }
                     }
                     Err(e) => {
-                        error!(
-                            "[Rest Offramp {}] Error encoding the request: {}",
-                            sink_uid, &e
-                        );
+                        error!("[Sink::{}] Error encoding the request: {}", &sink_url, &e);
                         // send error result to send task
                         if let Err(e) = tx.send(SendTaskInMsg::Failed).await {
-                            error!("Error sending Failed back to send task: {}", e);
+                            error!(
+                                "[Sink::{}] Error sending Failed back to send task: {}",
+                                &sink_url, e
+                            );
                         }
                         // send CB_fail
                         if let Some(mut insight) = event.insight_fail() {
                             insight.ingest_ns = nanotime();
                             if let Err(e) = reply_tx.send(sink::Reply::Insight(insight)).await {
-                                error!("Error sending CB fail event {}", e);
+                                error!("[Sink::{}] Error sending CB fail event {}", &sink_url, e);
                             }
                         }
                         // send response through error port
@@ -512,7 +515,10 @@ async fn codec_task(
                         );
                         if let Err(e) = reply_tx.send(sink::Reply::Response(ERR, error_event)).await
                         {
-                            error!("Error sending error response event {}", e);
+                            error!(
+                                "[Sink::{}] Error sending error response event {}",
+                                &sink_url, e
+                            );
                         }
                     }
                 }
@@ -533,9 +539,12 @@ async fn codec_task(
                     // the response back and not consume it yet (or log about it)
                     if !is_linked {
                         if let Ok(body) = response.body_string().await {
-                            error!("HTTP request failed: {} => {}", status, body)
+                            error!(
+                                "[Sink::{}] HTTP request failed: {} => {}",
+                                &sink_url, status, body
+                            )
                         } else {
-                            error!("HTTP request failed: {}", status)
+                            error!("[Sink::{}] HTTP request failed: {}", &sink_url, status)
                         }
                     }
                     meta.insert("time".into(), Value::from(duration));
@@ -564,16 +573,16 @@ async fn codec_task(
                                     .send(sink::Reply::Response(OUT, response_event))
                                     .await
                                 {
-                                    error!("Error sending response event: {}", e);
+                                    error!(
+                                        "[Sink::{}] Error sending response event: {}",
+                                        &sink_url, e
+                                    );
                                 }
                             }
                         }
                         Err(e) => {
                             cb = CBAction::Fail;
-                            error!(
-                                "[Rest Offramp {}] Error encoding the request: {}",
-                                sink_uid, &e
-                            );
+                            error!("[Sink::{}] Error encoding the request: {}", &sink_url, &e);
                             let error_event = create_error_response(
                                 Ids::new(sink_uid, response_ids.next()),
                                 &id,
@@ -586,7 +595,8 @@ async fn codec_task(
                                 reply_tx.send(sink::Reply::Response(ERR, error_event)).await
                             {
                                 error!(
-                                    "Error sending error event on response decoding error: {}",
+                                    "[Sink::{}] Error sending error event on response decoding error: {}",
+                                    &sink_url,
                                     e
                                 );
                             }
@@ -605,7 +615,7 @@ async fn codec_task(
                     }))
                     .await
                 {
-                    error!("Error sending CB event {}", e);
+                    error!("[Sink::{}] Error sending CB event {}", &sink_url, e);
                 };
             }
             CodecTaskInMsg::ReportFailure(id, op_meta, event_origin_uri, e) => {
@@ -615,8 +625,8 @@ async fn codec_task(
                 insight.op_meta = op_meta;
                 if let Err(send_err) = reply_tx.send(sink::Reply::Insight(insight)).await {
                     error!(
-                        "Error sending CB trigger event for REST sink {} and event {}: {}",
-                        sink_uid, id, send_err
+                        "[Sink::{}] Error sending CB trigger event for event {}: {}",
+                        &sink_url, id, send_err
                     );
                 }
                 let error_event = create_error_response(
@@ -629,14 +639,14 @@ async fn codec_task(
                 if let Err(send_err) = reply_tx.send(sink::Reply::Response(ERR, error_event)).await
                 {
                     error!(
-                        "Error sending error response for failed request send: {}",
-                        send_err
+                        "[Sink::{}] Error sending error response for failed request send: {}",
+                        &sink_url, send_err
                     );
                 }
             }
         }
     }
-    info!("REST Sink codec task stopped. Channel closed.");
+    info!("[Sink::{}] Codec task stopped. Channel closed.", &sink_url);
     Ok(())
 }
 
