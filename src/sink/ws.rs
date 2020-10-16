@@ -58,6 +58,7 @@ enum WsResult {
 
 /// An offramp that writes to a websocket endpoint
 pub struct Ws {
+    sink_url: TremorURL,
     config: Config,
     postprocessors: Postprocessors,
     preprocessors: Preprocessors,
@@ -70,6 +71,7 @@ pub struct Ws {
     reply_tx: Sender<sink::Reply>,
 }
 async fn ws_loop(
+    sink_url: TremorURL,
     url: String,
     offramp_tx: Sender<WsResult>,
     tx: WsAddr,
@@ -80,7 +82,10 @@ async fn ws_loop(
         let mut ws_stream = if let Ok((ws_stream, _)) = connect_async(&url).await {
             ws_stream
         } else {
-            error!("Failed to connect to {}, retrying in 1s", url);
+            error!(
+                "[Sink::{}] Failed to connect to {}, retrying in 1s",
+                &sink_url, url
+            );
             offramp_tx.send(WsResult::Disconnected(url.clone())).await?;
             task::sleep(Duration::from_secs(1)).await;
             continue;
@@ -96,7 +101,8 @@ async fn ws_loop(
             };
             if let Err(e) = r {
                 error!(
-                    "Websocket error while sending event to server {}: {}. Reconnecting...",
+                    "[Sink::{}] Websocket error while sending event to server {}: {}. Reconnecting...",
+                    &sink_url,
                     url, e
                 );
                 // TODO avoid these clones for non linked-transport usecase
@@ -106,8 +112,8 @@ async fn ws_loop(
                         .send(WsResult::Response(
                             id,
                             Box::new(Err(Error::from(format!(
-                                "Error sending event to server {}: {}",
-                                url, e
+                                "[Sink::{}] Error sending event to server {}: {}",
+                                &sink_url, url, e
                             )))),
                         ))
                         .await?;
@@ -135,7 +141,10 @@ async fn ws_loop(
                         }
                         Ok(Message::Ping(_)) | Ok(Message::Pong(_)) => {}
                         Ok(Message::Close(_)) => {
-                            warn!("Server {} closed websocket connection", url);
+                            warn!(
+                                "[Sink::{}] Server {} closed websocket connection",
+                                &sink_url, url
+                            );
                             offramp_tx.send(WsResult::Disconnected(url.clone())).await?;
                             offramp_tx
                                 .send(WsResult::Response(
@@ -150,7 +159,8 @@ async fn ws_loop(
                         }
                         Err(e) => {
                             error!(
-                                "Websocket error while receiving reply from server {}: {}",
+                                "[Sink::{}] Websocket error while receiving reply from server {}: {}",
+                                &sink_url,
                                 url, e
                             );
                             offramp_tx
@@ -181,7 +191,9 @@ impl offramp::Impl for Ws {
 
             // This is a dummy so we can set it later
             let (reply_tx, _) = bounded(1);
+
             Ok(SinkManager::new_box(Self {
+                sink_url: TremorURL::from_onramp_id("ws")?, // dummy value
                 codec: Box::new(crate::codec::null::Null {}),
                 preprocessors: vec![],
                 postprocessors: vec![],
@@ -377,6 +389,7 @@ impl Sink for Ws {
                 let (conn_tx, conn_rx) = bounded(crate::QSIZE);
                 // separate task to handle new url connection
                 task::spawn(ws_loop(
+                    self.sink_url.clone(),
                     msg_meta.url.clone(),
                     self.tx.clone(),
                     conn_tx.clone(),
@@ -452,7 +465,7 @@ impl Sink for Ws {
     async fn init(
         &mut self,
         _sink_uid: u64,
-        _sink_url: &TremorURL,
+        sink_url: &TremorURL,
         codec: &dyn Codec,
         _codec_map: &HashMap<String, Box<dyn Codec>>,
         processors: Processors<'_>,
@@ -470,6 +483,7 @@ impl Sink for Ws {
         self.codec = codec.boxed_clone();
         self.reply_tx = reply_channel;
         task::spawn(ws_loop(
+            sink_url.clone(),
             self.config.url.clone(),
             self.tx.clone(),
             conn_tx,

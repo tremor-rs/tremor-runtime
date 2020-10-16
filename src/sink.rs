@@ -96,6 +96,7 @@ pub(crate) struct SinkManager<T>
 where
     T: Sink,
 {
+    sink_url: Option<TremorURL>,
     sink: T,
     pipelines: HashMap<TremorURL, pipeline::Addr>,
     // for linked offramps
@@ -108,6 +109,7 @@ where
 {
     fn new(sink: T) -> Self {
         Self {
+            sink_url: None,
             sink,
             pipelines: HashMap::new(),
             dest_pipelines: HashMap::new(),
@@ -138,6 +140,7 @@ where
         is_linked: bool,
         reply_channel: Sender<Reply>,
     ) -> Result<()> {
+        self.sink_url = Some(offramp_url.clone());
         self.sink
             .init(
                 offramp_uid, // we treat offramp_uid and sink_uid as the same thing
@@ -202,18 +205,33 @@ where
     }
 
     async fn on_signal(&mut self, signal: Event) -> Option<Event> {
-        let replies = self.sink.on_signal(signal).await.ok()??;
+        let replies = match self.sink.on_signal(signal).await {
+            Ok(results) => results?,
+            Err(e) => {
+                if let Some(sink_url) = &self.sink_url {
+                    error!("[Sink::{}] Error processing signal: {}", sink_url, e);
+                }
+                return None;
+            }
+        };
         for reply in replies {
             match reply {
                 Reply::Insight(e) => {
                     if let Err(e) = handle_insight(e, self.pipelines.values()).await {
-                        error!("Error handling insight in sink: {}", e)
+                        if let Some(sink_url) = &self.sink_url {
+                            error!("[Sink::{}] Error handling insight in sink: {}", sink_url, e);
+                        }
                     }
                 }
                 Reply::Response(port, event) => {
                     if let Some(pipelines) = self.dest_pipelines.get_mut(&port) {
                         if let Err(e) = handle_response(event, pipelines.iter()).await {
-                            error!("Error handling response in sink: {}", e)
+                            if let Some(sink_url) = &self.sink_url {
+                                error!(
+                                    "[Sink::{}] Error handling response in sink: {}",
+                                    sink_url, e
+                                );
+                            }
                         }
                     }
                 }
