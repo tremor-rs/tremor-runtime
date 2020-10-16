@@ -254,7 +254,7 @@ where
             Err(e) => {
                 // record preprocessor failures too
                 // TODO: add error context (with error handling update)
-                results.push(Err(e.into()));
+                results.push(Err(e));
             }
         }
         results
