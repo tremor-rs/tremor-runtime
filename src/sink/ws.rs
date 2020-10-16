@@ -18,6 +18,7 @@ use async_channel::{bounded, unbounded, Receiver, Sender};
 use async_tungstenite::async_std::connect_async;
 use futures::SinkExt;
 use halfbrown::HashMap;
+use std::boxed::Box;
 use std::time::Duration;
 use tremor_pipeline::OpMeta;
 use tungstenite::protocol::Message;
@@ -52,7 +53,7 @@ enum WsResult {
     Disconnected(WsUrl),
     Ack(Ids, OpMeta),
     Fail(Ids, OpMeta),
-    Response(Ids, Result<WsMessage>),
+    Response(Ids, Box<Result<WsMessage>>),
 }
 
 /// An offramp that writes to a websocket endpoint
@@ -104,10 +105,10 @@ async fn ws_loop(
                     offramp_tx
                         .send(WsResult::Response(
                             id,
-                            Err(Error::from(format!(
+                            Box::new(Err(Error::from(format!(
                                 "Error sending event to server {}: {}",
                                 url, e
-                            ))),
+                            )))),
                         ))
                         .await?;
                 }
@@ -124,12 +125,12 @@ async fn ws_loop(
                     match msg {
                         Ok(Message::Text(t)) => {
                             offramp_tx
-                                .send(WsResult::Response(id, Ok(WsMessage::Text(t))))
+                                .send(WsResult::Response(id, Box::new(Ok(WsMessage::Text(t)))))
                                 .await?;
                         }
                         Ok(Message::Binary(t)) => {
                             offramp_tx
-                                .send(WsResult::Response(id, Ok(WsMessage::Binary(t))))
+                                .send(WsResult::Response(id, Box::new(Ok(WsMessage::Binary(t)))))
                                 .await?;
                         }
                         Ok(Message::Ping(_)) | Ok(Message::Pong(_)) => {}
@@ -139,10 +140,10 @@ async fn ws_loop(
                             offramp_tx
                                 .send(WsResult::Response(
                                     id,
-                                    Err(Error::from(format!(
+                                    Box::new(Err(Error::from(format!(
                                         "Error receiving reply from server {}: Server closed websocket connection",
                                         url
-                                    ))),
+                                    )))),
                                 ))
                                 .await?;
                             break;
@@ -155,10 +156,10 @@ async fn ws_loop(
                             offramp_tx
                                 .send(WsResult::Response(
                                     id,
-                                    Err(Error::from(format!(
+                                    Box::new(Err(Error::from(format!(
                                         "Error receiving reply from server {}: {}",
                                         url, e
-                                    ))),
+                                    )))),
                                 ))
                                 .await?;
                         }
@@ -232,7 +233,7 @@ impl Ws {
                     e.op_meta = op_meta;
                     self.reply_tx.send(sink::Reply::Insight(e)).await?;
                 }
-                WsResult::Response(id, msg_result) => match msg_result {
+                WsResult::Response(id, msg_result) => match *msg_result {
                     Ok(msg) => match self.build_response_events(&id, msg) {
                         Ok(events) => {
                             for event in events {
@@ -242,20 +243,16 @@ impl Ws {
                             }
                         }
                         Err(err) => {
+                            let err_response = Self::create_error_response(&id, err.to_string());
                             self.reply_tx
-                                .send(sink::Reply::Response(
-                                    ERR,
-                                    Self::create_error_response(&id, err),
-                                ))
+                                .send(sink::Reply::Response(ERR, err_response))
                                 .await?;
                         }
                     },
                     Err(err) => {
+                        let err_response = Self::create_error_response(&id, err.to_string());
                         self.reply_tx
-                            .send(sink::Reply::Response(
-                                ERR,
-                                Self::create_error_response(&id, err),
-                            ))
+                            .send(sink::Reply::Response(ERR, err_response))
                             .await?;
                     }
                 },
@@ -266,7 +263,6 @@ impl Ws {
 
     fn build_response_events(&mut self, id: &Ids, msg: WsMessage) -> Result<Vec<Event>> {
         let mut meta = Value::object_with_capacity(1);
-
         let response_bytes = match msg {
             WsMessage::Text(d) => {
                 meta.insert("binary", false)?;
@@ -307,13 +303,13 @@ impl Ws {
         Ok(events)
     }
 
-    fn create_error_response(event_id: &Ids, e: Error) -> Event {
+    fn create_error_response(event_id: &Ids, e: String) -> Event {
         let mut error_data = simd_json::value::borrowed::Object::with_capacity(2);
-        error_data.insert_nocheck("error".into(), Value::from(e.to_string()));
+        error_data.insert_nocheck("error".into(), Value::from(e.clone()));
         error_data.insert_nocheck("event_id".into(), Value::from(event_id.to_string()));
 
         let mut meta = simd_json::value::borrowed::Object::with_capacity(1);
-        meta.insert_nocheck("error".into(), Value::from(e.to_string()));
+        meta.insert_nocheck("error".into(), Value::from(e));
 
         Event {
             id: event_id.clone(),
@@ -420,13 +416,14 @@ impl Sink for Ws {
                     } else {
                         error!("[WS Offramp] Invalid utf8 data for text message");
                         let e = "Invalid utf8 data for text message";
+
                         self.reply_tx
                             .send(sink::Reply::Response(
                                 ERR,
-                                Self::create_error_response(&event.id, Error::from(e)),
+                                Self::create_error_response(&event.id, e.to_string()),
                             ))
                             .await?;
-                        return Err(Error::from(e));
+                        return Err(e.into());
                     }
                 }
             } else {
@@ -434,13 +431,11 @@ impl Sink for Ws {
                 // got to send a response
                 // TODO send this always and also log error here?
                 if self.is_linked {
+                    let err = "Error getting response for event: websocket sink is not connected";
                     self.reply_tx
                         .send(sink::Reply::Response(
                             ERR,
-                            Self::create_error_response(
-                                &event.id,
-                                Error::from("Error getting response for event: websocket sink is not connected")
-                            )
+                            Self::create_error_response(&event.id, err.to_string()),
                         ))
                         .await?;
                 }
@@ -453,9 +448,11 @@ impl Sink for Ws {
     fn default_codec(&self) -> &str {
         "json"
     }
+    #[allow(clippy::too_many_arguments)]
     async fn init(
         &mut self,
         _sink_uid: u64,
+        _sink_url: &TremorURL,
         codec: &dyn Codec,
         _codec_map: &HashMap<String, Box<dyn Codec>>,
         processors: Processors<'_>,

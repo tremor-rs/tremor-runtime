@@ -22,6 +22,7 @@ pub(crate) use crate::preprocessor::{make_preprocessors, preprocess, Preprocesso
 pub(crate) use crate::sink::{self, ResultVec, Sink, SinkManager};
 pub(crate) use crate::source::Processors;
 pub(crate) use crate::url::ports::{ERR, OUT};
+pub(crate) use crate::url::TremorURL;
 pub(crate) use crate::utils::hostname;
 pub(crate) use crate::{Event, OpConfig};
 pub(crate) use async_channel::Sender;

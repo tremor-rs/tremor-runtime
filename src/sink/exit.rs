@@ -57,9 +57,11 @@ impl Sink for Exit {
     fn default_codec(&self) -> &str {
         "json"
     }
+    #[allow(clippy::too_many_arguments)]
     async fn init(
         &mut self,
         _sink_uid: u64,
+        _sink_url: &TremorURL,
         _codec: &dyn Codec,
         _codec_map: &HashMap<String, Box<dyn Codec>>,
         _processors: Processors<'_>,

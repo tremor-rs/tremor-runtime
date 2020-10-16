@@ -14,7 +14,6 @@
 
 use crate::codec::Codec;
 use crate::sink::prelude::*;
-use crate::url::TremorURL;
 use async_channel::{bounded, Receiver, Sender};
 use async_std::task::JoinHandle;
 use halfbrown::HashMap;
@@ -367,9 +366,11 @@ impl Sink for Rest {
         "json"
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn init(
         &mut self,
         sink_uid: u64,
+        sink_url: &TremorURL,
         codec: &dyn Codec,
         codec_map: &HashMap<String, Box<dyn Codec>>,
         processors: Processors<'_>,
@@ -387,6 +388,7 @@ impl Sink for Rest {
         let default_method = self.config.method;
         let endpoint = self.config.endpoint.clone();
         let config_headers = self.config.headers.clone();
+        let sink_url = sink_url.clone();
 
         // inbound channel towards codec task
         // sending events to be turned into requests
@@ -398,6 +400,7 @@ impl Sink for Rest {
         self.codec_task_handle = Some(task::spawn(async move {
             codec_task(
                 sink_uid,
+                sink_url,
                 postprocessors,
                 preprocessors,
                 my_codec,
@@ -446,6 +449,7 @@ impl ResponseIdGenerator {
 #[allow(clippy::too_many_arguments, clippy::too_many_lines)]
 async fn codec_task(
     sink_uid: u64,
+    sink_url: TremorURL,
     mut postprocessors: Vec<Box<dyn Postprocessor>>,
     mut preprocessors: Vec<Box<dyn Preprocessor>>,
     codec: Box<dyn Codec>,
@@ -542,6 +546,7 @@ async fn codec_task(
 
                 if is_linked {
                     match build_response_events(
+                        &sink_url,
                         &id,
                         origin_uri.as_ref(),
                         response,
@@ -776,6 +781,7 @@ fn build_request(
 }
 
 async fn build_response_events(
+    sink_url: &TremorURL,
     id: &Ids,
     event_origin_uri: &EventOriginUri,
     mut response: Response,
@@ -812,12 +818,7 @@ async fn build_response_events(
     // extract one or multiple events from the body
     let response_bytes = response.body_bytes().await?;
     let mut ingest_ns = nanotime();
-    let preprocessed = preprocess(
-        preprocessors,
-        &mut ingest_ns,
-        response_bytes,
-        &TremorURL::from_offramp_id("rest")?, // FIXME: get proper url from offramp manager
-    )?;
+    let preprocessed = preprocess(preprocessors, &mut ingest_ns, response_bytes, sink_url)?;
 
     let mut events = Vec::with_capacity(preprocessed.len());
     for pp in preprocessed {
