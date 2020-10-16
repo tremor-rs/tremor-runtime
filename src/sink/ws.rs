@@ -52,7 +52,7 @@ enum WsResult {
     Disconnected(WsUrl),
     Ack(Ids, OpMeta),
     Fail(Ids, OpMeta),
-    Response(Ids, WsMessage),
+    Response(Ids, Result<WsMessage>),
 }
 
 /// An offramp that writes to a websocket endpoint
@@ -95,11 +95,22 @@ async fn ws_loop(
             };
             if let Err(e) = r {
                 error!(
-                    "Websocket send error: {} for endppoint {}, reconnecting",
-                    e, url
+                    "Websocket error while sending event to server {}: {}. Reconnecting...",
+                    url, e
                 );
                 // TODO avoid these clones for non linked-transport usecase
                 offramp_tx.send(WsResult::Fail(id.clone(), meta)).await?;
+                if has_link {
+                    offramp_tx
+                        .send(WsResult::Response(
+                            id,
+                            Err(Error::from(format!(
+                                "Error sending event to server {}: {}",
+                                url, e
+                            ))),
+                        ))
+                        .await?;
+                }
                 break;
             } else {
                 offramp_tx.send(WsResult::Ack(id.clone(), meta)).await?;
@@ -113,21 +124,44 @@ async fn ws_loop(
                     match msg {
                         Ok(Message::Text(t)) => {
                             offramp_tx
-                                .send(WsResult::Response(id, WsMessage::Text(t)))
+                                .send(WsResult::Response(id, Ok(WsMessage::Text(t))))
                                 .await?;
                         }
                         Ok(Message::Binary(t)) => {
                             offramp_tx
-                                .send(WsResult::Response(id, WsMessage::Binary(t)))
+                                .send(WsResult::Response(id, Ok(WsMessage::Binary(t))))
                                 .await?;
                         }
                         Ok(Message::Ping(_)) | Ok(Message::Pong(_)) => {}
                         Ok(Message::Close(_)) => {
                             warn!("Server {} closed websocket connection", url);
                             offramp_tx.send(WsResult::Disconnected(url.clone())).await?;
+                            offramp_tx
+                                .send(WsResult::Response(
+                                    id,
+                                    Err(Error::from(format!(
+                                        "Error receiving reply from server {}: Server closed websocket connection",
+                                        url
+                                    ))),
+                                ))
+                                .await?;
                             break;
                         }
-                        Err(e) => error!("WS error returned while waiting for server data: {}", e),
+                        Err(e) => {
+                            error!(
+                                "Websocket error while receiving reply from server {}: {}",
+                                url, e
+                            );
+                            offramp_tx
+                                .send(WsResult::Response(
+                                    id,
+                                    Err(Error::from(format!(
+                                        "Error receiving reply from server {}: {}",
+                                        url, e
+                                    ))),
+                                ))
+                                .await?;
+                        }
                     }
                 }
             }
@@ -198,24 +232,40 @@ impl Ws {
                     e.op_meta = op_meta;
                     self.reply_tx.send(sink::Reply::Insight(e)).await?;
                 }
-                WsResult::Response(id, msg) => match self.make_event(id, msg) {
-                    Ok(es) => {
-                        for e in es {
-                            self.reply_tx.send(sink::Reply::Response(OUT, e)).await?;
+                WsResult::Response(id, msg_result) => match msg_result {
+                    Ok(msg) => match self.build_response_events(&id, msg) {
+                        Ok(events) => {
+                            for event in events {
+                                self.reply_tx
+                                    .send(sink::Reply::Response(OUT, event))
+                                    .await?;
+                            }
                         }
+                        Err(err) => {
+                            self.reply_tx
+                                .send(sink::Reply::Response(
+                                    ERR,
+                                    Self::create_error_response(&id, err),
+                                ))
+                                .await?;
+                        }
+                    },
+                    Err(err) => {
+                        self.reply_tx
+                            .send(sink::Reply::Response(
+                                ERR,
+                                Self::create_error_response(&id, err),
+                            ))
+                            .await?;
                     }
-                    Err(err) => Err(err)?,
                 },
             }
         }
         Ok(())
     }
 
-    fn make_event(&mut self, id: Ids, msg: WsMessage) -> Result<Vec<Event>> {
+    fn build_response_events(&mut self, id: &Ids, msg: WsMessage) -> Result<Vec<Event>> {
         let mut meta = Value::object_with_capacity(1);
-
-        // FIXME
-        let event_origin_uri = EventOriginUri::default();
 
         let response_bytes = match msg {
             WsMessage::Text(d) => {
@@ -230,7 +280,7 @@ impl Ws {
             &mut self.preprocessors,
             &mut ingest_ns,
             response_bytes,
-            &TremorURL::from_offramp_id("ws")?, // FIXME: get proper url from offramp manager
+            &TremorURL::from_offramp_id("ws")?, // TODO: get proper url from offramp manager
         )?;
         let mut events = Vec::with_capacity(preprocessed.len());
 
@@ -248,13 +298,29 @@ impl Ws {
                 .map_err(|e: rental::RentalError<Error, _>| e.0)
                 .map(|data| Event {
                     id: id.clone(),
-                    origin_uri: Some(event_origin_uri.clone()),
+                    origin_uri: None, // TODO
                     data,
                     ..Event::default()
                 })?,
             );
         }
         Ok(events)
+    }
+
+    fn create_error_response(event_id: &Ids, e: Error) -> Event {
+        let mut error_data = simd_json::value::borrowed::Object::with_capacity(2);
+        error_data.insert_nocheck("error".into(), Value::from(e.to_string()));
+        error_data.insert_nocheck("event_id".into(), Value::from(event_id.to_string()));
+
+        let mut meta = simd_json::value::borrowed::Object::with_capacity(1);
+        meta.insert_nocheck("error".into(), Value::from(e.to_string()));
+
+        Event {
+            id: event_id.clone(),
+            origin_uri: None, // TODO
+            data: (error_data, meta).into(),
+            ..Event::default()
+        }
     }
 
     fn get_message_meta(&self, meta: &Value) -> WsMessageMeta {
@@ -352,10 +418,31 @@ impl Sink for Ws {
                             ))
                             .await?;
                     } else {
-                        // TODO send these to offramp error port
                         error!("[WS Offramp] Invalid utf8 data for text message");
-                        return Err(Error::from("Invalid utf8 data for text message"));
+                        let e = "Invalid utf8 data for text message";
+                        self.reply_tx
+                            .send(sink::Reply::Response(
+                                ERR,
+                                Self::create_error_response(&event.id, Error::from(e)),
+                            ))
+                            .await?;
+                        return Err(Error::from(e));
                     }
+                }
+            } else {
+                // connnection is in a disconnected state, but if this is a linked offramp,
+                // got to send a response
+                // TODO send this always and also log error here?
+                if self.is_linked {
+                    self.reply_tx
+                        .send(sink::Reply::Response(
+                            ERR,
+                            Self::create_error_response(
+                                &event.id,
+                                Error::from("Error getting response for event: websocket sink is not connected")
+                            )
+                        ))
+                        .await?;
                 }
             }
         }
