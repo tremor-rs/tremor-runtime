@@ -28,6 +28,7 @@ use rdkafka::{
     producer::{FutureProducer, FutureRecord},
 };
 use std::fmt;
+use tremor_script::prelude::*;
 
 #[derive(Deserialize)]
 pub struct Config {
@@ -146,13 +147,15 @@ where
 impl Offramp for Kafka {
     // TODO
     fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) -> Result<()> {
-        for value in event.value_iter() {
+        for (value, meta) in event.value_meta_iter() {
             let raw = codec.encode(value)?;
             let mut record = FutureRecord::to(&self.config.topic);
             record = record.payload(&raw);
             //TODO: Key
 
-            let record = if let Some(ref k) = self.key {
+            let record = if let Some(k) = meta.get("kafka_key").and_then(Value::as_str) {
+                record.key(k)
+            } else if let Some(ref k) = self.key {
                 record.key(k.as_str())
             } else {
                 record
