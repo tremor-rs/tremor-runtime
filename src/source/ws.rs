@@ -55,8 +55,9 @@ impl onramp::Impl for Ws {
 /// encoded response and additional information
 /// for post-processing and assembling WS messages
 pub struct SerializedResponse {
-    data: Vec<u8>,
+    event_id: Ids,
     ingest_ns: u64,
+    data: Vec<u8>,
     binary: bool,
 }
 
@@ -102,7 +103,7 @@ impl Int {
         })
     }
 
-    fn get_stream_sender_for_id(&mut self, id: u64) -> Option<&Sender<SerializedResponse>> {
+    fn get_stream_sender_for_id(&self, id: u64) -> Option<&Sender<SerializedResponse>> {
         // TODO improve the way stream_id is retrieved -- this works as long as a
         // previous event id is used by pipelines/offramps (which is suitable only
         // for request/response style flow), but for websocket, arbitrary events can
@@ -117,6 +118,7 @@ impl Int {
 }
 
 async fn handle_connection(
+    source_url: TremorURL,
     tx: Sender<SourceReply<Sender<SerializedResponse>>>,
     raw_stream: TcpStream,
     origin_uri: EventOriginUri,
@@ -135,21 +137,38 @@ async fn handle_connection(
         // response handling task
         task::spawn::<_, Result<()>>(async move {
             // create post-processors for this stream
-            let mut post_processors = make_postprocessors(processors.as_slice())
-                .expect("Heck, we verified it works in init, and now? Shitty times, he?");
-            // wait for response messages to arrive (via reply_event)
-            while let Ok(response) = stream_rx.recv().await {
-                let msgs = match make_messages(response, &mut post_processors) {
-                    // post-process
-                    Ok(messages) => messages,
-                    Err(e) => vec![Message::Text(format!(
-                        "Error post-processing messages: {}",
-                        e
-                    ))],
-                };
-                for msg in msgs {
-                    ws_write.send(msg).await?;
+            match make_postprocessors(processors.as_slice()) {
+                Ok(mut post_processors) => {
+                    // wait for response messages to arrive (via reply_event)
+                    while let Ok(response) = stream_rx.recv().await {
+                        let event_id = response.event_id.to_string();
+                        let msgs = match make_messages(response, &mut post_processors) {
+                            // post-process
+                            Ok(messages) => messages,
+                            Err(e) => {
+                                let err = create_error_response(
+                                    format!("Error post-processing messages: {}", e),
+                                    event_id,
+                                    &source_url,
+                                );
+                                let mut msgs = Vec::with_capacity(1);
+                                if let Ok(data) = simd_json::to_vec(&err) {
+                                    msgs.push(Message::Binary(data));
+                                } else {
+                                    error!("Error serializing error response to json");
+                                }
+                                msgs
+                            }
+                        };
+                        for msg in msgs {
+                            ws_write.send(msg).await?;
+                        }
+                    }
                 }
+                Err(e) => error!(
+                    "[Onramp::WS] Invalid Post Processors, not starting response receiver task: {}",
+                    e
+                ), // shouldnt happen, got valitdated before in init and is not changes after
             }
             Ok(())
         });
@@ -216,6 +235,14 @@ fn make_messages(
         .collect())
 }
 
+fn create_error_response(err: String, event_id: String, source_id: &TremorURL) -> Value<'static> {
+    let mut err_data = simd_json::borrowed::Object::with_capacity(3);
+    err_data.insert_nocheck("error".into(), Value::from(err));
+    err_data.insert_nocheck("event_id".into(), Value::from(event_id));
+    err_data.insert_nocheck("source_id".into(), Value::from(source_id.to_string()));
+    Value::from(err_data)
+}
+
 #[async_trait::async_trait()]
 impl Source for Int {
     type SourceReplyStreamExtra = Sender<SerializedResponse>;
@@ -262,11 +289,19 @@ impl Source for Int {
                     // we do the encoding here, and the post-processing later on the sending task, as this is stream-based
                     let data = match codec.encode(value) {
                         Ok(data) => data,
-                        Err(e) => format!("Error encoding message: {}", e).into_bytes(), // for proper error handling
+                        Err(e) => {
+                            let err_res = create_error_response(
+                                format!("Error encoding message: {}", e),
+                                event.id.to_string(),
+                                &self.onramp_id,
+                            );
+                            simd_json::to_vec(&err_res)? // for proper error handling
+                        }
                     };
                     let res = SerializedResponse {
-                        data,
+                        event_id: event.id.clone(),
                         ingest_ns: event.ingest_ns,
+                        data,
                         binary,
                     };
                     tx.send(res).await?;
@@ -281,6 +316,7 @@ impl Source for Int {
         let listener = TcpListener::bind((self.config.host.as_str(), listen_port)).await?;
         let (tx, rx) = bounded(crate::QSIZE);
         let uid = self.uid;
+        let source_url = self.onramp_id.clone();
 
         let link = self.is_linked;
 
@@ -299,6 +335,7 @@ impl Source for Int {
 
                 stream_id += 1;
                 task::spawn(handle_connection(
+                    source_url.clone(),
                     tx.clone(),
                     stream,
                     uri,
