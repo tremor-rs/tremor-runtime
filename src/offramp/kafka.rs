@@ -25,6 +25,7 @@ use halfbrown::HashMap;
 use rdkafka::config::ClientConfig;
 use rdkafka::producer::{FutureProducer, FutureRecord};
 use std::fmt;
+use tremor_script::prelude::*;
 
 #[derive(Deserialize)]
 pub struct Config {
@@ -108,12 +109,14 @@ impl offramp::Impl for Kafka {
 impl Offramp for Kafka {
     // TODO
     fn on_event(&mut self, codec: &Box<dyn Codec>, _input: String, event: Event) -> Result<()> {
-        for value in event.value_iter() {
+        for (value, meta) in event.value_meta_iter() {
             let raw = codec.encode(value)?;
             let mut record = FutureRecord::to(&self.topic);
             record = record.payload(&raw);
             //TODO: Key
-            if let Some(ref k) = self.key {
+            if let Some(k) = meta.get("kafka_key").and_then(Value::as_str) {
+                task::spawn(self.producer.send(record.key(k), 1));
+            } else if let Some(ref k) = self.key {
                 task::spawn(self.producer.send(record.key(k.as_str()), 1));
             } else {
                 task::spawn(self.producer.send(record, 1));
