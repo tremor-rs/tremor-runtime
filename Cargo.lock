@@ -2116,13 +2116,15 @@ dependencies = [
 
 [[package]]
 name = "http-types"
-version = "2.5.0"
+version = "2.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "50e703a631784b7881751ebff731cd645eb4c7f9b6288c19178ba9e1c4788d39"
+checksum = "3bc9a434e0182abff944d7d44190f02d141f269a3f31c45ac5368dc548bb934b"
 dependencies = [
  "anyhow",
+ "async-channel",
  "async-std",
  "cookie 0.14.2",
+ "futures-lite",
  "infer",
  "pin-project-lite",
  "rand 0.7.3",
