@@ -44,7 +44,7 @@ futures = "0.3"
 glob = "0.3"
 hashbrown = {version = "0.9", features = ["serde"]}
 hostname = "0.3"
-http-types = "2.5"
+http-types = "2.6"
 log4rs = "0.13"
 pin-project-lite = "0.1"
 rand = "0.7"
