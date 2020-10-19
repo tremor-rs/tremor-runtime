@@ -25,7 +25,7 @@ clap = {version = "3.0.0-beta.2", features = ["yaml", "color"]}
 clap_generate = "3.0.0-beta.2"
 difference = "2"
 dirs = "3"
-env_logger = "0.7.1"
+env_logger = "0.8.1"
 halfbrown = "0.1"
 http-types = "2.5"
 jemallocator = {version = "0.3", optional = false}
