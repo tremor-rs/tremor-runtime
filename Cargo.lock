@@ -161,15 +161,16 @@ dependencies = [
 
 [[package]]
 name = "async-compat"
-version = "0.1.4"
+version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3f0bb3019d8e5ffe88594b122ba9ba37280a3bc8d94a742b56c8417457215ae4"
+checksum = "dba33560a6a8357944496e20d172468b0eb1f7f879877dce248e0993872b95e1"
 dependencies = [
  "futures-core",
  "futures-io",
  "once_cell",
  "pin-project-lite",
  "tokio 0.2.22",
+ "tokio 0.3.0",
 ]
 
 [[package]]
@@ -4887,6 +4888,17 @@ dependencies = [
  "mio",
  "mio-uds",
  "num_cpus",
+ "pin-project-lite",
+ "slab",
+]
+
+[[package]]
+name = "tokio"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7137dbb0abee577362ccdc7df21605cfcbb949243aeab47dac9ea6ef7d830e21"
+dependencies = [
+ "bytes 0.5.6",
  "pin-project-lite",
  "slab",
 ]
