@@ -1108,6 +1108,8 @@ where
     }
 }
 
+/// A record pattern matches a target if the target is a record that contains **at least all
+/// declared keys** and the tests for **each of the declared key** match.
 #[inline]
 fn match_rp_expr<'run, 'event, 'script, Expr>(
     outer: &'script Expr,
@@ -1230,6 +1232,12 @@ where
     Ok(Some(acc))
 }
 
+/// An *array pattern* matches a target value if the *target* is an array and **each** test in the
+/// pattern matches **at least for one** element in the *target* indiscriminate of their positions.
+///
+/// %[ _ ] ~= [] = false
+/// %[ _ ] ~= [1] = true
+/// %[ _ ] ~= [x, y, z] = true
 #[inline]
 fn match_ap_expr<'run, 'event, 'script, Expr>(
     outer: &'script Expr,
@@ -1248,53 +1256,87 @@ where
     'script: 'event,
     'event: 'run,
 {
-    if let Some(a) = target.as_array() {
-        let mut acc = Vec::with_capacity(if opts.result_needed { a.len() } else { 0 });
-        let mut idx: u64 = 0;
-        for candidate in a {
-            'inner: for expr in &ap.exprs {
+    let res = if let Some(a) = target.as_array() {
+        // %[] - matches if target is an array
+        if ap.exprs.is_empty() {
+            Some(Value::array_with_capacity(0))
+        } else {
+            let mut acc = Vec::with_capacity(if opts.result_needed { a.len() } else { 0 });
+            for expr in &ap.exprs {
+                let mut matched = false;
                 match expr {
-                    ArrayPredicatePattern::Ignore => continue 'inner,
+                    ArrayPredicatePattern::Ignore => {
+                        // _ matches any element
+                        matched = !a.is_empty();
+                    }
                     ArrayPredicatePattern::Expr(e) => {
-                        let r = stry!(e.run(opts, env, event, state, meta, local));
-                        let vb: &Value = r.borrow();
-
-                        // NOTE: We are creating a new value here so we have to clone
-                        if val_eq(candidate, vb) && opts.result_needed {
-                            acc.push(Value::from(vec![Value::from(idx), r.into_owned()]));
+                        let mut idx: u64 = 0;
+                        'inner_expr: for candidate in a {
+                            let r = stry!(e.run(opts, env, event, state, meta, local));
+                            let vb: &Value = r.borrow();
+                            let expr_matches = val_eq(candidate, vb);
+                            matched |= expr_matches;
+                            if expr_matches {
+                                if opts.result_needed {
+                                    // NOTE: We are creating a new value here so we have to clone
+                                    acc.push(Value::from(vec![Value::from(idx), r.into_owned()]));
+                                } else {
+                                    // if we don't need the results, we can abort here as we have a match
+                                    break 'inner_expr;
+                                }
+                            }
+                            idx += 1;
                         }
                     }
                     ArrayPredicatePattern::Tilde(test) => {
-                        if let Ok(r) =
-                            test.extractor
-                                .extract(opts.result_needed, &candidate, &env.context)
-                        {
-                            if opts.result_needed {
-                                acc.push(Value::from(vec![Value::from(idx), r]));
+                        let mut idx: u64 = 0;
+                        'inner_tilde: for candidate in a {
+                            if let Ok(r) =
+                                test.extractor
+                                    .extract(opts.result_needed, &candidate, &env.context)
+                            {
+                                matched |= true;
+                                if opts.result_needed {
+                                    acc.push(Value::from(vec![Value::from(idx), r]));
+                                } else {
+                                    // if we don't need the results, we can abort here as we have a match
+                                    break 'inner_tilde;
+                                }
                             }
-                        } else {
-                            continue 'inner;
+                            idx += 1;
                         }
                     }
                     ArrayPredicatePattern::Record(rp) => {
-                        if let Some(r) = stry!(match_rp_expr(
-                            outer, opts, env, event, state, meta, local, candidate, rp,
-                        )) {
-                            if opts.result_needed {
-                                acc.push(Value::from(vec![Value::from(idx), r]))
-                            };
-                        } else {
-                            continue 'inner;
+                        let mut idx: u64 = 0;
+                        'inner_rec: for candidate in a {
+                            if let Some(r) = stry!(match_rp_expr(
+                                outer, opts, env, event, state, meta, local, candidate, rp,
+                            )) {
+                                matched |= true;
+                                if opts.result_needed {
+                                    acc.push(Value::from(vec![Value::from(idx), r]))
+                                } else {
+                                    // if we don't need the results, we can abort here as we have a match
+                                    break 'inner_rec;
+                                };
+                            }
+                            idx += 1;
                         }
                     }
                 }
+                // we did find a match for 1 pattern expression, we have no match at all ;-(
+                // short circuit here
+                if !matched {
+                    return Ok(None);
+                }
             }
-            idx += 1;
+            Some(Value::from(acc))
         }
-        Ok(Some(Value::from(acc)))
     } else {
-        Ok(None)
-    }
+        // not an array
+        None
+    };
+    Ok(res)
 }
 
 #[inline]
