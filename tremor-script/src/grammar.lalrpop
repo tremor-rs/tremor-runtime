@@ -1158,11 +1158,11 @@ TuplePredicatePatterns: ArrayPredicatePatternsRaw<'input> = {
 
 TuplePredicatePattern: ArrayPredicatePatternRaw<'input> = {
     ArrayPredicatePattern => <>,
-    "_" => ArrayPredicatePatternRaw::Ignore,
 }
 
 ArrayPredicatePattern: ArrayPredicatePatternRaw<'input> = {
     "~" <test:TestExpr> => ArrayPredicatePatternRaw::Tilde(test),
+    "_" => ArrayPredicatePatternRaw::Ignore,
     ComplexExprImut => ArrayPredicatePatternRaw::Expr(<>),
     RecordPattern => ArrayPredicatePatternRaw::Record(<>),
 }
