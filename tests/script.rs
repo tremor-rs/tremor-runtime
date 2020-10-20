@@ -144,7 +144,9 @@ test_cases!(
     empty_array_pattern,
     // TODO
     // const_in_const_lookup,
-    //INSERT
+    // INSERT
+    array_pattern_element,
+    array_pattern_ignore,
     string_quoted_curly,
     heredoc_quoted_curly,
     string_interpolation_import,

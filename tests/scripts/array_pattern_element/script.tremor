@@ -1,0 +1,4 @@
+match [event] of
+  case %[ 0 ] => true
+  default => false
+end;
