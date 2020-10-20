@@ -17,6 +17,10 @@ ENV RUSTFLAGS="-C target-feature=+avx,+avx2,+sse4.2"
 
 COPY Cargo.* ./
 
+# We change lto to 'thin' for docker builds so it
+# can be build on more moderate system
+RUN mv Cargo.toml Cargo.toml.orig && sed 's/lto = true/lto = "thin"/' Cargo.toml.orig > Cargo.toml
+
 # Main library
 COPY src ./src
 # supporting libraries
@@ -30,6 +34,7 @@ COPY tremor-common ./tremor-common
 
 RUN cat /proc/cpuinfo
 RUN cargo build --release --all --verbose
+RUN strip target/release/tremor
 
 FROM debian:buster-slim
 
