@@ -1,0 +1,4 @@
+match event of
+  case result = %[ 1, 2 ] => result
+  default => null
+end

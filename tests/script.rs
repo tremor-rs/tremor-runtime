@@ -64,9 +64,9 @@ macro_rules! test_cases {
                     };
                 }
                 assert_eq!(results.len(), out_json.len());
-                for value in results {
+                for (i, value) in results.iter().enumerate() {
                     if let Some(expected) = out_json.pop() {
-                        assert_eq!(sorsorted_serialize(&value)?, sorsorted_serialize(&expected)?);
+                        assert_eq!(sorsorted_serialize(&value)?, sorsorted_serialize(&expected)?, "Input event #{} Expected `{}`, but got `{}`", i, sorsorted_serialize(&expected)?, sorsorted_serialize(&value)?);
                     }
                 }
                 Ok(())
@@ -147,6 +147,7 @@ test_cases!(
     // INSERT
     array_pattern_element,
     array_pattern_ignore,
+    array_pattern_short_circuit,
     string_quoted_curly,
     heredoc_quoted_curly,
     string_interpolation_import,
