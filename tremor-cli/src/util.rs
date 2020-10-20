@@ -95,7 +95,7 @@ impl TremorApp {
 }
 
 pub(crate) fn tremor_home_dir() -> Result<String> {
-    dirs::home_dir()
+    dirs_next::home_dir()
         .and_then(|s| s.to_str().map(ToString::to_string))
         .ok_or_else(|| Error::from("Expected home_dir"))
         .map(|tremor_root| format!("{}/{}", tremor_root, ".tremor"))
