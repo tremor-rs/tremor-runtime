@@ -1270,8 +1270,7 @@ where
                         matched = !a.is_empty();
                     }
                     ArrayPredicatePattern::Expr(e) => {
-                        let mut idx: u64 = 0;
-                        'inner_expr: for candidate in a {
+                        'inner_expr: for (idx, candidate) in a.iter().enumerate() {
                             let r = stry!(e.run(opts, env, event, state, meta, local));
                             let vb: &Value = r.borrow();
                             let expr_matches = val_eq(candidate, vb);
@@ -1285,12 +1284,10 @@ where
                                     break 'inner_expr;
                                 }
                             }
-                            idx += 1;
                         }
                     }
                     ArrayPredicatePattern::Tilde(test) => {
-                        let mut idx: u64 = 0;
-                        'inner_tilde: for candidate in a {
+                        'inner_tilde: for (idx, candidate) in a.iter().enumerate() {
                             if let Ok(r) =
                                 test.extractor
                                     .extract(opts.result_needed, &candidate, &env.context)
@@ -1303,12 +1300,10 @@ where
                                     break 'inner_tilde;
                                 }
                             }
-                            idx += 1;
                         }
                     }
                     ArrayPredicatePattern::Record(rp) => {
-                        let mut idx: u64 = 0;
-                        'inner_rec: for candidate in a {
+                        'inner_rec: for (idx, candidate) in a.iter().enumerate() {
                             if let Some(r) = stry!(match_rp_expr(
                                 outer, opts, env, event, state, meta, local, candidate, rp,
                             )) {
@@ -1320,7 +1315,6 @@ where
                                     break 'inner_rec;
                                 };
                             }
-                            idx += 1;
                         }
                     }
                 }
