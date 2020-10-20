@@ -60,7 +60,6 @@ impl onramp::Impl for Metronome {
 
 #[async_trait::async_trait()]
 impl Source for Metronome {
-    type SourceReplyStreamExtra = ();
     fn id(&self) -> &TremorURL {
         &self.onramp_id
     }

@@ -35,7 +35,7 @@ pub struct Tcp {
 pub struct Int {
     uid: u64,
     config: Config,
-    listener: Option<Receiver<SourceReply<<Int as Source>::SourceReplyStreamExtra>>>,
+    listener: Option<Receiver<SourceReply>>,
     onramp_id: TremorURL,
 }
 impl std::fmt::Debug for Int {
@@ -72,12 +72,11 @@ impl onramp::Impl for Tcp {
 
 #[async_trait::async_trait()]
 impl Source for Int {
-    type SourceReplyStreamExtra = ();
     fn id(&self) -> &TremorURL {
         &self.onramp_id
     }
 
-    async fn pull_event(&mut self, _id: u64) -> Result<SourceReply<Self::SourceReplyStreamExtra>> {
+    async fn pull_event(&mut self, _id: u64) -> Result<SourceReply> {
         if let Some(listener) = self.listener.as_ref() {
             match listener.try_recv() {
                 Ok(r) => Ok(r),
@@ -112,7 +111,7 @@ impl Source for Int {
                 task::spawn(async move {
                     //let (reader, writer) = &mut (&stream, &stream);
                     let mut buffer = [0; BUFFER_SIZE_BYTES];
-                    if let Err(e) = tx.send(SourceReply::StartStream(stream_id, None)).await {
+                    if let Err(e) = tx.send(SourceReply::StartStream(stream_id)).await {
                         error!("TCP Error: {}", e);
                         return;
                     }
