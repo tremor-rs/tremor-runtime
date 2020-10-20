@@ -52,6 +52,12 @@ impl onramp::Impl for Ws {
     }
 }
 
+enum WsSourceReply {
+    StartStream(usize, Option<Sender<SerializedResponse>>),
+    EndStream(usize),
+    Data(SourceReply), // stupid wrapper around SourceReply::Data
+}
+
 /// encoded response and additional information
 /// for post-processing and assembling WS messages
 pub struct SerializedResponse {
@@ -66,13 +72,13 @@ pub struct Int {
     onramp_id: TremorURL,
     config: Config,
     is_linked: bool,
-    listener: Option<Receiver<SourceReply<<Int as Source>::SourceReplyStreamExtra>>>,
+    listener: Option<Receiver<WsSourceReply>>,
     post_processors: Vec<String>,
     // mapping of event id to stream id
     messages: BTreeMap<u64, usize>,
     // mapping of stream id to the stream sender
     // TODO alternative to this? possible to store actual ws_tream refs here?
-    streams: BTreeMap<usize, <Int as Source>::SourceReplyStreamExtra>,
+    streams: BTreeMap<usize, Sender<SerializedResponse>>,
 }
 
 impl std::fmt::Debug for Int {
@@ -119,7 +125,7 @@ impl Int {
 
 async fn handle_connection(
     source_url: TremorURL,
-    tx: Sender<SourceReply<Sender<SerializedResponse>>>,
+    tx: Sender<WsSourceReply>,
     raw_stream: TcpStream,
     origin_uri: EventOriginUri,
     processors: Vec<String>,
@@ -185,7 +191,7 @@ async fn handle_connection(
         None
     };
 
-    tx.send(SourceReply::StartStream(stream, stream_sender))
+    tx.send(WsSourceReply::StartStream(stream, stream_sender))
         .await?;
 
     while let Some(msg) = ws_read.next().await {
@@ -193,29 +199,29 @@ async fn handle_connection(
         match msg {
             Ok(Message::Text(t)) => {
                 meta.insert("binary", false)?;
-                tx.send(SourceReply::Data {
+                tx.send(WsSourceReply::Data(SourceReply::Data {
                     origin_uri: origin_uri.clone(),
                     data: t.into_bytes(),
                     meta: Some(meta),
                     codec_override: None,
                     stream,
-                })
+                }))
                 .await?;
             }
             Ok(Message::Binary(data)) => {
                 meta.insert("binary", true)?;
-                tx.send(SourceReply::Data {
+                tx.send(WsSourceReply::Data(SourceReply::Data {
                     origin_uri: origin_uri.clone(),
                     data,
                     meta: Some(meta),
                     codec_override: None,
                     stream,
-                })
+                }))
                 .await?;
             }
             Ok(Message::Ping(_)) | Ok(Message::Pong(_)) => (),
             Ok(Message::Close(_)) => {
-                tx.send(SourceReply::EndStream(stream)).await?;
+                tx.send(WsSourceReply::EndStream(stream)).await?;
                 break;
             }
             Err(e) => error!("WS error returned while waiting for client data: {}", e),
@@ -253,28 +259,31 @@ fn create_error_response(err: String, event_id: String, source_id: &TremorURL) -
 
 #[async_trait::async_trait()]
 impl Source for Int {
-    type SourceReplyStreamExtra = Sender<SerializedResponse>;
-
-    async fn pull_event(&mut self, id: u64) -> Result<SourceReply<Self::SourceReplyStreamExtra>> {
+    async fn pull_event(&mut self, id: u64) -> Result<SourceReply> {
         if let Some(listener) = self.listener.as_ref() {
             match listener.try_recv() {
-                Ok(r) => {
-                    match r {
+                Ok(r) => match r {
+                    WsSourceReply::Data(wrapped) => match wrapped {
                         SourceReply::Data { stream, .. } => {
                             self.messages.insert(id, stream);
+                            Ok(wrapped)
                         }
-                        SourceReply::StartStream(stream, ref sender) => {
-                            if let Some(tx) = sender {
-                                self.streams.insert(stream, tx.clone());
-                            }
+                        _ => Err(
+                            "Invalid WsSourceReply received in pull_event. Something is fishy!"
+                                .into(),
+                        ),
+                    },
+                    WsSourceReply::StartStream(stream, ref sender) => {
+                        if let Some(tx) = sender {
+                            self.streams.insert(stream, tx.clone());
                         }
-                        SourceReply::EndStream(stream) => {
-                            self.streams.remove(&stream);
-                        }
-                        _ => (),
+                        Ok(SourceReply::StartStream(stream))
                     }
-                    Ok(r)
-                }
+                    WsSourceReply::EndStream(stream) => {
+                        self.streams.remove(&stream);
+                        Ok(SourceReply::EndStream(stream))
+                    }
+                },
                 Err(TryRecvError::Empty) => Ok(SourceReply::Empty(10)),
                 Err(TryRecvError::Closed) => {
                     Ok(SourceReply::StateChange(SourceState::Disconnected))

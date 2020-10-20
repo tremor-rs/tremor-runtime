@@ -97,8 +97,6 @@ impl Acc {
 
 #[async_trait::async_trait()]
 impl Source for Blaster {
-    type SourceReplyStreamExtra = ();
-
     fn id(&self) -> &TremorURL {
         &self.onramp_id
     }

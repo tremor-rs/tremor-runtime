@@ -74,7 +74,7 @@ pub(crate) enum SourceState {
 }
 
 #[derive(Debug)]
-pub(crate) enum SourceReply<T = ()> {
+pub(crate) enum SourceReply {
     /// A normal data event with a `Vec<u8>` for data
     Data {
         origin_uri: EventOriginUri,
@@ -90,10 +90,8 @@ pub(crate) enum SourceReply<T = ()> {
         origin_uri: EventOriginUri,
         data: LineValue,
     },
-    /// A stream is opened with an optional Sender to answer an
-    /// event back to the channel
-    /// TODO 002: get rid of this and internalize it to the WS onramp
-    StartStream(usize, Option<T>),
+    /// A stream is opened
+    StartStream(usize),
     /// A stream is closed
     EndStream(usize),
     /// We change the connection state of the source
@@ -104,11 +102,9 @@ pub(crate) enum SourceReply<T = ()> {
 
 #[async_trait::async_trait]
 pub(crate) trait Source {
-    /// type used in SourceReply::StartStream
-    type SourceReplyStreamExtra: Send;
     /// Pulls an event from the source if one exists
     /// determine the codec to be used
-    async fn pull_event(&mut self, id: u64) -> Result<SourceReply<Self::SourceReplyStreamExtra>>;
+    async fn pull_event(&mut self, id: u64) -> Result<SourceReply>;
 
     /// This callback is called when the data provided from
     /// pull_event did not create any events, this is needed for
@@ -530,7 +526,7 @@ where
             //       lets call it `wait_for_error_pipelines` (horrible name)
             if !self.triggered && !pipelines_out_empty {
                 match self.source.pull_event(self.id).await {
-                    Ok(SourceReply::StartStream(id, _)) => {
+                    Ok(SourceReply::StartStream(id)) => {
                         self.preprocessors
                             .insert(id, make_preprocessors(&self.pp_template)?);
                     }

@@ -273,13 +273,11 @@ impl ChronomicQueue {
 
 #[async_trait::async_trait()]
 impl Source for Crononome {
-    type SourceReplyStreamExtra = ();
-
     fn id(&self) -> &TremorURL {
         &self.onramp_id
     }
 
-    async fn pull_event(&mut self, id: u64) -> Result<SourceReply<Self::SourceReplyStreamExtra>> {
+    async fn pull_event(&mut self, id: u64) -> Result<SourceReply> {
         if let Some(trigger) = self.cq.next() {
             let mut origin_uri = self.origin_uri.clone();
             origin_uri.path.push(trigger.0.clone());
