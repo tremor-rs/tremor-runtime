@@ -1,0 +1,11 @@
+define qos::roundrobin operator roundrobin
+with
+  outputs = ["one", "two", "three"]
+end;
+
+create operator roundrobin;
+
+select event from in into roundrobin;
+select event from roundrobin/one into out;
+select event from roundrobin/two into out;
+select event from roundrobin/three into out;
