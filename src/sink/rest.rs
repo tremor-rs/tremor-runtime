@@ -18,10 +18,11 @@ use async_channel::{bounded, Receiver, Sender};
 use async_std::task::JoinHandle;
 use halfbrown::HashMap;
 use http_types::mime::Mime;
-use http_types::Method;
+use http_types::{headers::HeaderValue, Method};
 use serde::de::{self, MapAccess, Visitor};
 use serde::{Deserialize, Deserializer};
 use std::borrow::Borrow;
+use std::borrow::Cow;
 use std::fmt;
 use std::marker::PhantomData;
 use std::str::FromStr;
@@ -691,7 +692,7 @@ fn build_request(
     let mut body: Vec<u8> = vec![];
     let mut method = None;
     let mut endpoint = None;
-    let mut headers = Vec::with_capacity(8);
+    let mut headers: Vec<(&Cow<str>, Vec<HeaderValue>)> = Vec::with_capacity(8);
     let mut codec_in_use = None;
     for (data, meta) in event.value_meta_iter() {
         if let Some(request_meta) = meta.get("request") {
@@ -718,7 +719,8 @@ fn build_request(
                             continue;
                         }
                         if let Some(value) = v.as_str() {
-                            headers.push((header_name, value));
+                            let values = vec![HeaderValue::from_str(value)?];
+                            headers.push((header_name, values));
                             // TODO: deduplicate
                             // try to determine codec
                             if "content-type".eq_ignore_ascii_case(header_name)
@@ -731,11 +733,11 @@ fn build_request(
                                         .map_or(codec, |c| c.borrow()),
                                 );
                             }
-                        }
-                        if let Some(array) = v.as_array() {
+                        } else if let Some(array) = v.as_array() {
+                            let mut values = Vec::with_capacity(array.len());
                             for header in array {
                                 if let Some(value) = header.as_str() {
-                                    headers.push((header_name, value));
+                                    values.push(HeaderValue::from_str(value)?);
                                     // try to determine codec
                                     if "content-type".eq_ignore_ascii_case(header_name)
                                         && codec_in_use.is_none()
@@ -749,6 +751,7 @@ fn build_request(
                                     }
                                 }
                             }
+                            headers.push((header_name, values));
                         }
                     }
                 }
@@ -796,17 +799,20 @@ fn build_request(
 
     // build headers from config
     for (k, v) in default_headers {
-        request_builder = request_builder.header(k.clone().as_str(), v.clone());
+        request_builder = request_builder.header(k.as_str(), v.as_str());
     }
 
     // build headers from meta - effectivelty overwrite config headers in case of conflict
     for (k, v) in headers {
         if "content-type".eq_ignore_ascii_case(k) {
-            if let Ok(mime) = Mime::from_str(v) {
-                request_builder = request_builder.content_type(mime);
+            'inner: for hv in &v {
+                if let Ok(mime) = Mime::from_str(hv.as_str()) {
+                    request_builder = request_builder.content_type(mime);
+                    break 'inner;
+                }
             }
         }
-        request_builder = request_builder.header(k.to_string().as_str(), v);
+        request_builder = request_builder.header(k.as_ref(), v.as_slice());
     }
     // overwrite Host header
     // otherwise we might run into trouble when overwriting the endpoint.
@@ -977,6 +983,8 @@ impl AtomicMaxCounter {
 #[cfg(test)]
 mod test {
 
+    use http_types::headers::HeaderValues;
+
     use super::*;
 
     #[test]
@@ -1095,6 +1103,55 @@ mod test {
         };
         let res = ep.as_url();
         assert!(res.is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn build_request_multiple_headers() -> Result<()> {
+        let mut event = Event::default();
+        let mut meta = Value::object_with_capacity(2);
+        let mut request_meta = Value::object_with_capacity(2);
+        let mut request_headers_meta = Value::object_with_capacity(2);
+        request_headers_meta.insert("Content-Type", "text/plain")?;
+        request_headers_meta.insert("Content-Length", "3")?;
+        request_headers_meta.insert("Overwrite-Me", "indeed!")?;
+        let mut multiple = Value::array_with_capacity(2);
+        multiple.push("first")?;
+        multiple.push("second")?;
+        request_headers_meta.insert("Multiple", multiple)?;
+        request_meta.insert("headers", request_headers_meta)?;
+        meta.insert("request", request_meta)?;
+
+        let data = Value::String("foo".into());
+        event.data = (data, meta).into();
+        let codec = crate::codec::lookup("string")?;
+        let codec_map = halfbrown::HashMap::with_capacity(0);
+        let mut pp = vec![];
+        let mut default_headers = halfbrown::HashMap::with_capacity(2);
+        default_headers.insert_nocheck("Server".to_string(), "Tremor".to_string());
+        default_headers.insert_nocheck("Overwrite-Me".to_string(), "oh noes!".to_string());
+        let endpoint = Endpoint::from_str("http://localhost:65535/path&query=value#fragment")?;
+        let request = build_request(
+            &event,
+            codec.as_ref(),
+            &codec_map,
+            pp.as_mut_slice(),
+            Method::Get,
+            &default_headers,
+            &endpoint,
+        )?;
+        let expected = HeaderValues::from(HeaderValue::from_str("indeed!")?);
+        assert_eq!(
+            Some(expected.to_string()),
+            request.header("Overwrite-Me").map(ToString::to_string)
+        );
+        let mut expected_multiple = HeaderValues::from(HeaderValue::from_str("first")?);
+        expected_multiple.append(&mut HeaderValues::from(HeaderValue::from_str("second")?));
+        assert_eq!(
+            Some(expected_multiple.to_string()),
+            request.header("Multiple").map(ToString::to_string)
+        );
+        assert_eq!(request.url(), &endpoint.as_url()?);
         Ok(())
     }
 }
