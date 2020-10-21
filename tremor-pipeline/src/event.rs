@@ -76,6 +76,7 @@ impl Event {
             Event::cb_fail(ingest_ns, ids)
         }
     }
+
     /// Creates a new ack insight from the event, consums the `op_meta` and
     /// `origin_uri` of the event may return None if no insight is needed
     #[must_use]
