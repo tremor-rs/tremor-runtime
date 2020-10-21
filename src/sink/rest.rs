@@ -233,9 +233,6 @@ pub struct Config {
     pub concurrency: usize,
 
     // HTTP method to use (default: POST)
-    // TODO implement Deserialize for http_types::Method
-    // https://docs.rs/http-types/2.4.0/http_types/enum.Method.html
-    // or have our own Method enum here and deserialize into it
     #[serde(default = "dflt_method")]
     pub method: SerdeMethod,
 
