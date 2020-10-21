@@ -841,13 +841,12 @@ async fn build_response_events(
     let mut headers = Value::object_with_capacity(8);
     {
         for (name, values) in response.iter() {
-            let mut header_value = String::new();
-            for value in values {
-                // TODO join with comma. or align type with request_headers (values is array of
-                // strings)
-                header_value.push_str(value.to_string().as_str());
-            }
-            headers.insert(name.to_string(), header_value)?;
+            let header_values: Value = values
+                .iter()
+                .map(ToString::to_string)
+                .map(Value::from)
+                .collect();
+            headers.insert(name.to_string(), header_values)?;
         }
     }
     response_meta.insert("headers", headers)?;
@@ -983,7 +982,7 @@ impl AtomicMaxCounter {
 #[cfg(test)]
 mod test {
 
-    use http_types::headers::HeaderValues;
+    use http_types::{headers::HeaderValues, StatusCode};
 
     use super::*;
 
@@ -1125,7 +1124,7 @@ mod test {
         let data = Value::String("foo".into());
         event.data = (data, meta).into();
         let codec = crate::codec::lookup("string")?;
-        let codec_map = halfbrown::HashMap::with_capacity(0);
+        let codec_map = crate::codec::builtin_codec_map();
         let mut pp = vec![];
         let mut default_headers = halfbrown::HashMap::with_capacity(2);
         default_headers.insert_nocheck("Server".to_string(), "Tremor".to_string());
@@ -1152,6 +1151,56 @@ mod test {
             request.header("Multiple").map(ToString::to_string)
         );
         assert_eq!(request.url(), &endpoint.as_url()?);
+        Ok(())
+    }
+
+    #[async_std::test]
+    async fn build_response() -> Result<()> {
+        use simd_json::json;
+        let sink_url = TremorURL::from_offramp_id("rest")?;
+        let id = Ids::default();
+        let event_origin_uri = EventOriginUri::default();
+        let mut body = Body::from_string(r#"{"foo": true}"#.to_string());
+        body.set_mime(http_types::mime::JSON);
+        let mut response = http_types::Response::new(StatusCode::Ok);
+        response.append_header("Server", "Upstream");
+        response.append_header("Multiple", "first");
+        response.append_header("Multiple", "second");
+        response.set_body(body);
+        let codec = crate::codec::lookup("string")?;
+        let codec_map = crate::codec::builtin_codec_map();
+        let mut pp = vec![];
+
+        let res = build_response_events(
+            &sink_url,
+            &id,
+            &event_origin_uri,
+            Response::from(response),
+            codec.as_ref(),
+            &codec_map,
+            pp.as_mut_slice(),
+        )
+        .await?;
+        assert_eq!(1, res.len());
+        if let Some(event) = res.get(0) {
+            let mut expected_data = Value::object_with_capacity(1);
+            expected_data.insert("foo", true)?;
+            let data_parts = event.data.parts();
+            assert_eq!(&mut expected_data, data_parts.0);
+            let mut expected_meta = json!({
+                "response": {
+                    "headers": {
+                        "multiple": ["first", "second"],
+                        "server": ["Upstream"],
+                        "content-type": ["application/json"]
+                    }
+                }
+            });
+            if let Some(response) = expected_meta.get_mut("response") {
+                response.insert("status", 200_u64)?;
+            }
+            assert_eq!(expected_meta, data_parts.1.to_owned());
+        }
         Ok(())
     }
 }
