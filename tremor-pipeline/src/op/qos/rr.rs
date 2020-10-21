@@ -108,7 +108,7 @@ impl Operator for RoundRobin {
             }
         }
         if let Some((out, oid)) = output {
-            event.op_meta.insert(uid, oid.into());
+            event.op_meta.insert(uid, oid);
             Ok(vec![(out.into(), event)].into())
         } else {
             Ok(vec![("overflow".into(), event)].into())
@@ -216,7 +216,7 @@ mod test {
 
         // Mark output 0 as broken
         let mut op_meta = OpMeta::default();
-        op_meta.insert(0, 0.into());
+        op_meta.insert(0, 0);
 
         let mut insight = Event {
             id: 1.into(),
@@ -261,7 +261,7 @@ mod test {
 
         // Mark output 1 as restored
         let mut op_meta = OpMeta::default();
-        op_meta.insert(0, 0.into());
+        op_meta.insert(0, 0);
 
         let mut insight = Event {
             id: 1.into(),
