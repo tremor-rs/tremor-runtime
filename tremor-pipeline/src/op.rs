@@ -31,7 +31,7 @@ use std::borrow::Cow;
 use tremor_script::Value;
 
 /// Response type for operator callbacks returning both events and insights
-#[derive(Default, Clone)]
+#[derive(Default, Clone, PartialEq, Debug)]
 pub struct EventAndInsights {
     /// Events being returned
     /// tuples of (port, event)
