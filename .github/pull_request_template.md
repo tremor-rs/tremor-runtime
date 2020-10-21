@@ -11,8 +11,8 @@
 <!-- please include links to related issues are RFCs, remove if not required  -->
 
 * [RFC](https://rfcs.tremor.rs/0000-.../)
-* Related Issues: fixes #xxx, closed #xxx
-* Related [docs PR](https://github.com/tremor-rs/tremor-www-docs/pull/XX)
+* Related Issues: fixes #000, closed #000
+* Related [docs PR](https://github.com/tremor-rs/tremor-www-docs/pull/000)
 
 ## Checklist
 
