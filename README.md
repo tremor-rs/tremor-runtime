@@ -1,6 +1,6 @@
 # Tremor
 
-[![Build Status]][actions-Tests] [![Quality Checks]][actions-Checks] [![License Checks]][actions-License-audit] [![Security Checks]][actions-Security-audit] [![Code Coverage]][codecov.io] [![Dependabot Status]][dependabot.com]
+[![Build Status]][actions-Tests] [![Quality Checks]][actions-Checks] [![License Checks]][actions-License-audit] [![Security Checks]][actions-Security-audit] [![Code Coverage]][codecov.io] [![Dependabot Status]][dependabot.com] [![CII Best Practices](https://bestpractices.coreinfrastructure.org/projects/4356/badge)](https://bestpractices.coreinfrastructure.org/projects/4356)
 
 [Build Status]: https://github.com/tremor-rs/tremor-runtime/workflows/Tests/badge.svg
 [actions-Tests]: https://github.com/tremor-rs/tremor-runtime/actions?query=workflow%3ATests
