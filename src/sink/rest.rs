@@ -190,6 +190,37 @@ where
     deserializer.deserialize_any(StringOrStruct(PhantomData))
 }
 
+/// Machinery for deserializing the HTTP method
+struct MethodStrVisitor;
+
+impl<'de> Visitor<'de> for MethodStrVisitor {
+    type Value = SerdeMethod;
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("an HTTP method string.")
+    }
+
+    fn visit_str<E>(self, v: &str) -> core::result::Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Method::from_str(v)
+            .map(SerdeMethod)
+            .map_err(|e| serde::de::Error::custom(e.to_string()))
+    }
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+pub struct SerdeMethod(Method);
+
+impl<'de> Deserialize<'de> for SerdeMethod {
+    fn deserialize<D>(deserializer: D) -> core::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_str(MethodStrVisitor)
+    }
+}
+
 #[derive(Clone, Debug, Deserialize)]
 pub struct Config {
     /// endpoint url - given as String or struct
@@ -202,11 +233,8 @@ pub struct Config {
     pub concurrency: usize,
 
     // HTTP method to use (default: POST)
-    // TODO implement Deserialize for http_types::Method
-    // https://docs.rs/http-types/2.4.0/http_types/enum.Method.html
-    // or have our own Method enum here and deserialize into it
-    #[serde(skip_deserializing, default = "dflt_method")]
-    pub method: Method,
+    #[serde(default = "dflt_method")]
+    pub method: SerdeMethod,
 
     #[serde(default)]
     pub headers: HashMap<String, String>,
@@ -216,8 +244,8 @@ fn dflt_concurrency() -> usize {
     4
 }
 
-fn dflt_method() -> Method {
-    Method::Post
+fn dflt_method() -> SerdeMethod {
+    SerdeMethod(Method::Post)
 }
 
 impl ConfigImpl for Config {}
@@ -385,7 +413,7 @@ impl Sink for Rest {
             .iter()
             .map(|(k, v)| (k.clone(), v.boxed_clone()))
             .collect::<HashMap<String, Box<dyn Codec>>>();
-        let default_method = self.config.method;
+        let default_method = self.config.method.0;
         let endpoint = self.config.endpoint.clone();
         let config_headers = self.config.headers.clone();
         let sink_url = sink_url.clone();
@@ -975,6 +1003,7 @@ mod test {
                 ..Endpoint::default()
             }
         );
+        assert_eq!(config.method.0, Method::Get);
         Ok(())
     }
 
@@ -997,6 +1026,19 @@ mod test {
                 ..Endpoint::default()
             }
         );
+        assert_eq!(config.method.0, Method::Options);
+        Ok(())
+    }
+
+    #[test]
+    fn deserialize_method() -> Result<()> {
+        let config_s = r#"
+          endpoint: http://localhost:8080/
+          method: PATCH
+        "#;
+        let v: serde_yaml::Value = serde_yaml::from_str(config_s)?;
+        let config = Config::new(&v)?;
+        assert_eq!(config.method.0, Method::Patch);
         Ok(())
     }
 
