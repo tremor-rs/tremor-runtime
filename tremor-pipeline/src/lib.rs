@@ -143,8 +143,11 @@ pub struct OpMeta(BTreeMap<PrimStr<u64>, OwnedValue>);
 
 impl OpMeta {
     /// inserts a value
-    pub fn insert(&mut self, key: u64, value: OwnedValue) -> Option<OwnedValue> {
-        self.0.insert(PrimStr(key), value)
+    pub fn insert<V>(&mut self, key: u64, value: V) -> Option<OwnedValue>
+    where
+        OwnedValue: From<V>,
+    {
+        self.0.insert(PrimStr(key), OwnedValue::from(value))
     }
     /// reads a value
     pub fn get(&mut self, key: u64) -> Option<&OwnedValue> {
@@ -1164,10 +1167,31 @@ mod test {
         let p = PrimStr(42);
         let fourtytwo = r#""42""#;
         let mut fourtytwo_s = fourtytwo.to_string();
+        let mut fourtytwo_i = "42".to_string();
         assert_eq!(fourtytwo, p.json_string().unwrap());
         assert_eq!(
             p,
             PrimStr::from_slice(unsafe { fourtytwo_s.as_bytes_mut() }).unwrap()
         );
+        assert!(PrimStr::<i32>::from_slice(unsafe { fourtytwo_i.as_bytes_mut() }).is_err());
+    }
+
+    #[test]
+    fn op_meta_merge() {
+        let mut m1 = OpMeta::default();
+        let mut m2 = OpMeta::default();
+        m1.insert(1, 1);
+        m1.insert(2, 1);
+        m2.insert(1, 2);
+        m2.insert(3, 2);
+        m1.merge(m2);
+
+        assert!(m1.contains_key(1));
+        assert!(m1.contains_key(2));
+        assert!(m1.contains_key(3));
+
+        assert_eq!(m1.get(1).unwrap(), &2);
+        assert_eq!(m1.get(2).unwrap(), &1);
+        assert_eq!(m1.get(3).unwrap(), &2);
     }
 }
