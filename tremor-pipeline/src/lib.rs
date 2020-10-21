@@ -35,21 +35,18 @@ extern crate rental;
 
 use crate::errors::{ErrorKind, Result};
 use crate::op::prelude::*;
+use executable_graph::NodeConfig;
 use halfbrown::HashMap;
 use lazy_static::lazy_static;
 use op::trickle::select::WindowImpl;
 use petgraph::graph::{self, NodeIndex};
-use serde::Serialize;
 use simd_json::{json, OwnedValue};
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::iter::Iterator;
 use std::str::FromStr;
-use std::{
-    fmt,
-    sync::{Arc, Mutex},
-};
+use std::{fmt, sync::Mutex};
 use tremor_script::prelude::*;
 use tremor_script::query::StmtRentalWrapper;
 
@@ -337,69 +334,6 @@ pub enum SignalKind {
     Tick,
 }
 
-/// Configuration for a node
-#[derive(Debug, Clone, PartialOrd, Eq)]
-pub struct NodeConfig {
-    pub(crate) id: Cow<'static, str>,
-    pub(crate) kind: NodeKind,
-    pub(crate) op_type: String,
-    pub(crate) config: ConfigMap,
-    pub(crate) defn: Option<Arc<StmtRentalWrapper>>,
-    pub(crate) node: Option<Arc<StmtRentalWrapper>>,
-}
-
-impl Display for NodeConfig {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.kind {
-            NodeKind::Input => write!(f, "--> {}", self.id),
-            NodeKind::Output => write!(f, "{} -->", self.id),
-            NodeKind::Operator => write!(f, "{}", self.id),
-        }
-    }
-}
-
-impl NodeConfig {
-    /// Creates a `NodeConfig` from a config struct
-    pub fn from_config<C, I>(id: I, config: C) -> Result<Self>
-    where
-        C: Serialize,
-        Cow<'static, str>: From<I>,
-    {
-        let config = serde_yaml::to_vec(&config)?;
-
-        Ok(NodeConfig {
-            id: id.into(),
-            kind: NodeKind::Operator,
-            op_type: "".into(),
-            config: serde_yaml::from_slice(&config)?,
-            defn: None,
-            node: None,
-        })
-    }
-}
-
-// We ignore stmt on equality and hasing as they're only
-// carried through for implementation purposes not part
-// if the identiy of a node
-
-impl PartialEq for NodeConfig {
-    fn eq(&self, other: &Self) -> bool {
-        self.id == other.id
-            && self.kind == other.kind
-            && self.op_type == other.op_type
-            && self.config == other.config
-    }
-}
-
-impl std::hash::Hash for NodeConfig {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.id.hash(state);
-        self.kind.hash(state);
-        self.op_type.hash(state);
-        self.config.hash(state);
-    }
-}
-
 fn factory(node: &NodeConfig) -> Result<Box<dyn InitializableOperator>> {
     #[cfg(feature = "bert")]
     use op::bert::{SequenceClassificationFactory, SummerizationFactory};
@@ -437,19 +371,6 @@ fn factory(node: &NodeConfig) -> Result<Box<dyn InitializableOperator>> {
 
 fn operator(node: &NodeConfig) -> Result<Box<dyn Operator + 'static>> {
     factory(&node)?.from_node(node)
-}
-
-impl NodeConfig {
-    pub(crate) fn to_op(
-        &self,
-        uid: u64,
-        resolver: NodeLookupFn,
-        defn: Option<StmtRentalWrapper>,
-        node: Option<StmtRentalWrapper>,
-        window: Option<HashMap<String, WindowImpl>>,
-    ) -> Result<OperatorNode> {
-        resolver(&self, uid, defn, node, window)
-    }
 }
 
 pub(crate) type ConfigGraph = graph::DiGraph<NodeConfig, u8>;

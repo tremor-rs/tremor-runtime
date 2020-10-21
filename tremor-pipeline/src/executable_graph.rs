@@ -12,13 +12,94 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::borrow::Cow;
+use std::{borrow::Cow, fmt, fmt::Display, sync::Arc};
 
-use crate::{common_cow, errors::Result, op::prelude::IN, ExecPortIndexMap, NodeMetrics};
+use crate::{
+    common_cow,
+    errors::Result,
+    op::{prelude::IN, trickle::select::WindowImpl},
+    ConfigMap, ExecPortIndexMap, NodeLookupFn, NodeMetrics,
+};
 use crate::{op::EventAndInsights, Event, NodeKind, Operator};
 use halfbrown::HashMap;
 use simd_json::BorrowedValue;
-use tremor_script::{LineValue, ValueAndMeta};
+use tremor_script::{query::StmtRentalWrapper, LineValue, ValueAndMeta};
+
+/// Configuration for a node
+#[derive(Debug, Clone, PartialOrd, Eq)]
+pub struct NodeConfig {
+    pub(crate) id: Cow<'static, str>,
+    pub(crate) kind: NodeKind,
+    pub(crate) op_type: String,
+    pub(crate) config: ConfigMap,
+    pub(crate) defn: Option<Arc<StmtRentalWrapper>>,
+    pub(crate) node: Option<Arc<StmtRentalWrapper>>,
+}
+
+impl Display for NodeConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.kind {
+            NodeKind::Input => write!(f, "--> {}", self.id),
+            NodeKind::Output => write!(f, "{} -->", self.id),
+            NodeKind::Operator => write!(f, "{}", self.id),
+        }
+    }
+}
+
+impl NodeConfig {
+    /// Creates a `NodeConfig` from a config struct
+    pub fn from_config<C, I>(id: I, config: C) -> Result<Self>
+    where
+        C: serde::Serialize,
+        Cow<'static, str>: From<I>,
+    {
+        let config = serde_yaml::to_vec(&config)?;
+
+        Ok(NodeConfig {
+            id: id.into(),
+            kind: NodeKind::Operator,
+            op_type: "".into(),
+            config: serde_yaml::from_slice(&config)?,
+            defn: None,
+            node: None,
+        })
+    }
+}
+
+// We ignore stmt on equality and hasing as they're only
+// carried through for implementation purposes not part
+// if the identiy of a node
+
+impl PartialEq for NodeConfig {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+            && self.kind == other.kind
+            && self.op_type == other.op_type
+            && self.config == other.config
+    }
+}
+
+impl std::hash::Hash for NodeConfig {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.id.hash(state);
+        self.kind.hash(state);
+        self.op_type.hash(state);
+        self.config.hash(state);
+    }
+}
+
+impl NodeConfig {
+    pub(crate) fn to_op(
+        &self,
+        uid: u64,
+        resolver: NodeLookupFn,
+        defn: Option<StmtRentalWrapper>,
+        node: Option<StmtRentalWrapper>,
+        window: Option<HashMap<String, WindowImpl>>,
+    ) -> Result<OperatorNode> {
+        resolver(&self, uid, defn, node, window)
+    }
+}
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct State {
@@ -432,5 +513,32 @@ impl ExecutableGraph {
             // self.run(returns)?
         }
         Ok(has_events)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use std::{
+        collections::hash_map::DefaultHasher,
+        hash::{Hash, Hasher},
+    };
+    #[test]
+    fn node_conjfig_eq() {
+        #[derive(Serialize)]
+        struct C();
+        let n0 = NodeConfig::from_config("node", C()).unwrap();
+        let n1 = NodeConfig::from_config("other", C()).unwrap();
+        assert_eq!(n0, n0);
+        assert_ne!(n0, n1);
+        let mut h1 = DefaultHasher::new();
+        let mut h2 = DefaultHasher::new();
+        let mut h3 = DefaultHasher::new();
+        n0.hash(&mut h1);
+        n0.hash(&mut h2);
+
+        assert_eq!(h1.finish(), h2.finish());
+        n1.hash(&mut h3);
+        assert_ne!(h2.finish(), h3.finish());
     }
 }
