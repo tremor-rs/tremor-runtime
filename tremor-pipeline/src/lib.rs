@@ -1194,4 +1194,68 @@ mod test {
         assert_eq!(m1.get(2).unwrap(), &1);
         assert_eq!(m1.get(3).unwrap(), &2);
     }
+
+    #[test]
+    fn cbaction_creation() {
+        assert_eq!(CBAction::default(), CBAction::None);
+        assert_eq!(CBAction::from(true), CBAction::Ack);
+        assert_eq!(CBAction::from(false), CBAction::Fail);
+    }
+
+    #[test]
+    fn cbaction_is_gd() {
+        assert_eq!(CBAction::None.is_gd(), false);
+
+        assert_eq!(CBAction::Fail.is_gd(), true);
+        assert_eq!(CBAction::Ack.is_gd(), true);
+
+        assert_eq!(CBAction::Open.is_gd(), false);
+        assert_eq!(CBAction::Close.is_gd(), false);
+    }
+
+    #[test]
+    fn cbaction_is_cb() {
+        assert_eq!(CBAction::None.is_cb(), false);
+
+        assert_eq!(CBAction::Fail.is_cb(), false);
+        assert_eq!(CBAction::Ack.is_cb(), false);
+
+        assert_eq!(CBAction::Open.is_cb(), true);
+        assert_eq!(CBAction::Close.is_cb(), true);
+    }
+
+    #[test]
+    fn ids() {
+        let mut ids1 = Ids::new(1, 1);
+        let mut ids2 = Ids::new(1, 2);
+        ids1.add(
+            Some(EventOriginUri {
+                uid: 2,
+                ..EventOriginUri::default()
+            }),
+            1,
+        );
+
+        ids2.add(
+            Some(EventOriginUri {
+                uid: 2,
+                ..EventOriginUri::default()
+            }),
+            3,
+        );
+
+        assert_eq!(ids1.get(1), Some(1));
+        assert_eq!(ids1.get(2), Some(1));
+
+        assert_eq!(ids2.get(1), Some(2));
+        assert_eq!(ids2.get(2), Some(3));
+
+        ids1.merge(&ids2);
+
+        assert_eq!(ids1.get(1), Some(2));
+        assert_eq!(ids1.get(2), Some(3));
+
+        let ids = Ids::from(42u64);
+        assert_eq!(ids.get(0), Some(42));
+    }
 }
