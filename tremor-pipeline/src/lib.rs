@@ -98,7 +98,7 @@ where
     where
         W: std::io::Write,
     {
-        write!(writer, "{}", self.0)
+        write!(writer, "\"{}\"", self.0)
     }
 }
 
@@ -110,7 +110,7 @@ where
     where
         W: std::io::Write,
     {
-        write!(writer, "{}", self.0)
+        write!(writer, "\"{}\"", self.0)
     }
 }
 
@@ -1152,5 +1152,22 @@ impl ExecutableGraph {
             // self.run(returns)?
         }
         Ok(has_events)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use simd_json_derive::{Deserialize, Serialize};
+    #[test]
+    fn prim_str() {
+        let p = PrimStr(42);
+        let fourtytwo = r#""42""#;
+        let mut fourtytwo_s = fourtytwo.to_string();
+        assert_eq!(fourtytwo, p.json_string().unwrap());
+        assert_eq!(
+            p,
+            PrimStr::from_slice(unsafe { fourtytwo_s.as_bytes_mut() }).unwrap()
+        );
     }
 }
