@@ -518,6 +518,8 @@ impl ExecutableGraph {
 
 #[cfg(test)]
 mod test {
+    use crate::op::identity::PassthroughFactory;
+
     use super::*;
     use std::{
         collections::hash_map::DefaultHasher,
@@ -525,10 +527,8 @@ mod test {
     };
     #[test]
     fn node_conjfig_eq() {
-        #[derive(Serialize)]
-        struct C();
-        let n0 = NodeConfig::from_config("node", C()).unwrap();
-        let n1 = NodeConfig::from_config("other", C()).unwrap();
+        let n0 = NodeConfig::from_config("node", ()).unwrap();
+        let n1 = NodeConfig::from_config("other", ()).unwrap();
         assert_eq!(n0, n0);
         assert_ne!(n0, n1);
         let mut h1 = DefaultHasher::new();
@@ -540,5 +540,27 @@ mod test {
         assert_eq!(h1.finish(), h2.finish());
         n1.hash(&mut h3);
         assert_ne!(h2.finish(), h3.finish());
+    }
+
+    #[test]
+    fn operator_node() {
+        let c = NodeConfig::from_config("passthrough", ()).unwrap();
+
+        let mut n = OperatorNode {
+            id: "passthrough".into(),
+            kind: NodeKind::Operator,
+            op_type: "passthrough".into(),
+            uid: 0,
+            op: PassthroughFactory::new_boxed().from_node(&c).unwrap(),
+        };
+        assert!(!n.handles_contraflow());
+        assert!(!n.handles_signal());
+        assert!(!n.handles_contraflow());
+        let mut e = Event::default();
+        n.on_contraflow(0, &mut e);
+        assert_eq!(e, Event::default());
+        assert_eq!(n.on_signal(0, &mut e).unwrap(), EventAndInsights::default());
+        assert_eq!(e, Event::default());
+        assert!(n.metrics(HashMap::default(), 0).unwrap().is_empty());
     }
 }
