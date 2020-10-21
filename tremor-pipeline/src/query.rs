@@ -99,6 +99,7 @@ impl From<tremor_script::query::Query> for Query {
         Self(q)
     }
 }
+
 impl Query {
     /// Fetches the ID of the query if it was provided
     pub fn id(&self) -> Option<&str> {
@@ -136,9 +137,7 @@ impl Query {
     /// Turn a query into a executable pipeline graph
     #[allow(clippy::too_many_lines)]
     pub fn to_pipe(&self, uid: &mut u64) -> Result<crate::ExecutableGraph> {
-        use crate::ExecutableGraph;
-        use crate::NodeMetrics;
-        use crate::State;
+        use crate::{ExecutableGraph, NodeMetrics, State};
         use std::iter;
 
         let query = self.0.suffix();
@@ -541,9 +540,7 @@ impl Query {
                     .get("metrics")
                     .ok_or_else(|| Error::from("metrics node missing"))?],
                 last_metrics: 0,
-                state: State {
-                    ops: iter::repeat(Value::null()).take(graph.len()).collect(),
-                },
+                state: State::new(iter::repeat(Value::null()).take(graph.len()).collect()),
                 graph,
                 inputs: inputs2,
                 port_indexes: port_indexes2,

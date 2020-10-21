@@ -20,7 +20,6 @@ pub mod grouper;
 pub mod identity;
 pub mod prelude;
 pub mod qos;
-pub mod runtime;
 pub mod trickle;
 
 use self::prelude::OUT;
