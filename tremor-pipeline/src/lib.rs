@@ -40,8 +40,8 @@ use lazy_static::lazy_static;
 use op::trickle::select::WindowImpl;
 use petgraph::graph::{self, NodeIndex};
 use serde::Serialize;
-use simd_json::prelude::*;
-use simd_json::{json, BorrowedValue, OwnedValue};
+
+use simd_json::{json, OwnedValue};
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fmt::Display;
@@ -49,7 +49,6 @@ use std::iter::Iterator;
 use std::str::FromStr;
 use std::{
     fmt,
-    mem::swap,
     sync::{Arc, Mutex},
 };
 use tremor_script::prelude::*;
@@ -57,6 +56,7 @@ use tremor_script::query::StmtRentalWrapper;
 
 /// Pipeline Errors
 pub mod errors;
+mod event;
 #[macro_use]
 mod macros;
 pub(crate) mod op;
@@ -64,6 +64,7 @@ pub(crate) mod op;
 pub mod query;
 use op::EventAndInsights;
 
+pub use crate::event::{Event, ValueIter, ValueMetaIter};
 pub use op::{ConfigImpl, InitializableOperator, Operator};
 pub use tremor_script::prelude::EventOriginUri;
 pub(crate) type PortIndexMap =
@@ -221,6 +222,7 @@ impl Default for CBAction {
         Self::None
     }
 }
+
 impl From<bool> for CBAction {
     fn from(success: bool) -> Self {
         if success {
@@ -312,229 +314,6 @@ impl Ids {
 impl From<u64> for Ids {
     fn from(eid: u64) -> Self {
         Self::new(0, eid)
-    }
-}
-
-/// A tremor event
-#[derive(
-    Debug, Clone, PartialEq, Default, simd_json_derive::Serialize, simd_json_derive::Deserialize,
-)]
-pub struct Event {
-    /// The event ID
-    pub id: Ids,
-    /// The event Data
-    pub data: tremor_script::LineValue,
-    /// Nanoseconds at when the event was ingested
-    pub ingest_ns: u64,
-    /// URI to identify the origin of th event
-    pub origin_uri: Option<tremor_script::EventOriginUri>,
-    /// The kind of the event
-    pub kind: Option<SignalKind>,
-    /// If this event is batched (containing multiple events itself)
-    pub is_batch: bool,
-    /// Circuit breaker action
-    pub cb: CBAction,
-    /// Metadata for operators
-    pub op_meta: OpMeta,
-    /// this needs transactional data
-    pub transactional: bool,
-}
-
-impl Event {
-    /// turns the event in an insight given it's success
-    #[must_use]
-    pub fn insight(self, success: bool) -> Event {
-        Event {
-            cb: success.into(),
-            ingest_ns: self.ingest_ns,
-            id: self.id,
-            op_meta: self.op_meta,
-            origin_uri: self.origin_uri,
-            ..Event::default()
-        }
-    }
-
-    /// Creates either a restore or trigger event
-    #[must_use]
-    pub fn restore_or_break(restore: bool, ingest_ns: u64) -> Self {
-        if restore {
-            Event::cb_restore(ingest_ns)
-        } else {
-            Event::cb_trigger(ingest_ns)
-        }
-    }
-
-    /// Creates either a ack or fail event
-    #[must_use]
-    pub fn ack_or_fail(ack: bool, ingest_ns: u64, ids: Ids) -> Self {
-        if ack {
-            Event::cb_ack(ingest_ns, ids)
-        } else {
-            Event::cb_fail(ingest_ns, ids)
-        }
-    }
-    /// Creates a new ack insight from the event, consums the `op_meta` and
-    /// `origin_uri` of the event may return None if no insight is needed
-    pub fn insight_ack(&mut self) -> Event {
-        let mut e = Event::cb_ack(self.ingest_ns, self.id.clone());
-        swap(&mut e.op_meta, &mut self.op_meta);
-        swap(&mut e.origin_uri, &mut self.origin_uri);
-        e
-    }
-
-    /// Creates a new fail insight from the event, consums the `op_meta` of the
-    /// event may return None if no insight is needed
-    pub fn insight_fail(&mut self) -> Option<Event> {
-        let mut e = Event::cb_fail(self.ingest_ns, self.id.clone());
-        swap(&mut e.op_meta, &mut self.op_meta);
-        swap(&mut e.origin_uri, &mut self.origin_uri);
-        Some(e)
-    }
-
-    /// Creates a restore insight from the event, consums the `op_meta` of the
-    /// event may return None if no insight is needed
-    pub fn insight_restore(&mut self) -> Option<Event> {
-        let mut e = Event::cb_restore(self.ingest_ns);
-        swap(&mut e.op_meta, &mut self.op_meta);
-        swap(&mut e.origin_uri, &mut self.origin_uri);
-        Some(e)
-    }
-
-    /// Creates a trigger insight from the event, consums the `op_meta` of the
-    /// event may return None if no insight is needed
-    pub fn insight_trigger(&mut self) -> Option<Event> {
-        let mut e = Event::cb_trigger(self.ingest_ns);
-        swap(&mut e.op_meta, &mut self.op_meta);
-        swap(&mut e.origin_uri, &mut self.origin_uri);
-        Some(e)
-    }
-
-    /// allows to iterate over the values and metadatas
-    /// in an event, if it is batched this can be multiple
-    /// otherwise it's a singular event
-    #[must_use]
-    pub fn value_meta_iter(&self) -> ValueMetaIter {
-        ValueMetaIter {
-            event: self,
-            idx: 0,
-        }
-    }
-    /// Creates a new event to restore a CB
-    #[must_use]
-    pub fn cb_restore(ingest_ns: u64) -> Self {
-        Event {
-            ingest_ns,
-            cb: CBAction::Open,
-            ..Event::default()
-        }
-    }
-
-    /// Creates a new event to trigger a CB
-    #[must_use]
-    pub fn cb_trigger(ingest_ns: u64) -> Self {
-        Event {
-            ingest_ns,
-            cb: CBAction::Close,
-            ..Event::default()
-        }
-    }
-
-    /// Creates a new event to trigger a CB
-    #[must_use]
-    pub fn cb_ack(ingest_ns: u64, id: Ids) -> Self {
-        Event {
-            ingest_ns,
-            id,
-            cb: CBAction::Ack,
-            ..Event::default()
-        }
-    }
-
-    /// Creates a new event to trigger a CB
-    #[must_use]
-    pub fn cb_fail(ingest_ns: u64, id: Ids) -> Self {
-        Event {
-            ingest_ns,
-            id,
-            cb: CBAction::Fail,
-            ..Event::default()
-        }
-    }
-}
-
-/// Iterator over the event value and metadata
-/// if the event is a batch this will allow iterating
-/// over all the batched events
-pub struct ValueMetaIter<'value> {
-    event: &'value Event,
-    idx: usize,
-}
-
-impl<'value> Iterator for ValueMetaIter<'value> {
-    type Item = (&'value Value<'value>, &'value Value<'value>);
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.event.is_batch {
-            let r = self
-                .event
-                .data
-                .suffix()
-                .value()
-                .as_array()
-                .and_then(|arr| arr.get(self.idx))
-                .and_then(|e| Some((e.get("data")?.get("value")?, e.get("data")?.get("meta")?)));
-            self.idx += 1;
-            r
-        } else if self.idx == 0 {
-            let v = self.event.data.suffix();
-            self.idx += 1;
-            Some((&v.value(), &v.meta()))
-        } else {
-            None
-        }
-    }
-}
-
-impl Event {
-    /// Iterate over the values in an event
-    /// this will result in multiple entries
-    /// if the event was batched otherwise
-    /// have only a single element
-    #[must_use]
-    pub fn value_iter(&self) -> ValueIter {
-        ValueIter {
-            event: self,
-            idx: 0,
-        }
-    }
-}
-
-/// Iterator over the values of an event
-pub struct ValueIter<'value> {
-    event: &'value Event,
-    idx: usize,
-}
-
-impl<'value> Iterator for ValueIter<'value> {
-    type Item = &'value BorrowedValue<'value>;
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.event.is_batch {
-            let r = self
-                .event
-                .data
-                .suffix()
-                .value()
-                .as_array()
-                .and_then(|arr| arr.get(self.idx))
-                .and_then(|e| e.get("data")?.get("value"));
-            self.idx += 1;
-            r
-        } else if self.idx == 0 {
-            let v = &self.event.data.suffix().value();
-            self.idx += 1;
-            Some(v)
-        } else {
-            None
-        }
     }
 }
 

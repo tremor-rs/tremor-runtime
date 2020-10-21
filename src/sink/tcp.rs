@@ -96,10 +96,11 @@ impl Sink for Tcp {
             Ok(Some(vec![sink::Reply::Insight(event.insight_ack())]))
         } else {
             self.stream = None;
-            Ok(event
-                .insight_trigger()
-                .and_then(|e1| event.insight_fail().map(|e2| (e1, e2)))
-                .map(|(e1, e2)| vec![sink::Reply::Insight(e1), sink::Reply::Insight(e2)]))
+
+            Ok(Some(vec![
+                sink::Reply::Insight(event.insight_trigger()),
+                sink::Reply::Insight(event.insight_fail()),
+            ]))
         }
     }
     fn default_codec(&self) -> &str {

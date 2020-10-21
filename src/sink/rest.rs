@@ -523,12 +523,12 @@ async fn codec_task(
                             );
                         }
                         // send CB_fail
-                        if let Some(mut insight) = event.insight_fail() {
-                            insight.ingest_ns = nanotime();
-                            if let Err(e) = reply_tx.send(sink::Reply::Insight(insight)).await {
-                                error!("[Sink::{}] Error sending CB fail event {}", &sink_url, e);
-                            }
+                        let mut insight = event.insight_fail();
+                        insight.ingest_ns = nanotime();
+                        if let Err(e) = reply_tx.send(sink::Reply::Insight(insight)).await {
+                            error!("[Sink::{}] Error sending CB fail event {}", &sink_url, e);
                         }
+
                         // send response through error port
                         let error_event = create_error_response(
                             Ids::new(sink_uid, response_ids.next()),
