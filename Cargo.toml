@@ -13,12 +13,12 @@ version = "0.9.0"
 [workspace]
 
 members = [
-    "tremor-api",
-    "tremor-influx",
-    "tremor-pipeline",
-    "tremor-script",
-    "tremor-cli",
-    "tremor-common"
+  "tremor-api",
+  "tremor-influx",
+  "tremor-pipeline",
+  "tremor-script",
+  "tremor-cli",
+  "tremor-common",
 ]
 
 [profile.release]
@@ -56,8 +56,8 @@ serde_yaml = "0.8"
 simd-json = {version = "0.3", features = ["known-key"]}
 simd-json-derive = "0.1.11"
 surf = "=2.0.0"
-tremor-pipeline = { path = "tremor-pipeline" }
-tremor-common = { path = "tremor-common" }
+tremor-common = {path = "tremor-common"}
+tremor-pipeline = {path = "tremor-pipeline"}
 url = "2.1"
 value-trait = "0.1"
 
@@ -85,8 +85,8 @@ postgres-protocol = "0.5"
 tokio-postgres = "0.5"
 
 # kafka. cmake is the encouraged way to build this and also the one that works on windows/with musl.
-rdkafka = {version = "0.24", features = ["cmake-build"]}
-rdkafka-sys = {version = "2.1", features = ["cmake-build"]}
+rdkafka = {version = "0.24", features = ["cmake-build", "libz"], default-features = false}
+rdkafka-sys = {version = "2.0.0", features = ["cmake-build", "libz"]}# tracking the version rdkafka depends on
 
 # crononome
 cron = "0.6.1"
@@ -116,8 +116,8 @@ regex = "1"
 default = []
 
 # arm suopport
-neon = ["simd-json/neon"]
 bert = ["tremor-pipeline/bert"]
+neon = ["simd-json/neon"]
 
 [patch.crates-io]
 rust-bert = {git = 'https://github.com/mfelsche/rust-bert.git', rev = '1140989'}
