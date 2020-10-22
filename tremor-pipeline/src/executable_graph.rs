@@ -18,11 +18,12 @@ use crate::{
     common_cow,
     errors::Result,
     op::{prelude::IN, trickle::select::WindowImpl},
-    ConfigMap, ExecPortIndexMap, NodeLookupFn, NodeMetrics,
+    ConfigMap, ExecPortIndexMap, NodeLookupFn,
 };
 use crate::{op::EventAndInsights, Event, NodeKind, Operator};
 use halfbrown::HashMap;
-use simd_json::BorrowedValue;
+use simd_json::Builder;
+use simd_json::{BorrowedValue, Mutable};
 use tremor_script::{query::StmtRentalWrapper, LineValue, ValueAndMeta};
 
 /// Configuration for a node
@@ -164,6 +165,91 @@ impl Operator for OperatorNode {
 
     fn skippable(&self) -> bool {
         self.op.skippable()
+    }
+}
+
+fn influx_value(
+    metric_name: Cow<'static, str>,
+    tags: &HashMap<Cow<'static, str>, BorrowedValue<'static>>,
+    count: u64,
+    timestamp: u64,
+) -> BorrowedValue<'static> {
+    let mut res = BorrowedValue::object_with_capacity(4);
+    let mut fields = BorrowedValue::object_with_capacity(1);
+    if let Some(fields) = fields.as_object_mut() {
+        fields.insert("count".into(), count.into());
+    };
+    if let Some(obj) = res.as_object_mut() {
+        obj.insert("measurement".into(), metric_name.into());
+        obj.insert("tags".into(), BorrowedValue::from(tags.clone()));
+        obj.insert("fields".into(), fields);
+        obj.insert("timestamp".into(), timestamp.into());
+    } else {
+        // ALLOW: we create this above so we
+        unreachable!()
+    }
+    res
+}
+
+#[derive(Debug, Default, Clone)]
+pub(crate) struct NodeMetrics {
+    inputs: HashMap<Cow<'static, str>, u64>,
+    outputs: HashMap<Cow<'static, str>, u64>,
+}
+
+impl NodeMetrics {
+    pub(crate) fn inc_input(&mut self, input: &Cow<'static, str>) {
+        self.inc_input_n(input, 1)
+    }
+    fn inc_input_n(&mut self, input: &Cow<'static, str>, increment: u64) {
+        let (_, v) = self
+            .inputs
+            .raw_entry_mut()
+            .from_key(input)
+            .or_insert_with(|| (input.clone(), 0));
+        *v += increment;
+    }
+    pub(crate) fn inc_output(&mut self, output: &Cow<'static, str>) {
+        self.inc_output_n(output, 1)
+    }
+
+    fn inc_output_n(&mut self, output: &Cow<'static, str>, increment: u64) {
+        let (_, v) = self
+            .outputs
+            .raw_entry_mut()
+            .from_key(output)
+            .or_insert_with(|| (output.clone(), 0));
+        *v += increment;
+    }
+
+    fn to_value(
+        &self,
+        metric_name: &str,
+        tags: &mut HashMap<Cow<'static, str>, BorrowedValue<'static>>,
+        timestamp: u64,
+    ) -> Result<Vec<BorrowedValue<'static>>> {
+        let mut res = Vec::with_capacity(self.inputs.len() + self.outputs.len());
+        tags.insert("direction".into(), "input".into());
+        for (k, v) in &self.inputs {
+            tags.insert("port".into(), BorrowedValue::from(k.clone()));
+            res.push(influx_value(
+                metric_name.to_string().into(),
+                tags,
+                *v,
+                timestamp,
+            ));
+        }
+        tags.insert("direction".into(), "output".into());
+        for (k, v) in &self.outputs {
+            tags.insert("port".into(), BorrowedValue::from(k.clone()));
+            res.push(influx_value(
+                metric_name.to_string().into(),
+                tags,
+                *v,
+                timestamp,
+            ));
+        }
+        Ok(res)
     }
 }
 
@@ -386,12 +472,7 @@ impl ExecutableGraph {
                     node.on_event(0, &port, &mut self.state.ops[idx], event)?;
 
                 for (out_port, _) in &events {
-                    let metrics = unsafe { self.metrics.get_unchecked_mut(idx) };
-                    if let Some(count) = metrics.outputs.get_mut(out_port) {
-                        *count += 1;
-                    } else {
-                        metrics.outputs.insert(out_port.clone(), 1);
-                    }
+                    unsafe { self.metrics.get_unchecked_mut(idx) }.inc_output(out_port);
                 }
                 for insight in insights {
                     self.insights.push((idx, insight))
@@ -455,22 +536,11 @@ impl ExecutableGraph {
             if let Some(outgoing) = self.port_indexes.get(&(idx, out_port)) {
                 if let Some((last, rest)) = outgoing.split_last() {
                     for (idx, in_port) in rest {
-                        let metrics = unsafe { self.metrics.get_unchecked_mut(*idx) };
-
-                        if let Some(count) = metrics.inputs.get_mut(in_port) {
-                            *count += 1;
-                        } else {
-                            metrics.inputs.insert(in_port.clone(), 1);
-                        }
+                        unsafe { self.metrics.get_unchecked_mut(*idx) }.inc_input(in_port);
                         self.stack.push((*idx, in_port.clone(), event.clone()));
                     }
                     let (idx, in_port) = last;
-                    let metrics = unsafe { self.metrics.get_unchecked_mut(*idx) };
-                    if let Some(count) = metrics.inputs.get_mut(in_port) {
-                        *count += 1;
-                    } else {
-                        metrics.inputs.insert(in_port.clone(), 1);
-                    }
+                    unsafe { self.metrics.get_unchecked_mut(*idx) }.inc_input(in_port);
                     self.stack.push((*idx, in_port.clone(), event))
                 }
             }
@@ -518,6 +588,8 @@ impl ExecutableGraph {
 
 #[cfg(test)]
 mod test {
+    use simd_json::Value;
+
     use crate::op::identity::PassthroughFactory;
 
     use super::*;
@@ -562,5 +634,28 @@ mod test {
         assert_eq!(n.on_signal(0, &mut e).unwrap(), EventAndInsights::default());
         assert_eq!(e, Event::default());
         assert!(n.metrics(HashMap::default(), 0).unwrap().is_empty());
+    }
+    #[test]
+    fn node_metrics() {
+        let mut m = NodeMetrics::default();
+        let port: Cow<'static, str> = Cow::from("port");
+        m.inc_input_n(&port, 41);
+        m.inc_input(&port);
+        m.inc_output(&port);
+        m.inc_output_n(&port, 22);
+        let mut tags = HashMap::default();
+        let mut v = m.to_value("test", &mut tags, 123).unwrap();
+        assert_eq!(v.len(), 2);
+        let mo = v.pop().unwrap();
+        let mi = v.pop().unwrap();
+        assert_eq!(mi.get("measurement").unwrap(), "test");
+        assert!(mi.get("tags").unwrap().is_object());
+        assert_eq!(mi.get("fields").unwrap().get("count").unwrap(), &42);
+        assert_eq!(mi.get("timestamp").unwrap(), &123);
+
+        assert_eq!(mo.get("measurement").unwrap(), "test");
+        assert!(mo.get("tags").unwrap().is_object());
+        assert_eq!(mo.get("fields").unwrap().get("count").unwrap(), &23);
+        assert_eq!(mo.get("timestamp").unwrap(), &123);
     }
 }
