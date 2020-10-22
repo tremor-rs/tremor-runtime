@@ -334,6 +334,8 @@ pub enum SignalKind {
     Tick,
 }
 
+// We ignore this since it's a simple lookup table
+#[cfg(not(tarpaulin_include))]
 fn factory(node: &NodeConfig) -> Result<Box<dyn InitializableOperator>> {
     #[cfg(feature = "bert")]
     use op::bert::{SequenceClassificationFactory, SummerizationFactory};
