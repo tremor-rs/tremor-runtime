@@ -153,11 +153,16 @@ impl Sink for Kafka {
         event: Event,
     ) -> ResultVec {
         let mut success = true;
+        let ingest_ns = event.ingest_ns;
         for (value, meta) in event.value_meta_iter() {
-            let raw = codec.encode(value)?;
-            let mut record = FutureRecord::to(&self.config.topic);
-            record = record.payload(&raw);
+            // TODO: use post processors
+            let encoded = codec.encode(value)?;
+            let processed = postprocess(self.postprocessors.as_mut_slice(), ingest_ns, encoded)?;
+            for raw in processed {
+                let mut record = FutureRecord::to(&self.config.topic);
+                record = record.payload(&raw);
 
+<<<<<<< Updated upstream
             let record = if let Some(k) = meta.get("kafka_key").and_then(Value::as_str) {
                 record.key(k)
             } else if let Some(ref k) = self.config.key {
@@ -178,12 +183,33 @@ impl Sink for Kafka {
                             unsafe { get_fatal_error(self.producer.client()) }
                         {
                             error!("[Kafka Offramp] Fatal Error({:?}): {}", code, fatal);
+=======
+                let record = if let Some(k) = meta.get("kafka_key").and_then(Value::as_str) {
+                    record.key(k)
+                } else if let Some(ref k) = self.config.key {
+                    record.key(k.as_str())
+                } else {
+                    record
+                };
+                match self
+                    .producer
+                    .send_with_runtime::<SmolRuntime, _, _, _>(record, Duration::from_secs(0))
+                    .await
+                {
+                    Ok(_) => {}
+                    Err((e, _r)) => {
+                        error!("[Kafka Offramp] failed to enque message: {}", e);
+                        if is_fatal(&e) {
+                            if let Some((code, fatal)) = self.producer.client().fatal_error() {
+                                error!("[Kafka Offramp] Fatal Error({:?}): {}", code, fatal);
+                            }
+                            self.producer = self.config.producer()?;
+                            error!("[Kafka Offramp] reinitiating client");
+>>>>>>> Stashed changes
                         }
-                        self.producer = self.config.producer()?;
-                        error!("[Kafka Offramp] reinitiating client");
+                        success = false;
+                        break;
                     }
-                    success = false;
-                    break;
                 }
             }
         }
