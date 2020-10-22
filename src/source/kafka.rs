@@ -114,15 +114,26 @@ impl std::fmt::Debug for Int {
     }
 }
 
+pub struct StreamAndMsgs<'consumer> {
+    pub stream: stream_consumer::MessageStream<'consumer, LoggingConsumerContext, SmolRuntime>,
+}
+
+impl<'consumer> StreamAndMsgs<'consumer> {
+    fn new(
+        stream: stream_consumer::MessageStream<'consumer, LoggingConsumerContext, SmolRuntime>,
+    ) -> Self {
+        Self { stream }
+    }
+}
+
 rental! {
     pub mod rentals {
-        use super::{LoggingConsumer, LoggingMessageStream};
-        use rdkafka::consumer::stream_consumer;
+        use super::{StreamAndMsgs, LoggingConsumer};
 
         #[rental(covariant)]
         pub struct MessageStream {
             consumer: Box<LoggingConsumer>,
-            stream: LoggingMessageStream<'consumer>
+            stream: StreamAndMsgs<'consumer>
         }
     }
 }
@@ -130,14 +141,16 @@ rental! {
 #[allow(clippy::transmute_ptr_to_ptr)]
 impl rentals::MessageStream {
     #[allow(mutable_transmutes, clippy::mut_from_ref)]
-    unsafe fn mut_suffix(&self) -> &mut LoggingMessageStream<'static> {
-        transmute(&self.suffix())
+    unsafe fn mut_suffix(
+        &self,
+    ) -> &mut stream_consumer::MessageStream<'static, LoggingConsumerContext, SmolRuntime> {
+        transmute(&self.suffix().stream)
     }
 
     unsafe fn consumer(&mut self) -> &mut LoggingConsumer {
         struct MessageStream {
             consumer: Box<LoggingConsumer>,
-            _stream: LoggingMessageStream<'static>,
+            _stream: StreamAndMsgs<'static>,
         };
         let s: &mut MessageStream = transmute(self);
         &mut s.consumer
@@ -238,8 +251,6 @@ impl ConsumerContext for LoggingConsumerContext {
     }
 }
 pub type LoggingConsumer = StreamConsumer<LoggingConsumerContext>;
-pub type LoggingMessageStream<'consumer> =
-    stream_consumer::MessageStream<'consumer, LoggingConsumerContext, SmolRuntime>;
 
 #[async_trait::async_trait()]
 impl Source for Int {
@@ -387,7 +398,9 @@ impl Source for Int {
         };
 
         let stream = rentals::MessageStream::new(Box::new(consumer), |c| {
-            c.start_with_runtime::<SmolRuntime>(Duration::from_millis(100), false)
+            StreamAndMsgs::new(
+                c.start_with_runtime::<SmolRuntime>(Duration::from_millis(100), false),
+            )
         });
         self.stream = Some(stream);
 
