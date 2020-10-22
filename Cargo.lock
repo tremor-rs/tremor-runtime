@@ -3803,7 +3803,6 @@ dependencies = [
  "serde",
  "serde_derive",
  "serde_json",
- "tokio 0.2.22",
 ]
 
 [[package]]
