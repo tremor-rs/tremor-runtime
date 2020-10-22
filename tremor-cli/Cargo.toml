@@ -24,7 +24,7 @@ async-std = {version = "1.6", features = ["unstable"]}
 clap = {version = "3.0.0-beta.2", features = ["yaml", "color"]}
 clap_generate = "3.0.0-beta.2"
 difference = "2"
-dirs-next = "1"
+dirs-next = "2"
 env_logger = "0.8.1"
 halfbrown = "0.1"
 http-types = "2.6"
