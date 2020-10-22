@@ -3803,7 +3803,6 @@ dependencies = [
  "serde",
  "serde_derive",
  "serde_json",
- "tokio 0.2.22",
 ]
 
 [[package]]
@@ -5438,7 +5437,6 @@ dependencies = [
  "pretty_assertions",
  "rand 0.7.3",
  "rdkafka",
- "rdkafka-sys",
  "regex",
  "rental",
  "rmp-serde",
