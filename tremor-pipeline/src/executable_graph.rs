@@ -198,9 +198,16 @@ pub(crate) struct NodeMetrics {
 }
 
 impl NodeMetrics {
+    // this makes sense since we might not need to clone the cow and
+    // it might be owned so cloning early would be costly
+    #[allow(clippy::ptr_arg)]
     pub(crate) fn inc_input(&mut self, input: &Cow<'static, str>) {
         self.inc_input_n(input, 1)
     }
+
+    // this makes sense since we might not need to clone the cow and
+    // it might be owned so cloning early would be costly
+    #[allow(clippy::ptr_arg)]
     fn inc_input_n(&mut self, input: &Cow<'static, str>, increment: u64) {
         let (_, v) = self
             .inputs
@@ -209,10 +216,16 @@ impl NodeMetrics {
             .or_insert_with(|| (input.clone(), 0));
         *v += increment;
     }
+    // this makes sense since we might not need to clone the cow and
+    // it might be owned so cloning early would be costly
+    #[allow(clippy::ptr_arg)]
     pub(crate) fn inc_output(&mut self, output: &Cow<'static, str>) {
         self.inc_output_n(output, 1)
     }
 
+    // this makes sense since we might not need to clone the cow and
+    // it might be owned so cloning early would be costly
+    #[allow(clippy::ptr_arg)]
     fn inc_output_n(&mut self, output: &Cow<'static, str>, increment: u64) {
         let (_, v) = self
             .outputs
