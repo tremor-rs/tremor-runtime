@@ -40,7 +40,7 @@ use halfbrown::HashMap;
 use lazy_static::lazy_static;
 use op::trickle::select::WindowImpl;
 use petgraph::graph::{self, NodeIndex};
-use simd_json::{json, OwnedValue};
+use simd_json::OwnedValue;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fmt::Display;
@@ -61,8 +61,8 @@ pub(crate) mod op;
 /// Tools to turn tremor query into pipelines
 pub mod query;
 pub use crate::event::{Event, ValueIter, ValueMetaIter};
-pub(crate) use crate::executable_graph::State;
 pub use crate::executable_graph::{ExecutableGraph, OperatorNode};
+pub(crate) use crate::executable_graph::{NodeMetrics, State};
 pub use op::{ConfigImpl, InitializableOperator, Operator};
 pub use tremor_script::prelude::EventOriginUri;
 pub(crate) type PortIndexMap =
@@ -374,56 +374,6 @@ fn operator(node: &NodeConfig) -> Result<Box<dyn Operator + 'static>> {
 }
 
 pub(crate) type ConfigGraph = graph::DiGraph<NodeConfig, u8>;
-
-#[derive(Debug, Default, Clone)]
-pub(crate) struct NodeMetrics {
-    inputs: HashMap<Cow<'static, str>, u64>,
-    outputs: HashMap<Cow<'static, str>, u64>,
-}
-
-impl NodeMetrics {
-    fn to_value(
-        &self,
-        metric_name: &str,
-        tags: &mut HashMap<Cow<'static, str>, Value<'static>>,
-        timestamp: u64,
-    ) -> Result<Vec<Value<'static>>> {
-        let mut res = Vec::with_capacity(self.inputs.len() + self.outputs.len());
-        for (k, v) in &self.inputs {
-            tags.insert("direction".into(), "input".into());
-            tags.insert("port".into(), Value::from(k.clone()));
-            //TODO: This is ugly
-            res.push(
-                json!({
-                    "measurement": metric_name,
-                    "tags": tags,
-                    "fields": {
-                        "count": v
-                    },
-                    "timestamp": timestamp
-                })
-                .into(),
-            )
-        }
-        for (k, v) in &self.outputs {
-            tags.insert("direction".into(), "output".into());
-            tags.insert("port".into(), Value::from(k.clone()));
-            //TODO: This is ugly
-            res.push(
-                json!({
-                    "measurement": metric_name,
-                    "tags": tags,
-                    "fields": {
-                        "count": v
-                    },
-                    "timestamp": timestamp
-                })
-                .into(),
-            )
-        }
-        Ok(res)
-    }
-}
 
 #[cfg(test)]
 mod test {
