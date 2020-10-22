@@ -177,7 +177,9 @@ impl Sink for Kafka {
                     Err((e, _r)) => {
                         error!("[Kafka Offramp] failed to enque message: {}", e);
                         if is_fatal(&e) {
-                            if let Some((code, fatal)) = self.producer.client().fatal_error() {
+                            if let Some((code, fatal)) =
+                                unsafe { get_fatal_error(self.producer.client()) }
+                            {
                                 error!("[Kafka Offramp] Fatal Error({:?}): {}", code, fatal);
                             }
                             self.producer = self.config.producer()?;
