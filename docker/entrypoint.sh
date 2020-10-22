@@ -26,7 +26,8 @@ else
     ARGS="server run -f ${ARTEFACTS} --logger-config ${LOGGER_FILE}"
 fi
 
-exec /tremor "${ARGS}"
+# IMPORTANT: do not quote ARGS, no matter what shellcheck tells you
+exec /tremor ${ARGS}
 
 
 
