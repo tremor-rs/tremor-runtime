@@ -17,13 +17,13 @@ use std::{borrow::Cow, fmt, fmt::Display, sync::Arc};
 use crate::{
     common_cow,
     errors::Result,
+    influx_value,
     op::{prelude::IN, trickle::select::WindowImpl},
     ConfigMap, ExecPortIndexMap, NodeLookupFn,
 };
 use crate::{op::EventAndInsights, Event, NodeKind, Operator};
 use halfbrown::HashMap;
-use simd_json::Builder;
-use simd_json::{BorrowedValue, Mutable};
+use simd_json::BorrowedValue;
 use tremor_script::{query::StmtRentalWrapper, LineValue, ValueAndMeta};
 
 /// Configuration for a node
@@ -168,29 +168,6 @@ impl Operator for OperatorNode {
     }
 }
 
-fn influx_value(
-    metric_name: Cow<'static, str>,
-    tags: &HashMap<Cow<'static, str>, BorrowedValue<'static>>,
-    count: u64,
-    timestamp: u64,
-) -> BorrowedValue<'static> {
-    let mut res = BorrowedValue::object_with_capacity(4);
-    let mut fields = BorrowedValue::object_with_capacity(1);
-    if let Some(fields) = fields.as_object_mut() {
-        fields.insert("count".into(), count.into());
-    };
-    if let Some(obj) = res.as_object_mut() {
-        obj.insert("measurement".into(), metric_name.into());
-        obj.insert("tags".into(), BorrowedValue::from(tags.clone()));
-        obj.insert("fields".into(), fields);
-        obj.insert("timestamp".into(), timestamp.into());
-    } else {
-        // ALLOW: we create this above so we
-        unreachable!()
-    }
-    res
-}
-
 #[derive(Debug, Default, Clone)]
 pub(crate) struct NodeMetrics {
     inputs: HashMap<Cow<'static, str>, u64>,
@@ -247,7 +224,7 @@ impl NodeMetrics {
             tags.insert("port".into(), BorrowedValue::from(k.clone()));
             res.push(influx_value(
                 metric_name.to_string().into(),
-                tags,
+                tags.clone(),
                 *v,
                 timestamp,
             ));
@@ -257,7 +234,7 @@ impl NodeMetrics {
             tags.insert("port".into(), BorrowedValue::from(k.clone()));
             res.push(influx_value(
                 metric_name.to_string().into(),
-                tags,
+                tags.clone(),
                 *v,
                 timestamp,
             ));
@@ -601,9 +578,9 @@ impl ExecutableGraph {
 
 #[cfg(test)]
 mod test {
-    use simd_json::Value;
+    use simd_json::{Builder, Value};
 
-    use crate::op::identity::PassthroughFactory;
+    use crate::op::{identity::PassthroughFactory, prelude::OUT};
 
     use super::*;
     use std::{
@@ -627,17 +604,19 @@ mod test {
         assert_ne!(h2.finish(), h3.finish());
     }
 
+    fn pass(id: &'static str) -> OperatorNode {
+        let c = NodeConfig::from_config("passthrough", ()).unwrap();
+        OperatorNode {
+            id: id.into(),
+            kind: NodeKind::Operator,
+            op_type: id.into(),
+            op: PassthroughFactory::new_boxed().from_node(&c).unwrap(),
+            uid: 0,
+        }
+    }
     #[test]
     fn operator_node() {
-        let c = NodeConfig::from_config("passthrough", ()).unwrap();
-
-        let mut n = OperatorNode {
-            id: "passthrough".into(),
-            kind: NodeKind::Operator,
-            op_type: "passthrough".into(),
-            uid: 0,
-            op: PassthroughFactory::new_boxed().from_node(&c).unwrap(),
-        };
+        let mut n = pass("passthrough");
         assert!(!n.handles_contraflow());
         assert!(!n.handles_signal());
         assert!(!n.handles_contraflow());
@@ -648,6 +627,13 @@ mod test {
         assert_eq!(e, Event::default());
         assert!(n.metrics(HashMap::default(), 0).unwrap().is_empty());
     }
+
+    fn test_metric<'value>(v: &BorrowedValue<'value>, m: &str, c: u64) {
+        assert_eq!(v.get("measurement").unwrap(), m);
+        assert!(v.get("tags").unwrap().is_object());
+        assert_eq!(v.get("fields").unwrap().get("count").unwrap(), &c);
+    }
+
     #[test]
     fn node_metrics() {
         let mut m = NodeMetrics::default();
@@ -659,16 +645,291 @@ mod test {
         let mut tags = HashMap::default();
         let mut v = m.to_value("test", &mut tags, 123).unwrap();
         assert_eq!(v.len(), 2);
-        let mo = v.pop().unwrap();
-        let mi = v.pop().unwrap();
-        assert_eq!(mi.get("measurement").unwrap(), "test");
-        assert!(mi.get("tags").unwrap().is_object());
-        assert_eq!(mi.get("fields").unwrap().get("count").unwrap(), &42);
-        assert_eq!(mi.get("timestamp").unwrap(), &123);
 
-        assert_eq!(mo.get("measurement").unwrap(), "test");
-        assert!(mo.get("tags").unwrap().is_object());
-        assert_eq!(mo.get("fields").unwrap().get("count").unwrap(), &23);
+        let mo = v.pop().unwrap();
+        test_metric(&mo, "test", 23);
         assert_eq!(mo.get("timestamp").unwrap(), &123);
+
+        let mi = v.pop().unwrap();
+        test_metric(&mi, "test", 42);
+        assert_eq!(mi.get("timestamp").unwrap(), &123);
+    }
+
+    #[derive(Debug)]
+    struct AllOperator {}
+
+    impl Operator for AllOperator {
+        fn on_event(
+            &mut self,
+            _uid: u64,
+            _port: &str,
+            _state: &mut BorrowedValue<'static>,
+            event: Event,
+        ) -> Result<EventAndInsights> {
+            Ok(vec![(OUT, event)].into())
+        }
+        fn handles_signal(&self) -> bool {
+            true
+        }
+
+        fn on_signal(&mut self, _uid: u64, _signal: &mut Event) -> Result<EventAndInsights> {
+            // Make the trait signature nicer
+            Ok(EventAndInsights::default())
+        }
+
+        fn handles_contraflow(&self) -> bool {
+            true
+        }
+
+        fn on_contraflow(&mut self, _uid: u64, _insight: &mut Event) {}
+
+        fn metrics(
+            &self,
+            _tags: HashMap<Cow<'static, str>, BorrowedValue<'static>>,
+            _timestamp: u64,
+        ) -> Result<Vec<BorrowedValue<'static>>> {
+            // Make the trait signature nicer
+            Ok(Vec::new())
+        }
+
+        fn skippable(&self) -> bool {
+            false
+        }
+    }
+
+    fn all_op(id: &'static str) -> OperatorNode {
+        OperatorNode {
+            id: id.into(),
+            kind: NodeKind::Operator,
+            op_type: "test".into(),
+            op: Box::new(AllOperator {}),
+            uid: 0,
+        }
+    }
+
+    fn test_metrics(mut metrics: Vec<Event>, n: u64) {
+        // out/in
+        let this = metrics.pop().unwrap();
+        let (data, _) = this.data.parts();
+        test_metric(data, "test-metric", n);
+        assert_eq!(data.get("tags").unwrap().get("node").unwrap(), "out");
+        assert_eq!(data.get("tags").unwrap().get("port").unwrap(), "in");
+
+        // all-2/out
+        let this = metrics.pop().unwrap();
+        let (data, _) = this.data.parts();
+        test_metric(data, "test-metric", n);
+        assert_eq!(data.get("tags").unwrap().get("node").unwrap(), "all-2");
+        assert_eq!(data.get("tags").unwrap().get("port").unwrap(), "out");
+
+        // all-2/in
+        let this = metrics.pop().unwrap();
+        let (data, _) = this.data.parts();
+        test_metric(data, "test-metric", n);
+        assert_eq!(data.get("tags").unwrap().get("node").unwrap(), "all-2");
+        assert_eq!(data.get("tags").unwrap().get("port").unwrap(), "in");
+
+        // all-1/out
+        let this = metrics.pop().unwrap();
+        let (data, _) = this.data.parts();
+        test_metric(data, "test-metric", n);
+        assert_eq!(data.get("tags").unwrap().get("node").unwrap(), "all-1");
+        assert_eq!(data.get("tags").unwrap().get("port").unwrap(), "out");
+
+        // all-1/in
+        let this = metrics.pop().unwrap();
+        let (data, _) = this.data.parts();
+        test_metric(data, "test-metric", n);
+        assert_eq!(data.get("tags").unwrap().get("node").unwrap(), "all-1");
+        assert_eq!(data.get("tags").unwrap().get("port").unwrap(), "in");
+
+        // out/in
+        let this = metrics.pop().unwrap();
+        let (data, _) = this.data.parts();
+        test_metric(data, "test-metric", n);
+        assert_eq!(data.get("tags").unwrap().get("node").unwrap(), "in");
+        assert_eq!(data.get("tags").unwrap().get("port").unwrap(), "out");
+        assert!(metrics.is_empty());
+    }
+
+    #[test]
+    fn eg_metrics() {
+        let mut in_n = pass("in");
+        in_n.kind = NodeKind::Input;
+        let mut out_n = pass("out");
+        out_n.kind = NodeKind::Output;
+        let mut metrics_n = pass("metrics");
+        metrics_n.kind = NodeKind::Output;
+
+        // The graph is in -> 1 -> 2 -> out, we pre-stack the edges since we do not
+        // need to have order in here.
+        let graph = vec![in_n, all_op("all-1"), all_op("all-2"), out_n, metrics_n];
+
+        let mut inputs = HashMap::new();
+        inputs.insert("in".into(), 0);
+
+        let mut port_indexes = ExecPortIndexMap::new();
+        // link out from
+        port_indexes.insert((0, "out".into()), vec![(1, "in".into())]);
+        port_indexes.insert((1, "out".into()), vec![(2, "in".into())]);
+        port_indexes.insert((2, "out".into()), vec![(3, "in".into())]);
+
+        // Create metric nodes for all elements in the graph
+        let metrics = vec![
+            NodeMetrics::default(),
+            NodeMetrics::default(),
+            NodeMetrics::default(),
+            NodeMetrics::default(),
+            NodeMetrics::default(),
+        ];
+        // Create state for all nodes
+        let state = State {
+            ops: vec![
+                BorrowedValue::null(),
+                BorrowedValue::null(),
+                BorrowedValue::null(),
+                BorrowedValue::null(),
+                BorrowedValue::null(),
+            ],
+        };
+        let mut g = ExecutableGraph {
+            id: "test".into(),
+            graph,
+            state,
+            inputs,
+            stack: vec![],
+            signalflow: vec![2, 3],
+            contraflow: vec![3, 2],
+            port_indexes,
+            metrics,
+            // The index of the metrics node in our pipeline
+            metrics_idx: 4,
+            last_metrics: 0,
+            metric_interval: Some(1),
+            insights: vec![],
+            dot: String::from(""),
+        };
+
+        // Test with one event
+        let e = Event::default();
+        let mut returns = Vec::new();
+        g.enqueue("in", e, &mut returns).unwrap();
+        assert_eq!(returns.len(), 1);
+        returns.clear();
+
+        g.enqueue_metrics("test-metric", HashMap::new(), 123);
+        g.run(&mut returns).unwrap();
+        let (ports, metrics): (Vec<_>, Vec<_>) = returns.drain(..).unzip();
+        assert!(ports.iter().all(|v| v == "metrics"));
+        test_metrics(metrics, 1);
+
+        // Test with two events
+        let e = Event::default();
+        let mut returns = Vec::new();
+        g.enqueue("in", e, &mut returns).unwrap();
+        assert_eq!(returns.len(), 1);
+        returns.clear();
+
+        let e = Event::default();
+        let mut returns = Vec::new();
+        g.enqueue("in", e, &mut returns).unwrap();
+        assert_eq!(returns.len(), 1);
+        returns.clear();
+
+        g.enqueue_metrics("test-metric", HashMap::new(), 123);
+        g.run(&mut returns).unwrap();
+        let (ports, metrics): (Vec<_>, Vec<_>) = returns.drain(..).unzip();
+        assert!(ports.iter().all(|v| v == "metrics"));
+        test_metrics(metrics, 3);
+    }
+
+    #[test]
+    fn eg_optimize() {
+        let mut in_n = pass("in");
+        in_n.kind = NodeKind::Input;
+        let mut out_n = pass("out");
+        out_n.kind = NodeKind::Output;
+        let mut metrics_n = pass("metrics");
+        metrics_n.kind = NodeKind::Output;
+
+        // The graph is in -> 1 -> 2 -> out, we pre-stack the edges since we do not
+        // need to have order in here.
+        let graph = vec![
+            in_n,
+            all_op("all-1"),
+            pass("nop"),
+            all_op("all-2"),
+            out_n,
+            metrics_n,
+        ];
+
+        let mut inputs = HashMap::new();
+        inputs.insert("in".into(), 0);
+
+        let mut port_indexes = ExecPortIndexMap::new();
+        // link out from
+        port_indexes.insert((0, "out".into()), vec![(1, "in".into())]);
+        port_indexes.insert((1, "out".into()), vec![(2, "in".into())]);
+        port_indexes.insert((2, "out".into()), vec![(3, "in".into())]);
+        port_indexes.insert((3, "out".into()), vec![(4, "in".into())]);
+
+        // Create metric nodes for all elements in the graph
+        let metrics = vec![
+            NodeMetrics::default(),
+            NodeMetrics::default(),
+            NodeMetrics::default(),
+            NodeMetrics::default(),
+            NodeMetrics::default(),
+            NodeMetrics::default(),
+        ];
+        // Create state for all nodes
+        let state = State {
+            ops: vec![
+                BorrowedValue::null(),
+                BorrowedValue::null(),
+                BorrowedValue::null(),
+                BorrowedValue::null(),
+                BorrowedValue::null(),
+                BorrowedValue::null(),
+            ],
+        };
+        let mut g = ExecutableGraph {
+            id: "test".into(),
+            graph,
+            state,
+            inputs,
+            stack: vec![],
+            signalflow: vec![2, 3],
+            contraflow: vec![3, 2],
+            port_indexes,
+            metrics,
+            // The index of the metrics node in our pipeline
+            metrics_idx: 5,
+            last_metrics: 0,
+            metric_interval: Some(1),
+            insights: vec![],
+            dot: String::from(""),
+        };
+        assert!(g.optimize().is_some());
+        // Test with one event
+        let e = Event::default();
+        let mut returns = Vec::new();
+        g.enqueue("in", e, &mut returns).unwrap();
+        assert_eq!(returns.len(), 1);
+        returns.clear();
+
+        // check that the Input was moved from 0 to 1, skipping the input
+        assert_eq!(g.inputs.len(), 1);
+        assert_eq!(g.inputs.get("in"), Some(&1));
+
+        // check that node 2, a passthrough, was optimized out
+        assert_eq!(
+            g.port_indexes.get(&(1usize, OUT)),
+            Some(&vec![(3usize, IN)])
+        );
+        assert_eq!(
+            g.port_indexes.get(&(3usize, OUT)),
+            Some(&vec![(4usize, IN)])
+        );
     }
 }
