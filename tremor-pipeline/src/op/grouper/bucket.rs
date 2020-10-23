@@ -61,12 +61,14 @@
 //! }
 //! ```
 
-use crate::errors::{ErrorKind, Result};
 use crate::op::prelude::*;
+use crate::{
+    errors::{ErrorKind, Result},
+    influx_value,
+};
 use crate::{Event, Operator};
 use halfbrown::HashMap;
 use lru::LruCache;
-use simd_json::borrowed::Object;
 use simd_json::prelude::*;
 use std::borrow::Cow;
 use tremor_script::prelude::*;
@@ -201,31 +203,21 @@ impl Operator for Grouper {
         mut tags: HashMap<Cow<'static, str>, Value<'static>>,
         timestamp: u64,
     ) -> Result<Vec<Value<'static>>> {
+        const BUCKETING: Cow<'static, str> = Cow::Borrowed("bucketing");
+        const CLASS: Cow<'static, str> = Cow::Borrowed("class");
+        const ACTION: Cow<'static, str> = Cow::Borrowed("action");
+        const PASS: Cow<'static, str> = Cow::Borrowed("pass");
+        const OVERFLOW: Cow<'static, str> = Cow::Borrowed("overflow");
+
         let mut res = Vec::with_capacity(self.buckets.len() * 2);
         for (class, b) in &self.buckets {
-            tags.insert("class".into(), class.clone().into());
-            tags.insert("action".into(), "pass".into());
-            // TODO: this is ugly
+            tags.insert(CLASS, class.clone().into());
+            tags.insert(ACTION, PASS.into());
             // Count good cases
-            let mut m = Object::with_capacity(4);
-            m.insert("measurement".into(), "bucketing".into());
-            m.insert("tags".into(), Value::from(tags.clone()));
-            let mut fields = Object::with_capacity(1);
-            fields.insert("count".into(), b.pass.into());
-            m.insert("fields".into(), Value::from(fields));
-            m.insert("timestamp".into(), timestamp.into());
-            res.push(Value::from(m.clone()));
-
+            res.push(influx_value(BUCKETING, tags.clone(), b.pass, timestamp));
             // Count bad cases
-            tags.insert("action".into(), "overflow".into());
-            let mut m = Object::with_capacity(4);
-            m.insert("measurement".into(), "bucketing".into());
-            m.insert("tags".into(), Value::from(tags.clone()));
-            let mut fields = Object::with_capacity(1);
-            fields.insert("count".into(), b.overflow.into());
-            m.insert("fields".into(), Value::from(fields));
-            m.insert("timestamp".into(), timestamp.into()); // TODO: this is ugly
-            res.push(Value::from(m.clone()));
+            tags.insert(ACTION, OVERFLOW.into());
+            res.push(influx_value(BUCKETING, tags.clone(), b.overflow, timestamp));
         }
         Ok(res)
     }

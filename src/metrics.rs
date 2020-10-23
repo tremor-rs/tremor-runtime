@@ -15,7 +15,6 @@
 use crate::pipeline;
 use crate::url::TremorURL;
 use halfbrown::HashMap;
-use simd_json::json;
 use std::borrow::Cow;
 use tremor_pipeline::Event;
 use tremor_script::prelude::*;
@@ -107,18 +106,11 @@ impl RampReporter {
     fn send_metric(&self, timestamp: u64, port: &'static str, count: u64) {
         // metrics tags
         let mut tags: HashMap<Cow<'static, str>, Value<'static>> = HashMap::new();
-        tags.insert("ramp".into(), self.artefact_url.to_string().into());
+        tags.insert(Cow::Borrowed("ramp"), self.artefact_url.to_string().into());
 
-        tags.insert("port".into(), port.into());
-        let value: Value = json!({
-            "measurement": "ramp_events",
-            "tags": tags,
-            "fields": {
-                "count": count,
-            },
-            "timestamp": timestamp,
-        })
-        .into();
+        tags.insert(Cow::Borrowed("port"), port.into());
+        let value: Value =
+            tremor_pipeline::influx_value(Cow::Borrowed("ramp_events"), tags, count, timestamp);
 
         // full metrics payload
         let metrics_event = Event {

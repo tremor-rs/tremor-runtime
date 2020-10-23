@@ -40,7 +40,7 @@ use halfbrown::HashMap;
 use lazy_static::lazy_static;
 use op::trickle::select::WindowImpl;
 use petgraph::graph::{self, NodeIndex};
-use simd_json::OwnedValue;
+use simd_json::{BorrowedValue, OwnedValue};
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fmt::Display;
@@ -373,6 +373,36 @@ fn factory(node: &NodeConfig) -> Result<Box<dyn InitializableOperator>> {
 
 fn operator(node: &NodeConfig) -> Result<Box<dyn Operator + 'static>> {
     factory(&node)?.from_node(node)
+}
+
+/// Takes a name, tags and creates a influx codec compatible Value
+#[must_use]
+pub fn influx_value(
+    metric_name: Cow<'static, str>,
+    tags: HashMap<Cow<'static, str>, BorrowedValue<'static>>,
+    count: u64,
+    timestamp: u64,
+) -> BorrowedValue<'static> {
+    const COUNT: Cow<'static, str> = Cow::Borrowed("count");
+    const MEASUREMENT: Cow<'static, str> = Cow::Borrowed("measurement");
+    const TAGS: Cow<'static, str> = Cow::Borrowed("tags");
+    const FIELDS: Cow<'static, str> = Cow::Borrowed("fields");
+    const TIMESTAMP: Cow<'static, str> = Cow::Borrowed("timestamp");
+    let mut res = BorrowedValue::object_with_capacity(4);
+    let mut fields = BorrowedValue::object_with_capacity(1);
+    if let Some(fields) = fields.as_object_mut() {
+        fields.insert(COUNT, count.into());
+    };
+    if let Some(obj) = res.as_object_mut() {
+        obj.insert(MEASUREMENT, metric_name.into());
+        obj.insert(TAGS, BorrowedValue::from(tags));
+        obj.insert(FIELDS, fields);
+        obj.insert(TIMESTAMP, timestamp.into());
+    } else {
+        // ALLOW: we create this above so we
+        unreachable!()
+    }
+    res
 }
 
 pub(crate) type ConfigGraph = graph::DiGraph<NodeConfig, u8>;
