@@ -677,7 +677,7 @@ error_chain! {
          */
         QueryStreamNotDefined(stmt: Range, inner: Range, name: String) {
             description("Stream is not defined")
-                display("Stream is not defined: {}", name)
+                display("Stream used in `from` or `into` is not defined: {}", name)
         }
         NoLocalsAllowed(stmt: Range, inner: Range) {
             description("Local variables are not allowed here")
@@ -692,13 +692,13 @@ error_chain! {
 
 /// Creates an stream not defined error
 #[allow(clippy::borrowed_box)]
-pub fn query_stream_not_defined<T, S: BaseExpr, I: BaseExpr>(
-    stmt: &Box<S>,
+pub fn query_stream_not_defined_err<S: BaseExpr, I: BaseExpr>(
+    stmt: &S,
     inner: &I,
     name: String,
     meta: &NodeMetas,
-) -> Result<T> {
-    Err(ErrorKind::QueryStreamNotDefined(stmt.extent(meta), inner.extent(meta), name).into())
+) -> Error {
+    ErrorKind::QueryStreamNotDefined(stmt.extent(meta), inner.extent(meta), name).into()
 }
 
 /// Creates a guard not bool error

@@ -27,7 +27,7 @@ use simd_json::BorrowedValue;
 use tremor_script::{query::StmtRentalWrapper, LineValue, ValueAndMeta};
 
 /// Configuration for a node
-#[derive(Debug, Clone, PartialOrd, Eq)]
+#[derive(Debug, Clone, PartialOrd, Eq, Default)]
 pub struct NodeConfig {
     pub(crate) id: Cow<'static, str>,
     pub(crate) kind: NodeKind,

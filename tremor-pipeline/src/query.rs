@@ -33,11 +33,13 @@ use simd_json::prelude::*;
 use std::borrow::Cow;
 use std::mem;
 use std::sync::Arc;
-use tremor_script::ast::{CompilationUnit, Ident, SelectType, Stmt, WindowDecl, WindowKind};
-use tremor_script::errors::{query_stream_not_defined, CompilerError};
-use tremor_script::highlighter::Dumb as DumbHighlighter;
 use tremor_script::path::ModulePath;
 use tremor_script::query::{StmtRental, StmtRentalWrapper};
+use tremor_script::{ast::Select, errors::CompilerError};
+use tremor_script::{
+    ast::{BaseExpr, CompilationUnit, Ident, NodeMetas, SelectType, Stmt, WindowDecl, WindowKind},
+    errors::query_stream_not_defined_err,
+};
 use tremor_script::{AggrRegistry, Registry, Value};
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -45,27 +47,31 @@ struct InputPort {
     pub id: Cow<'static, str>,
     pub port: Cow<'static, str>,
     pub had_port: bool,
+    pub location: tremor_script::pos::Range,
 }
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 struct OutputPort {
     pub id: Cow<'static, str>,
     pub port: Cow<'static, str>,
     pub had_port: bool,
+    pub location: tremor_script::pos::Range,
 }
 
-fn resolve_input_port(port: &(Ident, Ident)) -> InputPort {
+fn resolve_input_port(port: &(Ident, Ident), meta: &NodeMetas) -> InputPort {
     InputPort {
         id: common_cow(&port.0.id),
         port: common_cow(&port.1.id),
         had_port: true,
+        location: port.0.extent(meta),
     }
 }
 
-fn resolve_output_port(port: &(Ident, Ident)) -> OutputPort {
+fn resolve_output_port(port: &(Ident, Ident), meta: &NodeMetas) -> OutputPort {
     OutputPort {
         id: common_cow(&port.0.id),
         port: common_cow(&port.1.id),
         had_port: true,
+        location: port.0.extent(meta),
     }
 }
 
@@ -94,11 +100,6 @@ fn window_decl_to_impl<'script>(
 /// A Tremor Query
 #[derive(Clone, Debug)]
 pub struct Query(pub tremor_script::query::Query);
-impl From<tremor_script::query::Query> for Query {
-    fn from(q: tremor_script::query::Query) -> Self {
-        Self(q)
-    }
-}
 
 impl Query {
     /// Fetches the ID of the query if it was provided
@@ -166,9 +167,7 @@ impl Query {
             id: IN,
             kind: NodeKind::Input,
             op_type: "passthrough".to_string(),
-            config: None,
-            defn: None,
-            node: None,
+            ..NodeConfig::default()
         });
         nodes.insert(IN, id);
         *uid += 1;
@@ -182,9 +181,7 @@ impl Query {
             id: err.clone(),
             kind: NodeKind::Output,
             op_type: "passthrough".to_string(),
-            config: None,
-            defn: None,
-            node: None,
+            ..NodeConfig::default()
         });
         nodes.insert(err.clone(), id);
         *uid += 1;
@@ -198,9 +195,7 @@ impl Query {
             id: OUT,
             kind: NodeKind::Output,
             op_type: "passthrough".to_string(),
-            config: None,
-            defn: None,
-            node: None,
+            ..NodeConfig::default()
         });
         nodes.insert(OUT, id);
         *uid += 1;
@@ -226,32 +221,32 @@ impl Query {
 
             match stmt {
                 Stmt::Select(ref select) => {
-                    let s = &select.stmt;
+                    let s: &Select<'_> = &select.stmt;
 
                     if !nodes.contains_key(&s.from.0.id) {
-                        let from = s.from.0.id.clone().to_string();
-                        let mut h = DumbHighlighter::default();
-                        let butt = query_stream_not_defined(&s, &s.from.0, from, &query.node_meta)?;
-                        tremor_script::query::Query::format_error_from_script(
-                            &self.0.source,
-                            &mut h,
-                            &butt,
-                        )?;
-                        return Err("Missing node".into());
+                        return Err(query_stream_not_defined_err(
+                            s,
+                            &s.from.0,
+                            s.from.0.id.to_string(),
+                            &query.node_meta,
+                        )
+                        .into());
                     }
 
                     let select_in = InputPort {
                         id: format!("select_{}", select_num).into(),
                         port: OUT,
                         had_port: false,
+                        location: s.extent(&query.node_meta),
                     };
                     let select_out = OutputPort {
                         id: format!("select_{}", select_num).into(),
                         port: OUT,
                         had_port: false,
+                        location: s.extent(&query.node_meta),
                     };
                     select_num += 1;
-                    let mut from = resolve_output_port(&s.from);
+                    let mut from = resolve_output_port(&s.from, &query.node_meta);
                     if from.id == "in" && from.port != "out" {
                         let name: Cow<'static, str> = from.port;
 
@@ -280,7 +275,7 @@ impl Query {
                         from.had_port = false;
                         from.port = OUT;
                     }
-                    let mut into = resolve_input_port(&s.into);
+                    let mut into = resolve_input_port(&s.into, &query.node_meta);
                     if into.id == "out" && into.port != "in" {
                         let name: Cow<'static, str> = into.port;
                         if !nodes.contains_key(&name) {
@@ -466,8 +461,22 @@ impl Query {
         // Link graph edges
         for (from, tos) in &links {
             for to in tos {
-                let from_idx = nodes[&from.id];
-                let to_idx = nodes[&to.id];
+                let from_idx = *nodes.get(&from.id).ok_or_else(|| {
+                    query_stream_not_defined_err(
+                        &from.location,
+                        &from.location,
+                        from.id.to_string(),
+                        &query.node_meta,
+                    )
+                })?;
+                let to_idx = *nodes.get(&to.id).ok_or_else(|| {
+                    query_stream_not_defined_err(
+                        &to.location,
+                        &to.location,
+                        to.id.to_string(),
+                        &query.node_meta,
+                    )
+                })?;
 
                 let from_tpl = (from_idx, from.port.clone());
                 let to_tpl = (to_idx, to.port.clone());

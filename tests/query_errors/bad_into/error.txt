@@ -1,0 +1,3 @@
+Error: 
+    1 | select event from in into not_out;
+      |                           ^^^^^^^ Stream used in `from` or `into` is not defined: not_out
