@@ -199,6 +199,10 @@ impl From<TremorError> for Error {
                 StatusCode::NotFound,
                 r#"{"error": "Artefact not found"}"#.into(),
             ),
+            ErrorKind::InvalidConfig(msg) => Error::JSON(
+                StatusCode::BadRequest,
+                format!("{{\"error\": \"{}\"}}", msg).into(),
+            ),
             ErrorKind::PublishFailedAlreadyExists(_) => Error::JSON(
                 StatusCode::Conflict,
                 r#"{"error": "An resouce with the requested ID already exists"}"#.into(),
@@ -236,7 +240,7 @@ pub fn serialize<T: Serialize>(
         }
         ResourceType::Trickle => Err(Error::generic(
             StatusCode::InternalServerError,
-            &"Unsuported formating as trickle",
+            &"Unsuported formatting as trickle",
         )),
     }
 }

@@ -1,0 +1,6 @@
+onramp:
+    - id: invalid-onramp
+      codec: json
+      config:
+        host: 127.0.0.1
+        port: 65535

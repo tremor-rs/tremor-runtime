@@ -32,6 +32,7 @@ pub async fn list_artefact(req: Request) -> Result<Response> {
 
 pub async fn publish_artefact(req: Request) -> Result<Response> {
     let (req, data): (_, tremor_runtime::config::OffRamp) = decode(req).await?;
+    let data = data.validate()?;
     let url = build_url(&["offramp", &data.id])?;
     let repo = &req.state().world.repo;
     let result = repo.publish_offramp(&url, false, data).await?;

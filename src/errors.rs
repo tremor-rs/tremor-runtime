@@ -172,6 +172,10 @@ error_chain! {
             description("The artefact is a system artefact and cannot be unpublished")
                 display("Cannot unpublish system artefact {}.", key)
         }
+        InvalidConfig(msg: String) {
+            description("The provided configuration is invalid")
+                display("Invalid Configuration: {}.", msg)
+        }
 
         BindFailedAlreadyExists(key: String) {
             description("The binding already exists")

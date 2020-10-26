@@ -1,0 +1,7 @@
+id: invalid-onramp
+type: rest
+peer: bla
+codec: json
+config:
+  host: 127.0.0.1
+  port: 65535

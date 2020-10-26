@@ -1076,6 +1076,53 @@ suites:
             contains:
               - "id: ws-linked"
               - "instances: []"
+  - name: Validating onramps and offramps upon publishing
+    tags:
+      - publish
+      - validate
+    cases:
+      - name: Publish invalid offramp
+        command: >
+          curl -vs -stderr -X POST --data-binary @data/invalid-offramp.yaml -H"Content-Type: application/yaml" -H"Accept: application/yaml" http://localhost:9898/offramp
+        tags:
+          - validate
+          - publish
+        status: 0
+        expects:
+          - source: stderr
+            contains:
+              - HTTP/1.1 400 Bad Request
+          - source: stdout
+            contains:
+              - "Invalid offramp 'invalid-offramp': Provide one of `type` or `peer`"
+      - name: Publish invalid onramp
+        command: >
+          curl -vs -stderr -X POST --data-binary @data/invalid-onramp.yaml -H"Content-Type: application/yaml" -H"Accept: application/yaml" http://localhost:9898/onramp
+        tags:
+          - validate
+          - publish
+        status: 0
+        expects:
+          - source: stderr
+            contains:
+              - HTTP/1.1 400 Bad Request
+          - source: stdout
+            contains:
+              - "Invalid onramp 'invalid-onramp': Provide either `type` or `peer`, not both"
+      - name: Publish invalid yaml
+        command: >
+          curl -vs -stderr -X POST --data-binary @data/invalid.yaml -H"Content-Type: application/yaml" -H"Accept: application/yaml" http://localhost:9898/onramp
+        tags:
+          - validate
+          - publish
+        status: 0
+        expects:
+          - source: stderr
+            contains:
+              - HTTP/1.1 400 Bad Request
+          - source: stdout
+            contains:
+              - "Could not decode YAML"
 
 
 

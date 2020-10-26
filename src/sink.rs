@@ -119,6 +119,10 @@ where
     fn new_box(sink: T) -> Box<Self> {
         Box::new(Self::new(sink))
     }
+
+    fn has_dest_pipelines(&self) -> bool {
+        self.dest_pipelines.values().any(|v| !v.is_empty())
+    }
 }
 
 #[async_trait::async_trait]
@@ -195,13 +199,13 @@ where
 
     fn remove_pipeline(&mut self, id: TremorURL) -> bool {
         self.pipelines.remove(&id);
-        self.pipelines.is_empty() && self.dest_pipelines.is_empty()
+        self.pipelines.is_empty() && !self.has_dest_pipelines()
     }
     fn remove_dest_pipeline(&mut self, port: Cow<'static, str>, id: TremorURL) -> bool {
         if let Some(port_ps) = self.dest_pipelines.get_mut(&port) {
-            port_ps.retain(|(url, _)| url != &id)
+            port_ps.retain(|(url, _)| url != &id);
         }
-        self.pipelines.is_empty() && self.dest_pipelines.is_empty()
+        self.pipelines.is_empty() && !self.has_dest_pipelines()
     }
 
     async fn on_signal(&mut self, signal: Event) -> Option<Event> {

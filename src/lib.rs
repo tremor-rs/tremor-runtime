@@ -89,7 +89,7 @@ pub(crate) use tremor_pipeline::Event;
 pub const QSIZE: usize = 128;
 
 /// In incarnated config
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct IncarnatedConfig {
     /// Onramps
     pub onramps: OnRampVec,
@@ -106,8 +106,8 @@ pub struct IncarnatedConfig {
 /// # Errors
 ///  * if the pipeline can not be incarnated
 pub fn incarnate(config: config::Config) -> Result<IncarnatedConfig> {
-    let onramps = incarnate_onramps(config.onramp.clone());
-    let offramps = incarnate_offramps(config.offramp.clone());
+    let onramps = incarnate_onramps(config.onramp.clone())?;
+    let offramps = incarnate_offramps(config.offramp.clone())?;
     let bindings = incarnate_links(&config.binding);
     Ok(IncarnatedConfig {
         onramps,
@@ -117,12 +117,24 @@ pub fn incarnate(config: config::Config) -> Result<IncarnatedConfig> {
     })
 }
 
-fn incarnate_onramps(config: config::OnRampVec) -> OnRampVec {
-    config.into_iter().map(|d| d).collect()
+fn incarnate_onramps(config: config::OnRampVec) -> Result<OnRampVec> {
+    let len = config.len();
+    config
+        .into_iter()
+        .try_fold(Vec::with_capacity(len), |mut acc, o| {
+            acc.push(o.validate()?);
+            Ok(acc)
+        })
 }
 
-fn incarnate_offramps(config: config::OffRampVec) -> OffRampVec {
-    config.into_iter().map(|d| d).collect()
+fn incarnate_offramps(config: config::OffRampVec) -> Result<OffRampVec> {
+    let len = config.len();
+    config
+        .into_iter()
+        .try_fold(Vec::with_capacity(len), |mut acc, o| {
+            acc.push(o.validate()?);
+            Ok(acc)
+        })
 }
 
 fn incarnate_links(config: &[Binding]) -> BindingVec {
@@ -161,5 +173,27 @@ mod test {
         assert_eq!(1, runtime.onramps.len());
         assert_eq!(1, runtime.offramps.len());
         assert_eq!(2, runtime.bindings[0].links.len());
+    }
+
+    #[test]
+    fn incarnate_invalid_configs() {
+        let mut configs = halfbrown::HashMap::new();
+        configs.insert("tests/configs/invalid_onramp_no_type_no_peer.yaml",  "Invalid Configuration: Invalid onramp 'invalid-onramp': Provide one of `type` or `peer`.");
+        configs.insert("tests/configs/invalid_onramp_peer_and_config.yaml",  "Invalid Configuration: Invalid onramp 'invalid-onramp': `config` section inside `peer` onramp is not allowed.");
+        configs.insert("tests/configs/invalid_onramp_type_and_peer.yaml",    "Invalid Configuration: Invalid onramp 'invalid-onramp': Provide either `type` or `peer`, not both.");
+        configs.insert("tests/configs/invalid_offramp_no_type_no_peer.yaml",  "Invalid Configuration: Invalid offramp 'invalid-offramp': Provide one of `type` or `peer`.");
+        configs.insert("tests/configs/invalid_offramp_peer_and_config.yaml",  "Invalid Configuration: Invalid offramp 'invalid-offramp': `config` section inside `peer` onramp is not allowed.");
+        configs.insert("tests/configs/invalid_offramp_type_and_peer.yaml",    "Invalid Configuration: Invalid offramp 'invalid-offramp': Provide either `type` or `peer`, not both.");
+        for (config_path, errmsg) in configs {
+            let config = slurp(config_path);
+            assert_eq!(
+                errmsg,
+                incarnate(config)
+                    .expect_err(&format!("No error for {}.", config_path))
+                    .to_string(),
+                "Invalid Error Message for config in {}",
+                config_path
+            );
+        }
     }
 }

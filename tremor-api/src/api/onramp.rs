@@ -33,6 +33,7 @@ pub async fn list_artefact(req: Request) -> Result<Response> {
 
 pub async fn publish_artefact(req: Request) -> Result<Response> {
     let (req, data): (_, tremor_runtime::config::OnRamp) = decode(req).await?;
+    let data = data.validate()?;
     let url = build_url(&["onramp", &data.id])?;
     let repo = &req.state().world.repo;
     let result = repo.publish_onramp(&url, false, data).await?;
