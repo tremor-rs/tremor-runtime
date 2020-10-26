@@ -346,9 +346,7 @@ impl Query {
                         outputs.push(id);
                     };
                 }
-                Stmt::WindowDecl(_w) => {}
-                Stmt::ScriptDecl(_s) => {}
-                Stmt::OperatorDecl(_o) => {}
+                Stmt::WindowDecl(_) | Stmt::ScriptDecl(_) | Stmt::OperatorDecl(_) => {}
                 Stmt::Operator(o) => {
                     let target = o.target.clone().to_string();
                     let fqon = if o.module.is_empty() {
@@ -364,13 +362,23 @@ impl Query {
                         ..NodeConfig::default()
                     };
                     let id = pipe_graph.add_node(node.clone());
-                    let inner_stmt: tremor_script::ast::Stmt = Stmt::OperatorDecl(
-                        query
-                            .operators
-                            .get(&fqon)
-                            .ok_or_else(|| Error::from("operator not found"))?
-                            .clone(),
-                    );
+                    let mut decl = query
+                        .operators
+                        .get(&fqon)
+                        .ok_or_else(|| Error::from("operator not found"))?
+                        .clone();
+
+                    if let Some(params) = &o.params {
+                        if let Some(decl_params) = decl.params.as_mut() {
+                            for (k, v) in params {
+                                decl_params.insert(k.clone(), v.clone());
+                            }
+                        } else {
+                            decl.params = Some(params.clone());
+                        }
+                    }
+
+                    let inner_stmt: tremor_script::ast::Stmt = Stmt::OperatorDecl(decl);
                     let stmt_rental = StmtRental::new(Arc::new(self.0.clone()), |_| unsafe {
                         // This is sound since self.0 includes an ARC of the data we
                         // so we hold on to any referenced data by including a clone
