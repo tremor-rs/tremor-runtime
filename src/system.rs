@@ -714,7 +714,7 @@ impl World {
         let artefact_passthrough = tremor_pipeline::query::Query::parse(
             &module_path,
             "#!config id = \"system::passthrough\"\nselect event from in into out;",
-            "<metrics>",
+            "<passthrough>",
             Vec::new(),
             &*tremor_pipeline::FN_REGISTRY.lock()?,
             &aggr_reg,
