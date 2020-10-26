@@ -83,6 +83,6 @@ impl Operator for Summerization {
                 meta.insert("summary", s)?;
             }
         }
-        Ok(EventAndInsights::from(vec![(OUT, event)]))
+        Ok(EventAndInsights::from(event))
     }
 }

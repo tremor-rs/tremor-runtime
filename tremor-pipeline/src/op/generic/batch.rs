@@ -129,7 +129,7 @@ impl Operator for Batch {
                 ..Event::default()
             };
             swap(&mut self.event_ids, &mut event.id);
-            Ok(vec![(OUT, event)].into())
+            Ok(event.into())
         } else {
             Ok(EventAndInsights::default())
         }
@@ -155,7 +155,7 @@ impl Operator for Batch {
                     ..Event::default()
                 };
                 swap(&mut self.event_ids, &mut event.id);
-                Ok(EventAndInsights::from(vec![(OUT, event)]))
+                Ok(EventAndInsights::from(event))
             } else {
                 Ok(EventAndInsights::default())
             }

@@ -666,7 +666,7 @@ mod test {
             _state: &mut BorrowedValue<'static>,
             event: Event,
         ) -> Result<EventAndInsights> {
-            Ok(vec![(OUT, event)].into())
+            Ok(event.into())
         }
         fn handles_signal(&self) -> bool {
             true

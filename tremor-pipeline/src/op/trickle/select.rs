@@ -527,7 +527,7 @@ impl Operator for TrickleSelect {
             // We manually drop this here to inform rust that we no longer
             // borrow values from event
             drop(group_values);
-            return Ok(vec![(OUT, event)].into());
+            return Ok(event.into());
         }
         if group_values.is_empty() {
             group_values.push(vec![Value::null()])

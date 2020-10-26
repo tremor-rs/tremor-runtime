@@ -75,7 +75,7 @@ impl Operator for History {
                 }
             }
         };
-        Ok(vec![(OUT, event)].into())
+        Ok(event.into())
     }
 
     fn handles_signal(&self) -> bool {

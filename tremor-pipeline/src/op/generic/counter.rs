@@ -50,6 +50,6 @@ impl Operator for Counter {
             "event".into() => value.clone_static(),
         });
 
-        Ok(vec![(OUT, event)].into())
+        Ok(event.into())
     }
 }

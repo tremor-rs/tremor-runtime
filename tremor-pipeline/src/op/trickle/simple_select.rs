@@ -147,6 +147,6 @@ impl Operator for SimpleSelect {
             };
         }
 
-        Ok(vec![(OUT, event)].into())
+        Ok(event.into())
     }
 }
