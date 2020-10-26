@@ -1,0 +1,16 @@
+
+define debug::history operator history with
+  op = "op",
+  name = "name",
+end;
+
+create operator history1 from history;
+
+create operator history2 from history with
+  op = "op2"
+end;
+
+select event from in into history1;
+select event from history1 into history2;
+
+select {"meta": $, "event": event} from history2 into out;

@@ -170,7 +170,8 @@ pub struct OperatorStmt<'script> {
     pub target: String,
     /// Module of the script
     pub module: Vec<String>,
-    pub(crate) params: Option<HashMap<String, Value<'script>>>,
+    /// parameters of the instance
+    pub params: Option<HashMap<String, Value<'script>>>,
 }
 impl_expr2!(OperatorStmt);
 

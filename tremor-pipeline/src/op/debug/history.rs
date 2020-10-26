@@ -132,13 +132,30 @@ mod test {
 
         let mut state = Value::null();
 
-        let (out, mut event) = op
+        let (out, event) = op
             .on_event(0, "in", &mut state, event)
             .expect("Failed to run pipeline")
             .events
             .pop()
             .expect("Empty results");
-        assert_eq!("out", out);
+        assert_eq!(out, "out");
+
+        let (out, _event) = op
+            .on_event(0, "in", &mut state, event)
+            .expect("Failed to run pipeline")
+            .events
+            .pop()
+            .expect("Empty results");
+        assert_eq!(out, "out");
+
+        let mut event = Event {
+            id: Ids::new(0, 1),
+            ingest_ns: 1,
+            data: (Value::from("snot"), Value::from(json!({}))).into(),
+            ..Event::default()
+        };
+
+        let _ = op.on_signal(0, &mut event);
         let _ = op.on_signal(0, &mut event);
 
         let history = event.data.suffix().meta().get(op.config.name.as_str());
