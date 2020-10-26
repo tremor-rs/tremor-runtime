@@ -113,6 +113,7 @@ impl Operator for History {
 #[cfg(test)]
 mod test {
     use super::*;
+    use simd_json::json;
     #[test]
     fn history_op_test() {
         let mut op = History {
@@ -125,7 +126,7 @@ mod test {
         let event = Event {
             id: Ids::new(0, 1),
             ingest_ns: 1,
-            data: Value::from("badger").into(),
+            data: (Value::from("snot"), Value::from(json!({}))).into(),
             ..Event::default()
         };
 
