@@ -136,4 +136,7 @@ test_cases!(
     pp_embed_unrecognized_token3,
     pp_embed_unrecognized_token4,
     pp_embed_unrecognized_token5,
+    //INSERT
+    bad_into,
+    bad_from,
 );

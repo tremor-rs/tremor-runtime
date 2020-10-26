@@ -294,7 +294,7 @@ where
     match Query::parse(&mp, opts.src, &opts.raw, vec![], &reg, &aggr_reg) {
         Ok(runnable) => {
             let mut uid = 0;
-            let g = tremor_pipeline::query::Query::from(runnable).to_pipe(&mut uid)?;
+            let g = tremor_pipeline::query::Query(runnable).to_pipe(&mut uid)?;
 
             println!("{}", g.dot)
         }

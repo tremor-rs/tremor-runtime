@@ -197,6 +197,12 @@ pub enum NodeKind {
     Operator,
 }
 
+impl Default for NodeKind {
+    fn default() -> Self {
+        Self::Operator
+    }
+}
+
 /// A circuit breaker action
 #[derive(
     Debug, Clone, Copy, PartialEq, simd_json_derive::Serialize, simd_json_derive::Deserialize,
