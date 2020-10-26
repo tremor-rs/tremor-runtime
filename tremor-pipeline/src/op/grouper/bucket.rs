@@ -132,6 +132,7 @@ pub struct Grouper {
     pub buckets: HashMap<String, Bucket>,
 }
 
+#[cfg(not(tarpaulin_include))]
 impl std::fmt::Debug for Grouper {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "Bucketgrouper")
@@ -220,5 +221,106 @@ impl Operator for Grouper {
             res.push(influx_value(BUCKETING, tags.clone(), b.overflow, timestamp));
         }
         Ok(res)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use simd_json::json;
+    use tremor_script::Value;
+
+    #[test]
+    fn bucket() {
+        let mut op = Grouper {
+            buckets: HashMap::new(),
+
+            _id: "badger".into(),
+        };
+        let event1 = Event {
+            id: 1.into(),
+            ingest_ns: 1,
+            data: Value::from("snot").into(),
+            ..Event::default()
+        };
+
+        let mut state = Value::null();
+
+        let mut r = op
+            .on_event(0, "in", &mut state, event1.clone())
+            .expect("could not run pipeline");
+
+        let (port, e) = r.events.pop().unwrap();
+        assert!(r.events.is_empty());
+        assert_eq!(port, "err");
+        assert_eq!(e, event1);
+
+        // let meta =
+        let event2 = Event {
+            id: 1.into(),
+            ingest_ns: 1,
+            data: (
+                Value::from("snot"),
+                Value::from(json!({"class": "test", "rate": 2})),
+            )
+                .into(),
+            ..Event::default()
+        };
+
+        let mut r = op
+            .on_event(0, "in", &mut state, event2.clone())
+            .expect("could not run pipeline");
+
+        let (port, e) = r.events.pop().unwrap();
+        assert!(r.events.is_empty());
+        assert_eq!(port, "out");
+        assert_eq!(e, event2);
+
+        let mut r = op
+            .on_event(0, "in", &mut state, event2.clone())
+            .expect("could not run pipeline");
+
+        let (port, e) = r.events.pop().unwrap();
+        assert!(r.events.is_empty());
+        assert_eq!(port, "out");
+        assert_eq!(e, event2);
+
+        let mut r = op
+            .on_event(0, "in", &mut state, event2.clone())
+            .expect("could not run pipeline");
+
+        let (port, e) = r.events.pop().unwrap();
+        assert!(r.events.is_empty());
+        assert_eq!(port, "overflow");
+        assert_eq!(e, event2);
+
+        let event3 = Event {
+            id: 1.into(),
+            ingest_ns: 10_000_000_002,
+            data: (
+                Value::from("snot"),
+                Value::from(json!({"class": "test", "rate": 2})),
+            )
+                .into(),
+            ..Event::default()
+        };
+
+        let mut r = op
+            .on_event(0, "in", &mut state, event3.clone())
+            .expect("could not run pipeline");
+
+        let (port, e) = r.events.pop().unwrap();
+        assert!(r.events.is_empty());
+        assert_eq!(port, "out");
+        assert_eq!(e, event3);
+
+        let mut m = op.metrics(HashMap::new(), 0).unwrap();
+        let overflow = m.pop().unwrap();
+        let pass = m.pop().unwrap();
+        assert!(m.is_empty());
+        assert_eq!(overflow["tags"]["action"], "overflow");
+        assert_eq!(overflow["fields"]["count"], 1);
+        assert_eq!(pass["tags"]["action"], "pass");
+        assert_eq!(pass["fields"]["count"], 3);
     }
 }

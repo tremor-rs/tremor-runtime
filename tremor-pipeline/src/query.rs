@@ -255,9 +255,7 @@ impl Query {
                                 id: name.clone(),
                                 kind: NodeKind::Input,
                                 op_type: "passthrough".to_string(),
-                                config: None,
-                                defn: None,
-                                node: None,
+                                ..NodeConfig::default()
                             });
                             nodes.insert(name.clone(), id);
                             *uid += 1;
@@ -283,9 +281,7 @@ impl Query {
                                 id: name.clone(),
                                 kind: NodeKind::Output,
                                 op_type: "passthrough".to_string(),
-                                config: None,
-                                defn: None,
-                                node: None,
+                                ..NodeConfig::default()
                             });
                             nodes.insert(name.clone(), id);
                             *uid += 1;
@@ -311,9 +307,7 @@ impl Query {
                         id: select_in.id.clone(),
                         kind: NodeKind::Operator,
                         op_type: "trickle::select".to_string(),
-                        config: None,
-                        defn: None,
-                        node: None,
+                        ..NodeConfig::default()
                     };
                     let id = pipe_graph.add_node(node.clone());
 
@@ -335,9 +329,7 @@ impl Query {
                             id,
                             kind: NodeKind::Operator,
                             op_type: "passthrough".to_string(),
-                            config: None,
-                            defn: None,
-                            node: None,
+                            ..NodeConfig::default()
                         };
                         let id = pipe_graph.add_node(node.clone());
                         nodes.insert(name.clone(), id);
@@ -369,9 +361,7 @@ impl Query {
                         id: common_cow(&o.id),
                         kind: NodeKind::Operator,
                         op_type: "trickle::operator".to_string(),
-                        config: None,
-                        defn: None,
-                        node: None,
+                        ..NodeConfig::default()
                     };
                     let id = pipe_graph.add_node(node.clone());
                     let inner_stmt: tremor_script::ast::Stmt = Stmt::OperatorDecl(
@@ -447,9 +437,7 @@ impl Query {
             id: "_metrics".into(),
             kind: NodeKind::Output,
             op_type: "passthrough".to_string(),
-            config: None,
-            defn: None,
-            node: None,
+            ..NodeConfig::default()
         });
         nodes.insert("metrics".into(), id);
         *uid += 1;

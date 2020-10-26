@@ -85,7 +85,7 @@ impl Operator for TrickleOperator {
     fn on_event(
         &mut self,
         uid: u64,
-        port: &str,
+    port: &str,
         state: &mut Value<'static>,
         event: Event,
     ) -> Result<EventAndInsights> {
