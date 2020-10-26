@@ -693,3 +693,66 @@ pub(crate) fn supported_operators(
         op,
     })
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    #[test]
+    fn query() {
+        let module_path = &tremor_script::path::ModulePath { mounts: Vec::new() };
+        let aggr_reg = tremor_script::aggr_registry();
+
+        let src = "select event from in into out;";
+        let query = Query::parse(
+            &module_path,
+            src,
+            "<test>",
+            Vec::new(),
+            &*crate::FN_REGISTRY.lock().unwrap(),
+            &aggr_reg,
+        )
+        .unwrap();
+        assert!(query.id().is_none());
+        assert_eq!(query.source().trim_end(), src);
+
+        // check that we can overwrite the id with a config variable
+        let src = "#!config id = \"test\"\nselect event from in into out;";
+        let query = Query::parse(
+            &module_path,
+            src,
+            "<test>",
+            Vec::new(),
+            &*crate::FN_REGISTRY.lock().unwrap(),
+            &aggr_reg,
+        )
+        .unwrap();
+        assert_eq!(query.id().unwrap(), "test");
+        assert_eq!(query.source().trim_end(), src);
+    }
+
+    #[test]
+    fn custom_port() {
+        let module_path = &tremor_script::path::ModulePath { mounts: Vec::new() };
+        let aggr_reg = tremor_script::aggr_registry();
+
+        let src = "select event from in/test_in into out/test_out;";
+        let q = Query::parse(
+            &module_path,
+            src,
+            "<test>",
+            Vec::new(),
+            &*crate::FN_REGISTRY.lock().unwrap(),
+            &aggr_reg,
+        )
+        .unwrap();
+
+        let mut uid = 0;
+        let g = q.to_pipe(&mut uid).unwrap();
+
+        assert!(g.inputs.contains_key("test_in"));
+
+        let out = g.graph.get(4).unwrap();
+        assert_eq!(out.id, "test_out");
+        assert_eq!(out.kind, NodeKind::Output);
+    }
+}
