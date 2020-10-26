@@ -126,13 +126,10 @@ impl Operator for RoundRobin {
 
             Ok(EventAndInsights {
                 insights: vec![e],
-                events: vec![],
+                ..EventAndInsights::default()
             })
         } else {
-            Ok(EventAndInsights {
-                insights: vec![],
-                events: vec![],
-            })
+            Ok(EventAndInsights::default())
         }
     }
     fn handles_contraflow(&self) -> bool {

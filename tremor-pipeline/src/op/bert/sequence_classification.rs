@@ -127,6 +127,6 @@ impl Operator for SequenceClassification {
             // mutating the event
             meta.insert("classification", label_meta)?;
         }
-        Ok(EventAndInsights::from(vec![(OUT, event)]))
+        Ok(EventAndInsights::from(event))
     }
 }

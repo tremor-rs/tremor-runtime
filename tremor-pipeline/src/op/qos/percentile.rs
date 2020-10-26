@@ -102,7 +102,7 @@ impl Operator for Percentile {
         if r > self.perc {
             Ok(vec![(OVERFLOW, event)].into())
         } else {
-            Ok(vec![(OUT, event)].into())
+            Ok(event.into())
         }
     }
 

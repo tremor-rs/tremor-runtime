@@ -188,7 +188,7 @@ impl Operator for Grouper {
             };
             if window.inc_t(event.ingest_ns).is_ok() {
                 groups.pass += 1;
-                Ok(vec![(OUT, event)].into())
+                Ok(event.into())
             } else {
                 groups.overflow += 1;
                 Ok(vec![("overflow".into(), event)].into())
