@@ -128,6 +128,7 @@ test_cases!(
     pp_alias_operator,
     pp_config_directive,
     //INSERT
+    script_error,
     guard_where,
     guard_having,
     history,

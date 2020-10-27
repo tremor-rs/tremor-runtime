@@ -1,0 +1,13 @@
+define script error
+script
+  match event.snot of
+    case 1 => drop
+    default => event.snot
+  end
+end;
+
+create script error;
+
+select event from in into error;
+select event from error into out;
+select event from error/err into out;
