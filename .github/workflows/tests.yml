@@ -35,7 +35,7 @@ jobs:
           RUSTFLAGS: -C target-cpu=native
         with:
           version: "0.15.0"
-          args: " --exclude-files target* tremor-cli --all"
+          args: " --exclude-files target* tremor-cli deprecated --all"
       - uses: codecov/codecov-action@v1.0.2
         with:
           token: ${{secrets.CODECOV_TOKEN}} #required
