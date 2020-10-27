@@ -26,7 +26,7 @@ pub static mut INSTANCE: &str = "tremor";
 pub(crate) struct Ramp {
     r#in: u64,
     out: u64,
-    error: u64,
+    err: u64,
 }
 
 #[derive(Debug)]
@@ -39,13 +39,13 @@ pub(crate) struct RampReporter {
 }
 
 impl RampReporter {
-    pub fn new(artefact_url: TremorURL, flush_interval_s: Option<u64>) -> Self {
+    pub(crate) fn new(artefact_url: TremorURL, flush_interval_s: Option<u64>) -> Self {
         Self {
             artefact_url,
             metrics: Ramp {
                 r#in: 0,
                 out: 0,
-                error: 0,
+                err: 0,
             },
             metrics_pipeline: None,
             flush_interval: flush_interval_s.map(|n| n * 1_000_000_000),
@@ -53,72 +53,98 @@ impl RampReporter {
         }
     }
 
-    pub fn set_metrics_pipeline(&mut self, pipeline_tuple: (TremorURL, pipeline::Addr)) {
+    pub(crate) fn set_metrics_pipeline(&mut self, pipeline_tuple: (TremorURL, pipeline::Addr)) {
         self.metrics_pipeline = Some(pipeline_tuple);
     }
 
-    // TODO inline useful on these?
-    #[inline]
-    pub fn increment_in(&mut self) {
+    pub(crate) fn increment_in(&mut self) {
         self.metrics.r#in += 1;
     }
 
-    #[inline]
-    pub fn increment_out(&mut self) {
+    pub(crate) fn increment_out(&mut self) {
         self.metrics.out += 1;
     }
 
-    #[inline]
-    pub fn increment_error(&mut self) {
-        self.metrics.error += 1;
+    pub(crate) fn increment_err(&mut self) {
+        self.metrics.err += 1;
     }
 
-    #[inline]
-    pub fn periodic_flush(&mut self, timestamp: u64) -> Option<u64> {
+    pub(crate) fn periodic_flush(&mut self, timestamp: u64) -> Option<u64> {
         if let Some(interval) = self.flush_interval {
-            if timestamp - self.last_flush_ns > interval {
-                self.flush(timestamp);
+            if timestamp >= self.last_flush_ns + interval {
+                self.send(vec![
+                    self.make_event(timestamp, "in", self.metrics.r#in),
+                    self.make_event(timestamp, "out", self.metrics.out),
+                    self.make_event(timestamp, "error", self.metrics.err),
+                ]);
+                self.last_flush_ns = timestamp;
                 return Some(timestamp);
             }
         }
         None
     }
 
-    fn flush(&mut self, timestamp: u64) {
-        self.send_metric(timestamp, "in", self.metrics.r#in);
-        self.send_metric(timestamp, "out", self.metrics.out);
-        self.send_metric(timestamp, "error", self.metrics.error);
-        self.last_flush_ns = timestamp;
+    #[must_use]
+    fn make_event(&self, timestamp: u64, port: &'static str, count: u64) -> Event {
+        let mut tags: HashMap<Cow<'static, str>, Value<'static>> = HashMap::with_capacity(2);
+        tags.insert_nocheck(Cow::Borrowed("ramp"), self.artefact_url.to_string().into());
+        tags.insert_nocheck(Cow::Borrowed("port"), port.into());
+
+        let value =
+            tremor_pipeline::influx_value(Cow::Borrowed("ramp_events"), tags, count, timestamp);
+        // full metrics payload
+        // TODO update origin url
+        Event {
+            data: value.into(),
+            ingest_ns: timestamp,
+            ..Event::default()
+        }
     }
 
-    pub(crate) fn send(&self, event: Event) {
+    // this is simple forwarding
+    #[cfg(not(tarpaulin_include))]
+    pub(crate) fn send(&self, events: Vec<Event>) {
         if let Some((metrics_input, metrics_addr)) = &self.metrics_pipeline {
             if let Some(input) = metrics_input.instance_port() {
-                if !metrics_addr.try_send(pipeline::Msg::Event {
-                    input: input.to_string().into(),
-                    event,
-                }) {
-                    error!("Failed to send to system metrics pipeline");
+                for event in events {
+                    if !metrics_addr.try_send(pipeline::Msg::Event {
+                        input: input.to_string().into(),
+                        event,
+                    }) {
+                        error!("Failed to send to system metrics pipeline");
+                    }
                 }
             }
         }
     }
-    fn send_metric(&self, timestamp: u64, port: &'static str, count: u64) {
-        // metrics tags
-        let mut tags: HashMap<Cow<'static, str>, Value<'static>> = HashMap::new();
-        tags.insert(Cow::Borrowed("ramp"), self.artefact_url.to_string().into());
+}
 
-        tags.insert(Cow::Borrowed("port"), port.into());
-        let value: Value =
-            tremor_pipeline::influx_value(Cow::Borrowed("ramp_events"), tags, count, timestamp);
+#[cfg(test)]
+mod test {
+    use super::*;
 
-        // full metrics payload
-        let metrics_event = Event {
-            data: tremor_script::LineValue::new(vec![], |_| ValueAndMeta::from(value)),
-            ingest_ns: timestamp,
-            origin_uri: None, // TODO update
-            ..Event::default()
-        };
-        self.send(metrics_event)
+    #[test]
+    fn test() {
+        let mut r = RampReporter::new(TremorURL::parse("/onramp/example/00").unwrap(), Some(1));
+        r.increment_in();
+        assert_eq!(r.metrics.r#in, 1);
+        r.increment_out();
+        assert_eq!(r.metrics.out, 1);
+        r.increment_err();
+        assert_eq!(r.metrics.err, 1);
+
+        let e = r.make_event(123, "test", 42);
+
+        let (v, _) = e.data.parts();
+
+        assert_eq!(v["measurement"], "ramp_events");
+        assert_eq!(v["tags"]["ramp"], "tremor://localhost/onramp/example/00");
+        assert_eq!(v["tags"]["port"], "test");
+        assert_eq!(v["fields"]["count"], 42);
+        assert_eq!(v["timestamp"], 123);
+        assert_eq!(r.periodic_flush(1), None);
+        assert_eq!(r.periodic_flush(1_000_000_000), Some(1_000_000_000));
+        assert_eq!(r.periodic_flush(1_000_000_001), None);
+        assert_eq!(r.periodic_flush(2_000_000_000), Some(2_000_000_000));
     }
 }

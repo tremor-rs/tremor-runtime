@@ -248,7 +248,7 @@ impl Manager {
                                     .await
                                 {
                                     error!("[Offramp::{}] On Event error: {}", offramp_url, err);
-                                    metrics_reporter.increment_error();
+                                    metrics_reporter.increment_err();
                                     true
                                 } else {
                                     metrics_reporter.increment_out();
