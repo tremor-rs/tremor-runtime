@@ -21,6 +21,8 @@
 //!
 //! This operator takes no configuration
 
+#![cfg(not(tarpaulin_include))]
+
 use crate::sink::prelude::*;
 use async_std::io;
 use halfbrown::HashMap;

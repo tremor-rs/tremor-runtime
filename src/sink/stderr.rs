@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![cfg(not(tarpaulin_include))]
+
 //! # Debug offramp reporting classification statistics.
 //!
 //! The debug offramp periodically reports on the number of events

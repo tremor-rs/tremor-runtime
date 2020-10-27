@@ -30,6 +30,8 @@
 //! The 1st additional output is used to send divert messages that can not be
 //! enqueued due to overload
 
+#![cfg(not(tarpaulin_include))]
+
 use crate::postprocessor::Postprocessors;
 use crate::sink::prelude::*;
 use async_channel::{bounded, Receiver, Sender};
