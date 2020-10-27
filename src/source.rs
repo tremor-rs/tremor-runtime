@@ -390,14 +390,12 @@ where
         };
         if let Some((last, pipelines)) = pipelines.split_last_mut() {
             if let Some(t) = self.metrics_reporter.periodic_flush(ingest_ns) {
-                for e in self.source.metrics(t) {
-                    self.metrics_reporter.send(e)
-                }
+                self.metrics_reporter.send(self.source.metrics(t))
             }
 
             // TODO refactor metrics_reporter to do this by port now
             if ERR == port {
-                self.metrics_reporter.increment_error();
+                self.metrics_reporter.increment_err();
             } else {
                 self.metrics_reporter.increment_out();
             }
@@ -606,7 +604,7 @@ where
                     }
                     Err(e) => {
                         warn!("[Source::{}] Error: {}", self.source_id, e);
-                        self.metrics_reporter.increment_error();
+                        self.metrics_reporter.increment_err();
                     }
                 }
             }
