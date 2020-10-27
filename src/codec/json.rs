@@ -18,10 +18,12 @@ use super::prelude::*;
 pub struct JSON {}
 
 impl Codec for JSON {
+    #[cfg(not(tarpaulin_include))]
     fn name(&self) -> String {
         "json".to_string()
     }
 
+    #[cfg(not(tarpaulin_include))]
     fn mime_types(&self) -> Vec<&str> {
         vec!["application/json"]
         // TODO: application/json-seq for one json doc per line?
@@ -38,7 +40,7 @@ impl Codec for JSON {
     }
     fn encode(&self, data: &simd_json::BorrowedValue) -> Result<Vec<u8>> {
         let mut v = Vec::with_capacity(1024);
-        data.write(&mut v)?;
+        self.encode_into(data, &mut v)?;
         Ok(v)
     }
     fn encode_into(&self, data: &Value, dst: &mut Vec<u8>) -> Result<()> {
@@ -46,6 +48,7 @@ impl Codec for JSON {
         Ok(())
     }
 
+    #[cfg(not(tarpaulin_include))]
     fn boxed_clone(&self) -> Box<dyn Codec> {
         Box::new(self.clone())
     }

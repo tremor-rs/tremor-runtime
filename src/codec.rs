@@ -24,6 +24,16 @@ pub(crate) mod statsd;
 pub(crate) mod string;
 pub(crate) mod yaml;
 
+const MIME_TYPES: [&str; 7] = [
+    "application/json",
+    "application/yaml",
+    "text/plain",
+    "text/html",
+    "application/msgpack",
+    "application/x-msgpack",
+    "application/vnd.msgpack",
+];
+
 mod prelude {
     pub use super::Codec;
     pub use crate::errors::*;
@@ -42,6 +52,7 @@ pub trait Codec: Send + Sync {
     /// e.g. application/json
     ///
     /// The returned mime types should be unique to this codec
+    #[cfg(not(tarpaulin_include))]
     fn mime_types(&self) -> Vec<&str> {
         vec![]
     }
@@ -65,6 +76,7 @@ pub trait Codec: Send + Sync {
     ///
     /// # Errors
     ///  * when we can't write encode to the given vector
+    #[cfg(not(tarpaulin_include))]
     fn encode_into(&self, data: &BorrowedValue, dst: &mut Vec<u8>) -> Result<()> {
         let mut res = self.encode(data)?;
         std::mem::swap(&mut res, dst);
@@ -102,27 +114,15 @@ pub fn lookup(name: &str) -> Result<Box<dyn Codec>> {
 /// like statsd for text/plain
 /// these must be specified in a source specific `codec_map`
 #[must_use]
+#[allow(clippy::unwrap_used)]
 pub fn builtin_codec_map() -> halfbrown::HashMap<String, Box<dyn Codec>> {
-    let mut codecs: halfbrown::HashMap<String, Box<dyn Codec>> =
-        halfbrown::HashMap::with_capacity(7);
-    codecs.insert_nocheck("application/json".to_string(), Box::new(json::JSON {}));
-    codecs.insert_nocheck("application/yaml".to_string(), Box::new(yaml::YAML {}));
-    codecs.insert_nocheck("text/plain".to_string(), Box::new(string::String {}));
-    codecs.insert_nocheck("text/html".to_string(), Box::new(string::String {}));
-    codecs.insert_nocheck(
-        "application/msgpack".to_string(),
-        Box::new(msgpack::MsgPack {}),
-    );
-    codecs.insert_nocheck(
-        "application/x-msgpack".to_string(),
-        Box::new(msgpack::MsgPack {}),
-    );
-    codecs.insert_nocheck(
-        "application/vnd.msgpack".to_string(),
-        Box::new(msgpack::MsgPack {}),
-    );
-    // TODO: add more codecs
-    codecs
+    MIME_TYPES
+        .iter()
+        .map(|t| {
+            // ALLOW: we know that the codecs exist
+            ((*t).to_string(), by_mime_type(t).unwrap())
+        })
+        .collect()
 }
 
 /// lookup a codec by mime type
@@ -138,5 +138,47 @@ pub fn by_mime_type(mime: &str) -> Result<Box<dyn Codec>> {
             Ok(Box::new(msgpack::MsgPack {}))
         }
         _ => Err(format!("No codec found for mime type '{}'", mime).into()),
+    }
+}
+
+#[cfg(test)]
+mod test {
+
+    #[test]
+    fn lookup() {
+        assert!(super::lookup("json").is_ok());
+        assert!(super::lookup("msgpack").is_ok());
+        assert!(super::lookup("influx").is_ok());
+        assert!(super::lookup("binflux").is_ok());
+        assert!(super::lookup("null").is_ok());
+        assert!(super::lookup("string").is_ok());
+        assert!(super::lookup("statsd").is_ok());
+        assert!(super::lookup("yaml").is_ok());
+        assert_eq!(
+            super::lookup("snot").err().unwrap().to_string(),
+            "Codec 'snot' not found."
+        )
+    }
+
+    #[test]
+    fn builtin_codec_map() {
+        let map = super::builtin_codec_map();
+
+        for t in super::MIME_TYPES.iter() {
+            assert!(map.contains_key(*t));
+        }
+    }
+    #[test]
+    fn by_mime_type() {
+        for t in super::MIME_TYPES.iter() {
+            assert!(super::by_mime_type(t).is_ok());
+        }
+        assert_eq!(
+            super::by_mime_type("application/badger")
+                .err()
+                .unwrap()
+                .to_string(),
+            "No codec found for mime type 'application/badger'"
+        );
     }
 }

@@ -19,10 +19,12 @@ use rmp_serde as rmps;
 pub struct MsgPack {}
 
 impl Codec for MsgPack {
+    #[cfg(not(tarpaulin_include))]
     fn name(&self) -> String {
         "msgpack".to_string()
     }
 
+    #[cfg(not(tarpaulin_include))]
     fn mime_types(&self) -> Vec<&str> {
         vec![
             "application/msgpack",
@@ -45,6 +47,7 @@ impl Codec for MsgPack {
         Ok(rmps::to_vec(&data)?)
     }
 
+    #[cfg(not(tarpaulin_include))]
     fn boxed_clone(&self) -> Box<dyn Codec> {
         Box::new(self.clone())
     }

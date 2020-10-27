@@ -19,10 +19,12 @@ use simd_json::{self, BorrowedValue as Value};
 pub struct String {}
 
 impl Codec for String {
+    #[cfg(not(tarpaulin_include))]
     fn name(&self) -> std::string::String {
         "string".to_string()
     }
 
+    #[cfg(not(tarpaulin_include))]
     fn mime_types(&self) -> Vec<&str> {
         vec!["text/plain", "text/html"]
     }
@@ -46,6 +48,7 @@ impl Codec for String {
         }
     }
 
+    #[cfg(not(tarpaulin_include))]
     fn boxed_clone(&self) -> Box<dyn Codec> {
         Box::new(self.clone())
     }

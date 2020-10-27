@@ -18,6 +18,7 @@ use super::prelude::*;
 pub struct Null {}
 
 impl Codec for Null {
+    #[cfg(not(tarpaulin_include))]
     fn name(&self) -> String {
         "null".to_string()
     }
@@ -33,6 +34,7 @@ impl Codec for Null {
         Ok(vec![])
     }
 
+    #[cfg(not(tarpaulin_include))]
     fn boxed_clone(&self) -> Box<dyn Codec> {
         Box::new(self.clone())
     }
