@@ -1,0 +1,1 @@
+select event from in where event % 2 == 0 into out;
