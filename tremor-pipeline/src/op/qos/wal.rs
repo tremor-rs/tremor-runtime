@@ -24,12 +24,14 @@ const OUT: Cow<'static, str> = Cow::Borrowed("out");
 
 #[derive(Clone, Copy, Default)]
 struct Idx([u8; 8]);
+#[cfg(not(tarpaulin_include))]
 impl std::fmt::Debug for Idx {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Idx({})", u64::from(self))
     }
 }
 
+#[cfg(not(tarpaulin_include))]
 impl std::fmt::Display for Idx {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", u64::from(self))
@@ -47,13 +49,6 @@ impl Add<u64> for Idx {
     type Output = Idx;
     fn add(self, rhs: u64) -> Self::Output {
         Idx::from(u64::from(self) + rhs)
-    }
-}
-
-impl Add<u8> for Idx {
-    type Output = Idx;
-    fn add(self, rhs: u8) -> Self::Output {
-        self + u64::from(rhs)
     }
 }
 
@@ -92,6 +87,7 @@ impl From<IVec> for Idx {
         Self(unsafe { mem::transmute(res.to_be()) })
     }
 }
+
 impl From<u64> for Idx {
     fn from(v: u64) -> Self {
         Self(unsafe { mem::transmute(v.to_be()) })
@@ -189,6 +185,15 @@ op!(WalFactory(node) {
     if let Some(map) = &node.config {
         let config: Config = Config::new(map)?;
 
+        Ok(Box::new(WAL::new(node.id.to_string(), config)?))
+
+    } else {
+        Err(ErrorKind::MissingOpConfig(node.id.to_string()).into())
+    }
+});
+
+impl WAL {
+    fn new(id: String, config: Config) -> Result<Self> {
         let wal = if let Some(dir) = &config.dir {
             sled::open(&dir)?
         } else {
@@ -199,7 +204,7 @@ op!(WalFactory(node) {
 
         #[allow(clippy::cast_possible_truncation)]
         let read = state_tree.get("read")?.map(Idx::from).unwrap_or_default();
-        Ok(Box::new(WAL{
+        Ok(WAL {
             cnt: events_tree.len() as u64,
             wal,
             read,
@@ -214,15 +219,10 @@ op!(WalFactory(node) {
                 scheme: "tremor-wal".to_string(),
                 host: "pipeline".to_string(),
                 port: None,
-                path: vec![node.id.to_string()],
-            })
-        }))
-    } else {
-        Err(ErrorKind::MissingOpConfig(node.id.to_string()).into())
+                path: vec![id],
+            }),
+        })
     }
-});
-
-impl WAL {
     fn limit_reached(&self) -> Result<bool> {
         Ok(self.cnt >= self.config.max_elements
             || self.wal.size_on_disk()? >= self.config.max_bytes)
@@ -281,6 +281,7 @@ fn maybe_parse_ivec(e: Option<IVec>) -> Option<Event> {
 }
 
 impl Operator for WAL {
+    #[cfg(not(tarpaulin_include))]
     fn handles_contraflow(&self) -> bool {
         true
     }
@@ -344,6 +345,7 @@ impl Operator for WAL {
         insight.cb = CBAction::None;
     }
 
+    #[cfg(not(tarpaulin_include))]
     fn handles_signal(&self) -> bool {
         true
     }
@@ -414,7 +416,8 @@ mod test {
             max_bytes: 1024 * 1024,
             flush_on_evnt: None,
         };
-        let mut o = WalFactory::new().from_node(&NodeConfig::from_config("test", c)?)?;
+        let mut o = WAL::new("test".to_string(), c)?;
+
         let mut v = Value::null();
         let e = Event::default();
 
@@ -455,11 +458,11 @@ mod test {
         i.cb = CBAction::Fail;
         o.on_contraflow(0, &mut i);
 
-        // Send a second event
-        let r = o.on_event(0, "in", &mut v, e.clone())?;
-        // since we failed before we should see 4 events, 4 and the retransmit
-        // of 1-3
-        assert_eq!(r.len(), 4);
+        // since we failed before we should see 3 events the retransmit of 1-3
+        let r = o.on_signal(0, &mut i)?;
+        assert_eq!(r.len(), 3);
+
+        o.gc()?;
 
         Ok(())
     }
