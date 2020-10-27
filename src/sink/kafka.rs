@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![cfg(not(tarpaulin_include))]
+
 //! # Kafka Offramp
 //!
 //! The `kafka` offramp allows persisting events to a kafka queue.

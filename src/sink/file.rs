@@ -20,6 +20,8 @@
 //!
 //! See [Config](struct.Config.html) for details.
 
+#![cfg(not(tarpaulin_include))]
+
 use crate::sink::prelude::*;
 use async_std::fs::File as FSFile;
 use async_std::io::prelude::*;

@@ -20,6 +20,7 @@
 //!
 //! See [Config](struct.Config.html) for details.
 
+#![cfg(not(tarpaulin_include))]
 // This is OK, Blackhole is benchmark only
 #![allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
 

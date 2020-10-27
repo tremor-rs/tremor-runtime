@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![cfg(not(tarpaulin_include))]
+
 //! # UDP Offramp
 //!
 //! Sends each message as a udp datagram

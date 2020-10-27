@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![cfg(not(tarpaulin_include))]
+
 use crate::sink::prelude::*;
 use crate::source::prelude::*;
 use async_channel::{bounded, unbounded, Receiver, Sender};
