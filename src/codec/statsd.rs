@@ -20,6 +20,7 @@ use std::str;
 pub struct StatsD {}
 
 impl Codec for StatsD {
+    #[cfg(not(tarpaulin_include))]
     fn name(&self) -> String {
         "statsd".to_string()
     }
@@ -36,6 +37,7 @@ impl Codec for StatsD {
         encode(data)
     }
 
+    #[cfg(not(tarpaulin_include))]
     fn boxed_clone(&self) -> Box<dyn Codec> {
         Box::new(self.clone())
     }
@@ -257,8 +259,13 @@ mod test {
 
     #[test]
     fn horst() {
-        let data = b"horst:42.23|h";
-        let parsed = decode(data, 0).expect("failed to decode");
+        let c = StatsD {};
+        let mut data = b"horst:42.23|h".to_vec();
+
+        let parsed = c
+            .decode(data.as_mut_slice(), 0)
+            .expect("failed to decode")
+            .unwrap();
         let expected: Value = json!({
             "type": "h",
             "metric": "horst",
@@ -267,8 +274,8 @@ mod test {
         })
         .into();
         assert_eq!(parsed, expected);
-        let encoded = encode(&parsed).expect("failed to encode");
-        assert_eq!(encoded, data);
+        let encoded = c.encode(&parsed).expect("failed to encode");
+        assert_eq!(encoded, b"horst:42.23|h");
     }
 
     #[test]

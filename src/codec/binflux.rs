@@ -26,7 +26,7 @@ const TYPE_STRING: u8 = 2;
 const TYPE_TRUE: u8 = 3;
 const TYPE_FALSE: u8 = 4;
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct BInflux {}
 
 impl BInflux {
@@ -92,7 +92,11 @@ impl BInflux {
                     res.write_u8(TYPE_STRING)?;
                     write_str(&mut res, v)?;
                 } else {
-                    error!("Unknown type as influx line value: {:?}", v.value_type())
+                    return Err(ErrorKind::InvalidBInfluxData(format!(
+                        "Unknown type as influx line value: {:?}",
+                        v.value_type()
+                    ))
+                    .into());
                 }
             }
         } else {
@@ -179,5 +183,36 @@ impl Codec for BInflux {
 
     fn boxed_clone(&self) -> Box<dyn Codec> {
         Box::new(self.clone())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use simd_json::prelude::*;
+    use simd_json::BorrowedValue;
+    #[test]
+    fn errors() {
+        let mut o = BorrowedValue::object();
+        let c = BInflux::default();
+        assert_eq!(
+            c.encode(&o).err().unwrap().to_string(),
+            "Invalid BInflux Line Protocol data: measurement missing"
+        );
+
+        o.insert("measurement", "m").unwrap();
+        assert_eq!(
+            c.encode(&o).err().unwrap().to_string(),
+            "Invalid BInflux Line Protocol data: timestamp missing"
+        );
+        o.insert("timestamp", 42).unwrap();
+        let mut fields = BorrowedValue::object();
+        fields.insert("snot", vec![1]).unwrap();
+
+        o.insert("fields", fields).unwrap();
+        assert_eq!(
+            c.encode(&o).err().unwrap().to_string(),
+            "Invalid BInflux Line Protocol data: Unknown type as influx line value: Array"
+        );
     }
 }
