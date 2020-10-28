@@ -201,7 +201,7 @@ impl From<TremorError> for Error {
             ),
             ErrorKind::InvalidConfig(msg) => Error::JSON(
                 StatusCode::BadRequest,
-                format!("{{\"error\": \"{}\"}}", msg).into(),
+                format!("{{\"error\": \"{}\"}}", msg),
             ),
             ErrorKind::PublishFailedAlreadyExists(_) => Error::JSON(
                 StatusCode::Conflict,
