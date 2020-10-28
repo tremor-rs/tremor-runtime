@@ -116,7 +116,6 @@ test_cases!(
     invalid_const_unary,
     invalid_extractor,
     lexer_diamond,
-    lexer_double_minus,
     lexer_ngt,
     lexer_triple_colon,
     lexer_unterminated_extractor,

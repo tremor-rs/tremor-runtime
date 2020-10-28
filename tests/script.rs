@@ -84,6 +84,7 @@ test_cases!(
     base64,
     binary_float,
     binary_int,
+    binary_uint,
     binary_string,
     binary,
     bit_ops,

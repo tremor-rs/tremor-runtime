@@ -11,6 +11,10 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
+// This is terminal related for colorful printing
+#![cfg(not(tarpaulin_include))]
+
 use crate::ast::Warning;
 use crate::errors::{CompilerError, Error as ScriptError};
 use crate::lexer::{Token, TokenSpan};
@@ -54,6 +58,7 @@ pub struct Error {
 impl Error {
     /// Get start location of the error
     #[must_use]
+
     pub fn start(&self) -> Location {
         self.start
     }
