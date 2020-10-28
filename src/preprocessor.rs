@@ -32,7 +32,8 @@ pub type Preprocessors = Vec<Box<dyn Preprocessor>>;
 /// Preprocessor trait
 pub trait Preprocessor: Sync + Send {
     /// Canonical name for this preprocessor
-    fn name(&self) -> String;
+    #[cfg(not(tarpaulin_include))]
+    fn name(&self) -> &str;
     /// process data
     ///
     /// # Errors
@@ -140,8 +141,9 @@ pub(crate) use lines::Lines;
 pub(crate) struct FilterEmpty {}
 
 impl Preprocessor for FilterEmpty {
-    fn name(&self) -> String {
-        "remove-empty".to_string()
+    #[cfg(not(tarpaulin_include))]
+    fn name(&self) -> &str {
+        "remove-empty"
     }
     fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         if data.is_empty() {
@@ -155,8 +157,9 @@ impl Preprocessor for FilterEmpty {
 #[derive(Clone, Default, Debug)]
 pub(crate) struct Nulls {}
 impl Preprocessor for Nulls {
-    fn name(&self) -> String {
-        "nulls".to_string()
+    #[cfg(not(tarpaulin_include))]
+    fn name(&self) -> &str {
+        "nulls"
     }
 
     fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
@@ -167,8 +170,9 @@ impl Preprocessor for Nulls {
 #[derive(Clone, Default, Debug)]
 pub(crate) struct ExtractIngresTs {}
 impl Preprocessor for ExtractIngresTs {
-    fn name(&self) -> String {
-        "extract-ingress-ts".to_string()
+    #[cfg(not(tarpaulin_include))]
+    fn name(&self) -> &str {
+        "extract-ingress-ts"
     }
 
     fn process(&mut self, ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
@@ -181,8 +185,9 @@ impl Preprocessor for ExtractIngresTs {
 #[derive(Clone, Default, Debug)]
 pub(crate) struct Base64 {}
 impl Preprocessor for Base64 {
-    fn name(&self) -> String {
-        "base64".to_string()
+    #[cfg(not(tarpaulin_include))]
+    fn name(&self) -> &str {
+        "base64"
     }
 
     fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
@@ -193,8 +198,9 @@ impl Preprocessor for Base64 {
 #[derive(Clone, Default, Debug)]
 pub(crate) struct Gzip {}
 impl Preprocessor for Gzip {
-    fn name(&self) -> String {
-        "gzip".to_string()
+    #[cfg(not(tarpaulin_include))]
+    fn name(&self) -> &str {
+        "gzip"
     }
 
     fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
@@ -209,8 +215,9 @@ impl Preprocessor for Gzip {
 #[derive(Clone, Default, Debug)]
 pub(crate) struct Zlib {}
 impl Preprocessor for Zlib {
-    fn name(&self) -> String {
-        "zlib".to_string()
+    #[cfg(not(tarpaulin_include))]
+    fn name(&self) -> &str {
+        "zlib"
     }
 
     fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
@@ -225,8 +232,9 @@ impl Preprocessor for Zlib {
 #[derive(Clone, Default, Debug)]
 pub(crate) struct Xz2 {}
 impl Preprocessor for Xz2 {
-    fn name(&self) -> String {
-        "xz2".to_string()
+    #[cfg(not(tarpaulin_include))]
+    fn name(&self) -> &str {
+        "xz2"
     }
 
     fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
@@ -241,8 +249,9 @@ impl Preprocessor for Xz2 {
 #[derive(Clone, Default, Debug)]
 pub(crate) struct Snappy {}
 impl Preprocessor for Snappy {
-    fn name(&self) -> String {
-        "snappy".to_string()
+    #[cfg(not(tarpaulin_include))]
+    fn name(&self) -> &str {
+        "snappy"
     }
 
     fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
@@ -258,8 +267,9 @@ impl Preprocessor for Snappy {
 #[derive(Clone, Default, Debug)]
 pub(crate) struct Lz4 {}
 impl Preprocessor for Lz4 {
-    fn name(&self) -> String {
-        "lz4".to_string()
+    #[cfg(not(tarpaulin_include))]
+    fn name(&self) -> &str {
+        "lz4"
     }
 
     fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
@@ -274,8 +284,9 @@ impl Preprocessor for Lz4 {
 #[derive(Clone, Default, Debug)]
 pub(crate) struct Decompress {}
 impl Preprocessor for Decompress {
-    fn name(&self) -> String {
-        "decompress".to_string()
+    #[cfg(not(tarpaulin_include))]
+    fn name(&self) -> &str {
+        "decompress"
     }
 
     fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
@@ -332,8 +343,9 @@ pub(crate) struct LengthPrefix {
     buffer: BytesMut,
 }
 impl Preprocessor for LengthPrefix {
-    fn name(&self) -> String {
-        "length-prefix".to_string()
+    #[cfg(not(tarpaulin_include))]
+    fn name(&self) -> &str {
+        "length-prefix"
     }
 
     #[allow(clippy::cast_possible_truncation)]
@@ -367,20 +379,37 @@ mod test {
     use super::*;
     use crate::postprocessor::{self as post, Postprocessor};
     use crate::preprocessor::{self as pre, Preprocessor};
+    #[test]
+    fn ts() {
+        let mut pre_p = pre::ExtractIngresTs {};
+        let mut post_p = post::AttachIngresTs {};
+
+        let data = vec![1_u8, 2, 3];
+
+        let encoded = post_p.process(42, 23, &data).unwrap().pop().unwrap();
+
+        let mut in_ns = 0u64;
+        let decoded = pre_p.process(&mut in_ns, &encoded).unwrap().pop().unwrap();
+
+        assert_eq!(data, decoded);
+        assert_eq!(in_ns, 42);
+    }
 
     #[test]
     fn length_prefix() -> Result<()> {
         let mut it = 0;
 
-        let mut pre_p = pre::LengthPrefix::default();
+        let pre_p = pre::LengthPrefix::default();
         let mut post_p = post::LengthPrefix::default();
 
         let data = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
         let wire = post_p.process(0, 0, &data)?;
         let (start, end) = wire[0].split_at(7);
-        let recv = pre_p.process(&mut it, start)?;
+        let id = TremorURL::parse("/onramp/snot/00").unwrap();
+        let mut pps: Vec<Box<dyn Preprocessor>> = vec![Box::new(pre_p)];
+        let recv = preprocess(pps.as_mut_slice(), &mut it, start.to_vec(), &id)?;
         assert!(recv.is_empty());
-        let recv = pre_p.process(&mut it, end)?;
+        let recv = preprocess(pps.as_mut_slice(), &mut it, end.to_vec(), &id)?;
         assert_eq!(recv[0], data);
         Ok(())
     }

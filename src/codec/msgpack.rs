@@ -20,8 +20,8 @@ pub struct MsgPack {}
 
 impl Codec for MsgPack {
     #[cfg(not(tarpaulin_include))]
-    fn name(&self) -> String {
-        "msgpack".to_string()
+    fn name(&self) -> &str {
+        "msgpack"
     }
 
     #[cfg(not(tarpaulin_include))]

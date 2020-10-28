@@ -27,7 +27,8 @@ use std::mem;
 /// Postprocessor trait
 pub trait Postprocessor: Send {
     /// Canonical name of the postprocessor
-    fn name(&self) -> String;
+    #[cfg(not(tarpaulin_include))]
+    fn name(&self) -> &str;
     /// process data
     ///
     /// # Errors
@@ -50,7 +51,7 @@ pub fn lookup(name: &str) -> Result<Box<dyn Postprocessor>> {
         "xz2" => Ok(Box::new(Xz2::default())),
         "snappy" => Ok(Box::new(Snappy::default())),
         "lz4" => Ok(Box::new(Lz4::default())),
-        "ingest-ns" => Ok(Box::new(AttachIngresTS {})),
+        "ingest-ns" => Ok(Box::new(AttachIngresTs {})),
         "length-prefixed" => Ok(Box::new(LengthPrefix::default())),
         "gelf-chunking" => Ok(Box::new(GELF::default())),
         _ => Err(format!("Postprocessor '{}' not found.", name).into()),
@@ -99,8 +100,9 @@ pub fn postprocess(
 #[derive(Default)]
 pub(crate) struct Lines {}
 impl Postprocessor for Lines {
-    fn name(&self) -> String {
-        "lines".to_string()
+    #[cfg(not(tarpaulin_include))]
+    fn name(&self) -> &str {
+        "lines"
     }
 
     fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
@@ -115,8 +117,9 @@ impl Postprocessor for Lines {
 #[derive(Default)]
 pub(crate) struct Base64 {}
 impl Postprocessor for Base64 {
-    fn name(&self) -> String {
-        "base64".to_string()
+    #[cfg(not(tarpaulin_include))]
+    fn name(&self) -> &str {
+        "base64"
     }
 
     fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
@@ -127,8 +130,9 @@ impl Postprocessor for Base64 {
 #[derive(Default)]
 pub(crate) struct Gzip {}
 impl Postprocessor for Gzip {
-    fn name(&self) -> String {
-        "gzip".to_string()
+    #[cfg(not(tarpaulin_include))]
+    fn name(&self) -> &str {
+        "gzip"
     }
 
     fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
@@ -143,8 +147,9 @@ impl Postprocessor for Gzip {
 #[derive(Default)]
 pub(crate) struct Zlib {}
 impl Postprocessor for Zlib {
-    fn name(&self) -> String {
-        "zlib".to_string()
+    #[cfg(not(tarpaulin_include))]
+    fn name(&self) -> &str {
+        "zlib"
     }
 
     fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
@@ -158,8 +163,9 @@ impl Postprocessor for Zlib {
 #[derive(Default)]
 pub(crate) struct Xz2 {}
 impl Postprocessor for Xz2 {
-    fn name(&self) -> String {
-        "xz2".to_string()
+    #[cfg(not(tarpaulin_include))]
+    fn name(&self) -> &str {
+        "xz2"
     }
 
     fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
@@ -173,8 +179,9 @@ impl Postprocessor for Xz2 {
 #[derive(Default)]
 pub(crate) struct Snappy {}
 impl Postprocessor for Snappy {
-    fn name(&self) -> String {
-        "snappy".to_string()
+    #[cfg(not(tarpaulin_include))]
+    fn name(&self) -> &str {
+        "snappy"
     }
 
     fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
@@ -191,8 +198,9 @@ impl Postprocessor for Snappy {
 #[derive(Default)]
 pub(crate) struct Lz4 {}
 impl Postprocessor for Lz4 {
-    fn name(&self) -> String {
-        "lz4".to_string()
+    #[cfg(not(tarpaulin_include))]
+    fn name(&self) -> &str {
+        "lz4"
     }
 
     fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
@@ -204,10 +212,11 @@ impl Postprocessor for Lz4 {
     }
 }
 
-pub(crate) struct AttachIngresTS {}
-impl Postprocessor for AttachIngresTS {
-    fn name(&self) -> String {
-        "attach-ingress-ts".to_string()
+pub(crate) struct AttachIngresTs {}
+impl Postprocessor for AttachIngresTs {
+    #[cfg(not(tarpaulin_include))]
+    fn name(&self) -> &str {
+        "attach-ingress-ts"
     }
 
     fn process(&mut self, ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
@@ -222,8 +231,9 @@ impl Postprocessor for AttachIngresTS {
 #[derive(Clone, Default)]
 pub(crate) struct LengthPrefix {}
 impl Postprocessor for LengthPrefix {
-    fn name(&self) -> String {
-        "length-prefix".to_string()
+    #[cfg(not(tarpaulin_include))]
+    fn name(&self) -> &str {
+        "length-prefix"
     }
 
     fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {

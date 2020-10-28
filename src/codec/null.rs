@@ -19,8 +19,8 @@ pub struct Null {}
 
 impl Codec for Null {
     #[cfg(not(tarpaulin_include))]
-    fn name(&self) -> String {
-        "null".to_string()
+    fn name(&self) -> &str {
+        "null"
     }
 
     fn decode<'input>(

@@ -129,8 +129,9 @@ impl Lines {
 }
 
 impl Preprocessor for Lines {
-    fn name(&self) -> String {
-        "lines".to_string()
+    #[cfg(not(tarpaulin_include))]
+    fn name(&self) -> &str {
+        "lines"
     }
 
     fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {

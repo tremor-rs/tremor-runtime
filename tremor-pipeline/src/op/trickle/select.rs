@@ -112,12 +112,12 @@ impl Window {
         segments[..segments.len() - 1].to_vec()
     }
 
-    pub(crate) fn ident_name(fqwn: &str) -> String {
+    pub(crate) fn ident_name(fqwn: &str) -> &str {
         let segments: Vec<_> = fqwn
             .split("::")
-            .map(std::string::ToString::to_string)
+            // .map(std::string::ToString::to_string)
             .collect();
-        segments[segments.len() - 1].to_string()
+        segments[segments.len() - 1]
     }
 }
 
@@ -393,7 +393,7 @@ impl TrickleSelect {
                 dims: dims.clone(),
                 last_dims: dims.clone(),
                 module: Window::module_path(&fqwn),
-                name: Window::ident_name(&fqwn),
+                name: Window::ident_name(&fqwn).to_string(),
                 window_impl,
                 next_swap: 0,
             })

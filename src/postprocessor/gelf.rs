@@ -69,8 +69,8 @@ impl GELF {
 }
 
 impl Postprocessor for GELF {
-    fn name(&self) -> String {
-        "gelf".to_string()
+    fn name(&self) -> &str {
+        "gelf"
     }
 
     fn process(&mut self, _ingest_ns: u64, _egest_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
