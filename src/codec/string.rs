@@ -20,8 +20,8 @@ pub struct String {}
 
 impl Codec for String {
     #[cfg(not(tarpaulin_include))]
-    fn name(&self) -> std::string::String {
-        "string".to_string()
+    fn name(&self) -> &str {
+        "string"
     }
 
     #[cfg(not(tarpaulin_include))]

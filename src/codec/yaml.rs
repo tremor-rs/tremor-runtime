@@ -19,8 +19,8 @@ pub struct YAML {}
 
 impl Codec for YAML {
     #[cfg(not(tarpaulin_include))]
-    fn name(&self) -> String {
-        "yaml".to_string()
+    fn name(&self) -> &str {
+        "yaml"
     }
     #[cfg(not(tarpaulin_include))]
     fn mime_types(&self) -> Vec<&str> {

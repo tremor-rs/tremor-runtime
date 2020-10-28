@@ -44,7 +44,7 @@ mod prelude {
 /// The codec trait, to encode and decode data
 pub trait Codec: Send + Sync {
     /// The canonical name for this codec
-    fn name(&self) -> std::string::String;
+    fn name(&self) -> &str;
 
     /// supported mime types
     /// as <base>/<subtype>

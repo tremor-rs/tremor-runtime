@@ -165,8 +165,9 @@ impl BInflux {
 }
 
 impl Codec for BInflux {
-    fn name(&self) -> std::string::String {
-        "binflux".to_string()
+    #[cfg(not(tarpaulin_include))]
+    fn name(&self) -> &str {
+        "binflux"
     }
 
     fn decode<'input>(

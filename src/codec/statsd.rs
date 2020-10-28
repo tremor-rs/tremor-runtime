@@ -21,8 +21,8 @@ pub struct StatsD {}
 
 impl Codec for StatsD {
     #[cfg(not(tarpaulin_include))]
-    fn name(&self) -> String {
-        "statsd".to_string()
+    fn name(&self) -> &str {
+        "statsd"
     }
 
     fn decode<'input>(

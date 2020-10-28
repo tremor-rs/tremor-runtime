@@ -19,8 +19,8 @@ pub struct JSON {}
 
 impl Codec for JSON {
     #[cfg(not(tarpaulin_include))]
-    fn name(&self) -> String {
-        "json".to_string()
+    fn name(&self) -> &str {
+        "json"
     }
 
     #[cfg(not(tarpaulin_include))]
