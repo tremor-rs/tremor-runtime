@@ -17,97 +17,11 @@ use crate::util::{get_source_kind, SourceKind};
 use async_std::task;
 use clap::{App, ArgMatches};
 use std::io::Write;
-use std::path::Path;
-use std::{io::BufReader, sync::atomic::Ordering};
+use std::sync::atomic::Ordering;
 use tremor_api as api;
 use tremor_common::file;
-use tremor_pipeline::query::Query;
-use tremor_pipeline::FN_REGISTRY;
-use tremor_runtime::repository::BindingArtefact;
 use tremor_runtime::system::World;
-use tremor_runtime::url::TremorURL;
-use tremor_runtime::{self, config, version};
-
-#[cfg(not(tarpaulin_include))]
-pub(crate) async fn load_file(world: &World, file_name: &str) -> Result<usize> {
-    info!("Loading configuration from {}", file_name);
-    let mut count = 0;
-    let file = crate::open_file(file_name, None)?;
-    let buffered_reader = BufReader::new(file);
-    let config: config::Config = serde_yaml::from_reader(buffered_reader)?;
-    let config = tremor_runtime::incarnate(config)?;
-
-    for o in config.offramps {
-        let id = TremorURL::parse(&format!("/offramp/{}", o.id))?;
-        info!("Loading {} from file.", id);
-        world.repo.publish_offramp(&id, false, o).await?;
-        count += 1;
-    }
-
-    for o in config.onramps {
-        let id = TremorURL::parse(&format!("/onramp/{}", o.id))?;
-        info!("Loading {} from file.", id);
-        world.repo.publish_onramp(&id, false, o).await?;
-        count += 1;
-    }
-    for binding in config.bindings {
-        let id = TremorURL::parse(&format!("/binding/{}", binding.id))?;
-        info!("Loading {} from file.", id);
-        world
-            .repo
-            .publish_binding(
-                &id,
-                false,
-                BindingArtefact {
-                    binding,
-                    mapping: None,
-                },
-            )
-            .await?;
-        count += 1;
-    }
-    for (binding, mapping) in config.mappings {
-        world.link_binding(&binding, mapping).await?;
-        count += 1;
-    }
-    Ok(count)
-}
-
-#[cfg(not(tarpaulin_include))]
-pub(crate) async fn load_query_file(world: &World, file_name: &str) -> Result<usize> {
-    use std::ffi::OsStr;
-    use std::io::Read;
-    info!("Loading configuration from {}", file_name);
-    let path = Path::new(file_name);
-    let file_id = path
-        .file_stem()
-        .unwrap_or_else(|| OsStr::new(file_name))
-        .to_string_lossy();
-    let mut file = crate::open_file(path, None)?;
-    let mut raw = String::new();
-
-    file.read_to_string(&mut raw)
-        .map_err(|e| Error::from(format!("Could not open file {} => {}", file_name, e)))?;
-
-    // TODO: Should ideally be const'd
-    let aggr_reg = tremor_script::registry::aggr();
-    let module_path = tremor_script::path::load();
-    let query = Query::parse(
-        &module_path,
-        &raw,
-        file_name,
-        vec![],
-        &*FN_REGISTRY.lock()?,
-        &aggr_reg,
-    )?;
-    let id = query.id().unwrap_or_else(|| &file_id);
-
-    let id = TremorURL::parse(&format!("/pipeline/{}", id))?;
-    info!("Loading {} from file {}.", id, file_id);
-    world.repo.publish_pipeline(&id, false, query).await?;
-
-    Ok(1)
-}
+use tremor_runtime::{self, version};
 
 fn fix_tide(r: api::Result<tide::Response>) -> tide::Result {
     Ok(match r {
@@ -199,7 +113,7 @@ pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
         // We process trickle files first
         for config_file in config_files.clone() {
             match get_source_kind(config_file) {
-                SourceKind::Trickle => load_query_file(&world, config_file).await?,
+                SourceKind::Trickle => tremor_runtime::load_query_file(&world, config_file).await?,
                 _ => continue,
             };
         }
@@ -207,7 +121,7 @@ pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
         for config_file in config_files {
             match get_source_kind(config_file) {
                 SourceKind::Trickle | SourceKind::Tremor => continue,
-                _ => load_file(&world, config_file).await?,
+                _ => tremor_runtime::load_cfg_file(&world, config_file).await?,
             };
         }
     }
