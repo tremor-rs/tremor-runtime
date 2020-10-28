@@ -41,9 +41,11 @@ pub struct Addr {
 }
 
 impl Addr {
+    #[cfg(not(tarpaulin_include))]
     pub fn len(&self) -> usize {
         self.addr.len()
     }
+    #[cfg(not(tarpaulin_include))]
     pub fn id(&self) -> &ServantId {
         &self.id
     }
@@ -65,6 +67,7 @@ impl Addr {
     }
 }
 
+#[cfg(not(tarpaulin_include))]
 impl fmt::Debug for Addr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "Pipeline({})", self.id)

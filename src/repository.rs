@@ -12,6 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// The repository workflow is tested through EQC as well as the cli tests,
+// neither of them generate coverage :(
+#![cfg(not(tarpaulin_include))]
+
 mod artefact;
 
 use crate::errors::{ErrorKind, Result};
@@ -50,8 +54,8 @@ pub(crate) struct Repository<A: Artefact> {
 }
 
 impl<A: Artefact> Repository<A> {
-    /// Retrives the wraped artefacts
-    pub fn values(&self) -> Vec<A> {
+    // Retrives the wraped artefacts
+    fn values(&self) -> Vec<A> {
         self.map
             .values()
             .filter_map(|a| {
@@ -70,7 +74,7 @@ impl<A: Artefact> Repository<A> {
         }
     }
     /// Retreives the artifact Id's
-    pub fn keys(&self) -> Vec<ArtefactId> {
+    fn keys(&self) -> Vec<ArtefactId> {
         self.map.keys().cloned().collect()
     }
     /// Finds an artefact by ID
@@ -212,12 +216,14 @@ pub struct Repositories {
     binding: async_channel::Sender<Msg<BindingArtefact>>,
 }
 
+#[cfg(not(tarpaulin_include))]
 impl fmt::Debug for Repositories {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "Repositories {{ ... }}")
     }
 }
 
+#[cfg(not(tarpaulin_include))]
 impl Default for Repositories {
     fn default() -> Self {
         Self::new()
@@ -578,43 +584,4 @@ impl Repositories {
             .await?;
         rx.recv().await?
     }
-}
-
-#[cfg(test)]
-mod test {
-    // use super::*;
-    // use crate::config;
-    // use crate::errors::Error;
-    // use crate::url::TremorURL;
-    // use serde_yaml;
-
-    // use crate::incarnate;
-    // use matches::assert_matches;
-    // use std::fs::File;
-    // use std::io::BufReader;
-
-    // fn slurp(file: &str) -> config::Config {
-    //     let file = File::open(file).expect("could not open file");
-    //     let buffered_reader = BufReader::new(file);
-    //     serde_yaml::from_reader(buffered_reader).expect("failed to parse config")
-    // }
-
-    // #[test]
-    // fn test_pipeline_repo_lifecycle() {
-    //     let config = slurp("tests/configs/ut.passthrough.yaml");
-    //     let mut runtime = incarnate(config).expect("failed to incarnate");
-    //     let pipeline = runtime.pipes.pop().expect("failed to find artefact");
-    //     let mut repo: Repository<PipelineArtefact> = Repository::new();
-    //     let id = TremorURL::parse("/pipeline/test").expect("failed to parse id");
-    //     assert!(repo.find(id.clone()).is_none());
-    //     let receipt = repo.publish(id.clone(), false, pipeline.clone().into());
-    //     assert!(receipt.is_ok());
-    //     assert!(repo.find(id.clone()).is_some());
-    //     let receipt = repo.publish(id.clone(), false, pipeline.into());
-
-    //     assert_matches!(
-    //         receipt.err(),
-    //         Some(Error(ErrorKind::PublishFailedAlreadyExists { .. }, _))
-    //     );
-    // }
 }
