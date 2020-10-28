@@ -76,7 +76,7 @@ fn load_(tremor_path: &str) -> ModulePath {
                 let path = Path::new(&target);
                 let path = path.to_path_buf();
                 let target = if path.is_relative() {
-                    let path = path.canonicalize();
+                    let path = tremor_common::file::canonicalize(&path);
                     if let Ok(path) = path {
                         let path_str = path.to_string_lossy().to_string();
                         path_str
