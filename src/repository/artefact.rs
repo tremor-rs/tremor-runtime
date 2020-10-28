@@ -19,7 +19,7 @@ use crate::offramp;
 use crate::onramp;
 use crate::pipeline;
 use crate::registry::ServantId;
-use crate::system::{self, World};
+use crate::system::{self, World, PASSTHROUGH_PIPELINE};
 use crate::url::{ResourceType, TremorURL};
 use hashbrown::HashMap;
 use std::borrow::Cow;
@@ -319,7 +319,7 @@ impl Artefact for OfframpArtefact {
     ) -> Result<Self::LinkResult> {
         info!("Unlinking offramp {} ..", id);
         if let Some(offramp) = system.reg.find_offramp(id).await? {
-            let (tx, rx) = bounded(mappings.len());
+            let (tx, rx) = bounded(mappings.len().max(1));
             let mut expect_answers = mappings.len();
             for (_this, pipeline_id) in mappings {
                 let port = Cow::Owned(id.instance_port_required()?.to_string());
@@ -749,5 +749,75 @@ impl Artefact for Binding {
             (Some(ResourceType::Binding), Some(_id)) => Ok(id),
             _ => Err(format!("URL does not contain a binding servant id: {}", id).into()),
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use tremor_pipeline::Event;
+
+    use crate::lifecycle::ActivationState;
+
+    use super::*;
+
+    // just for coverage - testing world more than this module
+    #[async_std::test]
+    async fn spawn_offramp() -> Result<()> {
+        let offramp: OfframpArtefact = serde_yaml::from_str(
+            r#"
+        id: my-offramp
+        type: stdout
+        codec: json
+        postprocessors:
+          - lines
+        "#,
+        )?;
+        // link and unlink a pipeline
+        let mut servant_id = TremorURL::from_offramp_id("my-offramp")?;
+        let artefact_id = servant_id.clone();
+        servant_id.set_instance("my-instance".to_string());
+        let (world, handle) = World::start(10, None).await?;
+        // publish offramp
+        let offramp = world
+            .repo
+            .publish_offramp(&artefact_id, false, offramp)
+            .await?;
+        // create instance (will call offramp.spawn internally)
+        world.bind_offramp(&servant_id).await?;
+
+        let mut with_port = servant_id.clone();
+        with_port.set_port("IN".to_string());
+        let mut passthrough = PASSTHROUGH_PIPELINE.clone();
+        passthrough.set_port("OUT".to_string());
+
+        // link
+        let mut mappings = hashbrown::HashMap::with_capacity(1);
+        mappings.insert(passthrough, with_port.clone());
+        let link_result = offramp.link(&world, &with_port, mappings.clone()).await?;
+        assert!(link_result);
+        // send it an event
+        let spawned = world
+            .reg
+            .find_offramp(&servant_id)
+            .await?
+            .expect("offramp not found");
+        spawned
+            .send(offramp::Msg::Event {
+                event: Event::default(),
+                input: "in".into(),
+            })
+            .await?;
+        // unlink
+        let empty2 = offramp.unlink(&world, &with_port, mappings).await?;
+        assert!(empty2);
+        assert_eq!(
+            ActivationState::Deactivated,
+            world.unbind_offramp(&servant_id).await?
+        );
+
+        world.stop().await?;
+        handle.cancel().await;
+
+        Ok(())
     }
 }
