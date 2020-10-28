@@ -71,19 +71,22 @@ pub mod utils;
 /// Tremor runtime version tools
 pub mod version;
 
-use crate::errors::Result;
+use std::{io::BufReader, path::Path};
+
+use crate::errors::{Error, Result};
 
 pub(crate) type OnRampVec = Vec<OnRamp>;
 pub(crate) type OffRampVec = Vec<OffRamp>;
 pub(crate) type BindingVec = config::BindingVec;
 pub(crate) type MappingMap = config::MappingMap;
 
-pub(crate) use crate::config::Binding;
-//pub(crate) use crate::config::Config;
-pub(crate) use crate::config::OffRamp;
-pub(crate) use crate::config::OnRamp;
+pub(crate) use crate::config::{Binding, OffRamp, OnRamp};
+use crate::repository::BindingArtefact;
+use crate::url::TremorURL;
 pub(crate) use serde_yaml::Value as OpConfig;
+use system::World;
 pub(crate) use tremor_pipeline::Event;
+use tremor_pipeline::{query::Query, FN_REGISTRY};
 
 /// Default Q Size
 pub const QSIZE: usize = 128;
@@ -127,6 +130,90 @@ fn incarnate_offramps(config: config::OffRampVec) -> OffRampVec {
 
 fn incarnate_links(config: &[Binding]) -> BindingVec {
     config.to_owned()
+}
+
+/// Loads a tremor query file
+/// # Errors
+/// Fails if the file can not be loaded
+pub async fn load_query_file(world: &World, file_name: &str) -> Result<usize> {
+    use std::ffi::OsStr;
+    use std::io::Read;
+    info!("Loading configuration from {}", file_name);
+    let file_id = Path::new(file_name)
+        .file_stem()
+        .unwrap_or_else(|| OsStr::new(file_name))
+        .to_string_lossy();
+    let mut file = tremor_common::file::open(&file_name)?;
+    let mut raw = String::new();
+
+    file.read_to_string(&mut raw)
+        .map_err(|e| Error::from(format!("Could not open file {} => {}", file_name, e)))?;
+
+    // TODO: Should ideally be const'd
+    let aggr_reg = tremor_script::registry::aggr();
+    let module_path = tremor_script::path::load();
+    let query = Query::parse(
+        &module_path,
+        &raw,
+        file_name,
+        vec![],
+        &*FN_REGISTRY.lock()?,
+        &aggr_reg,
+    )?;
+    let id = query.id().unwrap_or_else(|| &file_id);
+
+    let id = TremorURL::parse(&format!("/pipeline/{}", id))?;
+    info!("Loading {} from file {}.", id, file_name);
+    world.repo.publish_pipeline(&id, false, query).await?;
+
+    Ok(1)
+}
+
+/// Loads a config yaml file
+/// # Errors
+/// Fails if the file can not be loaded
+pub async fn load_cfg_file(world: &World, file_name: &str) -> Result<usize> {
+    info!("Loading configuration from {}", file_name);
+    let mut count = 0;
+    let file = tremor_common::file::open(file_name)?;
+    let buffered_reader = BufReader::new(file);
+    let config: config::Config = serde_yaml::from_reader(buffered_reader)?;
+    let config = crate::incarnate(config)?;
+
+    for o in config.offramps {
+        let id = TremorURL::parse(&format!("/offramp/{}", o.id))?;
+        info!("Loading {} from file.", id);
+        world.repo.publish_offramp(&id, false, o).await?;
+        count += 1;
+    }
+
+    for o in config.onramps {
+        let id = TremorURL::parse(&format!("/onramp/{}", o.id))?;
+        info!("Loading {} from file.", id);
+        world.repo.publish_onramp(&id, false, o).await?;
+        count += 1;
+    }
+    for binding in config.bindings {
+        let id = TremorURL::parse(&format!("/binding/{}", binding.id))?;
+        info!("Loading {} from file.", id);
+        world
+            .repo
+            .publish_binding(
+                &id,
+                false,
+                BindingArtefact {
+                    binding,
+                    mapping: None,
+                },
+            )
+            .await?;
+        count += 1;
+    }
+    for (binding, mapping) in config.mappings {
+        world.link_binding(&binding, mapping).await?;
+        count += 1;
+    }
+    Ok(count)
 }
 
 #[cfg(test)]
