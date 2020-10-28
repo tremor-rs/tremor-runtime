@@ -171,6 +171,7 @@ fn server_run(matches: &ArgMatches) -> Result<()> {
 }
 
 #[cfg(not(tarpaulin_include))]
+
 pub(crate) fn run_cmd(mut app: App, cmd: &ArgMatches) -> Result<()> {
     if let Some(matches) = cmd.subcommand_matches("run") {
         server_run(matches)

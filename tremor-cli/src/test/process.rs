@@ -25,7 +25,7 @@ use crate::util::slurp_string;
 use globwalk::GlobWalkerBuilder;
 use std::collections::HashMap;
 use std::path::Path;
-use tremor_common::time::nanotime;
+use tremor_common::{file::canonicalize, time::nanotime};
 
 #[allow(clippy::too_many_lines)]
 pub(crate) fn run_process(
@@ -37,7 +37,7 @@ pub(crate) fn run_process(
     let mut evidence = HashMap::new();
 
     let artefacts = GlobWalkerBuilder::from_patterns(
-        bench_root.canonicalize()?,
+        canonicalize(bench_root)?,
         &["*.{yaml,tremor,trickle}", "!assert.yaml"],
     )
     .case_insensitive(true)

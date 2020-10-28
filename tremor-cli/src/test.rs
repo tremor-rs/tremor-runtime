@@ -223,7 +223,7 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
         vec![]
     };
 
-    let found = GlobWalkerBuilder::new(Path::new(&path).canonicalize()?, "meta.json")
+    let found = GlobWalkerBuilder::new(tremor_common::file::canonicalize(&path)?, "meta.json")
         .case_insensitive(true)
         .build()
         .map_err(|e| Error::from(format!("failed to walk directory `{}`: {}", path, e)))?;
