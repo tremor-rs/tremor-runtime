@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// This file is urely for testing w/ EQC
+#![cfg(not(tarpaulin_include))]
+
 use crate::errors::{Error, Result};
 use crate::registry::Registry; // AggrRegistry
 use crate::script::{AggrType, Return, Script};

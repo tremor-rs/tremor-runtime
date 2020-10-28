@@ -1403,15 +1403,6 @@ impl<'input> Lexer<'input> {
         }
     }
 
-    fn sb(&mut self, start: Location) -> Result<TokenSpan<'input>> {
-        let (end, lexeme) = self.take_while(start, |ch| ch == '-');
-
-        match lexeme {
-            "-" => Ok(self.spanned2(start, end, Token::Sub)),
-            _ => Ok(self.spanned2(start, end, Token::Bad(lexeme.to_string()))),
-        }
-    }
-
     fn an(&mut self, start: Location) -> Result<TokenSpan<'input>> {
         let (end, lexeme) = self.take_while(start, |ch| {
             ch == '>' || ch == '<' || ch == '=' || is_ident_continue(ch)
@@ -2258,7 +2249,7 @@ impl<'input> Iterator for Lexer<'input> {
                     '^' => Some(Ok(self.spanned2(start, start, Token::BitXor))),
                     '&' => Some(Ok(self.spanned2(start, start, Token::BitAnd))),
                     ':' => Some(self.cn(start)),
-                    '-' => Some(self.sb(start)),
+                    '-' => Some(Ok(self.spanned2(start, start, Token::Sub))),
                     '#' => Some(self.cx(start)),
                     '=' => Some(self.eq(start)),
                     '<' | '>' => Some(self.an(start)),
