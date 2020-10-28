@@ -30,8 +30,9 @@ pub(crate) struct Ramp {
     error: u64,
 }
 
+/// handling sending statistics to the metrics pipeline
 #[derive(Debug)]
-pub(crate) struct RampReporter {
+pub struct RampReporter {
     artefact_url: TremorURL,
     metrics: Ramp,
     metrics_pipeline: Option<(TremorURL, pipeline::Addr)>,
@@ -40,6 +41,8 @@ pub(crate) struct RampReporter {
 }
 
 impl RampReporter {
+    /// constructor
+    #[must_use]
     pub fn new(artefact_url: TremorURL, flush_interval_s: Option<u64>) -> Self {
         Self {
             artefact_url,
@@ -54,26 +57,31 @@ impl RampReporter {
         }
     }
 
+    /// set the metrics pipeline
     pub fn set_metrics_pipeline(&mut self, pipeline_tuple: (TremorURL, pipeline::Addr)) {
         self.metrics_pipeline = Some(pipeline_tuple);
     }
 
     // TODO inline useful on these?
+    /// increment counter for incoming events
     #[inline]
     pub fn increment_in(&mut self) {
         self.metrics.r#in += 1;
     }
 
+    /// increment counter for outgoing events
     #[inline]
     pub fn increment_out(&mut self) {
         self.metrics.out += 1;
     }
 
+    /// increment counter for errors
     #[inline]
     pub fn increment_error(&mut self) {
         self.metrics.error += 1;
     }
 
+    /// flush if the time has come
     #[inline]
     pub fn periodic_flush(&mut self, timestamp: u64) -> Option<u64> {
         if let Some(interval) = self.flush_interval {

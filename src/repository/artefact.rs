@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::codec;
-use crate::errors::{Error, Result};
+use crate::errors::{Error, ErrorKind, Result};
 use crate::metrics::RampReporter;
 use crate::offramp;
 use crate::onramp;
@@ -201,63 +201,87 @@ impl Artefact for OfframpArtefact {
     type LinkLHS = TremorURL;
     type LinkRHS = TremorURL;
     async fn spawn(&self, world: &World, servant_id: ServantId) -> Result<Self::SpawnResult> {
-        //TODO: define offramp by config!
-        match (&self.binding_type, &self.peer) {
+        //TODO: define offramp by config! META-TODO: what does this mean?
+        let offramp = match (&self.binding_type, &self.peer) {
             (Some(binding_type), None) => {
                 // offramp with `type`
-                let offramp = offramp::lookup(binding_type, &self.config)?;
-                // lookup codecs already here
-                // this will bail out early if something is mistyped or so
-                let codec = if let Some(codec) = &self.codec {
-                    codec::lookup(&codec)?
-                } else {
-                    codec::lookup(offramp.default_codec())?
-                };
-                let mut resolved_codec_map = codec::builtin_codec_map();
-                // override the builtin map
-                if let Some(codec_map) = &self.codec_map {
-                    for (k, v) in codec_map {
-                        resolved_codec_map.insert(k.to_string(), codec::lookup(v.as_str())?);
-                    }
-                }
-
-                let preprocessors = if let Some(preprocessors) = &self.preprocessors {
-                    preprocessors.clone()
-                } else {
-                    vec![]
-                };
-
-                let postprocessors = if let Some(postprocessors) = &self.postprocessors {
-                    postprocessors.clone()
-                } else {
-                    vec![]
-                };
-                let metrics_reporter =
-                    RampReporter::new(servant_id.clone(), self.metrics_interval_s);
-
-                let (tx, rx) = bounded(1);
-
-                world
-                    .system
-                    .send(system::ManagerMsg::CreateOfframp(
-                        tx,
-                        Box::new(offramp::Create {
-                            id: servant_id,
-                            codec,
-                            codec_map: resolved_codec_map,
-                            offramp,
-                            preprocessors,
-                            postprocessors,
-                            metrics_reporter,
-                            is_linked: self.is_linked,
-                        }),
-                    ))
-                    .await?;
-                rx.recv().await?
+                offramp::lookup(binding_type, &self.config)
             }
-            (None, Some(_peer)) => Err("Not implemented yet!".into()),
-            _ => Err("Shouldn't happen!".into()),
+            (None, Some(peer)) => {
+                // get the offramp from the peer onramp
+                let peer_url = TremorURL::from_onramp_id(peer)?;
+                if let Some(servant_instance) = servant_id.instance() {
+                    let mut instance_url = peer_url.clone();
+                    instance_url.set_instance(servant_instance.to_string());
+                    // create onramp if neccessary
+                    world.ensure_onramp(&instance_url).await?;
+                    if let Some(onramp) = world.reg.find_onramp(&instance_url).await? {
+                        // send msg to onramp to expose itself as offramp
+                        let (tx1, rx1) = bounded(1);
+                        onramp
+                            .send(onramp::Msg::ExposeAsOfframp {
+                                result_tx: tx1,
+                                offramp_servant_id: servant_id.clone(),
+                            })
+                            .await?;
+                        rx1.recv().await?
+                    } else {
+                        Err(ErrorKind::ArtefactInstanceNotFound(instance_url.to_string()).into())
+                    }
+                } else {
+                    Err(format!("Invalid ServantId: {}", &servant_id).into())
+                }
+            }
+            _ => Err(format!("Invalid Offramp Artefact: {}", &self.id).into()), //shouldn't happen
+        }?;
+
+        // lookup codecs already here
+        // this will bail out early if something is mistyped or so
+        let codec = if let Some(codec) = &self.codec {
+            codec::lookup(&codec)?
+        } else {
+            codec::lookup(offramp.default_codec())?
+        };
+        let mut resolved_codec_map = codec::builtin_codec_map();
+        // override the builtin map
+        if let Some(codec_map) = &self.codec_map {
+            for (k, v) in codec_map {
+                resolved_codec_map.insert(k.to_string(), codec::lookup(v.as_str())?);
+            }
         }
+
+        let preprocessors = if let Some(preprocessors) = &self.preprocessors {
+            preprocessors.clone()
+        } else {
+            vec![]
+        };
+
+        let postprocessors = if let Some(postprocessors) = &self.postprocessors {
+            postprocessors.clone()
+        } else {
+            vec![]
+        };
+        let metrics_reporter = RampReporter::new(servant_id.clone(), self.metrics_interval_s);
+
+        let (tx, rx) = bounded(1);
+
+        world
+            .system
+            .send(system::ManagerMsg::CreateOfframp(
+                tx,
+                Box::new(offramp::Create {
+                    id: servant_id,
+                    codec,
+                    codec_map: resolved_codec_map,
+                    offramp,
+                    preprocessors,
+                    postprocessors,
+                    metrics_reporter,
+                    is_linked: self.is_linked,
+                }),
+            ))
+            .await?;
+        rx.recv().await?
     }
 
     async fn link(
@@ -331,7 +355,7 @@ impl Artefact for OfframpArtefact {
         id.trim_to_instance();
         match (id.resource_type(), id.instance()) {
             (Some(ResourceType::Offramp), Some(_)) => Ok(id),
-            _ => Err(format!("URL does not contain a offramp servant id: {}", id).into()),
+            _ => Err(format!("URL does not contain an offramp servant id: {}", id).into()),
         }
     }
 }
@@ -342,54 +366,76 @@ impl Artefact for OnrampArtefact {
     type LinkLHS = String;
     type LinkRHS = TremorURL;
     async fn spawn(&self, world: &World, servant_id: ServantId) -> Result<Self::SpawnResult> {
-        match (&self.binding_type, &self.peer) {
-            (Some(binding_type), None) => {
-                let stream = onramp::lookup(binding_type, &servant_id, &self.config)?;
-                let codec = if let Some(codec) = &self.codec {
-                    codec.clone()
-                } else {
-                    stream.default_codec().to_string()
-                };
-                let codec_map = self
-                    .codec_map
-                    .clone()
-                    .unwrap_or_else(|| halfbrown::HashMap::with_capacity(0));
-                let preprocessors = if let Some(preprocessors) = &self.preprocessors {
-                    preprocessors.clone()
-                } else {
-                    vec![]
-                };
-                let postprocessors = if let Some(postprocessors) = &self.postprocessors {
-                    postprocessors.clone()
-                } else {
-                    vec![]
-                };
+        let stream = match (&self.binding_type, &self.peer) {
+            (Some(binding_type), None) => onramp::lookup(binding_type, &servant_id, &self.config),
 
-                let metrics_reporter =
-                    RampReporter::new(servant_id.clone(), self.metrics_interval_s);
-                let (tx, rx) = bounded(1);
-
-                world
-                    .system
-                    .send(system::ManagerMsg::CreateOnramp(
-                        tx,
-                        Box::new(onramp::Create {
-                            id: servant_id,
-                            preprocessors,
-                            postprocessors,
-                            codec,
-                            codec_map,
-                            stream,
-                            metrics_reporter,
-                            is_linked: self.is_linked,
-                        }),
-                    ))
-                    .await?;
-                rx.recv().await?
+            (None, Some(peer)) => {
+                // get the onramp from the peer offramp
+                let peer_url = TremorURL::from_offramp_id(peer)?;
+                if let Some(servant_instance) = servant_id.instance() {
+                    let mut instance_url = peer_url.clone();
+                    instance_url.set_instance(servant_instance.to_string());
+                    // create offramp if neccessary
+                    world.ensure_offramp(&instance_url).await?;
+                    if let Some(offramp) = world.reg.find_offramp(&instance_url).await? {
+                        // send msg to onramp to expose itself as offramp
+                        let (tx1, rx1) = bounded(1);
+                        offramp
+                            .send(offramp::Msg::ExposeAsOnramp {
+                                result_tx: tx1,
+                                onramp_servant_id: servant_id.clone(),
+                            })
+                            .await?;
+                        rx1.recv().await?
+                    } else {
+                        Err(ErrorKind::ArtefactInstanceNotFound(instance_url.to_string()).into())
+                    }
+                } else {
+                    Err(format!("Invalid ServantId: {}", &servant_id).into())
+                }
             }
-            (None, Some(_peer)) => Err("Peer onramps not implemented yet!".into()),
-            _ => Err("Shouldn't happen!".into()),
-        }
+            _ => Err(format!("Invalid Onramp Artefact: {}", &self.id).into()), //shouldn't happen
+        }?;
+        let codec = if let Some(codec) = &self.codec {
+            codec.clone()
+        } else {
+            stream.default_codec().to_string()
+        };
+        let codec_map = self
+            .codec_map
+            .clone()
+            .unwrap_or_else(|| halfbrown::HashMap::with_capacity(0));
+        let preprocessors = if let Some(preprocessors) = &self.preprocessors {
+            preprocessors.clone()
+        } else {
+            vec![]
+        };
+        let postprocessors = if let Some(postprocessors) = &self.postprocessors {
+            postprocessors.clone()
+        } else {
+            vec![]
+        };
+
+        let metrics_reporter = RampReporter::new(servant_id.clone(), self.metrics_interval_s);
+        let (tx, rx) = bounded(1);
+
+        world
+            .system
+            .send(system::ManagerMsg::CreateOnramp(
+                tx,
+                Box::new(onramp::Create {
+                    id: servant_id,
+                    preprocessors,
+                    postprocessors,
+                    codec,
+                    codec_map,
+                    stream,
+                    metrics_reporter,
+                    is_linked: self.is_linked,
+                }),
+            ))
+            .await?;
+        rx.recv().await?
     }
 
     async fn link(

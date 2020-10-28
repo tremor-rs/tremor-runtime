@@ -399,7 +399,10 @@ impl Source for Int {
                 };
                 response_tx.send(res).await?
             } else {
-                debug!("No outstanding HTTP session for event-id {}", event_id);
+                debug!(
+                    "[Source::{}] No outstanding HTTP session for event-id {}",
+                    &self.onramp_id, event_id
+                );
             }
         }
         Ok(())

@@ -130,6 +130,9 @@ impl<T> Offramp for SinkManager<T>
 where
     T: Sink + Send,
 {
+    fn id(&self) -> Option<&TremorURL> {
+        self.sink_url.as_ref()
+    }
     async fn terminate(&mut self) {
         self.sink.terminate().await
     }

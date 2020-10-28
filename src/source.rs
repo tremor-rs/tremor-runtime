@@ -13,8 +13,9 @@
 // limitations under the License.
 
 use crate::codec::{self, Codec};
-use crate::errors::Error;
+use crate::errors::{Error, ErrorKind};
 use crate::metrics::RampReporter;
+use crate::offramp::Offramp;
 use crate::onramp;
 use crate::pipeline;
 use crate::preprocessor::{make_preprocessors, preprocess, Preprocessors};
@@ -150,6 +151,12 @@ pub(crate) trait Source {
     fn is_transactional(&self) -> bool {
         false
     }
+
+    /// expose itself as offramp - not yet started, supposed to be sent to the offramp Manager
+    /// to enter the normal lifecycle of an offramp
+    fn as_offramp(&self) -> Result<Box<dyn Offramp>> {
+        Err(ErrorKind::LinkingNotSupported(self.id().to_string()).into())
+    }
 }
 
 pub(crate) struct SourceManager<T>
@@ -256,6 +263,7 @@ where
         results
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn handle_pipelines(&mut self) -> Result<bool> {
         loop {
             let msg = if self.pipelines_out.is_empty() || self.triggered || !self.rx.is_empty() {
@@ -359,6 +367,17 @@ where
                             self.source_id, e
                         );
                     }
+                }
+                onramp::Msg::ExposeAsOfframp {
+                    result_tx,
+                    offramp_servant_id,
+                } => {
+                    info!(
+                        "[Source::{}] [Onramp] Exposed as Offramp: {}",
+                        self.source_id, &offramp_servant_id
+                    );
+                    let as_offramp = self.source.as_offramp();
+                    result_tx.send(as_offramp).await?
                 }
             }
         }

@@ -13,8 +13,9 @@
 // limitations under the License.
 
 use crate::codec::Codec;
-use crate::errors::Result;
+use crate::errors::{ErrorKind, Result};
 use crate::metrics::RampReporter;
+use crate::onramp::Onramp;
 use crate::permge::PriorityMerge;
 use crate::pipeline;
 use crate::registry::ServantId;
@@ -49,6 +50,10 @@ pub enum Msg {
         port: Cow<'static, str>,
         id: TremorURL,
         tx: async_channel::Sender<bool>,
+    },
+    ExposeAsOnramp {
+        result_tx: async_channel::Sender<Result<Box<dyn Onramp>>>,
+        onramp_servant_id: TremorURL,
     },
 }
 
@@ -89,6 +94,16 @@ pub trait Offramp: Send {
     }
     fn auto_ack(&self) -> bool {
         true
+    }
+
+    fn id(&self) -> Option<&TremorURL>;
+
+    fn as_onramp(&self) -> Result<Box<dyn Onramp>> {
+        Err(ErrorKind::LinkingNotSupported(
+            self.id()
+                .map_or_else(|| "UNKNOWN".to_string(), std::string::ToString::to_string),
+        )
+        .into())
     }
 }
 
@@ -327,6 +342,17 @@ impl Manager {
                                     "[Offramp::{}] Pipeline {} disconnected from port {}",
                                     offramp_url, &id, &port
                                 );
+                            }
+                            Msg::ExposeAsOnramp {
+                                result_tx,
+                                onramp_servant_id,
+                            } => {
+                                info!(
+                                    "[Offramp::{}] Exposed as Onramp: {}",
+                                    &id, &onramp_servant_id
+                                );
+                                let onramp = offramp.as_onramp();
+                                result_tx.send(onramp).await?
                             }
                         }
                     }

@@ -86,6 +86,10 @@ pub struct OnRamp {
 
 impl OnRamp {
     /// validate the given onramp config, consuming it and only return it if it is valid
+    ///
+    /// # Errors
+    ///
+    /// * if we have an invalid onramp config
     pub fn validate(self) -> Result<Self> {
         match (&self.binding_type, &self.peer) {
             (Some(_), Some(_)) => {
@@ -164,6 +168,9 @@ pub struct OffRamp {
 
 impl OffRamp {
     /// validate the given offramp config, consuming it and only return it if it is valid
+    ///
+    /// # Errors
+    /// * if the offramp config is invalid
     pub fn validate(self) -> Result<Self> {
         match (&self.binding_type, &self.peer) {
             (Some(_), Some(_)) => {

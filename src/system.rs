@@ -317,6 +317,7 @@ impl World {
         info!("Binding onramp {}", id);
         match (&self.repo.find_onramp(id).await?, &id.instance()) {
             (Some(artefact), Some(_instance_id)) => {
+                // spawn instance
                 let servant = ActivatorLifecycleFsm::new(
                     self.clone(),
                     artefact.artefact.to_owned(),

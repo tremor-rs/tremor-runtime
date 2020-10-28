@@ -155,6 +155,10 @@ error_chain! {
             description("The artifact was not found")
                 display("The artifact was not found: {}", id)
         }
+        ArtefactInstanceNotFound(id: String) {
+            description("The artefact instance was not found")
+                display("The artefact instance was not found: {}", id)
+        }
         PublishFailedAlreadyExists(key: String) {
             description("The published artefact already exists")
                 display("The published {} already exists.", key)
@@ -185,6 +189,10 @@ error_chain! {
         BindFailedKeyNotExists(key: String) {
             description("Failed to bind non existand artefact")
                 display("Failed to bind non existand {}.", key)
+        }
+        LinkingNotSupported(artefact: String) {
+            description("Artefact does not support linking")
+            display("Artefact {} does not support linking.", artefact)
         }
 
         // TODO: Old errors, verify if needed

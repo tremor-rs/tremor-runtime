@@ -13,6 +13,7 @@
 // limitations under the License.
 use crate::errors::Result;
 use crate::metrics::RampReporter;
+use crate::offramp::Offramp;
 use crate::pipeline;
 use crate::repository::ServantId;
 use crate::source::prelude::*;
@@ -37,6 +38,10 @@ pub enum Msg {
         tx: async_channel::Sender<bool>,
     },
     Cb(CBAction, Ids),
+    ExposeAsOfframp {
+        result_tx: async_channel::Sender<Result<Box<dyn Offramp>>>,
+        offramp_servant_id: TremorURL,
+    },
     // TODO pick good naming here: LinkedEvent / Response / Result?
     Response(tremor_pipeline::Event),
 }
@@ -44,7 +49,7 @@ pub enum Msg {
 pub type Addr = async_channel::Sender<Msg>;
 
 #[async_trait::async_trait]
-pub(crate) trait Onramp: Send {
+pub trait Onramp: Send {
     async fn start(
         &mut self,
         onramp_uid: u64,
