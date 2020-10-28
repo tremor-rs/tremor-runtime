@@ -1,0 +1,3 @@
+Error: 
+    1 | "invalid: \uD800
+      |           ^^^^^^ An invalid UTF8 escape sequence was found

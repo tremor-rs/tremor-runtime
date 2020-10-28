@@ -191,4 +191,10 @@ impl Location {
         }
         self.absolute += ch.len_utf8();
     }
+    pub(crate) fn extend_left(&mut self, ch: char) {
+        if self.column != 0 {
+            self.column -= 1;
+            self.absolute -= ch.len_utf8();
+        }
+    }
 }

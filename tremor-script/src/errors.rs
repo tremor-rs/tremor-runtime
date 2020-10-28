@@ -162,13 +162,14 @@ impl ErrorKind {
             EmptyScript, ExtraToken, Generic, Grok, InvalidAssign, InvalidBinary, InvalidBitshift,
             InvalidConst, InvalidDrop, InvalidEmit, InvalidExtractor, InvalidFloatLiteral,
             InvalidFn, InvalidHexLiteral, InvalidInfluxData, InvalidIntLiteral, InvalidMod,
-            InvalidRecur, InvalidToken, InvalidUnary, Io, JSONError, MergeTypeConflict,
-            MissingEffectors, MissingFunction, MissingModule, ModuleNotFound, Msg, NoClauseHit,
-            NoConstsAllowed, NoLocalsAllowed, NoObjectError, NotConstant, NotFound, Oops,
-            ParseIntError, ParserError, PatchKeyExists, PreprocessorError, QueryStreamNotDefined,
-            RuntimeError, TailingHereDoc, TypeConflict, UnexpectedCharacter, UnexpectedEndOfStream,
-            UnexpectedEscapeCode, UnrecognizedToken, UnterminatedExtractor, UnterminatedHereDoc,
-            UnterminatedIdentLiteral, UnterminatedStringLiteral, UpdateKeyMissing, Utf8Error,
+            InvalidRecur, InvalidToken, InvalidUTF8Sequence, InvalidUnary, Io, JSONError,
+            MergeTypeConflict, MissingEffectors, MissingFunction, MissingModule, ModuleNotFound,
+            Msg, NoClauseHit, NoConstsAllowed, NoLocalsAllowed, NoObjectError, NotConstant,
+            NotFound, Oops, ParseIntError, ParserError, PatchKeyExists, PreprocessorError,
+            QueryStreamNotDefined, RuntimeError, TailingHereDoc, TypeConflict, UnexpectedCharacter,
+            UnexpectedEndOfStream, UnexpectedEscapeCode, UnrecognizedToken, UnterminatedExtractor,
+            UnterminatedHereDoc, UnterminatedIdentLiteral, UnterminatedStringLiteral,
+            UpdateKeyMissing, Utf8Error,
         };
         match self {
             NoClauseHit(outer) | Oops(outer, _, _) => (Some(outer.expand_lines(2)), Some(*outer)),
@@ -216,6 +217,7 @@ impl ErrorKind {
             | TypeConflict(outer, inner, _, _)
             | UnexpectedCharacter(outer, inner, _)
             | UnexpectedEscapeCode(outer, inner, _, _)
+            | InvalidUTF8Sequence(outer, inner, _)
             | UnrecognizedToken(outer, inner, _, _)
             | UnterminatedExtractor(outer, inner, _)
             | UnterminatedIdentLiteral(outer, inner, _)
@@ -246,13 +248,14 @@ impl ErrorKind {
     }
     pub(crate) fn token(&self) -> Option<String> {
         use ErrorKind::{
-            UnexpectedEscapeCode, UnterminatedExtractor, UnterminatedIdentLiteral,
-            UnterminatedStringLiteral,
+            InvalidUTF8Sequence, UnexpectedEscapeCode, UnterminatedExtractor,
+            UnterminatedIdentLiteral, UnterminatedStringLiteral,
         };
         match self {
             UnterminatedExtractor(_, _, token)
             | UnterminatedStringLiteral(_, _, token)
             | UnterminatedIdentLiteral(_, _, token)
+            | InvalidUTF8Sequence(_, _, token)
             | UnexpectedEscapeCode(_, _, token, _) => Some(token.to_string()),
             _ => None,
         }
@@ -470,13 +473,16 @@ error_chain! {
                 display("An unexpected character '{}' was found", found)
         }
 
-
         UnexpectedEscapeCode(expr: Range, inner: Range, token: String, found: char){
             description("An unexpected escape code was found")
                 display("An unexpected escape code '{}' was found", found)
 
         }
+        InvalidUTF8Sequence(expr: Range, inner: Range, token: String){
+            description("An invalid UTF8 escape sequence was found")
+                display("An invalid UTF8 escape sequence was found")
 
+        }
         InvalidHexLiteral(expr: Range, inner: Range){
             description("An invalid hexadecimal")
                 display("An invalid hexadecimal")
