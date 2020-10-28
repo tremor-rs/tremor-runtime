@@ -75,6 +75,7 @@ pub trait Offramp: Send {
         input: &str,
         event: Event,
     ) -> Result<()>;
+    #[cfg(not(tarpaulin_include))]
     async fn on_signal(&mut self, _signal: Event) -> Option<Event> {
         None
     }
@@ -84,9 +85,11 @@ pub trait Offramp: Send {
     fn remove_pipeline(&mut self, id: TremorURL) -> bool;
     fn add_dest_pipeline(&mut self, port: Cow<'static, str>, id: TremorURL, addr: pipeline::Addr);
     fn remove_dest_pipeline(&mut self, port: Cow<'static, str>, id: TremorURL) -> bool;
+    #[cfg(not(tarpaulin_include))]
     fn is_active(&self) -> bool {
         true
     }
+    #[cfg(not(tarpaulin_include))]
     fn auto_ack(&self) -> bool {
         true
     }
@@ -129,6 +132,7 @@ pub(crate) struct Create {
     pub is_linked: bool,
 }
 
+#[cfg(not(tarpaulin_include))]
 impl fmt::Debug for Create {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "StartOfframp({})", self.id)
