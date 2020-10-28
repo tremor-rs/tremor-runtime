@@ -336,9 +336,12 @@ impl<'input> Token<'input> {
             std::any::type_name::<Self>().to_string()
         }
     }
+
+    // tarpaulin falsely only marks the first and last as covered
+    // https://github.com/xd009642/tarpaulin/issues/607
+    #[cfg(not(tarpaulin_include))]
     /// Is the token ignorable except when syntax or error highlighting.
     /// Is the token insignificant when parsing ( a correct ... ) source.
-    #[cfg(not(tarpaulin_include))]
     pub(crate) fn is_ignorable(&self) -> bool {
         match *self {
             Token::SingleLineComment(_)
@@ -349,6 +352,9 @@ impl<'input> Token<'input> {
         }
     }
 
+    // tarpaulin falsely only marks the first and last as covered
+    // https://github.com/xd009642/tarpaulin/issues/607
+    #[cfg(not(tarpaulin_include))]
     /// Is the token a keyword, excluding keyword literals ( eg: true, nil )
     pub(crate) fn is_keyword(&self) -> bool {
         match *self {
@@ -404,6 +410,9 @@ impl<'input> Token<'input> {
         }
     }
 
+    // tarpaulin falsely only marks the first and last as covered
+    // https://github.com/xd009642/tarpaulin/issues/607
+    #[cfg(not(tarpaulin_include))]
     /// Is the token a literal, excluding list and record literals
     pub(crate) fn is_literal(&self) -> bool {
         match *self {
@@ -416,6 +425,9 @@ impl<'input> Token<'input> {
         }
     }
 
+    // tarpaulin falsely only marks the first and last as covered
+    // https://github.com/xd009642/tarpaulin/issues/607
+    #[cfg(not(tarpaulin_include))]
     // It's text-like or string-like notation such as String, char, regex ...
     pub(crate) fn is_string_like(&self) -> bool {
         match *self {
@@ -427,6 +439,9 @@ impl<'input> Token<'input> {
         }
     }
 
+    // tarpaulin falsely only marks the first and last as covered
+    // https://github.com/xd009642/tarpaulin/issues/607
+    #[cfg(not(tarpaulin_include))]
     /// Is the token a builtin delimiter symbol
     pub(crate) fn is_symbol(&self) -> bool {
         match *self {
@@ -452,6 +467,9 @@ impl<'input> Token<'input> {
         }
     }
 
+    // tarpaulin falsely only marks the first and last as covered
+    // https://github.com/xd009642/tarpaulin/issues/607
+    #[cfg(not(tarpaulin_include))]
     /// Is the token a builtin expression operator ( excludes forms such as 'match', 'let'
     pub(crate) fn is_operator(&self) -> bool {
         match *self {
@@ -1548,17 +1566,27 @@ impl<'input> Lexer<'input> {
             Some((e, 'r')) => Ok((e, '\r')),
             Some((e, 't')) => Ok((e, '\t')),
             // TODO: Unicode escape codes
-            Some((end, 'u')) => {
-                let mut end = end;
-                let mut digits = String::new();
+            Some((mut end, 'u')) => {
+                let mut escape_start = end;
+                escape_start.extend_left('u');
+                let mut digits = String::with_capacity(4);
                 for _i in 0..4 {
                     if let Some((e, c)) = self.bump() {
-                        end = e;
                         digits.push(c);
+                        if u32::from_str_radix(&format!("{}", c), 16).is_err() {
+                            return Err(ErrorKind::UnexpectedEscapeCode(
+                                Range::from((start, end)).expand_lines(2),
+                                Range::from((e, e)),
+                                format!("\"{}\\u{}\n", s, digits),
+                                c,
+                            )
+                            .into());
+                        }
+                        end = e;
                     } else {
-                        return Err(ErrorKind::UnterminatedIdentLiteral(
-                            Range::from((start, end)).expand_lines(2),
-                            Range::from((start, end)),
+                        return Err(ErrorKind::InvalidUTF8Sequence(
+                            Range::from((escape_start, end)).expand_lines(2),
+                            Range::from((escape_start, end)),
                             format!("\"{}\\u{}\n", s, digits),
                         )
                         .into());
@@ -1568,11 +1596,11 @@ impl<'input> Lexer<'input> {
                 if let Ok(Some(c)) = u32::from_str_radix(&digits, 16).map(std::char::from_u32) {
                     Ok((end, c))
                 } else {
-                    Err(ErrorKind::UnexpectedEscapeCode(
-                        Range::from((start, end)).expand_lines(2),
-                        Range::from((start, end)),
+                    end.shift(' ');
+                    Err(ErrorKind::InvalidUTF8Sequence(
+                        Range::from((escape_start, end)).expand_lines(2),
+                        Range::from((escape_start, end)),
                         format!("\"{}\\u{}\n", s, digits),
-                        'u',
                     )
                     .into())
                 }

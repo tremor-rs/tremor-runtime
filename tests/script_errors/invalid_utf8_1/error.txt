@@ -1,0 +1,3 @@
+Error: 
+    1 | "\u000"
+      |       ^ An unexpected escape code '"' was found

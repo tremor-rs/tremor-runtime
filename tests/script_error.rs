@@ -134,6 +134,8 @@ test_cases!(
     pp_cyclic,
     pp_nest_cyclic,
     //INSERT
+    invalid_utf8_1,
+    invalid_utf8_2,
     error_in_include,
 );
 

@@ -260,7 +260,6 @@ pub trait Highlighter {
             _ => (),
         }
         for t in tokens {
-            //            if let Ok(t) = t {
             if t.span.start().line() != line {
                 line = t.span.start().line();
                 if let Some(Error {
@@ -315,7 +314,6 @@ pub trait Highlighter {
                 }
                 self.reset()?;
             }
-
             let x = t;
             let mut c = ColorSpec::new();
             if x.value.is_keyword() {
@@ -415,7 +413,7 @@ pub trait Highlighter {
                 if end.line() > line {
                     line += 1;
                     self.set_color(ColorSpec::new().set_bold(true))?;
-                    writeln!(self.get_writer(), "{:5} | ", line)?;
+                    write!(self.get_writer(), "{:5} | ", line)?;
                     self.reset()?;
                 }
 
