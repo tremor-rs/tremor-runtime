@@ -160,7 +160,7 @@ where
     }
 
     /// Highlights a script with a given highlighter.
-
+    #[cfg(not(tarpaulin_include))]
     pub fn highlight_script_with<H: Highlighter>(script: &str, h: &mut H) -> std::io::Result<()> {
         let mut script = script.to_string();
         script.push('\n');
@@ -168,30 +168,6 @@ where
             .filter_map(Result::ok)
             .collect();
         h.highlight(None, &tokens)
-    }
-
-    /// Preprocessesa and highlights a script with a given highlighter.
-
-    pub fn highlight_preprocess_script_with<H: Highlighter>(
-        file_name: &str,
-        script: &'script str,
-        h: &mut H,
-    ) -> std::io::Result<()> {
-        let mut s = script.to_string();
-        let mut include_stack = lexer::IncludeStack::default();
-        let cu = include_stack.push(&file_name)?;
-
-        let tokens: Vec<_> = lexer::Preprocessor::preprocess(
-            &crate::path::load(),
-            &file_name,
-            &mut s,
-            cu,
-            &mut include_stack,
-        )?
-        .into_iter()
-        .filter_map(Result::ok)
-        .collect();
-        h.highlight(Some(file_name), &tokens)
     }
 
     /// Format an error given a script source.
