@@ -18,7 +18,6 @@ use crate::ctx::EventContext;
 use crate::errors::{CompilerError, Error, Result};
 use crate::highlighter::{Dumb as DumbHighlighter, Highlighter};
 pub use crate::interpreter::AggrType;
-use crate::interpreter::Cont;
 use crate::lexer::{self};
 use crate::parser::g as grammar;
 use crate::path::ModulePath;
@@ -49,25 +48,6 @@ pub enum Return<'event> {
     },
 }
 
-impl<'run, 'event> From<Cont<'run, 'event>> for Return<'event>
-where
-    'event: 'run,
-{
-    // TODO: This clones the data since we're returning it out of the scope of the
-    // execution - we might want to investigate if we can get rid of this in some cases.
-    fn from(v: Cont<'run, 'event>) -> Self {
-        match v {
-            Cont::Cont(value) => Return::Emit {
-                value: value.into_owned(),
-                port: None,
-            },
-            Cont::Emit(value, port) => Return::Emit { value, port },
-            Cont::EmitEvent(port) => Return::EmitEvent { port },
-            Cont::Drop => Return::Drop,
-        }
-    }
-}
-
 /// A tremor script
 #[derive(Debug)]
 pub struct Script {
@@ -77,13 +57,13 @@ pub struct Script {
     /// Source code for this script
     pub source: String,
     /// A set of warnings if any
-    pub warnings: Vec<Warning>,
+    pub(crate) warnings: Vec<Warning>,
 }
 
 impl Script {
     /// Get script warnings
     #[must_use]
-    pub fn warnings(&self) -> &Vec<Warning> {
+    pub fn warnings(&self) -> &[Warning] {
         &self.warnings
     }
 }
@@ -169,7 +149,7 @@ where
     }
 
     /// Highlights a script with a given highlighter.
-
+    #[cfg(not(tarpaulin_include))]
     pub fn highlight_script_with<H: Highlighter>(script: &str, h: &mut H) -> io::Result<()> {
         let tokens: Vec<_> = lexer::Tokenizer::new(&script)
             .filter_map(Result::ok)
@@ -226,30 +206,6 @@ where
 
         h.highlight_indent(line_prefix, None, &tokens[..])?;
         io::Result::Ok(())
-    }
-
-    /// Preprocesses and highlights a script with a given highlighter.
-    #[cfg(not(tarpaulin_include))]
-    pub fn highlight_preprocess_script_with<H: Highlighter>(
-        file_name: &str,
-        script: &'script str,
-        h: &mut H,
-    ) -> io::Result<()> {
-        let mut s = script.to_string();
-        let mut include_stack = lexer::IncludeStack::default();
-        let cu = include_stack.push(file_name)?;
-
-        let tokens: Vec<_> = lexer::Preprocessor::preprocess(
-            &crate::path::load(),
-            &file_name,
-            &mut s,
-            cu,
-            &mut include_stack,
-        )?
-        .into_iter()
-        .filter_map(Result::ok)
-        .collect();
-        h.highlight(Some(file_name), &tokens)
     }
 
     /// Format an error given a script source.
@@ -323,12 +279,8 @@ where
 
     /// Formats an error within this script using a given highlighter
     pub fn format_error_with<H: Highlighter>(&self, h: &mut H, e: &Error) -> io::Result<()> {
-        Self::format_error_from_script_and_cus(
-            &self.source,
-            h,
-            e,
-            &self.script.suffix().node_meta.cus,
-        )
+        let cus = &self.script.suffix().node_meta.cus;
+        Self::format_error_from_script_and_cus(&self.source, h, e, cus)
     }
 
     /// Runs an event through this script
