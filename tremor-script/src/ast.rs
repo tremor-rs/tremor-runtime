@@ -112,24 +112,21 @@ impl<'script> NodeMetas {
     pub(crate) fn start(&self, idx: usize) -> Option<Location> {
         self.nodes.get(idx).map(|v| v.start)
     }
+
     pub(crate) fn end(&self, idx: usize) -> Option<Location> {
         self.nodes.get(idx).map(|v| v.end)
     }
-    pub(crate) fn name(&self, idx: usize) -> Option<&String> {
-        self.nodes.get(idx).map(|v| v.name.as_ref()).and_then(|v| v)
-    }
-    /// Returns the CU for a meta node
-    pub fn cu(&self, idx: usize) -> Option<&str> {
+
+    pub(crate) fn name(&self, idx: usize) -> Option<&str> {
         self.nodes
             .get(idx)
-            .and_then(|e| self.cus.get(e.cu))
-            .and_then(CompilationUnit::to_str)
+            .map(|v| v.name.as_ref())
+            .and_then(|v| v)
+            .map(String::as_str)
     }
 
-    pub(crate) fn name_dflt(&self, idx: usize) -> String {
-        self.name(idx)
-            .cloned()
-            .unwrap_or_else(|| String::from("<UNKNOWN>"))
+    pub(crate) fn name_dflt(&self, idx: usize) -> &str {
+        self.name(idx).unwrap_or("<UNKNOWN>")
     }
 }
 
@@ -1440,22 +1437,15 @@ impl<'script> Path<'script> {
                     };
                     Ok(ImutExprInt::Literal(lit))
                 } else {
-                    error_generic(
-                        &Range::from((
-                            helper.meta.start(mid).unwrap_or_default(),
-                            helper.meta.end(mid).unwrap_or_default(),
-                        ))
-                        .expand_lines(2),
-                        &Range::from((
-                            helper.meta.start(mid).unwrap_or_default(),
-                            helper.meta.end(mid).unwrap_or_default(),
-                        )),
-                        &format!(
-                            "Invalid const reference to '{}'",
-                            helper.meta.name_dflt(mid),
-                        ),
-                        &helper.meta,
-                    )
+                    let r = Range::from((
+                        helper.meta.start(mid).unwrap_or_default(),
+                        helper.meta.end(mid).unwrap_or_default(),
+                    ));
+                    let e = format!(
+                        "Invalid const reference to '{}'",
+                        helper.meta.name_dflt(mid),
+                    );
+                    error_generic(&r.expand_lines(2), &r, &e, &helper.meta)
                 }
             }
             other => Ok(ImutExprInt::Path(other)),

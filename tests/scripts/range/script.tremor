@@ -1,0 +1,6 @@
+use std::range;
+
+{
+  "uint": range::range(1,3),
+  "int": range::range(-1,3),
+}

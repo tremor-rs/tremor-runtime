@@ -473,7 +473,7 @@ where
             if let Some(l) = stry!(local.get(lpath.idx, outer, lpath.mid, &env.meta)) {
                 l
             } else {
-                let key = env.meta.name_dflt(lpath.mid);
+                let key = env.meta.name_dflt(lpath.mid).to_string();
                 return error_bad_key(outer, lpath, &path, key, vec![], &env.meta);
             }
         }
@@ -495,7 +495,7 @@ where
                     subrange = None;
                     continue;
                 } else if let Some(o) = current.as_object() {
-                    let key = env.meta.name_dflt(*mid);
+                    let key = env.meta.name_dflt(*mid).to_string();
                     let options = o.keys().map(ToString::to_string).collect();
                     return error_bad_key(
                         outer, segment, //&Expr::dummy(*start, *end),

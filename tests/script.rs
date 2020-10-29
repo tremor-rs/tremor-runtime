@@ -153,6 +153,7 @@ test_cases!(
     // TODO
     // const_in_const_lookup,
     // INSERT
+    range,
     origin,
     array_pattern_element,
     array_pattern_ignore,
