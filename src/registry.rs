@@ -187,12 +187,14 @@ pub struct Registries {
     binding: async_channel::Sender<Msg<BindingArtefact>>,
 }
 
+#[cfg(not(tarpaulin_include))]
 impl fmt::Debug for Registries {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "Registries {{ ... }}")
     }
 }
 
+#[cfg(not(tarpaulin_include))]
 impl Default for Registries {
     fn default() -> Self {
         Self::new()
