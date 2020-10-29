@@ -155,8 +155,8 @@ impl EventContext {
 
     /// returns the events origin uri
     #[must_use]
-    pub fn origin_uri(&self) -> &Option<EventOriginUri> {
-        &self.origin_uri
+    pub fn origin_uri(&self) -> Option<&EventOriginUri> {
+        self.origin_uri.as_ref()
     }
 }
 
@@ -281,6 +281,6 @@ mod tests {
         // From Default
         let ctx = EventContext::default();
         assert_eq!(ctx.ingest_ns(), 0);
-        assert_eq!(ctx.origin_uri(), &None, "Default has no origin URI");
+        assert_eq!(ctx.origin_uri(), None, "Default has no origin URI");
     }
 }

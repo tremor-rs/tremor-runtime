@@ -16,7 +16,7 @@ use simd_json::prelude::*;
 use simd_json::value::borrowed::{Object, Value};
 use std::io::prelude::*;
 use tremor_common::file;
-use tremor_pipeline::FN_REGISTRY;
+use tremor_pipeline::{EventOriginUri, FN_REGISTRY};
 use tremor_runtime;
 use tremor_runtime::errors::*;
 use tremor_script::errors::CompilerError;
@@ -53,8 +53,15 @@ macro_rules! test_cases {
 
                 let mut results = Vec::new();
                 for (id, mut json) in in_json.into_iter().enumerate() {
+                    let uri = EventOriginUri{
+                        host: "test".into(),
+                        path: vec!["snot".into()],
+                        port: Some(23),
+                        scheme: "snot".into(),
+                        uid: 42
 
-                    let context = EventContext::new(id as u64, None);
+                    };
+                    let context = EventContext::new(id as u64, Some(uri));
                     let mut meta = Value::from(Object::default());
                     let mut state = Value::null();
                     match script.run(&context, AggrType::Tick, &mut json, &mut state, &mut meta)? {
@@ -146,6 +153,7 @@ test_cases!(
     // TODO
     // const_in_const_lookup,
     // INSERT
+    origin,
     array_pattern_element,
     array_pattern_ignore,
     array_pattern_short_circuit,
