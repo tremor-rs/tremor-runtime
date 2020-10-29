@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// this are macros
+#![cfg(not(tarpaulin_include))]
+
 /// A macro that makes it simple to create a operator and the
 /// required factory usage is:
 /// `op!(NodeFactory(Node) {<constructor>})`
