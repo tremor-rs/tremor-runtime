@@ -14,17 +14,15 @@
 
 use crate::registry::Registry;
 use crate::tremor_fn;
+use crate::EventOriginUri;
 use halfbrown::hashmap;
 use simd_json::prelude::*;
+use std::string::ToString;
 
 pub fn load(registry: &mut Registry) {
     registry
         .insert(tremor_fn! (origin::as_uri_string(context) {
-            if let Some(uri) = context.origin_uri() {
-                Ok(Value::from(uri.to_string()))
-            } else {
-                Ok(Value::null())
-            }
+            Ok(context.origin_uri().map(ToString::to_string).map(Value::from).unwrap_or_default())
         }))
         .insert(tremor_fn! (origin::as_uri_record(context) {
             if let Some(uri) = context.origin_uri() {
@@ -47,28 +45,13 @@ pub fn load(registry: &mut Registry) {
             }
         }))
         .insert(tremor_fn! (origin::scheme(context) {
-            if let Some(uri) = context.origin_uri() {
-                Ok(Value::String(uri.scheme().to_string().into()))
-            } else {
-                Ok(Value::null())
-            }
+            Ok(context.origin_uri().map(|uri| uri.scheme().to_string()).map(Value::from).unwrap_or_default())
         }))
         .insert(tremor_fn! (origin::host(context) {
-            if let Some(uri) = context.origin_uri() {
-                Ok(Value::String(uri.host().to_string().into()))
-            } else {
-                Ok(Value::null())
-            }
+            Ok(context.origin_uri().map(|uri| uri.host().to_string()).map(Value::from).unwrap_or_default())
         }))
         .insert(tremor_fn! (origin::port(context) {
-            if let Some(uri) = context.origin_uri() {
-                Ok(match uri.port() {
-                    Some(n) => Value::from(n),
-                    None => Value::null(),
-                })
-            } else {
-                Ok(Value::null())
-            }
+            Ok(context.origin_uri().and_then(EventOriginUri::port).map(Value::from).unwrap_or_default())
         }))
         .insert(tremor_fn! (origin::path(context) {
             if let Some(uri) = context.origin_uri() {

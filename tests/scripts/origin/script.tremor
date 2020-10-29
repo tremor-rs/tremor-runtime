@@ -1,0 +1,10 @@
+use tremor::origin;
+
+{
+  "origin::as_uri_string": origin::as_uri_string(),
+  "origin::as_uri_record": origin::as_uri_record(),
+  "origin::scheme": origin::scheme(),
+  "origin::host": origin::host(),
+  "origin::port": origin::port(),
+  "origin::path" : origin::path(),
+}
