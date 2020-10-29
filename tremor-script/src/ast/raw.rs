@@ -1856,13 +1856,13 @@ impl<'script> Upable<'script> for ConstPathRaw<'script> {
         let mut segments = segments.into_iter();
         if let Some(Segment::Id { mid, .. }) = segments.next() {
             let segments = segments.collect();
-            let id = helper.meta.name_dflt(mid);
+            let id = helper.meta.name_dflt(mid).to_string();
             let mid = helper.add_meta_w_name(self.start, self.end, &id);
             let mut module_direct: Vec<String> =
                 self.module.iter().map(|m| m.id.to_string()).collect();
             let mut module = helper.module.clone();
             module.append(&mut module_direct);
-            module.push(id);
+            module.push(id.to_string());
             if let Some(idx) = helper.is_const(&module) {
                 Ok(LocalPath {
                     is_const: true,
@@ -1908,7 +1908,7 @@ impl<'script> Upable<'script> for LocalPathRaw<'script> {
         let mut segments = segments.into_iter();
         if let Some(Segment::Id { mid, .. }) = segments.next() {
             let segments = segments.collect();
-            let id = helper.meta.name_dflt(mid);
+            let id = helper.meta.name_dflt(mid).to_string();
             let mid = helper.add_meta_w_name(self.start, self.end, &id);
 
             // NOTE We never modularise `window`, `args` or `group`

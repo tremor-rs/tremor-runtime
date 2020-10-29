@@ -185,7 +185,7 @@ where
                         mid: *mid,
                         segments: vec![],
                     });
-                    let key = env.meta.name_dflt(*mid);
+                    let key = env.meta.name_dflt(*mid).to_string();
                     //TODO: get root key
                     error_bad_key(self, self, &path, key, vec![], &env.meta)
                 }

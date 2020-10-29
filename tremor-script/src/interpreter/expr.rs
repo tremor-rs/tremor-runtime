@@ -354,21 +354,16 @@ where
 
         let mut current: &Value = match path {
             Path::Const(p) => {
-                return error_assign_to_const(self, env.meta.name_dflt(p.mid), &env.meta)
+                let name = env.meta.name_dflt(p.mid).to_string();
+                return error_assign_to_const(self, name, &env.meta);
             }
             Path::Local(lpath) => {
                 if let Some(l) = stry!(local.get(lpath.idx, self, lpath.mid(), &env.meta)) {
                     let l: &mut Value<'event> = unsafe { mem::transmute(l) };
                     l
                 } else {
-                    return error_bad_key(
-                        self,
-                        lpath,
-                        &path,
-                        env.meta.name_dflt(lpath.mid),
-                        vec![],
-                        &env.meta,
-                    );
+                    let key = env.meta.name_dflt(lpath.mid).to_string();
+                    return error_bad_key(self, lpath, &path, key, vec![], &env.meta);
                 }
             }
             Path::Meta(_path) => meta,
@@ -436,7 +431,9 @@ where
         mut value: Value<'event>,
     ) -> Result<Cow<'run, Value<'event>>> {
         match path {
-            Path::Const(p) => error_assign_to_const(self, env.meta.name_dflt(p.mid), &env.meta),
+            Path::Const(p) => {
+                error_assign_to_const(self, env.meta.name_dflt(p.mid).into(), &env.meta)
+            }
             Path::Local(lpath) => match stry!(local.get(lpath.idx, self, lpath.mid(), &env.meta)) {
                 Some(l) => {
                     let l: &mut Value<'event> = unsafe { mem::transmute(l) };
