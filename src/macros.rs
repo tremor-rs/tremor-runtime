@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// this are macros
+#![cfg(not(tarpaulin_include))]
+
 macro_rules! instance {
     // crate::metrics::INSTANCE is never mutated after the initial setting
     // in main::run() so we can use this safely.

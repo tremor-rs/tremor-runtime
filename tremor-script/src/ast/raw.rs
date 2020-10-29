@@ -1862,7 +1862,7 @@ impl<'script> Upable<'script> for ConstPathRaw<'script> {
                 self.module.iter().map(|m| m.id.to_string()).collect();
             let mut module = helper.module.clone();
             module.append(&mut module_direct);
-            module.push(id.to_string());
+            module.push(id);
             if let Some(idx) = helper.is_const(&module) {
                 Ok(LocalPath {
                     is_const: true,

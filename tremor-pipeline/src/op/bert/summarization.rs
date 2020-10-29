@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// this is not enabled
+#![cfg(not(tarpaulin_include))]
+
 use std::fmt;
 
 use crate::errors::*;
