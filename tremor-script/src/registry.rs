@@ -187,12 +187,14 @@ pub enum FunctionError {
     Error(Box<Error>),
 }
 
+#[cfg(not(tarpaulin_include))]
 impl PartialEq for FunctionError {
     fn eq(&self, _other: &Self) -> bool {
         false
     }
 }
 
+#[cfg(not(tarpaulin_include))]
 impl From<Error> for FunctionError {
     fn from(error: Error) -> Self {
         Self::Error(Box::new(error))
@@ -301,11 +303,13 @@ impl Clone for TremorFnWrapper {
         }
     }
 }
+#[cfg(not(tarpaulin_include))]
 impl fmt::Debug for TremorFnWrapper {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}::{}", self.module, self.name)
     }
 }
+#[cfg(not(tarpaulin_include))]
 impl PartialEq for TremorFnWrapper {
     fn eq(&self, other: &Self) -> bool {
         self.module == other.module && self.name == other.name
@@ -558,6 +562,7 @@ macro_rules! tremor_fn_ {
     };
 }
 
+#[cfg(not(tarpaulin_include))]
 impl Default for Registry {
     fn default() -> Self {
         Self {
@@ -679,11 +684,14 @@ impl TremorAggrFnWrapper {
     }
 }
 
+#[cfg(not(tarpaulin_include))]
 impl fmt::Debug for TremorAggrFnWrapper {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "(aggr){}::{}", self.module, self.name)
     }
 }
+
+#[cfg(not(tarpaulin_include))]
 impl PartialEq for TremorAggrFnWrapper {
     fn eq(&self, other: &Self) -> bool {
         self.module == other.module && self.name == other.name
@@ -696,6 +704,7 @@ pub struct Aggr {
     functions: HashMap<String, HashMap<String, TremorAggrFnWrapper>>,
 }
 
+#[cfg(not(tarpaulin_include))]
 impl Default for Aggr {
     fn default() -> Self {
         Self {
