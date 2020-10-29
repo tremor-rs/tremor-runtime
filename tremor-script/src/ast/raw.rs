@@ -25,7 +25,7 @@ use super::{
     Pattern, PredicateClause, PredicatePattern, Predicates, Record, RecordPattern, Recur, Script,
     Segment, StatePath, TestExpr, TuplePattern, UnaryExpr, UnaryOpKind, Warning,
 };
-use crate::errors::{error_generic, error_oops, ErrorKind, Result};
+use crate::errors::{error_generic, error_missing_effector, error_oops, ErrorKind, Result};
 use crate::impl_expr;
 use crate::pos::{Location, Range};
 use crate::registry::CustomFn;
@@ -1027,18 +1027,25 @@ impl<'script> Upable<'script> for PredicateClauseRaw<'script> {
         let pattern = self.pattern.up(helper)?;
         let guard = self.guard.up(helper)?;
         helper.possible_leaf = was_leaf;
-        let exprs = self.exprs.up(helper)?;
+        let mut exprs = self.exprs.up(helper)?;
 
         // If we are in an assign pattern we'd have created
         // a shadow variable, this needs to be undoine at the end
         if pattern.is_assign() {
             helper.end_shadow_var();
         }
+
+        let span = Range::from((self.start, self.end));
+        let last_expr = exprs
+            .pop()
+            .ok_or_else(|| error_missing_effector(&span, &span, &helper.meta))?;
+
         Ok(PredicateClause {
             mid: helper.add_meta(self.start, self.end),
             pattern,
             guard,
             exprs,
+            last_expr,
         })
     }
 }
@@ -1054,10 +1061,16 @@ pub struct ImutPredicateClauseRaw<'script> {
 
 impl<'script> Upable<'script> for ImutPredicateClauseRaw<'script> {
     type Target = ImutPredicateClause<'script>;
-    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+    fn up<'registry>(mut self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         // We run the pattern first as this might reserve a local shadow
         let pattern = self.pattern.up(helper)?;
-        let exprs = self.exprs.up(helper)?.into_iter().map(ImutExpr).collect();
+
+        let span = Range::from((self.start, self.end));
+        let expr = self
+            .exprs
+            .pop()
+            .ok_or_else(|| error_missing_effector(&span, &span, &helper.meta))?;
+        let expr = ImutExpr(expr.up(helper)?);
         let guard = self.guard.up(helper)?;
         // If we are in an assign pattern we'd have created
         // a shadow variable, this needs to be undoine at the end
@@ -1068,7 +1081,7 @@ impl<'script> Upable<'script> for ImutPredicateClauseRaw<'script> {
             mid: helper.add_meta(self.start, self.end),
             pattern,
             guard,
-            exprs,
+            expr,
         })
     }
 }
@@ -1306,12 +1319,17 @@ impl<'script> Upable<'script> for ComprehensionCaseRaw<'script> {
         // unregister them again
         helper.end_shadow_var();
         helper.end_shadow_var();
+        let span = Range::from((self.start, self.end));
+        let last_expr = exprs
+            .pop()
+            .ok_or_else(|| error_missing_effector(&span, &span, &helper.meta))?;
         Ok(ComprehensionCase {
             mid: helper.add_meta(self.start, self.end),
             key_name: self.key_name,
             value_name: self.value_name,
             guard,
             exprs,
+            last_expr,
         })
     }
 }
@@ -1328,13 +1346,20 @@ pub struct ImutComprehensionCaseRaw<'script> {
 
 impl<'script> Upable<'script> for ImutComprehensionCaseRaw<'script> {
     type Target = ImutComprehensionCase<'script>;
-    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+    fn up<'registry>(mut self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         // regiter key and value as shadowed variables
         helper.register_shadow_var(&self.key_name);
         helper.register_shadow_var(&self.value_name);
 
         let guard = self.guard.up(helper)?;
-        let exprs = self.exprs.up(helper)?.into_iter().map(ImutExpr).collect();
+
+        let span = Range::from((self.start, self.end));
+        let expr = self
+            .exprs
+            .pop()
+            .ok_or_else(|| error_missing_effector(&span, &span, &helper.meta))?;
+
+        let expr = ImutExpr(expr.up(helper)?);
 
         // unregister them again
         helper.end_shadow_var();
@@ -1344,7 +1369,7 @@ impl<'script> Upable<'script> for ImutComprehensionCaseRaw<'script> {
             key_name: self.key_name,
             value_name: self.value_name,
             guard,
-            exprs,
+            expr,
         })
     }
 }

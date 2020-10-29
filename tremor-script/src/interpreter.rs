@@ -140,12 +140,8 @@ impl<'stack> LocalStack<'stack> {
         if let Some(v) = self.values.get(idx) {
             Ok(v)
         } else {
-            error_oops(
-                outer,
-                0xdead_000f,
-                &format!("Unknown local variable: `{}`", meta.name_dflt(mid)),
-                meta,
-            )
+            let e = format!("Unknown local variable: `{}`", meta.name_dflt(mid));
+            error_oops(outer, 0xdead_000f, &e, meta)
         }
     }
 }
@@ -477,14 +473,8 @@ where
             if let Some(l) = stry!(local.get(lpath.idx, outer, lpath.mid, &env.meta)) {
                 l
             } else {
-                return error_bad_key(
-                    outer,
-                    lpath,
-                    &path,
-                    env.meta.name_dflt(lpath.mid),
-                    vec![],
-                    &env.meta,
-                );
+                let key = env.meta.name_dflt(lpath.mid);
+                return error_bad_key(outer, lpath, &path, key, vec![], &env.meta);
             }
         }
         Path::Const(lpath) => stry!(env.get_const(lpath.idx, outer, &env.meta)),
@@ -505,13 +495,11 @@ where
                     subrange = None;
                     continue;
                 } else if let Some(o) = current.as_object() {
+                    let key = env.meta.name_dflt(*mid);
+                    let options = o.keys().map(ToString::to_string).collect();
                     return error_bad_key(
-                        outer,
-                        segment, //&Expr::dummy(*start, *end),
-                        &path,
-                        env.meta.name_dflt(*mid),
-                        o.keys().map(ToString::to_string).collect(),
-                        &env.meta,
+                        outer, segment, //&Expr::dummy(*start, *end),
+                        &path, key, options, &env.meta,
                     );
                 } else {
                     return error_need_obj(outer, segment, current.value_type(), &env.meta);
@@ -528,14 +516,9 @@ where
                         subrange = None;
                         continue;
                     } else {
-                        return error_array_out_of_bound(
-                            outer,
-                            segment,
-                            &path,
-                            idx..idx,
-                            range_to_consider.len(),
-                            &env.meta,
-                        );
+                        let r = idx..idx;
+                        let l = range_to_consider.len();
+                        return error_array_out_of_bound(outer, segment, &path, r, l, &env.meta);
                     }
                 } else {
                     return error_need_arr(outer, segment, current.value_type(), &env.meta);
@@ -559,14 +542,9 @@ where
                             outer, segment, &path, start_idx, end_idx, &env.meta,
                         );
                     } else if end_idx > array.len() {
-                        return error_array_out_of_bound(
-                            outer,
-                            segment,
-                            &path,
-                            start_idx..end_idx,
-                            array.len(),
-                            &env.meta,
-                        );
+                        let r = start_idx..end_idx;
+                        let l = array.len();
+                        return error_array_out_of_bound(outer, segment, &path, r, l, &env.meta);
                     } else {
                         subrange = Some(&array[start_idx..end_idx]);
                         continue;
@@ -587,14 +565,9 @@ where
                             subrange = None;
                             continue;
                         } else {
-                            return error_bad_key(
-                                outer,
-                                segment,
-                                &path,
-                                id.to_string(),
-                                o.keys().map(ToString::to_string).collect(),
-                                &env.meta,
-                            );
+                            let key = id.to_string();
+                            let options = o.keys().map(ToString::to_string).collect();
+                            return error_bad_key(outer, segment, &path, key, options, &env.meta);
                         }
                     }
                     // The segment did not resolve to an identifier, but `current` is an object: err
@@ -611,13 +584,10 @@ where
                             subrange = None;
                             continue;
                         } else {
+                            let r = idx..idx;
+                            let l = array.len();
                             return error_array_out_of_bound(
-                                outer,
-                                segment,
-                                &path,
-                                idx..idx,
-                                array.len(),
-                                &env.meta,
+                                outer, segment, &path, r, l, &env.meta,
                             );
                         }
                     }
@@ -817,12 +787,8 @@ where
                     value,
                 } => {
                     if obj.contains_key(&ident) {
-                        return error_patch_key_exists(
-                            patch_expr,
-                            ident_expr,
-                            ident.to_string(),
-                            &env.meta,
-                        );
+                        let key = ident.to_string();
+                        return error_patch_key_exists(patch_expr, ident_expr, key, &env.meta);
                     } else {
                         obj.insert(ident, value);
                     }
@@ -835,11 +801,9 @@ where
                     if obj.contains_key(&ident) {
                         obj.insert(ident, value);
                     } else {
+                        let key = ident.to_string();
                         return error_patch_update_key_missing(
-                            patch_expr,
-                            ident_expr,
-                            ident.to_string(),
-                            &env.meta,
+                            patch_expr, ident_expr, key, &env.meta,
                         );
                     }
                 }
@@ -875,12 +839,9 @@ where
                         stry!(merge_values(patch_expr, expr, value, &merge_value));
                     }
                     Some(other) => {
+                        let key = ident.to_string();
                         return error_patch_merge_type_conflict(
-                            patch_expr,
-                            ident_expr,
-                            ident.to_string(),
-                            &other,
-                            &env.meta,
+                            patch_expr, ident_expr, key, &other, &env.meta,
                         );
                     }
                     None => {
@@ -949,19 +910,12 @@ where
     'script: 'event,
     'event: 'run,
 {
+    let opts_wo = opts.without_result();
     match pattern {
         Pattern::DoNotCare => test_guard(outer, opts, env, event, state, meta, local, guard),
         Pattern::Tuple(ref tp) => {
             if stry!(match_tp_expr(
-                outer,
-                opts.without_result(),
-                env,
-                event,
-                state,
-                meta,
-                local,
-                &target,
-                &tp,
+                outer, opts_wo, env, event, state, meta, local, &target, &tp,
             ))
             .is_some()
             {
@@ -972,15 +926,7 @@ where
         }
         Pattern::Record(ref rp) => {
             if stry!(match_rp_expr(
-                outer,
-                opts.without_result(),
-                env,
-                event,
-                state,
-                meta,
-                local,
-                &target,
-                &rp,
+                outer, opts_wo, env, event, state, meta, local, &target, &rp,
             ))
             .is_some()
             {
@@ -991,15 +937,7 @@ where
         }
         Pattern::Array(ref ap) => {
             if stry!(match_ap_expr(
-                outer,
-                opts.without_result(),
-                env,
-                event,
-                state,
-                meta,
-                local,
-                &target,
-                &ap,
+                outer, opts_wo, env, event, state, meta, local, &target, &ap,
             ))
             .is_some()
             {
@@ -1018,21 +956,15 @@ where
             }
         }
         Pattern::Assign(ref a) => {
+            let opts_w = opts.with_result();
+
             match *a.pattern {
                 Pattern::DoNotCare => {
                     test_guard(outer, opts, env, event, state, meta, local, guard)
                 }
                 Pattern::Array(ref ap) => {
                     if let Some(v) = stry!(match_ap_expr(
-                        outer,
-                        opts.with_result(),
-                        env,
-                        event,
-                        state,
-                        meta,
-                        local,
-                        &target,
-                        &ap,
+                        outer, opts_w, env, event, state, meta, local, &target, &ap,
                     )) {
                         // we need to assign prior to the guard so we can check
                         // against the pattern expressions
@@ -1045,15 +977,7 @@ where
                 }
                 Pattern::Record(ref rp) => {
                     if let Some(v) = stry!(match_rp_expr(
-                        outer,
-                        opts.with_result(),
-                        env,
-                        event,
-                        state,
-                        meta,
-                        local,
-                        &target,
-                        &rp,
+                        outer, opts_w, env, event, state, meta, local, &target, &rp,
                     )) {
                         // we need to assign prior to the guard so we can check
                         // against the pattern expressions
@@ -1080,15 +1004,7 @@ where
                 }
                 Pattern::Tuple(ref tp) => {
                     if let Some(v) = stry!(match_tp_expr(
-                        outer,
-                        opts.with_result(),
-                        env,
-                        event,
-                        state,
-                        meta,
-                        local,
-                        &target,
-                        &tp,
+                        outer, opts_w, env, event, state, meta, local, &target, &tp,
                     )) {
                         // we need to assign prior to the guard so we can cehck
                         // against the pattern expressions

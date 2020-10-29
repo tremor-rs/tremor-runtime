@@ -22,7 +22,7 @@ use crate::ast::{
 };
 use crate::errors::{
     error_assign_array, error_assign_to_const, error_bad_key, error_invalid_assign_target,
-    error_missing_effector, error_need_obj, error_no_clause_hit, error_oops, Result,
+    error_need_obj, error_no_clause_hit, error_oops, Result,
 };
 use crate::registry::RECUR_PTR;
 use crate::stry;
@@ -65,27 +65,22 @@ where
     'event: 'run,
 {
     #[inline]
-    fn execute_effectors<T: BaseExpr>(
-        &'script self,
+    fn execute_effectors(
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
         event: &'run mut Value<'event>,
         state: &'run mut Value<'static>,
         meta: &'run mut Value<'event>,
         local: &'run mut LocalStack<'event>,
-        inner: &'script T,
         effectors: &'script [Expr<'script>],
+        last_effector: &'script Expr<'script>,
     ) -> Result<Cont<'run, 'event>> {
-        if let Some((last_effector, other_effectors)) = effectors.split_last() {
-            for effector in other_effectors {
-                demit!(effector.run(opts.without_result(), env, event, state, meta, local));
-            }
-            Ok(Cont::Cont(demit!(
-                last_effector.run(opts, env, event, state, meta, local)
-            )))
-        } else {
-            error_missing_effector(self, inner, &env.meta)
+        for effector in effectors {
+            demit!(effector.run(opts.without_result(), env, event, state, meta, local));
         }
+        Ok(Cont::Cont(demit!(
+            last_effector.run(opts, env, event, state, meta, local)
+        )))
     }
 
     #[inline]
@@ -102,28 +97,14 @@ where
         let target = stry!(expr.target.run(opts, env, event, state, meta, local));
 
         for predicate in &expr.patterns {
+            let p = &predicate.pattern;
+            let g = &predicate.guard;
             if stry!(test_predicate_expr(
-                self,
-                opts,
-                env,
-                event,
-                state,
-                meta,
-                local,
-                &target,
-                &predicate.pattern,
-                &predicate.guard,
+                self, opts, env, event, state, meta, local, &target, p, g,
             )) {
-                return self.execute_effectors(
-                    opts,
-                    env,
-                    event,
-                    state,
-                    meta,
-                    local,
-                    predicate,
-                    &predicate.exprs,
-                );
+                let e = &predicate.exprs;
+                let l = &predicate.last_expr;
+                return Self::execute_effectors(opts, env, event, state, meta, local, e, l);
             }
         }
         error_no_clause_hit(self, &env.meta)
@@ -264,8 +245,11 @@ where
                     if stry!(test_guard(
                         self, opts, env, event, state, meta, local, &e.guard
                     )) {
-                        let v = demit!(self
-                            .execute_effectors(opts, env, event, state, meta, local, e, &e.exprs,));
+                        let es = &e.exprs;
+                        let l = &e.last_expr;
+                        let v = demit!(Self::execute_effectors(
+                            opts, env, event, state, meta, local, es, l,
+                        ));
                         // NOTE: We are creating a new value so we have to clone;
                         if opts.result_needed {
                             value_vec.push(v.into_owned());
@@ -298,8 +282,11 @@ where
                     if stry!(test_guard(
                         self, opts, env, event, state, meta, local, &e.guard
                     )) {
-                        let v = demit!(self
-                            .execute_effectors(opts, env, event, state, meta, local, e, &e.exprs,));
+                        let es = &e.exprs;
+                        let l = &e.last_expr;
+                        let v = demit!(Self::execute_effectors(
+                            opts, env, event, state, meta, local, es, l
+                        ));
 
                         if opts.result_needed {
                             value_vec.push(v.into_owned());

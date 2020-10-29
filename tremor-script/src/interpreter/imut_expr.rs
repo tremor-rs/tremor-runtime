@@ -22,8 +22,8 @@ use crate::ast::{
     LocalPath, Merge, Patch, Path, Recur, Segment, UnaryExpr, ARGS_CONST_ID,
 };
 use crate::errors::{
-    error_bad_key, error_decreasing_range, error_invalid_unary, error_missing_effector,
-    error_need_obj, error_need_str, error_no_clause_hit, error_oops, Result,
+    error_bad_key, error_decreasing_range, error_invalid_unary, error_need_obj, error_need_str,
+    error_no_clause_hit, error_oops, Result,
 };
 use crate::interpreter::value_to_index;
 use crate::registry::{Registry, TremorAggrFnWrapper, RECUR};
@@ -185,15 +185,9 @@ where
                         mid: *mid,
                         segments: vec![],
                     });
+                    let key = env.meta.name_dflt(*mid);
                     //TODO: get root key
-                    error_bad_key(
-                        self,
-                        self,
-                        &path,
-                        env.meta.name_dflt(*mid),
-                        vec![],
-                        &env.meta,
-                    )
+                    error_bad_key(self, self, &path, key, vec![], &env.meta)
                 }
             }
             ImutExprInt::Local {
@@ -244,8 +238,9 @@ where
                     if stry!(test_guard(
                         self, opts, env, event, state, meta, local, &e.guard
                     )) {
-                        let v = stry!(self
-                            .execute_effectors(opts, env, event, state, meta, local, e, &e.exprs,));
+                        let v = stry!(Self::execute_effectors(
+                            opts, env, event, state, meta, local, &e.expr
+                        ));
                         // NOTE: We are creating a new value so we have to clone;
                         value_vec.push(v.into_owned());
                         continue 'comprehension_outer;
@@ -268,8 +263,9 @@ where
                     if stry!(test_guard(
                         self, opts, env, event, state, meta, local, &e.guard
                     )) {
-                        let v = stry!(self
-                            .execute_effectors(opts, env, event, state, meta, local, e, &e.exprs,));
+                        let v = stry!(Self::execute_effectors(
+                            opts, env, event, state, meta, local, &e.expr
+                        ));
 
                         value_vec.push(v.into_owned());
                         count += 1;
@@ -283,23 +279,16 @@ where
     }
 
     #[inline]
-    fn execute_effectors<T: BaseExpr>(
-        &'script self,
+    fn execute_effectors(
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
         event: &'run Value<'event>,
         state: &'run Value<'static>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
-        inner: &'script T,
-        effectors: &'script [ImutExpr<'script>],
+        effector: &'script ImutExpr<'script>,
     ) -> Result<Cow<'run, Value<'event>>> {
-        // Since we don't have side effects we don't need to run anything but the last effector!
-        if let Some(effector) = effectors.last() {
-            effector.run(opts, env, event, state, meta, local)
-        } else {
-            error_missing_effector(self, inner, &env.meta)
-        }
+        effector.run(opts, env, event, state, meta, local)
     }
 
     fn match_expr(
@@ -315,28 +304,13 @@ where
         let target = stry!(expr.target.run(opts, env, event, state, meta, local));
 
         for predicate in &expr.patterns {
+            let p = &predicate.pattern;
+            let g = &predicate.guard;
             if stry!(test_predicate_expr(
-                self,
-                opts,
-                env,
-                event,
-                state,
-                meta,
-                local,
-                &target,
-                &predicate.pattern,
-                &predicate.guard,
+                self, opts, env, event, state, meta, local, &target, p, g,
             )) {
-                return self.execute_effectors(
-                    opts,
-                    env,
-                    event,
-                    state,
-                    meta,
-                    local,
-                    predicate,
-                    &predicate.exprs,
-                );
+                let e = &predicate.expr;
+                return Self::execute_effectors(opts, env, event, state, meta, local, e);
             }
         }
         error_no_clause_hit(self, &env.meta)

@@ -1044,6 +1044,8 @@ pub struct PredicateClause<'script> {
     pub guard: Option<ImutExprInt<'script>>,
     /// Expressions to evaluate if predicate test and guard pass
     pub exprs: Exprs<'script>,
+    /// The last expression
+    pub last_expr: Expr<'script>,
 }
 impl_expr2!(PredicateClause);
 
@@ -1057,7 +1059,7 @@ pub struct ImutPredicateClause<'script> {
     /// Optional guard expression
     pub guard: Option<ImutExprInt<'script>>,
     /// Expressions to evaluate if predicate test and guard pass
-    pub exprs: ImutExprs<'script>,
+    pub expr: ImutExpr<'script>,
 }
 impl_expr2!(ImutPredicateClause);
 
@@ -1187,6 +1189,8 @@ pub struct ComprehensionCase<'script> {
     pub guard: Option<ImutExprInt<'script>>,
     /// Case application against target on passing guard
     pub exprs: Exprs<'script>,
+    /// Last case application against target on passing guard
+    pub last_expr: Expr<'script>,
 }
 impl_expr2!(ComprehensionCase);
 
@@ -1202,7 +1206,7 @@ pub struct ImutComprehensionCase<'script> {
     /// Guard expression
     pub guard: Option<ImutExprInt<'script>>,
     /// Case application against target on passing guard
-    pub exprs: ImutExprs<'script>,
+    pub expr: ImutExpr<'script>,
 }
 impl_expr2!(ImutComprehensionCase);
 

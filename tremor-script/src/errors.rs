@@ -876,14 +876,14 @@ pub(crate) fn error_patch_update_key_missing<T, O: BaseExpr, I: BaseExpr>(
 ) -> Result<T> {
     Err(ErrorKind::UpdateKeyMissing(outer.extent(meta), inner.extent(meta), key).into())
 }
-pub(crate) fn error_missing_effector<T, O: BaseExpr, I: BaseExpr>(
+
+pub(crate) fn error_missing_effector<O: BaseExpr, I: BaseExpr>(
     outer: &O,
     inner: &I,
     meta: &NodeMetas,
-) -> Result<T> {
-    Err(ErrorKind::MissingEffectors(outer.extent(meta), inner.extent(meta)).into())
+) -> Error {
+    ErrorKind::MissingEffectors(outer.extent(meta), inner.extent(meta)).into()
 }
-
 pub(crate) fn error_patch_merge_type_conflict<T, O: BaseExpr, I: BaseExpr>(
     outer: &O,
     inner: &I,
