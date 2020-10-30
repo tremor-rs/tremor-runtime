@@ -7,7 +7,7 @@ use std::array;
 ## range::range(0, 3) == [0, 1, 2]
 ## ```
 ##
-## Returns `[int]`
+## Returns `[integer]`
 intrinsic fn range(a, b) as range::range;
 
 ## Checks if an element is within a range.
@@ -16,7 +16,7 @@ intrinsic fn range(a, b) as range::range;
 ## range::contains(range::range(0, 3), 2) == true
 ## ```
 ##
-## Returns `[int]`
+## Returns `[integer]`
 fn contains(r, n) with
   let len = array::len(r);
   match len of

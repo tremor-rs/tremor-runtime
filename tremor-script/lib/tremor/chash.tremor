@@ -16,13 +16,13 @@
 ##  "key4": hosts[chash::jump("key4", array::len(hosts))],
 ## }
 ## ```
-## Returns an `int`.
+## Returns an `integer`.
 intrinsic fn jump(key, slot_count) as chash::jump;
 
 ## The same as chash::jump but uses the integers k1 and k2 to initialise the
 ## hashing instead of using default values.
 ##
-## Returns an `int`
+## Returns an `integer`
 intrinsic fn jump_with_keys(k1, k2, key, slot_count) as chash::jump_with_keys;
 
 ## serialised the given data in a sorted and repeatable fashion no matter how

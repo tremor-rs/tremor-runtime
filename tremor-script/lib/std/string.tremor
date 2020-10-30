@@ -36,13 +36,13 @@ intrinsic fn is_empty(input) as string::is_empty;
 ## Returns the length of the input string (counted as utf8 characters not
 ## bytes!).
 ##
-## Retrusn an `int`
+## Returns an `integer`
 intrinsic fn len(input) as string::len;
 
 ## Returns the number of bytes composing the input string (may not be equivalent
 ## to the number of characters!).
 ##
-## Returns an `int`
+## Returns an `integer`
 intrinsic fn bytes(input) as string::bytes;
 
 ## Replaces all occurrences of from in Input to to.

@@ -6,7 +6,7 @@
 ## math::floor(42.9) == 42
 ## ```
 ##
-## Returns an `int`
+## Returns an `integer`
 intrinsic fn floor(n) as math::floor;
 
 ## Returns the largest integer value greater than or equal to n.
@@ -15,7 +15,7 @@ intrinsic fn floor(n) as math::floor;
 ## math::ceil(41.1) == 42
 ## ```
 ##
-## Returns an `int`
+## Returns an `integer`
 intrinsic fn ceil(n) as math::ceil;
 
 ## Returns the integer nearest to.
@@ -25,7 +25,7 @@ intrinsic fn ceil(n) as math::ceil;
 ## math::round(41.5) == 42
 ## ```
 ##
-## Returns an `int`
+## Returns an `integer`
 intrinsic fn round(n) as math::round;
 
 ## Returns the integer part of `n`.
@@ -35,7 +35,7 @@ intrinsic fn round(n) as math::round;
 ## math::trunc(41.5) == 41
 ## ```
 ##
-## Returns an `int`
+## Returns an `integer`
 intrinsic fn trunc(n) as math::trunc;
 
 ## Returns the maximum of two numbers.
@@ -44,7 +44,7 @@ intrinsic fn trunc(n) as math::trunc;
 ## math::max(41, 42) == 42
 ## ```
 ##
-## Returns a `number` (`int` or `float`)
+## Returns a `number` (`integer` or `float`)
 intrinsic fn max(n1, n2) as math::max;
 
 ## Returns the minimum of two numbers.
@@ -53,5 +53,5 @@ intrinsic fn max(n1, n2) as math::max;
 ## math::min(41, 42) == 41
 ## ```
 ##
-## Returns a `number` (`int` or `float`)
+## Returns a `number` (`integer` or `float`)
 intrinsic fn min(n1, n2) as math::min;

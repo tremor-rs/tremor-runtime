@@ -2,7 +2,7 @@
 
 ## Returns the length of `array`.
 ##
-## Returns an `int`.
+## Returns an `integer`.
 intrinsic fn len(array) as array::len;
 
 ## Returns if `array` is empty.
