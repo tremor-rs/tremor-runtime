@@ -5295,7 +5295,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-cli"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "async-std",
  "clap 3.0.0-beta.2",
@@ -5338,7 +5338,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-common"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "async-std",
 ]
@@ -5366,7 +5366,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-pipeline"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "base64 0.13.0",
  "byteorder",
@@ -5398,7 +5398,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-runtime"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "async-channel",
  "async-compat",
@@ -5463,7 +5463,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-script"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "base64 0.13.0",
  "chrono",
