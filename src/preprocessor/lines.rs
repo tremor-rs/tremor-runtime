@@ -20,8 +20,6 @@ use std::cmp::min;
 pub struct Lines {
     separator: u8,
     max_length: usize, //set to 0 if no limit for length of the data fragments
-    // to keep track of line fragments when partial data comes through
-    fragment_length: usize,
     buffer: Vec<u8>,
     is_buffered: bool, //indicates if buffering is needed.
 }
@@ -39,7 +37,6 @@ impl Lines {
         Self {
             separator: separator as u8,
             max_length,
-            fragment_length: 0,
             // allocating at once with enough capacity to ensure we don't do re-allocations
             // optimizing for performance here instead of memory usage
             buffer: Vec::with_capacity(max_length),
@@ -66,8 +63,8 @@ impl Lines {
         }
     }
 
-    fn save_fragment(&mut self, v: &[u8]) {
-        let total_fragment_length = self.fragment_length + v.len();
+    fn save_fragment(&mut self, v: &[u8]) -> Result<()> {
+        let total_fragment_length = self.buffer.len() + v.len();
 
         if total_fragment_length <= self.max_length {
             self.buffer.extend_from_slice(v);
@@ -77,25 +74,25 @@ impl Lines {
                 v.len(),
                 String::from_utf8_lossy(v)
             );
+            Ok(())
         } else {
-            warn!(
+            let w = format!(
                 "Discarded line fragment of length {} since total length of {} exceeds maximum allowed length of {}: {:?}",
                 v.len(),
                 total_fragment_length,
                 self.max_length,
                 String::from_utf8_lossy(v)
             );
+            warn!("{}", w);
             // since we are not saving the current fragment, anything that was saved earlier is
             // useless now so clear the buffer
             self.buffer.clear();
+            Err(w.into())
         }
-
-        // remember the total fragment length for later use
-        self.fragment_length = total_fragment_length;
     }
 
-    fn complete_fragment(&mut self, v: &mut Vec<u8>) {
-        let total_fragment_length = self.fragment_length + v.len();
+    fn complete_fragment(&mut self, v: &mut Vec<u8>) -> Result<()> {
+        let total_fragment_length = self.buffer.len() + v.len();
 
         if total_fragment_length <= self.max_length {
             // prepend v with buffer content
@@ -109,22 +106,24 @@ impl Lines {
                 self.buffer.len(),
                 String::from_utf8_lossy(&self.buffer)
             );
+            // reset the preprocessor to initial state
+            self.buffer.clear();
+            Ok(())
         } else {
-            warn!(
+            let w = format!(
                 "Discarded line fragment of length {} since total length of {} exceeds maximum allowed line length of {}: {:?}",
                 v.len(),
                 total_fragment_length,
                 self.max_length,
                 String::from_utf8_lossy(v)
             );
+            warn!("{}", w);
             // since v is of no use anymore (we did not make a complete line out of it), clear it
             // this enables callers of this function to handle v differently for this case.
             v.clear();
+            self.buffer.clear();
+            Err(w.into())
         }
-
-        // reset the preprocessor to initial state
-        self.buffer.clear();
-        self.fragment_length = 0;
     }
 }
 
@@ -147,14 +146,14 @@ impl Preprocessor for Lines {
                 // if incoming data had at least one line separator boundary (anywhere)
                 // AND if the preprocessor has memory of line fragment from earlier,
                 // reconstruct the first event fully (by adding the buffer contents to it)
-                if (last_event.is_empty() || !events.is_empty()) && self.fragment_length > 0 {
-                    self.complete_fragment(&mut events[0]);
+                if (last_event.is_empty() || !events.is_empty()) && !self.buffer.is_empty() {
+                    self.complete_fragment(&mut events[0])?;
                 }
 
                 // if the incoming data did not end in a line boundary, last event is actually
                 // a fragment so we need to remmeber it for later (when more data arrives)
                 if !last_event.is_empty() {
-                    self.save_fragment(&last_event);
+                    self.save_fragment(&last_event)?;
                 }
             }
         }
@@ -163,5 +162,193 @@ impl Preprocessor for Lines {
             .into_iter()
             .filter(|event| !event.is_empty() && self.is_valid_line(event))
             .collect::<Vec<Vec<u8>>>())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::Result;
+
+    #[test]
+    fn test6() -> Result<()> {
+        let mut pp = Lines::default();
+        let mut i = 0_u64;
+        pp.max_length = 10;
+
+        // Test simple split
+        let mut r = pp.process(&mut i, b"012345\n0123456789\n")?;
+        // since we pop this is going to be reverse order
+        assert_eq!(r.pop().unwrap(), b"0123456789");
+        assert_eq!(r.pop().unwrap(), b"012345");
+        assert!(r.is_empty());
+
+        // split test
+        assert!(pp.process(&mut i, b"012345")?.is_empty());
+        let mut r = pp.process(&mut i, b"\n0123456789\n")?;
+        assert_eq!(r.pop().unwrap(), b"0123456789");
+        assert_eq!(r.pop().unwrap(), b"012345");
+        assert!(r.is_empty());
+
+        // error for adding too much
+        assert!(pp.process(&mut i, b"012345")?.is_empty());
+        assert!(pp.process(&mut i, b"0123456789\n").is_err());
+
+        // Test if we still work with new data
+        let mut r = pp.process(&mut i, b"012345\n0123456789\n")?;
+        // since we pop this is going to be reverse order
+        assert_eq!(r.pop().unwrap(), b"0123456789");
+        assert_eq!(r.pop().unwrap(), b"012345");
+        assert!(r.is_empty());
+
+        // error for adding too much
+        assert!(pp.process(&mut i, b"012345")?.is_empty());
+        assert!(pp.process(&mut i, b"0123456789").is_err());
+
+        // Test if we still work with new data
+        let mut r = pp.process(&mut i, b"012345\n0123456789\n")?;
+        // since we pop this is going to be reverse order
+        assert_eq!(r.pop().unwrap(), b"0123456789");
+        assert_eq!(r.pop().unwrap(), b"012345");
+        assert!(r.is_empty());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test5() -> Result<()> {
+        let mut pp = Lines::default();
+        let mut i = 0_u64;
+        pp.max_length = 10;
+
+        // Test simple split
+        let mut r = pp.process(&mut i, b"012345\n0123456789\n")?;
+        // since we pop this is going to be reverse order
+        assert_eq!(r.pop().unwrap(), b"0123456789");
+        assert_eq!(r.pop().unwrap(), b"012345");
+        assert!(r.is_empty());
+
+        // split test
+        assert!(pp.process(&mut i, b"012345")?.is_empty());
+        let mut r = pp.process(&mut i, b"\n0123456789\n")?;
+        assert_eq!(r.pop().unwrap(), b"0123456789");
+        assert_eq!(r.pop().unwrap(), b"012345");
+        assert!(r.is_empty());
+
+        // error for adding too much
+        assert!(pp.process(&mut i, b"012345")?.is_empty());
+        assert!(pp.process(&mut i, b"0123456789\n").is_err());
+
+        // Test if we still work with new data
+        let mut r = pp.process(&mut i, b"012345\n0123456789\n")?;
+        // since we pop this is going to be reverse order
+        assert_eq!(r.pop().unwrap(), b"0123456789");
+        assert_eq!(r.pop().unwrap(), b"012345");
+        assert!(r.is_empty());
+
+        // error for adding too much
+        assert!(pp.process(&mut i, b"012345")?.is_empty());
+        assert!(pp.process(&mut i, b"0123456789").is_err());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test4() -> Result<()> {
+        let mut pp = Lines::default();
+        let mut i = 0_u64;
+        pp.max_length = 10;
+
+        // Test simple split
+        let mut r = pp.process(&mut i, b"012345\n0123456789\n")?;
+        // since we pop this is going to be reverse order
+        assert_eq!(r.pop().unwrap(), b"0123456789");
+        assert_eq!(r.pop().unwrap(), b"012345");
+        assert!(r.is_empty());
+
+        // split test
+        assert!(pp.process(&mut i, b"012345")?.is_empty());
+        let mut r = pp.process(&mut i, b"\n0123456789\n")?;
+        assert_eq!(r.pop().unwrap(), b"0123456789");
+        assert_eq!(r.pop().unwrap(), b"012345");
+        assert!(r.is_empty());
+
+        // error for adding too much
+        assert!(pp.process(&mut i, b"012345")?.is_empty());
+        assert!(pp.process(&mut i, b"0123456789\n").is_err());
+
+        // Test if we still work with new data
+        let mut r = pp.process(&mut i, b"012345\n0123456789\n")?;
+        // since we pop this is going to be reverse order
+        assert_eq!(r.pop().unwrap(), b"0123456789");
+        assert_eq!(r.pop().unwrap(), b"012345");
+        assert!(r.is_empty());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test3() -> Result<()> {
+        let mut pp = Lines::default();
+        let mut i = 0_u64;
+        pp.max_length = 10;
+
+        // Test simple split
+        let mut r = pp.process(&mut i, b"012345\n0123456789\n")?;
+        // since we pop this is going to be reverse order
+        assert_eq!(r.pop().unwrap(), b"0123456789");
+        assert_eq!(r.pop().unwrap(), b"012345");
+        assert!(r.is_empty());
+
+        // split test
+        assert!(pp.process(&mut i, b"012345")?.is_empty());
+        let mut r = pp.process(&mut i, b"\n0123456789\n")?;
+        assert_eq!(r.pop().unwrap(), b"0123456789");
+        assert_eq!(r.pop().unwrap(), b"012345");
+        assert!(r.is_empty());
+
+        // error for adding too much
+        assert!(pp.process(&mut i, b"012345")?.is_empty());
+        assert!(pp.process(&mut i, b"0123456789\n").is_err());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test2() -> Result<()> {
+        let mut pp = Lines::default();
+        let mut i = 0_u64;
+        pp.max_length = 10;
+
+        // Test simple split
+        let mut r = pp.process(&mut i, b"012345\n0123456789\n")?;
+        // since we pop this is going to be reverse order
+        assert_eq!(r.pop().unwrap(), b"0123456789");
+        assert_eq!(r.pop().unwrap(), b"012345");
+        assert!(r.is_empty());
+
+        // split test
+        assert!(pp.process(&mut i, b"012345")?.is_empty());
+        let mut r = pp.process(&mut i, b"\n0123456789\n")?;
+        assert_eq!(r.pop().unwrap(), b"0123456789");
+        assert_eq!(r.pop().unwrap(), b"012345");
+        assert!(r.is_empty());
+
+        Ok(())
+    }
+    #[test]
+    fn test1() -> Result<()> {
+        let mut pp = Lines::default();
+        let mut i = 0_u64;
+        pp.max_length = 10;
+
+        // Test simple split
+        let mut r = pp.process(&mut i, b"012345\n0123456789\n")?;
+        // since we pop this is going to be reverse order
+        assert_eq!(r.pop().unwrap(), b"0123456789");
+        assert_eq!(r.pop().unwrap(), b"012345");
+        assert!(r.is_empty());
+
+        Ok(())
     }
 }
