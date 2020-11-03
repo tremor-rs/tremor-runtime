@@ -43,11 +43,11 @@ impl AsyncRuntime for SmolRuntime {
     where
         T: Future<Output = ()> + Send + 'static,
     {
-        async_std::task::spawn(task);
+        smol::spawn(task).detach()
     }
 
     fn delay_for(duration: Duration) -> Self::Delay {
-        async_io::Timer::after(duration).map(|_| ())
+        smol::Timer::after(duration).map(|_| ())
     }
 }
 
