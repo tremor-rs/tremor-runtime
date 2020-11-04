@@ -1,6 +1,11 @@
-# Tremor
 
-[![Build Status]][actions-Tests] [![Quality Checks]][actions-Checks] [![License Checks]][actions-License-audit] [![Security Checks]][actions-Security-audit] [![Code Coverage]][codecov.io] [![Dependabot Status]][dependabot.com] [![CII Best Practices](https://bestpractices.coreinfrastructure.org/projects/4356/badge)](https://bestpractices.coreinfrastructure.org/projects/4356)
+<p align=center><img src="https://raw.githubusercontent.com/cncf/artwork/master/projects/tremor/horizontal/color/tremor-horizontal-color.png" width='35%'></p>
+<p align=center><a href="https://landscape.cncf.io/selected=tremor">CNCF Early Stage Sandbox Project</p>
+<p align=center><a href="https://landscape.cncf.io/category=streaming-messaging&format=card-mode&grouping=category">CNCF Streaming &amp; Messaging</p>
+
+<hr>
+
+[![Build Status]][actions-Tests] [![Quality Checks]][actions-Checks] [![License Checks]][actions-License-audit] [![Security Checks]][actions-Security-audit] [![Code Coverage]][codecov.io] [![Dependabot Status]][dependabot.com] [![CII Best Practices](https://bestpractices.coreinfrastructure.org/projects/4356/badge)](https://bestpractices.coreinfrastructure.org/projects/4356) [![GitHub](https://img.shields.io/github/license/tremor-rs/tremor-runtime)](LICENSE)
 
 [Build Status]: https://github.com/tremor-rs/tremor-runtime/workflows/Tests/badge.svg
 [actions-Tests]: https://github.com/tremor-rs/tremor-runtime/actions?query=workflow%3ATests
@@ -37,14 +42,14 @@ Kafka optimizes its connection lifetime for long-lived, persistent connections. 
 
 ### When to use Tremor
 
-* You are currently using software such as Logstash or Telgraf
+* You are currently using software such as Logstash or Telegraf
 * You have a high volume of events to handle
 * You want to protect a downstream system from overload
 * You wish to perform ETL like tasks on data.
 
 ### When not to use Tremor
 
-Note: Some of those restrictions are subject to change as tremor is a growing project. If you want to use tremor for any of the aftermentioned things and are willing to contribute to make it reality your contributions are more then welcome.
+Note: Some of those restrictions are subject to change as tremor is a growing project. If you want to use tremor for any of the before mentioned things and are willing to contribute to make it reality your contributions are more then welcome.
 
 * Your events structure can not be represented by JSONesque data structures. (If unsure, feel free to reach out and create a ticket and explain your use case - [codecs](https://docs.tremor.rs/artefacts/codecs/) are easy to write!)
 * Your onramps or offramps are not supported. (If you still wish to use tremor please reach out and create a ticket - [onramps](https://docs.tremor.rs/artefacts/onramps) and [offramps](https://docs.tremor.rs/artefacts/offramps/) too are easy to write!)
@@ -59,14 +64,14 @@ We provide usage examples of this in the `docs/workshop` folder. Those examples 
 
 Tremor runs in a docker image. If you wish to build a local image, clone this repository, and either run `make image` or run `docker-compose build`. Both will create an image called `tremor-runtime:latest`.
 
-Note that sice the image is building tremor in release mode it requires some serious resources, we recommend allowing docker to use at least **12 but better 16 gigabytes of memory** and as many cores as there are to spare. Depending on the system building, the image can take up to an hour.
+Note that since the image is building tremor in release mode it requires some serious resources. We recommend allowing docker to use at least **12 but better 16 gigabytes of memory** and as many cores as there are to spare. Depending on the system building, the image can take up to an hour.
 
 
 ### Local builds
 
 If you are not comfortable with managing library packages on your system or don't have experience with, please use the Docker image provided above. Local builds are not supported and purely at your own risk.
 
-For local builds, tremor requires rust 2018 (version `1.31` or later), along with all the tools needed to build rust programs. Eg: for centos, the packages `gcc`, `make`, `cmake`, `clang`, `openssl`, and `libstdc++` are required. For different distributions or operating systems, please install the packages accordingly.  
+For local builds, tremor requires rust 2018 (version `1.31` or later), along with all the tools needed to build rust programs. Eg: for CentOS, the packages `gcc`, `make`, `cmake`, `clang`, `openssl`, and `libstdc++` are required. For different distributions or operating systems, please install the packages accordingly.  
 **NOTE** AVX2, SSE4.2 or NEON are needed to build [simd-json](https://github.com/simd-lite/simd-json#cpu-target) used by tremor. So if you are building in vm, check which processor instruction are passed to it. Like `lscpu | grep Flags`  
 For a more detailed guide on local builds, please refer to the [tremor development docs](https://docs.tremor.rs/development/quick-start/).
 
