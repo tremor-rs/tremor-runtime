@@ -1076,15 +1076,81 @@ suites:
             contains:
               - "id: ws-linked"
               - "instances: []"
-
-
-
-
-        
-        
-
-
-
-
-
-              
+  - name: REST API - Error formatting
+    tags:
+      - error
+    cases:
+      - name: API error response should default to json
+        command: >
+          curl -vs -X DELETE http://localhost:9898/binding/non-existent/1
+        tags:
+          - delete
+        status: 0
+        expects:
+          - source: stderr
+            contains:
+              - HTTP/1.1 404 Not Found
+              - 'content-type: application/json'
+          - source: stdout
+            contains:
+              - '"error":"Artefact not found"}'
+      - name: YAML accept header should be respected while generating API error response
+        command: >
+          curl -vs -X DELETE -H"Accept: application/yaml" http://localhost:9898/binding/non-existent/1
+        tags:
+          - delete
+        status: 0
+        expects:
+          - source: stderr
+            contains:
+              - 'Accept: application/yaml'
+              - HTTP/1.1 404 Not Found
+              - 'content-type: application/yaml'
+          - source: stdout
+            contains:
+              - 'error: Artefact not found'
+      - name: JSON accept header should be respected while generating API error response
+        command: >
+          curl -vs -X DELETE -H"Accept: application/json" http://localhost:9898/binding/non-existent/1
+        tags:
+          - delete
+        status: 0
+        expects:
+          - source: stderr
+            contains:
+              - 'Accept: application/json'
+              - HTTP/1.1 404 Not Found
+              - 'content-type: application/json'
+          - source: stdout
+            contains:
+              - '"error":"Artefact not found"}'
+      - name: Trickle accept header should be ignored while generating error response and it should default to json
+        command: >
+          curl -vs -X GET -H"Accept: application/vnd.trickle" http://localhost:9898/pipeline/non-existent
+        tags:
+          - get
+        status: 0
+        expects:
+          - source: stderr
+            contains:
+              - 'Accept: application/vnd.trickle'
+              - HTTP/1.1 404 Not Found
+              - 'content-type: application/json'
+          - source: stdout
+            contains:
+              - '"error":"Artefact not found"}'
+      - name: Other accept headers should be ignored while generating error response and it should default to json
+        command: >
+          curl -vs -X DELETE -H"Accept: application/snot" http://localhost:9898/binding/non-existent/1
+        tags:
+          - delete
+        status: 0
+        expects:
+          - source: stderr
+            contains:
+              - 'Accept: application/snot'
+              - HTTP/1.1 404 Not Found
+              - 'content-type: application/json'
+          - source: stdout
+            contains:
+              - '"error":"Artefact not found"}'
