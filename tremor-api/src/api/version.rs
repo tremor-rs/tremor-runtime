@@ -30,6 +30,6 @@ impl Default for Version {
     }
 }
 
-pub async fn get(req: Request) -> std::result::Result<Response, crate::Error> {
+pub async fn get(req: Request) -> Result<Response> {
     reply(req, Version::default(), false, StatusCode::Ok).await
 }

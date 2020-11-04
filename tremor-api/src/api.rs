@@ -12,15 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::sync::{MutexGuard, PoisonError};
-
-pub use http_types::{headers, StatusCode};
+use crate::errors::Error;
+use http_types::{headers, StatusCode};
 use serde::{Deserialize, Serialize};
-pub use tide::Response;
-use tremor_runtime::errors::{Error as TremorError, ErrorKind};
+use tide::Response;
 use tremor_runtime::system::World;
 use tremor_runtime::url::TremorURL;
-use tremor_script::prelude::CompilerError;
 
 pub mod binding;
 pub mod offramp;
@@ -37,113 +34,6 @@ pub struct State {
     pub world: World,
 }
 
-#[derive(Debug)]
-pub enum Error {
-    Generic(StatusCode, String),
-    JSON(StatusCode, String),
-}
-
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Error::Generic(_c, d) | Error::JSON(_c, d) => write!(f, "{}", d),
-        }
-    }
-}
-impl std::error::Error for Error {}
-
-impl Error {
-    #[must_use]
-    pub fn into_http_error(self) -> http_types::Error {
-        match &self {
-            Error::Generic(c, _d) | Error::JSON(c, _d) => http_types::Error::new(*c, self),
-        }
-    }
-
-    fn not_found() -> Self {
-        Self::json(StatusCode::NotFound, &r#"{"error": "Artefact not found"}"#)
-    }
-    fn generic<S: ToString>(c: StatusCode, s: &S) -> Self {
-        Error::Generic(c, s.to_string())
-    }
-    fn json<S: ToString>(c: StatusCode, s: &S) -> Self {
-        Error::JSON(c, s.to_string())
-    }
-}
-
-impl Into<Response> for Error {
-    fn into(self) -> Response {
-        match self {
-            Error::Generic(c, d) => {
-                let mut r = Response::new(c);
-                r.set_body(d);
-                r
-            }
-            Error::JSON(c, d) => {
-                let mut r = Response::new(c);
-                r.insert_header(headers::CONTENT_TYPE, ResourceType::Json.as_str());
-                r.set_body(d);
-                r
-            }
-        }
-    }
-}
-
-impl From<std::io::Error> for Error {
-    fn from(e: std::io::Error) -> Self {
-        Self::generic(StatusCode::InternalServerError, &format!("IO Error: {}", e))
-    }
-}
-
-impl From<simd_json::Error> for Error {
-    fn from(e: simd_json::Error) -> Self {
-        Self::generic(
-            StatusCode::BadRequest,
-            &format!("json encoder failed: {}", e),
-        )
-    }
-}
-
-impl From<serde_yaml::Error> for Error {
-    fn from(e: serde_yaml::Error) -> Self {
-        Self::generic(
-            StatusCode::BadRequest,
-            &format!("yaml encoder failed: {}", e),
-        )
-    }
-}
-
-impl From<tremor_pipeline::errors::Error> for Error {
-    fn from(e: tremor_pipeline::errors::Error) -> Self {
-        Self::generic(StatusCode::BadRequest, &format!("Pipeline error: {}", e))
-    }
-}
-
-impl From<http_types::Error> for Error {
-    fn from(e: http_types::Error) -> Self {
-        Self::generic(
-            StatusCode::InternalServerError,
-            &format!("http type error: {}", e),
-        )
-    }
-}
-
-impl From<CompilerError> for Error {
-    fn from(e: CompilerError) -> Self {
-        Self::generic(
-            StatusCode::InternalServerError,
-            &format!("Compiler Error: {:?}", e),
-        )
-    }
-}
-impl From<PoisonError<MutexGuard<'_, tremor_script::Registry>>> for Error {
-    fn from(e: PoisonError<MutexGuard<tremor_script::Registry>>) -> Self {
-        Self::generic(
-            StatusCode::InternalServerError,
-            &format!("locking error: {}", e),
-        )
-    }
-}
 #[derive(Clone, Copy, Debug)]
 pub enum ResourceType {
     Json,
@@ -151,7 +41,8 @@ pub enum ResourceType {
     Trickle,
 }
 impl ResourceType {
-    fn as_str(self) -> &'static str {
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
         match self {
             Self::Yaml => "application/yaml",
             Self::Json => "application/json",
@@ -188,56 +79,29 @@ pub fn accept(req: &Request) -> ResourceType {
     }
 }
 
-impl From<TremorError> for Error {
-    fn from(e: TremorError) -> Self {
-        match e.0 {
-            ErrorKind::UnpublishFailedNonZeroInstances(_) => Error::JSON(
-                StatusCode::Conflict,
-                r#"{"error": "Resource still has active instances"}"#.into(),
-            ),
-            ErrorKind::ArtifactNotFound(_) => Error::JSON(
-                StatusCode::NotFound,
-                r#"{"error": "Artefact not found"}"#.into(),
-            ),
-            ErrorKind::PublishFailedAlreadyExists(_) => Error::JSON(
-                StatusCode::Conflict,
-                r#"{"error": "An resouce with the requested ID already exists"}"#.into(),
-            ),
-            ErrorKind::UnpublishFailedSystemArtefact(_) => Error::JSON(
-                StatusCode::Forbidden,
-                r#"{"error": "System Artefacts can not be unpublished"}"#.into(),
-            ),
-            _e => Error::JSON(
-                StatusCode::InternalServerError,
-                r#"{"error": "Internal server error"}"#.into(),
-            ),
-        }
+pub fn serialize<T: Serialize>(t: ResourceType, d: &T, code: StatusCode) -> Result<Response> {
+    match t {
+        ResourceType::Yaml => Ok(Response::builder(code)
+            .header(headers::CONTENT_TYPE, t.as_str())
+            .body(serde_yaml::to_string(d)?)
+            .build()),
+        ResourceType::Json => Ok(Response::builder(code)
+            .header(headers::CONTENT_TYPE, t.as_str())
+            .body(simd_json::to_string(d)?)
+            .build()),
+        ResourceType::Trickle => Err(Error::new(
+            StatusCode::InternalServerError,
+            "Unsuported formatting as trickle".into(),
+        )),
     }
 }
 
-pub fn serialize<T: Serialize>(
-    t: ResourceType,
-    d: &T,
-    ok_code: StatusCode,
-) -> std::result::Result<Response, crate::Error> {
+pub fn serialize_error(t: ResourceType, d: Error) -> Result<Response> {
     match t {
-        ResourceType::Yaml => {
-            let mut r = Response::new(ok_code);
-            r.insert_header(headers::CONTENT_TYPE, t.as_str());
-            r.set_body(serde_yaml::to_string(d)?);
-            Ok(r)
-        }
-
-        ResourceType::Json => {
-            let mut r = Response::new(ok_code);
-            r.insert_header(headers::CONTENT_TYPE, t.as_str());
-            r.set_body(simd_json::to_string(d)?);
-            Ok(r)
-        }
-        ResourceType::Trickle => Err(Error::generic(
-            StatusCode::InternalServerError,
-            &"Unsuported formating as trickle",
-        )),
+        ResourceType::Json | ResourceType::Yaml => serialize(t, &d, d.code),
+        // formatting errors as trickle does not make sense so for this
+        // fall back to the error's conversion into tide response
+        ResourceType::Trickle => Ok(d.into()),
     }
 }
 
@@ -246,7 +110,7 @@ pub async fn reply<T: Serialize + Send + Sync + 'static>(
     result_in: T,
     persist: bool,
     ok_code: StatusCode,
-) -> std::result::Result<Response, crate::Error> {
+) -> Result<Response> {
     if persist {
         let world = &req.state().world;
         world.save_config().await?;
@@ -262,7 +126,7 @@ where
     match content_type(&req) {
         Some(ResourceType::Yaml) => serde_yaml::from_slice(body.as_slice())
             .map_err(|e| {
-                Error::Generic(
+                Error::new(
                     StatusCode::BadRequest,
                     format!("Could not decode YAML: {}", e),
                 )
@@ -270,23 +134,23 @@ where
             .map(|data| (req, data)),
         Some(ResourceType::Json) => simd_json::from_slice(body.as_mut_slice())
             .map_err(|e| {
-                Error::Generic(
+                Error::new(
                     StatusCode::BadRequest,
                     format!("Could not decode JSON: {}", e),
                 )
             })
             .map(|data| (req, data)),
-        Some(ResourceType::Trickle) | None => Err(Error::Generic(
+        Some(ResourceType::Trickle) | None => Err(Error::new(
             StatusCode::UnsupportedMediaType,
             "No content type provided".into(),
         )),
     }
 }
 
-pub fn build_url(path: &[&str]) -> Result<TremorURL> {
+fn build_url(path: &[&str]) -> Result<TremorURL> {
     let url = format!("/{}", path.join("/"));
     TremorURL::parse(&url).map_err(|_e| {
-        Error::Generic(
+        Error::new(
             StatusCode::InternalServerError,
             format!("Could not decode Tremor URL: {}", url),
         )

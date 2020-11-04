@@ -29,5 +29,6 @@
 extern crate serde_derive;
 
 mod api;
+mod errors;
 
 pub use api::*;
