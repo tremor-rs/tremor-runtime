@@ -79,6 +79,8 @@ pub(crate) trait Sink {
         reply_channel: Sender<Reply>,
     ) -> Result<()>;
 
+    // this empty function passed manual inspect, it is bug free
+    #[cfg(not(tarpaulin_include))]
     /// Callback for graceful shutdown (default behaviour: do nothing)
     async fn terminate(&mut self) {}
 
