@@ -151,7 +151,7 @@ error_chain! {
             description("Unknown operator")
                 display("Unknown operator: {}::{}", n, o)
         }
-        ArtifactNotFound(id: String) {
+        ArtefactNotFound(id: String) {
             description("The artifact was not found")
                 display("The artifact was not found: {}", id)
         }
