@@ -208,7 +208,7 @@ impl World {
                 self.link_existing_pipeline(&id, m).await?;
                 Ok(res)
             }
-            (None, _) => Err(ErrorKind::ArtifactNotFound(id.to_string()).into()),
+            (None, _) => Err(ErrorKind::ArtefactNotFound(id.to_string()).into()),
             (_, None) => Err(format!("Invalid URI for instance {} ", id).into()),
         }
     }
@@ -225,7 +225,7 @@ impl World {
                 self.repo.unbind_pipeline(id).await?;
                 Ok(r)
             }
-            (None, _) => Err(ErrorKind::ArtifactNotFound(id.to_string()).into()),
+            (None, _) => Err(ErrorKind::ArtefactNotFound(id.to_string()).into()),
             (_, None) => Err(format!("Invalid URI for instance {}", id).into()),
         }
     }
@@ -256,7 +256,7 @@ impl World {
             };
             pipeline_a.artefact.link(self, id, mappings).await
         } else {
-            Err(ErrorKind::ArtifactNotFound(id.to_string()).into())
+            Err(ErrorKind::ArtefactNotFound(id.to_string()).into())
         }
     }
 
@@ -273,7 +273,7 @@ impl World {
         if let Some(pipeline_a) = self.repo.find_pipeline(id).await? {
             pipeline_a.artefact.link(self, id, mappings).await
         } else {
-            Err(ErrorKind::ArtifactNotFound(id.to_string()).into())
+            Err(ErrorKind::ArtefactNotFound(id.to_string()).into())
         }
     }
 
@@ -296,7 +296,7 @@ impl World {
             };
             r
         } else {
-            Err(ErrorKind::ArtifactNotFound(id.to_string()).into())
+            Err(ErrorKind::ArtefactNotFound(id.to_string()).into())
         }
     }
 
@@ -334,7 +334,7 @@ impl World {
                 self.link_existing_onramp(&id, m).await?;
                 Ok(res)
             }
-            (None, _) => Err(ErrorKind::ArtifactNotFound(id.to_string()).into()),
+            (None, _) => Err(ErrorKind::ArtefactNotFound(id.to_string()).into()),
             (_, None) => Err(format!("Invalid URI for instance {} ", id).into()),
         }
     }
@@ -350,7 +350,7 @@ impl World {
                 self.repo.unbind_onramp(id).await?;
                 r
             }
-            (None, _) => Err(ErrorKind::ArtifactNotFound(id.to_string()).into()),
+            (None, _) => Err(ErrorKind::ArtefactNotFound(id.to_string()).into()),
             (_, None) => Err(format!("Invalid URI for instance {} ", id).into()),
         }
     }
@@ -373,7 +373,7 @@ impl World {
             };
             onramp_a.artefact.link(self, id, mappings).await
         } else {
-            Err(ErrorKind::ArtifactNotFound(id.to_string()).into())
+            Err(ErrorKind::ArtefactNotFound(id.to_string()).into())
         }
     }
 
@@ -388,7 +388,7 @@ impl World {
         if let Some(onramp_a) = self.repo.find_onramp(id).await? {
             onramp_a.artefact.link(self, id, mappings).await
         } else {
-            Err(ErrorKind::ArtifactNotFound(id.to_string()).into())
+            Err(ErrorKind::ArtefactNotFound(id.to_string()).into())
         }
     }
 
@@ -411,7 +411,7 @@ impl World {
             };
             Ok(r)
         } else {
-            Err(ErrorKind::ArtifactNotFound(id.to_string()).into())
+            Err(ErrorKind::ArtefactNotFound(id.to_string()).into())
         }
     }
 
@@ -440,7 +440,7 @@ impl World {
                 self.link_existing_offramp(&id, m).await?;
                 Ok(res)
             }
-            (None, _) => Err(ErrorKind::ArtifactNotFound(id.to_string()).into()),
+            (None, _) => Err(ErrorKind::ArtefactNotFound(id.to_string()).into()),
             (_, None) => Err(format!("Invalid URI for instance {} ", id).into()),
         }
     }
@@ -457,7 +457,7 @@ impl World {
                 self.repo.unbind_offramp(id).await?;
                 r
             }
-            (None, _) => Err(ErrorKind::ArtifactNotFound(id.to_string()).into()),
+            (None, _) => Err(ErrorKind::ArtefactNotFound(id.to_string()).into()),
             (_, None) => Err(format!("Invalid URI for instance {} ", id).into()),
         }
     }
@@ -480,7 +480,7 @@ impl World {
             };
             offramp_a.artefact.link(self, id, mappings).await
         } else {
-            Err(ErrorKind::ArtifactNotFound(id.to_string()).into())
+            Err(ErrorKind::ArtefactNotFound(id.to_string()).into())
         }
     }
 
@@ -495,7 +495,7 @@ impl World {
         if let Some(offramp_a) = self.repo.find_offramp(id).await? {
             offramp_a.artefact.link(self, id, mappings).await
         } else {
-            Err(ErrorKind::ArtifactNotFound(id.to_string()).into())
+            Err(ErrorKind::ArtefactNotFound(id.to_string()).into())
         }
     }
 
@@ -518,7 +518,7 @@ impl World {
             };
             Ok(r)
         } else {
-            Err(ErrorKind::ArtifactNotFound(id.to_string()).into())
+            Err(ErrorKind::ArtefactNotFound(id.to_string()).into())
         }
     }
 
@@ -575,7 +575,7 @@ impl World {
             };
             Ok(r)
         } else {
-            Err(ErrorKind::ArtifactNotFound(id.to_string()).into())
+            Err(ErrorKind::ArtefactNotFound(id.to_string()).into())
         }
     }
 
@@ -649,7 +649,7 @@ impl World {
             return Ok(binding);
         }
 
-        Err(ErrorKind::ArtifactNotFound(id.to_string()).into())
+        Err(ErrorKind::ArtefactNotFound(id.to_string()).into())
     }
 
     /// Starts the runtime system

@@ -117,8 +117,7 @@ impl From<TremorError> for Error {
                 StatusCode::Conflict,
                 "Resource still has active instances".into(),
             ),
-            // TODO fix typo here
-            ErrorKind::ArtifactNotFound(_) => {
+            ErrorKind::ArtefactNotFound(_) => {
                 Error::new(StatusCode::NotFound, "Artefact not found".into())
             }
             ErrorKind::PublishFailedAlreadyExists(_) => Error::new(

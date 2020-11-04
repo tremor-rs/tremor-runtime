@@ -101,7 +101,7 @@ impl<A: Artefact> Repository<A> {
     pub fn unpublish(&mut self, mut id: ArtefactId) -> Result<A> {
         id.trim_to_artefact();
         match self.map.entry(id.clone()) {
-            Entry::Vacant(_) => Err(ErrorKind::ArtifactNotFound(id.to_string()).into()),
+            Entry::Vacant(_) => Err(ErrorKind::ArtefactNotFound(id.to_string()).into()),
             Entry::Occupied(e) => {
                 let wrapper = e.get();
                 if wrapper.system {
@@ -125,7 +125,7 @@ impl<A: Artefact> Repository<A> {
                 w.instances.push(sid);
                 Ok(&w.artefact)
             }
-            None => Err(ErrorKind::ArtifactNotFound(id.to_string()).into()),
+            None => Err(ErrorKind::ArtefactNotFound(id.to_string()).into()),
         }
     }
     /// Unbinds an artefact with a given servant
@@ -137,7 +137,7 @@ impl<A: Artefact> Repository<A> {
                 w.instances.retain(|x| x != &sid);
                 Ok(&w.artefact)
             }
-            None => Err(ErrorKind::ArtifactNotFound(id.to_string()).into()),
+            None => Err(ErrorKind::ArtefactNotFound(id.to_string()).into()),
         }
     }
 }
