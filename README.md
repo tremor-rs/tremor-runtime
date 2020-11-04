@@ -49,10 +49,17 @@ Kafka optimizes its connection lifetime for long-lived, persistent connections. 
 
 ### When not to use Tremor
 
-Note: Some of those restrictions are subject to change as tremor is a growing project. If you want to use tremor for any of the before mentioned things and are willing to contribute to make it reality your contributions are more then welcome.
+Note: Some of those restrictions are subject to change as tremor is a growing project. 
 
-* Your events structure can not be represented by JSONesque data structures. (If unsure, feel free to reach out and create a ticket and explain your use case - [codecs](https://docs.tremor.rs/artefacts/codecs/) are easy to write!)
-* Your onramps or offramps are not supported. (If you still wish to use tremor please reach out and create a ticket - [onramps](https://docs.tremor.rs/artefacts/onramps) and [offramps](https://docs.tremor.rs/artefacts/offramps/) too are easy to write!)
+We currently do not recommend tremor where:
+
+* Your event structure is not mappable to a JSON-like data structures.
+  * If in doubt, please reach out and create a ticket so we can assist and advice
+  * In many cases ( textual formats ) a [precrocessor](https://docs.tremor.rs/artefacts/preprocessors/), [postprocessor](https://docs.tremor.rs/artefacts/postprocessors/) or [codec](https://docs.tremor.rs/artefacts/codecs/) is sufficient and these are relatively easy to contribute.
+* You need connectivity to a system, protocol or technology that is not currently supported directly or indirectly by the set existing set of [onramps](https://docs.tremor.rs/artefacts/onramps) and [offramps](https://docs.tremor.rs/artefacts/offramps/).
+  * If in doubt, please reach out and create a ticket so we can assist and advise.
+
+We accept and encourage contributions no matter how small so if tremor is compelling for your use case or project, then please get in touch, reach out, raise a ticket and we're happy to collaborate and guide contributions and contributors.
 
 ### Example use cases
 
