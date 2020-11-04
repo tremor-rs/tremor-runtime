@@ -41,6 +41,20 @@ pub struct Addr {
 }
 
 impl Addr {
+    /// creates a new address
+    pub(crate) fn new(
+        addr: async_channel::Sender<Msg>,
+        cf_addr: async_channel::Sender<CfMsg>,
+        mgmt_addr: async_channel::Sender<MgmtMsg>,
+        id: ServantId,
+    ) -> Self {
+        Self {
+            addr,
+            cf_addr,
+            mgmt_addr,
+            id,
+        }
+    }
     #[cfg(not(tarpaulin_include))]
     pub fn len(&self) -> usize {
         self.addr.len()
@@ -416,11 +430,6 @@ impl Manager {
         task::Builder::new()
             .name(format!("pipeline-{}", id))
             .spawn(pipeline_task(id, pipeline, rx, cf_rx, mgmt_rx))?;
-        Ok(Addr {
-            id: req.id,
-            addr: tx,
-            cf_addr: cf_tx,
-            mgmt_addr: mgmt_tx,
-        })
+        Ok(Addr::new(tx, cf_tx, mgmt_tx, req.id))
     }
 }
