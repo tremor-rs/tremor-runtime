@@ -9,7 +9,7 @@
 ## Returns an `integer`
 intrinsic fn floor(n) as math::floor;
 
-## Returns the largest integer value greater than or equal to n.
+## Returns the largest `integer` value greater than or equal to n.
 ##
 ## ```tremor
 ## math::ceil(41.1) == 42
@@ -18,7 +18,7 @@ intrinsic fn floor(n) as math::floor;
 ## Returns an `integer`
 intrinsic fn ceil(n) as math::ceil;
 
-## Returns the integer nearest to.
+## Returns the `integer` nearest to.
 ##
 ## ```tremor
 ## math::round(41.4) == 41
@@ -28,7 +28,7 @@ intrinsic fn ceil(n) as math::ceil;
 ## Returns an `integer`
 intrinsic fn round(n) as math::round;
 
-## Returns the integer part of `n`.
+## Returns the `integer` part of `n`.
 ##
 ## ```tremor
 ## math::trunc(41.4) == 41

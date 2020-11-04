@@ -11,6 +11,8 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
+#![cfg(not(tarpaulin_include))]
 use crate::pipeline;
 use crate::sink::prelude::*;
 use crate::url::TremorURL;
@@ -305,4 +307,63 @@ where
         };
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::pipeline::Msg;
+
+    #[async_std::test]
+    async fn test_send() -> Result<()> {
+        let e = Event::default();
+
+        let (t11, r11) = async_channel::unbounded();
+        let (t12, r12) = async_channel::unbounded();
+        let (t13, r13) = async_channel::unbounded();
+        let p1 = pipeline::Addr::new(
+            t11,
+            t12,
+            t13,
+            TremorURL::parse("tremor://host/pipeline/name1/instance1/port1")?,
+        );
+
+        let (t21, r21) = async_channel::unbounded();
+        let (t22, r22) = async_channel::unbounded();
+        let (t23, r23) = async_channel::unbounded();
+        let p2 = pipeline::Addr::new(
+            t21,
+            t22,
+            t23,
+            TremorURL::parse("tremor://host/pipeline/name2/instance2/port2")?,
+        );
+
+        let p = vec![(p1.id().clone(), p1), (p2.id().clone(), p2)];
+
+        handle_response(e.clone(), p.iter()).await?;
+
+        if let Msg::Event { event, input } = r11.recv().await? {
+            assert_eq!(event, e);
+            assert_eq!(input, "port1");
+        } else {
+            panic!("not an event");
+        }
+
+        assert!(r11.is_empty());
+        assert!(r12.is_empty());
+        assert!(r13.is_empty());
+
+        if let Msg::Event { event, input } = r21.recv().await? {
+            assert_eq!(event, e);
+            assert_eq!(input, "port2");
+        } else {
+            panic!("not an event");
+        }
+
+        assert!(r21.is_empty());
+        assert!(r22.is_empty());
+        assert!(r23.is_empty());
+
+        Ok(())
+    }
 }
