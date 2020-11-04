@@ -41,7 +41,7 @@ bytes = "0.5"
 chrono = "0.4"
 elastic = "0.21.0-pre.5"
 error-chain = "0.12"
-futures = "0.3"
+futures = "0.3.7"
 glob = "0.3"
 hashbrown = {version = "0.9", features = ["serde"]}
 hostname = "0.3"
