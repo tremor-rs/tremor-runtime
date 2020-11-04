@@ -18,7 +18,7 @@ intrinsic fn bool() as random::bool;
 
 
 ## Generates a random string of given length with ASCII letters and numbers:
-## `a`-`z`, `A`-`Z` and `0`-`9`. The argument must be an integer greater than
+## `a`-`z`, `A`-`Z` and `0`-`9`. The argument must be an `integer` greater than
 ## or equal to zero -- otherwise the function errors out.
 ##
 ## ```tremor
@@ -30,7 +30,7 @@ intrinsic fn bool() as random::bool;
 intrinsic fn string(length) as random::string;
 
 
-## Generates a random integer, with the functionality changing based on the
+## Generates a random `integer`, with the functionality changing based on the
 ## number of arguments passed.
 ##
 ## ```tremor
@@ -39,9 +39,9 @@ intrinsic fn string(length) as random::string;
 ## random::integer(0, 100)   # one of 0-99
 ## random::integer(-1, 1)    # either -1 or 0
 ## random::integer(-42, -41) # always -42
-## random::integer(i) -> int 
+## random::integer(i) -> integer
 ## random::integer(100) # one of 0-99. same as random::integer(0, 100)
-## random::integer() -> int
+## random::integer() -> integer
 ## ```
 intrinsic fn integer(...) as random::integer;
 
