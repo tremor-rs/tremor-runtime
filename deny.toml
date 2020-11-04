@@ -99,5 +99,3 @@ license-files = [
 
 
 [advisories]
-# We allow RUSTSEC-2018-0006 as this is only called from clap
-ignore = ["RUSTSEC-2018-0006"]
