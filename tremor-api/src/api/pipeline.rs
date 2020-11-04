@@ -51,9 +51,9 @@ pub async fn publish_artefact(mut req: Request) -> Result<Response> {
             )?;
 
             let id = query.id().ok_or_else(|| {
-                Error::generic(
+                Error::new(
                     StatusCode::UnprocessableEntity,
-                    &r#"no `#!config id = "trickle-id"` directive provided"#,
+                    r#"no `#!config id = "trickle-id"` directive provided"#.into(),
                 )
             })?;
 
@@ -65,7 +65,7 @@ pub async fn publish_artefact(mut req: Request) -> Result<Response> {
                 .map(|result| result.source().to_string())?;
             reply_trickle_flat(req, result, true, StatusCode::Created).await
         }
-        Some(_) | None => Err(Error::Generic(
+        Some(_) | None => Err(Error::new(
             StatusCode::UnsupportedMediaType,
             "No content type provided".into(),
         )),
@@ -77,7 +77,7 @@ pub async fn reply_trickle_flat(
     result_in: String,
     persist: bool,
     ok_code: StatusCode,
-) -> std::result::Result<Response, crate::Error> {
+) -> Result<Response> {
     if persist {
         let world = &req.state().world;
         world.save_config().await?;
@@ -99,7 +99,7 @@ pub async fn reply_trickle_instanced(
     instances: Vec<String>,
     persist: bool,
     ok_code: StatusCode,
-) -> std::result::Result<Response, crate::Error> {
+) -> Result<Response> {
     if persist {
         let world = &req.state().world;
         world.save_config().await?;

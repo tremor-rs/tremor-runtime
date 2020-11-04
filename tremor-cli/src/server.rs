@@ -23,10 +23,21 @@ use tremor_common::file;
 use tremor_runtime::system::World;
 use tremor_runtime::{self, version};
 
-fn fix_tide(r: api::Result<tide::Response>) -> tide::Result {
-    Ok(match r {
-        Ok(r) => r,
-        Err(e) => e.into(),
+async fn handle_api_request<
+    G: std::future::Future<Output = api::Result<tide::Response>>,
+    F: Fn(api::Request) -> G,
+>(
+    req: api::Request,
+    handler_func: F,
+) -> tide::Result {
+    let resource_type = api::accept(&req);
+
+    // Handle request. If any api error is returned, serialize it into a tide response
+    // as well, respecting the requested resource type. (and if there's error during
+    // this serialization, fall back to the error's conversion into tide response)
+    handler_func(req).await.or_else(|api_error| {
+        api::serialize_error(resource_type, api_error)
+            .or_else(|e| Ok(Into::<tide::Response>::into(e)))
     })
 }
 
@@ -36,35 +47,35 @@ fn api_server(world: &World) -> Result<tide::Server<api::State>> {
     });
 
     app.at("/version")
-        .get(|r| async { fix_tide(api::version::get(r).await) });
+        .get(|r| handle_api_request(r, api::version::get));
     app.at("/binding")
-        .get(|r| async { fix_tide(api::binding::list_artefact(r).await) })
-        .post(|r| async { fix_tide(api::binding::publish_artefact(r).await) });
+        .get(|r| handle_api_request(r, api::binding::list_artefact))
+        .post(|r| handle_api_request(r, api::binding::publish_artefact));
     app.at("/binding/:aid")
-        .get(|r| async { fix_tide(api::binding::get_artefact(r).await) })
-        .delete(|r| async { fix_tide(api::binding::unpublish_artefact(r).await) });
+        .get(|r| handle_api_request(r, api::binding::get_artefact))
+        .delete(|r| handle_api_request(r, api::binding::unpublish_artefact));
     app.at("/binding/:aid/:sid")
-        .get(|r| async { fix_tide(api::binding::get_servant(r).await) })
-        .post(|r| async { fix_tide(api::binding::link_servant(r).await) })
-        .delete(|r| async { fix_tide(api::binding::unlink_servant(r).await) });
+        .get(|r| handle_api_request(r, api::binding::get_servant))
+        .post(|r| handle_api_request(r, api::binding::link_servant))
+        .delete(|r| handle_api_request(r, api::binding::unlink_servant));
     app.at("/pipeline")
-        .get(|r| async { fix_tide(api::pipeline::list_artefact(r).await) })
-        .post(|r| async { fix_tide(api::pipeline::publish_artefact(r).await) });
+        .get(|r| handle_api_request(r, api::pipeline::list_artefact))
+        .post(|r| handle_api_request(r, api::pipeline::publish_artefact));
     app.at("/pipeline/:aid")
-        .get(|r| async { fix_tide(api::pipeline::get_artefact(r).await) })
-        .delete(|r| async { fix_tide(api::pipeline::unpublish_artefact(r).await) });
+        .get(|r| handle_api_request(r, api::pipeline::get_artefact))
+        .delete(|r| handle_api_request(r, api::pipeline::unpublish_artefact));
     app.at("/onramp")
-        .get(|r| async { fix_tide(api::onramp::list_artefact(r).await) })
-        .post(|r| async { fix_tide(api::onramp::publish_artefact(r).await) });
+        .get(|r| handle_api_request(r, api::onramp::list_artefact))
+        .post(|r| handle_api_request(r, api::onramp::publish_artefact));
     app.at("/onramp/:aid")
-        .get(|r| async { fix_tide(api::onramp::get_artefact(r).await) })
-        .delete(|r| async { fix_tide(api::onramp::unpublish_artefact(r).await) });
+        .get(|r| handle_api_request(r, api::onramp::get_artefact))
+        .delete(|r| handle_api_request(r, api::onramp::unpublish_artefact));
     app.at("/offramp")
-        .get(|r| async { fix_tide(api::offramp::list_artefact(r).await) })
-        .post(|r| async { fix_tide(api::offramp::publish_artefact(r).await) });
+        .get(|r| handle_api_request(r, api::offramp::list_artefact))
+        .post(|r| handle_api_request(r, api::offramp::publish_artefact));
     app.at("/offramp/:aid")
-        .get(|r| async { fix_tide(api::offramp::get_artefact(r).await) })
-        .delete(|r| async { fix_tide(api::offramp::unpublish_artefact(r).await) });
+        .get(|r| handle_api_request(r, api::offramp::get_artefact))
+        .delete(|r| handle_api_request(r, api::offramp::unpublish_artefact));
 
     Ok(app)
 }

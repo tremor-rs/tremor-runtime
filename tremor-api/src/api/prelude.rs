@@ -11,6 +11,8 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 pub(crate) use crate::api::*;
+pub(crate) use crate::errors::Error;
 pub(crate) use http_types::StatusCode;
 pub(crate) use tide::Response;

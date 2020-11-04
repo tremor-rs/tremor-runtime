@@ -27,7 +27,7 @@ difference = "2"
 dirs-next = "2"
 env_logger = "0.8.1"
 halfbrown = "0.1"
-http-types = "2.6"
+http-types = "2.7"
 jemallocator = {version = "0.3", optional = false}
 log = "0.4"
 log4rs = "0.12.0"
