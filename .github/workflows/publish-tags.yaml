@@ -24,6 +24,6 @@ jobs:
         with:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-          registry: docker.pkg.github.com
-          repository: tremor-rs/tremor-runtime/tremor
+          registry: ghcr.io
+          repository: tremor-rs/tremor
           tag_with_ref: true
