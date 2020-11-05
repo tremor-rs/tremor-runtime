@@ -14,9 +14,8 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
           tag_semver: true
-      - uses: docker/setup-buildx-action@v1
-        with:
-          driver: docker # defaults to "docker-containerized"
+      - name: Setup Docker buildx
+        uses: docker/setup-buildx-action@v1
       - name: Docker meta
         id: docker_meta
         uses: crazy-max/ghaction-docker-meta@v1
