@@ -55,7 +55,7 @@ We currently do not recommend tremor where:
 
 * Your event structure is not mappable to a JSON-like data structures.
   * If in doubt, please reach out and create a ticket so we can assist and advice
-  * In many cases ( textual formats ) a [precrocessor](https://docs.tremor.rs/artefacts/preprocessors/), [postprocessor](https://docs.tremor.rs/artefacts/postprocessors/) or [codec](https://docs.tremor.rs/artefacts/codecs/) is sufficient and these are relatively easy to contribute.
+  * In many cases ( textual formats ) a [preprocessor](https://docs.tremor.rs/artefacts/preprocessors/), [postprocessor](https://docs.tremor.rs/artefacts/postprocessors/) or [codec](https://docs.tremor.rs/artefacts/codecs/) is sufficient and these are relatively easy to contribute.
 * You need connectivity to a system, protocol or technology that is not currently supported directly or indirectly by the set existing set of [onramps](https://docs.tremor.rs/artefacts/onramps) and [offramps](https://docs.tremor.rs/artefacts/offramps/).
   * If in doubt, please reach out and create a ticket so we can assist and advise.
 
