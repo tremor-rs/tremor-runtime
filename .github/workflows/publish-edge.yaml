@@ -1,4 +1,4 @@
-name: Publish Docker - edge
+name: Publish Docker - Edge
 on:
   push:
     branches:
@@ -16,7 +16,7 @@ jobs:
           password: ${{ secrets.GHCR_PAT }}
           tags: edge
           registry: docker.pkg.github.com
-      - name: Publish to Registry
+      - name: Publish to Docker Registry
         uses: elgohr/Publish-Docker-Github-Action@master
         with:
           name: tremorproject/tremor
