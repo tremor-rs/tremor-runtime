@@ -148,6 +148,6 @@ impl Sink for Tcp {
         }
     }
     fn is_active(&self) -> bool {
-        todo!()
+        self.stream.is_some()
     }
 }
