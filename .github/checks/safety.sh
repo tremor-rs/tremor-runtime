@@ -14,6 +14,7 @@ code sanity checker
   -l         check for let _
   -e         check for expect
   -d         check for dbg!
+  -t         check for todo!
   -x         check for std::process::exit
   -b         check for bracket access
   -c         check for pedantic and other checks
@@ -25,7 +26,7 @@ EOF
 
 files=$(find . -name '*.rs' | grep -v -f .checkignore)
 
-while getopts hauiprebldxcf opt; do
+while getopts hauiprebldxcft opt; do
     case $opt in
         h)
             help
@@ -99,6 +100,18 @@ while getopts hauiprebldxcf opt; do
                 fi
             done
             ;;
+        t)
+            for file in $files
+            do
+                if sed -e '/mod test.*/,$d' -e '/ALLOW: /{N;d;}' "$file" | grep 'todo!' > /dev/null
+                then
+                    echo "##[error] todo! found in \"$file\". Just do it!."
+                    grep -nH 'todo!' "$file"
+                    count=$((count + 1))
+                fi
+            done
+            ;;
+
 
         x)
             for file in $files
