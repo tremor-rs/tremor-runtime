@@ -33,7 +33,7 @@ while getopts hauiprebldxcft opt; do
             exit 0
             ;;
         a)
-            exec "$0" -uirpeldxcf
+            exec "$0" -uirpeldxcft
             ;;
         u)
             for file in $files
