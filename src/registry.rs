@@ -95,7 +95,10 @@ impl<A: Artefact> Registry<A> {
         id.trim_to_instance();
         match self.map.insert(id.clone(), servant) {
             Some(_old) => Err(ErrorKind::UnpublishFailedDoesNotExist(id.to_string()).into()),
-            None => Ok(&self.map[&id]),
+            None => self
+                .map
+                .get(&id)
+                .ok_or_else(|| ErrorKind::UnpublishFailedDoesNotExist(id.to_string()).into()),
         }
     }
 

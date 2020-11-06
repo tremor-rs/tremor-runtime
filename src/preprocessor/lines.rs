@@ -57,7 +57,7 @@ impl Lines {
                 "Invalid line of length {} since it exceeds maximum allowed length of {}: {:?}",
                 v.len(),
                 self.max_length,
-                String::from_utf8_lossy(&v[0..min(v.len(), 256)]),
+                String::from_utf8_lossy(v.get(0..min(v.len(), 256)).unwrap_or_default()),
             );
             false
         }
@@ -146,12 +146,14 @@ impl Preprocessor for Lines {
                 // if incoming data had at least one line separator boundary (anywhere)
                 // AND if the preprocessor has memory of line fragment from earlier,
                 // reconstruct the first event fully (by adding the buffer contents to it)
+
+                // FIXME: what is going on here?
                 if (last_event.is_empty() || !events.is_empty()) && !self.buffer.is_empty() {
                     self.complete_fragment(&mut events[0])?;
                 }
 
                 // if the incoming data did not end in a line boundary, last event is actually
-                // a fragment so we need to remmeber it for later (when more data arrives)
+                // a fragment so we need to remember it for later (when more data arrives)
                 if !last_event.is_empty() {
                     self.save_fragment(&last_event)?;
                 }

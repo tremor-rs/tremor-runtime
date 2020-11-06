@@ -204,7 +204,7 @@ where
             })
             .collect::<Vec<Spanned<lexer::Token>>>();
 
-        h.highlight_indent(line_prefix, None, &tokens[..])?;
+        h.highlight_indent(line_prefix, None, tokens.as_slice())?;
         io::Result::Ok(())
     }
 

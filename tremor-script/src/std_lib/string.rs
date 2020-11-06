@@ -46,9 +46,11 @@ impl TremorFn for StringFormat {
                 calling_a: args.len(),
             });
         }
-        if let Some(format) = args[0].as_str() {
-            let mut arg_stack = args[1..].to_vec();
-            arg_stack.reverse();
+        if let Some((format, arg_stack)) = args
+            .split_first()
+            .and_then(|(f, arg_stack)| Some((f.as_str()?, arg_stack)))
+        {
+            let mut arg_stack: Vec<_> = arg_stack.iter().rev().collect();
 
             let mut out = String::with_capacity(format.len());
             let mut iter = format.chars().enumerate();
@@ -150,15 +152,18 @@ pub fn load(registry: &mut Registry) {
                 } else {
                     return Err(FunctionError::BadType{mfa: this_mfa()})
                 };
-                // Since rust doens't handle UTF8 indexes we have to translate this
+                // Since rust doesn't handle UTF8 indexes we have to translate this
                 // _input.char_indices() - get an iterator over codepoint indexes
                 //   .nth(*_start as usize) - try to get the nth character as a byte index - returns an option of a two tuple 
                 //   .map(|v| v.0) - map to the first argument (byte index)
                 //   .unwrap_or_else(|| 0) - since this is an option we need to safely extract the value so we default it to 0 for start or len for end
                 let start = input.char_indices().nth(start).map_or_else(|| 0, |v| v.0);
                 let end = input.char_indices().nth(end).map_or_else(|| input.len(), |v| v.0);
-
-                Ok(Value::from((&input[start..end]).to_string()))
+                if let Some(sub) = input.get(start..end) {
+                    Ok(Value::from(sub.to_string()))
+                } else {
+                    Ok(Value::from(input.to_string()))
+                }
             }),
         )
         .insert(

@@ -106,7 +106,6 @@ impl Sink for Postgres {
                     "INSERT INTO {} ({}) VALUES ({});",
                     self.config.table, fields, params
                 );
-                let s_slice: &str = &q[..];
 
                 if self.client.is_none() {
                     self.client = match init_cli(&self.config) {
@@ -125,7 +124,7 @@ impl Sink for Postgres {
                 };
 
                 match client.query_raw(
-                    s_slice,
+                    q.as_str(),
                     records
                         .iter()
                         .map(|p| p as &dyn postgres::types::ToSql)

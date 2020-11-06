@@ -17,10 +17,6 @@ use super::{
     test_predicate_expr, AggrType, Env, ExecOpts, LocalStack, FALSE, TRUE,
 };
 
-use crate::ast::{
-    BaseExpr, BinExpr, ImutComprehension, ImutExpr, ImutExprInt, ImutMatch, Invoke, InvokeAggr,
-    LocalPath, Merge, Patch, Path, Recur, Segment, UnaryExpr, ARGS_CONST_ID,
-};
 use crate::errors::{
     error_bad_key, error_decreasing_range, error_invalid_unary, error_need_obj, error_need_str,
     error_no_clause_hit, error_oops, Result,
@@ -28,6 +24,13 @@ use crate::errors::{
 use crate::interpreter::value_to_index;
 use crate::registry::{Registry, TremorAggrFnWrapper, RECUR};
 use crate::stry;
+use crate::{
+    ast::{
+        BaseExpr, BinExpr, ImutComprehension, ImutExpr, ImutExprInt, ImutMatch, Invoke, InvokeAggr,
+        LocalPath, Merge, Patch, Path, Recur, Segment, UnaryExpr, ARGS_CONST_ID,
+    },
+    errors::error_oops_err,
+};
 use simd_json::prelude::*;
 use simd_json::value::borrowed::{Object, Value};
 use std::borrow::Borrow;
@@ -127,7 +130,9 @@ where
                     }
                 }
                 for (i, v) in next.drain(..) {
-                    local.values[i] = Some(v);
+                    if let Some(loc) = local.values.get_mut(i) {
+                        *loc = Some(v);
+                    }
                 }
                 Ok(Cow::Borrowed(&RECUR))
             }
@@ -433,7 +438,7 @@ where
                             // Index is out of array bounds: not present
                             return Ok(Cow::Borrowed(&FALSE));
                         } else {
-                            subrange = Some(&array[start_idx..end_idx]);
+                            subrange = array.get(start_idx..end_idx);
                             continue;
                         }
                     } else {
@@ -588,8 +593,14 @@ where
             );
         }
 
-        let invocable: &mut TremorAggrFnWrapper =
-            unsafe { mem::transmute(&env.aggrs[expr.aggr_id].invocable) };
+        let inv = env
+            .aggrs
+            .get(expr.aggr_id)
+            .map(|a| &a.invocable)
+            .ok_or_else(|| {
+                error_oops_err(self, 0xdead_0012, "Unknown aggregate function", &env.meta)
+            })?;
+        let invocable: &mut TremorAggrFnWrapper = unsafe { mem::transmute(inv) };
         let r = invocable.emit().map(Cow::Owned).map_err(|e| {
             let r: Option<&Registry> = None;
             e.into_err(self, self, r, &env.meta)

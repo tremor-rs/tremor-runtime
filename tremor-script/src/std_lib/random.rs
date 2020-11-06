@@ -38,9 +38,8 @@ impl TremorFn for RandomInteger {
         let this_mfa = || mfa("random", "integer", args.len());
         // TODO add event id to the seed? also change ingest_ns() for tremor-script binary runs too
         let mut rng = SmallRng::seed_from_u64(ctx.ingest_ns());
-        match args.len() {
-            2 => {
-                let (low, high) = (&args[0], &args[1]);
+        match args {
+            [low, high] => {
                 if let (Some(low), Some(high)) = (low.as_i64(), high.as_i64()) {
                     if low < high {
                         // random integer between low and high (not including high)
@@ -56,8 +55,7 @@ impl TremorFn for RandomInteger {
                     Err(FunctionError::BadType { mfa: this_mfa() })
                 }
             }
-            1 => {
-                let input = &args[0];
+            [input] => {
                 if let Some(input) = input.as_u64() {
                     // random integer between 0 and input (not including input)
                     Ok(Value::from(rng.gen_range(0, input)))
@@ -65,7 +63,7 @@ impl TremorFn for RandomInteger {
                     Err(FunctionError::BadType { mfa: this_mfa() })
                 }
             }
-            0 => Ok(Value::from(
+            [] => Ok(Value::from(
                 rng.gen::<i64>(), // random integer
             )),
             _ => Err(FunctionError::BadArity {
@@ -96,9 +94,8 @@ impl TremorFn for RandomFloat {
     ) -> FResult<Value<'event>> {
         let this_mfa = || mfa("random", "float", args.len());
         let mut rng = SmallRng::seed_from_u64(ctx.ingest_ns());
-        match args.len() {
-            2 => {
-                let (low, high) = (&args[0], &args[1]);
+        match args {
+            [low, high] => {
                 if let (Some(low), Some(high)) = (low.cast_f64(), high.cast_f64()) {
                     if low < high {
                         // random integer between low and high (not including high)
@@ -114,8 +111,7 @@ impl TremorFn for RandomFloat {
                     Err(FunctionError::BadType { mfa: this_mfa() })
                 }
             }
-            1 => {
-                let input = &args[0];
+            [input] => {
                 if let Some(input) = input.cast_f64() {
                     // random integer between 0 and input (not including input)
                     Ok(Value::from(rng.gen_range(0.0, input)))
@@ -123,7 +119,7 @@ impl TremorFn for RandomFloat {
                     Err(FunctionError::BadType { mfa: this_mfa() })
                 }
             }
-            0 => Ok(Value::from(
+            [] => Ok(Value::from(
                 rng.gen::<f64>(), // random integer
             )),
             _ => Err(FunctionError::BadArity {

@@ -43,17 +43,20 @@ pub struct MmapAnon {
 
 impl MmapFile {
     fn as_mut_slice(&mut self) -> &mut [u8] {
-        &mut self.store[..self.end]
+        // We read until it's end, so we know it's OK
+        unsafe { self.store.get_unchecked_mut(..self.end) }
     }
 }
 
 impl MmapAnon {
     fn as_slice(&self) -> &[u8] {
-        &self.store[..self.end]
+        // We read until it's end, so we know it's OK
+        unsafe { self.store.get_unchecked(..self.end) }
     }
 
     fn as_mut_slice(&mut self) -> &mut [u8] {
-        &mut self.store[..self.end]
+        // We read until it's end, so we know it's OK
+        unsafe { self.store.get_unchecked_mut(..self.end) }
     }
 
     fn flush(&mut self) -> io::Result<()> {

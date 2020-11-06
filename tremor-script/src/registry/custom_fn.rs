@@ -2,7 +2,7 @@
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
-// You may obtain a cstd::result::Result::Err(*right_val)::Result::Err(*right_val)License at
+// You may obtain a copy of the License at
 //
 //     http://www.apache.org/licenses/LICENSE-2.0
 //
@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use super::{FResult, FunctionError, Result};
-use crate::ast::query::ARGS_CONST_ID;
+use crate::ast::get_args_mut;
 use crate::ast::{Expr, Exprs, FnDecl, ImutExpr, ImutExprInt, ImutExprs, InvokeAggrFn};
 use crate::interpreter::{AggrType, Cont, Env, ExecOpts, LocalStack};
 use simd_json::prelude::*;
@@ -145,18 +145,15 @@ impl<'script> CustomFn<'script> {
                 .collect::<Vec<Value<'static>>>(),
         );
 
-        // We are swapping out the var args for constatns
+        // We are swapping out the var args for constants
 
         let consts: &'run mut [Value<'event>] = unsafe { mem::transmute(env.consts) };
 
-        mem::swap(&mut consts[ARGS_CONST_ID], &mut args_const);
+        mem::swap(get_args_mut(consts)?, &mut args_const);
 
         let mut this_local = LocalStack::with_size(self.locals);
-        for (i, arg) in args.iter().enumerate() {
-            if i == self.locals {
-                break;
-            }
-            this_local.values[i] = Some((*arg).clone_static());
+        for (arg, local) in args.iter().zip(this_local.values.iter_mut()) {
+            *local = Some((*arg).clone_static());
         }
         let opts = ExecOpts {
             result_needed: false,
@@ -186,7 +183,7 @@ impl<'script> CustomFn<'script> {
                         &mut this_local,
                     );
                     if r.is_err() {
-                        mem::swap(&mut consts[ARGS_CONST_ID], &mut args_const);
+                        mem::swap(get_args_mut(consts)?, &mut args_const);
                     };
                     match r? {
                         Cont::Cont(v) => {
@@ -195,7 +192,7 @@ impl<'script> CustomFn<'script> {
                         Cont::Drop => {
                             recursion_depth += 1;
                             if recursion_depth == env.recursion_limit {
-                                mem::swap(&mut consts[ARGS_CONST_ID], &mut args_const);
+                                mem::swap(get_args_mut(consts)?, &mut args_const);
                                 return Err(FunctionError::Error(Box::new(
                                     "recursion limit reached".into(),
                                 )));
@@ -209,7 +206,7 @@ impl<'script> CustomFn<'script> {
                             continue 'recur;
                         }
                         _ => {
-                            mem::swap(&mut consts[ARGS_CONST_ID], &mut args_const);
+                            mem::swap(get_args_mut(consts)?, &mut args_const);
                             return Err(FunctionError::Error(Box::new("can't emit here".into())));
                         }
                     };
@@ -223,7 +220,7 @@ impl<'script> CustomFn<'script> {
                         &mut this_local,
                     );
                     if r.is_err() {
-                        mem::swap(&mut consts[ARGS_CONST_ID], &mut args_const);
+                        mem::swap(get_args_mut(consts)?, &mut args_const);
                     };
                     r?;
                 }

@@ -187,7 +187,7 @@ pub fn _from_human_format(human: &str) -> Option<u64> {
 
     let res = tokens
         .chunks(2)
-        .filter_map(|sl| Some((sl[0].parse::<u32>().ok(), sl.get(1)?)))
+        .filter_map(|sl| Some((sl.get(0)?.parse::<u32>().ok(), sl.get(1)?)))
         .fold(0, |acc, sl| match sl {
             (Some(n), &"years") => acc + _with_years(n),
             (Some(n), &"weeks") => acc + _with_weeks(n),

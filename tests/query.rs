@@ -81,7 +81,7 @@ macro_rules! test_cases {
                 for (_, result) in results {
                     for value in result.value_iter() {
                         if let Some(expected) = out_json.pop() {
-                            assert_eq!(sorsorted_serialize(value)?, sorsorted_serialize(&expected)?);
+                            assert_eq!(sorted_serialize(value)?, sorted_serialize(&expected)?);
                         }
                     }
                 }

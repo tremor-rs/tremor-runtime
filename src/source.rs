@@ -217,7 +217,7 @@ where
                         // this is safe, because we get the vec we created in the previous argument and we now it has 1 element
                         // so it will never panic.
                         // take this, rustc!
-                        let mut_data = mutd[0].as_mut_slice();
+                        let mut_data = unsafe { mutd.get_unchecked_mut(0).as_mut_slice() };
                         let decoded = if let Some(doh) = &codec_override {
                             if let Some(c) = self.codec_map.get_mut(doh) {
                                 c.decode(mut_data, *ingest_ns)

@@ -27,7 +27,7 @@ pub fn hostname() -> String {
 }
 
 /// Serialize a Value in a sorted fashion to allow equality comparing the result
-pub fn sorsorted_serialize(j: &Value) -> Result<String> {
+pub fn sorted_serialize(j: &Value) -> Result<String> {
     // ballpark size of a 'sensible' message
     let mut w = Vec::with_capacity(512);
     sorted_serialize_(j, &mut w)?;

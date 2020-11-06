@@ -32,7 +32,7 @@ use simd_json::{prelude::*, BorrowedValue as Value};
 use std::num;
 use std::ops::{Range as RangeExclusive, RangeInclusive};
 
-/// A Compiletime error capturing the preprocessors cus at the time of the error
+/// A compile-time error capturing the preprocessors cus at the time of the error
 #[derive(Debug)]
 pub struct CompilerError {
     /// The original error
@@ -55,7 +55,7 @@ impl From<CompilerError> for Error {
 }
 
 #[doc(hidden)]
-/// Optimised try
+/// Optimized try
 #[macro_export]
 macro_rules! stry {
     ($e:expr) => {
@@ -158,18 +158,18 @@ impl ErrorKind {
         use ErrorKind::{
             AggrInAggr, ArrayOutOfRange, AssignIntoArray, AssignToConst, BadAccessInEvent,
             BadAccessInGlobal, BadAccessInLocal, BadAccessInState, BadArity, BadArrayIndex,
-            BadType, BinaryDrop, BinaryEmit, Common, DecreasingRange, DoubleConst, DoubleStream,
-            EmptyScript, ExtraToken, Generic, Grok, InvalidAssign, InvalidBinary, InvalidBitshift,
-            InvalidConst, InvalidDrop, InvalidEmit, InvalidExtractor, InvalidFloatLiteral,
-            InvalidFn, InvalidHexLiteral, InvalidInfluxData, InvalidIntLiteral, InvalidMod,
-            InvalidRecur, InvalidToken, InvalidUTF8Sequence, InvalidUnary, Io, JSONError,
-            MergeTypeConflict, MissingEffectors, MissingFunction, MissingModule, ModuleNotFound,
-            Msg, NoClauseHit, NoConstsAllowed, NoLocalsAllowed, NoObjectError, NotConstant,
-            NotFound, Oops, ParseIntError, ParserError, PatchKeyExists, PreprocessorError,
-            QueryStreamNotDefined, RuntimeError, TailingHereDoc, TypeConflict, UnexpectedCharacter,
-            UnexpectedEndOfStream, UnexpectedEscapeCode, UnrecognizedToken, UnterminatedExtractor,
-            UnterminatedHereDoc, UnterminatedIdentLiteral, UnterminatedStringLiteral,
-            UpdateKeyMissing, Utf8Error,
+            BadType, BinaryDrop, BinaryEmit, CantSetArgsConst, CantSetGroupConst,
+            CantSetWindowConst, Common, DecreasingRange, DoubleConst, DoubleStream, EmptyScript,
+            ExtraToken, Generic, Grok, InvalidAssign, InvalidBinary, InvalidBitshift, InvalidConst,
+            InvalidDrop, InvalidEmit, InvalidExtractor, InvalidFloatLiteral, InvalidFn,
+            InvalidHexLiteral, InvalidInfluxData, InvalidIntLiteral, InvalidMod, InvalidRecur,
+            InvalidToken, InvalidUTF8Sequence, InvalidUnary, Io, JSONError, MergeTypeConflict,
+            MissingEffectors, MissingFunction, MissingModule, ModuleNotFound, Msg, NoClauseHit,
+            NoConstsAllowed, NoLocalsAllowed, NoObjectError, NotConstant, NotFound, Oops,
+            ParseIntError, ParserError, PatchKeyExists, PreprocessorError, QueryStreamNotDefined,
+            RuntimeError, TailingHereDoc, TypeConflict, UnexpectedCharacter, UnexpectedEndOfStream,
+            UnexpectedEscapeCode, UnrecognizedToken, UnterminatedExtractor, UnterminatedHereDoc,
+            UnterminatedIdentLiteral, UnterminatedStringLiteral, UpdateKeyMissing, Utf8Error,
         };
         match self {
             NoClauseHit(outer) | Oops(outer, _, _) => (Some(outer.expand_lines(2)), Some(*outer)),
@@ -243,6 +243,9 @@ impl ErrorKind {
             | PreprocessorError(_)
             | UnexpectedEndOfStream
             | Utf8Error(_)
+            | CantSetWindowConst
+            | CantSetArgsConst
+            | CantSetGroupConst
             | Self::__Nonexhaustive { .. } => (Some(Range::default()), None),
         }
     }
@@ -339,8 +342,8 @@ fn choices<T>(choices: &[T]) -> String
 where
     T: ToString,
 {
-    if choices.len() == 1 {
-        choices[0].to_string()
+    if let [choice] = choices {
+        choice.to_string()
     } else {
         format!(
             "one of {}",
@@ -573,11 +576,11 @@ error_chain! {
                             format!("a subrange of 0:{}", len)
                         })
         }
-        AssignIntoArray(expor: Range, inner: Range) {
+        AssignIntoArray(expr: Range, inner: Range) {
             description("Can not assign into an array")
                 display("It is not supported to assign value into an array")
         }
-        InvalidAssign(expor: Range, inner: Range) {
+        InvalidAssign(expr: Range, inner: Range) {
             description("You can not assign that")
                 display("You are trying to assign to a value that isn't valid")
         }
@@ -693,6 +696,20 @@ error_chain! {
             description("Local variables are not allowed here")
                 display("Local variables are not allowed here")
         }
+
+        CantSetWindowConst {
+            description("Failed to initialize window constant")
+                display("Failed to initialize window constant")
+        }
+        CantSetGroupConst {
+            description("Failed to initialize group constant")
+                display("Failed to initialize group constant")
+        }
+        CantSetArgsConst {
+            description("Failed to initialize args constant")
+                display("Failed to initialize args constant")
+        }
+
     }
 }
 
@@ -856,7 +873,16 @@ pub(crate) fn error_oops<T, O: BaseExpr, S: ToString + ?Sized>(
     msg: &S,
     meta: &NodeMetas,
 ) -> Result<T> {
-    Err(ErrorKind::Oops(outer.extent(meta), id, msg.to_string()).into())
+    Err(error_oops_err(outer, id, msg, meta))
+}
+
+pub(crate) fn error_oops_err<O: BaseExpr, S: ToString + ?Sized>(
+    outer: &O,
+    id: u64,
+    msg: &S,
+    meta: &NodeMetas,
+) -> Error {
+    ErrorKind::Oops(outer.extent(meta), id, msg.to_string()).into()
 }
 
 pub(crate) fn error_patch_key_exists<T, O: BaseExpr, I: BaseExpr>(

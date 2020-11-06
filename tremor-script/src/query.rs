@@ -272,7 +272,7 @@ select event from in into boop;
 
 # Stream script operator synthetic events into out stream
 select event from beep into out;
-select event from boop into out;        
+select event from boop into out;
         "#,
         )
     }

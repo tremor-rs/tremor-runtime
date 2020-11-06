@@ -45,20 +45,16 @@ pub fn load(registry: &mut Registry) {
         }))
         .insert(tremor_const_fn! (array::unzip(_context, _input: Array) {
                 let r: FResult<Vec<(Value, Value)>> = _input.iter().map(|a| if let Some(a) = a.as_array() {
-                    if a.len() == 2 {
-                        let second: Value = a[0].clone();
-                        let first: Value = a[1].clone();
-                        Ok((first, second))
+                    if let [ first, second] = a.as_slice() {
+                        Ok((first.clone(), second.clone()))
                     } else {
-                        Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("Onlay arrays that consist of tuples (arrays of two elements) can be unzipped but this array contained {} elements", a.len())})
+                        Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("Only arrays that consist of tuples (arrays of two elements) can be unzipped but this array contained {} elements", a.len())})
                     }
                 } else {
-                    Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("Onlay arrays that consist of tuples (arrays of two elements) can be unzipped but this array contained: {:?}", a)})
+                    Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("Only arrays that consist of tuples (arrays of two elements) can be unzipped but this array contained: {:?}", a)})
                 }).collect();
-                let (r, l): (Vec<_>, Vec<_>) = r?.into_iter().unzip();
-                Ok(Value::from(vec![l,
-                    r,
-                ]))
+                let (l, r): (Vec<_>, Vec<_>) = r?.into_iter().unzip();
+                Ok(Value::from(vec![l, r]))
         }))
         .insert(tremor_const_fn!(array::zip(_context, _left: Array, _right: Array) {
             if _left.len() != _right.len() {

@@ -19,7 +19,10 @@ use super::{
     HashMap, Helper, Ident, ImutExpr, ImutExprInt, InvokeAggrFn, Location, NodeMetas, Path,
     Registry, Result, Script, Serialize, Stmts, Upable, Value, Warning,
 };
-use crate::impl_expr2;
+use crate::{
+    errors::{Error, ErrorKind},
+    impl_expr2,
+};
 use raw::WindowDefnRaw;
 
 /// The Constant ID of the `window` constant
@@ -28,8 +31,51 @@ pub const WINDOW_CONST_ID: usize = 0;
 pub const GROUP_CONST_ID: usize = 1;
 /// The Constant ID of the `args` constant
 pub const ARGS_CONST_ID: usize = 2;
-/// Last constant that is erserved for executionand can not be inlined.
+/// Last constant that is reserved for execution and can not be inlined.
 pub const LAST_RESERVED_CONST: usize = ARGS_CONST_ID;
+
+/// Sets `WINDOW_CONST_ID`
+pub fn set_window(consts: &mut [Value<'static>], window: Value<'static>) -> Result<()> {
+    *get_window_mut(consts)? = window;
+    Ok(())
+}
+
+/// Sets `ARGS_CONST_ID`
+pub fn set_args(consts: &mut [Value<'static>], args: Value<'static>) -> Result<()> {
+    *get_args_mut(consts)? = args;
+    Ok(())
+}
+/// Sets `GROUP_CONST_ID`
+pub fn set_group(consts: &mut [Value<'static>], group: Value<'static>) -> Result<()> {
+    *get_group_mut(consts)? = group;
+    Ok(())
+}
+
+/// gets `GROUP_CONST_ID` mutably
+pub fn get_group_mut<'consts, 'event>(
+    consts: &'consts mut [Value<'event>],
+) -> Result<&'consts mut Value<'event>> {
+    consts
+        .get_mut(GROUP_CONST_ID)
+        .ok_or_else(|| Error::from(ErrorKind::CantSetGroupConst))
+}
+
+/// gets `ARGS_CONST_ID` mutably
+pub fn get_args_mut<'consts, 'event>(
+    consts: &'consts mut [Value<'event>],
+) -> Result<&'consts mut Value<'event>> {
+    consts
+        .get_mut(ARGS_CONST_ID)
+        .ok_or_else(|| Error::from(ErrorKind::CantSetGroupConst))
+}
+/// gets `WINDOW_CONST_ID` mutably
+pub fn get_window_mut<'consts, 'event>(
+    consts: &'consts mut [Value<'event>],
+) -> Result<&'consts mut Value<'event>> {
+    consts
+        .get_mut(WINDOW_CONST_ID)
+        .ok_or_else(|| Error::from(ErrorKind::CantSetWindowConst))
+}
 
 /// A Tremor query
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -59,11 +105,11 @@ pub enum Stmt<'script> {
     OperatorDecl(OperatorDecl<'script>),
     /// A script declaration
     ScriptDecl(Box<ScriptDecl<'script>>),
-    /// An operator createion
+    /// An operator creation
     Operator(OperatorStmt<'script>),
     /// A script creation
     Script(ScriptStmt<'script>),
-    /// A selelect statement
+    /// A select statement
     Select(SelectStmt<'script>),
 }
 
@@ -82,7 +128,7 @@ pub struct SelectStmt<'script> {
     pub node_meta: NodeMetas,
 }
 
-/// The type of a select statment
+/// The type of a select statement
 pub enum SelectType {
     /// This select statement can be turned
     /// into a passthrough node
@@ -90,12 +136,12 @@ pub enum SelectType {
     /// This is a simple statement without grouping
     /// or windowing
     Simple,
-    /// This is a full fledged select statment
+    /// This is a full fledged select statement
     Normal,
 }
 
 impl SelectStmt<'_> {
-    /// Determine how complex a select statment is
+    /// Determine how complex a select statement is
     #[must_use]
     pub fn complexity(&self) -> SelectType {
         if self.stmt.target.0
@@ -117,11 +163,11 @@ impl SelectStmt<'_> {
     }
 }
 
-/// Operator kind identifyiner
+/// Operator kind identifier
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct OperatorKind {
     pub(crate) mid: usize,
-    /// Modeule of the operator
+    /// Module of the operator
     pub module: String,
     /// Operator name
     pub operation: String,
@@ -141,7 +187,7 @@ pub struct OperatorDecl<'script> {
     pub kind: OperatorKind,
     /// Module of the operator
     pub module: Vec<String>,
-    /// Identifyer for the operator
+    /// Identifer for the operator
     pub id: String,
     /// Parameters for the operator
     pub params: Option<HashMap<String, Value<'script>>>,
@@ -160,7 +206,7 @@ impl<'script> OperatorDecl<'script> {
     }
 }
 
-/// An operator creaton
+/// An operator creation
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct OperatorStmt<'script> {
     pub(crate) mid: usize,
@@ -226,7 +272,7 @@ pub enum WindowKind {
     Tumbling,
 }
 
-/// A window declration
+/// A window declaration
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct WindowDecl<'script> {
     pub(crate) mid: usize,

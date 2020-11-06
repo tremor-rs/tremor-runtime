@@ -16,6 +16,7 @@ use std::{borrow::Cow, fmt, fmt::Display, sync::Arc};
 
 use crate::{
     common_cow,
+    errors::Error,
     errors::Result,
     influx_value,
     op::{prelude::IN, trickle::select::WindowImpl},
@@ -432,7 +433,11 @@ impl ExecutableGraph {
                 self.last_metrics = event.ingest_ns;
             }
         }
-        self.stack.push((self.inputs[stream_name], IN, event));
+        let input = *self
+            .inputs
+            .get(stream_name)
+            .ok_or_else(|| Error::from(format!("invalid stream name: `{}`", stream_name)))?;
+        self.stack.push((input, IN, event));
         self.run(returns)
     }
 
@@ -458,8 +463,10 @@ impl ExecutableGraph {
             if node.kind == NodeKind::Output {
                 returns.push((node.id.clone(), event));
             } else {
+                // ALLOW: We know the state was initiated
+                let state = unsafe { self.state.ops.get_unchecked_mut(idx) };
                 let EventAndInsights { events, insights } =
-                    node.on_event(0, &port, &mut self.state.ops[idx], event)?;
+                    node.on_event(0, &port, state, event)?;
 
                 for (out_port, _) in &events {
                     unsafe { self.metrics.get_unchecked_mut(idx) }.inc_output(out_port);
@@ -548,7 +555,7 @@ impl ExecutableGraph {
         }
         insight
     }
-    /// Enque a signal
+    /// Enqueue a signal
     pub fn enqueue_signal(&mut self, signal: Event, returns: &mut Returns) -> Result<()> {
         if self.signalflow(signal)? {
             self.run(returns)?;
@@ -558,8 +565,11 @@ impl ExecutableGraph {
 
     fn signalflow(&mut self, mut signal: Event) -> Result<bool> {
         let mut has_events = false;
+        // We can't use an iterator over signalfow here
+        // rust refuses to let us use enqueue_events if we do
         for idx in 0..self.signalflow.len() {
-            let i = self.signalflow[idx];
+            // ALLOW: we guarantee that idx exists above
+            let i = unsafe { *self.signalflow.get_unchecked(idx) };
             let EventAndInsights { events, insights } = {
                 let op = unsafe { self.graph.get_unchecked_mut(i) }; // We know this exists
                 op.on_signal(op.uid, &mut signal)?
@@ -569,8 +579,6 @@ impl ExecutableGraph {
             }
             has_events = has_events || !events.is_empty();
             self.enqueue_events(i, events);
-            // We shouldn't call run in signal flow it should just enqueue
-            // self.run(returns)?
         }
         Ok(has_events)
     }
