@@ -171,6 +171,7 @@ impl Query {
         });
         nodes.insert(IN, id);
         *uid += 1;
+        // ALLOW: id is created by inserting above, we also have no other way to access, thanks petgraph
         let op = pipe_graph[id].to_op(*uid, supported_operators, None, None, None)?;
         pipe_ops.insert(id, op);
         inputs.insert(IN, id);
@@ -185,6 +186,7 @@ impl Query {
         });
         nodes.insert(err.clone(), id);
         *uid += 1;
+        // ALLOW: id is created by inserting above, we also have no other way to access, thanks petgraph
         let op = pipe_graph[id].to_op(*uid, supported_operators, None, None, None)?;
         pipe_ops.insert(id, op);
         outputs.push(id);
@@ -200,6 +202,7 @@ impl Query {
         nodes.insert(OUT, id);
         *uid += 1;
 
+        // ALLOW: id is created by inserting above, we also have no other way to access, thanks petgraph
         let op = pipe_graph[id].to_op(*uid, supported_operators, None, None, None)?;
         pipe_ops.insert(id, op);
         outputs.push(id);
@@ -259,6 +262,7 @@ impl Query {
                             });
                             nodes.insert(name.clone(), id);
                             *uid += 1;
+                            // ALLOW: id is created by inserting above, we also have no other way to access, thanks petgraph
                             let op = pipe_graph[id].to_op(
                                 *uid,
                                 supported_operators,
@@ -285,6 +289,7 @@ impl Query {
                             });
                             nodes.insert(name.clone(), id);
                             *uid += 1;
+                            // ALLOW: id is created by inserting above, we also have no other way to access, thanks petgraph
                             let op = pipe_graph[id].to_op(
                                 *uid,
                                 supported_operators,
@@ -449,7 +454,7 @@ impl Query {
         });
         nodes.insert("metrics".into(), id);
         *uid += 1;
-
+        // ALLOW: id is created by inserting above, we also have no other way to access, thanks petgraph
         let op = pipe_graph[id].to_op(*uid, supported_operators, None, None, None)?;
         pipe_ops.insert(id, op);
         outputs.push(id);

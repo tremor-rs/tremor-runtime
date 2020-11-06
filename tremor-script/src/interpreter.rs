@@ -546,7 +546,7 @@ where
                         let l = array.len();
                         return error_array_out_of_bound(outer, segment, &path, r, l, &env.meta);
                     } else {
-                        subrange = Some(&array[start_idx..end_idx]);
+                        subrange = array.get(start_idx..end_idx);
                         continue;
                     }
                 } else {

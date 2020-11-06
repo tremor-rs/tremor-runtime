@@ -868,6 +868,7 @@ async fn build_response_events(
     for pp in preprocessed {
         events.push(
             LineValue::try_new(vec![pp], |mutd| {
+                // ALLOW: we define mutd as a vector of one element above
                 let mut_data = mutd[0].as_mut_slice();
                 let body = the_chosen_one
                     .decode(mut_data, nanotime())?

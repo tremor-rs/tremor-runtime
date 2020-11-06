@@ -22,18 +22,15 @@ use simd_json::borrowed::Value;
 use std::borrow::Cow;
 use std::mem;
 use std::sync::Arc;
-use tremor_script::interpreter::Env;
 use tremor_script::query::StmtRentalWrapper;
-use tremor_script::utils::sorsorted_serialize;
+use tremor_script::utils::sorted_serialize;
 use tremor_script::{
     self,
-    ast::{
-        InvokeAggrFn, Select, SelectStmt, WindowDecl, ARGS_CONST_ID, GROUP_CONST_ID,
-        WINDOW_CONST_ID,
-    },
+    ast::{set_args, set_group, set_window, InvokeAggrFn, Select, SelectStmt, WindowDecl},
     prelude::*,
     query::StmtRental,
 };
+use tremor_script::{ast::get_group_mut, interpreter::Env};
 
 pub type Aggrs<'script> = Vec<InvokeAggrFn<'script>>;
 
@@ -105,19 +102,20 @@ pub struct Window {
 
 impl Window {
     pub(crate) fn module_path(fqwn: &str) -> Vec<String> {
-        let segments: Vec<String> = fqwn
-            .split("::")
-            .map(std::string::ToString::to_string)
-            .collect();
-        segments[..segments.len() - 1].to_vec()
+        let segments: Vec<_> = fqwn.split("::").collect();
+        if let Some((_, rest)) = segments.split_last() {
+            rest.iter().map(|v| (*v).to_string()).collect()
+        } else {
+            vec![]
+        }
     }
 
     pub(crate) fn ident_name(fqwn: &str) -> &str {
-        let segments: Vec<_> = fqwn
-            .split("::")
-            // .map(std::string::ToString::to_string)
-            .collect();
-        segments[segments.len() - 1]
+        if let Some(last) = fqwn.split("::").last() {
+            last
+        } else {
+            fqwn
+        }
     }
 }
 
@@ -179,7 +177,7 @@ impl From<TumblingWindowOnTime> for WindowImpl {
 pub struct WindowEvent {
     /// New window is opened,
     open: bool,
-    /// Close the window before this event and opeen the next one
+    /// Close the window before this event and open the next one
     emit: bool,
 }
 
@@ -225,7 +223,7 @@ impl TumblingWindowOnTime {
         let script = script.map(|s| {
             rentals::Window::new(stmt.stmt.clone(), |_| unsafe {
                 // This is sound since stmt.stmt is an arc that holds
-                // the borrwed data
+                // the borrowed data
                 mem::transmute::<WindowDecl<'_>, WindowDecl<'static>>(s.clone())
             })
         });
@@ -308,7 +306,7 @@ impl TumblingWindowOnNumber {
             rentals::Window::new(stmt.stmt.clone(), |_| unsafe {
                 // This is safe since `stmt.stmt` is an Arc that
                 // hods the referenced data and we clone it into the rental.
-                // This ensures refferenced data isn't dropped until the rental
+                // This ensures referenced data isn't dropped until the rental
                 // is dropped.
                 mem::transmute::<WindowDecl<'_>, WindowDecl<'static>>(s.clone())
             })
@@ -404,7 +402,7 @@ impl TrickleSelect {
             select: rentals::Select::new(stmt_rentwrapped.stmt.clone(), move |_| unsafe {
                 // This is safe since `stmt_rentwrapped.stmt` is an Arc that
                 // hods the referenced data and we clone it into the rental.
-                // This ensures refferenced data isn't dropped until the rental
+                // This ensures referenced data isn't dropped until the rental
                 // is dropped.
                 mem::transmute::<SelectStmt<'_>, SelectStmt<'static>>(select)
             }),
@@ -445,9 +443,9 @@ impl Operator for TrickleSelect {
             node_meta,
         }: &mut SelectStmt = unsafe { mem::transmute(self.select.suffix()) };
         let local_stack = tremor_script::interpreter::LocalStack::with_size(*locals);
-        consts[WINDOW_CONST_ID] = Value::null();
-        consts[GROUP_CONST_ID] = Value::null();
-        consts[ARGS_CONST_ID] = Value::null();
+        set_window(consts, Value::null())?;
+        set_group(consts, Value::null())?;
+        set_args(consts, Value::null())?;
         // TODO avoid origin_uri clone here
         let ctx = EventContext::new(event.ingest_ns, event.origin_uri.clone());
 
@@ -487,16 +485,17 @@ impl Operator for TrickleSelect {
 
         if self.windows.is_empty() && group_values.is_empty() {
             let group_value = Value::from(vec![()]);
-            let group_str = sorsorted_serialize(&group_value)?;
+            let group_str = sorted_serialize(&group_value)?;
 
             let data = event.data.suffix();
-            // This is sound since we're transmuting imutable to mutable
-            // We can't specify the 'lifetime' of the envetn or it would be
+            // This is sound since we're transmuting immutable to mutable
+            // We can't specify the 'lifetime' of the event or it would be
             // `&'run mut Value<'event>`
             let unwind_event = unsafe { data.force_value_mut() };
             let event_meta = data.meta();
-            consts[GROUP_CONST_ID] = group_value.clone_static();
-            consts[GROUP_CONST_ID].push(group_str).ok();
+
+            set_group(consts, group_value.clone_static())?;
+            get_group_mut(consts)?.push(group_str)?;
 
             let env = Env {
                 context: &ctx,
@@ -547,7 +546,7 @@ impl Operator for TrickleSelect {
 
         let group_values: Vec<Value> = group_values.into_iter().map(Value::Array).collect();
         for group_value in group_values {
-            let group_str = sorsorted_serialize(&group_value)?;
+            let group_str = sorted_serialize(&group_value)?;
             let mut windows = self.windows.iter_mut().peekable();
             let mut emit_depth = 0;
 
@@ -575,7 +574,7 @@ impl Operator for TrickleSelect {
                 this_group.id.merge(&event.id);
                 let window_event = this_group.window.on_event(&event)?;
                 // The issue with the windows is the following:
-                // We emit on the first event of the next windows, this works well for the inital frame
+                // We emit on the first event of the next windows, this works well for the initial frame
                 // on a second frame, we have the coordinate with the first we have a problem as we
                 // merge the higher resolution data into the lower resolution data before we get a chance
                 // to emit the lower res frame - causing us to have an element too much
@@ -602,12 +601,12 @@ impl Operator for TrickleSelect {
                     // See if we need to merge into the next tiltframe
                     // If so merge the aggregates
                     // Then emit the window itself
-                    consts[WINDOW_CONST_ID] = Value::from(this.name.to_string());
+                    set_window(consts, Value::from(this.name.to_string()))?;
                     let data = event.data.suffix();
                     let unwind_event = data.value();
                     let event_meta = data.meta();
-                    consts[GROUP_CONST_ID] = group_value.clone_static();
-                    consts[GROUP_CONST_ID].push(group_str.clone()).ok();
+                    set_group(consts, group_value.clone_static())?;
+                    get_group_mut(consts)?.push(group_str.clone())?;
 
                     let env = Env {
                         context: &ctx,
@@ -658,7 +657,7 @@ impl Operator for TrickleSelect {
             }
 
             // Next we take care of propagating the data from narrower to wider
-            // windows and clearning windows that we have already emitted (in this
+            // windows and clearing windows that we have already emitted (in this
             // order!).
 
             // calculate the count (depth + 1) since in the remaining code
@@ -673,7 +672,7 @@ impl Operator for TrickleSelect {
                 // We look one beyond the emit count this is required
                 // since we go 'backwards' from the widest to the narrowest.
                 // Since we do not want to clean the next not emitted
-                // frame we calcualted emit_all above.
+                // frame we calculated emit_all above.
                 .take(emit_count + 1)
                 // We reverse the iterator since we want to start with
                 // the widest window
@@ -715,7 +714,7 @@ impl Operator for TrickleSelect {
                 // Remember we iterate backwards so we the next element in the iterator
                 // is the previous window.
                 // We grab it and then merge the data from the previous window into this
-                // This ensures that in the next iteration of the leep we can clear
+                // This ensures that in the next iteration of the leap we can clear
                 // the previous window since we already pulled all needed data out here.
                 if let Some(prev) = windows.peek() {
                     // TODO: All the data we use mutably is in a pin
@@ -737,14 +736,11 @@ impl Operator for TrickleSelect {
                                 }),
                             )
                         });
-                    for (i, aggr) in prev_group.aggrs.iter().enumerate() {
-                        this_group.aggrs[i]
-                            .invocable
-                            .merge(&aggr.invocable)
-                            .map_err(|e| {
-                                let r: Option<&Registry> = None;
-                                e.into_err(aggr, aggr, r, &node_meta)
-                            })?;
+                    for (aggr, this) in prev_group.aggrs.iter().zip(this_group.aggrs.iter_mut()) {
+                        this.invocable.merge(&aggr.invocable).map_err(|e| {
+                            let r: Option<&Registry> = None;
+                            e.into_err(aggr, aggr, r, &node_meta)
+                        })?;
                     }
                 }
             }
@@ -752,7 +748,7 @@ impl Operator for TrickleSelect {
             // If we had at least one window ingest the event into this window
             if let Some(this) = self.windows.first_mut() {
                 let (unwind_event, event_meta) = event.data.parts();
-                consts[WINDOW_CONST_ID] = Value::from(this.name.to_string());
+                set_window(consts, Value::from(this.name.to_string()))?;
                 let this_groups = &mut this.dims.groups;
                 let window_impl = &this.window_impl;
                 let (_, this_group) = this_groups
@@ -769,8 +765,8 @@ impl Operator for TrickleSelect {
                             },
                         )
                     });
-                consts[GROUP_CONST_ID] = group_value.clone_static();
-                consts[GROUP_CONST_ID].push(group_str.clone()).ok();
+                set_group(consts, group_value.clone_static())?;
+                get_group_mut(consts)?.push(group_str.clone())?;
 
                 let env = Env {
                     context: &ctx,
@@ -803,8 +799,8 @@ impl Operator for TrickleSelect {
                 let data = event.data.suffix();
                 let unwind_event = unsafe { data.force_value_mut() };
                 let event_meta = data.meta();
-                consts[GROUP_CONST_ID] = group_value.clone_static();
-                consts[GROUP_CONST_ID].push(group_str.clone()).ok();
+                set_group(consts, group_value.clone_static())?;
+                get_group_mut(consts)?.push(group_str.clone())?;
 
                 let env = Env {
                     context: &ctx,
@@ -984,9 +980,14 @@ mod test {
         )
         .map_err(tremor_script::errors::CompilerError::error)?;
 
-        let stmt_rental = tremor_script::query::StmtRental::new(Arc::new(query.clone()), |q| {
-            q.suffix().stmts[0].clone()
-        });
+        let stmt_rental = tremor_script::query::StmtRental::try_new(Arc::new(query.clone()), |q| {
+            q.suffix()
+                .stmts
+                .get(0)
+                .cloned()
+                .ok_or_else(|| Error::from("Invalid query"))
+        })
+        .map_err(|e| e.0)?;
         let stmt = tremor_script::query::StmtRentalWrapper {
             stmt: Arc::new(stmt_rental),
         };

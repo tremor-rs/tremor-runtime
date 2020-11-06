@@ -132,6 +132,7 @@ error_chain! {
             description("Bad output pipeline id.")
                 display("Bad output pipeline id {}", i - 1)
         }
+
     }
 }
 

@@ -148,7 +148,7 @@ struct Function<'script> {
     name: Cow<'script, str>,
 }
 
-/// Documentaiton from constant
+/// Documentation from constant
 #[derive(Debug, Clone, PartialEq)]
 pub struct ConstDoc<'script> {
     /// Constant name
@@ -176,7 +176,7 @@ impl<'script> ToString for ConstDoc<'script> {
     }
 }
 
-/// Documentaiton from function
+/// Documentation from function
 #[derive(Debug, Clone, PartialEq)]
 pub struct FnDoc<'script> {
     /// Function name
@@ -190,7 +190,7 @@ pub struct FnDoc<'script> {
     pub open: bool,
 }
 
-/// Documentaiton from a module
+/// Documentation from a module
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct ModDoc<'script> {
     /// Module name
@@ -231,10 +231,10 @@ impl<'script> ToString for FnDoc<'script> {
     }
 }
 
-/// Documentaiton from a module
+/// Documentation from a module
 #[derive(Debug, Clone, PartialEq)]
 pub struct Docs<'script> {
-    /// Constatns
+    /// Constants
     pub consts: Vec<ConstDoc<'script>>,
     /// Functions
     pub fns: Vec<FnDoc<'script>>,
@@ -470,7 +470,7 @@ pub struct Script<'script> {
     /// Node metadata
     pub node_meta: NodeMetas,
     #[serde(skip)]
-    /// Documentaiton from the script
+    /// Documentation from the script
     pub docs: Docs<'script>,
 }
 

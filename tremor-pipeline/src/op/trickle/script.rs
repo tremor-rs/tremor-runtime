@@ -106,7 +106,7 @@ impl Trickle {
             }
         };
 
-        let script = rentals::Script::new(defn_rentwrapped.stmt.clone(), move |_| unsafe {
+        let script = rentals::Script::try_new(defn_rentwrapped.stmt.clone(), move |_| unsafe {
             use tremor_script::ast::ScriptDecl;
             // This is sound since defn_rentwrapped.stmt is an arc by cloning
             // it we ensure that the referenced data remains available until
@@ -115,9 +115,14 @@ impl Trickle {
             let args: Value<'static> = mem::transmute(args);
 
             decl.script.consts = vec![Value::null(), Value::null(), Value::null()];
-            decl.script.consts[ARGS_CONST_ID] = args;
-            decl
-        });
+            *decl
+                .script
+                .consts
+                .get_mut(ARGS_CONST_ID)
+                .ok_or_else(|| Error::from("Can't access ARGS_CONST_ID!"))? = args;
+            Ok(decl)
+        })
+        .map_err(|e: rental::RentalError<Error, _>| e.0)?;
 
         Ok(Self {
             id,

@@ -82,7 +82,7 @@ impl TremorAggrFn for Count {
 struct Sum(f64);
 impl TremorAggrFn for Sum {
     fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
-        if let Some(v) = args[0].cast_f64() {
+        if let Some(v) = args.get(0).and_then(|v| v.cast_f64()) {
             self.0 += v;
             Ok(())
         } else {
@@ -92,7 +92,7 @@ impl TremorAggrFn for Sum {
         }
     }
     fn compensate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
-        if let Some(v) = args[0].cast_f64() {
+        if let Some(v) = args.get(0).and_then(|v| v.cast_f64()) {
             self.0 -= v;
             Ok(())
         } else {
@@ -128,7 +128,7 @@ struct Mean(i64, f64);
 impl TremorAggrFn for Mean {
     fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
         self.0 += 1;
-        if let Some(v) = args[0].cast_f64() {
+        if let Some(v) = args.get(0).and_then(|v| v.cast_f64()) {
             self.1 += v;
             Ok(())
         } else {
@@ -139,7 +139,7 @@ impl TremorAggrFn for Mean {
     }
     fn compensate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
         self.0 -= 1;
-        if let Some(v) = args[0].cast_f64() {
+        if let Some(v) = args.get(0).and_then(|v| v.cast_f64()) {
             self.1 -= v;
             Ok(())
         } else {
@@ -180,7 +180,7 @@ impl TremorAggrFn for Mean {
 struct Min(Option<f64>);
 impl TremorAggrFn for Min {
     fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
-        if let Some(v) = args[0].cast_f64() {
+        if let Some(v) = args.get(0).and_then(|v| v.cast_f64()) {
             if self.0.is_none() || Some(v) < self.0 {
                 self.0 = Some(v);
             };
@@ -237,7 +237,7 @@ impl TremorAggrFn for Min {
 struct Max(Option<f64>);
 impl TremorAggrFn for Max {
     fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
-        if let Some(v) = args[0].cast_f64() {
+        if let Some(v) = args.get(0).and_then(|v| v.cast_f64()) {
             if self.0.is_none() || Some(v) > self.0 {
                 self.0 = Some(v);
             };
@@ -286,7 +286,7 @@ struct Var {
 
 impl TremorAggrFn for Var {
     fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
-        if let Some(v) = args[0].cast_f64() {
+        if let Some(v) = args.get(0).and_then(|v| v.cast_f64()) {
             if self.n == 0 {
                 self.k = v;
             }
@@ -301,7 +301,7 @@ impl TremorAggrFn for Var {
         }
     }
     fn compensate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
-        if let Some(v) = args[0].cast_f64() {
+        if let Some(v) = args.get(0).and_then(|v| v.cast_f64()) {
             self.n -= 1;
             self.ex -= v - self.k;
             self.ex2 -= (v - self.k) * (v - self.k);
@@ -454,7 +454,7 @@ impl TremorAggrFn for Dds {
                 self.percentiles_set = true
             }
         }
-        if let Some(v) = args[0].cast_f64() {
+        if let Some(v) = args.get(0).and_then(|v| v.cast_f64()) {
             if v < 0.0 {
                 return Ok(());
             } else if let Some(ref mut histo) = self.histo {
@@ -494,7 +494,7 @@ impl TremorAggrFn for Dds {
             if let Some(histo) = self.histo.as_ref() {
                 histo
             } else {
-                // ALLOW: we just set it, we know it exisdts
+                // ALLOW: we just set it, we know it exists
                 unreachable!()
             }
         };
@@ -662,8 +662,7 @@ impl TremorAggrFn for Hdr {
                 self.percentiles_set = true
             }
         }
-        if let Some(v) = args[0].cast_f64() {
-            // .unwrao() we need a histogram w/ float support
+        if let Some(v) = args.get(0).and_then(|v| v.cast_f64()) {
             if v < 0.0 {
                 return Ok(());
             }
@@ -714,7 +713,7 @@ impl TremorAggrFn for Hdr {
                     // If the other was also a histogram merge them
                     histo.add(other).map_err(|e| FunctionError::RuntimeError {
                         mfa: mfa("stats", "hdr", 2),
-                        error: format!("failed to merge historgrams: {:?}", e),
+                        error: format!("failed to merge histograms: {:?}", e),
                     })?;
                 } else {
                     // if the other was still a cache add it's values

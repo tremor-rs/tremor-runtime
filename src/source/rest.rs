@@ -273,7 +273,7 @@ fn make_response(
                 if let Some(header_values) = values.as_array() {
                     if name.eq_ignore_ascii_case("content-type") {
                         // pick first value in case of multiple content-type headers
-                        header_content_type = header_values[0].as_str();
+                        header_content_type = header_values.first().and_then(Value::as_str);
                     }
                     let mut v = Vec::with_capacity(header_values.len());
                     for value in header_values {

@@ -52,8 +52,8 @@
 //!      if let window bucket.windows(dimension) {
 //!        if window.inc() { pass } else { drop }
 //!      } else {
-//!        bucket.windows[dimension] = Window::new(bucket.limit)
-//!        if bucket.windows[dimension].inc() { pass } else { drop }
+//!        bucket.windows(dimension) = Window::new(bucket.limit)
+//!        if bucket.windows(dimension).inc() { pass } else { drop }
 //!      }
 //!   } else {
 //!     return drop

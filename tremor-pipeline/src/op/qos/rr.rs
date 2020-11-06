@@ -99,7 +99,8 @@ impl Operator for RoundRobin {
         let mut output = None;
         for n in 0..self.outputs.len() {
             let id = (self.next + n) % self.outputs.len();
-            let o = &mut self.outputs[id];
+            // ALLOW: we calculate the id above it's modulo the output
+            let o = unsafe { self.outputs.get_unchecked_mut(id) };
             if o.open {
                 // :/ need pipeline lifetime to fix
                 output = Some((o.output.clone(), id));
@@ -181,8 +182,8 @@ mod test {
 
         let mut state = Value::null();
 
-        // Sent a first event, as all is initited clean
-        // we syould see this pass
+        // Sent a first event, as all is initiated clean
+        // we should see this pass
         let event1 = Event {
             id: 1.into(),
             ingest_ns: 1_000_000,
@@ -196,8 +197,8 @@ mod test {
         let (out, _event) = r.pop().expect("no results");
         assert_eq!("out", out);
 
-        // Sent a first event, as all is initited clean
-        // we syould see this pass
+        // Sent a first event, as all is initiated clean
+        // we should see this pass
         let event2 = Event {
             id: 2.into(),
             ingest_ns: 1_000_001,
@@ -242,7 +243,7 @@ mod test {
         let (out, _event) = r.pop().expect("no results");
         assert_eq!("out2", out);
 
-        // Even for multiople events
+        // Even for multiple events
         let event3 = Event {
             id: 3.into(),
             ingest_ns: 2_000_000,

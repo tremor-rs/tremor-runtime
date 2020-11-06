@@ -124,12 +124,12 @@ pub enum Token<'input> {
     /// a string literal
     StringLiteral(Cow<'input, str>),
     /// A quoted `\{`
-    QotedSquigglyOpen,
+    QuotedSquigglyOpen,
     /// A quoted `\}`
-    QotedSquigglyClose,
+    QuotedSquigglyClose,
 
     // Keywords
-    /// the `let` keywrod
+    /// the `let` keyword
     Let,
     /// the `const` keyword
     Const,
@@ -534,14 +534,18 @@ impl<'input> fmt::Display for Token<'input> {
             Token::IntLiteral(value) => write!(f, "{}", value),
             Token::FloatLiteral(_, txt) => write!(f, "{}", txt),
             Token::DQuote => write!(f, "\""),
-            Token::QotedSquigglyOpen => write!(f, "\\{{"),
-            Token::QotedSquigglyClose => write!(f, "\\}}"),
+            Token::QuotedSquigglyOpen => write!(f, "\\{{"),
+            Token::QuotedSquigglyClose => write!(f, "\\}}"),
             Token::StringLiteral(value) => {
                 // We do thos to ensure proper escaping
                 let value: &str = &value;
                 let s = simd_json::BorrowedValue::from(value).encode();
                 // Strip the quotes
-                write!(f, "{}", &s[1..s.len() - 1])
+                if let Some(s) = s.get(1..s.len() - 1) {
+                    write!(f, "{}", s)
+                } else {
+                    Ok(())
+                }
             }
             Token::HereDoc => {
                 // (indent, lines) => {
@@ -554,8 +558,8 @@ impl<'input> fmt::Display for Token<'input> {
             Token::TestLiteral(indent, values) => {
                 let mut first = true;
                 write!(f, "|")?;
-                if values.len() == 1 {
-                    write!(f, "{}", values[0].replace('\\', "\\\\").replace('|', "\\|"))?;
+                if let [v] = values.as_slice() {
+                    write!(f, "{}", v.replace('\\', "\\\\").replace('|', "\\|"))?;
                 } else {
                     for l in values {
                         if first {
@@ -1360,15 +1364,13 @@ impl<'input> Lexer<'input> {
         } else {
             let (end, lexeme) = self.take_until(start, |ch| ch == '\n');
 
-            if lexeme.starts_with("###") {
-                let doc = Token::ModComment(&lexeme[3..]);
+            if let Some(l) = lexeme.strip_prefix("###") {
+                let doc = Token::ModComment(l);
                 Ok(self.spanned2(start, end, doc))
-            } else if lexeme.starts_with("##") {
-                let doc = Token::DocComment(&lexeme[2..]);
+            } else if let Some(l) = lexeme.strip_prefix("##") {
+                let doc = Token::DocComment(l);
                 Ok(self.spanned2(start, end, doc))
-            } else if lexeme.starts_with("#!line") {
-                let directive = &lexeme[6..];
-
+            } else if let Some(directive) = lexeme.strip_prefix("#!line") {
                 let directive = directive.trim();
                 let splitted: Vec<_> = directive.split(' ').collect();
 
@@ -1392,7 +1394,11 @@ impl<'input> Lexer<'input> {
                     Err("failed to parse line directive!".into())
                 }
             } else {
-                Ok(self.spanned2(start, end, Token::SingleLineComment(&lexeme[1..])))
+                Ok(self.spanned2(
+                    start,
+                    end,
+                    Token::SingleLineComment(lexeme.trim_start_matches('#')),
+                ))
             }
         }
     }
@@ -1764,9 +1770,9 @@ impl<'input> Lexer<'input> {
                             has_escapes = false;
                         }
                         if c == '{' {
-                            res.push(self.spanned2(end_inner, e, Token::QotedSquigglyOpen));
+                            res.push(self.spanned2(end_inner, e, Token::QuotedSquigglyOpen));
                         } else {
-                            res.push(self.spanned2(end_inner, e, Token::QotedSquigglyClose));
+                            res.push(self.spanned2(end_inner, e, Token::QuotedSquigglyClose));
                         };
                         segment_start = e;
                         end = e;
@@ -1903,9 +1909,9 @@ impl<'input> Lexer<'input> {
                             has_escapes = false;
                         }
                         if c == '{' {
-                            res.push(self.spanned2(end_inner, e, Token::QotedSquigglyOpen));
+                            res.push(self.spanned2(end_inner, e, Token::QuotedSquigglyOpen));
                         } else {
-                            res.push(self.spanned2(end_inner, e, Token::QotedSquigglyClose));
+                            res.push(self.spanned2(end_inner, e, Token::QuotedSquigglyClose));
                         };
                         segment_start = e;
                         end = e;
@@ -2543,13 +2549,13 @@ mod tests {
         lex_ok! {
             r#" "\{" "#,
             r#" ~    "# => Token::DQuote,
-            r#"  ~~  "# => Token::QotedSquigglyOpen,
+            r#"  ~~  "# => Token::QuotedSquigglyOpen,
             r#"    ~ "# => Token::DQuote,
         };
         lex_ok! {
             r#" "\}" "#,
             r#" ~    "# => Token::DQuote,
-            r#"  ~~  "# => Token::QotedSquigglyClose,
+            r#"  ~~  "# => Token::QuotedSquigglyClose,
             r#"    ~ "# => Token::DQuote,
         };
 

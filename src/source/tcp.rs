@@ -127,6 +127,7 @@ impl Source for Int {
                         if let Err(e) = tx
                             .send(SourceReply::Data {
                                 origin_uri: origin_uri.clone(),
+                                // ALLOW: we define n as part of the read
                                 data: buffer[0..n].to_vec(),
                                 meta: None, // TODO: add peer address etc. to meta
                                 codec_override: None,

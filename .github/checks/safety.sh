@@ -33,7 +33,7 @@ while getopts hauiprebldxcft opt; do
             exit 0
             ;;
         a)
-            exec "$0" -uirpeldxcft
+            exec "$0" -uirpeldxcftb
             ;;
         u)
             for file in $files
@@ -151,6 +151,7 @@ while getopts hauiprebldxcft opt; do
                 if sed -e '/mod test.*/,$d' -e '/ALLOW: /{N;d;}' "$file" | grep '[a-z]\[' > /dev/null
                 then
                     echo "##[error] array access ([...]) found in $file that could go wrong, array access can panic."
+                    grep -nH '[a-z]\[' "$file"
                     count=$((count + 1))
                 fi
             done

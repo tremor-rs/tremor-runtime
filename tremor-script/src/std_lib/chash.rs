@@ -14,7 +14,7 @@
 #![allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 
 use crate::registry::Registry;
-use crate::{tremor_const_fn, utils::sorsorted_serialize};
+use crate::{tremor_const_fn, utils::sorted_serialize};
 use simd_json::prelude::*;
 
 pub fn load(registry: &mut Registry) {
@@ -39,7 +39,7 @@ pub fn load(registry: &mut Registry) {
         }),
     ).insert(
         tremor_const_fn!(chash::sorted_serialize(_context, _data) {
-            let ser = sorsorted_serialize(_data).map_err(|_| FunctionError::RuntimeError{mfa: this_mfa(), error: "Failed to serialize".to_string()})?;
+            let ser = sorted_serialize(_data).map_err(|_| FunctionError::RuntimeError{mfa: this_mfa(), error: "Failed to serialize".to_string()})?;
             Ok(Value::from(ser))
         }),
     );

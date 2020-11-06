@@ -88,6 +88,7 @@ impl Source for Int {
                     origin_uri.port = Some(peer.port());
                     Ok(SourceReply::Data {
                         origin_uri,
+                        // ALLOW: we get n from recv
                         data: buf[0..n].to_vec(),
                         meta: None,
                         codec_override: None,
