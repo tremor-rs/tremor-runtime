@@ -625,6 +625,7 @@ impl<'script> Record<'script> {
         }
     }
     /// Tries to fetch a field from a record
+    #[must_use]
     pub fn get(&self, name: &str) -> Option<&ImutExprInt> {
         self.fields.iter().find_map(|f| {
             if let ImutExprInt::Literal(Literal { value, .. }) = &f.name {
@@ -639,6 +640,7 @@ impl<'script> Record<'script> {
         })
     }
     /// Tries to fetch a literal from a record
+    #[must_use]
     pub fn get_literal(&self, name: &str) -> Option<&Value> {
         if let ImutExprInt::Literal(Literal { value, .. }) = self.get(name)? {
             Some(value)

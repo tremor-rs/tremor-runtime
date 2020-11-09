@@ -68,9 +68,9 @@ struct GELFSegment {
 fn decode_gelf(bin: &[u8]) -> Result<GELFSegment> {
     // We got to do that for badly compressed / non standard conform
     // gelf messages
-    match bin {
+    match *bin {
         // WELF magic header - Wayfair uncompressed GELF
-        &[0x1f, 0x3c, ref rest @ ..] => {
+        [0x1f, 0x3c, ref rest @ ..] => {
             // If we are less then 2 byte we can not be a proper Package
             if bin.len() < 2 {
                 Err(ErrorKind::InvalidGELFHeader(bin.len(), None).into())
@@ -86,7 +86,7 @@ fn decode_gelf(bin: &[u8]) -> Result<GELFSegment> {
         }
 
         // GELF magic header
-        &[0x1e, 0x0f, b2, b3, b4, b5, b6, b7, b8, b9, seq, count, ref rest @ ..] => {
+        [0x1e, 0x0f, b2, b3, b4, b5, b6, b7, b8, b9, seq, count, ref rest @ ..] => {
             // If we are less then 12 byte we can not be a proper Package
             // we would allow up to 255 chunks
             let id = (u64::from(b2) << 56)
@@ -104,15 +104,15 @@ fn decode_gelf(bin: &[u8]) -> Result<GELFSegment> {
                 data: rest.to_vec(),
             })
         }
-        &[b'{', _] => Ok(GELFSegment {
+        [b'{', _] => Ok(GELFSegment {
             id: 0,
             seq: 0,
             count: 1,
             data: bin.to_vec(),
         }),
-        &[a, b, ..] => Err(ErrorKind::InvalidGELFHeader(bin.len(), Some([a, b])).into()),
-        &[v] => Err(ErrorKind::InvalidGELFHeader(1, Some([v, 0])).into()),
-        &[] => Err(ErrorKind::InvalidGELFHeader(0, None).into()),
+        [a, b, ..] => Err(ErrorKind::InvalidGELFHeader(bin.len(), Some([a, b])).into()),
+        [v] => Err(ErrorKind::InvalidGELFHeader(1, Some([v, 0])).into()),
+        [] => Err(ErrorKind::InvalidGELFHeader(0, None).into()),
     }
 }
 
