@@ -610,7 +610,7 @@ impl<'script> Record<'script> {
                 .into_iter()
                 .map(|f| {
                     reduce2(f.name.clone(), &helper).and_then(|n| {
-                        // ALLOW: The grammer guarantees the key of a record is always a string
+                        // ALLOW: The grammar guarantees the key of a record is always a string
                         let n = n.as_str().unwrap_or_else(|| unreachable!());
                         reduce2(f.value, &helper).map(|v| (n.to_owned().into(), v))
                     })
@@ -622,6 +622,28 @@ impl<'script> Record<'script> {
             }))
         } else {
             Ok(ImutExprInt::Record(self))
+        }
+    }
+    /// Tries to fetch a field from a record
+    pub fn get(&self, name: &str) -> Option<&ImutExprInt> {
+        self.fields.iter().find_map(|f| {
+            if let ImutExprInt::Literal(Literal { value, .. }) = &f.name {
+                if value == name {
+                    Some(&f.value)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        })
+    }
+    /// Tries to fetch a literal from a record
+    pub fn get_literal(&self, name: &str) -> Option<&Value> {
+        if let ImutExprInt::Literal(Literal { value, .. }) = self.get(name)? {
+            Some(value)
+        } else {
+            None
         }
     }
 }
@@ -1221,7 +1243,7 @@ pub enum Pattern<'script> {
     Assign(AssignPattern<'script>),
     /// Tuple pattern
     Tuple(TuplePattern<'script>),
-    /// Dont care condition
+    /// Don't care condition
     DoNotCare,
     /// Gates if no other pattern matches
     Default,
@@ -1248,7 +1270,7 @@ impl<'script> Pattern<'script> {
 pub enum PredicatePattern<'script> {
     /// Structural application
     TildeEq {
-        /// Assigment bindpoint
+        /// Assignment bind point
         assign: Cow<'script, str>,
         /// Lhs
         lhs: Cow<'script, str>,
@@ -1359,7 +1381,7 @@ pub enum ArrayPredicatePattern<'script> {
     Tilde(TestExpr),
     /// Nested record pattern
     Record(RecordPattern<'script>),
-    /// Dont care condition
+    /// Don't care condition
     Ignore,
 }
 
@@ -1376,7 +1398,7 @@ impl_expr2!(ArrayPattern);
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulates an assignment pattern
 pub struct AssignPattern<'script> {
-    /// Bindpoint
+    /// Bind point
     pub id: Cow<'script, str>,
     /// Local index
     pub idx: usize,
