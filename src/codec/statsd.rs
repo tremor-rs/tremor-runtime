@@ -201,6 +201,17 @@ fn substr<I: SliceIndex<[u8], Output = [u8]>>(data: &[u8], r: I) -> Result<&str>
 mod test {
     use super::*;
     use simd_json::json;
+    #[test]
+    fn test_subslice() {
+        let a = b"012345";
+
+        assert_eq!(substr(a, 1..), Ok("12345"));
+        assert_eq!(substr(a, ..4), Ok("0123"));
+        assert_eq!(substr(a, 1..4), Ok("123"));
+        assert!(substr(a, 99..).is_err());
+        assert!(substr(a, ..99).is_err());
+    }
+
     // gorets:1|c
     #[test]
     fn gorets() {

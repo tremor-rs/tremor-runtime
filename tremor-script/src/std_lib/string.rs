@@ -154,7 +154,7 @@ pub fn load(registry: &mut Registry) {
                 };
                 // Since rust doesn't handle UTF8 indexes we have to translate this
                 // _input.char_indices() - get an iterator over codepoint indexes
-                //   .nth(*_start as usize) - try to get the nth character as a byte index - returns an option of a two tuple 
+                //   .nth(*_start as usize) - try to get the nth character as a byte index - returns an option of a two tuple
                 //   .map(|v| v.0) - map to the first argument (byte index)
                 //   .unwrap_or_else(|| 0) - since this is an option we need to safely extract the value so we default it to 0 for start or len for end
                 let start = input.char_indices().nth(start).map_or_else(|| 0, |v| v.0);
