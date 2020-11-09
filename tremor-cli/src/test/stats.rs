@@ -1,3 +1,5 @@
+use crate::report::StatusKind;
+
 // Copyright 2020, The Tremor Team
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,6 +24,15 @@ pub struct Stats {
 }
 
 impl Stats {
+    pub(crate) fn report(&mut self, status: bool) -> StatusKind {
+        if status {
+            self.pass();
+            StatusKind::Passed
+        } else {
+            self.fail();
+            StatusKind::Failed
+        }
+    }
     pub(crate) fn new() -> Self {
         Stats {
             pass: 0,
