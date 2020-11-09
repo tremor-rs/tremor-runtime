@@ -16,7 +16,7 @@ mod gelf;
 pub(crate) use gelf::GELF;
 pub(crate) mod lines;
 
-use crate::errors::Result;
+use crate::errors::{Error, Result};
 use crate::url::TremorURL;
 use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
 use bytes::buf::Buf;
@@ -103,7 +103,7 @@ pub fn preprocess(
             match pp.process(ingest_ns, d) {
                 Ok(mut r) => data1.append(&mut r),
                 Err(e) => {
-                    error!("[{}] Preprocessor[{}] error {}", instance_id, i, e);
+                    error!("[{}] Preprocessor [{}] error {}", instance_id, i, e);
                     return Err(e);
                 }
             }
@@ -125,9 +125,9 @@ impl SliceTrim for [u8] {
 
         if let Some(first) = self.iter().position(|v| is_not_whitespace(*v)) {
             if let Some(last) = self.iter().rposition(|v| is_not_whitespace(*v)) {
-                &self[first..=last]
+                self.get(first..=last).unwrap_or_default()
             } else {
-                &self[first..]
+                self.get(first..).unwrap_or_default()
             }
         } else {
             &[]
@@ -177,8 +177,14 @@ impl Preprocessor for ExtractIngresTs {
 
     fn process(&mut self, ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         use std::io::Cursor;
-        *ingest_ns = Cursor::new(data).read_u64::<BigEndian>()?;
-        Ok(vec![data[8..].to_vec()])
+        if let Some(d) = data.get(8..) {
+            *ingest_ns = Cursor::new(data).read_u64::<BigEndian>()?;
+            Ok(vec![d.to_vec()])
+        } else {
+            Err(Error::from(
+                "Extract Ingest Ts Preprocessor provided with too little data (< 8 byte)",
+            ))
+        }
     }
 }
 
@@ -205,7 +211,7 @@ impl Preprocessor for Gzip {
 
     fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         use libflate::gzip::MultiDecoder;
-        let mut decoder = MultiDecoder::new(&data[..])?;
+        let mut decoder = MultiDecoder::new(data)?;
         let mut decompressed = Vec::new();
         decoder.read_to_end(&mut decompressed)?;
         Ok(vec![decompressed])
@@ -222,7 +228,7 @@ impl Preprocessor for Zlib {
 
     fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         use libflate::zlib::Decoder;
-        let mut decoder = Decoder::new(&data[..])?;
+        let mut decoder = Decoder::new(data)?;
         let mut decompressed = Vec::new();
         decoder.read_to_end(&mut decompressed)?;
         Ok(vec![decompressed])

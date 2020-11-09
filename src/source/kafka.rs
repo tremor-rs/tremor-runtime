@@ -307,15 +307,24 @@ impl Source for Int {
         } else {
             return Err(format!("No brokers provided for Kafka onramp {}", self.onramp_id).into());
         };
+        // picking the first host for these
+        let (host, port) = match first_broker.as_slice() {
+            [host] => ((*host).to_string(), None),
+            [host, port] => ((*host).to_string(), Some(port.parse()?)),
+            _ => {
+                return Err(format!(
+                    "Invalid broker config for {}: {}",
+                    self.onramp_id,
+                    first_broker.join(":")
+                )
+                .into())
+            }
+        };
         self.origin_uri = EventOriginUri {
             uid: self.uid,
             scheme: "tremor-kafka".to_string(),
-            // picking the first host for these
-            host: first_broker[0].to_string(),
-            port: match first_broker.get(1) {
-                Some(n) => Some(n.parse()?),
-                None => None,
-            },
+            host,
+            port,
             path: vec![],
         };
 

@@ -68,9 +68,9 @@ struct GELFSegment {
 fn decode_gelf(bin: &[u8]) -> Result<GELFSegment> {
     // We got to do that for badly compressed / non standard conform
     // gelf messages
-    match bin.get(0..2) {
-        // WELF magic header - wayfair uncompressed gelf
-        Some(&[0x1f, 0x3c]) => {
+    match bin {
+        // WELF magic header - Wayfair uncompressed GELF
+        &[0x1f, 0x3c, ref rest @ ..] => {
             // If we are less then 2 byte we can not be a proper Package
             if bin.len() < 2 {
                 Err(ErrorKind::InvalidGELFHeader(bin.len(), None).into())
@@ -80,50 +80,39 @@ fn decode_gelf(bin: &[u8]) -> Result<GELFSegment> {
                     id: rand::rngs::OsRng.next_u64(),
                     seq: 0,
                     count: 1,
-                    data: bin[2..].to_vec(),
+                    data: rest.to_vec(),
                 })
             }
         }
+
         // GELF magic header
-        Some(&[0x1e, 0x0f]) => {
+        &[0x1e, 0x0f, b2, b3, b4, b5, b6, b7, b8, b9, seq, count, ref rest @ ..] => {
             // If we are less then 12 byte we can not be a proper Package
-            if bin.len() < 12 {
-                if bin.len() >= 2 {
-                    Err(ErrorKind::InvalidGELFHeader(bin.len(), Some([0x1e, 0x0f])).into())
-                } else {
-                    Err(ErrorKind::InvalidGELFHeader(bin.len(), None).into())
-                }
-            } else {
-                // we would allow up to 255 chunks
-                Ok(GELFSegment {
-                    id: (u64::from(bin[2]) << 56)
-                        + (u64::from(bin[3]) << 48)
-                        + (u64::from(bin[4]) << 40)
-                        + (u64::from(bin[5]) << 32)
-                        + (u64::from(bin[6]) << 24)
-                        + (u64::from(bin[7]) << 16)
-                        + (u64::from(bin[8]) << 8)
-                        + u64::from(bin[9]),
-                    seq: bin[10],
-                    count: bin[11],
-                    data: bin[12..].to_vec(),
-                })
-            }
+            // we would allow up to 255 chunks
+            let id = (u64::from(b2) << 56)
+                + (u64::from(b3) << 48)
+                + (u64::from(b4) << 40)
+                + (u64::from(b5) << 32)
+                + (u64::from(b6) << 24)
+                + (u64::from(b7) << 16)
+                + (u64::from(b8) << 8)
+                + u64::from(b9);
+            Ok(GELFSegment {
+                id,
+                seq,
+                count,
+                data: rest.to_vec(),
+            })
         }
-        Some(&[b'{', _]) => Ok(GELFSegment {
+        &[b'{', _] => Ok(GELFSegment {
             id: 0,
             seq: 0,
             count: 1,
             data: bin.to_vec(),
         }),
-        Some(&[a, b]) => Err(ErrorKind::InvalidGELFHeader(bin.len(), Some([a, b])).into()),
-        _ => {
-            if bin.len() == 1 {
-                Err(ErrorKind::InvalidGELFHeader(1, bin.get(0).map(|v| [*v, 0])).into())
-            } else {
-                Err(ErrorKind::InvalidGELFHeader(0, None).into())
-            }
-        }
+        &[a, b, ..] => Err(ErrorKind::InvalidGELFHeader(bin.len(), Some([a, b])).into()),
+        &[v] => Err(ErrorKind::InvalidGELFHeader(1, Some([v, 0])).into()),
+        &[] => Err(ErrorKind::InvalidGELFHeader(0, None).into()),
     }
 }
 
@@ -136,12 +125,17 @@ impl Preprocessor for GELF {
     fn process(&mut self, ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         let msg = decode_gelf(data)?;
         if let Some(data) = self.enqueue(*ingest_ns, msg) {
+            // TODO: WHY :sob:
             let len = if self.is_tcp {
                 data.len() - 1
             } else {
                 data.len()
             };
-            Ok(vec![data[0..len].to_vec()])
+            if let Some(d) = data.get(0..len) {
+                Ok(vec![d.to_vec()])
+            } else {
+                Ok(vec![])
+            }
         } else {
             Ok(vec![])
         }

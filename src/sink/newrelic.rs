@@ -163,7 +163,7 @@ impl NewRelic {
 
         if log::log_enabled!(log::Level::Trace) {
             if self.config.compress_logs {
-                let mut decoder = libflate::gzip::Decoder::new(&buffer[..])?;
+                let mut decoder = libflate::gzip::Decoder::new(buffer.as_slice())?;
                 let mut output = String::new();
                 decoder.read_to_string(&mut output)?;
                 trace!("Payload to send {}", output);

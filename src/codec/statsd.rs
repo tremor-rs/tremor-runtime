@@ -14,7 +14,7 @@
 
 use super::prelude::*;
 use simd_json::value::borrowed::{Object, Value};
-use std::str;
+use std::{slice::SliceIndex, str};
 
 #[derive(Clone)]
 pub struct StatsD {}
@@ -103,13 +103,14 @@ fn decode<'input>(data: &'input [u8], _ingest_ns: u64) -> Result<Value<'input>> 
     loop {
         match d.next() {
             Some((idx, b':')) => {
-                let v = str::from_utf8(&data[0..idx])?;
+                let raw = data.get(0..idx).ok_or_else(invalid)?;
+                let v = str::from_utf8(raw)?;
                 value_start = idx + 1;
                 m.insert("metric".into(), Value::from(v));
                 break;
             }
             Some(_) => (),
-            None => return Err(ErrorKind::InvalidStatsD.into()),
+            None => return Err(invalid()),
         }
     }
     let sign = match d.peek() {
@@ -122,7 +123,7 @@ fn decode<'input>(data: &'input [u8], _ingest_ns: u64) -> Result<Value<'input>> 
         match d.next() {
             Some((_, b'.')) => is_float = true,
             Some((idx, b'|')) => {
-                let s = str::from_utf8(&data[value_start..idx])?;
+                let s = substr(data, value_start..idx)?;
                 if is_float {
                     let v: f64 = s.parse()?;
                     value = Value::from(v);
@@ -133,18 +134,18 @@ fn decode<'input>(data: &'input [u8], _ingest_ns: u64) -> Result<Value<'input>> 
                 break;
             }
             Some(_) => (),
-            None => return Err(ErrorKind::InvalidStatsD.into()),
+            None => return Err(invalid()),
         }
     }
     match d.next() {
         Some((i, b'c')) | Some((i, b'h')) | Some((i, b's')) => {
-            m.insert("type".into(), str::from_utf8(&data[i..=i])?.into())
+            m.insert("type".into(), substr(&data, i..=i)?.into())
         }
         Some((i, b'm')) => {
             if let Some((j, b's')) = d.next() {
-                m.insert("type".into(), str::from_utf8(&data[i..=j])?.into())
+                m.insert("type".into(), substr(data, i..=j)?.into())
             } else {
-                return Err(ErrorKind::InvalidStatsD.into());
+                return Err(invalid());
             }
         }
         Some((i, b'g')) => {
@@ -159,31 +160,41 @@ fn decode<'input>(data: &'input [u8], _ingest_ns: u64) -> Result<Value<'input>> 
                     } else if let Some(v) = value.as_f64() {
                         Value::from(-v)
                     } else {
-                        return Err(ErrorKind::InvalidStatsD.into());
+                        return Err(invalid());
                     };
                     m.insert("action".into(), "sub".into());
                 }
                 Sign::None => (),
             };
-            m.insert("type".into(), str::from_utf8(&data[i..=i])?.into())
+            m.insert("type".into(), substr(data, i..=i)?.into())
         }
-        _ => return Err(ErrorKind::InvalidStatsD.into()),
+        _ => return Err(invalid()),
     };
     match d.next() {
         Some((_, b'|')) => {
             if let Some((sample_start, b'@')) = d.next() {
-                let s = str::from_utf8(&data[sample_start + 1..])?;
+                let s = substr(data, sample_start + 1..)?;
                 let v: f64 = s.parse()?;
                 m.insert("sample_rate".into(), Value::from(v));
             } else {
-                return Err(ErrorKind::InvalidStatsD.into());
+                return Err(invalid());
             }
         }
-        Some(_) => return Err(ErrorKind::InvalidStatsD.into()),
+        Some(_) => return Err(invalid()),
         None => (),
     };
     m.insert("value".into(), value);
     Ok(Value::from(m))
+}
+
+fn invalid() -> Error {
+    Error::from(ErrorKind::InvalidStatsD)
+}
+
+fn substr<I: SliceIndex<[u8], Output = [u8]>>(data: &[u8], r: I) -> Result<&str> {
+    let raw = data.get(r).ok_or_else(invalid)?;
+    let s = str::from_utf8(raw)?;
+    Ok(s)
 }
 
 #[cfg(test)]

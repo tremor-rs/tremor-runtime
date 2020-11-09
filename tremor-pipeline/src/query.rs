@@ -176,7 +176,7 @@ impl Query {
         pipe_ops.insert(id, op);
         inputs.insert(IN, id);
 
-        // TODO compute public streams - do not hardcode
+        // TODO compute public streams - do not hard code
         let err: Cow<'static, str> = "err".into();
         let id = pipe_graph.add_node(NodeConfig {
             id: err.clone(),
@@ -530,25 +530,29 @@ impl Query {
             for ((i1, s1), connections) in &port_indexes {
                 let connections = connections
                     .iter()
-                    .map(|(i, s)| (i2pos[&i], s.clone()))
+                    .filter_map(|(i, s)| Some((*i2pos.get(&i)?, s.clone())))
                     .collect();
-                port_indexes2.insert((i2pos[&i1], s1.clone()), connections);
+                let k = *i2pos.get(i1).ok_or_else(|| Error::from("Invalid graph"))?;
+                port_indexes2.insert((k, s1.clone()), connections);
             }
 
             let mut inputs2: HashMap<Cow<'static, str>, usize> = HashMap::new();
             for (k, idx) in &inputs {
-                inputs2.insert(k.clone(), i2pos[idx]);
+                let v = *i2pos.get(idx).ok_or_else(|| Error::from("Invalid graph"))?;
+                inputs2.insert(k.clone(), v);
             }
 
+            let metrics_idx = *nodes
+                .get("metrics")
+                .and_then(|idx| i2pos.get(idx))
+                .ok_or_else(|| Error::from("metrics node missing"))?;
             let mut exec = ExecutableGraph {
                 metrics: iter::repeat(NodeMetrics::default())
                     .take(graph.len())
                     .collect(),
                 stack: Vec::with_capacity(graph.len()),
                 id: pipeline_id.to_string(), // TODO make configurable
-                metrics_idx: i2pos[&nodes
-                    .get("metrics")
-                    .ok_or_else(|| Error::from("metrics node missing"))?],
+                metrics_idx,
                 last_metrics: 0,
                 state: State::new(iter::repeat(Value::null()).take(graph.len()).collect()),
                 graph,
