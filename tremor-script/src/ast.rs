@@ -1751,3 +1751,43 @@ fn replace_last_shadow_use<'script>(replace_idx: usize, expr: Expr<'script>) -> 
 fn shadow_name(id: usize) -> String {
     format!(" __SHADOW {}__ ", id)
 }
+
+#[cfg(test)]
+mod test {
+    use simd_json::BorrowedValue;
+
+    fn v(s: &'static str) -> super::ImutExprInt<'static> {
+        super::ImutExprInt::Literal(super::Literal {
+            mid: 0,
+            value: BorrowedValue::from(s),
+        })
+    }
+    #[test]
+    fn record() {
+        let f1 = super::Field {
+            mid: 0,
+            name: v("snot"),
+            value: v("badger"),
+        };
+        let f2 = super::Field {
+            mid: 0,
+            name: v("badger"),
+            value: v("snot"),
+        };
+
+        let r = super::Record {
+            mid: 0,
+            fields: vec![f1, f2],
+        };
+
+        assert_eq!(r.get("snot"), Some(&v("badger")));
+        assert_eq!(r.get("nots"), None);
+
+        assert_eq!(
+            r.get_literal("badger")
+                .and_then(simd_json::prelude::ValueTrait::as_str),
+            Some("snot")
+        );
+        assert_eq!(r.get("adgerb"), None);
+    }
+}
