@@ -299,6 +299,7 @@ impl Ws {
         for pp in preprocessed {
             events.push(
                 LineValue::try_new(vec![pp], |mutd| {
+                    // ALLOW: mutd is vec![pp] in the line above
                     let mut_data = mutd[0].as_mut_slice();
                     let body = self
                         .codec
