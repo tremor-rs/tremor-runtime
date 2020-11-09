@@ -147,8 +147,8 @@ impl Preprocessor for Lines {
                 // AND if the preprocessor has memory of line fragment from earlier,
                 // reconstruct the first event fully (by adding the buffer contents to it)
 
-                // FIXME: what is going on here?
                 if (last_event.is_empty() || !events.is_empty()) && !self.buffer.is_empty() {
+                    // ALLOW: this is going to be fixed as part of #575
                     self.complete_fragment(&mut events[0])?;
                 }
 

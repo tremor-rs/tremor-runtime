@@ -36,7 +36,7 @@ jobs:
         with:
           version: "0.15.0"
           args: " --exclude-files target* tremor-cli deprecated --all"
-      - uses: codecov/codecov-action@v1.0.2
+      - uses: codecov/codecov-action@v1
         with:
           token: ${{secrets.CODECOV_TOKEN}} #required
           file: ./cobertura.xml

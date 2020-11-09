@@ -181,9 +181,7 @@ impl Preprocessor for ExtractIngresTs {
             *ingest_ns = Cursor::new(data).read_u64::<BigEndian>()?;
             Ok(vec![d.to_vec()])
         } else {
-            Err(Error::from(
-                "Extract Ingest Ts Preprocessor provided with too little data (< 8 byte)",
-            ))
+            Err(Error::from("Extract Ingest Ts Preprocessor: < 8 byte"))
         }
     }
 }
