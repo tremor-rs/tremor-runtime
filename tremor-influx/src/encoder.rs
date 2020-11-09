@@ -15,9 +15,9 @@
 
 use crate::{EncoderError as Error, EncoderResult as Result};
 use simd_json::prelude::*;
-use std::borrow::Borrow;
 use std::hash::Hash;
 use std::io::Write;
+use std::{borrow::Borrow, slice::SliceIndex};
 
 /// Tries to compile a value to a influx line value
 ///
@@ -109,12 +109,12 @@ fn write_escaped_value<W: Write>(writer: &mut W, string: &[u8]) -> Result<()> {
     for (index, ch) in string.iter().enumerate().skip(start) {
         let ch = *ch;
         if ch == b'"' || ch == b'\\' {
-            writer.write_all(&string[start..index])?;
+            write_substr(writer, string, start..index)?;
             writer.write_all(&[b'\\', ch])?;
             start = index + 1;
         }
     }
-    writer.write_all(&string[start..])?;
+    write_substr(writer, string, start..)?;
     writer.write_all(&[b'"'])?;
     Ok(())
 }
@@ -126,11 +126,26 @@ fn write_escaped_key<W: Write>(writer: &mut W, string: &[u8]) -> Result<()> {
     for (index, ch) in string.iter().enumerate().skip(start) {
         let ch = *ch;
         if ch == b'"' || ch == b'\\' || ch == b',' || ch == b' ' || ch == b'=' {
-            writer.write_all(&string[start..index])?;
+            write_substr(writer, string, start..index)?;
             writer.write_all(&[b'\\', ch])?;
             start = index + 1;
         }
     }
-    writer.write_all(&string[start..])?;
+    write_substr(writer, string, start..)?;
     Ok(())
+}
+
+fn write_substr<W: Write, I: SliceIndex<[u8], Output = [u8]>>(
+    writer: &mut W,
+    data: &[u8],
+    r: I,
+) -> std::io::Result<()> {
+    if let Some(s) = data.get(r) {
+        writer.write_all(s)
+    } else {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "Nothing to write",
+        ))
+    }
 }
