@@ -45,22 +45,22 @@ where
 
     let (measurement, idx1) = parse_to(total_idx, &data, |c| c == ',' || c == ' ')?;
     total_idx += idx1;
-    data = &data[idx1..];
-    let (tags, idx2) = if data.starts_with(',') {
+    data = get_rest(data, idx1)?;
+    let (tags, idx2) = if let Some(rest) = data.strip_prefix(',') {
         total_idx += 1;
-        data = &data[1..];
+        data = rest;
         parse_tags(total_idx, data)?
     } else {
         (V::object(), 0)
     };
-    data = &data[idx2..];
+    data = get_rest(data, idx2)?;
     if !data.is_empty() {
         total_idx += 1;
-        data = &data[1..];
+        data = get_rest(data, 1)?;
     };
     let (fields, idx): (V, usize) = parse_fields(total_idx, data)?;
     total_idx += idx;
-    data = &data[idx..];
+    data = get_rest(data, idx)?;
     let timestamp = if data.is_empty() {
         ingest_ns
     } else {
@@ -83,7 +83,7 @@ where
     V: ValueTrait + Mutable + Builder<'input> + 'input + From<Cow<'input, str>> + std::fmt::Debug,
 {
     let (val, idx) = parse_to(total_index, input, |c| c == '"')?;
-    input = &input[idx + 1..];
+    input = get_rest(input, idx + 1)?;
     if input.starts_with(' ') {
         Ok((V::from(val), Some(' '), idx + 2))
     } else if input.starts_with(',') {
@@ -103,16 +103,18 @@ where
         "t" | "T" | "true" | "True" | "TRUE" => Ok(V::from(true)),
         "f" | "F" | "false" | "False" | "FALSE" => Ok(V::from(false)),
         _ => {
-            if s.ends_with('i') && s.starts_with('-') {
-                Ok(V::from(
-                    lexical::parse::<i64, _>(&s[..s.len() - 1])
-                        .map_err(|e| Error::ParseIntError(total_idx, e))?,
-                ))
-            } else if s.ends_with('i') {
-                Ok(V::from(
-                    lexical::parse::<u64, _>(&s[..s.len() - 1])
-                        .map_err(|e| Error::ParseIntError(total_idx, e))?,
-                ))
+            if let Some(s) = s.strip_suffix('i') {
+                if s.starts_with('-') {
+                    Ok(V::from(
+                        lexical::parse::<i64, _>(s)
+                            .map_err(|e| Error::ParseIntError(total_idx, e))?,
+                    ))
+                } else {
+                    Ok(V::from(
+                        lexical::parse::<u64, _>(s)
+                            .map_err(|e| Error::ParseIntError(total_idx, e))?,
+                    ))
+                }
             } else {
                 Ok(V::from(
                     lexical::parse::<f64, _>(s)
@@ -131,18 +133,18 @@ where
     V: ValueTrait + Mutable + Builder<'input> + 'input + std::fmt::Debug,
 {
     let mut offset = 0;
-    if input.starts_with('"') {
-        parse_string(total_index, &input[1..])
+    if let Some(rest) = input.strip_prefix('"') {
+        parse_string(total_index, rest)
     } else if input.starts_with(' ') || input.is_empty() {
         Err(Error::UnexpectedEnd(total_index))
-    } else if let Some(idx) = input.find(|c| c == ',' || c == ' ' || c == '\\') {
+    } else if let Some((idx, data, rest)) = split_once(input, |c| c == ',' || c == ' ' || c == '\\')
+    {
         offset += idx;
-        let data = &input[..idx];
-        input = &input[idx..];
-        if input.starts_with('\\') {
+        input = rest;
+        if let Some(rest) = input.strip_prefix('\\') {
             let mut res = String::with_capacity(256);
             res.push_str(data);
-            parse_value_complex(total_index + offset, res, &input[1..])
+            parse_value_complex(total_index + offset, res, rest)
         } else if input.starts_with(',') {
             Ok((to_value(total_index + offset, data)?, Some(','), offset))
         } else if input.starts_with(' ') {
@@ -171,14 +173,15 @@ where
 {
     let mut offset = 0;
     loop {
-        if let Some(idx) = input.find(|c| c == ',' || c == ' ' || c == '\\') {
+        if let Some((idx, start, rest)) = split_once(input, |c| c == ',' || c == ' ' || c == '\\') {
             offset += idx;
-            res.push_str(&input[..idx]);
-            input = &input[idx..];
-            if input.starts_with('\\') {
-                input = &input[1..];
-                let d = &input[..1];
-                res.push_str(&d);
+            res.push_str(start);
+            input = rest;
+            if let Some(rest) = input.strip_prefix('\\') {
+                input = rest;
+                let (escaped, rest) = split_at(input, 1).ok_or(Error::UnexpectedEnd(offset))?;
+                input = rest;
+                res.push_str(escaped);
                 offset += 1;
             } else if input.starts_with(',') {
                 return Ok((to_value(total_index + offset, &res)?, Some(','), offset));
@@ -205,10 +208,10 @@ where
     let mut res = V::object_with_capacity(16);
     loop {
         let (key, idx1) = parse_to(total_idx + offset, input, |c| c == '=')?;
-        input = &input[idx1 + 1..];
+        input = get_rest(input, idx1 + 1)?;
         offset += idx1 + 1;
         let (val, c, idx2): (V, _, _) = parse_value(total_idx + offset, input)?;
-        input = &input[idx2 + 1..];
+        input = get_rest(input, idx2 + 1)?;
         offset += idx2 + 1;
 
         match c {
@@ -236,21 +239,20 @@ where
             c == '=' || c == ' ' || c == ','
         })?;
         offset += idx + 1;
-        input = &input[idx..];
-        if !input.starts_with('=') {
+        input = get_rest(input, idx)?;
+        if let Some(rest) = input.strip_prefix('=') {
+            input = rest;
+        } else {
             return Err(Error::MissingTagValue(total_idx + offset));
         }
-        input = &input[1..];
-        let (val, idx2) = parse_to(total_idx + offset, input, |c| {
-            c == '=' || c == ' ' || c == ','
-        })?;
+        let (val, idx2) = parse_to(total_idx + offset, input, |c| c == ' ' || c == ',')?;
         offset += idx2;
-        input = &input[idx2..];
+        input = get_rest(input, idx2)?;
         cant_error!(res.insert(key, V::from(val)));
         if input.starts_with(' ') {
             return Ok((res, offset));
-        } else if input.starts_with(',') {
-            input = &input[1..];
+        } else if let Some(rest) = input.strip_prefix(',') {
+            input = rest;
             offset += 1;
         } else if input.starts_with('=') {
             return Err(Error::MissingTagValue(total_idx + offset));
@@ -267,21 +269,21 @@ where
     F: Fn(char) -> bool,
 {
     let search = |c| p(c) || c == '\\';
-    if let Some(idx) = input.find(search) {
-        let data = &input[..idx];
-        input = &input[idx..];
-        if input.starts_with('\\') {
+
+    if let Some((idx, data, rest)) = split_once(input, &search) {
+        input = rest;
+        if let Some(rest) = input.strip_prefix('\\') {
+            input = rest;
             let mut res = String::with_capacity(256);
             res.push_str(data);
-            input = &input[1..];
             // https://docs.influxdata.com/influxdb/v1.7/write_protocols/line_protocol_reference/#special-characters
             if !input.starts_with(search) {
                 res.push('\\');
             }
 
-            if !input.is_empty() {
-                res.push_str(&input[..1]);
-                input = &input[1..];
+            if let Some((s, e)) = split_at(input, 1) {
+                res.push_str(s);
+                input = e;
             }
 
             parse_to_complex(total_idx, res, idx + 2, input, p)
@@ -305,20 +307,19 @@ where
 {
     let search = |c| p(c) || c == '\\';
     loop {
-        if let Some(idx) = input.find(&search) {
-            let data = &input[..idx];
-            input = &input[idx..];
+        if let Some((idx, data, rest)) = split_once(input, &search) {
+            input = rest;
             offset += idx;
-            if input.starts_with('\\') {
+            if let Some(rest) = input.strip_prefix('\\') {
+                input = rest;
                 res.push_str(data);
-                input = &input[1..];
                 // https://docs.influxdata.com/influxdb/v1.7/write_protocols/line_protocol_reference/#special-characters
                 if !input.starts_with(search) {
                     res.push('\\');
                 }
-                if !input.is_empty() {
-                    res.push_str(&input[..1]);
-                    input = &input[1..];
+                if let Some((s, e)) = split_at(input, 1) {
+                    res.push_str(s);
+                    input = e;
                 }
                 offset += 2;
             } else {
@@ -329,4 +330,20 @@ where
             return Err(Error::Unexpected(total_idx + offset));
         }
     }
+}
+
+fn split_once<F>(input: &str, p: F) -> Option<(usize, &str, &str)>
+where
+    F: Fn(char) -> bool,
+{
+    let idx = input.find(p)?;
+    split_at(input, idx).map(|(s, e)| (idx, s, e))
+}
+
+fn split_at(input: &str, idx: usize) -> Option<(&str, &str)> {
+    Some((input.get(..idx)?, input.get(idx..)?))
+}
+
+fn get_rest(data: &str, start: usize) -> Result<&str> {
+    data.get(start..).ok_or(Error::UnexpectedEnd(start))
 }
