@@ -332,6 +332,8 @@ where
     }
 }
 
+/// Splits off a string at the first occupance of `p`. The rest string will include the pattern
+/// that matched `p`
 fn split_once<F>(input: &str, p: F) -> Option<(usize, &str, &str)>
 where
     F: Fn(char) -> bool,
@@ -340,10 +342,35 @@ where
     split_at(input, idx).map(|(s, e)| (idx, s, e))
 }
 
+/// Splits a string at a given index
 fn split_at(input: &str, idx: usize) -> Option<(&str, &str)> {
     Some((input.get(..idx)?, input.get(idx..)?))
 }
 
 fn get_rest(data: &str, start: usize) -> Result<&str> {
     data.get(start..).ok_or(Error::UnexpectedEnd(start))
+}
+
+#[cfg(test)]
+mod test {
+
+    #[test]
+    fn split_once() {
+        assert_eq!(None, super::split_once("abc", |c| c == 'x'));
+        assert_eq!(
+            Some((1, "a", "bcbd")),
+            super::split_once("abcbd", |c| c == 'b')
+        );
+    }
+
+    #[test]
+    fn split_at() {
+        assert_eq!(None, super::split_at("abc", 5));
+        assert_eq!(Some(("a", "bcbd")), super::split_at("abcbd", 1));
+    }
+    #[test]
+    fn gest_rest() {
+        assert!(super::get_rest("abc", 5).is_err());
+        assert_eq!(Ok("bcbd"), super::get_rest("abcbd", 1));
+    }
 }
