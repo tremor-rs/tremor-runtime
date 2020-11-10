@@ -9,7 +9,7 @@ COPY --from=builder /usr/local/cargo/bin/websocat /usr/local/bin/websocat
 
 # Install workshop related tools
 RUN apt-get update \
-    && apt-get install -y wget curl  \
+    && apt-get install -y wget curl netcat  \
     && apt-get autoremove -y \
     && apt-get clean -y \
     && rm -rf /var/lib/apt/lists/*
