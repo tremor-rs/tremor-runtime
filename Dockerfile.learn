@@ -1,0 +1,42 @@
+FROM tremorproject/tremor:latest
+
+WORKDIR /
+COPY --from=tremorproject/tremor:latest /tremor /tremor
+COPY --from=tremorproject/tremor:latest opt/local/tremor/lib /opt/local/tremor/lib
+COPY --from=tremorproject/tremor:latest entrypoint.sh /entrypoint.sh
+COPY --from=tremorproject/tremor:latest etc/tremor /etc/tremor
+
+# Avoid warnings by switching to noninteractive
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+    &&  apt-get install -y build-essential \
+    autoconf automake autotools-dev libtool xutils-dev \
+    && apt-get install -y curl wget netcat \
+    && apt-get autoremove -y \
+    && apt-get clean -y \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV SSL_VERSION=1.0.2s
+
+RUN curl https://www.openssl.org/source/openssl-$SSL_VERSION.tar.gz -O && \
+   tar -xzf openssl-$SSL_VERSION.tar.gz && \
+   cd openssl-$SSL_VERSION && ./config && make depend && make install && \
+   cd .. && rm -rf openssl-$SSL_VERSION*
+
+ENV OPENSSL_LIB_DIR=/usr/local/ssl/lib \
+    OPENSSL_INCLUDE_DIR=/usr/local/ssl/include \
+    OPENSSL_STATIC=1
+
+# Switch back to dialog for any ad-hoc use of apt-get
+ENV DEBIAN_FRONTEND=dialog
+ENV RUSTFLAGS="-C target-feature=+avx,+avx2,+sse4.2"
+
+RUN curl https://sh.rustup.rs -sSf | \
+    sh -s -- --default-toolchain stable -y
+ENV PATH=/root/.cargo/bin:$PATH
+RUN cargo install --features=ssl websocat
+
+ENV TREMOR_PATH=/opt/local/tremor/lib
+
+ENTRYPOINT ["/entrypoint.sh"]
