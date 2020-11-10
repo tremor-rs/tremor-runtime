@@ -23,11 +23,3 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
           tags: edge
-      - name: Publish Tremor Courseware Docker image to Registry
-        uses: elgohr/Publish-Docker-Github-Action@master
-        with:
-          name: tremorproject/courseware
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-          tags: edge
-          dockerfile: Dockerfile.learn
