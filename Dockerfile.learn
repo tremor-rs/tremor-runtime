@@ -12,7 +12,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \
     &&  apt-get install -y build-essential \
     autoconf automake autotools-dev libtool xutils-dev \
-    && apt-get install -y curl wget netcat \
+    && apt-get install -y curl wget \
     && apt-get autoremove -y \
     && apt-get clean -y \
     && rm -rf /var/lib/apt/lists/*
@@ -36,6 +36,9 @@ RUN curl https://sh.rustup.rs -sSf | \
     sh -s -- --default-toolchain stable -y
 ENV PATH=/root/.cargo/bin:$PATH
 RUN cargo install --features=ssl websocat
+RUN ls /root/.cargo/bin
+RUN cp /root/.cargo/bin/websocat /usr/local/bin/websocat
+RUN rm -rf /root/.cargo
 
 ENV TREMOR_PATH=/opt/local/tremor/lib
 
