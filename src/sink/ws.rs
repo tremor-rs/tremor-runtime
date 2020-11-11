@@ -40,7 +40,7 @@ struct WsMessageMeta {
     binary: bool,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct Config {
     /// Host to use as source
     pub url: String,
@@ -637,5 +637,123 @@ impl Sink for Ws {
                 .map(|(_, (_, handle))| handle.cancel()),
         )
         .await;
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn message_to_event_ok() -> Result<()> {
+        let sink_url = TremorURL::parse("/offramp/ws/instance")?;
+        let origin_uri = EventOriginUri::default();
+        let codec: Arc<dyn Codec> = Arc::new(crate::codec::string::String {});
+        let mut preprocessors = make_preprocessors(&["lines".to_string()])?;
+        let mut ingest_ns = 42_u64;
+        let ids = Ids::default();
+        let message = Message::Text("hello\nworld\n".to_string());
+
+        let events = message_to_event(
+            &sink_url,
+            &origin_uri,
+            &codec,
+            &mut preprocessors,
+            &mut ingest_ns,
+            &ids,
+            message,
+        )?;
+        assert_eq!(2, events.len());
+        let event0 = events.get(0).ok_or(Error::from("no event 0"))?;
+        let (data, meta) = event0.data.parts();
+        assert!(meta.is_object());
+        assert_eq!(Some(&Value::from(false)), meta.get("binary"));
+        assert_eq!(&mut Value::from("hello"), data);
+
+        Ok(())
+    }
+
+    #[test]
+    fn event_to_message_ok() -> Result<()> {
+        let codec: Arc<dyn Codec> = Arc::new(crate::codec::json::JSON {});
+        let mut postprocessors = make_postprocessors(&["lines".to_string()])?;
+        let mut data = Value::object_with_capacity(2);
+        data.insert("snot", "badger")?;
+        data.insert("empty", Value::object())?;
+        let data = (data, Value::object()).into();
+        let mut messages: Vec<Result<Message>> =
+            event_to_message(&codec, &mut postprocessors, 42, &data, true)?.collect();
+        assert_eq!(1, messages.len());
+        let msg = messages.pop().ok_or(Error::from("no event 0"))?;
+        assert!(msg.is_ok());
+        assert_eq!(
+            Message::Binary("{\"snot\":\"badger\",\"empty\":{}}\n".as_bytes().to_vec()),
+            msg?
+        );
+        Ok(())
+    }
+
+    #[async_std::test]
+    async fn test_failed_connection_lifecycle() -> Result<()> {
+        let (conn_tx, conn_rx) = bounded(10);
+        let (reply_tx, reply_rx) = bounded(1000);
+
+        let url = TremorURL::parse("/offramp/ws/instance")?;
+        let codec: Arc<dyn Codec> = Arc::new(crate::codec::json::JSON {});
+        let config = Config {
+            url: "http://idonotexist:65535/path".to_string(),
+            binary: true,
+        };
+        let mut sink = Ws {
+            sink_url: url.clone(),
+            event_origin_uri: EventOriginUri::default(),
+            config: config.clone(),
+            preprocessors: vec!["lines".to_string()],
+            postprocessors: vec!["lines".to_string()],
+            shared_codec: codec.clone(),
+            connection_lifecycle_rx: conn_rx,
+            connection_lifecycle_tx: conn_tx,
+            connections: HashMap::new(),
+            is_linked: true,
+            merged_meta: OpMeta::default(),
+            reply_tx: reply_tx.clone(),
+        };
+        sink.init(
+            0,
+            &url,
+            codec.as_ref(),
+            &HashMap::new(),
+            Processors::default(),
+            true,
+            reply_tx.clone(),
+        )
+        .await?;
+
+        // we expect connect errors
+        if let Ok(WsConnectionMsg::Disconnected(url)) = sink.connection_lifecycle_rx.recv().await {
+            assert_eq!(config.url, url);
+        }
+
+        // lets try to send an event
+        let mut event = Event::default();
+        event.id = Ids::new(1, 1);
+        sink.on_event("in", codec.as_ref(), &HashMap::new(), event)
+            .await?;
+
+        while let Ok(msg) = reply_rx.try_recv() {
+            match msg {
+                sink::Reply::Insight(event) => {
+                    assert_eq!(CBAction::Fail, event.cb);
+                    assert_eq!(Some(1), event.id.get(1));
+                }
+                sink::Reply::Response(port, event) => {
+                    assert_eq!("err", port.as_ref());
+                    assert_eq!(Some(1), event.id.get(1));
+                }
+            }
+        }
+
+        sink.terminate().await;
+        Ok(())
     }
 }
