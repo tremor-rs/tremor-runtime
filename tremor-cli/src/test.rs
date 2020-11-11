@@ -214,6 +214,7 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
     let kind: test::TestKind = matches.value_of("MODE").unwrap_or_default().try_into()?;
     let path = matches.value_of("PATH").unwrap_or_default();
     let report = matches.value_of("REPORT").unwrap_or_default();
+    let quiet = matches.is_present("QUIET");
     let mut includes: Vec<String> = if matches.is_present("INCLUDES") {
         if let Some(matches) = matches.values_of("INCLUDES") {
             matches.map(std::string::ToString::to_string).collect()
@@ -281,8 +282,15 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
             if meta.kind == TestKind::Command
                 && (kind == TestKind::All || kind == TestKind::Command)
             {
-                let (stats, test_reports) =
-                    command::suite_command(base, root, &meta, &["command"], &includes, &excludes)?;
+                let (stats, test_reports) = command::suite_command(
+                    base,
+                    root,
+                    &meta,
+                    quiet,
+                    &["command"],
+                    &includes,
+                    &excludes,
+                )?;
                 reports.insert("command".to_string(), test_reports);
                 cmd_stats.merge(&stats);
                 status::hr()?;

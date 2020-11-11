@@ -57,6 +57,7 @@ pub(crate) fn suite_command(
     base: &Path,
     root: &Path,
     _meta: &Meta,
+    quiet: bool,
     sys_filter: &[&str],
     includes: &[String],
     excludes: &[String],
@@ -102,18 +103,24 @@ pub(crate) fn suite_command(
             let suite_start = nanotime();
             let command_str = slurp_string(&suite.path().to_string_lossy())?;
             let suite = serde_yaml::from_str::<CommandRun>(&command_str)?;
+            let mut header_printed = false;
             for suite in suite.suites {
-                status::h0("Command Suite: ", &suite.name)?;
-                status::hr()?;
                 let suite_tags = base_tags.join(suite.tags);
                 let mut casex = stats::Stats::new();
                 for case in suite.cases {
                     let current_tags = suite_tags.join(case.tags.clone());
                     if let (_, false) = current_tags.matches(sys_filter, includes, excludes) {
-                        status::h1("Command Test ( Skipping )", &case.name)?;
-                        status::tags(&current_tags, Some(includes), Some(excludes))?;
+                        if !quiet {
+                            status::h1("Command Test ( Skipping )", &case.name)?;
+                            status::tags(&current_tags, Some(includes), Some(excludes))?;
+                        }
                         continue; // SKIP
                     } else {
+                        if !header_printed {
+                            status::h0("Command Suite: ", &suite.name)?;
+                            status::hr()?;
+                            header_printed = true;
+                        }
                         status::h1("Command Test", &case.name)?;
                         status::tags(&current_tags, Some(includes), Some(excludes))?;
                     }
@@ -143,13 +150,6 @@ pub(crate) fn suite_command(
                             &case,
                         )?;
                         casex.merge(&case_stats);
-
-                        if case_stats.fail > 0 {
-                            casex.fail();
-                        } else {
-                            casex.pass();
-                        }
-                        casex.assert += case_stats.assert;
 
                         status::stats(&case_stats, "    Test")?;
                         status::hr()?;
@@ -231,13 +231,7 @@ fn process_testcase(
             hidden: false,
             keyword: report::KeywordKind::Predicate,
             result: report::ResultKind {
-                status: if success {
-                    stat_s.pass();
-                    report::StatusKind::Passed
-                } else {
-                    stat_s.fail();
-                    report::StatusKind::Failed
-                },
+                status: stat_s.report(success),
                 duration,
             },
         });
@@ -245,7 +239,7 @@ fn process_testcase(
 
     let (stat_assert, mut filebased_assert_elements) =
         assert::process_filebased_asserts("  ", stdout_path, stderr_path, &spec.expects, &None)?;
-    stat_s.assert += stat_assert.assert;
+    stat_s.merge(&stat_assert);
     elements.append(&mut filebased_assert_elements);
 
     Ok((stat_s, elements))

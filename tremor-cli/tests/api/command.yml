@@ -10,12 +10,13 @@ suites:
         command: curl -vs --stderr - http://localhost:9898/version
         tags:
           - get
+          - version
         status: 0
         expects:
           - source: stdout
             contains:
               - HTTP/1.1 200 OK
-              - '{"version":"0.9.0"'
+              - '{"version":"0.9.1"'
       - name: GET /onramp
         command: curl -vs --stderr - http://localhost:9898/onramp
         tags:
@@ -1090,7 +1091,7 @@ suites:
           - source: stderr
             contains:
               - HTTP/1.1 404 Not Found
-              - 'content-type: application/json'
+              - "content-type: application/json"
           - source: stdout
             contains:
               - '"error":"Artefact not found"}'
@@ -1103,12 +1104,12 @@ suites:
         expects:
           - source: stderr
             contains:
-              - 'Accept: application/yaml'
+              - "Accept: application/yaml"
               - HTTP/1.1 404 Not Found
-              - 'content-type: application/yaml'
+              - "content-type: application/yaml"
           - source: stdout
             contains:
-              - 'error: Artefact not found'
+              - "error: Artefact not found"
       - name: JSON accept header should be respected while generating API error response
         command: >
           curl -vs -X DELETE -H"Accept: application/json" http://localhost:9898/binding/non-existent/1
@@ -1118,9 +1119,9 @@ suites:
         expects:
           - source: stderr
             contains:
-              - 'Accept: application/json'
+              - "Accept: application/json"
               - HTTP/1.1 404 Not Found
-              - 'content-type: application/json'
+              - "content-type: application/json"
           - source: stdout
             contains:
               - '"error":"Artefact not found"}'
@@ -1133,9 +1134,9 @@ suites:
         expects:
           - source: stderr
             contains:
-              - 'Accept: application/vnd.trickle'
+              - "Accept: application/vnd.trickle"
               - HTTP/1.1 404 Not Found
-              - 'content-type: application/json'
+              - "content-type: application/json"
           - source: stdout
             contains:
               - '"error":"Artefact not found"}'
@@ -1148,9 +1149,9 @@ suites:
         expects:
           - source: stderr
             contains:
-              - 'Accept: application/snot'
+              - "Accept: application/snot"
               - HTTP/1.1 404 Not Found
-              - 'content-type: application/json'
+              - "content-type: application/json"
           - source: stdout
             contains:
               - '"error":"Artefact not found"}'
