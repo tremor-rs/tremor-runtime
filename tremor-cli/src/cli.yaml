@@ -120,6 +120,11 @@ subcommands:
             required: false
             multiple: true
             takes_value: true
+        - QUIET:
+            help: do not print skipped tests
+            short: q
+            long: quiet
+            required: false
 
   - dbg:
       about: Advanced debugging commands
