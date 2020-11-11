@@ -46,7 +46,7 @@ fn suite_bench(
     base: &Path,
     root: &Path,
     meta: &Meta,
-    by_tag: (&[String], &[String]),
+    by_tag: (&[&str], &[String], &[String]),
 ) -> Result<(stats::Stats, Vec<report::TestReport>)> {
     if let Ok(benches) = GlobWalkerBuilder::new(root, &meta.includes)
         .case_insensitive(true)
@@ -65,7 +65,7 @@ fn suite_bench(
             let bench_root = root.to_string_lossy();
             let tags = tag::resolve(base, root)?;
 
-            let (matched, is_match) = tags.matches(&by_tag.0, &by_tag.1);
+            let (matched, is_match) = tags.matches(&by_tag.0, &by_tag.1, &by_tag.1);
             if is_match {
                 status::h1("Benchmark", &format!("Running {}", &basename(&bench_root)))?;
                 status::tags(&tags, Some(&matched), Some(&by_tag.1))?;
@@ -93,7 +93,9 @@ fn suite_integration(
     base: &Path,
     root: &Path,
     meta: &Meta,
-    by_tag: (&[String], &[String]),
+    sys_filter: &[&str],
+    include: &[String],
+    exclude: &[String],
 ) -> Result<(stats::Stats, Vec<report::TestReport>)> {
     if let Ok(tests) = GlobWalkerBuilder::new(root, &meta.includes)
         .case_insensitive(true)
@@ -112,7 +114,7 @@ fn suite_integration(
             let bench_root = root.to_string_lossy();
             let tags = tag::resolve(base, root)?;
 
-            let (matched, is_match) = tags.matches(&by_tag.0, &by_tag.1);
+            let (matched, is_match) = tags.matches(sys_filter, include, exclude);
             if is_match {
                 status::h1(
                     "Integration",
@@ -121,7 +123,7 @@ fn suite_integration(
                 // Set cwd to test root
                 let cwd = std::env::current_dir()?;
                 std::env::set_current_dir(Path::new(&root))?;
-                status::tags(&tags, Some(&matched), Some(&by_tag.1))?;
+                status::tags(&tags, Some(&matched), Some(exclude))?;
 
                 // Run integration tests
                 let test_report = process::run_process("integration", base, root, &tags)?;
@@ -145,7 +147,7 @@ fn suite_integration(
                     "Integration",
                     &format!("Skipping {}", &basename(&bench_root)),
                 )?;
-                status::tags(&tags, Some(&matched), Some(&by_tag.1))?;
+                status::tags(&tags, Some(&matched), Some(exclude))?;
             }
         }
 
@@ -161,7 +163,9 @@ fn suite_unit(
     base: &Path,
     root: &Path,
     _meta: &Meta,
-    by_tag: (&[String], &[String]),
+    sys_filter: &[&str],
+    includes: &[String],
+    excludes: &[String],
 ) -> Result<(stats::Stats, Vec<report::TestReport>)> {
     if let Ok(suites) = GlobWalkerBuilder::new(root, "all.tremor")
         .case_insensitive(true)
@@ -174,16 +178,23 @@ fn suite_unit(
 
         status::h0("Framework", "Finding unit test scenarios")?;
 
-        let filter = by_tag;
         for suite in suites {
             status::h0("  Unit Test Scenario", &suite.path().to_string_lossy())?;
             let scenario_tags = tag::resolve(base, root)?;
-            let (matched, _is_match) =
-                scenario_tags.matches(&scenario_tags.includes(), &scenario_tags.excludes());
-            let denying = filter.1;
-            status::tags(&scenario_tags, Some(&matched), Some(&denying))?;
+            let (matched, _is_match) = scenario_tags.matches(
+                sys_filter,
+                &scenario_tags.includes(),
+                &scenario_tags.excludes(),
+            );
+            status::tags(&scenario_tags, Some(&matched), Some(&excludes))?;
 
-            let report = unit::run_suite(&suite.path(), &scenario_tags, by_tag)?;
+            let report = unit::run_suite(
+                &suite.path(),
+                &scenario_tags,
+                sys_filter,
+                includes,
+                excludes,
+            )?;
             stats.merge(&report.stats);
             status::stats(&report.stats, "  ")?;
             status::duration(report.duration, "    ")?;
@@ -203,6 +214,7 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
     let kind: test::TestKind = matches.value_of("MODE").unwrap_or_default().try_into()?;
     let path = matches.value_of("PATH").unwrap_or_default();
     let report = matches.value_of("REPORT").unwrap_or_default();
+    let quiet = matches.is_present("QUIET");
     let mut includes: Vec<String> = if matches.is_present("INCLUDES") {
         if let Some(matches) = matches.values_of("INCLUDES") {
             matches.map(std::string::ToString::to_string).collect()
@@ -250,8 +262,7 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
             }
 
             if meta.kind == TestKind::Bench && (kind == TestKind::All || kind == TestKind::Bench) {
-                includes.push("bench".into());
-                let tag_filter = (includes.as_slice(), excludes.as_slice());
+                let tag_filter = (&["bench"][..], includes.as_slice(), excludes.as_slice());
                 let (stats, test_reports) = suite_bench(base, root, &meta, tag_filter)?;
                 reports.insert("bench".to_string(), test_reports);
                 bench_stats.merge(&stats);
@@ -261,9 +272,8 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
             if meta.kind == TestKind::Integration
                 && (kind == TestKind::All || kind == TestKind::Integration)
             {
-                includes.push("integration".into());
-                let tag_filter = (includes.as_slice(), excludes.as_slice());
-                let (stats, test_reports) = suite_integration(base, root, &meta, tag_filter)?;
+                let (stats, test_reports) =
+                    suite_integration(base, root, &meta, &["integration"], &includes, &excludes)?;
                 reports.insert("integration".to_string(), test_reports);
                 integration_stats.merge(&stats);
                 status::hr()?;
@@ -272,18 +282,23 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
             if meta.kind == TestKind::Command
                 && (kind == TestKind::All || kind == TestKind::Command)
             {
-                includes.push("command".into());
-                let tag_filter = (includes.as_slice(), excludes.as_slice());
-                let (stats, test_reports) = command::suite_command(base, root, &meta, tag_filter)?;
+                let (stats, test_reports) = command::suite_command(
+                    base,
+                    root,
+                    &meta,
+                    quiet,
+                    &["command"],
+                    &includes,
+                    &excludes,
+                )?;
                 reports.insert("command".to_string(), test_reports);
                 cmd_stats.merge(&stats);
                 status::hr()?;
             }
 
             if meta.kind == TestKind::Unit && (kind == TestKind::All || kind == TestKind::Unit) {
-                includes.push("unit".into());
-                let tag_filter = (includes.as_slice(), excludes.as_slice());
-                let (stats, test_reports) = suite_unit(base, root, &meta, tag_filter)?;
+                let (stats, test_reports) =
+                    suite_unit(base, root, &meta, &["unit"], &includes, &excludes)?;
                 reports.insert("unit".to_string(), test_reports);
                 unit_stats.merge(&stats);
                 status::hr()?;

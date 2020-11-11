@@ -46,7 +46,9 @@ fn eval_suite_entrypoint(
     suite_spec: &Record<'_>,
     suite_result: &[Value<'_>],
     tags: &tag::TagFilter,
-    by_tag: (&[String], &[String]),
+    sys_filter: &[&str],
+    includes: &[String],
+    excludes: &[String],
 ) -> Result<(stats::Stats, Vec<report::TestElement>)> {
     let mut elements = Vec::new();
     let mut stats = stats::Stats::new();
@@ -65,8 +67,9 @@ fn eval_suite_entrypoint(
 
         if let ImutExprInt::List(l) = spec {
             if let Some(tests) = o.get("suite").and_then(|s| s.get("tests")) {
-                let (s, mut e) =
-                    eval_suite_tests(&env, &local, script, meta, l, tests, &tags, by_tag)?;
+                let (s, mut e) = eval_suite_tests(
+                    &env, &local, script, meta, l, tests, &tags, sys_filter, includes, excludes,
+                )?;
                 elements.append(&mut e);
                 stats.merge(&s);
             }
@@ -96,7 +99,9 @@ fn eval_suite_tests(
     suite_spec: &List,
     suite_result: &Value,
     suite_tags: &test::TagFilter,
-    by_tag: (&[String], &[String]),
+    sys_filter: &[&str],
+    includes: &[String],
+    excludes: &[String],
 ) -> Result<(stats::Stats, Vec<report::TestElement>)> {
     let mut elements = Vec::new();
     let mut stats = stats::Stats::new();
@@ -139,13 +144,15 @@ fn eval_suite_tests(
                                     script, extent, &mut hh,
                                 )?;
 
-                                if let (matched, false) = case_tags.matches(&by_tag.0, &by_tag.1) {
+                                if let (matched, false) =
+                                    case_tags.matches(sys_filter, includes, excludes)
+                                {
                                     status::h1("    Test ( Skipping )", "")?;
                                     status::tagsx(
                                         "        ",
                                         &case_tags,
                                         Some(&matched),
-                                        Some(&by_tag.1),
+                                        Some(excludes),
                                     )?;
                                     stats.skip();
                                     continue;
@@ -154,8 +161,8 @@ fn eval_suite_tests(
                                     status::tagsx(
                                         "        ",
                                         &case_tags,
-                                        Some(&by_tag.0),
-                                        Some(&by_tag.1),
+                                        Some(includes),
+                                        Some(excludes),
                                     )?;
                                 }
 
@@ -209,13 +216,13 @@ fn eval_suite_tests(
 
                 let case_tags = suite_tags;
 
-                let (matched, is_match) = case_tags.matches(&by_tag.0, &by_tag.1);
+                let (matched, is_match) = case_tags.matches(sys_filter, includes, excludes);
                 if is_match {
                     status::h1("    Test", "")?;
-                    status::tagsx("        ", &case_tags, Some(&matched), Some(&by_tag.1))?;
+                    status::tagsx("        ", &case_tags, Some(&matched), Some(excludes))?;
                 } else {
                     status::h1("    Test ( Skipping )", "")?;
-                    status::tagsx("        ", &case_tags, Some(&matched), Some(&by_tag.1))?;
+                    status::tagsx("        ", &case_tags, Some(&matched), Some(excludes))?;
                     continue;
                 }
 
@@ -253,7 +260,9 @@ fn eval_suite_tests(
 pub(crate) fn run_suite(
     path: &Path,
     scenario_tags: &tag::TagFilter,
-    by_tag: (&[String], &[String]),
+    sys_filter: &[&str],
+    includes: &[String],
+    excludes: &[String],
 ) -> Result<report::TestReport> {
     println!();
 
@@ -327,13 +336,15 @@ pub(crate) fn run_suite(
                                 };
 
                                 // TODO revisit tags in unit tests
-                                if let (_matched, true) = suite_tags.matches(&by_tag.0, &by_tag.1) {
+                                if let (_matched, true) =
+                                    suite_tags.matches(sys_filter, includes, excludes)
+                                {
                                     status::h1("  Suite", &suite_name.to_string())?;
                                     status::tagsx(
                                         "      ",
                                         &suite_tags,
-                                        Some(&by_tag.0),
-                                        Some(&by_tag.1),
+                                        Some(includes),
+                                        Some(excludes),
                                     )?;
 
                                     let (test_stats, mut test_reports) = eval_suite_entrypoint(
@@ -344,7 +355,9 @@ pub(crate) fn run_suite(
                                         r,
                                         &specs,
                                         &suite_tags,
-                                        by_tag,
+                                        sys_filter,
+                                        includes,
+                                        excludes,
                                     )?;
                                     stat_s.merge(&test_stats);
                                     elements.append(&mut test_reports);
@@ -356,8 +369,8 @@ pub(crate) fn run_suite(
                                 status::tagsx(
                                     "      ",
                                     &suite_tags,
-                                    Some(&by_tag.0),
-                                    Some(&by_tag.1),
+                                    Some(includes),
+                                    Some(excludes),
                                 )?;
                             }
 

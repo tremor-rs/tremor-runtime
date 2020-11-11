@@ -59,26 +59,72 @@ impl TagFilter {
             .collect()
     }
 
-    pub(crate) fn matches(&self, allowing: &[String], denying: &[String]) -> (Vec<String>, bool) {
-        let allowing: HashSet<String> = HashSet::from_iter(allowing.iter().cloned());
-        let denying: HashSet<String> = HashSet::from_iter(denying.iter().cloned());
-        let includes: HashSet<String> = HashSet::from_iter(self.includes.iter().cloned());
-        let accepted: Vec<&String> = includes.intersection(&allowing).collect();
-        let redacted: Vec<&String> = includes.intersection(&denying).collect();
+    // We allow this since the logic below is more readable when allowing for if not else
+    #[allow(clippy::if_not_else)]
+    pub(crate) fn matches(
+        &self,
+        system_allow: &[&str],
+        allowing: &[String],
+        denying: &[String],
+    ) -> (Vec<String>, bool) {
+        // Tags we want to allow based on the system
+        let system_allow: HashSet<&str> = HashSet::from_iter(system_allow.iter().copied());
+        // Tags we want to allow
+        let allowing: HashSet<&str> = HashSet::from_iter(allowing.iter().map(String::as_str));
+        // Tags we want to deny
+        let denying: HashSet<&str> = HashSet::from_iter(denying.iter().map(String::as_str));
+        // Tags in the current
+        let includes: HashSet<&str> = HashSet::from_iter(self.includes.iter().map(String::as_str));
+        // Tags that passed the system req
+        let sys_accepted: Vec<_> = includes.intersection(&system_allow).collect();
+        // The tags that were accepted
+        let accepted: Vec<_> = includes.intersection(&allowing).collect();
+        // The tags that were rejected
+        let redacted: Vec<_> = includes.intersection(&denying).collect();
 
-        if allowing.is_empty() {
+        if sys_accepted.is_empty() && !system_allow.is_empty() {
+            // If this was excluded by the system we don't want to run it
+            (vec!["<system>".into()], false)
+        } else if allowing.is_empty() && denying.is_empty() {
             // if there are no inclusions/exclusions we match
             // regardless of current tags
-            //
             (vec!["<all>".into()], true)
         } else {
+            // This test is specifically included
+            let is_included = !accepted.is_empty();
+            // This test is specifically excluded
+            let is_excluded = !redacted.is_empty();
+
+            let accept = if is_included {
+                // If we included a tag specifically we always accept it
+                true
+            } else if is_excluded {
+                // If we didn't specifically include it but it was excluded we don't accept it
+                false
+            // Starting here we have neither included nor excluded the tag specifically
+            // so the behavior got to depend on what was defined
+            } else if allowing.is_empty() && denying.is_empty() {
+                // If we have neither allowed or denied any tags we pass
+                // run w/o params
+                true
+            } else if !allowing.is_empty() {
+                // if we are allowing any tags but we want to default to reject
+                // run w/ -i <tag>
+                false
+            } else if !denying.is_empty() {
+                // if we are denying some tags but allow some we want to default to accept
+                // run w/ -e <tag>
+                true
+            } else {
+                // this never can be reached;
+                error!("this condition of tags should never be reached!");
+                true
+            };
+
             // If the current tags matched at least one include
             // and there were no excluded tags matched, then
             // we have a match
-            (
-                accepted.iter().map(|x| (*x).to_string()).collect(),
-                !accepted.is_empty() && redacted.is_empty(),
-            )
+            (accepted.iter().map(|x| (**x).to_string()).collect(), accept)
         }
     }
 

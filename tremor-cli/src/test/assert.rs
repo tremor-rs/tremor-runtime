@@ -249,6 +249,7 @@ pub(crate) fn process_filebased_asserts(
                         stats.assert();
                         counter += 1;
                         let condition = file_contains(&file, &[c.to_string()], base.as_ref())?;
+                        stats.report(condition);
                         total_condition &= condition;
                         status::assert_has(
                             prefix,
@@ -265,10 +266,8 @@ pub(crate) fn process_filebased_asserts(
                         keyword: report::KeywordKind::Predicate,
                         result: report::ResultKind {
                             status: if total_condition {
-                                stats.pass();
                                 report::StatusKind::Passed
                             } else {
-                                stats.fail();
                                 report::StatusKind::Failed
                             },
                             duration: 0,
@@ -282,6 +281,7 @@ pub(crate) fn process_filebased_asserts(
                     let changeset = file_equals(&file, &equals_file, base.as_ref())?;
                     let info = Some(changeset.to_string());
                     let condition = changeset.distance == 0;
+
                     status::assert_has(
                         prefix,
                         &format!("Assert {}", counter),
@@ -296,13 +296,7 @@ pub(crate) fn process_filebased_asserts(
                         hidden: false,
                         keyword: report::KeywordKind::Predicate,
                         result: report::ResultKind {
-                            status: if condition {
-                                stats.pass();
-                                report::StatusKind::Passed
-                            } else {
-                                stats.fail();
-                                report::StatusKind::Failed
-                            },
+                            status: stats.report(condition),
                             duration: 0,
                         },
                     });

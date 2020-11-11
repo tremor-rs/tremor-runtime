@@ -258,7 +258,7 @@ pub(crate) fn tagsx(
     };
 
     //    if let (Some(allowing), Some(denying)) = (allowing,denying) {
-    let (active, _status) = filter.matches(&config.0, &config.1);
+    let (active, _status) = filter.matches(&[], &config.0, &config.1);
     let mut h = TermHighlighter::default();
     fg_bold!(h, Yellow);
     write!(h.get_writer(), "{}Tags: ", prefix)?;
