@@ -59,6 +59,8 @@ impl TagFilter {
             .collect()
     }
 
+    // We allow this since the logic below is more readable when allowing for if not else
+    #[allow(clippy::if_not_else)]
     pub(crate) fn matches(
         &self,
         system_allow: &[&str],
@@ -66,7 +68,7 @@ impl TagFilter {
         denying: &[String],
     ) -> (Vec<String>, bool) {
         // Tags we want to allow based on the system
-        let system_allow: HashSet<&str> = HashSet::from_iter(system_allow.iter().map(|v| *v));
+        let system_allow: HashSet<&str> = HashSet::from_iter(system_allow.iter().copied());
         // Tags we want to allow
         let allowing: HashSet<&str> = HashSet::from_iter(allowing.iter().map(String::as_str));
         // Tags we want to deny
