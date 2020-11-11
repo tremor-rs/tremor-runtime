@@ -57,7 +57,9 @@ pub(crate) fn suite_command(
     base: &Path,
     root: &Path,
     _meta: &Meta,
-    by_tag: (&[String], &[String]),
+    sys_filter: &[&str],
+    includes: &[String],
+    excludes: &[String],
 ) -> Result<(stats::Stats, Vec<report::TestReport>)> {
     let api_suites = GlobWalkerBuilder::new(root, "**/command.yml")
         .case_insensitive(true)
@@ -107,13 +109,13 @@ pub(crate) fn suite_command(
                 let mut casex = stats::Stats::new();
                 for case in suite.cases {
                     let current_tags = suite_tags.join(case.tags.clone());
-                    if let (_, false) = current_tags.matches(&by_tag.0, &by_tag.1) {
+                    if let (_, false) = current_tags.matches(sys_filter, includes, excludes) {
                         status::h1("Command Test ( Skipping )", &case.name)?;
-                        status::tags(&current_tags, Some(&by_tag.0), Some(&by_tag.1))?;
+                        status::tags(&current_tags, Some(includes), Some(excludes))?;
                         continue; // SKIP
                     } else {
                         status::h1("Command Test", &case.name)?;
-                        status::tags(&current_tags, Some(&by_tag.0), Some(&by_tag.1))?;
+                        status::tags(&current_tags, Some(includes), Some(excludes))?;
                     }
                     let args = shell_words::split(&case.command).unwrap_or_default();
 
