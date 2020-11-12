@@ -178,11 +178,24 @@ impl Event {
                 .suffix()
                 .value()
                 .as_array()
-                .map(|a| a.len())
+                .map(Vec::len)
                 .unwrap_or_default()
         } else {
             1
         }
+    }
+
+    #[must_use]
+    /// returns true if this event is batched but has no wrapped events
+    pub fn is_empty(&self) -> bool {
+        self.is_batch
+            && self
+                .data
+                .suffix()
+                .value()
+                .as_array()
+                .map(Vec::is_empty)
+                .unwrap_or(true)
     }
 }
 
@@ -194,6 +207,7 @@ pub struct ValueMetaIter<'value> {
     idx: usize,
 }
 
+// TODO: descend recursively into batched events in batched events ...
 impl<'value> Iterator for ValueMetaIter<'value> {
     type Item = (&'value BorrowedValue<'value>, &'value BorrowedValue<'value>);
     fn next(&mut self) -> Option<Self::Item> {
@@ -264,7 +278,8 @@ impl<'value> Iterator for ValueIter<'value> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use simd_json::value::borrowed::Object;
+    use crate::errors::Result;
+    use simd_json::{value::borrowed::Object, StaticNode};
     use tremor_script::ValueAndMeta;
 
     #[test]
@@ -355,5 +370,64 @@ mod test {
         assert_eq!(Event::restore_or_break(false, 0).cb, CBAction::Close);
         assert_eq!(Event::cb_trigger(0).cb, CBAction::Close);
         assert_eq!(e.insight_trigger().cb, CBAction::Close);
+    }
+
+    #[test]
+    fn len() -> Result<()> {
+        // default non-batched event
+        let mut e = Event::default();
+        assert_eq!(1, e.len());
+        // batched event with 2 elements
+        e.is_batch = true;
+        let mut value = BorrowedValue::array_with_capacity(2);
+        value.push(BorrowedValue::Static(StaticNode::Bool(true)))?; // dummy events
+        value.push(BorrowedValue::Static(StaticNode::Bool(false)))?;
+        e.data = (value, BorrowedValue::object_with_capacity(0)).into();
+        assert_eq!(2, e.len());
+
+        // batched event with non-array value
+        e.data = (
+            BorrowedValue::null(),
+            BorrowedValue::object_with_capacity(0),
+        )
+            .into();
+        assert_eq!(0, e.len());
+        // batched array with empty array value
+        e.data = (
+            BorrowedValue::array_with_capacity(0),
+            BorrowedValue::object_with_capacity(0),
+        )
+            .into();
+        assert_eq!(0, e.len());
+
+        Ok(())
+    }
+
+    #[test]
+    fn is_empty() -> Result<()> {
+        let mut e = Event::default();
+        assert_eq!(false, e.is_empty());
+
+        e.is_batch = true;
+        e.data = (
+            BorrowedValue::null(),
+            BorrowedValue::object_with_capacity(0),
+        )
+            .into();
+        assert_eq!(true, e.is_empty());
+
+        e.data = (
+            BorrowedValue::array_with_capacity(0),
+            BorrowedValue::object_with_capacity(0),
+        )
+            .into();
+        assert_eq!(true, e.is_empty());
+
+        let mut value = BorrowedValue::array_with_capacity(2);
+        value.push(BorrowedValue::Static(StaticNode::Bool(true)))?; // dummy events
+        value.push(BorrowedValue::Static(StaticNode::Bool(false)))?;
+        e.data = (value, BorrowedValue::object_with_capacity(0)).into();
+        assert_eq!(false, e.is_empty());
+        Ok(())
     }
 }
