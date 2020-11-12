@@ -174,12 +174,7 @@ impl Event {
     /// normally 1, but for batched events possibly > 1
     pub fn len(&self) -> usize {
         if self.is_batch {
-            self.data
-                .suffix()
-                .value()
-                .as_array()
-                .map(Vec::len)
-                .unwrap_or_default()
+            self.data.suffix().value().as_array().map_or(0, Vec::len)
         } else {
             1
         }
@@ -194,8 +189,7 @@ impl Event {
                 .suffix()
                 .value()
                 .as_array()
-                .map(Vec::is_empty)
-                .unwrap_or(true)
+                .map_or(true, Vec::is_empty)
     }
 }
 
