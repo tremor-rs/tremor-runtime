@@ -168,6 +168,22 @@ impl Event {
             ..Event::default()
         }
     }
+
+    #[must_use]
+    /// return the number of events contained within this event
+    /// normally 1, but for batched events possibly > 1
+    pub fn len(&self) -> usize {
+        if self.is_batch {
+            self.data
+                .suffix()
+                .value()
+                .as_array()
+                .map(|a| a.len())
+                .unwrap_or_default()
+        } else {
+            1
+        }
+    }
 }
 
 /// Iterator over the event value and metadata
