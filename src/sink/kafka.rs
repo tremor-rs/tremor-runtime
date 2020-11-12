@@ -30,7 +30,7 @@ use rdkafka::{
     error::KafkaError,
     producer::{FutureProducer, FutureRecord},
 };
-use std::fmt;
+use std::{fmt, time::Duration};
 
 #[derive(Deserialize)]
 pub struct Config {
@@ -313,5 +313,17 @@ impl Sink for Kafka {
     }
     fn auto_ack(&self) -> bool {
         false
+    }
+    async fn terminate(&mut self) {
+        if self.producer.in_flight_count() > 0 {
+            // wait a second in order to flush messages.
+            let wait_secs = 1;
+            info!(
+                "[Sink::{}] Flushing messages. Waiting for {} seconds.",
+                wait_secs, &self.sink_url
+            );
+            self.producer.flush(Duration::from_secs(1));
+            info!("[Sink::{}] Terminating.", &self.sink_url);
+        }
     }
 }
