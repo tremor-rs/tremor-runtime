@@ -21,7 +21,7 @@ use futures::future::{self, FutureExt};
 use futures::StreamExt;
 use halfbrown::HashMap;
 use rdkafka::client::ClientContext;
-use rdkafka::config::{ClientConfig, RDKafkaLogLevel};
+use rdkafka::config::ClientConfig;
 use rdkafka::consumer::stream_consumer::{self, StreamConsumer};
 use rdkafka::consumer::{CommitMode, Consumer, ConsumerContext};
 use rdkafka::error::KafkaResult;
