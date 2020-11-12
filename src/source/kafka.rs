@@ -37,7 +37,7 @@ use std::time::{Duration, Instant};
 pub struct SmolRuntime;
 
 impl AsyncRuntime for SmolRuntime {
-    type Delay = future::Map<async_io::Timer, fn(Instant)>;
+    type Delay = future::Map<smol::Timer, fn(Instant)>;
 
     fn spawn<T>(task: T)
     where
@@ -331,6 +331,10 @@ impl Source for Int {
         info!("Starting kafka onramp {}", self.onramp_id);
         // Setting up the configuration with default and then overwriting
         // them with custom settings.
+        //
+        // ENABLE LIBRDKAFKA DEBUGGING:
+        // - set librdkafka logger to debug in logger.yaml
+        // - configure: debug: "all" for this onramp
         let client_config = client_config
             .set("group.id", &self.config.group_id)
             .set(
@@ -344,8 +348,7 @@ impl Source for Int {
             .set("enable.auto.commit", "true")
             .set("auto.commit.interval.ms", "5000")
             // but only commit the offsets explicitly stored via `consumer.store_offset`.
-            .set("enable.auto.offset.store", "true")
-            .set_log_level(RDKafkaLogLevel::Debug);
+            .set("enable.auto.offset.store", "true");
 
         let client_config = if let Some(options) = self.config.rdkafka_options.as_ref() {
             options
