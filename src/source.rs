@@ -47,6 +47,7 @@ pub(crate) mod ws;
 
 struct StaticValue(Value<'static>);
 
+#[derive(Default)]
 /// Set of pre and postprocessors
 pub struct Processors<'processor> {
     /// preprocessors

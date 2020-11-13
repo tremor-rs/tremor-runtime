@@ -91,7 +91,7 @@ impl offramp::Impl for Elastic {
 
 impl Elastic {
     async fn drain_insights(&mut self) -> ResultVec {
-        let mut v = Vec::with_capacity(self.tx.len() + 1);
+        let mut v = Vec::with_capacity(self.rx.len() + 1);
         while let Ok(e) = self.rx.try_recv() {
             v.push(e)
         }

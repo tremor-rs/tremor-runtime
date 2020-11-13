@@ -481,8 +481,8 @@ impl ResponseIdGenerator {
 async fn codec_task(
     sink_uid: u64,
     sink_url: TremorURL,
-    mut postprocessors: Vec<Box<dyn Postprocessor>>,
-    mut preprocessors: Vec<Box<dyn Preprocessor>>,
+    mut postprocessors: Postprocessors,
+    mut preprocessors: Preprocessors,
     codec: Box<dyn Codec>,
     codec_map: HashMap<String, Box<dyn Codec>>,
     endpoint: Endpoint,
