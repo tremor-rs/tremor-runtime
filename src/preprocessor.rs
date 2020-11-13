@@ -578,7 +578,7 @@ mod test {
         Ok(())
     }
 
-    macro_rules! assert_no_buffer {
+    macro_rules! assert_lines_no_buffer {
         ($inbound:expr, $outbound1:expr, $outbound2:expr, $case_number:expr, $separator:expr) => {
             let mut ingest_ns = 0_u64;
             let r = crate::preprocessor::Lines::new($separator, 0, false)
@@ -614,20 +614,19 @@ mod test {
     fn test_lines_no_buffer_no_maxlength() -> Result<()> {
         let test_data = get_data_for_test_lines_no_buffer_no_maxlength();
         for case in &test_data {
-            assert_no_buffer!(case.0, case.1, case.2, case.3, '\n');
+            assert_lines_no_buffer!(case.0, case.1, case.2, case.3, '\n');
         }
 
         Ok(())
     }
 
     fn get_data_for_test_lines_no_buffer_no_maxlength(
-    ) -> [(&'static [u8], &'static [u8], &'static [u8], &'static str); 5] {
+    ) -> [(&'static [u8], &'static [u8], &'static [u8], &'static str); 4] {
         [
             (b"snot\nbadger", b"snot", b"badger", "0"),
-            (b"snot\nbadger\n", b"snot", b"badger", "1"),
-            (b"snot\nbadger\n\n", b"snot", b"badger", "2"),
-            (b"snot\n\nbadger", b"snot", b"badger", "3"),
-            (b"\nsnot\nbadger", b"snot", b"badger", "4"),
+            (b"snot\n", b"snot", b"", "1"),
+            (b"\nsnot", b"", b"snot", "2"),
+            (b"\n", b"", b"", "3"),
         ]
     }
 
@@ -635,21 +634,25 @@ mod test {
     fn test_carriage_return_no_buffer_no_maxlength() -> Result<()> {
         let test_data = get_data_for_test_carriage_return_no_buffer_no_maxlength();
         for case in &test_data {
-            assert_no_buffer!(case.0, case.1, case.2, case.3, '\r');
+            assert_lines_no_buffer!(case.0, case.1, case.2, case.3, '\r');
         }
 
         Ok(())
     }
 
-    fn get_data_for_test_carriage_return_no_buffer_no_maxlength(
-    ) -> [(&'static [u8], &'static [u8], &'static [u8], &'static str); 5] {
-        [
+    #[test]
+    fn test_carriage_return_no_buffer_no_maxlength() -> Result<()> {
+        let test_data: [(&'static [u8], &'static [u8], &'static [u8], &'static str); 4] = [
             (b"snot\rbadger", b"snot", b"badger", "0"),
-            (b"snot\rbadger\r", b"snot", b"badger", "1"),
-            (b"snot\rbadger\r\r", b"snot", b"badger", "2"),
-            (b"snot\r\rbadger", b"snot", b"badger", "3"),
-            (b"\rsnot\rbadger", b"snot", b"badger", "4"),
-        ]
+            (b"snot\r", b"snot", b"", "1"),
+            (b"\rsnot", b"", b"snot", "2"),
+            (b"\r", b"", b"", "3"),
+        ];
+        for case in &test_data {
+            assert_lines_no_buffer!(case.0, case.1, case.2, case.3, '\r');
+        }
+
+        Ok(())
     }
 
     #[test]
