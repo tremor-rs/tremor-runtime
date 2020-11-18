@@ -612,29 +612,14 @@ mod test {
 
     #[test]
     fn test_lines_no_buffer_no_maxlength() -> Result<()> {
-        let test_data = get_data_for_test_lines_no_buffer_no_maxlength();
-        for case in &test_data {
-            assert_lines_no_buffer!(case.0, case.1, case.2, case.3, '\n');
-        }
-
-        Ok(())
-    }
-
-    fn get_data_for_test_lines_no_buffer_no_maxlength(
-    ) -> [(&'static [u8], &'static [u8], &'static [u8], &'static str); 4] {
-        [
+        let test_data: [(&'static [u8], &'static [u8], &'static [u8], &'static str); 4] = [
             (b"snot\nbadger", b"snot", b"badger", "0"),
             (b"snot\n", b"snot", b"", "1"),
             (b"\nsnot", b"", b"snot", "2"),
             (b"\n", b"", b"", "3"),
-        ]
-    }
-
-    #[test]
-    fn test_carriage_return_no_buffer_no_maxlength() -> Result<()> {
-        let test_data = get_data_for_test_carriage_return_no_buffer_no_maxlength();
+        ];
         for case in &test_data {
-            assert_lines_no_buffer!(case.0, case.1, case.2, case.3, '\r');
+            assert_lines_no_buffer!(case.0, case.1, case.2, case.3, '\n');
         }
 
         Ok(())
