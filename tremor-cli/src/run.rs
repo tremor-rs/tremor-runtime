@@ -179,7 +179,7 @@ impl Egress {
             Ok(Return::Drop) => Ok(()),
             Ok(Return::Emit { value, port }) => {
                 match port.unwrap_or_else(|| String::from("out")).as_str() {
-                    "error" | "stderr" => {
+                    "err" | "error" | "stderr" => {
                         self.buffer
                             .write_all(format!("{}\n", value.encode()).as_bytes())?;
                         self.buffer.flush()?;
