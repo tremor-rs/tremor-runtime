@@ -926,8 +926,6 @@ impl<'input> Preprocessor {
     ) -> Result<Vec<Result<TokenSpan<'input>>>> {
         let file_name = Path::new(file_name);
 
-        input.push_str(" ");
-
         let top = input.clone();
         let lexemes: Vec<Result<TokenSpan>> = Tokenizer::new(top.as_str()).collect();
         input.clear();
@@ -1325,6 +1323,13 @@ impl<'input> Lexer<'input> {
         self.input.get(start..end)
     }
 
+    /// return a slice from start to the end of the line
+    fn slice_until_eol(&self, start: &Location) -> Option<&'input str> {
+        let start = start.absolute() - self.start_index.to_usize();
+
+        self.input.get(start..).and_then(|f| f.split('\n').next())
+    }
+
     fn take_while<F>(&mut self, start: Location, mut keep_going: F) -> (Location, &'input str)
     where
         F: FnMut(char) -> bool,
@@ -1358,6 +1363,7 @@ impl<'input> Lexer<'input> {
         }
     }
 
+    /// handle comments
     fn cx(&mut self, start: Location) -> Result<TokenSpan<'input>> {
         if let Some((end, _)) = self.starts_with(start, "#!config ") {
             Ok(self.spanned2(start, end, Token::ConfigDirective))
@@ -1403,6 +1409,7 @@ impl<'input> Lexer<'input> {
         }
     }
 
+    /// handle equals
     fn eq(&mut self, start: Location) -> Result<TokenSpan<'input>> {
         match self.lookahead() {
             Some((end, '>')) => {
@@ -1417,6 +1424,7 @@ impl<'input> Lexer<'input> {
         }
     }
 
+    /// handle colons
     fn cn(&mut self, start: Location) -> Result<TokenSpan<'input>> {
         let (end, lexeme) = self.take_while(start, |ch| ch == ':');
 
@@ -1444,6 +1452,7 @@ impl<'input> Lexer<'input> {
         }
     }
 
+    /// handle pattern begin
     fn pb(&mut self, start: Location) -> Result<TokenSpan<'input>> {
         match self.lookahead() {
             Some((end, '[')) => {
@@ -1463,6 +1472,7 @@ impl<'input> Lexer<'input> {
         }
     }
 
+    /// handle pattern end
     fn pe(&mut self, start: Location) -> Result<TokenSpan<'input>> {
         match self.lookahead() {
             Some((end, '=')) => {
@@ -1474,6 +1484,7 @@ impl<'input> Lexer<'input> {
         }
     }
 
+    /// handle tilde
     fn tl(&mut self, start: Location) -> Result<TokenSpan<'input>> {
         match self.lookahead() {
             Some((end, '=')) => {
@@ -1558,7 +1569,11 @@ impl<'input> Lexer<'input> {
         }
     }
 
-    fn escape_code(&mut self, s: &str, start: Location) -> Result<(Location, char)> {
+    fn escape_code(
+        &mut self,
+        string_start: &Location,
+        start: Location,
+    ) -> Result<(Location, char)> {
         match self.bump() {
             Some((e, '\'')) => Ok((e, '\'')),
             Some((e, '"')) => Ok((e, '"')),
@@ -1580,20 +1595,34 @@ impl<'input> Lexer<'input> {
                     if let Some((e, c)) = self.bump() {
                         digits.push(c);
                         if u32::from_str_radix(&format!("{}", c), 16).is_err() {
+                            let token_str =
+                                if let Some(token_str) = self.slice_until_eol(string_start) {
+                                    token_str.to_string()
+                                } else {
+                                    String::new()
+                                };
                             return Err(ErrorKind::UnexpectedEscapeCode(
-                                Range::from((start, end)).expand_lines(2),
+                                Range::from((start, e)).expand_lines(2),
                                 Range::from((e, e)),
-                                format!("\"{}\\u{}\n", s, digits),
+                                token_str,
                                 c,
                             )
                             .into());
                         }
                         end = e;
                     } else {
+                        end.shift(' ');
+                        let token_str = if let Some(token_str) = self.slice_until_eol(string_start)
+                        {
+                            token_str.to_string()
+                        } else {
+                            String::new()
+                        };
+
                         return Err(ErrorKind::InvalidUTF8Sequence(
                             Range::from((escape_start, end)).expand_lines(2),
                             Range::from((escape_start, end)),
-                            format!("\"{}\\u{}\n", s, digits),
+                            token_str,
                         )
                         .into());
                     }
@@ -1602,22 +1631,35 @@ impl<'input> Lexer<'input> {
                 if let Ok(Some(c)) = u32::from_str_radix(&digits, 16).map(std::char::from_u32) {
                     Ok((end, c))
                 } else {
+                    let token_str = if let Some(token_str) = self.slice_until_eol(string_start) {
+                        token_str.to_string()
+                    } else {
+                        String::new()
+                    };
                     end.shift(' ');
                     Err(ErrorKind::InvalidUTF8Sequence(
                         Range::from((escape_start, end)).expand_lines(2),
                         Range::from((escape_start, end)),
-                        format!("\"{}\\u{}\n", s, digits),
+                        token_str,
                     )
                     .into())
                 }
             }
-            Some((end, ch)) => Err(ErrorKind::UnexpectedEscapeCode(
-                Range::from((start, end)).expand_lines(2),
-                Range::from((start, end)),
-                format!("\"{}\\{}\n", s, ch),
-                ch,
-            )
-            .into()),
+            Some((mut end, ch)) => {
+                end.shift(' ');
+                let token_str = if let Some(token_str) = self.slice_until_eol(string_start) {
+                    token_str.to_string()
+                } else {
+                    String::new()
+                };
+                Err(ErrorKind::UnexpectedEscapeCode(
+                    Range::from((start, end)).expand_lines(2),
+                    Range::from((start, end)),
+                    token_str,
+                    ch,
+                )
+                .into())
+            }
             None => Err(ErrorKind::UnexpectedEndOfStream.into()),
         }
     }
@@ -1648,7 +1690,7 @@ impl<'input> Lexer<'input> {
                     return Err(ErrorKind::UnterminatedIdentLiteral(
                         Range::from((start, end)).expand_lines(2),
                         Range::from((start, end)),
-                        format!("`{}\n", string),
+                        format!("`{}", string),
                     )
                     .into());
                 }
@@ -1670,8 +1712,10 @@ impl<'input> Lexer<'input> {
         }
     }
 
+    /// handle quoted strings or heredoc strings
     fn qs_or_hd(&mut self, start: Location) -> Result<Vec<TokenSpan<'input>>> {
         let mut end = start;
+        let heredoc_start = start;
         end.shift('"');
 
         let q1 = self.spanned2(start, end, Token::DQuote);
@@ -1682,28 +1726,42 @@ impl<'input> Lexer<'input> {
             // This would be the second quote
             Some((mut end, '"')) => {
                 self.bump();
-                if let Some((end, '"')) = self.lookahead() {
+                if let Some((mut end, '"')) = self.lookahead() {
                     self.bump();
                     // We don't allow anything tailing the initial `"""`
                     match self.bump() {
                         Some((start, '\n')) => {
                             res = vec![self.spanned2(start, end, Token::HereDoc)]; // (0, vec![]))];
                             string = String::new();
-                            self.hd(start, end, false, &string, res)
+
+                            self.hd(heredoc_start, start, end, false, &string, res)
                         }
-                        Some((end, ch)) => Err(ErrorKind::TailingHereDoc(
-                            Range::from((start, end)).expand_lines(2),
-                            Range::from((start, end)),
-                            format!(r#""""{}\n"#, ch),
-                            ch,
-                        )
-                        .into()),
-                        None => Err(ErrorKind::UnterminatedHereDoc(
-                            Range::from((start, end)).expand_lines(2),
-                            Range::from((start, end)),
-                            r#""""\n"#.to_string(),
-                        )
-                        .into()),
+                        Some((end, ch)) => {
+                            let token_str = self
+                                .slice_until_eol(&start)
+                                .map(ToString::to_string)
+                                .unwrap_or_else(|| format!(r#""""{}"#, ch));
+                            Err(ErrorKind::TailingHereDoc(
+                                Range::from((start, end)).expand_lines(2),
+                                Range::from((start, end)),
+                                token_str,
+                                ch,
+                            )
+                            .into())
+                        }
+                        None => {
+                            let token_str = self
+                                .slice_until_eol(&start)
+                                .map(ToString::to_string)
+                                .unwrap_or_else(|| r#"""""#.to_string());
+                            end.shift('"');
+                            Err(ErrorKind::UnterminatedHereDoc(
+                                Range::from((start, end)).expand_lines(2),
+                                Range::from((start, end)),
+                                token_str,
+                            )
+                            .into())
+                        }
                     }
                 } else {
                     // We had two quotes followed by something not a quote so
@@ -1729,6 +1787,7 @@ impl<'input> Lexer<'input> {
     /// Handle heredoc strings `"""`  ...
     fn hd(
         &mut self,
+        heredoc_start: Location,
         mut segment_start: Location,
         mut end: Location,
         mut has_escapes: bool,
@@ -1751,7 +1810,7 @@ impl<'input> Lexer<'input> {
                     heredoc_content = String::new();
                 }
                 Some((end_inner, '\\')) => {
-                    let (e, c) = self.escape_code(&heredoc_content, segment_start)?;
+                    let (e, c) = self.escape_code(&heredoc_start, end_inner)?;
                     if c == '{' || c == '}' {
                         let mut s = segment_start;
                         s.shift(c);
@@ -1866,12 +1925,16 @@ impl<'input> Lexer<'input> {
                 }
 
                 None => {
+                    let token_str = self
+                        .slice_until_eol(&heredoc_start)
+                        .map(ToString::to_string)
+                        .unwrap_or_else(|| format!(r#""""\n{}"#, heredoc_content));
                     return Err(ErrorKind::UnterminatedHereDoc(
-                        Range::from((segment_start, end)).expand_lines(2),
-                        Range::from((segment_start, end)),
-                        format!("\"{}", heredoc_content),
+                        Range::from((heredoc_start, end)).expand_lines(2),
+                        Range::from((heredoc_start, end)),
+                        token_str,
                     )
-                    .into())
+                    .into());
                 }
             }
         }
@@ -1887,10 +1950,11 @@ impl<'input> Lexer<'input> {
         mut string: String,
         mut res: Vec<TokenSpan<'input>>,
     ) -> Result<Vec<TokenSpan<'input>>> {
+        let string_start = segment_start;
         loop {
             match self.bump() {
                 Some((end_inner, '\\')) => {
-                    let (e, c) = self.escape_code(&string, segment_start)?;
+                    let (e, c) = self.escape_code(&string_start, end_inner)?;
                     if c == '{' || c == '}' {
                         let mut s = segment_start;
                         s.shift(c);
@@ -1982,32 +2046,98 @@ impl<'input> Lexer<'input> {
                     end.shift('{');
                     res.push(self.spanned2(segment_start, end, Token::LBrace));
                     let mut pcount = 0;
-                    // We can't use for because of the borrow checker ...
-                    #[allow(clippy::while_let_on_iterator)]
-                    while let Some(s) = self.next() {
-                        let s = s?;
-                        match &s.value {
-                            Token::RBrace if pcount == 0 => {
-                                segment_start = s.span.pp_start;
+                    loop {
+                        match self.next() {
+                            Some(Ok(s)) => {
+                                match &s.value {
+                                    Token::RBrace if pcount == 0 => {
+                                        segment_start = s.span.pp_start;
+                                        res.push(s);
+                                        break;
+                                    }
+                                    Token::RBrace => {
+                                        pcount -= 1;
+                                    }
+                                    Token::LBrace => {
+                                        pcount += 1;
+                                    }
+                                    _ => {}
+                                };
                                 res.push(s);
-                                break;
                             }
-                            Token::RBrace => {
-                                pcount -= 1;
+                            // intercept error and extend the token to match this outer string
+                            // with interpolation
+                            // otherwise we will not get the whole string in error messages
+                            Some(Err(Error(kind, _))) => {
+                                let token_str = self
+                                    .slice_until_eol(&string_start)
+                                    .map(ToString::to_string)
+                                    .unwrap_or_else(|| format!("\"{}", string));
+                                let error = match kind {
+                                    ErrorKind::UnterminatedExtractor(outer, location, _) => {
+                                        ErrorKind::UnterminatedExtractor(outer, location, token_str)
+                                    }
+                                    ErrorKind::UnterminatedIdentLiteral(outer, location, _) => {
+                                        ErrorKind::UnterminatedIdentLiteral(
+                                            outer, location, token_str,
+                                        )
+                                    }
+                                    ErrorKind::UnterminatedStringLiteral(_, _, _) => {
+                                        // unterminated strings within interpolation are better reported
+                                        // as unterminated interpolation
+                                        ErrorKind::UnterminatedInterpolation(
+                                            Range::from((segment_start, end)).expand_lines(2),
+                                            Range::from((segment_start, end)),
+                                            token_str,
+                                        )
+                                    }
+                                    ErrorKind::UnterminatedInterpolation(outer, location, _) => {
+                                        ErrorKind::UnterminatedInterpolation(
+                                            outer, location, token_str,
+                                        )
+                                    }
+                                    ErrorKind::UnexpectedEscapeCode(outer, location, _, found) => {
+                                        ErrorKind::UnexpectedEscapeCode(
+                                            outer, location, token_str, found,
+                                        )
+                                    }
+                                    ErrorKind::UnterminatedHereDoc(outer, location, _) => {
+                                        ErrorKind::UnterminatedHereDoc(outer, location, token_str)
+                                    }
+                                    ErrorKind::InvalidUTF8Sequence(outer, location, _) => {
+                                        ErrorKind::InvalidUTF8Sequence(outer, location, token_str)
+                                    }
+                                    e => e,
+                                };
+                                return Err(error.into());
                             }
-                            Token::LBrace => {
-                                pcount += 1;
+                            None => {
+                                let token_str =
+                                    if let Some(token_str) = self.slice_until_eol(&string_start) {
+                                        token_str.to_string()
+                                    } else {
+                                        format!("\"{}", string)
+                                    };
+                                return Err(ErrorKind::UnterminatedInterpolation(
+                                    Range::from((segment_start, end)).expand_lines(2),
+                                    Range::from((segment_start, end)),
+                                    token_str,
+                                )
+                                .into());
                             }
-                            _ => {}
-                        };
-                        res.push(s);
+                        }
                     }
                 }
                 Some((end, '\n')) => {
+                    let token_str = if let Some(token_str) = self.slice_until_eol(&string_start) {
+                        token_str.to_string()
+                    } else {
+                        format!("\"{}", string)
+                    };
                     return Err(ErrorKind::UnterminatedStringLiteral(
-                        Range::from((segment_start, end)).expand_lines(2),
-                        Range::from((segment_start, end)),
-                        format!("\"{}\n", string),
+                        Range::from((string_start, end)).expand_lines(2),
+                        Range::from((string_start, end)),
+                        token_str,
                     )
                     .into());
                 }
@@ -2017,12 +2147,17 @@ impl<'input> Lexer<'input> {
                     continue;
                 }
                 None => {
+                    let token_str = if let Some(token_str) = self.slice_until_eol(&string_start) {
+                        token_str.to_string()
+                    } else {
+                        format!("\"{}", string)
+                    };
                     return Err(ErrorKind::UnterminatedStringLiteral(
-                        Range::from((segment_start, end)).expand_lines(2),
-                        Range::from((segment_start, end)),
-                        format!("\"{}", string),
+                        Range::from((string_start, end)).expand_lines(2),
+                        Range::from((string_start, end)),
+                        token_str,
                     )
-                    .into())
+                    .into());
                 }
             }
         }
@@ -2036,7 +2171,7 @@ impl<'input> Lexer<'input> {
             Some((end, ch)) => Err(ErrorKind::UnexpectedEscapeCode(
                 Range::from((end, end)).expand_lines(2),
                 Range::from((end, end)),
-                format!("|{}\\{}\n", s, ch as char),
+                format!("|{}\\{}", s, ch as char),
                 ch,
             )
             .into()),
@@ -2082,7 +2217,7 @@ impl<'input> Lexer<'input> {
                     return Err(ErrorKind::UnterminatedExtractor(
                         Range::from((start, end)).expand_lines(2),
                         Range::from((start, end)),
-                        format!("|{}\n", string),
+                        format!("|{}", string),
                     )
                     .into());
                 }
@@ -2095,7 +2230,7 @@ impl<'input> Lexer<'input> {
                     return Err(ErrorKind::UnterminatedExtractor(
                         Range::from((start, end)).expand_lines(2),
                         Range::from((start, end)),
-                        format!("|{}\n", string),
+                        format!("|{}", string),
                     )
                     .into())
                 }
@@ -2103,6 +2238,7 @@ impl<'input> Lexer<'input> {
         }
     }
 
+    /// handle numbers
     #[allow(clippy::too_many_lines)]
     fn nm(&mut self, start: Location) -> Result<TokenSpan<'input>> {
         let (end, int) = self.take_while(start, is_dec_digit);

@@ -282,7 +282,7 @@ pub trait Highlighter {
                         let underline = "^".repeat(len);
 
                         if let Some(token) = token {
-                            write!(self.get_writer(), "{}", token)?;
+                            write!(self.get_writer(), "{}\n", token)?;
                         };
 
                         self.set_color(ColorSpec::new().set_bold(true))?;
@@ -425,7 +425,7 @@ pub trait Highlighter {
                 let prefix = " ".repeat(start.column().saturating_sub(1));
                 let underline = "^".repeat(len);
                 if let Some(token) = token {
-                    write!(self.get_writer(), "{}", token)?;
+                    write!(self.get_writer(), "{}\n", token)?;
                 };
                 self.set_color(ColorSpec::new().set_bold(true))?;
                 write!(self.get_writer(), "      | {}", prefix)?;
