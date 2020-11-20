@@ -169,7 +169,8 @@ impl ErrorKind {
             ParseIntError, ParserError, PatchKeyExists, PreprocessorError, QueryStreamNotDefined,
             RuntimeError, TailingHereDoc, TypeConflict, UnexpectedCharacter, UnexpectedEndOfStream,
             UnexpectedEscapeCode, UnrecognizedToken, UnterminatedExtractor, UnterminatedHereDoc,
-            UnterminatedIdentLiteral, UnterminatedStringLiteral, UpdateKeyMissing, Utf8Error,
+            UnterminatedIdentLiteral, UnterminatedInterpolation, UnterminatedStringLiteral,
+            UpdateKeyMissing, Utf8Error,
         };
         match self {
             NoClauseHit(outer) | Oops(outer, _, _) => (Some(outer.expand_lines(2)), Some(*outer)),
@@ -224,6 +225,7 @@ impl ErrorKind {
             | UnterminatedStringLiteral(outer, inner, _)
             | UpdateKeyMissing(outer, inner, _)
             | UnterminatedHereDoc(outer, inner, _)
+            | UnterminatedInterpolation(outer, inner, _)
             | TailingHereDoc(outer, inner, _, _)
             | Generic(outer, inner, _)
             | AggrInAggr(outer, inner)
@@ -251,22 +253,27 @@ impl ErrorKind {
     }
     pub(crate) fn token(&self) -> Option<String> {
         use ErrorKind::{
-            InvalidUTF8Sequence, UnexpectedEscapeCode, UnterminatedExtractor,
-            UnterminatedIdentLiteral, UnterminatedStringLiteral,
+            InvalidUTF8Sequence, TailingHereDoc, UnexpectedEscapeCode, UnterminatedExtractor,
+            UnterminatedHereDoc, UnterminatedIdentLiteral, UnterminatedInterpolation,
+            UnterminatedStringLiteral,
         };
         match self {
             UnterminatedExtractor(_, _, token)
             | UnterminatedStringLiteral(_, _, token)
+            | UnterminatedInterpolation(_, _, token)
             | UnterminatedIdentLiteral(_, _, token)
+            | UnterminatedHereDoc(_, _, token)
+            | TailingHereDoc(_, _, token, _)
             | InvalidUTF8Sequence(_, _, token)
             | UnexpectedEscapeCode(_, _, token, _) => Some(token.to_string()),
             _ => None,
         }
     }
+
     pub(crate) fn hint(&self) -> Option<String> {
         use ErrorKind::{
             BadAccessInEvent, BadAccessInGlobal, BadAccessInLocal, MissingFunction, MissingModule,
-            NoClauseHit, Oops, TypeConflict, UnrecognizedToken,
+            NoClauseHit, Oops, TypeConflict, UnrecognizedToken, UnterminatedInterpolation,
         };
         match self {
             UnrecognizedToken(outer, inner, t, _) if t == "" && inner.0.absolute() == outer.1.absolute() => Some("It looks like a `;` is missing at the end of the script".into()),
@@ -278,6 +285,9 @@ impl ErrorKind {
                     Some((_d, o)) => Some(format!("Did you mean to use {}?", o)),
                     _ => None
                 }
+            }
+            UnterminatedInterpolation(_, _, _) => {
+                Some("Did you mean to write a literal '{'? Esacpe it as '\\{' or '{{'.".to_string())
             }
             BadAccessInLocal(_, _, key, _) if key == "nil" => {
                 Some("Did you mean null?".to_owned())
@@ -462,6 +472,11 @@ error_chain! {
         TailingHereDoc(expr: Range, inner: Range, hd: String, ch: char) {
             description("Tailing Characters after opening a here doc")
                 display("It looks like you have characters tailing the here doc opening, it needs to be followed by a newline")
+        }
+        UnterminatedInterpolation(expr: Range, inner: Range, string_with_interpolation: String) {
+            description("Unterminated String interpolation")
+                display("It looks like you forgot to terminate a string interpolation with a closing '}}'")
+
         }
 
         UnterminatedIdentLiteral(expr: Range, inner: Range, extractor: String)

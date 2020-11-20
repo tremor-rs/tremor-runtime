@@ -227,8 +227,10 @@ where
         if let (Some(Range(start, end)), _) = error.context() {
             let cu = error.cu();
             if cu == 0 {
+                // i wanna use map_while here, but it is still unstable :(
                 let tokens: Vec<_> = lexer::Tokenizer::new(&script)
-                    .filter_map(Result::ok)
+                    .scan((), |_, item| item.ok())
+                    .fuse()
                     .collect();
                 h.highlight_runtime_error(None, &tokens, start, end, Some(error.into()))?;
             } else if let Some(cu) = cus.get(cu) {

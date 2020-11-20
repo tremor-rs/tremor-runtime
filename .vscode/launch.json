@@ -20,15 +20,16 @@
         }
       },
       "args": [
-        "server",
+        //"server",
         "run",
-        "-f",
-        "../tremor-www-docs/docs/workshop/examples/35_reverse_proxy_load_balancing/etc/tremor/config/config.yaml",
-        "../tremor-www-docs/docs/workshop/examples/35_reverse_proxy_load_balancing/etc/tremor/config/request_handling.trickle",
-        "../tremor-www-docs/docs/workshop/examples/35_reverse_proxy_load_balancing/etc/tremor/config/response_handling.trickle",
-        "../tremor-www-docs/docs/workshop/examples/35_reverse_proxy_load_balancing/etc/tremor/config/pass.trickle",
-        "-l",
-        "../tremor-www-docs/docs/workshop/examples/35_reverse_proxy_load_balancing/etc/tremor/logger.yaml"
+        "temp/heredoc.tremor"
+        //"-f",
+        //"../tremor-www-docs/docs/workshop/examples/35_reverse_proxy_load_balancing/etc/tremor/config/config.yaml",
+        // "../tremor-www-docs/docs/workshop/examples/35_reverse_proxy_load_balancing/etc/tremor/config/request_handling.trickle",
+        // "../tremor-www-docs/docs/workshop/examples/35_reverse_proxy_load_balancing/etc/tremor/config/response_handling.trickle",
+        // "../tremor-www-docs/docs/workshop/examples/35_reverse_proxy_load_balancing/etc/tremor/config/pass.trickle",
+        // "-l",
+        // "../tremor-www-docs/docs/workshop/examples/35_reverse_proxy_load_balancing/etc/tremor/logger.yaml"
       ],
       "env": {
         "TREMOR_PATH": "./tremor-script/lib"
