@@ -16,7 +16,7 @@
 use crate::errors::Result;
 use crate::source::prelude::*;
 
-//NOTE: This is required for StreamHander's stream
+//NOTE: This is required for StreamHandlers stream
 use futures::future::{self, FutureExt};
 use futures::StreamExt;
 use halfbrown::HashMap;
@@ -456,27 +456,9 @@ impl Source for Int {
 
 #[async_trait::async_trait]
 impl Onramp for Kafka {
-    async fn start(
-        &mut self,
-        onramp_uid: u64,
-        codec: &str,
-        codec_map: halfbrown::HashMap<String, String>,
-        processors: Processors<'_>,
-        metrics_reporter: RampReporter,
-        _is_linked: bool,
-        err_required: bool,
-    ) -> Result<onramp::Addr> {
-        let source = Int::from_config(onramp_uid, self.onramp_id.clone(), &self.config);
-        SourceManager::start(
-            onramp_uid,
-            source,
-            codec,
-            codec_map,
-            processors,
-            metrics_reporter,
-            err_required,
-        )
-        .await
+    async fn start(&mut self, config: OnrampConfig<'_>) -> Result<onramp::Addr> {
+        let source = Int::from_config(config.onramp_uid, self.onramp_id.clone(), &self.config);
+        SourceManager::start(source, config).await
     }
     fn default_codec(&self) -> &str {
         "json"

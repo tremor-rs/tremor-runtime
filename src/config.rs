@@ -22,7 +22,7 @@ pub(crate) type BindingVec = Vec<Binding>;
 pub(crate) type BindingMap = HashMap<TremorURL, Vec<TremorURL>>;
 pub(crate) type MappingMap = HashMap<TremorURL, HashMap<String, String>>;
 
-/// A full tremopr config
+/// A full tremor config
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {

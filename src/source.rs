@@ -33,6 +33,8 @@ use tremor_common::time::nanotime;
 use tremor_pipeline::{CBAction, Event, EventOriginUri, Ids};
 use tremor_script::{LineValue, Value, ValueAndMeta};
 
+use self::prelude::OnrampConfig;
+
 pub(crate) mod blaster;
 pub(crate) mod crononome;
 pub(crate) mod file;
@@ -97,7 +99,7 @@ pub(crate) enum SourceReply {
     EndStream(usize),
     /// We change the connection state of the source
     StateChange(SourceState),
-    /// There is no event currently ready and we're asked to wait an ammount of ms
+    /// There is no event currently ready and we're asked to wait an amount of ms
     Empty(u64),
 }
 
@@ -258,13 +260,15 @@ where
         results
     }
 
+    fn needs_pipeline_msg(&self) -> bool {
+        self.pipelines_out.is_empty()
+            || self.triggered
+            || !self.rx.is_empty()
+            || (self.err_required && self.pipelines_err.is_empty())
+    }
     async fn handle_pipelines(&mut self) -> Result<bool> {
         loop {
-            let msg = if self.pipelines_out.is_empty()
-                || self.triggered
-                || !self.rx.is_empty()
-                || (self.err_required && self.pipelines_err.is_empty())
-            {
+            let msg = if self.needs_pipeline_msg() {
                 self.rx.recv().await?
             } else {
                 return Ok(false);
@@ -443,39 +447,31 @@ where
         error
     }
 
-    async fn new(
-        uid: u64,
-        mut source: T,
-        processors: Processors<'_>,
-        codec: &str,
-        codec_map: HashMap<String, String>,
-        metrics_reporter: RampReporter,
-        err_required: bool,
-    ) -> Result<(Self, Sender<onramp::Msg>)> {
+    async fn new(mut source: T, config: OnrampConfig<'_>) -> Result<(Self, Sender<onramp::Msg>)> {
         // We use a unbounded channel for counterflow, while an unbounded channel seems dangerous
         // there is soundness to this.
         // The unbounded channel ensures that on counterflow we never have to block, or in other
-        // words that sinks or pipelines sending data backwards always can progress passt
+        // words that sinks or pipelines sending data backwards always can progress past
         // the sending.
         // This prevents a livelock where the pipeline is waiting for a full channel to send data to
         // the source and the source is waiting for a full channel to send data to the pipeline.
-        // We prevent unbounded groth by two mechanisms:
+        // We prevent unbounded growth by two mechanisms:
         // 1) counterflow is ALWAYS and ONLY created in response to a message
         // 2) we always process counterflow prior to forward flow
         //
         // As long as we have counterflow messages to process, and channel size is growing we do
-        // not process any forward flow. Without forwardflow we stave the counterflow ensuring that
+        // not process any forward flow. Without forward flow we stave the counterflow ensuring that
         // the counterflow channel is always bounded by the forward flow in a 1:N relationship where
         // N is the maximum number of counterflow events a single event can trigger.
         // N is normally < 1.
         let (tx, rx) = unbounded();
-        let codec = codec::lookup(&codec)?;
+        let codec = codec::lookup(&config.codec)?;
         let mut resolved_codec_map = codec::builtin_codec_map();
         // override the builtin map
-        for (k, v) in codec_map {
+        for (k, v) in config.codec_map {
             resolved_codec_map.insert(k, codec::lookup(&v)?);
         }
-        let pp_template = processors.pre.to_vec();
+        let pp_template = config.processors.pre.to_vec();
         let mut preprocessors = BTreeMap::new();
         preprocessors.insert(0, make_preprocessors(&&pp_template)?);
 
@@ -492,39 +488,22 @@ where
                 //postprocessors,
                 codec,
                 codec_map: resolved_codec_map,
-                metrics_reporter,
+                metrics_reporter: config.metrics_reporter,
                 triggered: false,
                 id: 0,
                 pipelines_out: Vec::new(),
                 pipelines_err: Vec::new(),
-                uid,
+                uid: config.onramp_uid,
                 is_transactional,
-                err_required,
+                err_required: config.err_required,
             },
             tx,
         ))
     }
 
-    async fn start(
-        uid: u64,
-        source: T,
-        codec: &str,
-        codec_map: HashMap<String, String>,
-        processors: Processors<'_>,
-        metrics_reporter: RampReporter,
-        err_required: bool,
-    ) -> Result<onramp::Addr> {
+    async fn start(source: T, config: OnrampConfig<'_>) -> Result<onramp::Addr> {
         let name = source.id().short_id("src");
-        let (manager, tx) = SourceManager::new(
-            uid,
-            source,
-            processors,
-            codec,
-            codec_map,
-            metrics_reporter,
-            err_required,
-        )
-        .await?;
+        let (manager, tx) = SourceManager::new(source, config).await?;
         task::Builder::new().name(name).spawn(manager.run())?;
         Ok(tx)
     }
