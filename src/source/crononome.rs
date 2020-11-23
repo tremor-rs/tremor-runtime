@@ -329,6 +329,7 @@ impl Onramp for Crononome {
         processors: Processors<'_>,
         metrics_reporter: RampReporter,
         _is_linked: bool,
+        err_required: bool,
     ) -> Result<onramp::Addr> {
         SourceManager::start(
             onramp_uid,
@@ -337,6 +338,7 @@ impl Onramp for Crononome {
             codec_map,
             processors,
             metrics_reporter,
+            err_required,
         )
         .await
     }

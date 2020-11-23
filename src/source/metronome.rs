@@ -92,6 +92,7 @@ impl Onramp for Metronome {
         processors: Processors<'_>,
         metrics_reporter: RampReporter,
         _is_linked: bool,
+        err_required: bool,
     ) -> Result<onramp::Addr> {
         SourceManager::start(
             onramp_uid,
@@ -100,6 +101,7 @@ impl Onramp for Metronome {
             codec_map,
             processors,
             metrics_reporter,
+            err_required,
         )
         .await
     }

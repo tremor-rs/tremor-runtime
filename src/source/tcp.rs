@@ -158,6 +158,7 @@ impl Onramp for Tcp {
         processors: Processors<'_>,
         metrics_reporter: RampReporter,
         _is_linked: bool,
+        err_required: bool,
     ) -> Result<onramp::Addr> {
         let source = Int::from_config(onramp_uid, self.onramp_id.clone(), &self.config)?;
         SourceManager::start(
@@ -167,6 +168,7 @@ impl Onramp for Tcp {
             codec_map,
             processors,
             metrics_reporter,
+            err_required,
         )
         .await
     }

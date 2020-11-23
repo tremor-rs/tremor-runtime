@@ -50,6 +50,8 @@ pub struct OnRamp {
     #[serde(rename = "linked", default = "Default::default")]
     // TODO validate that this is turned on only for supported onramps (rest, ws)
     pub(crate) is_linked: bool,
+    #[serde(rename = "error_required", default = "Default::default")]
+    pub(crate) err_required: bool,
     #[serde(default = "Default::default", skip_serializing_if = "Option::is_none")]
     pub(crate) codec: Option<String>,
     /// mapping from mime-type to codec used to handle requests/responses

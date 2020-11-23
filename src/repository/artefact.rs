@@ -371,6 +371,7 @@ impl Artefact for OnrampArtefact {
                     stream,
                     metrics_reporter,
                     is_linked: self.is_linked,
+                    err_required: self.err_required,
                 }),
             ))
             .await?;

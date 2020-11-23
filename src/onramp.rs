@@ -53,6 +53,7 @@ pub(crate) trait Onramp: Send {
         processors: Processors<'_>,
         metrics_reporter: RampReporter,
         is_linked: bool,
+        err_required: bool,
     ) -> Result<Addr>;
     fn default_codec(&self) -> &str;
 }
@@ -88,6 +89,7 @@ pub(crate) struct Create {
     pub postprocessors: Vec<String>,
     pub metrics_reporter: RampReporter,
     pub is_linked: bool,
+    pub err_required: bool,
 }
 
 impl fmt::Debug for Create {
@@ -133,6 +135,7 @@ impl Manager {
                             metrics_reporter,
                             is_linked,
                             id,
+                            err_required,
                         } = *c;
                         onramp_uid += 1;
                         match stream
@@ -146,6 +149,7 @@ impl Manager {
                                 },
                                 metrics_reporter,
                                 is_linked,
+                                err_required,
                             )
                             .await
                         {
