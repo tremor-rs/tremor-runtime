@@ -43,18 +43,18 @@ pub enum Msg {
 
 pub type Addr = async_channel::Sender<Msg>;
 
+pub(crate) struct OnrampConfig<'cfg> {
+    pub onramp_uid: u64,
+    pub codec: &'cfg str,
+    pub codec_map: halfbrown::HashMap<String, String>,
+    pub processors: Processors<'cfg>,
+    pub metrics_reporter: RampReporter,
+    pub is_linked: bool,
+    pub err_required: bool,
+}
 #[async_trait::async_trait]
 pub(crate) trait Onramp: Send {
-    async fn start(
-        &mut self,
-        onramp_uid: u64,
-        codec: &str,
-        codec_map: halfbrown::HashMap<String, String>,
-        processors: Processors<'_>,
-        metrics_reporter: RampReporter,
-        is_linked: bool,
-        err_required: bool,
-    ) -> Result<Addr>;
+    async fn start(&mut self, config: OnrampConfig<'_>) -> Result<Addr>;
     fn default_codec(&self) -> &str;
 }
 
@@ -139,18 +139,18 @@ impl Manager {
                         } = *c;
                         onramp_uid += 1;
                         match stream
-                            .start(
+                            .start(OnrampConfig {
                                 onramp_uid,
-                                &codec,
+                                codec: &codec,
                                 codec_map,
-                                Processors {
+                                processors: Processors {
                                     pre: &preprocessors,
                                     post: &postprocessors,
                                 },
                                 metrics_reporter,
                                 is_linked,
                                 err_required,
-                            )
+                            })
                             .await
                         {
                             Ok(addr) => {

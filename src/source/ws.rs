@@ -78,7 +78,7 @@ pub struct Int {
     // mapping of event id to stream id
     messages: BTreeMap<u64, usize>,
     // mapping of stream id to the stream sender
-    // TODO alternative to this? possible to store actual ws_tream refs here?
+    // TODO alternative to this? possible to store actual ws_stream refs here?
     streams: BTreeMap<usize, Sender<SerializedResponse>>,
 }
 
@@ -183,7 +183,7 @@ async fn handle_connection(
                 Err(e) => error!(
                     "[Onramp::WS] Invalid Post Processors, not starting response receiver task: {}",
                     e
-                ), // shouldnt happen, got valitdated before in init and is not changes after
+                ), // shouldn't happen, got validated before in init and is not changes after
             }
             Ok(())
         });
@@ -380,33 +380,15 @@ impl Source for Int {
 
 #[async_trait::async_trait]
 impl Onramp for Ws {
-    async fn start(
-        &mut self,
-        onramp_uid: u64,
-        codec: &str,
-        codec_map: halfbrown::HashMap<String, String>,
-        processors: Processors<'_>,
-        metrics_reporter: RampReporter,
-        is_linked: bool,
-        err_required: bool,
-    ) -> Result<onramp::Addr> {
+    async fn start(&mut self, config: OnrampConfig<'_>) -> Result<onramp::Addr> {
         let source = Int::from_config(
-            onramp_uid,
+            config.onramp_uid,
             self.onramp_id.clone(),
-            processors.post,
+            config.processors.post,
             &self.config,
-            is_linked,
+            config.is_linked,
         )?;
-        SourceManager::start(
-            onramp_uid,
-            source,
-            codec,
-            codec_map,
-            processors,
-            metrics_reporter,
-            err_required,
-        )
-        .await
+        SourceManager::start(source, config).await
     }
 
     fn default_codec(&self) -> &str {
