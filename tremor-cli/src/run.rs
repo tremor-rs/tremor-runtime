@@ -210,7 +210,7 @@ impl Egress {
             }
             Ok(Return::EmitEvent { port }) => {
                 match port.unwrap_or_else(|| String::from("out")).as_str() {
-                    "error" | "stderr" => {
+                    "err" | "error" | "stderr" => {
                         eprintln!("{}", event.encode());
                     }
                     _ => {
