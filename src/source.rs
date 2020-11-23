@@ -169,6 +169,7 @@ where
     triggered: bool,
     pipelines_out: Vec<(TremorURL, pipeline::Addr)>,
     pipelines_err: Vec<(TremorURL, pipeline::Addr)>,
+    err_required: bool,
     id: u64,
     is_transactional: bool,
     /// Unique Id for the source
@@ -259,7 +260,11 @@ where
 
     async fn handle_pipelines(&mut self) -> Result<bool> {
         loop {
-            let msg = if self.pipelines_out.is_empty() || self.triggered || !self.rx.is_empty() {
+            let msg = if self.pipelines_out.is_empty()
+                || self.triggered
+                || !self.rx.is_empty()
+                || (self.err_required && self.pipelines_err.is_empty())
+            {
                 self.rx.recv().await?
             } else {
                 return Ok(false);
@@ -445,6 +450,7 @@ where
         codec: &str,
         codec_map: HashMap<String, String>,
         metrics_reporter: RampReporter,
+        err_required: bool,
     ) -> Result<(Self, Sender<onramp::Msg>)> {
         // We use a unbounded channel for counterflow, while an unbounded channel seems dangerous
         // there is soundness to this.
@@ -493,6 +499,7 @@ where
                 pipelines_err: Vec::new(),
                 uid,
                 is_transactional,
+                err_required,
             },
             tx,
         ))
@@ -505,10 +512,19 @@ where
         codec_map: HashMap<String, String>,
         processors: Processors<'_>,
         metrics_reporter: RampReporter,
+        err_required: bool,
     ) -> Result<onramp::Addr> {
         let name = source.id().short_id("src");
-        let (manager, tx) =
-            SourceManager::new(uid, source, processors, codec, codec_map, metrics_reporter).await?;
+        let (manager, tx) = SourceManager::new(
+            uid,
+            source,
+            processors,
+            codec,
+            codec_map,
+            metrics_reporter,
+            err_required,
+        )
+        .await?;
         task::Builder::new().name(name).spawn(manager.run())?;
         Ok(tx)
     }

@@ -152,6 +152,7 @@ impl Onramp for File {
         processors: Processors<'_>,
         metrics_reporter: RampReporter,
         _is_linked: bool,
+        err_required: bool,
     ) -> Result<onramp::Addr> {
         let source =
             Int::from_config(onramp_uid, self.onramp_id.clone(), self.config.clone()).await?;
@@ -162,6 +163,7 @@ impl Onramp for File {
             codec_map,
             processors,
             metrics_reporter,
+            err_required,
         )
         .await
     }

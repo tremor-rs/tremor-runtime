@@ -388,6 +388,7 @@ impl Onramp for Ws {
         processors: Processors<'_>,
         metrics_reporter: RampReporter,
         is_linked: bool,
+        err_required: bool,
     ) -> Result<onramp::Addr> {
         let source = Int::from_config(
             onramp_uid,
@@ -403,6 +404,7 @@ impl Onramp for Ws {
             codec_map,
             processors,
             metrics_reporter,
+            err_required,
         )
         .await
     }
