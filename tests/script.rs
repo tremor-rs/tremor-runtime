@@ -161,6 +161,7 @@ test_cases!(
     string_quoted_curly,
     heredoc_quoted_curly,
     string_interpolation_import,
+    string_interpolation_prefix,
     patch_in_place,
     tuple_pattern,
     pattern_cmp,
