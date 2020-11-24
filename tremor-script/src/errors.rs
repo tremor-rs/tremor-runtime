@@ -287,7 +287,7 @@ impl ErrorKind {
                 }
             }
             UnterminatedInterpolation(_, _, _) => {
-                Some("Did you mean to write a literal '{'? Esacpe it as '\\{' or '{{'.".to_string())
+                Some("Did you mean to write a literal '{' ? Escape it as '\\{' or '{{'.".to_string())
             }
             BadAccessInLocal(_, _, key, _) if key == "nil" => {
                 Some("Did you mean null?".to_owned())

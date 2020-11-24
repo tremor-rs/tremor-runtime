@@ -20,7 +20,6 @@ use crate::errors::{CompilerError, Error as ScriptError};
 use crate::lexer::{Token, TokenSpan};
 use crate::pos::Location;
 use serde::{Deserialize, Serialize};
-use std::convert::TryFrom;
 use std::io::Write;
 use termcolor::{Buffer, BufferWriter, Color, ColorChoice, ColorSpec, WriteColor};
 
@@ -219,6 +218,64 @@ pub trait Highlighter {
         self.highlight_errors_indent("", emit_linenos, file, tokens, error)
     }
 
+    /// write line prefix and optionally line number
+    #[inline]
+    fn write_line_prefix(
+        &mut self,
+        line_prefix: &str,
+        line: usize,
+        emit_linenos: bool,
+    ) -> Result<(), std::io::Error> {
+        self.set_color(ColorSpec::new().set_bold(true))?;
+        if emit_linenos {
+            write!(self.get_writer(), "{}{:5} | ", line_prefix, line)?;
+        } else {
+            write!(self.get_writer(), "{}      | ", line_prefix)?;
+        }
+        self.reset()?;
+        Ok(())
+    }
+
+    /// write the actual error message below the error location
+    #[inline]
+    fn write_callout(
+        &mut self,
+        callout: &str,
+        error_level: &ErrorLevel,
+        start_column: usize,
+        error_len: usize,
+    ) -> Result<(), std::io::Error> {
+        let prefix = " ".repeat(start_column.saturating_sub(1));
+        let underline = "^".repeat(error_len);
+        self.set_color(ColorSpec::new().set_bold(true))?;
+        write!(self.get_writer(), "      | {}", prefix)?;
+        self.set_color(
+            ColorSpec::new()
+                .set_bold(false)
+                .set_fg(Some(error_level.to_color())),
+        )?;
+        writeln!(self.get_writer(), "{} {}", underline, callout)?;
+        self.reset()?;
+        Ok(())
+    }
+
+    /// write a helpful hint for users below the error message
+    fn write_hint(
+        &mut self,
+        hint: &str,
+        start_column: usize,
+        error_len: usize,
+    ) -> Result<(), std::io::Error> {
+        let prefix = " ".repeat(start_column + error_len);
+        self.set_color(ColorSpec::new().set_bold(true))?;
+        write!(self.get_writer(), "      | {}", prefix)?;
+        self.set_color(ColorSpec::new().set_bold(false).set_fg(Some(Color::Yellow)))?;
+        writeln!(self.get_writer(), "NOTE: {}", hint)?;
+
+        self.reset()?;
+        Ok(())
+    }
+
     /// highlights compile time errors with indentation
     #[allow(clippy::cast_possible_truncation, clippy::too_many_lines)]
     fn highlight_errors_indent(
@@ -259,6 +316,7 @@ pub trait Highlighter {
             }) => writeln!(self.get_writer(), "Hint: ")?,
             _ => (),
         }
+
         for t in tokens {
             if t.span.start().line() != line {
                 line = t.span.start().line();
@@ -276,43 +334,33 @@ pub trait Highlighter {
                         // TODO This isn't perfect, there are cases in trickle where more specific
                         // hygienic errors would be preferable ( eg: for-locals integration test )
                         //
-                        let delta = end.column() as i64 - start.column() as i64;
-                        let len = usize::try_from(delta).unwrap_or(1);
-                        let prefix = " ".repeat(start.column().saturating_sub(1));
-                        let underline = "^".repeat(len);
-
-                        if let Some(token) = token {
-                            write!(self.get_writer(), "{}\n", token)?;
+                        let (start_column, len) = if start.line() == end.line() {
+                            let start_column = start.column();
+                            (
+                                start_column,
+                                end.column().saturating_sub(start_column).max(1),
+                            )
+                        } else {
+                            // multi-line token
+                            (0, end.column())
                         };
 
-                        self.set_color(ColorSpec::new().set_bold(true))?;
-                        write!(self.get_writer(), "      | {}", prefix)?;
-                        self.set_color(
-                            ColorSpec::new()
-                                .set_bold(false)
-                                .set_fg(Some(level.to_color())),
-                        )?;
-                        writeln!(self.get_writer(), "{} {}", underline, callout)?;
-                        self.reset()?;
+                        if let Some(token) = token {
+                            let mut token_lines = token.lines();
+                            if let Some(first_line) = token_lines.next() {
+                                write!(self.get_writer(), "{}\n", first_line)?;
+                                line += 1;
+                            }
+                        };
+                        self.write_callout(callout, level, start_column, len)?;
+
                         if let Some(hint) = hint {
-                            let prefix = " ".repeat(start.column() + len);
-                            self.set_color(ColorSpec::new().set_bold(true))?;
-                            write!(self.get_writer(), "      | {}", prefix)?;
-                            self.set_color(
-                                ColorSpec::new().set_bold(false).set_fg(Some(Color::Yellow)),
-                            )?;
-                            writeln!(self.get_writer(), "NOTE: {}", hint)?;
+                            self.write_hint(hint, start_column, len)?;
                         }
                     }
                     self.reset()?;
                 }
-                self.set_color(ColorSpec::new().set_bold(true))?;
-                if emit_linenos {
-                    write!(self.get_writer(), "{}{:5} | ", line_prefix, line)?;
-                } else {
-                    write!(self.get_writer(), "{}      | ", line_prefix)?;
-                }
-                self.reset()?;
+                self.write_line_prefix(line_prefix, line, emit_linenos)?;
             }
             let x = t;
             let mut c = ColorSpec::new();
@@ -410,40 +458,46 @@ pub trait Highlighter {
         }) = &error
         {
             if !printed_error || start.line() == line {
-                if end.line() > line {
+                let (start_column, len) = if start.line() == end.line() {
+                    let start_column = start.column();
+                    (
+                        start_column,
+                        end.column().saturating_sub(start_column).max(1),
+                    )
+                } else {
+                    // multi-line token, use only the last lines content for addressing
+                    (1, end.column())
+                };
+
+                // write token if given
+                if let Some(token) = token {
+                    let mut lines = token.lines();
+                    if let Some(first_line) = lines.next() {
+                        write!(self.get_writer(), "{}\n", first_line)?;
+                    }
                     line += 1;
-                    self.set_color(ColorSpec::new().set_bold(true))?;
-                    write!(self.get_writer(), "{:5} | ", line)?;
-                    self.reset()?;
+
+                    while end.line() >= line {
+                        if let Some(token_line) = lines.next() {
+                            self.write_line_prefix(line_prefix, line, emit_linenos)?;
+                            write!(self.get_writer(), "{}\n", token_line)?;
+                            line += 1;
+                        } else {
+                            break;
+                        }
+                    }
+                    // last empty line, we print it if we didnt reach the error-end line yet
+                    if end.line() > line && token.ends_with('\n') {
+                        self.write_line_prefix(line_prefix, line, emit_linenos)?;
+                        writeln!(self.get_writer())?;
+                    }
                 }
 
-                let len = if end.column() > start.column() {
-                    end.column() - start.column()
-                } else {
-                    1
-                };
-                let prefix = " ".repeat(start.column().saturating_sub(1));
-                let underline = "^".repeat(len);
-                if let Some(token) = token {
-                    write!(self.get_writer(), "{}\n", token)?;
-                };
-                self.set_color(ColorSpec::new().set_bold(true))?;
-                write!(self.get_writer(), "      | {}", prefix)?;
-                self.set_color(
-                    ColorSpec::new()
-                        .set_bold(false)
-                        .set_fg(Some(level.to_color())),
-                )?;
-                writeln!(self.get_writer(), "{} {}", underline, callout)?;
-                self.reset()?;
+                // write callout and hint
+                self.write_callout(callout, level, start_column, len)?;
                 if let Some(hint) = hint {
-                    let prefix = " ".repeat(start.column() + len);
-                    self.set_color(ColorSpec::new().set_bold(true))?;
-                    write!(self.get_writer(), "      | {}", prefix)?;
-                    self.set_color(ColorSpec::new().set_bold(false).set_fg(Some(Color::Yellow)))?;
-                    writeln!(self.get_writer(), "NOTE: {}", hint)?;
+                    self.write_hint(hint, start_column, len)?;
                 }
-                self.reset()?;
             }
         }
 
