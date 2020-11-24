@@ -52,7 +52,7 @@ pub trait Artefact: Clone {
     type LinkRHS: Clone;
     /// Move from Repository to Registry
     async fn spawn(&self, system: &World, servant_id: ServantId) -> Result<Self::SpawnResult>;
-    /// Move from Registry(instanciated) to Registry(Active) or from one form of active to another
+    /// Move from Registry(instantiated) to Registry(Active) or from one form of active to another
     /// This acts differently on bindings and the rest. Where the binding takers a mapping of string
     /// replacements, the others take a from and to id
     async fn link(
@@ -371,6 +371,7 @@ impl Artefact for OnrampArtefact {
                     stream,
                     metrics_reporter,
                     is_linked: self.is_linked,
+                    err_required: self.err_required,
                 }),
             ))
             .await?;
@@ -448,7 +449,7 @@ impl Artefact for OnrampArtefact {
                 expect_answers -= 1;
             }
 
-            info!("Onramp {} unklinked.", id);
+            info!("Onramp {} unlinked.", id);
             Ok(empty)
         } else {
             Err(format!("Unlinking failed Onramp {} not found ", id).into())
@@ -614,8 +615,8 @@ impl Artefact for Binding {
         // TODO Quiescence Protocol ( termination correctness checks )
         //
         // We should ensure any in-flight events in a pipeline are flushed
-        // to completion before unlinkining *OR* unlink should should block/wait
-        // until the pipeline quiesces before returning
+        // to completion before unlinking *OR* unlink should should block/wait
+        // until the pipeline reaches quiescence before returning
         //
         // For now, we let this hang wet - May require an FSM
         //
@@ -637,7 +638,7 @@ impl Artefact for Binding {
                 system.unlink_onramp(&from, mappings).await?;
             }
         }
-        // keep track of already handled pipelines, so we dont unlink twice and run into errors
+        // keep track of already handled pipelines, so we don't unlink twice and run into errors
         let mut unlinked = HashSet::with_capacity(self.binding.links.len());
         for (from, tos) in &self.binding.links {
             let mut from_instance = from.clone();

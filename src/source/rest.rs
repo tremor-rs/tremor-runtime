@@ -448,7 +448,7 @@ impl Source for Int {
             }
             warn!("[Source::{}] Server stopped", source_id);
 
-            // TODO better statechange here?
+            // TODO better state change here?
             tx.send(SourceReply::StateChange(SourceState::Disconnected).into())
                 .await?;
 
@@ -467,31 +467,15 @@ impl Source for Int {
 
 #[async_trait::async_trait]
 impl Onramp for Rest {
-    async fn start(
-        &mut self,
-        onramp_uid: u64,
-        codec: &str,
-        codec_map: halfbrown::HashMap<String, String>,
-        processors: Processors<'_>,
-        metrics_reporter: RampReporter,
-        is_linked: bool,
-    ) -> Result<onramp::Addr> {
+    async fn start(&mut self, config: OnrampConfig<'_>) -> Result<onramp::Addr> {
         let source = Int::from_config(
-            onramp_uid,
+            config.onramp_uid,
             self.onramp_id.clone(),
             &self.config,
-            &processors.post,
-            is_linked,
+            &config.processors.post,
+            config.is_linked,
         )?;
-        SourceManager::start(
-            onramp_uid,
-            source,
-            codec,
-            codec_map,
-            processors,
-            metrics_reporter,
-        )
-        .await
+        SourceManager::start(source, config).await
     }
 
     fn default_codec(&self) -> &str {

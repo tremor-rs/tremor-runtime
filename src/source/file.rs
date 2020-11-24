@@ -118,13 +118,13 @@ impl Source for Int {
             Ok(SourceReply::Data {
                 origin_uri: self.origin_uri.clone(),
                 data: line.as_bytes().to_vec(),
-                meta: None,           // TODO: add linenum and filename here?
+                meta: None,           // TODO: add line num and filename here?
                 codec_override: None, // TODO overwrite codec based on file ending or magic bytes
                 stream: 0,
             })
         } else if self.config.sleep_on_done == 0 {
             if self.config.close_on_done {
-                // ALLOW: This is on purpose, close when done tells the onramp to terminate when it's done with sending it's data - this is for one off's
+                // ALLOW: This is on purpose, close when done tells the onramp to terminate when it's done with sending it's data - this is for one-offs
                 process::exit(0);
             }
             Ok(SourceReply::StateChange(SourceState::Disconnected))
@@ -144,26 +144,14 @@ impl Source for Int {
 
 #[async_trait::async_trait]
 impl Onramp for File {
-    async fn start(
-        &mut self,
-        onramp_uid: u64,
-        codec: &str,
-        codec_map: halfbrown::HashMap<String, String>,
-        processors: Processors<'_>,
-        metrics_reporter: RampReporter,
-        _is_linked: bool,
-    ) -> Result<onramp::Addr> {
-        let source =
-            Int::from_config(onramp_uid, self.onramp_id.clone(), self.config.clone()).await?;
-        SourceManager::start(
-            onramp_uid,
-            source,
-            codec,
-            codec_map,
-            processors,
-            metrics_reporter,
+    async fn start(&mut self, config: OnrampConfig<'_>) -> Result<onramp::Addr> {
+        let source = Int::from_config(
+            config.onramp_uid,
+            self.onramp_id.clone(),
+            self.config.clone(),
         )
-        .await
+        .await?;
+        SourceManager::start(source, config).await
     }
     fn default_codec(&self) -> &str {
         "json"

@@ -321,24 +321,8 @@ impl Source for Crononome {
 
 #[async_trait::async_trait]
 impl Onramp for Crononome {
-    async fn start(
-        &mut self,
-        onramp_uid: u64,
-        codec: &str,
-        codec_map: halfbrown::HashMap<String, String>,
-        processors: Processors<'_>,
-        metrics_reporter: RampReporter,
-        _is_linked: bool,
-    ) -> Result<onramp::Addr> {
-        SourceManager::start(
-            onramp_uid,
-            self.clone(),
-            codec,
-            codec_map,
-            processors,
-            metrics_reporter,
-        )
-        .await
+    async fn start(&mut self, config: OnrampConfig<'_>) -> Result<onramp::Addr> {
+        SourceManager::start(self.clone(), config).await
     }
 
     fn default_codec(&self) -> &str {

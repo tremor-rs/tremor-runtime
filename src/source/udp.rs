@@ -129,25 +129,9 @@ impl Source for Int {
 
 #[async_trait::async_trait]
 impl Onramp for Udp {
-    async fn start(
-        &mut self,
-        onramp_uid: u64,
-        codec: &str,
-        codec_map: halfbrown::HashMap<String, String>,
-        processors: Processors<'_>,
-        metrics_reporter: RampReporter,
-        _is_linked: bool,
-    ) -> Result<onramp::Addr> {
-        let source = Int::from_config(onramp_uid, self.onramp_id.clone(), &self.config);
-        SourceManager::start(
-            onramp_uid,
-            source,
-            codec,
-            codec_map,
-            processors,
-            metrics_reporter,
-        )
-        .await
+    async fn start(&mut self, config: OnrampConfig<'_>) -> Result<onramp::Addr> {
+        let source = Int::from_config(config.onramp_uid, self.onramp_id.clone(), &self.config);
+        SourceManager::start(source, config).await
     }
     fn default_codec(&self) -> &str {
         "string"
