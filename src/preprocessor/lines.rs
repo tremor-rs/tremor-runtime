@@ -124,8 +124,13 @@ impl Preprocessor for Lines {
 
         if !self.is_buffered {
             return Ok(lines
-                .filter(|line| self.is_valid_line(line))
-                .map(|line| line.to_vec())
+                .filter_map(|line| {
+                    if self.is_valid_line(line) {
+                        Some(line.to_vec())
+                    } else {
+                        None
+                    }
+                })
                 .collect::<Vec<Vec<u8>>>());
         }
 
