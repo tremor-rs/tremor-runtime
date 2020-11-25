@@ -134,9 +134,9 @@ test_cases!(
     pp_cyclic,
     pp_nest_cyclic,
     //INSERT
-lexer_string_interpolation3,
-lexer_string_interpolation2,
-lexer_string_interpolation,
+    lexer_string_interpolation3,
+    lexer_string_interpolation2,
+    lexer_string_interpolation,
     lexer_heredoc_interpolation,
     lexer_heredoc_interpolation2,
     lexer_heredoc_interpolation3,
