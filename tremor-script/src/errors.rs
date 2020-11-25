@@ -23,14 +23,14 @@ use crate::errors;
 use crate::lexer;
 use crate::path::ModulePath;
 use crate::pos;
-use crate::pos::{Location, Range};
+use crate::pos::{Location, Range, Spanned};
 use error_chain::error_chain;
 use lalrpop_util::ParseError as LalrpopError;
 use serde::{Deserialize, Serialize};
 pub use simd_json::ValueType;
 use simd_json::{prelude::*, BorrowedValue as Value};
-use std::num;
 use std::ops::{Range as RangeExclusive, RangeInclusive};
+use std::{num, ops::Deref};
 
 /// A compile-time error capturing the preprocessors cus at the time of the error
 #[derive(Debug)]
@@ -150,6 +150,19 @@ pub(crate) fn best_hint(
         .map(|(d, s)| (d, s.clone()))
 }
 pub(crate) type ErrorLocation = (Option<Range>, Option<Range>);
+
+#[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UnfinishedToken {
+    pub(crate) range: Range,
+    pub(crate) value: String,
+}
+
+impl UnfinishedToken {
+    pub(crate) fn new(range: Range, value: String) -> Self {
+        Self { range, value }
+    }
+}
+
 impl ErrorKind {
     pub(crate) fn cu(&self) -> usize {
         self.expr().0.map(Range::cu).unwrap_or_default()
@@ -251,7 +264,7 @@ impl ErrorKind {
             | Self::__Nonexhaustive { .. } => (Some(Range::default()), None),
         }
     }
-    pub(crate) fn token(&self) -> Option<String> {
+    pub(crate) fn token(&self) -> Option<UnfinishedToken> {
         use ErrorKind::{
             InvalidUTF8Sequence, TailingHereDoc, UnexpectedEscapeCode, UnterminatedExtractor,
             UnterminatedHereDoc, UnterminatedIdentLiteral, UnterminatedInterpolation,
@@ -265,7 +278,7 @@ impl ErrorKind {
             | UnterminatedHereDoc(_, _, token)
             | TailingHereDoc(_, _, token, _)
             | InvalidUTF8Sequence(_, _, token)
-            | UnexpectedEscapeCode(_, _, token, _) => Some(token.to_string()),
+            | UnexpectedEscapeCode(_, _, token, _) => Some(token.clone()),
             _ => None,
         }
     }
@@ -343,7 +356,7 @@ impl Error {
     pub(crate) fn hint(&self) -> Option<String> {
         self.0.hint()
     }
-    pub(crate) fn token(&self) -> Option<String> {
+    pub(crate) fn token(&self) -> Option<UnfinishedToken> {
         self.0.token()
     }
 }
@@ -455,35 +468,33 @@ error_chain! {
         /*
          * Lexer, Preprocessor and Parser
          */
-        UnterminatedExtractor(expr: Range, inner: Range, extractor: String) {
+        UnterminatedExtractor(expr: Range, inner: Range, extractor: UnfinishedToken) {
             description("Unterminated extractor")
                 display("It looks like you forgot to terminate an extractor with a closing '|'")
         }
 
-        UnterminatedStringLiteral(expr: Range, inner: Range, string: String) {
+        UnterminatedStringLiteral(expr: Range, inner: Range, string: UnfinishedToken) {
             description("Unterminated string")
                 display("It looks like you forgot to terminate a string with a closing '\"'")
         }
 
-        UnterminatedHereDoc(expr: Range, inner: Range, string: String) {
+        UnterminatedHereDoc(expr: Range, inner: Range, string: UnfinishedToken) {
             description("Unterminated heredoc")
                 display("It looks like you forgot to terminate a here doc with with a closing '\"\"\"'")
         }
-        TailingHereDoc(expr: Range, inner: Range, hd: String, ch: char) {
+        TailingHereDoc(expr: Range, inner: Range, hd: UnfinishedToken, ch: char) {
             description("Tailing Characters after opening a here doc")
                 display("It looks like you have characters tailing the here doc opening, it needs to be followed by a newline")
         }
-        UnterminatedInterpolation(expr: Range, inner: Range, string_with_interpolation: String) {
+        UnterminatedInterpolation(expr: Range, inner: Range, string_with_interpolation: UnfinishedToken) {
             description("Unterminated String interpolation")
                 display("It looks like you forgot to terminate a string interpolation with a closing '}}'")
-
         }
 
-        UnterminatedIdentLiteral(expr: Range, inner: Range, extractor: String)
+        UnterminatedIdentLiteral(expr: Range, inner: Range, ident: UnfinishedToken)
         {
             description("Unterminated ident")
                 display("It looks like you forgot to terminate an ident with a closing '`'")
-
         }
 
         UnexpectedCharacter(expr: Range, inner: Range, found: char){
@@ -491,12 +502,12 @@ error_chain! {
                 display("An unexpected character '{}' was found", found)
         }
 
-        UnexpectedEscapeCode(expr: Range, inner: Range, token: String, found: char){
+        UnexpectedEscapeCode(expr: Range, inner: Range, token: UnfinishedToken, found: char){
             description("An unexpected escape code was found")
                 display("An unexpected escape code '{}' was found", found)
 
         }
-        InvalidUTF8Sequence(expr: Range, inner: Range, token: String){
+        InvalidUTF8Sequence(expr: Range, inner: Range, token: UnfinishedToken){
             description("An invalid UTF8 escape sequence was found")
                 display("An invalid UTF8 escape sequence was found")
 

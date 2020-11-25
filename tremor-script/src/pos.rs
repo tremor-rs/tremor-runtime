@@ -93,6 +93,7 @@ pub struct Spanned<T> {
     /// The token
     pub value: T,
 }
+
 /// A rage in a file between two locations
 #[derive(
     Copy, Clone, Default, Eq, PartialEq, Debug, Hash, Ord, PartialOrd, Serialize, Deserialize,
@@ -191,6 +192,13 @@ impl Location {
         }
         self.absolute += ch.len_utf8();
     }
+
+    pub(crate) fn shift_str(&mut self, s: &str) {
+        for c in s.chars() {
+            self.shift(c);
+        }
+    }
+
     pub(crate) fn extend_left(&mut self, ch: char) {
         if self.column != 0 {
             self.column -= 1;

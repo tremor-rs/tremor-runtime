@@ -126,19 +126,19 @@ impl offramp::Impl for Kafka {
 }
 
 fn is_fatal(e: &KafkaError) -> bool {
-    match e {
+    matches!(
+        e,
         KafkaError::AdminOp(rdkafka::error::RDKafkaError::Fatal)
-        | KafkaError::ConsumerCommit(rdkafka::error::RDKafkaError::Fatal)
-        | KafkaError::Global(rdkafka::error::RDKafkaError::Fatal)
-        | KafkaError::GroupListFetch(rdkafka::error::RDKafkaError::Fatal)
-        | KafkaError::MessageConsumption(rdkafka::error::RDKafkaError::Fatal)
-        | KafkaError::MessageProduction(rdkafka::error::RDKafkaError::Fatal)
-        | KafkaError::MetadataFetch(rdkafka::error::RDKafkaError::Fatal)
-        | KafkaError::OffsetFetch(rdkafka::error::RDKafkaError::Fatal)
-        | KafkaError::SetPartitionOffset(rdkafka::error::RDKafkaError::Fatal)
-        | KafkaError::StoreOffset(rdkafka::error::RDKafkaError::Fatal) => true,
-        _ => false,
-    }
+            | KafkaError::ConsumerCommit(rdkafka::error::RDKafkaError::Fatal)
+            | KafkaError::Global(rdkafka::error::RDKafkaError::Fatal)
+            | KafkaError::GroupListFetch(rdkafka::error::RDKafkaError::Fatal)
+            | KafkaError::MessageConsumption(rdkafka::error::RDKafkaError::Fatal)
+            | KafkaError::MessageProduction(rdkafka::error::RDKafkaError::Fatal)
+            | KafkaError::MetadataFetch(rdkafka::error::RDKafkaError::Fatal)
+            | KafkaError::OffsetFetch(rdkafka::error::RDKafkaError::Fatal)
+            | KafkaError::SetPartitionOffset(rdkafka::error::RDKafkaError::Fatal)
+            | KafkaError::StoreOffset(rdkafka::error::RDKafkaError::Fatal)
+    )
 }
 
 unsafe fn get_fatal_error<C>(

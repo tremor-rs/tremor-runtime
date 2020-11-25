@@ -848,10 +848,7 @@ pub enum ImutExprInt<'script> {
 }
 
 fn is_lit<'script>(e: &ImutExprInt<'script>) -> bool {
-    match e {
-        ImutExprInt::Literal(_) => true,
-        _ => false,
-    }
+    matches!(e, ImutExprInt::Literal(_))
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -1252,18 +1249,10 @@ pub enum Pattern<'script> {
 }
 impl<'script> Pattern<'script> {
     fn is_default(&self) -> bool {
-        if let Pattern::Default = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, Pattern::Default)
     }
     fn is_assign(&self) -> bool {
-        if let Pattern::Assign(_) = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, Pattern::Assign(_))
     }
 }
 

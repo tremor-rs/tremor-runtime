@@ -25,6 +25,8 @@
 )]
 // TODO We need this for simd-json-derive
 #![allow(clippy::missing_errors_doc)]
+// often does not work because borrow checker
+#![allow(clippy::option_if_let_else)]
 
 /// The Tremor Script AST
 pub mod ast;

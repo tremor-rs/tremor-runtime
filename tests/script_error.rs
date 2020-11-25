@@ -134,6 +134,12 @@ test_cases!(
     pp_cyclic,
     pp_nest_cyclic,
     //INSERT
+lexer_string_interpolation3,
+lexer_string_interpolation2,
+lexer_string_interpolation,
+    lexer_heredoc_interpolation,
+    lexer_heredoc_interpolation2,
+    lexer_heredoc_interpolation3,
     invalid_utf8_1,
     invalid_utf8_2,
     error_in_include,

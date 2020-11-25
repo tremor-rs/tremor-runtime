@@ -350,6 +350,7 @@ impl Source for Int {
             // but only commit the offsets explicitly stored via `consumer.store_offset`.
             .set("enable.auto.offset.store", "true");
 
+        #[allow(clippy::option_if_let_else)]
         let client_config = if let Some(options) = self.config.rdkafka_options.as_ref() {
             options
                 .iter()

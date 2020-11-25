@@ -58,6 +58,7 @@ impl TremorApp {
             .and_then(|s| Ok(url::Url::parse(s)?))
     }
 
+    #[allow(clippy::map_err_ignore)]
     pub(crate) fn endpoint(&self, endpoint: &str) -> Result<url::Url> {
         self.default_url().and_then(|mut url| {
             url.path_segments_mut()
@@ -67,6 +68,7 @@ impl TremorApp {
         })
     }
 
+    #[allow(clippy::map_err_ignore)]
     pub(crate) fn endpoint_id(&self, endpoint: &str, id: &str) -> Result<url::Url> {
         self.default_url().and_then(|mut url| {
             url.path_segments_mut()
@@ -77,6 +79,7 @@ impl TremorApp {
         })
     }
 
+    #[allow(clippy::map_err_ignore)]
     pub(crate) fn endpoint_id_instance(
         &self,
         endpoint: &str,

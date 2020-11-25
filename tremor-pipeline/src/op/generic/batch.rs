@@ -45,11 +45,7 @@ pub fn empty() -> LineValue {
 op!(BatchFactory(node) {
 if let Some(map) = &node.config {
     let config: Config = Config::new(map)?;
-    let max_delay_ns = if let Some(max_delay_ms) = config.timeout {
-        Some(max_delay_ms * 1_000_000)
-    } else {
-        None
-    };
+    let max_delay_ns = config.timeout.map(|max_delay_ms| max_delay_ms * 1_000_000);
     Ok(Box::new(Batch {
         data: empty(),
         len: 0,
@@ -140,28 +136,29 @@ impl Operator for Batch {
     }
 
     fn on_signal(&mut self, _uid: u64, signal: &mut Event) -> Result<EventAndInsights> {
-        if let Some(delay_ns) = self.max_delay_ns {
-            if signal.ingest_ns - self.first_ns > delay_ns {
-                // We don't want to modify the original signal we clone it to
-                // create a new event.
+        self.max_delay_ns.map_or_else(
+            || Ok(EventAndInsights::default()),
+            |delay_ns| {
+                if signal.ingest_ns - self.first_ns > delay_ns {
+                    // We don't want to modify the original signal we clone it to
+                    // create a new event.
 
-                let mut data = empty();
-                swap(&mut data, &mut self.data);
-                self.len = 0;
-                let mut event = Event {
-                    data,
-                    ingest_ns: self.first_ns,
-                    is_batch: true,
-                    ..Event::default()
-                };
-                swap(&mut self.event_ids, &mut event.id);
-                Ok(EventAndInsights::from(event))
-            } else {
-                Ok(EventAndInsights::default())
-            }
-        } else {
-            Ok(EventAndInsights::default())
-        }
+                    let mut data = empty();
+                    swap(&mut data, &mut self.data);
+                    self.len = 0;
+                    let mut event = Event {
+                        data,
+                        ingest_ns: self.first_ns,
+                        is_batch: true,
+                        ..Event::default()
+                    };
+                    swap(&mut self.event_ids, &mut event.id);
+                    Ok(EventAndInsights::from(event))
+                } else {
+                    Ok(EventAndInsights::default())
+                }
+            },
+        )
     }
 }
 

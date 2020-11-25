@@ -4,4 +4,4 @@ Warning:
     3 |   default => true
     4 |   default => false
     5 | end end
-      |                ^ A match statement with more then one default clause will never reach any but the first default clause.
+      | ^^^ A match statement with more then one default clause will never reach any but the first default clause.

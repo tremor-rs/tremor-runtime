@@ -116,11 +116,9 @@ impl Int {
         // for request/response style flow), but for websocket, arbitrary events can
         // come in here.
         // also messages keeps growing as events come in right now
-        if let Some(stream_id) = self.messages.get(&id) {
-            self.streams.get(&stream_id)
-        } else {
-            None
-        }
+        self.messages
+            .get(&id)
+            .and_then(|stream_id| self.streams.get(stream_id))
     }
 }
 
@@ -260,6 +258,7 @@ fn create_error_response(err: String, event_id: String, source_id: &TremorURL) -
 
 #[async_trait::async_trait()]
 impl Source for Int {
+    #[allow(clippy::option_if_let_else)]
     async fn pull_event(&mut self, id: u64) -> Result<SourceReply> {
         if let Some(listener) = self.listener.as_ref() {
             match listener.try_recv() {

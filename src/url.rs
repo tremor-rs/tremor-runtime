@@ -208,11 +208,7 @@ impl TremorURL {
                 }
             };
 
-            let host = if let Some(host) = r.host_str() {
-                host.to_owned()
-            } else {
-                "localhost".to_owned()
-            };
+            let host = r.host_str().unwrap_or("localhost").to_owned();
             Ok(Self {
                 host,
                 scope,

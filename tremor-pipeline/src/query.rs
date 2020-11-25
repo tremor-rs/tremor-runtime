@@ -85,15 +85,27 @@ fn window_decl_to_impl<'script>(
         WindowKind::Tumbling => {
             let script = if d.script.is_some() { Some(d) } else { None };
             let ttl = d.params.get("eviction_period").and_then(Value::as_u64);
-            if let Some(interval) = d.params.get("interval").and_then(Value::as_u64) {
-                Ok(TumblingWindowOnTime::from_stmt(interval, ttl, script, stmt).into())
-            } else if let Some(size) = d.params.get("size").and_then(Value::as_u64) {
-                Ok(TumblingWindowOnNumber::from_stmt(size, ttl, script, stmt).into())
-            } else {
-                Err(Error::from(
-                    "Bad window configuration, either `size` or `interval` is required",
-                ))
-            }
+            d.params
+                .get("interval")
+                .and_then(Value::as_u64)
+                .map_or_else(
+                    || {
+                        d.params.get("size").and_then(Value::as_u64).map_or_else(
+                            || {
+                                Err(Error::from(
+                            "Bad window configuration, either `size` or `interval` is required",
+                        ))
+                            },
+                            |size| {
+                                Ok(TumblingWindowOnNumber::from_stmt(size, ttl, script, stmt)
+                                    .into())
+                            },
+                        )
+                    },
+                    |interval| {
+                        Ok(TumblingWindowOnTime::from_stmt(interval, ttl, script, stmt).into())
+                    },
+                )
         }
     }
 }

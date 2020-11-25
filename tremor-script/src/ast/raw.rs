@@ -1919,6 +1919,7 @@ impl<'script> Upable<'script> for LocalPathRaw<'script> {
                 vec![]
             };
             rel_path.push(id.to_string());
+            #[allow(clippy::option_if_let_else)]
             if let Some(idx) = helper.is_const(&rel_path) {
                 Ok(LocalPath {
                     is_const: true,

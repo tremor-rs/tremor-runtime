@@ -15,10 +15,10 @@
 // This is terminal related for colorful printing
 #![cfg(not(tarpaulin_include))]
 
-use crate::ast::Warning;
 use crate::errors::{CompilerError, Error as ScriptError};
 use crate::lexer::{Token, TokenSpan};
 use crate::pos::Location;
+use crate::{ast::Warning, errors::UnfinishedToken};
 use serde::{Deserialize, Serialize};
 use std::io::Write;
 use termcolor::{Buffer, BufferWriter, Color, ColorChoice, ColorSpec, WriteColor};
@@ -51,7 +51,7 @@ pub struct Error {
     callout: String,
     hint: Option<String>,
     level: ErrorLevel,
-    token: Option<String>,
+    token: Option<UnfinishedToken>,
 }
 
 impl Error {
@@ -88,8 +88,8 @@ impl Error {
 
     /// Get error token
     #[must_use]
-    pub fn token(&self) -> Option<&str> {
-        self.token.as_deref()
+    pub fn token(&self) -> Option<&UnfinishedToken> {
+        self.token.as_ref()
     }
 }
 
@@ -329,7 +329,7 @@ pub trait Highlighter {
                     token,
                 }) = &error
                 {
-                    if end.line() == line - 1 {
+                    if !printed_error && end.line() == line - 1 {
                         printed_error = true;
                         // TODO This isn't perfect, there are cases in trickle where more specific
                         // hygienic errors would be preferable ( eg: for-locals integration test )
@@ -342,23 +342,36 @@ pub trait Highlighter {
                             )
                         } else {
                             // multi-line token
-                            (0, end.column())
+                            (1, end.column() - 1)
                         };
 
                         if let Some(token) = token {
-                            let mut token_lines = token.lines();
-                            if let Some(first_line) = token_lines.next() {
-                                write!(self.get_writer(), "{}\n", first_line)?;
+                            let mut lines = token.value.lines();
+                            if let Some(first_line) = lines.next() {
+                                writeln!(self.get_writer(), "{}", first_line)?;
+                            }
+
+                            while end.line() >= line {
+                                if let Some(token_line) = lines.next() {
+                                    line += 1;
+                                    self.write_line_prefix(line_prefix, line, emit_linenos)?;
+                                    writeln!(self.get_writer(), "{}", token_line)?;
+                                } else {
+                                    break;
+                                }
+                            }
+                            // last empty line, we print it if we didnt reach the error-end line yet
+                            if end.line() > line && token.value.ends_with('\n') {
                                 line += 1;
+                                self.write_line_prefix(line_prefix, line, emit_linenos)?;
+                                writeln!(self.get_writer())?;
                             }
                         };
                         self.write_callout(callout, level, start_column, len)?;
-
                         if let Some(hint) = hint {
                             self.write_hint(hint, start_column, len)?;
                         }
                     }
-                    self.reset()?;
                 }
                 self.write_line_prefix(line_prefix, line, emit_linenos)?;
             }
@@ -466,28 +479,35 @@ pub trait Highlighter {
                     )
                 } else {
                     // multi-line token, use only the last lines content for addressing
-                    (1, end.column())
+                    (1, end.column() - 1)
                 };
 
                 // write token if given
                 if let Some(token) = token {
-                    let mut lines = token.lines();
-                    if let Some(first_line) = lines.next() {
-                        write!(self.get_writer(), "{}\n", first_line)?;
+                    // handle the case where we have no tokens, thus no line prefix has been printed yet
+                    // this happens if the first expression is faulty
+                    if line == 0 {
+                        line = token.range.0.line();
+                        self.write_line_prefix(line_prefix, line, emit_linenos)?;
                     }
-                    line += 1;
+
+                    let mut lines = token.value.lines();
+                    if let Some(first_line) = lines.next() {
+                        writeln!(self.get_writer(), "{}", first_line)?;
+                    }
 
                     while end.line() >= line {
                         if let Some(token_line) = lines.next() {
-                            self.write_line_prefix(line_prefix, line, emit_linenos)?;
-                            write!(self.get_writer(), "{}\n", token_line)?;
                             line += 1;
+                            self.write_line_prefix(line_prefix, line, emit_linenos)?;
+                            writeln!(self.get_writer(), "{}", token_line)?;
                         } else {
                             break;
                         }
                     }
                     // last empty line, we print it if we didnt reach the error-end line yet
-                    if end.line() > line && token.ends_with('\n') {
+                    if end.line() > line && token.value.ends_with('\n') {
+                        line += 1;
                         self.write_line_prefix(line_prefix, line, emit_linenos)?;
                         writeln!(self.get_writer())?;
                     }

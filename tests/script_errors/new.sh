@@ -17,4 +17,5 @@ fi
 cp -r ${BASEDIR}/_template ${TARGET}
 git add ${TARGET}
 
-sed -e "s;//INSERT;//INSERT\n    ${NAME},;" ${BASEDIR}/../script_error.rs > ${BASEDIR}/tmp && mv ${BASEDIR}/tmp ${BASEDIR}/../script_error.rs
+sed -e '/^    \/\/INSERT/a\
+'"${NAME}," ${BASEDIR}/../script_error.rs > ${BASEDIR}/tmp && mv ${BASEDIR}/tmp ${BASEDIR}/../script_error.rs

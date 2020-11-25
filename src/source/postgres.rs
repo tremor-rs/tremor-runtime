@@ -185,12 +185,7 @@ impl Source for Int {
         self.rows = match Compat::new(client.query(statement, &[&cf, &ct])).await {
             Ok(v) => v,
             Err(e) => {
-                let code = if let Some(v) = e.code() {
-                    v
-                } else {
-                    &SqlState::CONNECTION_EXCEPTION
-                };
-
+                let code = e.code().unwrap_or(&SqlState::CONNECTION_EXCEPTION);
                 if code == &SqlState::CONNECTION_EXCEPTION {
                     self.cli = None;
                     self.stmt = None;

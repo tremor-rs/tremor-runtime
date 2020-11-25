@@ -126,6 +126,7 @@ test_cases!(
     local_in_select,
     local_in_where,
     local_in_group_by,
+    pp_mod_not_found,
     pp_unrecognized_token,
     pp_unrecognized_token2,
     pp_unrecognized_token3,

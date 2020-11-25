@@ -16,6 +16,7 @@
 #[must_use]
 #[cfg(not(tarpaulin_include))]
 pub fn hostname() -> String {
+    #[allow(clippy::map_err_ignore)]
     hostname::get()
         .map_err(|_| ())
         .and_then(|s| s.into_string().map_err(|_| ()))

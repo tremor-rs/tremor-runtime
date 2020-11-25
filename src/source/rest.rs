@@ -343,6 +343,7 @@ fn make_response(
 impl Source for Int {
     // TODO possible to do this in source trait?
     async fn pull_event(&mut self, id: u64) -> Result<SourceReply> {
+        #[allow(clippy::option_if_let_else)]
         if let Some(listener) = self.listener.as_ref() {
             match listener.try_recv() {
                 Ok(RestSourceReply(Some(response_tx), source_reply)) => {

@@ -39,7 +39,7 @@ pub fn load(registry: &mut Registry) {
         }),
     ).insert(
         tremor_const_fn!(chash::sorted_serialize(_context, _data) {
-            let ser = sorted_serialize(_data).map_err(|_| FunctionError::RuntimeError{mfa: this_mfa(), error: "Failed to serialize".to_string()})?;
+            let ser = sorted_serialize(_data).map_err(|e| FunctionError::RuntimeError{mfa: this_mfa(), error: format!("Failed to serialize: {}", e)})?;
             Ok(Value::from(ser))
         }),
     );

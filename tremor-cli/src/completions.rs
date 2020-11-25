@@ -59,6 +59,7 @@ fn generate_for_shell(mut app: clap::App, shell: &str) -> Result<()> {
     }
 }
 
+#[allow(clippy::map_err_ignore)]
 fn guess_shell(app: clap::App) -> Result<()> {
     if std::env::var_os("ZSH_NAME").is_some() {
         generate_for_shell(app, "zsh")

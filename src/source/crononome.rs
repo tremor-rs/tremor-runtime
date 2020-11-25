@@ -263,12 +263,10 @@ impl ChronomicQueue {
         trigger
     }
     pub fn next(&mut self) -> Option<(String, Option<BorrowedValue<'static>>)> {
-        if let Some(ti) = self.tpq.pop() {
+        self.tpq.pop().map(|ti| {
             self.enqueue(&ti.what);
-            Some((ti.what.name, ti.what.payload))
-        } else {
-            None
-        }
+            (ti.what.name, ti.what.payload)
+        })
     }
 }
 

@@ -23,7 +23,7 @@
     clippy::unnecessary_unwrap,
     clippy::pedantic
 )]
-
+#![warn(clippy::option_if_let_else)]
 #[macro_use]
 extern crate serde_derive;
 #[macro_use]
@@ -120,12 +120,13 @@ pub fn incarnate(config: config::Config) -> Result<IncarnatedConfig> {
     })
 }
 
+// TODO: what the heck do we need this for?
 fn incarnate_onramps(config: config::OnRampVec) -> OnRampVec {
-    config.into_iter().map(|d| d).collect()
+    config.into_iter().collect()
 }
 
 fn incarnate_offramps(config: config::OffRampVec) -> OffRampVec {
-    config.into_iter().map(|d| d).collect()
+    config.into_iter().collect()
 }
 
 fn incarnate_links(config: &[Binding]) -> BindingVec {
@@ -160,7 +161,7 @@ pub async fn load_query_file(world: &World, file_name: &str) -> Result<usize> {
         &*FN_REGISTRY.lock()?,
         &aggr_reg,
     )?;
-    let id = query.id().unwrap_or_else(|| &file_id);
+    let id = query.id().unwrap_or(&file_id);
 
     let id = TremorURL::parse(&format!("/pipeline/{}", id))?;
     info!("Loading {} from file {}.", id, file_name);

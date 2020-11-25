@@ -1,6 +1,0 @@
-use foo as foo;
-
-match event of
-  case {} => "snot {snot}"
-  default => "ko"
-end;

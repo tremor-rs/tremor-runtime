@@ -111,11 +111,7 @@ impl Window {
     }
 
     pub(crate) fn ident_name(fqwn: &str) -> &str {
-        if let Some(last) = fqwn.split("::").last() {
-            last
-        } else {
-            fqwn
-        }
+        fqwn.split("::").last().map_or(fqwn, |last| last)
     }
 }
 
@@ -328,7 +324,7 @@ impl WindowTrait for TumblingWindowOnNumber {
             .script
             .as_ref()
             .and_then(|script| script.suffix().script.as_ref())
-            .map(|script| {
+            .map_or(Ok(1), |script| {
                 // TODO avoid origin_uri clone here
                 let context = EventContext::new(event.ingest_ns, event.origin_uri.clone());
                 let (mut unwind_event, mut event_meta) = event.data.parts();
@@ -345,8 +341,7 @@ impl WindowTrait for TumblingWindowOnNumber {
                     Return::Drop { .. } => None,
                 };
                 data.ok_or_else(|| Error::from("Data based window didn't provide a valid value"))
-            })
-            .unwrap_or(Ok(1))?;
+            })?;
 
         // If we're above count we emit and  set the new count to 1
         // ( we emit on the ) previous event

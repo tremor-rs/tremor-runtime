@@ -157,22 +157,22 @@ impl postgres::types::ToSql for Record<'_> {
     // NOTE: cannot easily tell which types are accepted due to trait not accepting self
     // which holds t context. This renders the function not as useful
     fn accepts(ty: &postgres::types::Type) -> bool {
-        match ty {
+        matches!(
+            ty,
             &postgres::types::Type::BOOL
-            | &postgres::types::Type::CHAR
-            | &postgres::types::Type::TEXT
-            | &postgres::types::Type::NAME
-            | &postgres::types::Type::INT2
-            | &postgres::types::Type::INT4
-            | &postgres::types::Type::INT8
-            | &postgres::types::Type::JSON
-            | &postgres::types::Type::JSONB
-            | &postgres::types::Type::TIMESTAMP
-            | &postgres::types::Type::TIMESTAMPTZ
-            | &postgres::types::Type::UNKNOWN
-            | &postgres::types::Type::VARCHAR => true,
-            _ => false,
-        }
+                | &postgres::types::Type::CHAR
+                | &postgres::types::Type::TEXT
+                | &postgres::types::Type::NAME
+                | &postgres::types::Type::INT2
+                | &postgres::types::Type::INT4
+                | &postgres::types::Type::INT8
+                | &postgres::types::Type::JSON
+                | &postgres::types::Type::JSONB
+                | &postgres::types::Type::TIMESTAMP
+                | &postgres::types::Type::TIMESTAMPTZ
+                | &postgres::types::Type::UNKNOWN
+                | &postgres::types::Type::VARCHAR
+        )
     }
 
     to_sql_checked!();

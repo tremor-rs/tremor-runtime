@@ -1,0 +1,5 @@
+Error: 
+    1 | """
+    2 | {"""
+      | ^ It looks like you forgot to terminate a string interpolation with a closing '}'
+      |   NOTE: Did you mean to write a literal '{' ? Escape it as '\{' or '{{'.
