@@ -2976,7 +2976,7 @@ mod tests {
         {
             res.push_str(&format!("{}", b.value));
         }
-        assert_eq!(snot.trim(), res);
+        assert_eq!(snot, res);
         let mut res2 = String::new();
         for b in badger2
             .into_iter()
