@@ -272,6 +272,7 @@ where
 
     if let Some((idx, data, rest)) = split_once(input, &search) {
         input = rest;
+        #[allow(clippy::option_if_let_else)] // cannot use map_or_else because borrow-checker
         if let Some(rest) = input.strip_prefix('\\') {
             input = rest;
             let mut res = String::with_capacity(256);

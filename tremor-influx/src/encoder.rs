@@ -141,9 +141,8 @@ fn write_substr<W: Write, I: SliceIndex<[u8], Output = [u8]>>(
     r: I,
 ) -> std::io::Result<()> {
     use std::io;
-    if let Some(s) = data.get(r) {
-        writer.write_all(s)
-    } else {
-        Err(io::Error::new(io::ErrorKind::Other, "Nothing to write"))
-    }
+    data.get(r).map_or_else(
+        || Err(io::Error::new(io::ErrorKind::Other, "Nothing to write")),
+        |s| writer.write_all(s),
+    )
 }

@@ -433,9 +433,9 @@ impl Extractor {
                         return Ok(Value::null());
                     }
 
-                    Ok(Value::from(String::from_utf8(decoded).map_err(|_| {
+                    Ok(Value::from(String::from_utf8(decoded).map_err(|e| {
                         ExtractorError {
-                            msg: "failed to decode".into(),
+                            msg: format!("failed to decode: {}", e),
                         }
                     })?))
                 }
@@ -444,8 +444,8 @@ impl Extractor {
                     // We will never use s afterwards so it's OK to destroy it's content
                     let encoded = s.as_mut_slice();
                     let decoded =
-                        simd_json::to_owned_value(encoded).map_err(|_| ExtractorError {
-                            msg: "Error in decoding to a json object".to_string(),
+                        simd_json::to_owned_value(encoded).map_err(|e| ExtractorError {
+                            msg: format!("Error in decoding to a json object: {}", e),
                         })?;
                     if !result_needed {
                         return Ok(Value::null());
@@ -456,8 +456,8 @@ impl Extractor {
                     range: Some(combiner),
                     ..
                 } => {
-                    let input = IpAddr::from_str(s).map_err(|_| ExtractorError {
-                        msg: "input is invalid".into(),
+                    let input = IpAddr::from_str(s).map_err(|e| ExtractorError {
+                        msg: format!("Invalid IP '{}': {}", s, e),
                     })?;
                     if combiner.combiner.contains(input) {
                         if !result_needed {

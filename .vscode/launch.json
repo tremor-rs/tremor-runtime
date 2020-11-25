@@ -22,7 +22,8 @@
       "args": [
         //"server",
         "run",
-        "temp/heredoc.tremor"
+        //"temp/end.tremor",
+        "tests/script_errors/lexer_string_interpolation3/script.tremor"
         //"-f",
         //"../tremor-www-docs/docs/workshop/examples/35_reverse_proxy_load_balancing/etc/tremor/config/config.yaml",
         // "../tremor-www-docs/docs/workshop/examples/35_reverse_proxy_load_balancing/etc/tremor/config/request_handling.trickle",
@@ -34,6 +35,26 @@
       "env": {
         "TREMOR_PATH": "./tremor-script/lib"
       },
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug script_error unit test",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "pp_embed_unrecognized_token2"
+        ],
+        "filter": {
+          "name": "script_error",
+          "kind": "test"
+        }
+      },
+      "args": [
+        "${selectedText}"
+      ],
       "cwd": "${workspaceFolder}"
     },
     {

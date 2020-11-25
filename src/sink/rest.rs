@@ -65,6 +65,7 @@ impl Endpoint {
         self.as_url_with_base("http://localhost")
     }
 
+    #[allow(clippy::map_err_ignore)]
     // expensive but seemingly correct way of populating a url from this struct
     fn as_url_with_base(&self, base_url: &str) -> Result<url::Url> {
         let mut res = url::Url::parse(base_url)?; //stupid placeholder, no other way to create a url

@@ -1,6 +1,8 @@
 Error: 
-    1 | use foo as foo;
-      |                 Module `foo.tremor` not found or not readable error in module path:
-			             - tests/script_errors/pp_mod_not_found/
-    2 | 
-    3 | match event of
+    1 | define script snot
+    2 | script
+    3 |   use foo as foo;
+      |                  ^ Module `foo` not found or not readable error in module path: 
+                         - tests/query_errors/pp_mod_not_found/
+    4 | 
+    5 |   match event of

@@ -123,6 +123,7 @@ impl SliceTrim for [u8] {
             c != b'\t' && c != b' '
         }
 
+        #[allow(clippy::option_if_let_else)]
         if let Some(first) = self.iter().position(|v| is_not_whitespace(*v)) {
             if let Some(last) = self.iter().rposition(|v| is_not_whitespace(*v)) {
                 self.get(first..=last).unwrap_or_default()

@@ -1,0 +1,14 @@
+define script snot
+script
+  use foo as foo;
+
+  match event of
+    case {} => "snot {snot}"
+    default => "ko"
+  end;
+end;
+
+create script snot;
+
+select from in into snot;
+select from snot into out;

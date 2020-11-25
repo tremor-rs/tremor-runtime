@@ -51,7 +51,7 @@ where
         path
     }
     .and_then(|p| p.as_path().to_str().map(String::from))
-    .ok_or_else(|| e)
+    .ok_or(e)
 }
 
 /// Read until EOF.
@@ -181,7 +181,7 @@ impl Drop for TargetProcess {
         }
 
         if let Some(handle) = self.stderr_thread.take() {
-            if let Err(e) = handle.join().unwrap_or_else(|_| Ok(())) {
+            if let Err(e) = handle.join().unwrap_or(Ok(())) {
                 eprintln!("target process drop error: {:?}", e);
             }
         }

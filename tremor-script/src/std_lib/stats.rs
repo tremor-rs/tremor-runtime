@@ -443,9 +443,9 @@ impl TremorAggrFn for Dds {
                     .iter()
                     .flat_map(|v| v.as_str().map(String::from))
                     .map(|s| {
-                        let p = s.parse().map_err(|_| FunctionError::RuntimeError {
+                        let p = s.parse().map_err(|e| FunctionError::RuntimeError {
                             mfa: mfa("stats", "dds", 2),
-                            error: format!("Provided percentile '{}' isn't a float", s),
+                            error: format!("Provided percentile '{}' isn't a float: {}", s, e),
                         })?;
                         Ok((s, p))
                     })
@@ -651,9 +651,9 @@ impl TremorAggrFn for Hdr {
                     .iter()
                     .flat_map(|v| v.as_str().map(String::from))
                     .map(|s| {
-                        let p = s.parse().map_err(|_| FunctionError::RuntimeError {
+                        let p = s.parse().map_err(|e| FunctionError::RuntimeError {
                             mfa: mfa("stats", "hdr", 2),
-                            error: format!("Provided percentile '{}' isn't a float", s),
+                            error: format!("Provided percentile '{}' isn't a float: {}", s, e),
                         })?;
                         Ok((s, p))
                     })

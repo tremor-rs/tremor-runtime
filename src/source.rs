@@ -204,6 +204,7 @@ where
         }
     }
 
+    #[allow(clippy::option_if_let_else)]
     async fn make_event_data(
         &mut self,
         stream: usize,

@@ -335,11 +335,10 @@ impl Artefact for OnrampArtefact {
     type LinkRHS = TremorURL;
     async fn spawn(&self, world: &World, servant_id: ServantId) -> Result<Self::SpawnResult> {
         let stream = onramp::lookup(&self.binding_type, &servant_id, &self.config)?;
-        let codec = if let Some(codec) = &self.codec {
-            codec.clone()
-        } else {
-            stream.default_codec().to_string()
-        };
+        let codec = self.codec.as_ref().map_or_else(
+            || stream.default_codec().to_string(),
+            std::clone::Clone::clone,
+        );
         let codec_map = self
             .codec_map
             .clone()

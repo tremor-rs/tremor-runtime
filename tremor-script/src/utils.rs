@@ -20,6 +20,7 @@ use std::io::prelude::*;
 /// Fetches a hostname with `tremor-host.local` being the default
 #[must_use]
 pub fn hostname() -> String {
+    #[allow(clippy::map_err_ignore)]
     hostname::get()
         .map_err(|_| ())
         .and_then(|s| s.into_string().map_err(|_| ()))
