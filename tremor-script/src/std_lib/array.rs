@@ -25,23 +25,25 @@ pub fn load(registry: &mut Registry) {
             Ok(Value::from(_input.is_empty()))
         }))
         .insert(tremor_const_fn! (array::contains(_context, _input, _contains) {
-            if let Some(input) = _input.as_array() {
-                Ok(Value::from(input.contains(&_contains)))
-            } else {
-                Err(FunctionError::BadType{mfa: mfa("array", "contains", 2)})
-            }
+            _input.as_array().map_or_else(
+                ||Err(FunctionError::BadType{mfa: mfa("array", "contains", 2)}),
+                |input| {
+                    Ok(Value::from(input.contains(&_contains)))
+                }
+            )
         }))
         .insert(tremor_const_fn! (array::push(_context, _input, _value) {
-            if let Some(input) = _input.as_array() {
-                // We clone because we do NOT want to mutate the value
-                // that was passed in
-                let mut output = input.clone();
-                let v: Value = (*_value).clone();
-                output.push(v);
-                Ok(Value::from(output))
-            } else {
-                 Err(FunctionError::BadType{mfa: mfa("array", "push", 2)})
-            }
+            _input.as_array().map_or_else(
+                ||Err(FunctionError::BadType{mfa: mfa("array", "push", 2)}),
+                |input| {
+                    // We clone because we do NOT want to mutate the value
+                    // that was passed in
+                    let mut output = input.clone();
+                    let v: Value = (*_value).clone();
+                    output.push(v);
+                    Ok(Value::from(output))
+                }
+            )
         }))
         .insert(tremor_const_fn! (array::unzip(_context, _input: Array) {
                 let r: FResult<Vec<(Value, Value)>> = _input.iter().map(|a| if let Some(a) = a.as_array() {

@@ -54,11 +54,12 @@ pub fn load(registry: &mut Registry) {
             Ok(context.origin_uri().and_then(EventOriginUri::port).map(Value::from).unwrap_or_default())
         }))
         .insert(tremor_fn! (origin::path(context) {
-            if let Some(uri) = context.origin_uri() {
-                // TODO avoid uri path clone here?
-                Ok(Value::from(uri.path().to_vec()))
-            } else {
-                Ok(Value::null())
-            }
+            Ok(context.origin_uri().map_or_else(
+                Value::null,
+                |uri| {
+                    // TODO avoid uri path clone here?
+                    Value::from(uri.path().to_vec())
+                }
+            ))
         }));
 }

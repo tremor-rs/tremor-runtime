@@ -1957,14 +1957,11 @@ impl<'input> Lexer<'input> {
                             // with interpolation
                             // otherwise we will not get the whole heredoc in error messages
                             Some(Err(error)) => {
-                                let end_location =
-                                    if let Some(inner_error_range) = error.context().1 {
-                                        inner_error_range.1
-                                    } else if let Some(last) = res.last() {
-                                        last.span.end
-                                    } else {
-                                        end
-                                    };
+                                let end_location = error.context().1.map_or_else(
+                                    || res.last().map_or(end, |last| last.span.end),
+                                    |inner_error_range| inner_error_range.1,
+                                );
+
                                 let Error(kind, ..) = error;
 
                                 let token_str = self
@@ -2251,11 +2248,13 @@ impl<'input> Lexer<'input> {
                         let token = if has_escapes {
                             // The string was modified so we can't use the slice
                             Token::StringLiteral(string.into())
-                        } else if let Some(slice) = self.slice(segment_start, end_inner) {
-                            Token::StringLiteral(slice.into())
                         } else {
-                            // Invalid start end case :(
-                            Token::StringLiteral(string.into())
+                            Token::StringLiteral(
+                                self.slice(segment_start, end_inner).map_or_else(
+                                    || Cow::Owned(string),
+                                    |slice| Cow::Borrowed(slice),
+                                ),
+                            )
                         };
                         res.push(self.spanned2(segment_start, end_inner, token));
                         string = String::new();

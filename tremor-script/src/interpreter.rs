@@ -42,8 +42,9 @@ use crate::ast::{
 use crate::errors::{
     error_array_out_of_bound, error_bad_array_index, error_bad_key, error_decreasing_range,
     error_guard_not_bool, error_invalid_binary, error_invalid_bitshift, error_need_arr,
-    error_need_int, error_need_obj, error_need_str, error_oops, error_patch_key_exists,
-    error_patch_merge_type_conflict, error_patch_update_key_missing, Result,
+    error_need_int, error_need_obj, error_need_str, error_oops, error_oops_err,
+    error_patch_key_exists, error_patch_merge_type_conflict, error_patch_update_key_missing,
+    Result,
 };
 use crate::stry;
 use crate::EventContext;
@@ -103,11 +104,9 @@ where
     where
         O: BaseExpr,
     {
-        if let Some(v) = self.consts.get(idx) {
-            Ok(v)
-        } else {
-            error_oops(outer, 0xdead_0010, "Unknown constant", &meta)
-        }
+        self.consts
+            .get(idx)
+            .ok_or_else(|| error_oops_err(outer, 0xdead_0010, "Unknown constant", &meta))
     }
 }
 
@@ -282,11 +281,10 @@ where
                 // try to turn this into a i64 and negate it;
                 let d = r - l;
 
-                if let Some(res) = d.try_into().ok().and_then(i64::checked_neg) {
-                    Ok(Cow::Owned(Value::from(res)))
-                } else {
-                    error_invalid_binary(outer, inner, op, lhs, rhs, node_meta)
-                }
+                d.try_into().ok().and_then(i64::checked_neg).map_or_else(
+                    || error_invalid_binary(outer, inner, op, lhs, rhs, node_meta),
+                    |res| Ok(Cow::Owned(Value::from(res))),
+                )
             }
             Mul => Ok(Cow::Owned(Value::from(l * r))),
             Div => Ok(Cow::Owned(Value::from((l as f64) / (r as f64)))),
@@ -606,11 +604,10 @@ where
         }
     }
 
-    if let Some(range_to_consider) = subrange {
-        Ok(Cow::Owned(Value::from(range_to_consider.to_vec())))
-    } else {
-        Ok(Cow::Borrowed(current))
-    }
+    Ok(subrange.map_or_else(
+        || Cow::Borrowed(current),
+        |range_to_consider| Cow::Owned(Value::from(range_to_consider.to_vec())),
+    ))
 }
 
 fn merge_values<'run, 'event, 'script, Outer, Inner>(
@@ -878,16 +875,16 @@ where
     'script: 'event,
     'event: 'run,
 {
-    if let Some(guard) = guard {
-        let test = stry!(guard.run(opts, env, event, state, meta, local));
-        if let Some(b) = test.as_bool() {
-            Ok(b)
-        } else {
-            error_guard_not_bool(outer, guard, &test, &env.meta)
-        }
-    } else {
-        Ok(true)
-    }
+    guard.as_ref().map_or_else(
+        || Ok(true),
+        |guard| {
+            let test = stry!(guard.run(opts, env, event, state, meta, local));
+            test.as_bool().map_or_else(
+                || error_guard_not_bool(outer, guard, &test, &env.meta),
+                Result::Ok,
+            )
+        },
+    )
 }
 
 #[inline]
@@ -1342,17 +1339,20 @@ where
     // This is icky do we want it?
     // it is only used
     let local: &'run mut LocalStack<'event> = unsafe { mem::transmute(local) };
-    if let Some(d) = local.values.get_mut(idx) {
-        *d = Some(v);
-        Ok(())
-    } else {
-        error_oops(
-            outer,
-            0xdead_0006,
-            "Unknown local variable in set_local_shadow",
-            &node_meta,
-        )
-    }
+    local.values.get_mut(idx).map_or_else(
+        || {
+            error_oops(
+                outer,
+                0xdead_0006,
+                "Unknown local variable in set_local_shadow",
+                &node_meta,
+            )
+        },
+        |d| {
+            *d = Some(v);
+            Ok(())
+        },
+    )
 }
 
 impl<'script> GroupBy<'script> {

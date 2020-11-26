@@ -56,12 +56,13 @@ impl TremorFn for RandomInteger {
                 }
             }
             [input] => {
-                if let Some(input) = input.as_u64() {
-                    // random integer between 0 and input (not including input)
-                    Ok(Value::from(rng.gen_range(0, input)))
-                } else {
-                    Err(FunctionError::BadType { mfa: this_mfa() })
-                }
+                input.as_u64().map_or_else(
+                    || Err(FunctionError::BadType { mfa: this_mfa() }),
+                    |input| {
+                        // random integer between 0 and input (not including input)
+                        Ok(Value::from(rng.gen_range(0, input)))
+                    },
+                )
             }
             [] => Ok(Value::from(
                 rng.gen::<i64>(), // random integer
@@ -112,12 +113,13 @@ impl TremorFn for RandomFloat {
                 }
             }
             [input] => {
-                if let Some(input) = input.cast_f64() {
-                    // random integer between 0 and input (not including input)
-                    Ok(Value::from(rng.gen_range(0.0, input)))
-                } else {
-                    Err(FunctionError::BadType { mfa: this_mfa() })
-                }
+                input.cast_f64().map_or_else(
+                    || Err(FunctionError::BadType { mfa: this_mfa() }),
+                    |input| {
+                        // random integer between 0 and input (not including input)
+                        Ok(Value::from(rng.gen_range(0.0, input)))
+                    },
+                )
             }
             [] => Ok(Value::from(
                 rng.gen::<f64>(), // random integer
@@ -150,15 +152,16 @@ pub fn load(registry: &mut Registry) {
         }))
         // TODO support specifying range of characters as a second (optional) arg
         .insert(tremor_fn! (random::string(_context, _length) {
-            if let Some(n) = _length.as_usize() {
+            _length.as_usize().map_or_else(
+                ||Err(FunctionError::BadType{mfa: this_mfa()}),
+                |n| {
                 // random string with chars uniformly distributed over ASCII letters and numbers
                 Ok(Value::String(
                  SmallRng::seed_from_u64(_context.ingest_ns())
                     .sample_iter(&Alphanumeric).take(n).collect()
                 ))
-            } else {
-                Err(FunctionError::BadType{mfa: this_mfa()})
-            }
+                }
+            )
         }))
         .insert(TremorFnWrapper::new(
             "random".to_string(),

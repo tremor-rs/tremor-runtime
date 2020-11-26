@@ -56,7 +56,7 @@ impl BInflux {
         if let Some(tags) = v.get("tags").and_then(Value::as_object) {
             res.write_u16::<BigEndian>(
                 u16::try_from(tags.len())
-                    .map_err(|_| ErrorKind::InvalidBInfluxData("too many tags".into()))?,
+                    .chain_err(|| ErrorKind::InvalidBInfluxData("too many tags".into()))?,
             )?;
 
             for (k, v) in tags {
@@ -72,7 +72,7 @@ impl BInflux {
         if let Some(fields) = v.get("fields").and_then(Value::as_object) {
             res.write_u16::<BigEndian>(
                 u16::try_from(fields.len())
-                    .map_err(|_| ErrorKind::InvalidBInfluxData("too many fields".into()))?,
+                    .chain_err(|| ErrorKind::InvalidBInfluxData("too many fields".into()))?,
             )?;
             for (k, v) in fields {
                 write_str(&mut res, k)?;

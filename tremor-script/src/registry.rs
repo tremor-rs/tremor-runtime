@@ -223,26 +223,19 @@ impl FunctionError {
                 ErrorKind::RuntimeError(outer, inner, mfa.m, mfa.f, mfa.a, error).into()
             }
             MissingModule { m } => {
-                let suggestion = if let Some(registry) = registry {
+                let suggestion = registry.and_then(|registry| {
                     let modules: Vec<String> = registry.functions.keys().cloned().collect();
                     best_hint(&m, &modules, 2)
-                } else {
-                    None
-                };
+                });
                 ErrorKind::MissingModule(outer, inner, m, suggestion).into()
             }
             MissingFunction { m, f } => {
-                let suggestion = if let Some(registry) = registry {
-                    if let Some(module) = registry.functions.get(&m) {
+                let suggestion = registry.and_then(|registry| {
+                    registry.functions.get(&m).and_then(|module| {
                         let functions: Vec<String> = module.keys().cloned().collect();
                         best_hint(&m, &functions, 2)
-                    } else {
-                        // This should never happen but lets be safe
-                        None
-                    }
-                } else {
-                    None
-                };
+                    })
+                });
                 ErrorKind::MissingFunction(outer, inner, vec![m], f, suggestion).into()
             }
             BadType { mfa } => ErrorKind::BadType(outer, inner, mfa.m, mfa.f, mfa.a).into(),
@@ -575,23 +568,22 @@ impl Default for Registry {
 impl Registry {
     /// finds a function in the registry
     pub fn find(&self, module: &str, function: &str) -> FResult<&TremorFnWrapper> {
-        if let Some(functions) = self.functions.get(module) {
-            if let Some(rf) = functions.get(function) {
+        self.functions
+            .get(module)
+            .ok_or_else(|| FunctionError::MissingModule {
+                m: module.to_string(),
+            })
+            .and_then(|functions| {
                 // TODO: We couldn't return the function wrapper but we can return
                 // the function It's not a big issue but it would have been nice to
                 // know why.
-                Ok(rf)
-            } else {
-                Err(FunctionError::MissingFunction {
-                    m: module.to_string(),
-                    f: function.to_string(),
-                })
-            }
-        } else {
-            Err(FunctionError::MissingModule {
-                m: module.to_string(),
+                functions
+                    .get(function)
+                    .ok_or_else(|| FunctionError::MissingFunction {
+                        m: module.to_string(),
+                        f: function.to_string(),
+                    })
             })
-        }
     }
 
     /// Inserts a function into the registry, overwriting it if it already exists
@@ -716,23 +708,22 @@ impl Default for Aggr {
 impl Aggr {
     /// finds a function in the registry
     pub fn find(&self, module: &str, function: &str) -> FResult<&TremorAggrFnWrapper> {
-        if let Some(functions) = self.functions.get(module) {
-            if let Some(rf) = functions.get(function) {
+        self.functions
+            .get(module)
+            .ok_or_else(|| FunctionError::MissingModule {
+                m: module.to_string(),
+            })
+            .and_then(|functions| {
                 // TODO: We couldn't return the function wrapper but we can return
                 // the function It's not a big issue but it would have been nice to
                 // know why.
-                Ok(rf)
-            } else {
-                Err(FunctionError::MissingFunction {
-                    m: module.to_string(),
-                    f: function.to_string(),
-                })
-            }
-        } else {
-            Err(FunctionError::MissingModule {
-                m: module.to_string(),
+                functions
+                    .get(function)
+                    .ok_or_else(|| FunctionError::MissingFunction {
+                        m: module.to_string(),
+                        f: function.to_string(),
+                    })
             })
-        }
     }
 
     /// Inserts a function into the registry, overwriting it if it already exists

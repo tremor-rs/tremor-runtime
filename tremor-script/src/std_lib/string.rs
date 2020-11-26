@@ -159,11 +159,7 @@ pub fn load(registry: &mut Registry) {
                 //   .unwrap_or_else(|| 0) - since this is an option we need to safely extract the value so we default it to 0 for start or len for end
                 let start = input.char_indices().nth(start).map_or_else(|| 0, |v| v.0);
                 let end = input.char_indices().nth(end).map_or_else(|| input.len(), |v| v.0);
-                if let Some(sub) = input.get(start..end) {
-                    Ok(Value::from(sub.to_string()))
-                } else {
-                    Ok(Value::from(input.to_string()))
-                }
+                Ok(Value::from(input.get(start..end).unwrap_or(input).to_string()))
             }),
         )
         .insert(

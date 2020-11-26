@@ -135,24 +135,20 @@ fn run(mut app: App, cmd: &ArgMatches) -> Result<()> {
         config: load_config()?,
     };
 
-    if let Some(_matches) = cmd.subcommand_matches("explain") {
-        Err("Not yet implemented".into())
-    } else if let Some(matches) = cmd.subcommand_matches("completions") {
-        completions::run_cmd(app, matches)
-    } else if let Some(matches) = cmd.subcommand_matches("server") {
-        server::run_cmd(app, matches)
-    } else if let Some(matches) = cmd.subcommand_matches("run") {
-        run::run_cmd(&matches)
-    } else if let Some(matches) = cmd.subcommand_matches("doc") {
-        doc::run_cmd(&matches)
-    } else if let Some(matches) = cmd.subcommand_matches("api") {
-        task::block_on(api::run_cmd(&mut config, &matches))
-    } else if let Some(matches) = cmd.subcommand_matches("dbg") {
-        debug::run_cmd(&matches)
-    } else if let Some(matches) = cmd.subcommand_matches("test") {
-        test::run_cmd(&matches)
-    } else {
-        app.print_long_help()
-            .map_err(|e| Error::from(format!("failed to print help: {}", e)))
+    match cmd
+        .subcommand_name()
+        .map(|name| (name, cmd.subcommand_matches(name)))
+    {
+        Some(("explain", Some(_matches))) => Err("Not yet implemented".into()),
+        Some(("completions", Some(matches))) => completions::run_cmd(app, matches),
+        Some(("server", Some(matches))) => server::run_cmd(app, matches),
+        Some(("run", Some(matches))) => run::run_cmd(&matches),
+        Some(("doc", Some(matches))) => doc::run_cmd(&matches),
+        Some(("api", Some(matches))) => task::block_on(api::run_cmd(&mut config, &matches)),
+        Some(("dbg", Some(matches))) => debug::run_cmd(&matches),
+        Some(("test", Some(matches))) => test::run_cmd(&matches),
+        _ => app
+            .print_long_help()
+            .map_err(|e| Error::from(format!("failed to print help: {}", e))),
     }
 }
