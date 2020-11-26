@@ -20,8 +20,8 @@ use async_channel::{bounded, unbounded, Receiver, Sender};
 use async_tungstenite::async_std::connect_async;
 use futures::SinkExt;
 use halfbrown::HashMap;
+use std::boxed::Box;
 use std::time::Duration;
-use std::{boxed::Box, sync::Arc};
 use tremor_pipeline::OpMeta;
 use tremor_script::LineValue;
 use tungstenite::protocol::Message;
@@ -65,7 +65,7 @@ pub struct Ws {
     config: Config,
     preprocessors: Vec<String>,
     postprocessors: Vec<String>,
-    shared_codec: Arc<dyn Codec>,
+    shared_codec: Box<dyn Codec>,
     connection_lifecycle_tx: Sender<WsConnectionMsg>,
     connection_lifecycle_rx: Receiver<WsConnectionMsg>,
     connections: HashMap<WsUrl, WsConnectionHandle>,
@@ -130,9 +130,10 @@ async fn ws_connection_loop(
     has_link: bool,
     mut preprocessors: Preprocessors,
     mut postprocessors: Postprocessors,
-    codec: Arc<dyn Codec>,
+    mut codec: Box<dyn Codec>,
 ) -> Result<()> {
     loop {
+        let codec: &mut dyn Codec = codec.as_mut();
         info!("[Sink::{}] Connecting to {} ...", &sink_url, url);
         let mut ws_stream = if let Ok((ws_stream, _)) = connect_async(&url).await {
             if let Ok(peer) = ws_stream.get_ref().peer_addr() {
@@ -167,7 +168,7 @@ async fn ws_connection_loop(
         )) = rx.recv().await
         {
             match event_to_message(
-                &codec,
+                codec,
                 &mut postprocessors,
                 ingest_ns,
                 &data,
@@ -251,7 +252,7 @@ async fn ws_connection_loop(
                             match message_to_event(
                                 &sink_url,
                                 &event_origin_url,
-                                &codec,
+                                codec,
                                 &mut preprocessors,
                                 &mut ingest_ns,
                                 &ids,
@@ -316,7 +317,7 @@ async fn ws_connection_loop(
 }
 
 fn event_to_message(
-    codec: &Arc<dyn Codec>,
+    codec: &dyn Codec,
     postprocessors: &mut Postprocessors,
     ingest_ns: u64,
     data: &LineValue,
@@ -339,7 +340,7 @@ fn event_to_message(
 fn message_to_event(
     sink_url: &TremorURL,
     event_origin_uri: &EventOriginUri,
-    codec: &Arc<dyn Codec>,
+    codec: &mut dyn Codec,
     preprocessors: &mut Preprocessors,
     ingest_ns: &mut u64,
     ids: &Ids,
@@ -405,7 +406,7 @@ impl offramp::Impl for Ws {
                 reply_tx,
                 preprocessors: vec![],  // dummy, overwritten in init
                 postprocessors: vec![], // dummy, overwritten in init
-                shared_codec: Arc::new(crate::codec::null::Null {}), //dummy, overwritten in init
+                shared_codec: Box::new(crate::codec::null::Null {}), //dummy, overwritten in init
             }))
         } else {
             Err("[WS Offramp] Offramp requires a config".into())
@@ -520,7 +521,7 @@ impl Sink for Ws {
         self.merged_meta.merge(op_meta);
         let msg_meta = self.get_message_meta(data.suffix().meta());
 
-        // actually used when we have new connection to make (overriden from event-meta)
+        // actually used when we have new connection to make (overridden from event-meta)
         let temp_conn_tx;
         let ws_conn_tx = if let Some((ws_conn_tx, _)) = self.connections.get(&msg_meta.url) {
             ws_conn_tx
@@ -538,7 +539,7 @@ impl Sink for Ws {
                 self.is_linked,
                 make_preprocessors(self.preprocessors.as_slice())?,
                 make_postprocessors(self.postprocessors.as_slice())?,
-                self.shared_codec.clone(),
+                self.shared_codec.boxed_clone(),
             ));
             // TODO default to None for initial connection? (like what happens for
             // default offramp config url). if we do circuit-breakers-per-url
@@ -590,7 +591,7 @@ impl Sink for Ws {
         is_linked: bool,
         reply_channel: Sender<sink::Reply>,
     ) -> Result<()> {
-        self.shared_codec = codec.boxed_clone().into();
+        self.shared_codec = codec.boxed_clone();
         self.postprocessors = processors.post.to_vec();
         self.preprocessors = processors.pre.to_vec();
 
@@ -622,7 +623,7 @@ impl Sink for Ws {
                 is_linked,
                 make_preprocessors(self.preprocessors.as_slice())?,
                 make_postprocessors(self.postprocessors.as_slice())?,
-                self.shared_codec.clone(),
+                self.shared_codec.boxed_clone(),
             ))?;
         self.connections
             .insert(self.config.url.clone(), (None, handle));
@@ -648,16 +649,15 @@ mod test {
     fn message_to_event_ok() -> Result<()> {
         let sink_url = TremorURL::parse("/offramp/ws/instance")?;
         let origin_uri = EventOriginUri::default();
-        let codec: Arc<dyn Codec> = Arc::new(crate::codec::string::String {});
         let mut preprocessors = make_preprocessors(&["lines".to_string()])?;
         let mut ingest_ns = 42_u64;
         let ids = Ids::default();
+        let mut codec: Box<dyn Codec> = Box::new(crate::codec::string::String {});
         let message = Message::Text("hello\nworld\n".to_string());
-
         let events = message_to_event(
             &sink_url,
             &origin_uri,
-            &codec,
+            codec.as_mut(),
             &mut preprocessors,
             &mut ingest_ns,
             &ids,
@@ -675,14 +675,14 @@ mod test {
 
     #[test]
     fn event_to_message_ok() -> Result<()> {
-        let codec: Arc<dyn Codec> = Arc::new(crate::codec::json::JSON {});
+        let mut codec: Box<dyn Codec> = Box::new(crate::codec::json::JSON::default());
         let mut postprocessors = make_postprocessors(&["lines".to_string()])?;
         let mut data = Value::object_with_capacity(2);
         data.insert("snot", "badger")?;
         data.insert("empty", Value::object())?;
         let data = (data, Value::object()).into();
         let mut messages: Vec<Result<Message>> =
-            event_to_message(&codec, &mut postprocessors, 42, &data, true)?.collect();
+            event_to_message(codec.as_mut(), &mut postprocessors, 42, &data, true)?.collect();
         assert_eq!(1, messages.len());
         let msg = messages.pop().ok_or(Error::from("no event 0"))?;
         assert!(msg.is_ok());
@@ -699,7 +699,7 @@ mod test {
         let (reply_tx, reply_rx) = bounded(1000);
 
         let url = TremorURL::parse("/offramp/ws/instance")?;
-        let codec: Arc<dyn Codec> = Arc::new(crate::codec::json::JSON {});
+        let codec: Box<dyn Codec> = Box::new(crate::codec::json::JSON::default());
         let config = Config {
             url: "http://idonotexist:65535/path".to_string(),
             binary: true,
@@ -710,7 +710,7 @@ mod test {
             config: config.clone(),
             preprocessors: vec!["lines".to_string()],
             postprocessors: vec!["lines".to_string()],
-            shared_codec: codec.clone(),
+            shared_codec: codec.boxed_clone(),
             connection_lifecycle_rx: conn_rx,
             connection_lifecycle_tx: conn_tx,
             connections: HashMap::new(),

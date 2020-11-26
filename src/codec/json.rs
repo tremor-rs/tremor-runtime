@@ -12,10 +12,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::prelude::*;
+use std::cmp::max;
 
-#[derive(Clone)]
-pub struct JSON {}
+use super::prelude::*;
+use simd_json::{prelude::*, AlignedBuf};
+
+pub struct JSON {
+    input_buffer: AlignedBuf,
+    string_buffer: Vec<u8>,
+}
+
+impl Clone for JSON {
+    fn clone(&self) -> Self {
+        Self::default()
+    }
+}
+
+impl Default for JSON {
+    fn default() -> Self {
+        Self {
+            input_buffer: AlignedBuf::with_capacity(1024),
+            string_buffer: Vec::with_capacity(1024),
+        }
+    }
+}
 
 impl Codec for JSON {
     #[cfg(not(tarpaulin_include))]
@@ -30,13 +50,22 @@ impl Codec for JSON {
     }
 
     fn decode<'input>(
-        &self,
+        &mut self,
         data: &'input mut [u8],
         _ingest_ns: u64,
     ) -> Result<Option<Value<'input>>> {
-        simd_json::to_borrowed_value(data)
-            .map(Some)
-            .map_err(|e| e.into())
+        // The input buffer will be automatically grown if required
+        if self.string_buffer.capacity() < data.len() {
+            self.input_buffer
+                .reserve(max(self.string_buffer.capacity(), data.len()) * 2);
+        }
+        simd_json::value::borrowed::to_value_with_buffers(
+            data,
+            &mut self.input_buffer,
+            &mut self.string_buffer,
+        )
+        .map(Some)
+        .map_err(|e| e.into())
     }
     fn encode(&self, data: &simd_json::BorrowedValue) -> Result<Vec<u8>> {
         let mut v = Vec::with_capacity(1024);
@@ -66,7 +95,7 @@ mod test {
         let seed: OwnedValue = json!({ "snot": "badger" });
         let seed: BorrowedValue = seed.into();
 
-        let codec = JSON {};
+        let mut codec = JSON::default();
         let mut as_raw = codec.encode(&seed)?;
         let as_json = codec.decode(as_raw.as_mut_slice(), 0);
 

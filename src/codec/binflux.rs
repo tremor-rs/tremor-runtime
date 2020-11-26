@@ -171,7 +171,7 @@ impl Codec for BInflux {
     }
 
     fn decode<'input>(
-        &self,
+        &mut self,
         data: &'input mut [u8],
         _ingest_ns: u64,
     ) -> Result<Option<Value<'input>>> {

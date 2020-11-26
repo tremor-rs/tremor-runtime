@@ -24,7 +24,7 @@ impl Codec for Null {
     }
 
     fn decode<'input>(
-        &self,
+        &mut self,
         _data: &'input mut [u8],
         _ingest_ns: u64,
     ) -> Result<Option<Value<'input>>> {
@@ -51,7 +51,7 @@ mod test {
         let seed: OwnedValue = OwnedValue::null();
         let seed: BorrowedValue = seed.into();
 
-        let codec = Null {};
+        let mut codec = Null {};
         let mut as_raw = codec.encode(&seed)?;
         let as_json = codec.decode(as_raw.as_mut_slice(), 0);
         assert!(as_json.is_ok());

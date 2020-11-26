@@ -50,7 +50,7 @@ impl Codec for Influx {
     }
 
     fn decode<'input>(
-        &self,
+        &mut self,
         data: &'input mut [u8],
         ingest_ns: u64,
     ) -> Result<Option<Value<'input>>> {
@@ -123,7 +123,7 @@ mod tests {
     #[test]
     pub fn decode_test() {
         let mut s = b"weather,location=us-midwest temperature=82 1465839830100400200".to_vec();
-        let codec = Influx {};
+        let mut codec = Influx {};
 
         let decoded = codec
             .decode(s.as_mut_slice(), 0)
@@ -308,7 +308,7 @@ mod tests {
         let pairs = get_data_for_tests();
 
         for case in &pairs {
-            let codec = Influx {};
+            let mut codec = Influx {};
             let v = case.1.clone();
             let mut encoded = codec.encode(&v)?;
 
@@ -334,7 +334,7 @@ mod tests {
         let mut s =
             b"weather,location=us-midwest temperature=82,bug_concentration=98 1465839830100400200"
                 .to_vec();
-        let codec = Influx {};
+        let mut codec = Influx {};
 
         let decoded = codec
             .decode(s.as_mut_slice(), 0)
@@ -355,7 +355,7 @@ mod tests {
     #[test]
     pub fn parse_int_value() {
         let mut s = b"weather,location=us-midwest temperature=82i 1465839830100400200".to_vec();
-        let codec = Influx {};
+        let mut codec = Influx {};
 
         let decoded = codec
             .decode(s.as_mut_slice(), 0)
@@ -377,7 +377,7 @@ mod tests {
         let mut s = b"kafka_BrokerTopicMetrics,agent=jmxtrans,dc=iad1,host_name=kafka-iad1-g4-1,junk=kafka_topic,kafka_type=server,metric_type=counter,topic_name=customerEmailServiceMessage BytesInPerSec=0i,BytesOutPerSec=0i,FailedFetchRequestsPerSec=0i,FetchMessageConversionsPerSec=0i,TotalFetchRequestsPerSec=1993153i 1562179275506000000".to_vec();
         let expected = s.clone();
 
-        let codec = Influx {};
+        let mut codec = Influx {};
 
         let e: Value = json!({
                     "measurement" : "kafka_BrokerTopicMetrics",
