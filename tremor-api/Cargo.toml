@@ -1,19 +1,21 @@
 [package]
-name = "tremor-api"
-version = "0.9.0"
-description = "Tremor Api Callbacks"
 authors = ["The Tremor Team"]
+description = "Tremor Api Callbacks"
 edition = "2018"
 license = "Apache-2.0"
+name = "tremor-api"
+version = "0.9.2"
 
 [dependencies]
-tremor-pipeline = { path = "../tremor-pipeline" }
-tremor-script = { path = "../tremor-script" }
-tremor-runtime = { path = "../" }
+hashbrown = {version = "0.9", features = ["serde"]}
+hashbrown = {version = "0.9", features = ["serde"]}
+http-types = "2.8"
+http-types = "2.8"
 serde = "1"
 serde_derive = "1"
 serde_yaml = "0.8"
-hashbrown = { version = "0.9", features = ["serde"] }
-tide = "0.15"
-http-types = "2.8"
 simd-json = "0.3"
+tide = "0.15"
+tremor-pipeline = {path = "../tremor-pipeline"}
+tremor-runtime = {path = "../"}
+tremor-script = {path = "../tremor-script"}
