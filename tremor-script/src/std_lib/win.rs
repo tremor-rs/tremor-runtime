@@ -33,20 +33,12 @@ impl TremorAggrFn for First {
         Ok(())
     }
     fn emit<'event>(&mut self) -> FResult<Value<'event>> {
-        if let Some(v) = &self.0 {
-            Ok(v.clone())
-        } else {
-            Ok(Value::null())
-        }
+        Ok(self.0.as_ref().map_or_else(Value::null, Clone::clone))
     }
     fn emit_and_init<'event>(&mut self) -> FResult<Value<'event>> {
         let mut r = None;
         std::mem::swap(&mut r, &mut self.0);
-        if let Some(r) = r {
-            Ok(r)
-        } else {
-            Ok(Value::null())
-        }
+        Ok(r.unwrap_or_else(Value::null))
     }
     fn init(&mut self) {
         self.0 = None;
@@ -81,20 +73,12 @@ impl TremorAggrFn for Last {
         Ok(())
     }
     fn emit<'event>(&mut self) -> FResult<Value<'event>> {
-        if let Some(v) = &self.0 {
-            Ok(v.clone())
-        } else {
-            Ok(Value::null())
-        }
+        Ok(self.0.as_ref().map_or_else(Value::null, Clone::clone))
     }
     fn emit_and_init<'event>(&mut self) -> FResult<Value<'event>> {
         let mut r = None;
         std::mem::swap(&mut r, &mut self.0);
-        if let Some(r) = r {
-            Ok(r)
-        } else {
-            Ok(Value::null())
-        }
+        Ok(r.unwrap_or_else(Value::null))
     }
     fn init(&mut self) {
         self.0 = None;

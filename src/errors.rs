@@ -126,6 +126,7 @@ error_chain! {
         ElasticError(elastic::Error);
         KafkaError(rdkafka::error::KafkaError);
         ParseIntError(std::num::ParseIntError);
+        TryFromIntError(std::num::TryFromIntError);
         UrlParserError(url::ParseError);
         ParseFloatError(std::num::ParseFloatError);
         LoggerError(log4rs::Error);

@@ -98,9 +98,8 @@ impl TargetProcess {
 
         let stdout = target_cmd.stdout.take();
         let stderr = target_cmd.stderr.take();
-
-        if let Some(stdout) = stdout {
-            if let Some(stderr) = stderr {
+        match stdout.zip(stderr) {
+            Some((stdout, stderr)) => {
                 let (stdout_tx, stdout_rx) = mpsc::channel();
                 let (stderr_tx, stderr_rx) = mpsc::channel();
 
@@ -121,11 +120,8 @@ impl TargetProcess {
                     stdout_receiver: stdout_rx,
                     stderr_receiver: stderr_rx,
                 })
-            } else {
-                Err("Unable to create error stream from target process".into())
             }
-        } else {
-            Err("Unable to create output stream from target process".into())
+            None => Err("Unable to create stdout and stderr streams from target process".into()),
         }
     }
 

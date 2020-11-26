@@ -17,7 +17,7 @@ use crate::errors::{Error, ErrorKind};
 #[cfg(not(tarpaulin_include))]
 pub fn hostname() -> String {
     hostname::get()
-        .map_err(|ioe| Error::from(ioe))
+        .map_err(Error::from)
         .and_then(|hostname| {
             hostname.into_string().map_err(|os_string| {
                 ErrorKind::Msg(format!("Invalid hostname: {}", os_string.to_string_lossy())).into()

@@ -82,24 +82,30 @@ impl TremorAggrFn for Count {
 struct Sum(f64);
 impl TremorAggrFn for Sum {
     fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
-        if let Some(v) = args.get(0).and_then(|v| v.cast_f64()) {
-            self.0 += v;
-            Ok(())
-        } else {
-            Err(FunctionError::BadType {
-                mfa: mfa("stats", "sum", 1),
-            })
-        }
+        args.get(0).and_then(|v| v.cast_f64()).map_or_else(
+            || {
+                Err(FunctionError::BadType {
+                    mfa: mfa("stats", "sum", 1),
+                })
+            },
+            |v| {
+                self.0 += v;
+                Ok(())
+            },
+        )
     }
     fn compensate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
-        if let Some(v) = args.get(0).and_then(|v| v.cast_f64()) {
-            self.0 -= v;
-            Ok(())
-        } else {
-            Err(FunctionError::BadType {
-                mfa: mfa("stats", "sum", 1),
-            })
-        }
+        args.get(0).and_then(|v| v.cast_f64()).map_or_else(
+            || {
+                Err(FunctionError::BadType {
+                    mfa: mfa("stats", "sum", 1),
+                })
+            },
+            |v| {
+                self.0 -= v;
+                Ok(())
+            },
+        )
     }
     fn emit<'event>(&mut self) -> FResult<Value<'event>> {
         Ok(Value::from(self.0))
@@ -128,25 +134,31 @@ struct Mean(i64, f64);
 impl TremorAggrFn for Mean {
     fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
         self.0 += 1;
-        if let Some(v) = args.get(0).and_then(|v| v.cast_f64()) {
-            self.1 += v;
-            Ok(())
-        } else {
-            Err(FunctionError::BadType {
-                mfa: mfa("stats", "mean", 1),
-            })
-        }
+        args.get(0).and_then(|v| v.cast_f64()).map_or_else(
+            || {
+                Err(FunctionError::BadType {
+                    mfa: mfa("stats", "mean", 1),
+                })
+            },
+            |v| {
+                self.1 += v;
+                Ok(())
+            },
+        )
     }
     fn compensate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
         self.0 -= 1;
-        if let Some(v) = args.get(0).and_then(|v| v.cast_f64()) {
-            self.1 -= v;
-            Ok(())
-        } else {
-            Err(FunctionError::BadType {
-                mfa: mfa("stats", "mean", 1),
-            })
-        }
+        args.get(0).and_then(|v| v.cast_f64()).map_or_else(
+            || {
+                Err(FunctionError::BadType {
+                    mfa: mfa("stats", "mean", 1),
+                })
+            },
+            |v| {
+                self.1 -= v;
+                Ok(())
+            },
+        )
     }
     fn emit<'event>(&mut self) -> FResult<Value<'event>> {
         if self.0 == 0 {
@@ -180,16 +192,19 @@ impl TremorAggrFn for Mean {
 struct Min(Option<f64>);
 impl TremorAggrFn for Min {
     fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
-        if let Some(v) = args.get(0).and_then(|v| v.cast_f64()) {
-            if self.0.is_none() || Some(v) < self.0 {
-                self.0 = Some(v);
-            };
-            Ok(())
-        } else {
-            Err(FunctionError::BadType {
-                mfa: mfa("stats", "min", 1),
-            })
-        }
+        args.get(0).and_then(|v| v.cast_f64()).map_or_else(
+            || {
+                Err(FunctionError::BadType {
+                    mfa: mfa("stats", "min", 1),
+                })
+            },
+            |v| {
+                if self.0.is_none() || Some(v) < self.0 {
+                    self.0 = Some(v);
+                };
+                Ok(())
+            },
+        )
     }
     fn compensate<'event>(&mut self, _args: &[&Value<'event>]) -> FResult<()> {
         // TODO: how?
@@ -237,16 +252,19 @@ impl TremorAggrFn for Min {
 struct Max(Option<f64>);
 impl TremorAggrFn for Max {
     fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
-        if let Some(v) = args.get(0).and_then(|v| v.cast_f64()) {
-            if self.0.is_none() || Some(v) > self.0 {
-                self.0 = Some(v);
-            };
-            Ok(())
-        } else {
-            Err(FunctionError::BadType {
-                mfa: mfa("stats", "max", 1),
-            })
-        }
+        args.get(0).and_then(|v| v.cast_f64()).map_or_else(
+            || {
+                Err(FunctionError::BadType {
+                    mfa: mfa("stats", "max", 1),
+                })
+            },
+            |v| {
+                if self.0.is_none() || Some(v) > self.0 {
+                    self.0 = Some(v);
+                };
+                Ok(())
+            },
+        )
     }
     fn compensate<'event>(&mut self, _args: &[&Value<'event>]) -> FResult<()> {
         // TODO: how?
@@ -286,31 +304,37 @@ struct Var {
 
 impl TremorAggrFn for Var {
     fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
-        if let Some(v) = args.get(0).and_then(|v| v.cast_f64()) {
-            if self.n == 0 {
-                self.k = v;
-            }
-            self.n += 1;
-            self.ex += v - self.k;
-            self.ex2 += (v - self.k) * (v - self.k);
-            Ok(())
-        } else {
-            Err(FunctionError::BadType {
-                mfa: mfa("stats", "var", 1),
-            })
-        }
+        args.get(0).and_then(|v| v.cast_f64()).map_or_else(
+            || {
+                Err(FunctionError::BadType {
+                    mfa: mfa("stats", "var", 1),
+                })
+            },
+            |v| {
+                if self.n == 0 {
+                    self.k = v;
+                }
+                self.n += 1;
+                self.ex += v - self.k;
+                self.ex2 += (v - self.k) * (v - self.k);
+                Ok(())
+            },
+        )
     }
     fn compensate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
-        if let Some(v) = args.get(0).and_then(|v| v.cast_f64()) {
-            self.n -= 1;
-            self.ex -= v - self.k;
-            self.ex2 -= (v - self.k) * (v - self.k);
-            Ok(())
-        } else {
-            Err(FunctionError::BadType {
-                mfa: mfa("stats", "var", 1),
-            })
-        }
+        args.get(0).and_then(|v| v.cast_f64()).map_or_else(
+            || {
+                Err(FunctionError::BadType {
+                    mfa: mfa("stats", "var", 1),
+                })
+            },
+            |v| {
+                self.n -= 1;
+                self.ex -= v - self.k;
+                self.ex2 -= (v - self.k) * (v - self.k);
+                Ok(())
+            },
+        )
     }
     fn emit<'event>(&mut self) -> FResult<Value<'event>> {
         if self.n == 0 {
@@ -356,13 +380,9 @@ impl TremorAggrFn for Stdev {
         self.0.compensate(args)
     }
     fn emit<'event>(&mut self) -> FResult<Value<'event>> {
-        self.0.emit().map(|v| {
-            if let Some(v) = v.as_f64() {
-                Value::from(v.sqrt())
-            } else {
-                v
-            }
-        })
+        self.0
+            .emit()
+            .map(|v| v.as_f64().map_or(v, |v| Value::from(v.sqrt())))
     }
     fn init(&mut self) {
         self.0.init()

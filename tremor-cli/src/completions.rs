@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::{ErrorKind, Result, ResultExt};
+use crate::errors::{Error, Result};
 use clap::{self, ArgMatches};
 use clap_generate::{
     generate,
@@ -55,23 +55,25 @@ fn generate_for_shell(mut app: clap::App, shell: &str) -> Result<()> {
             generate::<Zsh, _>(&mut app, "tremor", &mut std::io::stdout());
             Ok(())
         }
-        _ => Err("Unsupported shell".into()),
+        _ => Err(format!("Unsupported shell: {}", shell).into()),
     }
 }
 
 fn guess_shell(app: clap::App) -> Result<()> {
-    if std::env::var_os("ZSH_NAME").is_some() {
-        generate_for_shell(app, "zsh")
+    let shell = if std::env::var_os("ZSH_NAME").is_some() {
+        Ok("zsh".to_string())
     } else if std::env::var_os("PSModulePath").is_some() {
-        generate_for_shell(app, "powershell")
-    } else if let Some(shell) = std::env::var_os("SHELL") {
-        if let Some(shell_str) = Path::new(&shell).file_name() {
-            generate_for_shell(app, &shell_str.to_string_lossy())
-                .chain_err(|| ErrorKind::Msg(ERR_MSG.to_string()))
-        } else {
-            Err(ERR_MSG.into())
-        }
+        Ok("powershell".to_string())
     } else {
-        Err(ERR_MSG.into())
-    }
+        match std::env::var_os("SHELL")
+            .and_then(|s| Path::new(&s).file_name().map(std::ffi::OsStr::to_os_string))
+        {
+            Some(shell) => {
+                #[allow(clippy::map_err_ignore)] // Error is OsString, unusable here
+                shell.into_string().map_err(|_| Error::from(ERR_MSG))
+            }
+            None => Err(ERR_MSG.into()),
+        }
+    }?;
+    generate_for_shell(app, &shell)
 }

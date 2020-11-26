@@ -353,7 +353,7 @@ impl Source for Int {
         self.config
             .rdkafka_options
             .iter()
-            .flat_map(|m| m.iter())
+            .flat_map(halfbrown::HashMap::iter)
             .for_each(|(k, v)| {
                 client_config.set(k, v);
             });
