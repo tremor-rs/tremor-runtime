@@ -1,0 +1,4 @@
+Error: 
+    1 | let heredoc = """
+    2 | { | }
+      |   ^^^ It looks like you forgot to terminate an extractor with a closing '|'

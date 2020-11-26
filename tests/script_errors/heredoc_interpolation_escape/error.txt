@@ -1,0 +1,5 @@
+Error: 
+    1 | use std::string;
+    2 | let x = string::trim("""
+    3 |   { "\z" }
+      |      ^^ An unexpected escape code 'z' was found

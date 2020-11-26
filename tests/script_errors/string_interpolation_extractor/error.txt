@@ -1,0 +1,3 @@
+Error: 
+    1 | " { | } "
+      |     ^^^^^ It looks like you forgot to terminate an extractor with a closing '|'
