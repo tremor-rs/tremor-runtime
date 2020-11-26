@@ -69,7 +69,7 @@ impl TremorApp {
     }
 
     #[allow(clippy::map_err_ignore)] // err is () here
-    pub(crate) fn endpoint_id(&self, endpoeint: &str, id: &str) -> Result<url::Url> {
+    pub(crate) fn endpoint_id(&self, endpoint: &str, id: &str) -> Result<url::Url> {
         self.default_url().and_then(|mut url| {
             url.path_segments_mut()
                 .map_err(|_| Error::from("Bad endpoint api"))?
