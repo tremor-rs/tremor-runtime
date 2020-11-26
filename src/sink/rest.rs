@@ -355,7 +355,7 @@ impl Sink for Rest {
                         match http_client.send(request).await {
                             Ok(response) => {
                                 #[allow(clippy::cast_possible_truncation)]
-                                // we dont care about the upper 64 bit
+                                // we don't care about the upper 64 bit
                                 let duration = start.elapsed().as_millis() as u64; // measure response duration
                                 codec_task_channel
                                     .send(CodecTaskInMsg::ToEvent {
@@ -379,7 +379,7 @@ impl Sink for Rest {
                             }
                         }
                     }
-                    SendTaskInMsg::Failed => {} // just stop the task here, error alrady handled and reported in codec_task
+                    SendTaskInMsg::Failed => {} // just stop the task here, error already handled and reported in codec_task
                 }
 
                 max_counter.dec_from(current_inflights); // be fair to others and free our spot
@@ -483,8 +483,8 @@ async fn codec_task(
     sink_url: TremorURL,
     mut postprocessors: Postprocessors,
     mut preprocessors: Preprocessors,
-    codec: Box<dyn Codec>,
-    codec_map: HashMap<String, Box<dyn Codec>>,
+    mut codec: Box<dyn Codec>,
+    mut codec_map: HashMap<String, Box<dyn Codec>>,
     endpoint: Endpoint,
     default_method: Method,
     default_headers: HashMap<String, String>,
@@ -495,12 +495,13 @@ async fn codec_task(
     debug!("REST Sink codec task started.");
     let mut response_ids = ResponseIdGenerator::new();
 
+    let codec: &mut dyn Codec = codec.as_mut();
     while let Ok(msg) = in_rx.recv().await {
         match msg {
             CodecTaskInMsg::ToRequest(mut event, tx) => {
                 match build_request(
                     &event,
-                    codec.borrow(),
+                    codec,
                     &codec_map,
                     postprocessors.as_mut_slice(),
                     default_method,
@@ -590,8 +591,8 @@ async fn codec_task(
                         &id,
                         origin_uri.as_ref(),
                         response,
-                        codec.borrow(),
-                        &codec_map,
+                        codec,
+                        &mut codec_map,
                         preprocessors.as_mut_slice(),
                     )
                     .await
@@ -767,7 +768,7 @@ fn build_request(
                     if let Some(s) = v.as_str() {
                         Some(Endpoint::from_str(s)?)
                     } else {
-                        None // shouldnt happen
+                        None // shouldn't happen
                     }
                 }
                 Some(v) if v.is_object() => {
@@ -804,7 +805,7 @@ fn build_request(
         request_builder = request_builder.header(k.as_str(), v.as_str());
     }
 
-    // build headers from meta - effectivelty overwrite config headers in case of conflict
+    // build headers from meta - effectively overwrite config headers in case of conflict
     for (k, v) in headers {
         if "content-type".eq_ignore_ascii_case(k) {
             'inner: for hv in &v {
@@ -830,8 +831,8 @@ async fn build_response_events(
     id: &Ids,
     event_origin_uri: &EventOriginUri,
     mut response: Response,
-    codec: &dyn Codec,
-    codec_map: &HashMap<String, Box<dyn Codec>>,
+    codec: &mut dyn Codec,
+    codec_map: &mut HashMap<String, Box<dyn Codec>>,
     preprocessors: &mut [Box<dyn Preprocessor>],
 ) -> Result<Vec<Event>> {
     let mut meta = Value::object_with_capacity(1);
@@ -856,10 +857,9 @@ async fn build_response_events(
     // chose a codec
     let the_chosen_one = response
         .content_type()
-        .and_then(|mime| codec_map.get(mime.essence()))
-        .map_or(codec, |c| c.borrow());
+        .and_then(|mime| codec_map.get_mut(mime.essence()))
+        .map_or(codec, |c| -> &mut dyn Codec { c.as_mut() });
 
-    // extract one or multiple events from the body
     let response_bytes = response.body_bytes().await?;
     let mut ingest_ns = nanotime();
     let preprocessed = preprocess(preprocessors, &mut ingest_ns, response_bytes, sink_url)?;
@@ -885,6 +885,7 @@ async fn build_response_events(
             })?,
         );
     }
+
     Ok(events)
 }
 
@@ -1157,6 +1158,7 @@ mod test {
         Ok(())
     }
 
+    // we can't use async_std::tst here as it causes lifetime issues with codec
     #[async_std::test]
     async fn build_response() -> Result<()> {
         use simd_json::json;
@@ -1170,8 +1172,8 @@ mod test {
         response.append_header("Multiple", "first");
         response.append_header("Multiple", "second");
         response.set_body(body);
-        let codec = crate::codec::lookup("string")?;
-        let codec_map = crate::codec::builtin_codec_map();
+        let mut codec = crate::codec::lookup("string")?;
+        let mut codec_map = crate::codec::builtin_codec_map();
         let mut pp = vec![];
 
         let res = build_response_events(
@@ -1179,8 +1181,8 @@ mod test {
             &id,
             &event_origin_uri,
             Response::from(response),
-            codec.as_ref(),
-            &codec_map,
+            codec.as_mut(),
+            &mut codec_map,
             pp.as_mut_slice(),
         )
         .await?;

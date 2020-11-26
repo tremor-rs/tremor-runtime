@@ -26,7 +26,7 @@ impl Codec for StatsD {
     }
 
     fn decode<'input>(
-        &self,
+        &mut self,
         data: &'input mut [u8],
         ingest_ns: u64,
     ) -> Result<Option<Value<'input>>> {
@@ -281,7 +281,7 @@ mod test {
 
     #[test]
     fn horst() {
-        let c = StatsD {};
+        let mut c = StatsD {};
         let mut data = b"horst:42.23|h".to_vec();
 
         let parsed = c

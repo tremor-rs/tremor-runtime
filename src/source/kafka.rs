@@ -70,7 +70,7 @@ pub struct Config {
     ///
     /// Default settings:
     /// * `client.id` - `"tremor-<hostname>-<thread id>"`
-    /// * `bootstrap.servers` - `brokers` from the config concatinated by `,`
+    /// * `bootstrap.servers` - `brokers` from the config concatenated by `,`
     /// * `enable.partition.eof` - `"false"`
     /// * `session.timeout.ms` - `"6000"`
     /// * `enable.auto.commit` - `"true"`

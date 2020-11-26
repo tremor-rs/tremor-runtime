@@ -63,7 +63,7 @@ pub trait Codec: Send + Sync {
     /// # Errors
     ///  * if we can't decode the data
     fn decode<'input>(
-        &self,
+        &mut self,
         data: &'input mut [u8],
         ingest_ns: u64,
     ) -> Result<Option<Value<'input>>>;
@@ -96,7 +96,7 @@ pub trait Codec: Send + Sync {
 ///  * if the codec doesn't exist
 pub fn lookup(name: &str) -> Result<Box<dyn Codec>> {
     match name {
-        "json" => Ok(Box::new(json::JSON {})),
+        "json" => Ok(Box::new(json::JSON::default())),
         "msgpack" => Ok(Box::new(msgpack::MsgPack {})),
         "influx" => Ok(Box::new(influx::Influx {})),
         "binflux" => Ok(Box::new(binflux::BInflux {})),
@@ -131,7 +131,7 @@ pub fn builtin_codec_map() -> halfbrown::HashMap<String, Box<dyn Codec>> {
 /// if no codec could be found for the given mime type
 pub fn by_mime_type(mime: &str) -> Result<Box<dyn Codec>> {
     match mime {
-        "application/json" => Ok(Box::new(json::JSON {})),
+        "application/json" => Ok(Box::new(json::JSON::default())),
         "application/yaml" => Ok(Box::new(yaml::YAML {})),
         "text/plain" | "text/html" => Ok(Box::new(string::String {})),
         "application/msgpack" | "application/x-msgpack" | "application/vnd.msgpack" => {
