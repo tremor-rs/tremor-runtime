@@ -56,7 +56,7 @@ serde = "1"
 serde_yaml = "0.8"
 simd-json = {version = "0.3", features = ["known-key"]}
 simd-json-derive = "0.1.11"
-surf = "=2.0.0"
+surf = "=2.1.0"
 tremor-common = {path = "tremor-common"}
 tremor-pipeline = {path = "tremor-pipeline"}
 url = "2.1"
