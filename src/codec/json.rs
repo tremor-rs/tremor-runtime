@@ -91,11 +91,33 @@ mod test {
     use simd_json::OwnedValue;
 
     #[test]
+    fn decode() -> Result<()> {
+        let mut codec = JSON {
+            input_buffer: AlignedBuf::with_capacity(0),
+            string_buffer: Vec::new(),
+        };
+        let expected: OwnedValue = json!({ "snot": "badger" });
+
+        let mut data = br#"{ "snot": "badger" }"#.to_vec();
+        let output = codec.decode(&mut data, 42)?.unwrap();
+        assert_eq!(expected, output);
+
+        let mut codec = codec.clone();
+
+        let mut data = br#"{ "snot": "badger" }"#.to_vec();
+        let output = codec.decode(&mut data, 42)?.unwrap();
+        assert_eq!(expected, output);
+
+        Ok(())
+    }
+
+    #[test]
     fn test_json_codec() -> Result<()> {
         let seed: OwnedValue = json!({ "snot": "badger" });
         let seed: BorrowedValue = seed.into();
 
         let mut codec = JSON::default();
+
         let mut as_raw = codec.encode(&seed)?;
         let as_json = codec.decode(as_raw.as_mut_slice(), 0);
 
