@@ -22,8 +22,6 @@
     clippy::unnecessary_unwrap,
     clippy::pedantic
 )]
-// in most cases, map_or_else is less readable
-#![allow(clippy::option_if_let_else)]
 
 #[macro_use]
 extern crate serde_derive;

@@ -30,12 +30,11 @@ const TYPE_FALSE: u8 = 4;
 pub struct BInflux {}
 
 impl BInflux {
-    #[allow(clippy::map_err_ignore)]
     pub fn encode(v: &simd_json::BorrowedValue) -> Result<Vec<u8>> {
         fn write_str<W: Write>(w: &mut W, s: &str) -> Result<()> {
             w.write_u16::<BigEndian>(
                 u16::try_from(s.len())
-                    .map_err(|_| ErrorKind::InvalidBInfluxData("string too long".into()))?,
+                    .chain_err(|| ErrorKind::InvalidBInfluxData("string too long".into()))?,
             )?;
             w.write_all(s.as_bytes())?;
             Ok(())

@@ -2078,10 +2078,10 @@ impl<'input> Lexer<'input> {
                     // If the current line is just a `"""` then we are at the end of the heredoc
                     res.push(self.spanned2(
                         segment_start,
-                        end,
+                        e,
                         Token::StringLiteral(heredoc_content.into()),
                     ));
-                    segment_start = end;
+                    segment_start = e;
                     heredoc_content = String::new();
                     heredoc_content.push('"');
                     end = if let Some((e, '"')) = self.lookahead() {
@@ -2984,7 +2984,8 @@ mod tests {
             r#" ~    "# => Token::DQuote,
             r#"  ~   "# => Token::StringLiteral("}".into()),
             r#"   ~  "# => Token::DQuote,
-        }
+        };
+
         lex_ok! {
             r#" "a\nb}}" "#,
             r#" ~        "# => Token::DQuote,

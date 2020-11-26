@@ -23,7 +23,7 @@
         //"server",
         "run",
         //"temp/end.tremor",
-        "tests/script_errors/heredoc_interpolation_extractor/script.tremor"
+        "tests/scripts/heredoc_interpolation_quotes/script.tremor"
         //"-f",
         //"../tremor-www-docs/docs/workshop/examples/35_reverse_proxy_load_balancing/etc/tremor/config/config.yaml",
         // "../tremor-www-docs/docs/workshop/examples/35_reverse_proxy_load_balancing/etc/tremor/config/request_handling.trickle",

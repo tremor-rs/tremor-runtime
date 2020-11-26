@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::Result;
+use crate::errors::{Error, ErrorKind, Result};
 use simd_json::prelude::*;
 use simd_json::BorrowedValue as Value;
 use std::io::prelude::*;
@@ -20,11 +20,14 @@ use std::io::prelude::*;
 /// Fetches a hostname with `tremor-host.local` being the default
 #[must_use]
 pub fn hostname() -> String {
-    #[allow(clippy::map_err_ignore)]
     hostname::get()
-        .map_err(|_| ())
-        .and_then(|s| s.into_string().map_err(|_| ()))
-        .unwrap_or_else(|_| "tremor-host.local".to_string())
+        .map_err(|ioe| Error::from(ErrorKind::Io(ioe)))
+        .and_then(|hostname| {
+            hostname.into_string().map_err(|os_string| {
+                ErrorKind::Msg(format!("Invalid hostname: {}", os_string.to_string_lossy())).into()
+            })
+        })
+        .unwrap_or_else(|_| "tremor_host.local".to_string())
 }
 
 /// Serialize a Value in a sorted fashion to allow equality comparing the result

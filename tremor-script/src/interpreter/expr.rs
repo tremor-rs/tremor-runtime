@@ -393,11 +393,11 @@ where
                     let id = stry!(expr.eval_to_string(opts, env, event, state, meta, local));
                     let v: &mut Value<'event> = unsafe { mem::transmute(current) };
                     if let Some(map) = v.as_object_mut() {
-                        current = if let Some(v) = map.get_mut(&id) {
-                            v
-                        } else {
-                            map.entry(id)
-                                .or_insert_with(|| Value::object_with_capacity(32))
+                        current = match map.get_mut(&id) {
+                            Some(v) => v,
+                            None => map
+                                .entry(id)
+                                .or_insert_with(|| Value::object_with_capacity(32)),
                         }
                     } else {
                         return error_need_obj(self, segment, current.value_type(), &env.meta);

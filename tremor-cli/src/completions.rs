@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::Result;
+use crate::errors::{ErrorKind, Result, ResultExt};
 use clap::{self, ArgMatches};
 use clap_generate::{
     generate,
@@ -59,7 +59,6 @@ fn generate_for_shell(mut app: clap::App, shell: &str) -> Result<()> {
     }
 }
 
-#[allow(clippy::map_err_ignore)]
 fn guess_shell(app: clap::App) -> Result<()> {
     if std::env::var_os("ZSH_NAME").is_some() {
         generate_for_shell(app, "zsh")
@@ -67,7 +66,8 @@ fn guess_shell(app: clap::App) -> Result<()> {
         generate_for_shell(app, "powershell")
     } else if let Some(shell) = std::env::var_os("SHELL") {
         if let Some(shell_str) = Path::new(&shell).file_name() {
-            generate_for_shell(app, &shell_str.to_string_lossy()).map_err(|_| ERR_MSG.into())
+            generate_for_shell(app, &shell_str.to_string_lossy())
+                .chain_err(|| ErrorKind::Msg(ERR_MSG.to_string()))
         } else {
             Err(ERR_MSG.into())
         }

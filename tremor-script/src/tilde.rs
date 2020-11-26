@@ -480,15 +480,14 @@ impl Extractor {
                 }
                 Self::Dissect {
                     compiled: pattern, ..
-                } => {
-                    if let Some(o) = pattern.run(s) {
-                        Ok(Value::from(o))
-                    } else {
+                } => pattern.run(s).map_or_else(
+                    || {
                         Err(ExtractorError {
                             msg: "No match".into(),
                         })
-                    }
-                }
+                    },
+                    |o| Ok(Value::from(o)),
+                ),
                 Self::Grok {
                     compiled: ref pattern,
                     ..

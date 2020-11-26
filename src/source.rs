@@ -204,7 +204,6 @@ where
         }
     }
 
-    #[allow(clippy::option_if_let_else)]
     async fn make_event_data(
         &mut self,
         stream: usize,
@@ -223,15 +222,12 @@ where
                         // so it will never panic.
                         // take this, rustc!
                         let mut_data = unsafe { mutd.get_unchecked_mut(0).as_mut_slice() };
-                        let decoded = if let Some(doh) = &codec_override {
-                            if let Some(c) = self.codec_map.get_mut(doh) {
-                                c.decode(mut_data, *ingest_ns)
-                            } else {
-                                self.codec.decode(mut_data, *ingest_ns)
-                            }
-                        } else {
-                            self.codec.decode(mut_data, *ingest_ns)
-                        };
+                        let codec_map = &mut self.codec_map;
+                        let codec = codec_override
+                            .as_ref()
+                            .and_then(|codec_name| codec_map.get_mut(codec_name))
+                            .unwrap_or(&mut self.codec);
+                        let decoded = codec.decode(mut_data, *ingest_ns);
                         match decoded {
                             Ok(None) => Err(RentalSnot::Skip),
                             Err(e) => Err(RentalSnot::Error(e)),

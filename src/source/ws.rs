@@ -258,14 +258,18 @@ fn create_error_response(err: String, event_id: String, source_id: &TremorURL) -
 
 #[async_trait::async_trait()]
 impl Source for Int {
-    #[allow(clippy::option_if_let_else)]
     async fn pull_event(&mut self, id: u64) -> Result<SourceReply> {
-        if let Some(listener) = self.listener.as_ref() {
-            match listener.try_recv() {
+        let messages = &mut self.messages;
+        let streams = &mut self.streams;
+        self.listener.as_ref().map_or_else(
+            // listener channel dropped or not created yet, we ae disconnected
+            || Ok(SourceReply::StateChange(SourceState::Disconnected)),
+            // get a request or other control message from the ws server
+            |listener| match listener.try_recv() {
                 Ok(r) => match r {
                     WsSourceReply::Data(wrapped) => match wrapped {
                         SourceReply::Data { stream, .. } => {
-                            self.messages.insert(id, stream);
+                            messages.insert(id, stream);
                             Ok(wrapped)
                         }
                         _ => Err(
@@ -275,12 +279,12 @@ impl Source for Int {
                     },
                     WsSourceReply::StartStream(stream, ref sender) => {
                         if let Some(tx) = sender {
-                            self.streams.insert(stream, tx.clone());
+                            streams.insert(stream, tx.clone());
                         }
                         Ok(SourceReply::StartStream(stream))
                     }
                     WsSourceReply::EndStream(stream) => {
-                        self.streams.remove(&stream);
+                        streams.remove(&stream);
                         Ok(SourceReply::EndStream(stream))
                     }
                 },
@@ -288,11 +292,10 @@ impl Source for Int {
                 Err(TryRecvError::Closed) => {
                     Ok(SourceReply::StateChange(SourceState::Disconnected))
                 }
-            }
-        } else {
-            Ok(SourceReply::StateChange(SourceState::Disconnected))
-        }
+            },
+        )
     }
+
     async fn reply_event(
         &mut self,
         event: Event,

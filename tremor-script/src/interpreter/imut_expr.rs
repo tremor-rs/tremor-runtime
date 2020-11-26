@@ -73,11 +73,10 @@ where
         local: &'run LocalStack<'event>,
     ) -> Result<Cow<'event, str>> {
         let value = stry!(self.run(opts, env, event, state, meta, local));
-        if let Some(s) = value.as_str() {
-            Ok(Cow::from(s.to_owned()))
-        } else {
-            error_need_str(self, self, value.value_type(), &env.meta)
-        }
+        value.as_str().map_or_else(
+            || error_need_str(self, self, value.value_type(), &env.meta),
+            |s| Ok(Cow::from(s.to_owned())),
+        )
     }
 
     /// Evaluates the expression to an index, i.e., a `usize`, or returns the appropriate error

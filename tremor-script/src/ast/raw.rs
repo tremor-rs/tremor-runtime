@@ -1920,6 +1920,7 @@ impl<'script> Upable<'script> for LocalPathRaw<'script> {
             };
             rel_path.push(id.to_string());
             #[allow(clippy::option_if_let_else)]
+            // we cannot use map_or_else here because of the borrow checker
             if let Some(idx) = helper.is_const(&rel_path) {
                 Ok(LocalPath {
                     is_const: true,
