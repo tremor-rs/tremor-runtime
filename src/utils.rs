@@ -11,14 +11,17 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
+use crate::errors::{Error, ErrorKind};
 /// Fetches a hostname with `tremor-host.local` being the default
 #[must_use]
 #[cfg(not(tarpaulin_include))]
 pub fn hostname() -> String {
-    #[allow(clippy::map_err_ignore)]
     hostname::get()
-        .map_err(|_| ())
-        .and_then(|s| s.into_string().map_err(|_| ()))
-        .unwrap_or_else(|_| "tremor-host.local".to_string())
+        .map_err(|ioe| Error::from(ioe))
+        .and_then(|hostname| {
+            hostname.into_string().map_err(|os_string| {
+                ErrorKind::Msg(format!("Invalid hostname: {}", os_string.to_string_lossy())).into()
+            })
+        })
+        .unwrap_or_else(|_| "tremor_host.local".to_string())
 }

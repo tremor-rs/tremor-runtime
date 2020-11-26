@@ -23,7 +23,6 @@
     clippy::unnecessary_unwrap,
     clippy::pedantic
 )]
-#![warn(clippy::option_if_let_else)]
 #[macro_use]
 extern crate serde_derive;
 #[macro_use]

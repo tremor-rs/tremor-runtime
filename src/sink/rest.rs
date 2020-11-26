@@ -15,6 +15,7 @@
 #![cfg(not(tarpaulin_include))]
 
 use crate::codec::Codec;
+use crate::errors::ErrorKind;
 use crate::sink::prelude::*;
 use async_channel::{bounded, Receiver, Sender};
 use async_std::task::JoinHandle;
@@ -55,7 +56,7 @@ fn none_if_empty(s: &str) -> Option<String> {
     }
 }
 
-fn err(s: &str) -> Error {
+fn err(s: &str) -> ErrorKind {
     s.into()
 }
 

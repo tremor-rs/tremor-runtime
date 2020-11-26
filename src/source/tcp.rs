@@ -77,19 +77,17 @@ impl Source for Int {
         &self.onramp_id
     }
 
-    #[allow(clippy::option_if_let_else)]
     async fn pull_event(&mut self, _id: u64) -> Result<SourceReply> {
-        if let Some(listener) = self.listener.as_ref() {
-            match listener.try_recv() {
+        self.listener.as_ref().map_or_else(
+            || Ok(SourceReply::StateChange(SourceState::Disconnected)),
+            |listener| match listener.try_recv() {
                 Ok(r) => Ok(r),
                 Err(TryRecvError::Empty) => Ok(SourceReply::Empty(10)),
                 Err(TryRecvError::Closed) => {
                     Ok(SourceReply::StateChange(SourceState::Disconnected))
                 }
-            }
-        } else {
-            Ok(SourceReply::StateChange(SourceState::Disconnected))
-        }
+            },
+        )
     }
 
     async fn init(&mut self) -> Result<SourceState> {

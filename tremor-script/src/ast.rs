@@ -434,18 +434,12 @@ where
     }
 
     fn var_id(&mut self, id: &str) -> usize {
-        let id = if let Some(shadow) = self.find_shadow_var(id) {
-            shadow
-        } else {
-            id.to_string()
-        };
+        let id = self.find_shadow_var(id).unwrap_or_else(|| id.to_string());
 
-        if let Some(idx) = self.locals.get(id.as_str()) {
-            *idx
-        } else {
+        self.locals.get(id.as_str()).copied().unwrap_or_else(|| {
             self.locals.insert(id.to_string(), self.locals.len());
             self.locals.len() - 1
-        }
+        })
     }
     fn is_const(&self, id: &[String]) -> Option<&usize> {
         self.consts.get(id)

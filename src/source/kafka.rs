@@ -335,7 +335,7 @@ impl Source for Int {
         // ENABLE LIBRDKAFKA DEBUGGING:
         // - set librdkafka logger to debug in logger.yaml
         // - configure: debug: "all" for this onramp
-        let client_config = client_config
+        client_config
             .set("group.id", &self.config.group_id)
             .set(
                 "client.id",
@@ -350,16 +350,13 @@ impl Source for Int {
             // but only commit the offsets explicitly stored via `consumer.store_offset`.
             .set("enable.auto.offset.store", "true");
 
-        #[allow(clippy::option_if_let_else)]
-        let client_config = if let Some(options) = self.config.rdkafka_options.as_ref() {
-            options
-                .iter()
-                .fold(client_config, |c: &mut ClientConfig, (k, v)| c.set(k, v))
-        } else {
-            client_config
-        };
-
-        let client_config = client_config.to_owned();
+        self.config
+            .rdkafka_options
+            .iter()
+            .flat_map(|m| m.iter())
+            .for_each(|(k, v)| {
+                client_config.set(k, v);
+            });
 
         // Set up the the consumer
         let consumer: LoggingConsumer = client_config.create_with_context(context)?;

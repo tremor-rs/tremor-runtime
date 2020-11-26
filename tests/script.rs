@@ -153,6 +153,8 @@ test_cases!(
     // TODO
     // const_in_const_lookup,
     // INSERT
+    string_interpolation_quotes,
+    heredoc_interpolation_quotes,
     range,
     origin,
     array_pattern_element,

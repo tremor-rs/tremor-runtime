@@ -343,23 +343,26 @@ fn make_response(
 impl Source for Int {
     // TODO possible to do this in source trait?
     async fn pull_event(&mut self, id: u64) -> Result<SourceReply> {
-        #[allow(clippy::option_if_let_else)]
-        if let Some(listener) = self.listener.as_ref() {
-            match listener.try_recv() {
-                Ok(RestSourceReply(Some(response_tx), source_reply)) => {
-                    // store a sender here to be able to send the response later
-                    self.response_txes.insert(id, response_tx);
-                    Ok(source_reply)
+        let response_txes = &mut self.response_txes;
+        self.listener.as_ref().map_or_else(
+            // listener channel dropped, server stopped
+            || Ok(SourceReply::StateChange(SourceState::Disconnected)),
+            // get some request from the server channel
+            |listener| {
+                match listener.try_recv() {
+                    Ok(RestSourceReply(Some(response_tx), source_reply)) => {
+                        // store a sender here to be able to send the response later
+                        response_txes.insert(id, response_tx);
+                        Ok(source_reply)
+                    }
+                    Ok(r) => Ok(r.1),
+                    Err(TryRecvError::Empty) => Ok(SourceReply::Empty(10)),
+                    Err(TryRecvError::Closed) => {
+                        Ok(SourceReply::StateChange(SourceState::Disconnected))
+                    }
                 }
-                Ok(r) => Ok(r.1),
-                Err(TryRecvError::Empty) => Ok(SourceReply::Empty(10)),
-                Err(TryRecvError::Closed) => {
-                    Ok(SourceReply::StateChange(SourceState::Disconnected))
-                }
-            }
-        } else {
-            Ok(SourceReply::StateChange(SourceState::Disconnected))
-        }
+            },
+        )
     }
 
     async fn reply_event(
