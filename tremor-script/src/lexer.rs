@@ -1606,9 +1606,10 @@ impl<'input> Lexer<'input> {
                 escape_start.extend_left('u');
                 let mut digits = String::with_capacity(4);
                 for _i in 0..4 {
-                    if let Some((e, c)) = self.bump() {
+                    if let Some((mut e, c)) = self.bump() {
                         digits.push(c);
                         if u32::from_str_radix(&format!("{}", c), 16).is_err() {
+                            e.shift(' ');
                             let token_str =
                                 self.slice_full_lines(string_start, &e).unwrap_or_default();
                             let range = Range::from((escape_start, e));
@@ -1976,8 +1977,9 @@ impl<'input> Lexer<'input> {
                                 let error = match kind {
                                     ErrorKind::UnterminatedExtractor(outer, location, _) => {
                                         // expand to start line of heredoc, so we get a proper context
-                                        let outer = outer
-                                            .expand_lines(outer.0.line() - heredoc_start.line());
+                                        let outer = outer.expand_lines(
+                                            outer.0.line().saturating_sub(heredoc_start.line()),
+                                        );
                                         ErrorKind::UnterminatedExtractor(
                                             outer,
                                             location,
@@ -1986,8 +1988,9 @@ impl<'input> Lexer<'input> {
                                     }
                                     ErrorKind::UnterminatedIdentLiteral(outer, location, _) => {
                                         // expand to start line of heredoc, so we get a proper context
-                                        let outer = outer
-                                            .expand_lines(outer.0.line() - heredoc_start.line());
+                                        let outer = outer.expand_lines(
+                                            outer.0.line().saturating_sub(heredoc_start.line()),
+                                        );
                                         ErrorKind::UnterminatedIdentLiteral(
                                             outer,
                                             location,
@@ -2006,8 +2009,9 @@ impl<'input> Lexer<'input> {
                                     }
                                     ErrorKind::UnterminatedInterpolation(outer, location, _) => {
                                         // expand to start line of heredoc, so we get a proper context
-                                        let outer = outer
-                                            .expand_lines(outer.0.line() - heredoc_start.line());
+                                        let outer = outer.expand_lines(
+                                            outer.0.line().saturating_sub(heredoc_start.line()),
+                                        );
                                         ErrorKind::UnterminatedInterpolation(
                                             outer,
                                             location,
@@ -2016,8 +2020,9 @@ impl<'input> Lexer<'input> {
                                     }
                                     ErrorKind::UnexpectedEscapeCode(outer, location, _, found) => {
                                         // expand to start line of heredoc, so we get a proper context
-                                        let outer = outer
-                                            .expand_lines(outer.0.line() - heredoc_start.line());
+                                        let outer = outer.expand_lines(
+                                            outer.0.line().saturating_sub(heredoc_start.line()),
+                                        );
                                         ErrorKind::UnexpectedEscapeCode(
                                             outer,
                                             location,
@@ -2027,8 +2032,9 @@ impl<'input> Lexer<'input> {
                                     }
                                     ErrorKind::UnterminatedStringLiteral(outer, location, _) => {
                                         // expand to start line of heredoc, so we get a proper context
-                                        let outer = outer
-                                            .expand_lines(outer.0.line() - heredoc_start.line());
+                                        let outer = outer.expand_lines(
+                                            outer.0.line().saturating_sub(heredoc_start.line()),
+                                        );
                                         ErrorKind::UnterminatedStringLiteral(
                                             outer,
                                             location,
@@ -2037,8 +2043,9 @@ impl<'input> Lexer<'input> {
                                     }
                                     ErrorKind::InvalidUTF8Sequence(outer, location, _) => {
                                         // expand to start line of heredoc, so we get a proper context
-                                        let outer = outer
-                                            .expand_lines(outer.0.line() - heredoc_start.line());
+                                        let outer = outer.expand_lines(
+                                            outer.0.line().saturating_sub(heredoc_start.line()),
+                                        );
                                         ErrorKind::InvalidUTF8Sequence(
                                             outer,
                                             location,
@@ -2428,7 +2435,7 @@ impl<'input> Lexer<'input> {
         }
     }
 
-    /// handle escaped
+    /// handle test/extractor '|...'
     fn pl(&mut self, start: Location) -> Result<TokenSpan<'input>> {
         let mut string = String::new();
         let mut strings = Vec::new();
@@ -2949,10 +2956,41 @@ mod tests {
             r#"    ~ "# => Token::DQuote,
         };
         lex_ok! {
+            r#" "{{" "#,
+            r#" ~    "# => Token::DQuote,
+            r#"  ~~  "# => Token::QuotedSquigglyOpen,
+            r#"    ~ "# => Token::DQuote,
+        };
+        lex_ok! {
             r#" "\}" "#,
             r#" ~    "# => Token::DQuote,
            r#"  ~~  "# => Token::QuotedSquigglyClose,
             r#"    ~ "# => Token::DQuote,
+        };
+        lex_ok! {
+            r#" "}}" "#,
+            r#" ~    "# => Token::DQuote,
+            r#"  ~~  "# => Token::QuotedSquigglyClose,
+            r#"    ~ "# => Token::DQuote,
+        };
+        lex_ok! {
+            r#" "{}" "#,
+            r#" ~    "# => Token::DQuote,
+            r#"  ~~  "# => Token::StringLiteral("{}".into()),
+            r#"    ~ "# => Token::DQuote,
+        };
+        lex_ok! {
+            r#" "}" "#,
+            r#" ~    "# => Token::DQuote,
+            r#"  ~   "# => Token::StringLiteral("}".into()),
+            r#"   ~  "# => Token::DQuote,
+        }
+        lex_ok! {
+            r#" "a\nb}}" "#,
+            r#" ~        "# => Token::DQuote,
+            r#"  ~~~~    "# => Token::StringLiteral("a\nb".into()),
+            r#"      ~~  "# => Token::QuotedSquigglyClose,
+            r#"        ~ "# => Token::DQuote,
         };
 
         lex_ok! {

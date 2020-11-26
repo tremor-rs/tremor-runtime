@@ -1,0 +1,3 @@
+Error: 
+    1 | let escape = " { "\z" } ";
+      |                   ^^ An unexpected escape code 'z' was found

@@ -1,0 +1,4 @@
+Error: 
+    1 | 1; """
+    2 | { "\u1" }
+      |    ^^^^ An invalid UTF8 escape sequence was found

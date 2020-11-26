@@ -1,0 +1,4 @@
+use std::string;
+let x = string::trim("""
+  { "\z" }
+""";

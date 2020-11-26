@@ -34,7 +34,6 @@ impl BInflux {
     pub fn encode(v: &simd_json::BorrowedValue) -> Result<Vec<u8>> {
         fn write_str<W: Write>(w: &mut W, s: &str) -> Result<()> {
             w.write_u16::<BigEndian>(
-                #[allow(clippy::map_err_ignore)]
                 u16::try_from(s.len())
                     .map_err(|_| ErrorKind::InvalidBInfluxData("string too long".into()))?,
             )?;
@@ -73,7 +72,6 @@ impl BInflux {
 
         if let Some(fields) = v.get("fields").and_then(Value::as_object) {
             res.write_u16::<BigEndian>(
-                #[allow(clippy::map_err_ignore)]
                 u16::try_from(fields.len())
                     .map_err(|_| ErrorKind::InvalidBInfluxData("too many fields".into()))?,
             )?;
