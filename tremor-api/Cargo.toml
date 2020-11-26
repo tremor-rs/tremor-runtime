@@ -8,8 +8,6 @@ version = "0.9.2"
 
 [dependencies]
 hashbrown = {version = "0.9", features = ["serde"]}
-hashbrown = {version = "0.9", features = ["serde"]}
-http-types = "2.8"
 http-types = "2.8"
 serde = "1"
 serde_derive = "1"
