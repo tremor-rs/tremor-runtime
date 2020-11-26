@@ -1039,9 +1039,9 @@ dependencies = [
 
 [[package]]
 name = "cron"
-version = "0.6.1"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ab00a636277f7ea5d8dd92ac7a5099fc9a46e5327bba84d3640b41ae127eada9"
+checksum = "05bbdd28f53ab6cf727930e0430512404e2c04345c6c30ed253418ff2b4e7aa3"
 dependencies = [
  "chrono",
  "error-chain 0.10.0",
