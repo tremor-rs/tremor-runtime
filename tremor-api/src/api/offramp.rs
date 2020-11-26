@@ -39,16 +39,16 @@ pub async fn publish_artefact(req: Request) -> Result<Response> {
 }
 
 pub async fn unpublish_artefact(req: Request) -> Result<Response> {
-    let id: String = req.param("aid").unwrap_or_default();
-    let url = build_url(&["offramp", &id])?;
+    let id = req.param("aid").unwrap_or_default();
+    let url = build_url(&["offramp", id])?;
     let repo = &req.state().world.repo;
     let result = repo.unpublish_offramp(&url).await?;
     reply(req, result, true, StatusCode::Ok).await
 }
 
 pub async fn get_artefact(req: Request) -> Result<Response> {
-    let id: String = req.param("aid").unwrap_or_default();
-    let url = build_url(&["offramp", &id])?;
+    let id = req.param("aid").unwrap_or_default();
+    let url = build_url(&["offramp", id])?;
     let repo = &req.state().world.repo;
     let result = repo
         .find_offramp(&url)

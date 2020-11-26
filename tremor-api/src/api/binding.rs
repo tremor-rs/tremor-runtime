@@ -54,16 +54,16 @@ pub async fn publish_artefact(req: Request) -> Result<Response> {
 }
 
 pub async fn unpublish_artefact(req: Request) -> Result<Response> {
-    let id: String = req.param("aid").unwrap_or_default();
-    let url = build_url(&["binding", &id])?;
+    let id = req.param("aid").unwrap_or_default();
+    let url = build_url(&["binding", id])?;
     let repo = &req.state().world.repo;
     let result = repo.unpublish_binding(&url).await?;
     reply(req, result.binding, true, StatusCode::Ok).await
 }
 
 pub async fn get_artefact(req: Request) -> Result<Response> {
-    let id: String = req.param("aid").unwrap_or_default();
-    let url = build_url(&["binding", &id])?;
+    let id = req.param("aid").unwrap_or_default();
+    let url = build_url(&["binding", id])?;
 
     let repo = &req.state().world.repo;
     let result = repo
@@ -84,9 +84,9 @@ pub async fn get_artefact(req: Request) -> Result<Response> {
 }
 
 pub async fn get_servant(req: Request) -> Result<Response> {
-    let a_id: String = req.param("aid").unwrap_or_default();
-    let s_id: String = req.param("sid").unwrap_or_default();
-    let url = build_url(&["binding", &a_id, &s_id])?;
+    let a_id = req.param("aid").unwrap_or_default();
+    let s_id = req.param("sid").unwrap_or_default();
+    let url = build_url(&["binding", a_id, s_id])?;
 
     let registry = &req.state().world.reg;
     let result = registry
@@ -102,9 +102,9 @@ pub async fn get_servant(req: Request) -> Result<Response> {
 pub async fn link_servant(req: Request) -> Result<Response> {
     let (req, decoded_data): (_, HashMap<String, String, _>) = decode(req).await?;
 
-    let a_id: String = req.param("aid").unwrap_or_default();
-    let s_id: String = req.param("sid").unwrap_or_default();
-    let url = build_url(&["binding", &a_id, &s_id])?;
+    let a_id = req.param("aid").unwrap_or_default();
+    let s_id = req.param("sid").unwrap_or_default();
+    let url = build_url(&["binding", a_id, s_id])?;
     let world = &req.state().world;
 
     let result = world.link_binding(&url, decoded_data).await?.binding;
@@ -114,9 +114,9 @@ pub async fn link_servant(req: Request) -> Result<Response> {
 
 #[allow(clippy::implicit_hasher)]
 pub async fn unlink_servant(req: Request) -> Result<Response> {
-    let a_id: String = req.param("aid").unwrap_or_default();
-    let s_id: String = req.param("sid").unwrap_or_default();
-    let url = build_url(&["binding", &a_id, &s_id])?;
+    let a_id = req.param("aid").unwrap_or_default();
+    let s_id = req.param("sid").unwrap_or_default();
+    let url = build_url(&["binding", a_id, s_id])?;
 
     let world = &req.state().world;
     let result = world.unlink_binding(&url, HashMap::new()).await?.binding;
