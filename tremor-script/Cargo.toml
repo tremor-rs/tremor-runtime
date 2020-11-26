@@ -1,67 +1,67 @@
 [package]
-name = "tremor-script"
-version = "0.9.1"
-description = "Tremor Script Interpreter"
 authors = ["The Tremor Team"]
+build = "build.rs"
+description = "Tremor Script Interpreter"
+documentation = "https://docs.rs/tremor-script"
 edition = "2018"
 license = "Apache-2.0"
-build = "build.rs"
+name = "tremor-script"
 readme = "README.md"
-documentation = "https://docs.rs/tremor-script"
+version = "0.9.2"
 
 [package.metadata.docs.rs]
 default-target = "x86_64-unknown-linux-gnu"
 
 # Additional `RUSTFLAGS` to set (default: none)
-rustc-args = [ "-C target-cpu=native" ]
+rustc-args = ["-C target-cpu=native"]
 
 [lib]
-name = "tremor_script"
 crate-type = ["staticlib", "cdylib", "rlib"]
+name = "tremor_script"
 
 [dependencies]
-downcast-rs = "1.2"
-rental = "0.5"
-simd-json = {version = "0.3", features = ["known-key"]}
-simd-json-derive = "0.1"
-error-chain="0.12"
-lalrpop-util = "0.19"
-regex = "1"
-serde_derive = "1.0"
-serde = "1.0"
-glob = "0.3"
-hostname = "0.3"
-codespan = "0.9"
-termcolor = "1.1"
-unicode-xid = "0.2"
-halfbrown = "0.1"
 base64 = "0.13"
-tremor-kv = "0.1"
+chrono = "0.4"
+cidr-utils = "0.5"
+codespan = "0.9"
 dissect = "0.1"
 distance = "0.4"
-chrono = "0.4"
-grok = "1"
-cidr-utils = "0.5"
-jumphash = "0.1"
-rand = { version = "0.7", features = ["small_rng"] }
-hdrhistogram = "7"
-sketches-ddsketch = "0.1.2"
-xz2 = "0.1"
-url = "2"
-tremor-influx = { version = "0.2", path = "../tremor-influx" } # FIXME tremor-influx v0.2
-tremor-common = { version = "0.9", path = "../tremor-common" } # FIXME tremor-influx v0.2"
-percent-encoding = "2.1"
-matches = "0.1.8"
+downcast-rs = "1.2"
+error-chain = "0.12"
 fxhash = "0.2"
+glob = "0.3"
+grok = "1"
+halfbrown = "0.1"
+hdrhistogram = "7"
+hostname = "0.3"
+jumphash = "0.1"
+lalrpop-util = "0.19"
+matches = "0.1.8"
+percent-encoding = "2.1"
+rand = {version = "0.7", features = ["small_rng"]}
+regex = "1"
+rental = "0.5"
+serde = "1.0"
+serde_derive = "1.0"
+simd-json = {version = "0.3", features = ["known-key"]}
+simd-json-derive = "0.1"
+sketches-ddsketch = "0.1.2"
+termcolor = "1.1"
+tremor-common = {version = "0.9", path = "../tremor-common"}# FIXME tremor-influx v0.2"
+tremor-influx = {version = "0.2", path = "../tremor-influx"}# FIXME tremor-influx v0.2
+tremor-kv = "0.1"
+unicode-xid = "0.2"
+url = "2"
+xz2 = "0.1"
 
 [build-dependencies]
 lalrpop = "0.19"
 
 [dev-dependencies]
 criterion = "0.3"
+float-cmp = "0.8"
 matches = "0.1"
 pretty_assertions = "0.6.1"
-float-cmp = "0.8"
 
 [features]
 fns = []
