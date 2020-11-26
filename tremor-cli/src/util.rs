@@ -58,7 +58,7 @@ impl TremorApp {
             .and_then(|s| Ok(url::Url::parse(s)?))
     }
 
-    #[allow(clippy::map_err_ignore)]
+    #[allow(clippy::map_err_ignore)] // err is () her
     pub(crate) fn endpoint(&self, endpoint: &str) -> Result<url::Url> {
         self.default_url().and_then(|mut url| {
             url.path_segments_mut()
@@ -68,8 +68,8 @@ impl TremorApp {
         })
     }
 
-    #[allow(clippy::map_err_ignore)]
-    pub(crate) fn endpoint_id(&self, endpoint: &str, id: &str) -> Result<url::Url> {
+    #[allow(clippy::map_err_ignore)] // err is () here
+    pub(crate) fn endpoint_id(&self, endpoeint: &str, id: &str) -> Result<url::Url> {
         self.default_url().and_then(|mut url| {
             url.path_segments_mut()
                 .map_err(|_| Error::from("Bad endpoint api"))?
@@ -79,7 +79,7 @@ impl TremorApp {
         })
     }
 
-    #[allow(clippy::map_err_ignore)]
+    #[allow(clippy::map_err_ignore)] // err is () here
     pub(crate) fn endpoint_id_instance(
         &self,
         endpoint: &str,
