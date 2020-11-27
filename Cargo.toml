@@ -59,7 +59,7 @@ smol = "1.2"
 surf = "=2.1.0"
 tremor-common = {path = "tremor-common"}
 tremor-pipeline = {path = "tremor-pipeline"}
-url = "2.1"
+url = "2.2"
 value-trait = "0.1"
 
 halfbrown = "0.1"
