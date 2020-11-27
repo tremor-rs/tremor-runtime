@@ -25,7 +25,7 @@ simd-json-derive = "0.1"
 sled = "0.34"
 tremor-influx = {path = "../tremor-influx"}
 tremor-script = {path = "../tremor-script"}
-url = "2.1.1"
+url = "2.2.0"
 value-trait = "0.1"
 window = {git = "https://github.com/tremor-rs/window.git", tag = "v0.1.1"}
 

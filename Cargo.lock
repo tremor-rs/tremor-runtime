@@ -2190,7 +2190,7 @@ dependencies = [
  "serde_json",
  "serde_qs",
  "serde_urlencoded 0.7.0",
- "url 2.1.1",
+ "url 2.2.0",
 ]
 
 [[package]]
@@ -3602,7 +3602,7 @@ dependencies = [
  "idna 0.2.0",
  "lazy_static",
  "regex",
- "url 2.1.1",
+ "url 2.2.0",
 ]
 
 [[package]]
@@ -3998,7 +3998,7 @@ dependencies = [
  "serde_urlencoded 0.6.1",
  "tokio 0.2.22",
  "tokio-tls",
- "url 2.1.1",
+ "url 2.2.0",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
@@ -4282,7 +4282,7 @@ dependencies = [
  "dtoa",
  "itoa",
  "serde",
- "url 2.1.1",
+ "url 2.2.0",
 ]
 
 [[package]]
@@ -5409,7 +5409,7 @@ dependencies = [
  "tremor-pipeline",
  "tremor-runtime",
  "tremor-script",
- "url 2.1.1",
+ "url 2.2.0",
 ]
 
 [[package]]
@@ -5466,7 +5466,7 @@ dependencies = [
  "tempfile",
  "tremor-influx",
  "tremor-script",
- "url 2.1.1",
+ "url 2.2.0",
  "value-trait",
  "window",
  "xz2",
@@ -5533,7 +5533,7 @@ dependencies = [
  "tremor-pipeline",
  "tremor-script",
  "tungstenite",
- "url 2.1.1",
+ "url 2.2.0",
  "value-trait",
  "xz2",
 ]
@@ -5577,7 +5577,7 @@ dependencies = [
  "tremor-influx",
  "tremor-kv",
  "unicode-xid 0.2.1",
- "url 2.1.1",
+ "url 2.2.0",
  "xz2",
 ]
 
@@ -5611,7 +5611,7 @@ dependencies = [
  "log",
  "rand 0.7.3",
  "sha-1",
- "url 2.1.1",
+ "url 2.2.0",
  "utf-8",
 ]
 
@@ -5722,10 +5722,11 @@ dependencies = [
 
 [[package]]
 name = "url"
-version = "2.1.1"
+version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "829d4a8476c35c9bf0bbce5a3b23f4106f79728039b726d292bb93bc106787cb"
+checksum = "5909f2b0817350449ed73e8bcd81c8c3c8d9a7a5d8acba4b27db277f1868976e"
 dependencies = [
+ "form_urlencoded",
  "idna 0.2.0",
  "matches",
  "percent-encoding 2.1.0",
