@@ -3505,7 +3505,7 @@ dependencies = [
  "futures 0.3.8",
  "log",
  "tokio 0.3.0",
- "tokio-postgres 0.6.0",
+ "tokio-postgres",
 ]
 
 [[package]]
@@ -5072,10 +5072,8 @@ dependencies = [
  "futures-core",
  "iovec",
  "lazy_static",
- "libc",
  "memchr",
  "mio 0.6.22",
- "mio-uds",
  "num_cpus",
  "pin-project-lite",
  "slab",
@@ -5163,28 +5161,6 @@ dependencies = [
 
 [[package]]
 name = "tokio-postgres"
-version = "0.5.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "55a2482c9fe4dd481723cf5c0616f34afc710e55dcda0944e12e7b3316117892"
-dependencies = [
- "async-trait",
- "byteorder",
- "bytes 0.5.6",
- "fallible-iterator",
- "futures 0.3.8",
- "log",
- "parking_lot 0.11.0",
- "percent-encoding 2.1.0",
- "phf",
- "pin-project-lite",
- "postgres-protocol",
- "postgres-types",
- "tokio 0.2.22",
- "tokio-util 0.3.1",
-]
-
-[[package]]
-name = "tokio-postgres"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "150d9be163b0df6dc185b8ee33bcb9a74865f0cad754495847f2e06e2051a345"
@@ -5193,7 +5169,7 @@ dependencies = [
  "byteorder",
  "bytes 0.5.6",
  "fallible-iterator",
- "futures 0.3.7",
+ "futures 0.3.8",
  "log",
  "parking_lot 0.11.0",
  "percent-encoding 2.1.0",
@@ -5600,7 +5576,7 @@ dependencies = [
  "surf",
  "tempfile",
  "tide",
- "tokio-postgres 0.5.5",
+ "tokio-postgres",
  "tremor-common",
  "tremor-influx",
  "tremor-pipeline",
