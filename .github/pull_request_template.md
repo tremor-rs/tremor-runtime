@@ -32,3 +32,4 @@ usually do. If in doubt, please open a ticket for a PR first to discuss the issu
 * [ ] Any user-facing impact of the changes is reflected in docs.tremor.rs
 * [ ] The code is tested
 * [ ] Use of unsafe code is reasoned about in a comment
+* [ ] Update CHANGELOG.md appropriately, recording any changes, bug fixes or other observable changes in behavior
