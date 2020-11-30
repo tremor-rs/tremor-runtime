@@ -25,8 +25,7 @@ use tremor_pipeline::{Event, Ids};
 use tremor_runtime::codec::Codec;
 use tremor_runtime::postprocessor::Postprocessor;
 use tremor_runtime::preprocessor::Preprocessor;
-use tremor_script::ctx::{EventContext, EventOriginUri};
-use tremor_script::highlighter::{Highlighter, Term as TermHighlighter};
+use tremor_script::highlighter::Error as HighlighterError;
 use tremor_script::path::load as load_module_path;
 use tremor_script::query::Query;
 use tremor_script::registry;
@@ -34,6 +33,14 @@ use tremor_script::registry::Registry;
 use tremor_script::script::{AggrType, Return, Script};
 use tremor_script::LineValue;
 use tremor_script::ValueAndMeta;
+use tremor_script::{
+    ctx::{EventContext, EventOriginUri},
+    lexer::Tokenizer,
+};
+use tremor_script::{
+    highlighter::{Highlighter, Term as TermHighlighter},
+    lexer::Range,
+};
 struct Ingress {
     is_interactive: bool,
     is_pretty: bool,
@@ -174,10 +181,10 @@ impl Egress {
         })
     }
 
-    fn process(&mut self, _src: &str, event: &Value, ret: Result<Return>) -> Result<()> {
+    fn process(&mut self, _src: &str, event: &Value, ret: Return) -> Result<()> {
         match ret {
-            Ok(Return::Drop) => Ok(()),
-            Ok(Return::Emit { value, port }) => {
+            Return::Drop => Ok(()),
+            Return::Emit { value, port } => {
                 match port.unwrap_or_else(|| String::from("out")).as_str() {
                     "err" | "error" | "stderr" => {
                         self.buffer
@@ -208,7 +215,7 @@ impl Egress {
                 self.buffer.flush()?;
                 Ok(())
             }
-            Ok(Return::EmitEvent { port }) => {
+            Return::EmitEvent { port } => {
                 match port.unwrap_or_else(|| String::from("out")).as_str() {
                     "err" | "error" | "stderr" => {
                         eprintln!("{}", event.encode());
@@ -220,10 +227,6 @@ impl Egress {
                     }
                 };
                 Ok(())
-            }
-            Err(e) => {
-                eprintln!("error processing event: {}", e);
-                Err(e)
             }
         }
     }
@@ -240,11 +243,11 @@ fn run_tremor_source(matches: &ArgMatches, src: String) -> Result<()> {
 
     let reg: Registry = registry::registry();
     let mp = load_module_path();
-    let mut h = TermHighlighter::default();
 
+    let mut outer = TermHighlighter::default();
     match Script::parse(&mp, &src, raw.clone(), &reg) {
         Ok(mut script) => {
-            script.format_warnings_with(&mut h)?;
+            script.format_warnings_with(&mut outer)?;
 
             let mut ingress = Ingress::from_args(&matches)?;
             let mut egress = Egress::from_args(&matches)?;
@@ -265,25 +268,54 @@ fn run_tremor_source(matches: &ArgMatches, src: String) -> Result<()> {
                         &mut state,
                         &mut global_map,
                     ) {
-                        Ok(r) => egress.process(&src, &event, Ok(r)),
-                        Err(e) => egress.process(&src, &event, Err(e.into())),
-                    }?;
-                    Ok(())
+                        Ok(r) => egress.process(&src, &event, r),
+                        Err(e) => {
+                            if let (Some(Range(start, end)), _) = e.context() {
+                                let mut inner = TermHighlighter::default();
+                                let mut input = raw.clone();
+                                input.push('\n'); // for nicer highlighting
+                                let tokens: Vec<_> =
+                                    Tokenizer::new(&input).tokenize_until_err().collect();
+
+                                if let Err(highlight_error) = inner.highlight_runtime_error(
+                                    Some(&src),
+                                    &tokens,
+                                    start,
+                                    end,
+                                    Some(HighlighterError::from(&e)),
+                                ) {
+                                    eprintln!(
+                                        "Error during error highlighting: {}",
+                                        highlight_error
+                                    );
+                                    Err(highlight_error.into())
+                                } else {
+                                    inner.finalize()?;
+                                    Ok(()) // error has already been displayed
+                                }
+                            } else {
+                                eprintln!("Error processing event: {}", e);
+                                Err(e.into())
+                            }
+                        }
+                    }
                 },
             )?;
 
             Ok(())
         }
         Err(e) => {
-            if let Err(e) = Script::format_error_from_script(&raw, &mut h, &e) {
+            if let Err(e) = Script::format_error_from_script(&raw, &mut outer, &e) {
                 eprintln!("Error: {}", e);
             };
-            Err(e.into())
+
+            // ALLOW: main.rs
+            std::process::exit(1);
         }
     }
 }
 
-fn run_trickle_source(matches: &ArgMatches, src: &str) -> Result<()> {
+fn run_trickle_source(matches: &ArgMatches, src: String) -> Result<()> {
     let raw = slurp_string(&src);
     if let Err(e) = raw {
         eprintln!("Error processing file {}: {}", &src, e);
@@ -329,7 +361,7 @@ fn run_trickle_source(matches: &ArgMatches, src: &str) -> Result<()> {
 
             let mut continuation = vec![];
 
-            runnable.enqueue(
+            if let Err(e) = runnable.enqueue(
                 "in",
                 Event {
                     id: Ids::new(0, *id),
@@ -338,17 +370,46 @@ fn run_trickle_source(matches: &ArgMatches, src: &str) -> Result<()> {
                     ..Event::default()
                 },
                 &mut continuation,
-            )?;
+            ) {
+                match e.0 {
+                    tremor_pipeline::errors::ErrorKind::Script(script_kind) => {
+                        let script_error: tremor_script::errors::Error = script_kind.into();
+                        if let (Some(Range(start, end)), _) = script_error.context() {
+                            let mut inner = TermHighlighter::default();
+                            let mut input = raw.clone();
+                            input.push('\n'); // for nicer highlighting
+                            let tokens: Vec<_> =
+                                Tokenizer::new(&input).tokenize_until_err().collect();
+
+                            if let Err(highlight_error) = inner.highlight_runtime_error(
+                                Some(&src),
+                                &tokens,
+                                start,
+                                end,
+                                Some(HighlighterError::from(&script_error)),
+                            ) {
+                                eprintln!("Error during error highlighting: {}", highlight_error);
+                                return Err(highlight_error.into());
+                            }
+                            inner.finalize()?;
+                            return Ok(());
+                        }
+                    }
+                    _ => {
+                        return Err(e.into());
+                    }
+                }
+            }
             *id += 1;
 
             for (port, rvalue) in continuation.drain(..) {
                 egress.process(
                     &simd_json::to_string_pretty(&value.suffix().value())?,
                     &event,
-                    Ok(Return::Emit {
+                    Return::Emit {
                         value: rvalue.data.suffix().value().clone_static(),
                         port: Some(port.to_string()),
-                    }),
+                    },
                 )?;
             }
 
@@ -370,7 +431,7 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
         SourceKind::Tremor | SourceKind::Json | SourceKind::Default => {
             run_tremor_source(&matches, script_file)
         }
-        SourceKind::Trickle => run_trickle_source(&matches, &script_file),
+        SourceKind::Trickle => run_trickle_source(&matches, script_file),
         SourceKind::Unsupported => {
             eprintln!("Error: Unable to execute source: {}", &script_file);
             // ALLOW: main.rs
