@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.9.2
+
+* Standardize error responses for tremor api [#559](https://github.com/tremor-rs/tremor-runtime/pull/559)
+* Add docker image, and action for training docker image [#576](https://github.com/tremor-rs/tremor-runtime/pull/576)
+* Fix Kafka SmolRuntime hang [#558](https://github.com/tremor-rs/tremor-runtime/pull/558)
+* Remove array access to prevent possible runtime panics [#574](https://github.com/tremor-rs/tremor-runtime/pull/574)
+* Update CLI: -i allows selecting a subset now [#580](https://github.com/tremor-rs/tremor-runtime/pull/580)
+* Allow using err for errors in tremor run [#592](https://github.com/tremor-rs/tremor-runtime/pull/592)
+* Performance enhancements [#608](https://github.com/tremor-rs/tremor-runtime/pull/608)
+* Fix possible crashes in from todo macro from tcp sink [#573](https://github.com/tremor-rs/tremor-runtime/pull/573)
+* Fix linked offramp not shutting down after binding is deleted. [#582](https://github.com/tremor-rs/tremor-runtime/pull/582)
+* Fix slow kafka sink when queue.buffering.max.ms is set to > 0. [#585](https://github.com/tremor-rs/tremor-runtime/pull/585)
+* Fix string and heredoc errors with and without interpolation. [#595](https://github.com/tremor-rs/tremor-runtime/pull/595)
+* Add hygienic error feedback for `tremor run` [#620](https://github.com/tremor-rs/tremor-runtime/pull/620)
 
 ## 0.2.3
 
