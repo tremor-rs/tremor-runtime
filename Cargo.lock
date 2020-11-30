@@ -5553,6 +5553,7 @@ dependencies = [
  "async-tungstenite",
  "base64 0.13.0",
  "byteorder",
+ "bytes 0.5.6",
  "bytes 0.6.0",
  "chrono",
  "cron",
