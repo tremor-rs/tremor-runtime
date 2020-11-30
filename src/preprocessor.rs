@@ -19,8 +19,8 @@ pub(crate) mod lines;
 use crate::errors::{Error, Result};
 use crate::url::TremorURL;
 use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
-use bytes::buf::Buf;
-use bytes::BytesMut;
+use bytes6::buf::Buf;
+use bytes6::BytesMut;
 
 use std::io::{self, Read};
 
