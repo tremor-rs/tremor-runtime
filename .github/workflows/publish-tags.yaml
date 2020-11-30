@@ -22,7 +22,7 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
           tag_semver: true
-      - name: Publish to GH Registry
+      - name: Publish Tremor Courseware to GH Registry
         uses: elgohr/Publish-Docker-Github-Action@master
         with:
           name: tremor-rs/tremor-runtime/courseware
@@ -30,7 +30,7 @@ jobs:
           password: ${{ secrets.GHCR_PAT }}
           tags: latest
           registry: docker.pkg.github.com
-      - name: Publish Tremor Courseware Docker image to Registry
+      - name: Publish Tremor Courseware to Docker Registry
         uses: elgohr/Publish-Docker-Github-Action@master
         with:
           name: tremorproject/courseware
