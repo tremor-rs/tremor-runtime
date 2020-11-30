@@ -152,7 +152,7 @@ where
     #[cfg(not(tarpaulin_include))]
     pub fn highlight_script_with<H: Highlighter>(script: &str, h: &mut H) -> io::Result<()> {
         let tokens: Vec<_> = lexer::Tokenizer::new(&script)
-            .filter_map(Result::ok)
+            .tokenize_until_err()
             .collect();
         h.highlight(None, &tokens)?;
         io::Result::Ok(())
@@ -229,14 +229,13 @@ where
             if cu == 0 {
                 // i wanna use map_while here, but it is still unstable :(
                 let tokens: Vec<_> = lexer::Tokenizer::new(&script)
-                    .scan((), |_, item| item.ok())
-                    .fuse()
+                    .tokenize_until_err()
                     .collect();
                 h.highlight_runtime_error(None, &tokens, start, end, Some(error.into()))?;
             } else if let Some(cu) = cus.get(cu) {
                 let script = std::fs::read_to_string(cu.file_path())?;
                 let tokens: Vec<_> = lexer::Tokenizer::new(&script)
-                    .filter_map(Result::ok)
+                    .tokenize_until_err()
                     .collect();
                 h.highlight_runtime_error(
                     cu.file_path().to_str(),
@@ -261,7 +260,7 @@ where
         warnings.dedup();
         for w in &warnings {
             let tokens: Vec<_> = lexer::Tokenizer::new(&self.source)
-                .filter_map(Result::ok)
+                .tokenize_until_err()
                 .collect();
             h.highlight_runtime_error(None, &tokens, w.outer.0, w.outer.1, Some(w.into()))?;
         }

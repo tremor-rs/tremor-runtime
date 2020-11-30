@@ -290,7 +290,7 @@ pub(crate) fn highlight(is_pretty: bool, value: &Value) -> Result<()> {
         }
     );
     let lexed_tokens: Vec<_> = lexer::Tokenizer::new(&result)
-        .filter_map(std::result::Result::ok)
+        .tokenize_until_err()
         .collect();
 
     let mut h = TermHighlighter::default();

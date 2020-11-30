@@ -159,9 +159,7 @@ where
         "Lexical token stream after preprocessing",
     )?;
 
-    let lexemes: Vec<_> = Tokenizer::new(&opts.raw)
-        .filter_map(std::result::Result::ok)
-        .collect();
+    let lexemes: Vec<_> = Tokenizer::new(&opts.raw).tokenize_until_err().collect();
 
     dbg_tokens(h, lexemes)?;
 

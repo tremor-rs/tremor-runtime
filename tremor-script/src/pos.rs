@@ -98,7 +98,7 @@ pub struct Spanned<T> {
 #[derive(
     Copy, Clone, Default, Eq, PartialEq, Debug, Hash, Ord, PartialOrd, Serialize, Deserialize,
 )]
-pub struct Range(pub(crate) Location, pub(crate) Location);
+pub struct Range(pub Location, pub Location);
 impl Range {
     pub(crate) fn expand_lines(&self, lines: usize) -> Self {
         let mut new = *self;
