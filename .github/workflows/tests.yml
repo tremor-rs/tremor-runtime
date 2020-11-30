@@ -40,3 +40,4 @@ jobs:
         with:
           token: ${{secrets.CODECOV_TOKEN}} #required
           file: ./cobertura.xml
+          verbose: true
