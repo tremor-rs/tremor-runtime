@@ -36,7 +36,7 @@ async-trait = "0.1"
 async-tungstenite = {version = "0.10.0", features = ["async-std-runtime"]}
 base64 = "0.13"
 byteorder = "1"
-bytes = "0.5"
+bytes = "0.6"
 chrono = "0.4"
 elastic = "0.21.0-pre.5"
 error-chain = "0.12"
