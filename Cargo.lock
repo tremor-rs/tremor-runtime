@@ -1471,9 +1471,9 @@ dependencies = [
 
 [[package]]
 name = "env_logger"
-version = "0.8.1"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "54532e3223c5af90a6a757c90b5c5521564b07e5e7a958681bcd2afad421cdcd"
+checksum = "f26ecb66b4bdca6c1409b40fb255eefc2bd4f6d135dab3c3124f80ffa2a9661e"
 dependencies = [
  "atty",
  "humantime 2.0.1",
@@ -5441,7 +5441,7 @@ dependencies = [
  "criterion",
  "difference",
  "dirs-next",
- "env_logger 0.8.1",
+ "env_logger 0.8.2",
  "error-chain 0.12.4",
  "float-cmp 0.8.0",
  "globwalk",
@@ -5551,7 +5551,7 @@ dependencies = [
  "chrono",
  "cron",
  "elastic",
- "env_logger 0.8.1",
+ "env_logger 0.8.2",
  "error-chain 0.12.4",
  "futures 0.3.8",
  "glob",
