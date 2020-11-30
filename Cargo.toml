@@ -47,7 +47,7 @@ hashbrown = {version = "0.9", features = ["serde"]}
 hostname = "0.3"
 http-types = "2.8"
 log4rs = "0.13"
-pin-project-lite = "0.1"
+pin-project-lite = "0.2"
 rand = "0.7"
 regex = "1.4"
 rental = "0.5"
