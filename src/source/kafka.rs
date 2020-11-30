@@ -17,7 +17,7 @@ use crate::errors::Result;
 use crate::source::prelude::*;
 
 //NOTE: This is required for StreamHandlers stream
-use futures::future::{self, FutureExt};
+use futures::future;
 use futures::StreamExt;
 use halfbrown::HashMap;
 use rdkafka::client::ClientContext;
@@ -49,7 +49,7 @@ impl AsyncRuntime for SmolRuntime {
 
     fn delay_for(duration: Duration) -> Self::Delay {
         // This needs to be smol::Timer we can't use async_io::Timer
-        smol::Timer::after(duration).map(|_| ())
+        futures::FutureExt::map(smol::Timer::after(duration), |_| ())
     }
 }
 
