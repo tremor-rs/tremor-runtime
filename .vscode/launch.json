@@ -22,8 +22,8 @@
       "args": [
         //"server",
         "run",
-        //"temp/end.tremor",
-        "tests/scripts/heredoc_interpolation_quotes/script.tremor"
+        "temp/sample.trickle",
+        //"tests/scripts/heredoc_interpolation_quotes/script.tremor"
         //"-f",
         //"../tremor-www-docs/docs/workshop/examples/35_reverse_proxy_load_balancing/etc/tremor/config/config.yaml",
         // "../tremor-www-docs/docs/workshop/examples/35_reverse_proxy_load_balancing/etc/tremor/config/request_handling.trickle",

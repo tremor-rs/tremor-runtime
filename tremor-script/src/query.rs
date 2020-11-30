@@ -165,7 +165,7 @@ where
         let mut script = script.to_string();
         script.push('\n');
         let tokens: Vec<_> = lexer::Tokenizer::new(&script)
-            .filter_map(Result::ok)
+            .tokenize_until_err()
             .collect();
         h.highlight(None, &tokens)
     }
@@ -180,7 +180,7 @@ where
         script.push('\n');
 
         let tokens: Vec<_> = lexer::Tokenizer::new(&script)
-            .filter_map(Result::ok)
+            .tokenize_until_err()
             .collect();
         match e.context() {
             (Some(Range(start, end)), _) => {
@@ -202,7 +202,7 @@ where
         warnings.dedup();
         for w in &warnings {
             let tokens: Vec<_> = lexer::Tokenizer::new(&self.source)
-                .filter_map(Result::ok)
+                .tokenize_until_err()
                 .collect();
             h.highlight_runtime_error(None, &tokens, w.outer.0, w.outer.1, Some(w.into()))?;
         }

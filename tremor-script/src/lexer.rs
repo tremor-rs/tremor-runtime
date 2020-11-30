@@ -738,6 +738,16 @@ impl<'input> Tokenizer<'input> {
             pos: span(start, end, start, end),
         }
     }
+
+    /// Turn this Tokenizer into an `Iterator` of tokens that are produced until the first error is hit
+    ///
+    /// The purpose of this method is to not accidentally consume tokens after an error,
+    /// which might be completely incorrect, but would still show up in the resulting iterator if
+    /// used with `filter_map(Result::ok)` for example.
+    pub fn tokenize_until_err(self) -> impl Iterator<Item = Spanned<Token<'input>>> {
+        // i wanna use map_while here, but it is still unstable :(
+        self.scan((), |_, item| item.ok()).fuse()
+    }
 }
 
 impl<'input> Iterator for Tokenizer<'input> {
