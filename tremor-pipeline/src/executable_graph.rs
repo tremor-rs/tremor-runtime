@@ -263,6 +263,8 @@ pub struct ExecutableGraph {
     pub(crate) metric_interval: Option<u64>,
     /// snot
     pub insights: Vec<(usize, Event)>,
+    /// source code of the pipeline
+    pub source: Option<String>,
     /// the dot representation of the graph
     pub dot: String,
 }
@@ -815,6 +817,7 @@ mod test {
             last_metrics: 0,
             metric_interval: Some(1),
             insights: vec![],
+            source: None, // TODO
             dot: String::from(""),
         };
 
@@ -916,6 +919,7 @@ mod test {
             last_metrics: 0,
             metric_interval: Some(1),
             insights: vec![],
+            source: None,
             dot: String::from(""),
         };
         assert!(g.optimize().is_some());

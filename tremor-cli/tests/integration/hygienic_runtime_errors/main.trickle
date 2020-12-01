@@ -1,0 +1,15 @@
+define script runtime
+script
+  let event["new"] = event.foo_script;
+  emit event
+end;
+
+
+create script runtime;
+
+select event.foo_select from in
+where event.foo_where == true
+group by event.foo_group
+into runtime having event["foo_having"] == true;
+select event from runtime into out;
+select event from runtime/err into err;
