@@ -563,12 +563,39 @@ pub struct Term {
 // This is a terminal highlighter it simply adds colors
 // so we skip it in tests.
 
+impl Term {
+    /// create a Term Highlighter emitting to stdout
+    pub fn stdout() -> Self {
+        let color = if atty::is(atty::Stream::Stdout) {
+            ColorChoice::Auto
+        } else {
+            // don't use color when stdout is not a tty
+            ColorChoice::Never
+        };
+        let bufwtr = BufferWriter::stdout(color);
+        let buff = bufwtr.buffer();
+        Self { bufwtr, buff }
+    }
+
+    /// create a Term Highlighter emitting to stderr
+    pub fn stderr() -> Self {
+        let color = if atty::is(atty::Stream::Stderr) {
+            ColorChoice::Auto
+        } else {
+            // don't use color when stdout is not a tty
+            ColorChoice::Never
+        };
+
+        let bufwtr = BufferWriter::stderr(color);
+        let buff = bufwtr.buffer();
+        Self { bufwtr, buff }
+    }
+}
+
 impl Default for Term {
     /// Creates a new highlighter
     fn default() -> Self {
-        let bufwtr = BufferWriter::stdout(ColorChoice::Auto);
-        let buff = bufwtr.buffer();
-        Self { bufwtr, buff }
+        Term::stdout()
     }
 }
 
@@ -585,6 +612,12 @@ impl Highlighter for Term {
     }
     fn get_writer(&mut self) -> &mut Self::W {
         &mut self.buff
+    }
+}
+
+impl ToString for Term {
+    fn to_string(&self) -> String {
+        String::from_utf8_lossy(self.buff.as_slice()).to_string()
     }
 }
 

@@ -20,6 +20,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 name = "tremor_script"
 
 [dependencies]
+atty = "0.2"
 base64 = "0.13"
 chrono = "0.4"
 cidr-utils = "0.5"

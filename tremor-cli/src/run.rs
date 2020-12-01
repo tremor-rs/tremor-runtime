@@ -244,7 +244,7 @@ fn run_tremor_source(matches: &ArgMatches, src: String) -> Result<()> {
     let reg: Registry = registry::registry();
     let mp = load_module_path();
 
-    let mut outer = TermHighlighter::default();
+    let mut outer = TermHighlighter::stderr();
     match Script::parse(&mp, &src, raw.clone(), &reg) {
         Ok(mut script) => {
             script.format_warnings_with(&mut outer)?;
@@ -271,7 +271,7 @@ fn run_tremor_source(matches: &ArgMatches, src: String) -> Result<()> {
                         Ok(r) => egress.process(&src, &event, r),
                         Err(e) => {
                             if let (Some(Range(start, end)), _) = e.context() {
-                                let mut inner = TermHighlighter::default();
+                                let mut inner = TermHighlighter::stderr();
                                 let mut input = raw.clone();
                                 input.push('\n'); // for nicer highlighting
                                 let tokens: Vec<_> =
@@ -327,7 +327,7 @@ fn run_trickle_source(matches: &ArgMatches, src: String) -> Result<()> {
     let reg: Registry = registry::registry();
     let aggr = registry::aggr();
     let mp = load_module_path();
-    let mut h = TermHighlighter::default();
+    let mut h = TermHighlighter::stderr();
 
     let runnable = match Query::parse(&mp, &src, &raw, vec![], &reg, &aggr) {
         Ok(runnable) => runnable,
@@ -375,7 +375,7 @@ fn run_trickle_source(matches: &ArgMatches, src: String) -> Result<()> {
                     tremor_pipeline::errors::ErrorKind::Script(script_kind) => {
                         let script_error: tremor_script::errors::Error = script_kind.into();
                         if let (Some(Range(start, end)), _) = script_error.context() {
-                            let mut inner = TermHighlighter::default();
+                            let mut inner = TermHighlighter::stderr();
                             let mut input = raw.clone();
                             input.push('\n'); // for nicer highlighting
                             let tokens: Vec<_> =
