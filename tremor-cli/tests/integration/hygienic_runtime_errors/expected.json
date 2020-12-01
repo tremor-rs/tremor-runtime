@@ -1,0 +1,2 @@
+{"foo_script":true,"new":true,"foo_having":true}
+{"error":"Error: \n    3 |   let event[\"new\"] = event.foo_script;\n      |                            ^^^^^^^^^^ Trying to access a non existing event key `foo_script`\n\n","event":{"foo_having":true}}
