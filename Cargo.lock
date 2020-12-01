@@ -5745,6 +5745,7 @@ dependencies = [
 name = "tremor-script"
 version = "0.9.2"
 dependencies = [
+ "atty",
  "base64 0.13.0",
  "chrono",
  "cidr-utils",
