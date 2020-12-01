@@ -2,6 +2,8 @@
 
 ## Unreleased (in branch main)
 
+* Output errors to stderr on `tremor run` invocation. [#628](https://github.com/tremor-rs/tremor-runtime/pull/628)
+* Output more helpful errors for runtime errors (like accessing non-existing fields) [#628](https://github.com/tremor-rs/tremor-runtime/pull/628)
 * Fix gelf preprocessor to accept valid (unchunked) gelf messages [#628](https://github.com/tremor-rs/tremor-runtime/pull/628)
 * Fix memory access issue for large objects
 
