@@ -27,6 +27,8 @@ pub(crate) struct Before {
     run: String,
     cmd: String,
     args: Vec<String>,
+    #[serde(default = "Default::default")]
+    env: HashMap<String, String>,
     #[serde(rename = "await")]
     conditionals: Option<HashMap<String, Vec<String>>>,
     #[serde(rename = "max-await-secs", default = "default_max_await_secs")]
@@ -39,7 +41,7 @@ impl Before {
     pub(crate) fn spawn(&self) -> Result<Option<TargetProcess>> {
         let cmd = job::which(&self.cmd)?;
 
-        let process = job::TargetProcess::new_with_stderr(&cmd, &self.args)?;
+        let process = job::TargetProcess::new_with_stderr(&cmd, &self.args, &self.env)?;
         self.block_on()?;
         Ok(Some(process))
     }
