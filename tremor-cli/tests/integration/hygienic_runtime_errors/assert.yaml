@@ -12,4 +12,4 @@ asserts:
       - "13 | into runtime having event[\"foo_having\"] == true;"
       - "   |                           ^^^^^^^^^^^^ Trying to access a non existing event key `foo_having`"
   - source: events.log
-    equals_file: expected.log
+    equals_file: "expected.json"
