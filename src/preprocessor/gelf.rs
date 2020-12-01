@@ -104,7 +104,7 @@ fn decode_gelf(bin: &[u8]) -> Result<GELFSegment> {
                 data: rest.to_vec(),
             })
         }
-        [b'{', _] => Ok(GELFSegment {
+        [b'{', _, ..] => Ok(GELFSegment {
             id: 0,
             seq: 0,
             count: 1,
@@ -269,7 +269,10 @@ mod test {
         assert!(decode_gelf(&d).is_err());
         let d = vec![b'{'];
         assert!(decode_gelf(&d).is_err());
+
         let d = vec![b'{', b'}'];
         assert!(decode_gelf(&d).is_ok());
+        let d = br#"{"snot": "badger"}"#;
+        assert!(decode_gelf(d).is_ok());
     }
 }
