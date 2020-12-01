@@ -1,0 +1,4 @@
+use std::string;
+
+let trimmed = string::trim(event.foo);
+let event.trimmed = trimmed;

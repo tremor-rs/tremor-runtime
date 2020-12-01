@@ -1,0 +1,9 @@
+define script error_script
+script
+  emit event.baz
+end;
+create script error_script;
+
+select event from in into error_script;
+select event from error_script into out;
+select event.error from error_script/err into err;

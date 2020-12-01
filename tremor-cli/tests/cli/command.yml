@@ -167,3 +167,43 @@ suites:
           - source: stdout
             contains:
               - "#compdef tremor"
+  - name: Calling `run` shows hygienic errors
+    cases:
+      - name: Running a tremor script shows hygienic runtime error
+        command: tremor run data/script_with_error.tremor -i data/input.json
+        tags:
+          - run
+          - script
+        status: 0
+        expects:
+          - source: stderr
+            contains:
+              - "Error in data/script_with_error.tremor:3:34"
+              - "3 | let trimmed = string::trim(event.foo);"
+              - "  |                                  ^^^ Trying to access a non existing event key `foo`"
+      - name: Running a trickle query shows hygienic runtime error
+        command: tremor run data/query_with_error.trickle -i data/input.json
+        tags:
+          - run
+          - query
+        status: 0
+        expects:
+          - source: stderr
+            contains:
+              - "Error in data/query_with_error.trickle:1:14"
+              - "1 | select event.foo from in into out;"
+              - "  |              ^^^ Trying to access a non existing event key `foo`"
+      - name: Running a trickle query shows a hygienic runtime error caused in embedded script
+        command: tremor run data/query_with_script_with_error.trickle -i data/input.json --encoder string
+        tags:
+          - run
+          - query
+          - script
+        status: 0
+        expects:
+          - source: stdout
+            contains:
+              - "Error:"
+              - "3 |   emit event.baz"
+              - "  |              ^^^ Trying to access a non existing event key `baz`\n\n"
+
