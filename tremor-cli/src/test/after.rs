@@ -22,13 +22,15 @@ pub(crate) struct After {
     run: String,
     cmd: String,
     args: Vec<String>,
+    #[serde(default = "Default::default")]
+    env: HashMap<String, String>,
 }
 
 impl After {
     pub(crate) fn spawn(&self, _base: &str) -> Result<Option<TargetProcess>> {
         let cmd = job::which(&self.cmd)?;
 
-        let mut process = job::TargetProcess::new_with_stderr(&cmd, &self.args)?;
+        let mut process = job::TargetProcess::new_with_stderr(&cmd, &self.args, &self.env)?;
         process.wait_with_output()?;
         Ok(Some(process))
     }

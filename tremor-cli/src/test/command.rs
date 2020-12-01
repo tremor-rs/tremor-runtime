@@ -47,6 +47,8 @@ pub(crate) struct CommandSuite {
 pub(crate) struct CommandTest {
     pub(crate) name: String,
     pub(crate) command: String,
+    #[serde(default = "Default::default")]
+    pub(crate) env: HashMap<String, String>,
     pub(crate) tags: Option<Tags>,
     pub(crate) status: i32,
     pub(crate) expects: assert::Asserts,
@@ -131,7 +133,7 @@ pub(crate) fn suite_command(
 
                         // TODO wintel
                         let mut fg_process =
-                            job::TargetProcess::new_with_stderr(&resolved_cmd, &args)?;
+                            job::TargetProcess::new_with_stderr(&resolved_cmd, &args, &case.env)?;
                         let exit_status = fg_process.wait_with_output();
 
                         let fg_out_file = format!("{}/fg.{}.out.log", base_str, counter);

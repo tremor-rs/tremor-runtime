@@ -57,7 +57,8 @@ pub(crate) fn run_process(
     let before_process = before.spawn()?;
     let bench_rootx = bench_root.to_string();
 
-    let mut process = job::TargetProcess::new_with_stderr(&job::which("tremor")?, &args)?;
+    let mut process =
+        job::TargetProcess::new_with_stderr(&job::which("tremor")?, &args, &HashMap::default())?;
     let process_status = process.wait_with_output();
 
     let fg_out_file = format!("{}/fg.out.log", bench_root);

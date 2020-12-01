@@ -16,6 +16,8 @@ use crate::errors::{Error, Result};
 use std::io::{BufRead, BufReader, Read, Write};
 use tremor_common::file;
 
+use std::collections::HashMap;
+
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::sync::mpsc::TryRecvError;
@@ -83,14 +85,19 @@ pub(crate) struct TargetProcess {
 }
 
 impl TargetProcess {
-    pub fn new_with_stderr(cmd: &str, args: &[String]) -> Result<Self> {
-        TargetProcess::new(cmd, args)
+    pub fn new_with_stderr(
+        cmd: &str,
+        args: &[String],
+        env: &HashMap<String, String>,
+    ) -> Result<Self> {
+        TargetProcess::new(cmd, args, env)
     }
 
     /// Spawn target process and pipe IO
-    fn new(cmd: &str, args: &[String]) -> Result<Self> {
+    fn new(cmd: &str, args: &[String], env: &HashMap<String, String>) -> Result<Self> {
         let mut target_cmd = Command::new(cmd)
             .args(args)
+            .envs(env)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
