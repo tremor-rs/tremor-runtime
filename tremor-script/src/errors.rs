@@ -359,6 +359,52 @@ impl Error {
     pub(crate) fn token(&self) -> Option<UnfinishedToken> {
         self.0.token()
     }
+
+    /// If possible locate this error inside the given source.
+    /// This is done without highlighting, for this, use an instance of `tremor_script::highlighter::Highlighter`,
+    /// but it needs some more shenanigans than this in order to do proper highlighting.
+    #[must_use]
+    pub fn locate_in_source(&self, source: &str) -> Option<String> {
+        match self.context() {
+            (Some(Range(ctx_start, ctx_end)), Some(Range(error_loc_start, error_loc_end))) => {
+                // display error we can locate in the source
+                let start_line = ctx_start.line();
+                let context_lines = source
+                    .lines()
+                    .skip(start_line.saturating_sub(1))
+                    .take(ctx_end.line().saturating_sub(start_line).max(1))
+                    .collect::<Vec<_>>();
+                let error_line = error_loc_end.line();
+                let mut cur_line_num = start_line;
+                let mut error_lines = Vec::with_capacity(context_lines.len() + 1);
+                for context_line in context_lines {
+                    error_lines.push(format!("{:5} | {}", cur_line_num, context_line));
+                    if cur_line_num == error_line {
+                        let err_msg = format!("{}", self);
+                        let (start_column, err_len) =
+                            if error_loc_end.line() == error_loc_start.line() {
+                                (
+                                    error_loc_start.column(),
+                                    error_loc_end
+                                        .column()
+                                        .saturating_sub(error_loc_start.column())
+                                        .max(1),
+                                )
+                            } else {
+                                (1, error_loc_end.column() - 1)
+                            };
+
+                        let prefix = " ".repeat(start_column.saturating_sub(1));
+                        let underline = "^".repeat(err_len);
+                        error_lines.push(format!("      | {}{} {}", prefix, underline, err_msg));
+                    }
+                    cur_line_num += 1;
+                }
+                Some(error_lines.join("\n"))
+            }
+            _ => None,
+        }
+    }
 }
 
 fn choices<T>(choices: &[T]) -> String

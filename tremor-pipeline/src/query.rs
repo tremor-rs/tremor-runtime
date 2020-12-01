@@ -574,6 +574,7 @@ impl Query {
                 signalflow,
                 metric_interval,
                 insights: Vec::new(),
+                source: Some(self.0.source.clone()),
                 dot: format!("{}", dot),
             };
             exec.optimize();

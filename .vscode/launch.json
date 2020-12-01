@@ -20,9 +20,18 @@
         }
       },
       "args": [
-        //"server",
+        "server",
+        //server run -f temp/sample.yaml temp/sample.trickle -l temp/logger.yaml
         "run",
+        "-f",
+        "temp/sample.yaml",
         "temp/sample.trickle",
+        "-l",
+        "temp/logger.yaml",
+        //"tremor-cli/tests/cli/data/script_with_error.tremor",
+        //"-i",
+        //"tremor-cli/tests/cli/data/input.json",
+        //"temp/sample.trickle",
         //"tests/scripts/heredoc_interpolation_quotes/script.tremor"
         //"-f",
         //"../tremor-www-docs/docs/workshop/examples/35_reverse_proxy_load_balancing/etc/tremor/config/config.yaml",

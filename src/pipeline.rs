@@ -24,6 +24,7 @@ use std::borrow::Cow;
 use std::fmt;
 use std::time::Duration;
 use tremor_common::time::nanotime;
+use tremor_pipeline::errors::ErrorKind as PipelineErrorKind;
 use tremor_pipeline::{CBAction, Event, ExecutableGraph, SignalKind};
 
 const TICK_MS: u64 = 100;
@@ -263,6 +264,7 @@ fn maybe_send(r: Result<()>) {
     }
 }
 
+#[allow(clippy::too_many_lines)]
 async fn pipeline_task(
     id: TremorURL,
     mut pipeline: ExecutableGraph,
@@ -298,7 +300,23 @@ async fn pipeline_task(
                         handle_insights(&mut pipeline, &onramps).await;
                         maybe_send(send_events(&mut eventset, &mut dests).await);
                     }
-                    Err(e) => error!("error: {:?}", e),
+                    Err(e) => {
+                        let err_str = if let PipelineErrorKind::Script(script_kind) = e.0 {
+                            let script_error: tremor_script::errors::Error = script_kind.into();
+                            // possibly a hygienic error
+                            pipeline
+                                .source
+                                .as_ref()
+                                .and_then(|s| script_error.locate_in_source(s))
+                                .map_or_else(
+                                    || format!(" {:?}", script_error),
+                                    |located| format!("\n{}", located),
+                                ) // add a newline to have the error nicely formatted in the log
+                        } else {
+                            format!(" {:?}", e)
+                        };
+                        error!("Error:{}", err_str);
+                    }
                 }
             }
             M::F(Msg::Signal(signal)) => {

@@ -565,6 +565,7 @@ pub struct Term {
 
 impl Term {
     /// create a Term Highlighter emitting to stdout
+    #[must_use]
     pub fn stdout() -> Self {
         let color = if atty::is(atty::Stream::Stdout) {
             ColorChoice::Auto
@@ -578,6 +579,7 @@ impl Term {
     }
 
     /// create a Term Highlighter emitting to stderr
+    #[must_use]
     pub fn stderr() -> Self {
         let color = if atty::is(atty::Stream::Stderr) {
             ColorChoice::Auto
