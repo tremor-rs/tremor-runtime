@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased (in branch main)
+
+* Fix gelf preprocessor to accept valid (unchunked) gelf messages [#628](https://github.com/tremor-rs/tremor-runtime/pull/628)
+
 ## 0.9.2
 
 ### New Features
