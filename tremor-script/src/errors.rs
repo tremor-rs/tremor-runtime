@@ -215,9 +215,9 @@ impl ErrorKind {
             | DoubleConst(outer, inner, _)
             | DoubleStream(outer, inner, _)
             | InvalidExtractor(outer, inner, _, _, _)
-            | InvalidFloatLiteral(outer, inner)
-            | InvalidHexLiteral(outer, inner)
-            | InvalidIntLiteral(outer, inner)
+            | InvalidFloatLiteral(outer, inner, _)
+            | InvalidHexLiteral(outer, inner, _)
+            | InvalidIntLiteral(outer, inner, _)
             | InvalidToken(outer, inner)
             | InvalidUnary(outer, inner, _, _)
             | MergeTypeConflict(outer, inner, _, _)
@@ -229,7 +229,7 @@ impl ErrorKind {
             | NoConstsAllowed(outer, inner)
             | RuntimeError(outer, inner, _, _, _, _)
             | TypeConflict(outer, inner, _, _)
-            | UnexpectedCharacter(outer, inner, _)
+            | UnexpectedCharacter(outer, inner, _, _)
             | UnexpectedEscapeCode(outer, inner, _, _)
             | InvalidUTF8Sequence(outer, inner, _)
             | UnrecognizedToken(outer, inner, _, _)
@@ -266,7 +266,8 @@ impl ErrorKind {
     }
     pub(crate) fn token(&self) -> Option<UnfinishedToken> {
         use ErrorKind::{
-            InvalidUTF8Sequence, TailingHereDoc, UnexpectedEscapeCode, UnterminatedExtractor,
+            InvalidFloatLiteral, InvalidHexLiteral, InvalidIntLiteral, InvalidUTF8Sequence,
+            TailingHereDoc, UnexpectedCharacter, UnexpectedEscapeCode, UnterminatedExtractor,
             UnterminatedHereDoc, UnterminatedIdentLiteral, UnterminatedInterpolation,
             UnterminatedStringLiteral,
         };
@@ -278,6 +279,10 @@ impl ErrorKind {
             | UnterminatedHereDoc(_, _, token)
             | TailingHereDoc(_, _, token, _)
             | InvalidUTF8Sequence(_, _, token)
+            | UnexpectedCharacter(_, _, token, _)
+            | InvalidHexLiteral(_, _, token)
+            | InvalidIntLiteral(_, _, token)
+            | InvalidFloatLiteral(_, _, token)
             | UnexpectedEscapeCode(_, _, token, _) => Some(token.clone()),
             _ => None,
         }
@@ -543,7 +548,7 @@ error_chain! {
                 display("It looks like you forgot to terminate an ident with a closing '`'")
         }
 
-        UnexpectedCharacter(expr: Range, inner: Range, found: char){
+        UnexpectedCharacter(expr: Range, inner: Range, token: UnfinishedToken, found: char){
             description("An unexpected character was found")
                 display("An unexpected character '{}' was found", found)
         }
@@ -558,18 +563,18 @@ error_chain! {
                 display("An invalid UTF8 escape sequence was found")
 
         }
-        InvalidHexLiteral(expr: Range, inner: Range){
+        InvalidHexLiteral(expr: Range, inner: Range, token: UnfinishedToken){
             description("An invalid hexadecimal")
                 display("An invalid hexadecimal")
 
         }
 
-        InvalidIntLiteral(expr: Range, inner: Range) {
+        InvalidIntLiteral(expr: Range, inner: Range, token: UnfinishedToken) {
             description("An invalid integer literal")
                 display("An invalid integer literal")
 
         }
-        InvalidFloatLiteral(expr: Range, inner: Range) {
+        InvalidFloatLiteral(expr: Range, inner: Range, token: UnfinishedToken) {
             description("An invalid float literal")
                 display("An invalid float literal")
 

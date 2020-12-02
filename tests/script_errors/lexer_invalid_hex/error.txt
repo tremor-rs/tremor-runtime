@@ -1,0 +1,3 @@
+Error: 
+    1 | let invalid = 0x;
+      |               ^^^ An invalid hexadecimal

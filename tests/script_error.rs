@@ -134,6 +134,11 @@ test_cases!(
     pp_cyclic,
     pp_nest_cyclic,
     //INSERT
+lexer_invalid_hex2,
+    lexer_invalid_int_invalid_char,
+    lexer_invalid_hex,
+    lexer_invalid_float,
+    lexer_invalid_int,
     string_interpolation_eof,
     string_interpolation_invalid_utf8,
     string_interpolation_escape,

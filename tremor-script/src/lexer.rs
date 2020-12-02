@@ -2514,11 +2514,10 @@ impl<'input> Lexer<'input> {
         }
     }
 
-    /// handle numbers
+    /// handle numbers (with or without leading '-')
     #[allow(clippy::too_many_lines)]
     fn nm(&mut self, start: Location) -> Result<TokenSpan<'input>> {
         let (end, int) = self.take_while(start, is_dec_digit);
-
         let (start, end, token) = match self.lookahead() {
             Some((_, '.')) => {
                 self.bump(); // Skip '.'
@@ -2526,27 +2525,60 @@ impl<'input> Lexer<'input> {
                 match self.lookahead() {
                     Some((_, 'e')) => {
                         self.bump();
-                        self.bump();
-                        let (end, exp) = self.take_while(end, is_dec_digit);
-                        let float = &format!("{}{}", float, exp);
-                        (
-                            start,
-                            end,
-                            Token::FloatLiteral(
-                                float.parse().chain_err(|| {
-                                    ErrorKind::InvalidFloatLiteral(
-                                        Range::from((start, end)).expand_lines(2),
-                                        Range::from((start, end)),
-                                    )
-                                })?,
-                                float.to_string(),
-                            ),
-                        )
+                        if let Some((exp_location, _)) = self.bump() {
+                            // handle sign
+                            let (exp_location, sign) = match self.lookahead() {
+                                Some((loc, '+')) | Some((loc, '-')) => {
+                                    self.bump();
+                                    self.slice(exp_location, loc).map(|s| (loc, s))
+                                }
+                                _ => Some((exp_location, "")),
+                            }
+                            .unwrap_or((exp_location, ""));
+                            let (end, exp) = self.take_while(exp_location, is_dec_digit);
+                            let float = &format!("{}e{}{}", float, sign, exp);
+                            (
+                                start,
+                                end,
+                                Token::FloatLiteral(
+                                    float.parse().chain_err(|| {
+                                        ErrorKind::InvalidFloatLiteral(
+                                            Range::from((start, end)).expand_lines(2),
+                                            Range::from((start, end)),
+                                            UnfinishedToken::new(
+                                                Range::from((start, end)),
+                                                self.slice_until_eol(&start).map_or_else(
+                                                    || float.to_string(),
+                                                    ToString::to_string,
+                                                ),
+                                            ),
+                                        )
+                                    })?,
+                                    float.to_string(),
+                                ),
+                            )
+                        } else {
+                            return Err(ErrorKind::InvalidFloatLiteral(
+                                Range::from((start, end)).expand_lines(2),
+                                Range::from((start, end)),
+                                UnfinishedToken::new(
+                                    Range::from((start, end)),
+                                    self.slice_until_eol(&start)
+                                        .map_or_else(|| float.to_string(), ToString::to_string),
+                                ),
+                            )
+                            .into());
+                        }
                     }
                     Some((end, ch)) if is_ident_start(ch) => {
                         return Err(ErrorKind::UnexpectedCharacter(
                             Range::from((start, end)).expand_lines(2),
-                            Range::from((start, end)),
+                            Range::from((end, end)),
+                            UnfinishedToken::new(
+                                Range::from((start, end)),
+                                self.slice_until_eol(&start)
+                                    .map_or_else(|| int.to_string(), ToString::to_string),
+                            ),
                             ch,
                         )
                         .into());
@@ -2559,6 +2591,11 @@ impl<'input> Lexer<'input> {
                                 ErrorKind::InvalidFloatLiteral(
                                     Range::from((start, end)).expand_lines(2),
                                     Range::from((start, end)),
+                                    UnfinishedToken::new(
+                                        Range::from((start, end)),
+                                        self.slice_until_eol(&start)
+                                            .map_or_else(|| float.to_string(), ToString::to_string),
+                                    ),
                                 )
                             })?,
                             float.to_string(),
@@ -2576,6 +2613,11 @@ impl<'input> Lexer<'input> {
                             return Err(ErrorKind::UnexpectedCharacter(
                                 Range::from((start, end)).expand_lines(2),
                                 Range::from((start, end)),
+                                UnfinishedToken::new(
+                                    Range::from((start, end)),
+                                    self.slice_until_eol(&start)
+                                        .map_or_else(|| hex.to_string(), ToString::to_string),
+                                ),
                                 ch,
                             )
                             .into());
@@ -2585,6 +2627,11 @@ impl<'input> Lexer<'input> {
                                 return Err(ErrorKind::InvalidHexLiteral(
                                     Range::from((start, end)).expand_lines(2),
                                     Range::from((start, end)),
+                                    UnfinishedToken::new(
+                                        Range::from((start, end)),
+                                        self.slice_until_eol(&start)
+                                            .map_or_else(|| hex.to_string(), ToString::to_string),
+                                    ),
                                 )
                                 .into());
                             }
@@ -2595,6 +2642,13 @@ impl<'input> Lexer<'input> {
                                     return Err(ErrorKind::InvalidHexLiteral(
                                         Range::from((start, end)).expand_lines(2),
                                         Range::from((start, end)),
+                                        UnfinishedToken::new(
+                                            Range::from((start, end)),
+                                            self.slice_until_eol(&start).map_or_else(
+                                                || hex.to_string(),
+                                                ToString::to_string,
+                                            ),
+                                        ),
                                     )
                                     .into());
                                 }
@@ -2605,15 +2659,25 @@ impl<'input> Lexer<'input> {
                         return Err(ErrorKind::InvalidHexLiteral(
                             Range::from((start, end)).expand_lines(2),
                             Range::from((start, end)),
+                            UnfinishedToken::new(
+                                Range::from((start, end)),
+                                self.slice_until_eol(&start)
+                                    .map_or_else(|| int.to_string(), ToString::to_string),
+                            ),
                         )
                         .into());
                     }
                 }
             }
-            Some((_, ch)) if is_ident_start(ch) => {
+            Some((char_loc, ch)) if is_ident_start(ch) => {
                 return Err(ErrorKind::UnexpectedCharacter(
                     Range::from((start, end)).expand_lines(2),
-                    Range::from((start, end)),
+                    Range::from((char_loc, char_loc)),
+                    UnfinishedToken::new(
+                        Range::from((start, end)),
+                        self.slice_until_eol(&start)
+                            .map_or_else(|| int.to_string(), ToString::to_string),
+                    ),
                     ch,
                 )
                 .into());
@@ -2626,6 +2690,11 @@ impl<'input> Lexer<'input> {
                     return Err(ErrorKind::InvalidIntLiteral(
                         Range::from((start, end)).expand_lines(2),
                         Range::from((start, end)),
+                        UnfinishedToken::new(
+                            Range::from((start, end)),
+                            self.slice_until_eol(&start)
+                                .map_or_else(|| int.to_string(), ToString::to_string),
+                        ),
                     )
                     .into());
                 }
@@ -2695,7 +2764,10 @@ impl<'input> Iterator for Lexer<'input> {
                     '^' => Some(Ok(self.spanned2(start, start, Token::BitXor))),
                     '&' => Some(Ok(self.spanned2(start, start, Token::BitAnd))),
                     ':' => Some(self.cn(start)),
-                    '-' => Some(Ok(self.spanned2(start, start, Token::Sub))),
+                    '-' => match self.lookahead() {
+                        Some((_loc, c)) if is_dec_digit(c) => Some(self.nm(start)),
+                        _ => Some(Ok(self.spanned2(start, start, Token::Sub))),
+                    },
                     '#' => Some(self.cx(start)),
                     '=' => Some(self.eq(start)),
                     '<' | '>' => Some(self.an(start)),
@@ -3075,5 +3147,55 @@ mod tests {
         }
         assert_eq!(snot, res2);
         Ok(())
+    }
+
+    #[test]
+    fn lexer_long_float() -> Result<()> {
+        let f = 48354865651623290000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000.0;
+        let mut source = format!("{:.1}", f); // ensure we keep the .0
+        match Tokenizer::new(&mut source).next() {
+            Some(Ok(token)) => match token.value {
+                Token::FloatLiteral(f_token, _) => {
+                    assert_eq!(f, f_token);
+                }
+                t => assert!(false, format!("{:?} not a float", t)),
+            },
+            e => assert!(false, format!("{:?} unexpected", e)),
+        };
+        Ok(())
+    }
+    use proptest::prelude::*;
+
+    proptest! {
+        // negative floats are constructed in the AST later
+        #[test]
+        #[cfg(not(tarpaulin))] // avoid coverage from this
+        fn float_literals_precision(f in 0f64..f64::MAX) {
+            if f.round() != f {
+                let mut float = format!("{:.}", f);
+                for token in Tokenizer::new(&mut float) {
+                    let _ = token?;
+                }
+            }
+        }
+    }
+
+    proptest! {
+        // negative floats are constructed in the AST later
+        #[test]
+        #[cfg(not(tarpaulin))] // avoid coverage from this
+        fn float_literals_scientific(f in 0f64..f64::MAX) {
+            let mut float = format!("{:e}", f);
+            for token in Tokenizer::new(&mut float) {
+                match token {
+                    Ok(spanned) =>
+                        match spanned.value {
+                            Token::FloatLiteral(f_token, _f_str) => assert_eq!(f, f_token),
+                            _ => ()
+                        }
+                    _ => ()
+                }
+            }
+        }
     }
 }

@@ -817,7 +817,7 @@ mod test {
             last_metrics: 0,
             metric_interval: Some(1),
             insights: vec![],
-            source: None, // TODO
+            source: None,
             dot: String::from(""),
         };
 
