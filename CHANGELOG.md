@@ -2,9 +2,14 @@
 
 ## Unreleased (in branch main)
 
-* Output errors to stderr on `tremor run` invocation. [#628](https://github.com/tremor-rs/tremor-runtime/pull/628)
-* Output more helpful errors for runtime errors (like accessing non-existing fields) [#628](https://github.com/tremor-rs/tremor-runtime/pull/628)
+### Fixes
+
+* Allow to express minimal value of i64 as int literal [#629](https://github.com/tremor-rs/tremor-runtime/pull/629)
+* Fix scientific float literals (e.g. `1.0e-5`) [#629](https://github.com/tremor-rs/tremor-runtime/pull/629)
+* Output errors to stderr on `tremor run` invocation. [#629](https://github.com/tremor-rs/tremor-runtime/pull/629)
+* Output more helpful errors for runtime errors (like accessing non-existing fields) [#629](https://github.com/tremor-rs/tremor-runtime/pull/629)
 * Fix gelf preprocessor to accept valid (unchunked) gelf messages [#628](https://github.com/tremor-rs/tremor-runtime/pull/628)
+
 
 ## 0.9.2
 
