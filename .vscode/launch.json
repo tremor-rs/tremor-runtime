@@ -20,19 +20,19 @@
         }
       },
       "args": [
-        "server",
         //server run -f temp/sample.yaml temp/sample.trickle -l temp/logger.yaml
+        //"server",
         "run",
-        "-f",
-        "temp/sample.yaml",
-        "temp/sample.trickle",
-        "-l",
-        "temp/logger.yaml",
+        //"-f",
+        //"temp/sample.yaml",
+        //"temp/sample.trickle",
+        //"-l",
+        //"temp/logger.yaml",
         //"tremor-cli/tests/cli/data/script_with_error.tremor",
         //"-i",
         //"tremor-cli/tests/cli/data/input.json",
-        //"temp/sample.trickle",
-        //"tests/scripts/heredoc_interpolation_quotes/script.tremor"
+        "temp/end.tremor",
+        //"tests/script_errors/lexer_invalid_float/script.tremor"
         //"-f",
         //"../tremor-www-docs/docs/workshop/examples/35_reverse_proxy_load_balancing/etc/tremor/config/config.yaml",
         // "../tremor-www-docs/docs/workshop/examples/35_reverse_proxy_load_balancing/etc/tremor/config/request_handling.trickle",

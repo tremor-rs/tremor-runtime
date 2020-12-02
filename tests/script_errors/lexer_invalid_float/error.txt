@@ -1,0 +1,3 @@
+Error: 
+    1 | 12.0_5
+      |     ^ An unexpected character '_' was found

@@ -212,7 +212,7 @@ impl Manager {
             )
             .await
         {
-            error!("Failed to create onramp {}: {}", id, e);
+            error!("Failed to create offramp {}: {}", id, e);
             return Err(e);
         }
         // merge channels and prioritize contraflow/insight events
