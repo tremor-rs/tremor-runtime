@@ -3,6 +3,7 @@
 ## Unreleased (in branch main)
 
 * Fix gelf preprocessor to accept valid (unchunked) gelf messages [#628](https://github.com/tremor-rs/tremor-runtime/pull/628)
+* Fix memory access issue for large objects
 
 ## 0.9.2
 
