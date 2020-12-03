@@ -34,6 +34,7 @@ use std::borrow::{Borrow, Cow};
 use std::fmt;
 use tremor_common::time::nanotime;
 
+#[derive(Debug)]
 pub enum Msg {
     Event {
         event: Event,
