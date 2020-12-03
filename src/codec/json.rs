@@ -56,8 +56,8 @@ impl Codec for JSON {
     ) -> Result<Option<Value<'input>>> {
         // The input buffer will be automatically grown if required
         if self.string_buffer.capacity() < data.len() {
-            self.input_buffer
-                .reserve(max(self.string_buffer.capacity(), data.len()) * 2);
+            let new_len = max(self.string_buffer.capacity(), data.len()) * 2;
+            self.string_buffer.reserve(new_len);
         }
         simd_json::value::borrowed::to_value_with_buffers(
             data,
