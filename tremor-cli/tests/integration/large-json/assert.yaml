@@ -1,0 +1,5 @@
+status: 0
+name: Query passthrough
+asserts:
+  - source: events.log
+    equals_file: expected.json
