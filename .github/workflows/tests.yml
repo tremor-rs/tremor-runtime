@@ -35,14 +35,15 @@ jobs:
           RUSTFLAGS: -C target-cpu=native
         with:
           version: "0.15.0"
+          # excluded files:
+          # - target: those are generated files
+          # - tremor-cli: cli logic, excluded since it's covered over integration tests
+          # - tremor-api: API logic, excluded since it's covered over integration tests and property based tests
+          # - deprecated: those files are deprecated
+          # - **/errors.rs: error-chain boilerplate
           args: " --exclude-files target* tremor-cli tremor-api deprecated **/errors.rs --out Lcov --all"
       - name: Coveralls
         uses: coverallsapp/github-action@master
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path-to-lcov: ./lcov.info
-    # - uses: codecov/codecov-action@v1
-    #   with:
-    #     token: ${{secrets.CODECOV_TOKEN}} #required
-    #     file: ./cobertura.xml
-    #     verbose: true
