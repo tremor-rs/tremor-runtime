@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (in branch main)
+## 0.9.3
 
 ### New features
 

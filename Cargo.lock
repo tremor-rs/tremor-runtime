@@ -5598,7 +5598,7 @@ checksum = "efd1f82c56340fdf16f2a953d7bda4f8fdffba13d93b00844c25572110b26079"
 
 [[package]]
 name = "tremor-api"
-version = "0.9.2"
+version = "0.9.3"
 dependencies = [
  "hashbrown 0.9.1",
  "http-types",
@@ -5614,7 +5614,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-cli"
-version = "0.9.2"
+version = "0.9.3"
 dependencies = [
  "async-std",
  "clap 3.0.0-beta.2",
@@ -5657,7 +5657,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-common"
-version = "0.9.2"
+version = "0.9.3"
 dependencies = [
  "async-std",
 ]
@@ -5685,7 +5685,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-pipeline"
-version = "0.9.2"
+version = "0.9.3"
 dependencies = [
  "base64 0.13.0",
  "byteorder",
@@ -5717,7 +5717,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-runtime"
-version = "0.9.2"
+version = "0.9.3"
 dependencies = [
  "async-channel",
  "async-compat",
@@ -5784,7 +5784,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-script"
-version = "0.9.2"
+version = "0.9.3"
 dependencies = [
  "atty",
  "base64 0.13.0",
