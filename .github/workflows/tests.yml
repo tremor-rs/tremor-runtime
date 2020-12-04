@@ -35,9 +35,14 @@ jobs:
           RUSTFLAGS: -C target-cpu=native
         with:
           version: "0.15.0"
-          args: " --exclude-files target* tremor-cli deprecated --all"
-      - uses: codecov/codecov-action@v1
+          args: " --exclude-files target* tremor-cli deprecated --out Lcov --all"
+      - name: Coveralls
+        uses: coverallsapp/github-action@master
         with:
-          token: ${{secrets.CODECOV_TOKEN}} #required
-          file: ./cobertura.xml
-          verbose: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path-to-lcov: ./lcov.info
+    # - uses: codecov/codecov-action@v1
+    #   with:
+    #     token: ${{secrets.CODECOV_TOKEN}} #required
+    #     file: ./cobertura.xml
+    #     verbose: true
