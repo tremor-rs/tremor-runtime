@@ -5,7 +5,7 @@
 
 <hr>
 
-[![Build Status]][actions-Tests] [![Quality Checks]][actions-Checks] [![License Checks]][actions-License-audit] [![Security Checks]][actions-Security-audit] [![Code Coverage]][codecov.io] [![Dependabot Status]][dependabot.com] [![CII Best Practices](https://bestpractices.coreinfrastructure.org/projects/4356/badge)](https://bestpractices.coreinfrastructure.org/projects/4356) [![GitHub](https://img.shields.io/github/license/tremor-rs/tremor-runtime)](LICENSE)
+[![Build Status]][actions-Tests] [![Quality Checks]][actions-Checks] [![License Checks]][actions-License-audit] [![Security Checks]][actions-Security-audit] [![codecov.io]](https://coveralls.io/github/tremor-rs/tremor-runtime?branch=main) [![Dependabot Status]][dependabot.com] [![CII Best Practices](https://bestpractices.coreinfrastructure.org/projects/4356/badge)](https://bestpractices.coreinfrastructure.org/projects/4356) [![GitHub](https://img.shields.io/github/license/tremor-rs/tremor-runtime)](LICENSE)
 
 [Build Status]: https://github.com/tremor-rs/tremor-runtime/workflows/Tests/badge.svg
 [actions-Tests]: https://github.com/tremor-rs/tremor-runtime/actions?query=workflow%3ATests
@@ -16,7 +16,7 @@
 [Security Checks]: https://github.com/tremor-rs/tremor-runtime/workflows/Security%20audit/badge.svg
 [actions-Security-audit]: https://github.com/tremor-rs/tremor-runtime/actions?query=workflow%3A%22Security+audit%22
 [Code Coverage]: https://codecov.io/gh/tremor-rs/tremor-runtime/branch/main/graph/badge.svg
-[codecov.io]: https://codecov.io/gh/tremor-rs/tremor-runtime
+[coveralls.io]: https://coveralls.io/repos/github/tremor-rs/tremor-runtime/badge.svg?branch=main
 [Dependabot Status]: https://api.dependabot.com/badges/status?host=github&repo=tremor-rs/tremor-runtime
 [dependabot.com]: https://dependabot.com
 
