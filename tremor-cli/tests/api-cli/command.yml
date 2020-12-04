@@ -15,7 +15,7 @@ suites:
         expects:
           - source: stdout
             contains:
-              - '{"version":"0.9.2"}'
+              - '{"version":"0.9.3"}'
       - name: GET /onramp
         command: tremor api -f json onramp list
         tags:
