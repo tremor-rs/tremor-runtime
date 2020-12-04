@@ -35,7 +35,7 @@ jobs:
           RUSTFLAGS: -C target-cpu=native
         with:
           version: "0.15.0"
-          args: " --exclude-files target* tremor-cli deprecated --out Lcov --all"
+          args: " --exclude-files target* tremor-cli tremor-api deprecated **/errors.rs --out Lcov --all"
       - name: Coveralls
         uses: coverallsapp/github-action@master
         with:
