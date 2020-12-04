@@ -1,0 +1,20 @@
+{
+  "run": "tests/integration/udp_postprocessors/before",
+  "cmd": "tremor",
+  "args": [
+    "server",
+    "run",
+    "-p",
+    "before.pid",
+    "-n",
+    "-f",
+    "before/main.trickle",
+    "before/config.yaml"
+  ],
+  "await": {
+    "wait-for-ms": [
+      "2000"
+    ]
+  },
+  "max-await-secs": 15
+}

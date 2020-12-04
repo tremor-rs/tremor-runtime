@@ -357,7 +357,7 @@ impl Manager {
     pub fn start(self) -> (JoinHandle<Result<()>>, Sender) {
         let (tx, rx) = bounded(crate::QSIZE);
         let h = task::spawn(async move {
-            info!("Onramp manager started");
+            info!("Offramp manager started");
             let mut offramp_uid: u64 = 0;
             while let Ok(msg) = rx.recv().await {
                 match msg {

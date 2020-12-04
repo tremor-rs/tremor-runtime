@@ -37,6 +37,10 @@ pub struct StdOut {
 struct Config {
     #[serde(default = "Default::default")]
     prefix: String,
+
+    /// print non-string payloads as raw bytes, not in debug formatting
+    #[serde(default = "Default::default")]
+    raw: bool,
 }
 
 impl ConfigImpl for Config {}
@@ -67,16 +71,21 @@ impl Sink for StdOut {
         _codec_map: &HashMap<String, Box<dyn Codec>>,
         event: Event,
     ) -> ResultVec {
+        let ingest_ns = event.ingest_ns;
         for value in event.value_iter() {
             let raw = codec.encode(value)?;
-            if let Ok(s) = std::str::from_utf8(&raw) {
+            for processed in postprocess(&mut self.postprocessors, ingest_ns, raw)? {
                 self.stdout.write_all(self.config.prefix.as_bytes()).await?;
-                self.stdout.write_all(s.as_bytes()).await?;
+                if self.config.raw {
+                    self.stdout.write_all(&processed).await?;
+                } else if let Ok(s) = std::str::from_utf8(&processed) {
+                    self.stdout.write_all(s.as_bytes()).await?;
+                } else {
+                    self.stdout
+                        .write_all(format!("{:?}", &processed).as_bytes())
+                        .await?;
+                }
                 self.stdout.write_all(b"\n").await?;
-            } else {
-                self.stdout
-                    .write_all(format!("{}{:?}\n", self.config.prefix, raw).as_bytes())
-                    .await?
             }
         }
         self.stdout.flush().await?;

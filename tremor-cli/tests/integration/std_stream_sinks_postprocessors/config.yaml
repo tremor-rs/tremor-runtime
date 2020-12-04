@@ -1,0 +1,38 @@
+onramp:
+  - id: input
+    type: file
+    codec: json
+    config:
+      source: "in.json"
+      close_on_done: true
+      sleep_on_done: 5000
+offramp:
+  - id: stderr
+    type: stderr
+    codec: json
+    postprocessors:
+      - base64
+    config:
+      prefix: '\o/ '
+      raw: true
+  - id: stdout
+    type: stdout
+    codec: string
+    postprocessors:
+      - snappy
+    config:
+      prefix: '🎄 '
+      raw: false
+
+binding:
+  - id: "01"
+    links:
+      "/onramp/input/{instance}/out":
+        - "/pipeline/system::passthrough/{instance}/in"
+      "/pipeline/system::passthrough/{instance}/out":
+        - "/offramp/stderr/{instance}/in"
+        - "/offramp/stdout/{instance}/in"
+
+mapping:
+  /binding/01/mapping:
+    instance: "01"

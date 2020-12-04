@@ -1,0 +1,29 @@
+onramp:
+  - id: in
+    type: file
+    codec: json
+    config:
+      source: "in.json"
+      close_on_done: true
+      sleep_on_done: 5000
+
+offramp:
+  - id: udp-out
+    type: udp
+    codec: yaml
+    postprocessors:
+      - base64
+    config:
+      host: "127.0.0.1"
+      port: 4343
+      dst_host: "127.0.0.1"
+      dst_port: 4242
+binding:
+  - id: main
+    links:
+      "/onramp/in/{instance}/out": ["/pipeline/system::passthrough/{instance}/in"]
+      "/pipeline/system::passthrough/{instance}/out": ["/offramp/udp-out/{instance}/in"]
+
+mapping:
+  /binding/main/1:
+    instance: "1"

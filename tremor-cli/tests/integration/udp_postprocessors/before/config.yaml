@@ -1,0 +1,28 @@
+onramp:
+  - id: udp-in
+    type: udp
+    codec: string
+    config:
+      host: "127.0.0.1"
+      port: 4242
+
+offramp:
+  - id: out
+    type: file
+    codec: string
+    config:
+      file: "gen.log"
+  - id: exit
+    type: exit
+
+binding:
+  - id: main
+    links:
+      "/onramp/udp-in/{instance}/out": ["/pipeline/main/{instance}/in"]
+      "/pipeline/main/{instance}/out": ["/offramp/out/{instance}/in", "/offramp/system::stdout/{instance}/in" ]
+      "/pipeline/main/{instance}/exit": ["/offramp/exit/{instance}/in" ]
+
+mapping:
+  /binding/main/1:
+    instance: "1"
+

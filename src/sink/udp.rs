@@ -70,10 +70,13 @@ impl Sink for Udp {
     ) -> ResultVec {
         let mut success = true;
         if let Some(socket) = &mut self.socket {
+            let ingest_ns = event.ingest_ns;
             for value in event.value_iter() {
                 let raw = codec.encode(value)?;
-                //TODO: Error handling
-                socket.send(&raw).await?;
+                for processed in postprocess(&mut self.postprocessors, ingest_ns, raw)? {
+                    //TODO: Error handling
+                    socket.send(&processed).await?;
+                }
             }
         } else {
             success = false
