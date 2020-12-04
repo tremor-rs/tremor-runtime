@@ -30,14 +30,35 @@ use halfbrown::HashMap;
 pub struct StdErr {
     postprocessors: Postprocessors,
     stderr: io::Stderr,
+    config: Config,
+}
+#[derive(Clone, Debug, Deserialize, Default)]
+struct Config {
+    #[serde(default = "Default::default")]
+    prefix: String,
+
+    /// write data to stderr as raw bytes, not in debug formatting
+    #[serde(default = "Default::default")]
+    raw: bool,
 }
 
+impl ConfigImpl for Config {}
+
 impl offramp::Impl for StdErr {
-    fn from_config(_config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
-        Ok(SinkManager::new_box(Self {
-            postprocessors: vec![],
-            stderr: io::stderr(),
-        }))
+    fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
+        if let Some(config) = config {
+            Ok(SinkManager::new_box(Self {
+                postprocessors: vec![],
+                stderr: io::stderr(),
+                config: Config::new(config)?,
+            }))
+        } else {
+            Ok(SinkManager::new_box(Self {
+                postprocessors: vec![],
+                stderr: io::stderr(),
+                config: Config::default(),
+            }))
+        }
     }
 }
 #[async_trait::async_trait]
@@ -49,15 +70,21 @@ impl Sink for StdErr {
         _codec_map: &HashMap<String, Box<dyn Codec>>,
         event: Event,
     ) -> ResultVec {
+        let ingest_ns = event.ingest_ns;
         for value in event.value_iter() {
             let raw = codec.encode(value)?;
-            if let Ok(s) = std::str::from_utf8(&raw) {
-                self.stderr.write_all(s.as_bytes()).await?;
+            for processed in postprocess(&mut self.postprocessors, ingest_ns, raw)? {
+                self.stderr.write_all(self.config.prefix.as_bytes()).await?;
+                if self.config.raw {
+                    self.stderr.write_all(&processed).await?;
+                } else if let Ok(s) = std::str::from_utf8(&processed) {
+                    self.stderr.write_all(s.as_bytes()).await?;
+                } else {
+                    self.stderr
+                        .write_all(format!("{:?}", &processed).as_bytes())
+                        .await?;
+                }
                 self.stderr.write_all(b"\n").await?;
-            } else {
-                self.stderr
-                    .write_all(format!("{:?}\n", raw).as_bytes())
-                    .await?
             }
         }
         self.stderr.flush().await?;

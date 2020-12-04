@@ -1,0 +1,8 @@
+status: 0
+name: udp postprocessors
+asserts:
+  - source: gen.log
+    equals_file: expected.txt
+#    contains:
+#       - |
+#         {"done":true}
