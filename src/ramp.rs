@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use crate::errors::Result;
-use memmap::MmapOptions;
+use mapr::MmapOptions;
 use simd_json::prelude::*;
 use std::cmp;
 use std::fs::OpenOptions;
@@ -31,12 +31,12 @@ pub trait KV {
 
 pub struct MmapFile {
     pub config: Config,
-    pub store: memmap::MmapMut,
+    pub store: mapr::MmapMut,
     pub len: usize,
     pub end: usize,
 }
 pub struct MmapAnon {
-    pub store: memmap::MmapMut,
+    pub store: mapr::MmapMut,
     pub end: usize,
     pub len: usize,
 }

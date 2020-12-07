@@ -74,7 +74,7 @@ snap = "1"
 tremor-influx = {path = "tremor-influx"}
 tremor-script = {path = "tremor-script"}
 
-memmap = {version = "0.7.0"}
+mapr = "0.8"
 tempfile = {version = "3.1"}
 
 # blaster / blackhole
