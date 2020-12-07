@@ -222,6 +222,7 @@ dependencies = [
  "futures-lite",
  "num_cpus",
  "once_cell",
+ "tokio 0.3.4",
 ]
 
 [[package]]
@@ -5285,6 +5286,7 @@ dependencies = [
  "libc",
  "memchr",
  "mio 0.7.6",
+ "num_cpus",
  "pin-project-lite 0.2.0",
  "slab",
 ]
