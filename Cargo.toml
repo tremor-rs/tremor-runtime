@@ -51,7 +51,7 @@ pin-project-lite = "0.2"
 rand = "0.7"
 regex = "1.4"
 rental = "0.5"
-rmp-serde = "0.14"
+rmp-serde = "0.15"
 serde = "1"
 serde_yaml = "0.8"
 simd-json = {version = "0.3", features = ["known-key"]}
