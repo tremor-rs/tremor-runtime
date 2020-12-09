@@ -20,7 +20,6 @@ use std::io::Cursor;
 use std::mem;
 use std::ops::{Add, AddAssign};
 use tremor_script::prelude::*;
-const OUT: Cow<'static, str> = Cow::Borrowed("out");
 
 #[derive(Clone, Copy, Default)]
 struct Idx([u8; 8]);

@@ -15,11 +15,13 @@
 // This file is urely for testing w/ EQC
 #![cfg(not(tarpaulin_include))]
 
-use crate::errors::{Error, Result};
-use crate::registry::Registry; // AggrRegistry
-use crate::script::{AggrType, Return, Script};
-use crate::{registry, EventContext};
-use simd_json::{prelude::*, BorrowedValue as Value};
+use crate::prelude::*;
+use crate::{
+    errors::{Error, Result},
+    registry::{self, Registry},
+    script::{AggrType, Return, Script},
+    EventContext, Value,
+};
 use std::ffi::CStr;
 use std::os::raw::c_char;
 use std::ptr;

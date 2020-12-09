@@ -24,14 +24,14 @@ pub fn load(registry: &mut Registry) {
 
 #[cfg(test)]
 mod test {
+    use crate::prelude::*;
     use crate::registry::fun;
-    use simd_json::BorrowedValue as Value;
     use tremor_common::time::nanotime;
     #[test]
     fn system_nanotime() {
         let f = fun("system", "nanotime");
         let r = f(&[]);
-        if let Ok(Value::Static(simd_json::StaticNode::U64(x))) = r {
+        if let Some(x) = r.ok().and_then(|v| v.as_u64()) {
             let status = x <= nanotime();
             assert!(status);
         } else {

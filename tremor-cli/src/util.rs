@@ -15,7 +15,6 @@
 use crate::errors::{Error, Result};
 use halfbrown::HashMap;
 use serde::Deserialize;
-use simd_json::BorrowedValue as Value;
 use std::ffi::OsStr;
 use std::fs;
 use std::io::prelude::*;
@@ -23,7 +22,7 @@ use std::io::BufReader;
 use std::path::Path;
 use tremor_common::file as cfile;
 use tremor_script::highlighter::{Highlighter, Term as TermHighlighter};
-use tremor_script::lexer;
+use tremor_script::{lexer, Value};
 
 pub(crate) enum FormatKind {
     Json,

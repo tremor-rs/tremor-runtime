@@ -21,8 +21,7 @@ use crate::{
 use crate::{op::prelude::*, EventIdGenerator};
 use crate::{Event, Operator};
 use halfbrown::HashMap;
-use simd_json::borrowed::Value;
-use std::borrow::Cow;
+use std::borrow::Cow as SCow;
 use std::mem;
 use std::sync::Arc;
 use tremor_script::query::StmtRentalWrapper;
@@ -32,6 +31,7 @@ use tremor_script::{
     ast::{set_args, set_group, set_window, InvokeAggrFn, Select, SelectStmt, WindowDecl},
     prelude::*,
     query::StmtRental,
+    Value,
 };
 use tremor_script::{ast::get_group_mut, interpreter::Env};
 
@@ -792,7 +792,7 @@ impl Operator for TrickleSelect {
                 };
                 for aggr in &mut this_group.aggrs {
                     let invocable = &mut aggr.invocable;
-                    let mut argv: Vec<Cow<Value>> = Vec::with_capacity(aggr.args.len());
+                    let mut argv: Vec<SCow<Value>> = Vec::with_capacity(aggr.args.len());
                     let mut argv1: Vec<&Value> = Vec::with_capacity(aggr.args.len());
                     for arg in &aggr.args {
                         let result =
@@ -870,9 +870,9 @@ impl Operator for TrickleSelect {
 mod test {
     #![allow(clippy::float_cmp)]
     use super::*;
-    use simd_json::borrowed::Value;
     use simd_json::json;
     use tremor_script::ast::{self, Ident, ImutExpr, Literal};
+    use tremor_script::Value;
 
     fn test_target<'test>() -> ast::ImutExpr<'test> {
         let target: ast::ImutExpr<'test> = ImutExpr::from(ast::Literal {

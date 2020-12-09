@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::prelude::*;
 use crate::registry::{mfa, FResult, FunctionError, Registry, TremorFn, TremorFnWrapper};
 use crate::tremor_fn;
 use crate::EventContext;
+use crate::Value;
 use rand::distributions::Alphanumeric;
 use rand::{rngs::SmallRng, Rng, SeedableRng};
-use simd_json::prelude::*;
-use simd_json::BorrowedValue as Value;
 
 // TODO see if we can cache the RNG here across function calls (or at least
 // at the thread level, like via rand::thread_rng()
@@ -156,9 +156,9 @@ pub fn load(registry: &mut Registry) {
                 ||Err(FunctionError::BadType{mfa: this_mfa()}),
                 |n| {
                 // random string with chars uniformly distributed over ASCII letters and numbers
-                Ok(Value::String(
+                Ok(Value::from(
                  SmallRng::seed_from_u64(_context.ingest_ns())
-                    .sample_iter(&Alphanumeric).take(n).collect()
+                    .sample_iter(&Alphanumeric).take(n).collect::<String>()
                 ))
                 }
             )
@@ -178,7 +178,8 @@ pub fn load(registry: &mut Registry) {
 #[cfg(test)]
 mod test {
     use crate::registry::fun;
-    use simd_json::{BorrowedValue as Value, Value as ValueTrait};
+    use crate::Value;
+    use simd_json::Value as ValueTrait;
 
     #[test]
     fn bool() {

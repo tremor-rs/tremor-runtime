@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::prelude::*;
 use crate::registry::{mfa, FResult, FunctionError, Registry, TremorFn, TremorFnWrapper};
 use crate::tremor_const_fn;
 use crate::EventContext;
-use simd_json::prelude::*;
-use simd_json::BorrowedValue as Value;
+use crate::Value;
 
 macro_rules! map_function {
     ($name:ident, $fun:ident) => {
@@ -183,7 +183,7 @@ pub fn load(registry: &mut Registry) {
 #[cfg(test)]
 mod test {
     use crate::registry::{fun, FunctionError};
-    use simd_json::BorrowedValue as Value;
+    use crate::Value;
 
     #[test]
     fn replace() {

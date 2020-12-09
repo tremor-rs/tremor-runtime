@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use super::prelude::*;
-use simd_json::value::borrowed::{Object, Value};
 use std::{slice::SliceIndex, str};
 
 #[derive(Clone)]
@@ -33,7 +32,7 @@ impl Codec for StatsD {
         decode(data, ingest_ns).map(Some)
     }
 
-    fn encode(&self, data: &simd_json::BorrowedValue) -> Result<Vec<u8>> {
+    fn encode(&self, data: &Value) -> Result<Vec<u8>> {
         encode(data)
     }
 

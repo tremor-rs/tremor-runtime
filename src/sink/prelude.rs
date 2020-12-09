@@ -28,7 +28,7 @@ pub(crate) use crate::{Event, OpConfig};
 pub(crate) use async_channel::Sender;
 pub(crate) use async_std::prelude::*;
 pub(crate) use async_std::task;
-pub(crate) use simd_json::prelude::*;
+pub(crate) use beef::Cow;
 pub(crate) use tremor_common::time::nanotime;
 pub(crate) use tremor_pipeline::{CBAction, ConfigImpl};
 pub(crate) use tremor_script::prelude::*;

@@ -35,17 +35,18 @@ extern crate rental;
 
 use crate::errors::{ErrorKind, Result};
 use crate::op::prelude::*;
+use beef::Cow;
 use executable_graph::NodeConfig;
 use halfbrown::HashMap;
 use lazy_static::lazy_static;
 use op::trickle::select::WindowImpl;
 use petgraph::graph::{self, NodeIndex};
-use simd_json::{BorrowedValue, OwnedValue};
+use simd_json::OwnedValue;
+use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::iter::Iterator;
 use std::str::FromStr;
-use std::{borrow::Cow, cmp::Ordering};
 use std::{fmt, sync::Mutex};
 use tremor_script::prelude::*;
 use tremor_script::query::StmtRentalWrapper;
@@ -58,6 +59,13 @@ mod executable_graph;
 #[macro_use]
 mod macros;
 pub(crate) mod op;
+
+const COUNT: Cow<'static, str> = Cow::const_str("count");
+const MEASUREMENT: Cow<'static, str> = Cow::const_str("measurement");
+const TAGS: Cow<'static, str> = Cow::const_str("tags");
+const FIELDS: Cow<'static, str> = Cow::const_str("fields");
+const TIMESTAMP: Cow<'static, str> = Cow::const_str("timestamp");
+
 /// Tools to turn tremor query into pipelines
 pub mod query;
 pub use crate::event::{Event, ValueIter, ValueMetaIter};
@@ -174,12 +182,12 @@ lazy_static! {
     };
 }
 
-pub(crate) fn common_cow(s: &str) -> Cow<'static, str> {
+pub(crate) fn common_cow(s: &str) -> beef::Cow<'static, str> {
     macro_rules! cows {
         ($target:expr, $($cow:expr),*) => {
             match $target {
                 $($cow => $cow.into()),*,
-                _ => Cow::Owned($target.to_string()),
+                _ => beef::Cow::from($target.to_string()),
             }
         };
     }
@@ -688,23 +696,18 @@ fn operator(uid: u64, node: &NodeConfig) -> Result<Box<dyn Operator + 'static>> 
 #[must_use]
 pub fn influx_value(
     metric_name: Cow<'static, str>,
-    tags: HashMap<Cow<'static, str>, BorrowedValue<'static>>,
+    tags: HashMap<Cow<'static, str>, Value<'static>>,
     count: u64,
     timestamp: u64,
-) -> BorrowedValue<'static> {
-    const COUNT: Cow<'static, str> = Cow::Borrowed("count");
-    const MEASUREMENT: Cow<'static, str> = Cow::Borrowed("measurement");
-    const TAGS: Cow<'static, str> = Cow::Borrowed("tags");
-    const FIELDS: Cow<'static, str> = Cow::Borrowed("fields");
-    const TIMESTAMP: Cow<'static, str> = Cow::Borrowed("timestamp");
-    let mut res = BorrowedValue::object_with_capacity(4);
-    let mut fields = BorrowedValue::object_with_capacity(1);
+) -> Value<'static> {
+    let mut res = Value::object_with_capacity(4);
+    let mut fields = Value::object_with_capacity(1);
     if let Some(fields) = fields.as_object_mut() {
         fields.insert(COUNT, count.into());
     };
     if let Some(obj) = res.as_object_mut() {
         obj.insert(MEASUREMENT, metric_name.into());
-        obj.insert(TAGS, BorrowedValue::from(tags));
+        obj.insert(TAGS, Value::from(tags));
         obj.insert(FIELDS, fields);
         obj.insert(TIMESTAMP, timestamp.into());
     } else {

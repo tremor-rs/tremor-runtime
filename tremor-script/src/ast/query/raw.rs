@@ -19,13 +19,14 @@ use super::super::raw::{
     reduce2, BaseExpr, ExprRaw, IdentRaw, ImutExprRaw, ModuleRaw, ScriptRaw, WithExprsRaw,
 };
 use super::{
-    error_generic, error_no_consts, error_no_locals, AggrRegistry, Builder, Cow, GroupBy,
-    GroupByInt, HashMap, Helper, ImutExpr, Location, NodeMetas, OperatorDecl, OperatorKind,
-    OperatorStmt, Query, Registry, Result, ScriptDecl, ScriptStmt, Select, SelectStmt, Serialize,
-    Stmt, StreamStmt, Upable, Value, Warning, WindowDecl, WindowKind, ARGS_CONST_ID,
-    GROUP_CONST_ID, WINDOW_CONST_ID,
+    error_generic, error_no_consts, error_no_locals, AggrRegistry, Builder, GroupBy, GroupByInt,
+    HashMap, Helper, ImutExpr, Location, NodeMetas, OperatorDecl, OperatorKind, OperatorStmt,
+    Query, Registry, Result, ScriptDecl, ScriptStmt, Select, SelectStmt, Serialize, Stmt,
+    StreamStmt, Upable, Value, Warning, WindowDecl, WindowKind, ARGS_CONST_ID, GROUP_CONST_ID,
+    WINDOW_CONST_ID,
 };
 use crate::impl_expr;
+use beef::Cow;
 
 fn up_params<'script, 'registry>(
     params: WithExprsRaw<'script>,
@@ -514,7 +515,7 @@ impl<'script> Upable<'script> for SelectRaw<'script> {
         let from = match self.from {
             (stream, None) => {
                 let mut port = stream.clone();
-                port.id = Cow::Borrowed("out");
+                port.id = Cow::from("out");
                 (stream, port)
             }
             (stream, Some(port)) => (stream, port),
@@ -522,7 +523,7 @@ impl<'script> Upable<'script> for SelectRaw<'script> {
         let into = match self.into {
             (stream, None) => {
                 let mut port = stream.clone();
-                port.id = Cow::Borrowed("in");
+                port.id = Cow::from("in");
                 (stream, port)
             }
             (stream, Some(port)) => (stream, port),

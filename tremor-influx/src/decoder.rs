@@ -14,8 +14,8 @@
 // limitations under the License.
 
 use crate::{DecoderError as Error, DecoderResult as Result};
-use simd_json::prelude::*;
 use std::borrow::Cow;
+use value_trait::{Builder, Mutable, Value};
 
 macro_rules! cant_error {
     ($e:expr) => {
@@ -33,8 +33,8 @@ macro_rules! cant_error {
 ///    * if the input isn't valid influx line protocol
 pub fn decode<'input, V>(data: &'input str, ingest_ns: u64) -> Result<Option<V>>
 where
-    V: ValueTrait + Mutable + Builder<'input> + 'input + std::fmt::Debug,
-    <V as ValueTrait>::Key: From<Cow<'input, str>> + From<&'input str>,
+    V: Value + Mutable + Builder<'input> + 'input + std::fmt::Debug,
+    <V as Value>::Key: From<Cow<'input, str>> + From<&'input str>,
 {
     let mut data = data.trim();
 
@@ -80,7 +80,7 @@ fn parse_string<'input, V>(
     mut input: &'input str,
 ) -> Result<(V, Option<char>, usize)>
 where
-    V: ValueTrait + Mutable + Builder<'input> + 'input + From<Cow<'input, str>> + std::fmt::Debug,
+    V: Value + Mutable + Builder<'input> + 'input + From<Cow<'input, str>> + std::fmt::Debug,
 {
     let (val, idx) = parse_to(total_index, input, |c| c == '"')?;
     input = get_rest(input, idx + 1)?;
@@ -97,7 +97,7 @@ where
 
 fn to_value<'input, V>(total_idx: usize, s: &str) -> Result<V>
 where
-    V: ValueTrait + Mutable + Builder<'input> + 'input + From<Cow<'input, str>> + std::fmt::Debug,
+    V: Value + Mutable + Builder<'input> + 'input + From<Cow<'input, str>> + std::fmt::Debug,
 {
     match s {
         "t" | "T" | "true" | "True" | "TRUE" => Ok(V::from(true)),
@@ -130,7 +130,7 @@ fn parse_value<'input, V>(
     mut input: &'input str,
 ) -> Result<(V, Option<char>, usize)>
 where
-    V: ValueTrait + Mutable + Builder<'input> + 'input + std::fmt::Debug,
+    V: Value + Mutable + Builder<'input> + 'input + std::fmt::Debug,
 {
     let mut offset = 0;
     if let Some(rest) = input.strip_prefix('"') {
@@ -169,7 +169,7 @@ fn parse_value_complex<'input, V>(
     mut input: &'input str,
 ) -> Result<(V, Option<char>, usize)>
 where
-    V: ValueTrait + Mutable + Builder<'input> + 'input + std::fmt::Debug,
+    V: Value + Mutable + Builder<'input> + 'input + std::fmt::Debug,
 {
     let mut offset = 0;
     loop {
@@ -201,8 +201,8 @@ where
 
 fn parse_fields<'input, V>(total_idx: usize, mut input: &'input str) -> Result<(V, usize)>
 where
-    V: ValueTrait + Mutable + Builder<'input> + 'input + std::fmt::Debug,
-    <V as ValueTrait>::Key: From<Cow<'input, str>>,
+    V: Value + Mutable + Builder<'input> + 'input + std::fmt::Debug,
+    <V as Value>::Key: From<Cow<'input, str>>,
 {
     let mut offset = 0;
     let mut res = V::object_with_capacity(16);
@@ -229,8 +229,8 @@ where
 
 fn parse_tags<'input, V>(total_idx: usize, mut input: &'input str) -> Result<(V, usize)>
 where
-    V: ValueTrait + Mutable + Builder<'input> + 'input + From<Cow<'input, str>> + std::fmt::Debug,
-    <V as ValueTrait>::Key: From<Cow<'input, str>>,
+    V: Value + Mutable + Builder<'input> + 'input + From<Cow<'input, str>> + std::fmt::Debug,
+    <V as Value>::Key: From<Cow<'input, str>>,
 {
     let mut res = V::object_with_capacity(16);
     let mut offset = 0;

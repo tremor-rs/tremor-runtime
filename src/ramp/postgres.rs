@@ -26,14 +26,13 @@ use crate::errors::{Error, Result};
 use bytes5::buf::{BufMut, BufMutExt};
 use chrono::prelude::*;
 use postgres::types::to_sql_checked;
-use simd_json::prelude::*;
-use simd_json::BorrowedValue as Value;
 use std::time::SystemTime;
+use tremor_script::prelude::*;
 
 #[derive(Debug)]
 pub struct Record<'a> {
     pub t: postgres::types::Type,
-    pub value: &'a simd_json::BorrowedValue<'a>,
+    pub value: &'a Value<'a>,
     pub name: &'a str,
 }
 
@@ -177,7 +176,7 @@ impl postgres::types::ToSql for Record<'_> {
     to_sql_checked!();
 }
 
-pub fn json_to_record<'a>(json: &'a simd_json::BorrowedValue<'a>) -> Result<Record> {
+pub fn json_to_record<'a>(json: &'a Value<'a>) -> Result<Record> {
     let field_type = match json.get("fieldType").and_then(ValueTrait::as_str) {
         Some(v) => v,
         None => return Err("error getting fieldType".into()),

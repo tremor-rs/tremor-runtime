@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use pretty_assertions::assert_eq;
-use simd_json::prelude::*;
-use simd_json::value::borrowed::{Object, Value};
 use std::io::prelude::*;
 use tremor_common::file;
 use tremor_pipeline::FN_REGISTRY;
@@ -22,8 +20,10 @@ use tremor_runtime::errors::*;
 use tremor_script::errors::CompilerError;
 use tremor_script::highlighter::{Dumb, Highlighter};
 use tremor_script::path::ModulePath;
+use tremor_script::prelude::*;
 use tremor_script::utils::*;
 use tremor_script::{AggrType, EventContext, Script};
+use tremor_script::{Object, Value};
 
 macro_rules! test_cases {
     ($($file:ident),* ,) => {
@@ -107,7 +107,7 @@ macro_rules! ignore_cases {
 
                 if let Some(mut json) =  in_json.pop() {
                     let context = EventContext::new(0, None);
-                    let mut meta = Value::from(Object::default());
+                    let mut meta = Value::object();
                     let mut state = Value::null();
                     let s = script.run(&context, AggrType::Tick, &mut json, &mut state, &mut meta);
                     if let Err(e) = s {

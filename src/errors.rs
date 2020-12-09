@@ -115,6 +115,7 @@ error_chain! {
         Pipeline(tremor_pipeline::errors::Error, tremor_pipeline::errors::ErrorKind);
     }
     foreign_links {
+        ValueError(tremor_value::Error);
         Base64Error(base64::DecodeError);
         YAMLError(serde_yaml::Error) #[doc = "Error during yaml parsing"];
         JSONError(simd_json::Error);

@@ -447,11 +447,11 @@ impl Ws {
     }
 
     fn create_error_response(event_id: &EventId, e: &str, origin_uri: &EventOriginUri) -> Event {
-        let mut error_data = simd_json::value::borrowed::Object::with_capacity(2);
+        let mut error_data = tremor_script::Object::with_capacity(2);
         error_data.insert_nocheck("error".into(), Value::from(e.to_string()));
         error_data.insert_nocheck("event_id".into(), Value::from(event_id.to_string()));
 
-        let mut meta = simd_json::value::borrowed::Object::with_capacity(1);
+        let mut meta = tremor_script::Object::with_capacity(1);
         meta.insert_nocheck("error".into(), Value::from(e.to_string()));
 
         Event {

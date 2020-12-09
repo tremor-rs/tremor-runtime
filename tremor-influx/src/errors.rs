@@ -13,9 +13,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use simd_json::prelude::ValueType;
 use std::fmt;
 use std::io;
+use value_trait::ValueType;
 
 /// Influx parser error
 #[derive(Debug)]

@@ -22,7 +22,8 @@ use crate::errors::{
     error_no_clause_hit, error_oops, Result,
 };
 use crate::interpreter::value_to_index;
-use crate::registry::{Registry, TremorAggrFnWrapper, RECUR};
+use crate::prelude::*;
+use crate::registry::{Registry, TremorAggrFnWrapper, RECUR_REF};
 use crate::stry;
 use crate::{
     ast::{
@@ -31,8 +32,7 @@ use crate::{
     },
     errors::error_oops_err,
 };
-use simd_json::prelude::*;
-use simd_json::value::borrowed::{Object, Value};
+use crate::{Object, Value};
 use std::borrow::Borrow;
 use std::borrow::Cow;
 use std::mem;
@@ -71,11 +71,11 @@ where
         state: &'run Value<'static>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
-    ) -> Result<Cow<'event, str>> {
+    ) -> Result<beef::Cow<'event, str>> {
         let value = stry!(self.run(opts, env, event, state, meta, local));
         value.as_str().map_or_else(
             || error_need_str(self, self, value.value_type(), &env.meta),
-            |s| Ok(Cow::from(s.to_owned())),
+            |s| Ok(beef::Cow::from(s.to_owned())),
         )
     }
 
@@ -133,7 +133,8 @@ where
                         *loc = Some(v);
                     }
                 }
-                Ok(Cow::Borrowed(&RECUR))
+
+                Ok(Cow::Borrowed(RECUR_REF))
             }
             ImutExprInt::Literal(literal) => Ok(Cow::Borrowed(&literal.value)),
             ImutExprInt::Path(path) => resolve(self, opts, env, event, state, meta, local, path),

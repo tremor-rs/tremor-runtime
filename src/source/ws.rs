@@ -250,7 +250,7 @@ fn make_messages(
 }
 
 fn create_error_response(err: String, event_id: String, source_id: &TremorURL) -> Value<'static> {
-    let mut err_data = simd_json::borrowed::Object::with_capacity(3);
+    let mut err_data = tremor_script::Object::with_capacity(3);
     err_data.insert_nocheck("error".into(), Value::from(err));
     err_data.insert_nocheck("event_id".into(), Value::from(event_id));
     err_data.insert_nocheck("source_id".into(), Value::from(source_id.to_string()));

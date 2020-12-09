@@ -21,8 +21,8 @@ use crate::pipeline;
 use crate::registry::ServantId;
 use crate::system::{self, World};
 use crate::url::{ResourceType, TremorURL};
+use beef::Cow;
 use hashbrown::HashMap;
-use std::borrow::Cow;
 use std::collections::HashSet;
 use tremor_pipeline::query;
 pub(crate) type Id = TremorURL;
@@ -261,7 +261,7 @@ impl Artefact for OfframpArtefact {
         info!("Linking offramp {} ..", id);
         if let Some(offramp) = system.reg.find_offramp(id).await? {
             for (pipeline_id, this) in mappings {
-                let port = Cow::Owned(this.instance_port_required()?.to_string());
+                let port = Cow::from(this.instance_port_required()?.to_string());
                 info!("Linking offramp {} to {}", this, pipeline_id);
                 if let Some(pipeline) = system.reg.find_pipeline(&pipeline_id).await? {
                     offramp
@@ -290,7 +290,7 @@ impl Artefact for OfframpArtefact {
             let (tx, rx) = bounded(mappings.len());
             let mut expect_answers = mappings.len();
             for (_this, pipeline_id) in mappings {
-                let port = Cow::Owned(id.instance_port_required()?.to_string());
+                let port = Cow::from(id.instance_port_required()?.to_string());
                 offramp
                     .send(offramp::Msg::Disconnect {
                         port,

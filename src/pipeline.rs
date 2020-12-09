@@ -20,7 +20,7 @@ use crate::{offramp, onramp};
 use async_channel::{bounded, unbounded};
 use async_std::stream::StreamExt;
 use async_std::task::{self, JoinHandle};
-use std::borrow::Cow;
+use beef::Cow;
 use std::fmt;
 use std::time::Duration;
 use tremor_common::ids::OperatorIdGen;
@@ -279,7 +279,7 @@ async fn pipeline_task(
 
     let mut dests: Dests = halfbrown::HashMap::new();
     let mut onramps: Onramps = halfbrown::HashMap::new();
-    let mut eventset: Vec<(Cow<'static, str>, Event)> = Vec::new();
+    let mut eventset: Eventset = Vec::new();
 
     info!("[Pipeline:{}] starting task.", id);
 
@@ -470,8 +470,7 @@ mod tests {
     use super::*;
     use tremor_pipeline::FN_REGISTRY;
 
-    use simd_json::prelude::*;
-    use tremor_script::Value;
+    use tremor_script::prelude::*;
     use tremor_script::{path::ModulePath, query::Query};
 
     #[async_std::test]

@@ -70,7 +70,7 @@ extern crate serde_derive;
 #[macro_use]
 extern crate rental;
 
-use simd_json::prelude::*;
+use crate::prelude::*;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 pub use crate::ast::query::{SelectType, ARGS_CONST_ID};
@@ -83,8 +83,7 @@ pub use crate::registry::{
 pub use crate::script::{Return, Script};
 
 pub use interpreter::{AggrType, FALSE, NULL, TRUE};
-pub use simd_json::value::borrowed::Object;
-pub use simd_json::value::borrowed::Value;
+pub use tremor_value::{KnownKey, Object, Value};
 
 /// Default recursion limit
 pub static RECURSION_LIMIT: AtomicU32 = AtomicU32::new(1024);
@@ -185,9 +184,7 @@ rental! {
     /// Tremor script rentals to work around lifetime
     /// issues
     pub(crate) mod rentals {
-        use simd_json::value::borrowed;
         use super::*;
-        use std::borrow::Cow;
 
         /// Rental wrapped value with the data it was parsed
         /// from from
@@ -261,8 +258,8 @@ impl rentals::Value {
     }
 }
 
-impl From<simd_json::BorrowedValue<'static>> for rentals::Value {
-    fn from(v: simd_json::BorrowedValue<'static>) -> Self {
+impl From<Value<'static>> for rentals::Value {
+    fn from(v: Value<'static>) -> Self {
         Self::new(vec![], |_| ValueAndMeta::from(v))
     }
 }
@@ -325,12 +322,12 @@ mod tests {
     use crate::lexer::TokenSpan;
     use crate::path::ModulePath;
     use halfbrown::hashmap;
-    use simd_json::borrowed::Value;
 
     macro_rules! eval {
         ($src:expr, $expected:expr) => {{
             let _r: Registry = registry();
             let mut src: String = format!("{} ", $src.to_string());
+            let src1 = src.clone();
             let lexed_tokens: Result<Vec<TokenSpan>> = lexer::Tokenizer::new(&mut src).collect();
             let lexed_tokens = lexed_tokens.expect("");
             let mut filtered_tokens: Vec<Result<TokenSpan>> = Vec::new();
@@ -343,7 +340,7 @@ mod tests {
             }
             let reg: Registry = registry::registry();
             let runnable: Script =
-                Script::parse(&ModulePath { mounts: vec![] }, "<test>", src, &reg)
+                Script::parse(&ModulePath { mounts: vec![] }, "<test>", src1, &reg)
                     .expect("parse failed");
             let mut event = Value::object();
             let mut state = Value::null();
@@ -369,6 +366,7 @@ mod tests {
         ($src:expr, $expected:expr) => {{
             let _r: Registry = registry();
             let mut src = format!("{} ", $src).to_string();
+            let src1 = src.clone();
             let lexed_tokens: Result<Vec<TokenSpan>> = lexer::Tokenizer::new(&mut src).collect();
             let lexed_tokens = lexed_tokens.expect("");
             let mut filtered_tokens: Vec<Result<TokenSpan>> = Vec::new();
@@ -381,7 +379,7 @@ mod tests {
             }
             let reg: Registry = registry::registry();
             let runnable: Script =
-                Script::parse(&ModulePath { mounts: vec![] }, "<test>", src, &reg)
+                Script::parse(&ModulePath { mounts: vec![] }, "<test>", src1, &reg)
                     .expect("parse failed");
             let mut event = Value::object();
             let mut state = Value::null();
@@ -401,6 +399,7 @@ mod tests {
         ($src:expr, $expected:expr) => {{
             let _r: Registry = registry();
             let mut src = format!("{} ", $src).to_string();
+            let src1 = src.clone();
             let lexed_tokens: Result<Vec<TokenSpan>> = lexer::Tokenizer::new(&mut src).collect();
             let lexed_tokens = lexed_tokens.expect("");
             let mut filtered_tokens: Vec<Result<TokenSpan>> = Vec::new();
@@ -413,7 +412,7 @@ mod tests {
             }
             let reg: Registry = registry::registry();
             let runnable: Script =
-                Script::parse(&ModulePath { mounts: vec![] }, "<test>", src, &reg)
+                Script::parse(&ModulePath { mounts: vec![] }, "<test>", src1, &reg)
                     .expect("parse failed");
             let mut event = Value::object();
             let mut state = Value::null();
@@ -577,13 +576,13 @@ mod tests {
         eval_event!(
             "\"hello\"; let event.test = [2,4,6,8];",
             Value::from(hashmap! {
-                std::borrow::Cow::Borrowed("test") => Value::from(vec![2u64, 4, 6, 8]),
+                "test".into() => Value::from(vec![2u64, 4, 6, 8]),
             })
         );
         eval_event!(
             "\"hello\"; let $test = [2,4,6,8]; let event.test = [$test];",
             Value::from(hashmap! {
-                std::borrow::Cow::Borrowed("test") => Value::from(vec![vec![2u64, 4, 6, 8]]),
+                "test".into() => Value::from(vec![vec![2u64, 4, 6, 8]]),
             })
         );
     }

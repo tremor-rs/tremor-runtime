@@ -37,12 +37,12 @@ use crate::sink::prelude::*;
 use async_channel::{bounded, Sender};
 use elastic::prelude::*;
 use halfbrown::HashMap;
-use simd_json::borrowed::Object;
 use simd_json::json;
 use std::str;
 use std::time::Instant;
 use tremor_pipeline::{EventId, OpMeta};
 use tremor_script::prelude::*;
+use tremor_script::Object;
 
 #[derive(Debug, Deserialize)]
 pub struct Config {

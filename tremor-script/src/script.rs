@@ -12,19 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::ast::Helper;
-use crate::ast::{Docs, Warning};
+use crate::ast::{Docs, Helper, Warning};
 use crate::ctx::EventContext;
 use crate::errors::{CompilerError, Error, Result};
 use crate::highlighter::{Dumb as DumbHighlighter, Highlighter};
 pub use crate::interpreter::AggrType;
-use crate::lexer::{self};
+use crate::lexer;
 use crate::parser::g as grammar;
 use crate::path::ModulePath;
 use crate::pos::{Range, Spanned};
 use crate::registry::{Aggr as AggrRegistry, Registry};
+use crate::Value;
 use serde::Serialize;
-use simd_json::borrowed::Value;
 use std::io::{self, Write};
 
 /// Return of a script execution

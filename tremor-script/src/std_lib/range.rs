@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::prelude::*;
 use crate::registry::Registry;
 use crate::tremor_const_fn;
-use simd_json::prelude::*;
 
 // ALLOW: Until we have u64 support in clippy
 #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
@@ -35,7 +35,7 @@ pub fn load(registry: &mut Registry) {
 #[cfg(test)]
 mod test {
     use crate::registry::fun;
-    use simd_json::BorrowedValue as Value;
+    use crate::Value;
 
     #[test]
     fn range() {

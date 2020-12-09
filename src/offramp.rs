@@ -29,8 +29,9 @@ use crate::{Event, OpConfig};
 use async_channel::{self, bounded, unbounded};
 use async_std::stream::StreamExt; // for .next() on PriorityMerge
 use async_std::task::{self, JoinHandle};
+use beef::Cow;
 use halfbrown::HashMap;
-use std::borrow::{Borrow, Cow};
+use std::borrow::Borrow;
 use std::fmt;
 use tremor_common::ids::OfframpIdGen;
 use tremor_common::time::nanotime;

@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use super::prelude::*;
-use simd_json::{self, BorrowedValue as Value};
 
 #[derive(Clone)]
 pub struct String {}
@@ -40,7 +39,7 @@ impl Codec for String {
             .map_err(|e| e.into())
     }
 
-    fn encode(&self, data: &simd_json::BorrowedValue) -> Result<Vec<u8>> {
+    fn encode(&self, data: &Value) -> Result<Vec<u8>> {
         if let Some(s) = data.as_str() {
             Ok(s.as_bytes().to_vec())
         } else {
@@ -58,13 +57,12 @@ impl Codec for String {
 mod test {
     use super::*;
     use simd_json::json;
-    use simd_json::BorrowedValue;
     use simd_json::OwnedValue;
 
     #[test]
     fn test_string_codec() -> Result<()> {
         let seed: OwnedValue = json!("snot badger");
-        let seed: BorrowedValue = seed.into();
+        let seed: Value = seed.into();
 
         let mut codec = String {};
         let mut as_raw = codec.encode(&seed)?;

@@ -15,7 +15,7 @@
 use std::cmp::max;
 
 use super::prelude::*;
-use simd_json::{prelude::*, AlignedBuf};
+use tremor_value::AlignedBuf;
 
 pub struct JSON {
     input_buffer: AlignedBuf,
@@ -59,15 +59,11 @@ impl Codec for JSON {
             let new_len = max(self.string_buffer.capacity(), data.len()) * 2;
             self.string_buffer.reserve(new_len);
         }
-        simd_json::value::borrowed::to_value_with_buffers(
-            data,
-            &mut self.input_buffer,
-            &mut self.string_buffer,
-        )
-        .map(Some)
-        .map_err(|e| e.into())
+        tremor_value::to_value_with_buffers(data, &mut self.input_buffer, &mut self.string_buffer)
+            .map(Some)
+            .map_err(|e| e.into())
     }
-    fn encode(&self, data: &simd_json::BorrowedValue) -> Result<Vec<u8>> {
+    fn encode(&self, data: &Value) -> Result<Vec<u8>> {
         let mut v = Vec::with_capacity(1024);
         self.encode_into(data, &mut v)?;
         Ok(v)
@@ -87,7 +83,6 @@ impl Codec for JSON {
 mod test {
     use super::*;
     use simd_json::json;
-    use simd_json::BorrowedValue;
     use simd_json::OwnedValue;
 
     #[test]
@@ -100,13 +95,13 @@ mod test {
 
         let mut data = br#"{ "snot": "badger" }"#.to_vec();
         let output = codec.decode(&mut data, 42)?.unwrap();
-        assert_eq!(expected, output);
+        assert_eq!(output, expected);
 
         let mut codec = codec.clone();
 
         let mut data = br#"{ "snot": "badger" }"#.to_vec();
         let output = codec.decode(&mut data, 42)?.unwrap();
-        assert_eq!(expected, output);
+        assert_eq!(output, expected);
 
         Ok(())
     }
@@ -114,7 +109,7 @@ mod test {
     #[test]
     fn test_json_codec() -> Result<()> {
         let seed: OwnedValue = json!({ "snot": "badger" });
-        let seed: BorrowedValue = seed.into();
+        let seed: Value = seed.into();
 
         let mut codec = JSON::default();
 

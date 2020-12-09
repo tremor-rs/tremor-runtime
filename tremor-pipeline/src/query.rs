@@ -18,6 +18,7 @@ use crate::op::trickle::select::WindowImpl;
 use crate::{
     common_cow, op, ConfigGraph, NodeConfig, NodeKind, Operator, OperatorNode, PortIndexMap,
 };
+use beef::Cow;
 use halfbrown::HashMap;
 use indexmap::IndexMap;
 use op::identity::PassthroughFactory;
@@ -29,12 +30,11 @@ use op::trickle::{
 };
 use petgraph::algo::is_cyclic_directed;
 use petgraph::dot::Config;
-use simd_json::prelude::*;
-use std::borrow::Cow;
 use std::mem;
 use std::sync::Arc;
 use tremor_common::ids::OperatorIdGen;
 use tremor_script::path::ModulePath;
+use tremor_script::prelude::*;
 use tremor_script::query::{StmtRental, StmtRentalWrapper};
 use tremor_script::{ast::Select, errors::CompilerError};
 use tremor_script::{
@@ -574,7 +574,7 @@ impl Query {
                 port_indexes2.insert((k, s1.clone()), connections);
             }
 
-            let mut inputs2: HashMap<Cow<'static, str>, usize> = HashMap::new();
+            let mut inputs2: HashMap<beef::Cow<'static, str>, usize> = HashMap::new();
             for (k, idx) in &inputs {
                 let v = *i2pos.get(idx).ok_or_else(|| Error::from("Invalid graph"))?;
                 inputs2.insert(k.clone(), v);

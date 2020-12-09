@@ -20,8 +20,9 @@ use crate::errors::{Error, ErrorKind, Result, ResultExt, UnfinishedToken};
 use crate::parser::g::__ToTriple;
 use crate::path::ModulePath;
 pub use crate::pos::*;
-use simd_json::prelude::*;
-use std::borrow::Cow;
+use crate::Value;
+use beef::Cow;
+use simd_json::Writable;
 use std::collections::VecDeque;
 use std::ffi::OsStr;
 use std::fmt;
@@ -531,7 +532,7 @@ impl<'input> fmt::Display for Token<'input> {
             Token::StringLiteral(value) => {
                 // We do thos to ensure proper escaping
                 let value: &str = &value;
-                let s = simd_json::BorrowedValue::from(value).encode();
+                let s = Value::from(value).encode();
                 // Strip the quotes
                 if let Some(s) = s.get(1..s.len() - 1) {
                     write!(f, "{}", s)
@@ -2260,10 +2261,8 @@ impl<'input> Lexer<'input> {
                             Token::StringLiteral(string.into())
                         } else {
                             Token::StringLiteral(
-                                self.slice(segment_start, end_inner).map_or_else(
-                                    || Cow::Owned(string),
-                                    |slice| Cow::Borrowed(slice),
-                                ),
+                                self.slice(segment_start, end_inner)
+                                    .map_or_else(|| Cow::from(string), Cow::from),
                             )
                         };
                         res.push(self.spanned2(segment_start, end_inner, token));

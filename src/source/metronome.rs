@@ -15,9 +15,9 @@
 
 use crate::source::prelude::*;
 //NOTE: This is required for StreamHandlers
-use simd_json::BorrowedValue;
 use std::time::Duration;
 use tremor_common::time::nanotime;
+use tremor_script::Value;
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Config {
@@ -67,7 +67,7 @@ impl Source for Metronome {
 
     async fn pull_event(&mut self, id: u64) -> Result<SourceReply> {
         task::sleep(self.duration).await;
-        let mut data: BorrowedValue<'static> = BorrowedValue::object_with_capacity(3);
+        let mut data: Value<'static> = Value::object_with_capacity(3);
         data.insert("onramp", "metronome")?;
         data.insert("ingest_ns", nanotime())?;
         data.insert("id", id)?;

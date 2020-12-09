@@ -13,7 +13,6 @@
 // limitations under the License.
 use crate::errors::Result;
 use mapr::MmapOptions;
-use simd_json::prelude::*;
 use std::cmp;
 use std::fs::OpenOptions;
 use std::io;
@@ -21,6 +20,7 @@ use std::io::Write;
 use std::ops::DerefMut;
 use std::path::Path;
 use tremor_pipeline::ConfigImpl;
+use tremor_script::prelude::*;
 
 pub mod postgres;
 

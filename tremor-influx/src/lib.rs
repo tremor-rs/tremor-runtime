@@ -53,7 +53,7 @@ pub use errors::*;
 mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
-    use simd_json::{json, BorrowedValue as Value};
+    use simd_json::{json, BorrowedValue};
 
     #[test]
     fn unparse_test() {
@@ -63,8 +63,8 @@ mod tests {
             .expect("failed to parse");
         // This is a bit ugly but to make a sensible comparison we got to convert the data
         // from an object to json to an object
-        let j: Value = d;
-        let e: Value = json!({
+        let j: BorrowedValue = d;
+        let e: BorrowedValue = json!({
             "measurement": "weather",
             "tags": {"location": "us-midwest"},
             "fields": {"temperature": 82.0},
@@ -78,36 +78,36 @@ mod tests {
     #[test]
     fn unparse_empty() {
         let s = "";
-        let d: Option<Value> = decode(s, 0).expect("failed to parse");
+        let d: Option<BorrowedValue> = decode(s, 0).expect("failed to parse");
         assert!(d.is_none());
         let s = "  ";
-        let d: Option<Value> = decode(s, 0).expect("failed to parse");
+        let d: Option<BorrowedValue> = decode(s, 0).expect("failed to parse");
         assert!(d.is_none());
         let s = "  \n";
-        let d: Option<Value> = decode(s, 0).expect("failed to parse");
+        let d: Option<BorrowedValue> = decode(s, 0).expect("failed to parse");
         assert!(d.is_none());
         let s = " \t \n";
-        let d: Option<Value> = decode(s, 0).expect("failed to parse");
+        let d: Option<BorrowedValue> = decode(s, 0).expect("failed to parse");
         assert!(d.is_none());
     }
 
     #[test]
     fn unparse_comment() {
         let s = "# bla";
-        let d: Option<Value> = decode(s, 0).expect("failed to parse");
+        let d: Option<BorrowedValue> = decode(s, 0).expect("failed to parse");
         assert!(d.is_none());
         let s = "  # bla";
-        let d: Option<Value> = decode(s, 0).expect("failed to parse");
+        let d: Option<BorrowedValue> = decode(s, 0).expect("failed to parse");
         assert!(d.is_none());
         let s = " \t \n# bla";
-        let d: Option<Value> = decode(s, 0).expect("failed to parse");
+        let d: Option<BorrowedValue> = decode(s, 0).expect("failed to parse");
         assert!(d.is_none());
     }
 
     #[test]
     fn parse_simple() {
         let s = "weather,location=us-midwest temperature=82 1465839830100400200";
-        let r: Value = json!({
+        let r: BorrowedValue = json!({
             "measurement": "weather",
             "tags": {
                 "location": "us-midwest"
@@ -124,7 +124,7 @@ mod tests {
     #[test]
     fn parse_simple2() {
         let s = "weather,location=us-midwest,season=summer temperature=82 1465839830100400200";
-        let r: Value = json!({
+        let r: BorrowedValue = json!({
             "measurement": "weather",
             "tags": {
                 "location": "us-midwest",
@@ -150,7 +150,7 @@ mod tests {
     fn parse_simple3() {
         let s =
             "weather,location=us-midwest temperature=82,bug_concentration=98 1465839830100400200";
-        let r: Value = json!({
+        let r: BorrowedValue = json!({
             "measurement": "weather",
             "tags": {
                 "location": "us-midwest"
@@ -170,7 +170,7 @@ mod tests {
     fn parse_no_timestamp() {
         let s = "weather temperature=82i";
         let parsed = decode(s, 1_465_839_830_100_400_200u64).expect("failed to parse");
-        let r: Value = json!({
+        let r: BorrowedValue = json!({
             "measurement": "weather",
             "tags": {},
             "fields": {
@@ -185,7 +185,7 @@ mod tests {
     #[test]
     fn parse_float_value() {
         let s = "weather temperature=82 1465839830100400200";
-        let r: Value = json!({
+        let r: BorrowedValue = json!({
             "measurement": "weather",
             "tags": {},
             "fields": {
@@ -200,7 +200,7 @@ mod tests {
     #[test]
     fn parse_int_value() {
         let s = "weather temperature=82i 1465839830100400200";
-        let r: Value = json!({
+        let r: BorrowedValue = json!({
             "measurement": "weather",
             "tags": {},
             "fields": {
@@ -215,7 +215,7 @@ mod tests {
     #[test]
     fn parse_str_value() {
         let s = "weather,location=us-midwest temperature=\"too warm\" 1465839830100400200";
-        let r: Value = json!({
+        let r: BorrowedValue = json!({
             "measurement": "weather",
             "tags": {
                 "location": "us-midwest"
@@ -237,7 +237,7 @@ mod tests {
             "weather,location=us-midwest too_hot=t 1465839830100400200",
             "weather,location=us-midwest too_hot=T 1465839830100400200",
         ];
-        let r: Value = json!({
+        let r: BorrowedValue = json!({
             "measurement": "weather",
             "tags": {
                 "location": "us-midwest"
@@ -261,7 +261,7 @@ mod tests {
             "weather,location=us-midwest too_hot=f 1465839830100400200",
             "weather,location=us-midwest too_hot=F 1465839830100400200",
         ];
-        let r: Value = json!({
+        let r: BorrowedValue = json!({
             "measurement": "weather",
             "tags": {
                 "location": "us-midwest"
@@ -279,7 +279,7 @@ mod tests {
     #[test]
     fn parse_escape01() {
         let s = "weather,location=us\\,midwest temperature=82 1465839830100400200";
-        let r: Value = json!({
+        let r: BorrowedValue = json!({
             "measurement": "weather",
             "tags": {
                 "location": "us,midwest"
@@ -296,7 +296,7 @@ mod tests {
     #[test]
     fn parse_escape02() {
         let s = "weather,location=us-midwest temp\\=rature=82 1465839830100400200";
-        let r: Value = json!({
+        let r: BorrowedValue = json!({
             "measurement": "weather",
             "tags": {
                 "location": "us-midwest"
@@ -312,7 +312,7 @@ mod tests {
     #[test]
     fn parse_escape03() {
         let s = "weather,location\\ place=us-midwest temperature=82 1465839830100400200";
-        let r: Value = json!({
+        let r: BorrowedValue = json!({
             "measurement": "weather",
             "tags": {
                 "location place": "us-midwest"
@@ -329,7 +329,7 @@ mod tests {
     #[test]
     fn parse_escape04() {
         let s = "wea\\,ther,location=us-midwest temperature=82 1465839830100400200";
-        let r: Value = json!({
+        let r: BorrowedValue = json!({
             "measurement": "wea,ther",
             "tags": {
                 "location": "us-midwest"
@@ -345,7 +345,7 @@ mod tests {
     #[test]
     fn parse_escape05() {
         let s = "wea\\ ther,location=us-midwest temperature=82 1465839830100400200";
-        let r: Value = json!({
+        let r: BorrowedValue = json!({
             "measurement": "wea ther",
             "tags": {
                 "location": "us-midwest"
@@ -362,7 +362,7 @@ mod tests {
     #[test]
     fn parse_escape06() {
         let s = r#"weather,location=us-midwest temperature="too\"hot\"" 1465839830100400200"#;
-        let r: Value = json!({
+        let r: BorrowedValue = json!({
             "measurement": "weather",
             "tags": {
                 "location": "us-midwest"
@@ -379,7 +379,7 @@ mod tests {
     #[test]
     fn parse_escape07() {
         let s = "weather,location=us-midwest temperature_str=\"too hot/cold\" 1465839830100400201";
-        let r: Value = json!({
+        let r: BorrowedValue = json!({
             "measurement": "weather",
             "tags": {
                 "location": "us-midwest"
@@ -396,7 +396,7 @@ mod tests {
     #[test]
     fn parse_escape08() {
         let s = "weather,location=us-midwest temperature_str=\"too hot\\cold\" 1465839830100400202";
-        let r: Value = json!({
+        let r: BorrowedValue = json!({
             "measurement": "weather",
             "tags": {
                 "location": "us-midwest"
@@ -414,7 +414,7 @@ mod tests {
     fn parse_escape09() {
         let s =
             "weather,location=us-midwest temperature_str=\"too hot\\\\cold\" 1465839830100400203";
-        let r: Value = json!({
+        let r: BorrowedValue = json!({
             "measurement": "weather",
             "tags": {
                 "location": "us-midwest"
@@ -432,7 +432,7 @@ mod tests {
     fn parse_escape10() {
         let s =
             "weather,location=us-midwest temperature_str=\"too hot\\\\\\cold\" 1465839830100400204";
-        let r: Value = json!({
+        let r: BorrowedValue = json!({
             "measurement": "weather",
             "tags": {
                 "location": "us-midwest"
@@ -448,7 +448,7 @@ mod tests {
     #[test]
     fn parse_escape11() {
         let s = "weather,location=us-midwest temperature_str=\"too hot\\\\\\\\cold\" 1465839830100400205";
-        let r: Value = json!({
+        let r: BorrowedValue = json!({
             "measurement": "weather",
             "tags": {
 
@@ -466,7 +466,7 @@ mod tests {
     #[test]
     fn parse_escape12() {
         let s = "weather,location=us-midwest temperature_str=\"too hot\\\\\\\\\\cold\" 1465839830100400206";
-        let r: Value = json!({
+        let r: BorrowedValue = json!({
             "measurement": "weather",
             "tags": {
                 "location": "us-midwest"

@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::prelude::*;
 use crate::registry::Registry;
 use crate::tremor_const_fn;
-use simd_json::prelude::*;
-use simd_json::value::borrowed::Object;
+use crate::Object;
 pub fn load(registry: &mut Registry) {
     registry
         .insert(tremor_const_fn! (record::len(_context, _input: Object) {
@@ -86,8 +86,8 @@ pub fn load(registry: &mut Registry) {
 #[cfg(test)]
 mod test {
     use crate::registry::fun;
+    use crate::Value;
     use halfbrown::hashmap;
-    use simd_json::BorrowedValue as Value;
 
     #[test]
     fn len() {

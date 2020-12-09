@@ -14,14 +14,14 @@
 
 mod custom_fn;
 pub use self::custom_fn::CustomFn;
-pub(crate) use self::custom_fn::{RECUR, RECUR_PTR};
+pub(crate) use self::custom_fn::{RECUR_PTR, RECUR_REF};
 use crate::ast::{BaseExpr, NodeMetas};
 use crate::errors::{best_hint, Error, ErrorKind, Result};
 use crate::utils::hostname as get_hostname;
+use crate::Value;
 use crate::{tremor_fn, EventContext};
 use downcast_rs::{impl_downcast, DowncastSync};
 use halfbrown::HashMap;
-use simd_json::BorrowedValue as Value;
 use std::default::Default;
 use std::fmt;
 use std::ops::RangeInclusive;
@@ -375,7 +375,7 @@ macro_rules! tremor_fn_ {
                     $sub
                 };
             }
-            use simd_json::BorrowedValue as Value;
+            use $crate::Value;
             use $crate::EventContext;
             use $crate::registry::{TremorFnWrapper, TremorFn};
             #[allow(unused_imports)] // We might not use all of this imports
@@ -438,7 +438,7 @@ macro_rules! tremor_fn_ {
                     $sub
                 };
             }
-            use simd_json::BorrowedValue as Value;
+            use $crate::Value;
             use $crate::EventContext;
             use $crate::registry::{TremorFnWrapper, TremorFn};
             #[allow(unused_imports)] // We might not use all of this imports
@@ -500,7 +500,7 @@ macro_rules! tremor_fn_ {
 
     ($module:ident :: $name:ident($const:expr, $context:ident) $code:block) => {
         {
-            use simd_json::BorrowedValue as Value;
+            use $crate::Value;
             use $crate::EventContext;
             use $crate::registry::{TremorFnWrapper, TremorFn};
             #[allow(unused_imports)] // We might not use all of this imports
@@ -751,7 +751,7 @@ pub use tests::fun;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use simd_json::{BorrowedValue as Value, Value as ValueTrait};
+    use simd_json::Value as ValueTrait;
 
     // Test utility to grab a function from the registry
     pub fn fun<'event>(m: &str, f: &str) -> impl Fn(&[&Value<'event>]) -> FResult<Value<'event>> {

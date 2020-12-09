@@ -13,13 +13,13 @@
 // limitations under the License.
 #![allow(clippy::cast_precision_loss)]
 
+use crate::prelude::*;
 use crate::registry::{
     mfa, Aggr as AggrRegistry, FResult, FunctionError, TremorAggrFn, TremorAggrFnWrapper,
 };
+use crate::Value;
 use halfbrown::hashmap;
 use hdrhistogram::Histogram;
-use simd_json::prelude::*;
-use simd_json::value::borrowed::Value;
 use sketches_ddsketch::{Config as DDSketchConfig, DDSketch};
 use std::cmp::max;
 use std::f64;
@@ -912,6 +912,7 @@ pub fn load_aggr(registry: &mut AggrRegistry) {
 
 #[cfg(test)]
 mod test {
+    // use std::ffi::VaList;
     use super::*;
     use crate::registry::FResult as Result;
     use float_cmp::approx_eq;
@@ -1045,8 +1046,6 @@ mod test {
 
     #[test]
     fn hdr() -> Result<()> {
-        use simd_json::BorrowedValue;
-
         let mut a = Hdr::default();
         a.init();
         let mut i = 1;
@@ -1062,7 +1061,7 @@ mod test {
             i += 1;
         }
         let v = a.emit()?;
-        let e: BorrowedValue = json!({
+        let e: Value = json!({
             "min": 1,
             "max": 100,
             "count": 100,
@@ -1085,7 +1084,7 @@ mod test {
 
     #[test]
     fn dds() -> Result<()> {
-        use simd_json::BorrowedValue;
+        use crate::Value;
 
         let mut a = Dds::default();
         a.init();
@@ -1102,7 +1101,7 @@ mod test {
             i += 1;
         }
         let v = a.emit()?;
-        let e: BorrowedValue = json!({
+        let e: Value = json!({
                     "min": 1.0,
                     "max": 100.0,
                     "count": 100,

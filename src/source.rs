@@ -24,14 +24,13 @@ use crate::url::TremorURL;
 use crate::Result;
 use async_channel::{self, unbounded, Receiver, Sender};
 use async_std::task;
+use beef::Cow;
 use halfbrown::HashMap;
-use simd_json::Builder;
-use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::time::Duration;
 use tremor_common::time::nanotime;
 use tremor_pipeline::{CBAction, Event, EventId, EventOriginUri, DEFAULT_STREAM_ID};
-use tremor_script::{LineValue, Value, ValueAndMeta};
+use tremor_script::prelude::*;
 
 use self::prelude::OnrampConfig;
 
@@ -566,12 +565,10 @@ where
                                         "[Source::{}] Error decoding event data: {}",
                                         self.source_id, e
                                     );
-                                    let mut error_meta =
-                                        simd_json::borrowed::Object::with_capacity(1);
+                                    let mut error_meta = Object::with_capacity(1);
                                     error_meta.insert_nocheck("error".into(), e.to_string().into());
 
-                                    let mut error_data =
-                                        simd_json::borrowed::Object::with_capacity(3);
+                                    let mut error_data = Object::with_capacity(3);
                                     error_data.insert_nocheck("error".into(), e.to_string().into());
                                     error_data
                                         .insert_nocheck("event_id".into(), original_id.into());

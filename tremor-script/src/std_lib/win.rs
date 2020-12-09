@@ -14,8 +14,7 @@
 
 use crate::registry::{Aggr as AggrRegistry, FResult, TremorAggrFn, TremorAggrFnWrapper};
 
-use simd_json::prelude::*;
-use simd_json::BorrowedValue as Value;
+use crate::prelude::*;
 
 use std::ops::RangeInclusive;
 
@@ -221,7 +220,6 @@ pub fn load_aggr(registry: &mut AggrRegistry) {
 mod test {
     use super::*;
     use crate::registry::FResult as Result;
-    use simd_json::value::Value as ValueTrait;
     #[test]
     fn first() -> Result<()> {
         let mut a = First::default();

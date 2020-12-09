@@ -38,7 +38,7 @@ while getopts hauiprebldxcft opt; do
         u)
             for file in $files
             do
-                if sed -e '/mod test.*/,$d' -e '/ALLOW: /{N;d;}' "$file" | grep 'unwrap()' > /dev/null
+                if sed -e '/mod test.*/,$d' -e '/ALLOW: /{N;d;}' "$file" | grep -v '^[ ]*//' |  grep 'unwrap()' > /dev/null
                 then
                     echo "##[error] unwrap found in $file don't unwrap it panics."
                     count=$((count + 1))
@@ -148,7 +148,7 @@ while getopts hauiprebldxcft opt; do
         b)
             for file in $files
             do
-                if sed -e '/mod test.*/,$d' -e '/ALLOW: /{N;d;}' "$file" | grep '[a-z]\[' > /dev/null
+                if sed -e '/mod test.*/,$d' -e '/ALLOW: /{N;d;}' "$file" | grep -v '^[ ]*//' | grep '[a-z]\[' > /dev/null
                 then
                     echo "##[error] array access ([...]) found in $file that could go wrong, array access can panic."
                     grep -nH '[a-z]\[' "$file"

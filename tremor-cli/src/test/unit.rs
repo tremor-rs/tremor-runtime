@@ -19,8 +19,6 @@ use crate::test::stats;
 use crate::test::status;
 use halfbrown::hashmap;
 use report::TestSuite;
-use simd_json::prelude::*;
-use simd_json::{borrowed::Value, StaticNode};
 use std::io::Read;
 use std::{collections::HashMap, path::Path};
 use test::tag;
@@ -31,6 +29,8 @@ use tremor_script::ctx::{EventContext, EventOriginUri};
 use tremor_script::highlighter::{Dumb as DumbHighlighter, Highlighter, Term as TermHighlighter};
 use tremor_script::interpreter::{AggrType, Env, ExecOpts, LocalStack};
 use tremor_script::path::load as load_module_path;
+use tremor_script::prelude::*;
+use tremor_script::Value;
 use tremor_script::{registry, Registry};
 const EXEC_OPTS: ExecOpts = ExecOpts {
     result_needed: true,
@@ -136,7 +136,7 @@ fn eval_suite_tests(
                             let value = eval(item, env, local)?;
                             let elapsed = nanotime() - start;
 
-                            if let Value::Static(StaticNode::Bool(status)) = value {
+                            if let Some(status) = value.as_bool() {
                                 // Non colorized test source extent for json report capture
                                 let extent = item.extent(node_metas);
                                 let mut hh = DumbHighlighter::new();
@@ -202,9 +202,10 @@ fn eval_suite_tests(
                 }
             }
 
-            if let Value::Static(StaticNode::Bool(status)) = suite_result
+            if let Some(status) = suite_result
                 .get_idx(idx)
                 .ok_or_else(|| Error::from("Invalid test result"))?
+                .as_bool()
             {
                 // Predicate tests do not have tags support
 
@@ -212,7 +213,7 @@ fn eval_suite_tests(
                 let extent = item.extent(node_metas);
                 let mut hh = DumbHighlighter::new();
                 tremor_script::Script::highlight_script_with_range(script, extent, &mut hh)?;
-                let prefix = if *status { "(+)" } else { "(-)" };
+                let prefix = if status { "(+)" } else { "(-)" };
 
                 let case_tags = suite_tags;
 
@@ -231,7 +232,7 @@ fn eval_suite_tests(
                     description: format!("    {} Executing test {} of {}", prefix, idx + 1, al),
                     keyword: report::KeywordKind::Predicate,
                     result: report::ResultKind {
-                        status: stats.report(*status),
+                        status: stats.report(status),
                         duration: 0, // Compile time evaluation
                     },
                     info: Some(hh.to_string()),
@@ -242,7 +243,7 @@ fn eval_suite_tests(
                 stats.assert();
 
                 // Interactive console report
-                status::executing_unit_testcase(idx, ll, *status)?;
+                status::executing_unit_testcase(idx, ll, status)?;
                 let mut h = TermHighlighter::default();
                 tremor_script::Script::highlight_script_with_range_indent(
                     "      ", script, extent, &mut h,
@@ -298,9 +299,9 @@ pub(crate) fn run_suite(
 
             let mut stat_s = stats::Stats::new();
             for expr in &script.exprs {
-                let state = Value::Object(Box::new(hashmap! {}));
-                let event = Value::Object(Box::new(hashmap! {}));
-                let meta = Value::Object(Box::new(hashmap! {}));
+                let state = Value::object();
+                let event = Value::object();
+                let meta = Value::object();
                 let mut elements = Vec::new();
                 let mut suite_name = "".to_string();
 

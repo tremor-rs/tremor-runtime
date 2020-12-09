@@ -19,7 +19,7 @@ use crate::{
 use clap::{self, ArgMatches};
 use halfbrown::HashMap;
 use http_types::{headers, StatusCode};
-use simd_json::prelude::*;
+use tremor_script::prelude::*;
 
 use crate::util::{accept, content_type, load, save_config, ser, TremorApp};
 

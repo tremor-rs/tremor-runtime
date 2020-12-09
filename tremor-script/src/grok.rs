@@ -13,12 +13,13 @@
 // limitations under the License.
 
 use crate::errors::Result;
+use crate::Value;
 use grok::Grok;
-use simd_json::{json, owned::Value};
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader};
 use std::str;
 use tremor_common::file;
+use value_trait::{Builder, Mutable};
 
 const PATTERNS_FILE_TUPLE: &str = "%{NOTSPACE:alias} %{GREEDYDATA:pattern}";
 pub(crate) const PATTERNS_FILE_DEFAULT_PATH: &str = "/etc/tremor/grok.patterns";
@@ -81,15 +82,15 @@ impl Pattern {
     }
 
     /// Tests if a pattern matches
-    pub fn matches(&self, data: &[u8]) -> Result<Value> {
+    pub fn matches(&self, data: &[u8]) -> Result<Value<'static>> {
         let text: String = str::from_utf8(&data)?.to_string();
         match self.pattern.match_against(&text) {
             Some(m) => {
-                let mut as_map: HashMap<&str, &str> = HashMap::new();
+                let mut o = Value::object();
                 for (a, b) in m.iter() {
-                    as_map.insert(a, b);
+                    o.insert(a.to_string(), b.to_string())?;
                 }
-                Ok(json!(as_map))
+                Ok(o)
             }
             None => Err(format!("No match for log text: {}", &text).into()),
         }
@@ -110,6 +111,7 @@ impl std::clone::Clone for Pattern {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use simd_json::json;
 
     macro_rules! assert_grok_ok {
         ($pattern:expr, $raw:expr, $json:expr) => {

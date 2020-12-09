@@ -15,8 +15,6 @@
 use crate::errors::{Error, Result};
 use crate::util::{get_source_kind, highlight, slurp_string, SourceKind};
 use clap::ArgMatches;
-use simd_json::borrowed::Value;
-use simd_json::prelude::*;
 use std::io::prelude::*;
 use std::io::{self, BufReader, BufWriter, Read, Write};
 use tremor_common::time::nanotime;
@@ -27,12 +25,10 @@ use tremor_runtime::postprocessor::Postprocessor;
 use tremor_runtime::preprocessor::Preprocessor;
 use tremor_script::highlighter::Error as HighlighterError;
 use tremor_script::path::load as load_module_path;
+use tremor_script::prelude::*;
 use tremor_script::query::Query;
-use tremor_script::registry;
 use tremor_script::registry::Registry;
 use tremor_script::script::{AggrType, Return, Script};
-use tremor_script::LineValue;
-use tremor_script::ValueAndMeta;
 use tremor_script::{
     ctx::{EventContext, EventOriginUri},
     lexer::Tokenizer,
@@ -41,6 +37,7 @@ use tremor_script::{
     highlighter::{Highlighter, Term as TermHighlighter},
     lexer::Range,
 };
+use tremor_script::{registry, LineValue, Value, ValueAndMeta};
 struct Ingress {
     is_interactive: bool,
     is_pretty: bool,
@@ -50,8 +47,7 @@ struct Ingress {
     codec: Box<dyn Codec>,
 }
 
-type IngressHandler<T> =
-    dyn Fn(&mut T, &mut u64, &mut Egress, u64, simd_json::BorrowedValue) -> Result<()>;
+type IngressHandler<T> = dyn Fn(&mut T, &mut u64, &mut Egress, u64, Value) -> Result<()>;
 
 impl Ingress {
     fn from_args(matches: &ArgMatches) -> Result<Self> {
