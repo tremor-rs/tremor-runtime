@@ -46,14 +46,17 @@ serde = "1.0"
 serde_derive = "1.0"
 simd-json = {version = "0.3", features = ["known-key"]}
 simd-json-derive = "0.1"
+value-trait = "0.1"
 sketches-ddsketch = "0.1.2"
 termcolor = "1.1"
 tremor-common = {version = "0.9", path = "../tremor-common"}# FIXME tremor-influx v0.2"
 tremor-influx = {version = "0.2", path = "../tremor-influx"}# FIXME tremor-influx v0.2
+tremor-value = {version = "0.1", path = "../tremor-value"}# FIXME tremor-influx v0.2
 tremor-kv = "0.1"
 unicode-xid = "0.2"
 url = "2"
 xz2 = "0.1"
+beef = {version = "0.4", features = ["impl_serde"]}
 
 [build-dependencies]
 lalrpop = "0.19"

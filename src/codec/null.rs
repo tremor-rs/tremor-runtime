@@ -30,7 +30,7 @@ impl Codec for Null {
     ) -> Result<Option<Value<'input>>> {
         Ok(Some(Value::null()))
     }
-    fn encode(&self, _data: &simd_json::BorrowedValue) -> Result<Vec<u8>> {
+    fn encode(&self, _data: &Value) -> Result<Vec<u8>> {
         Ok(vec![])
     }
 
@@ -43,13 +43,12 @@ impl Codec for Null {
 #[cfg(test)]
 mod test {
     use super::*;
-    use simd_json::BorrowedValue;
     use simd_json::OwnedValue;
 
     #[test]
     fn test_null_codec() -> Result<()> {
         let seed: OwnedValue = OwnedValue::null();
-        let seed: BorrowedValue = seed.into();
+        let seed: Value = seed.into();
 
         let mut codec = Null {};
         let mut as_raw = codec.encode(&seed)?;

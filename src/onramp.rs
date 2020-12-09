@@ -20,7 +20,6 @@ use crate::source::{blaster, crononome, file, kafka, metronome, postgres, rest, 
 use crate::url::TremorURL;
 use async_std::task::{self, JoinHandle};
 use serde_yaml::Value;
-use std::borrow::Cow;
 use std::fmt;
 use tremor_common::ids::OnrampIdGen;
 use tremor_pipeline::EventId;

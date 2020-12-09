@@ -12,15 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::registry::Registry;
+use crate::prelude::*;
 use crate::tremor_fn;
-use simd_json::prelude::*;
-use simd_json::BorrowedValue;
+use crate::{registry::Registry, FALSE, TRUE};
 
 pub fn load(registry: &mut Registry) {
     registry.insert(tremor_fn! (test::assert(ctx, desc, expected, got) {
         if expected == got {
-            Ok(BorrowedValue::from(true))
+            Ok(TRUE)
         } else if ctx.panic_on_assert {
             Err(to_runtime_error(format!(r#"
 Assertion for {} failed:
@@ -28,7 +27,7 @@ Assertion for {} failed:
     got: {}
 "#, desc, expected.encode(), got.encode())))
         } else {
-            Ok(BorrowedValue::from(false))
+            Ok(FALSE)
         }
     }));
 }

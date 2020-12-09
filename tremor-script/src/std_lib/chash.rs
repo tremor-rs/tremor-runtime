@@ -13,9 +13,9 @@
 // limitations under the License.
 #![allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 
+use crate::prelude::*;
 use crate::registry::Registry;
 use crate::{tremor_const_fn, utils::sorted_serialize};
-use simd_json::prelude::*;
 
 pub fn load(registry: &mut Registry) {
     registry.insert(
@@ -48,7 +48,8 @@ pub fn load(registry: &mut Registry) {
 #[cfg(test)]
 mod test {
     use crate::registry::fun;
-    use simd_json::{json, BorrowedValue as Value};
+    use crate::Value;
+    use simd_json::json;
 
     #[test]
     fn sorted_serialize() {

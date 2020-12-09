@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::prelude::*;
 use crate::registry::Registry;
 use crate::tremor_fn;
 use crate::EventOriginUri;
 use halfbrown::hashmap;
-use simd_json::prelude::*;
 use std::string::ToString;
 
 pub fn load(registry: &mut Registry) {

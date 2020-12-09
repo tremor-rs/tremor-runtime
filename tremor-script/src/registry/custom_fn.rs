@@ -16,13 +16,14 @@ use super::{FResult, FunctionError, Result};
 use crate::ast::get_args_mut;
 use crate::ast::{Expr, Exprs, FnDecl, ImutExpr, ImutExprInt, ImutExprs, InvokeAggrFn};
 use crate::interpreter::{AggrType, Cont, Env, ExecOpts, LocalStack};
-use simd_json::prelude::*;
-use simd_json::BorrowedValue as Value;
-use std::borrow::Cow;
+use crate::prelude::*;
+use crate::Value;
+use beef::Cow;
 //use std::mem;
 const RECUR_STR: &str = "recur";
 pub(crate) const RECUR_PTR: Option<*const u8> = Some(RECUR_STR.as_ptr());
-pub(crate) const RECUR: Value<'static> = Value::String(Cow::Borrowed(RECUR_STR));
+pub(crate) const RECUR: Value<'static> = Value::String(Cow::const_str(RECUR_STR));
+pub(crate) const RECUR_REF: &Value<'static> = &RECUR;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 /// Encapsulates a user defined or standard library function

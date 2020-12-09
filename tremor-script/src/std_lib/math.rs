@@ -13,9 +13,9 @@
 // limitations under the License.
 #![allow(clippy::cast_precision_loss)]
 
+use crate::prelude::*;
 use crate::registry::Registry;
 use crate::tremor_const_fn;
-use simd_json::prelude::*;
 use std::cmp::{max, min};
 
 macro_rules! math_fn {
@@ -82,7 +82,7 @@ pub fn load(registry: &mut Registry) {
 #[cfg(test)]
 mod test {
     use crate::registry::fun;
-    use simd_json::BorrowedValue as Value;
+    use crate::Value;
 
     #[test]
     fn floor() {

@@ -37,7 +37,7 @@ impl Codec for YAML {
             .map(Some)
             .map_err(|e| e.into())
     }
-    fn encode(&self, data: &simd_json::BorrowedValue) -> Result<Vec<u8>> {
+    fn encode(&self, data: &Value) -> Result<Vec<u8>> {
         Ok(serde_yaml::to_vec(data)?)
     }
 
@@ -51,13 +51,12 @@ impl Codec for YAML {
 mod test {
     use super::*;
     use simd_json::json;
-    use simd_json::BorrowedValue;
     use simd_json::OwnedValue;
 
     #[test]
     fn test_yaml_codec() -> Result<()> {
         let seed: OwnedValue = json!({ "snot": "badger" });
-        let seed: BorrowedValue = seed.into();
+        let seed: Value = seed.into();
 
         let mut codec = YAML {};
         let mut as_raw = codec.encode(&seed)?;

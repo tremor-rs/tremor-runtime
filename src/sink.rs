@@ -18,7 +18,6 @@ use crate::sink::prelude::*;
 use crate::url::TremorURL;
 use async_channel::Sender;
 use halfbrown::HashMap;
-use std::borrow::Cow;
 
 pub(crate) mod blackhole;
 pub(crate) mod debug;

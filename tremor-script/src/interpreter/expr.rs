@@ -24,11 +24,10 @@ use crate::errors::{
     error_assign_array, error_assign_to_const, error_bad_key, error_invalid_assign_target,
     error_need_obj, error_no_clause_hit, error_oops, Result,
 };
+use crate::prelude::*;
 use crate::registry::RECUR_PTR;
-use crate::stry;
+use crate::{stry, Value};
 use matches::matches;
-use simd_json::prelude::*;
-use simd_json::value::borrowed::Value;
 use std::borrow::{Borrow, Cow};
 use std::mem;
 

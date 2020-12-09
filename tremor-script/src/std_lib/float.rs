@@ -24,7 +24,7 @@ pub fn load(registry: &mut Registry) {
 #[cfg(test)]
 mod test {
     use crate::registry::fun;
-    use simd_json::BorrowedValue as Value;
+    use crate::Value;
 
     #[test]
     fn parse() {

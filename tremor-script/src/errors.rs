@@ -18,17 +18,18 @@
 #![allow(unused_imports)]
 #![allow(missing_docs)]
 
-use crate::ast::{self, BaseExpr, Expr, Ident, NodeMetas};
-use crate::errors;
-use crate::lexer;
-use crate::path::ModulePath;
-use crate::pos;
-use crate::pos::{Location, Range, Spanned};
+pub use crate::prelude::ValueType;
+use crate::prelude::*;
+use crate::{
+    ast::{self, BaseExpr, Expr, Ident, NodeMetas},
+    errors, lexer,
+    path::ModulePath,
+    pos::{self, Location, Range, Spanned},
+    Value,
+};
 use error_chain::error_chain;
 use lalrpop_util::ParseError as LalrpopError;
 use serde::{Deserialize, Serialize};
-pub use simd_json::ValueType;
-use simd_json::{prelude::*, BorrowedValue as Value};
 use std::ops::{Range as RangeExclusive, RangeInclusive};
 use std::{num, ops::Deref};
 
@@ -169,9 +170,9 @@ impl ErrorKind {
     }
     pub(crate) fn expr(&self) -> ErrorLocation {
         use ErrorKind::{
-            AggrInAggr, ArrayOutOfRange, AssignIntoArray, AssignToConst, BadAccessInEvent,
-            BadAccessInGlobal, BadAccessInLocal, BadAccessInState, BadArity, BadArrayIndex,
-            BadType, BinaryDrop, BinaryEmit, CantSetArgsConst, CantSetGroupConst,
+            AccessError, AggrInAggr, ArrayOutOfRange, AssignIntoArray, AssignToConst,
+            BadAccessInEvent, BadAccessInGlobal, BadAccessInLocal, BadAccessInState, BadArity,
+            BadArrayIndex, BadType, BinaryDrop, BinaryEmit, CantSetArgsConst, CantSetGroupConst,
             CantSetWindowConst, Common, DecreasingRange, DoubleConst, DoubleStream, EmptyScript,
             ExtraToken, Generic, Grok, InvalidAssign, InvalidBinary, InvalidBitshift, InvalidConst,
             InvalidDrop, InvalidEmit, InvalidExtractor, InvalidFloatLiteral, InvalidFn,
@@ -184,7 +185,7 @@ impl ErrorKind {
             TypeConflict, UnexpectedCharacter, UnexpectedEndOfStream, UnexpectedEscapeCode,
             UnrecognizedToken, UnterminatedExtractor, UnterminatedHereDoc,
             UnterminatedIdentLiteral, UnterminatedInterpolation, UnterminatedStringLiteral,
-            UpdateKeyMissing, Utf8Error,
+            UpdateKeyMissing, Utf8Error, ValueError,
         };
         match self {
             NoClauseHit(outer)
@@ -254,6 +255,8 @@ impl ErrorKind {
             | InvalidInfluxData(_, _)
             | Io(_)
             | JSONError(_)
+            | ValueError(_)
+            | AccessError(_)
             | Msg(_)
             | NoObjectError(_)
             | NotFound
@@ -439,9 +442,11 @@ error_chain! {
         Grok(grok::Error);
         Io(std::io::Error);
         JSONError(simd_json::Error);
+        ValueError(tremor_value::Error);
         ParseIntError(num::ParseIntError);
         Utf8Error(std::str::Utf8Error);
-        NoObjectError(simd_json::KnownKeyError);
+        NoObjectError(tremor_value::KnownKeyError);
+        AccessError(value_trait::AccessError);
         Common(tremor_common::Error);
     }
     errors {

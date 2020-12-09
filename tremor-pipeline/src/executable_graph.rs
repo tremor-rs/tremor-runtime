@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::{borrow::Cow, fmt, fmt::Display, sync::Arc};
+use std::{fmt, fmt::Display, sync::Arc};
 
 use crate::{
     common_cow,
@@ -23,9 +23,9 @@ use crate::{
     ConfigMap, ExecPortIndexMap, NodeLookupFn,
 };
 use crate::{op::EventAndInsights, Event, NodeKind, Operator};
+use beef::Cow;
 use halfbrown::HashMap;
-use simd_json::BorrowedValue;
-use tremor_script::{query::StmtRentalWrapper, LineValue, ValueAndMeta};
+use tremor_script::{query::StmtRentalWrapper, LineValue, Value, ValueAndMeta};
 
 /// Configuration for a node
 #[derive(Debug, Clone, PartialOrd, Eq, Default)]
@@ -106,12 +106,12 @@ impl NodeConfig {
 #[derive(Clone, Debug, Default)]
 pub(crate) struct State {
     // for operator node-level state (ordered in the same way as nodes in the executable graph)
-    ops: Vec<BorrowedValue<'static>>,
+    ops: Vec<Value<'static>>,
 }
 
 impl State {
     /// Creates a new Sate
-    pub fn new(ops: Vec<BorrowedValue<'static>>) -> Self {
+    pub fn new(ops: Vec<Value<'static>>) -> Self {
         Self { ops }
     }
 }
@@ -136,7 +136,7 @@ impl Operator for OperatorNode {
         &mut self,
         _uid: u64,
         port: &str,
-        state: &mut BorrowedValue<'static>,
+        state: &mut Value<'static>,
         event: Event,
     ) -> Result<EventAndInsights> {
         self.op.on_event(self.uid, port, state, event)
@@ -158,9 +158,9 @@ impl Operator for OperatorNode {
 
     fn metrics(
         &self,
-        tags: HashMap<Cow<'static, str>, BorrowedValue<'static>>,
+        tags: HashMap<Cow<'static, str>, Value<'static>>,
         timestamp: u64,
-    ) -> Result<Vec<BorrowedValue<'static>>> {
+    ) -> Result<Vec<Value<'static>>> {
         self.op.metrics(tags, timestamp)
     }
 
@@ -216,13 +216,13 @@ impl NodeMetrics {
     fn to_value(
         &self,
         metric_name: &str,
-        tags: &mut HashMap<Cow<'static, str>, BorrowedValue<'static>>,
+        tags: &mut HashMap<Cow<'static, str>, Value<'static>>,
         timestamp: u64,
-    ) -> Result<Vec<BorrowedValue<'static>>> {
+    ) -> Result<Vec<Value<'static>>> {
         let mut res = Vec::with_capacity(self.inputs.len() + self.outputs.len());
         tags.insert("direction".into(), "input".into());
         for (k, v) in &self.inputs {
-            tags.insert("port".into(), BorrowedValue::from(k.clone()));
+            tags.insert("port".into(), Value::from(k.clone()));
             res.push(influx_value(
                 metric_name.to_string().into(),
                 tags.clone(),
@@ -232,7 +232,7 @@ impl NodeMetrics {
         }
         tags.insert("direction".into(), "output".into());
         for (k, v) in &self.outputs {
-            tags.insert("port".into(), BorrowedValue::from(k.clone()));
+            tags.insert("port".into(), Value::from(k.clone()));
             res.push(influx_value(
                 metric_name.to_string().into(),
                 tags.clone(),
@@ -488,7 +488,7 @@ impl ExecutableGraph {
     fn enqueue_metrics(
         &mut self,
         metric_name: &str,
-        mut tags: HashMap<Cow<'static, str>, BorrowedValue<'static>>,
+        mut tags: HashMap<Cow<'static, str>, Value<'static>>,
         timestamp: u64,
     ) {
         for (i, m) in self.metrics.iter().enumerate() {
@@ -588,15 +588,13 @@ impl ExecutableGraph {
 
 #[cfg(test)]
 mod test {
-    use simd_json::{Builder, Value};
-
-    use crate::op::{identity::PassthroughFactory, prelude::OUT};
-
     use super::*;
+    use crate::op::{identity::PassthroughFactory, prelude::OUT};
     use std::{
         collections::hash_map::DefaultHasher,
         hash::{Hash, Hasher},
     };
+    use tremor_script::prelude::*;
     #[test]
     fn node_conjfig_eq() {
         let n0 = NodeConfig::from_config("node", ()).unwrap();
@@ -638,7 +636,7 @@ mod test {
         assert!(n.metrics(HashMap::default(), 0).unwrap().is_empty());
     }
 
-    fn test_metric<'value>(v: &BorrowedValue<'value>, m: &str, c: u64) {
+    fn test_metric<'value>(v: &Value<'value>, m: &str, c: u64) {
         assert_eq!(v.get("measurement").unwrap(), m);
         assert!(v.get("tags").unwrap().is_object());
         assert_eq!(v.get("fields").unwrap().get("count").unwrap(), &c);
@@ -673,7 +671,7 @@ mod test {
             &mut self,
             _uid: u64,
             _port: &str,
-            _state: &mut BorrowedValue<'static>,
+            _state: &mut Value<'static>,
             event: Event,
         ) -> Result<EventAndInsights> {
             Ok(event.into())
@@ -695,9 +693,9 @@ mod test {
 
         fn metrics(
             &self,
-            _tags: HashMap<Cow<'static, str>, BorrowedValue<'static>>,
+            _tags: HashMap<Cow<'static, str>, Value<'static>>,
             _timestamp: u64,
-        ) -> Result<Vec<BorrowedValue<'static>>> {
+        ) -> Result<Vec<Value<'static>>> {
             // Make the trait signature nicer
             Ok(Vec::new())
         }
@@ -795,11 +793,11 @@ mod test {
         // Create state for all nodes
         let state = State {
             ops: vec![
-                BorrowedValue::null(),
-                BorrowedValue::null(),
-                BorrowedValue::null(),
-                BorrowedValue::null(),
-                BorrowedValue::null(),
+                Value::null(),
+                Value::null(),
+                Value::null(),
+                Value::null(),
+                Value::null(),
             ],
         };
         let mut g = ExecutableGraph {
@@ -896,12 +894,12 @@ mod test {
         // Create state for all nodes
         let state = State {
             ops: vec![
-                BorrowedValue::null(),
-                BorrowedValue::null(),
-                BorrowedValue::null(),
-                BorrowedValue::null(),
-                BorrowedValue::null(),
-                BorrowedValue::null(),
+                Value::null(),
+                Value::null(),
+                Value::null(),
+                Value::null(),
+                Value::null(),
+                Value::null(),
             ],
         };
         let mut g = ExecutableGraph {

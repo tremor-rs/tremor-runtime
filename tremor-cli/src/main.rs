@@ -29,9 +29,6 @@ extern crate serde_derive;
 #[allow(unused_extern_crates)]
 extern crate serde;
 
-extern crate serde_yaml;
-extern crate simd_json;
-
 #[macro_use]
 extern crate log;
 

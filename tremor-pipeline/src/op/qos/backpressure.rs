@@ -27,9 +27,10 @@
 
 use crate::errors::{ErrorKind, Result};
 use crate::op::prelude::*;
+use beef::Cow;
 use tremor_script::prelude::*;
 
-const OVERFLOW: Cow<'static, str> = Cow::Borrowed("overflow");
+const OVERFLOW: Cow<'static, str> = Cow::const_str("overflow");
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
@@ -193,7 +194,6 @@ impl Operator for Backpressure {
 #[cfg(test)]
 mod test {
     use super::*;
-    use simd_json::value::borrowed::Object;
 
     #[test]
     fn pass_wo_error() {

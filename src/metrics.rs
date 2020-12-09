@@ -14,8 +14,8 @@
 
 use crate::pipeline;
 use crate::url::TremorURL;
+use beef::Cow;
 use halfbrown::HashMap;
-use std::borrow::Cow;
 use tremor_pipeline::Event;
 use tremor_script::prelude::*;
 
@@ -87,11 +87,10 @@ impl RampReporter {
     #[must_use]
     fn make_event(&self, timestamp: u64, port: &'static str, count: u64) -> Event {
         let mut tags: HashMap<Cow<'static, str>, Value<'static>> = HashMap::with_capacity(2);
-        tags.insert_nocheck(Cow::Borrowed("ramp"), self.artefact_url.to_string().into());
-        tags.insert_nocheck(Cow::Borrowed("port"), port.into());
+        tags.insert_nocheck(Cow::from("ramp"), self.artefact_url.to_string().into());
+        tags.insert_nocheck(Cow::from("port"), port.into());
 
-        let value =
-            tremor_pipeline::influx_value(Cow::Borrowed("ramp_events"), tags, count, timestamp);
+        let value = tremor_pipeline::influx_value(Cow::from("ramp_events"), tags, count, timestamp);
         // full metrics payload
         // TODO update origin url
         Event {

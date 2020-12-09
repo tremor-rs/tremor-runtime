@@ -13,8 +13,8 @@
 // limitations under the License.
 
 use crate::errors::{Error, ErrorKind, Result};
-use simd_json::prelude::*;
-use simd_json::BorrowedValue as Value;
+use crate::prelude::*;
+use crate::Value;
 use std::io::prelude::*;
 
 /// Fetches a hostname with `tremor-host.local` being the default
@@ -86,7 +86,6 @@ fn sorted_serialize_<'v, W: Write>(j: &Value<'v>, w: &mut W) -> Result<()> {
 
 /// Loads an event file required for tests
 pub fn load_event_file(name: &str) -> crate::errors::Result<Vec<Value<'static>>> {
-    use simd_json::to_borrowed_value;
     use tremor_common::file as cfile;
     use xz2::read::XzDecoder;
 
@@ -104,7 +103,7 @@ pub fn load_event_file(name: &str) -> crate::errors::Result<Vec<Value<'static>>>
     }
     let mut json = Vec::new();
     for bytes in in_bytes {
-        json.push(to_borrowed_value(bytes)?.into_static())
+        json.push(tremor_value::to_value(bytes)?.into_static())
     }
     Ok(json)
 }

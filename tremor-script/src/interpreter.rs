@@ -46,10 +46,8 @@ use crate::errors::{
     error_patch_key_exists, error_patch_merge_type_conflict, error_patch_update_key_missing,
     Result,
 };
-use crate::stry;
-use crate::EventContext;
-use simd_json::borrowed::Value;
-use simd_json::prelude::*;
+use crate::prelude::*;
+use crate::{stry, EventContext, Value};
 use simd_json::StaticNode;
 use std::borrow::Borrow;
 use std::borrow::Cow;
@@ -656,32 +654,32 @@ where
 ///
 enum PreEvaluatedPatchOperation<'event, 'script> {
     Insert {
-        ident: Cow<'event, str>,
+        ident: beef::Cow<'event, str>,
         ident_expr: &'script ImutExprInt<'event>,
         value: Value<'event>,
     },
     Update {
-        ident: Cow<'event, str>,
+        ident: beef::Cow<'event, str>,
         ident_expr: &'script ImutExprInt<'event>,
         value: Value<'event>,
     },
     Upsert {
-        ident: Cow<'event, str>,
+        ident: beef::Cow<'event, str>,
         value: Value<'event>,
     },
     Erase {
-        ident: Cow<'event, str>,
+        ident: beef::Cow<'event, str>,
     },
     Copy {
-        from: Cow<'event, str>,
-        to: Cow<'event, str>,
+        from: beef::Cow<'event, str>,
+        to: beef::Cow<'event, str>,
     },
     Move {
-        from: Cow<'event, str>,
-        to: Cow<'event, str>,
+        from: beef::Cow<'event, str>,
+        to: beef::Cow<'event, str>,
     },
     Merge {
-        ident: Cow<'event, str>,
+        ident: beef::Cow<'event, str>,
         ident_expr: &'script ImutExprInt<'event>,
         merge_value: Value<'event>,
     },

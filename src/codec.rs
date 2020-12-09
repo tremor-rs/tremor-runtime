@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use crate::errors::Result;
-use simd_json::BorrowedValue;
 use tremor_script::Value;
 pub(crate) mod binflux;
 pub(crate) mod influx;
@@ -37,8 +36,8 @@ const MIME_TYPES: [&str; 7] = [
 mod prelude {
     pub use super::Codec;
     pub use crate::errors::*;
-    pub use simd_json::prelude::*;
     pub use tremor_script::prelude::*;
+    pub use tremor_script::{Object, Value};
 }
 
 /// The codec trait, to encode and decode data
@@ -71,13 +70,13 @@ pub trait Codec: Send + Sync {
     ///
     /// # Errors
     ///  * If the encoding fails
-    fn encode(&self, data: &BorrowedValue) -> Result<Vec<u8>>;
+    fn encode(&self, data: &Value) -> Result<Vec<u8>>;
     /// Encodes into an existing buffer
     ///
     /// # Errors
     ///  * when we can't write encode to the given vector
     #[cfg(not(tarpaulin_include))]
-    fn encode_into(&self, data: &BorrowedValue, dst: &mut Vec<u8>) -> Result<()> {
+    fn encode_into(&self, data: &Value, dst: &mut Vec<u8>) -> Result<()> {
         let mut res = self.encode(data)?;
         std::mem::swap(&mut res, dst);
         Ok(())

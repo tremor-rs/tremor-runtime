@@ -17,6 +17,6 @@ pub use crate::ctx::{EventContext, EventOriginUri};
 pub use crate::errors::CompilerError;
 pub use crate::interpreter::{AggrType, ExecOpts};
 pub use crate::Return;
+pub use crate::{Object, Value};
 pub use crate::{FALSE, NULL, TRUE};
 pub use simd_json::prelude::*;
-pub use simd_json::value::borrowed::{Object, Value};

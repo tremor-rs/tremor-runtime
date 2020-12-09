@@ -63,7 +63,7 @@ impl Codec for Influx {
         })
     }
 
-    fn encode(&self, data: &simd_json::BorrowedValue) -> Result<Vec<u8>> {
+    fn encode(&self, data: &Value) -> Result<Vec<u8>> {
         Ok(influx::encode(data)?)
     }
 
@@ -77,8 +77,7 @@ mod tests {
     use super::*;
     use crate::codec::binflux::BInflux;
     use pretty_assertions::assert_eq;
-    use simd_json::prelude::*;
-    use simd_json::{json, value::borrowed::Value};
+    use simd_json::json;
     use tremor_influx as influx;
 
     #[test]

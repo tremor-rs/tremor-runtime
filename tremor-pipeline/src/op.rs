@@ -25,9 +25,9 @@ pub mod trickle;
 use self::prelude::OUT;
 use super::{Event, NodeConfig};
 use crate::errors::Result;
+use beef::Cow;
 use halfbrown::HashMap;
 use regex::Regex;
-use std::borrow::Cow;
 use tremor_script::Value;
 
 lazy_static::lazy_static! {
@@ -48,8 +48,8 @@ pub struct EventAndInsights {
     pub insights: Vec<Event>,
 }
 
-impl From<Vec<(Cow<'static, str>, Event)>> for EventAndInsights {
-    fn from(events: Vec<(Cow<'static, str>, Event)>) -> Self {
+impl From<Vec<(beef::Cow<'static, str>, Event)>> for EventAndInsights {
+    fn from(events: Vec<(beef::Cow<'static, str>, Event)>) -> Self {
         Self {
             events,
             ..Self::default()

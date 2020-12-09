@@ -67,12 +67,17 @@ use crate::{
     influx_value,
 };
 use crate::{Event, Operator};
+use beef::Cow;
 use halfbrown::HashMap;
 use lru::LruCache;
-use simd_json::prelude::*;
-use std::borrow::Cow;
 use tremor_script::prelude::*;
 use window::TimeWindow;
+
+const BUCKETING: Cow<'static, str> = Cow::const_str("bucketing");
+const CLASS: Cow<'static, str> = Cow::const_str("class");
+const ACTION: Cow<'static, str> = Cow::const_str("action");
+const PASS: Cow<'static, str> = Cow::const_str("pass");
+const OVERFLOW: Cow<'static, str> = Cow::const_str("overflow");
 
 op!(BucketGrouperFactory(_uid, node) {
     if node.config.is_none() {
@@ -204,12 +209,6 @@ impl Operator for Grouper {
         mut tags: HashMap<Cow<'static, str>, Value<'static>>,
         timestamp: u64,
     ) -> Result<Vec<Value<'static>>> {
-        const BUCKETING: Cow<'static, str> = Cow::Borrowed("bucketing");
-        const CLASS: Cow<'static, str> = Cow::Borrowed("class");
-        const ACTION: Cow<'static, str> = Cow::Borrowed("action");
-        const PASS: Cow<'static, str> = Cow::Borrowed("pass");
-        const OVERFLOW: Cow<'static, str> = Cow::Borrowed("overflow");
-
         let mut res = Vec::with_capacity(self.buckets.len() * 2);
         for (class, b) in &self.buckets {
             tags.insert(CLASS, class.clone().into());

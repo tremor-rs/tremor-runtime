@@ -24,20 +24,21 @@ use crate::impl_expr2;
 use crate::interpreter::{exec_binary, exec_unary, AggrType, Cont, Env, ExecOpts, LocalStack};
 pub use crate::lexer::CompilationUnit;
 use crate::pos::{Location, Range};
+use crate::prelude::*;
 use crate::registry::FResult;
 use crate::registry::{
     Aggr as AggrRegistry, CustomFn, Registry, TremorAggrFnWrapper, TremorFnWrapper,
 };
 use crate::script::Return;
-use crate::stry;
-use crate::{tilde::Extractor, EventContext};
+use crate::KnownKey;
+use crate::{stry, tilde::Extractor, EventContext, Value};
 pub use base_expr::BaseExpr;
+use beef::Cow;
 use halfbrown::HashMap;
 pub use query::*;
 use raw::{reduce2, NO_AGGRS, NO_CONSTS};
 use serde::Serialize;
-use simd_json::{borrowed, prelude::*, BorrowedValue as Value, KnownKey};
-use std::borrow::{Borrow, Cow};
+use std::borrow::Borrow;
 use std::mem;
 use upable::Upable;
 
@@ -552,7 +553,7 @@ pub enum LexicalUnit<'script> {
 pub struct Ident<'script> {
     pub(crate) mid: usize,
     /// the text of the ident
-    pub id: Cow<'script, str>,
+    pub id: beef::Cow<'script, str>,
 }
 impl_expr2!(Ident);
 
@@ -599,7 +600,7 @@ impl<'script> Record<'script> {
             .iter()
             .all(|f| is_lit(&f.name) && is_lit(&f.value))
         {
-            let obj: Result<borrowed::Object> = self
+            let obj: Result<crate::Object> = self
                 .fields
                 .into_iter()
                 .map(|f| {
@@ -1737,12 +1738,12 @@ fn shadow_name(id: usize) -> String {
 
 #[cfg(test)]
 mod test {
-    use simd_json::BorrowedValue;
+    use crate::prelude::*;
 
     fn v(s: &'static str) -> super::ImutExprInt<'static> {
         super::ImutExprInt::Literal(super::Literal {
             mid: 0,
-            value: BorrowedValue::from(s),
+            value: Value::from(s),
         })
     }
     #[test]
@@ -1767,8 +1768,7 @@ mod test {
         assert_eq!(r.get("nots"), None);
 
         assert_eq!(
-            r.get_literal("badger")
-                .and_then(simd_json::prelude::ValueTrait::as_str),
+            r.get_literal("badger").and_then(ValueTrait::as_str),
             Some("snot")
         );
         assert_eq!(r.get("adgerb"), None);

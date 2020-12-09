@@ -13,10 +13,9 @@
 // limitations under the License.
 
 use crate::{CBAction, EventId, OpMeta, SignalKind};
-use simd_json::prelude::*;
-use simd_json::BorrowedValue;
 use std::mem::swap;
-use tremor_script::{EventOriginUri, LineValue};
+use tremor_script::prelude::*;
+use tremor_script::{EventOriginUri, LineValue, Value};
 
 /// A tremor event
 #[derive(
@@ -204,7 +203,7 @@ pub struct ValueMetaIter<'value> {
 
 // TODO: descend recursively into batched events in batched events ...
 impl<'value> Iterator for ValueMetaIter<'value> {
-    type Item = (&'value BorrowedValue<'value>, &'value BorrowedValue<'value>);
+    type Item = (&'value Value<'value>, &'value Value<'value>);
     fn next(&mut self) -> Option<Self::Item> {
         if self.event.is_batch {
             let r = self
@@ -247,7 +246,7 @@ pub struct ValueIter<'value> {
 }
 
 impl<'value> Iterator for ValueIter<'value> {
-    type Item = &'value BorrowedValue<'value>;
+    type Item = &'value Value<'value>;
     fn next(&mut self) -> Option<Self::Item> {
         if self.event.is_batch {
             let r = self
@@ -274,13 +273,12 @@ impl<'value> Iterator for ValueIter<'value> {
 mod test {
     use super::*;
     use crate::errors::Result;
-    use simd_json::{value::borrowed::Object, StaticNode};
-    use tremor_script::ValueAndMeta;
+    use tremor_script::{Object, ValueAndMeta};
 
     #[test]
     fn value_iters() {
         let mut b = Event {
-            data: (BorrowedValue::array(), 2).into(),
+            data: (Value::array(), 2).into(),
             is_batch: true,
             ..Event::default()
         };
@@ -307,16 +305,16 @@ mod test {
                 let (value, meta) = other.into_parts();
                 data.insert_nocheck("value".into(), value);
                 data.insert_nocheck("meta".into(), meta);
-                e.insert_nocheck("data".into(), BorrowedValue::from(data));
+                e.insert_nocheck("data".into(), Value::from(data));
                 //  "ingest_ns":1,
                 e.insert_nocheck("ingest_ns".into(), 1.into());
                 //  "kind":null,
                 // kind is always null on events
-                e.insert_nocheck("kind".into(), BorrowedValue::null());
+                e.insert_nocheck("kind".into(), Value::null());
                 //  "is_batch":false
                 e.insert_nocheck("is_batch".into(), false.into());
                 // }
-                a.push(BorrowedValue::from(e))
+                a.push(Value::from(e))
             };
             Ok(())
         };
@@ -374,23 +372,19 @@ mod test {
         assert_eq!(1, e.len());
         // batched event with 2 elements
         e.is_batch = true;
-        let mut value = BorrowedValue::array_with_capacity(2);
-        value.push(BorrowedValue::Static(StaticNode::Bool(true)))?; // dummy events
-        value.push(BorrowedValue::Static(StaticNode::Bool(false)))?;
-        e.data = (value, BorrowedValue::object_with_capacity(0)).into();
+        let mut value = Value::array_with_capacity(2);
+        value.push(Value::from(true))?; // dummy events
+        value.push(Value::from(false))?;
+        e.data = (value, Value::object_with_capacity(0)).into();
         assert_eq!(2, e.len());
 
         // batched event with non-array value
-        e.data = (
-            BorrowedValue::null(),
-            BorrowedValue::object_with_capacity(0),
-        )
-            .into();
+        e.data = (Value::null(), Value::object_with_capacity(0)).into();
         assert_eq!(0, e.len());
         // batched array with empty array value
         e.data = (
-            BorrowedValue::array_with_capacity(0),
-            BorrowedValue::object_with_capacity(0),
+            Value::array_with_capacity(0),
+            Value::object_with_capacity(0),
         )
             .into();
         assert_eq!(0, e.len());
@@ -404,24 +398,20 @@ mod test {
         assert_eq!(false, e.is_empty());
 
         e.is_batch = true;
+        e.data = (Value::null(), Value::object_with_capacity(0)).into();
+        assert_eq!(true, e.is_empty());
+
         e.data = (
-            BorrowedValue::null(),
-            BorrowedValue::object_with_capacity(0),
+            Value::array_with_capacity(0),
+            Value::object_with_capacity(0),
         )
             .into();
         assert_eq!(true, e.is_empty());
 
-        e.data = (
-            BorrowedValue::array_with_capacity(0),
-            BorrowedValue::object_with_capacity(0),
-        )
-            .into();
-        assert_eq!(true, e.is_empty());
-
-        let mut value = BorrowedValue::array_with_capacity(2);
-        value.push(BorrowedValue::Static(StaticNode::Bool(true)))?; // dummy events
-        value.push(BorrowedValue::Static(StaticNode::Bool(false)))?;
-        e.data = (value, BorrowedValue::object_with_capacity(0)).into();
+        let mut value = Value::array_with_capacity(2);
+        value.push(Value::from(true))?; // dummy events
+        value.push(Value::from(false))?;
+        e.data = (value, Value::object_with_capacity(0)).into();
         assert_eq!(false, e.is_empty());
         Ok(())
     }

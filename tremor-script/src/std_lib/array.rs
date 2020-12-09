@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::prelude::*;
 use crate::registry::Registry;
 use crate::tremor_const_fn;
-use simd_json::{prelude::*, BorrowedValue as Value};
+use crate::Value;
 
 pub fn load(registry: &mut Registry) {
     registry
@@ -98,9 +99,8 @@ fn flatten_value<'event>(v: &Value<'event>) -> Vec<Value<'event>> {
 
 #[cfg(test)]
 mod test {
+    use crate::prelude::*;
     use crate::registry::fun;
-    use simd_json::prelude::*;
-    use simd_json::BorrowedValue as Value;
 
     #[test]
     fn len() {

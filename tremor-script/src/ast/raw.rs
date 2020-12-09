@@ -28,14 +28,15 @@ use super::{
 use crate::errors::{error_generic, error_missing_effector, error_oops, ErrorKind, Result};
 use crate::impl_expr;
 use crate::pos::{Location, Range};
+use crate::prelude::*;
 use crate::registry::CustomFn;
 use crate::tilde::Extractor;
+use crate::{KnownKey, Value};
 pub use base_expr::BaseExpr;
+use beef::Cow;
 use halfbrown::HashMap;
 pub use query::*;
 use serde::Serialize;
-use simd_json::{prelude::*, BorrowedValue as Value, KnownKey};
-use std::borrow::Cow;
 
 pub(crate) const NO_AGGRS: [InvokeAggrFn<'static>; 0] = [];
 pub(crate) const NO_CONSTS: Vec<Value<'static>> = Vec::new();
@@ -230,7 +231,7 @@ impl<'script> ModuleRaw<'script> {
 pub struct IdentRaw<'script> {
     pub start: Location,
     pub end: Location,
-    pub id: Cow<'script, str>,
+    pub id: beef::Cow<'script, str>,
 }
 impl_expr!(IdentRaw);
 

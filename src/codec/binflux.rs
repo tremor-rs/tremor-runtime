@@ -13,12 +13,12 @@
 // limitations under the License.
 
 use super::prelude::*;
+use beef::Cow;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use simd_json::borrowed::Object;
-use std::borrow::Cow;
 use std::convert::TryFrom;
 use std::io::{Cursor, Write};
 use std::str;
+use tremor_script::Object;
 
 const TYPE_I64: u8 = 0;
 const TYPE_F64: u8 = 1;
@@ -30,7 +30,7 @@ const TYPE_FALSE: u8 = 4;
 pub struct BInflux {}
 
 impl BInflux {
-    pub fn encode(v: &simd_json::BorrowedValue) -> Result<Vec<u8>> {
+    pub fn encode(v: &Value) -> Result<Vec<u8>> {
         fn write_str<W: Write>(w: &mut W, s: &str) -> Result<()> {
             w.write_u16::<BigEndian>(
                 u16::try_from(s.len())
@@ -178,7 +178,7 @@ impl Codec for BInflux {
         Self::decode(data).map(Some)
     }
 
-    fn encode(&self, data: &simd_json::BorrowedValue) -> Result<Vec<u8>> {
+    fn encode(&self, data: &Value) -> Result<Vec<u8>> {
         Self::encode(data)
     }
 
@@ -190,11 +190,9 @@ impl Codec for BInflux {
 #[cfg(test)]
 mod test {
     use super::*;
-    use simd_json::prelude::*;
-    use simd_json::BorrowedValue;
     #[test]
     fn errors() {
-        let mut o = BorrowedValue::object();
+        let mut o = Value::object();
         let c = BInflux::default();
         assert_eq!(
             c.encode(&o).err().unwrap().to_string(),
@@ -207,7 +205,7 @@ mod test {
             "Invalid BInflux Line Protocol data: timestamp missing"
         );
         o.insert("timestamp", 42).unwrap();
-        let mut fields = BorrowedValue::object();
+        let mut fields = Value::object();
         fields.insert("snot", vec![1]).unwrap();
 
         o.insert("fields", fields).unwrap();

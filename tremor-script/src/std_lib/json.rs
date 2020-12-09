@@ -14,7 +14,7 @@
 
 use crate::registry::Registry;
 use crate::tremor_const_fn;
-use simd_json::to_owned_value;
+use tremor_value::to_value;
 
 pub fn load(registry: &mut Registry) {
     registry
@@ -25,7 +25,7 @@ pub fn load(registry: &mut Registry) {
             // Screw you rust
             let mut bytes = s.into_bytes();
             // We need to do this since otherwise we depend on the clone of s
-            to_owned_value(bytes.as_mut_slice()).map_err(to_runtime_error).map(Value::from)
+            to_value(bytes.as_mut_slice()).map_err(to_runtime_error).map(Value::into_static)
         }))
         .insert(tremor_const_fn! (json::encode(_context, _input) {
             simd_json::to_string(_input).map(Value::from).map_err(to_runtime_error)
@@ -38,7 +38,7 @@ pub fn load(registry: &mut Registry) {
 #[cfg(test)]
 mod test {
     use crate::registry::fun;
-    use simd_json::BorrowedValue as Value;
+    use crate::Value;
 
     #[test]
     fn decode() {

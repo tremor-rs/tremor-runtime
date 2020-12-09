@@ -15,28 +15,26 @@
 use crate::registry::Registry;
 use crate::tremor_fn;
 use percent_encoding::{percent_decode_str, utf8_percent_encode, NON_ALPHANUMERIC};
-use simd_json::BorrowedValue;
 
 pub fn load(registry: &mut Registry) {
     registry
         .insert(tremor_fn! (url::decode(ctx, s: String) {
             let ds = percent_decode_str(&s).decode_utf8();
             if let Ok(decoded) = ds {
-                Ok(BorrowedValue::from(decoded.to_string()))
+                Ok(Value::from(decoded.to_string()))
             } else {
                 Err(to_runtime_error(format!("Could not urldecode value: {}", s)))
             }
         }))
         .insert(tremor_fn! (url::encode(ctx, s: String) {
-            Ok(BorrowedValue::from(utf8_percent_encode(&s, NON_ALPHANUMERIC).to_string()))
+            Ok(Value::from(utf8_percent_encode(&s, NON_ALPHANUMERIC).to_string()))
         }));
 }
 
 #[cfg(test)]
 mod test {
     use crate::registry::fun;
-    use simd_json::BorrowedValue as Value;
-    //    use std::borrow::Cow;
+    use crate::Value;
 
     macro_rules! assert_val {
         ($e:expr, $r:expr) => {

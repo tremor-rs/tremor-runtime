@@ -16,11 +16,12 @@ rustc-args = [ "-C target-cpu=native" ]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-simd-json = "0.3"
 lexical = "5.2.0"
+value-trait = "0.1"
 
 
 [dev-dependencies]
+simd-json = "0.3"
 pretty_assertions = "0.6"
 criterion = "0.3"
 snmalloc-rs = "0.2"

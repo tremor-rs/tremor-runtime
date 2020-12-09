@@ -70,7 +70,7 @@ impl Trickle {
                 // Set params from decl as meta vars
                 for (name, value) in p {
                     // We could clone here since we bind Script to defn_rentwrapped.stmt's lifetime
-                    params.insert(Cow::Owned(name.clone()), value.clone());
+                    params.insert(Cow::from(name.clone()), value.clone());
                 }
                 // Set params from instance as meta vars ( eg: upsert ~= override + add )
                 if let tremor_script::ast::query::Stmt::Script(instance) = node_rentwrapped.suffix()
@@ -78,7 +78,7 @@ impl Trickle {
                     if let Some(map) = &instance.params {
                         for (name, value) in map {
                             // We can not clone here since we do not bind Script to node_rentwrapped's lifetime
-                            params.insert(Cow::Owned(name.clone()), value.clone_static());
+                            params.insert(Cow::from(name.clone()), value.clone_static());
                         }
                     }
                 } else {
@@ -165,13 +165,11 @@ impl Operator for Trickle {
         event.origin_uri = context.origin_uri;
 
         match value {
-            Ok(Return::EmitEvent { port }) => {
-                Ok(vec![(port.map_or(OUT, Cow::Owned), event)].into())
-            }
+            Ok(Return::EmitEvent { port }) => Ok(vec![(port.map_or(OUT, Cow::from), event)].into()),
 
             Ok(Return::Emit { value, port }) => {
                 *unwind_event = value;
-                Ok(vec![(port.map_or(OUT, Cow::Owned), event)].into())
+                Ok(vec![(port.map_or(OUT, Cow::from), event)].into())
             }
             Ok(Return::Drop) => Ok(EventAndInsights::default()),
             Err(e) => {

@@ -13,8 +13,8 @@
 // limitations under the License.
 
 use crate::op::prelude::*;
+use beef::Cow;
 use tremor_script::prelude::*;
-
 #[derive(Debug)]
 pub(crate) struct TrickleOperator {
     pub id: String,

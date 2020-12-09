@@ -43,7 +43,7 @@ impl Codec for MsgPack {
             .map_err(|e| e.into())
     }
 
-    fn encode(&self, data: &simd_json::BorrowedValue) -> Result<Vec<u8>> {
+    fn encode(&self, data: &Value) -> Result<Vec<u8>> {
         Ok(rmps::to_vec(&data)?)
     }
 
@@ -57,13 +57,12 @@ impl Codec for MsgPack {
 mod test {
     use super::*;
     use simd_json::json;
-    use simd_json::BorrowedValue;
     use simd_json::OwnedValue;
 
     #[test]
     fn test_msgpack_codec() -> Result<()> {
         let seed: OwnedValue = json!({ "snot": "badger" });
-        let seed: BorrowedValue = seed.into();
+        let seed: Value = seed.into();
 
         let mut codec = MsgPack {};
         let mut as_raw = codec.encode(&seed)?;

@@ -28,7 +28,6 @@ use halfbrown::HashMap;
 use http_types::headers::{CONTENT_ENCODING, CONTENT_TYPE};
 use libflate::{finish, gzip};
 use log::debug;
-use simd_json::BorrowedValue;
 
 use crate::sink::prelude::*;
 
@@ -231,14 +230,14 @@ impl NewRelic {
         }
     }
 
-    fn value_to_newrelic_log<'a>(value: &'a BorrowedValue<'_>) -> Result<NewRelicLog<'a>> {
+    fn value_to_newrelic_log<'a>(value: &'a Value<'_>) -> Result<NewRelicLog<'a>> {
         let mut new_value = value.clone();
         let timestamp = new_value
             .remove("timestamp")
             .ok()
             .flatten()
             .as_ref()
-            .and_then(BorrowedValue::as_i64)
+            .and_then(Value::as_i64)
             .unwrap_or_else(|| Utc::now().timestamp_millis());
 
         let message = new_value
@@ -246,7 +245,7 @@ impl NewRelic {
             .ok()
             .flatten()
             .as_ref()
-            .and_then(BorrowedValue::as_str)
+            .and_then(Value::as_str)
             .unwrap_or("")
             .to_string();
 
@@ -267,7 +266,7 @@ struct NewRelicPayload<'a> {
 struct NewRelicLog<'a> {
     timestamp: i64,
     message: String,
-    attributes: Option<BorrowedValue<'a>>,
+    attributes: Option<Value<'a>>,
 }
 
 #[cfg(test)]

@@ -25,7 +25,6 @@ use http_types::{headers::HeaderValue, Method};
 use serde::de::{self, MapAccess, Visitor};
 use serde::{Deserialize, Deserializer};
 use std::borrow::Borrow;
-use std::borrow::Cow;
 use std::fmt;
 use std::marker::PhantomData;
 use std::str::FromStr;
@@ -34,6 +33,7 @@ use std::sync::Arc;
 use std::time::Instant;
 use surf::{Body, Client, Request, Response};
 use tremor_pipeline::{EventId, EventIdGenerator, OpMeta};
+use tremor_script::Object;
 
 /// custom Url struct for parsing a url
 #[derive(Clone, Debug, Deserialize, Default, PartialEq)]
@@ -260,7 +260,7 @@ enum CodecTaskInMsg {
     ToEvent {
         id: EventId,
         origin_uri: Box<EventOriginUri>, // box to avoid becoming the struct too big
-        op_meta: OpMeta,
+        op_meta: Box<OpMeta>,
         response: Response,
         duration: u64,
     },
@@ -363,7 +363,7 @@ impl Sink for Rest {
                                     .send(CodecTaskInMsg::ToEvent {
                                         id,
                                         origin_uri: Box::new(event_origin_uri),
-                                        op_meta,
+                                        op_meta: Box::new(op_meta),
                                         response,
                                         duration,
                                     })
@@ -555,7 +555,7 @@ async fn codec_task(
                 // send CB insight -> handle status >= 400
                 let status = response.status();
 
-                let mut meta = simd_json::borrowed::Object::with_capacity(1);
+                let mut meta = Object::with_capacity(1);
                 let mut cb = if status.is_client_error() || status.is_server_error() {
                     // when the offramp is linked to pipeline, we want to send
                     // the response back and not consume it yet (or log about it)
@@ -630,7 +630,7 @@ async fn codec_task(
                 if let Err(e) = reply_tx
                     .send(sink::Reply::Insight(Event {
                         id: id.clone(),
-                        op_meta,
+                        op_meta: *op_meta,
                         data: (Value::null(), Value::from(meta)).into(),
                         cb,
                         ingest_ns: nanotime(),
@@ -687,7 +687,7 @@ fn build_request(
     let mut body: Vec<u8> = vec![];
     let mut method = None;
     let mut endpoint = None;
-    let mut headers: Vec<(&Cow<str>, Vec<HeaderValue>)> = Vec::with_capacity(8);
+    let mut headers: Vec<(&beef::Cow<str>, Vec<HeaderValue>)> = Vec::with_capacity(8);
     let mut codec_in_use = None;
     for (data, meta) in event.value_meta_iter() {
         if let Some(request_meta) = meta.get("request") {
@@ -895,11 +895,11 @@ fn create_error_response(
     origin_uri: EventOriginUri,
     e: &Error,
 ) -> Event {
-    let mut error_data = simd_json::value::borrowed::Object::with_capacity(2);
-    let mut meta = simd_json::value::borrowed::Object::with_capacity(2);
-    let mut response_meta = simd_json::value::borrowed::Object::with_capacity(2);
+    let mut error_data = Object::with_capacity(2);
+    let mut meta = Object::with_capacity(2);
+    let mut response_meta = Object::with_capacity(2);
     response_meta.insert_nocheck("status".into(), Value::from(status));
-    let mut headers = simd_json::value::borrowed::Object::with_capacity(2);
+    let mut headers = Object::with_capacity(2);
     headers.insert_nocheck("Content-Type".into(), Value::from("application/json"));
     headers.insert_nocheck("Server".into(), Value::from("Tremor"));
     response_meta.insert_nocheck("headers".into(), Value::from(headers));
@@ -1193,7 +1193,7 @@ mod test {
             expected_data.insert("foo", true)?;
             let data_parts = event.data.parts();
             assert_eq!(&mut expected_data, data_parts.0);
-            let mut expected_meta = json!({
+            let mut expected_meta: Value = json!({
                 "response": {
                     "headers": {
                         "multiple": ["first", "second"],
@@ -1201,7 +1201,8 @@ mod test {
                         "content-type": ["application/json"]
                     }
                 }
-            });
+            })
+            .into();
             if let Some(response) = expected_meta.get_mut("response") {
                 response.insert("status", 200_u64)?;
             }

@@ -16,8 +16,6 @@
 use crate::source::prelude::*;
 use chrono::{DateTime, Utc};
 use cron::Schedule;
-use simd_json::prelude::*;
-use simd_json::BorrowedValue;
 use std::clone::Clone;
 use std::cmp::Reverse;
 use std::cmp::{Eq, Ord, Ordering, PartialEq, PartialOrd};
@@ -26,6 +24,7 @@ use std::convert::TryFrom;
 use std::fmt;
 use std::str::FromStr;
 use tremor_common::time::nanotime;
+use tremor_script::prelude::*;
 
 #[derive(Deserialize, Clone)]
 pub struct CronEntry {
@@ -39,16 +38,17 @@ pub struct CronEntryInt {
     pub name: String,
     pub expr: String,
     pub sched: Schedule,
-    pub payload: Option<BorrowedValue<'static>>,
+    pub payload: Option<Value<'static>>,
 }
 
 impl TryFrom<CronEntry> for CronEntryInt {
     type Error = crate::errors::Error;
     fn try_from(entry: CronEntry) -> Result<Self> {
-        let payload = if let Some(payload) = entry.payload {
-            let mut payload = simd_json::to_vec(&payload)?;
-            let payload = simd_json::to_borrowed_value(&mut payload)?;
-            Some(payload.into_static())
+        let payload = if let Some(yaml_payload) = entry.payload {
+            // We use this to translate a yaml value (payload in) to tremor value (payload out)
+            let mut payload = simd_json::to_vec(&yaml_payload)?;
+            let tremor_payload = tremor_value::to_value(&mut payload)?;
+            Some(tremor_payload.into_static())
         } else {
             None
         };
@@ -252,9 +252,9 @@ impl ChronomicQueue {
         }
     }
     #[cfg(test)]
-    pub fn drain(&mut self) -> Vec<(String, Option<BorrowedValue<'static>>)> {
+    pub fn drain(&mut self) -> Vec<(String, Option<Value<'static>>)> {
         let due = self.tpq.drain();
-        let mut trigger: Vec<(String, Option<BorrowedValue<'static>>)> = vec![];
+        let mut trigger: Vec<(String, Option<Value<'static>>)> = vec![];
         for ti in &due {
             // Enqueue next scheduled event if any
             self.enqueue(&ti.what);
@@ -262,7 +262,7 @@ impl ChronomicQueue {
         }
         trigger
     }
-    pub fn next(&mut self) -> Option<(String, Option<BorrowedValue<'static>>)> {
+    pub fn next(&mut self) -> Option<(String, Option<Value<'static>>)> {
         self.tpq.pop().map(|ti| {
             self.enqueue(&ti.what);
             (ti.what.name, ti.what.payload)
@@ -281,11 +281,11 @@ impl Source for Crononome {
             let mut origin_uri = self.origin_uri.clone();
             origin_uri.path.push(trigger.0.clone());
 
-            let mut data: BorrowedValue<'static> = BorrowedValue::object_with_capacity(4);
+            let mut data: Value<'static> = Value::object_with_capacity(4);
             data.insert("onramp", "crononome")?;
             data.insert("ingest_ns", nanotime())?;
             data.insert("id", id)?;
-            let mut tr: BorrowedValue<'static> = BorrowedValue::object_with_capacity(2);
+            let mut tr: Value<'static> = Value::object_with_capacity(2);
             tr.insert("name", trigger.0)?;
             if let Some(payload) = trigger.1 {
                 tr.insert("payload", payload)?;

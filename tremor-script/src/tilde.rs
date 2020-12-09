@@ -25,23 +25,21 @@
 //  '{blarg' -> json|| =>
 use halfbrown::{hashmap, HashMap};
 
-use crate::datetime;
-use crate::grok::Pattern as GrokPattern;
-use crate::EventContext;
+use crate::prelude::*;
+use crate::{datetime, grok::Pattern as GrokPattern, EventContext, Object, Value};
+use beef::Cow;
 use cidr_utils::{
     cidr::{IpCidr, Ipv4Cidr},
     utils::IpCidrCombiner,
 };
 use dissect::Pattern;
 use regex::Regex;
-use simd_json::borrowed::{Object, Value};
-use simd_json::prelude::*;
 use std::fmt;
+use std::hash::BuildHasherDefault;
 use std::iter::{Iterator, Peekable};
 use std::net::{IpAddr, Ipv4Addr};
 use std::slice::Iter;
 use std::str::FromStr;
-use std::{borrow::Cow, hash::BuildHasherDefault};
 use tremor_influx as influx;
 use tremor_kv as kv;
 
@@ -362,14 +360,14 @@ impl Extractor {
                         if !result_needed {
                             return Ok(Value::null());
                         }
-                        let matches: HashMap<std::borrow::Cow<str>, Value> = re
+                        let matches: HashMap<beef::Cow<str>, Value> = re
                             .capture_names()
                             .flatten()
                             .filter_map(|n| {
                                 Some((n.into(), Value::from(caps.name(n)?.as_str().to_string())))
                             })
                             .collect();
-                        Ok(Value::from(matches.clone()))
+                        Ok(Value::from(matches))
                     } else {
                         Err(ExtractorError {
                             msg: "regular expression didn't match'".into(),
@@ -443,14 +441,15 @@ impl Extractor {
                     let mut s = s.as_bytes().to_vec();
                     // We will never use s afterwards so it's OK to destroy it's content
                     let encoded = s.as_mut_slice();
-                    let decoded =
-                        simd_json::to_owned_value(encoded).map_err(|e| ExtractorError {
+                    let decoded = tremor_value::to_value(encoded)
+                        .map_err(|e| ExtractorError {
                             msg: format!("Error in decoding to a json object: {}", e),
-                        })?;
+                        })?
+                        .into_static();
                     if !result_needed {
                         return Ok(Value::null());
                     }
-                    Ok(decoded.into())
+                    Ok(decoded)
                 }
                 Self::Cidr {
                     range: Some(combiner),
@@ -486,7 +485,15 @@ impl Extractor {
                             msg: "No match".into(),
                         })
                     },
-                    |o| Ok(Value::from(o)),
+                    |o| {
+                        Ok(o.into_iter()
+                            .map(|(k, v)| {
+                                let v: simd_json::BorrowedValue<'static> = v.into_static();
+                                let v: Value<'static> = Value::from(v);
+                                (beef::Cow::from(k.to_string()), v)
+                            })
+                            .collect())
+                    },
                 ),
                 Self::Grok {
                     compiled: ref pattern,
@@ -496,7 +503,7 @@ impl Extractor {
                     if !result_needed {
                         return Ok(Value::null());
                     };
-                    Ok(o.into())
+                    Ok(o)
                 }
                 Self::Influx => match influx::decode::<'influx, Value<'influx>>(s, ctx.ingest_ns())
                 {
@@ -599,8 +606,9 @@ impl<'cidr> From<Cidr>
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::Value;
     use halfbrown::hashmap;
-    use simd_json::{borrowed::Value, json};
+    use simd_json::json;
     #[test]
     fn test_reg_extractor() {
         let ex = Extractor::new("rerg", "(?P<key>[^=]+)=(?P<val>[^&]+)&").expect("bad extractor");
