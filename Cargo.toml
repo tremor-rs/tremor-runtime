@@ -31,7 +31,7 @@ async-channel = "1"
 async-compat = "0.1"
 async-compression = {version = "0.3", features = ["xz", "futures-bufread", "stream"]}
 async-io = "1.3"
-async-std = {version = "1.7.0", features = ["unstable", "attributes", "tokio03"]}
+async-std = {version = "1.8.0", features = ["unstable", "attributes", "tokio03"]}
 async-trait = "0.1"
 async-tungstenite = {version = "0.10.0", features = ["async-std-runtime"]}
 base64 = "0.13"
