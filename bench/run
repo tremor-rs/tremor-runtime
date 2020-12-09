@@ -23,7 +23,7 @@ else
   TARGET_ROOT=target
   if [ ! -z $TREMOR_TARGET ]
   then
-    TARGET_ROOT="target/${TREMOR_TARGET}"
+    TARGET_ROOT="${TREMOR_TARGET}"
   fi
 fi
 
