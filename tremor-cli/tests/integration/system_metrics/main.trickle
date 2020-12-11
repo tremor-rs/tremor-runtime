@@ -1,0 +1,20 @@
+#!config metrics_interval_s = 3
+
+define script process
+script
+  let event.ingest_ns = null; # for testing
+  match event.id of
+    # 7th event from metronome
+    case 6 => emit {"exit": 0, "delay": 100} => "done"
+    default => event
+  end
+end;
+
+create script process;
+
+select event from in into process;
+select event from process into out;
+select event from process/err into err;
+
+select event from process/done into out/done;
+#select { "exit": 0, "delay": 100 } from in where event.done into out/done;

@@ -1,0 +1,27 @@
+define script process
+script
+  let event.timestamp = null; # for testing
+
+  let port = match event.measurement of
+    case "events" => "pipeline"
+    case "ramp_events" =>
+      match event.tags.ramp of
+        case "tremor://localhost/onramp/in/1/out" => "onramp"
+        case "tremor://localhost/offramp/out/1/in" => "offramp"
+        default => "out"
+      end
+    default => "out"
+  end;
+
+  emit event => "{port}";
+end;
+
+create script process;
+
+select event from in into process;
+
+select event from process/pipeline into out/pipeline;
+select event from process/onramp into out/onramp;
+select event from process/offramp into out/offramp;
+
+select event from process/err into err;

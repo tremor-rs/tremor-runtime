@@ -1,0 +1,11 @@
+status: 0
+name: Output of tremor's system::metrics pipeline
+asserts:
+  - source: metrics_pipeline.log
+    equals_file: "expected_metrics_pipeline.json"
+  - source: metrics_onramp.log
+    equals_file: "expected_metrics_onramp.json"
+  - source: metrics_offramp.log
+    equals_file: "expected_metrics_offramp.json"
+  - source: events.log
+    equals_file: "expected_events.json"
