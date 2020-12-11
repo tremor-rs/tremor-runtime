@@ -1,0 +1,52 @@
+onramp:
+  - id: in
+    metrics_interval_s: 3
+    type: metronome
+    config:
+      interval: 1000
+
+offramp:
+  - id: out
+    metrics_interval_s: 3
+    type: file
+    config:
+      file: "events.log"
+
+  - id: metrics_pipeline
+    type: file
+    config:
+      file: "metrics_pipeline.log"
+
+  - id: metrics_onramp
+    type: file
+    config:
+      file: "metrics_onramp.log"
+
+  - id: metrics_offramp
+    type: file
+    config:
+      file: "metrics_offramp.log"
+
+  - id: exit
+    type: exit
+
+binding:
+  - id: test
+    links:
+      "/onramp/in/{instance}/out": ["/pipeline/main/{instance}/in"]
+      "/pipeline/main/{instance}/out": ["/offramp/out/{instance}/in"]
+      "/pipeline/main/{instance}/err": ["/offramp/out/{instance}/in"]
+
+      "/pipeline/system::metrics/system/out": ["/pipeline/metrics/{instance}/in"]
+      "/pipeline/metrics/{instance}/pipeline": ["/offramp/metrics_pipeline/{instance}/in"]
+      "/pipeline/metrics/{instance}/onramp": ["/offramp/metrics_onramp/{instance}/in"]
+      "/pipeline/metrics/{instance}/offramp": ["/offramp/metrics_offramp/{instance}/in"]
+      # catching other outputs, just in case
+      "/pipeline/metrics/{instance}/out": ["/offramp/system::stdout/system/in"]
+      "/pipeline/metrics/{instance}/err": ["/offramp/system::stderr/system/in"]
+
+      "/pipeline/main/{instance}/done": ["/offramp/exit/{instance}/in"]
+
+mapping:
+  /binding/test/1:
+    instance: "1"

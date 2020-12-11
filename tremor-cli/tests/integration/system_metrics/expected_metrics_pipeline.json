@@ -1,0 +1,4 @@
+{"measurement":"events","tags":{"pipeline":"tremor://localhost/pipeline/main/1","node":"out","direction":"input","port":"in"},"fields":{"count":3},"timestamp":null}
+{"measurement":"events","tags":{"pipeline":"tremor://localhost/pipeline/main/1","node":"process","direction":"output","port":"out"},"fields":{"count":3},"timestamp":null}
+{"measurement":"events","tags":{"pipeline":"tremor://localhost/pipeline/main/1","node":"out","direction":"input","port":"in"},"fields":{"count":6},"timestamp":null}
+{"measurement":"events","tags":{"pipeline":"tremor://localhost/pipeline/main/1","node":"process","direction":"output","port":"out"},"fields":{"count":6},"timestamp":null}
