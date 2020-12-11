@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::errors::{Error, ErrorKind, Result};
-use crate::op::prelude::{IN, OUT};
+use crate::op::prelude::{ERR, IN, METRICS, OUT};
 use crate::op::trickle::select::WindowImpl;
 use crate::{
     common_cow, op, ConfigGraph, NodeConfig, NodeKind, Operator, OperatorNode, PortIndexMap,
@@ -189,14 +189,13 @@ impl Query {
         inputs.insert(IN, id);
 
         // TODO compute public streams - do not hard code
-        let err: Cow<'static, str> = "err".into();
         let id = pipe_graph.add_node(NodeConfig {
-            id: err.clone(),
+            id: ERR,
             kind: NodeKind::Output,
             op_type: "passthrough".to_string(),
             ..NodeConfig::default()
         });
-        nodes.insert(err.clone(), id);
+        nodes.insert(ERR, id);
         *uid += 1;
         // ALLOW: id is created by inserting above, we also have no other way to access, thanks petgraph
         let op = pipe_graph[id].to_op(*uid, supported_operators, None, None, None)?;
@@ -204,7 +203,6 @@ impl Query {
         outputs.push(id);
 
         // TODO compute public streams - do not hardcode
-
         let id = pipe_graph.add_node(NodeConfig {
             id: OUT,
             kind: NodeKind::Output,
@@ -213,7 +211,6 @@ impl Query {
         });
         nodes.insert(OUT, id);
         *uid += 1;
-
         // ALLOW: id is created by inserting above, we also have no other way to access, thanks petgraph
         let op = pipe_graph[id].to_op(*uid, supported_operators, None, None, None)?;
         pipe_ops.insert(id, op);
@@ -457,14 +454,14 @@ impl Query {
             };
         }
 
-        // Add metrics output port
+        // TODO compute public streams - do not hardcode
         let id = pipe_graph.add_node(NodeConfig {
-            id: "_metrics".into(),
+            id: METRICS,
             kind: NodeKind::Output,
             op_type: "passthrough".to_string(),
             ..NodeConfig::default()
         });
-        nodes.insert("metrics".into(), id);
+        nodes.insert(METRICS, id);
         *uid += 1;
         // ALLOW: id is created by inserting above, we also have no other way to access, thanks petgraph
         let op = pipe_graph[id].to_op(*uid, supported_operators, None, None, None)?;
@@ -555,7 +552,7 @@ impl Query {
             }
 
             let metrics_idx = *nodes
-                .get("metrics")
+                .get(&METRICS)
                 .and_then(|idx| i2pos.get(idx))
                 .ok_or_else(|| Error::from("metrics node missing"))?;
             let mut exec = ExecutableGraph {
