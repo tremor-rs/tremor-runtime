@@ -19,9 +19,9 @@ use simd_json::borrowed::Value;
 use simd_json::prelude::*;
 use std::io::prelude::*;
 use std::io::{self, BufReader, BufWriter, Read, Write};
-use tremor_common::file;
 use tremor_common::time::nanotime;
-use tremor_pipeline::{Event, Ids};
+use tremor_common::{file, ids::OperatorIdGen};
+use tremor_pipeline::{Event, EventId};
 use tremor_runtime::codec::Codec;
 use tremor_runtime::postprocessor::Postprocessor;
 use tremor_runtime::preprocessor::Preprocessor;
@@ -346,8 +346,8 @@ fn run_trickle_source(matches: &ArgMatches, src: String) -> Result<()> {
     let mut egress = Egress::from_args(&matches)?;
 
     let runnable = tremor_pipeline::query::Query(runnable);
-    let mut uid = 0_u64;
-    let mut pipeline = runnable.to_pipe(&mut uid)?;
+    let mut idgen = OperatorIdGen::new();
+    let mut pipeline = runnable.to_pipe(&mut idgen)?;
     let id = 0_u64;
 
     ingress.process(
@@ -364,7 +364,7 @@ fn run_trickle_source(matches: &ArgMatches, src: String) -> Result<()> {
             if let Err(e) = runnable.enqueue(
                 "in",
                 Event {
-                    id: Ids::new(0, *id),
+                    id: EventId::new(0, 0, *id),
                     data: value.clone(),
                     ingest_ns: at,
                     ..Event::default()

@@ -99,7 +99,7 @@ pub fn next_backoff(steps: &[u64], current: u64) -> u64 {
     b
 }
 
-op!(BackpressureFactory(node) {
+op!(BackpressureFactory(_uid, node) {
     if let Some(map) = &node.config {
         let config: Config = Config::new(map)?;
         Ok(Box::new(Backpressure::from(config)))
@@ -209,7 +209,7 @@ mod test {
         // Sent a first event, as all is initited clean
         // we syould see this pass
         let event1 = Event {
-            id: 1.into(),
+            id: (1, 1, 1).into(),
             ingest_ns: 1,
             ..Event::default()
         };
@@ -224,7 +224,7 @@ mod test {
         // Without a timeout event sent a second event,
         // it too should pass
         let event2 = Event {
-            id: 2.into(),
+            id: (1, 1, 2).into(),
             ingest_ns: 2,
             ..Event::default()
         };
@@ -251,7 +251,7 @@ mod test {
         // Sent a first event, as all is initited clean
         // we syould see this pass
         let event1 = Event {
-            id: 1.into(),
+            id: (1, 1, 1).into(),
             ingest_ns: 1_000_000,
             ..Event::default()
         };
@@ -272,7 +272,7 @@ mod test {
         let mut op_meta = OpMeta::default();
         op_meta.insert(0, OwnedValue::null());
         let mut insight = Event {
-            id: 1.into(),
+            id: (1, 1, 1).into(),
             ingest_ns: 1_000_000,
             data: (Value::null(), m).into(),
             op_meta,
@@ -288,7 +288,7 @@ mod test {
         // 1_999_999
         // this event syould overflow
         let event2 = Event {
-            id: 2.into(),
+            id: (1, 1, 2).into(),
             ingest_ns: 2_000_000 - 1,
             ..Event::default()
         };
@@ -303,7 +303,7 @@ mod test {
         // On exactly 2_000_000 we should be allowed to send
         // again
         let event3 = Event {
-            id: 3.into(),
+            id: (1, 1, 3).into(),
             ingest_ns: 2_000_000,
             ..Event::default()
         };
@@ -318,7 +318,7 @@ mod test {
         // Since now the last successful event was at 2_000_000
         // the next event should overflow at 2_000_001
         let event3 = Event {
-            id: 3.into(),
+            id: (1, 1, 3).into(),
             ingest_ns: 2_000_000 + 1,
             ..Event::default()
         };
@@ -346,7 +346,7 @@ mod test {
         op_meta.insert(0, OwnedValue::null());
 
         let mut insight = Event {
-            id: 1.into(),
+            id: (1, 1, 1).into(),
             ingest_ns: 2,
             data: (Value::null(), m).into(),
             op_meta,
@@ -360,7 +360,7 @@ mod test {
         op_meta.insert(0, OwnedValue::null());
 
         let mut insight_reset = Event {
-            id: 1.into(),
+            id: (1, 1, 1).into(),
             ingest_ns: 2,
             data: (Value::null(), m).into(),
             op_meta,

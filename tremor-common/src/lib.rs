@@ -30,6 +30,9 @@ pub mod file;
 /// Time related functions
 pub mod time;
 
+/// common id handling
+pub mod ids;
+
 pub use errors::Error;
 
 #[cfg(test)]

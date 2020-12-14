@@ -20,12 +20,13 @@
 /// `op!(NodeFactory(Node) {<constructor>})`
 #[macro_export]
 macro_rules! op {
-    ($factory:ident ($node:ident) $constructor:block) => {
+    ($factory:ident ($uid:ident, $node:ident) $constructor:block) => {
         #[derive(Default)]
         pub struct $factory {}
         impl crate::op::InitializableOperator for $factory {
             fn from_node(
                 &self,
+                $uid: u64,
                 $node: &crate::NodeConfig,
             ) -> crate::errors::Result<Box<dyn crate::op::Operator>> {
                 $constructor

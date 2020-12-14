@@ -20,6 +20,7 @@ use lexer::Tokenizer;
 use std::io::Write;
 use std::io::{self, Read};
 use termcolor::{Color, ColorSpec};
+use tremor_common::ids::OperatorIdGen;
 use tremor_script::highlighter::{Dumb as TermNoHighlighter, Highlighter, Term as TermHighlighter};
 use tremor_script::lexer;
 use tremor_script::lexer::Token;
@@ -291,8 +292,8 @@ where
     let aggr_reg = registry::aggr();
     match Query::parse(&mp, opts.src, &opts.raw, vec![], &reg, &aggr_reg) {
         Ok(runnable) => {
-            let mut uid = 0;
-            let g = tremor_pipeline::query::Query(runnable).to_pipe(&mut uid)?;
+            let mut idgen = OperatorIdGen::new();
+            let g = tremor_pipeline::query::Query(runnable).to_pipe(&mut idgen)?;
 
             println!("{}", g.dot)
         }

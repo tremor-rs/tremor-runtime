@@ -614,19 +614,19 @@ mod test {
         assert_ne!(h2.finish(), h3.finish());
     }
 
-    fn pass(id: &'static str) -> OperatorNode {
+    fn pass(uid: u64, id: &'static str) -> OperatorNode {
         let c = NodeConfig::from_config("passthrough", ()).unwrap();
         OperatorNode {
             id: id.into(),
             kind: NodeKind::Operator,
             op_type: id.into(),
-            op: PassthroughFactory::new_boxed().from_node(&c).unwrap(),
+            op: PassthroughFactory::new_boxed().from_node(uid, &c).unwrap(),
             uid: 0,
         }
     }
     #[test]
     fn operator_node() {
-        let mut n = pass("passthrough");
+        let mut n = pass(0, "passthrough");
         assert!(!n.handles_contraflow());
         assert!(!n.handles_signal());
         assert!(!n.handles_contraflow());
@@ -764,11 +764,11 @@ mod test {
 
     #[test]
     fn eg_metrics() {
-        let mut in_n = pass("in");
+        let mut in_n = pass(1, "in");
         in_n.kind = NodeKind::Input;
-        let mut out_n = pass("out");
+        let mut out_n = pass(2, "out");
         out_n.kind = NodeKind::Output;
-        let mut metrics_n = pass("metrics");
+        let mut metrics_n = pass(3, "metrics");
         metrics_n.kind = NodeKind::Output;
 
         // The graph is in -> 1 -> 2 -> out, we pre-stack the edges since we do not
@@ -856,11 +856,11 @@ mod test {
 
     #[test]
     fn eg_optimize() {
-        let mut in_n = pass("in");
+        let mut in_n = pass(1, "in");
         in_n.kind = NodeKind::Input;
-        let mut out_n = pass("out");
+        let mut out_n = pass(2, "out");
         out_n.kind = NodeKind::Output;
-        let mut metrics_n = pass("metrics");
+        let mut metrics_n = pass(3, "metrics");
         metrics_n.kind = NodeKind::Output;
 
         // The graph is in -> 1 -> 2 -> out, we pre-stack the edges since we do not
@@ -868,7 +868,7 @@ mod test {
         let graph = vec![
             in_n,
             all_op("all-1"),
-            pass("nop"),
+            pass(4, "nop"),
             all_op("all-2"),
             out_n,
             metrics_n,

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::{CBAction, Ids, OpMeta, SignalKind};
+use crate::{CBAction, EventId, OpMeta, SignalKind};
 use simd_json::prelude::*;
 use simd_json::BorrowedValue;
 use std::mem::swap;
@@ -24,17 +24,18 @@ use tremor_script::{EventOriginUri, LineValue};
 )]
 pub struct Event {
     /// The event ID
-    pub id: Ids,
+    pub id: EventId,
     /// The event Data
     pub data: LineValue,
     /// Nanoseconds at when the event was ingested
     pub ingest_ns: u64,
-    /// URI to identify the origin of th event
+    /// URI to identify the origin of the event
     pub origin_uri: Option<EventOriginUri>,
     /// The kind of the event
     pub kind: Option<SignalKind>,
     /// If this event is batched (containing multiple events itself)
     pub is_batch: bool,
+
     /// Circuit breaker action
     pub cb: CBAction,
     /// Metadata for operators
@@ -69,7 +70,7 @@ impl Event {
 
     /// Creates either a ack or fail event
     #[must_use]
-    pub fn ack_or_fail(ack: bool, ingest_ns: u64, ids: Ids) -> Self {
+    pub fn ack_or_fail(ack: bool, ingest_ns: u64, ids: EventId) -> Self {
         if ack {
             Event::cb_ack(ingest_ns, ids)
         } else {
@@ -149,7 +150,7 @@ impl Event {
 
     /// Creates a new event to trigger a CB
     #[must_use]
-    pub fn cb_ack(ingest_ns: u64, id: Ids) -> Self {
+    pub fn cb_ack(ingest_ns: u64, id: EventId) -> Self {
         Event {
             ingest_ns,
             id,
@@ -160,7 +161,7 @@ impl Event {
 
     /// Creates a new event to trigger a CB
     #[must_use]
-    pub fn cb_fail(ingest_ns: u64, id: Ids) -> Self {
+    pub fn cb_fail(ingest_ns: u64, id: EventId) -> Self {
         Event {
             ingest_ns,
             id,
@@ -277,7 +278,7 @@ mod test {
     use tremor_script::ValueAndMeta;
 
     #[test]
-    fn valeu_iters() {
+    fn value_iters() {
         let mut b = Event {
             data: (BorrowedValue::array(), 2).into(),
             is_batch: true,
@@ -339,17 +340,17 @@ mod test {
         assert_eq!(e.clone().insight(false).cb, CBAction::Fail);
 
         assert_eq!(
-            Event::ack_or_fail(true, 0, Ids::default()).cb,
+            Event::ack_or_fail(true, 0, EventId::default()).cb,
             CBAction::Ack
         );
-        assert_eq!(Event::cb_ack(0, Ids::default()).cb, CBAction::Ack);
+        assert_eq!(Event::cb_ack(0, EventId::default()).cb, CBAction::Ack);
         assert_eq!(e.insight_ack().cb, CBAction::Ack);
 
         assert_eq!(
-            Event::ack_or_fail(false, 0, Ids::default()).cb,
+            Event::ack_or_fail(false, 0, EventId::default()).cb,
             CBAction::Fail
         );
-        assert_eq!(Event::cb_fail(0, Ids::default()).cb, CBAction::Fail);
+        assert_eq!(Event::cb_fail(0, EventId::default()).cb, CBAction::Fail);
         assert_eq!(e.insight_fail().cb, CBAction::Fail);
     }
 

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::op::prelude::*;
+use crate::{op::prelude::*, EventId, EventIdGenerator};
 use std::mem::swap;
 use tremor_script::prelude::*;
 
@@ -35,17 +35,22 @@ pub struct Batch {
     pub max_delay_ns: Option<u64>,
     pub first_ns: u64,
     pub id: Cow<'static, str>,
-    pub event_ids: Ids,
+    /// event id for the resulting batched event
+    /// the resulting id will be a new distinct id and will be tracking
+    /// all event ids (min and max) in the batched event
+    batch_event_id: EventId,
+    event_id_gen: EventIdGenerator,
 }
 
 pub fn empty() -> LineValue {
     LineValue::new(vec![], |_| ValueAndMeta::from(Value::array()))
 }
 
-op!(BatchFactory(node) {
+op!(BatchFactory(uid, node) {
 if let Some(map) = &node.config {
     let config: Config = Config::new(map)?;
     let max_delay_ns = config.timeout.map(|max_delay_ms| max_delay_ms * 1_000_000);
+    let mut idgen = EventIdGenerator::new(uid);
     Ok(Box::new(Batch {
         data: empty(),
         len: 0,
@@ -53,7 +58,8 @@ if let Some(map) = &node.config {
         max_delay_ns,
         first_ns: 0,
         id: node.id.clone(),
-        event_ids: Ids::default(),
+        batch_event_id: idgen.next(),
+        event_id_gen: idgen,
     }))
 } else {
     Err(ErrorKind::MissingOpConfig(node.id.to_string()).into())
@@ -61,6 +67,8 @@ if let Some(map) = &node.config {
 }});
 
 impl Operator for Batch {
+    /// emit a new event once the batch is flushed
+    /// with a new event id tracking all events within that batch
     fn on_event(
         &mut self,
         _uid: u64,
@@ -76,7 +84,7 @@ impl Operator for Batch {
             is_batch,
             ..
         } = event;
-        self.event_ids.merge(&id);
+        self.batch_event_id.track(&id);
         self.data.consume(
             data,
             move |this: &mut ValueAndMeta<'static>, other: ValueAndMeta<'static>| -> Result<()> {
@@ -118,13 +126,15 @@ impl Operator for Batch {
             let mut data = empty();
             swap(&mut data, &mut self.data);
             self.len = 0;
+
             let mut event = Event {
+                id: self.event_id_gen.next(),
                 data,
                 ingest_ns: self.first_ns,
                 is_batch: true,
                 ..Event::default()
             };
-            swap(&mut self.event_ids, &mut event.id);
+            swap(&mut self.batch_event_id, &mut event.id);
             Ok(event.into())
         } else {
             Ok(EventAndInsights::default())
@@ -147,12 +157,14 @@ impl Operator for Batch {
                     swap(&mut data, &mut self.data);
                     self.len = 0;
                     let mut event = Event {
+                        id: self.event_id_gen.next(),
                         data,
                         ingest_ns: self.first_ns,
                         is_batch: true,
                         ..Event::default()
                     };
-                    swap(&mut self.event_ids, &mut event.id);
+
+                    swap(&mut self.batch_event_id, &mut event.id);
                     Ok(EventAndInsights::from(event))
                 } else {
                     Ok(EventAndInsights::default())
@@ -170,20 +182,22 @@ mod test {
 
     #[test]
     fn size() {
+        let mut idgen = EventIdGenerator::new(0);
         let mut op = Batch {
             config: Config {
                 count: 2,
                 timeout: None,
             },
-            event_ids: Ids::default(),
             first_ns: 0,
             max_delay_ns: None,
             data: empty(),
             len: 0,
             id: "badger".into(),
+            batch_event_id: idgen.next(),
+            event_id_gen: idgen,
         };
         let event1 = Event {
-            id: 1.into(),
+            id: EventId::new(0, 0, 1),
             ingest_ns: 1,
             data: Value::from("snot").into(),
             ..Event::default()
@@ -197,7 +211,7 @@ mod test {
         assert_eq!(r.len(), 0);
 
         let event2 = Event {
-            id: 1.into(),
+            id: (1, 1, 1).into(),
             ingest_ns: 1,
             data: Value::from("badger").into(),
             ..Event::default()
@@ -216,7 +230,7 @@ mod test {
         );
 
         let event = Event {
-            id: 1.into(),
+            id: (1, 1, 1).into(),
             ingest_ns: 1,
             data: Value::from("snot").into(),
             ..Event::default()
@@ -230,20 +244,22 @@ mod test {
 
     #[test]
     fn time() {
+        let mut idgen = EventIdGenerator::new(0);
         let mut op = Batch {
             config: Config {
                 count: 100,
                 timeout: Some(1),
             },
-            event_ids: Ids::default(),
             first_ns: 0,
             max_delay_ns: Some(1_000_000),
             data: empty(),
             len: 0,
             id: "badger".into(),
+            batch_event_id: idgen.next(),
+            event_id_gen: idgen,
         };
         let event1 = Event {
-            id: 1.into(),
+            id: (1, 1, 1).into(),
             ingest_ns: 1,
             data: Value::from("snot").into(),
             ..Event::default()
@@ -259,7 +275,7 @@ mod test {
         assert_eq!(r.len(), 0);
 
         let event2 = Event {
-            id: 1.into(),
+            id: (1, 1, 1).into(),
             ingest_ns: 2_000_000,
             data: Value::from("badger").into(),
             ..Event::default()
@@ -280,7 +296,7 @@ mod test {
         );
 
         let event = Event {
-            id: 1.into(),
+            id: (1, 1, 1).into(),
             ingest_ns: 1,
             data: Value::from("snot").into(),
             ..Event::default()
@@ -292,7 +308,7 @@ mod test {
         assert_eq!(r.len(), 0);
 
         let event = Event {
-            id: 1.into(),
+            id: (1, 1, 1).into(),
             ingest_ns: 2,
             data: Value::from("snot").into(),
             ..Event::default()
@@ -306,20 +322,22 @@ mod test {
 
     #[test]
     fn signal() {
+        let mut idgen = EventIdGenerator::new(0);
         let mut op = Batch {
             config: Config {
                 count: 100,
                 timeout: Some(1),
             },
-            event_ids: Ids::default(),
             first_ns: 0,
             max_delay_ns: Some(1_000_000),
             data: empty(),
             len: 0,
             id: "badger".into(),
+            batch_event_id: idgen.next(),
+            event_id_gen: idgen,
         };
         let event1 = Event {
-            id: 1.into(),
+            id: (1, 1, 1).into(),
             ingest_ns: 1,
             data: Value::from("snot").into(),
             ..Event::default()
@@ -333,7 +351,7 @@ mod test {
         assert_eq!(r.len(), 0);
 
         let mut signal = Event {
-            id: 1.into(),
+            id: (1, 1, 1).into(),
             ingest_ns: 2_000_000,
             data: Value::null().into(),
             ..Event::default()
@@ -351,7 +369,7 @@ mod test {
         assert_eq!(events, vec![event1.data.suffix().value()]);
 
         let event = Event {
-            id: 1.into(),
+            id: (1, 1, 1).into(),
             ingest_ns: 1,
             data: Value::from("snot").into(),
             ..Event::default()
@@ -363,7 +381,7 @@ mod test {
         assert_eq!(r.len(), 0);
 
         let event = Event {
-            id: 1.into(),
+            id: (1, 1, 1).into(),
             ingest_ns: 2,
             data: Value::from("snot").into(),
             ..Event::default()
