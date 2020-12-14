@@ -34,7 +34,7 @@ jobs:
         env:
           RUSTFLAGS: -C target-cpu=native
         with:
-          version: "0.15.0"
+          version: "0.16.0"
           # excluded files:
           # - target: those are generated files
           # - tremor-cli: cli logic, excluded since it's covered over integration tests
