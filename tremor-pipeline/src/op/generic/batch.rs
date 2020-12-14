@@ -58,7 +58,7 @@ if let Some(map) = &node.config {
         max_delay_ns,
         first_ns: 0,
         id: node.id.clone(),
-        batch_event_id: idgen.next(),
+        batch_event_id: idgen.next_id(),
         event_id_gen: idgen,
     }))
 } else {
@@ -128,7 +128,7 @@ impl Operator for Batch {
             self.len = 0;
 
             let mut event = Event {
-                id: self.event_id_gen.next(),
+                id: self.event_id_gen.next_id(),
                 data,
                 ingest_ns: self.first_ns,
                 is_batch: true,
@@ -157,7 +157,7 @@ impl Operator for Batch {
                     swap(&mut data, &mut self.data);
                     self.len = 0;
                     let mut event = Event {
-                        id: self.event_id_gen.next(),
+                        id: self.event_id_gen.next_id(),
                         data,
                         ingest_ns: self.first_ns,
                         is_batch: true,
@@ -193,7 +193,7 @@ mod test {
             data: empty(),
             len: 0,
             id: "badger".into(),
-            batch_event_id: idgen.next(),
+            batch_event_id: idgen.next_id(),
             event_id_gen: idgen,
         };
         let event1 = Event {
@@ -255,7 +255,7 @@ mod test {
             data: empty(),
             len: 0,
             id: "badger".into(),
-            batch_event_id: idgen.next(),
+            batch_event_id: idgen.next_id(),
             event_id_gen: idgen,
         };
         let event1 = Event {
@@ -333,7 +333,7 @@ mod test {
             data: empty(),
             len: 0,
             id: "badger".into(),
-            batch_event_id: idgen.next(),
+            batch_event_id: idgen.next_id(),
             event_id_gen: idgen,
         };
         let event1 = Event {

@@ -253,7 +253,7 @@ impl CBAction {
 /// Event identifier
 ///
 /// Events are identified by their source, the stream within that source that originated the given event
-/// and an event_id that is unique only within the same stream.
+/// and an `event_id` that is unique only within the same stream.
 ///
 /// `EventId` also tracks min and max event ids for other events in order to support batched and grouped events
 /// and facilitate CB mechanics
@@ -271,7 +271,8 @@ pub struct EventId {
 pub const DEFAULT_STREAM_ID: u64 = 0;
 
 impl EventId {
-    /// create a new EventId from numeric ids
+    #[must_use]
+    /// create a new `EventId` from numeric ids
     pub fn new(source_id: u64, stream_id: u64, event_id: u64) -> Self {
         Self {
             source_id,
@@ -281,40 +282,43 @@ impl EventId {
         }
     }
 
-    /// return the source_id of this event
+    #[must_use]
+    /// return the `source_id` of this event
     /// the unique id of the source/onramp/pipeline-node where this event came from
     pub fn source_id(&self) -> u64 {
         self.source_id
     }
 
-    /// setter for source_id
+    /// setter for `source_id`
     pub fn set_source_id(&mut self, source_id: u64) {
         self.source_id = source_id;
     }
 
-    /// return the stream_id of this event
+    #[must_use]
+    /// return the `stream_id` of this event
     /// the unique id of the stream within a source/onramp/pipeline-node where this event came from
     pub fn stream_id(&self) -> u64 {
         self.stream_id
     }
 
-    /// setter for stream id
+    /// setter for `stream_id`
     pub fn set_stream_id(&mut self, stream_id: u64) {
         self.stream_id = stream_id;
     }
 
-    /// return the event_id of this event
+    #[must_use]
+    /// return the `event_id` of this event
     /// the unique id of the event within its stream
     pub fn event_id(&self) -> u64 {
         self.event_id
     }
 
-    /// setter for event_id
+    /// setter for `event_id`
     pub fn set_event_id(&mut self, event_id: u64) {
         self.event_id = event_id;
     }
 
-    /// track the min and max of the given event id    
+    /// track the min and max of the given `event_id`    
     /// and also include all event ids `event_id` was tracking
     pub fn track(&mut self, event_id: &EventId) {
         self.track_ids(
@@ -368,6 +372,7 @@ impl EventId {
         }
     }
 
+    #[must_use]
     /// get minimum event id for a given source and stream, if it is tracked
     ///
     /// This also always checks the actual eventId, not only the tracked ones, this way we can save allocations when used within insights
@@ -388,6 +393,7 @@ impl EventId {
         }
     }
 
+    #[must_use]
     /// get maximum event id for a given source and stream if we have it here
     ///
     /// This also always checks the actual eventId, not only the tracked ones
@@ -408,7 +414,8 @@ impl EventId {
         }
     }
 
-    /// get the minimum tracked (stream_id, event_id)
+    #[must_use]
+    /// get the minimum tracked (`stream_id`, `event_id`)
     /// by chosing events with smaller stream id
     ///
     /// This also always checks the actual eventId, not only the tracked ones
@@ -425,7 +432,8 @@ impl EventId {
         }
     }
 
-    /// get the maximum tracked (stream_id, event_id)
+    #[must_use]
+    /// get the maximum tracked (`stream_id`, `event_id`)
     /// by chosing events with bigger stream id
     ///
     /// This also always checks the actual eventId, not only the tracked ones
@@ -481,6 +489,7 @@ pub struct TrackedEventIds {
 }
 
 impl TrackedEventIds {
+    #[must_use]
     /// create a new instance with min and max set to `event_id`.
     pub fn new(source_id: u64, stream_id: u64, min_event_id: u64, max_event_id: u64) -> Self {
         Self {
@@ -491,7 +500,8 @@ impl TrackedEventIds {
         }
     }
 
-    /// create tracked ids from a single event_id
+    #[must_use]
+    /// create tracked ids from a single `event_id`
     pub fn from_id(source_id: u64, stream_id: u64, event_id: u64) -> Self {
         Self {
             source_id,
@@ -501,16 +511,19 @@ impl TrackedEventIds {
         }
     }
 
+    #[must_use]
     /// returns true if this struct tracks the given source and stream ids
     pub fn tracks_id(&self, source_id: u64, stream_id: u64) -> bool {
         self.source_id == source_id && self.stream_id == stream_id
     }
 
+    #[must_use]
     /// compares against the given source and stream ids, using simple numeric ordering
     pub fn compare_ids(&self, source_id: u64, stream_id: u64) -> Ordering {
         (self.source_id, self.stream_id).cmp(&(source_id, stream_id))
     }
 
+    #[must_use]
     /// compare source and stream ids against the ones given in `other`
     pub fn compare(&self, other: &TrackedEventIds) -> Ordering {
         (self.source_id, self.stream_id).cmp(&(other.source_id, other.stream_id))
@@ -581,17 +594,19 @@ impl fmt::Display for TrackedEventIds {
 pub struct EventIdGenerator(u64, u64, u64);
 impl EventIdGenerator {
     /// generate the next event id for this stream
-    pub fn next(&mut self) -> EventId {
+    pub fn next_id(&mut self) -> EventId {
         let event_id = self.2;
         self.2 = self.2.wrapping_add(1);
         EventId::new(self.0, self.1, event_id)
     }
 
+    #[must_use]
     /// create a new generator using the default stream id
     pub fn new(source_id: u64) -> Self {
         Self(source_id, DEFAULT_STREAM_ID, 0)
     }
 
+    #[must_use]
     /// create a new generator using the given source and stream id
     pub fn with_stream(source_id: u64, stream_id: u64) -> Self {
         Self(source_id, stream_id, 0)

@@ -575,7 +575,7 @@ impl Operator for TrickleSelect {
                                 window: window_impl.clone(),
                                 aggrs: aggregates.clone(),
                                 group: group_value.clone_static(),
-                                id: idgen.next(), // after all this is a new event
+                                id: idgen.next_id(), // after all this is a new event
                             }),
                         )
                     });
@@ -708,7 +708,7 @@ impl Operator for TrickleSelect {
                                 window: window_impl.clone(),
                                 aggrs: aggregates.clone(),
                                 group: group_value.clone_static(),
-                                id: idgen.next(),
+                                id: idgen.next_id(),
                             }),
                         )
                     });
@@ -746,7 +746,7 @@ impl Operator for TrickleSelect {
                                     window: window_impl.clone(),
                                     aggrs: aggregates.clone(),
                                     group: group_value.clone_static(),
-                                    id: idgen.next(),
+                                    id: idgen.next_id(),
                                 }),
                             )
                         });
@@ -776,7 +776,7 @@ impl Operator for TrickleSelect {
                                 window: window_impl.clone(),
                                 aggrs: aggregates.clone(),
                                 group: group_value.clone_static(),
-                                id: idgen.next(),
+                                id: idgen.next_id(),
                             },
                         )
                     });
@@ -845,7 +845,7 @@ impl Operator for TrickleSelect {
                         )?;
                     }
                 }
-                let mut event_id = self.event_id_gen.next();
+                let mut event_id = self.event_id_gen.next_id();
                 event_id.track(&event.id);
                 events.push((
                     OUT,

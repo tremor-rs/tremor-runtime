@@ -30,7 +30,7 @@ use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::time::Duration;
 use tremor_common::time::nanotime;
-use tremor_pipeline::{CBAction, Event, EventId, EventOriginUri};
+use tremor_pipeline::{CBAction, Event, EventId, EventOriginUri, DEFAULT_STREAM_ID};
 use tremor_script::{LineValue, Value, ValueAndMeta};
 
 use self::prelude::OnrampConfig;
@@ -384,7 +384,7 @@ where
     ) -> bool {
         let event = Event {
             // TODO: stream handling
-            id: EventId::new(self.uid, 0, self.id),
+            id: EventId::new(self.uid, DEFAULT_STREAM_ID, self.id),
             data,
             ingest_ns,
             // TODO make origin_uri non-optional here too?
