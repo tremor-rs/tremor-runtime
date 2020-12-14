@@ -1,0 +1,7 @@
+define generic::counter operator counter;
+
+create operator c1 from counter;
+create operator c1 from counter;
+
+select event from in into c1;
+select event from c1 into out;

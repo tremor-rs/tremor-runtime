@@ -38,9 +38,18 @@ use tremor_script::query::{StmtRental, StmtRentalWrapper};
 use tremor_script::{ast::Select, errors::CompilerError};
 use tremor_script::{
     ast::{BaseExpr, CompilationUnit, Ident, NodeMetas, SelectType, Stmt, WindowDecl, WindowKind},
-    errors::query_stream_not_defined_err,
+    errors::{
+        query_node_duplicate_name_err, query_node_reserved_name_err, query_stream_not_defined_err,
+    },
 };
 use tremor_script::{AggrRegistry, Registry, Value};
+
+const BUILTIN_NODES: [(Cow<'static, str>, NodeKind); 4] = [
+    (IN, NodeKind::Input),
+    (OUT, NodeKind::Output),
+    (ERR, NodeKind::Output),
+    (METRICS, NodeKind::Output),
+];
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 struct InputPort {
@@ -174,50 +183,37 @@ impl Query {
             .and_then(Value::as_str)
             .unwrap_or("<generated>");
 
-        // TODO compute public streams - do not hardcode
-        let id = pipe_graph.add_node(NodeConfig {
-            id: IN,
-            kind: NodeKind::Input,
-            op_type: "passthrough".to_string(),
-            ..NodeConfig::default()
-        });
-        nodes.insert(IN, id);
-        *uid += 1;
-        // ALLOW: id is created by inserting above, we also have no other way to access, thanks petgraph
-        let op = pipe_graph[id].to_op(*uid, supported_operators, None, None, None)?;
-        pipe_ops.insert(id, op);
-        inputs.insert(IN, id);
+        for (name, node_kind) in &BUILTIN_NODES {
+            let id = pipe_graph.add_node(NodeConfig {
+                id: name.clone(),
+                kind: *node_kind,
+                op_type: "passthrough".to_string(),
+                ..NodeConfig::default()
+            });
+            nodes.insert(name.clone(), id);
+            *uid += 1;
+            // ALLOW: id is created by inserting above, we also have no other way to access, thanks petgraph
+            let op = pipe_graph[id].to_op(*uid, supported_operators, None, None, None)?;
+            pipe_ops.insert(id, op);
+            match node_kind {
+                NodeKind::Input => {
+                    inputs.insert(name.clone(), id);
+                }
+                NodeKind::Output => outputs.push(id),
+                _ => {
+                    return Err(format!(
+                        "Builtin node {} has unsupported node kind: {:?}",
+                        name, node_kind
+                    )
+                    .into())
+                }
+            }
+        }
 
-        // TODO compute public streams - do not hard code
-        let id = pipe_graph.add_node(NodeConfig {
-            id: ERR,
-            kind: NodeKind::Output,
-            op_type: "passthrough".to_string(),
-            ..NodeConfig::default()
-        });
-        nodes.insert(ERR, id);
-        *uid += 1;
-        // ALLOW: id is created by inserting above, we also have no other way to access, thanks petgraph
-        let op = pipe_graph[id].to_op(*uid, supported_operators, None, None, None)?;
-        pipe_ops.insert(id, op);
-        outputs.push(id);
-
-        // TODO compute public streams - do not hardcode
-        let id = pipe_graph.add_node(NodeConfig {
-            id: OUT,
-            kind: NodeKind::Output,
-            op_type: "passthrough".to_string(),
-            ..NodeConfig::default()
-        });
-        nodes.insert(OUT, id);
-        *uid += 1;
-        // ALLOW: id is created by inserting above, we also have no other way to access, thanks petgraph
-        let op = pipe_graph[id].to_op(*uid, supported_operators, None, None, None)?;
-        pipe_ops.insert(id, op);
-        outputs.push(id);
         let mut port_indexes: PortIndexMap = HashMap::new();
-
         let mut select_num = 0;
+
+        let has_builtin_node_name = make_builtin_node_name_checker();
 
         for stmt in &query.stmts {
             let stmt_rental = StmtRental::new(Arc::new(self.0.clone()), |_| unsafe {
@@ -362,6 +358,15 @@ impl Query {
                 }
                 Stmt::WindowDecl(_) | Stmt::ScriptDecl(_) | Stmt::OperatorDecl(_) => {}
                 Stmt::Operator(o) => {
+                    if nodes.contains_key(&common_cow(&o.id)) {
+                        let error_func = if has_builtin_node_name(&common_cow(&o.id)) {
+                            query_node_reserved_name_err
+                        } else {
+                            query_node_duplicate_name_err
+                        };
+                        return Err(error_func(o, o.id.clone(), &query.node_meta).into());
+                    }
+
                     let target = o.target.clone().to_string();
                     let fqon = if o.module.is_empty() {
                         target
@@ -410,6 +415,15 @@ impl Query {
                     outputs.push(id);
                 }
                 Stmt::Script(o) => {
+                    if nodes.contains_key(&common_cow(&o.id)) {
+                        let error_func = if has_builtin_node_name(&common_cow(&o.id)) {
+                            query_node_reserved_name_err
+                        } else {
+                            query_node_duplicate_name_err
+                        };
+                        return Err(error_func(o, o.id.clone(), &query.node_meta).into());
+                    }
+
                     let target = o.target.clone().to_string();
                     let fqsn = if o.module.is_empty() {
                         target
@@ -453,20 +467,6 @@ impl Query {
                 }
             };
         }
-
-        // TODO compute public streams - do not hardcode
-        let id = pipe_graph.add_node(NodeConfig {
-            id: METRICS,
-            kind: NodeKind::Output,
-            op_type: "passthrough".to_string(),
-            ..NodeConfig::default()
-        });
-        nodes.insert(METRICS, id);
-        *uid += 1;
-        // ALLOW: id is created by inserting above, we also have no other way to access, thanks petgraph
-        let op = pipe_graph[id].to_op(*uid, supported_operators, None, None, None)?;
-        pipe_ops.insert(id, op);
-        outputs.push(id);
 
         // Link graph edges
         for (from, tos) in &links {
@@ -709,6 +709,13 @@ pub(crate) fn supported_operators(
     })
 }
 
+pub(crate) fn make_builtin_node_name_checker() -> impl Fn(&Cow<'static, str>) -> bool {
+    // saving these names for reuse
+    let builtin_node_names: Vec<Cow<'static, str>> =
+        BUILTIN_NODES.iter().map(|(n, _)| n.clone()).collect();
+    move |name| builtin_node_names.contains(name)
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -766,8 +773,19 @@ mod test {
 
         assert!(g.inputs.contains_key("test_in"));
 
-        let out = g.graph.get(4).unwrap();
+        let out = g.graph.get(5).unwrap();
         assert_eq!(out.id, "test_out");
         assert_eq!(out.kind, NodeKind::Output);
+    }
+
+    #[test]
+    fn builtin_nodes() {
+        let has_builtin_node_name = make_builtin_node_name_checker();
+        assert!(has_builtin_node_name(&"in".into()));
+        assert!(has_builtin_node_name(&"out".into()));
+        assert!(has_builtin_node_name(&"err".into()));
+        assert!(has_builtin_node_name(&"metrics".into()));
+        assert!(!has_builtin_node_name(&"snot".into()));
+        assert!(!has_builtin_node_name(&"badger".into()));
     }
 }

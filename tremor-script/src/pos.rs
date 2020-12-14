@@ -94,7 +94,7 @@ pub struct Spanned<T> {
     pub value: T,
 }
 
-/// A rage in a file between two locations
+/// A range in a file between two locations
 #[derive(
     Copy, Clone, Default, Eq, PartialEq, Debug, Hash, Ord, PartialOrd, Serialize, Deserialize,
 )]

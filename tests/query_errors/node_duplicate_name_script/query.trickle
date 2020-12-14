@@ -1,0 +1,11 @@
+define script pass
+script
+  event
+end;
+create script pass;
+
+create script process from pass;
+create script process from pass;
+
+select event from in into process;
+select event from process into out;

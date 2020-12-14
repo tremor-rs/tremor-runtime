@@ -1,0 +1,7 @@
+Error: 
+    3 |   event
+    4 | end;
+    5 | create script metrics;
+      | ^^^^^^^^^^^^^^^^^^^^^ Name `metrics` is reserved for built-in nodes, please use another name.
+    6 | 
+    7 | select event from in into metrics;
