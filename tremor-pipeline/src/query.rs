@@ -192,9 +192,13 @@ impl Query {
                 ..NodeConfig::default()
             });
             nodes.insert(name.clone(), id);
-            // ALLOW: id is created by inserting above, we also have no other way to access, thanks petgraph
-            let op =
-                pipe_graph[id].to_op(idgen.next_id(), supported_operators, None, None, None)?;
+            let op = match pipe_graph.raw_nodes().get(id.index()) {
+                Some(node) => {
+                    node.weight
+                        .to_op(idgen.next_id(), supported_operators, None, None, None)?
+                }
+                _ => return Err(format!("Error finding node {:?} in constructed graph", id).into()),
+            };
             pipe_ops.insert(id, op);
             match node_kind {
                 NodeKind::Input => {
@@ -267,14 +271,22 @@ impl Query {
                                 ..NodeConfig::default()
                             });
                             nodes.insert(name.clone(), id);
-                            // ALLOW: id is created by inserting above, we also have no other way to access, thanks petgraph
-                            let op = pipe_graph[id].to_op(
-                                idgen.next_id(),
-                                supported_operators,
-                                None,
-                                None,
-                                None,
-                            )?;
+                            let op = match pipe_graph.raw_nodes().get(id.index()) {
+                                Some(node) => node.weight.to_op(
+                                    idgen.next_id(),
+                                    supported_operators,
+                                    None,
+                                    None,
+                                    None,
+                                )?,
+                                _ => {
+                                    return Err(format!(
+                                        "Error finding freshly added node {:?} in pipeline graph.",
+                                        id
+                                    )
+                                    .into())
+                                }
+                            };
                             pipe_ops.insert(id, op);
                             inputs.insert(name.clone(), id);
                         }
@@ -293,14 +305,22 @@ impl Query {
                                 ..NodeConfig::default()
                             });
                             nodes.insert(name.clone(), id);
-                            // ALLOW: id is created by inserting above, we also have no other way to access, thanks petgraph
-                            let op = pipe_graph[id].to_op(
-                                idgen.next_id(),
-                                supported_operators,
-                                None,
-                                None,
-                                None,
-                            )?;
+                            let op = match pipe_graph.raw_nodes().get(id.index()) {
+                                Some(node) => node.weight.to_op(
+                                    idgen.next_id(),
+                                    supported_operators,
+                                    None,
+                                    None,
+                                    None,
+                                )?,
+                                _ => {
+                                    return Err(format!(
+                                        "Error finding freshly added node {:?} in pipeline graph.",
+                                        id
+                                    )
+                                    .into())
+                                }
+                            };
                             pipe_ops.insert(id, op);
                             outputs.push(id);
                         }
