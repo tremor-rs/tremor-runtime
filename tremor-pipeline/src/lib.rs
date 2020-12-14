@@ -343,7 +343,8 @@ impl EventId {
         }
     }
 
-    fn track_id(&mut self, source_id: u64, stream_id: u64, event_id: u64) {
+    /// track the given event id by its raw numeric ids
+    pub fn track_id(&mut self, source_id: u64, stream_id: u64, event_id: u64) {
         self.track_ids(source_id, stream_id, event_id, event_id)
     }
 
