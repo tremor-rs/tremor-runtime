@@ -142,7 +142,7 @@ impl Manager {
 
                         match stream
                             .start(OnrampConfig {
-                                onramp_uid: onramp_id_gen.next(),
+                                onramp_uid: onramp_id_gen.next_id(),
                                 codec: &codec,
                                 codec_map,
                                 processors: Processors {

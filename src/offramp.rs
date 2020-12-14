@@ -367,7 +367,7 @@ impl Manager {
                         break;
                     }
                     ManagerMsg::Create(r, c) => {
-                        self.offramp_task(r, *c, offramp_id_gen.next()).await?
+                        self.offramp_task(r, *c, offramp_id_gen.next_id()).await?
                     }
                 };
                 info!("Stopping offramps...");
