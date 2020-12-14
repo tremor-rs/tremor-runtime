@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::{op::prelude::*, DEFAULT_STREAM_ID};
+use crate::{op::prelude::*, EventId, DEFAULT_STREAM_ID};
 use byteorder::{BigEndian, ReadBytesExt};
 use simd_json_derive::{Deserialize, Serialize};
 use sled::IVec;
@@ -249,11 +249,12 @@ impl WAL {
     }
 
     fn store_event(&mut self, source_id: u64, mut event: Event) -> Result<()> {
-        let id = self.wal.generate_id()?;
-        let write: [u8; 8] = unsafe { mem::transmute(id.to_be()) };
+        let wal_id = self.wal.generate_id()?;
+        let write: [u8; 8] = unsafe { mem::transmute(wal_id.to_be()) };
         // TODO: figure out if handling of separate streams makes sense here
-        // FIXME: this should go into op_meta, shouldnt it?
-        event.id.track_id(source_id, DEFAULT_STREAM_ID, id);
+        let mut new_event_id = EventId::new(source_id, DEFAULT_STREAM_ID, wal_id);
+        new_event_id.track(&event.id);
+        event.id = new_event_id;
 
         // Serialize and write the event
         let event_buf = event.json_vec()?;
