@@ -197,7 +197,9 @@ impl Query {
                     node.weight
                         .to_op(idgen.next_id(), supported_operators, None, None, None)?
                 }
-                _ => return Err(format!("Error finding node {:?} in constructed graph", id).into()),
+                None => {
+                    return Err(format!("Error finding node {:?} in constructed graph", id).into())
+                }
             };
             pipe_ops.insert(id, op);
             match node_kind {
@@ -279,7 +281,7 @@ impl Query {
                                     None,
                                     None,
                                 )?,
-                                _ => {
+                                None => {
                                     return Err(format!(
                                         "Error finding freshly added node {:?} in pipeline graph.",
                                         id
@@ -313,7 +315,7 @@ impl Query {
                                     None,
                                     None,
                                 )?,
-                                _ => {
+                                None => {
                                     return Err(format!(
                                         "Error finding freshly added node {:?} in pipeline graph.",
                                         id
