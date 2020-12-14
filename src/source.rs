@@ -609,3 +609,104 @@ where
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(Debug)]
+    struct FakeSource {
+        url: TremorURL,
+    }
+
+    #[async_trait::async_trait]
+    impl Source for FakeSource {
+        async fn pull_event(&mut self, _id: u64) -> Result<SourceReply> {
+            Ok(SourceReply::Data {
+                origin_uri: EventOriginUri::default(),
+                codec_override: None,
+                stream: 0,
+                data: "data".as_bytes().to_vec(),
+                meta: None,
+            })
+        }
+
+        async fn init(&mut self) -> Result<SourceState> {
+            Ok(SourceState::Connected)
+        }
+
+        fn id(&self) -> &TremorURL {
+            &self.url
+        }
+    }
+
+    #[async_std::test]
+    async fn fake_source_manager_connect_cb() -> Result<()> {
+        let onramp_url = TremorURL::from_onramp_id("fake")?;
+        let s = FakeSource {
+            url: onramp_url.clone(),
+        };
+        let o_config = OnrampConfig {
+            onramp_uid: 1,
+            codec: "string",
+            codec_map: HashMap::new(),
+            processors: Processors::default(),
+            metrics_reporter: RampReporter::new(onramp_url.clone(), None),
+            is_linked: false,
+            err_required: false,
+        };
+        let (sm, sender) = SourceManager::new(s, o_config).await?;
+        let handle = task::spawn(sm.run());
+
+        let pipeline_url = TremorURL::parse("/pipeline/bla/01/in")?;
+        let (tx1, rx1) = async_channel::unbounded();
+        let (tx2, _rx2) = async_channel::unbounded();
+        let (tx3, rx3) = async_channel::unbounded();
+        let addr = pipeline::Addr::new(tx1, tx2, tx3, pipeline_url.clone());
+
+        // trigger the source to ensure it is not being pulled from
+        sender
+            .send(onramp::Msg::Cb(CBAction::Close, EventId::default()))
+            .await?;
+
+        // connect our fake pipeline
+        sender
+            .send(onramp::Msg::Connect(
+                OUT,
+                vec![(pipeline_url.clone(), addr)],
+            ))
+            .await?;
+        let answer = rx3.recv().await?;
+        match answer {
+            pipeline::MgmtMsg::ConnectOnramp { id, reply, .. } => {
+                assert_eq!(id, onramp_url);
+                assert_eq!(reply, false);
+            }
+            _ => return Err("Invalid Pipeline connect answer.".into()),
+        }
+        // ensure no events are pulled as long as we are not opened yet
+        task::sleep(Duration::from_millis(200)).await;
+        assert!(rx1.try_recv().is_err()); // nothing put into connected pipeline yet
+
+        // send the initial open event
+        sender
+            .send(onramp::Msg::Cb(CBAction::Open, EventId::default()))
+            .await?;
+
+        // wait some time
+        task::sleep(Duration::from_millis(100)).await;
+        assert!(rx1.len() > 0);
+
+        let (tx4, rx4) = async_channel::unbounded();
+        // disconnect to break the busy loop
+        sender
+            .send(onramp::Msg::Disconnect {
+                id: pipeline_url,
+                tx: tx4,
+            })
+            .await?;
+        assert_eq!(rx4.recv().await?, true);
+        handle.cancel().await;
+        Ok(())
+    }
+}

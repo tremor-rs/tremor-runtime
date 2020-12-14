@@ -16,7 +16,7 @@ use crate::{op::prelude::*, EventId, EventIdGenerator};
 use std::mem::swap;
 use tremor_script::prelude::*;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Config {
     /// Name of the event history ( path ) to track
     pub count: usize,
@@ -243,21 +243,16 @@ mod test {
     }
 
     #[test]
-    fn time() {
-        let mut idgen = EventIdGenerator::new(0);
-        let mut op = Batch {
-            config: Config {
+    fn time() -> Result<()> {
+        let node_config = NodeConfig::from_config(
+            "badger",
+            Config {
                 count: 100,
                 timeout: Some(1),
             },
-            first_ns: 0,
-            max_delay_ns: Some(1_000_000),
-            data: empty(),
-            len: 0,
-            id: "badger".into(),
-            batch_event_id: idgen.next_id(),
-            event_id_gen: idgen,
-        };
+        )?;
+        let mut op = BatchFactory::new().from_node(42, &node_config)?;
+
         let event1 = Event {
             id: (1, 1, 1).into(),
             ingest_ns: 1,
@@ -318,6 +313,7 @@ mod test {
             .on_event(0, "in", &mut state, event)
             .expect("could not run pipeline");
         assert_eq!(r.len(), 0);
+        Ok(())
     }
 
     #[test]

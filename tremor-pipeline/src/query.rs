@@ -269,7 +269,7 @@ impl Query {
                             nodes.insert(name.clone(), id);
                             // ALLOW: id is created by inserting above, we also have no other way to access, thanks petgraph
                             let op = pipe_graph[id].to_op(
-                                idgen.next(),
+                                idgen.next_id(),
                                 supported_operators,
                                 None,
                                 None,
@@ -295,7 +295,7 @@ impl Query {
                             nodes.insert(name.clone(), id);
                             // ALLOW: id is created by inserting above, we also have no other way to access, thanks petgraph
                             let op = pipe_graph[id].to_op(
-                                idgen.next(),
+                                idgen.next_id(),
                                 supported_operators,
                                 None,
                                 None,
@@ -325,7 +325,7 @@ impl Query {
                         ww.insert(w.0.clone(), window_decl_to_impl(&w.1, &that)?);
                     }
                     let op = node.to_op(
-                        idgen.next(),
+                        idgen.next_id(),
                         supported_operators,
                         None,
                         Some(that),
@@ -348,7 +348,7 @@ impl Query {
                         let id = pipe_graph.add_node(node.clone());
                         nodes.insert(name.clone(), id);
                         let op = node.to_op(
-                            idgen.next(),
+                            idgen.next_id(),
                             supported_operators,
                             None,
                             Some(that),
@@ -412,7 +412,7 @@ impl Query {
                         stmt: std::sync::Arc::new(stmt_rental),
                     };
                     let op =
-                        node.to_op(idgen.next(), supported_operators, None, Some(that), None)?;
+                        node.to_op(idgen.next_id(), supported_operators, None, Some(that), None)?;
                     pipe_ops.insert(id, op);
                     nodes.insert(common_cow(&o.id), id);
                     outputs.push(id);
@@ -462,7 +462,7 @@ impl Query {
 
                     let id = pipe_graph.add_node(node.clone());
                     let op = node.to_op(
-                        idgen.next(),
+                        idgen.next_id(),
                         supported_operators,
                         Some(that_defn),
                         Some(that),
@@ -780,11 +780,11 @@ mod test {
         .unwrap();
 
         let mut idgen = OperatorIdGen::new();
-        let first = idgen.next();
+        let first = idgen.next_id();
         let g = q.to_pipe(&mut idgen).unwrap();
 
         assert!(g.inputs.contains_key("test_in"));
-        assert_eq!(idgen.next(), first + g.graph.len() as u64 + 1);
+        assert_eq!(idgen.next_id(), first + g.graph.len() as u64 + 1);
         let out = g.graph.get(5).unwrap();
         assert_eq!(out.id, "test_out");
         assert_eq!(out.kind, NodeKind::Output);
