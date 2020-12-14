@@ -1,0 +1,7 @@
+Error: 
+    6 | 
+    7 | create script process from pass;
+    8 | create script process from pass;
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Name `process` is already in use for another node, please use another name.
+    9 | 
+   10 | select event from in into process;

@@ -140,4 +140,8 @@ test_cases!(
     //INSERT
     bad_into,
     bad_from,
+    node_duplicate_name_operator,
+    node_duplicate_name_script,
+    node_reserved_name_operator,
+    node_reserved_name_script,
 );

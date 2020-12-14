@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// NOTE: We node this because of error_chain
+// NOTE: We need this because of error_chain
 #![allow(clippy::large_enum_variant)]
 #![allow(deprecated)]
 #![allow(unused_imports)]
@@ -179,16 +179,19 @@ impl ErrorKind {
             InvalidToken, InvalidUTF8Sequence, InvalidUnary, Io, JSONError, MergeTypeConflict,
             MissingEffectors, MissingFunction, MissingModule, ModuleNotFound, Msg, NoClauseHit,
             NoConstsAllowed, NoLocalsAllowed, NoObjectError, NotConstant, NotFound, Oops,
-            ParseIntError, ParserError, PatchKeyExists, PreprocessorError, QueryStreamNotDefined,
-            RuntimeError, TailingHereDoc, TypeConflict, UnexpectedCharacter, UnexpectedEndOfStream,
-            UnexpectedEscapeCode, UnrecognizedToken, UnterminatedExtractor, UnterminatedHereDoc,
+            ParseIntError, ParserError, PatchKeyExists, PreprocessorError, QueryNodeDuplicateName,
+            QueryNodeReservedName, QueryStreamNotDefined, RuntimeError, TailingHereDoc,
+            TypeConflict, UnexpectedCharacter, UnexpectedEndOfStream, UnexpectedEscapeCode,
+            UnrecognizedToken, UnterminatedExtractor, UnterminatedHereDoc,
             UnterminatedIdentLiteral, UnterminatedInterpolation, UnterminatedStringLiteral,
             UpdateKeyMissing, Utf8Error,
         };
         match self {
-            NoClauseHit(outer) | Oops(outer, _, _) => (Some(outer.expand_lines(2)), Some(*outer)),
-            QueryStreamNotDefined(outer, inner, _)
-            | ArrayOutOfRange(outer, inner, _, _)
+            NoClauseHit(outer)
+            | Oops(outer, _, _)
+            | QueryNodeDuplicateName(outer, _)
+            | QueryNodeReservedName(outer, _) => (Some(outer.expand_lines(2)), Some(*outer)),
+            ArrayOutOfRange(outer, inner, _, _)
             | AssignIntoArray(outer, inner)
             | BadAccessInEvent(outer, inner, _, _)
             | BadAccessInState(outer, inner, _, _)
@@ -227,6 +230,7 @@ impl ErrorKind {
             | ModuleNotFound(outer, inner, _, _)
             | NoLocalsAllowed(outer, inner)
             | NoConstsAllowed(outer, inner)
+            | QueryStreamNotDefined(outer, inner, _)
             | RuntimeError(outer, inner, _, _, _, _)
             | TypeConflict(outer, inner, _, _)
             | UnexpectedCharacter(outer, inner, _, _)
@@ -699,11 +703,11 @@ error_chain! {
         }
         BinaryEmit(expr: Range, inner: Range) {
             description("Please enclose the value you want to emit")
-                display("The expression can be read as a binary expression, please put the value you wan to emit in parentheses.")
+                display("The expression can be read as a binary expression, please put the value you want to emit in parentheses.")
         }
         BinaryDrop(expr: Range, inner: Range) {
             description("Please enclose the value you want to drop")
-                display("The expression can be read as a binary expression, please put the value you wan to drop in parentheses.")
+                display("The expression can be read as a binary expression, please put the value you want to drop in parentheses.")
         }
         /*
          * Operators
@@ -770,8 +774,8 @@ error_chain! {
                 display("Local variables are not allowed here")
         }
         NoConstsAllowed(stmt: Range, inner: Range) {
-            description("Local variables are not allowed here")
-                display("Local variables are not allowed here")
+            description("Constants are not allowed here")
+                display("Constants are not allowed here")
         }
 
         CantSetWindowConst {
@@ -787,10 +791,20 @@ error_chain! {
                 display("Failed to initialize args constant")
         }
 
+        QueryNodeReservedName(stmt: Range, name: String) {
+            description("Reserved name used for the node")
+                display("Name `{}` is reserved for built-in nodes, please use another name.", name)
+        }
+        QueryNodeDuplicateName(stmt: Range, name: String) {
+            description("Duplicate name used for the node")
+                // TODO would be nice to include location of the node where the name was already used
+                display("Name `{}` is already in use for another node, please use another name.", name)
+        }
+
     }
 }
 
-/// Creates an stream not defined error
+/// Creates a stream not defined error
 #[allow(clippy::borrowed_box)]
 pub fn query_stream_not_defined_err<S: BaseExpr, I: BaseExpr>(
     stmt: &S,
@@ -799,6 +813,24 @@ pub fn query_stream_not_defined_err<S: BaseExpr, I: BaseExpr>(
     meta: &NodeMetas,
 ) -> Error {
     ErrorKind::QueryStreamNotDefined(stmt.extent(meta), inner.extent(meta), name).into()
+}
+
+/// Creates a query node reserved name error
+pub fn query_node_reserved_name_err<S: BaseExpr>(
+    stmt: &S,
+    name: String,
+    meta: &NodeMetas,
+) -> Error {
+    ErrorKind::QueryNodeReservedName(stmt.extent(meta), name).into()
+}
+
+/// Creates a query node duplicate name error
+pub fn query_node_duplicate_name_err<S: BaseExpr>(
+    stmt: &S,
+    name: String,
+    meta: &NodeMetas,
+) -> Error {
+    ErrorKind::QueryNodeDuplicateName(stmt.extent(meta), name).into()
 }
 
 /// Creates a guard not bool error

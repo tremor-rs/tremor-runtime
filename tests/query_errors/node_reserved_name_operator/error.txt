@@ -1,0 +1,6 @@
+Error: 
+    1 | define generic::counter operator counter;
+    2 | create operator metrics from counter;
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Name `metrics` is reserved for built-in nodes, please use another name.
+    3 | 
+    4 | select event from in into metrics;

@@ -1,0 +1,7 @@
+Error: 
+    2 | 
+    3 | create operator c1 from counter;
+    4 | create operator c1 from counter;
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Name `c1` is already in use for another node, please use another name.
+    5 | 
+    6 | select event from in into c1;

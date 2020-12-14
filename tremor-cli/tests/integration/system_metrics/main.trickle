@@ -17,4 +17,3 @@ select event from process into out;
 select event from process/err into err;
 
 select event from process/done into out/done;
-#select { "exit": 0, "delay": 100 } from in where event.done into out/done;
