@@ -21,6 +21,7 @@ use async_std::task;
 use futures::{SinkExt, StreamExt};
 use halfbrown::HashMap;
 use std::collections::BTreeMap;
+use tremor_pipeline::EventId;
 use tremor_script::Value;
 use tungstenite::protocol::Message;
 
@@ -62,7 +63,7 @@ enum WsSourceReply {
 /// encoded response and additional information
 /// for post-processing and assembling WS messages
 pub struct SerializedResponse {
-    event_id: Ids,
+    event_id: EventId,
     ingest_ns: u64,
     data: Vec<u8>,
     binary: bool,
@@ -302,7 +303,7 @@ impl Source for Int {
         codec: &dyn Codec,
         _codec_map: &HashMap<String, Box<dyn Codec>>,
     ) -> Result<()> {
-        if let Some(eid) = event.id.get(self.uid) {
+        if let Some((_stream, eid)) = event.id.get_max_by_source(self.uid) {
             if let Some(tx) = self.get_stream_sender_for_id(eid) {
                 for (value, meta) in event.value_meta_iter() {
                     let binary = meta.get("binary").and_then(Value::as_bool).unwrap_or(false);

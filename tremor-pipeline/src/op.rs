@@ -127,7 +127,7 @@ pub trait Operator: std::fmt::Debug + Send {
 /// Initialisable trait that can be turned from a `NodeConfig`
 pub trait InitializableOperator {
     /// Takes a `NodeConfig` and intialises the operator.
-    fn from_node(&self, node: &NodeConfig) -> Result<Box<dyn Operator>>;
+    fn from_node(&self, uid: u64, node: &NodeConfig) -> Result<Box<dyn Operator>>;
 }
 
 /// Trait for detecting errors in config and the key names are included in errors

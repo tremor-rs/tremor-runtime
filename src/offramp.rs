@@ -32,6 +32,7 @@ use async_std::task::{self, JoinHandle};
 use halfbrown::HashMap;
 use std::borrow::{Borrow, Cow};
 use std::fmt;
+use tremor_common::ids::OfframpIdGen;
 use tremor_common::time::nanotime;
 
 #[derive(Debug)]
@@ -358,7 +359,7 @@ impl Manager {
         let (tx, rx) = bounded(crate::QSIZE);
         let h = task::spawn(async move {
             info!("Offramp manager started");
-            let mut offramp_uid: u64 = 0;
+            let mut offramp_id_gen = OfframpIdGen::new();
             while let Ok(msg) = rx.recv().await {
                 match msg {
                     ManagerMsg::Stop => {
@@ -366,8 +367,7 @@ impl Manager {
                         break;
                     }
                     ManagerMsg::Create(r, c) => {
-                        offramp_uid += 1;
-                        self.offramp_task(r, *c, offramp_uid).await?
+                        self.offramp_task(r, *c, offramp_id_gen.next()).await?
                     }
                 };
                 info!("Stopping offramps...");

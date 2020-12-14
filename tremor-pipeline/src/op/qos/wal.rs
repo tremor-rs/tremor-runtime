@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::op::prelude::*;
+use crate::{op::prelude::*, DEFAULT_STREAM_ID};
 use byteorder::{BigEndian, ReadBytesExt};
 use simd_json_derive::{Deserialize, Serialize};
 use sled::IVec;
@@ -181,7 +181,7 @@ pub struct WAL {
     origin_uri: Option<EventOriginUri>,
 }
 
-op!(WalFactory(node) {
+op!(WalFactory(_uid, node) {
     if let Some(map) = &node.config {
         let config: Config = Config::new(map)?;
 
@@ -248,12 +248,14 @@ impl WAL {
         Ok(events)
     }
 
-    fn store_event(&mut self, uid: u64, mut event: Event) -> Result<()> {
+    fn store_event(&mut self, source_id: u64, mut event: Event) -> Result<()> {
         let id = self.wal.generate_id()?;
         let write: [u8; 8] = unsafe { mem::transmute(id.to_be()) };
-        event.id.add_id(uid, id); // = Ids::new(uid, id);
+        // TODO: figure out if handling of separate streams makes sense here
+        // FIXME: this should go into op_meta, shouldnt it?
+        event.id.track_id(source_id, DEFAULT_STREAM_ID, id);
 
-        // Sieralize and write the event
+        // Serialize and write the event
         let event_buf = event.json_vec()?;
         self.events_tree.insert(write, event_buf.as_slice())?;
         if self.config.flush_on_evnt.unwrap_or_default() {
@@ -291,13 +293,14 @@ impl Operator for WAL {
             CBAction::Open => self.broken = false,
             CBAction::Close => self.broken = true,
             CBAction::Ack => {
-                let c_id = if let Some(c_id) = insight.id.get(u_id) {
-                    c_id
-                } else {
-                    // This is not for us
-                    return;
-                };
-                self.confirmed.set(c_id);
+                let event_id =
+                    if let Some((_stream_id, event_id)) = insight.id.get_max_by_source(u_id) {
+                        event_id
+                    } else {
+                        // This is not for us
+                        return;
+                    };
+                self.confirmed.set(event_id);
                 if let Err(e) = self.state_tree.insert("read", self.confirmed) {
                     error!("Failed to persist confirm state: {}", e);
                 }
@@ -307,18 +310,19 @@ impl Operator for WAL {
                     .ok()
                     .and_then(maybe_parse_ivec)
                 {
-                    debug!("WAL confirm: {}", c_id);
-                    insight.id.merge(&e.id);
+                    debug!("WAL confirm: {}", event_id);
+                    insight.id.track(&e.id);
                 }
             }
             CBAction::Fail => {
-                let f_id = if let Some(f_id) = insight.id.get(u_id) {
-                    f_id
-                } else {
-                    // This is not for us
-                    return;
-                };
-                self.read.set_min(f_id);
+                let event_id =
+                    if let Some((_stream_id, event_id)) = insight.id.get_min_by_source(u_id) {
+                        event_id
+                    } else {
+                        // This is not for us
+                        return;
+                    };
+                self.read.set_min(event_id);
 
                 if let Some(e) = self
                     .events_tree
@@ -326,16 +330,16 @@ impl Operator for WAL {
                     .ok()
                     .and_then(maybe_parse_ivec)
                 {
-                    insight.id.merge(&e.id);
+                    insight.id.track(&e.id);
                 }
 
                 let c = u64::from(self.confirmed);
-                if f_id < c {
+                if event_id < c {
                     error!(
                         "trying to fail a message({}) that was already confirmed({})",
-                        f_id, c
+                        event_id, c
                     );
-                    self.confirmed.set(f_id);
+                    self.confirmed.set(event_id);
                     if let Err(e) = self.state_tree.insert("read", self.confirmed) {
                         error!("Failed to persist confirm state: {}", e);
                     }
@@ -404,6 +408,8 @@ impl Operator for WAL {
 
 #[cfg(test)]
 mod test {
+    use crate::EventIdGenerator;
+
     use super::*;
     use tempfile::Builder as TempDirBuilder;
 
@@ -417,14 +423,17 @@ mod test {
             flush_on_evnt: None,
         };
         let mut o = WAL::new("test".to_string(), c)?;
+        let wal_uid = 0_u64;
+        let source_uid = 42_u64;
+        let mut idgen = EventIdGenerator::new(source_uid);
 
         let mut v = Value::null();
-        let e = Event::default();
-
+        let mut e = Event::default();
+        e.id = idgen.next();
         // The operator start in broken status
 
         // Send a first event
-        let r = o.on_event(0, "in", &mut v, e.clone())?;
+        let r = o.on_event(wal_uid, "in", &mut v, e.clone())?;
         // Since we are broken we should get nothing back
         assert_eq!(r.len(), 0);
 
@@ -433,27 +442,33 @@ mod test {
         o.on_contraflow(0, &mut i);
 
         // Send a second event
-        let r = o.on_event(0, "in", &mut v, e.clone())?;
+        e.id = idgen.next();
+        let r = o.on_event(wal_uid, "in", &mut v, e.clone())?;
         // Since we are restored we now get 2 events (1 and 2)
         assert_eq!(r.len(), 2);
 
-        // Send a fail event beck to 1, this tell the WAL that delivery of
+        // extract the ids assigned by the WAL and tracked in the event ids
+        let id_e1 = r.events.get(0).map(|(_, event)| &event.id).unwrap();
+        let id_e2 = r.events.get(1).map(|(_, event)| &event.id).unwrap();
+
+        // Send a fail event beck to the source through the WAL, this tell the WAL that delivery of
         // 2 failed and they need to be delivered again
         let mut i = Event::default();
-        i.id = 1.into();
+        i.id = id_e2.clone();
         i.cb = CBAction::Fail;
         o.on_contraflow(0, &mut i);
 
-        // Send a second event
+        // Send a third event
+        e.id = idgen.next();
         let r = o.on_event(0, "in", &mut v, e.clone())?;
         // since we failed before we should see 2 events, 3 and the retransmit
         // of 2
         assert_eq!(r.len(), 2);
 
-        // Send a fail event beck to 0, this tell the WAL that delivery of
+        // Send a fail event back to the source for the first event, this will tell the WAL that delivery of
         // 1, 2, 3 failed and they need to be delivered again
         let mut i = Event::default();
-        i.id = 0.into();
+        i.id = id_e1.clone();
 
         i.cb = CBAction::Fail;
         o.on_contraflow(0, &mut i);
@@ -488,8 +503,8 @@ mod test {
 
         {
             // create the operator - first time
-            let mut o1 =
-                WalFactory::new().from_node(&NodeConfig::from_config("wal-test-1", c.clone())?)?;
+            let mut o1 = WalFactory::new()
+                .from_node(1, &NodeConfig::from_config("wal-test-1", c.clone())?)?;
 
             // Restore the CB
             let mut i = Event::cb_restore(0);
@@ -504,7 +519,8 @@ mod test {
         {
             // create the operator - second time
             // simulating a tremor restart
-            let mut o2 = WalFactory::new().from_node(&NodeConfig::from_config("wal-test-2", c)?)?;
+            let mut o2 =
+                WalFactory::new().from_node(2, &NodeConfig::from_config("wal-test-2", c)?)?;
 
             // Restore the CB
             let mut i = Event::cb_restore(1);
@@ -515,9 +531,12 @@ mod test {
             assert_eq!(r.events.len(), 2);
             let id1 = &r.events[0].1.id;
             let id2 = &r.events[1].1.id;
-            assert_eq!(id1.get(0).unwrap(), 0);
+            assert_eq!(id1.get_max_by_stream(0, 0).unwrap(), 0);
             // ensure we actually had a gap bigger than read count, which triggers the error condition
-            assert!(id2.get(0).unwrap() - id1.get(0).unwrap() > read_count as u64);
+            assert!(
+                id2.get_max_by_stream(0, 0).unwrap() - id1.get_max_by_stream(0, 0).unwrap()
+                    > read_count as u64
+            );
             assert_eq!(r.insights.len(), 0);
 
             let r = o2.on_event(0, "in", &mut v, e.clone())?;

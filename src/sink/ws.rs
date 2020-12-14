@@ -22,7 +22,7 @@ use futures::SinkExt;
 use halfbrown::HashMap;
 use std::boxed::Box;
 use std::time::Duration;
-use tremor_pipeline::OpMeta;
+use tremor_pipeline::{EventId, OpMeta};
 use tremor_script::LineValue;
 use tungstenite::protocol::Message;
 use url::Url;
@@ -54,7 +54,7 @@ enum WsConnectionMsg {
 }
 
 enum ConnectionTaskMsg {
-    SendEvent(Ids, WsMessageMeta, OpMeta, u64, LineValue),
+    SendEvent(EventId, WsMessageMeta, OpMeta, u64, LineValue),
     //ToEvent(Ids, u64, Message),
 }
 
@@ -79,7 +79,7 @@ async fn handle_error_with_fail(
     sink_url: &TremorURL,
     e: &str,
     reply_tx: &Sender<sink::Reply>,
-    ids: &Ids,
+    ids: &EventId,
     event_origin_uri: &EventOriginUri,
     op_meta: OpMeta,
 ) -> Result<()> {
@@ -104,7 +104,7 @@ async fn handle_error_no_fail(
     sink_url: &TremorURL,
     e: &str,
     reply_tx: &Sender<sink::Reply>,
-    ids: &Ids,
+    ids: &EventId,
     event_origin_uri: &EventOriginUri,
 ) -> Result<()> {
     error!("[Sink::{}] {}", sink_url, e);
@@ -343,7 +343,7 @@ fn message_to_event(
     codec: &mut dyn Codec,
     preprocessors: &mut Preprocessors,
     ingest_ns: &mut u64,
-    ids: &Ids,
+    ids: &EventId,
     message: Message,
 ) -> Result<Vec<Event>> {
     let mut meta = Value::object_with_capacity(1);
@@ -446,7 +446,7 @@ impl Ws {
         Ok(())
     }
 
-    fn create_error_response(event_id: &Ids, e: &str, origin_uri: &EventOriginUri) -> Event {
+    fn create_error_response(event_id: &EventId, e: &str, origin_uri: &EventOriginUri) -> Event {
         let mut error_data = simd_json::value::borrowed::Object::with_capacity(2);
         error_data.insert_nocheck("error".into(), Value::from(e.to_string()));
         error_data.insert_nocheck("event_id".into(), Value::from(event_id.to_string()));
@@ -651,7 +651,7 @@ mod test {
         let origin_uri = EventOriginUri::default();
         let mut preprocessors = make_preprocessors(&["lines".to_string()])?;
         let mut ingest_ns = 42_u64;
-        let ids = Ids::default();
+        let ids = EventId::default();
         let mut codec: Box<dyn Codec> = Box::new(crate::codec::string::String {});
         let message = Message::Text("hello\nworld\n".to_string());
         let events = message_to_event(
@@ -736,7 +736,7 @@ mod test {
 
         // lets try to send an event
         let mut event = Event::default();
-        event.id = Ids::new(1, 1);
+        event.id = EventId::new(1, 1, 1);
         sink.on_event("in", codec.as_ref(), &HashMap::new(), event)
             .await?;
 
@@ -744,11 +744,11 @@ mod test {
             match msg {
                 sink::Reply::Insight(event) => {
                     assert_eq!(CBAction::Fail, event.cb);
-                    assert_eq!(Some(1), event.id.get(1));
+                    assert_eq!(Some((1, 1)), event.id.get_max_by_source(1));
                 }
                 sink::Reply::Response(port, event) => {
                     assert_eq!("err", port.as_ref());
-                    assert_eq!(Some(1), event.id.get(1));
+                    assert_eq!(Some((1, 1)), event.id.get_max_by_source(1));
                 }
             }
         }

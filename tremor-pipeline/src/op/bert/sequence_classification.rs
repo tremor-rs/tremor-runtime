@@ -78,7 +78,7 @@ fn get_resource(resource: &str) -> Result<Resource> {
     }
 }
 
-op!(SequenceClassificationFactory(node) {
+op!(SequenceClassificationFactory(_uid, node) {
     let mapping = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
     let config_map = if let Some(map) = &node.config {
         map

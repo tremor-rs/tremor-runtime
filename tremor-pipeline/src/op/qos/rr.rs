@@ -12,9 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! # Incremental backoff limiter
-//!
-//! The Backoff limiter will start backing off based on the maximum allowed time for results
+//! # Round Robin backoff limiter
 //!
 //! ## Configuration
 //!
@@ -22,8 +20,9 @@
 //!
 //! ## Outputs
 //!
-//! The 1st additional output is used to route data that was decided to
-//! be discarded.
+//! Sends incoming events to the next open (not closed due to circuit breaker events) output
+//! determined by iterating through the list of outputs from the last one that has been used.
+//! If no open output was found, the event is sent via the output port `overflow`.
 
 use crate::errors::{ErrorKind, Result};
 use crate::op::prelude::*;
@@ -74,7 +73,7 @@ fn d_outputs() -> Vec<String> {
     vec![String::from("out")]
 }
 
-op!(RoundRobinFactory(node) {
+op!(RoundRobinFactory(_uid, node) {
 if let Some(map) = &node.config {
     let config: Config = Config::new(map)?;
     if config.outputs.is_empty() {
@@ -185,7 +184,7 @@ mod test {
         // Sent a first event, as all is initiated clean
         // we should see this pass
         let event1 = Event {
-            id: 1.into(),
+            id: (1, 1, 1).into(),
             ingest_ns: 1_000_000,
             ..Event::default()
         };
@@ -200,7 +199,7 @@ mod test {
         // Sent a first event, as all is initiated clean
         // we should see this pass
         let event2 = Event {
-            id: 2.into(),
+            id: (1, 1, 2).into(),
             ingest_ns: 1_000_001,
             ..Event::default()
         };
@@ -217,7 +216,7 @@ mod test {
         op_meta.insert(0, 0);
 
         let mut insight = Event {
-            id: 1.into(),
+            id: (1, 1, 1).into(),
             ingest_ns: 1_000_000,
             cb: CBAction::Close,
             op_meta,
@@ -231,7 +230,7 @@ mod test {
 
         // Output should now come out of 1
         let event2 = Event {
-            id: 2.into(),
+            id: (1, 1, 2).into(),
             ingest_ns: 2_000_000 - 1,
             ..Event::default()
         };
@@ -245,7 +244,7 @@ mod test {
 
         // Even for multiple events
         let event3 = Event {
-            id: 3.into(),
+            id: (1, 1, 3).into(),
             ingest_ns: 2_000_000,
             ..Event::default()
         };
@@ -262,7 +261,7 @@ mod test {
         op_meta.insert(0, 0);
 
         let mut insight = Event {
-            id: 1.into(),
+            id: (1, 1, 1).into(),
             ingest_ns: 1_000_000,
             cb: CBAction::Open,
             op_meta,
@@ -276,7 +275,7 @@ mod test {
 
         // The next event should go to the newly enabled output
         let event3 = Event {
-            id: 3.into(),
+            id: (1, 1, 3).into(),
             ingest_ns: 2_000_000 + 1,
             ..Event::default()
         };

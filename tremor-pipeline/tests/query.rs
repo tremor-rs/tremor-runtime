@@ -11,6 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+use tremor_common::ids::OperatorIdGen;
 use tremor_pipeline::query::Query;
 use tremor_script::errors::CompilerError;
 
@@ -20,8 +21,8 @@ fn to_pipe(file_name: String, query: &str) -> std::result::Result<(), CompilerEr
     let module_path = tremor_script::path::load();
     let cus = vec![];
     let q = Query::parse(&module_path, query, &file_name, cus, &reg, &aggr_reg)?;
-    let mut uid = 0;
-    q.to_pipe(&mut uid).map_err(|error| CompilerError {
+    let mut idgen = OperatorIdGen::new();
+    q.to_pipe(&mut idgen).map_err(|error| CompilerError {
         error: format!("{}", error).into(),
         cus: vec![],
     })?;

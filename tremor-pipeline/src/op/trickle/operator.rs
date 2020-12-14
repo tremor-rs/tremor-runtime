@@ -22,7 +22,7 @@ pub(crate) struct TrickleOperator {
     pub op: Box<dyn Operator>,
 }
 
-fn mk_node_confiug<'script>(
+fn mk_node_config<'script>(
     id: Cow<'static, str>,
     op_type: String,
     config: Option<HashMap<String, Value<'script>>>,
@@ -51,6 +51,7 @@ fn mk_node_confiug<'script>(
 
 impl TrickleOperator {
     pub fn with_stmt(
+        operator_uid: u64,
         id: String,
         stmt_rentwrapped: tremor_script::query::StmtRentalWrapper,
     ) -> Result<Self> {
@@ -58,12 +59,12 @@ impl TrickleOperator {
         let stmt = stmt_rentwrapped.suffix();
         let op: Box<dyn Operator> = match stmt {
             tremor_script::ast::Stmt::OperatorDecl(ref op) => {
-                let config = mk_node_confiug(
+                let config = mk_node_config(
                     op.id.clone().into(),
                     format!("{}::{}", op.kind.module, op.kind.operation),
                     op.params.clone(),
                 );
-                operator(&config)?
+                operator(operator_uid, &config)?
             }
             _ => {
                 return Err(ErrorKind::PipelineError(

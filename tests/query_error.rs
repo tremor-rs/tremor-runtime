@@ -15,7 +15,7 @@ use pretty_assertions::assert_eq;
 use regex::Regex;
 use std::io::prelude::*;
 use std::path::Path;
-use tremor_common::file;
+use tremor_common::{file, ids::OperatorIdGen};
 use tremor_pipeline;
 use tremor_pipeline::query::Query;
 use tremor_pipeline::ExecutableGraph;
@@ -28,7 +28,7 @@ use tremor_script::path::ModulePath;
 fn to_pipe(module_path: &ModulePath, file_name: &str, query: &str) -> Result<ExecutableGraph> {
     let aggr_reg = tremor_script::aggr_registry();
     let cus = vec![];
-    let mut uid = 0;
+    let mut idgen = OperatorIdGen::new();
     let q = Query::parse(
         module_path,
         query,
@@ -37,7 +37,7 @@ fn to_pipe(module_path: &ModulePath, file_name: &str, query: &str) -> Result<Exe
         &*FN_REGISTRY.lock()?,
         &aggr_reg,
     )?;
-    Ok(q.to_pipe(&mut uid)?)
+    Ok(q.to_pipe(&mut idgen)?)
 }
 
 macro_rules! test_cases {

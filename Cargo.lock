@@ -5711,6 +5711,7 @@ dependencies = [
  "simd-json-derive",
  "sled",
  "tempfile",
+ "tremor-common",
  "tremor-influx",
  "tremor-script",
  "url 2.2.0",

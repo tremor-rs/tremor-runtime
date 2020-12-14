@@ -33,7 +33,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 use surf::{Body, Client, Request, Response};
-use tremor_pipeline::{Ids, OpMeta};
+use tremor_pipeline::{EventId, EventIdGenerator, OpMeta};
 
 /// custom Url struct for parsing a url
 #[derive(Clone, Debug, Deserialize, Default, PartialEq)]
@@ -258,13 +258,13 @@ impl ConfigImpl for Config {}
 enum CodecTaskInMsg {
     ToRequest(Event, Sender<SendTaskInMsg>),
     ToEvent {
-        id: Ids,
+        id: EventId,
         origin_uri: Box<EventOriginUri>, // box to avoid becoming the struct too big
         op_meta: OpMeta,
         response: Response,
         duration: u64,
     },
-    ReportFailure(Ids, OpMeta, EventOriginUri, Error),
+    ReportFailure(EventId, OpMeta, EventOriginUri, Error),
 }
 
 enum SendTaskInMsg {
@@ -465,19 +465,6 @@ impl Sink for Rest {
     }
 }
 
-struct ResponseIdGenerator(u64);
-impl ResponseIdGenerator {
-    fn next(&mut self) -> u64 {
-        let res = self.0;
-        self.0 += 1;
-        res
-    }
-
-    fn new() -> Self {
-        Self(0)
-    }
-}
-
 // TODO: use headers from config
 #[allow(clippy::too_many_arguments, clippy::too_many_lines)]
 async fn codec_task(
@@ -494,8 +481,8 @@ async fn codec_task(
     in_rx: Receiver<CodecTaskInMsg>,
     is_linked: bool,
 ) -> Result<()> {
-    debug!("REST Sink codec task started.");
-    let mut response_ids = ResponseIdGenerator::new();
+    debug!("[Sink::{}] Codec task started.", &sink_url);
+    let mut response_ids = EventIdGenerator::new(sink_uid);
 
     let codec: &mut dyn Codec = codec.as_mut();
     while let Ok(msg) = in_rx.recv().await {
@@ -536,7 +523,8 @@ async fn codec_task(
 
                         // send response through error port
                         let error_event = create_error_response(
-                            Ids::new(sink_uid, response_ids.next()),
+                            // TODO: add proper stream handling
+                            response_ids.next(),
                             &event.id,
                             400,
                             EventOriginUri {
@@ -591,6 +579,7 @@ async fn codec_task(
                     match build_response_events(
                         &sink_url,
                         &id,
+                        &mut response_ids,
                         origin_uri.as_ref(),
                         response,
                         codec,
@@ -600,9 +589,8 @@ async fn codec_task(
                     .await
                     {
                         Ok(response_events) => {
-                            for mut response_event in response_events {
-                                let my_id = Ids::new(sink_uid, response_ids.next());
-                                response_event.id.merge(&my_id);
+                            for response_event in response_events {
+                                // TODO: stream handling
                                 if let Err(e) = reply_tx
                                     .send(sink::Reply::Response(OUT, response_event))
                                     .await
@@ -618,7 +606,8 @@ async fn codec_task(
                             cb = CBAction::Fail;
                             error!("[Sink::{}] Error encoding the request: {}", &sink_url, &e);
                             let error_event = create_error_response(
-                                Ids::new(sink_uid, response_ids.next()),
+                                // TODO: stream handling
+                                response_ids.next(),
                                 &id,
                                 500,
                                 origin_uri.as_ref().clone(),
@@ -664,7 +653,8 @@ async fn codec_task(
                     );
                 }
                 let error_event = create_error_response(
-                    Ids::new(sink_uid, response_ids.next()),
+                    // TODO: stream handling
+                    response_ids.next(),
                     &id,
                     503,
                     event_origin_uri,
@@ -793,7 +783,7 @@ fn build_request(
         }
     }
     let endpoint = endpoint.map_or_else(|| config_endpoint.as_url(), |ep| ep.as_url())?;
-    debug!("endpoint [{}] chosen", &endpoint);
+    trace!("endpoint [{}] chosen", &endpoint);
     let host = match (endpoint.host(), endpoint.port()) {
         (Some(host), Some(port)) => Some(format!("{}:{}", host, port)),
         (Some(host), _) => Some(host.to_string()),
@@ -830,7 +820,8 @@ fn build_request(
 
 async fn build_response_events(
     sink_url: &TremorURL,
-    id: &Ids,
+    event_id: &EventId,
+    response_ids: &mut EventIdGenerator,
     event_origin_uri: &EventOriginUri,
     mut response: Response,
     codec: &mut dyn Codec,
@@ -879,11 +870,15 @@ async fn build_response_events(
                 Ok(ValueAndMeta::from_parts(body, meta.clone())) // TODO: no need to clone the last element?
             })
             .map_err(|e: rental::RentalError<Error, _>| e.0)
-            .map(|data| Event {
-                id: id.clone(),
-                origin_uri: Some(event_origin_uri.clone()),
-                data,
-                ..Event::default()
+            .map(|data| {
+                let mut id = response_ids.next();
+                id.track(event_id);
+                Event {
+                    id,
+                    origin_uri: Some(event_origin_uri.clone()),
+                    data,
+                    ..Event::default()
+                }
             })?,
         );
     }
@@ -893,8 +888,8 @@ async fn build_response_events(
 
 /// build an error event bearing error information and metadata to be handled as http response
 fn create_error_response(
-    mut error_id: Ids,
-    event_id: &Ids,
+    mut error_id: EventId,
+    event_id: &EventId,
     status: u16,
     origin_uri: EventOriginUri,
     e: &Error,
@@ -913,7 +908,7 @@ fn create_error_response(
 
     error_data.insert_nocheck("error".into(), Value::from(e.to_string()));
     error_data.insert_nocheck("event_id".into(), Value::from(event_id.to_string()));
-    error_id.merge(event_id); // make sure we carry over the old events ids
+    error_id.track(event_id); // make sure we carry over the old events ids
     Event {
         id: error_id,
         data: (error_data, meta).into(),
@@ -1165,7 +1160,9 @@ mod test {
     async fn build_response() -> Result<()> {
         use simd_json::json;
         let sink_url = TremorURL::from_offramp_id("rest")?;
-        let id = Ids::default();
+        let sink_uid = 0_u64;
+        let mut response_id_gen = EventIdGenerator::new(sink_uid);
+        let id = EventId::default();
         let event_origin_uri = EventOriginUri::default();
         let mut body = Body::from_string(r#"{"foo": true}"#.to_string());
         body.set_mime(http_types::mime::JSON);
@@ -1181,6 +1178,7 @@ mod test {
         let res = build_response_events(
             &sink_url,
             &id,
+            &mut response_id_gen,
             &event_origin_uri,
             Response::from(response),
             codec.as_mut(),

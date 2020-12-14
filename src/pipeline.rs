@@ -23,6 +23,7 @@ use async_std::task::{self, JoinHandle};
 use std::borrow::Cow;
 use std::fmt;
 use std::time::Duration;
+use tremor_common::ids::OperatorIdGen;
 use tremor_common::time::nanotime;
 use tremor_pipeline::errors::ErrorKind as PipelineErrorKind;
 use tremor_pipeline::{CBAction, Event, ExecutableGraph, SignalKind};
@@ -164,7 +165,7 @@ pub(crate) enum ManagerMsg {
 #[derive(Default, Debug)]
 pub(crate) struct Manager {
     qsize: usize,
-    uid: u64,
+    operator_id_gen: OperatorIdGen,
 }
 
 #[inline]
@@ -402,9 +403,7 @@ impl Manager {
     pub fn new(qsize: usize) -> Self {
         Self {
             qsize,
-            /// We're using a different 'numberspace' for operators so their ID's
-            /// are unique from the onramps
-            uid: 0b1000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_u64,
+            operator_id_gen: OperatorIdGen::new(),
         }
     }
     pub fn start(mut self) -> (JoinHandle<Result<()>>, Sender) {
@@ -421,7 +420,7 @@ impl Manager {
                         r.send(self.start_pipeline(create)).await?
                     }
                     Err(e) => {
-                        info!("Stopping onramps... {}", e);
+                        info!("Stopping Pipeline manager... {}", e);
                         break;
                     }
                 }
@@ -434,7 +433,7 @@ impl Manager {
 
     fn start_pipeline(&mut self, req: Create) -> Result<Addr> {
         let config = req.config;
-        let pipeline = config.to_pipe(&mut self.uid)?;
+        let pipeline = config.to_pipe(&mut self.operator_id_gen)?;
 
         let id = req.id.clone();
 

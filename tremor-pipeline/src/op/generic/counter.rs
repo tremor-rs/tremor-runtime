@@ -19,7 +19,7 @@ use tremor_script::prelude::*;
 // TODO add seed value and field name as config items
 pub struct Counter {}
 
-op!(CounterFactory(_node) {
+op!(CounterFactory(_uid, _node) {
     Ok(Box::new(Counter{}))
 });
 

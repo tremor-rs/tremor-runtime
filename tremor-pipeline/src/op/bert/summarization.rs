@@ -41,7 +41,7 @@ impl fmt::Debug for Summerization {
     }
 }
 
-op!(SummerizationFactory(node) {
+op!(SummerizationFactory(_uid, node) {
     if let Some(config_map) = &node.config {
         let config = Config::new(config_map)?;
         debug!("{}", config.file);

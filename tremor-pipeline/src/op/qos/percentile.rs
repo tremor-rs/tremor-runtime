@@ -76,7 +76,7 @@ fn d_step_down() -> f64 {
     0.05
 }
 
-op!(PercentileFactory(node) {
+op!(PercentileFactory(_uid, node) {
     if let Some(map) = &node.config {
         let config: Config = Config::new(map)?;
         Ok(Box::new(Percentile::from(config)))

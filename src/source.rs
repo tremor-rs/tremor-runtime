@@ -30,7 +30,7 @@ use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::time::Duration;
 use tremor_common::time::nanotime;
-use tremor_pipeline::{CBAction, Event, EventOriginUri, Ids};
+use tremor_pipeline::{CBAction, Event, EventId, EventOriginUri};
 use tremor_script::{LineValue, Value, ValueAndMeta};
 
 use self::prelude::OnrampConfig;
@@ -333,13 +333,17 @@ where
                     }
                 }
                 onramp::Msg::Cb(CBAction::Fail, ids) => {
-                    if let Some(id) = ids.get(self.uid) {
+                    // TODO: stream handling
+                    // when failing, we use the earliest/min event within the tracked set
+                    if let Some((_stream_id, id)) = ids.get_min_by_source(self.uid) {
                         self.source.fail(id);
                     }
                 }
                 // Circuit breaker explicit acknowledgement of an event
                 onramp::Msg::Cb(CBAction::Ack, ids) => {
-                    if let Some(id) = ids.get(self.uid) {
+                    // TODO: stream handling
+                    // when acknowledging, we use the latest/max event within the tracked set
+                    if let Some((_stream_id, id)) = ids.get_max_by_source(self.uid) {
                         self.source.ack(id);
                     }
                 }
@@ -379,7 +383,8 @@ where
         port: Cow<'static, str>,
     ) -> bool {
         let event = Event {
-            id: Ids::new(self.uid, self.id),
+            // TODO: stream handling
+            id: EventId::new(self.uid, 0, self.id),
             data,
             ingest_ns,
             // TODO make origin_uri non-optional here too?

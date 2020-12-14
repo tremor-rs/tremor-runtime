@@ -13,12 +13,12 @@
 // limitations under the License.
 use pretty_assertions::assert_eq;
 use std::io::prelude::*;
-use tremor_common::file;
+use tremor_common::{file, ids::OperatorIdGen};
 use tremor_pipeline;
 use tremor_pipeline::query::Query;
 use tremor_pipeline::ExecutableGraph;
 use tremor_pipeline::FN_REGISTRY;
-use tremor_pipeline::{Event, Ids};
+use tremor_pipeline::{Event, EventId};
 use tremor_runtime;
 use tremor_runtime::errors::*;
 use tremor_script::path::ModulePath;
@@ -26,7 +26,7 @@ use tremor_script::utils::*;
 
 fn to_pipe(module_path: &ModulePath, file_name: &str, query: &str) -> Result<ExecutableGraph> {
     let aggr_reg = tremor_script::aggr_registry();
-    let mut uid = 0;
+    let mut idgen = OperatorIdGen::new();
     let q = Query::parse(
         &module_path,
         query,
@@ -35,7 +35,7 @@ fn to_pipe(module_path: &ModulePath, file_name: &str, query: &str) -> Result<Exe
         &*FN_REGISTRY.lock()?,
         &aggr_reg,
     )?;
-    Ok(q.to_pipe(&mut uid)?)
+    Ok(q.to_pipe(&mut idgen)?)
 }
 
 macro_rules! test_cases {
@@ -68,7 +68,7 @@ macro_rules! test_cases {
                 let mut results = Vec::new();
                 for (id, json) in in_json.into_iter().enumerate() {
                     let event = Event {
-                        id: Ids::new(0, (id as u64)),
+                        id: EventId::new(0, 0, (id as u64)),
                         data: json.clone_static().into(),
                         ingest_ns: id as u64,
                         ..Event::default()

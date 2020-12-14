@@ -371,7 +371,7 @@ impl Source for Int {
         codec: &dyn Codec,
         codec_map: &HashMap<String, Box<dyn Codec>>,
     ) -> Result<()> {
-        if let Some(event_id) = event.id.get(self.uid) {
+        if let Some((_stream_id, event_id)) = event.id.get_max_by_source(self.uid) {
             if let Some(response_tx) = self.response_txes.remove(&event_id) {
                 if event.is_batch && self.is_linked {
                     return Err("Batched events not supported in linked REST source.".into());

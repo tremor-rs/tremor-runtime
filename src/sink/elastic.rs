@@ -34,14 +34,14 @@
 
 use crate::postprocessor::Postprocessors;
 use crate::sink::prelude::*;
-use async_channel::{bounded, Receiver, Sender};
+use async_channel::{bounded, Sender};
 use elastic::prelude::*;
 use halfbrown::HashMap;
 use simd_json::borrowed::Object;
 use simd_json::json;
 use std::str;
 use std::time::Instant;
-use tremor_pipeline::OpMeta;
+use tremor_pipeline::{EventId, OpMeta};
 use tremor_script::prelude::*;
 
 #[derive(Debug, Deserialize)]
@@ -58,11 +58,11 @@ fn concurrency() -> usize {
 impl ConfigImpl for Config {}
 
 pub struct Elastic {
+    sink_url: TremorURL,
     client: SyncClient,
     queue: AsyncSink<u64>,
     postprocessors: Postprocessors,
-    tx: Sender<sink::Reply>,
-    rx: Receiver<sink::Reply>,
+    insight_tx: Sender<sink::Reply>,
 }
 
 impl offramp::Impl for Elastic {
@@ -74,14 +74,14 @@ impl offramp::Impl for Elastic {
                 .build()?;
 
             let queue = AsyncSink::new(config.concurrency);
-            let (tx, rx) = bounded(crate::QSIZE);
+            let (tx, _rx) = bounded(1); // dummy value
 
             Ok(SinkManager::new_box(Self {
+                sink_url: TremorURL::from_offramp_id("elastic")?, // just a dummy value, gonna be overwritten on init
                 postprocessors: vec![],
                 client,
                 queue,
-                rx,
-                tx,
+                insight_tx: tx,
             }))
         } else {
             Err("Elastic offramp requires a configuration.".into())
@@ -90,22 +90,14 @@ impl offramp::Impl for Elastic {
 }
 
 impl Elastic {
-    async fn drain_insights(&mut self) -> ResultVec {
-        let mut v = Vec::with_capacity(self.rx.len() + 1);
-        while let Ok(e) = self.rx.try_recv() {
-            v.push(e)
-        }
-        Ok(Some(v))
-    }
-
     async fn enqueue_send_future(
         &mut self,
-        id: Ids,
+        id: EventId,
         op_meta: OpMeta,
         payload: Vec<u8>,
     ) -> Result<()> {
         let (tx, rx) = bounded(1);
-        let insight_tx = self.tx.clone();
+        let insight_tx = self.insight_tx.clone();
 
         let req = self.client.request(BulkRequest::new(payload));
 
@@ -163,7 +155,7 @@ impl Elastic {
         Ok(())
     }
 
-    async fn maybe_enque(&mut self, id: Ids, op_meta: OpMeta, payload: Vec<u8>) -> Result<()> {
+    async fn maybe_enque(&mut self, id: EventId, op_meta: OpMeta, payload: Vec<u8>) -> Result<()> {
         match self.queue.dequeue() {
             Err(SinkDequeueError::NotReady) if !self.queue.has_capacity() => {
                 let mut m = Object::new();
@@ -175,11 +167,16 @@ impl Elastic {
                     ..Event::default()
                 };
 
-                if self.tx.send(sink::Reply::Insight(insight)).await.is_err() {
-                    error!("Failed to send insight")
+                if self
+                    .insight_tx
+                    .send(sink::Reply::Insight(insight))
+                    .await
+                    .is_err()
+                {
+                    error!("[Sink::{}] Failed to send insight", &self.sink_url)
                 };
 
-                error!("Dropped data due to es overload");
+                error!("[Sink::{}] Dropped data due to es overload", &self.sink_url);
                 Err("Dropped data due to es overload".into())
             }
             _ => {
@@ -189,7 +186,10 @@ impl Elastic {
                     .is_err()
                 {
                     // TODO: handle reply to the pipeline
-                    error!("Failed to enqueue send request to elastic");
+                    error!(
+                        "[Sink::{}] Failed to enqueue send request to elastic",
+                        &self.sink_url
+                    );
                     Err("Failed to enqueue send request to elastic".into())
                 } else {
                     Ok(())
@@ -214,7 +214,6 @@ impl Sink for Elastic {
         let mut output = None;
         let op_meta = event.op_meta.clone();
 
-        // TODO: make proper use of postprocessors here
         for (value, meta) in event.value_meta_iter() {
             if output.is_none() {
                 output = meta.get("backpressure-output").map(Value::clone_static);
@@ -250,26 +249,28 @@ impl Sink for Elastic {
             payload.push(b'\n');
         }
         self.maybe_enque(event.id, op_meta, payload).await?;
-        self.drain_insights().await
+        Ok(None) // insights are sent via reply_channel directly
     }
 
     #[allow(clippy::too_many_arguments)]
     async fn init(
         &mut self,
         _sink_uid: u64,
-        _sink_url: &TremorURL,
+        sink_url: &TremorURL,
         _codec: &dyn Codec,
         _codec_map: &HashMap<String, Box<dyn Codec>>,
         processors: Processors<'_>,
         _is_linked: bool,
-        _reply_channel: Sender<sink::Reply>,
+        reply_channel: Sender<sink::Reply>,
     ) -> Result<()> {
+        self.sink_url = sink_url.clone();
         self.postprocessors = make_postprocessors(processors.post)?;
+        self.insight_tx = reply_channel;
         Ok(())
     }
 
     async fn on_signal(&mut self, _signal: Event) -> ResultVec {
-        self.drain_insights().await
+        Ok(None) // insights are sent via reply_channel directly
     }
     fn is_active(&self) -> bool {
         true

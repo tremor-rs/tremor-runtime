@@ -17,7 +17,7 @@ use crate::op::prelude::*;
 #[derive(Debug, Clone, Hash)]
 pub struct Passthrough {}
 
-op!(PassthroughFactory (_node) {
+op!(PassthroughFactory (_uid, _node) {
     Ok(Box::new(Passthrough{}))
 });
 

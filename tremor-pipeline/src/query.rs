@@ -33,6 +33,7 @@ use simd_json::prelude::*;
 use std::borrow::Cow;
 use std::mem;
 use std::sync::Arc;
+use tremor_common::ids::OperatorIdGen;
 use tremor_script::path::ModulePath;
 use tremor_script::query::{StmtRental, StmtRentalWrapper};
 use tremor_script::{ast::Select, errors::CompilerError};
@@ -158,7 +159,7 @@ impl Query {
 
     /// Turn a query into a executable pipeline graph
     #[allow(clippy::too_many_lines)]
-    pub fn to_pipe(&self, uid: &mut u64) -> Result<crate::ExecutableGraph> {
+    pub fn to_pipe(&self, idgen: &mut OperatorIdGen) -> Result<crate::ExecutableGraph> {
         use crate::{ExecutableGraph, NodeMetrics, State};
         use std::iter;
 
@@ -191,9 +192,9 @@ impl Query {
                 ..NodeConfig::default()
             });
             nodes.insert(name.clone(), id);
-            *uid += 1;
             // ALLOW: id is created by inserting above, we also have no other way to access, thanks petgraph
-            let op = pipe_graph[id].to_op(*uid, supported_operators, None, None, None)?;
+            let op =
+                pipe_graph[id].to_op(idgen.next_id(), supported_operators, None, None, None)?;
             pipe_ops.insert(id, op);
             match node_kind {
                 NodeKind::Input => {
@@ -266,10 +267,9 @@ impl Query {
                                 ..NodeConfig::default()
                             });
                             nodes.insert(name.clone(), id);
-                            *uid += 1;
                             // ALLOW: id is created by inserting above, we also have no other way to access, thanks petgraph
                             let op = pipe_graph[id].to_op(
-                                *uid,
+                                idgen.next(),
                                 supported_operators,
                                 None,
                                 None,
@@ -293,10 +293,9 @@ impl Query {
                                 ..NodeConfig::default()
                             });
                             nodes.insert(name.clone(), id);
-                            *uid += 1;
                             // ALLOW: id is created by inserting above, we also have no other way to access, thanks petgraph
                             let op = pipe_graph[id].to_op(
-                                *uid,
+                                idgen.next(),
                                 supported_operators,
                                 None,
                                 None,
@@ -325,8 +324,13 @@ impl Query {
                     for w in &query.windows {
                         ww.insert(w.0.clone(), window_decl_to_impl(&w.1, &that)?);
                     }
-                    *uid += 1;
-                    let op = node.to_op(*uid, supported_operators, None, Some(that), Some(ww))?;
+                    let op = node.to_op(
+                        idgen.next(),
+                        supported_operators,
+                        None,
+                        Some(that),
+                        Some(ww),
+                    )?;
                     pipe_ops.insert(id, op);
                     nodes.insert(select_in.id.clone(), id);
                     outputs.push(id);
@@ -343,9 +347,8 @@ impl Query {
                         };
                         let id = pipe_graph.add_node(node.clone());
                         nodes.insert(name.clone(), id);
-                        *uid += 1;
                         let op = node.to_op(
-                            *uid,
+                            idgen.next(),
                             supported_operators,
                             None,
                             Some(that),
@@ -408,8 +411,8 @@ impl Query {
                     let that = StmtRentalWrapper {
                         stmt: std::sync::Arc::new(stmt_rental),
                     };
-                    *uid += 1;
-                    let op = node.to_op(*uid, supported_operators, None, Some(that), None)?;
+                    let op =
+                        node.to_op(idgen.next(), supported_operators, None, Some(that), None)?;
                     pipe_ops.insert(id, op);
                     nodes.insert(common_cow(&o.id), id);
                     outputs.push(id);
@@ -458,9 +461,13 @@ impl Query {
                     };
 
                     let id = pipe_graph.add_node(node.clone());
-                    *uid += 1;
-                    let op =
-                        node.to_op(*uid, supported_operators, Some(that_defn), Some(that), None)?;
+                    let op = node.to_op(
+                        idgen.next(),
+                        supported_operators,
+                        Some(that_defn),
+                        Some(that),
+                        None,
+                    )?;
                     pipe_ops.insert(id, op);
                     nodes.insert(common_cow(&o.id), id);
                     outputs.push(id);
@@ -582,6 +589,7 @@ impl Query {
 }
 
 fn select(
+    operator_uid: u64,
     config: &NodeConfig,
     node: Option<tremor_script::query::StmtRentalWrapper>,
     windows: Option<HashMap<String, WindowImpl>>,
@@ -605,7 +613,7 @@ fn select(
     match select_type {
         SelectType::Passthrough => {
             let op = PassthroughFactory::new_boxed();
-            op.from_node(config)
+            op.from_node(operator_uid, config)
         }
         SelectType::Simple => Ok(Box::new(SimpleSelect::with_stmt(
             config.id.clone().to_string(),
@@ -641,6 +649,7 @@ fn select(
                 };
 
             Ok(Box::new(TrickleSelect::with_stmt(
+                operator_uid,
                 config.id.clone().to_string(),
                 &groups,
                 windows?,
@@ -651,6 +660,7 @@ fn select(
 }
 
 fn operator(
+    operator_uid: u64,
     config: &NodeConfig,
     node: Option<tremor_script::query::StmtRentalWrapper>,
 ) -> Result<Box<dyn Operator>> {
@@ -662,6 +672,7 @@ fn operator(
         );
     };
     Ok(Box::new(TrickleOperator::with_stmt(
+        operator_uid,
         config.id.clone().to_string(),
         node,
     )?))
@@ -695,10 +706,10 @@ pub(crate) fn supported_operators(
     let name_parts: Vec<&str> = config.op_type.split("::").collect();
 
     let op: Box<dyn op::Operator> = match name_parts.as_slice() {
-        ["trickle", "select"] => select(config, node, windows)?,
-        ["trickle", "operator"] => operator(config, node)?,
+        ["trickle", "select"] => select(uid, config, node, windows)?,
+        ["trickle", "operator"] => operator(uid, config, node)?,
         ["trickle", "script"] => script(config, defn, node)?,
-        _ => crate::operator(&config)?,
+        _ => crate::operator(uid, &config)?,
     };
     Ok(OperatorNode {
         uid,
@@ -768,11 +779,12 @@ mod test {
         )
         .unwrap();
 
-        let mut uid = 0;
-        let g = q.to_pipe(&mut uid).unwrap();
+        let mut idgen = OperatorIdGen::new();
+        let first = idgen.next();
+        let g = q.to_pipe(&mut idgen).unwrap();
 
         assert!(g.inputs.contains_key("test_in"));
-
+        assert_eq!(idgen.next(), first + g.graph.len() as u64 + 1);
         let out = g.graph.get(5).unwrap();
         assert_eq!(out.id, "test_out");
         assert_eq!(out.kind, NodeKind::Output);

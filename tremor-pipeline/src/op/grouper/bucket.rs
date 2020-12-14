@@ -74,7 +74,7 @@ use std::borrow::Cow;
 use tremor_script::prelude::*;
 use window::TimeWindow;
 
-op!(BucketGrouperFactory(node) {
+op!(BucketGrouperFactory(_uid, node) {
     if node.config.is_none() {
         Ok(Box::new(Grouper {
             buckets: HashMap::new(),
@@ -238,7 +238,7 @@ mod test {
             _id: "badger".into(),
         };
         let event1 = Event {
-            id: 1.into(),
+            id: (1, 1, 1).into(),
             ingest_ns: 1,
             data: Value::from("snot").into(),
             ..Event::default()
@@ -257,7 +257,7 @@ mod test {
 
         // let meta =
         let event2 = Event {
-            id: 1.into(),
+            id: (1, 1, 1).into(),
             ingest_ns: 1,
             data: (
                 Value::from("snot"),
@@ -295,7 +295,7 @@ mod test {
         assert_eq!(e, event2);
 
         let event3 = Event {
-            id: 1.into(),
+            id: (1, 1, 1).into(),
             ingest_ns: 10_000_000_002,
             data: (
                 Value::from("snot"),

@@ -138,6 +138,7 @@ impl Source for Blaster {
 #[async_trait::async_trait]
 impl Onramp for Blaster {
     async fn start(&mut self, config: OnrampConfig<'_>) -> Result<onramp::Addr> {
+        self.origin_uri.uid = config.onramp_uid;
         SourceManager::start(self.clone(), config).await
     }
     fn default_codec(&self) -> &str {

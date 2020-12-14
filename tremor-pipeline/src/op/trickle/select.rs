@@ -14,8 +14,11 @@
 
 // [x] PERF0001: handle select without grouping or windows easier.
 
-use crate::errors::{Error, ErrorKind, Result};
-use crate::op::prelude::*;
+use crate::{
+    errors::{Error, ErrorKind, Result},
+    EventId,
+};
+use crate::{op::prelude::*, EventIdGenerator};
 use crate::{Event, Operator};
 use halfbrown::HashMap;
 use simd_json::borrowed::Value;
@@ -39,7 +42,7 @@ pub struct GroupData<'groups> {
     group: Value<'static>,
     window: WindowImpl,
     aggrs: Aggrs<'groups>,
-    id: Ids,
+    id: EventId,
 }
 type Groups<'groups> = HashMap<String, GroupData<'groups>>;
 rental! {
@@ -83,6 +86,7 @@ pub struct TrickleSelect {
     pub id: String,
     pub select: rentals::Select,
     pub windows: Vec<Window>,
+    pub event_id_gen: EventIdGenerator,
 }
 
 pub trait WindowTrait: std::fmt::Debug {
@@ -365,6 +369,7 @@ const NO_AGGRS: [InvokeAggrFn<'static>; 0] = [];
 
 impl TrickleSelect {
     pub fn with_stmt(
+        operator_uid: u64,
         id: String,
         dims: &Dims,
         windows: Vec<(String, WindowImpl)>,
@@ -401,6 +406,7 @@ impl TrickleSelect {
                 // is dropped.
                 mem::transmute::<SelectStmt<'_>, SelectStmt<'static>>(select)
             }),
+            event_id_gen: EventIdGenerator::new(operator_uid),
         })
     }
     fn opts() -> ExecOpts {
@@ -478,6 +484,11 @@ impl Operator for TrickleSelect {
             }
         };
 
+        //
+        // select without group by or windows
+        // event stays the same, only the value might change based on select clause
+        // and we might drop it altogether based on having clause.
+        //
         if self.windows.is_empty() && group_values.is_empty() {
             let group_value = Value::from(vec![()]);
             let group_str = sorted_serialize(&group_value)?;
@@ -504,6 +515,7 @@ impl Operator for TrickleSelect {
                     .run(opts, &env, unwind_event, state, event_meta, &local_stack)?;
 
             let result = value.into_owned();
+            // evaluate having clause, if one exists
             if let Some(guard) = &stmt.maybe_having {
                 let test = guard.run(opts, &env, &result, state, &NULL, &local_stack)?;
                 if let Some(test) = test.as_bool() {
@@ -551,6 +563,7 @@ impl Operator for TrickleSelect {
                 let this_groups = &mut this.dims.groups;
                 let last_groups = &mut this.last_dims.groups;
                 let window_impl = &this.window_impl;
+                let mut idgen = self.event_id_gen;
                 let (_, this_group) = this_groups
                     .raw_entry_mut()
                     .from_key(&group_str)
@@ -562,11 +575,11 @@ impl Operator for TrickleSelect {
                                 window: window_impl.clone(),
                                 aggrs: aggregates.clone(),
                                 group: group_value.clone_static(),
-                                id: event.id.clone(),
+                                id: idgen.next(), // after all this is a new event
                             }),
                         )
                     });
-                this_group.id.merge(&event.id);
+                this_group.id.track(&event.id);
                 let window_event = this_group.window.on_event(&event)?;
                 // The issue with the windows is the following:
                 // We emit on the first event of the next windows, this works well for the initial frame
@@ -598,6 +611,7 @@ impl Operator for TrickleSelect {
                     // Then emit the window itself
                     set_window(consts, Value::from(this.name.to_string()))?;
                     let data = event.data.suffix();
+                    // TODO: how to handle batched events here?
                     let unwind_event = data.value();
                     let event_meta = data.meta();
                     set_group(consts, group_value.clone_static())?;
@@ -638,11 +652,14 @@ impl Operator for TrickleSelect {
                         Event {
                             id: this_group.id.clone(),
                             ingest_ns: event.ingest_ns,
-                            // TODO avoid origin_uri clone here
-                            origin_uri: event.origin_uri.clone(),
+                            // TODO: this will blindly chose the origin uri of the last event arriving at the window, which is at least misleading and might be just wrong
+                            // e.g. in case of having two source input events into a stream we select from
+                            // having a single origin_uri doesnt make sense here anymore, if this info is valuable, we should track multiple origins for such events
+                            //origin_uri: event.origin_uri.clone(),
+                            origin_uri: None,
                             is_batch: event.is_batch,
                             kind: event.kind,
-                            data: (result.into_static(), event_meta.clone_static()).into(),
+                            data: (result.into_static(), event_meta.clone_static()).into(), // TODO: this is the event meta of the last event in the window
                             ..Event::default()
                         },
                     ));
@@ -680,6 +697,7 @@ impl Operator for TrickleSelect {
                 let this_groups = &mut this.dims.groups;
                 let last_groups = &mut this.last_dims.groups;
                 let window_impl = &this.window_impl;
+                let mut idgen = self.event_id_gen;
                 let (_, this_group) = this_groups
                     .raw_entry_mut()
                     .from_key(&group_str)
@@ -690,7 +708,7 @@ impl Operator for TrickleSelect {
                                 window: window_impl.clone(),
                                 aggrs: aggregates.clone(),
                                 group: group_value.clone_static(),
-                                id: event.id.clone(),
+                                id: idgen.next(),
                             }),
                         )
                     });
@@ -717,6 +735,7 @@ impl Operator for TrickleSelect {
                     let prev_groups = &mut prev.dims.groups;
                     let last_groups = &mut prev.last_dims.groups;
                     let window_impl = &prev.window_impl;
+                    let mut idgen = self.event_id_gen;
                     let (_, prev_group) = prev_groups
                         .raw_entry_mut()
                         .from_key(&group_str)
@@ -727,7 +746,7 @@ impl Operator for TrickleSelect {
                                     window: window_impl.clone(),
                                     aggrs: aggregates.clone(),
                                     group: group_value.clone_static(),
-                                    id: event.id.clone(),
+                                    id: idgen.next(),
                                 }),
                             )
                         });
@@ -746,6 +765,7 @@ impl Operator for TrickleSelect {
                 set_window(consts, Value::from(this.name.to_string()))?;
                 let this_groups = &mut this.dims.groups;
                 let window_impl = &this.window_impl;
+                let mut idgen = self.event_id_gen;
                 let (_, this_group) = this_groups
                     .raw_entry_mut()
                     .from_key(&group_str)
@@ -756,7 +776,7 @@ impl Operator for TrickleSelect {
                                 window: window_impl.clone(),
                                 aggrs: aggregates.clone(),
                                 group: group_value.clone_static(),
-                                id: event.id.clone(),
+                                id: idgen.next(),
                             },
                         )
                     });
@@ -790,6 +810,7 @@ impl Operator for TrickleSelect {
                     })?;
                 }
             } else {
+                // group by without windows
                 // otherwise we just pass it through the select portion of the statement
                 let data = event.data.suffix();
                 let unwind_event = unsafe { data.force_value_mut() };
@@ -797,6 +818,7 @@ impl Operator for TrickleSelect {
                 set_group(consts, group_value.clone_static())?;
                 get_group_mut(consts)?.push(group_str.clone())?;
 
+                // evaluate select clause
                 let env = Env {
                     context: &ctx,
                     consts: &consts,
@@ -808,6 +830,7 @@ impl Operator for TrickleSelect {
                     stmt.target
                         .run(opts, &env, unwind_event, state, event_meta, &local_stack)?;
 
+                // check having clause
                 let result = value.into_owned();
                 if let Some(guard) = &stmt.maybe_having {
                     let test = guard.run(opts, &env, &result, state, &NULL, &local_stack)?;
@@ -822,10 +845,12 @@ impl Operator for TrickleSelect {
                         )?;
                     }
                 }
+                let mut event_id = self.event_id_gen.next();
+                event_id.track(&event.id);
                 events.push((
                     OUT,
                     Event {
-                        id: event.id.clone(),
+                        id: event_id,
                         ingest_ns: event.ingest_ns,
                         // TODO avoid origin_uri clone here
                         origin_uri: event.origin_uri.clone(),
@@ -886,7 +911,7 @@ mod test {
 
     fn test_event(s: u64) -> Event {
         Event {
-            id: s.into(),
+            id: (0, 0, s).into(),
             ingest_ns: s * 1_000_000_000,
             data: Value::from(json!({
                "h2g2" : 42,
@@ -898,7 +923,10 @@ mod test {
 
     use std::sync::Arc;
 
-    fn test_select(stmt: tremor_script::query::StmtRentalWrapper) -> Result<TrickleSelect> {
+    fn test_select(
+        uid: u64,
+        stmt: tremor_script::query::StmtRentalWrapper,
+    ) -> Result<TrickleSelect> {
         let groups = Dims::new(stmt.stmt.clone());
         let windows = vec![
             (
@@ -923,7 +951,7 @@ mod test {
             ),
         ];
         let id = "select".to_string();
-        TrickleSelect::with_stmt(id, &groups, windows, &stmt)
+        TrickleSelect::with_stmt(uid, id, &groups, windows, &stmt)
     }
 
     fn try_enqueue(
@@ -986,7 +1014,7 @@ mod test {
         let stmt = tremor_script::query::StmtRentalWrapper {
             stmt: Arc::new(stmt_rental),
         };
-        Ok(test_select(stmt)?)
+        Ok(test_select(1, stmt)?)
     }
 
     #[test]
@@ -1090,7 +1118,7 @@ mod test {
             stmt: Arc::new(stmt_rental),
         };
 
-        let mut op = test_select(stmt)?;
+        let mut op = test_select(1, stmt)?;
         assert!(try_enqueue(&mut op, test_event(0))?.is_none());
         assert!(try_enqueue(&mut op, test_event(1))?.is_none());
         let (out, event) = try_enqueue(&mut op, test_event(15))?.expect("no event");
@@ -1131,7 +1159,7 @@ mod test {
             stmt: Arc::new(stmt_rental),
         };
 
-        let mut op = test_select(stmt)?;
+        let mut op = test_select(2, stmt)?;
 
         assert!(try_enqueue(&mut op, test_event(0))?.is_none());
 
@@ -1173,7 +1201,7 @@ mod test {
             stmt: Arc::new(stmt_rental),
         };
 
-        let mut op = test_select(stmt)?;
+        let mut op = test_select(3, stmt)?;
         let next = try_enqueue(&mut op, test_event(0))?;
         assert_eq!(None, next);
         Ok(())
@@ -1209,7 +1237,7 @@ mod test {
             stmt: Arc::new(stmt_rental),
         };
 
-        let mut op = test_select(stmt)?;
+        let mut op = test_select(4, stmt)?;
 
         assert!(try_enqueue(&mut op, test_event(0)).is_err());
 
@@ -1250,7 +1278,7 @@ mod test {
             stmt: Arc::new(stmt_rental),
         };
 
-        let mut op = test_select(stmt)?;
+        let mut op = test_select(5, stmt)?;
 
         let event = test_event(0);
         assert!(try_enqueue(&mut op, event)?.is_none());
@@ -1296,7 +1324,7 @@ mod test {
             stmt: Arc::new(stmt_rental),
         };
 
-        let mut op = test_select(stmt)?;
+        let mut op = test_select(6, stmt)?;
         let event = test_event(0);
 
         let next = try_enqueue(&mut op, event)?;
@@ -1351,7 +1379,7 @@ mod test {
             stmt: Arc::new(stmt_rental),
         };
 
-        let mut op = test_select(stmt)?;
+        let mut op = test_select(7, stmt)?;
         let event = test_event(0);
 
         let next = try_enqueue(&mut op, event)?;

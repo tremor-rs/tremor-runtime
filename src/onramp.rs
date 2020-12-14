@@ -22,6 +22,8 @@ use async_std::task::{self, JoinHandle};
 use serde_yaml::Value;
 use std::borrow::Cow;
 use std::fmt;
+use tremor_common::ids::OnrampIdGen;
+use tremor_pipeline::EventId;
 
 pub(crate) type Sender = async_channel::Sender<ManagerMsg>;
 
@@ -36,7 +38,7 @@ pub enum Msg {
         id: TremorURL,
         tx: async_channel::Sender<bool>,
     },
-    Cb(CBAction, Ids),
+    Cb(CBAction, EventId),
     // TODO pick good naming here: LinkedEvent / Response / Result?
     Response(tremor_pipeline::Event),
 }
@@ -117,7 +119,7 @@ impl Manager {
         let (tx, rx) = bounded(self.qsize);
 
         let h = task::spawn::<_, Result<()>>(async move {
-            let mut onramp_uid: u64 = 0;
+            let mut onramp_id_gen = OnrampIdGen::new();
             info!("Onramp manager started");
             loop {
                 match rx.recv().await {
@@ -137,10 +139,10 @@ impl Manager {
                             id,
                             err_required,
                         } = *c;
-                        onramp_uid += 1;
+
                         match stream
                             .start(OnrampConfig {
-                                onramp_uid,
+                                onramp_uid: onramp_id_gen.next(),
                                 codec: &codec,
                                 codec_map,
                                 processors: Processors {
