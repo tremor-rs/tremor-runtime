@@ -524,7 +524,7 @@ async fn codec_task(
                         // send response through error port
                         let error_event = create_error_response(
                             // TODO: add proper stream handling
-                            response_ids.next(),
+                            response_ids.next_id(),
                             &event.id,
                             400,
                             EventOriginUri {
@@ -607,7 +607,7 @@ async fn codec_task(
                             error!("[Sink::{}] Error encoding the request: {}", &sink_url, &e);
                             let error_event = create_error_response(
                                 // TODO: stream handling
-                                response_ids.next(),
+                                response_ids.next_id(),
                                 &id,
                                 500,
                                 origin_uri.as_ref().clone(),
@@ -654,7 +654,7 @@ async fn codec_task(
                 }
                 let error_event = create_error_response(
                     // TODO: stream handling
-                    response_ids.next(),
+                    response_ids.next_id(),
                     &id,
                     503,
                     event_origin_uri,
@@ -818,6 +818,7 @@ fn build_request(
     Ok(request_builder.build())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn build_response_events(
     sink_url: &TremorURL,
     event_id: &EventId,
@@ -871,7 +872,7 @@ async fn build_response_events(
             })
             .map_err(|e: rental::RentalError<Error, _>| e.0)
             .map(|data| {
-                let mut id = response_ids.next();
+                let mut id = response_ids.next_id();
                 id.track(event_id);
                 Event {
                     id,
