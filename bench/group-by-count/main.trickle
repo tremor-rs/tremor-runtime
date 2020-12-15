@@ -1,9 +1,9 @@
 define tumbling window my_window
 with
-    size = 1000,
+    size = 10,
 end;
 
-select { "count": aggr::stats::count(), "first": aggr::win::first(event) }
+select { "count": aggr::stats::count(), "first": aggr::win::collect_flattened(event) }
 from in[my_window]
 group by set(event.index_type)
 into out;
