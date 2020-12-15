@@ -82,19 +82,7 @@ impl<'value> Value<'value> {
     #[inline]
     #[must_use]
     pub fn into_static(self) -> Value<'static> {
-        unsafe {
-            use std::mem::transmute;
-            let r = match self {
-                Self::String(s) => Self::String(s.into_owned().into()),
-                Self::Array(arr) => arr.into_iter().map(Value::into_static).collect(),
-                Self::Object(obj) => obj
-                    .into_iter()
-                    .map(|(k, v)| (Cow::from(k.into_owned()), v.into_static()))
-                    .collect(),
-                _ => self,
-            };
-            transmute(r)
-        }
+        self.clone_static()
     }
 
     /// Clones the current value and enforces a static lifetime, it works the same
@@ -340,6 +328,7 @@ impl<'de> ValueDeserializer<'de> {
 
     #[cfg_attr(not(feature = "no-inline"), inline(always))]
     pub fn parse(&mut self) -> Value<'de> {
+        // We know the tape is valid JSON
         match unsafe { self.0.next_() } {
             Node::Static(s) => Value::Static(s),
             Node::String(s) => Value::from(s),
@@ -350,8 +339,8 @@ impl<'de> ValueDeserializer<'de> {
 
     #[cfg_attr(not(feature = "no-inline"), inline(always))]
     fn parse_array(&mut self, len: usize) -> Value<'de> {
-        // Rust doens't optimize the normal loop away here
-        // so we write our own avoiding the lenght
+        // Rust doesn't optimize the normal loop away here
+        // so we write our own avoiding the length
         // checks during push
         let mut res = Vec::with_capacity(len);
         unsafe {
@@ -367,9 +356,8 @@ impl<'de> ValueDeserializer<'de> {
     fn parse_map(&mut self, len: usize) -> Value<'de> {
         let mut res = Object::with_capacity(len);
 
-        // Since we checked if it's empty we know that we at least have one
-        // element so we eat this
         for _ in 0..len {
+            // We know the tape is sane
             if let Node::String(key) = unsafe { self.0.next_() } {
                 res.insert_nocheck(key.into(), self.parse());
             } else {

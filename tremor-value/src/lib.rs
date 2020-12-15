@@ -70,8 +70,8 @@ impl<'input, 'tape> ValueDeser<'input, 'tape> {
     #[inline(always)]
     #[allow(clippy::clippy::unwrap_used)]
     fn parse_array(&mut self, len: usize) -> Value<'input> {
-        // Rust doens't optimize the normal loop away here
-        // so we write our own avoiding the lenght
+        // Rust doesn't optimize the normal loop away here
+        // so we write our own avoiding the length
         // checks during push
         let mut res = Vec::with_capacity(len);
         unsafe {
