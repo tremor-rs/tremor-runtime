@@ -155,10 +155,9 @@ pub(crate) fn process(
     s.assert(); // status code
     if let Some(code) = status {
         let success = code == spec.status;
-        let prefix = if success { "(+)" } else { "(-)" };
         status::assert_has(
             "   ",
-            &format!("{} Assert 0", prefix),
+            "Assert 0",
             &format!("Status {}", &spec.name,),
             Some(&spec.status.to_string()),
             success,
