@@ -71,6 +71,7 @@ impl<'value> Into<OwnedValue> for Value<'value> {
             Value::String(s) => OwnedValue::from(s.to_string()),
             Value::Array(a) => a.into_iter().collect(),
             Value::Object(m) => m.into_iter().collect(),
+            Value::Bytes(b) => OwnedValue::from(base64::encode(b)),
         }
     }
 }

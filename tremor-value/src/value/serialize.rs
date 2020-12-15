@@ -146,6 +146,12 @@ trait Generator: BaseGenerator {
                 }
             }
             Value::Object(ref object) => self.write_object(object),
+            Value::Bytes(ref b) => {
+                let mut enc =
+                    base64::write::EncoderWriter::new(self.get_writer(), base64::STANDARD);
+                stry!(enc.write_all(b));
+                enc.finish().map(|_| ())
+            }
         }
     }
 }
@@ -220,6 +226,12 @@ trait FastGenerator: BaseGenerator {
                 }
             }
             Value::Object(ref object) => self.write_object(object),
+            Value::Bytes(ref b) => {
+                let mut enc =
+                    base64::write::EncoderWriter::new(self.get_writer(), base64::STANDARD);
+                stry!(enc.write_all(b));
+                enc.finish().map(|_| ())
+            }
         }
     }
 }

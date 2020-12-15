@@ -135,6 +135,7 @@ fn t2s(t: ValueType) -> &'static str {
         ValueType::F64 => "float",
         ValueType::Array => "array",
         ValueType::Object => "record",
+        ValueType::Custom(c) => c,
     }
 }
 

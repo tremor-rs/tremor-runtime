@@ -47,11 +47,18 @@ pub fn load(registry: &mut Registry) {
                 ValueType::String => Value::from("string"),
                 ValueType::Array => Value::from("array"),
                 ValueType::Object => Value::from("record"),
+                ValueType::Custom(c) => Value::from(c),
             })
         }))
         .insert(tremor_const_fn! (type::is_number(_context, _input) {
             Ok(match _input.value_type() {
                 ValueType::I64 | ValueType::F64 | ValueType::U64 => Value::from(true),
+                _ => Value::from(false),
+            })
+        }))
+        .insert(tremor_const_fn! (type::is_binary(_context, _input) {
+            Ok(match _input.value_type() {
+                ValueType::Custom("binary") => Value::from(true),
                 _ => Value::from(false),
             })
         }));

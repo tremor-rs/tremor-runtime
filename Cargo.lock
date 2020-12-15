@@ -5711,7 +5711,9 @@ dependencies = [
 name = "tremor-value"
 version = "0.1.0"
 dependencies = [
+ "base64 0.13.0",
  "beef",
+ "bytes 0.6.0",
  "float-cmp 0.8.0",
  "getopts",
  "halfbrown",

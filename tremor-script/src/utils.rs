@@ -40,7 +40,7 @@ pub fn sorted_serialize(j: &Value) -> Result<String> {
 
 fn sorted_serialize_<'v, W: Write>(j: &Value<'v>, w: &mut W) -> Result<()> {
     match j {
-        Value::Static(_) | Value::String(_) => {
+        Value::Static(_) | Value::String(_) | Value::Bytes(_) => {
             write!(w, "{}", j.encode())?;
         }
         Value::Array(a) => {
