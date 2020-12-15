@@ -18,6 +18,7 @@ mod serialize;
 
 use crate::{Error, Result};
 use beef::Cow;
+use bytes::Bytes;
 use halfbrown::HashMap;
 use simd_json::prelude::*;
 use simd_json::{AlignedBuf, Deserializer, Node, StaticNode};
@@ -73,6 +74,8 @@ pub enum Value<'value> {
     Array(Vec<Value<'value>>),
     /// object type
     Object(Box<Object<'value>>),
+    /// A binary type
+    Bytes(Bytes),
 }
 
 impl<'value> Value<'value> {
@@ -100,6 +103,7 @@ impl<'value> Value<'value> {
                     .map(|(k, v)| (Cow::from(k.to_string()), v.clone_static()))
                     .collect(),
                 Self::Static(s) => Self::Static(*s),
+                Self::Bytes(b) => Self::Bytes(b.clone()),
             };
             transmute(r)
         }
@@ -150,12 +154,22 @@ impl<'value> ValueTrait for Value<'value> {
 
     #[inline]
     #[must_use]
+    fn is_custom(&self) -> bool {
+        match self {
+            Value::Bytes(_) => true,
+            _ => false,
+        }
+    }
+
+    #[inline]
+    #[must_use]
     fn value_type(&self) -> ValueType {
         match self {
             Self::Static(s) => s.value_type(),
             Self::String(_) => ValueType::String,
             Self::Array(_) => ValueType::Array,
             Self::Object(_) => ValueType::Object,
+            Self::Bytes(_) => ValueType::Custom("bytes"),
         }
     }
 
@@ -269,6 +283,7 @@ impl<'value> fmt::Display for Value<'value> {
             Self::String(s) => write!(f, "{}", s),
             Self::Array(a) => write!(f, "{:?}", a),
             Self::Object(o) => write!(f, "{:?}", o),
+            Value::Bytes(b) => write!(f, "<<{:?}>>", b),
         }
     }
 }

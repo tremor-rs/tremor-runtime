@@ -53,6 +53,7 @@ impl<'de> de::Deserializer<'de> for Value<'de> {
                 i: o.iter(),
                 v: &Value::Static(StaticNode::Null),
             }),
+            Value::Bytes(b) => visitor.visit_bytes(&b),
         }
     }
 

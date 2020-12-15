@@ -49,6 +49,7 @@ impl<'value> Serialize for Value<'value> {
                 }
                 map.end()
             }
+            Value::Bytes(b) => serializer.serialize_bytes(&b),
         }
     }
 }
