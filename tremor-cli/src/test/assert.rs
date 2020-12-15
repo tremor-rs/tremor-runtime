@@ -161,7 +161,6 @@ pub(crate) fn process(
             &format!("Status {}", &spec.name,),
             Some(&spec.status.to_string()),
             success,
-            //            &code.to_string(),
         )?;
         elements.push(report::TestElement {
             description: format!("Process expected to exit with status code {}", spec.status),
