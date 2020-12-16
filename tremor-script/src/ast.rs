@@ -19,8 +19,10 @@ pub mod query;
 pub(crate) mod raw;
 mod support;
 mod upable;
-use crate::errors::{error_generic, error_no_consts, error_no_locals, ErrorKind, Result};
-use crate::impl_expr2;
+use crate::errors::{
+    err_generic, error_generic, error_no_consts, error_no_locals, ErrorKind, Result,
+};
+use crate::impl_expr_mid;
 use crate::interpreter::{exec_binary, exec_unary, AggrType, Cont, Env, ExecOpts, LocalStack};
 pub use crate::lexer::CompilationUnit;
 use crate::pos::{Location, Range};
@@ -147,6 +149,45 @@ struct Function<'script> {
     is_const: bool,
     argc: usize,
     name: Cow<'script, str>,
+}
+
+/// Binary semiliteral
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct Bytes<'script> {
+    mid: usize,
+    /// Bytes
+    pub value: ImutExprs<'script>,
+}
+impl_expr_mid!(Bytes);
+impl<'script> Bytes<'script> {
+    fn try_reduce(mut self, helper: &Helper<'script, '_>) -> Result<ImutExprInt<'script>> {
+        self.value = self
+            .value
+            .into_iter()
+            .map(|v| v.0.try_reduce(helper).map(ImutExpr))
+            .collect::<Result<ImutExprs>>()?;
+        if self.value.iter().all(|v| is_lit(&v.0)) {
+            let outer = self.extent(&helper.meta);
+            let bytes = self
+                .value
+                .into_iter()
+                .map(|e| {
+                    let extent = e.extent(&helper.meta);
+                    reduce2(e.0, &helper).and_then(|inner| {
+                        inner.as_u8().ok_or_else(|| {
+                            err_generic(&outer, &extent, &"Not a valid u8", &helper.meta)
+                        })
+                    })
+                })
+                .collect::<Result<Vec<u8>>>()?;
+            Ok(ImutExprInt::Literal(Literal {
+                mid: self.mid,
+                value: Value::Bytes(bytes.into()),
+            }))
+        } else {
+            Ok(ImutExprInt::Bytes(self))
+        }
+    }
 }
 
 /// Documentation from constant
@@ -546,7 +587,7 @@ pub enum LexicalUnit<'script> {
     /// Line directive with embedded "<string> <num> ;"
     LineDirective(Cow<'script, str>),
 }
-// impl_expr2!(Ident);
+// impl_expr_mid!(Ident);
 
 /// An ident
 #[derive(Debug, PartialEq, Serialize, Clone)]
@@ -555,7 +596,7 @@ pub struct Ident<'script> {
     /// the text of the ident
     pub id: beef::Cow<'script, str>,
 }
-impl_expr2!(Ident);
+impl_expr_mid!(Ident);
 
 impl<'script> std::fmt::Display for Ident<'script> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -582,7 +623,7 @@ pub struct Field<'script> {
     /// Value expression for the field
     pub value: ImutExprInt<'script>,
 }
-impl_expr2!(Field);
+impl_expr_mid!(Field);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulation of a record structure
@@ -592,7 +633,7 @@ pub struct Record<'script> {
     /// Fields of this record
     pub fields: Fields<'script>,
 }
-impl_expr2!(Record);
+impl_expr_mid!(Record);
 impl<'script> Record<'script> {
     fn try_reduce(self, helper: &Helper<'script, '_>) -> Result<ImutExprInt<'script>> {
         if self
@@ -653,7 +694,7 @@ pub struct List<'script> {
     /// Value expressions for list elements of this list
     pub exprs: ImutExprs<'script>,
 }
-impl_expr2!(List);
+impl_expr_mid!(List);
 
 impl<'script> List<'script> {
     fn try_reduce(self, helper: &Helper<'script, '_>) -> Result<ImutExprInt<'script>> {
@@ -681,7 +722,7 @@ pub struct Literal<'script> {
     /// Literal value
     pub value: Value<'script>,
 }
-impl_expr2!(Literal);
+impl_expr_mid!(Literal);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub(crate) struct FnDecl<'script> {
@@ -693,7 +734,7 @@ pub(crate) struct FnDecl<'script> {
     pub open: bool,
     pub inline: bool,
 }
-impl_expr2!(FnDecl);
+impl_expr_mid!(FnDecl);
 
 fn path_eq<'script>(path: &Path<'script>, expr: &ImutExprInt<'script>) -> bool {
     let path_expr: ImutExprInt = ImutExprInt::Path(path.clone());
@@ -840,6 +881,8 @@ pub enum ImutExprInt<'script> {
     InvokeAggr(InvokeAggr),
     /// Tail-Recursion
     Recur(Recur<'script>),
+    /// Bytes
+    Bytes(Bytes<'script>),
 }
 
 fn is_lit<'script>(e: &ImutExprInt<'script>) -> bool {
@@ -856,7 +899,7 @@ pub struct EmitExpr<'script> {
     /// Port name
     pub port: Option<ImutExprInt<'script>>,
 }
-impl_expr2!(EmitExpr);
+impl_expr_mid!(EmitExpr);
 
 #[derive(Clone, Serialize)]
 /// Encapsulates a function invocation expression
@@ -873,7 +916,7 @@ pub struct Invoke<'script> {
     /// Arguments
     pub args: ImutExprs<'script>,
 }
-impl_expr2!(Invoke);
+impl_expr_mid!(Invoke);
 
 impl<'script> Invoke<'script> {
     fn inline(self) -> Result<ImutExprInt<'script>> {
@@ -980,7 +1023,7 @@ pub struct Recur<'script> {
     /// Capture of argument value expressions
     pub exprs: ImutExprs<'script>,
 }
-impl_expr2!(Recur);
+impl_expr_mid!(Recur);
 
 #[derive(Clone, Serialize)]
 /// Encapsulates an Aggregate function invocation
@@ -1007,7 +1050,7 @@ pub struct InvokeAggrFn<'script> {
     /// Arguments passed to the function
     pub args: ImutExprs<'script>,
 }
-impl_expr2!(InvokeAggrFn);
+impl_expr_mid!(InvokeAggrFn);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulates a pluggable extractor expression form
@@ -1032,7 +1075,7 @@ pub struct Match<'script> {
     /// Patterns to match against the target
     pub patterns: Predicates<'script>,
 }
-impl_expr2!(Match);
+impl_expr_mid!(Match);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulates an immutable match expression form
@@ -1044,7 +1087,7 @@ pub struct ImutMatch<'script> {
     /// The patterns against the match target
     pub patterns: ImutPredicates<'script>,
 }
-impl_expr2!(ImutMatch);
+impl_expr_mid!(ImutMatch);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulates a predicate expression form
@@ -1060,7 +1103,7 @@ pub struct PredicateClause<'script> {
     /// The last expression
     pub last_expr: Expr<'script>,
 }
-impl_expr2!(PredicateClause);
+impl_expr_mid!(PredicateClause);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulates an immutable predicate expression form
@@ -1074,7 +1117,7 @@ pub struct ImutPredicateClause<'script> {
     /// Expressions to evaluate if predicate test and guard pass
     pub expr: ImutExpr<'script>,
 }
-impl_expr2!(ImutPredicateClause);
+impl_expr_mid!(ImutPredicateClause);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulates a path expression form
@@ -1086,7 +1129,7 @@ pub struct Patch<'script> {
     /// Operations to patch against the target
     pub operations: PatchOperations<'script>,
 }
-impl_expr2!(Patch);
+impl_expr_mid!(Patch);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulates patch operation forms
@@ -1155,7 +1198,7 @@ pub struct Merge<'script> {
     /// Value expression computing content to merge into the target
     pub expr: ImutExprInt<'script>,
 }
-impl_expr2!(Merge);
+impl_expr_mid!(Merge);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulates a structure comprehension form
@@ -1171,7 +1214,7 @@ pub struct Comprehension<'script> {
     /// Case applications against target elements
     pub cases: ComprehensionCases<'script>,
 }
-impl_expr2!(Comprehension);
+impl_expr_mid!(Comprehension);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulates an immutable comprehension form
@@ -1187,7 +1230,7 @@ pub struct ImutComprehension<'script> {
     /// Case applications against target elements
     pub cases: ImutComprehensionCases<'script>,
 }
-impl_expr2!(ImutComprehension);
+impl_expr_mid!(ImutComprehension);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulates a comprehension case application
@@ -1205,7 +1248,7 @@ pub struct ComprehensionCase<'script> {
     /// Last case application against target on passing guard
     pub last_expr: Expr<'script>,
 }
-impl_expr2!(ComprehensionCase);
+impl_expr_mid!(ComprehensionCase);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulates an immutable comprehension case application
@@ -1221,7 +1264,7 @@ pub struct ImutComprehensionCase<'script> {
     /// Case application against target on passing guard
     pub expr: ImutExpr<'script>,
 }
-impl_expr2!(ImutComprehensionCase);
+impl_expr_mid!(ImutComprehensionCase);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulates predicate pattern form
@@ -1356,7 +1399,7 @@ pub struct RecordPattern<'script> {
     /// Pattern fields
     pub fields: PatternFields<'script>,
 }
-impl_expr2!(RecordPattern);
+impl_expr_mid!(RecordPattern);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulates an array predicate pattern
@@ -1379,7 +1422,7 @@ pub struct ArrayPattern<'script> {
     /// Predicates
     pub exprs: ArrayPredicatePatterns<'script>,
 }
-impl_expr2!(ArrayPattern);
+impl_expr_mid!(ArrayPattern);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulates an assignment pattern
@@ -1402,7 +1445,7 @@ pub struct TuplePattern<'script> {
     /// True, if the pattern supports variable arguments
     pub open: bool,
 }
-impl_expr2!(TuplePattern);
+impl_expr_mid!(TuplePattern);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Represents a path-like-structure
@@ -1513,7 +1556,7 @@ pub struct LocalPath<'script> {
     /// Segments
     pub segments: Segments<'script>,
 }
-impl_expr2!(LocalPath);
+impl_expr_mid!(LocalPath);
 
 #[derive(Clone, Debug, Serialize)]
 /// A metadata path
@@ -1523,7 +1566,7 @@ pub struct MetadataPath<'script> {
     /// Segments
     pub segments: Segments<'script>,
 }
-impl_expr2!(MetadataPath);
+impl_expr_mid!(MetadataPath);
 
 #[derive(Clone, Debug, Serialize)]
 /// The path representing the current in-flight event
@@ -1533,7 +1576,7 @@ pub struct EventPath<'script> {
     /// Segments
     pub segments: Segments<'script>,
 }
-impl_expr2!(EventPath);
+impl_expr_mid!(EventPath);
 
 #[derive(Clone, Debug, Serialize)]
 /// The path representing captured program state
@@ -1543,7 +1586,7 @@ pub struct StatePath<'script> {
     /// Segments
     pub segments: Segments<'script>,
 }
-impl_expr2!(StatePath);
+impl_expr_mid!(StatePath);
 
 /// we're forced to make this pub because of lalrpop
 #[derive(Copy, Clone, Debug, PartialEq, Serialize)]
@@ -1607,7 +1650,7 @@ pub struct BinExpr<'script> {
     /// The Right-hand-side operand
     pub rhs: ImutExprInt<'script>,
 }
-impl_expr2!(BinExpr);
+impl_expr_mid!(BinExpr);
 
 impl<'script> BinExpr<'script> {
     fn try_reduce(self, helper: &Helper<'script, '_>) -> Result<ImutExprInt<'script>> {
@@ -1653,7 +1696,7 @@ pub struct UnaryExpr<'script> {
     /// The operand
     pub expr: ImutExprInt<'script>,
 }
-impl_expr2!(UnaryExpr);
+impl_expr_mid!(UnaryExpr);
 
 impl<'script> UnaryExpr<'script> {
     fn try_reduce(self, helper: &Helper<'script, '_>) -> Result<ImutExprInt<'script>> {

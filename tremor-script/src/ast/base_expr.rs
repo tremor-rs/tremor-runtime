@@ -73,7 +73,7 @@ impl BaseExpr for Range {
 #[doc(hidden)]
 /// Implements the BaseExpr trait for a given expression
 #[macro_export]
-macro_rules! impl_expr2 {
+macro_rules! impl_expr_mid {
     ($name:ident) => {
         impl<'script> BaseExpr for $name<'script> {
             fn mid(&self) -> usize {
@@ -136,6 +136,7 @@ impl<'script> BaseExpr for ImutExprInt<'script> {
             ImutExprInt::Path(e) => e.s(meta),
             ImutExprInt::Record(e) => e.s(meta),
             ImutExprInt::Unary(e) => e.s(meta),
+            ImutExprInt::Bytes(e) => e.s(meta),
         }
     }
     fn e(&self, meta: &NodeMetas) -> Location {
@@ -159,6 +160,7 @@ impl<'script> BaseExpr for ImutExprInt<'script> {
             }
             ImutExprInt::Record(e) => e.e(meta),
             ImutExprInt::Unary(e) => e.e(meta),
+            ImutExprInt::Bytes(e) => e.e(meta),
         }
     }
     fn mid(&self) -> usize {
@@ -180,6 +182,7 @@ impl<'script> BaseExpr for ImutExprInt<'script> {
             ImutExprInt::Local { mid, .. } | ImutExprInt::Present { mid, .. } => *mid,
             ImutExprInt::Record(e) => e.mid(),
             ImutExprInt::Unary(e) => e.mid(),
+            ImutExprInt::Bytes(e) => e.mid(),
         }
     }
 }

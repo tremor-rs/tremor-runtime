@@ -18,18 +18,16 @@
 use super::upable::Upable;
 use super::{
     base_expr, path_eq, query, replace_last_shadow_use, ArrayPattern, ArrayPredicatePattern,
-    AssignPattern, BinExpr, BinOpKind, Comprehension, ComprehensionCase, EmitExpr, EventPath, Expr,
-    Field, FnDecl, FnDoc, Helper, Ident, ImutComprehension, ImutComprehensionCase, ImutExpr,
-    ImutExprInt, ImutMatch, ImutPredicateClause, Invocable, Invoke, InvokeAggr, InvokeAggrFn, List,
-    Literal, LocalPath, Match, Merge, MetadataPath, ModDoc, NodeMetas, Patch, PatchOperation, Path,
-    Pattern, PredicateClause, PredicatePattern, Predicates, Record, RecordPattern, Recur, Script,
-    Segment, StatePath, TestExpr, TuplePattern, UnaryExpr, UnaryOpKind, Warning,
+    AssignPattern, BinExpr, BinOpKind, Bytes, Comprehension, ComprehensionCase, EmitExpr,
+    EventPath, Expr, Field, FnDecl, FnDoc, Helper, Ident, ImutComprehension, ImutComprehensionCase,
+    ImutExpr, ImutExprInt, ImutMatch, ImutPredicateClause, Invocable, Invoke, InvokeAggr,
+    InvokeAggrFn, List, Literal, LocalPath, Match, Merge, MetadataPath, ModDoc, NodeMetas, Patch,
+    PatchOperation, Path, Pattern, PredicateClause, PredicatePattern, Predicates, Record,
+    RecordPattern, Recur, Script, Segment, StatePath, TestExpr, TuplePattern, UnaryExpr,
+    UnaryOpKind, Warning,
 };
-use crate::errors::{
-    err_generic, error_generic, error_missing_effector, error_oops, ErrorKind, Result,
-};
+use crate::errors::{error_generic, error_missing_effector, error_oops, ErrorKind, Result};
 use crate::impl_expr;
-use crate::impl_expr_no_lt;
 use crate::pos::{Location, Range};
 use crate::prelude::*;
 use crate::registry::CustomFn;
@@ -40,7 +38,6 @@ use beef::Cow;
 use halfbrown::HashMap;
 pub use query::*;
 use serde::Serialize;
-use std::convert::TryFrom;
 
 pub(crate) const NO_AGGRS: [InvokeAggrFn<'static>; 0] = [];
 pub(crate) const NO_CONSTS: Vec<Value<'static>> = Vec::new();
@@ -159,48 +156,24 @@ impl<'script> ScriptRaw<'script> {
 }
 
 #[derive(Debug, PartialEq, Serialize, Clone)]
-pub struct BytesRaw {
+pub struct BytesRaw<'script> {
     pub start: Location,
     pub end: Location,
-    pub bytes: Vec<Byte>,
+    pub bytes: ImutExprsRaw<'script>,
 }
-impl_expr_no_lt!(BytesRaw);
+impl_expr!(BytesRaw);
 
-impl<'script> Upable<'script> for BytesRaw {
-    type Target = Literal<'script>;
+impl<'script> Upable<'script> for BytesRaw<'script> {
+    type Target = Bytes<'script>;
 
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        Ok(Literal {
+        Ok(Bytes {
             mid: helper.add_meta(self.start, self.end),
-            value: Value::Bytes(
-                self.bytes
-                    .into_iter()
-                    .map(|b| b.up(helper))
-                    .collect::<Result<_>>()?,
-            ),
-        })
-    }
-}
-/// a single byte
-#[derive(Debug, PartialEq, Serialize, Clone)]
-pub struct Byte {
-    pub start: Location,
-    pub end: Location,
-    pub val: i64,
-}
-impl_expr_no_lt!(Byte);
-
-impl<'script> Upable<'script> for Byte {
-    type Target = u8;
-
-    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        u8::try_from(self.val).map_err(|e| {
-            err_generic(
-                &self,
-                &self,
-                &format!("bytes need to be between 255 and 0: {}", e),
-                &helper.meta,
-            )
+            value: self
+                .bytes
+                .into_iter()
+                .map(|b| Ok(ImutExpr(b.up(helper)?)))
+                .collect::<Result<_>>()?,
         })
     }
 }
@@ -434,6 +407,7 @@ impl<'script> ImutExprInt<'script> {
     pub(crate) fn try_reduce(self, helper: &Helper<'script, '_>) -> Result<Self> {
         match self {
             ImutExprInt::Unary(u) => u.try_reduce(helper),
+            ImutExprInt::Bytes(b) => b.try_reduce(helper),
             ImutExprInt::Binary(b) => b.try_reduce(helper),
             ImutExprInt::List(l) => l.try_reduce(helper),
             ImutExprInt::Record(r) => r.try_reduce(helper),
@@ -885,7 +859,7 @@ pub enum ImutExprRaw<'script> {
     /// we're forced to make this pub because of lalrpop
     Recur(RecurRaw<'script>),
     /// bytes
-    Bytes(BytesRaw),
+    Bytes(BytesRaw<'script>),
 }
 
 impl<'script> Upable<'script> for ImutExprRaw<'script> {
@@ -973,7 +947,7 @@ impl<'script> Upable<'script> for ImutExprRaw<'script> {
                 ImutExprInt::Match(Box::new(m.up(helper)?))
             }
             ImutExprRaw::Comprehension(c) => ImutExprInt::Comprehension(Box::new(c.up(helper)?)),
-            ImutExprRaw::Bytes(b) => ImutExprInt::Literal(b.up(helper)?).try_reduce(helper)?,
+            ImutExprRaw::Bytes(b) => ImutExprInt::Bytes(b.up(helper)?).try_reduce(helper)?,
         };
         helper.possible_leaf = was_leaf;
         Ok(r)

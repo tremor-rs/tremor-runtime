@@ -18,8 +18,8 @@ use super::{
 };
 
 use crate::errors::{
-    error_bad_key, error_decreasing_range, error_invalid_unary, error_need_obj, error_need_str,
-    error_no_clause_hit, error_oops, Result,
+    err_generic, error_bad_key, error_decreasing_range, error_invalid_unary, error_need_obj,
+    error_need_str, error_no_clause_hit, error_oops, Result,
 };
 use crate::interpreter::value_to_index;
 use crate::prelude::*;
@@ -154,6 +154,25 @@ where
 
                 Ok(Cow::Owned(Value::from(object)))
             }
+            ImutExprInt::Bytes(ref bytes) => {
+                let outer = bytes.extent(&env.meta);
+                let bs: Vec<u8> = stry!(bytes
+                    .value
+                    .iter()
+                    .map(|b| {
+                        let extent = b.extent(&env.meta);
+                        b.run(opts, env, event, state, meta, local)
+                            .and_then(|inner| {
+                                inner.as_u8().ok_or_else(|| {
+                                    err_generic(&outer, &extent, &"Not a valid u8", &env.meta)
+                                })
+                            })
+                    })
+                    .collect());
+
+                Ok(Cow::Owned(Value::Bytes(bs.into())))
+            }
+
             ImutExprInt::List(ref list) => {
                 let mut r: Vec<Value<'event>> = Vec::with_capacity(list.exprs.len());
                 for expr in &list.exprs {
