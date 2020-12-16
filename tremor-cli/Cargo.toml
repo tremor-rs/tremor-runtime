@@ -10,7 +10,7 @@ version = "0.9.3"
 default-target = "x86_64-unknown-linux-gnu"
 
 [build-dependencies]
-lalrpop = "0.18"
+lalrpop = "0.19"
 matches = "0.1.8"
 
 [dev-dependencies]
