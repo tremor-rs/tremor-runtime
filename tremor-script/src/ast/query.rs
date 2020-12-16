@@ -21,7 +21,7 @@ use super::{
 };
 use crate::{
     errors::{Error, ErrorKind},
-    impl_expr2,
+    impl_expr_mid,
 };
 use raw::WindowDefnRaw;
 
@@ -192,7 +192,7 @@ pub struct OperatorDecl<'script> {
     /// Parameters for the operator
     pub params: Option<HashMap<String, Value<'script>>>,
 }
-impl_expr2!(OperatorDecl);
+impl_expr_mid!(OperatorDecl);
 
 impl<'script> OperatorDecl<'script> {
     /// Calculate the fully qualified name
@@ -219,7 +219,7 @@ pub struct OperatorStmt<'script> {
     /// parameters of the instance
     pub params: Option<HashMap<String, Value<'script>>>,
 }
-impl_expr2!(OperatorStmt);
+impl_expr_mid!(OperatorStmt);
 
 /// A script declaration
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -234,7 +234,7 @@ pub struct ScriptDecl<'script> {
     /// The script itself
     pub script: Script<'script>,
 }
-impl_expr2!(ScriptDecl);
+impl_expr_mid!(ScriptDecl);
 
 impl<'script> ScriptDecl<'script> {
     /// Calculate the fully qualified name
@@ -261,7 +261,7 @@ pub struct ScriptStmt<'script> {
     /// Module path of the script
     pub module: Vec<String>,
 }
-impl_expr2!(ScriptStmt);
+impl_expr_mid!(ScriptStmt);
 
 /// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -287,7 +287,7 @@ pub struct WindowDecl<'script> {
     /// The script of the window
     pub script: Option<Script<'script>>,
 }
-impl_expr2!(WindowDecl);
+impl_expr_mid!(WindowDecl);
 
 impl<'script> WindowDecl<'script> {
     /// Calculate the fully qualified window name
@@ -322,7 +322,7 @@ pub struct Select<'script> {
     /// Window
     pub windows: Vec<WindowDefnRaw<'script>>,
 }
-impl_expr2!(Select);
+impl_expr_mid!(Select);
 
 /// A group by clause
 #[derive(Clone, Debug, PartialEq, Serialize)]

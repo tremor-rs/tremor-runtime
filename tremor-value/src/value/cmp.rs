@@ -26,6 +26,7 @@ impl<'value> PartialEq for Value<'value> {
             (Self::String(v1), Self::String(v2)) => v1.eq(v2),
             (Self::Array(v1), Self::Array(v2)) => v1.eq(v2),
             (Self::Object(v1), Self::Object(v2)) => v1.eq(v2),
+            (Self::Bytes(v1), Self::Bytes(v2)) => v1.eq(v2),
             _ => false,
         }
     }

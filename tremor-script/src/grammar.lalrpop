@@ -1213,22 +1213,18 @@ TestLiteral: String = {
     "<extractor>" => <>.join(""),
 }
 
-BytesLiteral: BytesRaw = {
+BytesLiteral: BytesRaw<'input> = {
     <start:@L> "<<" ">>" <end:@L> => BytesRaw{ start, end, bytes: Vec::new()},
     <start:@L> "<<" <bytes:Bytes> ">>" <end:@L> => BytesRaw{ start, end, bytes }
 }
 
-Bytes: Vec<Byte> = {
-    <Byte> => vec![<>],
-    <bytes:Bytes> "," <b:Byte> => {
+Bytes: ImutExprsRaw<'input> = {
+    <SimpleExprImut> => vec![<>],
+    <bytes:Bytes> "," <b:SimpleExprImut> => {
         let mut bytes = bytes;
         bytes.push(b);
         bytes
     }
-}
-
-Byte: Byte = {
-    <start:@L> <val:"int"> <end:@L> => Byte{start, end , val}
 }
 
 Sep<L, T, D>: L = {
