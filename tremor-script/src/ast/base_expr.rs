@@ -38,6 +38,26 @@ macro_rules! impl_expr {
     };
 }
 
+#[doc(hidden)]
+/// Implements the BaseExpr trait for a given expression
+#[macro_export]
+macro_rules! impl_expr_no_lt {
+    ($name:ident) => {
+        impl BaseExpr for $name {
+            fn s(&self, _meta: &NodeMetas) -> Location {
+                self.start
+            }
+
+            fn e(&self, _meta: &NodeMetas) -> Location {
+                self.end
+            }
+            fn mid(&self) -> usize {
+                0
+            }
+        }
+    };
+}
+
 impl BaseExpr for Range {
     fn s(&self, _meta: &NodeMetas) -> Location {
         self.0
@@ -246,6 +266,7 @@ impl<'script> BaseExpr for ImutExprRaw<'script> {
             ImutExprRaw::Recur(e) => e.s(meta),
             ImutExprRaw::String(e) => e.start,
             ImutExprRaw::Unary(e) => e.start,
+            ImutExprRaw::Bytes(e) => e.start,
         }
     }
     fn e(&self, meta: &NodeMetas) -> Location {
@@ -264,6 +285,7 @@ impl<'script> BaseExpr for ImutExprRaw<'script> {
             ImutExprRaw::Recur(e) => e.e(meta),
             ImutExprRaw::String(e) => e.end,
             ImutExprRaw::Unary(e) => e.end,
+            ImutExprRaw::Bytes(e) => e.end,
         }
     }
 }

@@ -856,7 +856,16 @@ pub(crate) fn error_generic<T, O: BaseExpr, I: BaseExpr, S: ToString>(
     error: &S,
     meta: &NodeMetas,
 ) -> Result<T> {
-    Err(ErrorKind::Generic(outer.extent(meta), inner.extent(meta), error.to_string()).into())
+    Err(err_generic(outer, inner, error, meta))
+}
+
+pub(crate) fn err_generic<O: BaseExpr, I: BaseExpr, S: ToString>(
+    outer: &O,
+    inner: &I,
+    error: &S,
+    meta: &NodeMetas,
+) -> Error {
+    ErrorKind::Generic(outer.extent(meta), inner.extent(meta), error.to_string()).into()
 }
 
 pub(crate) fn error_type_conflict_mult<T, O: BaseExpr, I: BaseExpr>(

@@ -341,6 +341,7 @@ AlwaysImutExpr: ImutExprRaw<'input> = {
     <record:Record> => ImutExprRaw::Record(Box::new(record)),
     <list:List> => ImutExprRaw::List(Box::new(list)),
     <s:StringLiteral> => ImutExprRaw::String(s),
+    <b:BytesLiteral> => ImutExprRaw::Bytes(b),
     <r:Recur> => ImutExprRaw::Recur(r),
 }
 
@@ -632,7 +633,7 @@ Bool: Value<'input> = {
 
 /// integers
 Int: Value<'input> = {
-    <literal:"int">  => Value::from(literal as i64),
+    <literal:"int">  => Value::from(literal),
 }
 
 /// floats
@@ -1210,6 +1211,24 @@ Ident: IdentRaw<'input> = {
 #[inline]
 TestLiteral: String = {
     "<extractor>" => <>.join(""),
+}
+
+BytesLiteral: BytesRaw = {
+    <start:@L> "<<" ">>" <end:@L> => BytesRaw{ start, end, bytes: Vec::new()},
+    <start:@L> "<<" <bytes:Bytes> ">>" <end:@L> => BytesRaw{ start, end, bytes }
+}
+
+Bytes: Vec<Byte> = {
+    <Byte> => vec![<>],
+    <bytes:Bytes> "," <b:Byte> => {
+        let mut bytes = bytes;
+        bytes.push(b);
+        bytes
+    }
+}
+
+Byte: Byte = {
+    <start:@L> <val:"int"> <end:@L> => Byte{start, end , val}
 }
 
 Sep<L, T, D>: L = {
