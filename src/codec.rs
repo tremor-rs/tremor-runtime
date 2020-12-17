@@ -14,6 +14,7 @@
 
 use crate::errors::Result;
 use tremor_script::Value;
+pub(crate) mod binary;
 pub(crate) mod binflux;
 pub(crate) mod influx;
 pub(crate) mod json;
@@ -23,7 +24,7 @@ pub(crate) mod statsd;
 pub(crate) mod string;
 pub(crate) mod yaml;
 
-const MIME_TYPES: [&str; 7] = [
+const MIME_TYPES: [&str; 8] = [
     "application/json",
     "application/yaml",
     "text/plain",
@@ -31,6 +32,7 @@ const MIME_TYPES: [&str; 7] = [
     "application/msgpack",
     "application/x-msgpack",
     "application/vnd.msgpack",
+    "application/octet-stream",
 ];
 
 mod prelude {
@@ -103,6 +105,7 @@ pub fn lookup(name: &str) -> Result<Box<dyn Codec>> {
         "string" => Ok(Box::new(string::String {})),
         "statsd" => Ok(Box::new(statsd::StatsD {})),
         "yaml" => Ok(Box::new(yaml::YAML {})),
+        "binary" => Ok(Box::new(binary::Binary {})),
         _ => Err(format!("Codec '{}' not found.", name).into()),
     }
 }
@@ -136,6 +139,7 @@ pub fn by_mime_type(mime: &str) -> Result<Box<dyn Codec>> {
         "application/msgpack" | "application/x-msgpack" | "application/vnd.msgpack" => {
             Ok(Box::new(msgpack::MsgPack {}))
         }
+        "application/octet-stream" => Ok(Box::new(binary::Binary {})),
         _ => Err(format!("No codec found for mime type '{}'", mime).into()),
     }
 }

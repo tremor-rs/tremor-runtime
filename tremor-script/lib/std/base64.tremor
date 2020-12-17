@@ -1,0 +1,11 @@
+### The base64 module contains functions work with base64 encoding and decoding
+
+## Encodes a `binary` as a base64 encoded string
+##
+## Returns a `string`
+intrinsic fn encode(input) as base64::encode;
+
+## Decodes a base64 ebcided `string` into it's bytes
+##
+## Returns a `binary`
+intrinsic fn decode(input) as base64::decode;

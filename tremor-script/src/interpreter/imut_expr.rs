@@ -104,6 +104,7 @@ where
         value_to_index(outer, self, val.borrow(), env, path, array)
     }
 
+    #[allow(clippy::clippy::too_many_lines)]
     #[inline]
     /// Invokes expression
     pub fn run(
@@ -155,8 +156,7 @@ where
                 Ok(Cow::Owned(Value::from(object)))
             }
             ImutExprInt::Bytes(ref bytes) => {
-                let outer = bytes.extent(&env.meta);
-                let bs: Vec<u8> = stry!(bytes
+                let bs = stry!(bytes
                     .value
                     .iter()
                     .map(|b| {
@@ -164,13 +164,13 @@ where
                         b.run(opts, env, event, state, meta, local)
                             .and_then(|inner| {
                                 inner.as_u8().ok_or_else(|| {
-                                    err_generic(&outer, &extent, &"Not a valid u8", &env.meta)
+                                    err_generic(bytes, &extent, &"Not a valid u8", &env.meta)
                                 })
                             })
                     })
                     .collect());
 
-                Ok(Cow::Owned(Value::Bytes(bs.into())))
+                Ok(Cow::Owned(Value::Bytes(bs)))
             }
 
             ImutExprInt::List(ref list) => {

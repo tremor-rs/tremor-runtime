@@ -96,3 +96,13 @@ intrinsic fn split(input, separator) as string::split;
 ##
 ## Returns a `bool`
 intrinsic fn contains(input, string) as string::contains;
+
+## Turns a `binary` into a utf8 string, potentally discarding invalid codepoints
+##
+## Returns a `string`
+intrinsic fn from_utf8_lossy(bytes) as string::from_utf8_lossy;
+
+## Turns a `string` into it's binary representation
+##
+## Returns a `binary`
+intrinsic fn into_binary(bytes) as string::into_binary;

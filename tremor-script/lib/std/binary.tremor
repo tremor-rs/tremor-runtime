@@ -1,0 +1,16 @@
+### The binary module handles interacting with the binary/bytes type
+
+## Returns the number of bytes in a`binary`
+##
+## Returns a `integer`
+intrinsic fn len(input) as binary::len;
+
+## Turns an `array` fo bytes into a `binary`
+##
+## Returns a `binary`
+intrinsic fn from_bytes(input) as binary::from_bytes;
+
+## Turns a `binary` int oan `array` fo bytes
+##
+## Returns a `array`
+intrinsic fn into_bytes(input) as binary::into_bytes;

@@ -159,6 +159,7 @@ pub struct Bytes<'script> {
     pub value: ImutExprs<'script>,
 }
 impl_expr_mid!(Bytes);
+
 impl<'script> Bytes<'script> {
     fn try_reduce(mut self, helper: &Helper<'script, '_>) -> Result<ImutExprInt<'script>> {
         self.value = self
@@ -179,10 +180,10 @@ impl<'script> Bytes<'script> {
                         })
                     })
                 })
-                .collect::<Result<Vec<u8>>>()?;
+                .collect::<Result<_>>()?;
             Ok(ImutExprInt::Literal(Literal {
                 mid: self.mid,
-                value: Value::Bytes(bytes.into()),
+                value: Value::Bytes(bytes),
             }))
         } else {
             Ok(ImutExprInt::Bytes(self))

@@ -145,8 +145,7 @@ pub fn load(registry: &mut Registry) {
                 Some(f) => Value::from(f.to_uppercase().collect::<String>() + c.as_str()),
             })
         }))
-        .insert(
-            tremor_const_fn!(string::substr(_context, _input, _start, _end) {
+        .insert(tremor_const_fn!(string::substr(_context, _input, _start, _end) {
                 let (input, start, end) = if let (Some(input), Some(start), Some(end)) =  (_input.as_str(), _start.as_usize(), _end.as_usize()) {
                     (input, start, end)
                 } else {
@@ -162,18 +161,23 @@ pub fn load(registry: &mut Registry) {
                 Ok(Value::from(input.get(start..end).unwrap_or(input).to_string()))
             }),
         )
-        .insert(
-            tremor_const_fn! (string::split(_context, _input: String, _sep: String) {
+        .insert(tremor_const_fn! (string::split(_context, _input: String, _sep: String) {
                 let sep: &str = _sep;
                 Ok(Value::from(_input.split(sep).map(|v| Value::from(v.to_string())).collect::<Vec<_>>()))
             }),
         )
-        .insert(
-            tremor_const_fn! (string::contains(_context, _input: String, _contains: String) {
-                Ok(Value::from(_input.contains(&_contains.to_string())))
+        .insert(tremor_const_fn! (string::from_utf8_lossy(_context, _bytes: Bytes) {
+                Ok(Value::from(String::from_utf8_lossy(_bytes).to_string()))
             }),
-        )
-        .insert(TremorFnWrapper::new(
+        ).insert(tremor_const_fn! (string::contains(_context, _input: String, _contains: String) {
+                use std::borrow::Borrow;
+                let s: &str = _contains.borrow();
+                Ok(Value::from(_input.contains(s)))
+            }),
+        ).insert(tremor_const_fn! (string::into_binary(_context, _input: String) {
+                Ok(Value::Bytes(_input.to_string().into()))
+            }),
+        ).insert(TremorFnWrapper::new(
             "string".to_string(),
             "format".to_string(),
             Box::new(StringFormat::default()),
@@ -184,7 +188,18 @@ pub fn load(registry: &mut Registry) {
 mod test {
     use crate::registry::{fun, FunctionError};
     use crate::Value;
-
+    #[test]
+    fn from_utf8_lossy() {
+        let f = fun("string", "from_utf8_lossy");
+        let v = Value::Bytes("badger".into());
+        assert_val!(f(&[&v]), "badger");
+    }
+    #[test]
+    fn into_binary() {
+        let f = fun("string", "into_binary");
+        let v = Value::from("badger");
+        assert_val!(f(&[&v]), Value::Bytes("badger".into()));
+    }
     #[test]
     fn replace() {
         let f = fun("string", "replace");
