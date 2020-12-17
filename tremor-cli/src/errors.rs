@@ -49,7 +49,7 @@ error_chain! {
         Io(std::io::Error) #[doc = "Error during std::io"];
         Globwalk(globwalk::GlobError) #[doc = "Glob walker error"];
         SendError(std::sync::mpsc::SendError<String>);
-        LoggingError(log4rs::Error);
+        AnyhowError(anyhow::Error);
         TestKindError(crate::test::UnknownKind);
         Url(url::ParseError) #[doc = "Error while parsing a url"];
         Common(tremor_common::Error);
