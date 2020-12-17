@@ -130,7 +130,7 @@ error_chain! {
         TryFromIntError(std::num::TryFromIntError);
         UrlParserError(url::ParseError);
         ParseFloatError(std::num::ParseFloatError);
-        LoggerError(log4rs::Error);
+        AnyhowError(anyhow::Error);
         ChannelReceiveError(std::sync::mpsc::RecvError);
         MsgPackDecoderError(rmp_serde::decode::Error);
         MsgPackEncoderError(rmp_serde::encode::Error);

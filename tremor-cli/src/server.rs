@@ -84,7 +84,7 @@ fn api_server(world: &World) -> Result<tide::Server<api::State>> {
 pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
     // Logging
     if let Some(logger_config) = matches.value_of("logger-config") {
-        log4rs::init_file(logger_config, log4rs::file::Deserializers::default())?;
+        log4rs::init_file(logger_config, log4rs::config::Deserializers::default())?;
     } else {
         env_logger::init();
     }
