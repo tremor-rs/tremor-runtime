@@ -18,7 +18,6 @@ mod serialize;
 
 use crate::{Error, Result};
 use beef::Cow;
-use bytes::Bytes;
 use halfbrown::HashMap;
 use simd_json::prelude::*;
 use simd_json::{AlignedBuf, Deserializer, Node, StaticNode};
@@ -27,6 +26,8 @@ use std::ops::{Index, IndexMut};
 
 /// Representation of a JSON object
 pub type Object<'value> = HashMap<Cow<'value, str>, Value<'value>>;
+/// Bytes
+pub type Bytes = Vec<u8>;
 
 /// Parses a slice of bytes into a Value dom. This function will
 /// rewrite the slice to de-escape strings.
@@ -155,10 +156,7 @@ impl<'value> ValueTrait for Value<'value> {
     #[inline]
     #[must_use]
     fn is_custom(&self) -> bool {
-        match self {
-            Value::Bytes(_) => true,
-            _ => false,
-        }
+        matches!(self, Value::Bytes(_))
     }
 
     #[inline]

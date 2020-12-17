@@ -1,6 +1,6 @@
 Error: 
     1 | match "dont-care" of
     2 |   case "dont-care" when drop
-      |                         ^^^^ Found the token `drop` but expected one of `!`, `\``, `$`, `(`, `+`, `-`, `<ident>`, `[`, `absent`, `args`, `bool`, `event`, `float`, `for`, `group`, `heredoc`, `int`, `match`, `merge`, `nil`, `not`, `patch`, `present`, `recur`, `state`, `window`, `{`
+      |                         ^^^^ Found the token `drop` but expected one of `!`, `\``, `$`, `(`, `+`, `-`, `<<`, `<ident>`, `[`, `absent`, `args`, `bool`, `event`, `float`, `for`, `group`, `heredoc`, `int`, `match`, `merge`, `nil`, `not`, `patch`, `present`, `recur`, `state`, `window`, `{`
     3 |   default => "ouch"
     4 | end

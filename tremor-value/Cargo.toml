@@ -17,7 +17,6 @@ serde = "1.0"
 halfbrown = "0.1"
 beef = "0.4"
 simd-json-derive = "0.1"
-bytes = "0.6"
 base64 = "0.13"
 
 [dev-dependencies]

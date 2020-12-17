@@ -20,6 +20,8 @@ macro_rules! assert_val {
 }
 
 mod array;
+mod base64;
+mod binary;
 mod chash;
 mod datetime;
 mod dummy;
@@ -44,6 +46,8 @@ use crate::registry::{Aggr as AggrRegistry, Registry};
 
 pub fn load(registry: &mut Registry) {
     array::load(registry);
+    base64::load(registry);
+    binary::load(registry);
     chash::load(registry);
     datetime::load(registry);
     dummy::load(registry);

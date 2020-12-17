@@ -12,6 +12,7 @@ use std::test;
 use std::type;
 use std::url;
 use tremor::system;
+use std::base64;
 
 fn as_string(arr) with
   for arr of
@@ -391,6 +392,14 @@ test::suite({
     "tags": [ "string" ],
     "tests": [
       test::test({
+        "name": "from_butf8_lossy",
+        "test": test::assert("from_butf8_lossy", string::from_utf8_lossy(<< 115, 110, 111, 116 >>), "snot")
+      }),
+      test::test({
+        "name": "into_binary",
+        "test": test::assert("into_binary", string::into_binary("snot"), << 115, 110, 111, 116 >>)
+      }),
+      test::test({
         "name": "format 1",
         "test": test::assert("format 1", string::format("blah"), "blah")
       }),
@@ -617,5 +626,47 @@ test::suite({
     ],
   }
 });
+
+test::suite({
+  "name": "base64 Encoding and decoding tests",
+  "suite": {
+    "name": "Encoded/Decoded characters",
+    "tags": [ "base64", "encode", "binary" ],
+    "tests": [
+      test::test({
+        "name": "Test encoded binary to a base64 string",
+        "test": test::assert("base64::encode", base64::encode(<< 115, 110, 111, 116 >>), "c25vdA=="),
+      }),
+      test::test({
+        "name": "Test decoded a base64 string",
+        "test": test::assert("base64::decode", base64::decode("c25vdA=="), << 115, 110, 111, 116 >>),
+      }),
+    ],
+  }
+});
+
+test::suite({
+  "name": "binary type utility functions",
+  "suite": {
+    "name": "binary functions",
+    "tags": [ "binary" ],
+    "tests": [
+      test::test({
+        "name": "Tests the len function",
+        "test": test::assert("binary::len", binary::len(<< 115, 110, 111, 116 >>), 4),
+      }),
+      test::test({
+        "name": "Tests the from_bytes function",
+        "test": test::assert("binary::from_bytes", binary::from_bytes([115, 110, 111, 116]), << 115, 110, 111, 116 >>),
+      }),
+            test::test({
+        "name": "Tests the into_bytes function",
+        "test": test::assert("binary::into_bytes", binary::into_bytes(<< 115, 110, 111, 116 >>), [115, 110, 111, 116]),
+      }),
+
+    ],
+  }
+});
+
 
 "snot badger";
