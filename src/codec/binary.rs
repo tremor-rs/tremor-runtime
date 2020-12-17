@@ -52,22 +52,20 @@ impl Codec for Binary {
     }
 }
 
-// #[cfg(test)]
-// mod test {
-//     use super::*;
-//     use simd_json::json;
-//     use simd_json::OwnedValue;
+#[cfg(test)]
+mod test {
+    use super::*;
 
-//     #[test]
-//     fn test_string_codec() -> Result<()> {
-//         let seed: OwnedValue = json!("snot badger");
-//         let seed: Value = seed.into();
+    #[test]
+    fn test_binary_codec() -> Result<()> {
+        let seed = Value::Bytes(b"snot badger".to_vec());
 
-//         let mut codec = String {};
-//         let mut as_raw = codec.encode(&seed)?;
-//         let as_json = codec.decode(as_raw.as_mut_slice(), 0);
-//         assert!(as_json.is_ok());
+        let mut codec = Binary {};
+        let mut as_raw = codec.encode(&seed)?;
+        assert_eq!(as_raw, b"snot badger");
+        let as_value = codec.decode(as_raw.as_mut_slice(), 0)?.unwrap();
+        assert_eq!(as_value, seed);
 
-//         Ok(())
-//     }
-// }
+        Ok(())
+    }
+}
