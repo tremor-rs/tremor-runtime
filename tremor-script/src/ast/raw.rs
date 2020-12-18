@@ -159,9 +159,46 @@ impl<'script> ScriptRaw<'script> {
 pub struct BytesRaw<'script> {
     pub start: Location,
     pub end: Location,
-    pub bytes: ImutExprsRaw<'script>,
+    pub bytes: Vec<BytesPart<'script>>,
 }
 impl_expr!(BytesRaw);
+
+#[derive(Debug, PartialEq, Serialize, Clone, Copy)]
+pub enum BytesDataType {
+    Integer,
+    Binary,
+}
+impl Default for BytesDataType {
+    fn default() -> Self {
+        BytesDataType::Integer
+    }
+}
+#[derive(Debug, PartialEq, Serialize, Clone)]
+pub struct BytesPart<'script> {
+    pub start: Location,
+    pub end: Location,
+    pub data: ImutExprRaw<'script>,
+    pub data_type: IdentRaw<'script>,
+    pub bits: i64,
+}
+impl<'script> Default for BytesPart<'script> {
+    fn default() -> Self {
+        BytesPart {
+            start: Location::default(),
+            end: Location::default(),
+            data: ImutExprRaw::Literal(LiteralRaw::default()),
+            data_type: IdentRaw::default(),
+            bits: 0,
+        }
+    }
+}
+impl<'script> Upable<'script> for BytesPart<'script> {
+    type Target = ImutExpr<'script>;
+
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+        self.data.up(helper).map(ImutExpr)
+    }
+}
 
 impl<'script> Upable<'script> for BytesRaw<'script> {
     type Target = Bytes<'script>;
@@ -172,7 +209,7 @@ impl<'script> Upable<'script> for BytesRaw<'script> {
             value: self
                 .bytes
                 .into_iter()
-                .map(|b| Ok(ImutExpr(b.up(helper)?)))
+                .map(|b| Ok(b.up(helper)?))
                 .collect::<Result<_>>()?,
         })
     }
@@ -251,7 +288,7 @@ impl<'script> ModuleRaw<'script> {
 }
 
 /// we're forced to make this pub because of lalrpop
-#[derive(Debug, PartialEq, Serialize, Clone)]
+#[derive(Debug, PartialEq, Serialize, Clone, Default)]
 pub struct IdentRaw<'script> {
     pub start: Location,
     pub end: Location,
@@ -329,12 +366,13 @@ impl<'script> Upable<'script> for ListRaw<'script> {
 }
 
 /// we're forced to make this pub because of lalrpop
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Default)]
 pub struct LiteralRaw<'script> {
     pub(crate) start: Location,
     pub(crate) end: Location,
     pub(crate) value: Value<'script>,
 }
+
 impl_expr!(LiteralRaw);
 impl<'script> Upable<'script> for LiteralRaw<'script> {
     type Target = Literal<'script>;
