@@ -167,7 +167,7 @@ impl<'value> ValueTrait for Value<'value> {
             Self::String(_) => ValueType::String,
             Self::Array(_) => ValueType::Array,
             Self::Object(_) => ValueType::Object,
-            Self::Bytes(_) => ValueType::Custom("bytes"),
+            Self::Bytes(_) => ValueType::Custom("binary"),
         }
     }
 
