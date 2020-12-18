@@ -336,14 +336,14 @@ impl<'de> Visitor<'de> for ValueVisitor {
 
     /****************** byte stuff ******************/
 
-    /*
     #[cfg_attr(not(feature = "no-inline"), inline)]
     fn visit_borrowed_bytes<E>(self, value: &'de [u8]) -> Result<Self::Value, E>
     where
         E: de::Error,
     {
-        Ok(Value::String(value))
+        Ok(Value::Bytes(value.to_vec()))
     }
+    /*
 
     #[cfg_attr(not(feature = "no-inline"), inline)]
     fn visit_str<E>(self, value: &[u8]) -> Result<Self::Value, E>
@@ -362,7 +362,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
       Ok(Value::String(&value))
     }
      */
-    /****************** nexted stuff ******************/
+    /****************** nested stuff ******************/
 
     #[cfg_attr(not(feature = "no-inline"), inline)]
     fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
