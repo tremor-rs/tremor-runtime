@@ -386,6 +386,7 @@ impl<'de> ValueDeserializer<'de> {
 mod test {
     #![allow(clippy::cognitive_complexity)]
     use super::*;
+    use proptest::proptest;
 
     #[test]
     fn object_access() {
