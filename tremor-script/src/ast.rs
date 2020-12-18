@@ -180,7 +180,8 @@ impl<'script> Bytes<'script> {
                         })
                     })
                 })
-                .collect::<Result<_>>()?;
+                .collect::<Result<Vec<u8>>>()?
+                .into();
             Ok(ImutExprInt::Literal(Literal {
                 mid: self.mid,
                 value: Value::Bytes(bytes),

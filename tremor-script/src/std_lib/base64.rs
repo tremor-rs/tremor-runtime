@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::registry::Registry;
-use crate::tremor_const_fn;
+use crate::{tremor_const_fn, tremor_fn_};
 
 pub fn load(registry: &mut Registry) {
     registry
@@ -21,7 +21,7 @@ pub fn load(registry: &mut Registry) {
             Ok(Value::from(base64::encode(&_input)))
         }))
         .insert(tremor_const_fn! (base64::decode(_context, _input: String) {
-            base64::decode(_input.as_bytes()).map(Value::Bytes).map_err(to_runtime_error)
+            base64::decode(_input.as_bytes()).map(|v| Value::Bytes(v.into())).map_err(to_runtime_error)
         }));
 }
 
@@ -34,12 +34,12 @@ mod test {
     fn decode() {
         let f = fun("base64", "decode");
         let v = Value::from("c25vdA==");
-        assert_val!(f(&[&v]), Value::Bytes("snot".into()));
+        assert_val!(f(&[&v]), Value::Bytes("snot".as_bytes().into()));
     }
     #[test]
     fn encode() {
         let f = fun("base64", "encode");
-        let v = Value::Bytes("snot".into());
+        let v = Value::Bytes("snot".as_bytes().into());
         assert_val!(f(&[&v]), Value::from("c25vdA=="));
     }
 }

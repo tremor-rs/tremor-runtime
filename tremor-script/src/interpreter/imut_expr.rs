@@ -156,7 +156,7 @@ where
                 Ok(Cow::Owned(Value::from(object)))
             }
             ImutExprInt::Bytes(ref bytes) => {
-                let bs = stry!(bytes
+                let bs: Vec<u8> = stry!(bytes
                     .value
                     .iter()
                     .map(|b| {
@@ -170,7 +170,7 @@ where
                     })
                     .collect());
 
-                Ok(Cow::Owned(Value::Bytes(bs)))
+                Ok(Cow::Owned(Value::Bytes(bs.into())))
             }
 
             ImutExprInt::List(ref list) => {

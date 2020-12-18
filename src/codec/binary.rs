@@ -33,7 +33,8 @@ impl Codec for Binary {
         data: &'input mut [u8],
         _ingest_ns: u64,
     ) -> Result<Option<Value<'input>>> {
-        Ok(Some(Value::Bytes(data.to_vec())))
+        let data: &'input [u8] = data;
+        Ok(Some(Value::Bytes(data.into())))
     }
 
     fn encode(&self, data: &Value) -> Result<Vec<u8>> {
@@ -58,7 +59,7 @@ mod test {
 
     #[test]
     fn test_binary_codec() -> Result<()> {
-        let seed = Value::Bytes(b"snot badger".to_vec());
+        let seed = Value::Bytes("snot badger".as_bytes().into());
 
         let mut codec = Binary {};
         let mut as_raw = codec.encode(&seed)?;

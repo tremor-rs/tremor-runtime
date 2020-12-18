@@ -341,7 +341,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
     where
         E: de::Error,
     {
-        Ok(Value::Bytes(value.to_vec()))
+        Ok(Value::Bytes(value.into()))
     }
     /*
 

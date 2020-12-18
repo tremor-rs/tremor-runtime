@@ -27,7 +27,7 @@ use std::ops::{Index, IndexMut};
 /// Representation of a JSON object
 pub type Object<'value> = HashMap<Cow<'value, str>, Value<'value>>;
 /// Bytes
-pub type Bytes = Vec<u8>;
+pub type Bytes<'value> = Cow<'value, [u8]>;
 
 /// Parses a slice of bytes into a Value dom. This function will
 /// rewrite the slice to de-escape strings.
@@ -76,7 +76,7 @@ pub enum Value<'value> {
     /// object type
     Object(Box<Object<'value>>),
     /// A binary type
-    Bytes(Bytes),
+    Bytes(Bytes<'value>),
 }
 
 impl<'value> Value<'value> {
@@ -167,7 +167,7 @@ impl<'value> ValueTrait for Value<'value> {
             Self::String(_) => ValueType::String,
             Self::Array(_) => ValueType::Array,
             Self::Object(_) => ValueType::Object,
-            Self::Bytes(_) => ValueType::Custom("binary"),
+            Self::Bytes(_) => ValueType::Custom("bytes"),
         }
     }
 
