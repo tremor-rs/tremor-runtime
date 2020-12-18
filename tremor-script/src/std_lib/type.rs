@@ -14,7 +14,7 @@
 
 use crate::prelude::*;
 use crate::registry::Registry;
-use crate::tremor_const_fn;
+use crate::{tremor_const_fn, tremor_fn_};
 
 macro_rules! map_function {
     ($name:ident, $fun:ident) => {

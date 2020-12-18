@@ -14,9 +14,9 @@
 
 use crate::prelude::*;
 use crate::registry::{mfa, FResult, FunctionError, Registry, TremorFn, TremorFnWrapper};
-use crate::tremor_const_fn;
 use crate::EventContext;
 use crate::Value;
+use crate::{tremor_const_fn, tremor_fn_};
 
 macro_rules! map_function {
     ($name:ident, $fun:ident) => {
@@ -175,7 +175,7 @@ pub fn load(registry: &mut Registry) {
                 Ok(Value::from(_input.contains(s)))
             }),
         ).insert(tremor_const_fn! (string::into_binary(_context, _input: String) {
-                Ok(Value::Bytes(_input.to_string().into()))
+                Ok(Value::Bytes(_input.as_bytes().to_vec().into()))
             }),
         ).insert(TremorFnWrapper::new(
             "string".to_string(),
@@ -191,14 +191,14 @@ mod test {
     #[test]
     fn from_utf8_lossy() {
         let f = fun("string", "from_utf8_lossy");
-        let v = Value::Bytes("badger".into());
+        let v = Value::Bytes("badger".as_bytes().into());
         assert_val!(f(&[&v]), "badger");
     }
     #[test]
     fn into_binary() {
         let f = fun("string", "into_binary");
         let v = Value::from("badger");
-        assert_val!(f(&[&v]), Value::Bytes("badger".into()));
+        assert_val!(f(&[&v]), Value::Bytes("badger".as_bytes().into()));
     }
     #[test]
     fn replace() {
