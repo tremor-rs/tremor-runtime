@@ -39,7 +39,7 @@ jumphash = "0.1"
 lalrpop-util = "0.19"
 matches = "0.1.8"
 percent-encoding = "2.1"
-rand = {version = "0.7", features = ["small_rng"]}
+rand = {version = "0.8", features = ["small_rng"]}
 regex = "1"
 rental = "0.5"
 serde = "1.0"
