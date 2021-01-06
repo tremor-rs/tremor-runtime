@@ -87,7 +87,7 @@ xz2 = "0.1"
 # postgres
 postgres = {version = "0.18.1", features = ["with-serde_json-1", "with-chrono-0_4"]}
 postgres-protocol = "0.5"
-tokio-postgres = "0.6"
+tokio-postgres = "0.7"
 
 # kafka. cmake is the encouraged way to build this and also the one that works on windows/with musl.
 rdkafka = {version = "0.24", features = ["cmake-build", "libz"], default-features = false}
