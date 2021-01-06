@@ -1,0 +1,3 @@
+Error: 
+    1 | "string" + 1
+      | ^^^^^^^^^^^^ The binary operation `+` is not defined for the type `string` and `integer`
