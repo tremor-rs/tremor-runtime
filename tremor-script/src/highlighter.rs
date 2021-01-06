@@ -218,6 +218,13 @@ pub trait Highlighter {
         self.highlight_errors_indent("", emit_linenos, file, tokens, error)
     }
 
+    /// ensure we have a newline written as last character
+    ///
+    /// # Errors
+    /// if unable to write a newline
+    ///
+    fn ensure_newline(&mut self) -> std::result::Result<(), std::io::Error>;
+
     /// write line prefix and optionally line number
     #[inline]
     fn write_line_prefix(
@@ -367,6 +374,8 @@ pub trait Highlighter {
                                 writeln!(self.get_writer())?;
                             }
                         };
+
+                        self.ensure_newline()?;
                         self.write_callout(callout, level, start_column, len)?;
                         if let Some(hint) = hint {
                             self.write_hint(hint, start_column, len)?;
@@ -512,8 +521,8 @@ pub trait Highlighter {
                         writeln!(self.get_writer())?;
                     }
                 }
-
                 // write callout and hint
+                self.ensure_newline()?;
                 self.write_callout(callout, level, start_column, len)?;
                 if let Some(hint) = hint {
                     self.write_hint(hint, start_column, len)?;
@@ -544,6 +553,14 @@ impl Highlighter for Dumb {
     type W = Vec<u8>;
     fn get_writer(&mut self) -> &mut Self::W {
         &mut self.buff
+    }
+
+    fn ensure_newline(&mut self) -> std::result::Result<(), std::io::Error> {
+        match self.buff.last() {
+            Some(0xa) => (), // ok
+            _ => self.buff.push(0xa),
+        }
+        Ok(())
     }
 }
 
@@ -614,6 +631,12 @@ impl Highlighter for Term {
     }
     fn get_writer(&mut self) -> &mut Self::W {
         &mut self.buff
+    }
+    fn ensure_newline(&mut self) -> std::result::Result<(), std::io::Error> {
+        match strip_ansi_escapes::strip(self.buff.as_slice())?.last() {
+            Some(0xa) => Ok(()),
+            _ => writeln!(self.buff),
+        }
     }
 }
 
