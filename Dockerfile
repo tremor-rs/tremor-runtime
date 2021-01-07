@@ -28,6 +28,7 @@ COPY tremor-pipeline ./tremor-pipeline
 COPY tremor-script ./tremor-script
 COPY tremor-api ./tremor-api
 COPY tremor-influx ./tremor-influx
+COPY tremor-value ./tremor-value
 # Binaries
 COPY tremor-cli ./tremor-cli
 COPY tremor-common ./tremor-common
