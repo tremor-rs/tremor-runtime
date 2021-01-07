@@ -37,6 +37,7 @@ async-std = {version = "1.8.0", features = ["unstable", "attributes", "tokio03"]
 async-trait = "0.1"
 async-tungstenite = {version = "0.11.0", features = ["async-std-runtime"]}
 base64 = "0.13"
+beef = {version = "0.4", features = ["impl_serde"]}
 byteorder = "1"
 bytes5 = {version = "0.5", package = "bytes"}
 bytes6 = {version = "0.6", package = "bytes"}
@@ -45,37 +46,36 @@ elastic = "0.21.0-pre.5"
 error-chain = "0.12"
 futures = "0.3.8"
 glob = "0.3"
+halfbrown = "0.1"
 hashbrown = {version = "0.9", features = ["serde"]}
 hostname = "0.3"
 http-types = "2.9"
-log4rs = "1.0"
-pin-project-lite = "0.2"
-rand = "0.7"
-regex = "1.4"
-rental = "0.5"
-rmp-serde = "0.15"
-serde = "1"
-serde_yaml = "0.8"
-simd-json = {version = "0.3", features = ["known-key"]}
-simd-json-derive = "0.1.15"
-smol = "1.2"
-surf = "=2.1.0"
-tremor-common = {path = "tremor-common"}
-tremor-value = {path = "tremor-value"}
-tremor-pipeline = {path = "tremor-pipeline"}
-url = "2.2"
-value-trait = "0.1"
-beef = {version = "0.4", features = ["impl_serde"]}
-halfbrown = "0.1"
 indexmap = {version = "1", features = ["serde-1"]}
 lazy_static = "1"
 libflate = "1.0"
 log = "0.4"
+log4rs = "1.0"
 lz4 = "1.23.2"
+pin-project-lite = "0.2"
+rand = "0.8"
+regex = "1.4"
+rental = "0.5"
+rmp-serde = "0.15"
+serde = "1"
 serde_derive = "1"
+serde_yaml = "0.8"
+simd-json = {version = "0.3", features = ["known-key"]}
+simd-json-derive = "0.1.15"
+smol = "1.2"
 snap = "1"
+surf = "=2.1.0"
+tremor-common = {path = "tremor-common"}
 tremor-influx = {path = "tremor-influx"}
+tremor-pipeline = {path = "tremor-pipeline"}
 tremor-script = {path = "tremor-script"}
+tremor-value = {path = "tremor-value"}
+url = "2.2"
+value-trait = "0.1"
 
 mapr = "0.8"
 tempfile = {version = "3.1"}

@@ -43,7 +43,7 @@ impl TremorFn for RandomInteger {
                 if let (Some(low), Some(high)) = (low.as_i64(), high.as_i64()) {
                     if low < high {
                         // random integer between low and high (not including high)
-                        Ok(Value::from(rng.gen_range(low, high)))
+                        Ok(Value::from(rng.gen_range(low..high)))
                     } else {
                         Err(FunctionError::RuntimeError {
                                 mfa: this_mfa(),
@@ -59,8 +59,17 @@ impl TremorFn for RandomInteger {
                 input.as_u64().map_or_else(
                     || Err(FunctionError::BadType { mfa: this_mfa() }),
                     |input| {
-                        // random integer between 0 and input (not including input)
-                        Ok(Value::from(rng.gen_range(0, input)))
+                        if input == 0 {
+                            // avoid panic in gen_range
+                            Err(FunctionError::RuntimeError {
+                                mfa: this_mfa(),
+                                error: "Invalid arguments. Single argument value must be > 0."
+                                    .to_string(),
+                            })
+                        } else {
+                            // random integer between 0 and input (not including input)
+                            Ok(Value::from(rng.gen_range(0..input)))
+                        }
                     },
                 )
             }
@@ -100,7 +109,7 @@ impl TremorFn for RandomFloat {
                 if let (Some(low), Some(high)) = (low.cast_f64(), high.cast_f64()) {
                     if low < high {
                         // random integer between low and high (not including high)
-                        Ok(Value::from(rng.gen_range(low, high)))
+                        Ok(Value::from(rng.gen_range(low..high)))
                     } else {
                         Err(FunctionError::RuntimeError {
                                 mfa: this_mfa(),
@@ -116,8 +125,17 @@ impl TremorFn for RandomFloat {
                 input.cast_f64().map_or_else(
                     || Err(FunctionError::BadType { mfa: this_mfa() }),
                     |input| {
-                        // random integer between 0 and input (not including input)
-                        Ok(Value::from(rng.gen_range(0.0, input)))
+                        if input <= 0.0 {
+                            // avoid panic in gen_range
+                            Err(FunctionError::RuntimeError {
+                                mfa: this_mfa(),
+                                error: "Invalid arguments. Single argument value must be > 0.0."
+                                    .to_string(),
+                            })
+                        } else {
+                            // random integer between 0 and input (not including input)
+                            Ok(Value::from(rng.gen_range(0.0..input)))
+                        }
                     },
                 )
             }
@@ -158,7 +176,7 @@ pub fn load(registry: &mut Registry) {
                 // random string with chars uniformly distributed over ASCII letters and numbers
                 Ok(Value::from(
                  SmallRng::seed_from_u64(_context.ingest_ns())
-                    .sample_iter(&Alphanumeric).take(n).collect::<String>()
+                    .sample_iter(&Alphanumeric).map(char::from).take(n).collect::<String>()
                 ))
                 }
             )
@@ -179,6 +197,7 @@ pub fn load(registry: &mut Registry) {
 mod test {
     use crate::registry::fun;
     use crate::Value;
+    use proptest::prelude::*;
     use simd_json::Value as ValueTrait;
 
     #[test]
@@ -211,6 +230,19 @@ mod test {
         let v = Value::from(1);
         assert_val!(f(&[&v]), 0);
         assert!(f(&[]).ok().map(|v| v.is_i64()).unwrap_or_default());
+        let null = Value::from(0);
+        assert!(f(&[&null]).is_err());
+    }
+
+    proptest! {
+
+        #[test]
+        #[cfg(not(tarpaulin))] // avoid coverage from this
+            fn integer_single_arg_no_error(x in 1u64..u64::MAX) { // exclude 0 here
+            let f = fun("random", "integer");
+            let v = Value::from(x);
+            assert!(f(&[&v]).is_ok())
+        }
     }
 
     #[test]
@@ -229,10 +261,22 @@ mod test {
             .and_then(|v| v.as_f64())
             .map(|a| a >= 0.0 && a < v)
             .unwrap_or_default());
+        let null = Value::from(0.0);
+        assert!(f(&[&null]).is_err());
         assert!(f(&[])
             .ok()
             .and_then(|v| v.as_f64())
             .map(|a| a >= 0.0 && a < 1.0)
             .unwrap_or_default());
+    }
+
+    proptest! {
+        #[test]
+        #[cfg(not(tarpaulin))]
+        fn float_single_arg_no_error(x in (0.0f64..f64::MAX).prop_filter("Values must be > 0.0", |x| *x > 0.0)) {
+            let f = fun("random", "float");
+            let v = Value::from(x);
+            assert!(f(&[&v]).is_ok())
+        }
     }
 }
