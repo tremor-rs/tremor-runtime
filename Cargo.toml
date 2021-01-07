@@ -39,8 +39,7 @@ async-tungstenite = {version = "0.12.0", features = ["async-std-runtime"]}
 base64 = "0.13"
 beef = {version = "0.4", features = ["impl_serde"]}
 byteorder = "1"
-bytes5 = {version = "0.5", package = "bytes"}
-bytes6 = {version = "0.6", package = "bytes"}
+bytes = "1.0"
 chrono = "0.4"
 elastic = "0.21.0-pre.5"
 error-chain = "0.12"
@@ -85,9 +84,9 @@ hdrhistogram = "7"
 xz2 = "0.1"
 
 # postgres
-postgres = {version = "0.18.1", features = ["with-serde_json-1", "with-chrono-0_4"]}
-postgres-protocol = "0.5"
-tokio-postgres = "0.6"
+postgres = {version = "0.19", features = ["with-serde_json-1", "with-chrono-0_4"]}
+postgres-protocol = "0.6"
+tokio-postgres = "0.7"
 
 # kafka. cmake is the encouraged way to build this and also the one that works on windows/with musl.
 rdkafka = {version = "0.24", features = ["cmake-build", "libz"], default-features = false}

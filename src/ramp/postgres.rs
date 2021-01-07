@@ -23,7 +23,8 @@
 //! See [Config](struct.Config.html) for details.
 
 use crate::errors::{Error, Result};
-use bytes5::buf::{BufMut, BufMutExt};
+use bytes::buf::BufMut;
+use bytes::BytesMut;
 use chrono::prelude::*;
 use postgres::types::to_sql_checked;
 use std::time::SystemTime;
@@ -40,7 +41,7 @@ impl postgres::types::ToSql for Record<'_> {
     fn to_sql(
         &self,
         type_: &postgres::types::Type,
-        w: &mut postgres::types::private::BytesMut,
+        w: &mut BytesMut,
     ) -> std::result::Result<postgres::types::IsNull, Box<dyn std::error::Error + Sync + Send>>
     {
         if self.value.is_null() {
