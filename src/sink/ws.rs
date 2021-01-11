@@ -18,13 +18,13 @@ use crate::sink::prelude::*;
 use crate::source::prelude::*;
 use async_channel::{bounded, unbounded, Receiver, Sender};
 use async_tungstenite::async_std::connect_async;
+use async_tungstenite::tungstenite::Message;
 use futures::SinkExt;
 use halfbrown::HashMap;
 use std::boxed::Box;
 use std::time::Duration;
 use tremor_pipeline::{EventId, OpMeta};
 use tremor_script::LineValue;
-use tungstenite::protocol::Message;
 use url::Url;
 
 type WsUrl = String;
