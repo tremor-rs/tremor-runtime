@@ -2588,9 +2588,9 @@ dependencies = [
 
 [[package]]
 name = "lalrpop-util"
-version = "0.19.3"
+version = "0.19.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f9de203e2fa3e883364fcc778a1293ab4d936f6cff400433013c20105df178c5"
+checksum = "3ebbd90154472db6267a7d28ca08fea7788e5619fef10f2398155cb74c08f77a"
 dependencies = [
  "regex",
 ]
