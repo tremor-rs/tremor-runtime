@@ -18,12 +18,12 @@ use crate::{codec::Codec, source::prelude::*};
 use async_channel::{Sender, TryRecvError};
 use async_std::net::{TcpListener, TcpStream};
 use async_std::task;
+use async_tungstenite::tungstenite::Message;
 use futures::{SinkExt, StreamExt};
 use halfbrown::HashMap;
 use std::collections::BTreeMap;
 use tremor_pipeline::EventId;
 use tremor_script::Value;
-use tungstenite::protocol::Message;
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Config {

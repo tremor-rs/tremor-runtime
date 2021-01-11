@@ -139,7 +139,7 @@ error_chain! {
         SnappyError(snap::Error);
         AddrParseError(std::net::AddrParseError);
         RegexError(regex::Error);
-        WsError(tungstenite::Error);
+        WsError(async_tungstenite::tungstenite::Error);
         InfluxEncoderError(influx::EncoderError);
         AsyncChannelRecvError(async_channel::RecvError);
         JSONAccessError(value_trait::AccessError);
