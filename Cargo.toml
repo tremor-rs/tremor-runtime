@@ -108,7 +108,7 @@ tide = "0.15"
 
 [dependencies.tungstenite]
 default-features = false
-version = "0.11"
+version = "0.12"
 
 [dev-dependencies]
 matches = "0.1"
