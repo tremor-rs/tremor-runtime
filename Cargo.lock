@@ -182,7 +182,7 @@ dependencies = [
  "futures-core",
  "futures-io",
  "memchr",
- "pin-project-lite 0.2.1",
+ "pin-project-lite 0.2.4",
  "xz2",
 ]
 
@@ -366,7 +366,7 @@ dependencies = [
  "memchr",
  "num_cpus",
  "once_cell",
- "pin-project-lite 0.2.1",
+ "pin-project-lite 0.2.4",
  "pin-utils",
  "slab",
  "wasm-bindgen-futures",
@@ -1856,7 +1856,7 @@ dependencies = [
  "futures-sink",
  "futures-task",
  "memchr",
- "pin-project-lite 0.2.1",
+ "pin-project-lite 0.2.4",
  "pin-utils",
  "proc-macro-hack",
  "proc-macro-nested",
@@ -3409,9 +3409,9 @@ checksum = "c917123afa01924fc84bb20c4c03f004d9c38e5127e3c039bbf7f4b9c76a2f6b"
 
 [[package]]
 name = "pin-project-lite"
-version = "0.2.1"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e36743d754ccdf9954c2e352ce2d4b106e024c814f6499c2dadff80da9a442d8"
+checksum = "439697af366c49a6d0a010c56a0d97685bc140ce0d377b13a2ea2aa42d64a827"
 
 [[package]]
 name = "pin-utils"
@@ -4062,7 +4062,7 @@ dependencies = [
  "mime_guess",
  "native-tls",
  "percent-encoding 2.1.0",
- "pin-project-lite 0.2.1",
+ "pin-project-lite 0.2.4",
  "serde",
  "serde_urlencoded 0.7.0",
  "tokio 0.2.23",
@@ -5110,7 +5110,7 @@ dependencies = [
  "memchr",
  "mio 0.7.6",
  "num_cpus",
- "pin-project-lite 0.2.1",
+ "pin-project-lite 0.2.4",
  "slab",
 ]
 
@@ -5380,7 +5380,7 @@ checksum = "9f47026cdc4080c07e49b37087de021820269d996f581aac150ef9e5583eefe3"
 dependencies = [
  "cfg-if 1.0.0",
  "log",
- "pin-project-lite 0.2.1",
+ "pin-project-lite 0.2.4",
  "tracing-attributes",
  "tracing-core",
 ]
@@ -5582,7 +5582,7 @@ dependencies = [
  "lz4",
  "mapr",
  "matches",
- "pin-project-lite 0.2.1",
+ "pin-project-lite 0.2.4",
  "postgres",
  "postgres-protocol",
  "pretty_assertions",
