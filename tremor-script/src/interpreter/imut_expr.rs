@@ -17,14 +17,17 @@ use super::{
     test_predicate_expr, AggrType, Env, ExecOpts, LocalStack, FALSE, TRUE,
 };
 
-use crate::errors::{
-    err_generic, error_bad_key, error_decreasing_range, error_invalid_unary, error_need_obj,
-    error_need_str, error_no_clause_hit, error_oops, Result,
-};
 use crate::interpreter::value_to_index;
 use crate::prelude::*;
 use crate::registry::{Registry, TremorAggrFnWrapper, RECUR_REF};
 use crate::stry;
+use crate::{
+    ast::extend_bytes_from_value,
+    errors::{
+        error_bad_key, error_decreasing_range, error_invalid_unary, error_need_obj, error_need_str,
+        error_no_clause_hit, error_oops, Result,
+    },
+};
 use crate::{
     ast::{
         BaseExpr, BinExpr, ImutComprehension, ImutExpr, ImutExprInt, ImutMatch, Invoke, InvokeAggr,
@@ -156,19 +159,25 @@ where
                 Ok(Cow::Owned(Value::from(object)))
             }
             ImutExprInt::Bytes(ref bytes) => {
-                let bs: Vec<u8> = stry!(bytes
-                    .value
-                    .iter()
-                    .map(|b| {
-                        let extent = b.extent(&env.meta);
-                        b.run(opts, env, event, state, meta, local)
-                            .and_then(|inner| {
-                                inner.as_u8().ok_or_else(|| {
-                                    err_generic(bytes, &extent, &"Not a valid u8", &env.meta)
-                                })
-                            })
-                    })
-                    .collect());
+                let mut bs: Vec<u8> = Vec::with_capacity(bytes.value.len());
+
+                for part in &bytes.value {
+                    let value = stry!(part.data.run(opts, env, event, state, meta, local));
+                    stry!(extend_bytes_from_value(
+                        self,
+                        part,
+                        &env.meta,
+                        part.data_type,
+                        part.bits,
+                        &mut bs,
+                        &value,
+                    ));
+
+                    //     inner.as_u8().ok_or_else(|| {
+                    //         err_generic(bytes, &extent, &"Not a valid u8", &env.meta)
+                    //     })
+                    // })
+                }
 
                 Ok(Cow::Owned(Value::Bytes(bs.into())))
             }

@@ -15,7 +15,6 @@
 #![doc(hidden)]
 // We want to keep the names here
 #![allow(clippy::module_name_repetitions)]
-use super::upable::Upable;
 use super::{
     base_expr, path_eq, query, replace_last_shadow_use, ArrayPattern, ArrayPredicatePattern,
     AssignPattern, BinExpr, BinOpKind, Bytes, Comprehension, ComprehensionCase, EmitExpr,
@@ -26,7 +25,10 @@ use super::{
     RecordPattern, Recur, Script, Segment, StatePath, TestExpr, TuplePattern, UnaryExpr,
     UnaryOpKind, Warning,
 };
-use crate::errors::{error_generic, error_missing_effector, error_oops, ErrorKind, Result};
+use super::{upable::Upable, BytesPart};
+use crate::errors::{
+    err_generic, error_generic, error_missing_effector, error_oops, ErrorKind, Result,
+};
 use crate::impl_expr;
 use crate::pos::{Location, Range};
 use crate::prelude::*;
@@ -155,35 +157,31 @@ impl<'script> ScriptRaw<'script> {
     }
 }
 
-#[derive(Debug, PartialEq, Serialize, Clone)]
-pub struct BytesRaw<'script> {
-    pub start: Location,
-    pub end: Location,
-    pub bytes: Vec<BytesPart<'script>>,
-}
-impl_expr!(BytesRaw);
-
 #[derive(Debug, PartialEq, Serialize, Clone, Copy)]
 pub enum BytesDataType {
     Integer,
     Binary,
 }
+
 impl Default for BytesDataType {
     fn default() -> Self {
         BytesDataType::Integer
     }
 }
+
 #[derive(Debug, PartialEq, Serialize, Clone)]
-pub struct BytesPart<'script> {
+pub struct BytesPartRaw<'script> {
     pub start: Location,
     pub end: Location,
     pub data: ImutExprRaw<'script>,
     pub data_type: IdentRaw<'script>,
     pub bits: i64,
 }
-impl<'script> Default for BytesPart<'script> {
+impl_expr!(BytesPartRaw);
+
+impl<'script> Default for BytesPartRaw<'script> {
     fn default() -> Self {
-        BytesPart {
+        BytesPartRaw {
             start: Location::default(),
             end: Location::default(),
             data: ImutExprRaw::Literal(LiteralRaw::default()),
@@ -192,13 +190,56 @@ impl<'script> Default for BytesPart<'script> {
         }
     }
 }
-impl<'script> Upable<'script> for BytesPart<'script> {
-    type Target = ImutExpr<'script>;
+impl<'script> Upable<'script> for BytesPartRaw<'script> {
+    type Target = BytesPart<'script>;
 
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        self.data.up(helper).map(ImutExpr)
+        let data_type: &str = &self.data_type.id;
+        let data_type = match data_type {
+            "binary" => BytesDataType::Binary,
+            "integer" => BytesDataType::Integer,
+            other => {
+                return Err(err_generic(
+                    &self,
+                    &self.data_type,
+                    &format!("Not a valid data type: {}", other),
+                    &helper.meta,
+                ))
+            }
+        };
+        let bits = self.bits;
+        if bits < 0 {
+            Err(err_generic(
+                &self,
+                &self.data_type,
+                &format!("negative bits are not allowed: {}", bits),
+                &helper.meta,
+            ))
+        } else if bits % 8 != 0 {
+            Err(err_generic(
+                &self,
+                &self.data_type,
+                &format!("bits need to be dividable by 8, but {} isn't", bits),
+                &helper.meta,
+            ))
+        } else {
+            Ok(BytesPart {
+                mid: helper.add_meta(self.start, self.end),
+                data: self.data.up(helper).map(ImutExpr)?,
+                data_type,
+                bits: self.bits as u64,
+            })
+        }
     }
 }
+
+#[derive(Debug, PartialEq, Serialize, Clone)]
+pub struct BytesRaw<'script> {
+    pub start: Location,
+    pub end: Location,
+    pub bytes: Vec<BytesPartRaw<'script>>,
+}
+impl_expr!(BytesRaw);
 
 impl<'script> Upable<'script> for BytesRaw<'script> {
     type Target = Bytes<'script>;

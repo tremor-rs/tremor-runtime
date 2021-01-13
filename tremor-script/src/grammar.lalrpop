@@ -1218,7 +1218,7 @@ BytesLiteral: BytesRaw<'input> = {
     <start:@L> "<<" <bytes:Bytes> ">>" <end:@L> => BytesRaw{ start, end, bytes }
 }
 
-Bytes: Vec<BytesPart<'input>> = {
+Bytes: Vec<BytesPartRaw<'input>> = {
     <BytesPart> => vec![<>],
     <bytes:Bytes> "," <b:BytesPart> => {
         let mut bytes = bytes;
@@ -1228,11 +1228,11 @@ Bytes: Vec<BytesPart<'input>> = {
 }
 
 
-BytesPart: BytesPart<'input> = {
-    <start:@L> <data:SimpleExprImut> <end:@L> => BytesPart{start, end, data, ..Default::default()},
-    <start:@L> <data:SimpleExprImut> ":" <bits:"int"> <end:@L> => BytesPart{start, end, data, bits, ..Default::default()},
-    <start:@L> <data:SimpleExprImut> "/" <data_type:Ident> <end:@L> => BytesPart{start, end, data, data_type, ..Default::default()},
-    <start:@L> <data:SimpleExprImut> "/" <data_type:Ident> ":" <bits:"int"> <end:@L> => BytesPart{start, end, data, bits, data_type},
+BytesPart: BytesPartRaw<'input> = {
+    <start:@L> <data:SimpleExprImut> <end:@L> => BytesPartRaw{start, end, data, ..Default::default()},
+    <start:@L> <data:SimpleExprImut> ":" <bits:"int"> <end:@L> => BytesPartRaw{start, end, data, bits, ..Default::default()},
+    <start:@L> <data:SimpleExprImut> "/" <data_type:Ident> <end:@L> => BytesPartRaw{start, end, data, data_type, ..Default::default()},
+    <start:@L> <data:SimpleExprImut> "/" <data_type:Ident> ":" <bits:"int"> <end:@L> => BytesPartRaw{start, end, data, bits, data_type},
 }
 
 
