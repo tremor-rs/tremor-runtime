@@ -78,7 +78,7 @@ url = "2.2"
 value-trait = "0.1"
 
 mapr = "0.8"
-tempfile = {version = "3.1"}
+tempfile = {version = "3.2"}
 
 # blaster / blackhole
 hdrhistogram = "7"
