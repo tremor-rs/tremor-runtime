@@ -19,9 +19,7 @@ pub mod query;
 pub(crate) mod raw;
 mod support;
 mod upable;
-use crate::errors::{
-    err_generic, error_generic, error_no_consts, error_no_locals, ErrorKind, Result,
-};
+use crate::errors::{error_generic, error_no_consts, error_no_locals, ErrorKind, Result};
 use crate::impl_expr_mid;
 use crate::interpreter::{exec_binary, exec_unary, AggrType, Cont, Env, ExecOpts, LocalStack};
 pub use crate::lexer::CompilationUnit;
@@ -43,6 +41,8 @@ use serde::Serialize;
 use std::borrow::Borrow;
 use std::mem;
 use upable::Upable;
+
+use self::raw::BytesDataType;
 
 #[derive(Default, Clone, Serialize, Debug, PartialEq)]
 struct NodeMeta {
@@ -151,40 +151,85 @@ struct Function<'script> {
     name: Cow<'script, str>,
 }
 
+#[derive(Debug, PartialEq, Serialize, Clone)]
+/// A section of a binary
+pub struct BytesPart<'script> {
+    /// metadata id
+    pub mid: usize,
+    /// data
+    pub data: ImutExpr<'script>,
+    /// type we want to convert this to
+    pub data_type: BytesDataType,
+    /// bits allocated for this
+    pub bits: u64,
+}
+impl_expr_mid!(BytesPart);
+
 /// Binary semiliteral
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Bytes<'script> {
     mid: usize,
     /// Bytes
-    pub value: ImutExprs<'script>,
+    pub value: Vec<BytesPart<'script>>,
 }
 impl_expr_mid!(Bytes);
+
+pub(crate) fn extend_bytes_from_value<'value, O: BaseExpr, I: BaseExpr>(
+    outer: &O,
+    inner: &I,
+    meta: &NodeMetas,
+    data_type: BytesDataType,
+    bits: u64,
+    bytes: &mut Vec<u8>,
+    value: &Value<'value>,
+) -> Result<()> {
+    match (data_type, bits) {
+        (BytesDataType::Integer, 0) => {
+            if let Some(b) = value.as_u8() {
+                bytes.push(b)
+            } else {
+                return error_generic(outer, inner, &"Not a valid u8", meta);
+            }
+        }
+        (BytesDataType::Binary, _) => {
+            unimplemented!()
+        }
+        _ => {
+            unreachable!()
+        }
+    }
+    Ok(())
+}
 
 impl<'script> Bytes<'script> {
     fn try_reduce(mut self, helper: &Helper<'script, '_>) -> Result<ImutExprInt<'script>> {
         self.value = self
             .value
             .into_iter()
-            .map(|v| v.0.try_reduce(helper).map(ImutExpr))
-            .collect::<Result<ImutExprs>>()?;
-        if self.value.iter().all(|v| is_lit(&v.0)) {
+            .map(|mut v| {
+                v.data = v.data.0.try_reduce(helper).map(ImutExpr)?;
+                Ok(v)
+            })
+            .collect::<Result<Vec<BytesPart>>>()?;
+        if self.value.iter().all(|v| is_lit(&v.data.0)) {
+            let mut bytes: Vec<u8> = Vec::with_capacity(self.value.len());
             let outer = self.extent(&helper.meta);
-            let bytes = self
-                .value
-                .into_iter()
-                .map(|e| {
-                    let extent = e.extent(&helper.meta);
-                    reduce2(e.0, &helper).and_then(|inner| {
-                        inner.as_u8().ok_or_else(|| {
-                            err_generic(&outer, &extent, &"Not a valid u8", &helper.meta)
-                        })
-                    })
-                })
-                .collect::<Result<Vec<u8>>>()?
-                .into();
+            for part in self.value {
+                let inner = part.extent(&helper.meta);
+                let value = reduce2(part.data.0, &helper)?;
+                extend_bytes_from_value(
+                    &outer,
+                    &inner,
+                    &helper.meta,
+                    part.data_type,
+                    part.bits,
+                    &mut bytes,
+                    &value,
+                )?;
+            }
             Ok(ImutExprInt::Literal(Literal {
                 mid: self.mid,
-                value: Value::Bytes(bytes),
+                value: Value::Bytes(bytes.into()),
             }))
         } else {
             Ok(ImutExprInt::Bytes(self))
