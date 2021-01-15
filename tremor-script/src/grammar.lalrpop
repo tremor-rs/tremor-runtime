@@ -1227,12 +1227,11 @@ Bytes: Vec<BytesPartRaw<'input>> = {
     }
 }
 
-
 BytesPart: BytesPartRaw<'input> = {
     <start:@L> <data:SimpleExprImut> <end:@L> => BytesPartRaw{start, end, data, ..Default::default()},
-    <start:@L> <data:SimpleExprImut> ":" <bits:"int"> <end:@L> => BytesPartRaw{start, end, data, bits, ..Default::default()},
+    <start:@L> <data:SimpleExprImut> ":" <bits:"int"> <end:@L> => BytesPartRaw{start, end, data, bits: Some(bits), ..Default::default()},
     <start:@L> <data:SimpleExprImut> "/" <data_type:Ident> <end:@L> => BytesPartRaw{start, end, data, data_type, ..Default::default()},
-    <start:@L> <data:SimpleExprImut> "/" <data_type:Ident> ":" <bits:"int"> <end:@L> => BytesPartRaw{start, end, data, bits, data_type},
+    <start:@L> <data:SimpleExprImut> ":" <bits:"int"> "/" <data_type:Ident>  <end:@L> => BytesPartRaw{start, end, data, bits: Some(bits), data_type},
 }
 
 

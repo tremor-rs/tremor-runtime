@@ -109,6 +109,15 @@ impl<'value> Value<'value> {
             transmute(r)
         }
     }
+
+    /// Tries to get the bytes from a Value
+    pub fn as_bytes(&self) -> Option<&[u8]> {
+        match self {
+            Value::Bytes(bs) => Some(&bs),
+            Value::String(bs) => Some(bs.as_bytes()),
+            _ => None,
+        }
+    }
 }
 
 impl<'value> Builder<'value> for Value<'value> {

@@ -15,6 +15,7 @@
 #![doc(hidden)]
 // We want to keep the names here
 #![allow(clippy::module_name_repetitions)]
+
 use super::{
     base_expr, path_eq, query, replace_last_shadow_use, ArrayPattern, ArrayPredicatePattern,
     AssignPattern, BinExpr, BinOpKind, Bytes, Comprehension, ComprehensionCase, EmitExpr,
@@ -159,13 +160,26 @@ impl<'script> ScriptRaw<'script> {
 
 #[derive(Debug, PartialEq, Serialize, Clone, Copy)]
 pub enum BytesDataType {
-    Integer,
+    SignedInteger,
+    UnsignedInteger,
     Binary,
 }
 
 impl Default for BytesDataType {
     fn default() -> Self {
-        BytesDataType::Integer
+        BytesDataType::UnsignedInteger
+    }
+}
+
+#[derive(Debug, PartialEq, Serialize, Clone, Copy)]
+pub enum Endian {
+    Little,
+    Big,
+}
+
+impl Default for Endian {
+    fn default() -> Self {
+        Endian::Big
     }
 }
 
@@ -175,7 +189,7 @@ pub struct BytesPartRaw<'script> {
     pub end: Location,
     pub data: ImutExprRaw<'script>,
     pub data_type: IdentRaw<'script>,
-    pub bits: i64,
+    pub bits: Option<i64>,
 }
 impl_expr!(BytesPartRaw);
 
@@ -186,7 +200,7 @@ impl<'script> Default for BytesPartRaw<'script> {
             end: Location::default(),
             data: ImutExprRaw::Literal(LiteralRaw::default()),
             data_type: IdentRaw::default(),
-            bits: 0,
+            bits: None,
         }
     }
 }
@@ -194,42 +208,56 @@ impl<'script> Upable<'script> for BytesPartRaw<'script> {
     type Target = BytesPart<'script>;
 
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        let data_type: &str = &self.data_type.id;
-        let data_type = match data_type {
-            "binary" => BytesDataType::Binary,
-            "integer" => BytesDataType::Integer,
+        let data_type: Vec<&str> = self.data_type.id.split('-').collect();
+        let (data_type, endianess) = match data_type.as_slice() {
+            [] | [""] => (BytesDataType::UnsignedInteger, Endian::Big),
+            ["binary"] => (BytesDataType::Binary, Endian::Big),
+            ["integer"]
+            | ["big"]
+            | ["unsigned"]
+            | ["unsigned", "integer"]
+            | ["big", "integer"]
+            | ["big", "unsigned", "integer"] => (BytesDataType::UnsignedInteger, Endian::Big),
+            ["signed", "integer"] | ["big", "signed", "integer"] => {
+                (BytesDataType::SignedInteger, Endian::default())
+            }
+            ["little"] | ["little", "integer"] | ["little", "unsigned", "integer"] => {
+                (BytesDataType::UnsignedInteger, Endian::Little)
+            }
+            ["little", "signed", "integer"] => (BytesDataType::SignedInteger, Endian::Little),
             other => {
                 return Err(err_generic(
                     &self,
-                    &self.data_type,
-                    &format!("Not a valid data type: {}", other),
+                    &self,
+                    &format!("Not a valid data type: '{}' ({:?})", other.join("-"), other),
                     &helper.meta,
                 ))
             }
         };
-        let bits = self.bits;
-        if bits < 0 {
-            Err(err_generic(
-                &self,
-                &self.data_type,
-                &format!("negative bits are not allowed: {}", bits),
-                &helper.meta,
-            ))
-        } else if bits % 8 != 0 {
-            Err(err_generic(
-                &self,
-                &self.data_type,
-                &format!("bits need to be dividable by 8, but {} isn't", bits),
-                &helper.meta,
-            ))
+        let bits = if let Some(bits) = self.bits {
+            if bits <= 0 || bits > 64 {
+                return Err(err_generic(
+                    &self,
+                    &self,
+                    &format!("negative bits or bits > 64 are are not allowed: {}", bits),
+                    &helper.meta,
+                ));
+            }
+            bits as u8
         } else {
-            Ok(BytesPart {
-                mid: helper.add_meta(self.start, self.end),
-                data: self.data.up(helper).map(ImutExpr)?,
-                data_type,
-                bits: self.bits as u64,
-            })
-        }
+            match data_type {
+                BytesDataType::SignedInteger | BytesDataType::UnsignedInteger => 8,
+                BytesDataType::Binary => 0,
+            }
+        };
+
+        Ok(BytesPart {
+            mid: helper.add_meta(self.start, self.end),
+            data: self.data.up(helper).map(ImutExpr)?,
+            data_type,
+            endianess,
+            bits,
+        })
     }
 }
 

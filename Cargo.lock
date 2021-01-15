@@ -5665,6 +5665,7 @@ dependencies = [
  "atty",
  "base64 0.13.0",
  "beef",
+ "byteorder",
  "chrono",
  "cidr-utils",
  "codespan",

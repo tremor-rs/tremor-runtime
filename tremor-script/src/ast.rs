@@ -14,6 +14,7 @@
 
 /// Base definition for expressions
 pub mod base_expr;
+pub(crate) mod binary;
 /// Query AST
 pub mod query;
 pub(crate) mod raw;
@@ -42,7 +43,10 @@ use std::borrow::Borrow;
 use std::mem;
 use upable::Upable;
 
-use self::raw::BytesDataType;
+use self::{
+    binary::extend_bytes_from_value,
+    raw::{BytesDataType, Endian},
+};
 
 #[derive(Default, Clone, Serialize, Debug, PartialEq)]
 struct NodeMeta {
@@ -160,8 +164,10 @@ pub struct BytesPart<'script> {
     pub data: ImutExpr<'script>,
     /// type we want to convert this to
     pub data_type: BytesDataType,
+    /// Endianness
+    pub endianess: Endian,
     /// bits allocated for this
-    pub bits: u64,
+    pub bits: u8,
 }
 impl_expr_mid!(BytesPart);
 
@@ -173,33 +179,6 @@ pub struct Bytes<'script> {
     pub value: Vec<BytesPart<'script>>,
 }
 impl_expr_mid!(Bytes);
-
-pub(crate) fn extend_bytes_from_value<'value, O: BaseExpr, I: BaseExpr>(
-    outer: &O,
-    inner: &I,
-    meta: &NodeMetas,
-    data_type: BytesDataType,
-    bits: u64,
-    bytes: &mut Vec<u8>,
-    value: &Value<'value>,
-) -> Result<()> {
-    match (data_type, bits) {
-        (BytesDataType::Integer, 0) => {
-            if let Some(b) = value.as_u8() {
-                bytes.push(b)
-            } else {
-                return error_generic(outer, inner, &"Not a valid u8", meta);
-            }
-        }
-        (BytesDataType::Binary, _) => {
-            unimplemented!()
-        }
-        _ => {
-            unreachable!()
-        }
-    }
-    Ok(())
-}
 
 impl<'script> Bytes<'script> {
     fn try_reduce(mut self, helper: &Helper<'script, '_>) -> Result<ImutExprInt<'script>> {
@@ -214,6 +193,9 @@ impl<'script> Bytes<'script> {
         if self.value.iter().all(|v| is_lit(&v.data.0)) {
             let mut bytes: Vec<u8> = Vec::with_capacity(self.value.len());
             let outer = self.extent(&helper.meta);
+            let mut used = 0;
+            let mut buf = 0;
+
             for part in self.value {
                 let inner = part.extent(&helper.meta);
                 let value = reduce2(part.data.0, &helper)?;
@@ -222,10 +204,16 @@ impl<'script> Bytes<'script> {
                     &inner,
                     &helper.meta,
                     part.data_type,
+                    part.endianess,
                     part.bits,
+                    &mut buf,
+                    &mut used,
                     &mut bytes,
                     &value,
                 )?;
+            }
+            if used > 0 {
+                bytes.push(buf >> (8 - used))
             }
             Ok(ImutExprInt::Literal(Literal {
                 mid: self.mid,
