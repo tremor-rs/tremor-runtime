@@ -22,7 +22,7 @@ use crate::prelude::*;
 use crate::registry::{Registry, TremorAggrFnWrapper, RECUR_REF};
 use crate::stry;
 use crate::{
-    ast::extend_bytes_from_value,
+    ast::binary::extend_bytes_from_value,
     errors::{
         error_bad_key, error_decreasing_range, error_invalid_unary, error_need_obj, error_need_str,
         error_no_clause_hit, error_oops, Result,
@@ -160,23 +160,26 @@ where
             }
             ImutExprInt::Bytes(ref bytes) => {
                 let mut bs: Vec<u8> = Vec::with_capacity(bytes.value.len());
-
+                let mut used = 0;
+                let mut buf = 0;
                 for part in &bytes.value {
                     let value = stry!(part.data.run(opts, env, event, state, meta, local));
+
                     stry!(extend_bytes_from_value(
                         self,
                         part,
                         &env.meta,
                         part.data_type,
+                        part.endianess,
                         part.bits,
+                        &mut buf,
+                        &mut used,
                         &mut bs,
                         &value,
                     ));
-
-                    //     inner.as_u8().ok_or_else(|| {
-                    //         err_generic(bytes, &extent, &"Not a valid u8", &env.meta)
-                    //     })
-                    // })
+                }
+                if used > 0 {
+                    bs.push(buf >> (8 - used))
                 }
 
                 Ok(Cow::Owned(Value::Bytes(bs.into())))

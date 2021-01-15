@@ -1,0 +1,2 @@
+use std::string;
+string::from_utf8_lossy(<< << event/binary, 32 >>/binary, 0x22/signed-integer, "snot"/binary, 0x2122:16/big-integer >>)

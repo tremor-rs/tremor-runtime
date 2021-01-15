@@ -152,6 +152,8 @@ test_cases!(
     // TODO
     // const_in_const_lookup,
     // INSERT
+bytes_tcp,
+bytes_create,
     string_interpolation_quotes,
     heredoc_interpolation_quotes,
     range,
