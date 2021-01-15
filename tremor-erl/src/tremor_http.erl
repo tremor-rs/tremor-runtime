@@ -161,7 +161,7 @@ post(Path, Body, C) ->
         {response, nofin, Code, _Hdrs} when Code >= 400 ->
             case gun:await_body(ConnPid, StreamRef) of
                 {ok, Body1} ->
-                    Body2 = decode(Body1),
+                    _ = decode(Body1),
                     gun:close(ConnPid),
                     {error, Code};
                 E1 ->
