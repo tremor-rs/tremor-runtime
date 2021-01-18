@@ -14,7 +14,7 @@
 
 -compile(export_all).
 
--define(SYS_PIPES, [<<"system::metrics">>]).
+-define(SYS_PIPES, [<<"system::metrics">>, <<"system::passthrough">>]).
 
 -record(state,{
                connection,
@@ -44,17 +44,26 @@ precondition_common(_S, _Call) ->
 id() ->
     ?SUCHTHAT(Id, ?LET(Id, list(choose($a, $z)), list_to_binary(Id) ), byte_size(Id) > 0).
 
-%% TODO: We remove links and nodes as at this point they are really hard to generate (as they must be valid!)
+%% TODO: chose a simple sample pipeline as constant
 %% got to find out a way to do this properly
-pipeline(#state{root = Root, schema = Schema}) ->
-    ?LET(V, jsongen:json(Schema, [{root, Root}, {depth, 3}]), maps:put(<<"nodes">>, [], maps:put(<<"links">>, #{}, tremor_http:decode(list_to_binary(jsg_json:encode(V)))))).
+pipeline(_State) ->
+    ?LET(Id, 
+        id(),
+        << <<"#!config id = \"">>/binary, Id/binary, <<"\"\nselect event from in into out;">>/binary >>
+    ).
 
-
-pipeline_with_id(State = #state{pipelines = Pipelines}) ->
-    ?LET(Id,
-         elements(Pipelines),
-         ?LET(Artefact, pipeline(State),
-              maps:put(<<"id">>, Id, Artefact))).
+pipeline_id(Pipeline) ->
+    case binary:match(Pipeline, <<"#!config id = \"">>) of
+        {Start, Length} -> 
+            Idx = Start + Length,
+            case binary:match(Pipeline, <<"\"\n">>, [{scope, {Idx, byte_size(Pipeline) - Idx}}]) of
+                {SStart, _} ->
+                    binary:part(Pipeline, {Idx, SStart - Idx});
+                nomatch -> none
+            end;
+        nomatch -> none
+    end.
+pipeline_ids(Pipelines) -> [ pipeline_id(P) || P <- Pipelines].
 
 %% -----------------------------------------------------------------------------
 %% Grouped operator: list_pipeline
@@ -73,7 +82,7 @@ list_pipeline(C) ->
     Pipelines.
 
 list_pipeline_post(#state{pipelines = Pipelines}, _Args, Result) ->
-    lists:sort(Result) == lists:sort(Pipelines ++ ?SYS_PIPES).
+    lists:sort(Result) == lists:sort(pipeline_ids(Pipelines) ++ ?SYS_PIPES).
 
 list_pipeline_next(S, _Result, _Args) ->
     S.
@@ -92,21 +101,25 @@ publish_pipeline_args(S = #state{connection = C}) ->
 publish_pipeline_pre(#state{}) ->
     true.
 
-publish_pipeline_pre(#state{pipelines = Pipelines}, [_C, #{<<"id">> := Id}]) ->
-    not lists:member(Id, Pipelines).
+publish_pipeline_pre(#state{pipelines = Pipelines}, [_C, Pipeline]) ->
+    not lists:member(pipeline_id(Pipeline), pipeline_ids(Pipelines)).
 
 publish_pipeline(C, Pipeline) ->
     tremor_pipeline:publish(Pipeline, C).
 
-publish_pipeline_post(#state{schema = Schema, root = Root},
-                      [_C, #{<<"id">> := Id}],
-                      {ok, Resp = #{<<"id">> := Id}}) ->
-    jesse_validator:validate(Schema, Root, jsone:encode(Resp));
+publish_pipeline_post(_State,
+                      [_C, Pipeline],
+                      {ok, Resp}) ->
+    case {pipeline_id(Pipeline), pipeline_id(Resp)} of
+        %% assert that we have the same id published as we have locally
+        {Id, Id} -> true;
+        _ -> false
+    end;
 publish_pipeline_post(_, _, _) ->
     false.
 
-publish_pipeline_next(S = #state{pipelines = Pipelines}, _Result, [_C, #{<<"id">> := Id}]) ->
-    S#state{pipelines = [Id | Pipelines]}.
+publish_pipeline_next(S = #state{pipelines = Pipelines}, _Result, [_C, Pipeline]) ->
+    S#state{pipelines = [Pipeline | Pipelines]}.
 
 %% -----------------------------------------------------------------------------
 %% Grouped operator: publish_existing_pipeline_args
@@ -114,16 +127,16 @@ publish_pipeline_next(S = #state{pipelines = Pipelines}, _Result, [_C, #{<<"id">
 %% (conflict) error.
 %% -----------------------------------------------------------------------------
 
-publish_existing_pipeline_args(S = #state{connection = C}) ->
-    [C, pipeline_with_id(S)].
+publish_existing_pipeline_args(#state{connection = C, pipelines = Pipelines}) ->
+    [C, elements(Pipelines)].
 
 publish_existing_pipeline_pre(#state{pipelines = []}) ->
     false;
 publish_existing_pipeline_pre(#state{}) ->
     true.
 
-publish_existing_pipeline_pre(#state{pipelines = Pipelines}, [_C, #{<<"id">> := Id}]) ->
-    lists:member(Id, Pipelines).
+publish_existing_pipeline_pre(#state{pipelines = Pipelines}, [_C, Pipeline]) ->
+    lists:member(Pipeline, Pipelines).
 
 publish_existing_pipeline(C, Pipeline) ->
     tremor_pipeline:publish(Pipeline, C).
@@ -150,7 +163,7 @@ unpublish_nonexisting_pipeline_pre(#state{}) ->
     true.
 
 unpublish_nonexisting_pipeline_pre(#state{pipelines = Pipelines}, [_C, Id]) ->
-    not lists:member(Id, Pipelines).
+    not lists:member(Id, pipeline_ids(Pipelines)).
 
 unpublish_nonexisting_pipeline(C, Id) ->
     tremor_pipeline:unpublish(Id, C).
@@ -180,22 +193,25 @@ unpublish_pipeline_pre(#state{pipelines = []}) ->
 unpublish_pipeline_pre(#state{}) ->
     true.
 
-unpublish_pipeline_pre(#state{pipelines = Pipelines}, [_C, Id]) ->
-    lists:member(Id, Pipelines).
+unpublish_pipeline_pre(#state{pipelines = Pipelines}, [_C, Pipeline]) ->
+    lists:member(Pipeline, Pipelines).
 
-unpublish_pipeline(C, Id) ->
-    tremor_pipeline:unpublish(Id, C).
+unpublish_pipeline(C, Pipeline) ->
+    tremor_pipeline:unpublish(pipeline_id(Pipeline), C).
 
-unpublish_pipeline_post(#state{schema = Schema, root = Root},
-                        [_, Id],
-                        {ok, Resp = #{<<"id">> := Id}}) ->
-    jesse_validator:validate(Schema, Root, jsone:encode(Resp));
+unpublish_pipeline_post(_State,
+                        [_, Pipeline],
+                        {ok, Resp}) ->
+    case {pipeline_id(Pipeline), pipeline_id(Resp)} of
+        {Id, Id} -> true;
+        _ -> false
+    end;
 
 unpublish_pipeline_post(_, _, _) ->
     false.
 
 unpublish_pipeline_next(S = #state{pipelines = Pipelines}, _Result, [_C, Deleted]) ->
-    S#state{pipelines = [Id || Id <- Pipelines, Id =/= Deleted]}.
+    S#state{pipelines = [P || P <- Pipelines, P =/= Deleted]}.
 
 %% -----------------------------------------------------------------------------
 %% Grouped operator: find_nonexisting_pipeline_args
@@ -210,7 +226,7 @@ find_nonexisting_pipeline_pre(#state{}) ->
     true.
 
 find_nonexisting_pipeline_pre(#state{pipelines = Pipelines}, [_C, Id]) ->
-    not lists:member(Id, Pipelines).
+    not lists:member(Id, pipeline_ids(Pipelines)).
 
 find_nonexisting_pipeline(C, Id) ->
     tremor_pipeline:find(Id, C).
@@ -238,18 +254,19 @@ find_pipeline_pre(#state{pipelines = []}) ->
 find_pipeline_pre(#state{}) ->
     true.
 
-find_pipeline_pre(#state{pipelines = Pipelines}, [_C, Id]) ->
-    lists:member(Id, Pipelines).
+find_pipeline_pre(#state{pipelines = Pipelines}, [_C, Existing]) ->
+    lists:member(Existing, Pipelines).
 
-find_pipeline(C, Id) ->
-    tremor_pipeline:find(Id, C).
+find_pipeline(C, Pipeline) ->
+    tremor_pipeline:find(pipeline_id(Pipeline), C).
 
-find_pipeline_post(#state{root = Root}, [_, Id], {ok, Resp = #{<<"artefact">> := #{<<"id">> := Id}}}) ->
-    {ok, S} = jsg_jsonref:deref(["components", "schemas", "pipeline_state"], Root),
-    jesse_validator:validate(S, Root, jsone:encode(Resp));
-
-find_pipeline_post(_, _, _) ->
-    io:format("Error: bad body"),
+find_pipeline_post(_State, [_, Existing], {ok, Resp}) ->
+    case {pipeline_id(Existing), pipeline_id(Resp)} of
+        {Id, Id} -> true;
+        _ -> false
+    end;
+find_pipeline_post(_, _, Resp) ->
+    io:format("Error: bad body ~w~n", [Resp]),
     false.
 
 find_pipeline_next(S, _Result, [_C, _Pipeline]) ->
@@ -294,9 +311,8 @@ prop_pipeline() ->
 
 cleanup() ->
     C = tremor_api:new(),
-    %% We do it twice to ensure failed vm's are deleted proppelry.
     {ok, Pipelines} = tremor_pipeline:list(C),
-    [tremor_pipeline:unpublish(Pipeline, C) || Pipeline <- Pipelines -- ?SYS_PIPES],
+    [ tremor_pipeline:unpublish(Pipeline, C) || Pipeline <- Pipelines -- ?SYS_PIPES],
     {ok, Rest} = tremor_pipeline:list(C),
     ?SYS_PIPES = lists:sort(Rest),
     ok.

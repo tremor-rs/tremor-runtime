@@ -237,7 +237,7 @@ paths:
       description: |
         Returns a list of identifiers for each pipeline stored in the repository
 
-        Response data may be either JSON or YAML formatted ( defaults to JSON ).
+        Response data is a trickle source code string.
       operationId: find_pipelines
       tags: [ repo, pipeline ]
       responses:
@@ -256,6 +256,8 @@ paths:
         Publishes a new pipeline to the tremor artefact repository if the artefact id
         is unique.
 
+        The request body need to be valid trickle.
+
         Returns artefact data, on success.
 
         If an pipeline of the same name already exists, a conflict error is returned.
@@ -264,6 +266,17 @@ paths:
 
       operationId: publish_pipeline
       tags: [ repo, pipeline ]
+      requestBody:
+        description: "trickle source code"
+        content:
+          application/vnd.trickle:
+            schema:
+              $ref: '/components/schemas/pipeline'
+            examples:
+              passthrough:
+                summary: simplest passthrough pipeline
+                value: select event from in into out
+        required: true
       responses:
         '201':
           description: 'Successfully published pipeline to tremor registry'
@@ -274,17 +287,21 @@ paths:
             application/yaml:
               schema:
                 $ref: '#/components/schemas/pipeline'
+            application/vnd.trickle:
+              schema:
+                $ref: '#/components/schemas/pipeline'
         '409':
           description: 'A pipeline with the same id already exists error'
   /pipeline/{artefact-id}:
     get:
       summary: Get pipeline data from tremor artefact repository
       description: |
-        Given a valid artefact identifier of an artefact stored in the tremor artefact repository
+        Given a valid pipeline artefact identifier of a pipeline artefact stored in the tremor artefact repository
 
-        Returns artefact data, on success.
+        Returns pipeline source code string, on success.
 
-        Response data may be either JSON or YAML formatted ( defaults to JSON ).
+        Response data may be either JSON or YAML formatted ( defaults to JSON ),
+        but is essentially a trickle source code string.
       tags: [ repo, pipeline ]
       operationId: get_pipeline_by_id
       parameters:
@@ -300,10 +317,13 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/pipeline_state'
+                $ref: '#/components/schemas/pipeline'
             application/yaml:
               schema:
-                $ref: '#/components/schemas/pipeline_state'
+                $ref: '#/components/schemas/pipeline'
+            application/vnd.trickle:
+              schema:
+                $ref: '#/components/schemas/pipeline'
         '404':
           description: 'The artefact was not found and does not exist'
     delete:
@@ -331,6 +351,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/pipeline'
             application/yaml:
+              schema:
+                $ref: '#/components/schemas/pipeline'
+            application/vnd.trickle:
               schema:
                 $ref: '#/components/schemas/pipeline'
         '409':
@@ -445,45 +468,31 @@ paths:
           description: 'The artefact was not found and does not exist'
 
 
-  /{artefact-kind}/{artefact-id}/{instance-id}:
+  /binding/{artefact-id}/{instance-id}:
     get:
       summary: Get deployed artefact servant data from tremor artefact registry
       description: |
-        Given a valid artefact kind parameter of:
+        Given a valid identifier of a binding artefact stored in the tremor artefact repository
 
-        * pipeline
-        * onramp
-        * offramp
-        * binding
-
-        Given a valid artefact identifier of an artefact stored in the tremor artefact repository
-
-        Given a valid instance identifier for a deployed and running instance of the artefact deployed
+        Given a valid binding instance identifier for a deployed and running instance of the binding deployed
         and accesible via the tremor instance registry
 
-        Returns instance data, on success.
+        Returns binding instance data on success.
 
         Response data may be either JSON or YAML formatted ( defaults to JSON ).
       tags: [ repo, reg ]
-      operationId: get_artefact_instance_by_id
+      operationId: get_binding_instance_by_id
       parameters:
-        - name: artefact-kind
-          in: path
-          required: true
-          description: The type of artefact
-          schema:
-            type: string
-            enum: [ "pipeline", "onramp", "offramp", "binding" ]
         - name: artefact-id
           in: path
           required: true
-          description: The ( server ) unique id of the artefact
+          description: The ( server ) unique id of the binding artefact
           schema:
             type: string
         - name: instance-id
           in: path
           required: true
-          description: The ( server ) unique instance id of the artefact
+          description: The ( server ) unique instance id of the binding 
           schema:
             type: string
       responses:
@@ -492,83 +501,62 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/artefact'
+                $ref: '#/components/schemas/binding'
             application/yaml:
               schema:
-                $ref: '#/components/schemas/artefact'
+                $ref: '#/components/schemas/binding'
         '404':
-          description: 'The artefact instance was not found and does not exist'
+          description: 'The binding instance was not found and does not exist'
     post:
-      summary: Publish, deploy and activate instances
+      summary: Publish, deploy and activate a binding
       description: |
-        Given a valid artefact kind parameter of:
+        Given a valid binding artefact identifier of a binding artefact stored in the tremor artefact repository
 
-        * pipeline
-        * onramp
-        * offramp
-        * binding
-
-        Given a valid artefact identifier of an artefact stored in the tremor artefact repository
-
-        Given a valid instance identifier for a deployed and running instance of the artefact deployed
+        Given a valid binding instance identifier for a deployed and running instance of the binding deployed
         and accesible via the tremor instance registry
 
         Creates new instances of artefacts ( if required ), publishes instances
         to the tremor instance registry. If instances are onramps, offramps or
         pipelines new registry values will be created. In the case of onramps
         and offramps these are deployed *after* any dependant pipeline instances
-        and then they are interaconnected.
+        and then they are interconnected.
 
-        Returns instance data, on success.
+        Returns the binding instance data, on success.
 
         Response data may be either JSON or YAML formatted ( defaults to JSON ).
       tags: [ repo, reg ]
-      operationId: activate
+      operationId: activate-binding
       parameters:
-        - name: artefact-kind
-          in: path
-          required: true
-          description: The type of artefact
-          schema:
-            type: string
-            enum: [ "pipeline", "onramp", "offramp", "binding" ]
         - name: artefact-id
           in: path
           required: true
-          description: The ( server ) unique id of the artefact
+          description: The ( server ) unique id of the binding artefact
           schema:
             type: string
         - name: instance-id
           in: path
           required: true
-          description: The ( server ) unique instance id of the artefact
+          description: The ( server ) unique instance id of the binding
           schema:
             type: string
       responses:
         '201':
-          description: 'Old tremor artefact instance data'
+          description: 'Binding instance data'
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/artefact'
+                $ref: '#/components/schemas/binding'
             application/yaml:
               schema:
-                $ref: '#/components/schemas/artefact'
+                $ref: '#/components/schemas/binding'
         '404':
-          description: 'The artefact instance was not found and does not exist'
+          description: 'The binding instance was not found and does not exist'
     delete:
-      summary: Deactivate and unpublish deployed instances
+      summary: Deactivate and unpublish deployed bindings
       description: |
-        Given a valid artefact kind parameter of:
+        Given a valid binding artefact identifier of a binding artefact stored in the tremor artefact repository
 
-        * pipeline
-        * onramp
-        * offramp
-        * binding
-
-        Given a valid artefact identifier of an artefact stored in the tremor artefact repository
-
-        Given a valid instance identifier for a deployed and running instance of the artefact deployed
+        Given a valid binding instance identifier for a deployed and running instance of the binding deployed
         and accesible via the tremor instance registry
 
         Deactivates, stops and unpublishes the target instances and any
@@ -578,15 +566,8 @@ paths:
 
         Response data may be either JSON or YAML formatted ( defaults to JSON ).
       tags: [ repo, reg ]
-      operationId: deactivate
+      operationId: deactivate-binding
       parameters:
-        - name: artefact-kind
-          in: path
-          required: true
-          description: The type of artefact
-          schema:
-            type: string
-            enum: [ "pipeline", "onramp", "offramp", "binding" ]
         - name: artefact-id
           in: path
           required: true
@@ -605,10 +586,10 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/artefact'
+                $ref: '#/components/schemas/binding'
             application/yaml:
               schema:
-                $ref: '#/components/schemas/artefact'
+                $ref: '#/components/schemas/binding'
         '404':
           description: 'The artefact instance was not found and does not exist'
 
@@ -636,9 +617,13 @@ components:
     version:
       description: Version information
       properties:
+        additionalProperties: false
         version:
           type: string
           description: The semantic version code
+        debug:
+          type: boolean
+          description: True if this is a debug build
       required: [ version ]
     
     registry_set:
@@ -682,95 +667,10 @@ components:
           description: The id of the pubished artefact
       required: [ id ]
       
-    pipeline_state:
-      description: State of an pipeline, including specification and instances
-      type: object
-      additionalProperties: false
-      properties:
-        artefact:
-          $ref: '#/components/schemas/pipeline'
-        instances:
-          $ref: '#/components/schemas/instance_set'
-
     pipeline:
-      description: A tremor pipeline specification
-      type: object
-      additionalProperties: false
-      properties:
-        id:
-          # description: A unique identifier for this pipeline specification
-          $ref: '#/components/schemas/artefact_id'
-        description:
-          # description: Documentation for this type
-          type: string
-        interface:
-          $ref: "#/components/schemas/interface"
-        nodes:
-          $ref: "#/components/schemas/nodes"
-        links:
-          $ref: "#/components/schemas/links"
-        metrics_interval_s:
-          minimum: 1
-          type: integer
-      required: [ id, interface, nodes, links ]
-
-    interface:
-      type: object
-      additionalProperties: false
-      properties:
-        inputs:
-          $ref: "#/components/schemas/stream_names"
-        outputs:
-          $ref: "#/components/schemas/stream_names"
-
-    stream_names:
-      description: The set of input or output stream names
-      type: array
-      additionalItems: false
-      items: 
-        $ref: "#/components/schemas/port_id"
-
-
-    nodes:
-      description: The set of operator nodes this pipeline DAG is formed from
-      type: array
-      additionalItems: false
-      items:
-        $ref: "#/components/schemas/operator"
-
-    operator:
-      description: An operator node in a pipeline or vertex in the pipeline DAG
-      type: object
-      additionalProperties: false
-      properties:
-        id:
-          $ref: '#/components/schemas/artefact_id'
-          description: A pipeline unique identifier for this operator
-        description:
-          type: string
-          description: Documentation for this type
-        type:
-          type: string
-          description: Rust native type for this operator specification
-        config:
-          type: object
-          description: A map of key/value pairs used to configure this operator
-      required: [ id, type ]
-
-    links:
-      description: The set of connections between nodes/vertices/operators in a pipeline DAG
-      type: object
-      additionalProperties: false
-      # Note: swagger claims this is invalid but it's part of jsonspec
-      # we can ignore swaggers complaint here
-      patternProperties: 
-        '^[a-zA-Z][A-Za-z0-9_/]*$':
-          type: array
-          additionalItems: false
-          items:
-            type: string
-            pattern: "^[a-zA-Z][A-Za-z0-9_/]*$"
-
+      description: State of an pipeline, expressed as trickle source code.
+      type: string
+    
     onramp_state:
       description: State of an onramp, including specification and instances
       type: object
@@ -787,8 +687,7 @@ components:
       additionalProperties: false
       properties:
         type:
-          type: string
-          description: Rust native type for this onramp specification
+          $ref: '#/components/schemas/onramp_type'
         id:
           # This description would make it an invlaid schema :/
           # description: A unique identifier for this onramp specification
@@ -800,12 +699,29 @@ components:
           # This description would make it an invlaid schema :/
           # description: The codec supported by this offramp
           $ref: "#/components/schemas/codec"
+        codec_map:
+          $ref: "#/components/schemas/codec_map"
         preprocessors:
           # Preprocessors to be applied to the data
           type: array
           additionalItems: false
           items:
             $ref: "#/components/schemas/preprocessor"
+        postprocessors:
+          type: array
+          additionalItems: false
+          items:
+            $ref: "#/components/schemas/postprocessor"
+        linked:
+          type: boolean
+          description: Whether this offramp is linked or not
+        err_required:
+          type: boolean
+          description: Whether a pipeline needs to be connected to the err port before startup
+        metrics_interval_s:
+          type: integer
+          description: interval in which metrics info is published
+          minimum: 0
         config:
           type: object
           description: A map of key/value pairs used to configure this onramp
@@ -828,9 +744,9 @@ components:
       additionalProperties: false
       properties:
         type:
-          # This description would make it an invlaid schema :/
+          # This description would make it an invalid schema :/
           # description: Rust native type for this offramp specification
-          type: string
+          $ref: '#/components/schemas/offramp_type'
         id:
           # This description would make it an invlaid schema :/
           # description: A unique identifier for this offramp specification
@@ -840,10 +756,29 @@ components:
           description: Documentation for this type
         codec:
           $ref: "#/components/schemas/codec"
+        codec_map:
+          $ref: "#/components/schemas/codec_map"
+        preprocessors:
+          # Preprocessors to be applied to the data
+          type: array
+          additionalItems: false
+          items:
+            $ref: "#/components/schemas/preprocessor"
+        postprocessors:
+          type: array
+          additionalItems: false
+          items:
+            $ref: "#/components/schemas/postprocessor"
+        linked:
+          type: boolean
+          description: Whether this offramp is linked or not
+        metrics_interval_s:
+          type: integer
+          description: interval in which metrics info is published
+          minimum: 0
         config:
           type: object
           description: A map of key/value pairs used to configure this onramp
-
       required: [ type, id ]  
     
     binding_state:
@@ -880,7 +815,7 @@ components:
       # Note: swagger claims this is invalid but it's part of jsonspec
       # we can ignore swaggers complaint here
       patternProperties: 
-        '^(tremor://)?/(onramp|pipeline)/[a-zA-Z][A-Za-z0-9_]*/[a-zA-Z][A-Za-z0-9_]*$':
+        '^(tremor://localhost)?/(onramp|pipeline)/[a-zA-Z][A-Za-z0-9_]*/[a-zA-Z][A-Za-z0-9_]*$':
           type: array
           additionalItems: false
           items:
@@ -888,27 +823,95 @@ components:
 
     binding_dst:
       type: string
-      pattern: '^(tremor://)?/(pipeline|offramp)/[a-zA-Z][A-Za-z0-9_]*/[a-zA-Z][A-Za-z0-9_]*$'
+      pattern: '^(tremor://localhost)?/(pipeline|offramp)/[a-zA-Z][A-Za-z0-9_]*/[a-zA-Z][A-Za-z0-9_]*$'
 
     mapping:
       description: A tremor mapping specification
       type: object
 
+    offramp_type:
+      description: supported offramp types
+      type: string
+      enum:
+        - blackhole
+        - debug
+        - elastic
+        - exit
+        - file
+        - kafka
+        - newrelic
+        - postgres
+        - rest
+        - stderr
+        - stdout
+        - tcp
+        - udp
+        - ws
+
+    onramp_type:
+      description: supported onramp types
+      type: string
+      enum:
+        - blaster
+        - crononome
+        - file
+        - kafka
+        - metronome
+        - postgres
+        - rest
+        - tcp
+        - udp
+        - ws
+
     codec:
       description: The data format supported for encoding/decoding to/from tremor types
       type: string
       enum:
+        - binflux
+        - influx
         - json
         - msgpack
-        - string
         - 'null'
-        - influx
+        - statsd
+        - string
+        - yaml
+
+    codec_map:
+      description: A map from mime-type to codec
+      type: object
+      additionalProperties:
+        $ref: "#/components/schemas/codec"
 
     preprocessor:
       description: Supported preprocessors
       type: string
       enum:
-        - lines
         - base64
         - decompress
         - gelf-chunking
+        - gzip
+        - length-prefixed
+        - lines
+        - lines-null
+        - lines-pipe
+        - lines-no-buffer
+        - lines-cr-no-buffer
+        - lz4
+        - remove-empty
+        - snappy
+        - xz
+        - zlib
+
+    postprocessor:
+      description: Supported postprocessors
+      type: string
+      enum:
+        - base64
+        - gelf-chunking
+        - gzip
+        - length-prefixed
+        - lines
+        - lz4
+        - snappy
+        - xz
+        - zlib

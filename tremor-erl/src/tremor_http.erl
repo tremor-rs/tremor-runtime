@@ -1,7 +1,7 @@
 %% taken from: https://gitlab.com/Project-FiFo/FiFo/fifo_api/blob/master/src/fifo_api_http.erl
 -module(tremor_http).
 
--export([new/1, get/2, get/3, post/3, put/3, url/2,
+-export([new/1, get/2, get/3, post/3, post_raw/4, put/3, url/2,
         delete/2, delete/3, connect/1, close/1, decode/1]).
 
 -export([take_last/1, full_list/1]).
@@ -122,7 +122,8 @@ delete(Path, Opts, C) ->
                 E1 ->
                     gun:close(ConnPid),
                     E1
-            end;        {response, nofin, _Status, _Hdrs} ->
+            end;
+        {response, nofin, _Status, _Hdrs} ->
             case gun:await_body(ConnPid, StreamRef) of
                 {ok, Body1} ->
                     Body2 = decode(Body1),
@@ -137,14 +138,13 @@ delete(Path, Opts, C) ->
             E
     end.
 
-post(Path, Body, C) ->
+post_raw(Path, Body, C, ContentType) ->
     ConnPid = connect(C),
     URL = url(Path, C),
     ReqHeaders = [{<<"accept">>, ?ENCODING},
-                  {<<"content-type">>, ?ENCODING}],
-    ReqBody = encode(Body),
+                  {<<"content-type">>, ContentType}],
     StreamRef = gun:post(ConnPid, URL, ReqHeaders),
-    gun:data(ConnPid, StreamRef, fin, ReqBody),
+    gun:data(ConnPid, StreamRef, fin, Body),
     case gun:await(ConnPid, StreamRef) of
         {response, fin, Code, _Hdrs} when Code >= 400 ->
             gun:close(ConnPid),
@@ -186,6 +186,9 @@ post(Path, Body, C) ->
             gun:close(ConnPid),
             Error
     end.
+post(Path, Body, C) ->
+    ReqBody = encode(Body),
+    post_raw(Path, ReqBody, C, ?ENCODING).
 
 put(Path, Body, C) ->
     ConnPid = connect(C),

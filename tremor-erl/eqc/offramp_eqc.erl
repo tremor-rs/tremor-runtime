@@ -45,7 +45,35 @@ id() ->
     ?SUCHTHAT(Id, ?LET(Id, list(choose($a, $z)), list_to_binary(Id) ), byte_size(Id) > 0).
 
 offramp(#state{root = Root, schema = Schema}) ->
-    ?LET(V, jsongen:json(Schema, [{root, Root}, {depth, 3}]), tremor_http:decode(list_to_binary(jsg_json:encode(V)))).
+    ?LET(V, jsongen:json(Schema, [{root, Root}, {depth, 3}]), offramp_prepare(V)).
+
+offramp_prepare(Offramp) ->
+    Prepared = tremor_http:decode(list_to_binary(jsg_json:encode(Offramp))),
+    offramp_add_valid_config(Prepared).
+
+%% add a valid config - this is to cumbersome to express in openapi.yaml
+offramp_add_valid_config(#{<<"type">> := <<"rest">>} = Offramp) ->
+    Offramp#{ <<"config">> => #{ <<"endpoint">> => <<"http://127.0.0.1:65535">> }};
+offramp_add_valid_config(#{<<"type">> := <<"elastic">>} = Offramp) ->
+    Offramp#{<<"config">> => #{ <<"endpoints">> => [<<"http://127.0.0.1:8888">>]}};
+offramp_add_valid_config(#{<<"type">> := <<"kafka">>} = Offramp) ->
+    Offramp#{<<"config">> => #{ <<"brokers">> => [<<"http://127.0.0.1:8888">>], <<"topic">> => <<"test">> }};
+offramp_add_valid_config(#{<<"type">> := <<"ws">>} = Offramp) ->
+    Offramp#{<<"config">> => #{ <<"url">> => <<"http://127.0.0.1:8888">>}};
+offramp_add_valid_config(#{<<"type">> := <<"udp">>} = Offramp) ->
+    Offramp#{<<"config">> => #{ <<"host">> => <<"0.0.0.0">>, <<"port">> => <<"0">>, <<"dst_host">> => <<"example.org">>, <<"dst_port">> => <<"9999">> }};
+offramp_add_valid_config(#{<<"type">> := <<"postgres">>} = Offramp) ->
+    Offramp#{<<"config">> => #{ <<"host">> => <<"localhost">>, <<"port">> => <<"9990">>, <<"user">> => <<"root">>, <<"password">> => <<"abcdef">>, <<"dbname">> => <<"db">>, <<"table">> => <<"my_table">> }};
+offramp_add_valid_config(#{<<"type">> := <<"file">>} = Offramp) ->
+    Offramp#{<<"config">> => #{ <<"file">> => <<"/tmp/file.json">>}};
+offramp_add_valid_config(#{<<"type">> := <<"blackhole">>} = Offramp) ->
+    Offramp#{<<"config">> => #{ <<"warmup_secs">> => <<"1">>, <<"stop_after_secs">> => <<"2">>, <<"significant_figures">> => <<"1">>}};
+offramp_add_valid_config(#{<<"type">> := <<"tcp">>} = Offramp) ->
+    Offramp#{<<"config">> => #{ <<"host">> => <<"localhost">>, <<"port">> => <<"65535">>}};
+offramp_add_valid_config(#{<<"type">> := <<"newrelic">>} = Offramp) ->
+    Offramp#{<<"config">> => #{ <<"license_key">> => <<"keystring">>, <<"compress_logs">> => <<"true">>, <<"region">> => <<"europe">>}};
+offramp_add_valid_config(Offramp) -> 
+    Offramp.
 
 
 offramp_with_id(State = #state{offramps = Offramps}) ->

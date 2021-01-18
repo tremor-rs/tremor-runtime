@@ -40,7 +40,6 @@ pub async fn publish_artefact(mut req: Request) -> Result<Response> {
             let body = req.body_string().await?;
             let aggr_reg = tremor_script::registry::aggr();
             let module_path = tremor_script::path::load();
-            println!("{}", body);
             let query = Query::parse(
                 &module_path,
                 &body,
