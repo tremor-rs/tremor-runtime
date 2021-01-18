@@ -1,4 +1,4 @@
-### The base64 module contains functions work with base64 encoding and decoding
+### The base64 module contains functions to work with base64 encoding and decoding
 
 ## Encodes a `binary` as a base64 encoded string
 ##

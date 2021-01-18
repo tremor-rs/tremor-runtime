@@ -1460,20 +1460,38 @@ impl<'input> Lexer<'input> {
         }
     }
 
-    fn an(&mut self, start: Location) -> Result<TokenSpan<'input>> {
-        let (end, lexeme) = self.take_while(start, |ch| {
-            ch == '>' || ch == '<' || ch == '=' || is_ident_continue(ch)
-        });
+    fn gt(&mut self, start: Location) -> Result<TokenSpan<'input>> {
+        match self.lookahead() {
+            Some((end, '>')) => {
+                self.bump();
+                if let Some((end, '>')) = self.lookahead() {
+                    self.bump();
+                    Ok(self.spanned2(start, end, Token::RBitShiftUnsigned))
+                } else {
+                    Ok(self.spanned2(start, end, Token::RBitShiftSigned))
+                }
+            }
+            Some((end, '=')) => {
+                self.bump();
+                Ok(self.spanned2(start, end, Token::Gte))
+            }
+            Some((end, _)) => Ok(self.spanned2(start, end, Token::Gt)),
+            None => Ok(self.spanned2(start, start, Token::Bad(">".to_string()))),
+        }
+    }
 
-        match lexeme {
-            "<" => Ok(self.spanned2(start, end, Token::Lt)),
-            "<=" => Ok(self.spanned2(start, end, Token::Lte)),
-            ">" => Ok(self.spanned2(start, end, Token::Gt)),
-            ">=" => Ok(self.spanned2(start, end, Token::Gte)),
-            "<<" => Ok(self.spanned2(start, end, Token::LBitShift)),
-            ">>" => Ok(self.spanned2(start, end, Token::RBitShiftSigned)),
-            ">>>" => Ok(self.spanned2(start, end, Token::RBitShiftUnsigned)),
-            _ => Ok(self.spanned2(start, end, Token::Bad(lexeme.to_string()))),
+    fn lt(&mut self, start: Location) -> Result<TokenSpan<'input>> {
+        match self.lookahead() {
+            Some((end, '<')) => {
+                self.bump();
+                Ok(self.spanned2(start, end, Token::LBitShift))
+            }
+            Some((end, '=')) => {
+                self.bump();
+                Ok(self.spanned2(start, end, Token::Lte))
+            }
+            Some((end, _)) => Ok(self.spanned2(start, end, Token::Lt)),
+            None => Ok(self.spanned2(start, start, Token::Bad("<".to_string()))),
         }
     }
 
@@ -2769,7 +2787,8 @@ impl<'input> Iterator for Lexer<'input> {
                     },
                     '#' => Some(self.cx(start)),
                     '=' => Some(self.eq(start)),
-                    '<' | '>' => Some(self.an(start)),
+                    '<' => Some(self.lt(start)),
+                    '>' => Some(self.gt(start)),
                     '%' => Some(self.pb(start)),
                     '~' => Some(self.tl(start)),
                     '`' => Some(self.id2(start)),
