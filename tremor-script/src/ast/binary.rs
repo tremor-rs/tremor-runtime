@@ -1,3 +1,17 @@
+// Copyright 2020, The Tremor Team
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 use super::{
     raw::{BytesDataType, Endian},
     BaseExpr, NodeMetas,
@@ -57,6 +71,7 @@ fn write_bits_be(bytes: &mut Vec<u8>, bits: u8, buf: &mut u8, used: &mut u8, v: 
             16 => {
                 let l = bytes.len();
                 bytes.extend_from_slice(&[0, 0]);
+                // ALLOW: we know bytes is at least `l` long
                 BigEndian::write_u16(&mut bytes[l..], v as u16)
             }
             24 => {
@@ -64,39 +79,44 @@ fn write_bits_be(bytes: &mut Vec<u8>, bits: u8, buf: &mut u8, used: &mut u8, v: 
                 bytes.push((v >> 16) as u8);
                 let l = bytes.len();
                 bytes.extend_from_slice(&[0, 0]);
+                // ALLOW: we know bytes is at least `l` long
                 BigEndian::write_u16(&mut bytes[l..], v as u16)
             }
             32 => {
                 let l = bytes.len();
                 bytes.extend_from_slice(&[0, 0, 0, 0]);
+                // ALLOW: we know bytes is at least `l` long
                 BigEndian::write_u32(&mut bytes[l..], v as u32)
             }
             40 => {
                 bytes.push((v >> 32) as u8);
                 let l = bytes.len();
                 bytes.extend_from_slice(&[0, 0, 0, 0]);
+                // ALLOW: we know bytes is at least `l` long
                 BigEndian::write_u32(&mut bytes[l..], v as u32)
             }
             48 => {
                 let l = bytes.len();
                 bytes.extend_from_slice(&[0, 0, 0, 0, 0, 0]);
+                // ALLOW: we know bytes is at least `l` long
                 BigEndian::write_u16(&mut bytes[l..], (v >> 32) as u16);
+                // ALLOW: we know bytes is at least `l` long
                 BigEndian::write_u32(&mut bytes[l + 2..], v as u32);
             }
             56 => {
                 bytes.push((v >> 48) as u8);
                 let l = bytes.len();
                 bytes.extend_from_slice(&[0, 0, 0, 0, 0, 0]);
+                // ALLOW: we know bytes is at least `l` long
                 BigEndian::write_u16(&mut bytes[l..], (v >> 32) as u16);
+                // ALLOW: we know bytes is at least `l` long
                 BigEndian::write_u32(&mut bytes[l + 2..], v as u32);
             }
-            64 => {
+            _ => {
                 let l = bytes.len();
                 bytes.extend_from_slice(&[0, 0, 0, 0, 0, 0, 0, 0]);
+                // ALLOW: we know bytes is at least `l` long
                 BigEndian::write_u64(&mut bytes[l..], v)
-            }
-            _ => {
-                unreachable!()
             }
         }
         Ok(())
@@ -231,6 +251,11 @@ mod test {
             Return::EmitEvent { .. } => event.as_bytes().unwrap_or_default().to_vec(),
         }
     }
+    #[test]
+    fn test_empty() {
+        let empty: [u8; 0] = [];
+        assert_eq!(eval_binary("<<>>"), empty);
+    }
 
     #[test]
     fn test_u4() {
@@ -263,6 +288,7 @@ mod test {
         assert_eq!(eval_binary("<< 42 >>"), [42]);
         assert_eq!(eval_binary("<< 42/little >>"), [42]);
         assert_eq!(eval_binary("<< 42/big >>"), [42]);
+        assert_eq!(eval_binary("<<1,2,3,4>>"), [1, 2, 3, 4]);
     }
 
     #[test]

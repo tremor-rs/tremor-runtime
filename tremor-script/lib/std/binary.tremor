@@ -5,12 +5,12 @@
 ## Returns a `integer`
 intrinsic fn len(input) as binary::len;
 
-## Turns an `array` fo bytes into a `binary`
+## Turns an `array` of bytes into a `binary`
 ##
 ## Returns a `binary`
 intrinsic fn from_bytes(input) as binary::from_bytes;
 
-## Turns a `binary` int oan `array` fo bytes
+## Turns a `binary` into an `array` of bytes
 ##
-## Returns a `array`
+## Returns an `array`
 intrinsic fn into_bytes(input) as binary::into_bytes;
