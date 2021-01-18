@@ -1364,7 +1364,7 @@ pub enum ArrayPredicatePattern<'script> {
     /// Expression
     Expr(ImutExprInt<'script>),
     /// Tilde predicate
-    Tilde(TestExpr),
+    Tilde(Box<TestExpr>),
     /// Nested record pattern
     Record(RecordPattern<'script>),
     /// Don't care condition
