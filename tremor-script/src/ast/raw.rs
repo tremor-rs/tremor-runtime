@@ -1593,7 +1593,7 @@ impl<'script> Upable<'script> for ArrayPredicatePatternRaw<'script> {
         use ArrayPredicatePatternRaw::{Expr, Ignore, Record, Tilde};
         Ok(match self {
             Expr(expr) => ArrayPredicatePattern::Expr(expr.up(helper)?),
-            Tilde(te) => ArrayPredicatePattern::Tilde(te.up(helper)?),
+            Tilde(te) => ArrayPredicatePattern::Tilde(Box::new(te.up(helper)?)),
             Record(rp) => ArrayPredicatePattern::Record(rp.up(helper)?),
             Ignore => ArrayPredicatePattern::Ignore,
             //Array(ap) => ArrayPredicatePattern::Array(ap),
