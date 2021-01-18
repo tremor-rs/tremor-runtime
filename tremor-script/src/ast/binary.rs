@@ -111,8 +111,16 @@ fn write_bits_le(bytes: &mut Vec<u8>, bits: u8, buf: &mut u8, used: &mut u8, v: 
         write_bits_be(bytes, bits, buf, used, v)
     } else if bits <= 16 {
         write_bits_be(bytes, bits, buf, used, (v as u16).to_be() as u64)
+    } else if bits <= 24 {
+        write_bits_be(bytes, bits, buf, used, ((v as u32).to_be() >> 8) as u64)
     } else if bits <= 32 {
         write_bits_be(bytes, bits, buf, used, (v as u32).to_be() as u64)
+    } else if bits <= 40 {
+        write_bits_be(bytes, bits, buf, used, (v.to_be() >> 24) as u64)
+    } else if bits <= 48 {
+        write_bits_be(bytes, bits, buf, used, (v.to_be() >> 16) as u64)
+    } else if bits <= 56 {
+        write_bits_be(bytes, bits, buf, used, (v.to_be() >> 8) as u64)
     } else {
         write_bits_be(bytes, bits, buf, used, v.to_be())
     }
@@ -205,13 +213,6 @@ mod test {
     }
 
     #[test]
-    fn test_u8() {
-        assert_eq!(eval_binary("<< 42 >>"), [42]);
-        assert_eq!(eval_binary("<< 42/little >>"), [42]);
-        assert_eq!(eval_binary("<< 42/big >>"), [42]);
-    }
-
-    #[test]
     fn test_u4() {
         assert_eq!(eval_binary("<< 1:4 >>"), [1]);
         assert_eq!(eval_binary("<< 1:4/little >>"), [1]);
@@ -223,9 +224,97 @@ mod test {
     }
 
     #[test]
+    fn test_u6() {
+        assert_eq!(eval_binary("<< 1:6 >>"), [1]);
+        assert_eq!(eval_binary("<< 1:6/little >>"), [1]);
+        assert_eq!(eval_binary("<< 1:6/big >>"), [1]);
+
+        assert_eq!(eval_binary("<< 1:6, 1:2 >>"), [5]);
+        assert_eq!(eval_binary("<< 1:6/little, 1:2/little >>"), [5]);
+        assert_eq!(eval_binary("<< 1:6/big, 1:2/big >>"), [5]);
+
+        assert_eq!(eval_binary("<< 1:2, 1:6 >>"), [65]);
+        assert_eq!(eval_binary("<< 1:2/little, 1:6/little >>"), [65]);
+        assert_eq!(eval_binary("<< 1:2/big, 1:6/big >>"), [65]);
+    }
+
+    #[test]
+    fn test_u8() {
+        assert_eq!(eval_binary("<< 42 >>"), [42]);
+        assert_eq!(eval_binary("<< 42/little >>"), [42]);
+        assert_eq!(eval_binary("<< 42/big >>"), [42]);
+    }
+
+    #[test]
     fn test_u16() {
-        assert_eq!(eval_binary("<< 42:16 >>"), [00, 42]);
-        assert_eq!(eval_binary("<< 42:16/little >>"), [42, 00]);
-        assert_eq!(eval_binary("<< 42:16/big >>"), [00, 42]);
+        assert_eq!(eval_binary("<< 258:16 >>"), [1, 2]);
+        assert_eq!(eval_binary("<< 258:16/little >>"), [2, 1]);
+        assert_eq!(eval_binary("<< 258:16/big >>"), [1, 2]);
+    }
+    #[test]
+    fn test_u24() {
+        assert_eq!(eval_binary("<< 66051:24 >>"), [1, 2, 3]);
+        assert_eq!(eval_binary("<< 66051:24/little >>"), [3, 2, 1]);
+        assert_eq!(eval_binary("<< 66051:24/big >>"), [1, 2, 3]);
+    }
+
+    #[test]
+    fn test_u32() {
+        assert_eq!(eval_binary("<< 16909060:32 >>"), [1, 2, 3, 4]);
+        assert_eq!(eval_binary("<< 4328719365:32 >>"), [2, 3, 4, 5]);
+        assert_eq!(eval_binary("<< 16909060:32/little >>"), [4, 3, 2, 1]);
+        assert_eq!(eval_binary("<< 16909060:32/big >>"), [1, 2, 3, 4]);
+    }
+
+    #[test]
+    fn test_u40() {
+        assert_eq!(eval_binary("<< 4328719365:40 >>"), [1, 2, 3, 4, 5]);
+        assert_eq!(eval_binary("<< 4328719365:40/little >>"), [5, 4, 3, 2, 1]);
+        assert_eq!(eval_binary("<< 4328719365:40/big >>"), [1, 2, 3, 4, 5]);
+    }
+
+    #[test]
+    fn test_u48() {
+        assert_eq!(eval_binary("<< 1108152157446:48 >>"), [1, 2, 3, 4, 5, 6]);
+        assert_eq!(
+            eval_binary("<< 1108152157446:48/little >>"),
+            [6, 5, 4, 3, 2, 1]
+        );
+        assert_eq!(
+            eval_binary("<< 1108152157446:48/big >>"),
+            [1, 2, 3, 4, 5, 6]
+        );
+    }
+
+    #[test]
+    fn test_u56() {
+        assert_eq!(
+            eval_binary("<< 283686952306183:56 >>"),
+            [1, 2, 3, 4, 5, 6, 7]
+        );
+        assert_eq!(
+            eval_binary("<< 283686952306183:56/little >>"),
+            [7, 6, 5, 4, 3, 2, 1]
+        );
+        assert_eq!(
+            eval_binary("<< 283686952306183:56/big >>"),
+            [1, 2, 3, 4, 5, 6, 7]
+        );
+    }
+
+    #[test]
+    fn test_u64() {
+        assert_eq!(
+            eval_binary("<< 72623859790382856:64 >>"),
+            [1, 2, 3, 4, 5, 6, 7, 8]
+        );
+        assert_eq!(
+            eval_binary("<< 72623859790382856:64/little >>"),
+            [8, 7, 6, 5, 4, 3, 2, 1]
+        );
+        assert_eq!(
+            eval_binary("<< 72623859790382856:64/big >>"),
+            [1, 2, 3, 4, 5, 6, 7, 8]
+        );
     }
 }
