@@ -38,8 +38,8 @@ list(C) ->
 -spec find(ID :: binary(), tremor_api:connection()) ->
                   {ok, JSON :: binary()}.
 
-find(UUID, C) ->
-    tremor_http:get([?ENDPOINT, $/, UUID], C).
+find(ID, C) ->
+    tremor_http:get([?ENDPOINT, $/, ID], C).
 
 
 
@@ -53,7 +53,7 @@ find(UUID, C) ->
                      ok.
 
 publish(Spec, C) ->
-    tremor_http:post([?ENDPOINT], Spec, C).
+    tremor_http:post_raw([?ENDPOINT], Spec, C, <<"application/vnd.trickle">>).
 
 %%--------------------------------------------------------------------
 %% @doc
