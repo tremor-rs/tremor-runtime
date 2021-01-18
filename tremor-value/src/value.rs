@@ -111,6 +111,7 @@ impl<'value> Value<'value> {
     }
 
     /// Tries to get the bytes from a Value
+    #[must_use]
     pub fn as_bytes(&self) -> Option<&[u8]> {
         match self {
             Value::Bytes(bs) => Some(&bs),
