@@ -7,9 +7,11 @@ use crate::prelude::*;
 use crate::{stry, Value};
 use byteorder::{BigEndian, ByteOrder};
 
+// We are truncating for so we can write parts of the values
+#[allow(clippy::cast_possible_truncation)]
 fn write_bits_be(bytes: &mut Vec<u8>, bits: u8, buf: &mut u8, used: &mut u8, v: u64) -> Result<()> {
     // Make sure we don't  have any of the more significant bits set that are not inside of 'bits'
-    let bit_mask: u64 = ((1u128 << bits + 1) - 1) as u64;
+    let bit_mask: u64 = ((1_u128 << (bits + 1)) - 1) as u64;
     let v = v & bit_mask;
 
     if bits == 0 {
@@ -39,14 +41,14 @@ fn write_bits_be(bytes: &mut Vec<u8>, bits: u8, buf: &mut u8, used: &mut u8, v: 
             *buf |= (v as u8) << shift;
             Ok(())
         }
-    } else if bits % 8 != 0 {
+    } else if bits % 8 > 0 {
         // our data isn't 8 bit aligned so we chop of the extra bits at the end
         // and then write
         let extra = bits % 8;
         stry!(write_bits_be(bytes, bits - extra, buf, used, v >> extra));
-        let mask = (1u8 << extra) - 1;
+        let mask = (1_u8 << extra) - 1;
         *buf = (v as u8) & mask;
-        *buf = *buf << (8 - extra);
+        *buf <<= 8 - extra;
         *used = extra;
         Ok(())
     } else {
@@ -101,8 +103,10 @@ fn write_bits_be(bytes: &mut Vec<u8>, bits: u8, buf: &mut u8, used: &mut u8, v: 
     }
 }
 
+// We allow truncation since we want to cut down the size of values
+#[allow(clippy::cast_possible_truncation)]
 fn write_bits_le(bytes: &mut Vec<u8>, bits: u8, buf: &mut u8, used: &mut u8, v: u64) -> Result<()> {
-    let bit_mask: u64 = ((1u128 << bits + 1) - 1) as u64;
+    let bit_mask: u64 = ((1_u128 << (bits + 1)) - 1) as u64;
     let v = v & bit_mask;
 
     // We write little endian by transforming the number of bits we want to write  into big endian
@@ -110,11 +114,11 @@ fn write_bits_le(bytes: &mut Vec<u8>, bits: u8, buf: &mut u8, used: &mut u8, v: 
     if bits <= 8 {
         write_bits_be(bytes, bits, buf, used, v)
     } else if bits <= 16 {
-        write_bits_be(bytes, bits, buf, used, (v as u16).to_be() as u64)
+        write_bits_be(bytes, bits, buf, used, u64::from((v as u16).to_be()))
     } else if bits <= 24 {
-        write_bits_be(bytes, bits, buf, used, ((v as u32).to_be() >> 8) as u64)
+        write_bits_be(bytes, bits, buf, used, u64::from((v as u32).to_be() >> 8))
     } else if bits <= 32 {
-        write_bits_be(bytes, bits, buf, used, (v as u32).to_be() as u64)
+        write_bits_be(bytes, bits, buf, used, u64::from((v as u32).to_be()))
     } else if bits <= 40 {
         write_bits_be(bytes, bits, buf, used, (v.to_be() >> 24) as u64)
     } else if bits <= 48 {
@@ -140,13 +144,23 @@ fn write_bits(
     }
 }
 
+// We allow this so we can cast the bits to u8, this is safe since we limit
+// bits to 64 during creation.
+// We allow cast sign loss since we translate everything
+// into u64 (since we only)
+#[allow(
+    clippy::cast_lossless,
+    clippy::cast_possible_truncation,
+    clippy::clippy::cast_sign_loss,
+    clippy::too_many_arguments
+)]
 pub(crate) fn extend_bytes_from_value<'value, O: BaseExpr, I: BaseExpr>(
     outer: &O,
     inner: &I,
     meta: &NodeMetas,
     data_type: BytesDataType,
     endianess: Endian,
-    bits: u8,
+    bits: u64,
     buf: &mut u8,
     used: &mut u8,
     bytes: &mut Vec<u8>,
@@ -157,26 +171,32 @@ pub(crate) fn extend_bytes_from_value<'value, O: BaseExpr, I: BaseExpr>(
     };
 
     match data_type {
-        BytesDataType::UnsignedInteger => {
-            if let Some(v) = value.as_u64() {
-                write_bits(bytes, bits, endianess, buf, used, v as u64)
-            } else {
-                err("Not an unsigned integer", &value)
-            }
-        }
-        BytesDataType::SignedInteger => {
-            if let Some(v) = value.as_i64() {
-                write_bits(bytes, bits, endianess, buf, used, v as u64)
-            } else {
-                err("Not an unsigned integer", &value)
-            }
-        }
+        BytesDataType::UnsignedInteger => value.as_u64().map_or_else(
+            || err("Not an unsigned integer", &value),
+            |v| write_bits(bytes, bits as u8, endianess, buf, used, v as u64),
+        ),
+        BytesDataType::SignedInteger => value.as_i64().map_or_else(
+            || err("Not an signed integer", &value),
+            |v| write_bits(bytes, bits as u8, endianess, buf, used, v as u64),
+        ),
         BytesDataType::Binary => {
-            if let Some(b) = value.as_bytes() {
-                bytes.extend_from_slice(&b);
+            if let Some(b) = value.as_bytes().and_then(|b| {
+                if bits == 0 {
+                    Some(b)
+                } else {
+                    b.get(..(bits as usize))
+                }
+            }) {
+                if *used == 0 {
+                    bytes.extend_from_slice(&b);
+                } else {
+                    for v in b {
+                        stry!(write_bits(bytes, 8, endianess, buf, used, *v as u64))
+                    }
+                }
                 Ok(())
             } else {
-                err("Not an unsigned integer", &value)
+                err("Not a long enough binary", &value)
             }
         }
     }
@@ -315,6 +335,21 @@ mod test {
         assert_eq!(
             eval_binary("<< 72623859790382856:64/big >>"),
             [1, 2, 3, 4, 5, 6, 7, 8]
+        );
+    }
+
+    #[test]
+    fn test_binary_split() {
+        assert_eq!(
+            eval_binary("<< 1:4, << 1,2,3,4 >>/binary >>"),
+            [16, 16, 32, 48, 4]
+        );
+    }
+    #[test]
+    fn test_binary_split_sized() {
+        assert_eq!(
+            eval_binary("<< 1:4, << 1,2,3,4 >>:2/binary >>"),
+            [16, 16, 2]
         );
     }
 }

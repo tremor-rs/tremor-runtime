@@ -167,7 +167,7 @@ pub struct BytesPart<'script> {
     /// Endianness
     pub endianess: Endian,
     /// bits allocated for this
-    pub bits: u8,
+    pub bits: u64,
 }
 impl_expr_mid!(BytesPart);
 

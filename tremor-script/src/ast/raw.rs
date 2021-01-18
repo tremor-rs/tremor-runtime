@@ -206,20 +206,22 @@ impl<'script> Default for BytesPartRaw<'script> {
 }
 impl<'script> Upable<'script> for BytesPartRaw<'script> {
     type Target = BytesPart<'script>;
-
+    // We allow this for casting the bits
+    #[allow(clippy::cast_sign_loss)]
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let data_type: Vec<&str> = self.data_type.id.split('-').collect();
         let (data_type, endianess) = match data_type.as_slice() {
-            [] | [""] => (BytesDataType::UnsignedInteger, Endian::Big),
             ["binary"] => (BytesDataType::Binary, Endian::Big),
-            ["integer"]
+            []
+            | [""]
+            | ["integer"]
             | ["big"]
             | ["unsigned"]
             | ["unsigned", "integer"]
             | ["big", "integer"]
             | ["big", "unsigned", "integer"] => (BytesDataType::UnsignedInteger, Endian::Big),
             ["signed", "integer"] | ["big", "signed", "integer"] => {
-                (BytesDataType::SignedInteger, Endian::default())
+                (BytesDataType::SignedInteger, Endian::Big)
             }
             ["little"] | ["little", "integer"] | ["little", "unsigned", "integer"] => {
                 (BytesDataType::UnsignedInteger, Endian::Little)
@@ -243,7 +245,7 @@ impl<'script> Upable<'script> for BytesPartRaw<'script> {
                     &helper.meta,
                 ));
             }
-            bits as u8
+            bits as u64
         } else {
             match data_type {
                 BytesDataType::SignedInteger | BytesDataType::UnsignedInteger => 8,
