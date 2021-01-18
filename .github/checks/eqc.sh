@@ -12,5 +12,4 @@ trap stop_tremor EXIT
 cd tremor-erl
 rebar3 as eqc eqc
 cd ..
-pkill tremor
 
