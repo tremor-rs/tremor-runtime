@@ -193,6 +193,8 @@ mod test {
         let f = fun("string", "from_utf8_lossy");
         let v = Value::Bytes("badger".as_bytes().into());
         assert_val!(f(&[&v]), "badger");
+        let v = Value::Bytes(b"badger\xF0\x90\x80".to_vec().into());
+        assert_val!(f(&[&v]), "badger�");
     }
     #[test]
     fn into_binary() {
