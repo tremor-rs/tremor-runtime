@@ -23,7 +23,13 @@ use byteorder::{BigEndian, ByteOrder};
 
 // We are truncating for so we can write parts of the values
 #[allow(clippy::cast_possible_truncation)]
-fn write_bits_be(bytes: &mut Vec<u8>, bits: u8, buf: &mut u8, used: &mut u8, v: u64) -> Result<()> {
+fn write_bits_be(
+    bytes: &mut Vec<u8>,
+    bits: u8,
+    buf: &mut u8,
+    pending: &mut u8,
+    v: u64,
+) -> Result<()> {
     // Make sure we don't  have any of the more significant bits set that are not inside of 'bits'
     let bit_mask: u64 = ((1_u128 << (bits + 1)) - 1) as u64;
     let v = v & bit_mask;
@@ -31,12 +37,12 @@ fn write_bits_be(bytes: &mut Vec<u8>, bits: u8, buf: &mut u8, used: &mut u8, v: 
     if bits == 0 {
         // Short circuit if we got nothing to write
         Ok(())
-    } else if *used > 0 {
+    } else if *pending > 0 {
         // we have some pending bits so we got to steal some from the current value
-        if bits + *used >= 8 {
+        if bits + *pending >= 8 {
             // we got enough bits to write the buffer
             // calculate how many bits are missing
-            let missing = 8 - *used;
+            let missing = 8 - *pending;
             let shift = bits - missing;
             // use the most significant out all the least significant bits
             // we don't need
@@ -44,14 +50,14 @@ fn write_bits_be(bytes: &mut Vec<u8>, bits: u8, buf: &mut u8, used: &mut u8, v: 
             // Pus the updated value
             bytes.push(*buf);
             // reset our buffer
-            *used = 0;
+            *pending = 0;
             *buf = 0;
             // write the rest
-            write_bits_be(bytes, bits - missing, buf, used, v)
+            write_bits_be(bytes, bits - missing, buf, pending, v)
         } else {
             // we don't got enough bits
-            let shift = 8 - (bits + *used);
-            *used += bits;
+            let shift = 8 - (bits + *pending);
+            *pending += bits;
             *buf |= (v as u8) << shift;
             Ok(())
         }
@@ -59,11 +65,11 @@ fn write_bits_be(bytes: &mut Vec<u8>, bits: u8, buf: &mut u8, used: &mut u8, v: 
         // our data isn't 8 bit aligned so we chop of the extra bits at the end
         // and then write
         let extra = bits % 8;
-        stry!(write_bits_be(bytes, bits - extra, buf, used, v >> extra));
+        stry!(write_bits_be(bytes, bits - extra, buf, pending, v >> extra));
         let mask = (1_u8 << extra) - 1;
         *buf = (v as u8) & mask;
         *buf <<= 8 - extra;
-        *used = extra;
+        *pending = extra;
         Ok(())
     } else {
         match bits {
@@ -125,28 +131,40 @@ fn write_bits_be(bytes: &mut Vec<u8>, bits: u8, buf: &mut u8, used: &mut u8, v: 
 
 // We allow truncation since we want to cut down the size of values
 #[allow(clippy::cast_possible_truncation)]
-fn write_bits_le(bytes: &mut Vec<u8>, bits: u8, buf: &mut u8, used: &mut u8, v: u64) -> Result<()> {
+fn write_bits_le(
+    bytes: &mut Vec<u8>,
+    bits: u8,
+    buf: &mut u8,
+    pending: &mut u8,
+    v: u64,
+) -> Result<()> {
     let bit_mask: u64 = ((1_u128 << (bits + 1)) - 1) as u64;
     let v = v & bit_mask;
 
     // We write little endian by transforming the number of bits we want to write  into big endian
     // and then write that.
     if bits <= 8 {
-        write_bits_be(bytes, bits, buf, used, v)
+        write_bits_be(bytes, bits, buf, pending, v)
     } else if bits <= 16 {
-        write_bits_be(bytes, bits, buf, used, u64::from((v as u16).to_be()))
+        write_bits_be(bytes, bits, buf, pending, u64::from((v as u16).to_be()))
     } else if bits <= 24 {
-        write_bits_be(bytes, bits, buf, used, u64::from((v as u32).to_be() >> 8))
+        write_bits_be(
+            bytes,
+            bits,
+            buf,
+            pending,
+            u64::from((v as u32).to_be() >> 8),
+        )
     } else if bits <= 32 {
-        write_bits_be(bytes, bits, buf, used, u64::from((v as u32).to_be()))
+        write_bits_be(bytes, bits, buf, pending, u64::from((v as u32).to_be()))
     } else if bits <= 40 {
-        write_bits_be(bytes, bits, buf, used, (v.to_be() >> 24) as u64)
+        write_bits_be(bytes, bits, buf, pending, (v.to_be() >> 24) as u64)
     } else if bits <= 48 {
-        write_bits_be(bytes, bits, buf, used, (v.to_be() >> 16) as u64)
+        write_bits_be(bytes, bits, buf, pending, (v.to_be() >> 16) as u64)
     } else if bits <= 56 {
-        write_bits_be(bytes, bits, buf, used, (v.to_be() >> 8) as u64)
+        write_bits_be(bytes, bits, buf, pending, (v.to_be() >> 8) as u64)
     } else {
-        write_bits_be(bytes, bits, buf, used, v.to_be())
+        write_bits_be(bytes, bits, buf, pending, v.to_be())
     }
 }
 
@@ -155,12 +173,12 @@ fn write_bits(
     bits: u8,
     endianess: Endian,
     buf: &mut u8,
-    used: &mut u8,
+    pending: &mut u8,
     v: u64,
 ) -> Result<()> {
     match endianess {
-        Endian::Big => write_bits_be(bytes, bits, buf, used, v),
-        Endian::Little => write_bits_le(bytes, bits, buf, used, v),
+        Endian::Big => write_bits_be(bytes, bits, buf, pending, v),
+        Endian::Little => write_bits_le(bytes, bits, buf, pending, v),
     }
 }
 
@@ -182,7 +200,7 @@ pub(crate) fn extend_bytes_from_value<'value, O: BaseExpr, I: BaseExpr>(
     endianess: Endian,
     bits: u64,
     buf: &mut u8,
-    used: &mut u8,
+    pending: &mut u8,
     bytes: &mut Vec<u8>,
     value: &Value<'value>,
 ) -> Result<()> {
@@ -193,11 +211,11 @@ pub(crate) fn extend_bytes_from_value<'value, O: BaseExpr, I: BaseExpr>(
     match data_type {
         BytesDataType::UnsignedInteger => value.as_u64().map_or_else(
             || err("Not an unsigned integer", &value),
-            |v| write_bits(bytes, bits as u8, endianess, buf, used, v as u64),
+            |v| write_bits(bytes, bits as u8, endianess, buf, pending, v as u64),
         ),
         BytesDataType::SignedInteger => value.as_i64().map_or_else(
             || err("Not an signed integer", &value),
-            |v| write_bits(bytes, bits as u8, endianess, buf, used, v as u64),
+            |v| write_bits(bytes, bits as u8, endianess, buf, pending, v as u64),
         ),
         BytesDataType::Binary => {
             if let Some(b) = value.as_bytes().and_then(|b| {
@@ -207,11 +225,11 @@ pub(crate) fn extend_bytes_from_value<'value, O: BaseExpr, I: BaseExpr>(
                     b.get(..(bits as usize))
                 }
             }) {
-                if *used == 0 {
+                if *pending == 0 {
                     bytes.extend_from_slice(&b);
                 } else {
                     for v in b {
-                        stry!(write_bits(bytes, 8, endianess, buf, used, *v as u64))
+                        stry!(write_bits(bytes, 8, endianess, buf, pending, *v as u64))
                     }
                 }
                 Ok(())
