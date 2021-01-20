@@ -10,7 +10,7 @@
 // We might want to revisit inline_always
 #![allow(clippy::module_name_repetitions, clippy::inline_always)]
 #![deny(missing_docs)]
-// Copyright 2020, The Tremor Team
+// Copyright 2020-2021, The Tremor Team
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
