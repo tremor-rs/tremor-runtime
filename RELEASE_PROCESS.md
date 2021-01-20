@@ -11,6 +11,7 @@
 * Update version in `Dockerfile.learn`
 * Update CHANGELOG.md
   - Change unreleased section to have the new version for the upcoming release
+* Update tests in tremor-cli/tests/ that match against the current version number
 * `git tag -a -m"Release v<MAJOR>.<MINOR>.<BUGFIX>" <COMMIT>`
 * `git push origin --tag`
 * Draft a new release on github
@@ -21,6 +22,7 @@
   - Make sure you are an owner of the crates to publish
   - Execute `cargo publish` in these folders in the following order:
     - ./tremor-common
+    - ./tremor-value
     - ./tremor-script
 * Release https://github.com/tremor-rs/tremor-language-server
   - Bump version and update dependency `tremor-script` to the new version.
