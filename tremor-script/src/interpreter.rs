@@ -178,7 +178,7 @@ fn val_eq<'event>(lhs: &Value<'event>, rhs: &Value<'event>) -> bool {
     // TODO Consider Tony Garnock-Jones perserves w.r.t. forcing a total ordering
     // across builtin types if/when extending for 'lt' and 'gt' variants
     //
-    use Value::{Array, Object, Static, String};
+    use Value::{Array, Bytes, Object, Static, String};
     let error = std::f64::EPSILON;
     match (lhs, rhs) {
         (Object(l), Object(r)) => {
@@ -199,6 +199,9 @@ fn val_eq<'event>(lhs: &Value<'event>, rhs: &Value<'event>) -> bool {
         (Static(StaticNode::Bool(l)), Static(StaticNode::Bool(r))) => *l == *r,
         (Static(StaticNode::Null), Static(StaticNode::Null)) => true,
         (String(l), String(r)) => *l == *r,
+        (Bytes(l), Bytes(r)) => *l == *r,
+        (String(l), Bytes(r)) => *l.as_bytes() == *r,
+        (Bytes(l), String(r)) => *l == *r.as_bytes(),
         (l, r) => {
             if let (Some(l), Some(r)) = (l.as_u64(), r.as_u64()) {
                 l == r
@@ -371,7 +374,7 @@ where
     // - snot badger - Darach
     use BinOpKind::{Add, And, BitAnd, BitOr, BitXor, Eq, Gt, Gte, Lt, Lte, NotEq, Or, Xor};
     use StaticNode::Bool;
-    use Value::{Static, String};
+    use Value::{Bytes, Static, String};
     match (op, lhs, rhs) {
         (Eq, Static(StaticNode::Null), Static(StaticNode::Null)) => Ok(static_bool!(true)),
         (NotEq, Static(StaticNode::Null), Static(StaticNode::Null)) => Ok(static_bool!(false)),
@@ -390,13 +393,36 @@ where
         (op, Static(Bool(_)), Static(Bool(_))) => {
             error_invalid_binary(outer, inner, op, lhs, rhs, node_meta)
         }
+        // Binary
+        (Gt, Bytes(l), Bytes(r)) => Ok(static_bool!(l > r)),
+        (Gte, Bytes(l), Bytes(r)) => Ok(static_bool!(l >= r)),
+        (Lt, Bytes(l), Bytes(r)) => Ok(static_bool!(l < r)),
+        (Lte, Bytes(l), Bytes(r)) => Ok(static_bool!(l <= r)),
+
+        // Binary String
+        // we have to reverse the comparison here because of types
+        (Gt, Bytes(l), String(r)) => Ok(static_bool!(r.as_bytes() < l)),
+        (Gte, Bytes(l), String(r)) => Ok(static_bool!(r.as_bytes() <= l)),
+        (Lt, Bytes(l), String(r)) => Ok(static_bool!(r.as_bytes() > l)),
+        (Lte, Bytes(l), String(r)) => Ok(static_bool!(r.as_bytes() >= l)),
+
+        // String Binary
+        (Gt, String(l), Bytes(r)) => Ok(static_bool!(l.as_bytes() > &r)),
+        (Gte, String(l), Bytes(r)) => Ok(static_bool!(l.as_bytes() >= &r)),
+        (Lt, String(l), Bytes(r)) => Ok(static_bool!(l.as_bytes() < &r)),
+        (Lte, String(l), Bytes(r)) => Ok(static_bool!(l.as_bytes() <= &r)),
+
         // String
         (Gt, String(l), String(r)) => Ok(static_bool!(l > r)),
         (Gte, String(l), String(r)) => Ok(static_bool!(l >= r)),
         (Lt, String(l), String(r)) => Ok(static_bool!(l < r)),
         (Lte, String(l), String(r)) => Ok(static_bool!(l <= r)),
         (Add, String(l), String(r)) => Ok(Cow::Owned(format!("{}{}", *l, *r).into())),
-        (op, String(_), String(_)) => error_invalid_binary(outer, inner, op, lhs, rhs, node_meta),
+        // Errors
+        (op, Bytes(_), Bytes(_))
+        | (op, Bytes(_), String(_))
+        | (op, String(_), Bytes(_))
+        | (op, String(_), String(_)) => error_invalid_binary(outer, inner, op, lhs, rhs, node_meta),
         // numeric
         (op, l, r) => exec_binary_numeric(outer, inner, node_meta, op, l, r),
     }

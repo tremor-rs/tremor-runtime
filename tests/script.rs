@@ -152,6 +152,9 @@ test_cases!(
     // TODO
     // const_in_const_lookup,
     // INSERT
+    binary_binary,
+    binary_binary_string,
+    binary_string_binary,
     bytes_tcp,
     bytes_create,
     string_interpolation_quotes,
