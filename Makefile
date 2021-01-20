@@ -2,7 +2,7 @@ APP=tremor-runtime
 DOCKER_VSN=$(shell grep 'ARG tag' docker/tremor-runtime.dockerfile | sed 's/.*=//')
 CARGO_VSN=$(shell grep '^version' Cargo.toml | sed -e 's/.*=[^"]*"//' -e 's/"$$//')
 VSN=$(DOCKER_VSN)
-YEAR=2018-2020
+YEAR=2018-2021
 
 RELEASE_TARGETS := \
 	x86_64-unknown-linux-gnu \
