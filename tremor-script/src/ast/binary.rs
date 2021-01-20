@@ -284,6 +284,10 @@ mod test {
         assert_eq!(eval_binary("<< 1:4, 1:4 >>"), [17]);
         assert_eq!(eval_binary("<< 1:4/little, 1:4/little >>"), [17]);
         assert_eq!(eval_binary("<< 1:4/big, 1:4/big >>"), [17]);
+
+        assert_eq!(eval_binary("<< 1:2, 1:2 >>"), [5]);
+        assert_eq!(eval_binary("<< 1:2/little, 1:2/little >>"), [5]);
+        assert_eq!(eval_binary("<< 1:2/big, 1:2/big >>"), [5]);
     }
 
     #[test]
