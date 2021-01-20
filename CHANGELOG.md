@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.9.4
 
 * Extract simd_json::BorrowedValue into tremor specific tremor-value to allow extension of the type system.
 * Terminate pipeline creation when a node already exists with the given name [#650](https://github.com/tremor-rs/tremor-runtime/issues/650)
