@@ -272,4 +272,18 @@ mod test {
         assert_eq!(Value::from(42), 42_i128);
         assert_eq!(Value::from(42), 42_u128);
     }
+
+    #[test]
+    fn bytes() {
+        let v1 = vec![1_u8, 2, 3];
+        let v2 = vec![1_u8, 2, 3, 4];
+        assert_eq!(
+            Value::Bytes(v1.clone().into()),
+            Value::Bytes(v1.clone().into())
+        );
+        assert_ne!(
+            Value::Bytes(v1.clone().into()),
+            Value::Bytes(v2.clone().into())
+        );
+    }
 }
