@@ -1,10 +1,11 @@
 const c = 7;
-let data = { "exists": 1 };
+let $data = { "exists": 1 };
 let e = "exists";
 let ne = "does't";
-let arr = [1, 2, 3];
+let event.arr = [1, 2, 3];
 let good_idx = 1;
 let bad_idx = 42;
+
 {
   "present": match { "superhero": "superman" } of case %{ present superhero } => "ok" default => "ko" end,
   "absent": match { "human": "clark kent" } of case %{ absent superhero } => "ok" default => "ko" end,
@@ -12,21 +13,21 @@ let bad_idx = 42;
   "both-present-nomatch": match {} of case %{ present superhero, present human } => "ko" default => "ok" end,
   "both-absent": match {} of case %{ absent superhero, absent human } => "ok" default => "ko" end,
   "both-absent-nomatch": match { "superhero": "superman", "human": "clark kent" } of case %{ absent superhero, absent human } => "ko" default => "ok" end,
-  "absent-kw-true": match absent data.not_here of case true => "ok" default => "ko" end,
-  "absent-kw-false": match absent data.exists of case true => "ko" default => "ok" end,
-  "present-kw-true": match present data.not_here of case true => "ko" default => "ok" end,
-  "present-kw-false": match present data.exists of case true => "ok" default => "ko" end,
+  "absent-kw-true": match absent $data.not_here of case true => "ok" default => "ko" end,
+  "absent-kw-false": match absent $data.exists of case true => "ko" default => "ok" end,
+  "present-kw-true": match present $data.not_here of case true => "ko" default => "ok" end,
+  "present-kw-false": match present $data.exists of case true => "ok" default => "ko" end,
   "present-const": present c,
   "present-local-not": present cake,
-  "present-local": present data,
-  "present-local-nested1": present data["exists"],
-  "present-local-nested2": present data[e],
-  "present-local-nested-not": present data["does't"],
-  "present-local-nested-not": present data[ne],
-  "present-local-arr": present arr[1],
-  "present-local-arr2": present arr[good_idx],
-  "present-local-arr-range": present arr[1:2],
-  "present-local-arr-range-not": present arr[1:42],
-  "present-local-arr-not": present arr[42],
-  "present-local-arr-not2": present arr[bad_idx],
+  "present-local": present $data,
+  "present-local-nested1": present $data["exists"],
+  "present-local-nested2": present $data[e],
+  "present-local-nested-not": present $data["does't"],
+  "present-local-nested-not": present $data[ne],
+  "present-local-arr": present event.arr[1],
+  "present-local-arr2": present event.arr[good_idx],
+  "present-local-arr-range": present event.arr[1:2],
+  "present-local-arr-range-not": present event.arr[1:42],
+  "present-local-arr-not": present event.arr[42],
+  "present-local-arr-not2": present event.arr[bad_idx],
 }
