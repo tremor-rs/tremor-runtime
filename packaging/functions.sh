@@ -94,14 +94,9 @@ function package_rpm {
 
   # install cargo-rpm if not already there (helps us easily build a rpm package)
   # https://github.com/iqlusioninc/cargo-rpm
-  #
-  # currently need to install it from the git develop branch for the various
-  # rpm build flags to work (below). once v0.8.0 is released, install it from
-  # crates.io. changes from develop branch that we make use of here:
-  # https://github.com/iqlusioninc/cargo-rpm/pulls?q=is%3Apr+is%3Aclosed+author%3Aanupdhml
   if ! cargo rpm version > /dev/null 2>&1; then
     echo "Installing cargo-rpm..."
-    cargo install --git https://github.com/iqlusioninc/cargo-rpm.git --branch develop
+    cargo install cargo-rpm
   fi
 
   echo "Creating rpm file in directory: ${PACKAGES_DIR}"

@@ -43,14 +43,9 @@ pushd "$ROOT_DIR" > /dev/null
 
 # install cross if not already there (helps us build easily across various targets)
 # see https://github.com/rust-embedded/cross
-#
-# currently need to install it from the git repo for builds to work against custom targets
-# (eg: x86_64-alpine-linux-musl which we use for generating working musl binaries right now)
-# once version > 0.20 is released, install it from crates.io. changes from the development
-# repo that we make use of here: https://github.com/rust-embedded/cross/pull/431
 if ! command -v cross > /dev/null 2>&1; then
   echo "Installing cross..."
-  cargo install --git https://github.com/rust-embedded/cross.git
+  cargo install cross
 fi
 
 BUILD_ARGS=(
