@@ -259,56 +259,59 @@ where
         let cases = &expr.cases;
         let target_value = stry!(target.run(opts, env, event, state, meta, local));
 
-        if let Some(target_map) = target_value.as_object() {
-            // Record comprehension case
+        let (l, items): (usize, Box<dyn Iterator<Item = (Value, Value)>>) =
+            target_value.as_object().map_or_else(
+                || {
+                    target_value
+                        .as_array()
+                        .map_or_else::<(usize, Box<dyn Iterator<Item = (Value, Value)>>), _, _>(
+                            || (0, Box::new(std::iter::empty())),
+                            |target_array| {
+                                (
+                                    target_array.len(),
+                                    Box::new(
+                                        target_array
+                                            .iter()
+                                            .enumerate()
+                                            .map(|(k, v)| (Value::from(k), v.clone())),
+                                    ),
+                                )
+                            },
+                        )
+                },
+                |target_map| {
+                    (
+                        target_map.len(),
+                        Box::new(
+                            target_map
+                                .iter()
+                                .map(|(k, v)| (Value::from(k.clone()), v.clone())),
+                        ),
+                    )
+                },
+            );
 
-            value_vec.reserve(target_map.len());
+        if opts.result_needed {
+            value_vec.reserve(l);
+        }
 
-            'comprehension_outer: for (k, v) in target_map {
-                let k = Value::from(k.clone());
-                let v = v.clone();
-                stry!(set_local_shadow(self, local, &env.meta, expr.key_id, k));
-                stry!(set_local_shadow(self, local, &env.meta, expr.val_id, v));
+        // } else if let Some(target_array) = target_value.as_array() {
 
-                for e in cases {
-                    if stry!(test_guard(
-                        self, opts, env, event, state, meta, local, &e.guard
-                    )) {
-                        let v = stry!(Self::execute_effectors(
-                            opts, env, event, state, meta, local, &e.expr
-                        ));
-                        // NOTE: We are creating a new value so we have to clone;
-                        value_vec.push(v.into_owned());
-                        continue 'comprehension_outer;
-                    }
+        'outer: for (k, v) in items {
+            stry!(set_local_shadow(self, local, &env.meta, expr.key_id, k));
+            stry!(set_local_shadow(self, local, &env.meta, expr.val_id, v));
+
+            for e in cases {
+                if stry!(test_guard(
+                    self, opts, env, event, state, meta, local, &e.guard
+                )) {
+                    let v = stry!(Self::execute_effectors(
+                        opts, env, event, state, meta, local, &e.expr
+                    ));
+                    // NOTE: We are creating a new value so we have to clone;
+                    value_vec.push(v.into_owned());
+                    continue 'outer;
                 }
-            }
-        } else if let Some(target_array) = target_value.as_array() {
-            // Array comprehension case
-
-            value_vec.reserve(target_array.len());
-
-            let mut count = 0;
-            'comp_array_outer: for x in target_array {
-                let k = count.into();
-                let v = x.clone();
-                stry!(set_local_shadow(self, local, &env.meta, expr.key_id, k));
-                stry!(set_local_shadow(self, local, &env.meta, expr.val_id, v));
-
-                for e in cases {
-                    if stry!(test_guard(
-                        self, opts, env, event, state, meta, local, &e.guard
-                    )) {
-                        let v = stry!(Self::execute_effectors(
-                            opts, env, event, state, meta, local, &e.expr
-                        ));
-
-                        value_vec.push(v.into_owned());
-                        count += 1;
-                        continue 'comp_array_outer;
-                    }
-                }
-                count += 1;
             }
         }
         Ok(Cow::Owned(Value::from(value_vec)))

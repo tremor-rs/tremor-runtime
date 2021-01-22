@@ -1,4 +1,4 @@
-[package]
+# [package]
 authors = ["The Tremor Team"]
 description = "Tremor CLI Tool"
 edition = "2018"
@@ -29,7 +29,7 @@ dirs-next = "2"
 env_logger = "0.8.2"
 halfbrown = "0.1"
 http-types = "2.10"
-jemallocator = {version = "0.3", optional = false}
+# jemallocator = {version = "0.3", optional = false}
 log = "0.4"
 log4rs = "1.0.0"
 serde = "1"
@@ -76,5 +76,5 @@ snmalloc = []
 # mimalloc = [ "mimalloc-rs" ]
 bert = ["tremor-runtime/bert", "tch"]
 default = []
-jemalloc = []
+# jemalloc = []
 stdalloc = []
