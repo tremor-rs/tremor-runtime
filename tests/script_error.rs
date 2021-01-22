@@ -134,6 +134,7 @@ test_cases!(
     pp_cyclic,
     pp_nest_cyclic,
     //INSERT
+fn_bad_recur,
     script_without_newline,
     lexer_invalid_hex2,
     lexer_invalid_int_invalid_char,

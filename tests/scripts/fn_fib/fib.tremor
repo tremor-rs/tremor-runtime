@@ -4,6 +4,8 @@ fn fib_(a, b, n) of
 end;
 
 fn fib(n) with
-  fib_(0, 1, n)
+  let a = 0;
+  let b = 1;
+  fib_(a, b, n)
 end;
 
