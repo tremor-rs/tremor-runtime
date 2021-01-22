@@ -22,9 +22,10 @@ IMAGES=(
   "tremor-builder:x86_64-unknown-linux-gnu-${RUST_VERSION}"
   "tremor-builder:x86_64-alpine-linux-musl"
   "tremor-builder:x86_64-alpine-linux-musl-${RUST_VERSION}"
-  #"tremor-builder:x86_64-unknown-linux-musl"
-  #"tremor-builder:x86_64-unknown-linux-musl-${RUST_VERSION}"
+  "tremor-builder:x86_64-unknown-linux-musl"
+  "tremor-builder:x86_64-unknown-linux-musl-${RUST_VERSION}"
 )
 for image in "${IMAGES[@]}"; do
   docker push "tremorproject/${image}"
 done
+./publish_images
