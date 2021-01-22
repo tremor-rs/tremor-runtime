@@ -222,81 +222,66 @@ where
         let cases = &expr.cases;
         let target_value = stry!(target.run(opts, env, event, state, meta, local,));
 
-        if let Some(target_map) = target_value.as_object() {
-            // Record comprehension case
-            value_vec.reserve(if opts.result_needed {
-                target_map.len()
-            } else {
-                0
-            });
+        let (l, items): (usize, Box<dyn Iterator<Item = (Value, Value)>>) =
+            target_value.as_object().map_or_else(
+                || {
+                    target_value
+                        .as_array()
+                        .map_or_else::<(usize, Box<dyn Iterator<Item = (Value, Value)>>), _, _>(
+                            || (0, Box::new(std::iter::empty())),
+                            |target_array| {
+                                (
+                                    target_array.len(),
+                                    Box::new(
+                                        target_array
+                                            .clone()
+                                            .into_iter()
+                                            .enumerate()
+                                            .map(|(k, v)| (Value::from(k), v)),
+                                    ),
+                                )
+                            },
+                        )
+                },
+                |target_map| {
+                    (
+                        target_map.len(),
+                        Box::new(
+                            target_map
+                                .clone()
+                                .into_iter()
+                                .map(|(k, v)| (Value::from(k), v)),
+                        ),
+                    )
+                },
+            );
 
-            // NOTE: the `execute_effectors` below cannot happen while `env`, `event`, `state`,
-            // `meta`, and `local` are borrowed by `target_value`, and thus by `target_map`. We
-            // clone `target_map` to end the lifetime of that borrow.
-            // If we restruct mutation in the future we could get rid of this.
+        if opts.result_needed {
+            value_vec.reserve(l);
+        }
 
-            'comprehension_outer: for (k, v) in target_map.clone() {
-                let k = Value::from(k);
-                stry!(set_local_shadow(self, local, &env.meta, expr.key_id, k));
-                stry!(set_local_shadow(self, local, &env.meta, expr.val_id, v));
+        'outer: for (k, v) in items {
+            stry!(set_local_shadow(self, local, &env.meta, expr.key_id, k));
+            stry!(set_local_shadow(self, local, &env.meta, expr.val_id, v));
 
-                for e in cases {
-                    if stry!(test_guard(
-                        self, opts, env, event, state, meta, local, &e.guard
-                    )) {
-                        let es = &e.exprs;
-                        let l = &e.last_expr;
-                        let v = demit!(Self::execute_effectors(
-                            opts, env, event, state, meta, local, es, l,
-                        ));
-                        // NOTE: We are creating a new value so we have to clone;
-                        if opts.result_needed {
-                            value_vec.push(v.into_owned());
-                        }
-                        continue 'comprehension_outer;
+            for e in cases {
+                if stry!(test_guard(
+                    self, opts, env, event, state, meta, local, &e.guard
+                )) {
+                    let es = &e.exprs;
+                    let l = &e.last_expr;
+                    let v = demit!(Self::execute_effectors(
+                        opts, env, event, state, meta, local, es, l,
+                    ));
+                    // NOTE: We are creating a new value so we have to clone;
+                    if opts.result_needed {
+                        value_vec.push(v.into_owned());
                     }
+                    continue 'outer;
                 }
-            }
-        } else if let Some(target_array) = target_value.as_array() {
-            // Array comprehension case
-
-            value_vec.reserve(if opts.result_needed {
-                target_array.len()
-            } else {
-                0
-            });
-
-            // NOTE: the `execute_effectors` below cannot happen while `env`, `event`, `state`,
-            // `meta`, and `local` are borrowed by `target_value`, and thus by `target_array`. We
-            // clone `target_array` to end the lifetime of that borrow.
-            // If we restruct mutation in the future we could get rid of this.
-
-            let mut count = 0;
-            'comp_array_outer: for x in target_array.clone() {
-                let k = count.into();
-                stry!(set_local_shadow(self, local, &env.meta, expr.key_id, k));
-                stry!(set_local_shadow(self, local, &env.meta, expr.val_id, x));
-
-                for e in cases {
-                    if stry!(test_guard(
-                        self, opts, env, event, state, meta, local, &e.guard
-                    )) {
-                        let es = &e.exprs;
-                        let l = &e.last_expr;
-                        let v = demit!(Self::execute_effectors(
-                            opts, env, event, state, meta, local, es, l
-                        ));
-
-                        if opts.result_needed {
-                            value_vec.push(v.into_owned());
-                        }
-                        count += 1;
-                        continue 'comp_array_outer;
-                    }
-                }
-                count += 1;
             }
         }
+
         Ok(Cont::Cont(Cow::Owned(Value::from(value_vec))))
     }
 
