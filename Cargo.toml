@@ -24,7 +24,7 @@ members = [
 
 [profile.release]
 debug = true
-lto = true
+lto = "thin"
 opt-level = 3
 
 [dependencies]
