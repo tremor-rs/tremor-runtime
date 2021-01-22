@@ -22,10 +22,10 @@ pub(crate) struct TrickleOperator {
     pub op: Box<dyn Operator>,
 }
 
-fn mk_node_config<'script>(
+fn mk_node_config(
     id: Cow<'static, str>,
     op_type: String,
-    config: Option<HashMap<String, Value<'script>>>,
+    config: Option<HashMap<String, Value>>,
 ) -> NodeConfig {
     NodeConfig {
         id,

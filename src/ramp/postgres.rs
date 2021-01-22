@@ -102,26 +102,17 @@ impl postgres::types::ToSql for Record<'_> {
                 postgres_protocol::types::int8_to_sql(val, w)
             }
             postgres::types::Type::JSON => {
-                let val = match self.value.as_str() {
-                    Some(v) => v,
-                    None => "",
-                };
+                let val = self.value.as_str().unwrap_or_default();
                 simd_json::to_writer(w.writer(), &val)?;
             }
             postgres::types::Type::JSONB => {
-                let val = match self.value.as_str() {
-                    Some(v) => v,
-                    None => "",
-                };
+                let val = self.value.as_str().unwrap_or_default();
                 w.put_u8(1);
 
                 simd_json::to_writer(w.writer(), &val)?;
             }
             postgres::types::Type::TIMESTAMPTZ => {
-                let val = match self.value.as_str() {
-                    Some(v) => v,
-                    None => "",
-                };
+                let val = self.value.as_str().unwrap_or_default();
 
                 let dt = match DateTime::parse_from_str(val, "%Y-%m-%d %H:%M:%S%.6f %:z") {
                     Ok(v) => v,
@@ -130,10 +121,7 @@ impl postgres::types::ToSql for Record<'_> {
                 dt.with_timezone(&Utc).to_sql(type_, w)?;
             }
             postgres::types::Type::TIMESTAMP => {
-                let val = match self.value.as_str() {
-                    Some(v) => v,
-                    None => "",
-                };
+                let val = self.value.as_str().unwrap_or_default();
 
                 let base: NaiveDateTime = NaiveDate::from_ymd(2000, 1, 1).and_hms(0, 0, 0);
                 let dt = match NaiveDateTime::parse_from_str(val, "%Y-%m-%d %H:%M:%S%.6f %:z") {

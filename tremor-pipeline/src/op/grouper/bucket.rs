@@ -101,7 +101,7 @@ pub struct Rate {
 }
 
 impl Rate {
-    pub fn from_meta<'any>(meta: &Value<'any>) -> Option<Self> {
+    pub fn from_meta(meta: &Value) -> Option<Self> {
         let rate = meta.get("rate")?.as_u64()?;
 
         let time_range = meta

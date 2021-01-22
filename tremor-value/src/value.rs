@@ -37,7 +37,7 @@ pub type Bytes<'value> = Cow<'value, [u8]>;
 /// # Errors
 ///
 /// Will return `Err` if `s` is invalid JSON.
-pub fn to_value<'value>(s: &'value mut [u8]) -> Result<Value<'value>> {
+pub fn to_value(s: &mut [u8]) -> Result<Value> {
     match Deserializer::from_slice(s) {
         Ok(de) => Ok(ValueDeserializer::from_deserializer(de).parse()),
         Err(e) => Err(Error::SimdJSON(e)),

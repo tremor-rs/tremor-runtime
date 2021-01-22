@@ -66,7 +66,7 @@ impl BInflux {
                 }
             }
         } else {
-            res.write_u16::<BigEndian>(0 as u16)?;
+            res.write_u16::<BigEndian>(0)?;
         }
 
         if let Some(fields) = v.get("fields").and_then(Value::as_object) {
@@ -100,12 +100,12 @@ impl BInflux {
                 }
             }
         } else {
-            res.write_u16::<BigEndian>(0 as u16)?;
+            res.write_u16::<BigEndian>(0)?;
         }
         Ok(res)
     }
 
-    pub fn decode<'event>(data: &'event [u8]) -> Result<Value<'event>> {
+    pub fn decode(data: &[u8]) -> Result<Value> {
         fn read_string<'event>(c: &mut Cursor<&'event [u8]>) -> Result<Cow<'event, str>> {
             let l = c.read_u16::<BigEndian>()? as usize;
             #[allow(clippy::cast_possible_truncation)]

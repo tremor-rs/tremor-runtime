@@ -1,10 +1,8 @@
 name: Create release packages
 
-on: [push]
-
-# on:
-#   release:
-#     types: [published]
+on:
+  release:
+    types: [published]
 
 jobs:
   package:
@@ -17,3 +15,8 @@ jobs:
         run: make archives
       - name: Creating release packages
         run: make packages
+      - uses: AButler/upload-release-assets@v2.0
+        with:
+          files: "packaging/out/*"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          release-tag: ${{ github.ref }}

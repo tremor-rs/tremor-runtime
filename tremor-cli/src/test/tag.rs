@@ -15,7 +15,6 @@
 use crate::errors::Result;
 use crate::util;
 use crate::util::slurp_string;
-use std::iter::FromIterator;
 use std::{collections::HashSet, path::Path};
 
 #[derive(Serialize, Debug)]
@@ -40,8 +39,8 @@ pub(crate) fn maybe_slurp_tags(path: &str) -> Result<Tags> {
 impl TagFilter {
     pub(crate) fn new(excludes: Vec<String>, includes: Vec<String>) -> Self {
         Self {
-            includes: HashSet::from_iter(includes.into_iter()),
-            excludes: HashSet::from_iter(excludes.into_iter()),
+            includes: includes.into_iter().collect(),
+            excludes: excludes.into_iter().collect(),
         }
     }
 
@@ -68,13 +67,13 @@ impl TagFilter {
         denying: &[String],
     ) -> (Vec<String>, bool) {
         // Tags we want to allow based on the system
-        let system_allow: HashSet<&str> = HashSet::from_iter(system_allow.iter().copied());
+        let system_allow: HashSet<&str> = system_allow.iter().copied().collect();
         // Tags we want to allow
-        let allowing: HashSet<&str> = HashSet::from_iter(allowing.iter().map(String::as_str));
+        let allowing: HashSet<&str> = allowing.iter().map(String::as_str).collect();
         // Tags we want to deny
-        let denying: HashSet<&str> = HashSet::from_iter(denying.iter().map(String::as_str));
+        let denying: HashSet<&str> = denying.iter().map(String::as_str).collect();
         // Tags in the current
-        let includes: HashSet<&str> = HashSet::from_iter(self.includes.iter().map(String::as_str));
+        let includes: HashSet<&str> = self.includes.iter().map(String::as_str).collect();
         // Tags that passed the system req
         let sys_accepted: Vec<_> = includes.intersection(&system_allow).collect();
         // The tags that were accepted
@@ -129,8 +128,8 @@ impl TagFilter {
     }
 
     pub(crate) fn join(&self, tags: Option<Vec<String>>) -> TagFilter {
-        let mut includes: Vec<String> = Vec::from_iter(self.includes.iter().cloned());
-        let excludes: Vec<String> = Vec::from_iter(self.excludes.iter().cloned());
+        let mut includes: Vec<String> = self.includes.iter().cloned().collect();
+        let excludes: Vec<String> = self.excludes.iter().cloned().collect();
         if let Some(mut tags) = tags {
             includes.append(&mut tags);
         }
