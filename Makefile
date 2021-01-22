@@ -6,10 +6,10 @@ YEAR=2018-2021
 
 RELEASE_TARGETS := \
 	x86_64-unknown-linux-gnu \
-	x86_64-alpine-linux-musl \
+	#x86_64-unknown-linux-musl \
+	# x86_64-alpine-linux-musl \
 	# fails on snmalloc builds currently so disabled
 	# TODO if we fix this, we don't need the alpine specifc target above for musl builds
-	#x86_64-unknown-linux-musl \
 
 # Please keep the RELEASE_FORMATS_* vars here aligned with RELEASE_TARGETS.
 #
@@ -29,7 +29,7 @@ RELEASE_TARGETS := \
 #RELEASE_FORMATS_x86_64-unknown-linux-gnu := archive,deb,rpm
 RELEASE_FORMATS_x86_64-unknown-linux-gnu := archive,rpm
 RELEASE_FORMATS_x86_64-alpine-linux-musl := archive
-#RELEASE_FORMATS_x86_64-unknown-linux-musl := archive
+RELEASE_FORMATS_x86_64-unknown-linux-musl := archive
 
 help:
 	@echo "This makefile wraps the tasks:"
