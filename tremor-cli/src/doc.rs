@@ -24,8 +24,8 @@ use tremor_script::script::Script;
 
 fn gen_doc(
     is_interactive: bool,
-    rel_path: &Option<&Path>,
-    dest_path: &Option<String>,
+    rel_path: Option<&Path>,
+    dest_path: Option<&str>,
     path: &Path,
 ) -> Result<()> {
     let rel_path = rel_path.ok_or_else(|| Error::from("Bad relative path"))?;
@@ -110,11 +110,6 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
         //
         // This would be so much more elegant in erlang! Surely there's a more convivial syntax in rust?
         //
-        gen_doc(
-            is_interactive,
-            &rel_path,
-            &Some(dest_path.clone()),
-            src_path,
-        )
+        gen_doc(is_interactive, rel_path, Some(&dest_path), src_path)
     })?)
 }

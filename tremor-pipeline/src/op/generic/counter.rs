@@ -32,7 +32,7 @@ impl Operator for Counter {
         event: Event,
     ) -> Result<EventAndInsights> {
         if state.is_null() {
-            *state = Value::from(1 as u64);
+            *state = Value::from(1_u64);
         } else {
             *state = Value::from(
                 state

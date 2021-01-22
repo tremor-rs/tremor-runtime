@@ -2485,7 +2485,7 @@ impl<'input> Lexer<'input> {
                     let strings = strings
                         .iter()
                         .map(|s| {
-                            if s == "" {
+                            if s.is_empty() {
                                 s.to_owned()
                             } else {
                                 s.split_at(indent).1.to_string()
@@ -2821,7 +2821,7 @@ impl<'input> Iterator for Lexer<'input> {
 fn indentation(strings: &[String]) -> usize {
     let mut indent = None;
     for s in strings {
-        if s != "" {
+        if !s.is_empty() {
             let l = s.len() - s.trim_start().len();
             if let Some(i) = indent {
                 if i > l {

@@ -89,7 +89,7 @@ fn encode(value: &Value) -> Result<Vec<u8>> {
     Ok(r.as_bytes().to_vec())
 }
 
-fn decode<'input>(data: &'input [u8], _ingest_ns: u64) -> Result<Value<'input>> {
+fn decode(data: &[u8], _ingest_ns: u64) -> Result<Value> {
     enum Sign {
         Plus,
         Minus,

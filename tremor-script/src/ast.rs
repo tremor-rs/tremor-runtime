@@ -920,7 +920,7 @@ pub enum ImutExprInt<'script> {
     Bytes(Bytes<'script>),
 }
 
-fn is_lit<'script>(e: &ImutExprInt<'script>) -> bool {
+fn is_lit(e: &ImutExprInt) -> bool {
     matches!(e, ImutExprInt::Literal(_))
 }
 

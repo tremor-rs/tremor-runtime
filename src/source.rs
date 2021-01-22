@@ -691,7 +691,7 @@ mod tests {
             .await?;
 
         // wait some time
-        task::sleep(Duration::from_millis(100)).await;
+        task::sleep(Duration::from_millis(200)).await;
         assert!(rx1.len() > 0);
 
         let (tx4, rx4) = async_channel::unbounded();

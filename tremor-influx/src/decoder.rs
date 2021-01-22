@@ -260,11 +260,7 @@ where
     }
 }
 
-fn parse_to<'input, F>(
-    total_idx: usize,
-    mut input: &'input str,
-    p: F,
-) -> Result<(Cow<'input, str>, usize)>
+fn parse_to<F>(total_idx: usize, mut input: &str, p: F) -> Result<(Cow<str>, usize)>
 where
     F: Fn(char) -> bool,
 {
@@ -296,13 +292,13 @@ where
     }
 }
 
-fn parse_to_complex<'input, F>(
+fn parse_to_complex<F>(
     total_idx: usize,
     mut res: String,
     mut offset: usize,
-    mut input: &'input str,
+    mut input: &str,
     p: F,
-) -> Result<(Cow<'input, str>, usize)>
+) -> Result<(Cow<str>, usize)>
 where
     F: Fn(char) -> bool,
 {

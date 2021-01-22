@@ -1,11 +1,10 @@
-FROM rust:1.48.0 as builder
+FROM rust:1.49.0 as builder
 
 RUN cargo install --features=ssl websocat
 
 FROM tremorproject/tremor:0.9.4
 
 COPY --from=builder /usr/local/cargo/bin/websocat /usr/local/bin/websocat
-
 
 # Install workshop related tools
 RUN apt-get update \

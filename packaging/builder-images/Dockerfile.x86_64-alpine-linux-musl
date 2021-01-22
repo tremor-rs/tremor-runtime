@@ -1,7 +1,7 @@
 # update the version here as needed
 # may bring updates to things like musl so proceed carefully.
 # via https://hub.docker.com/_/alpine
-FROM alpine:3.11.6
+FROM alpine:3.13.0
 
 RUN apk add --update-cache \
     # dependencies for C builds
@@ -20,12 +20,15 @@ RUN apk add --update-cache \
     --repository http://dl-cdn.alpinelinux.org/alpine/edge/main \
     # using apk's fuzzy version matching
     # https://git.alpinelinux.org/apk-tools/commit/?id=693b4bcdb0f22904a521a7c8ac4f13e697dc4d71
-    "cargo=~${RUST_VERSION}"
-    # alpine doesn't keep old package versions around (https://gitlab.alpinelinux.org/alpine/abuild/-/issues/9996)
-    # so if the above strategy causes issues, we can opt for the below strategy.
-    # Better to bump our project's rust version at that point though (unless
-    # there's a strong reason not to).
-    #"cargo>=${RUST_VERSION}"
+    "cargo"
+
+# This doesn't work since we don't controle what version alpine offers, so we just grab the latest instead
+# "cargo=~${RUST_VERSION}"
+# alpine doesn't keep old package versions around (https://gitlab.alpinelinux.org/alpine/abuild/-/issues/9996)
+# so if the above strategy causes issues, we can opt for the below strategy.
+# Better to bump our project's rust version at that point though (unless
+# there's a strong reason not to).
+#"cargo>=${RUST_VERSION}"
 
 # only alpine's patched rustc has worked for succesful snmalloc musl builds
 # so installing rust this way does not quite work

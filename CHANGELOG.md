@@ -1,5 +1,13 @@
 # Changelog
 
+## Latest
+
+### New features
+
+* Default to thin-lto for all builds (prior this was only done in docker)
+* Automatically generate rpms and tarballs for releases.
+* Update rust to 1.49.0
+
 ## 0.9.4
 
 ### New features
