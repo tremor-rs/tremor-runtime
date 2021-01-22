@@ -1,0 +1,7 @@
+Error: 
+    1 | 
+    2 | fn snot(a) with
+    3 |   recur(a);
+      |   ^^^^^^^^ Can not recur from this location
+    4 |   a + 1
+    5 | end;

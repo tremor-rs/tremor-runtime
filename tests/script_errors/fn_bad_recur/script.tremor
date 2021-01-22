@@ -1,0 +1,7 @@
+
+fn snot(a) with
+  recur(a);
+  a + 1
+end;
+
+snot(event)
