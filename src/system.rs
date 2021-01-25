@@ -201,7 +201,7 @@ impl World {
                 // We link to the metrics pipeline
                 let res = self.reg.publish_pipeline(id, servant).await?;
                 let mut id = id.clone();
-                id.set_port(METRICS.to_string());
+                id.set_port(&METRICS);
                 let m = vec![(METRICS.to_string(), METRICS_PIPELINE.clone())]
                     .into_iter()
                     .collect();
@@ -327,7 +327,7 @@ impl World {
                 // We link to the metrics pipeline
                 let res = self.reg.publish_onramp(id, servant).await?;
                 let mut id = id.clone();
-                id.set_port(METRICS.to_string());
+                id.set_port(&METRICS);
                 let m = vec![(METRICS.to_string(), METRICS_PIPELINE.clone())]
                     .into_iter()
                     .collect();
@@ -433,7 +433,7 @@ impl World {
                 // We link to the metrics pipeline
                 let res = self.reg.publish_offramp(id, servant).await?;
                 let mut metrics_id = id.clone();
-                metrics_id.set_port(METRICS.to_string());
+                metrics_id.set_port(&METRICS);
                 let m = vec![(METRICS_PIPELINE.clone(), metrics_id.clone())]
                     .into_iter()
                     .collect();

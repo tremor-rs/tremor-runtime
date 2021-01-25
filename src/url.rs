@@ -249,8 +249,11 @@ impl TremorURL {
     /// Sets the instance of the URL, will extend
     /// the scope to `Scope::Servant` if it was
     /// `Artefact` before.
-    pub fn set_instance(&mut self, i: String) {
-        self.instance = Some(i);
+    pub fn set_instance<S>(&mut self, i: &S)
+    where
+        S: ToString + ?Sized,
+    {
+        self.instance = Some(i.to_string());
         if self.scope == Scope::Artefact {
             self.scope = Scope::Servant;
         }
@@ -259,8 +262,11 @@ impl TremorURL {
     /// Sets the port of the URL, will extend
     /// the scope to `Scope::Port` if it was
     /// `Servant` before.
-    pub fn set_port(&mut self, i: String) {
-        self.instance_port = Some(i);
+    pub fn set_port<S>(&mut self, i: &S)
+    where
+        S: ToString + ?Sized,
+    {
+        self.instance_port = Some(i.to_string());
         if self.scope == Scope::Servant {
             self.scope = Scope::Port;
         }
@@ -325,25 +331,18 @@ mod test {
     use super::*;
 
     #[test]
-    fn bad_url() -> Result<()> {
-        match TremorURL::parse("snot://") {
-            Err(_) => Ok(()),
-            Ok(_) => Err("expected a bad url".into()),
-        }
+    fn bad_url() {
+        assert!(TremorURL::parse("snot://").is_err())
     }
 
     #[test]
-    fn bad_url2() -> Result<()> {
-        match TremorURL::parse("foo/bar/baz/bogo/mips/snot") {
-            Err(_) => Ok(()),
-            Ok(_) => Err("expected a bad url".into()),
-        }
+    fn bad_url2() {
+        assert!(TremorURL::parse("foo/bar/baz/bogo/mips/snot").is_err())
     }
 
     #[test]
     fn url() -> Result<()> {
-        let url = TremorURL::parse("tremor://127.0.0.1:1234/pipeline/main/01/in?format=json")
-            .expect("failed to parse url");
+        let url = TremorURL::parse("tremor://127.0.0.1:1234/pipeline/main/01/in?format=json")?;
 
         assert_eq!(Scope::Port, url.scope());
         assert_eq!(Some(ResourceType::Pipeline), url.resource_type());
@@ -355,7 +354,7 @@ mod test {
 
     #[test]
     fn short_url() -> Result<()> {
-        let url = TremorURL::parse("/pipeline/main/01/in").expect("failed to parse url");
+        let url = TremorURL::parse("/pipeline/main/01/in")?;
 
         assert_eq!(Scope::Port, url.scope());
         assert_eq!(Some(ResourceType::Pipeline), url.resource_type());
@@ -434,6 +433,20 @@ mod test {
         assert_eq!(Some("id"), url.artefact());
         assert_eq!(Some("01"), url.instance());
         assert_eq!(Some(ports::IN.as_ref()), url.instance_port());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_set_instance() -> Result<()> {
+        let mut url = TremorURL::parse("tremor://127.0.0.1:1234/pipeline/main")?;
+        assert_eq!(Scope::Artefact, url.scope());
+        assert_eq!(Some(ResourceType::Pipeline), url.resource_type());
+        assert_eq!(Some("main"), url.artefact());
+        assert_eq!(None, url.instance());
+        url.set_instance("inst");
+        assert_eq!(Scope::Servant, url.scope());
+        assert_eq!(Some("inst"), url.instance());
 
         Ok(())
     }
