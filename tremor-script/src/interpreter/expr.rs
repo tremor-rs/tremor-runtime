@@ -28,8 +28,11 @@ use crate::prelude::*;
 use crate::registry::RECUR_PTR;
 use crate::{stry, Value};
 use matches::matches;
-use std::borrow::{Borrow, Cow};
 use std::mem;
+use std::{
+    borrow::{Borrow, Cow},
+    iter,
+};
 
 #[derive(Debug)]
 /// Continuation context to control program flow
@@ -217,44 +220,29 @@ where
         local: &'run mut LocalStack<'event>,
         expr: &'script Comprehension,
     ) -> Result<Cont<'run, 'event>> {
+        type BI<'v, 'r> = (usize, Box<dyn Iterator<Item = (Value<'v>, Value<'v>)> + 'r>);
+        fn kv<'k, K>((k, v): (K, Value)) -> (Value<'k>, Value)
+        where
+            K: 'k,
+            Value<'k>: From<K>,
+        {
+            (k.into(), v)
+        }
+
         let mut value_vec = vec![];
         let target = &expr.target;
         let cases = &expr.cases;
-        let target_value = stry!(target.run(opts, env, event, state, meta, local,));
+        let t = stry!(target.run(opts, env, event, state, meta, local,));
 
-        let (l, items): (usize, Box<dyn Iterator<Item = (Value, Value)>>) =
-            target_value.as_object().map_or_else(
-                || {
-                    target_value
-                        .as_array()
-                        .map_or_else::<(usize, Box<dyn Iterator<Item = (Value, Value)>>), _, _>(
-                            || (0, Box::new(std::iter::empty())),
-                            |target_array| {
-                                (
-                                    target_array.len(),
-                                    Box::new(
-                                        target_array
-                                            .clone()
-                                            .into_iter()
-                                            .enumerate()
-                                            .map(|(k, v)| (Value::from(k), v)),
-                                    ),
-                                )
-                            },
-                        )
-                },
-                |target_map| {
-                    (
-                        target_map.len(),
-                        Box::new(
-                            target_map
-                                .clone()
-                                .into_iter()
-                                .map(|(k, v)| (Value::from(k), v)),
-                        ),
-                    )
-                },
-            );
+        let (l, items): BI = t.as_object().map_or_else(
+            || {
+                t.as_array().map_or_else::<BI, _, _>(
+                    || (0, Box::new(iter::empty())),
+                    |t| (t.len(), Box::new(t.clone().into_iter().enumerate().map(kv))),
+                )
+            },
+            |t| (t.len(), Box::new(t.clone().into_iter().map(kv))),
+        );
 
         if opts.result_needed {
             value_vec.reserve(l);

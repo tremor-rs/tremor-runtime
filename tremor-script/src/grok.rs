@@ -73,7 +73,7 @@ impl Pattern {
     }
 
     /// Creates a pattern from a string
-    pub fn new<D>(definition: D) -> Result<Self>
+    pub fn new<D>(definition: &D) -> Result<Self>
     where
         D: ToString,
     {
@@ -132,7 +132,7 @@ mod tests {
         let raw: String = raw.to_string();
         dbg!(pat.clone());
         dbg!(raw.clone());
-        let codec = Pattern::new(pat).expect("bad pattern");
+        let codec = Pattern::new(&pat).expect("bad pattern");
         let decoded = codec.matches(raw.as_bytes());
         dbg!(&decoded);
         match decoded {
@@ -155,7 +155,7 @@ mod tests {
             use std::io::Write;
             let mut f1 = file.reopen()?;
             writeln!(f1, "# the snots")?;
-            writeln!(f1, "")?;
+            writeln!(f1)?;
             writeln!(f1, "SNOT %{{USERNAME:snot}} %{{USERNAME:snot}}")?;
             writeln!(f1, "#the badgers")?;
             writeln!(f1, "SNOTBADGER %{{USERNAME:snot}} %{{USERNAME:badger}}")?;
@@ -165,7 +165,7 @@ mod tests {
 
     #[test]
     fn no_match() {
-        let codec = Pattern::new("{}").expect("bad pattern");
+        let codec = Pattern::new(&"{}").expect("bad pattern");
         let decoded = codec.matches(b"cookie monster");
         match decoded {
             Err(decoded) => assert_eq!(

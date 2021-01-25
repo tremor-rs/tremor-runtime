@@ -36,9 +36,9 @@ use crate::{
     errors::error_oops_err,
 };
 use crate::{Object, Value};
-use std::borrow::Borrow;
 use std::borrow::Cow;
 use std::mem;
+use std::{borrow::Borrow, iter};
 
 impl<'run, 'event, 'script> ImutExpr<'script>
 where
@@ -254,42 +254,34 @@ where
         local: &'run LocalStack<'event>,
         expr: &'script ImutComprehension,
     ) -> Result<Cow<'run, Value<'event>>> {
+        type BI<'v, 'r> = (usize, Box<dyn Iterator<Item = (Value<'v>, Value<'v>)> + 'r>);
+        fn kv<'v, K>((k, v): (K, &Value<'v>)) -> (Value<'v>, Value<'v>)
+        where
+            K: 'v + Clone,
+            Value<'v>: From<K>,
+        {
+            (k.into(), v.clone())
+        }
+
         let mut value_vec = vec![];
         let target = &expr.target;
         let cases = &expr.cases;
-        let target_value = stry!(target.run(opts, env, event, state, meta, local));
+        let t = stry!(target.run(opts, env, event, state, meta, local));
 
-        let (l, items): (usize, Box<dyn Iterator<Item = (Value, Value)>>) =
-            target_value.as_object().map_or_else(
-                || {
-                    target_value
-                        .as_array()
-                        .map_or_else::<(usize, Box<dyn Iterator<Item = (Value, Value)>>), _, _>(
-                            || (0, Box::new(std::iter::empty())),
-                            |target_array| {
-                                (
-                                    target_array.len(),
-                                    Box::new(
-                                        target_array
-                                            .iter()
-                                            .enumerate()
-                                            .map(|(k, v)| (Value::from(k), v.clone())),
-                                    ),
-                                )
-                            },
-                        )
-                },
-                |target_map| {
-                    (
-                        target_map.len(),
-                        Box::new(
-                            target_map
-                                .iter()
-                                .map(|(k, v)| (Value::from(k.clone()), v.clone())),
-                        ),
-                    )
-                },
-            );
+        let (l, items): BI = t.as_object().map_or_else(
+            || {
+                t.as_array().map_or_else::<BI, _, _>(
+                    || (0, Box::new(iter::empty())),
+                    |t| (t.len(), Box::new(t.iter().enumerate().map(kv))),
+                )
+            },
+            |t| {
+                (
+                    t.len(),
+                    Box::new(t.iter().map(|(k, v)| (k.clone().into(), v.clone()))),
+                )
+            },
+        );
 
         if opts.result_needed {
             value_vec.reserve(l);
