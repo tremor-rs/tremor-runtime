@@ -69,6 +69,7 @@ float-cmp = "0.8"
 matches = "0.1"
 pretty_assertions = "0.6.1"
 proptest = "0.10"
+tempfile = "3"
 
 [features]
 fns = []
