@@ -11,8 +11,6 @@ jobs:
       - uses: actions/checkout@master
       - name: Build releases
         run: make builds
-      - name: Creating release tarballs
-        run: make archives
       - name: Creating release packages
         run: make packages
       - uses: AButler/upload-release-assets@v2.0
