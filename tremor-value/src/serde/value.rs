@@ -15,3 +15,6 @@
 mod de;
 mod se;
 // pub use self::borrowed::from_value as from_borrowed_value;
+
+pub use se::to_value;
+pub use se::Serializer;

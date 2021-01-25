@@ -47,7 +47,7 @@ impl TryFrom<CronEntry> for CronEntryInt {
         let payload = if let Some(yaml_payload) = entry.payload {
             // We use this to translate a yaml value (payload in) to tremor value (payload out)
             let mut payload = simd_json::to_vec(&yaml_payload)?;
-            let tremor_payload = tremor_value::to_value(&mut payload)?;
+            let tremor_payload = tremor_value::parse_to_value(&mut payload)?;
             Some(tremor_payload.into_static())
         } else {
             None

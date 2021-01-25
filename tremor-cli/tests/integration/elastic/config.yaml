@@ -1,0 +1,44 @@
+onramp:
+  - id: input
+    type: file
+    codec: json
+    config:
+      source: "in.json"
+      close_on_done: true
+      sleep_on_done: 10000
+
+offramp:
+  - id: elastic
+    type: elastic
+    linked: true
+    config:
+      nodes: 
+        - "http://0.0.0.0:9200/"
+  - id: errfile
+    type: file
+    codec: json
+    config:
+      file: "err.json"
+  - id: okfile
+    type: file
+    codec: json
+    config:
+      file: "ok.json"
+
+
+binding:
+  - id: elastic_integration
+    links:
+      "/onramp/input/{instance}/out": ["/pipeline/main/{instance}/in"]
+      "/pipeline/main/{instance}/out": ["/offramp/elastic/{instance}/in"]
+
+      "/offramp/elastic/{instance}/out": ["/pipeline/response_handling/{instance}/in"]
+      "/pipeline/response_handling/{instance}/out": ["/offramp/okfile/{instance}/in"]
+      
+      "/offramp/elastic/{instance}/err": ["/pipeline/response_handling/{instance}/in"]
+      "/pipeline/response_handling/{instance}/err": ["/offramp/errfile/{instance}/in"]
+
+      
+mapping:
+  "/binding/elastic_integration/01":
+    instance: "01"

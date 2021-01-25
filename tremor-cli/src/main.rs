@@ -66,27 +66,24 @@ where
     let path = Path::new(path);
     match file::open(path) {
         Ok(f) => Ok(f),
-        Err(e) => {
-            if let Some(base) = base {
+        Err(tremor_common::Error::FileOpen(io_error, msg)) => {
+            let msg = if let Some(base) = base {
                 let mut p = Path::new(base).to_path_buf();
                 p.push(path);
                 if let Ok(f) = file::open(&p) {
                     return Ok(f);
                 }
-                Err(Error::from(format!(
-                    "Failed to open `{}` (or  `{}`): {}",
+                format!(
+                    "Failed to open `{}` (or  `{}`)",
                     path.to_str().unwrap_or("<unknown>"),
-                    p.to_str().unwrap_or("<unknown>"),
-                    e
-                )))
+                    p.to_str().unwrap_or("<unknown>")
+                )
             } else {
-                Err(Error::from(format!(
-                    "Failed to open {}: {}",
-                    path.to_str().unwrap_or("<unknown>"),
-                    e
-                )))
-            }
+                msg
+            };
+            Err(tremor_common::Error::FileOpen(io_error, msg).into())
         }
+        Err(e) => Err(e.into()),
     }
 }
 

@@ -1,0 +1,2 @@
+{"success":true,"payload":{"snot":"badger"},"index":"my_little_index","doc":"my_little_doc"}
+{"success":true,"payload":{"tremor":[true,true,true,false]},"index":"my_little_index","doc":"my_little_doc"}

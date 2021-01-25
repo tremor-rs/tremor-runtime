@@ -45,3 +45,9 @@ impl serde_ext::de::Error for Error {
         Error::Serde(msg.to_string())
     }
 }
+
+impl serde_ext::ser::Error for Error {
+    fn custom<T: fmt::Display>(msg: T) -> Self {
+        Error::Serde(msg.to_string())
+    }
+}
