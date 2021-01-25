@@ -505,7 +505,7 @@ impl Artefact for Binding {
                     instance = inst.replace(&format!("%7B{}%7D", map_name), map_replace.as_str());
                 }
                 let mut from = src.clone();
-                from.set_instance(instance);
+                from.set_instance(&instance);
                 let mut tos: Vec<TremorURL> = Vec::new();
                 for dst in dsts {
                     // TODO: It should be validated ahead of time that every mapping has an instance!
@@ -518,7 +518,7 @@ impl Artefact for Binding {
                                 inst.replace(&format!("%7B{}%7D", map_name), map_replace.as_str());
                         }
                         let mut to = dst.clone();
-                        to.set_instance(instance);
+                        to.set_instance(&instance);
                         tos.push(to.clone());
                         match (from.resource_type(), to.resource_type()) {
                             (Some(ResourceType::Onramp), Some(ResourceType::Pipeline)) => {
