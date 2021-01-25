@@ -5694,6 +5694,7 @@ dependencies = [
  "simd-json-derive",
  "sketches-ddsketch",
  "strip-ansi-escapes",
+ "tempfile",
  "termcolor",
  "tremor-common",
  "tremor-influx",

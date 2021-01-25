@@ -1,4 +1,4 @@
-# [package]
+[package]
 authors = ["The Tremor Team"]
 description = "Tremor CLI Tool"
 edition = "2018"

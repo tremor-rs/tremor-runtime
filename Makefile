@@ -6,7 +6,7 @@ YEAR=2018-2021
 
 RELEASE_TARGETS := \
 	x86_64-unknown-linux-gnu \
-	#x86_64-unknown-linux-musl \
+	# x86_64-unknown-linux-musl \
 	# x86_64-alpine-linux-musl \
 	# fails on snmalloc builds currently so disabled
 	# TODO if we fix this, we don't need the alpine specifc target above for musl builds

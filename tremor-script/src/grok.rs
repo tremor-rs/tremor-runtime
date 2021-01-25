@@ -15,9 +15,9 @@
 use crate::errors::Result;
 use crate::Value;
 use grok::Grok;
-use std::collections::HashMap;
 use std::io::{BufRead, BufReader};
 use std::str;
+use std::{collections::HashMap, path::Path};
 use tremor_common::file;
 use value_trait::{Builder, Mutable};
 
@@ -33,7 +33,10 @@ pub struct Pattern {
 
 impl Pattern {
     /// Reads a pattern from a file
-    pub fn from_file(file_path: &str, definition: &str) -> Result<Self> {
+    pub fn from_file<S>(file_path: &S, definition: &str) -> Result<Self>
+    where
+        S: AsRef<Path> + ?Sized,
+    {
         let file = file::open(file_path)?;
         let input: Box<dyn BufRead> = Box::new(BufReader::new(file));
 
@@ -62,15 +65,20 @@ impl Pattern {
             }
         }
 
+        let p: &Path = file_path.as_ref();
         Ok(Self {
-            definition: format!("{}{}", "file://", file_path),
+            definition: format!("file://{}", p.as_os_str().to_string_lossy()),
             pattern: result.compile(&definition, true)?,
         })
     }
 
     /// Creates a pattern from a string
-    pub fn new(definition: String) -> Result<Self> {
+    pub fn new<D>(definition: D) -> Result<Self>
+    where
+        D: ToString,
+    {
         let mut grok = Grok::default();
+        let definition = definition.to_string();
         if let Ok(pattern) = grok.compile(&definition, true) {
             Ok(Self {
                 definition,
@@ -113,79 +121,93 @@ mod tests {
     use super::*;
     use simd_json::json;
 
-    macro_rules! assert_grok_ok {
-        ($pattern:expr, $raw:expr, $json:expr) => {
-            let pat: String = $pattern.to_string();
-            let raw: String = $raw.to_string();
-            dbg!(pat.clone());
-            dbg!(raw.clone());
-            let codec = Pattern::new(pat).expect("bad pattern");
-            let decoded = codec.matches(raw.as_bytes());
-            dbg!(&decoded);
-            match decoded {
-                Ok(j) => assert_eq!(j, $json),
-
-                Err(x) => eprintln!("{}", x),
+    fn assert_grok_ok<I1, I2, V>(pattern: I1, raw: I2, json: V) -> bool
+    where
+        I1: ToString,
+        I2: ToString,
+        V: core::fmt::Debug,
+        tremor_value::Value<'static>: PartialEq<V>,
+    {
+        let pat: String = pattern.to_string();
+        let raw: String = raw.to_string();
+        dbg!(pat.clone());
+        dbg!(raw.clone());
+        let codec = Pattern::new(pat).expect("bad pattern");
+        let decoded = codec.matches(raw.as_bytes());
+        dbg!(&decoded);
+        match decoded {
+            Ok(j) => {
+                assert_eq!(j, json);
+                true
             }
-        };
+
+            Err(x) => {
+                eprintln!("{}", x);
+                false
+            }
+        }
     }
 
-    macro_rules! assert_grok_ko {
-        ($pattern:expr, $raw:expr, $expr:expr) => {
-            let pat: String = $pattern.to_string();
-            let raw: String = $raw.to_string();
-            dbg!(pat.clone());
-            dbg!(raw.clone());
-            let codec = Pattern::new(pat).expect("bad pattern");
-            let decoded = codec.matches(raw.as_bytes());
-            match decoded {
-                Err(decoded) => assert_eq!($expr, decoded.description()),
-                _ => eprintln!("{}", "Expected no match"),
-            };
-        };
+    #[test]
+    fn load_file() -> Result<()> {
+        let file = tempfile::NamedTempFile::new().expect("can't create temp file");
+        {
+            use std::io::Write;
+            let mut f1 = file.reopen()?;
+            writeln!(f1, "# the snots")?;
+            writeln!(f1, "")?;
+            writeln!(f1, "SNOT %{{USERNAME:snot}} %{{USERNAME:snot}}")?;
+            writeln!(f1, "#the badgers")?;
+            writeln!(f1, "SNOTBADGER %{{USERNAME:snot}} %{{USERNAME:badger}}")?;
+        }
+        Pattern::from_file(file.path(), "%{SNOT} %{SNOTBADGER}").map(|_| ())
     }
 
     #[test]
     fn no_match() {
-        assert_grok_ko!(
-            "{}",
-            "cookie monster",
-            "No match for log text: cookie monster"
-        );
+        let codec = Pattern::new("{}").expect("bad pattern");
+        let decoded = codec.matches(b"cookie monster");
+        match decoded {
+            Err(decoded) => assert_eq!(
+                "No match for log text: cookie monster",
+                decoded.description()
+            ),
+            _ => eprintln!("{}", "Expected no match"),
+        };
     }
 
     #[test]
     fn decode_no_alias_does_not_map() {
-        assert_grok_ok!("%{USERNAME}", "foobar", json!({}));
+        assert_grok_ok("%{USERNAME}", "foobar", json!({}));
     }
 
     #[test]
     fn decode_clashing_alias_maps_with_default_unknowable_name() {
-        assert_grok_ok!(
+        assert_grok_ok(
             "%{USERNAME:snot} %{USERNAME:snot}",
             "foobar badger",
-            json!({"snot": "badger", "name0": "foobar"})
+            json!({"snot": "badger", "name0": "foobar"}),
         );
-        assert_grok_ok!(
+        assert_grok_ok(
             "%{USERNAME:snot} %{USERNAME:name0}",
             "foobar badger",
-            json!({"snot": "foobar", "name0": "badger"})
+            json!({"snot": "foobar", "name0": "badger"}),
         );
     }
 
     #[test]
     fn decode_simple_ok() {
-        assert_grok_ok!(
+        assert_grok_ok(
             "%{USERNAME:username}",
             "foobar",
-            json!({"username": "foobar"})
+            json!({"username": "foobar"}),
         );
     }
 
     #[test]
     fn decode_syslog_esx_hypervisors() {
         let pattern = r#"^<%%{POSINT:syslog_pri}> %{TIMESTAMP_ISO8601:syslog_timestamp} (?<esx_uid>[-0-9a-f]+) %{SYSLOGHOST:syslog_hostname} (?:(?<syslog_program>[\x21-\x39\x3b-\x5a\x5c\x5e-\x7e]+)(?:\[%{POSINT:syslog_pid}\])?:?)? (?:%{TIMESTAMP_ISO8601:syslog_ingest_timestamp} )?(%{WORD:wf_pod} %{WORD:wf_datacenter} )?%{GREEDYDATA:syslog_message}"#;
-        assert_grok_ok!(pattern,"<%1> 2019-04-01T09:59:19+0000 deadbeaf01234 example program_name[1234] 2019-04-01T09:59:19+0010 pod dc foo bar baz", json!({
+        assert_grok_ok(pattern,"<%1> 2019-04-01T09:59:19+0000 deadbeaf01234 example program_name[1234] 2019-04-01T09:59:19+0010 pod dc foo bar baz", json!({
            "syslog_program": "program_name",
            "esx_uid": "deadbeaf01234",
            "wf_datacenter": "dc",
@@ -202,7 +224,7 @@ mod tests {
     #[test]
     fn decode_syslog_artifactory() {
         let pattern = r#"^<%%{POSINT:syslog_pri}>(?:(?<syslog_version>\d{1,3}) )?(?:%{SYSLOGTIMESTAMP:syslog_timestamp1}|%{TIMESTAMP_ISO8601:syslog_timestamp}) %{SYSLOGHOST:syslog_hostname} (?:(?<syslog_program>[\x21-\x39\x3b-\x5a\x5c\x5e-\x7e]+)(?:\[%{POSINT:syslog_pid}\])?:?)? (?:%{TIMESTAMP_ISO8601:syslog_ingest_timestamp} )?(%{WORD:wf_pod} %{WORD:wf_datacenter} )?%{GREEDYDATA:syslog_message}"#;
-        assert_grok_ok!(pattern, "<%1>123 Jul   7 10:51:24 hostname program_name[1234] 2019-04-01T09:59:19+0010 pod dc foo bar baz", json!({
+        assert_grok_ok(pattern, "<%1>123 Jul   7 10:51:24 hostname program_name[1234] 2019-04-01T09:59:19+0010 pod dc foo bar baz", json!({
            "wf_pod": "pod",
            "syslog_timestamp1": "Jul   7 10:51:24",
            "syslog_message": "foo bar baz",
@@ -221,7 +243,7 @@ mod tests {
     fn decode_standard_syslog() {
         let pattern = r#"^<%%{POSINT:syslog_pri}>(?:(?<syslog_version>\d{1,3}) )?(?:%{SYSLOGTIMESTAMP:syslog_timestamp0}|%{TIMESTAMP_ISO8601:syslog_timestamp1}) %{SYSLOGHOST:syslog_hostname}  ?(?:%{TIMESTAMP_ISO8601:syslog_ingest_timestamp} )?(%{WORD:wf_pod} %{WORD:wf_datacenter} )?%{GREEDYDATA:syslog_message}"#;
 
-        assert_grok_ok!(
+        assert_grok_ok(
             pattern,
             "<%1>123 Jul   7 10:51:24 hostname 2019-04-01T09:59:19+0010 pod dc foo bar baz",
             json!({
@@ -234,7 +256,7 @@ mod tests {
                "syslog_message": "foo bar baz",
                "syslog_version": "123",
                "syslog_timestamp0": "Jul   7 10:51:24"
-            })
+            }),
         );
     }
 
@@ -242,7 +264,7 @@ mod tests {
     fn decode_nonstd_syslog() {
         let pattern = r#"^<%%{POSINT:syslog_pri}>(?:(?<syslog_version>\d{1,3}) )?(?:%{SYSLOGTIMESTAMP:syslog_timestamp}|%{TIMESTAMP_ISO8601:syslog_timestamp})  ?(?:%{TIMESTAMP_ISO8601:syslog_ingest_timestamp} )?(%{WORD:wf_pod} %{WORD:wf_datacenter} )?%{GREEDYDATA:syslog_message}"#;
 
-        assert_grok_ok!(
+        assert_grok_ok(
             pattern,
             "<%1>123 Jul   7 10:51:24  2019-04-01T09:59:19+0010 pod dc foo bar baz",
             json!({
@@ -254,7 +276,7 @@ mod tests {
                "wf_pod": "pod",
                "wf_datacenter": "dc",
                "name1": "Jul   7 10:51:24"
-            })
+            }),
         );
     }
 
@@ -262,7 +284,7 @@ mod tests {
     fn decode_syslog_noversion() {
         let pattern = r#"^<%%{POSINT:syslog_pri}>(?:(?<syslog_version>\d{1,3}))? ?(?:%{TIMESTAMP_ISO8601:syslog_ingest_timestamp} )?(%{WORD:wf_pod} %{WORD:wf_datacenter} )?%{GREEDYDATA:syslog_message}"#;
 
-        assert_grok_ok!(
+        assert_grok_ok(
             pattern,
             "<%1>123 2019-04-01T09:59:19+0010 pod dc foo bar baz",
             json!({
@@ -272,9 +294,9 @@ mod tests {
                "syslog_version": "123",
                "syslog_message": "foo bar baz",
                "syslog_ingest_timestamp": "2019-04-01T09:59:19+0010"
-            })
+            }),
         );
-        assert_grok_ok!(
+        assert_grok_ok(
             pattern,
             "<%1>12 2019-04-01T09:59:19+0010 pod dc foo bar baz",
             json!({
@@ -284,9 +306,9 @@ mod tests {
                "syslog_version": "12",
                "syslog_message": "foo bar baz",
                "syslog_ingest_timestamp": "2019-04-01T09:59:19+0010"
-            })
+            }),
         );
-        assert_grok_ok!(
+        assert_grok_ok(
             pattern,
             "<%1>1 2019-04-01T09:59:19+0010 pod dc foo bar baz",
             json!({
@@ -296,9 +318,9 @@ mod tests {
                "syslog_version": "1",
                "syslog_message": "foo bar baz",
                "syslog_ingest_timestamp": "2019-04-01T09:59:19+0010"
-            })
+            }),
         );
-        assert_grok_ok!(
+        assert_grok_ok(
             pattern,
             "<%1> 2019-04-01T09:59:19+0010 pod dc foo bar baz",
             json!({
@@ -308,14 +330,14 @@ mod tests {
                "syslog_version": "",
                "syslog_message": "foo bar baz",
                "syslog_ingest_timestamp": "2019-04-01T09:59:19+0010"
-            })
+            }),
         );
     }
 
     #[test]
     fn decode_syslog_isilon() {
         let pattern = r#"^<invld>%{GREEDYDATA:syslog_error_prefix}>(%{TIMESTAMP_ISO8601:syslog_timestamp}(?: %{TIMESTAMP_ISO8601:syslog_ingest_timestamp})? )?(%{WORD:wf_pod} %{WORD:wf_datacenter} )?%{SYSLOGHOST:syslog_hostname} ?(%{SYSLOGPROG:syslog_program}:)?%{GREEDYDATA:syslog_message}"#;
-        assert_grok_ok!(
+        assert_grok_ok(
             pattern,
             "<invld>x>hostname.com bar baz",
             json!({
@@ -329,10 +351,10 @@ mod tests {
                "wf_pod": "",
                "syslog_ingest_timestamp": "",
                "program": ""
-            })
+            }),
         );
 
-        assert_grok_ok!(
+        assert_grok_ok(
             pattern,
             "<invld>x y z>2019-04-01T09:59:19+0010 2019-04-01T09:59:19+0010 hostname.com bar baz",
             json!({
@@ -346,10 +368,10 @@ mod tests {
                "pid": "",
                "syslog_error_prefix": "x y z",
                "program": ""
-            })
+            }),
         );
 
-        assert_grok_ok!(
+        assert_grok_ok(
             pattern,
             "<invld>x y z>2019-04-01T09:59:19+0010 hostname.com bar baz",
             json!({
@@ -363,10 +385,10 @@ mod tests {
                "pid": "",
                "syslog_error_prefix": "x y z",
                "program": ""
-            })
+            }),
         );
 
-        assert_grok_ok!(
+        assert_grok_ok(
             pattern,
             "<invld>x y z>2019-04-01T09:59:19+0010 pod dc hostname.com bar baz",
             json!({
@@ -380,10 +402,10 @@ mod tests {
                "pid": "",
                "syslog_error_prefix": "x y z",
                "program": ""
-            })
+            }),
         );
 
-        assert_grok_ok!(
+        assert_grok_ok(
             pattern,
             "<invld>x y z>pod dc hostname.com bar baz",
             json!({
@@ -397,11 +419,11 @@ mod tests {
                "pid": "",
                "syslog_error_prefix": "x y z",
                "program": ""
-            })
+            }),
         );
 
         // prog / pid
-        assert_grok_ok!(
+        assert_grok_ok(
             pattern,
             "<invld>x>hostname.com program_name[1234]: bar baz",
             json!({
@@ -415,10 +437,10 @@ mod tests {
                "wf_pod": "",
                "syslog_ingest_timestamp": "",
                "program": "program_name"
-            })
+            }),
         );
 
-        assert_grok_ok!(pattern, "<invld>x y z>2019-04-01T09:59:19+0010 2019-04-01T09:59:19+0010 hostname.com program_name: bar baz", json!({
+        assert_grok_ok(pattern, "<invld>x y z>2019-04-01T09:59:19+0010 2019-04-01T09:59:19+0010 hostname.com program_name: bar baz", json!({
            "syslog_timestamp": "2019-04-01T09:59:19+0010",
            "syslog_ingest_timestamp": "2019-04-01T09:59:19+0010",
            "wf_datacenter": "",
@@ -431,7 +453,7 @@ mod tests {
            "program": "program_name"
         }));
 
-        assert_grok_ok!(
+        assert_grok_ok(
             pattern,
             "<invld>x y z>2019-04-01T09:59:19+0010 hostname.com program_name[1234]: bar baz",
             json!({
@@ -445,10 +467,10 @@ mod tests {
                "pid": "1234",
                "syslog_error_prefix": "x y z",
                "program": "program_name"
-            })
+            }),
         );
 
-        assert_grok_ok!(
+        assert_grok_ok(
             pattern,
             "<invld>x y z>2019-04-01T09:59:19+0010 pod dc hostname.com program_name: bar baz",
             json!({
@@ -462,10 +484,10 @@ mod tests {
                "pid": "",
                "syslog_error_prefix": "x y z",
                "program": "program_name"
-            })
+            }),
         );
 
-        assert_grok_ok!(
+        assert_grok_ok(
             pattern,
             "<invld>x y z>pod dc hostname.com program_name[1234]:bar baz",
             json!({
@@ -479,7 +501,7 @@ mod tests {
                "pid": "1234",
                "syslog_error_prefix": "x y z",
                "program": "program_name"
-            })
+            }),
         );
     }
 }
