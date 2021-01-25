@@ -1,0 +1,3 @@
+{"snot": "badger"}
+{"tremor": [true, true, true, false]}
+{"tremor": 12, "cause": "this one has a different type underneath the same key and thus will fail elastic"}

@@ -36,16 +36,24 @@ pub(crate) fn run_process(
 ) -> Result<report::TestReport> {
     let mut evidence = HashMap::new();
 
-    let artefacts = GlobWalkerBuilder::from_patterns(
+    let mut artefacts = GlobWalkerBuilder::from_patterns(
         canonicalize(bench_root)?,
-        &["*.{yaml,tremor,trickle}", "!assert.yaml"],
+        &["*.{yaml,tremor,trickle}", "!assert.yaml", "!logger.yaml"],
     )
     .case_insensitive(true)
     .max_depth(1)
     .build()
     .map_err(|e| Error::from(format!("Unable to walk path for artefacts capture: {}", e)))?
-    .filter_map(|x| x.ok().map(|x| x.path().to_string_lossy().to_string()));
+    .filter_map(|x| x.ok().map(|x| x.path().to_string_lossy().to_string()))
+    .peekable();
 
+    // fail fast if no artefacts are provided
+    if artefacts.peek().is_none() {
+        return Err(Error::from(format!(
+            "No tremor artefacts found in '{}'.",
+            bench_root.to_string_lossy()
+        )));
+    }
     let args: Vec<String> = vec!["server", "run", "-n", "-f"]
         .iter()
         .map(|x| (*x).to_string())

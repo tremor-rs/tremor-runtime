@@ -24,6 +24,8 @@ use simd_json::{AlignedBuf, Deserializer, Node, StaticNode};
 use std::fmt;
 use std::ops::{Index, IndexMut};
 
+pub use crate::serde::to_value;
+
 /// Representation of a JSON object
 pub type Object<'value> = HashMap<Cow<'value, str>, Value<'value>>;
 /// Bytes
@@ -37,7 +39,7 @@ pub type Bytes<'value> = Cow<'value, [u8]>;
 /// # Errors
 ///
 /// Will return `Err` if `s` is invalid JSON.
-pub fn to_value(s: &mut [u8]) -> Result<Value> {
+pub fn parse_to_value<'value>(s: &'value mut [u8]) -> Result<Value<'value>> {
     match Deserializer::from_slice(s) {
         Ok(de) => Ok(ValueDeserializer::from_deserializer(de).parse()),
         Err(e) => Err(Error::SimdJSON(e)),
@@ -52,7 +54,7 @@ pub fn to_value(s: &mut [u8]) -> Result<Value> {
 /// # Errors
 ///
 /// Will return `Err` if `s` is invalid JSON.
-pub fn to_value_with_buffers<'value>(
+pub fn parse_to_value_with_buffers<'value>(
     s: &'value mut [u8],
     input_buffer: &mut AlignedBuf,
     string_buffer: &mut [u8],
@@ -885,7 +887,7 @@ mod test {
         fn prop_serialize_deserialize(borrowed in arb_value()) {
             let mut string = borrowed.encode();
             let mut bytes = unsafe{ string.as_bytes_mut()};
-            let decoded = to_value(&mut bytes).expect("Failed to decode");
+            let decoded = parse_to_value(&mut bytes).expect("Failed to decode");
             prop_assert_eq!(borrowed, decoded)
         }
         #[test]

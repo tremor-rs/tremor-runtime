@@ -441,7 +441,7 @@ impl Extractor {
                     let mut s = s.as_bytes().to_vec();
                     // We will never use s afterwards so it's OK to destroy it's content
                     let encoded = s.as_mut_slice();
-                    let decoded = tremor_value::to_value(encoded)
+                    let decoded = tremor_value::parse_to_value(encoded)
                         .map_err(|e| ExtractorError {
                             msg: format!("Error in decoding to a json object: {}", e),
                         })?

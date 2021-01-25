@@ -14,7 +14,7 @@
 
 use time::Instant;
 
-use crate::errors::{Error, Result};
+use crate::errors::{Error, ErrorKind, Result};
 use crate::{job, job::TargetProcess, util::slurp_string};
 use std::{
     collections::HashMap,
@@ -40,7 +40,6 @@ pub(crate) struct Before {
 impl Before {
     pub(crate) fn spawn(&self) -> Result<Option<TargetProcess>> {
         let cmd = job::which(&self.cmd)?;
-
         let process = job::TargetProcess::new_with_stderr(&cmd, &self.args, &self.env)?;
         self.block_on()?;
         Ok(Some(process))
@@ -70,9 +69,20 @@ impl Before {
                             .map(|delay| start.elapsed() > Duration::from_millis(delay))
                             .unwrap_or_default();
                     }
+                    if "http-ok" == k.as_str() {
+                        for endpoint in v {
+                            success &= match async_std::task::block_on(surf::get(endpoint).send()) {
+                                Ok(res) => res.status().is_success(),
+                                Err(_) => false,
+                            }
+                        }
+                    }
                 }
                 if success {
                     break;
+                } else {
+                    // do not overload the system, try a little (100ms) tenderness
+                    std::thread::sleep(Duration::from_millis(100));
                 }
             }
         }
@@ -93,9 +103,9 @@ pub(crate) fn load_before(path_str: &str) -> Result<Before> {
     let tags_data = slurp_string(path_str)?;
     match serde_json::from_str(&tags_data) {
         Ok(s) => Ok(s),
-        Err(_) => Err(Error::from(format!(
-            "Unable to load `before.json` from path: {}",
-            path_str
+        Err(e) => Err(Error::from(format!(
+            "Invalid `before.json` in path `{}`: {}",
+            path_str, e
         ))),
     }
 }
@@ -117,7 +127,11 @@ impl BeforeController {
         let before_json = load_before(before_str);
         match before_json {
             Ok(before_json) => before_json.spawn(),
-            Err(_not_found) => Ok(None),
+            Err(Error(ErrorKind::Common(tremor_common::Error::FileOpen(_, _)), _)) => {
+                // no before json found, all good
+                Ok(None)
+            }
+            Err(e) => Err(e),
         }
     }
 

@@ -103,7 +103,7 @@ pub fn load_event_file(name: &str) -> crate::errors::Result<Vec<Value<'static>>>
     }
     let mut json = Vec::new();
     for bytes in in_bytes {
-        json.push(tremor_value::to_value(bytes)?.into_static())
+        json.push(tremor_value::parse_to_value(bytes)?.into_static())
     }
     Ok(json)
 }

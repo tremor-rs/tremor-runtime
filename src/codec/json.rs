@@ -59,9 +59,13 @@ impl Codec for JSON {
             let new_len = max(self.string_buffer.capacity(), data.len()) * 2;
             self.string_buffer.reserve(new_len);
         }
-        tremor_value::to_value_with_buffers(data, &mut self.input_buffer, &mut self.string_buffer)
-            .map(Some)
-            .map_err(|e| e.into())
+        tremor_value::parse_to_value_with_buffers(
+            data,
+            &mut self.input_buffer,
+            &mut self.string_buffer,
+        )
+        .map(Some)
+        .map_err(|e| e.into())
     }
     fn encode(&self, data: &Value) -> Result<Vec<u8>> {
         let mut v = Vec::with_capacity(1024);
