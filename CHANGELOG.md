@@ -2,6 +2,10 @@
 
 ## Latest
 
+### Breaking Changes
+
+* elastic sink config value `endpoints` renamed to `nodes` [#715](https://github.com/tremor-rs/tremor-runtime/pull/715)
+
 ### New features
 
 * Default to thin-lto for all builds (prior this was only done in docker)
@@ -9,6 +13,7 @@
 * Update rust to 1.49.0
 * Build deb packages
 * Statically link openssl
+* elastic sink now supports linked transports [#715](https://github.com/tremor-rs/tremor-runtime/pull/715)
 
 ## 0.9.4
 
