@@ -16,7 +16,9 @@ use crate::metrics::RampReporter;
 use crate::pipeline;
 use crate::repository::ServantId;
 use crate::source::prelude::*;
-use crate::source::{blaster, crononome, file, kafka, metronome, postgres, rest, tcp, udp, ws};
+use crate::source::{
+    blaster, crononome, file, kafka, metronome, postgres, rest, tcp, tnt, udp, ws,
+};
 use crate::url::TremorURL;
 use async_std::task::{self, JoinHandle};
 use serde_yaml::Value;
@@ -77,6 +79,7 @@ pub(crate) fn lookup(
         "tcp" => tcp::Tcp::from_config(id, config),
         "rest" => rest::Rest::from_config(id, config),
         "ws" => ws::Ws::from_config(id, config),
+        "tnt" => tnt::Tnt::from_config(id, config),
         _ => Err(format!("[onramp:{}] Onramp type {} not known", id, name).into()),
     }
 }

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::codec;
 use crate::errors::{Error, Result};
 use crate::metrics::RampReporter;
 use crate::offramp;
@@ -21,8 +20,10 @@ use crate::pipeline;
 use crate::registry::ServantId;
 use crate::system::{self, World};
 use crate::url::{ResourceType, TremorURL};
+use crate::{codec, network};
 use beef::Cow;
 use hashbrown::HashMap;
+use network::Network;
 use std::collections::HashSet;
 use tremor_pipeline::query;
 pub(crate) type Id = TremorURL;
@@ -70,6 +71,44 @@ pub trait Artefact: Clone {
     ) -> Result<bool>;
     fn artefact_id(u: &TremorURL) -> Result<Id>;
     fn servant_id(u: &TremorURL) -> Result<ServantId>;
+}
+
+#[async_trait]
+impl Artefact for Network {
+    type SpawnResult = network::Addr;
+    type LinkResult = bool;
+    type LinkLHS = String;
+    type LinkRHS = TremorURL;
+
+    async fn spawn(&self, _world: &World, _servant_id: ServantId) -> Result<Self::SpawnResult> {
+        Ok(network::Addr { id: 0 })
+    }
+
+    async fn link(
+        &self,
+        _system: &World,
+        _id: &TremorURL,
+        _mappings: HashMap<Self::LinkLHS, Self::LinkRHS>,
+    ) -> Result<Self::LinkResult> {
+        todo!()
+    }
+
+    async fn unlink(
+        &self,
+        _system: &World,
+        _id: &TremorURL,
+        _mappings: HashMap<Self::LinkLHS, Self::LinkRHS>,
+    ) -> Result<bool> {
+        todo!()
+    }
+
+    fn artefact_id(_u: &TremorURL) -> Result<Id> {
+        todo!()
+    }
+
+    fn servant_id(_u: &TremorURL) -> Result<ServantId> {
+        TremorURL::from_network_id("")
+    }
 }
 
 #[async_trait]

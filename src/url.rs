@@ -27,6 +27,8 @@ pub enum ResourceType {
     Offramp,
     /// This is a binding
     Binding,
+    /// This is a network
+    Network,
 }
 
 /// The scrope of the URL
@@ -40,6 +42,8 @@ pub enum Scope {
     Artefact,
     /// This URL identifies a type of artefact
     Type,
+    /// This URL identifies a connected network participant
+    NetworkParticipant,
 }
 
 /// module for standard port names
@@ -76,6 +80,7 @@ fn decode_type(t: &str) -> Result<ResourceType> {
         "onramp" => Ok(ResourceType::Onramp),
         "offramp" => Ok(ResourceType::Offramp),
         "binding" => Ok(ResourceType::Binding),
+        "network" => Ok(ResourceType::Network),
         other => Err(format!("Bad Resource type: {}", other).into()),
     }
 }
@@ -87,6 +92,7 @@ impl fmt::Display for ResourceType {
             Self::Onramp => write!(f, "onramp"),
             Self::Offramp => write!(f, "offramp"),
             Self::Binding => write!(f, "binding"),
+            Self::Network => write!(f, "network"),
         }
     }
 }
@@ -118,6 +124,15 @@ impl TremorURL {
         let instance_id = self.instance().unwrap_or("-");
         format!("{}-{}.{}", pfx, artefact_id, instance_id)
     }
+
+    /// Creates a URL from a given network id
+    ///
+    /// # Errors
+    ///  * if the id isn't a valid network id
+    pub fn from_network_id(id: &str) -> Result<Self> {
+        Self::parse(&format!("/network/{}", id))
+    }
+
     /// Creates an URL from a given onramp id
     ///
     /// # Errors
@@ -361,6 +376,14 @@ mod test {
         assert_eq!(Some("main"), url.artefact());
         assert_eq!(Some("01"), url.instance());
         assert_eq!(Some(ports::IN.as_ref()), url.instance_port());
+        Ok(())
+    }
+
+    #[test]
+    fn network_url() -> Result<()> {
+        let url = TremorURL::from_network_id("tnt")?;
+        assert_eq!(Some(ResourceType::Network), url.resource_type());
+        assert_eq!(Some("tnt"), url.artefact());
         Ok(())
     }
 

@@ -46,6 +46,7 @@ pub mod functions;
 pub(crate) mod lifecycle;
 /// Runtime metrics helper
 pub mod metrics;
+pub(crate) mod network;
 pub(crate) mod offramp;
 pub(crate) mod onramp;
 pub(crate) mod permge;
