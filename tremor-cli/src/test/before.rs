@@ -16,6 +16,7 @@ use time::Instant;
 
 use crate::errors::{Error, ErrorKind, Result};
 use crate::{job, job::TargetProcess, util::slurp_string};
+use async_std::{future, task};
 use std::{
     collections::HashMap,
     fs,
@@ -71,7 +72,11 @@ impl Before {
                     }
                     if "http-ok" == k.as_str() {
                         for endpoint in v {
-                            success &= match async_std::task::block_on(surf::get(endpoint).send()) {
+                            let res = task::block_on(future::timeout(
+                                Duration::from_secs(self.until.min(5)),
+                                surf::get(endpoint).send(),
+                            ))?;
+                            success &= match res {
                                 Ok(res) => res.status().is_success(),
                                 Err(_) => false,
                             }

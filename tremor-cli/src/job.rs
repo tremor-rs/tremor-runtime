@@ -110,14 +110,22 @@ impl TargetProcess {
                 let (stdout_tx, stdout_rx) = mpsc::channel();
                 let (stderr_tx, stderr_rx) = mpsc::channel();
 
+                let cmd_name = cmd.to_string();
                 let stdout_thread = Some(thread::spawn(move || -> Result<()> {
                     // Redirect target process stdout
-                    readlines_until_eof(stdout, |resp| stdout_tx.send(resp).map_err(|e| e.into()))
+                    readlines_until_eof(stdout, |resp| {
+                        trace!("[{} OUT] {}", cmd_name, &resp);
+                        stdout_tx.send(resp).map_err(|e| e.into())
+                    })
                 }));
 
+                let cmd_name = cmd.to_string();
                 let stderr_thread = Some(thread::spawn(move || -> Result<()> {
                     // Redirect target process stderr
-                    readlines_until_eof(stderr, |resp| stderr_tx.send(resp).map_err(|e| e.into()))
+                    readlines_until_eof(stderr, |resp| {
+                        trace!("[{} ERR] {}", cmd_name, &resp);
+                        stderr_tx.send(resp).map_err(|e| e.into())
+                    })
                 }));
 
                 Ok(Self {

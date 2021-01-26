@@ -636,3 +636,60 @@ impl serde::ser::SerializeStructVariant for SerializeStructVariant {
         Ok(Value::from(object))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use serde_ext::Serialize;
+    #[derive(Serialize)]
+    enum Snot {
+        Struct { badger: String, snot: Option<u64> },
+        NotAStruct,
+        TupleStruct(Vec<u8>, usize),
+    }
+
+    #[test]
+    fn to_value_enum_variants() -> Result<()> {
+        let x = Snot::Struct {
+            badger: "snot".to_string(),
+            snot: Some(0),
+        };
+        let value = to_value(x)?;
+        if let Value::Object(map) = value {
+            if let Some(&Value::Object(inner)) = map.get("Struct".into()).as_ref() {
+                let snot = inner.get("snot".into());
+                assert_eq!(Some(&Value::Static(StaticNode::U64(0))), snot);
+                assert_eq!(
+                    Some(&Value::String("snot".into())),
+                    inner.get("badger".into())
+                );
+            } else {
+                assert!(false, "Struct not serialized with its name at teh toplevel");
+            }
+        } else {
+            assert!(false, "Struct not serialized to an object");
+        }
+
+        let not_a_struct = Snot::NotAStruct;
+        let nas_value = to_value(not_a_struct)?;
+        assert_eq!(Value::String("NotAStruct".into()), nas_value);
+
+        let tuple = Snot::TupleStruct(vec![1, 2, 3], 3);
+        let t_value = to_value(tuple)?;
+        if let Value::Object(map) = t_value {
+            if let Some(&Value::Array(values)) = map.get("TupleStruct".into()).as_ref() {
+                if let Some(&Value::Array(first_field)) = values.get(0).as_ref() {
+                    assert_eq!(Some(&Value::Static(StaticNode::I64(1))), first_field.get(0));
+                    assert_eq!(Some(&Value::Static(StaticNode::I64(2))), first_field.get(1));
+                    assert_eq!(Some(&Value::Static(StaticNode::I64(3))), first_field.get(2));
+                } else {
+                    assert!(false, "Vec<u8> not serialized as array");
+                }
+                assert_eq!(Some(&Value::Static(StaticNode::U64(3))), values.get(1));
+            }
+        }
+
+        Ok(())
+    }
+}

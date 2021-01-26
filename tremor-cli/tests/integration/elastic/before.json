@@ -5,7 +5,7 @@
         "run",
         "--name",
         "tremor-elasticsearch-integration-blabla-unique",
-        "-p9200:9200",
+        "-p127.0.0.1:9200:9200",
         "-p9300:9300",
         "-e",
         "discovery.type=single-node",
@@ -15,8 +15,8 @@
     ],
     "await": {
         "http-ok": [
-            "http://0.0.0.0:9200/"
+            "http://127.0.0.1:9200/"
         ]
     },
-    "max-await-secs": 20
+    "max-await-secs": 120
 }
