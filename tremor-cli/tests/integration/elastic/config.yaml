@@ -12,8 +12,8 @@ offramp:
     type: elastic
     linked: true
     config:
-      nodes: 
-        - "http://0.0.0.0:9200/"
+      endpoints: 
+        - "http://127.0.0.1:9200/"
   - id: errfile
     type: file
     codec: json

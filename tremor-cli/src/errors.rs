@@ -47,6 +47,7 @@ error_chain! {
         YAMLError(serde_yaml::Error) #[doc = "Error during yaml parsing"];
         JSONError(simd_json::Error) #[doc = "Error during json parsing"];
         Io(std::io::Error) #[doc = "Error during std::io"];
+        FutureTimeoutError(async_std::future::TimeoutError) #[doc = "Error waiting for futures to complete"];
         Globwalk(globwalk::GlobError) #[doc = "Glob walker error"];
         SendError(std::sync::mpsc::SendError<String>);
         AnyhowError(anyhow::Error);
