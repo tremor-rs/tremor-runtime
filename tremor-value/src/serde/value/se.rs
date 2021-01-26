@@ -111,13 +111,6 @@ impl serde::Serializer for Serializer {
         Ok(Value::Static(StaticNode::I64(value)))
     }
 
-    #[cfg(feature = "arbitrary_precision")]
-    serde_if_integer128! {
-        fn serialize_i128(self, value: i128) -> Result<Value<'static>> {
-            Ok(Value::Number(value.into()))
-        }
-    }
-
     #[inline]
     fn serialize_u8(self, value: u8) -> Result<Value<'static>> {
         self.serialize_u64(u64::from(value))
@@ -137,13 +130,6 @@ impl serde::Serializer for Serializer {
     #[allow(clippy::cast_possible_wrap)]
     fn serialize_u64(self, value: u64) -> Result<Value<'static>> {
         Ok(Value::Static(StaticNode::I64(value as i64)))
-    }
-
-    #[cfg(feature = "arbitrary_precision")]
-    serde_if_integer128! {
-        fn serialize_u128(self, value: u128) -> Result<Value<'static>> {
-            Ok(Value::Number(value.into()))
-        }
     }
 
     #[inline]
@@ -394,10 +380,6 @@ impl serde::ser::SerializeMap for SerializeMap {
                 *next_key = Some(stry!(key.serialize(MapKeySerializer {})));
                 Ok(())
             }
-            #[cfg(feature = "arbitrary_precision")]
-            Self::Number { .. } => unreachable!(),
-            #[cfg(feature = "raw_value")]
-            Self::RawValue { .. } => unreachable!(),
         }
     }
 
@@ -411,26 +393,17 @@ impl serde::ser::SerializeMap for SerializeMap {
                 ref mut next_key,
             } => {
                 let key = next_key.take();
-                // Panic because this indicates a bug in the program rather than an
-                // expected failure.
+                // ALLOW: Panic because this indicates a bug in the program rather than an expected failure.
                 let key = key.expect("serialize_value called before serialize_key");
                 map.insert(key.into(), stry!(to_value(&value)));
                 Ok(())
             }
-            #[cfg(feature = "arbitrary_precision")]
-            Self::Number { .. } => unreachable!(),
-            #[cfg(feature = "raw_value")]
-            Self::RawValue { .. } => unreachable!(),
         }
     }
 
     fn end(self) -> Result<Value<'static>> {
         match self {
             Self::Map { map, .. } => Ok(Value::from(map)),
-            #[cfg(feature = "arbitrary_precision")]
-            Self::Number { .. } => unreachable!(),
-            #[cfg(feature = "raw_value")]
-            Self::RawValue { .. } => unreachable!(),
         }
     }
 }
@@ -633,34 +606,12 @@ impl serde::ser::SerializeStruct for SerializeMap {
                 stry!(serde::ser::SerializeMap::serialize_key(self, key));
                 serde::ser::SerializeMap::serialize_value(self, value)
             }
-            #[cfg(feature = "arbitrary_precision")]
-            Self::Number { ref mut out_value } => {
-                if key == ::number::TOKEN {
-                    *out_value = Some(value.serialize(NumberValueEmitter)?);
-                    Ok(())
-                } else {
-                    Err(invalid_number())
-                }
-            }
-            #[cfg(feature = "raw_value")]
-            Self::RawValue { ref mut out_value } => {
-                if key == ::raw::TOKEN {
-                    *out_value = Some(value.serialize(RawValueEmitter)?);
-                    Ok(())
-                } else {
-                    Err(invalid_raw_value())
-                }
-            }
         }
     }
 
     fn end(self) -> Result<Value<'static>> {
         match self {
             Self::Map { .. } => serde::ser::SerializeMap::end(self),
-            #[cfg(feature = "arbitrary_precision")]
-            Self::Number { out_value, .. } => Ok(out_value.expect("number value was not emitted")),
-            #[cfg(feature = "raw_value")]
-            Self::RawValue { out_value, .. } => Ok(out_value.expect("raw value was not emitted")),
         }
     }
 }

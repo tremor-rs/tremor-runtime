@@ -18,12 +18,12 @@ offramp:
     type: file
     codec: json
     config:
-      file: "err.json"
+      file: "err.log"
   - id: okfile
     type: file
     codec: json
     config:
-      file: "ok.json"
+      file: "ok.log"
 
 
 binding:

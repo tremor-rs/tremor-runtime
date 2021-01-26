@@ -2,10 +2,6 @@
 
 ## Latest
 
-### Breaking Changes
-
-* elastic sink config value `endpoints` renamed to `nodes` [#715](https://github.com/tremor-rs/tremor-runtime/pull/715)
-
 ### New features
 
 * Default to thin-lto for all builds (prior this was only done in docker)

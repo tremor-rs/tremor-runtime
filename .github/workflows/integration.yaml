@@ -14,6 +14,11 @@ jobs:
           - ubuntu-latest
           #- windows-latest
           - macOS-latest
+        include:
+          - os: "macOS-latest"
+            exclude_tests: "--excludes docker"
+          - os: "ubuntu-latest"
+            exclude_tests: ""
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v1
@@ -27,13 +32,13 @@ jobs:
       - name: Build test runner
         run: cargo build -p tremor-cli
       - name: Run Integration Tests
-        run: TREMOR_PATH="$GITHUB_WORKSPACE/tremor-script/lib" cargo run -p tremor-cli -- test integration tremor-cli/tests
+        run: TREMOR_PATH="$GITHUB_WORKSPACE/tremor-script/lib" cargo run -p tremor-cli -- test integration tremor-cli/tests ${{ matrix.exclude_tests }}
       - name: Run API Tests
-        run: TREMOR_PATH="$GITHUB_WORKSPACE/tremor-script/lib" cargo run -p tremor-cli -- test api tremor-cli/tests
+        run: TREMOR_PATH="$GITHUB_WORKSPACE/tremor-script/lib" cargo run -p tremor-cli -- test api tremor-cli/tests ${{ matrix.exclude_tests }}
       - name: Run Unit Tests
-        run: TREMOR_PATH="$GITHUB_WORKSPACE/tremor-script/lib" cargo run -p tremor-cli -- test unit tremor-cli/tests
+        run: TREMOR_PATH="$GITHUB_WORKSPACE/tremor-script/lib" cargo run -p tremor-cli -- test unit tremor-cli/tests ${{ matrix.exclude_tests }}
       - name: Run Command Tests
-        run: TREMOR_PATH="$GITHUB_WORKSPACE/tremor-script/lib" cargo run -p tremor-cli -- test command tremor-cli/tests
+        run: TREMOR_PATH="$GITHUB_WORKSPACE/tremor-script/lib" cargo run -p tremor-cli -- test command tremor-cli/tests ${{ matrix.exclude_tests }}
       - name: Upload error logs
         uses: actions/upload-artifact@v2
         if: failure()

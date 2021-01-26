@@ -1,7 +1,7 @@
 status: 0
 name: elastic
 asserts:
-  - source: err.json
+  - source: err.log
     equals_file: expected_err.json
-  - source: ok.json
+  - source: ok.log
     equals_file: expected_ok.json
