@@ -32,6 +32,7 @@ use slog::{o, Drain};
 use tremor_common::asy::file;
 use tremor_common::time::nanotime;
 
+pub(crate) use crate::network;
 pub(crate) use crate::offramp;
 pub(crate) use crate::onramp;
 pub(crate) use crate::pipeline;
@@ -83,9 +84,11 @@ pub(crate) struct Manager {
     pub offramp: offramp::Sender,
     pub onramp: onramp::Sender,
     pub pipeline: pipeline::Sender,
+    pub network: network::NetworkSender,
     pub offramp_h: JoinHandle<Result<()>>,
     pub onramp_h: JoinHandle<Result<()>>,
     pub pipeline_h: JoinHandle<Result<()>>,
+    pub network_h: JoinHandle<Result<()>>,
     pub qsize: usize,
 }
 
@@ -113,6 +116,8 @@ impl Manager {
                         self.pipeline.send(pipeline::ManagerMsg::Stop).await?;
                         info!("Stopping onramps...");
                         self.onramp.send(onramp::ManagerMsg::Stop).await?;
+                        info!("Stopping network...");
+                        self.network.send(network::ManagerMsg::Stop).await?;
                         break;
                     }
                 }
@@ -672,13 +677,19 @@ impl World {
         let (offramp_h, offramp) = offramp::Manager::new(qsize).start();
         let (pipeline_h, pipeline) = pipeline::Manager::new(qsize).start();
 
+        // ALLOW: Cloning msg senders for network manager
+        let (network_h, network) =
+            network::Manager::new(onramp.clone(), offramp.clone(), pipeline.clone(), qsize).start();
+
         let (system_h, system) = Manager {
             offramp,
             onramp,
             pipeline,
+            network,
             offramp_h,
             onramp_h,
             pipeline_h,
+            network_h,
             qsize,
         }
         .start();

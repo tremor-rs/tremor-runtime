@@ -44,6 +44,7 @@ pub(crate) mod postgres;
 pub(crate) mod prelude;
 pub(crate) mod rest;
 pub(crate) mod tcp;
+pub(crate) mod tnt;
 pub(crate) mod udp;
 pub(crate) mod ws;
 
@@ -160,7 +161,7 @@ where
     T: Source,
 {
     source_id: TremorURL,
-    source: T,
+    pub(crate) source: T,
     rx: Receiver<onramp::Msg>,
     tx: Sender<onramp::Msg>,
     pp_template: Vec<String>,
@@ -176,6 +177,7 @@ where
     is_transactional: bool,
     /// Unique Id for the source
     uid: u64,
+    //    is_stopping: bool,
 }
 
 impl<T> SourceManager<T>
@@ -449,7 +451,10 @@ where
         error
     }
 
-    async fn new(mut source: T, config: OnrampConfig<'_>) -> Result<(Self, Sender<onramp::Msg>)> {
+    pub async fn new(
+        mut source: T,
+        config: OnrampConfig<'_>,
+    ) -> Result<(Self, Sender<onramp::Msg>)> {
         // We use a unbounded channel for counterflow, while an unbounded channel seems dangerous
         // there is soundness to this.
         // The unbounded channel ensures that on counterflow we never have to block, or in other
@@ -510,100 +515,104 @@ where
         Ok(tx)
     }
 
-    async fn run(mut self) -> Result<()> {
+    pub async fn run(mut self) -> Result<()> {
         loop {
             if self.handle_pipelines().await? {
                 return Ok(());
             }
 
-            let pipelines_out_empty = self.pipelines_out.is_empty();
+            // let pipelines_out_empty = self.pipelines_out.is_empty();
 
             // TODO: add a flag to the onramp to wait for the error pipelines to be populated as well
             //       lets call it `wait_for_error_pipelines` (horrible name)
-            if !self.triggered && !pipelines_out_empty {
-                match self.source.pull_event(self.id).await {
-                    Ok(SourceReply::StartStream(id)) => {
-                        self.preprocessors
-                            .insert(id, make_preprocessors(&self.pp_template)?);
-                    }
-                    Ok(SourceReply::EndStream(id)) => {
-                        self.preprocessors.remove(&id);
-                    }
-                    Ok(SourceReply::Structured { origin_uri, data }) => {
-                        let ingest_ns = nanotime();
 
-                        self.transmit_event(data, ingest_ns, origin_uri, OUT).await;
+            // FIXME elided to enable addition of network transport layer, but
+            // needs reconsideration and should be re-asserted before any release
+            //
+            // if !self.triggered && !pipelines_out_empty {
+
+            match self.source.pull_event(self.id).await {
+                Ok(SourceReply::StartStream(id)) => {
+                    self.preprocessors
+                        .insert(id, make_preprocessors(&self.pp_template)?);
+                }
+                Ok(SourceReply::EndStream(id)) => {
+                    self.preprocessors.remove(&id);
+                }
+                Ok(SourceReply::Structured { origin_uri, data }) => {
+                    let ingest_ns = nanotime();
+
+                    self.transmit_event(data, ingest_ns, origin_uri, OUT).await;
+                }
+                Ok(SourceReply::Data {
+                    mut origin_uri,
+                    data,
+                    meta,
+                    codec_override,
+                    stream,
+                }) => {
+                    origin_uri.maybe_set_uid(self.uid);
+                    let mut ingest_ns = nanotime();
+                    let mut error = false;
+                    let original_id = self.id;
+                    let results = self
+                        .make_event_data(
+                            stream,
+                            &mut ingest_ns,
+                            codec_override,
+                            data,
+                            meta.map(StaticValue),
+                        )
+                        .await;
+                    if results.is_empty() {
+                        self.source.on_empty_event(original_id, stream).await?;
                     }
-                    Ok(SourceReply::Data {
-                        mut origin_uri,
-                        data,
-                        meta,
-                        codec_override,
-                        stream,
-                    }) => {
-                        origin_uri.maybe_set_uid(self.uid);
-                        let mut ingest_ns = nanotime();
-                        let mut error = false;
-                        let original_id = self.id;
-                        let results = self
-                            .make_event_data(
-                                stream,
-                                &mut ingest_ns,
-                                codec_override,
-                                data,
-                                meta.map(StaticValue),
-                            )
+
+                    for result in results {
+                        let (port, data) = match result {
+                            Ok(d) => (OUT, d),
+                            Err(e) => {
+                                error!(
+                                    "[Source::{}] Error decoding event data: {}",
+                                    self.source_id, e
+                                );
+                                let mut error_meta = Object::with_capacity(1);
+                                error_meta.insert_nocheck("error".into(), e.to_string().into());
+
+                                let mut error_data = Object::with_capacity(3);
+                                error_data.insert_nocheck("error".into(), e.to_string().into());
+                                error_data.insert_nocheck("event_id".into(), original_id.into());
+                                error_data.insert_nocheck(
+                                    "source_id".into(),
+                                    self.source_id.to_string().into(),
+                                );
+                                (
+                                    ERR,
+                                    (Value::from(error_data), Value::from(error_meta)).into(),
+                                )
+                            }
+                        };
+                        error |= self
+                            .transmit_event(data, ingest_ns, origin_uri.clone(), port)
                             .await;
-                        if results.is_empty() {
-                            self.source.on_empty_event(original_id, stream).await?;
-                        }
-
-                        for result in results {
-                            let (port, data) = match result {
-                                Ok(d) => (OUT, d),
-                                Err(e) => {
-                                    error!(
-                                        "[Source::{}] Error decoding event data: {}",
-                                        self.source_id, e
-                                    );
-                                    let mut error_meta = Object::with_capacity(1);
-                                    error_meta.insert_nocheck("error".into(), e.to_string().into());
-
-                                    let mut error_data = Object::with_capacity(3);
-                                    error_data.insert_nocheck("error".into(), e.to_string().into());
-                                    error_data
-                                        .insert_nocheck("event_id".into(), original_id.into());
-                                    error_data.insert_nocheck(
-                                        "source_id".into(),
-                                        self.source_id.to_string().into(),
-                                    );
-                                    (
-                                        ERR,
-                                        (Value::from(error_data), Value::from(error_meta)).into(),
-                                    )
-                                }
-                            };
-                            error |= self
-                                .transmit_event(data, ingest_ns, origin_uri.clone(), port)
-                                .await;
-                        }
-                        // We ONLY fail on transmit errors as preprocessor errors might be
-                        // problematic
-                        if error {
-                            self.source.fail(original_id);
-                        }
                     }
-                    Ok(SourceReply::StateChange(SourceState::Disconnected)) => return Ok(()),
-                    Ok(SourceReply::StateChange(SourceState::Connected)) => (),
-                    Ok(SourceReply::Empty(sleep_ms)) => {
-                        task::sleep(Duration::from_millis(sleep_ms)).await
-                    }
-                    Err(e) => {
-                        warn!("[Source::{}] Error: {}", self.source_id, e);
-                        self.metrics_reporter.increment_err();
+                    // We ONLY fail on transmit errors as preprocessor errors might be
+                    // problematic
+                    if error {
+                        self.source.fail(original_id);
                     }
                 }
+                Ok(SourceReply::StateChange(SourceState::Disconnected)) => return Ok(()),
+                Ok(SourceReply::StateChange(SourceState::Connected)) => (),
+                Ok(SourceReply::Empty(sleep_ms)) => {
+                    task::sleep(Duration::from_millis(sleep_ms)).await
+                }
+                Err(e) => {
+                    warn!("[Source::{}] Error: {}", self.source_id, e);
+                    self.metrics_reporter.increment_err();
+                }
             }
+            // }
         }
     }
 }

@@ -32,6 +32,7 @@ pub(crate) mod rest;
 pub(crate) mod stderr;
 pub(crate) mod stdout;
 pub(crate) mod tcp;
+pub(crate) mod tnt;
 pub(crate) mod udp;
 pub(crate) mod ws;
 
