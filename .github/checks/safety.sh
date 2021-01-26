@@ -140,7 +140,7 @@ while getopts hauiprebldxcft opt; do
             do
                 if sed -e '/mod test.*/,$d' -e '/ALLOW: /{N;d;}' "$file" | grep 'expect(' > /dev/null
                 then
-                    echo "##[error] expect found in $file try hygenic errors, this panics!"
+                    echo "##[error] expect found in $file try hygienic errors, this panics!"
                     count=$((count + 1))
                 fi
             done

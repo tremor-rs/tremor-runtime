@@ -51,7 +51,7 @@ use tremor_script::Object;
 #[derive(Debug, Deserialize)]
 pub struct Config {
     /// list of endpoint urls
-    pub nodes: Vec<String>,
+    pub endpoints: Vec<String>,
     /// maximum number of paralel in flight batches (default: 4)
     #[serde(default = "concurrency")]
     pub concurrency: usize,
@@ -78,7 +78,7 @@ impl offramp::Impl for Elastic {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
             let client = SyncClientBuilder::new()
-                .static_nodes(config.nodes.into_iter())
+                .static_nodes(config.endpoints.into_iter())
                 .build()?;
 
             let queue = AsyncSink::new(config.concurrency);
@@ -112,31 +112,36 @@ fn build_source(id: &EventId, origin_uri: Option<&EventOriginUri>) -> Value<'sta
     Value::from(source)
 }
 
-/**
-Format:
-
-Value:
-{
-    "source": {
-        "`event_id`": ...,
-        "origin": "..."
-    },
-    "payload": ...,
-    "success": false,
-    "error": {
-        <es error struct>
-    }
-}
-
-Meta:
-{
-    "elastic": {
-        "id": ...,
-        "type": ...,
-        "index": ...
-    }
-}
-*/
+///
+/// Error Event Payload Format:
+///
+/// ```json
+/// {
+///    "source": {
+///        "event_id": "...",
+///        "origin": "..."
+///    },
+///    "payload": {
+///        <original event payload>    
+///    },
+///    "success": false,
+///    "error": {
+///        <es error struct>
+///    }
+/// }
+/// ```
+///
+/// Error Event Meta format:
+///
+/// ```json
+/// {
+///    "elastic": {
+///        "id": "...",
+///        "type": "...",
+///        "index": "..."
+///    }
+/// }
+/// ```
 fn build_bulk_error_data(
     item: &ErrorItem<String, String, String>,
     id: &EventId,
@@ -154,31 +159,40 @@ fn build_bulk_error_data(
     let source = build_source(id, origin_uri);
     value.insert("source".into(), source);
     value.insert("payload".into(), payload);
-    // TODO: how to convert serde Value to our Value?
     value.insert("error".into(), tremor_value::to_value(item.err())?);
     value.insert("success".into(), Value::from(false));
     Ok((value, meta).into())
 }
 
-/// Format:
+///
+/// Success Event Payload Format:
+///
+/// ```json
 /// {
 ///    "source": {
-///        "`event_id`": ...,
-///        "origin": ...
+///        "event_id": "...",
+///        "origin": "..."
 ///    },
-///    "payload": ...,
+///    "payload": {
+///        <original event payload>    
+///    },
 ///    "success": true
 /// }
+/// ```
 ///
-/// Meta:
+/// Success Event Meta Format:
+///
+/// ```json
 /// {
 ///    "elastic": {
-///        "id": ...,
-///        "type": ...,
-///        "index": ...,
-///        "version": ...
+///        "id": "...",
+///        "type": "...",
+///        "index": "...",
+///        "version": "..."
 ///    }
 /// }
+/// ```
+///
 fn build_bulk_success_data(
     item: &OkItem<String, String, String>,
     id: &EventId,
@@ -191,7 +205,7 @@ fn build_bulk_success_data(
     es_meta.insert("index".into(), Value::from(item.index().to_string()));
     es_meta.insert("doc_type".into(), Value::from(item.ty().to_string()));
     es_meta.insert(
-        "_version".into(),
+        "version".into(),
         item.version().map_or_else(Value::null, Value::from),
     );
     meta.insert("elastic".into(), Value::from(es_meta));
@@ -336,7 +350,6 @@ impl Elastic {
                 Err(e) => {
                     // request failed
                     // TODO update error metric here?
-                    println!("ES request failed: {:?}", e);
                     if is_linked {
                         // send error event via ERR port
                         let mut error_data = Object::with_capacity(1);
@@ -464,17 +477,16 @@ async fn response_task(
                     origin_uri: Some(origin_uri.clone()),
                     ..Event::default()
                 };
-                eprintln!("Sending response {:?} via {}", &response_event, port);
                 if let Err(e) = insight_tx
                     .send(sink::Reply::Response(port, response_event))
                     .await
                 {
-                    eprintln!("Error sending insight {}", e);
                     return Err(e.into());
                 }
             }
             Err(e) => {
-                eprintln!("Error receiving response data {}", e);
+                error!("[Sink::elastic] Response task channel closed: {}", e);
+                return Err(e.into());
             }
         }
     }
