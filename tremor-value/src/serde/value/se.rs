@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::{Error, Object, Result, Value};
+use crate::{value::Bytes, Error, Object, Result, Value};
 use serde_ext::ser::{
     self, Serialize, SerializeMap as SerializeMapTrait, SerializeSeq as SerializeSeqTrait,
 };
@@ -129,7 +129,7 @@ impl serde::Serializer for Serializer {
     #[inline]
     #[allow(clippy::cast_possible_wrap)]
     fn serialize_u64(self, value: u64) -> Result<Value<'static>> {
-        Ok(Value::Static(StaticNode::I64(value as i64)))
+        Ok(Value::Static(StaticNode::U64(value)))
     }
 
     #[inline]
@@ -155,7 +155,7 @@ impl serde::Serializer for Serializer {
     }
 
     fn serialize_bytes(self, value: &[u8]) -> Result<Value<'static>> {
-        Ok(value.iter().cloned().collect())
+        Ok(Value::Bytes(Bytes::owned(value.to_vec())))
     }
 
     #[inline]
@@ -692,4 +692,270 @@ mod tests {
 
         Ok(())
     }
+    macro_rules! assert_to_value {
+        ($expected:pat, $arg:expr) => {
+            let res = to_value($arg)?;
+            match res {
+                $expected => {}
+                _ => fail!(
+                    "{:?} did serialized to {:?}, instead of expected {:?}",
+                    $arg,
+                    res,
+                    stringify!($expected)
+                ),
+            }
+        };
+    }
+
+    macro_rules! fail {
+        ($msg:expr) => (
+            assert!(false, $msg);
+        );
+        ($msg:expr, $($args:expr),+) => (
+            assert!(false, format!($msg, $($args),*));
+        )
+    }
+
+    #[test]
+    fn serialize_numbers() -> Result<()> {
+        // signed
+        assert_to_value!(Value::Static(StaticNode::I64(1)), 1_i8);
+        assert_to_value!(Value::Static(StaticNode::I64(127)), i8::max_value());
+        assert_to_value!(Value::Static(StaticNode::I64(-128)), i8::min_value());
+
+        assert_to_value!(Value::Static(StaticNode::I64(1)), 1_i16);
+        assert_to_value!(Value::Static(StaticNode::I64(32767)), i16::max_value());
+        assert_to_value!(Value::Static(StaticNode::I64(-32768)), i16::min_value());
+        assert_to_value!(Value::Static(StaticNode::I64(1)), 1_i32);
+        assert_to_value!(Value::Static(StaticNode::I64(2147483647)), i32::max_value());
+        assert_to_value!(
+            Value::Static(StaticNode::I64(-2147483648)),
+            i32::min_value()
+        );
+        assert_to_value!(Value::Static(StaticNode::I64(1)), 1_i64);
+        assert_to_value!(
+            Value::Static(StaticNode::I64(9223372036854775807)),
+            i64::max_value()
+        );
+        assert_to_value!(
+            Value::Static(StaticNode::I64(-9223372036854775808)),
+            i64::min_value()
+        );
+
+        // unsigned
+        assert_to_value!(Value::Static(StaticNode::U64(1)), 1_u8);
+        assert_to_value!(Value::Static(StaticNode::U64(255)), u8::max_value());
+        assert_to_value!(Value::Static(StaticNode::U64(0)), u8::min_value());
+
+        assert_to_value!(Value::Static(StaticNode::U64(1)), 1_u16);
+        assert_to_value!(Value::Static(StaticNode::U64(65535)), u16::max_value());
+        assert_to_value!(Value::Static(StaticNode::U64(0)), u16::min_value());
+
+        assert_to_value!(Value::Static(StaticNode::U64(1)), 1_u32);
+        assert_to_value!(Value::Static(StaticNode::U64(4294967295)), u32::max_value());
+        assert_to_value!(Value::Static(StaticNode::U64(0)), u32::min_value());
+
+        assert_to_value!(Value::Static(StaticNode::U64(1)), 1_u64);
+        assert_to_value!(
+            Value::Static(StaticNode::U64(18446744073709551615)),
+            u64::max_value()
+        );
+        assert_to_value!(Value::Static(StaticNode::U64(0)), u64::min_value());
+
+        assert_eq!(Value::Static(StaticNode::Bool(true)), to_value(true)?);
+        assert_eq!(Value::Static(StaticNode::Bool(false)), to_value(false)?);
+
+        assert_eq!(Value::Static(StaticNode::F64(0.5)), to_value(0.5_f32)?);
+        assert_eq!(Value::Static(StaticNode::F64(0.5)), to_value(0.5_f64)?);
+
+        Ok(())
+    }
+
+    #[derive(Serialize, Clone)]
+    struct NestedStruct {
+        key: String,
+        number: Option<i8>,
+        tuple: (String, bool),
+    }
+
+    #[test]
+    fn serialize_option() -> Result<()> {
+        let mut x: Option<(NestedStruct, usize)> = None;
+        assert_eq!(Value::Static(StaticNode::Null), to_value(x)?);
+        x = Some((
+            NestedStruct {
+                key: "key".to_string(),
+                number: None,
+                tuple: ("".to_string(), false),
+            },
+            3,
+        ));
+        if let Value::Object(values) = to_value(x.clone())? {
+            let key = values.get("key").ok_or(Error::Serde(
+                "struct fields not serialized correctly".to_string(),
+            ))?;
+
+            if let Value::String(s) = key {
+                assert_eq!("key".to_string(), s.to_string());
+            } else {
+                fail!("string field serialized into: {}", key)
+            }
+            match values.get("number") {
+                Some(Value::Static(StaticNode::Null)) => {}
+                _ => fail!("None did not correctly serialize."),
+            }
+            match values.get("tuple") {
+                Some(Value::Array(array)) => {
+                    assert_eq!(Value::String("".into()), array.get(0).unwrap());
+                    assert_eq!(
+                        Value::Static(StaticNode::Bool(false)),
+                        array.get(1).unwrap()
+                    );
+                }
+                _ => fail!("Tuple in struct not correctly serialized"),
+            }
+        }
+
+        // assert it is the same without the option wrapped around it
+        if let Value::Object(values) = to_value(x.unwrap())? {
+            let key = values.get("key").ok_or(Error::Serde(
+                "struct fields not serialized correctly".to_string(),
+            ))?;
+
+            if let Value::String(s) = key {
+                assert_eq!("key".to_string(), s.to_string());
+            } else {
+                fail!("string field serialized into: {}", key)
+            }
+            match values.get("number") {
+                Some(Value::Static(StaticNode::Null)) => {}
+                _ => fail!("None did not correctly serialize."),
+            }
+            match values.get("tuple") {
+                Some(Value::Array(array)) => {
+                    assert_eq!(Value::String("".into()), array.get(0).unwrap());
+                    assert_eq!(
+                        Value::Static(StaticNode::Bool(false)),
+                        array.get(1).unwrap()
+                    );
+                }
+                _ => fail!("Tuple in struct not correctly serialized"),
+            }
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn serialize_tuple() -> Result<()> {
+        #[derive(Serialize)]
+        struct UnitStruct;
+
+        assert_eq!(Value::Static(StaticNode::Null), to_value(UnitStruct)?);
+        #[derive(Serialize)]
+        struct TupleStruct(UnitStruct, String);
+
+        let t = (UnitStruct, TupleStruct(UnitStruct, "ABC".to_string()));
+        match to_value(t)? {
+            Value::Array(values) => {
+                assert_eq!(2, values.len());
+                assert_eq!(Value::Static(StaticNode::Null), values.get(0).unwrap());
+                if let Value::Array(vec) = values.get(1).unwrap() {
+                    assert_eq!(Value::Static(StaticNode::Null), vec.get(0).unwrap());
+                    if let Value::String(s) = vec.get(1).unwrap() {
+                        assert_eq!("ABC".to_string(), s.to_string());
+                    }
+                } else {
+                    fail!(
+                        "TupleStruct not serialized correctly, but as {:?}",
+                        values.get(1).unwrap()
+                    )
+                }
+            }
+            x => fail!("tuple not serialized as array, but as {:?}", x),
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn serialize_map() -> Result<()> {
+        let mut map: std::collections::HashMap<String, Vec<f64>> =
+            std::collections::HashMap::with_capacity(2);
+        map.insert("k".to_string(), vec![1.0, 0.5, -23.123]);
+        map.insert("snot".to_string(), vec![]);
+
+        let value_map = to_value(map)?;
+        match value_map {
+            Value::Object(kvs) => match kvs.get("k").unwrap() {
+                Value::Array(arr) => {
+                    assert_eq!(3, arr.len());
+                    assert_eq!(Value::Static(StaticNode::F64(1.0)), arr.get(0).unwrap());
+                    assert_eq!(Value::Static(StaticNode::F64(0.5)), arr.get(1).unwrap());
+                    assert_eq!(Value::Static(StaticNode::F64(-23.123)), arr.get(2).unwrap());
+                }
+                _ => fail!(
+                    "Failed to serialize array in map, got {:?}",
+                    kvs.get("k").unwrap()
+                ),
+            },
+            _ => fail!("Failed to serialize map, got {:?}", value_map),
+        }
+        let empty: std::collections::HashMap<String, Vec<f64>> =
+            std::collections::HashMap::with_capacity(0);
+        if let Value::Object(kvs) = to_value(empty.clone())? {
+            assert_eq!(0, kvs.len());
+        } else {
+            fail!("Failed to serialize empty map. Got {:?}", to_value(empty)?)
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn serialize_seq() -> Result<()> {
+        let mut vec = Vec::with_capacity(2);
+        vec.push(Some("bla"));
+        vec.push(Some(""));
+        vec.push(None);
+        let v = to_value(vec)?;
+        match v {
+            Value::Array(elems) => {
+                assert_eq!(3, elems.len());
+                assert_eq!(Value::String("bla".into()), elems.get(0).unwrap());
+                assert_eq!(Value::String("".into()), elems.get(1).unwrap());
+                assert_eq!(Value::Static(StaticNode::Null), elems.get(2).unwrap());
+            }
+            _ => fail!("Vec not properly serialized"),
+        }
+        Ok(())
+    }
+
+    /*
+    not working until rust has specialization
+
+       #[test]
+       fn serialize_bytes() -> Result<()> {
+           let bytes = vec![1_u8, 1_u8, 1_u8];
+           if let Value::Bytes(serialized) = to_value(bytes.as_slice())? {
+               assert_eq!(bytes, serialized.to_owned());
+           } else {
+               assert!(
+                   false,
+                   "&[u8] not serialized as Bytes but as {:?}",
+                   to_value(bytes.as_slice())?
+               );
+           }
+
+           let some_bytes = Some(bytes.as_slice());
+           if let Value::Bytes(serialized) = to_value(&some_bytes)? {
+               assert_eq!(bytes, serialized.to_owned());
+           } else {
+               assert!(
+                   false,
+                   "Option<&[u8]> not serialized as Bytes but as {:?}",
+                   to_value(&some_bytes)?
+               );
+           }
+           Ok(())
+       }
+    */
 }
