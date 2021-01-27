@@ -102,6 +102,8 @@ fi
 export RUSTFLAGS="${RUSTFLAGS} ${CUSTOM_RUSTFLAGS[@]}"
 echo "RUSTFLAGS set to: ${RUSTFLAGS}"
 
+cross -V
+
 cross build -p tremor-cli "${BUILD_ARGS[@]}"
 
 TARGET_BIN="${ROOT_DIR}/target/${TARGET}/${BUILD_MODE}/${BIN_NAME}"

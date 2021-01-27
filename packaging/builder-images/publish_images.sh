@@ -14,7 +14,10 @@ set -o errexit
 # catch exit status for piped commands
 set -o pipefail
 
-RUST_TOOLCHAIN_FILE="../../rust-toolchain"
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+
+
+RUST_TOOLCHAIN_FILE="${SCRIPT_DIR}/../../rust-toolchain"
 RUST_VERSION=$(<"$RUST_TOOLCHAIN_FILE")
 
 IMAGES=(
@@ -28,4 +31,3 @@ IMAGES=(
 for image in "${IMAGES[@]}"; do
   docker push "tremorproject/${image}"
 done
-./publish_images

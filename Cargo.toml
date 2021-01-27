@@ -89,8 +89,8 @@ postgres-protocol = "0.6"
 tokio-postgres = "0.7"
 
 # kafka. cmake is the encouraged way to build this and also the one that works on windows/with musl.
-rdkafka = {version = "0.24", features = ["cmake-build", "libz"], default-features = false}
-rdkafka-sys = {version = "2.0.0", features = ["cmake-build", "libz"]}# tracking the version rdkafka depends on
+rdkafka = {version = "0.24", features = ["cmake-build", "libz-static"], default-features = false}
+rdkafka-sys = {version = "2.0.0", features = ["cmake-build", "libz-static"]}# tracking the version rdkafka depends on
 
 # crononome
 cron = "0.7.0"
@@ -100,7 +100,7 @@ grok = "1"
 
 # not used directly in tremor codebase, but present here so that we can turn
 # on features for these (see static-ssl feature here)
-#openssl = { version = "0.10" }
+openssl = { version = "0.10", features = ["vendored"] }
 
 # rest onramp
 tide = "0.15"
