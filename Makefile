@@ -27,7 +27,7 @@ RELEASE_TARGETS := \
 # packaging using debian image itself (might also need to have separate build for
 # archive packaging too).
 #RELEASE_FORMATS_x86_64-unknown-linux-gnu := archive,deb,rpm
-RELEASE_FORMATS_x86_64-unknown-linux-gnu := archive,rpm
+RELEASE_FORMATS_x86_64-unknown-linux-gnu := archive,rpm,deb
 RELEASE_FORMATS_x86_64-alpine-linux-musl := archive
 RELEASE_FORMATS_x86_64-unknown-linux-musl := archive
 
