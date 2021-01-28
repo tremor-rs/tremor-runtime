@@ -100,7 +100,7 @@ grok = "1"
 
 # not used directly in tremor codebase, but present here so that we can turn
 # on features for these (see static-ssl feature here)
-openssl = { version = "0.10", features = ["vendored"] }
+openssl = {version = "0.10", features = ["vendored"]}
 
 # rest onramp
 tide = "0.15"
@@ -119,8 +119,11 @@ regex = "1"
 [features]
 default = []
 
-# arm suopport
+# support for 128bit numbers in tremor-value
+128bit = ["tremor-value/128bit"]
 bert = ["tremor-pipeline/bert"]
+
+# arm support
 neon = ["simd-json/neon"]
 
 [patch.crates-io]

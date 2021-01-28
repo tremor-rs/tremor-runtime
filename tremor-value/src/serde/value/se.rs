@@ -762,11 +762,13 @@ mod tests {
         );
         assert_to_value!(Value::Static(StaticNode::U64(0)), u64::min_value());
 
-        assert_eq!(Value::Static(StaticNode::Bool(true)), to_value(true)?);
-        assert_eq!(Value::Static(StaticNode::Bool(false)), to_value(false)?);
+        assert_to_value!(Value::Static(StaticNode::Bool(true)), true);
+        assert_to_value!(Value::Static(StaticNode::Bool(false)), false);
 
         assert_eq!(Value::Static(StaticNode::F64(0.5)), to_value(0.5_f32)?);
         assert_eq!(Value::Static(StaticNode::F64(0.5)), to_value(0.5_f64)?);
+
+        assert_eq!(Value::String("a".into()), to_value('a')?);
 
         Ok(())
     }
@@ -790,59 +792,99 @@ mod tests {
             },
             3,
         ));
-        if let Value::Object(values) = to_value(x.clone())? {
-            let key = values.get("key").ok_or(Error::Serde(
-                "struct fields not serialized correctly".to_string(),
-            ))?;
+        let res = to_value(x.clone())?;
+        if let Value::Array(elems) = &res {
+            if let Value::Object(values) = elems.get(0).unwrap() {
+                let key = values.get("key").ok_or(Error::Serde(
+                    "struct fields not serialized correctly".to_string(),
+                ))?;
 
-            if let Value::String(s) = key {
-                assert_eq!("key".to_string(), s.to_string());
-            } else {
-                fail!("string field serialized into: {}", key)
-            }
-            match values.get("number") {
-                Some(Value::Static(StaticNode::Null)) => {}
-                _ => fail!("None did not correctly serialize."),
-            }
-            match values.get("tuple") {
-                Some(Value::Array(array)) => {
-                    assert_eq!(Value::String("".into()), array.get(0).unwrap());
-                    assert_eq!(
-                        Value::Static(StaticNode::Bool(false)),
-                        array.get(1).unwrap()
-                    );
+                if let Value::String(s) = key {
+                    assert_eq!("key".to_string(), s.to_string());
+                } else {
+                    fail!("string field serialized into: {}", key)
                 }
-                _ => fail!("Tuple in struct not correctly serialized"),
+                match values.get("number") {
+                    Some(Value::Static(StaticNode::Null)) => {}
+                    _ => fail!("None did not correctly serialize."),
+                }
+                match values.get("tuple") {
+                    Some(Value::Array(array)) => {
+                        assert_eq!(Value::String("".into()), array.get(0).unwrap());
+                        assert_eq!(
+                            Value::Static(StaticNode::Bool(false)),
+                            array.get(1).unwrap()
+                        );
+                    }
+                    _ => fail!("Tuple in struct not correctly serialized"),
+                }
+            } else {
+                fail!(
+                    "struct in tuple in option not serialized correctly, got {:?}",
+                    res
+                );
             }
+            assert_eq!(Value::Static(StaticNode::U64(3)), elems.get(1).unwrap())
+        } else {
+            fail!(
+                "tuple in option not serialized correctly to array, git {:?}",
+                res
+            );
         }
 
         // assert it is the same without the option wrapped around it
-        if let Value::Object(values) = to_value(x.unwrap())? {
-            let key = values.get("key").ok_or(Error::Serde(
-                "struct fields not serialized correctly".to_string(),
-            ))?;
+        let res = to_value(x.unwrap())?;
+        if let Value::Array(elems) = &res {
+            if let Value::Object(values) = elems.get(0).unwrap() {
+                let key = values.get("key").ok_or(Error::Serde(
+                    "struct fields not serialized correctly".to_string(),
+                ))?;
 
-            if let Value::String(s) = key {
-                assert_eq!("key".to_string(), s.to_string());
-            } else {
-                fail!("string field serialized into: {}", key)
-            }
-            match values.get("number") {
-                Some(Value::Static(StaticNode::Null)) => {}
-                _ => fail!("None did not correctly serialize."),
-            }
-            match values.get("tuple") {
-                Some(Value::Array(array)) => {
-                    assert_eq!(Value::String("".into()), array.get(0).unwrap());
-                    assert_eq!(
-                        Value::Static(StaticNode::Bool(false)),
-                        array.get(1).unwrap()
-                    );
+                if let Value::String(s) = key {
+                    assert_eq!("key".to_string(), s.to_string());
+                } else {
+                    fail!("string field serialized into: {}", key)
                 }
-                _ => fail!("Tuple in struct not correctly serialized"),
+                match values.get("number") {
+                    Some(Value::Static(StaticNode::Null)) => {}
+                    _ => fail!("None did not correctly serialize."),
+                }
+                match values.get("tuple") {
+                    Some(Value::Array(array)) => {
+                        assert_eq!(Value::String("".into()), array.get(0).unwrap());
+                        assert_eq!(
+                            Value::Static(StaticNode::Bool(false)),
+                            array.get(1).unwrap()
+                        );
+                    }
+                    _ => fail!("Tuple in struct not correctly serialized"),
+                }
+            } else {
+                fail!(
+                    "struct in tuple in option not serialized correctly, got {:?}",
+                    res
+                );
             }
+            assert_eq!(Value::Static(StaticNode::U64(3)), elems.get(1).unwrap())
+        } else {
+            fail!(
+                "tuple in option not serialized correctly to array, git {:?}",
+                res
+            );
         }
 
+        Ok(())
+    }
+
+    #[test]
+    fn serialize_unit_struct() -> Result<()> {
+        #[derive(Serialize)]
+        struct UnitStruct(u8);
+
+        assert_eq!(
+            Value::Static(StaticNode::U64(1)),
+            to_value(UnitStruct(1_u8))?
+        );
         Ok(())
     }
 
@@ -925,6 +967,17 @@ mod tests {
                 assert_eq!(Value::Static(StaticNode::Null), elems.get(2).unwrap());
             }
             _ => fail!("Vec not properly serialized"),
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn serialize_map_no_string_keys() -> Result<()> {
+        let mut map = std::collections::HashMap::with_capacity(2);
+        map.insert(1_u8, "foo");
+        match to_value(map) {
+            Err(e) => assert_eq!("Key must be a String.".to_string(), e.to_string()),
+            other => fail!("Did not fail for non-string map keys, got: {:?}", other),
         }
         Ok(())
     }
