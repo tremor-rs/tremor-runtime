@@ -40,12 +40,14 @@ impl Display for Error {
 
 impl std::error::Error for Error {}
 
+#[cfg(not(tarpaulin_include))] // this is a simple error
 impl serde_ext::de::Error for Error {
     fn custom<T: fmt::Display>(msg: T) -> Self {
         Error::Serde(msg.to_string())
     }
 }
 
+#[cfg(not(tarpaulin_include))] // this is a simple error
 impl serde_ext::ser::Error for Error {
     fn custom<T: fmt::Display>(msg: T) -> Self {
         Error::Serde(msg.to_string())
