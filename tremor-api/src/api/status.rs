@@ -17,17 +17,6 @@ use async_channel::bounded;
 use futures::StreamExt;
 use tremor_runtime::raft_node::{RaftNetworkMsg, RequestId, WsMessage};
 
-#[derive(Serialize, Deserialize)]
-pub struct Status {
-    role: &'static str,
-}
-
-impl Default for Status {
-    fn default() -> Self {
-        Self { role: "leader" }
-    }
-}
-
 pub async fn get(req: Request) -> Result<Response> {
     let raft = &req.state().world.raft;
 
