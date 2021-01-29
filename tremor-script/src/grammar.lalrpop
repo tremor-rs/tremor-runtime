@@ -691,6 +691,9 @@ StrLitElements: StrLitElements<'input> = {
     },
 
     <literal:StringPart> => StrLitElements(vec![literal], vec![]),
+    "\\}" => StrLitElements(vec!["\\}".into()], vec![]),
+    "\\{" => StrLitElements(vec!["\\{".into()], vec![]),
+
     "{" <expr:ExprImut> "}" => StrLitElements(vec!["{}".into()], vec![expr]),
 }
 
