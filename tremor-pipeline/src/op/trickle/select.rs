@@ -349,14 +349,15 @@ impl WindowTrait for TumblingWindowOnNumber {
 
         // If we're above count we emit and  set the new count to 1
         // ( we emit on the ) previous event
-        if self.count >= self.size {
-            self.count = count;
+        let new_count = self.count + count;
+        if new_count >= self.size {
+            self.count = new_count - self.size;
             Ok(WindowEvent {
                 open: true,
                 emit: true,
             })
         } else {
-            self.count += count;
+            self.count = new_count;
             Ok(WindowEvent {
                 open: false,
                 emit: false,
@@ -1068,7 +1069,7 @@ mod test {
         assert!(try_enqueue(&mut op, test_event(16))?.is_none());
         // This emits only the initial event since the rollup
         // will only be emitted once it gets the first event
-        // if the next window
+        // of the next window
         let (out, event) = try_enqueue(&mut op, test_event(30))?.expect("no event 2");
         assert_eq!("out", out);
         assert_eq!(*event.data.suffix().value(), 2);
@@ -1385,6 +1386,107 @@ mod test {
         let next = try_enqueue(&mut op, event)?;
 
         assert_eq!(None, next);
+        Ok(())
+    }
+
+    #[test]
+    fn tumbling_window_on_time_emit() -> Result<()> {
+        Ok(())
+    }
+
+    #[test]
+    fn tumbling_window_on_time_from_script_emit() -> Result<()> {
+        Ok(())
+    }
+
+    // get a stmt rental for a stupid script
+    fn stmt_rental() -> Result<StmtRentalWrapper> {
+        let file_name = "foo";
+        let reg = tremor_script::registry();
+        let aggr_reg = tremor_script::aggr_registry();
+        let module_path = tremor_script::path::load();
+        let cus = vec![];
+        let query = tremor_script::query::Query::parse(
+            &module_path,
+            &file_name,
+            "select event from in into out;",
+            cus,
+            &reg,
+            &aggr_reg,
+        )
+        .map_err(tremor_script::errors::CompilerError::error)?;
+
+        let stmt_rental = tremor_script::query::StmtRental::try_new(Arc::new(query.clone()), |q| {
+            q.suffix()
+                .stmts
+                .get(0)
+                .cloned()
+                .ok_or_else(|| Error::from("Invalid query"))
+        })
+        .map_err(|e| e.0)?;
+        let stmt = tremor_script::query::StmtRentalWrapper {
+            stmt: Arc::new(stmt_rental),
+        };
+        Ok(stmt)
+    }
+
+    #[test]
+    fn tumbling_window_on_number_emit() -> Result<()> {
+        let stmt = stmt_rental()?;
+        /*
+        // create a WindowDecl with a custom script
+        let reg = Registry::default();
+        let script = Script::parse(
+            ModulePath::load(),
+            "foo",
+            "event.count".to_string(),
+            &reg,
+        )?;
+        let mut params = halfbrown::HashMap::with_capacity(1);
+        params.insert("size".to_string(), Value::Static(StaticNode::U64(3)));
+        let window_decl = WindowDecl {
+            module: vec!["snot".to_string()],
+            mid: 1,
+            id: "my_window",
+            kind: ast::WindowKind::Tumbling,
+            params,
+            script: Some(script),
+        };
+        */
+        let mut window = TumblingWindowOnNumber::from_stmt(3, None, None, &stmt);
+        // do not emit yet
+        assert_eq!(
+            WindowEvent {
+                open: false,
+                emit: false
+            },
+            window.on_event(&test_event(0))?
+        );
+        // do not emit yet
+        assert_eq!(
+            WindowEvent {
+                open: false,
+                emit: false
+            },
+            window.on_event(&test_event(0))?
+        );
+        // emit and open on the third event
+        assert_eq!(
+            WindowEvent {
+                open: true,
+                emit: true
+            },
+            window.on_event(&test_event(0))?
+        );
+        // no emit here, next window
+        assert_eq!(
+            WindowEvent {
+                open: false,
+                emit: false
+            },
+            window.on_event(&test_event(0))?
+        );
+
         Ok(())
     }
 }

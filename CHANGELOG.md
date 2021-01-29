@@ -16,7 +16,10 @@
 * elastic sink now supports linked transports [#715](https://github.com/tremor-rs/tremor-runtime/pull/715)
 
 ### Fixes
+
 * rewrite string interpolation to fix [#726](https://github.com/tremor-rs/tremor-runtime/issues/726)
+* Emit tumbling windows based on `size` immediately when they are full.
+
 ## 0.9.4
 
 ### New features
