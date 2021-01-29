@@ -24,6 +24,7 @@ pub mod offramp;
 pub mod onramp;
 pub mod pipeline;
 pub mod prelude;
+pub mod status;
 pub mod version;
 
 pub type Request = tide::Request<State>;

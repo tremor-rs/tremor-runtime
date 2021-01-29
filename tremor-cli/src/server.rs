@@ -48,6 +48,8 @@ fn api_server(world: &World) -> Result<tide::Server<api::State>> {
 
     app.at("/version")
         .get(|r| handle_api_request(r, api::version::get));
+    app.at("/status")
+        .get(|r| handle_api_request(r, api::status::get));
     app.at("/binding")
         .get(|r| handle_api_request(r, api::binding::list_artefact))
         .post(|r| handle_api_request(r, api::binding::publish_artefact));

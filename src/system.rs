@@ -15,17 +15,19 @@
 use crate::config::{BindingVec, Config, MappingMap, OffRampVec, OnRampVec};
 use crate::errors::{Error, ErrorKind, Result};
 use crate::lifecycle::{ActivationState, ActivatorLifecycleFsm};
+use crate::raft_node::{start_raft, NodeId, RaftNetworkMsg};
 use crate::registry::{Registries, ServantId};
 use crate::repository::{
     Artefact, BindingArtefact, OfframpArtefact, OnrampArtefact, PipelineArtefact, Repositories,
 };
 use crate::url::ports::METRICS;
 use crate::url::TremorURL;
-use async_channel::bounded;
+use async_channel::{bounded, unbounded};
 use async_std::io::prelude::*;
 use async_std::path::Path;
 use async_std::task::{self, JoinHandle};
 use hashbrown::HashMap;
+use slog::{o, Drain};
 use tremor_common::asy::file;
 use tremor_common::time::nanotime;
 
@@ -124,6 +126,8 @@ impl Manager {
 /// Tremor runtime
 #[derive(Clone, Debug)]
 pub struct World {
+    /// Raft
+    pub raft: async_channel::Sender<RaftNetworkMsg>,
     pub(crate) system: Sender,
     /// Repository
     pub repo: Repositories,
@@ -677,12 +681,27 @@ impl World {
 
         let repo = Repositories::new();
         let reg = Registries::new();
+        let (raft_tx, raft_rx) = unbounded();
         let mut world = Self {
+            raft: raft_tx,
             system,
             repo,
             reg,
             storage_directory,
         };
+
+        // FIXME hardcoded here for testing right now
+        let node_id = NodeId(1);
+        let bootstrap = true;
+
+        // TODO direct these logs to a separate file? also include the json option
+        let logger = {
+            let decorator = slog_term::TermDecorator::new().build();
+            let drain = slog_term::FullFormat::new(decorator).build().fuse();
+            let drain = slog_async::Async::new(drain).build().fuse();
+            slog::Logger::root(drain, o!())
+        };
+        start_raft(node_id, bootstrap, logger, raft_rx).await;
 
         world.register_system().await?;
         Ok((world, system_h))

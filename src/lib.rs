@@ -54,6 +54,8 @@ pub(crate) mod pipeline;
 pub mod postprocessor;
 /// Offramp Postprocessors
 pub mod preprocessor;
+/// Raft node primitives
+pub mod raft_node;
 pub(crate) mod ramp;
 /// Tremor registry
 pub mod registry;

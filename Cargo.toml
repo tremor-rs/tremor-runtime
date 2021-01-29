@@ -56,12 +56,14 @@ log = "0.4"
 log4rs = "1.0"
 lz4 = "1.23.2"
 pin-project-lite = "0.2"
+raft = "0.6.0-alpha"
 rand = "0.8"
 regex = "1.4"
 rental = "0.5"
 rmp-serde = "0.15"
 serde = "1"
 serde_derive = "1"
+serde_json = "1.0" # TODO remove
 serde_yaml = "0.8"
 simd-json = {version = "0.3", features = ["known-key"]}
 simd-json-derive = "0.1.15"
@@ -108,6 +110,12 @@ tide = "0.16"
 # discord
 serenity = {version = "0.10", default-features = false, features = ["client", "gateway", "rustls_backend", "model", "cache"]}
 
+# for raft
+slog = { version = "2", features = ["max_level_info", "release_max_level_warn"] }
+slog-json = "2"
+slog-term = "*"
+slog-async = "*"
+
 [dependencies.tungstenite]
 default-features = false
 version = "0.13"
@@ -127,6 +135,8 @@ default = []
 bert = ["tremor-pipeline/bert"]
 
 [patch.crates-io]
+# waiting on raft-rs 0.6 here: https://github.com/tikv/raft-rs/issues/390
+raft = { git = 'https://github.com/tikv/raft-rs', rev = 'ed74d64' }
 rust-bert = {git = 'https://github.com/mfelsche/rust-bert.git', rev = '1140989'}
 rust_tokenizers = {git = 'https://github.com/mfelsche/rust-tokenizers.git', rev = '5a7860d'}
 
