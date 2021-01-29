@@ -23,7 +23,6 @@ use hdrhistogram::Histogram;
 use sketches_ddsketch::{Config as DDSketchConfig, DDSketch};
 use std::cmp::max;
 use std::f64;
-use std::marker::Send;
 use std::ops::RangeInclusive;
 use std::u64;
 
@@ -452,9 +451,6 @@ impl std::default::Default for Dds {
     }
 }
 
-unsafe impl Send for Dds {}
-unsafe impl Sync for Dds {}
-
 impl TremorAggrFn for Dds {
     fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
         if let Some(vals) = args.get(1).and_then(|v| v.as_array()) {
@@ -654,9 +650,6 @@ impl std::default::Default for Hdr {
         }
     }
 }
-
-unsafe impl Send for Hdr {}
-unsafe impl Sync for Hdr {}
 
 impl Hdr {
     fn max(&self) -> u64 {
