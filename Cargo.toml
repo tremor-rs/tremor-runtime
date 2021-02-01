@@ -103,7 +103,7 @@ grok = "1"
 openssl = {version = "0.10", features = ["vendored"]}
 
 # rest onramp
-tide = "0.15"
+tide = "0.16"
 
 [dependencies.tungstenite]
 default-features = false
