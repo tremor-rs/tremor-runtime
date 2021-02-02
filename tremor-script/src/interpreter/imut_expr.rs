@@ -121,9 +121,7 @@ where
     ) -> Result<Cow<'run, Value<'event>>> {
         match self {
             ImutExprInt::String(StringLit { elements, .. }) => {
-                // FIXME: optimize
-                let mut out = String::new();
-
+                let mut out = String::with_capacity(128);
                 for e in elements {
                     match e {
                         crate::ast::StrLitElement::Lit(l) => out.push_str(l),
