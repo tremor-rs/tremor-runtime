@@ -13,7 +13,7 @@ script
     default => "out"
   end;
 
-  emit event => "{port}";
+  emit event => "#{port}";
 end;
 
 create script process;
