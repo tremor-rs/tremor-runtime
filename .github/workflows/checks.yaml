@@ -60,7 +60,7 @@ jobs:
     steps:
       - uses: actions/checkout@v1
       - name: Install deps
-        run: sudo apt-get -qy update && sudo apt-get install -y libssl1.0-dev libssl1.0
+        run: sudo apt-get -qy update && sudo apt-get install -y libssl-dev libssl1.1
       - uses: actions-rs/toolchain@v1
         with:
           override: true
