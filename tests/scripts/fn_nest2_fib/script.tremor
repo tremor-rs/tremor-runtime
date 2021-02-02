@@ -1,8 +1,8 @@
 mod a with
   mod b with
-    fn snot(n) with "snot {n}" end
+    fn snot(n) with "snot #{n}" end
   end;
-  fn badger(n) with "{b::snot(n)} badger {n}" end
+  fn badger(n) with "#{b::snot(n)} badger #{n}" end
 end;
 
 a::badger(event)

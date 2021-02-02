@@ -2,6 +2,10 @@
 
 ## Latest
 
+### Breaking Changes
+
+* String interpolation is now done via `#{..}` instead of `{}`. `{` no longer needs to be escaped, but `\#{` needs an escape for literal `#{`.
+
 ### New features
 
 * Default to thin-lto for all builds (prior this was only done in docker)
@@ -11,6 +15,8 @@
 * Statically link openssl
 * elastic sink now supports linked transports [#715](https://github.com/tremor-rs/tremor-runtime/pull/715)
 
+### Fixes
+* rewrite string interpolation to fix [#726](https://github.com/tremor-rs/tremor-runtime/issues/726)
 ## 0.9.4
 
 ### New features

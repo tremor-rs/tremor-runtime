@@ -642,59 +642,52 @@ Float: Value<'input> = {
 }
 
 StringLiteral: StringLitRaw<'input> = {
-    <start:@L> "heredoc" <es:StrLitElements> "heredoc" <end:@L> => {
-        let mut sl: StringLitRaw = es.into();
-        sl.start = start;
-        sl.end = end;
-        sl
+    <start:@L> "heredoc" <elements:StrLitElements> "heredoc" <end:@L> => {
+        StringLitRaw {
+            start,
+            end,
+            elements
+        }
     },
-    <start:@L> "\"" <es:StrLitElements> "\"" <end:@L> => {
-        let mut sl: StringLitRaw = es.into();
-        sl.start = start;
-        sl.end = end;
-        sl
+    <start:@L> "\"" <elements:StrLitElements> "\"" <end:@L> => {
+        StringLitRaw {
+            start,
+            end,
+            elements
+        }
     },
     <start:@L> "\""  "\"" <end:@L> => {
         StringLitRaw {
             start,
             end,
-            string: "".into(),
-            exprs: vec![],
+            elements: vec!["".into()],
         }
     },
 }
 
-StrLitElements: StrLitElements<'input> = {
+StrLitElements: StrLitElementsRaw<'input> = {
     <literal:StringPart> <es:StrLitElements> => {
         let mut es = es;
-        es.0.push(literal);
+        es.push(literal.into());
         es
     },
 
-    "\\{" <es:StrLitElements> => {
+    "\\#" <es:StrLitElements> => {
         let mut es = es;
-        es.0.push("\\{".into());
+        es.push("#".into());
         es
     },
 
-    "\\}" <es:StrLitElements> => {
+    "#{" <expr:ExprImut> "}" <es:StrLitElements> => {
         let mut es = es;
-        es.0.push("\\}".into());
+        es.push(expr.into());
         es
     },
 
-    "{" <expr:ExprImut> "}" <es:StrLitElements> => {
-        let mut es = es;
-        es.0.push("{}".into());
-        es.1.push(expr);
-        es
-    },
+    <literal:StringPart> => vec![literal.into()],
+    "\\#" => vec!["#".into()],
 
-    <literal:StringPart> => StrLitElements(vec![literal], vec![]),
-    "\\}" => StrLitElements(vec!["\\}".into()], vec![]),
-    "\\{" => StrLitElements(vec!["\\{".into()], vec![]),
-
-    "{" <expr:ExprImut> "}" => StrLitElements(vec!["{}".into()], vec![expr]),
+    "#{" <expr:ExprImut> "}" => vec![expr.into()],
 }
 
 StringPart: Cow<'input, str> = {
@@ -1347,8 +1340,7 @@ extern {
         "mod" => Token::Module,
         "." => Token::Dot,
         "\"" => Token::DQuote,
-        "\\{" => Token::QuotedSquigglyOpen,
-        "\\}" => Token::QuotedSquigglyClose,
+        "\\#" => Token::EscapedHash,
         ";" => Token::Semi,
         "::" => Token::ColonColon,
         ":" => Token::Colon,
@@ -1357,6 +1349,7 @@ extern {
         "_" => Token::DontCare,
         "==" => Token::EqEq,
         "!=" => Token::NotEq,
+        "#{" => Token::Interpol,
         "{" => Token::LBrace,
         "}" => Token::RBrace,
         "(" => Token::LParen,

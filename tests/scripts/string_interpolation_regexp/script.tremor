@@ -1,2 +1,2 @@
 use std::re;
-re::replace_all("[0-9]\{4\}", event, "####")
+re::replace_all("[0-9]{4}", event, "####")

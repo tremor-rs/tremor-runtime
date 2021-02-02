@@ -1,1 +1,1 @@
-"  \{event\} = {{event}} = {event}\n"
+"  \#{event} = #{event}\n"

@@ -153,8 +153,12 @@ test_cases!(
     // TODO
     // const_in_const_lookup,
     // INSERT
-string_interpolation_tailing,
-string_interpolation_regexp,
+    string_interpolation_nested,
+    string_interpolation_escaped_hash,
+    string_interpolation_escaped,
+    string_interpolation_simple,
+    string_interpolation_tailing,
+    string_interpolation_regexp,
     binary_binary,
     binary_binary_string,
     binary_string_binary,

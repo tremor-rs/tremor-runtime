@@ -1,2 +1,2 @@
-let x = "before { { {}";
+let x = "before #{ { {}";
  

@@ -1,4 +1,4 @@
 Error: 
     1 | use std::string;
-    2 | let e = "\u0065 { `unterminated_ident } \u0076 {2} \u0080";
-      |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ It looks like you forgot to terminate an ident with a closing '`'
+    2 | let e = "\u0065 #{ `unterminated_ident } \u0076 #{2} \u0080";
+      |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ It looks like you forgot to terminate an ident with a closing '`'

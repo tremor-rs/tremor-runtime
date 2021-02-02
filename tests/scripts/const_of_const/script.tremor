@@ -1,4 +1,4 @@
 const a = "snot";
 const b = ( a + " badger" );
 
-"{b}: {event}!"
+"#{b}: #{event}!"
