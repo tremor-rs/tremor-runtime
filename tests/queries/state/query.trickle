@@ -10,7 +10,7 @@ script
       let state.count = state.count + 1
   end;
 
-  { "e": event, "{args.name}": state.count }
+  { "e": event, "#{args.name}": state.count }
 end;
 
 create script seq1 from countable with name = "s1" end;

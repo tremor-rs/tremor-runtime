@@ -886,6 +886,8 @@ pub enum ImutExprInt<'script> {
     Merge(Box<Merge<'script>>),
     /// Path
     Path(Path<'script>),
+    /// A string literal
+    String(StringLit<'script>),
     /// Local - local variable
     Local {
         /// Local Index
@@ -923,6 +925,27 @@ pub enum ImutExprInt<'script> {
 fn is_lit(e: &ImutExprInt) -> bool {
     matches!(e, ImutExprInt::Literal(_))
 }
+
+/// A string literal with interpolation
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct StringLit<'script> {
+    /// Id
+    pub mid: usize,
+    /// Elements
+    pub elements: StrLitElements<'script>,
+}
+impl_expr_mid!(StringLit);
+
+/// A part of a string literal with interpolation
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub enum StrLitElement<'script> {
+    /// A literal string
+    Lit(Cow<'script, str>),
+    /// An expression in a string interpolation
+    Expr(ImutExprInt<'script>),
+}
+/// we're forced to make this pub because of lalrpop
+pub type StrLitElements<'script> = Vec<StrLitElement<'script>>;
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulates an emit expression

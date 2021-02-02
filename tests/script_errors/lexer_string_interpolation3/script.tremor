@@ -1,2 +1,2 @@
 use std::string;
-let e = "\u0065 { `unterminated_ident } \u0076 {2} \u0080";
+let e = "\u0065 #{ `unterminated_ident } \u0076 #{2} \u0080";

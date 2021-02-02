@@ -1,0 +1,5 @@
+
+[
+  "\#{} this is a format string",
+  "\#{} this is a format #{"string"}",
+]

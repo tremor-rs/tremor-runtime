@@ -19,3 +19,8 @@ git add ${TARGET}
 
 sed -e '/^    \/\/ INSERT/a\
 '"${NAME}," ${BASEDIR}/../script.rs > ${BASEDIR}/tmp && mv ${BASEDIR}/tmp ${BASEDIR}/../script.rs
+
+for f in ${TARGET}/*
+do
+	echo "$f"
+done

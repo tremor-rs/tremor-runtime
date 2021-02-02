@@ -23,8 +23,8 @@ use super::{
     ImutExpr, ImutExprInt, ImutMatch, ImutPredicateClause, Invocable, Invoke, InvokeAggr,
     InvokeAggrFn, List, Literal, LocalPath, Match, Merge, MetadataPath, ModDoc, NodeMetas, Patch,
     PatchOperation, Path, Pattern, PredicateClause, PredicatePattern, Predicates, Record,
-    RecordPattern, Recur, Script, Segment, StatePath, TestExpr, TuplePattern, UnaryExpr,
-    UnaryOpKind, Warning,
+    RecordPattern, Recur, Script, Segment, StatePath, StrLitElement, StringLit, TestExpr,
+    TuplePattern, UnaryExpr, UnaryOpKind, Warning,
 };
 use super::{upable::Upable, BytesPart};
 use crate::errors::{
@@ -460,38 +460,35 @@ impl<'script> Upable<'script> for LiteralRaw<'script> {
 pub struct StringLitRaw<'script> {
     pub(crate) start: Location,
     pub(crate) end: Location,
-    pub(crate) string: Cow<'script, str>,
-    pub(crate) exprs: ImutExprsRaw<'script>,
+    pub(crate) elements: StrLitElementsRaw<'script>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub enum StrLitElementRaw<'script> {
+    Lit(Cow<'script, str>),
+    Expr(ImutExprRaw<'script>),
+}
+
+impl<'script> From<ImutExprRaw<'script>> for StrLitElementRaw<'script> {
+    fn from(e: ImutExprRaw<'script>) -> Self {
+        StrLitElementRaw::Expr(e)
+    }
+}
+
+impl<'script> From<Cow<'script, str>> for StrLitElementRaw<'script> {
+    fn from(e: Cow<'script, str>) -> Self {
+        StrLitElementRaw::Lit(e)
+    }
+}
+
+impl<'script> From<&'script str> for StrLitElementRaw<'script> {
+    fn from(e: &'script str) -> Self {
+        StrLitElementRaw::Lit(e.into())
+    }
 }
 
 /// we're forced to make this pub because of lalrpop
-pub struct StrLitElements<'script>(
-    pub(crate) Vec<Cow<'script, str>>,
-    pub(crate) ImutExprsRaw<'script>,
-);
-
-impl<'script> From<StrLitElements<'script>> for StringLitRaw<'script> {
-    fn from(mut es: StrLitElements<'script>) -> StringLitRaw<'script> {
-        es.0.reverse();
-        es.1.reverse();
-
-        let string = if es.0.len() == 1 {
-            es.0.pop().unwrap_or_default()
-        } else {
-            let mut s = String::new();
-            for e in es.0 {
-                s.push_str(&e);
-            }
-            s.into()
-        };
-        StringLitRaw {
-            start: Location::default(),
-            end: Location::default(),
-            string,
-            exprs: es.1,
-        }
-    }
-}
+pub type StrLitElementsRaw<'script> = Vec<StrLitElementRaw<'script>>;
 
 pub(crate) fn reduce2<'script>(
     expr: ImutExprInt<'script>,
@@ -973,6 +970,7 @@ pub enum ImutExprRaw<'script> {
 
 impl<'script> Upable<'script> for ImutExprRaw<'script> {
     type Target = ImutExprInt<'script>;
+    #[allow(clippy::too_many_lines)]
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let was_leaf = helper.possible_leaf;
         helper.possible_leaf = false;
@@ -988,26 +986,62 @@ impl<'script> Upable<'script> for ImutExprRaw<'script> {
                 ImutExprInt::Unary(Box::new(u.up(helper)?)).try_reduce(helper)?
             }
             ImutExprRaw::String(mut s) => {
-                let lit = ImutExprRaw::Literal(LiteralRaw {
-                    start: s.start,
-                    end: s.end,
-                    value: Value::from(s.string),
-                });
-                if s.exprs.is_empty() {
-                    lit.up(helper)?
-                } else {
-                    let mut args = vec![lit];
-                    args.append(&mut s.exprs);
-                    ImutExprRaw::Invoke(InvokeRaw {
-                        start: s.start,
-                        end: s.end,
-                        module: vec!["core".into(), "string".into()],
-                        fun: "format".into(),
-                        args,
-                    })
-                    .up(helper)?
-                    .try_reduce(helper)?
+                s.elements.reverse();
+                let mut new = Vec::with_capacity(s.elements.len());
+                for e in s.elements {
+                    let next = match e {
+                        StrLitElementRaw::Expr(e) => {
+                            let i = e.up(helper)?;
+                            let i = i.try_reduce(helper)?;
+                            match i {
+                                ImutExprInt::Literal(l) => l.value.as_str().map_or_else(
+                                    || StrLitElement::Lit(l.value.encode().into()),
+                                    |s| StrLitElement::Lit(s.to_string().into()),
+                                ),
+                                _ => StrLitElement::Expr(i),
+                            }
+                        }
+                        StrLitElementRaw::Lit(l) => StrLitElement::Lit(l),
+                    };
+                    if let StrLitElement::Lit(next_lit) = next {
+                        // We need this because otherwise we run into lifetime issues
+                        #[allow(clippy::option_if_let_else)]
+                        if let Some(prev) = new.pop() {
+                            match prev {
+                                StrLitElement::Lit(l) => {
+                                    let mut o = l.into_owned();
+                                    o.push_str(&next_lit);
+                                    new.push(StrLitElement::Lit(o.into()))
+                                }
+                                prev @ StrLitElement::Expr(..) => {
+                                    new.push(prev);
+                                    new.push(StrLitElement::Lit(next_lit))
+                                }
+                            }
+                        } else {
+                            new.push(StrLitElement::Lit(next_lit))
+                        }
+                    } else {
+                        new.push(next)
+                    }
                 }
+                let mid = helper.add_meta(s.start, s.end);
+                if new.len() == 1 {
+                    match new.pop() {
+                        Some(StrLitElement::Lit(l)) => {
+                            let value = Value::from(l);
+                            return Ok(ImutExprInt::Literal(Literal { mid, value }));
+                        }
+                        Some(other) => new.push(other),
+                        None => (),
+                    }
+                } else if new.is_empty() {
+                    return Ok(ImutExprInt::Literal(Literal {
+                        mid,
+                        value: Value::from(""),
+                    }));
+                }
+                ImutExprInt::String(StringLit { mid, elements: new })
             }
             ImutExprRaw::Record(r) => ImutExprInt::Record(r.up(helper)?).try_reduce(helper)?,
             ImutExprRaw::List(l) => ImutExprInt::List(l.up(helper)?).try_reduce(helper)?,

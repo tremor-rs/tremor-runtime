@@ -5,6 +5,6 @@ use tremor::system;
 re::replace(
 "1\\d+",
 """
-  {event.class} {event.answer} { string::format("{}", "foo") } { system::nanotime() }
+  #{event.class} #{event.answer} #{ string::format("{}", "foo") } #{ system::nanotime() }
   """
 , "<nanotime>")

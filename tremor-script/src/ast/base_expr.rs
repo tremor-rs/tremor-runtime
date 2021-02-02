@@ -137,6 +137,7 @@ impl<'script> BaseExpr for ImutExprInt<'script> {
             ImutExprInt::Record(e) => e.s(meta),
             ImutExprInt::Unary(e) => e.s(meta),
             ImutExprInt::Bytes(e) => e.s(meta),
+            ImutExprInt::String(e) => e.s(meta),
         }
     }
     fn e(&self, meta: &NodeMetas) -> Location {
@@ -161,6 +162,7 @@ impl<'script> BaseExpr for ImutExprInt<'script> {
             ImutExprInt::Record(e) => e.e(meta),
             ImutExprInt::Unary(e) => e.e(meta),
             ImutExprInt::Bytes(e) => e.e(meta),
+            ImutExprInt::String(e) => e.e(meta),
         }
     }
     fn mid(&self) -> usize {
@@ -183,6 +185,7 @@ impl<'script> BaseExpr for ImutExprInt<'script> {
             ImutExprInt::Record(e) => e.mid(),
             ImutExprInt::Unary(e) => e.mid(),
             ImutExprInt::Bytes(e) => e.mid(),
+            ImutExprInt::String(e) => e.mid(),
         }
     }
 }

@@ -1,5 +1,5 @@
 Error: 
     2 | let x = """
-    3 | {""";
-      | ^ It looks like you forgot to terminate a string interpolation with a closing '}'
-      |   NOTE: Did you mean to write a literal '{' ? Escape it as '\{' or '{{'.
+    3 | #{""";
+      | ^^^^^^ It looks like you forgot to terminate a string interpolation with a closing '}'
+      |        NOTE: Did you mean to write a literal '#{' ? Escape it as '\#{'.

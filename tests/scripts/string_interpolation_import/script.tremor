@@ -1,2 +1,2 @@
 use std::random;
-"{event} snot"
+"#{event} snot"

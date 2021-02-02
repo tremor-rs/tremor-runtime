@@ -17,7 +17,6 @@ use super::{
     test_predicate_expr, AggrType, Env, ExecOpts, LocalStack, FALSE, TRUE,
 };
 
-use crate::interpreter::value_to_index;
 use crate::prelude::*;
 use crate::registry::{Registry, TremorAggrFnWrapper, RECUR_REF};
 use crate::stry;
@@ -28,6 +27,7 @@ use crate::{
         error_no_clause_hit, error_oops, Result,
     },
 };
+use crate::{ast::StringLit, interpreter::value_to_index};
 use crate::{
     ast::{
         BaseExpr, BinExpr, ImutComprehension, ImutExpr, ImutExprInt, ImutMatch, Invoke, InvokeAggr,
@@ -120,6 +120,25 @@ where
         local: &'run LocalStack<'event>,
     ) -> Result<Cow<'run, Value<'event>>> {
         match self {
+            ImutExprInt::String(StringLit { elements, .. }) => {
+                // FIXME: optimize
+                let mut out = String::new();
+
+                for e in elements {
+                    match e {
+                        crate::ast::StrLitElement::Lit(l) => out.push_str(l),
+                        crate::ast::StrLitElement::Expr(e) => {
+                            let r = e.run(opts, env, event, state, meta, local)?;
+                            if let Some(s) = r.as_str() {
+                                out.push_str(&s);
+                            } else {
+                                out.push_str(r.encode().as_str());
+                            };
+                        }
+                    }
+                }
+                Ok(Cow::Owned(out.into()))
+            }
             ImutExprInt::Recur(Recur { exprs, argc, .. }) => {
                 #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
                 let local: &'run mut LocalStack<'event> = unsafe { mem::transmute(local) };

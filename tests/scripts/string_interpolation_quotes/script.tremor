@@ -1,4 +1,4 @@
 fn bla(e) with
-  " \"{e}\" \"{e}\" "
+  " \"#{e}\" \"#{e}\" "
 end;
 bla(event)
