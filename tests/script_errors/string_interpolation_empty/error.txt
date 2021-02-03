@@ -1,0 +1,4 @@
+Error: 
+    1 | "#{}"
+      |  ^^^ You have an interpolation without content.
+      |      NOTE: Did you mean to write a literal '#{'? Escape it as '\#{'.
