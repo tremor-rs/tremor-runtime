@@ -114,6 +114,8 @@ impl BaseExpr for (Location, Location) {
     }
 }
 
+// This is a simple accessor
+#[cfg(not(tarpaulin_include))]
 impl<'script> BaseExpr for ImutExprInt<'script> {
     fn s(&self, meta: &NodeMetas) -> Location {
         match self {
@@ -140,6 +142,7 @@ impl<'script> BaseExpr for ImutExprInt<'script> {
             ImutExprInt::String(e) => e.s(meta),
         }
     }
+
     fn e(&self, meta: &NodeMetas) -> Location {
         match self {
             ImutExprInt::Binary(e) => e.e(meta),
@@ -190,6 +193,8 @@ impl<'script> BaseExpr for ImutExprInt<'script> {
     }
 }
 
+// This is a simple accessor
+#[cfg(not(tarpaulin_include))]
 impl<'script> BaseExpr for Expr<'script> {
     fn mid(&self) -> usize {
         match self {
@@ -206,6 +211,8 @@ impl<'script> BaseExpr for Expr<'script> {
     }
 }
 
+// This is a simple accessor
+#[cfg(not(tarpaulin_include))]
 impl<'script> BaseExpr for PathRaw<'script> {
     fn s(&self, meta: &NodeMetas) -> Location {
         match self {
@@ -230,6 +237,8 @@ impl<'script> BaseExpr for PathRaw<'script> {
     }
 }
 
+// This is a simple accessor
+#[cfg(not(tarpaulin_include))]
 impl<'script> BaseExpr for Path<'script> {
     fn mid(&self) -> usize {
         match self {
@@ -241,6 +250,8 @@ impl<'script> BaseExpr for Path<'script> {
     }
 }
 
+// This is a simple accessor
+#[cfg(not(tarpaulin_include))]
 impl<'script> BaseExpr for Segment<'script> {
     fn mid(&self) -> usize {
         match self {
@@ -252,6 +263,8 @@ impl<'script> BaseExpr for Segment<'script> {
     }
 }
 
+// This is a simple accessor
+#[cfg(not(tarpaulin_include))]
 impl<'script> BaseExpr for ImutExprRaw<'script> {
     fn mid(&self) -> usize {
         0
@@ -296,12 +309,16 @@ impl<'script> BaseExpr for ImutExprRaw<'script> {
     }
 }
 
+// This is a simple accessor
+#[cfg(not(tarpaulin_include))]
 impl BaseExpr for TestExpr {
     fn mid(&self) -> usize {
         self.mid
     }
 }
 
+// This is a simple accessor
+#[cfg(not(tarpaulin_include))]
 impl BaseExpr for TestExprRaw {
     fn s(&self, _meta: &NodeMetas) -> Location {
         self.start
@@ -315,18 +332,24 @@ impl BaseExpr for TestExprRaw {
     }
 }
 
+// This is a simple accessor
+#[cfg(not(tarpaulin_include))]
 impl BaseExpr for InvokeAggr {
     fn mid(&self) -> usize {
         self.mid
     }
 }
 
+// This is a simple accessor
+#[cfg(not(tarpaulin_include))]
 impl<'script> BaseExpr for GroupBy<'script> {
     fn mid(&self) -> usize {
         self.0.mid()
     }
 }
 
+// This is a simple accessor
+#[cfg(not(tarpaulin_include))]
 impl<'script> BaseExpr for GroupByInt<'script> {
     fn mid(&self) -> usize {
         match self {

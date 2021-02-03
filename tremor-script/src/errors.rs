@@ -169,6 +169,7 @@ impl ErrorKind {
     pub(crate) fn cu(&self) -> usize {
         self.expr().0.map(Range::cu).unwrap_or_default()
     }
+    #[allow(clippy::too_many_lines)]
     pub(crate) fn expr(&self) -> ErrorLocation {
         use ErrorKind::{
             AccessError, AggrInAggr, ArrayOutOfRange, AssignIntoArray, AssignToConst,
