@@ -174,19 +174,19 @@ impl ErrorKind {
             AccessError, AggrInAggr, ArrayOutOfRange, AssignIntoArray, AssignToConst,
             BadAccessInEvent, BadAccessInGlobal, BadAccessInLocal, BadAccessInState, BadArity,
             BadArrayIndex, BadType, BinaryDrop, BinaryEmit, CantSetArgsConst, CantSetGroupConst,
-            CantSetWindowConst, Common, DecreasingRange, DoubleConst, DoubleStream, EmptyScript,
-            ExtraToken, Generic, Grok, InvalidAssign, InvalidBinary, InvalidBitshift, InvalidConst,
-            InvalidDrop, InvalidEmit, InvalidExtractor, InvalidFloatLiteral, InvalidFn,
-            InvalidHexLiteral, InvalidInfluxData, InvalidIntLiteral, InvalidMod, InvalidRecur,
-            InvalidToken, InvalidUTF8Sequence, InvalidUnary, Io, JSONError, MergeTypeConflict,
-            MissingEffectors, MissingFunction, MissingModule, ModuleNotFound, Msg, NoClauseHit,
-            NoConstsAllowed, NoLocalsAllowed, NoObjectError, NotConstant, NotFound, Oops,
-            ParseIntError, ParserError, PatchKeyExists, PreprocessorError, QueryNodeDuplicateName,
-            QueryNodeReservedName, QueryStreamNotDefined, RuntimeError, TailingHereDoc,
-            TypeConflict, UnexpectedCharacter, UnexpectedEndOfStream, UnexpectedEscapeCode,
-            UnrecognizedToken, UnterminatedExtractor, UnterminatedHereDoc,
-            UnterminatedIdentLiteral, UnterminatedInterpolation, UnterminatedStringLiteral,
-            UpdateKeyMissing, Utf8Error, ValueError,
+            CantSetWindowConst, Common, DecreasingRange, DoubleConst, DoubleStream,
+            EmptyInterpolation, EmptyScript, ExtraToken, Generic, Grok, InvalidAssign,
+            InvalidBinary, InvalidBitshift, InvalidConst, InvalidDrop, InvalidEmit,
+            InvalidExtractor, InvalidFloatLiteral, InvalidFn, InvalidHexLiteral, InvalidInfluxData,
+            InvalidIntLiteral, InvalidMod, InvalidRecur, InvalidToken, InvalidUTF8Sequence,
+            InvalidUnary, Io, JSONError, MergeTypeConflict, MissingEffectors, MissingFunction,
+            MissingModule, ModuleNotFound, Msg, NoClauseHit, NoConstsAllowed, NoLocalsAllowed,
+            NoObjectError, NotConstant, NotFound, Oops, ParseIntError, ParserError, PatchKeyExists,
+            PreprocessorError, QueryNodeDuplicateName, QueryNodeReservedName,
+            QueryStreamNotDefined, RuntimeError, TailingHereDoc, TypeConflict, UnexpectedCharacter,
+            UnexpectedEndOfStream, UnexpectedEscapeCode, UnrecognizedToken, UnterminatedExtractor,
+            UnterminatedHereDoc, UnterminatedIdentLiteral, UnterminatedInterpolation,
+            UnterminatedStringLiteral, UpdateKeyMissing, Utf8Error, ValueError,
         };
         match self {
             NoClauseHit(outer)
@@ -245,6 +245,7 @@ impl ErrorKind {
             | UpdateKeyMissing(outer, inner, _)
             | UnterminatedHereDoc(outer, inner, _)
             | UnterminatedInterpolation(outer, inner, _)
+            | EmptyInterpolation(outer, inner, _)
             | TailingHereDoc(outer, inner, _, _)
             | Generic(outer, inner, _)
             | AggrInAggr(outer, inner)
@@ -274,15 +275,16 @@ impl ErrorKind {
     }
     pub(crate) fn token(&self) -> Option<UnfinishedToken> {
         use ErrorKind::{
-            InvalidFloatLiteral, InvalidHexLiteral, InvalidIntLiteral, InvalidUTF8Sequence,
-            TailingHereDoc, UnexpectedCharacter, UnexpectedEscapeCode, UnterminatedExtractor,
-            UnterminatedHereDoc, UnterminatedIdentLiteral, UnterminatedInterpolation,
-            UnterminatedStringLiteral,
+            EmptyInterpolation, InvalidFloatLiteral, InvalidHexLiteral, InvalidIntLiteral,
+            InvalidUTF8Sequence, TailingHereDoc, UnexpectedCharacter, UnexpectedEscapeCode,
+            UnterminatedExtractor, UnterminatedHereDoc, UnterminatedIdentLiteral,
+            UnterminatedInterpolation, UnterminatedStringLiteral,
         };
         match self {
             UnterminatedExtractor(_, _, token)
             | UnterminatedStringLiteral(_, _, token)
             | UnterminatedInterpolation(_, _, token)
+            | EmptyInterpolation(_, _, token)
             | UnterminatedIdentLiteral(_, _, token)
             | UnterminatedHereDoc(_, _, token)
             | TailingHereDoc(_, _, token, _)
@@ -298,8 +300,9 @@ impl ErrorKind {
 
     pub(crate) fn hint(&self) -> Option<String> {
         use ErrorKind::{
-            BadAccessInEvent, BadAccessInGlobal, BadAccessInLocal, MissingFunction, MissingModule,
-            NoClauseHit, Oops, TypeConflict, UnrecognizedToken, UnterminatedInterpolation,
+            BadAccessInEvent, BadAccessInGlobal, BadAccessInLocal, EmptyInterpolation,
+            MissingFunction, MissingModule, NoClauseHit, Oops, TypeConflict, UnrecognizedToken,
+            UnterminatedInterpolation,
         };
         match self {
             UnrecognizedToken(outer, inner, t, _) if t.is_empty() && inner.0.absolute() == outer.1.absolute() => Some("It looks like a `;` is missing at the end of the script".into()),
@@ -312,8 +315,8 @@ impl ErrorKind {
                     _ => None
                 }
             }
-            UnterminatedInterpolation(_, _, _) => {
-                Some("Did you mean to write a literal '#{' ? Escape it as '\\#{'.".to_string())
+            UnterminatedInterpolation(_, _, _) | EmptyInterpolation(_, _, _) => {
+                Some("Did you mean to write a literal '#{'? Escape it as '\\#{'.".to_string())
             }
             BadAccessInLocal(_, _, key, _) if key == "nil" => {
                 Some("Did you mean null?".to_owned())
@@ -550,6 +553,10 @@ error_chain! {
         UnterminatedInterpolation(expr: Range, inner: Range, string_with_interpolation: UnfinishedToken) {
             description("Unterminated String interpolation")
                 display("It looks like you forgot to terminate a string interpolation with a closing '}}'")
+        }
+        EmptyInterpolation(expr: Range, inner: Range, string_with_interpolation: UnfinishedToken) {
+            description("Empty interpolation")
+                display("You have an interpolation without content.")
         }
 
         UnterminatedIdentLiteral(expr: Range, inner: Range, ident: UnfinishedToken)
