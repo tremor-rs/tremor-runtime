@@ -1,3 +1,5 @@
 Error: 
+    1 | use std::string;
+    2 | let a = 7;
     3 | string::format(a, "snot", "badger", "cake")
       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Runtime error in function string::format/4: expected 1st parameter to format to be a format specifier e.g. to print a number use `string::format("{}", 1)`

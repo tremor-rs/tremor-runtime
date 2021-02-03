@@ -164,6 +164,7 @@ test_cases!(
     subslice_no_arr,
     subslice_out_of_bounds,
     undefined_local,
+    recursion_limit,
 );
 
 // There errors on thise are not optimal

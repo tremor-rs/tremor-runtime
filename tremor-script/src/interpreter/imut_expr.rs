@@ -17,7 +17,6 @@ use super::{
     test_predicate_expr, AggrType, Env, ExecOpts, LocalStack, FALSE, TRUE,
 };
 
-use crate::prelude::*;
 use crate::registry::{Registry, TremorAggrFnWrapper, RECUR_REF};
 use crate::stry;
 use crate::{
@@ -35,6 +34,7 @@ use crate::{
     },
     errors::error_oops_err,
 };
+use crate::{lexer::Range, prelude::*};
 use crate::{Object, Value};
 use std::borrow::Cow;
 use std::mem;
@@ -536,7 +536,8 @@ where
             .map(Cow::Owned)
             .map_err(|e| {
                 let r: Option<&Registry> = None;
-                e.into_err(self, self, r, &env.meta)
+                let outer: Range = self.extent(&env.meta).expand_lines(2);
+                e.into_err(&outer, self, r, &env.meta)
             })
     }
 
@@ -558,7 +559,8 @@ where
             .map(Cow::Owned)
             .map_err(|e| {
                 let r: Option<&Registry> = None;
-                e.into_err(self, self, r, &env.meta)
+                let outer: Range = self.extent(&env.meta).expand_lines(2);
+                e.into_err(&outer, self, r, &env.meta)
             })
     }
 
@@ -588,7 +590,8 @@ where
             .map(Cow::Owned)
             .map_err(|e| {
                 let r: Option<&Registry> = None;
-                e.into_err(self, self, r, &env.meta)
+                let outer: Range = self.extent(&env.meta).expand_lines(2);
+                e.into_err(&outer, self, r, &env.meta)
             })
     }
 
@@ -616,7 +619,8 @@ where
             .map(Cow::Owned)
             .map_err(|e| {
                 let r: Option<&Registry> = None;
-                e.into_err(self, self, r, &env.meta)
+                let outer: Range = self.extent(&env.meta).expand_lines(2);
+                e.into_err(&outer, self, r, &env.meta)
             })
     }
 

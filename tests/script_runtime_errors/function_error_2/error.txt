@@ -1,3 +1,5 @@
 Error: 
+    1 | use std::math;
+    2 | let a = 7;
     3 | math::max("snot", a)
       | ^^^^^^^^^^^^^^^^^^^^ Bad type passed to function math::max/2

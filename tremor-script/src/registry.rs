@@ -183,6 +183,8 @@ pub enum FunctionError {
         /// The function was called with a bad arity
         mfa: MFA,
     },
+    /// Recursion Limit Reached
+    RecursionLimit,
     /// A generic error
     Error(Box<Error>),
 }
@@ -211,7 +213,7 @@ impl FunctionError {
         meta: &NodeMetas,
     ) -> crate::errors::Error {
         use FunctionError::{
-            BadArity, BadType, Error, MissingFunction, MissingModule, RuntimeError,
+            BadArity, BadType, Error, MissingFunction, MissingModule, RecursionLimit, RuntimeError,
         };
         let outer = outer.extent(meta);
         let inner = inner.extent(meta);
@@ -239,6 +241,7 @@ impl FunctionError {
                 ErrorKind::MissingFunction(outer, inner, vec![m], f, suggestion).into()
             }
             BadType { mfa } => ErrorKind::BadType(outer, inner, mfa.m, mfa.f, mfa.a).into(),
+            RecursionLimit => ErrorKind::RecursionLimit(outer, inner).into(),
             Error(e) => *e,
         }
     }

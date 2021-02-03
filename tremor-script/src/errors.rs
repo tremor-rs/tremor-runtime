@@ -183,10 +183,11 @@ impl ErrorKind {
             MissingModule, ModuleNotFound, Msg, NoClauseHit, NoConstsAllowed, NoLocalsAllowed,
             NoObjectError, NotConstant, NotFound, Oops, ParseIntError, ParserError, PatchKeyExists,
             PreprocessorError, QueryNodeDuplicateName, QueryNodeReservedName,
-            QueryStreamNotDefined, RuntimeError, TailingHereDoc, TypeConflict, UnexpectedCharacter,
-            UnexpectedEndOfStream, UnexpectedEscapeCode, UnrecognizedToken, UnterminatedExtractor,
-            UnterminatedHereDoc, UnterminatedIdentLiteral, UnterminatedInterpolation,
-            UnterminatedStringLiteral, UpdateKeyMissing, Utf8Error, ValueError,
+            QueryStreamNotDefined, RecursionLimit, RuntimeError, TailingHereDoc, TypeConflict,
+            UnexpectedCharacter, UnexpectedEndOfStream, UnexpectedEscapeCode, UnrecognizedToken,
+            UnterminatedExtractor, UnterminatedHereDoc, UnterminatedIdentLiteral,
+            UnterminatedInterpolation, UnterminatedStringLiteral, UpdateKeyMissing, Utf8Error,
+            ValueError,
         };
         match self {
             NoClauseHit(outer)
@@ -213,6 +214,7 @@ impl ErrorKind {
             | InvalidDrop(outer, inner)
             | InvalidEmit(outer, inner)
             | InvalidRecur(outer, inner)
+            | RecursionLimit(outer, inner)
             | InvalidConst(outer, inner)
             | InvalidMod(outer, inner)
             | InvalidFn(outer, inner)
@@ -529,6 +531,11 @@ error_chain! {
             description("Can not recur from this location")
                 display("Can not recur from this location")
         }
+        RecursionLimit(expr: Range, inner: Range) {
+            description("Recursion limit Reached")
+                display("Recursion limit Reached")
+        }
+
         /*
          * Lexer, Preprocessor and Parser
          */
