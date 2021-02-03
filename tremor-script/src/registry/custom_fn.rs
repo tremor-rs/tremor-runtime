@@ -194,9 +194,7 @@ impl<'script> CustomFn<'script> {
                             recursion_depth += 1;
                             if recursion_depth == env.recursion_limit {
                                 mem::swap(get_args_mut(consts)?, &mut args_const);
-                                return Err(FunctionError::Error(Box::new(
-                                    "recursion limit reached".into(),
-                                )));
+                                return Err(FunctionError::RecursionLimit);
                             }
                             // clear the local variables (that are not the
                             // arguments)

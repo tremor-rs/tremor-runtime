@@ -1,0 +1,5 @@
+Error: 
+    4 | end;
+    5 | 
+    6 | boom(1)
+      | ^^^^^^^ Recursion limit Reached

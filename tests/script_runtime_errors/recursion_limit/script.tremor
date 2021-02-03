@@ -1,0 +1,6 @@
+fn boom(x) with
+  let x = x + 1;
+  recur(x)
+end;
+
+boom(1)

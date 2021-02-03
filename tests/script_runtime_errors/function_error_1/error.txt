@@ -1,3 +1,5 @@
 Error: 
+    2 | 
+    3 | let a = 7;
     4 | record::from_array(a)
       | ^^^^^^^^^^^^^^^^^^^^^ Bad type passed to function record::from_array/1
