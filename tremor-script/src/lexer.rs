@@ -1857,13 +1857,34 @@ impl<'input> Lexer<'input> {
         *segment_start = end_inner;
         res.push(self.spanned2(*segment_start, *end, Token::Interpol));
         let mut pcount = 0;
+        let mut first = true;
         loop {
             match self.next() {
                 Some(Ok(s)) => {
                     match &s.value {
                         Token::RBrace if pcount == 0 => {
+                            let start = *segment_start;
                             *segment_start = s.span.pp_end;
+
                             res.push(s);
+                            if first {
+                                let end_location = *segment_start;
+                                let token_str = self
+                                    .slice_full_lines(&total_start, &end_location)
+                                    .unwrap_or_else(|| format!("{}{}", error_prefix, content));
+
+                                let unfinished_token = UnfinishedToken::new(
+                                    Range::from((start, end_location)),
+                                    token_str,
+                                );
+
+                                return Err(ErrorKind::EmptyInterpolation(
+                                    Range::from((total_start, end_location)),
+                                    Range::from((start, end_location)),
+                                    unfinished_token,
+                                )
+                                .into());
+                            }
                             break;
                         }
                         Token::RBrace => {
@@ -1875,6 +1896,7 @@ impl<'input> Lexer<'input> {
                         _ => {}
                     };
                     res.push(s);
+                    first = false;
                 }
                 // intercept error and extend the token to match this outer heredoc
                 // with interpolation
