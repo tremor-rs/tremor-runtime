@@ -119,8 +119,22 @@ pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
     let storage_directory = matches
         .value_of("storage-directory")
         .map(std::string::ToString::to_string);
+    // FIXME better naming here
+    let cluster_host = matches
+        .value_of("cluster-host")
+        .unwrap_or("127.0.0.1:8080")
+        .to_string();
+    let cluster_peers = matches.values_of_lossy("cluster-peer").unwrap_or(vec![]);
+    let cluster_bootstrap = matches.is_present("cluster-bootstrap");
     // TODO: Allow configuring this for offramps and pipelines
-    let (world, handle) = World::start(64, storage_directory).await?;
+    let (world, handle) = World::start(
+        64,
+        storage_directory,
+        cluster_host,
+        cluster_peers,
+        cluster_bootstrap,
+    )
+    .await?;
 
     if let Some(config_files) = matches.values_of("artefacts") {
         // We process trickle files first

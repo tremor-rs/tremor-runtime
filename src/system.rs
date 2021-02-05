@@ -664,6 +664,9 @@ impl World {
     pub async fn start(
         qsize: usize,
         storage_directory: Option<String>,
+        cluster_endpoint: String,
+        cluster_peers: Vec<String>,
+        cluster_bootstrap: bool,
     ) -> Result<(Self, JoinHandle<Result<()>>)> {
         let (onramp_h, onramp) = onramp::Manager::new(qsize).start();
         let (offramp_h, offramp) = offramp::Manager::new(qsize).start();
@@ -691,12 +694,6 @@ impl World {
             storage_directory,
         };
 
-        // FIXME hardcoded here for testing right now
-        let node_id = NodeId(1);
-        let bootstrap = true;
-        let endpoint = "127.0.0.1:8080".to_string();
-        let peers = vec!["127.0.0.1:8081".to_string()];
-
         // TODO direct these logs to a separate file? also include the json option
         let logger = {
             let decorator = slog_term::TermDecorator::new().build();
@@ -705,12 +702,14 @@ impl World {
             slog::Logger::root(drain, o!())
         };
 
-        let network = ws::Network::new(&logger, node_id, endpoint, peers);
+        // FIXME allow for non-numeric
+        let numeric_instance_id = instance!().parse::<u64>()?;
+        let node_id = NodeId(numeric_instance_id);
+        let network = ws::Network::new(&logger, node_id, cluster_endpoint, cluster_peers);
         dbg!(&network.id);
         dbg!(&network.logger);
         dbg!(&network.known_peers);
-
-        start_raft(node_id, bootstrap, logger, raft_rx).await;
+        start_raft(node_id, cluster_bootstrap, logger, raft_rx).await;
 
         world.register_system().await?;
         Ok((world, system_h))

@@ -74,6 +74,28 @@ subcommands:
                   long: api-host
                   takes_value: true
                   default_value: "0.0.0.0:9898"
+              # FIXME better args here
+              - cluster-host:
+                  help: The `host:port` to listen for cluster communication
+                  short: c
+                  long: cluster-host
+                  takes_value: true
+                  default_value: "0.0.0.0:8080"
+              - cluster-peer:
+                  help: Peer to connect to in the cluster
+                  short: e
+                  long: cluster-peer
+                  takes_value: true
+                  min_values: 1
+                  max_values: 7 # Imposed practical upper limit for the raft cluster
+                  required: false
+                  multiple: true
+              - cluster-bootstrap:
+                  help: Set the node to bootstrap mode and become cluster leader
+                  takes_value: false
+                  short: b
+                  long: cluster-bootstrap
+                  required: false
               - logger-config:
                   help: log4rs config
                   short: l
