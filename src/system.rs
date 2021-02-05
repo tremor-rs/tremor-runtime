@@ -15,15 +15,15 @@
 use crate::config::{BindingVec, Config, MappingMap, OffRampVec, OnRampVec};
 use crate::errors::{Error, ErrorKind, Result};
 use crate::lifecycle::{ActivationState, ActivatorLifecycleFsm};
-use crate::network::ws;
-use crate::raft_node::{start_raft, NodeId, RaftNetworkMsg};
+use crate::network::ws::{self, UrMsg};
+use crate::raft_node::{start_raft, NodeId};
 use crate::registry::{Registries, ServantId};
 use crate::repository::{
     Artefact, BindingArtefact, OfframpArtefact, OnrampArtefact, PipelineArtefact, Repositories,
 };
 use crate::url::ports::METRICS;
 use crate::url::TremorURL;
-use async_channel::{bounded, unbounded};
+use async_channel::bounded;
 use async_std::io::prelude::*;
 use async_std::path::Path;
 use async_std::task::{self, JoinHandle};
@@ -127,8 +127,8 @@ impl Manager {
 /// Tremor runtime
 #[derive(Clone, Debug)]
 pub struct World {
-    /// Raft
-    pub raft: async_channel::Sender<RaftNetworkMsg>,
+    /// Sender for the raft-based micro-ring
+    pub uring: async_channel::Sender<UrMsg>,
     pub(crate) system: Sender,
     /// Repository
     pub repo: Repositories,
@@ -683,17 +683,6 @@ impl World {
         }
         .start();
 
-        let repo = Repositories::new();
-        let reg = Registries::new();
-        let (raft_tx, raft_rx) = unbounded();
-        let mut world = Self {
-            raft: raft_tx,
-            system,
-            repo,
-            reg,
-            storage_directory,
-        };
-
         // TODO direct these logs to a separate file? also include the json option
         let logger = {
             let decorator = slog_term::TermDecorator::new().build();
@@ -701,7 +690,6 @@ impl World {
             let drain = slog_async::Async::new(drain).build().fuse();
             slog::Logger::root(drain, o!())
         };
-
         // FIXME allow for non-numeric
         let numeric_instance_id = instance!().parse::<u64>()?;
         let node_id = NodeId(numeric_instance_id);
@@ -709,7 +697,19 @@ impl World {
         dbg!(&network.id);
         dbg!(&network.logger);
         dbg!(&network.known_peers);
-        start_raft(node_id, cluster_bootstrap, logger, raft_rx).await;
+
+        let repo = Repositories::new();
+        let reg = Registries::new();
+
+        let mut world = Self {
+            uring: network.tx.clone(),
+            system,
+            repo,
+            reg,
+            storage_directory,
+        };
+
+        start_raft(node_id, cluster_bootstrap, logger, network).await;
 
         world.register_system().await?;
         Ok((world, system_h))

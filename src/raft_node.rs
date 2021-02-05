@@ -13,16 +13,13 @@
 // limitations under the License.
 
 use crate::errors::Result;
-pub use crate::network::ws::{RequestId, WsMessage};
+use crate::network::ws::{Network, RequestId, WsMessage};
 use async_std::task::{self, JoinHandle};
 use futures::{select, FutureExt, StreamExt};
 use raft::{prelude::*, raw_node::RawNode, storage::MemStorage, StateRole};
 use slog::Logger;
 use std::fmt;
 use std::time::{Duration, Instant};
-
-// FIXME use Network type from network crate and eliminate this
-type Network = async_channel::Receiver<RaftNetworkMsg>;
 
 #[derive(Serialize, Deserialize, Debug, Hash, PartialEq, Eq, Ord, PartialOrd, Clone, Copy)]
 /// Id for a node in the Tremor raft cluster
@@ -83,7 +80,7 @@ pub struct RaftNode {
     // FIXME swap out MemStorage
     /// FIXME
     pub raft_group: Option<RawNode<MemStorage>>,
-    network: Network,
+    //network: Network,
     //proposals: VecDeque<Proposal>,
     //pending_proposals: HashMap<ProposalId, Proposal>,
     //pending_acks: HashMap<ProposalId, EventId>,
@@ -100,7 +97,7 @@ impl RaftNode {
     }
 
     /// Create a raft leader
-    pub async fn create_raft_leader(logger: &Logger, id: NodeId, network: Network) -> Self {
+    pub async fn create_raft_leader(logger: &Logger, id: NodeId, _network: &Network) -> Self {
         let mut config = example_config();
         config.id = id.0;
         config.validate().unwrap();
@@ -118,7 +115,7 @@ impl RaftNode {
             //logger: logger.clone(),
             id,
             raft_group,
-            network,
+            //network,
             //proposals: VecDeque::new(),
             //pending_proposals: HashMap::new(),
             //pending_acks: HashMap::new(),
@@ -130,7 +127,7 @@ impl RaftNode {
     }
 
     /// Create a raft follower.
-    pub async fn create_raft_follower(logger: &Logger, id: NodeId, network: Network) -> Self {
+    pub async fn create_raft_follower(logger: &Logger, id: NodeId, _network: &Network) -> Self {
         /*
         let storage = Storage::new(id).await;
         let raft_group = if storage.last_index().unwrap() == 1 {
@@ -159,7 +156,7 @@ impl RaftNode {
             //logger: logger.clone(),
             id,
             raft_group,
-            network,
+            //network,
             //proposals: VecDeque::new(),
             //pending_proposals: HashMap::new(),
             //pending_acks: HashMap::new(),
@@ -180,15 +177,16 @@ pub async fn start_raft(
 ) -> JoinHandle<()> {
     let mut node = if bootstrap {
         dbg!("bootstrap on");
-        RaftNode::create_raft_leader(&logger, id, network.clone()).await
+        RaftNode::create_raft_leader(&logger, id, &network).await
     } else {
-        RaftNode::create_raft_follower(&logger, id, network.clone()).await
+        RaftNode::create_raft_follower(&logger, id, &network).await
     };
     dbg!(&node.id);
     dbg!(&node.last_state);
-    dbg!(&node.network);
+    //dbg!(&node.network);
 
     // node loop
+    // TODO stash this in a function and use node network
     task::spawn(async move {
         let duration = Duration::from_millis(100);
         let mut ticks = async_std::stream::interval(duration);

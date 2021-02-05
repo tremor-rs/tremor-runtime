@@ -15,15 +15,13 @@
 use crate::api::prelude::*;
 use async_channel::bounded;
 use futures::StreamExt;
-use tremor_runtime::raft_node::{RaftNetworkMsg, RequestId, WsMessage};
+use tremor_runtime::network::ws::{RequestId, UrMsg, WsMessage};
 
 pub async fn get(req: Request) -> Result<Response> {
-    let raft = &req.state().world.raft;
+    let uring = &req.state().world.uring;
 
-    let (tx, mut rx) = bounded(1);
-    raft.send(RaftNetworkMsg::Status(RequestId(42), tx))
-        .await
-        .unwrap();
+    let (tx, mut rx) = bounded(64);
+    uring.try_send(UrMsg::Status(RequestId(42), tx)).unwrap();
 
     match rx.next().await {
         Some(WsMessage::Reply { code, data, .. }) => {

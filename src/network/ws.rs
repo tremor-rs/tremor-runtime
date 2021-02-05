@@ -15,9 +15,11 @@
 mod client;
 mod server;
 
-use crate::raft_node::NodeId;
+use crate::raft_node::{NodeId, RaftNetworkMsg};
 use async_channel::{unbounded, Receiver, Sender};
 use async_std::task;
+//use futures::future::{BoxFuture, FutureExt};
+use futures::StreamExt;
 use halfbrown::HashMap;
 use slog::Logger;
 
@@ -28,14 +30,21 @@ pub(crate) struct Node {
     logger: Logger,
 }
 
-pub(crate) enum UrMsg {
+/// blah
+pub enum UrMsg {
     // Network related
+    /// blah
     InitLocal(Sender<WsMessage>),
+    /// blah
     RegisterLocal(NodeId, String, Sender<WsMessage>, Vec<(NodeId, String)>),
+    /// blah
     RegisterRemote(NodeId, String, Sender<WsMessage>),
+    /// blah
     DownLocal(NodeId),
+    /// blah
     DownRemote(NodeId),
-    //Status(RequestId, Sender<WsMessage>),
+    /// blah
+    Status(RequestId, Sender<WsMessage>),
 }
 
 // TODO this will be using the websocket driver for the tremor network protocol
@@ -98,8 +107,9 @@ pub struct Network {
     pub endpoint: String,
     /// blah
     pub logger: Logger,
-    //rx: Receiver<UrMsg>,
-    //tx: Sender<UrMsg>,
+    rx: Receiver<UrMsg>,
+    /// blah
+    pub tx: Sender<UrMsg>,
     //next_eid: u64,
     //pending: HashMap<EventId, Reply>,
     //prot_pending: HashMap<EventId, (RequestId, protocol_driver::HandlerOutboundChannelSender)>,
@@ -109,7 +119,7 @@ impl Network {
     /// blah
     pub fn new(logger: &Logger, id: NodeId, endpoint: String, peers: Vec<String>) -> Self {
         // exchanges UrMsg
-        let (tx, _rx) = unbounded();
+        let (tx, rx) = unbounded();
 
         // initial peer connections
         for peer in peers {
@@ -138,8 +148,8 @@ impl Network {
         Self {
             id,
             endpoint,
-            //tx,
-            //rx,
+            tx,
+            rx,
             logger: logger.clone(),
             known_peers: HashMap::new(),
             //local_mailboxes: HashMap::new(),
@@ -147,6 +157,39 @@ impl Network {
             //next_eid: 1,
             //pending: HashMap::new(),
             //prot_pending: HashMap::new(),
+        }
+    }
+
+    /// blah
+    //pub async fn next(&mut self) -> BoxFuture<'static, Option<RaftNetworkMsg>> {
+    pub async fn next(&mut self) -> Option<RaftNetworkMsg> {
+        let msg = if let Some(msg) = self.rx.next().await {
+            msg
+        } else {
+            return None;
+        };
+        match msg {
+            UrMsg::InitLocal(endpoint) => {
+                info!("Initializing local endpoint (sending hello)");
+                endpoint
+                    .send(WsMessage::Ctrl(CtrlMsg::Hello(
+                        self.id,
+                        self.endpoint.clone(),
+                    )))
+                    .await
+                    .unwrap();
+                //self.next().await.boxed()
+                //self.next().await
+                // FIXME
+                None
+            }
+            UrMsg::RegisterRemote(id, peer, _endpoint) => {
+                info!("register(remote) remote-id: {} remote-peer: {}", id, &peer);
+                // FIXME send hello-ack from here
+                None
+            }
+            UrMsg::Status(rid, reply) => Some(RaftNetworkMsg::Status(rid, reply)),
+            _ => unimplemented!(),
         }
     }
 }
