@@ -80,8 +80,10 @@ macro_rules! test_cases {
                 assert_eq!(results.len(), out_json.len(), "Number of events differ error");
                 for (_, result) in results {
                     for value in result.value_iter() {
+                        let serialized = sorted_serialize(value)?;
+                        println!("{}", &serialized);
                         if let Some(expected) = out_json.pop() {
-                            assert_eq!(sorted_serialize(value)?, sorted_serialize(&expected)?);
+                            assert_eq!(serialized, sorted_serialize(&expected)?);
                         }
                     }
                 }
@@ -127,7 +129,10 @@ test_cases!(
     pp_alias_script,
     pp_alias_operator,
     pp_config_directive,
-    //INSERT
+    // INSERT
+    window_eviction_period,
+    window_mixed_2,
+    window_mixed_1,
     script_error,
     guard_where,
     guard_having,

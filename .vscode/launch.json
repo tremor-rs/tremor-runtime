@@ -122,7 +122,7 @@
         }
       },
       "args": [
-        "window_size_tilted"
+        "window_mixed_1"
       ],
       "cwd": "${workspaceFolder}"
     },

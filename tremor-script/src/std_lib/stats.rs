@@ -89,7 +89,6 @@ impl TremorAggrFn for Sum {
             },
             |v| {
                 self.0 += v;
-                dbg!(self.0);
                 Ok(())
             },
         )

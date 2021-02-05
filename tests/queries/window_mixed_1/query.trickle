@@ -1,0 +1,22 @@
+define tumbling window four_nanos
+with
+  interval = 4 # the test framework emits 1 event per nanosecond, so we should get two events per window
+end;
+define tumbling window two_size
+with
+  size = 2 
+end;
+define tumbling window nine_nanos
+with
+  interval = 8 # 
+end;
+
+
+select {
+  "group": group[0],
+  "count": aggr::stats::count(),
+  "sum": aggr::stats::sum(event.num)
+}
+from in[four_nanos, two_size, nine_nanos] # tilt frame of three windows where the middle one can immediately emit, the others cant 
+group by set(event.g)
+into out;
