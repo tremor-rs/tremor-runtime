@@ -17,4 +17,10 @@ fi
 cp -r ${BASEDIR}/_template ${TARGET}
 git add ${TARGET}
 
-sed -e "s;//INSERT;//INSERT\n    ${NAME},;" ${BASEDIR}/../query.rs > ${BASEDIR}/tmp && mv ${BASEDIR}/tmp ${BASEDIR}/../query.rs
+sed -e '/^    \/\/ INSERT/a\
+'"${NAME}," ${BASEDIR}/../query.rs > ${BASEDIR}/tmp && mv ${BASEDIR}/tmp ${BASEDIR}/../query.rs
+
+for f in ${TARGET}/*
+do
+	echo "$f"
+done

@@ -1238,32 +1238,38 @@ impl Operator for TrickleSelect {
                     }
 
                     // merge state from last emit window into next non-emit window if there is any
-                    if let Some(non_emit_window) = self.windows.get_mut(emit_window_events.len()) {
-                        set_window(consts, Value::from(non_emit_window.name.to_string()))?;
-                        let this_groups = &mut non_emit_window.dims.groups;
-                        let last_groups = &mut non_emit_window.last_dims.groups;
-                        let window_impl = &non_emit_window.window_impl;
-                        let mut idgen = self.event_id_gen;
-                        let (_, this_group) = this_groups
-                            .raw_entry_mut()
-                            .from_key(&group_str)
-                            .or_insert_with(|| {
-                                // This is sound since we only add mutability to groups
-                                (
-                                    group_str.clone(),
-                                    last_groups.remove(&group_str).unwrap_or_else(|| GroupData {
-                                        window: window_impl.clone(),
-                                        aggrs: aggregates.clone(),
-                                        group: group_value.clone_static(),
-                                        id: idgen.next_id(), // after all this is a new event
-                                    }),
-                                )
-                            });
-                        for (this, prev) in this_group.aggrs.iter_mut().zip(scratch.iter()) {
-                            this.invocable.merge(&prev.invocable).map_err(|e| {
-                                let r: Option<&Registry> = None;
-                                e.into_err(prev, prev, r, &node_meta)
-                            })?;
+                    if !emit_window_events.is_empty() {
+                        if let Some(non_emit_window) =
+                            self.windows.get_mut(emit_window_events.len())
+                        {
+                            set_window(consts, Value::from(non_emit_window.name.to_string()))?;
+                            let this_groups = &mut non_emit_window.dims.groups;
+                            let last_groups = &mut non_emit_window.last_dims.groups;
+                            let window_impl = &non_emit_window.window_impl;
+                            let mut idgen = self.event_id_gen;
+                            let (_, this_group) = this_groups
+                                .raw_entry_mut()
+                                .from_key(&group_str)
+                                .or_insert_with(|| {
+                                    // This is sound since we only add mutability to groups
+                                    (
+                                        group_str.clone(),
+                                        last_groups.remove(&group_str).unwrap_or_else(|| {
+                                            GroupData {
+                                                window: window_impl.clone(),
+                                                aggrs: aggregates.clone(),
+                                                group: group_value.clone_static(),
+                                                id: idgen.next_id(), // after all this is a new event
+                                            }
+                                        }),
+                                    )
+                                });
+                            for (this, prev) in this_group.aggrs.iter_mut().zip(scratch.iter()) {
+                                this.invocable.merge(&prev.invocable).map_err(|e| {
+                                    let r: Option<&Registry> = None;
+                                    e.into_err(prev, prev, r, &node_meta)
+                                })?;
+                            }
                         }
                     }
                 }
