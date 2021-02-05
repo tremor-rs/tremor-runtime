@@ -83,6 +83,12 @@ chk:
 dep-list:
 	@cargo tree --all | sed -e 's/[^a-z]*\([a-z]\)/\1/' | sort -u
 
+clippy:
+	touch */src/lib.rs && \
+	touch src/lib.rs && \
+	touch */src/main.rs && \
+	cargo clippy --all
+
 ###############################################################################
 
 # eg: builder-image-x86_64-unknown-linux-gnu
