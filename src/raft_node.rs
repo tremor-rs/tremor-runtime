@@ -16,10 +16,13 @@ use crate::errors::Result;
 pub use crate::network::ws::{RequestId, WsMessage};
 use async_std::task::{self, JoinHandle};
 use futures::{select, FutureExt, StreamExt};
-use raft::{prelude::*, raw_node::RawNode, storage::MemStorage};
+use raft::{prelude::*, raw_node::RawNode, storage::MemStorage, StateRole};
 use slog::Logger;
 use std::fmt;
 use std::time::{Duration, Instant};
+
+// FIXME use Network type from network crate and eliminate this
+type Network = async_channel::Receiver<RaftNetworkMsg>;
 
 #[derive(Serialize, Deserialize, Debug, Hash, PartialEq, Eq, Ord, PartialOrd, Clone, Copy)]
 /// Id for a node in the Tremor raft cluster
@@ -59,10 +62,7 @@ fn example_config() -> Config {
     }
 }
 
-async fn status<Storage>(node: &raft::RawNode<Storage>) -> Result<RaftNodeStatus>
-where
-    Storage: raft::storage::Storage,
-{
+async fn status(node: &raft::RawNode<MemStorage>) -> Result<RaftNodeStatus> {
     Ok(RaftNodeStatus {
         id: node.raft.id,
         role: format!("{:?}", node.raft.state),
@@ -75,25 +75,118 @@ where
     })
 }
 
+/// Raft node
+pub struct RaftNode {
+    //logger: Logger,
+    // None if the raft is not initialized.
+    id: NodeId,
+    // FIXME swap out MemStorage
+    /// FIXME
+    pub raft_group: Option<RawNode<MemStorage>>,
+    network: Network,
+    //proposals: VecDeque<Proposal>,
+    //pending_proposals: HashMap<ProposalId, Proposal>,
+    //pending_acks: HashMap<ProposalId, EventId>,
+    //proposal_id: u64,
+    tick_duration: Duration,
+    //services: HashMap<ServiceId, Box<dyn Service<Storage>>>,
+    last_state: StateRole,
+}
+
+impl RaftNode {
+    /// Set raft tick duration
+    pub fn set_raft_tick_duration(&mut self, d: Duration) {
+        self.tick_duration = d;
+    }
+
+    /// Create a raft leader
+    pub async fn create_raft_leader(logger: &Logger, id: NodeId, network: Network) -> Self {
+        let mut config = example_config();
+        config.id = id.0;
+        config.validate().unwrap();
+
+        let storage = MemStorage::new_with_conf_state((vec![id.0], vec![]));
+        let mut raw_node = RawNode::new(&config, storage, logger).unwrap();
+
+        // testing for now
+        raw_node.raft.become_candidate();
+        raw_node.raft.become_leader();
+
+        let raft_group = Some(raw_node);
+
+        Self {
+            //logger: logger.clone(),
+            id,
+            raft_group,
+            network,
+            //proposals: VecDeque::new(),
+            //pending_proposals: HashMap::new(),
+            //pending_acks: HashMap::new(),
+            //proposal_id: 0,
+            tick_duration: Duration::from_millis(100),
+            //services: HashMap::new(),
+            last_state: StateRole::PreCandidate,
+        }
+    }
+
+    /// Create a raft follower.
+    pub async fn create_raft_follower(logger: &Logger, id: NodeId, network: Network) -> Self {
+        /*
+        let storage = Storage::new(id).await;
+        let raft_group = if storage.last_index().unwrap() == 1 {
+            None
+        } else {
+            let mut cfg = example_config();
+            cfg.id = id.0;
+            Some(RawNode::new(&cfg, storage, logger).unwrap())
+        };
+        */
+
+        let mut config = example_config();
+        config.id = id.0;
+        config.validate().unwrap();
+
+        let storage = MemStorage::new_with_conf_state((vec![id.0], vec![]));
+        let mut raw_node = RawNode::new(&config, storage, logger).unwrap();
+
+        // FIXME testing values for now
+        raw_node.raft.become_candidate();
+        raw_node.raft.become_follower(1, 1);
+
+        let raft_group = Some(raw_node);
+
+        Self {
+            //logger: logger.clone(),
+            id,
+            raft_group,
+            network,
+            //proposals: VecDeque::new(),
+            //pending_proposals: HashMap::new(),
+            //pending_acks: HashMap::new(),
+            //proposal_id: 0,
+            tick_duration: Duration::from_millis(100),
+            //services: HashMap::new(),
+            last_state: StateRole::PreCandidate,
+        }
+    }
+}
+
 /// Raft start function
 pub async fn start_raft(
     id: NodeId,
-    _bootstrap: bool,
+    bootstrap: bool,
     logger: Logger,
-    // TODO this will be the network
-    mut rx: async_channel::Receiver<RaftNetworkMsg>,
+    mut network: Network,
 ) -> JoinHandle<()> {
-    let mut config = example_config();
-    config.id = id.0;
-    config.validate().unwrap();
-
-    // FIXME use rocksdb
-    let storage = MemStorage::new_with_conf_state((vec![1], vec![]));
-    let mut node = RawNode::new(&config, storage, &logger).unwrap();
-
-    // single node cluster for now
-    node.raft.become_candidate();
-    node.raft.become_leader();
+    let mut node = if bootstrap {
+        dbg!("bootstrap on");
+        RaftNode::create_raft_leader(&logger, id, network.clone()).await
+    } else {
+        RaftNode::create_raft_follower(&logger, id, network.clone()).await
+    };
+    dbg!(&node.id);
+    dbg!(&node.last_state);
+    dbg!(&node.network);
 
     // node loop
     task::spawn(async move {
@@ -103,12 +196,13 @@ pub async fn start_raft(
 
         loop {
             select! {
-                msg = rx.next().fuse() => {
+                msg = network.next().fuse() => {
                     let msg = if let Some(msg) = msg {
                         msg
                     } else {
                         break;
                     };
+                    let raft = node.raft_group.as_ref().unwrap();
                     match msg {
                         RaftNetworkMsg::Status(rid, reply) => {
                             info!("Getting node status");
@@ -116,7 +210,7 @@ pub async fn start_raft(
                                 .send(WsMessage::Reply {
                                     code: 200,
                                     rid,
-                                    data: serde_json::to_value(status(&node).await.unwrap()).unwrap(),
+                                    data: serde_json::to_value(status(&raft).await.unwrap()).unwrap(),
                                 })
                                 .await
                                 .unwrap();
@@ -127,8 +221,8 @@ pub async fn start_raft(
                     if i.elapsed() >= Duration::from_secs(10) {
                         i = Instant::now();
                     }
-
-                    node.tick();
+                    let raft = node.raft_group.as_mut().unwrap();
+                    raft.tick();
                 }
             }
         }
