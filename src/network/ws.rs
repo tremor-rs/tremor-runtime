@@ -15,9 +15,11 @@
 mod client;
 mod server;
 
+use crate::network::Network as NetworkTrait;
 use crate::raft_node::{NodeId, RaftNetworkMsg};
 use async_channel::{unbounded, Receiver, Sender};
 use async_std::task;
+use async_trait::async_trait;
 //use futures::future::{BoxFuture, FutureExt};
 use futures::StreamExt;
 use halfbrown::HashMap;
@@ -159,10 +161,11 @@ impl Network {
             //prot_pending: HashMap::new(),
         }
     }
+}
 
-    /// blah
-    //pub async fn next(&mut self) -> BoxFuture<'static, Option<RaftNetworkMsg>> {
-    pub async fn next(&mut self) -> Option<RaftNetworkMsg> {
+#[async_trait]
+impl NetworkTrait for Network {
+    async fn next(&mut self) -> Option<RaftNetworkMsg> {
         let msg = if let Some(msg) = self.rx.next().await {
             msg
         } else {
@@ -178,10 +181,7 @@ impl Network {
                     )))
                     .await
                     .unwrap();
-                //self.next().await.boxed()
-                //self.next().await
-                // FIXME
-                None
+                self.next().await
             }
             UrMsg::RegisterRemote(id, peer, _endpoint) => {
                 info!("register(remote) remote-id: {} remote-peer: {}", id, &peer);

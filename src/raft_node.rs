@@ -14,6 +14,7 @@
 
 use crate::errors::Result;
 use crate::network::ws::{Network, RequestId, WsMessage};
+use crate::network::Network as NetworkTrait;
 use async_std::task::{self, JoinHandle};
 use futures::{select, FutureExt, StreamExt};
 use raft::{prelude::*, raw_node::RawNode, storage::MemStorage, StateRole};

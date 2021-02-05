@@ -14,3 +14,13 @@
 
 /// Websocket-based network
 pub mod ws;
+
+use crate::raft_node::RaftNetworkMsg;
+use async_trait::async_trait;
+
+/// blah
+#[async_trait]
+pub trait Network: Send + Sync {
+    /// blah
+    async fn next(&mut self) -> Option<RaftNetworkMsg>;
+}
