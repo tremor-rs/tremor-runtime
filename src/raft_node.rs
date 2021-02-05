@@ -18,11 +18,18 @@ use async_std::task::{self, JoinHandle};
 use futures::{select, FutureExt, StreamExt};
 use raft::{prelude::*, raw_node::RawNode, storage::MemStorage};
 use slog::Logger;
+use std::fmt;
 use std::time::{Duration, Instant};
 
 #[derive(Serialize, Deserialize, Debug, Hash, PartialEq, Eq, Ord, PartialOrd, Clone, Copy)]
 /// Id for a node in the Tremor raft cluster
 pub struct NodeId(pub u64);
+
+impl fmt::Display for NodeId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Node({:?})", self)
+    }
+}
 
 // TODO this will be under the tremor network protocol
 /// Raft Network Message

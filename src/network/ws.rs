@@ -13,7 +13,7 @@
 // limitations under the License.
 
 mod client;
-//mod server;
+mod server;
 
 use crate::raft_node::NodeId;
 use async_channel::{unbounded, Receiver, Sender};
@@ -32,9 +32,9 @@ pub(crate) enum UrMsg {
     // Network related
     InitLocal(Sender<WsMessage>),
     RegisterLocal(NodeId, String, Sender<WsMessage>, Vec<(NodeId, String)>),
-    //RegisterRemote(NodeId, String, Sender<WsMessage>),
+    RegisterRemote(NodeId, String, Sender<WsMessage>),
     DownLocal(NodeId),
-    //DownRemote(NodeId),
+    DownRemote(NodeId),
     //Status(RequestId, Sender<WsMessage>),
 }
 
@@ -121,7 +121,6 @@ impl Network {
             task::spawn(client::remote_endpoint(peer, tx, logger));
         }
 
-        /*
         // websocket node
         let node = Node {
             tx: tx.clone(),
@@ -135,7 +134,6 @@ impl Network {
         //let net_handler = crate::protocol::network::Handler::new(tx.clone());
         //let mut net_interceptor = protocol_driver::Interceptor::new(net_handler);
         //task::spawn(net_interceptor.run_loop());
-        */
 
         Self {
             id,
