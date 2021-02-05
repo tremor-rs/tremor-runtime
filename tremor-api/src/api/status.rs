@@ -31,6 +31,8 @@ pub async fn get(req: Request) -> Result<Response> {
             dbg!(&code);
             reply(req, data, false, StatusCode::Ok).await
         }
+        // FIXME
+        Some(_) => unimplemented!(),
         None => unimplemented!(),
         //_ => unreachable!(),
     }

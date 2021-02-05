@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use crate::errors::Result;
+pub use crate::network::ws::{RequestId, WsMessage};
 use async_std::task::{self, JoinHandle};
 use futures::{select, FutureExt, StreamExt};
 use raft::{prelude::*, raw_node::RawNode, storage::MemStorage};
@@ -23,32 +24,11 @@ use std::time::{Duration, Instant};
 /// Id for a node in the Tremor raft cluster
 pub struct NodeId(pub u64);
 
-#[derive(Serialize, Deserialize, Debug, Hash, PartialEq, Eq, Ord, PartialOrd, Clone, Copy)]
-/// Request ID
-pub struct RequestId(pub u64);
-
 // TODO this will be under the tremor network protocol
 /// Raft Network Message
 pub enum RaftNetworkMsg {
     /// Status requests
     Status(RequestId, async_channel::Sender<WsMessage>),
-}
-
-// TODO this will be using the websocket driver for the tremor network protocol
-/// Websocket Message
-pub enum WsMessage {
-    //Ctrl(CtrlMsg),
-    //Raft(RaftMessage),
-    /// Websocket message reply
-    // TODO switch to tremor type
-    Reply {
-        /// Status code
-        code: u16,
-        /// Request Id
-        rid: RequestId,
-        /// Message data
-        data: serde_json::Value,
-    },
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]

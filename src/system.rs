@@ -15,6 +15,7 @@
 use crate::config::{BindingVec, Config, MappingMap, OffRampVec, OnRampVec};
 use crate::errors::{Error, ErrorKind, Result};
 use crate::lifecycle::{ActivationState, ActivatorLifecycleFsm};
+use crate::network::ws;
 use crate::raft_node::{start_raft, NodeId, RaftNetworkMsg};
 use crate::registry::{Registries, ServantId};
 use crate::repository::{
@@ -693,6 +694,8 @@ impl World {
         // FIXME hardcoded here for testing right now
         let node_id = NodeId(1);
         let bootstrap = true;
+        let endpoint = "127.0.0.1:8080".to_string();
+        let peers = vec!["127.0.0.1:8081".to_string()];
 
         // TODO direct these logs to a separate file? also include the json option
         let logger = {
@@ -701,6 +704,12 @@ impl World {
             let drain = slog_async::Async::new(drain).build().fuse();
             slog::Logger::root(drain, o!())
         };
+
+        let network = ws::Network::new(&logger, node_id, endpoint, peers);
+        dbg!(&network.id);
+        dbg!(&network.logger);
+        dbg!(&network.known_peers);
+
         start_raft(node_id, bootstrap, logger, raft_rx).await;
 
         world.register_system().await?;
