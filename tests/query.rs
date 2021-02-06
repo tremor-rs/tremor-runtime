@@ -130,7 +130,6 @@ test_cases!(
     pp_alias_operator,
     pp_config_directive,
     // INSERT
-    window_eviction_period,
     window_mixed_2,
     window_mixed_1,
     script_error,
