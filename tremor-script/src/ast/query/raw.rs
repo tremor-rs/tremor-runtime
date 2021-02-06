@@ -151,10 +151,17 @@ impl<'script> Upable<'script> for StmtRaw<'script> {
                 helper.swap(&mut aggregates, &mut consts, &mut locals);
                 // We know that select statements have exactly three consts
                 let consts = vec![Value::null(), Value::null(), Value::null()];
+                // only allocate scratches if they are really needed - when we have multiple windows
+                let aggregate_scratches = if stmt.windows.len() > 1 {
+                    vec![(aggregates.clone(), aggregates.clone())]
+                } else {
+                    Vec::with_capacity(0)
+                };
 
                 Ok(Stmt::Select(SelectStmt {
                     stmt: Box::new(stmt),
                     aggregates,
+                    aggregate_scratches,
                     consts,
                     locals: locals.len(),
                     node_meta: helper.meta.clone(),

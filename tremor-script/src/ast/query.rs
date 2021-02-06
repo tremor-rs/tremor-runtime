@@ -113,13 +113,19 @@ pub enum Stmt<'script> {
     Select(SelectStmt<'script>),
 }
 
+/// array of aggregate functions
+pub type Aggregates<'a> = Vec<InvokeAggrFn<'a>>;
+
 /// A Select statement
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct SelectStmt<'script> {
     /// The select statement
     pub stmt: Box<Select<'script>>,
     /// Aggregates
-    pub aggregates: Vec<InvokeAggrFn<'script>>,
+    pub aggregates: Aggregates<'script>,
+    /// scratches needed when executing multiple windows
+    /// only necessary if we have multiple windows, otherwise empty
+    pub aggregate_scratches: Vec<(Aggregates<'script>, Aggregates<'script>)>,
     /// Constants
     pub consts: Vec<Value<'script>>,
     /// Number of locals
