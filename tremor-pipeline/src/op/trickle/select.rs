@@ -493,7 +493,10 @@ fn execute_select_and_having(
             }
         } else {
             let s: &Select = &stmt;
-            return tremor_script::errors::query_guard_not_bool(s, guard, &test, node_meta)?;
+            return Err(tremor_script::errors::query_guard_not_bool_err(
+                s, guard, &test, node_meta,
+            )
+            .into());
         }
     }
     let mut event_id = event_id_gen.next_id();
@@ -633,7 +636,10 @@ impl Operator for TrickleSelect {
                 };
             } else {
                 let s: &Select = &stmt;
-                return tremor_script::errors::query_guard_not_bool(s, guard, &test, &node_meta)?;
+                return Err(tremor_script::errors::query_guard_not_bool_err(
+                    s, guard, &test, &node_meta,
+                )
+                .into());
             };
         }
 
@@ -688,9 +694,10 @@ impl Operator for TrickleSelect {
                     }
                 } else {
                     let s: &Select = &stmt;
-                    return tremor_script::errors::query_guard_not_bool(
+                    return Err(tremor_script::errors::query_guard_not_bool_err(
                         s, guard, &test, &node_meta,
-                    )?;
+                    )
+                    .into());
                 }
             }
             *unwind_event = result;
