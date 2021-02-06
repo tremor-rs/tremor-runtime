@@ -865,6 +865,15 @@ pub fn query_guard_not_bool<T, O: BaseExpr, I: BaseExpr>(
     error_type_conflict_mult(stmt, inner, got.value_type(), vec![ValueType::Bool], meta)
 }
 
+pub fn query_guard_not_bool_err<O: BaseExpr, I: BaseExpr>(
+    stmt: &O,
+    inner: &I,
+    got: &Value,
+    meta: &NodeMetas,
+) -> Error {
+    error_type_conflict_mult_err(stmt, inner, got.value_type(), vec![ValueType::Bool], meta)
+}
+
 pub(crate) fn error_generic<T, O: BaseExpr, I: BaseExpr, S: ToString>(
     outer: &O,
     inner: &I,
@@ -890,7 +899,19 @@ pub(crate) fn error_type_conflict_mult<T, O: BaseExpr, I: BaseExpr>(
     expected: Vec<ValueType>,
     meta: &NodeMetas,
 ) -> Result<T> {
-    Err(ErrorKind::TypeConflict(outer.extent(meta), inner.extent(meta), got, expected).into())
+    Err(error_type_conflict_mult_err(
+        outer, inner, got, expected, meta,
+    ))
+}
+
+pub(crate) fn error_type_conflict_mult_err<O: BaseExpr, I: BaseExpr>(
+    outer: &O,
+    inner: &I,
+    got: ValueType,
+    expected: Vec<ValueType>,
+    meta: &NodeMetas,
+) -> Error {
+    ErrorKind::TypeConflict(outer.extent(meta), inner.extent(meta), got, expected).into()
 }
 
 pub(crate) fn error_no_locals<T, O: BaseExpr, I: BaseExpr>(
