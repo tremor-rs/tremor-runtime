@@ -281,6 +281,7 @@ pub enum WindowKind {
 /// A window declaration
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct WindowDecl<'script> {
+    /// metadata id
     pub(crate) mid: usize,
     /// Module of the window declaration
     pub module: Vec<String>,

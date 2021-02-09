@@ -134,7 +134,12 @@ impl Operator for Backpressure {
         true
     }
 
-    fn on_signal(&mut self, _uid: u64, signal: &mut Event) -> Result<EventAndInsights> {
+    fn on_signal(
+        &mut self,
+        _uid: u64,
+        _state: &Value<'static>,
+        signal: &mut Event,
+    ) -> Result<EventAndInsights> {
         let insights = if self.output.backoff > 0 && self.output.next <= signal.ingest_ns {
             self.output.backoff = 0;
             self.output.next = 0;

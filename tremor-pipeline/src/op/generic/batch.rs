@@ -145,7 +145,12 @@ impl Operator for Batch {
         true
     }
 
-    fn on_signal(&mut self, _uid: u64, signal: &mut Event) -> Result<EventAndInsights> {
+    fn on_signal(
+        &mut self,
+        _uid: u64,
+        _state: &Value<'static>,
+        signal: &mut Event,
+    ) -> Result<EventAndInsights> {
         self.max_delay_ns.map_or_else(
             || Ok(EventAndInsights::default()),
             |delay_ns| {
@@ -354,7 +359,7 @@ mod test {
         };
 
         let mut r = op
-            .on_signal(0, &mut signal)
+            .on_signal(0, &state, &mut signal)
             .expect("failed to run pipeline")
             .events;
         assert_eq!(r.len(), 1);
