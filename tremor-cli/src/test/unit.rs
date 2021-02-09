@@ -67,11 +67,14 @@ fn eval_suite_entrypoint(
 
         if let ImutExprInt::List(l) = spec {
             if let Some(tests) = o.get("suite").and_then(|s| s.get("tests")) {
-                let (s, mut e) = eval_suite_tests(
+                if let Ok((s, mut e)) = eval_suite_tests(
                     &env, &local, script, meta, l, tests, &tags, sys_filter, includes, excludes,
-                )?;
-                elements.append(&mut e);
-                stats.merge(&s);
+                ) {
+                    elements.append(&mut e);
+                    stats.merge(&s);
+                } else {
+                    stats.fail();
+                }
             }
         } // TODO error/warning handling when no tests found
     }
@@ -278,7 +281,7 @@ pub(crate) fn run_suite(
     let reg: Registry = registry::registry();
 
     let report_start = nanotime();
-
+    let mut stat_x = stats::Stats::new();
     match tremor_script::Script::parse(&module_path, &script, raw.clone(), &reg) {
         Ok(runnable) => {
             let local = LocalStack::default();
@@ -392,6 +395,7 @@ pub(crate) fn run_suite(
             }
         }
         Err(e) => {
+            stat_x.fail();
             let mut h = TermHighlighter::default();
             if let Err(e) = tremor_script::Script::format_error_from_script(&raw, &mut h, &e) {
                 eprintln!("Error: {}", e);
@@ -399,7 +403,6 @@ pub(crate) fn run_suite(
         }
     }
 
-    let mut stat_x = stats::Stats::new();
     for v in suites.values() {
         stat_x.merge(&v.stats)
     }
