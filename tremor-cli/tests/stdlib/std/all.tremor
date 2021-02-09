@@ -1,4 +1,6 @@
 use std::array;
+use std::base64;
+use std::binary;
 use std::float;
 use std::integer;
 use std::json;
@@ -12,7 +14,6 @@ use std::test;
 use std::type;
 use std::url;
 use tremor::system;
-use std::base64;
 
 fn as_string(arr) with
   for arr of
