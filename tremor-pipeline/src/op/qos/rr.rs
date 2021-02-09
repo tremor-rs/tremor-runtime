@@ -118,7 +118,12 @@ impl Operator for RoundRobin {
     fn handles_signal(&self) -> bool {
         true
     }
-    fn on_signal(&mut self, _uid: u64, signal: &mut Event) -> Result<EventAndInsights> {
+    fn on_signal(
+        &mut self,
+        _uid: u64,
+        _state: &Value<'static>,
+        signal: &mut Event,
+    ) -> Result<EventAndInsights> {
         if self.first && self.outputs.iter().any(|o| o.open) {
             let mut e = Event::cb_restore(signal.ingest_ns);
             e.origin_uri = None;

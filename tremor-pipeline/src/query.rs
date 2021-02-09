@@ -114,19 +114,7 @@ fn window_decl_to_impl<'script>(
                         )
                     },
                     |interval| {
-                        let emit_on_tick = d
-                            .params
-                            .get("emit_on_tick")
-                            .and_then(Value::as_bool)
-                            .unwrap_or_else(|| script.is_none());
-                        Ok(TumblingWindowOnTime::from_stmt(
-                            interval,
-                            ttl,
-                            script,
-                            emit_on_tick,
-                            stmt,
-                        )
-                        .into())
+                        Ok(TumblingWindowOnTime::from_stmt(interval, ttl, script, stmt).into())
                     },
                 )
         }

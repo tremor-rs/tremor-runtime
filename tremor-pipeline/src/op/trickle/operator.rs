@@ -96,8 +96,13 @@ impl Operator for TrickleOperator {
     fn handles_signal(&self) -> bool {
         self.op.handles_signal()
     }
-    fn on_signal(&mut self, uid: u64, signal: &mut Event) -> Result<EventAndInsights> {
-        self.op.on_signal(uid, signal)
+    fn on_signal(
+        &mut self,
+        uid: u64,
+        state: &Value<'static>,
+        signal: &mut Event,
+    ) -> Result<EventAndInsights> {
+        self.op.on_signal(uid, state, signal)
     }
 
     fn handles_contraflow(&self) -> bool {

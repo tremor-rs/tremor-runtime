@@ -145,8 +145,13 @@ impl Operator for OperatorNode {
     fn handles_signal(&self) -> bool {
         self.op.handles_signal()
     }
-    fn on_signal(&mut self, _uid: u64, signal: &mut Event) -> Result<EventAndInsights> {
-        self.op.on_signal(self.uid, signal)
+    fn on_signal(
+        &mut self,
+        _uid: u64,
+        state: &Value<'static>,
+        signal: &mut Event,
+    ) -> Result<EventAndInsights> {
+        self.op.on_signal(self.uid, state, signal)
     }
 
     fn handles_contraflow(&self) -> bool {
@@ -574,7 +579,8 @@ impl ExecutableGraph {
             let i = unsafe { *self.signalflow.get_unchecked(idx) };
             let EventAndInsights { events, insights } = {
                 let op = unsafe { self.graph.get_unchecked_mut(i) }; // We know this exists
-                op.on_signal(op.uid, &mut signal)?
+                let state = unsafe { self.state.ops.get_unchecked(i) }; // we know this has been initialized
+                op.on_signal(op.uid, state, &mut signal)?
             };
             for cf in insights {
                 self.insights.push((i, cf));
@@ -629,9 +635,13 @@ mod test {
         assert!(!n.handles_signal());
         assert!(!n.handles_contraflow());
         let mut e = Event::default();
+        let state = Value::null();
         n.on_contraflow(0, &mut e);
         assert_eq!(e, Event::default());
-        assert_eq!(n.on_signal(0, &mut e).unwrap(), EventAndInsights::default());
+        assert_eq!(
+            n.on_signal(0, &state, &mut e).unwrap(),
+            EventAndInsights::default()
+        );
         assert_eq!(e, Event::default());
         assert!(n.metrics(HashMap::default(), 0).unwrap().is_empty());
     }
@@ -680,7 +690,12 @@ mod test {
             true
         }
 
-        fn on_signal(&mut self, _uid: u64, _signal: &mut Event) -> Result<EventAndInsights> {
+        fn on_signal(
+            &mut self,
+            _uid: u64,
+            _state: &Value<'static>,
+            _signal: &mut Event,
+        ) -> Result<EventAndInsights> {
             // Make the trait signature nicer
             Ok(EventAndInsights::default())
         }

@@ -81,7 +81,6 @@ macro_rules! test_cases {
                 for (_, result) in results {
                     for value in result.value_iter() {
                         let serialized = sorted_serialize(value)?;
-                        println!("{}", &serialized);
                         if let Some(expected) = out_json.pop() {
                             assert_eq!(serialized, sorted_serialize(&expected)?);
                         }

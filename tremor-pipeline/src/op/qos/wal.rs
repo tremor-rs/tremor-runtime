@@ -353,7 +353,12 @@ impl Operator for WAL {
     fn handles_signal(&self) -> bool {
         true
     }
-    fn on_signal(&mut self, _uid: u64, signal: &mut Event) -> Result<EventAndInsights> {
+    fn on_signal(
+        &mut self,
+        _uid: u64,
+        _state: &Value<'static>,
+        signal: &mut Event,
+    ) -> Result<EventAndInsights> {
         let now = signal.ingest_ns;
         // Are we currently full
         let now_full = self.limit_reached()?;
@@ -474,7 +479,7 @@ mod test {
         o.on_contraflow(0, &mut i);
 
         // since we failed before we should see 3 events the retransmit of 1-3
-        let r = o.on_signal(0, &mut i)?;
+        let r = o.on_signal(0, &v, &mut i)?;
         assert_eq!(r.len(), 3);
 
         o.gc()?;

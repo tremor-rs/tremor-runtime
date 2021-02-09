@@ -39,6 +39,9 @@ rental! {
     }
 }
 
+/// optimized variant for a simple select of the form:
+///
+/// select event from in [where ...] into out [having ...]
 #[derive(Debug)]
 pub struct SimpleSelect {
     pub id: String,

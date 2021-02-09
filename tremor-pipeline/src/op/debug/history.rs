@@ -81,7 +81,12 @@ impl Operator for History {
     fn handles_signal(&self) -> bool {
         true
     }
-    fn on_signal(&mut self, _uid: u64, signal: &mut Event) -> Result<EventAndInsights> {
+    fn on_signal(
+        &mut self,
+        _uid: u64,
+        _state: &Value<'static>,
+        signal: &mut Event,
+    ) -> Result<EventAndInsights> {
         let (_, meta) = signal.data.parts();
 
         match meta
@@ -156,9 +161,10 @@ mod test {
             data: (Value::from("snot"), Value::from(json!({}))).into(),
             ..Event::default()
         };
+        let state = Value::null();
 
-        let _ = op.on_signal(0, &mut event);
-        let _ = op.on_signal(0, &mut event);
+        let _ = op.on_signal(0, &state, &mut event);
+        let _ = op.on_signal(0, &state, &mut event);
 
         let history = event.data.suffix().meta().get(op.config.name.as_str());
 

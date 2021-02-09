@@ -90,7 +90,13 @@ pub trait Operator: std::fmt::Debug + Send {
         false
     }
     /// Handle singal events, defaults to returning an empty vector.
-    fn on_signal(&mut self, _uid: u64, _signal: &mut Event) -> Result<EventAndInsights> {
+    /// Gets an immutable reference to the pipeline state
+    fn on_signal(
+        &mut self,
+        _uid: u64,
+        _state: &Value<'static>,
+        _signal: &mut Event,
+    ) -> Result<EventAndInsights> {
         // Make the trait signature nicer
         Ok(EventAndInsights::default())
     }
