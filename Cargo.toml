@@ -111,6 +111,7 @@ tide = "0.16"
 serenity = {version = "0.10", default-features = false, features = ["client", "gateway", "rustls_backend", "model", "cache"]}
 
 # for raft
+protobuf = "2"
 slog = { version = "2", features = ["max_level_info", "release_max_level_warn"] }
 slog-json = "2"
 slog-term = "*"

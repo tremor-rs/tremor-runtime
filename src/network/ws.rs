@@ -20,6 +20,7 @@ use crate::raft_node::{NodeId, RaftNetworkMsg};
 use async_channel::{unbounded, Receiver, Sender};
 use async_std::task;
 use async_trait::async_trait;
+use bytes::Bytes;
 //use futures::future::{BoxFuture, FutureExt};
 use futures::StreamExt;
 use halfbrown::HashMap;
@@ -60,7 +61,8 @@ pub enum UrMsg {
 pub enum WsMessage {
     /// Websocket control message
     Ctrl(CtrlMsg),
-    //Raft(RaftMessage),
+    /// Raft core message
+    Raft(RaftMessage),
     /// Websocket message reply
     // TODO switch to tremor type
     Reply {
@@ -89,10 +91,10 @@ pub enum CtrlMsg {
 pub struct RequestId(pub u64);
 
 //#[cfg(feature = "json-proto")]
-//fn decode_ws(bin: &[u8]) -> RaftMessage {
-//    let msg: crate::codec::json::Event = serde_json::from_slice(bin).unwrap();
-//    msg.into()
-//}
+fn decode_ws(bin: &[u8]) -> RaftMessage {
+    let msg: crate::raft::message_types::Event = serde_json::from_slice(bin).unwrap();
+    msg.into()
+}
 
 //#[cfg(not(feature = "json-proto"))]
 //fn decode_ws(bin: &[u8]) -> RaftMessage {
@@ -100,6 +102,19 @@ pub struct RequestId(pub u64);
 //    let mut msg = RaftMessage::default();
 //    msg.merge_from_bytes(bin).unwrap();
 //    msg
+//}
+
+//#[cfg(feature = "json-proto")]
+fn encode_ws(msg: RaftMessage) -> Bytes {
+    let data: crate::raft::message_types::Event = msg.clone().into();
+    let data = serde_json::to_string_pretty(&data);
+    data.unwrap().into()
+}
+
+//#[cfg(not(feature = "json-proto"))]
+//fn encode_ws(msg: RaftMessage) -> Bytes {
+//    use protobuf::Message;
+//    msg.write_to_bytes().unwrap().into()
 //}
 
 type LocalMailboxes = HashMap<NodeId, Sender<WsMessage>>;
@@ -237,7 +252,6 @@ impl NetworkTrait for Network {
                 }
                 self.next().await
             }
-            UrMsg::Status(rid, reply) => Some(RaftNetworkMsg::Status(rid, reply)),
             UrMsg::DownLocal(id) => {
                 warn!("down(local) id: {}", id);
                 self.local_mailboxes.remove(&id);
@@ -254,14 +268,16 @@ impl NetworkTrait for Network {
                 }
                 self.next().await
             }
-            _ => {
-                // temp logging
-                error!(
-                    "Handling not implemented for uring message type: {:?}",
-                    &msg
-                );
-                unimplemented!()
-            }
+            UrMsg::Status(rid, reply) => Some(RaftNetworkMsg::Status(rid, reply)),
+            UrMsg::RaftMsg(msg) => Some(RaftNetworkMsg::RaftMsg(msg)),
+            //_ => {
+            //    // temp logging
+            //    error!(
+            //        "Handling not implemented for uring message type: {:?}",
+            //        &msg
+            //    );
+            //    unimplemented!()
+            //}
         }
     }
 }

@@ -53,9 +53,8 @@ pub(crate) struct Connection {
 impl Connection {
     async fn handle(&mut self, msg: Message) {
         if msg.is_binary() {
-            //let msg = decode_ws(&msg.into_data());
-            //self.handler.try_send(UrMsg::RaftMsg(msg)).unwrap();
-            unimplemented!();
+            let msg = decode_ws(&msg.into_data());
+            self.handler.try_send(UrMsg::RaftMsg(msg)).unwrap();
         } else if msg.is_text() {
             let msg: CtrlMsg = eat_error_and_blow!(serde_json::from_slice(&msg.into_data()));
             match msg {
@@ -124,7 +123,7 @@ async fn worker(_logger: Logger, endpoint: String, handler: Sender<UrMsg>) -> st
                 msg = c.rx.next().fuse() =>
                     // talking to the peer from the current node
                     match msg {
-                        //Some(WsMessage::Raft(msg)) => {c.ws_stream.send(Message::Binary(encode_ws(msg).to_vec())).await.is_ok()},
+                        Some(WsMessage::Raft(msg)) => {c.ws_stream.send(Message::Binary(encode_ws(msg).to_vec())).await.is_ok()},
                         Some(WsMessage::Ctrl(msg)) => {c.ws_stream.send(Message::Text(serde_json::to_string(&msg).unwrap())).await.is_ok()},
                         Some(WsMessage::Reply {data, ..}) => {c.ws_stream.send(Message::Text(serde_json::to_string(&data).unwrap())).await.is_ok()},
                         None => false

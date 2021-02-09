@@ -17,7 +17,9 @@ use crate::network::ws::{Network, RequestId, WsMessage};
 use crate::network::Network as NetworkTrait;
 use async_std::task::{self, JoinHandle};
 use futures::{select, FutureExt, StreamExt};
-use raft::{prelude::*, raw_node::RawNode, storage::MemStorage, StateRole};
+use raft::{
+    eraftpb::Message as RaftMessage, prelude::*, raw_node::RawNode, storage::MemStorage, StateRole,
+};
 use slog::Logger;
 use std::fmt;
 use std::time::{Duration, Instant};
@@ -37,6 +39,9 @@ impl fmt::Display for NodeId {
 pub enum RaftNetworkMsg {
     /// Status requests
     Status(RequestId, async_channel::Sender<WsMessage>),
+
+    /// Core raft mesages
+    RaftMsg(RaftMessage),
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
@@ -201,10 +206,10 @@ pub async fn start_raft(
                     } else {
                         break;
                     };
-                    let raft = node.raft_group.as_ref().unwrap();
                     match msg {
                         RaftNetworkMsg::Status(rid, reply) => {
                             info!("Getting node status");
+                            let raft = node.raft_group.as_ref().unwrap();
                             reply
                                 .send(WsMessage::Reply {
                                     code: 200,
@@ -213,6 +218,14 @@ pub async fn start_raft(
                                 })
                                 .await
                                 .unwrap();
+                        }
+                        RaftNetworkMsg::RaftMsg(msg) => {
+                            dbg!("Stepping raft!");
+                            // FIXME initialize the raft if need.
+                            let raft = node.raft_group.as_mut().unwrap();
+                            if let Err(e) = raft.step(msg) {
+                                error!("Raft step error: {}", e);
+                            }
                         }
                     }
                 }

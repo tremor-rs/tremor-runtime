@@ -86,10 +86,9 @@ impl Connection {
                 }
             }
         } else if msg.is_binary() {
-            //let bin = msg.into_data();
-            //let msg = decode_ws(&bin);
-            //self.node.tx.try_send(UrMsg::RaftMsg(msg)).is_ok()
-            unimplemented!()
+            let bin = msg.into_data();
+            let msg = decode_ws(&bin);
+            self.node.tx.try_send(UrMsg::RaftMsg(msg)).is_ok()
         } else {
             true
         }
@@ -111,7 +110,7 @@ impl Connection {
                 msg = self.ws_rx.next().fuse() => {
                     match msg {
                         Some(WsMessage::Ctrl(msg)) =>self.tx.send(Message::Text(serde_json::to_string(&msg).unwrap())).await.is_ok(),
-                        //Some(WsMessage::Raft(msg)) => self.tx.send(Message::Binary(encode_ws(msg).to_vec())).await.is_ok(),
+                        Some(WsMessage::Raft(msg)) => self.tx.send(Message::Binary(encode_ws(msg).to_vec())).await.is_ok(),
                         Some(WsMessage::Reply {data, ..}) =>self.tx.send(Message::Text(serde_json::to_string(&data).unwrap())).await.is_ok(),
                         None => false,
                     }

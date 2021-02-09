@@ -56,6 +56,7 @@ pub(crate) mod pipeline;
 pub mod postprocessor;
 /// Offramp Postprocessors
 pub mod preprocessor;
+pub(crate) mod raft;
 /// Raft node primitives
 pub mod raft_node;
 pub(crate) mod ramp;
