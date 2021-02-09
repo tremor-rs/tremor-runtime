@@ -23,6 +23,7 @@ use async_trait::async_trait;
 //use futures::future::{BoxFuture, FutureExt};
 use futures::StreamExt;
 use halfbrown::HashMap;
+use raft::eraftpb::Message as RaftMessage;
 use slog::Logger;
 
 #[derive(Clone)]
@@ -33,6 +34,7 @@ pub(crate) struct Node {
 }
 
 /// blah
+#[derive(Debug)]
 pub enum UrMsg {
     // Network related
     /// blah
@@ -47,6 +49,10 @@ pub enum UrMsg {
     DownRemote(NodeId),
     /// blah
     Status(RequestId, Sender<WsMessage>),
+
+    // Raft related
+    /// blah
+    RaftMsg(RaftMessage),
 }
 
 // TODO this will be using the websocket driver for the tremor network protocol
@@ -96,13 +102,16 @@ pub struct RequestId(pub u64);
 //    msg
 //}
 
+type LocalMailboxes = HashMap<NodeId, Sender<WsMessage>>;
+type RemoteMailboxes = HashMap<NodeId, Sender<WsMessage>>;
+
 /// Network for cluster communication
 pub struct Network {
     // TODO remove pubs here
     /// blah
     pub id: NodeId,
-    //local_mailboxes: LocalMailboxes,
-    //remote_mailboxes: RemoteMailboxes,
+    local_mailboxes: LocalMailboxes,
+    remote_mailboxes: RemoteMailboxes,
     /// blah
     pub known_peers: HashMap<NodeId, String>,
     /// blah
@@ -154,8 +163,8 @@ impl Network {
             rx,
             logger: logger.clone(),
             known_peers: HashMap::new(),
-            //local_mailboxes: HashMap::new(),
-            //remote_mailboxes: HashMap::new(),
+            local_mailboxes: HashMap::new(),
+            remote_mailboxes: HashMap::new(),
             //next_eid: 1,
             //pending: HashMap::new(),
             //prot_pending: HashMap::new(),
@@ -183,13 +192,76 @@ impl NetworkTrait for Network {
                     .unwrap();
                 self.next().await
             }
-            UrMsg::RegisterRemote(id, peer, _endpoint) => {
-                info!("register(remote) remote-id: {} remote-peer: {}", id, &peer);
-                // FIXME send hello-ack from here
-                None
+            UrMsg::RegisterLocal(id, peer, endpoint, peers) => {
+                if id != self.id {
+                    info!(
+                        "register(local) remote-id: {} remote-peer: {} discoverd-peers: {:?}",
+                        id, peer, peers
+                    );
+                    self.local_mailboxes.insert(id, endpoint.clone());
+                    for (peer_id, peer) in peers {
+                        if !self.known_peers.contains_key(&peer_id) {
+                            //info!("register(local) not a known peer: {}", peer);
+                            self.known_peers.insert(peer_id, peer.clone());
+                            let tx = self.tx.clone();
+                            let logger = self.logger.clone();
+                            task::spawn(client::remote_endpoint(peer, tx, logger));
+                        }
+                    }
+                }
+                self.next().await
+            }
+            UrMsg::RegisterRemote(id, peer, endpoint) => {
+                if id != self.id {
+                    info!("register(remote) remote-id: {} remote-peer: {}", id, &peer);
+                    if !self.known_peers.contains_key(&id) {
+                        //info!("register(remote) not a known peer: {}", peer);
+                        self.known_peers.insert(id, peer.clone());
+                        let tx = self.tx.clone();
+                        let logger = self.logger.clone();
+                        task::spawn(client::remote_endpoint(peer, tx, logger));
+                    }
+                    //dbg!(&self.known_peers);
+                    endpoint
+                        .clone()
+                        .send(WsMessage::Ctrl(CtrlMsg::HelloAck(
+                            self.id,
+                            self.endpoint.clone(),
+                            self.known_peers
+                                .clone()
+                                .into_iter()
+                                .collect::<Vec<(NodeId, String)>>(),
+                        )))
+                        .await
+                        .unwrap();
+                }
+                self.next().await
             }
             UrMsg::Status(rid, reply) => Some(RaftNetworkMsg::Status(rid, reply)),
-            _ => unimplemented!(),
+            UrMsg::DownLocal(id) => {
+                warn!("down(local) id: {}", id);
+                self.local_mailboxes.remove(&id);
+                if !self.remote_mailboxes.contains_key(&id) {
+                    self.known_peers.remove(&id);
+                }
+                self.next().await
+            }
+            UrMsg::DownRemote(id) => {
+                warn!("down(remote) id: {}", id);
+                self.remote_mailboxes.remove(&id);
+                if !self.local_mailboxes.contains_key(&id) {
+                    self.known_peers.remove(&id);
+                }
+                self.next().await
+            }
+            _ => {
+                // temp logging
+                error!(
+                    "Handling not implemented for uring message type: {:?}",
+                    &msg
+                );
+                unimplemented!()
+            }
         }
     }
 }

@@ -688,15 +688,14 @@ impl World {
             let decorator = slog_term::TermDecorator::new().build();
             let drain = slog_term::FullFormat::new(decorator).build().fuse();
             let drain = slog_async::Async::new(drain).build().fuse();
+            // temp filter for only showing warnings
+            let drain = slog::LevelFilter::new(drain, slog::Level::Warning).fuse();
             slog::Logger::root(drain, o!())
         };
         // FIXME allow for non-numeric
         let numeric_instance_id = instance!().parse::<u64>()?;
         let node_id = NodeId(numeric_instance_id);
         let network = ws::Network::new(&logger, node_id, cluster_endpoint, cluster_peers);
-        dbg!(&network.id);
-        dbg!(&network.logger);
-        dbg!(&network.known_peers);
 
         let repo = Repositories::new();
         let reg = Registries::new();
