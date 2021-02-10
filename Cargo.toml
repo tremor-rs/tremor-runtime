@@ -137,7 +137,8 @@ bert = ["tremor-pipeline/bert"]
 
 [patch.crates-io]
 # waiting on raft-rs 0.6 here: https://github.com/tikv/raft-rs/issues/390
-raft = { git = 'https://github.com/tikv/raft-rs', rev = 'ed74d64' }
+#raft = { git = 'https://github.com/tikv/raft-rs', rev = 'ed74d64' }
+raft = { git = 'https://github.com/tikv/raft-rs', rev = 'eec5ead3ebe8f790154c94cb5f5adb0063a674e9' }
 rust-bert = {git = 'https://github.com/mfelsche/rust-bert.git', rev = '1140989'}
 rust_tokenizers = {git = 'https://github.com/mfelsche/rust-tokenizers.git', rev = '5a7860d'}
 

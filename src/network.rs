@@ -17,10 +17,29 @@ pub mod ws;
 
 use crate::raft_node::RaftNetworkMsg;
 use async_trait::async_trait;
+use raft::eraftpb::Message as RaftMessage;
+use std::{fmt, io};
 
 /// blah
 #[async_trait]
 pub trait Network: Send + Sync {
     /// blah
     async fn next(&mut self) -> Option<RaftNetworkMsg>;
+    /// blah
+    async fn send_msg(&mut self, msg: RaftMessage) -> Result<(), Error>;
+}
+
+/// blah
+#[derive(Debug)]
+pub enum Error {
+    /// blah
+    Io(io::Error),
+    //Generic(String),
+    //NotConnected(NodeId),
+}
+impl std::error::Error for Error {}
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }

@@ -15,7 +15,7 @@
 mod client;
 mod server;
 
-use crate::network::Network as NetworkTrait;
+use crate::network::{Error as NetworkError, Network as NetworkTrait};
 use crate::raft_node::{NodeId, RaftNetworkMsg};
 use async_channel::{unbounded, Receiver, Sender};
 use async_std::task;
@@ -26,6 +26,7 @@ use futures::StreamExt;
 use halfbrown::HashMap;
 use raft::eraftpb::Message as RaftMessage;
 use slog::Logger;
+use std::io;
 
 #[derive(Clone)]
 pub(crate) struct Node {
@@ -278,6 +279,24 @@ impl NetworkTrait for Network {
             //    );
             //    unimplemented!()
             //}
+        }
+    }
+
+    async fn send_msg(&mut self, msg: RaftMessage) -> Result<(), NetworkError> {
+        let to = NodeId(msg.to);
+        if let Some(remote) = self.local_mailboxes.get_mut(&to) {
+            remote
+                .send(WsMessage::Raft(msg))
+                .await
+                .map_err(|e| NetworkError::Io(io::Error::new(io::ErrorKind::ConnectionAborted, e)))
+        } else if let Some(remote) = self.remote_mailboxes.get_mut(&to) {
+            remote
+                .send(WsMessage::Raft(msg))
+                .await
+                .map_err(|e| NetworkError::Io(io::Error::new(io::ErrorKind::ConnectionAborted, e)))
+        } else {
+            // Err(Error::NotConnected(to)) this is not an error we'll retry
+            Ok(())
         }
     }
 }

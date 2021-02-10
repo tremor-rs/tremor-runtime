@@ -3777,7 +3777,7 @@ checksum = "941ba9d78d8e2f7ce474c015eea4d9c6d25b6a3327f9832ee29a4de27f91bbb8"
 [[package]]
 name = "raft"
 version = "0.6.0-alpha"
-source = "git+https://github.com/tikv/raft-rs?rev=ed74d64#ed74d64cf3eefa77f388be49c39482099430cd93"
+source = "git+https://github.com/tikv/raft-rs?rev=eec5ead3ebe8f790154c94cb5f5adb0063a674e9#eec5ead3ebe8f790154c94cb5f5adb0063a674e9"
 dependencies = [
  "fxhash",
  "getset",
@@ -3794,7 +3794,7 @@ dependencies = [
 [[package]]
 name = "raft-proto"
 version = "0.6.0-alpha"
-source = "git+https://github.com/tikv/raft-rs?rev=ed74d64#ed74d64cf3eefa77f388be49c39482099430cd93"
+source = "git+https://github.com/tikv/raft-rs?rev=eec5ead3ebe8f790154c94cb5f5adb0063a674e9#eec5ead3ebe8f790154c94cb5f5adb0063a674e9"
 dependencies = [
  "protobuf",
  "protobuf-build",
