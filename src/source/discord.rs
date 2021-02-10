@@ -272,7 +272,23 @@ async fn reply_loop(rx: Receiver<Value<'static>>, ctx: Context) {
                     if let Some(embed) = reply.get("embed") {
                         // FIXME: todo;
                         m.embed(|e| {
-                            if let Some(_author) = embed.get("author") {};
+                            if let Some(author) = embed.get("author") {
+                                e.author(|a| {
+                                    if let Some(icon_url) =
+                                        author.get("icon_url").and_then(Value::as_str)
+                                    {
+                                        a.icon_url(icon_url);
+                                    };
+                                    if let Some(name) = author.get("name").and_then(Value::as_str) {
+                                        a.name(name);
+                                    };
+                                    if let Some(url) = author.get("url").and_then(Value::as_str) {
+                                        a.url(url);
+                                    };
+
+                                    a
+                                });
+                            };
 
                             if let Some(colour) = embed.get("colour").and_then(Value::as_u64) {
                                 e.colour(colour);
@@ -283,15 +299,23 @@ async fn reply_loop(rx: Receiver<Value<'static>>, ctx: Context) {
                                 e.description(description);
                             };
 
-                            if let Some(fields) = embed.get("fields").and_then(Value::as_array) {
-                                e.fields(fields.iter().filter_map(|f| {
-                                    Some((
-                                        f.get("name").and_then(Value::as_str)?,
-                                        f.get("value").and_then(Value::as_str)?,
-                                        f.get("inline")
-                                            .and_then(Value::as_bool)
-                                            .unwrap_or_default(),
-                                    ))
+                            if let Some(fields) = embed.get("fields").and_then(Value::as_object) {
+                                e.fields(fields.iter().filter_map(|(name, v)| {
+                                    if let Some(value) = v.as_str() {
+                                        Some((name, value, false))
+                                    } else if let Some(value) =
+                                        v.get("value").and_then(Value::as_str)
+                                    {
+                                        Some((
+                                            name,
+                                            value,
+                                            v.get("inline")
+                                                .and_then(Value::as_bool)
+                                                .unwrap_or_default(),
+                                        ))
+                                    } else {
+                                        None
+                                    }
                                 }));
                             };
                             if let Some(footer) = embed.get("footer") {
