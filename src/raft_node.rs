@@ -86,7 +86,7 @@ pub struct RaftNode {
     // FIXME swap out MemStorage
     /// FIXME
     pub raft_group: Option<RawNode<MemStorage>>,
-    //network: Network,
+    network: Network,
     //proposals: VecDeque<Proposal>,
     //pending_proposals: HashMap<ProposalId, Proposal>,
     //pending_acks: HashMap<ProposalId, EventId>,
@@ -97,13 +97,61 @@ pub struct RaftNode {
 }
 
 impl RaftNode {
+    /// Raft node loop
+    pub async fn node_loop(&mut self) {
+        let duration = Duration::from_millis(100);
+        let mut ticks = async_std::stream::interval(duration);
+        let mut i = Instant::now();
+
+        loop {
+            select! {
+                msg = self.network.next().fuse() => {
+                    let msg = if let Some(msg) = msg {
+                        msg
+                    } else {
+                        break;
+                    };
+                    match msg {
+                        RaftNetworkMsg::Status(rid, reply) => {
+                            info!("Getting node status");
+                            let raft = self.raft_group.as_ref().unwrap();
+                            reply
+                                .send(WsMessage::Reply {
+                                    code: 200,
+                                    rid,
+                                    data: serde_json::to_value(status(&raft).await.unwrap()).unwrap(),
+                                })
+                                .await
+                                .unwrap();
+                        }
+                        RaftNetworkMsg::RaftMsg(msg) => {
+                            dbg!("Stepping raft!");
+                            // FIXME initialize the raft if need.
+                            let raft = self.raft_group.as_mut().unwrap();
+                            if let Err(e) = raft.step(msg) {
+                                error!("Raft step error: {}", e);
+                            }
+                        }
+                    }
+                }
+                _tick = ticks.next().fuse() => {
+                    if i.elapsed() >= Duration::from_secs(10) {
+                        i = Instant::now();
+                    }
+                    let raft = self.raft_group.as_mut().unwrap();
+                    raft.tick();
+                }
+            }
+        }
+    }
+
     /// Set raft tick duration
     pub fn set_raft_tick_duration(&mut self, d: Duration) {
         self.tick_duration = d;
     }
 
     /// Create a raft leader
-    pub async fn create_raft_leader(logger: &Logger, id: NodeId, _network: &Network) -> Self {
+    pub async fn create_raft_leader(logger: &Logger, id: NodeId, network: Network) -> Self {
         let mut config = example_config();
         config.id = id.0;
         config.validate().unwrap();
@@ -121,7 +169,7 @@ impl RaftNode {
             //logger: logger.clone(),
             id,
             raft_group,
-            //network,
+            network,
             //proposals: VecDeque::new(),
             //pending_proposals: HashMap::new(),
             //pending_acks: HashMap::new(),
@@ -133,7 +181,7 @@ impl RaftNode {
     }
 
     /// Create a raft follower.
-    pub async fn create_raft_follower(logger: &Logger, id: NodeId, _network: &Network) -> Self {
+    pub async fn create_raft_follower(logger: &Logger, id: NodeId, network: Network) -> Self {
         /*
         let storage = Storage::new(id).await;
         let raft_group = if storage.last_index().unwrap() == 1 {
@@ -162,7 +210,7 @@ impl RaftNode {
             //logger: logger.clone(),
             id,
             raft_group,
-            //network,
+            network,
             //proposals: VecDeque::new(),
             //pending_proposals: HashMap::new(),
             //pending_acks: HashMap::new(),
@@ -179,64 +227,16 @@ pub async fn start_raft(
     id: NodeId,
     bootstrap: bool,
     logger: Logger,
-    mut network: Network,
+    network: Network,
 ) -> JoinHandle<()> {
     let mut node = if bootstrap {
         dbg!("bootstrap on");
-        RaftNode::create_raft_leader(&logger, id, &network).await
+        RaftNode::create_raft_leader(&logger, id, network).await
     } else {
-        RaftNode::create_raft_follower(&logger, id, &network).await
+        RaftNode::create_raft_follower(&logger, id, network).await
     };
     dbg!(&node.id);
     dbg!(&node.last_state);
-    //dbg!(&node.network);
 
-    // node loop
-    // TODO stash this in a function and use node network
-    task::spawn(async move {
-        let duration = Duration::from_millis(100);
-        let mut ticks = async_std::stream::interval(duration);
-        let mut i = Instant::now();
-
-        loop {
-            select! {
-                msg = network.next().fuse() => {
-                    let msg = if let Some(msg) = msg {
-                        msg
-                    } else {
-                        break;
-                    };
-                    match msg {
-                        RaftNetworkMsg::Status(rid, reply) => {
-                            info!("Getting node status");
-                            let raft = node.raft_group.as_ref().unwrap();
-                            reply
-                                .send(WsMessage::Reply {
-                                    code: 200,
-                                    rid,
-                                    data: serde_json::to_value(status(&raft).await.unwrap()).unwrap(),
-                                })
-                                .await
-                                .unwrap();
-                        }
-                        RaftNetworkMsg::RaftMsg(msg) => {
-                            dbg!("Stepping raft!");
-                            // FIXME initialize the raft if need.
-                            let raft = node.raft_group.as_mut().unwrap();
-                            if let Err(e) = raft.step(msg) {
-                                error!("Raft step error: {}", e);
-                            }
-                        }
-                    }
-                }
-                _tick = ticks.next().fuse() => {
-                    if i.elapsed() >= Duration::from_secs(10) {
-                        i = Instant::now();
-                    }
-                    let raft = node.raft_group.as_mut().unwrap();
-                    raft.tick();
-                }
-            }
-        }
-    })
+    task::spawn(async move { node.node_loop().await })
 }
