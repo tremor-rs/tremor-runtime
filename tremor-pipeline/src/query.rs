@@ -85,7 +85,7 @@ fn resolve_output_port(port: &(Ident, Ident), meta: &NodeMetas) -> OutputPort {
     }
 }
 
-fn window_decl_to_impl<'script>(
+pub(crate) fn window_decl_to_impl<'script>(
     d: &WindowDecl<'script>,
     stmt: &StmtRentalWrapper,
 ) -> Result<WindowImpl> {

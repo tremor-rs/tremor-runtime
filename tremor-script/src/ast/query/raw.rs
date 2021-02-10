@@ -153,9 +153,9 @@ impl<'script> Upable<'script> for StmtRaw<'script> {
                 let consts = vec![Value::null(), Value::null(), Value::null()];
                 // only allocate scratches if they are really needed - when we have multiple windows
                 let aggregate_scratches = if stmt.windows.len() > 1 {
-                    vec![(aggregates.clone(), aggregates.clone())]
+                    Some((aggregates.clone(), aggregates.clone()))
                 } else {
-                    Vec::with_capacity(0)
+                    None
                 };
 
                 Ok(Stmt::Select(SelectStmt {
