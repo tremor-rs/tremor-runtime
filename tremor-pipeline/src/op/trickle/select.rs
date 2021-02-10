@@ -698,7 +698,8 @@ impl Operator for TrickleSelect {
         };
 
         // Handle eviction
-        // TODO: what is this doing? Do we get the evicted windows or are they discarded?
+        // retire the group data that didnt receive an event in `eviction_ns()` nanoseconds
+        // if no event came after `2 * eviction_ns()` this group is finally cleared out
         for window in &mut self.windows {
             if let Some(eviction_ns) = window.window_impl.eviction_ns() {
                 if window.next_swap < event.ingest_ns {
