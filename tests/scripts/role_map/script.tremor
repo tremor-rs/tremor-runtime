@@ -1,0 +1,13 @@
+const map = {
+  "🔧": 808995606240165938,
+  "🏫": 808995543497703444
+};
+
+fn role_map(r) with
+  match present map[r] of
+    case true => map[r]
+    default => false
+  end
+end;
+
+role_map(event)

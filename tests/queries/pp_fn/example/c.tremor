@@ -1,0 +1,10 @@
+# c.tremor
+const int_map = {
+  "🔧": 1,
+  "🏫": 2,
+  "👷": 3,
+};
+
+fn map(r) with
+  int_map[r]
+end
