@@ -93,7 +93,7 @@ rdkafka = {version = "0.24", features = ["cmake-build", "libz-static"], default-
 rdkafka-sys = {version = "2.0.0", features = ["cmake-build", "libz-static"]}# tracking the version rdkafka depends on
 
 # crononome
-cron = "0.7.0"
+cron = "0.8.0"
 
 # logstash grok patterns
 grok = "1"
