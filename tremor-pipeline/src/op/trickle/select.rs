@@ -16,7 +16,7 @@
 
 use crate::{
     errors::{Error, ErrorKind, Result},
-    EventId,
+    EventId, SignalKind,
 };
 use crate::{op::prelude::*, EventIdGenerator};
 use crate::{Event, Operator};
@@ -155,6 +155,15 @@ impl WindowTrait for WindowImpl {
             Self::No(w) => w.on_event(event),
         }
     }
+
+    fn on_tick(&mut self, ns: u64) -> Result<WindowEvent> {
+        match self {
+            Self::TumblingTimeBased(w) => w.on_tick(ns),
+            Self::TumblingCountBased(w) => w.on_tick(ns),
+            Self::No(w) => w.on_tick(ns),
+        }
+    }
+
     fn eviction_ns(&self) -> Option<u64> {
         match self {
             Self::TumblingTimeBased(w) => w.eviction_ns(),
@@ -702,7 +711,7 @@ impl Operator for TrickleSelect {
 
         let group_values: Vec<Value> = group_values.into_iter().map(Value::Array).collect();
 
-        let scratches = aggregate_scratches.get_mut(0);
+        let scratches = aggregate_scratches.as_mut();
 
         for group_value in group_values {
             let group_str = sorted_serialize(&group_value)?;
@@ -1159,9 +1168,8 @@ impl Operator for TrickleSelect {
         state: &Value<'static>, // we only reference state here immutably, no chance to change it here
         signal: &mut Event,
     ) -> Result<EventAndInsights> {
-        if self.windows.is_empty() {
-            Ok(EventAndInsights::default())
-        } else {
+        // we only react on ticks and when we have windows
+        if signal.kind == Some(SignalKind::Tick) && !self.windows.is_empty() {
             let ingest_ns = signal.ingest_ns;
             let opts = Self::opts();
             // TODO: reason about soundness
@@ -1239,11 +1247,9 @@ impl Operator for TrickleSelect {
                 _ => {
                     // complicated logic
                     // get a set of groups
-
-                    // for each distinct group
                     //   for each window
-                    //       on_event ... do the magic dance with scratches etc
-                    // TODO: move the magic dance ot its own method
+                    //      get the corresponding group data
+                    //      on_event ... do the magic dance with scratches etc
                     // we need scratches for multiple window handling
 
                     let ctx = EventContext::new(ingest_ns, None);
@@ -1278,7 +1284,7 @@ impl Operator for TrickleSelect {
                         set_group(consts, group_value.clone_static())?;
                         get_group_mut(consts)?.push(group_str.clone())?;
 
-                        if let Some((scratch1, scratch2)) = aggregate_scratches.get_mut(0) {
+                        if let Some((scratch1, scratch2)) = aggregate_scratches.as_mut() {
                             // gather window events
                             let mut emit_window_events = Vec::with_capacity(self.windows.len());
                             let step1_iter = self.windows.iter_mut();
@@ -1452,6 +1458,8 @@ impl Operator for TrickleSelect {
                 }
             }
             Ok(res)
+        } else {
+            Ok(EventAndInsights::default())
         }
     }
 
@@ -1463,10 +1471,13 @@ impl Operator for TrickleSelect {
 #[cfg(test)]
 mod test {
     #![allow(clippy::float_cmp)]
+    use crate::query::window_decl_to_impl;
+
     use super::*;
+    use rental::RentalError;
     use simd_json::{json, StaticNode};
-    use tremor_script::ast::Stmt;
     use tremor_script::Value;
+    use tremor_script::{ast::Stmt, Query};
     use tremor_script::{
         ast::{self, Ident, ImutExpr, Literal},
         path::ModulePath,
@@ -1645,13 +1656,253 @@ mod test {
         Ok(())
     }
 
+    fn select_stmt_from_query(query_str: &str) -> Result<TrickleSelect> {
+        let reg = tremor_script::registry();
+        let aggr_reg = tremor_script::aggr_registry();
+        let module_path = tremor_script::path::load();
+        let cus = vec![];
+        let query = tremor_script::query::Query::parse(
+            &module_path,
+            "fake",
+            query_str,
+            cus,
+            &reg,
+            &aggr_reg,
+        )
+        .map_err(tremor_script::errors::CompilerError::error)?;
+        let window_decls: Vec<WindowDecl<'_>> = query
+            .suffix()
+            .stmts
+            .iter()
+            .filter_map(|stmt| match stmt {
+                Stmt::WindowDecl(wd) => Some(wd.as_ref().clone()),
+                _ => None,
+            })
+            .collect();
+        let stmt_rental = tremor_script::query::StmtRental::try_new(Arc::new(query.clone()), |q| {
+            q.suffix()
+                .stmts
+                .iter()
+                .find(|stmt| matches!(*stmt, Stmt::Select(_)))
+                .cloned()
+                .ok_or_else(|| Error::from("Invalid query, expected only 1 select statement"))
+        })
+        .map_err(|e: RentalError<Error, Arc<Query>>| e.0)?;
+        let stmt = tremor_script::query::StmtRentalWrapper {
+            stmt: Arc::new(stmt_rental),
+        };
+        let windows: Vec<(String, WindowImpl)> = window_decls
+            .iter()
+            .enumerate()
+            .map(|(i, window_decl)| {
+                (
+                    i.to_string(),
+                    window_decl_to_impl(window_decl, &stmt).unwrap(), // yes, indeed!
+                )
+            })
+            .collect();
+        let groups = Dims::new(stmt.stmt.clone());
+
+        let id = "select".to_string();
+        Ok(TrickleSelect::with_stmt(42, id, &groups, windows, &stmt)?)
+    }
+
+    fn test_tick(ns: u64) -> Event {
+        Event {
+            id: EventId::new(1, 1, ns),
+            kind: Some(SignalKind::Tick),
+            ingest_ns: ns,
+            ..Event::default()
+        }
+    }
+
+    #[test]
+    fn select_single_win_with_script_on_signal() -> Result<()> {
+        let mut select = select_stmt_from_query(
+            r#"
+        define tumbling window window1
+        with
+            interval = 5
+        script
+            event.time
+        end;
+        select aggr::stats::count() from in[window1] group by event.g into out having event > 0;
+        "#,
+        )?;
+        let uid = 42;
+        let mut state = Value::null();
+        let mut tick1 = test_tick(1);
+        let mut eis = select.on_signal(uid, &state, &mut tick1)?;
+        assert!(eis.insights.is_empty());
+        assert_eq!(0, eis.events.len());
+
+        let event = Event {
+            id: (1, 1, 300).into(),
+            ingest_ns: 1_000,
+            data: Value::from(json!({
+               "time" : 4,
+               "g": "group"
+            }))
+            .into(),
+            ..Event::default()
+        };
+        eis = select.on_event(uid, "IN", &mut state, event)?;
+        assert!(eis.insights.is_empty());
+        assert_eq!(0, eis.events.len());
+
+        // no emit on signal, although window interval would be passed
+        let mut tick2 = test_tick(10);
+        eis = select.on_signal(uid, &state, &mut tick2)?;
+        assert!(eis.insights.is_empty());
+        assert_eq!(0, eis.events.len());
+
+        // only emit on event
+        let event = Event {
+            id: (1, 1, 300).into(),
+            ingest_ns: 3_000,
+            data: Value::from(json!({
+               "time" : 11,
+               "g": "group"
+            }))
+            .into(),
+            ..Event::default()
+        };
+        eis = select.on_event(uid, "IN", &mut state, event)?;
+        assert!(eis.insights.is_empty());
+        assert_eq!(1, eis.events.len());
+        assert_eq!("1", sorted_serialize(eis.events[0].1.data.parts().0)?);
+        Ok(())
+    }
+
+    #[test]
+    fn select_single_win_on_signal() -> Result<()> {
+        let mut select = select_stmt_from_query(
+            r#"
+        define tumbling window window1
+        with
+            interval = 2
+        end;
+        select aggr::win::collect_flattened(event) from in[window1] group by event.g into out;
+        "#,
+        )?;
+        let uid = 42;
+        let mut state = Value::null();
+        let mut tick1 = test_tick(1);
+        let mut eis = select.on_signal(uid, &state, &mut tick1)?;
+        assert!(eis.insights.is_empty());
+        assert_eq!(0, eis.events.len());
+
+        let event = Event {
+            id: (1, 1, 300).into(),
+            ingest_ns: 2,
+            data: Value::from(json!({
+               "g": "group"
+            }))
+            .into(),
+            ..Event::default()
+        };
+        eis = select.on_event(uid, "IN", &mut state, event)?;
+        assert!(eis.insights.is_empty());
+        assert_eq!(0, eis.events.len());
+
+        // no emit yet
+        let mut tick2 = test_tick(3);
+        eis = select.on_signal(uid, &state, &mut tick2)?;
+        assert!(eis.insights.is_empty());
+        assert_eq!(0, eis.events.len());
+
+        // now emit
+        let mut tick3 = test_tick(4);
+        eis = select.on_signal(uid, &state, &mut tick3)?;
+        assert!(eis.insights.is_empty());
+        assert_eq!(1, eis.events.len());
+        assert_eq!(
+            r#"[{"g":"group"}]"#,
+            sorted_serialize(eis.events[0].1.data.parts().0)?
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn select_multiple_wins_on_signal() -> Result<()> {
+        let mut select = select_stmt_from_query(
+            r#"
+        define tumbling window window1
+        with
+            interval = 100
+        end;
+        define tumbling window window2
+        with
+            size = 2
+        end;
+        select aggr::win::collect_flattened(event) from in[window1, window2] group by event.cat into out;
+        "#,
+        )?;
+        let uid = 42;
+        let mut state = Value::null();
+        let mut tick1 = test_tick(1);
+        let mut eis = select.on_signal(uid, &state, &mut tick1)?;
+        assert!(eis.insights.is_empty());
+        assert_eq!(0, eis.events.len());
+
+        let mut tick2 = test_tick(100);
+        eis = select.on_signal(uid, &state, &mut tick2)?;
+        assert!(eis.insights.is_empty());
+        assert_eq!(0, eis.events.len());
+
+        // we have no groups, so no emit yet
+        let mut tick3 = test_tick(201);
+        eis = select.on_signal(uid, &state, &mut tick3)?;
+        assert!(eis.insights.is_empty());
+        assert_eq!(0, eis.events.len());
+
+        // insert first event
+        let event = Event {
+            id: (1, 1, 300).into(),
+            ingest_ns: 300,
+            data: Value::from(json!({
+               "cat" : 42,
+            }))
+            .into(),
+            ..Event::default()
+        };
+        eis = select.on_event(uid, "IN", &mut state, event)?;
+        assert!(eis.insights.is_empty());
+        assert_eq!(0, eis.events.len());
+
+        // finish the window with the next tick
+        let mut tick4 = test_tick(401);
+        eis = select.on_signal(uid, &state, &mut tick4)?;
+        assert!(eis.insights.is_empty());
+        assert_eq!(1, eis.events.len());
+        let (_port, event) = eis.events.remove(0);
+        assert_eq!(r#"[{"cat":42}]"#, sorted_serialize(event.data.parts().0)?);
+
+        let mut tick5 = test_tick(499);
+        eis = select.on_signal(uid, &state, &mut tick5)?;
+        assert!(eis.insights.is_empty());
+        assert_eq!(0, eis.events.len());
+
+        Ok(())
+    }
+
     #[test]
     fn count_tilt() -> Result<()> {
         // Windows are 15s and 30s
-        let mut op = parse_query(
-            "test.trickle".to_string(),
-            "select aggr::stats::count() from in[w15s, w30s] into out;",
+        let mut op = select_stmt_from_query(
+            r#"
+        define tumbling window w15s
+        with
+          interval = 15 * 1000000000
+        end;
+        define tumbling window w30s
+        with
+          interval = 30 * 1000000000
+        end;
+        select aggr::stats::count() from in [w15s, w30s] into out;
+        "#,
         )?;
+
         // Insert two events prior to 15
         assert!(try_enqueue(&mut op, test_event(0))?.is_none());
         assert!(try_enqueue(&mut op, test_event(1))?.is_none());
@@ -1932,7 +2183,7 @@ mod test {
 
     fn test_select_stmt(stmt: tremor_script::ast::Select) -> tremor_script::ast::Stmt {
         let aggregates = vec![];
-        let aggregate_scratches = vec![(aggregates.clone(), aggregates.clone())];
+        let aggregate_scratches = Some((aggregates.clone(), aggregates.clone()));
         ast::Stmt::Select(SelectStmt {
             stmt: Box::new(stmt),
             aggregates,
@@ -2228,26 +2479,6 @@ mod test {
     #[test]
     fn tumbling_window_on_number_emit() -> Result<()> {
         let stmt = stmt_rental()?;
-        /*
-        // create a WindowDecl with a custom script
-        let reg = Registry::default();
-        let script = Script::parse(
-            ModulePath::load(),
-            "foo",
-            "event.count".to_string(),
-            &reg,
-        )?;
-        let mut params = halfbrown::HashMap::with_capacity(1);
-        params.insert("size".to_string(), Value::Static(StaticNode::U64(3)));
-        let window_decl = WindowDecl {
-            module: vec!["snot".to_string()],
-            mid: 1,
-            id: "my_window",
-            kind: ast::WindowKind::Tumbling,
-            params,
-            script: Some(script),
-        };
-        */
         let mut window = TumblingWindowOnNumber::from_stmt(3, None, None, &stmt);
         // do not emit yet
         assert_eq!(

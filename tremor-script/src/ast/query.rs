@@ -125,7 +125,7 @@ pub struct SelectStmt<'script> {
     pub aggregates: Aggregates<'script>,
     /// scratches needed when executing multiple windows
     /// only necessary if we have multiple windows, otherwise empty
-    pub aggregate_scratches: Vec<(Aggregates<'script>, Aggregates<'script>)>,
+    pub aggregate_scratches: Option<(Aggregates<'script>, Aggregates<'script>)>,
     /// Constants
     pub consts: Vec<Value<'script>>,
     /// Number of locals
