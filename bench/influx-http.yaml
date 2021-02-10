@@ -14,7 +14,7 @@ offramp:
     codec: influx
     config:
       concurrency: 8
-      endpoints:
+      nodes:
         - http://localhost:8086/write?db=metrics
       headers:
         "Client": "Tremor"

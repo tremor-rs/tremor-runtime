@@ -55,7 +55,7 @@ offramp_prepare(Offramp) ->
 offramp_add_valid_config(#{<<"type">> := <<"rest">>} = Offramp) ->
     Offramp#{ <<"config">> => #{ <<"endpoint">> => <<"http://127.0.0.1:65535">> }};
 offramp_add_valid_config(#{<<"type">> := <<"elastic">>} = Offramp) ->
-    Offramp#{<<"config">> => #{ <<"endpoints">> => [<<"http://127.0.0.1:8888">>]}};
+    Offramp#{<<"config">> => #{ <<"nodes">> => [<<"http://127.0.0.1:8888">>]}};
 offramp_add_valid_config(#{<<"type">> := <<"kafka">>} = Offramp) ->
     Offramp#{<<"config">> => #{ <<"brokers">> => [<<"http://127.0.0.1:8888">>], <<"topic">> => <<"test">> }};
 offramp_add_valid_config(#{<<"type">> := <<"ws">>} = Offramp) ->
