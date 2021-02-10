@@ -50,8 +50,8 @@ use tremor_script::Object;
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
-    /// list of endpoint urls
-    pub endpoints: Vec<String>,
+    /// list of elasticsearch cluster nodes
+    pub nodes: Vec<String>,
     /// maximum number of paralel in flight batches (default: 4)
     #[serde(default = "concurrency")]
     pub concurrency: usize,
@@ -78,7 +78,7 @@ impl offramp::Impl for Elastic {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
             let client = SyncClientBuilder::new()
-                .static_nodes(config.endpoints.into_iter())
+                .static_nodes(config.nodes.into_iter())
                 .build()?;
 
             let queue = AsyncSink::new(config.concurrency);

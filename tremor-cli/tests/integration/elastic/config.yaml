@@ -12,7 +12,7 @@ offramp:
     type: elastic
     linked: true
     config:
-      endpoints: 
+      nodes: 
         - "http://127.0.0.1:9200/"
   - id: errfile
     type: file
