@@ -153,6 +153,7 @@ test_cases!(
     // TODO
     // const_in_const_lookup,
     // INSERT
+role_map,
     string_interpolation_nested,
     string_interpolation_escaped_hash,
     string_interpolation_escaped,

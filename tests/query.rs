@@ -128,9 +128,11 @@ test_cases!(
     pp_alias_script,
     pp_alias_operator,
     pp_config_directive,
-    // INSERT
+    //INSERT
     window_mixed_2,
     window_mixed_1,
+    pp_const,
+    pp_fn,
     script_error,
     guard_where,
     guard_having,

@@ -113,11 +113,22 @@ impl<'value> Value<'value> {
     }
 
     /// Tries to get the bytes from a Value
+    #[inline]
     #[must_use]
     pub fn as_bytes(&self) -> Option<&[u8]> {
         match self {
             Value::Bytes(bs) => Some(&bs),
             Value::String(bs) => Some(bs.as_bytes()),
+            _ => None,
+        }
+    }
+
+    /// Tries to get the value as a char
+    #[inline]
+    #[must_use]
+    pub fn as_char(&self) -> Option<char> {
+        match self {
+            Self::String(s) => s.chars().next(),
             _ => None,
         }
     }
