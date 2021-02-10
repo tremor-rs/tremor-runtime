@@ -1,0 +1,3 @@
+use example::c;
+
+select c::map(event) from in into out;
