@@ -33,7 +33,7 @@ async-channel = "1"
 async-compat = "0.2"
 async-compression = {version = "0.3", features = ["xz", "futures-bufread", "stream"]}
 async-io = "1.3"
-async-std = {version = "1.9.0", features = ["unstable", "attributes", "tokio03"]}
+async-std = {version = "1.9.0", features = ["unstable", "attributes", "tokio03", "tokio1"]}
 async-trait = "0.1"
 async-tungstenite = {version = "0.13.0", features = ["async-std-runtime"]}
 base64 = "0.13"
@@ -104,6 +104,9 @@ openssl = {version = "0.10", features = ["vendored"]}
 
 # rest onramp
 tide = "0.16"
+
+# discord
+serenity = {version = "0.10", default-features = false, features = ["client", "gateway", "rustls_backend", "model", "cache"]}
 
 [dependencies.tungstenite]
 default-features = false

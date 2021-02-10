@@ -36,6 +36,7 @@ use self::prelude::OnrampConfig;
 
 pub(crate) mod blaster;
 pub(crate) mod crononome;
+pub(crate) mod discord;
 pub(crate) mod file;
 pub(crate) mod kafka;
 pub(crate) mod metronome;

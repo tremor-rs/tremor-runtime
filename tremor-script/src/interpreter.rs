@@ -401,16 +401,40 @@ where
 
         // Binary String
         // we have to reverse the comparison here because of types
-        (Gt, Bytes(l), String(r)) => Ok(static_bool!(r.as_bytes() < l)),
-        (Gte, Bytes(l), String(r)) => Ok(static_bool!(r.as_bytes() <= l)),
-        (Lt, Bytes(l), String(r)) => Ok(static_bool!(r.as_bytes() > l)),
-        (Lte, Bytes(l), String(r)) => Ok(static_bool!(r.as_bytes() >= l)),
+        (Gt, Bytes(l), String(r)) => {
+            let l: &[u8] = &l;
+            Ok(static_bool!(l > r.as_bytes()))
+        }
+        (Gte, Bytes(l), String(r)) => {
+            let l: &[u8] = &l;
+            Ok(static_bool!(l >= r.as_bytes()))
+        }
+        (Lt, Bytes(l), String(r)) => {
+            let l: &[u8] = &l;
+            Ok(static_bool!(r.as_bytes() > l))
+        }
+        (Lte, Bytes(l), String(r)) => {
+            let l: &[u8] = &l;
+            Ok(static_bool!(r.as_bytes() >= l))
+        }
 
         // String Binary
-        (Gt, String(l), Bytes(r)) => Ok(static_bool!(l.as_bytes() > &r)),
-        (Gte, String(l), Bytes(r)) => Ok(static_bool!(l.as_bytes() >= &r)),
-        (Lt, String(l), Bytes(r)) => Ok(static_bool!(l.as_bytes() < &r)),
-        (Lte, String(l), Bytes(r)) => Ok(static_bool!(l.as_bytes() <= &r)),
+        (Gt, String(l), Bytes(r)) => {
+            let r: &[u8] = &r;
+            Ok(static_bool!(l.as_bytes() > r))
+        }
+        (Gte, String(l), Bytes(r)) => {
+            let r: &[u8] = &r;
+            Ok(static_bool!(l.as_bytes() >= r))
+        }
+        (Lt, String(l), Bytes(r)) => {
+            let r: &[u8] = &r;
+            Ok(static_bool!(l.as_bytes() < r))
+        }
+        (Lte, String(l), Bytes(r)) => {
+            let r: &[u8] = &r;
+            Ok(static_bool!(l.as_bytes() <= r))
+        }
 
         // String
         (Gt, String(l), String(r)) => Ok(static_bool!(l > r)),
