@@ -1,12 +1,12 @@
 # Changelog
 
-## Latest
+## 0.10.0
 
 ### Breaking Changes
 
 * String interpolation is now done via `#{..}` instead of `{}`. `{` no longer needs to be escaped, but `\#{` needs an escape for literal `#{`.
 * Emit tumbling windows based on `size` immediately when they are full. [#731](https://github.com/tremor-rs/tremor-runtime/pull/731)
-* Emit tumbling windows based on time `interval` also when no event comes in put the interval passed [#731](https://github.com/tremor-rs/tremor-runtime/pull/731)
+* Emit tumbling windows based on time `interval` also when no event comes in but the interval passed [#731](https://github.com/tremor-rs/tremor-runtime/pull/731)
 * Elasticsearch offramp `elastic`: change the config value `endpoints` to `nodes` [#732](https://github.com/tremor-rs/tremor-runtime/pull/732)
 
 ### New features

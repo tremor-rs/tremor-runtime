@@ -8,6 +8,7 @@
   - ./tremor-influx/Cargo.toml
   - ./tremor-pipeline/Cargo.toml
   - ./tremor-api/Cargo.toml
+* Update version in `./tremor-cli/src/cli.yaml` (minor version update only)
 * Update version in `Dockerfile.learn`
 * Update CHANGELOG.md
   - Change unreleased section to have the new version for the upcoming release
