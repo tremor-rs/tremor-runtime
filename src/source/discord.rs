@@ -196,17 +196,17 @@ enum DiscordMessage {
 async fn reply_loop(rx: Receiver<Value<'static>>, ctx: Context) {
     while let Ok(reply) = rx.recv().await {
         if let Some(reply) = reply.get("guild") {
-            let guild = if let Some(id) = reply.get("id").and_then(Value::as_u64) {
+            let guild = if let Some(id) = reply.get_u64("id") {
                 GuildId(id)
             } else {
                 continue;
             };
 
             if let Some(member) = reply.get("member") {
-                if let Some(id) = member.get("id").and_then(Value::as_u64) {
+                if let Some(id) = member.get_u64("id") {
                     let user = UserId(id);
                     let mut current_member = guild.member(&ctx, user).await.unwrap();
-                    if let Some(to_remove) = member.get("remove_roles").and_then(Value::as_array) {
+                    if let Some(to_remove) = member.get_array("remove_roles") {
                         let to_remove: Vec<_> = to_remove
                             .iter()
                             .filter_map(Value::as_u64)
@@ -215,7 +215,7 @@ async fn reply_loop(rx: Receiver<Value<'static>>, ctx: Context) {
                         current_member.remove_roles(&ctx, &to_remove).await.unwrap();
                     }
 
-                    if let Some(to_roles) = member.get("add_roles").and_then(Value::as_array) {
+                    if let Some(to_roles) = member.get_array("add_roles") {
                         let to_roles: Vec<_> = to_roles
                             .iter()
                             .filter_map(Value::as_u64)
@@ -225,10 +225,10 @@ async fn reply_loop(rx: Receiver<Value<'static>>, ctx: Context) {
                     }
                     guild
                         .edit_member(&ctx, id, |m| {
-                            if let Some(deafen) = member.get("deafen").and_then(Value::as_bool) {
+                            if let Some(deafen) = member.get_bool("deafen") {
                                 m.deafen(deafen);
                             }
-                            if let Some(mute) = member.get("mute").and_then(Value::as_bool) {
+                            if let Some(mute) = member.get_bool("mute") {
                                 m.mute(mute);
                             }
 
@@ -240,7 +240,7 @@ async fn reply_loop(rx: Receiver<Value<'static>>, ctx: Context) {
             }
         }
         if let Some(reply) = reply.get("message") {
-            let channel = if let Some(id) = reply.get("channel_id").and_then(Value::as_u64) {
+            let channel = if let Some(id) = reply.get_u64("channel_id") {
                 ChannelId(id)
             } else {
                 continue;
@@ -248,24 +248,21 @@ async fn reply_loop(rx: Receiver<Value<'static>>, ctx: Context) {
             if let Err(e) = channel
                 .send_message(&ctx, |m| {
                     // Normal content
-                    if let Some(content) = reply.get("content").and_then(Value::as_str) {
+                    if let Some(content) = reply.get_str("content") {
                         m.content(content);
                     };
                     // Reference to another message
-                    if let Some(reference_message) =
-                        reply.get("reference_message").and_then(Value::as_u64)
-                    {
-                        let reference_channel = if let Some(reference_channel) =
-                            reply.get("reference_channel").and_then(Value::as_u64)
-                        {
-                            ChannelId(reference_channel)
-                        } else {
-                            channel
-                        };
+                    if let Some(reference_message) = reply.get_u64("reference_message") {
+                        let reference_channel =
+                            if let Some(reference_channel) = reply.get_u64("reference_channel") {
+                                ChannelId(reference_channel)
+                            } else {
+                                channel
+                            };
                         m.reference_message((reference_channel, MessageId(reference_message)));
                     };
 
-                    if let Some(tts) = reply.get("tts").and_then(Value::as_bool) {
+                    if let Some(tts) = reply.get_bool("tts") {
                         m.tts(tts);
                     };
 
@@ -274,15 +271,13 @@ async fn reply_loop(rx: Receiver<Value<'static>>, ctx: Context) {
                         m.embed(|e| {
                             if let Some(author) = embed.get("author") {
                                 e.author(|a| {
-                                    if let Some(icon_url) =
-                                        author.get("icon_url").and_then(Value::as_str)
-                                    {
+                                    if let Some(icon_url) = author.get_str("icon_url") {
                                         a.icon_url(icon_url);
                                     };
-                                    if let Some(name) = author.get("name").and_then(Value::as_str) {
+                                    if let Some(name) = author.get_str("name") {
                                         a.name(name);
                                     };
-                                    if let Some(url) = author.get("url").and_then(Value::as_str) {
+                                    if let Some(url) = author.get_str("url") {
                                         a.url(url);
                                     };
 
@@ -290,28 +285,22 @@ async fn reply_loop(rx: Receiver<Value<'static>>, ctx: Context) {
                                 });
                             };
 
-                            if let Some(colour) = embed.get("colour").and_then(Value::as_u64) {
+                            if let Some(colour) = embed.get_u64("colour") {
                                 e.colour(colour);
                             };
-                            if let Some(description) =
-                                embed.get("description").and_then(Value::as_str)
-                            {
+                            if let Some(description) = embed.get_str("description") {
                                 e.description(description);
                             };
 
-                            if let Some(fields) = embed.get("fields").and_then(Value::as_object) {
+                            if let Some(fields) = embed.get_object("fields") {
                                 e.fields(fields.iter().filter_map(|(name, v)| {
                                     if let Some(value) = v.as_str() {
                                         Some((name, value, false))
-                                    } else if let Some(value) =
-                                        v.get("value").and_then(Value::as_str)
-                                    {
+                                    } else if let Some(value) = v.get_str("value") {
                                         Some((
                                             name,
                                             value,
-                                            v.get("inline")
-                                                .and_then(Value::as_bool)
-                                                .unwrap_or_default(),
+                                            v.get_bool("inline").unwrap_or_default(),
                                         ))
                                     } else {
                                         None
@@ -323,12 +312,10 @@ async fn reply_loop(rx: Receiver<Value<'static>>, ctx: Context) {
                                     if let Some(text) = footer.as_str() {
                                         f.text(text);
                                     };
-                                    if let Some(text) = footer.get("text").and_then(Value::as_str) {
+                                    if let Some(text) = footer.get_str("text") {
                                         f.text(text);
                                     };
-                                    if let Some(icon_url) =
-                                        footer.get("icon_url").and_then(Value::as_str)
-                                    {
+                                    if let Some(icon_url) = footer.get_str("icon_url") {
                                         f.icon_url(icon_url);
                                     };
 
@@ -340,23 +327,15 @@ async fn reply_loop(rx: Receiver<Value<'static>>, ctx: Context) {
                         });
                     };
 
-                    if let Some(reactions) = reply.get("reactions").and_then(Value::as_array) {
-                        // FIXME: todo;
-                        dbg!(reactions);
+                    if let Some(reactions) = reply.get_array("reactions") {
                         m.reactions(reactions.iter().filter_map(|v| {
                             if let Some(c) = v.as_char() {
                                 Some(ReactionType::Unicode(c.to_string()))
-                            } else if let Some(id) = v.get("id").and_then(Value::as_u64) {
+                            } else if let Some(id) = v.get_u64("id") {
                                 Some(ReactionType::Custom {
                                     id: EmojiId(id),
-                                    animated: v
-                                        .get("animated")
-                                        .and_then(Value::as_bool)
-                                        .unwrap_or_default(),
-                                    name: v
-                                        .get("name")
-                                        .and_then(Value::as_str)
-                                        .map(|s| s.to_string()),
+                                    animated: v.get_bool("animated").unwrap_or_default(),
+                                    name: v.get_str("name").map(|s| s.to_string()),
                                 })
                             } else {
                                 None

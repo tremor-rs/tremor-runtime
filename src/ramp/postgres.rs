@@ -166,7 +166,7 @@ impl postgres::types::ToSql for Record<'_> {
 }
 
 pub fn json_to_record<'a>(json: &'a Value<'a>) -> Result<Record> {
-    let field_type = match json.get("fieldType").and_then(ValueTrait::as_str) {
+    let field_type = match json.get_str("fieldType") {
         Some(v) => v,
         None => return Err("error getting fieldType".into()),
     };
@@ -189,8 +189,7 @@ pub fn json_to_record<'a>(json: &'a Value<'a>) -> Result<Record> {
     };
 
     let name = json
-        .get("name")
-        .and_then(ValueTrait::as_str)
+        .get_str("name")
         .ok_or_else(|| Error::from("Missing field `name`"))?;
 
     let value = json

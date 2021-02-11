@@ -245,7 +245,7 @@ impl Sink for Kafka {
         for (value, meta) in event.value_meta_iter() {
             let encoded = codec.encode(value)?;
             let processed = postprocess(self.postprocessors.as_mut_slice(), ingest_ns, encoded)?;
-            let meta_kafka_key = meta.get("kafka_key").and_then(Value::as_str);
+            let meta_kafka_key = meta.get_str("kafka_key");
             for payload in processed {
                 // TODO: allow defining partition and timestamp in meta
                 let mut record = FutureRecord::to(self.config.topic.as_str());

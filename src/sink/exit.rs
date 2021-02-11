@@ -44,8 +44,8 @@ impl Sink for Exit {
         event: Event,
     ) -> ResultVec {
         for (value, _meta) in event.value_meta_iter() {
-            if let Some(status) = value.get("exit").and_then(Value::as_i32) {
-                if let Some(delay) = value.get("delay").and_then(Value::as_u64) {
+            if let Some(status) = value.get_i32("exit") {
+                if let Some(delay) = value.get_u64("delay") {
                     task::sleep(Duration::from_millis(delay)).await;
                 }
                 // ALLOW: this is the supposed to exit

@@ -44,12 +44,12 @@ impl Codec for StatsD {
 
 fn encode(value: &Value) -> Result<Vec<u8>> {
     let mut r = String::new();
-    if let Some(m) = value.get("metric").and_then(|v| v.as_str()) {
+    if let Some(m) = value.get_str("metric") {
         r.push_str(&m);
     } else {
         return Err(ErrorKind::InvalidStatsD.into());
     };
-    let t = if let Some(s) = value.get("type").and_then(|v| v.as_str()) {
+    let t = if let Some(s) = value.get_str("type") {
         s
     } else {
         return Err(ErrorKind::InvalidStatsD.into());
@@ -57,7 +57,7 @@ fn encode(value: &Value) -> Result<Vec<u8>> {
     if let Some(val) = value.get("value") {
         r.push(':');
         if t == "g" {
-            if let Some(s) = value.get("action").and_then(Value::as_str) {
+            if let Some(s) = value.get_str("action") {
                 match s {
                     "add" => r.push('+'),
                     "sub" => r.push('-'),

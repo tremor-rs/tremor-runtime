@@ -226,20 +226,19 @@ fn build_event_payload(event: &Event) -> Result<Vec<u8>> {
     let mut payload = Vec::with_capacity(vec_size);
     for (value, meta) in event.value_meta_iter() {
         let index = meta
-            .get("index")
-            .and_then(Value::as_str)
+            .get_str("index")
             .ok_or_else(|| Error::from("'index' not set for elastic offramp!"))?;
         let mut index_meta = json!({
             "_index": index,
         });
         // _type is deprecated in ES 7.10, thus it is no longer required
-        if let Some(doc_type) = meta.get("doc_type").and_then(Value::as_str) {
+        if let Some(doc_type) = meta.get_str("doc_type") {
             index_meta.insert("_type", doc_type)?;
         }
-        if let Some(doc_id) = meta.get("doc_id").and_then(Value::as_str) {
+        if let Some(doc_id) = meta.get_str("doc_id") {
             index_meta.insert("_id", doc_id)?;
         };
-        if let Some(pipeline) = meta.get("pipeline").and_then(Value::as_str) {
+        if let Some(pipeline) = meta.get_str("pipeline") {
             index_meta.insert("pipeline", pipeline)?;
         };
         let value_meta = json!({ "index": index_meta });

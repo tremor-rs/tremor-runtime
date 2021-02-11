@@ -464,15 +464,8 @@ impl Ws {
 
     fn get_message_meta(&self, meta: &Value) -> WsMessageMeta {
         WsMessageMeta {
-            url: meta
-                .get("url")
-                .and_then(Value::as_str)
-                .unwrap_or(&self.config.url)
-                .into(),
-            binary: meta
-                .get("binary")
-                .and_then(Value::as_bool)
-                .unwrap_or(self.config.binary),
+            url: meta.get_str("url").unwrap_or(&self.config.url).into(),
+            binary: meta.get_bool("binary").unwrap_or(self.config.binary),
         }
     }
 }

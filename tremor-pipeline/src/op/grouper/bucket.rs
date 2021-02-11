@@ -104,11 +104,8 @@ impl Rate {
     pub fn from_meta(meta: &Value) -> Option<Self> {
         let rate = meta.get("rate")?.as_u64()?;
 
-        let time_range = meta
-            .get("time_range")
-            .and_then(Value::as_u64)
-            .unwrap_or(1000);
-        let windows = meta.get("windows").and_then(Value::as_usize).unwrap_or(100);
+        let time_range = meta.get_u64("time_range").unwrap_or(1000);
+        let windows = meta.get_usize("windows").unwrap_or(100);
         Some(Self {
             rate,
             time_range,
@@ -153,16 +150,13 @@ impl Operator for Grouper {
         event: Event,
     ) -> Result<EventAndInsights> {
         let meta = event.data.suffix().meta();
-        if let Some(class) = meta.get("class").and_then(Value::as_str) {
+        if let Some(class) = meta.get_str("class") {
             let (_, groups) = self
                 .buckets
                 .raw_entry_mut()
                 .from_key(class)
                 .or_insert_with(|| {
-                    let cardinality = meta
-                        .get("cardinality")
-                        .and_then(Value::as_usize)
-                        .unwrap_or(1000);
+                    let cardinality = meta.get_usize("cardinality").unwrap_or(1000);
                     (class.to_string(), Bucket::new(cardinality))
                 });
 
