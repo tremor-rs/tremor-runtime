@@ -4,7 +4,7 @@
   - ./Cargo.toml
   - ./tremor-cli/Cargo.toml
   - ./tremor-common/Cargo.toml
-  - ./tremor-script/Cargo.toml
+  - ./tremor-script/Cargo.toml (don't forget the reference to the other tremor packages)
   - ./tremor-influx/Cargo.toml
   - ./tremor-pipeline/Cargo.toml
   - ./tremor-api/Cargo.toml
