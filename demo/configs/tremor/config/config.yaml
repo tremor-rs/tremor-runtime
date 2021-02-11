@@ -35,13 +35,13 @@ offramp:
   - id: elastic
     type: elastic
     config:
-      endpoints:
+      nodes:
         - http://elastic:9200
   - id: influxdb
     type: rest
     codec: influx
     config:
-      endpoints:
+      nodes:
         - http://influx:8086/write?db=tremor
       headers:
         "Client": "Tremor"

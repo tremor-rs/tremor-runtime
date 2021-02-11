@@ -5457,7 +5457,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-cli"
-version = "0.9.4"
+version = "0.10.0"
 dependencies = [
  "anyhow",
  "async-std",
@@ -5563,7 +5563,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-runtime"
-version = "0.9.4"
+version = "0.10.0"
 dependencies = [
  "anyhow",
  "async-channel",
