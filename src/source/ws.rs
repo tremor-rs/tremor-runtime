@@ -306,7 +306,7 @@ impl Source for Int {
         if let Some((_stream, eid)) = event.id.get_max_by_source(self.uid) {
             if let Some(tx) = self.get_stream_sender_for_id(eid) {
                 for (value, meta) in event.value_meta_iter() {
-                    let binary = meta.get("binary").and_then(Value::as_bool).unwrap_or(false);
+                    let binary = meta.get_bool("binary").unwrap_or_default();
                     // we do the encoding here, and the post-processing later on the sending task, as this is stream-based
                     let data = match codec.encode(value) {
                         Ok(data) => data,

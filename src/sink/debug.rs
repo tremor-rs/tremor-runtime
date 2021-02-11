@@ -82,10 +82,7 @@ impl Sink for Debug {
                 }
                 self.buckets.clear();
             }
-            let c = meta
-                .get("class")
-                .and_then(Value::as_str)
-                .unwrap_or("<unclassified>");
+            let c = meta.get_str("class").unwrap_or("<unclassified>");
             //TODO: return to entry
             if let Some(entry) = self.buckets.get_mut(c) {
                 entry.cnt += 1;

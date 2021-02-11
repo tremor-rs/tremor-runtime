@@ -170,13 +170,11 @@ impl Source for Int {
         let mut obj = self.cache.get()?;
 
         let consume_from = obj
-            .get("consume_from")
-            .and_then(ValueTrait::as_str)
+            .get_str("consume_from")
             .ok_or_else(|| Error::from("Failed to fetching consume_from"))?;
 
         let consume_until = obj
-            .get("consume_until")
-            .and_then(ValueTrait::as_str)
+            .get_str("consume_until")
             .ok_or_else(|| Error::from("Failed to fetching consume_until"))?;
 
         let cf = DateTime::parse_from_str(consume_from, TIME_FMT)?;

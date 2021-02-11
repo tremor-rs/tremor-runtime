@@ -1630,15 +1630,6 @@ dependencies = [
 
 [[package]]
 name = "float-cmp"
-version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "499a1bfa03d254b047e7e5c1fc8dd23a8cf6b344a8eb7e622ae4bc76bfac8e68"
-dependencies = [
- "num-traits",
-]
-
-[[package]]
-name = "float-cmp"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e1267f4ac4f343772758f7b1bdcbe767c218bbab93bb432acbf5162bbf85a6c4"
@@ -4642,9 +4633,9 @@ dependencies = [
 
 [[package]]
 name = "simd-json"
-version = "0.3.23"
+version = "0.3.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "98f8dc3d55aedd35466debadcc7aac328914f068e210685bc6caf6bc6a7b181e"
+checksum = "756ffe7871658b52eab07850b8b2179d2b6c5666443bc41e4d8bdcb8bb732dbd"
 dependencies = [
  "halfbrown",
  "serde",
@@ -5693,7 +5684,7 @@ dependencies = [
  "dirs-next",
  "env_logger 0.8.3",
  "error-chain 0.12.4",
- "float-cmp 0.8.0",
+ "float-cmp",
  "globwalk",
  "halfbrown",
  "http-types",
@@ -5873,7 +5864,7 @@ dependencies = [
  "distance",
  "downcast-rs",
  "error-chain 0.12.4",
- "float-cmp 0.8.0",
+ "float-cmp",
  "fxhash",
  "glob",
  "grok",
@@ -5914,7 +5905,7 @@ version = "0.2.0"
 dependencies = [
  "base64 0.13.0",
  "beef",
- "float-cmp 0.8.0",
+ "float-cmp",
  "getopts",
  "halfbrown",
  "proptest",
@@ -6161,11 +6152,11 @@ dependencies = [
 
 [[package]]
 name = "value-trait"
-version = "0.1.20"
+version = "0.1.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e431c15afdab296b503945cbde123c828948ad123e1110bc7036303feb910cc9"
+checksum = "4fd13485b764afe742226ad5a4906e9f7c1ae0029895473fa52855882661e06c"
 dependencies = [
- "float-cmp 0.7.0",
+ "float-cmp",
  "halfbrown",
  "itoa",
  "ryu",

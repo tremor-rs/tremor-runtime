@@ -42,18 +42,18 @@ impl BInflux {
 
         let mut res = Vec::with_capacity(512);
         res.write_u16::<BigEndian>(0)?;
-        if let Some(measurement) = v.get("measurement").and_then(Value::as_str) {
+        if let Some(measurement) = v.get_str("measurement") {
             write_str(&mut res, measurement)?;
         } else {
             return Err(ErrorKind::InvalidBInfluxData("measurement missing".into()).into());
         }
 
-        if let Some(timestamp) = v.get("timestamp").and_then(Value::as_u64) {
+        if let Some(timestamp) = v.get_u64("timestamp") {
             res.write_u64::<BigEndian>(timestamp)?;
         } else {
             return Err(ErrorKind::InvalidBInfluxData("timestamp missing".into()).into());
         }
-        if let Some(tags) = v.get("tags").and_then(Value::as_object) {
+        if let Some(tags) = v.get_object("tags") {
             res.write_u16::<BigEndian>(
                 u16::try_from(tags.len())
                     .chain_err(|| ErrorKind::InvalidBInfluxData("too many tags".into()))?,
@@ -69,7 +69,7 @@ impl BInflux {
             res.write_u16::<BigEndian>(0)?;
         }
 
-        if let Some(fields) = v.get("fields").and_then(Value::as_object) {
+        if let Some(fields) = v.get_object("fields") {
             res.write_u16::<BigEndian>(
                 u16::try_from(fields.len())
                     .chain_err(|| ErrorKind::InvalidBInfluxData("too many fields".into()))?,

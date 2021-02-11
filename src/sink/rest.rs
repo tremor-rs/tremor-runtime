@@ -695,8 +695,7 @@ fn build_request(
             if method.is_none() {
                 method = Some(
                     match request_meta
-                        .get("method")
-                        .and_then(Value::as_str)
+                        .get_str("method")
                         .map(|m| Method::from_str(&m.trim().to_uppercase()))
                     {
                         Some(Ok(method)) => method,
@@ -707,7 +706,7 @@ fn build_request(
             }
             // use headers from event
             if headers.is_empty() {
-                if let Some(map) = request_meta.get("headers").and_then(Value::as_object) {
+                if let Some(map) = request_meta.get_object("headers") {
                     for (header_name, v) in map {
                         // filter out content-length (might be carried over from received request), likely to have changed
                         if "content-length".eq_ignore_ascii_case(header_name) {

@@ -126,9 +126,6 @@ default = []
 128bit = ["tremor-value/128bit"]
 bert = ["tremor-pipeline/bert"]
 
-# arm support
-neon = ["simd-json/neon"]
-
 [patch.crates-io]
 rust-bert = {git = 'https://github.com/mfelsche/rust-bert.git', rev = '1140989'}
 rust_tokenizers = {git = 'https://github.com/mfelsche/rust-tokenizers.git', rev = '5a7860d'}
