@@ -193,6 +193,24 @@ enum DiscordMessage {
     PresenceReplace(Vec<Presence>),
 }
 
+fn to_reaction(v: &Value) -> Option<ReactionType> {
+    if let Some(c) = v.as_char() {
+        Some(ReactionType::Unicode(c.to_string()))
+    } else if let Some(id) = v.get_u64("id") {
+        Some(ReactionType::Custom {
+            id: EmojiId(id),
+            animated: v.get_bool("animated").unwrap_or_default(),
+            name: v.get_str("name").map(|s| s.to_string()),
+        })
+    } else {
+        None
+    }
+}
+fn to_reactions(v: &Value) -> Option<Vec<ReactionType>> {
+    v.as_array()
+        .map(|a| a.iter().filter_map(to_reaction).collect::<Vec<_>>())
+}
+
 async fn reply_loop(rx: Receiver<Value<'static>>, ctx: Context) {
     while let Ok(reply) = rx.recv().await {
         if let Some(reply) = reply.get("guild") {
@@ -245,109 +263,106 @@ async fn reply_loop(rx: Receiver<Value<'static>>, ctx: Context) {
             } else {
                 continue;
             };
-            if let Err(e) = channel
-                .send_message(&ctx, |m| {
-                    // Normal content
-                    if let Some(content) = reply.get_str("content") {
-                        m.content(content);
-                    };
-                    // Reference to another message
-                    if let Some(reference_message) = reply.get_u64("reference_message") {
-                        let reference_channel =
-                            if let Some(reference_channel) = reply.get_u64("reference_channel") {
+
+            if let Some(reply) = reply.get("update") {
+                if let Some(message_id) = reply.get_u64("message_id") {
+                    let message = channel.message(&ctx, message_id).await.unwrap();
+
+                    if let Some(reactions) = reply.get("add_reactions").and_then(to_reactions) {
+                        for r in reactions {
+                            message.react(&ctx, r).await.unwrap();
+                        }
+                    }
+                }
+            }
+
+            if let Some(reply) = reply.get("send") {
+                if let Err(e) = channel
+                    .send_message(&ctx, |m| {
+                        // Normal content
+                        if let Some(content) = reply.get_str("content") {
+                            m.content(content);
+                        };
+                        // Reference to another message
+                        if let Some(reference_message) = reply.get_u64("reference_message") {
+                            let reference_channel = if let Some(reference_channel) =
+                                reply.get_u64("reference_channel")
+                            {
                                 ChannelId(reference_channel)
                             } else {
                                 channel
                             };
-                        m.reference_message((reference_channel, MessageId(reference_message)));
-                    };
+                            m.reference_message((reference_channel, MessageId(reference_message)));
+                        };
 
-                    if let Some(tts) = reply.get_bool("tts") {
-                        m.tts(tts);
-                    };
+                        if let Some(tts) = reply.get_bool("tts") {
+                            m.tts(tts);
+                        };
 
-                    if let Some(embed) = reply.get("embed") {
-                        // FIXME: todo;
-                        m.embed(|e| {
-                            if let Some(author) = embed.get("author") {
-                                e.author(|a| {
-                                    if let Some(icon_url) = author.get_str("icon_url") {
-                                        a.icon_url(icon_url);
-                                    };
-                                    if let Some(name) = author.get_str("name") {
-                                        a.name(name);
-                                    };
-                                    if let Some(url) = author.get_str("url") {
-                                        a.url(url);
-                                    };
+                        if let Some(embed) = reply.get("embed") {
+                            // FIXME: todo;
+                            m.embed(|e| {
+                                if let Some(author) = embed.get("author") {
+                                    e.author(|a| {
+                                        if let Some(icon_url) = author.get_str("icon_url") {
+                                            a.icon_url(icon_url);
+                                        };
+                                        if let Some(name) = author.get_str("name") {
+                                            a.name(name);
+                                        };
+                                        if let Some(url) = author.get_str("url") {
+                                            a.url(url);
+                                        };
 
-                                    a
-                                });
-                            };
+                                        a
+                                    });
+                                };
 
-                            if let Some(colour) = embed.get_u64("colour") {
-                                e.colour(colour);
-                            };
-                            if let Some(description) = embed.get_str("description") {
-                                e.description(description);
-                            };
+                                if let Some(colour) = embed.get_u64("colour") {
+                                    e.colour(colour);
+                                };
+                                if let Some(description) = embed.get_str("description") {
+                                    e.description(description);
+                                };
 
-                            if let Some(fields) = embed.get_object("fields") {
-                                e.fields(fields.iter().filter_map(|(name, v)| {
-                                    if let Some(value) = v.as_str() {
-                                        Some((name, value, false))
-                                    } else if let Some(value) = v.get_str("value") {
-                                        Some((
-                                            name,
-                                            value,
-                                            v.get_bool("inline").unwrap_or_default(),
-                                        ))
-                                    } else {
-                                        None
-                                    }
-                                }));
-                            };
-                            if let Some(footer) = embed.get("footer") {
-                                e.footer(|f| {
-                                    if let Some(text) = footer.as_str() {
-                                        f.text(text);
-                                    };
-                                    if let Some(text) = footer.get_str("text") {
-                                        f.text(text);
-                                    };
-                                    if let Some(icon_url) = footer.get_str("icon_url") {
-                                        f.icon_url(icon_url);
-                                    };
+                                if let Some(fields) = embed.get_array("fields") {
+                                    e.fields(fields.iter().filter_map(|v| {
+                                        let name = v.get_str("name")?;
+                                        let value = v.get_str("value")?;
+                                        let inline = v.get_bool("inline").unwrap_or_default();
+                                        Some((name, value, inline))
+                                    }));
+                                };
+                                if let Some(footer) = embed.get("footer") {
+                                    e.footer(|f| {
+                                        if let Some(text) = footer.as_str() {
+                                            f.text(text);
+                                        };
+                                        if let Some(text) = footer.get_str("text") {
+                                            f.text(text);
+                                        };
+                                        if let Some(icon_url) = footer.get_str("icon_url") {
+                                            f.icon_url(icon_url);
+                                        };
 
-                                    f
-                                });
-                            };
+                                        f
+                                    });
+                                };
 
-                            e
-                        });
-                    };
+                                e
+                            });
+                        };
 
-                    if let Some(reactions) = reply.get_array("reactions") {
-                        m.reactions(reactions.iter().filter_map(|v| {
-                            if let Some(c) = v.as_char() {
-                                Some(ReactionType::Unicode(c.to_string()))
-                            } else if let Some(id) = v.get_u64("id") {
-                                Some(ReactionType::Custom {
-                                    id: EmojiId(id),
-                                    animated: v.get_bool("animated").unwrap_or_default(),
-                                    name: v.get_str("name").map(|s| s.to_string()),
-                                })
-                            } else {
-                                None
-                            }
-                        }));
-                    };
+                        if let Some(reactions) = reply.get("reactions").and_then(to_reactions) {
+                            m.reactions(reactions);
+                        };
 
-                    m
-                })
-                .await
-            {
-                error!("Discord send error: {}", e)
+                        m
+                    })
+                    .await
+                {
+                    error!("Discord send error: {}", e)
+                };
             };
         }
     }
