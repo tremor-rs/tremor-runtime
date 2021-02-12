@@ -2,13 +2,13 @@
 
 * Update version in all Cargo.toml files in the repository
   - ./Cargo.toml
+  - ./tremor-api/Cargo.toml
   - ./tremor-cli/Cargo.toml
   - ./tremor-common/Cargo.toml
-  - ./tremor-script/Cargo.toml (don't forget the reference to the other tremor packages)
-  - ./tremor-influx/Cargo.toml
+  - ./tremor-influx/Cargo.toml (if we have changes compared to the previous release)
   - ./tremor-pipeline/Cargo.toml
-  - ./tremor-api/Cargo.toml
-  - ./tremor-value/Cargo.toml
+  - ./tremor-script/Cargo.toml (don't forget the reference to the other tremor packages)
+  - ./tremor-value/Cargo.toml (if we have changes compared to the previous release)
 * Update version in `./tremor-cli/src/cli.yaml` (minor version update only)
 * Update version in `Dockerfile.learn`
 * Update CHANGELOG.md
@@ -33,12 +33,15 @@
 * Wait for the docker image to build and publish
   - Verify docker image with some usage examples
   - Tag the published dockerhub image as latest: 
+
   ```sh
   export VERSION=<version>
   docker rmi --force tremorproject/tremor:$VERSION && \
     docker pull tremorproject/tremor:$VERSION && \
     docker tag tremorproject/tremor:$VERSION tremorproject/tremor:latest && \
-    docker push tremorproject/tremor:latest`
+    docker push tremorproject/tremor:latest
+  ```
+
 * If syntax changed: Update the highlighers:
   - https://github.com/tremor-rs/tremor-vim
   - https://github.com/tremor-rs/highlightjs-tremor
