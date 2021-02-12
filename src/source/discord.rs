@@ -288,14 +288,22 @@ async fn reply_loop(rx: Receiver<Value<'static>>, ctx: Context) {
             if let Some(member) = reply.get("member") {
                 if let Some(id) = member.get_u64("id") {
                     let user = UserId(id);
-                    let mut current_member = guild.member(&ctx, user).await.unwrap();
+                    let mut current_member = match guild.member(&ctx, user).await {
+                        Ok(current_member) => current_member,
+                        Err(e) => {
+                            error!("Member error: {}", e);
+                            continue;
+                        }
+                    };
                     if let Some(to_remove) = member.get_array("remove_roles") {
                         let to_remove: Vec<_> = to_remove
                             .iter()
                             .filter_map(Value::as_u64)
                             .map(RoleId)
                             .collect();
-                        current_member.remove_roles(&ctx, &to_remove).await.unwrap();
+                        if let Err(e) = current_member.remove_roles(&ctx, &to_remove).await {
+                            error!("Role removal error: {}", e);
+                        };
                     }
 
                     if let Some(to_roles) = member.get_array("add_roles") {
@@ -304,9 +312,11 @@ async fn reply_loop(rx: Receiver<Value<'static>>, ctx: Context) {
                             .filter_map(Value::as_u64)
                             .map(RoleId)
                             .collect();
-                        current_member.add_roles(&ctx, &to_roles).await.unwrap();
+                        if let Err(e) = current_member.add_roles(&ctx, &to_roles).await {
+                            error!("Role add error: {}", e);
+                        };
                     }
-                    guild
+                    let r = guild
                         .edit_member(&ctx, id, |m| {
                             if let Some(deafen) = member.get_bool("deafen") {
                                 m.deafen(deafen);
@@ -317,8 +327,10 @@ async fn reply_loop(rx: Receiver<Value<'static>>, ctx: Context) {
 
                             m
                         })
-                        .await
-                        .unwrap();
+                        .await;
+                    if let Err(e) = r {
+                        error!("Mute/Deafen error: {}", e);
+                    };
                 }
             }
         }
@@ -331,11 +343,19 @@ async fn reply_loop(rx: Receiver<Value<'static>>, ctx: Context) {
 
             if let Some(reply) = reply.get("update") {
                 if let Some(message_id) = reply.get_u64("message_id") {
-                    let message = channel.message(&ctx, message_id).await.unwrap();
+                    let message = match channel.message(&ctx, message_id).await {
+                        Ok(message) => message,
+                        Err(e) => {
+                            error!("Message error: {}", e);
+                            continue;
+                        }
+                    };
 
                     if let Some(reactions) = reply.get("add_reactions").and_then(to_reactions) {
                         for r in reactions {
-                            message.react(&ctx, r).await.unwrap();
+                            if let Err(e) = message.react(&ctx, r).await {
+                                error!("Message reaction error: {}", e);
+                            };
                         }
                     }
                 }
