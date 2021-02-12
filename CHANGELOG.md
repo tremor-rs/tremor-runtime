@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.10.1
+
+### Fixes
+
+* Update tremor-value to 0.2 to include binary changes and thus unbreak the 0.10 tremor-script crate
 ## 0.10.0
 
 ### Breaking Changes
