@@ -23,6 +23,7 @@ use async_trait;
 use halfbrown::HashMap;
 use serde::Serialize;
 use serenity::{
+    client::bridge::gateway::GatewayIntents,
     model::{
         channel::{Channel, ChannelCategory, GuildChannel, Message, Reaction, ReactionType},
         event::{
@@ -43,6 +44,8 @@ use tremor_value::to_value;
 #[derive(Deserialize, Clone)]
 pub struct Config {
     pub token: String,
+    #[serde(default)]
+    pub intents: Vec<Intents>,
 }
 
 impl ConfigImpl for Config {}
@@ -57,6 +60,68 @@ pub struct Discord {
 impl std::fmt::Debug for Discord {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Discord")
+    }
+}
+
+#[derive(Deserialize, Serialize, Clone, Copy, Debug)]
+pub enum Intents {
+    /// Guilds Grouping
+    Guilds,
+    /// GuildMembers Grouping
+    GuildMembers,
+    /// GuildBans Grouping
+    GuildBans,
+    /// GuildEmojis Grouping
+    GuildEmojis,
+    /// GuildIntegrations Grouping
+    GuildIntegrations,
+    /// GuildWebHooks Grouping
+    GuildWebHooks,
+    /// GuildInvites Grouping
+    GuildInvites,
+    /// GuildVoiceStates
+    GuildVoiceStates,
+    /// GuildPresence
+    GuildPresence,
+    /// GuildMessages
+    GuildMessages,
+    /// GuildMessageReactions
+    GuildMessageReactions,
+    /// GuildMessageTyping
+    GuildMessageTyping,
+    /// DirectMessages
+    DirectMessages,
+    /// DirectMessageReactions
+    DirectMessageReactions,
+    /// DirectMessageTyping
+    DirectMessageTyping,
+    /// All intents
+    All,
+    /// All non privileged details
+    NonPrivileged,
+}
+
+impl Into<GatewayIntents> for Intents {
+    fn into(self) -> GatewayIntents {
+        match self {
+            Intents::Guilds => GatewayIntents::GUILDS,
+            Intents::GuildMembers => GatewayIntents::GUILD_MEMBERS,
+            Intents::GuildBans => GatewayIntents::GUILD_BANS,
+            Intents::GuildEmojis => GatewayIntents::GUILD_EMOJIS,
+            Intents::GuildIntegrations => GatewayIntents::GUILD_INTEGRATIONS,
+            Intents::GuildWebHooks => GatewayIntents::GUILD_WEBHOOKS,
+            Intents::GuildInvites => GatewayIntents::GUILD_INVITES,
+            Intents::GuildVoiceStates => GatewayIntents::GUILD_VOICE_STATES,
+            Intents::GuildPresence => GatewayIntents::GUILD_PRESENCES,
+            Intents::GuildMessages => GatewayIntents::GUILD_MESSAGES,
+            Intents::GuildMessageReactions => GatewayIntents::GUILD_MESSAGE_REACTIONS,
+            Intents::GuildMessageTyping => GatewayIntents::GUILD_MESSAGE_TYPING,
+            Intents::DirectMessages => GatewayIntents::DIRECT_MESSAGES,
+            Intents::DirectMessageReactions => GatewayIntents::DIRECT_MESSAGE_REACTIONS,
+            Intents::DirectMessageTyping => GatewayIntents::DIRECT_MESSAGE_TYPING,
+            Intents::All => GatewayIntents::all(),
+            Intents::NonPrivileged => GatewayIntents::non_privileged(),
+        }
     }
 }
 
@@ -753,14 +818,25 @@ impl Source for Discord {
         let (tx, rx) = async_channel::bounded(QSIZE);
         let (reply_tx, reply_rx) = async_channel::bounded(QSIZE);
         self.client = Some((reply_tx, rx));
-        let mut client = Client::builder(&token)
-            .event_handler(Handler {
-                tx,
-                rx: reply_rx,
-                is_loop_running: AtomicBool::from(false),
-            })
-            .await
-            .expect("Err creating client");
+        let client = Client::builder(&token).event_handler(Handler {
+            tx,
+            rx: reply_rx,
+            is_loop_running: AtomicBool::from(false),
+        });
+
+        let client = if !self.config.intents.is_empty() {
+            let intents = self
+                .config
+                .intents
+                .iter()
+                .copied()
+                .map(Intents::into)
+                .fold(GatewayIntents::default(), |a, b| a | b);
+            client.intents(intents)
+        } else {
+            client
+        };
+        let mut client = client.await.expect("Err creating client");
         task::spawn(async move { client.start().await });
 
         Ok(SourceState::Connected)
