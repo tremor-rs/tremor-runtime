@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::Result;
 use crate::permge::{PriorityMerge, M};
 use crate::registry::ServantId;
 use crate::repository::PipelineArtefact;
 use crate::url::TremorURL;
+use crate::{errors::Result, network};
 use crate::{offramp, onramp};
 use async_channel::{bounded, unbounded};
 use async_std::stream::StreamExt;
@@ -105,6 +105,13 @@ pub(crate) enum MgmtMsg {
         addr: onramp::Addr,
         reply: bool,
     },
+    // Network
+    OpenTap(TremorURL, TremorURL, network::Addr),
+    CloseTap {
+        source: TremorURL,
+        target: TremorURL,
+        addr: network::Addr,
+    },
     DisconnectOutput(Cow<'static, str>, TremorURL),
     DisconnectInput(TremorURL),
 }
@@ -122,6 +129,7 @@ pub(crate) enum Msg {
 pub enum Dest {
     Offramp(async_channel::Sender<offramp::Msg>),
     Pipeline(Addr),
+    Network(network::Addr),
     LinkedOnramp(async_channel::Sender<onramp::Msg>),
 }
 
@@ -131,6 +139,7 @@ impl Dest {
             Self::Offramp(addr) => addr.send(offramp::Msg::Event { input, event }).await?,
             Self::Pipeline(addr) => addr.send(Msg::Event { input, event }).await?,
             Self::LinkedOnramp(addr) => addr.send(onramp::Msg::Response(event)).await?,
+            Self::Network(addr) => addr.send(network::Msg::Event { event }).await?,
         }
         Ok(())
     }
@@ -148,6 +157,7 @@ impl Dest {
                 // TODO implement?
                 //addr.send(onramp::Msg::Signal(signal)).await?
             }
+            Self::Network(_addr) => {} // TODO consider signals in context of network layer
         }
         Ok(())
     }
@@ -342,6 +352,61 @@ async fn pipeline_task(
                     maybe_send(send_signal(&id, signal, &mut dests).await);
                     handle_insights(&mut pipeline, &onramps).await;
                     maybe_send(send_events(&mut eventset, &mut dests).await);
+                }
+            }
+            M::M(MgmtMsg::OpenTap(source, target, addr)) => {
+                let msg = network::ControlMsg::ConnectOnramp {
+                    source: source.clone(),
+                    target: target.clone(),
+                    addr: addr.clone(),
+                };
+
+                // ack back to n/w layer
+                addr.send_control(msg.clone()).await?;
+
+                if let Some(port) = target.instance_port() {
+                    let port = beef::Cow::owned(port.to_string());
+                    if let Some(output_dests) = dests.get_mut(&port) {
+                        output_dests.push((target.clone(), Dest::Network(addr)));
+                    } else {
+                        dests.insert(port, vec![(target.clone(), Dest::Network(addr))]);
+                    }
+                }
+            }
+            M::M(MgmtMsg::CloseTap {
+                // source,
+                target,
+                addr,
+                ..
+            }) => {
+                let msg = network::ControlMsg::DisconnectOnramp {
+                    addr: addr.clone(),
+                    reply: false,
+                };
+                addr.send_control(msg).await?;
+                if let Some(port) = target.instance_port() {
+                    let port = beef::Cow::owned(port.to_string());
+                    if let Some(matching_ports) = dests.get_mut(&port) {
+                        // FIXME When drain_filter stable => refactor
+
+                        // Find index by tremor url
+                        let mut idx: i32 = -1;
+                        {
+                            for (id, _dest) in matching_ports {
+                                idx += 1;
+                                if id == &target {
+                                    break;
+                                }
+                            }
+                        }
+
+                        // Remove found index
+                        if let Some(dest_for_update) = dests.get_mut(&port) {
+                            dest_for_update.remove(idx as usize);
+                        } else {
+                            error!("Unexpected state in pipeline, dest.get(port) was None");
+                        }
+                    }
                 }
             }
             M::M(MgmtMsg::ConnectOfframp(output, offramp_id, offramp)) => {

@@ -20,7 +20,7 @@ struct OnRampWrap {
 }
 
 pub async fn list_artefact(req: Request) -> Result<Response> {
-    let repo = &req.state().world.repo;
+    let repo = &req.state().world.conductor.repo;
 
     let result: Vec<_> = repo
         .list_onramps()
@@ -34,7 +34,7 @@ pub async fn list_artefact(req: Request) -> Result<Response> {
 pub async fn publish_artefact(req: Request) -> Result<Response> {
     let (req, data): (_, tremor_runtime::config::OnRamp) = decode(req).await?;
     let url = build_url(&["onramp", &data.id])?;
-    let repo = &req.state().world.repo;
+    let repo = &req.state().world.conductor.repo;
     let result = repo.publish_onramp(&url, false, data).await?;
     reply(req, result, true, StatusCode::Created).await
 }
@@ -42,7 +42,7 @@ pub async fn publish_artefact(req: Request) -> Result<Response> {
 pub async fn unpublish_artefact(req: Request) -> Result<Response> {
     let id = req.param("aid").unwrap_or_default();
     let url = build_url(&["onramp", id])?;
-    let repo = &req.state().world.repo;
+    let repo = &req.state().world.conductor.repo;
     let result = repo.unpublish_onramp(&url).await?;
     reply(req, result, true, StatusCode::Ok).await
 }
@@ -50,7 +50,7 @@ pub async fn unpublish_artefact(req: Request) -> Result<Response> {
 pub async fn get_artefact(req: Request) -> Result<Response> {
     let id = req.param("aid").unwrap_or_default();
     let url = build_url(&["onramp", id])?;
-    let repo = &req.state().world.repo;
+    let repo = &req.state().world.conductor.repo;
     let result = repo.find_onramp(&url).await?.ok_or_else(Error::not_found)?;
     let result = OnRampWrap {
         artefact: result.artefact,

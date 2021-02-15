@@ -57,20 +57,24 @@ lazy_static! {
     };
 }
 
-/// This is control plane
+/// This is the node runtime control plane
 pub(crate) enum ManagerMsg {
+    /// Create a pipeline
     CreatePipeline(
         async_channel::Sender<Result<pipeline::Addr>>,
         pipeline::Create,
     ),
+    /// Create an onramp
     CreateOnramp(
         async_channel::Sender<Result<onramp::Addr>>,
         Box<onramp::Create>,
     ),
+    /// Create an offramp
     CreateOfframp(
         async_channel::Sender<Result<offramp::Addr>>,
         Box<offramp::Create>,
     ),
+    /// Stop command
     Stop,
 }
 
@@ -129,15 +133,38 @@ impl Manager {
 /// Tremor runtime
 #[derive(Clone, Debug)]
 pub struct World {
+    /// Runtime type information
     pub(crate) system: Sender,
-    /// Repository
-    pub repo: Repositories,
-    /// Registry
-    pub reg: Registries,
+    /// Conductor
+    pub conductor: Conductor,
+    /// Storage directory
     storage_directory: Option<String>,
 }
 
-impl World {
+#[derive(Clone, Debug)]
+/// Encapsulates registry+repository interactions.
+/// These are the set of events that govern user provided
+/// managed deployment state
+///
+pub struct Conductor {
+    /// Runtime type information
+    pub(crate) system: Sender,
+
+    /// Configuration ( code ) models of managed tremor artefacts
+    pub reg: Registries,
+
+    /// Instances of managed tremor artefacts
+    pub repo: Repositories,
+}
+
+impl Conductor {
+    /// Create a new conductor
+    pub(crate) fn new(system: Sender) -> Self {
+        let repo = Repositories::new();
+        let reg = Registries::new();
+        Self { system, reg, repo }
+    }
+
     /// Ensures the existance of an onramp, creating it if required.
     ///
     /// # Errors
@@ -171,6 +198,7 @@ impl World {
         }
         Ok(())
     }
+
     /// Ensures the existance of an pipeline, creating it if required.
     ///
     /// # Errors
@@ -196,12 +224,9 @@ impl World {
         info!("Binding pipeline {}", id);
         match (&self.repo.find_pipeline(id).await?, &id.instance()) {
             (Some(artefact), Some(_instance_id)) => {
-                let servant = ActivatorLifecycleFsm::new(
-                    self.clone(),
-                    artefact.artefact.to_owned(),
-                    id.clone(),
-                )
-                .await?;
+                let servant =
+                    ActivatorLifecycleFsm::new(self, artefact.artefact.to_owned(), id.clone())
+                        .await?;
                 self.repo.bind_pipeline(id).await?;
                 // We link to the metrics pipeline
                 let res = self.reg.publish_pipeline(id, servant).await?;
@@ -235,13 +260,6 @@ impl World {
         }
     }
 
-    /// Stop the runtime
-    ///
-    /// # Errors
-    ///  * if the system failed to stop
-    pub async fn stop(&self) -> Result<()> {
-        Ok(self.system.send(ManagerMsg::Stop).await?)
-    }
     /// Links a pipeline
     ///
     /// # Errors
@@ -282,7 +300,7 @@ impl World {
         }
     }
 
-    /// Unlink a pipelein
+    /// Unlink a pipeline
     ///
     /// # Errors
     ///  * if the id isn't a pipeline or the pipeline can't be unlinked
@@ -314,6 +332,7 @@ impl World {
         self.repo.publish_pipeline(id, false, artefact).await?;
         self.bind_pipeline(id).await
     }
+
     /// Bind an onramp
     ///
     /// # Errors
@@ -322,12 +341,9 @@ impl World {
         info!("Binding onramp {}", id);
         match (&self.repo.find_onramp(id).await?, &id.instance()) {
             (Some(artefact), Some(_instance_id)) => {
-                let servant = ActivatorLifecycleFsm::new(
-                    self.clone(),
-                    artefact.artefact.to_owned(),
-                    id.clone(),
-                )
-                .await?;
+                let servant =
+                    ActivatorLifecycleFsm::new(self, artefact.artefact.to_owned(), id.clone())
+                        .await?;
                 self.repo.bind_onramp(id).await?;
                 // We link to the metrics pipeline
                 let res = self.reg.publish_onramp(id, servant).await?;
@@ -343,6 +359,7 @@ impl World {
             (_, None) => Err(format!("Invalid URI for instance {} ", id).into()),
         }
     }
+
     /// Unbind an onramp
     ///
     /// # Errors
@@ -428,12 +445,9 @@ impl World {
         info!("Binding offramp {}", id);
         match (&self.repo.find_offramp(id).await?, &id.instance()) {
             (Some(artefact), Some(_instance_id)) => {
-                let servant = ActivatorLifecycleFsm::new(
-                    self.clone(),
-                    artefact.artefact.to_owned(),
-                    id.clone(),
-                )
-                .await?;
+                let servant =
+                    ActivatorLifecycleFsm::new(self, artefact.artefact.to_owned(), id.clone())
+                        .await?;
                 self.repo.bind_offramp(id).await?;
                 // We link to the metrics pipeline
                 let res = self.reg.publish_offramp(id, servant).await?;
@@ -536,8 +550,7 @@ impl World {
         match &id.instance() {
             Some(_instance_id) => {
                 let servant =
-                    ActivatorLifecycleFsm::new(self.clone(), artefact.to_owned(), id.clone())
-                        .await?;
+                    ActivatorLifecycleFsm::new(self, artefact.to_owned(), id.clone()).await?;
                 self.repo.bind_binding(id).await?;
                 self.reg.publish_binding(id, servant).await
             }
@@ -564,7 +577,7 @@ impl World {
     /// Links a binding
     ///
     /// # Errors
-    ///  * If the id isn't a binding or the bindig can't be linked
+    ///  * If the id isn't a binding or the binding can't be linked
     pub async fn link_binding(
         &self,
         id: &TremorURL,
@@ -581,57 +594,6 @@ impl World {
             Ok(r)
         } else {
             Err(ErrorKind::ArtefactNotFound(id.to_string()).into())
-        }
-    }
-
-    /// Turns the running system into a config
-    ///
-    /// # Errors
-    ///  * If the systems configuration can't be stored
-    pub async fn to_config(&self) -> Result<Config> {
-        let onramp: OnRampVec = self.repo.serialize_onramps().await?;
-        let offramp: OffRampVec = self.repo.serialize_offramps().await?;
-        let binding: BindingVec = self
-            .repo
-            .serialize_bindings()
-            .await?
-            .into_iter()
-            .map(|b| b.binding)
-            .collect();
-        let mapping: MappingMap = self.reg.serialize_mappings().await?;
-        let config = crate::config::Config {
-            onramp,
-            offramp,
-            binding,
-            mapping,
-        };
-        Ok(config)
-    }
-
-    /// Saves the current config
-    ///
-    /// # Errors
-    ///  * if the config can't be saved
-    pub async fn save_config(&self) -> Result<String> {
-        if let Some(storage_directory) = &self.storage_directory {
-            let config = self.to_config().await?;
-            let path = Path::new(storage_directory);
-            let file_name = format!("config_{}.yaml", nanotime());
-            let mut file_path = path.to_path_buf();
-            file_path.push(Path::new(&file_name));
-            info!(
-                "Serializing configuration to file {}",
-                file_path.to_string_lossy()
-            );
-            let mut f = file::create(&file_path).await?;
-            f.write_all(&serde_yaml::to_vec(&config)?).await?;
-            // lets really sync this!
-            f.sync_all().await?;
-            f.sync_all().await?;
-            f.sync_all().await?;
-            Ok(file_path.to_string_lossy().to_string())
-        } else {
-            Ok("".to_string())
         }
     }
 
@@ -657,6 +619,86 @@ impl World {
         Err(ErrorKind::ArtefactNotFound(id.to_string()).into())
     }
 
+    ///
+    ///
+    ///
+
+    pub(crate) async fn start_pipeline(
+        &self,
+        config: PipelineArtefact,
+        id: ServantId,
+    ) -> Result<pipeline::Addr> {
+        let (tx, rx) = bounded(1);
+        self.system
+            .send(ManagerMsg::CreatePipeline(
+                tx,
+                pipeline::Create { id, config },
+            ))
+            .await?;
+        rx.recv().await?
+    }
+
+    /// Turns the running system into a config
+    ///
+    /// # Errors
+    ///  * If the systems configuration can't be stored
+    pub async fn to_config(&self) -> Result<Config> {
+        let onramp: OnRampVec = self.repo.serialize_onramps().await?;
+        let offramp: OffRampVec = self.repo.serialize_offramps().await?;
+        let binding: BindingVec = self
+            .repo
+            .serialize_bindings()
+            .await?
+            .into_iter()
+            .map(|b| b.binding)
+            .collect();
+        let mapping: MappingMap = self.reg.serialize_mappings().await?;
+        let config = crate::config::Config {
+            onramp,
+            offramp,
+            binding,
+            mapping,
+        };
+        Ok(config)
+    }
+}
+
+impl World {
+    /// Stop the runtime
+    ///
+    /// # Errors
+    ///  * if the system failed to stop
+    pub async fn stop(&self) -> Result<()> {
+        Ok(self.system.send(ManagerMsg::Stop).await?)
+    }
+
+    /// Saves the current config
+    ///
+    /// # Errors
+    ///  * if the config can't be saved
+    pub async fn save_config(&self) -> Result<String> {
+        if let Some(storage_directory) = &self.storage_directory {
+            let config = self.conductor.to_config().await?;
+            let path = Path::new(storage_directory);
+            let file_name = format!("config_{}.yaml", nanotime());
+            let mut file_path = path.to_path_buf();
+            file_path.push(Path::new(&file_name));
+            info!(
+                "Serializing configuration to file {}",
+                file_path.to_string_lossy()
+            );
+            let mut f = file::create(&file_path).await?;
+            f.write_all(&serde_yaml::to_vec(&config)?).await?;
+            // lets really sync this!
+            f.sync_all().await?;
+            f.sync_all().await?;
+            f.sync_all().await?;
+            Ok(file_path.to_string_lossy().to_string())
+        } else {
+            Ok("".to_string())
+        }
+    }
+
     /// Starts the runtime system
     ///
     /// # Errors
@@ -665,13 +707,15 @@ impl World {
         qsize: usize,
         storage_directory: Option<String>,
     ) -> Result<(Self, JoinHandle<Result<()>>)> {
+        let (fake_system_tx, _not_used) = bounded(crate::QSIZE);
+
+        let mut conductor = Conductor::new(fake_system_tx.clone());
+
         let (onramp_h, onramp) = onramp::Manager::new(qsize).start();
         let (offramp_h, offramp) = offramp::Manager::new(qsize).start();
         let (pipeline_h, pipeline) = pipeline::Manager::new(qsize).start();
 
-        // ALLOW: Cloning msg senders for network manager
-        let (network_h, network) =
-            network::Manager::new(onramp.clone(), offramp.clone(), pipeline.clone(), qsize).start();
+        let (network_h, network) = network::Manager::new(&conductor, qsize).start();
 
         let (system_h, system) = Manager {
             offramp,
@@ -686,12 +730,12 @@ impl World {
         }
         .start();
 
-        let repo = Repositories::new();
-        let reg = Registries::new();
+        // Rebind system in conductor
+        conductor.system = system.clone();
+
         let mut world = Self {
             system,
-            repo,
-            reg,
+            conductor,
             storage_directory,
         };
 
@@ -712,12 +756,14 @@ impl World {
             &*tremor_pipeline::FN_REGISTRY.lock()?,
             &aggr_reg,
         )?;
-        self.repo
+        self.conductor
+            .repo
             .publish_pipeline(&METRICS_PIPELINE, true, artefact_metrics)
             .await?;
-        self.bind_pipeline(&METRICS_PIPELINE).await?;
+        self.conductor.bind_pipeline(&METRICS_PIPELINE).await?;
 
-        self.reg
+        self.conductor
+            .reg
             .find_pipeline(&METRICS_PIPELINE)
             .await?
             .ok_or_else(|| Error::from("Failed to initialize metrics pipeline."))?;
@@ -730,7 +776,8 @@ impl World {
             &*tremor_pipeline::FN_REGISTRY.lock()?,
             &aggr_reg,
         )?;
-        self.repo
+        self.conductor
+            .repo
             .publish_pipeline(&PASSTHROUGH_PIPELINE, true, artefact_passthrough)
             .await?;
         // Register stdout offramp
@@ -740,11 +787,13 @@ id: system::stdout
 type: stdout
 "#,
         )?;
-        self.repo
+        self.conductor
+            .repo
             .publish_offramp(&STDOUT_OFFRAMP, true, artefact)
             .await?;
-        self.bind_offramp(&STDOUT_OFFRAMP).await?;
-        self.reg
+        self.conductor.bind_offramp(&STDOUT_OFFRAMP).await?;
+        self.conductor
+            .reg
             .find_offramp(&STDOUT_OFFRAMP)
             .await?
             .ok_or_else(|| Error::from("Failed to initialize stdout offramp."))?;
@@ -756,30 +805,17 @@ id: system::stderr
 type: stderr
 "#,
         )?;
-        self.repo
+        self.conductor
+            .repo
             .publish_offramp(&STDERR_OFFRAMP, true, artefact)
             .await?;
-        self.bind_offramp(&STDERR_OFFRAMP).await?;
-        self.reg
+        self.conductor.bind_offramp(&STDERR_OFFRAMP).await?;
+        self.conductor
+            .reg
             .find_offramp(&STDERR_OFFRAMP)
             .await?
             .ok_or_else(|| Error::from("Failed to initialize stderr offramp."))?;
 
         Ok(())
-    }
-
-    pub(crate) async fn start_pipeline(
-        &self,
-        config: PipelineArtefact,
-        id: ServantId,
-    ) -> Result<pipeline::Addr> {
-        let (tx, rx) = bounded(1);
-        self.system
-            .send(ManagerMsg::CreatePipeline(
-                tx,
-                pipeline::Create { id, config },
-            ))
-            .await?;
-        rx.recv().await?
     }
 }

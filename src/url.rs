@@ -149,6 +149,22 @@ impl TremorURL {
         Self::parse(&format!("/offramp/{}", id))
     }
 
+    /// Creates an URL from a given pipeline id
+    ///
+    /// # Errors
+    ///  * if the passed ID isn't a valid pipeline id
+    pub fn from_pipeline_id(id: &str) -> Result<Self> {
+        Self::parse(&format!("/pipeline/{}", id))
+    }
+
+    /// Creates an URL from a given binding id
+    ///
+    /// # Errors
+    ///  * if the passed ID isn't a valid binding id
+    pub fn from_binding_id(id: &str) -> Result<Self> {
+        Self::parse(&format!("/binding/{}", id))
+    }
+
     /// Parses a string into a Trmeor URL
     ///
     /// # Errors

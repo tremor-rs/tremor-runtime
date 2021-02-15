@@ -16,19 +16,14 @@
 // FIXME TODO - Add timed-wait from Disconnecting->Zombie->Inactive(Done)
 // FIMXE TODO - formalize close error reasons
 
-use crate::errors::Result;
+use crate::{errors::Result, system::Conductor};
 
-use super::{echo::EchoProtocol, pubsub::PubSubProtocol, NetworkCont};
+use super::{api::ApiProtocol, echo::EchoProtocol, pubsub::PubSubProtocol, NetworkCont};
 use crate::network::prelude::*;
-use crate::offramp;
-use crate::onramp;
-use crate::pipeline;
-use async_channel::Sender;
-use halfbrown::{hashmap, HashMap as HalfMap};
-use simd_json::json;
+use halfbrown::HashMap as HalfMap;
 use std::collections::HashMap;
 pub(crate) use tremor_pipeline::Event;
-use tremor_script::{LineValue, Value, ValueAndMeta};
+use tremor_script::Value;
 
 pub(crate) mod fsm;
 
@@ -45,9 +40,7 @@ pub(crate) enum ControlState {
 type ProtocolAlias = String;
 #[derive(Clone)]
 pub(crate) struct ControlProtocol {
-    pub(crate) onramp: Sender<onramp::ManagerMsg>,
-    pub(crate) offramp: Sender<offramp::ManagerMsg>,
-    pub(crate) pipeline: Sender<pipeline::ManagerMsg>,
+    pub(crate) conductor: Conductor,
     // Protocol multiplexing micro-state
     pub(crate) active_protocols: HashMap<ProtocolAlias, String>,
     pub(crate) mux: HashMap<String, Box<dyn NetworkProtocol>>,
@@ -68,15 +61,9 @@ impl std::fmt::Debug for ControlProtocol {
 }
 
 impl ControlProtocol {
-    pub(crate) fn new(
-        onramp: Sender<onramp::ManagerMsg>,
-        offramp: Sender<offramp::ManagerMsg>,
-        pipeline: Sender<pipeline::ManagerMsg>,
-    ) -> Self {
+    pub(crate) fn new(conductor: &Conductor) -> Self {
         let mut instance = Self {
-            onramp: onramp.clone(),
-            offramp: offramp.clone(),
-            pipeline: pipeline.clone(),
+            conductor: conductor.clone(),
             active_protocols: HashMap::new(),
             mux: HashMap::new(),
         };
@@ -94,16 +81,14 @@ impl ControlProtocol {
     }
 }
 
-unsafe impl Send for ControlProtocol {}
-unsafe impl Sync for ControlProtocol {}
-
+#[async_trait::async_trait]
 impl NetworkProtocol for ControlProtocol {
     fn on_init(&mut self) -> Result<()> {
-        info!("Initializing control for network protocol");
+        trace!("Initializing control for network protocol");
         Ok(())
     }
 
-    fn on_event(&mut self, event: &Event) -> Result<NetworkCont> {
+    async fn on_event(&mut self, sid: StreamId, event: &Event) -> Result<NetworkCont> {
         trace!("Received control protocol event");
         if let (Value::Object(value), ..) = event.data.parts() {
             if let Some(Value::Object(control)) = value.get(CONTROL_ALIAS) {
@@ -122,9 +107,7 @@ impl NetworkProtocol for ControlProtocol {
                         };
 
                         if "control" == protocol || self.active_protocols.contains_key(&alias) {
-                            return Ok(NetworkCont::Close(
-                                event!({ CONTROL_ALIAS: { "close": "already connected" }}),
-                            ));
+                            return protocol_error("control already connected");
                         }
 
                         // If we get here we have a new protocol alias to register
@@ -136,15 +119,17 @@ impl NetworkProtocol for ControlProtocol {
                                 self.mux.insert(alias.to_string(), proto);
                             }
                             "pubsub" => {
-                                let proto = Box::new(PubSubProtocol::new(self, headers));
+                                let proto =
+                                    Box::new(PubSubProtocol::new(self, alias.to_string(), headers));
+                                self.mux.insert(alias.to_string(), proto);
+                            }
+                            "api" => {
+                                let proto =
+                                    Box::new(ApiProtocol::new(self, alias.to_string(), headers));
                                 self.mux.insert(alias.to_string(), proto);
                             }
                             _unknown_protocol => {
-                                return Ok(NetworkCont::Close(event!({
-                                    CONTROL_ALIAS: {
-                                        "close": "protocol not found error"
-                                    }
-                                })));
+                                return protocol_error("protocol not found error");
                             }
                         }
 
@@ -154,15 +139,10 @@ impl NetworkProtocol for ControlProtocol {
                             ControlState::Active,
                         ));
                     } else {
-                        return Ok(NetworkCont::Close(event!({
-                            CONTROL_ALIAS: {
-                                "close": "protocol not specified error"
-                            }
-                        })));
+                        return protocol_error("protocol not specified error");
                     }
                 } else if let Some(Value::Object(disconnect)) = control.get("disconnect") {
                     let alias = disconnect.get("protocol");
-                    dbg!(&alias);
                     match alias {
                         Some(Value::String(alias)) => {
                             let alias = alias.to_string();
@@ -171,57 +151,38 @@ impl NetworkProtocol for ControlProtocol {
                             return Ok(NetworkCont::DisconnectProtocol(alias.to_string()));
                         }
                         _otherwise => {
-                            return Ok(NetworkCont::Close(event!({
-                                CONTROL_ALIAS: {
-                                    "close": "protocol not found error"
-                                }
-                            })));
+                            return protocol_error("protocol not found error");
                         }
                     }
                 } else {
-                    return Ok(NetworkCont::Close(event!({
-                        CONTROL_ALIAS: {
-                            "close": "unsupported control operation"
-                        }
-                    })));
+                    return protocol_error("unsupported control operation");
                 }
             }
 
             // Each well-formed message record MUST have only 1 field
             if value.len() != 1 {
-                return Ok(NetworkCont::Close(
-                    event!({CONTROL_ALIAS: {"close": "expected 1 record field"}}),
-                ));
+                return protocol_error("expected one record field");
             } else {
                 match value.keys().next() {
                     Some(key) => match self.mux.get_mut(&key.to_string()) {
                         Some(active_protocol) => {
-                            let resp = active_protocol.on_event(event)?;
+                            let resp = active_protocol.on_event(sid, event).await?;
                             return Ok(resp);
                         }
                         None => {
-                            return Ok(NetworkCont::Close(event!({
-                                CONTROL_ALIAS: {
-                                    "close": format!("protocol session not found for {}", &key.to_string())
-                                }
-                            })));
+                            return protocol_error(&format!(
+                                "protocol session not found for {}",
+                                &key.to_string()
+                            ));
                         }
                     },
                     None => {
-                        return Ok(NetworkCont::Close(event!({
-                            CONTROL_ALIAS: {
-                                "close": format!("expected record with 1 field")
-                            }
-                        })));
+                        return protocol_error("expected one record field");
                     }
                 }
             }
         } else {
-            return Ok(NetworkCont::Close(event!({
-                CONTROL_ALIAS: {
-                    "close": format!("record expected")
-                }
-            })));
+            return protocol_error("control record expected");
         }
     }
 }
@@ -230,26 +191,28 @@ impl NetworkProtocol for ControlProtocol {
 mod test {
     use super::*;
     use crate::network::prelude::NetworkSession;
-    use crate::{errors::Result, event};
-    use halfbrown::hashmap;
-    use simd_json::json;
-    use tremor_script::LineValue;
+    use crate::system;
+    use crate::{errors::Result, event, system::Conductor};
+    use async_channel::bounded;
     use tremor_script::Value;
-    use tremor_script::ValueAndMeta;
 
     #[async_std::test]
     async fn control_connect_bad_protocol() -> Result<()> {
-        let onrampq = async_channel::bounded(1);
-        let offrampq = async_channel::bounded(1);
-        let pipelineq = async_channel::bounded(1);
-        let mut control = ControlProtocol::new(onrampq.0, offrampq.0, pipelineq.0);
+        let (tx, _rx) = bounded::<system::ManagerMsg>(1);
+        let conductor = Conductor::new(tx);
+        let mut control = ControlProtocol::new(&conductor);
 
-        let actual = control.on_event(&event!({
-            "tremor": {
-            "connect": {
-                "protocol_malformed": "control"
-            }
-        }}))?;
+        let actual = control
+            .on_event(
+                0,
+                &event!({
+                    "tremor": {
+                    "connect": {
+                        "protocol_malformed": "control"
+                    }
+                }}),
+            )
+            .await?;
 
         assert_eq!(
             actual,
@@ -260,12 +223,17 @@ mod test {
             }))
         );
 
-        let actual = control.on_event(&event!({
-            "tremor": {
-            "connect": {
-                "protocol": "flork"
-            }
-        }}))?;
+        let actual = control
+            .on_event(
+                0,
+                &event!({
+                    "tremor": {
+                    "connect": {
+                        "protocol": "flork"
+                    }
+                }}),
+            )
+            .await?;
 
         assert_eq!(
             actual,
@@ -281,18 +249,22 @@ mod test {
 
     #[async_std::test]
     async fn control_alias_connect_bad_protocol() -> Result<()> {
-        let onrampq = async_channel::bounded(1);
-        let offrampq = async_channel::bounded(1);
-        let pipelineq = async_channel::bounded(1);
-        let mut control = ControlProtocol::new(onrampq.0, offrampq.0, pipelineq.0);
+        let (tx, _rx) = bounded::<system::ManagerMsg>(1);
+        let conductor = Conductor::new(tx);
+        let mut control = ControlProtocol::new(&conductor);
 
-        let actual = control.on_event(&event!({
-            "tremor": {
-            "connect": {
-                "protocol_malformed": "control",
-                "alias": "snot"
-            }
-        }}))?;
+        let actual = control
+            .on_event(
+                0,
+                &event!({
+                    "tremor": {
+                    "connect": {
+                        "protocol_malformed": "control",
+                        "alias": "snot"
+                    }
+                }}),
+            )
+            .await?;
 
         assert_eq!(
             actual,
@@ -303,13 +275,18 @@ mod test {
             }))
         );
 
-        let actual = control.on_event(&event!({
-            "tremor": {
-            "connect": {
-                "protocol": "flork",
-                "alias": "snot"
-            }
-        }}))?;
+        let actual = control
+            .on_event(
+                0,
+                &event!({
+                    "tremor": {
+                    "connect": {
+                        "protocol": "flork",
+                        "alias": "snot"
+                    }
+                }}),
+            )
+            .await?;
 
         assert_eq!(
             actual,
@@ -325,15 +302,19 @@ mod test {
 
     #[async_std::test]
     async fn control_bad_operation() -> Result<()> {
-        let onrampq = async_channel::bounded(1);
-        let offrampq = async_channel::bounded(1);
-        let pipelineq = async_channel::bounded(1);
-        let mut control = ControlProtocol::new(onrampq.0, offrampq.0, pipelineq.0);
+        let (tx, _rx) = bounded::<system::ManagerMsg>(1);
+        let conductor = Conductor::new(tx);
+        let mut control = ControlProtocol::new(&conductor);
 
-        let actual = control.on_event(&event!({
-            "tremor": {
-            "snot": { }
-        }}))?;
+        let actual = control
+            .on_event(
+                0,
+                &event!({
+                    "tremor": {
+                    "snot": { }
+                }}),
+            )
+            .await?;
 
         assert_eq!(
             actual,
@@ -350,23 +331,24 @@ mod test {
     #[async_std::test]
     async fn network_session_cannot_override_control() -> Result<()> {
         let stream_id = 0 as StreamId;
-        let onrampq = async_channel::bounded(1);
-        let offrampq = async_channel::bounded(1);
-        let pipelineq = async_channel::bounded(1);
-        let control = ControlProtocol::new(onrampq.0, offrampq.0, pipelineq.0);
+        let (tx, _rx) = bounded::<system::ManagerMsg>(1);
+        let conductor = Conductor::new(tx);
+        let control = ControlProtocol::new(&conductor);
         let mut session = NetworkSession::new(stream_id, control)?;
         let (sender, _receiver) = async_channel::bounded(1);
         assert_eq!(ControlState::Connecting, session.fsm.state);
 
-        session.on_event(
-            &sender,
-            &event!({
-                "tremor": {
-                "connect": {
-                    "protocol": "control"
-                }
-            }}),
-        )?;
+        session
+            .on_event(
+                &sender,
+                &event!({
+                    "tremor": {
+                    "connect": {
+                        "protocol": "control"
+                    }
+                }}),
+            )
+            .await?;
         assert_eq!(ControlState::Connecting, session.fsm.state);
         Ok(())
     }
@@ -374,10 +356,9 @@ mod test {
     #[async_std::test]
     async fn network_session_control_connect_disconnect_lifecycle() -> Result<()> {
         let stream_id = 0 as StreamId;
-        let onrampq = async_channel::bounded(1);
-        let offrampq = async_channel::bounded(1);
-        let pipelineq = async_channel::bounded(1);
-        let control = ControlProtocol::new(onrampq.0, offrampq.0, pipelineq.0);
+        let (tx, _rx) = bounded::<system::ManagerMsg>(1);
+        let conductor = Conductor::new(tx);
+        let control = ControlProtocol::new(&conductor);
         let mut session = NetworkSession::new(stream_id, control)?;
 
         let (sender, _receiver) = async_channel::bounded(1);
@@ -387,27 +368,31 @@ mod test {
         assert_eq!(1, session.fsm.control.mux.len());
         assert_eq!(ControlState::Connecting, session.fsm.state);
 
-        session.on_event(
-            &sender,
-            &event!({
-                "tremor": {
-                "connect": {
-                    "protocol": "echo"
-                }
-            }}),
-        )?;
+        session
+            .on_event(
+                &sender,
+                &event!({
+                    "tremor": {
+                    "connect": {
+                        "protocol": "echo"
+                    }
+                }}),
+            )
+            .await?;
         assert_eq!(2, session.fsm.control.active_protocols.len());
         assert_eq!(2, session.fsm.control.mux.len());
         assert_eq!(ControlState::Active, session.fsm.state);
-        session.on_event(
-            &sender,
-            &event!({
-                "tremor": {
-                "disconnect": {
-                    "protocol": "echo"
-                }
-            }}),
-        )?;
+        session
+            .on_event(
+                &sender,
+                &event!({
+                    "tremor": {
+                    "disconnect": {
+                        "protocol": "echo"
+                    }
+                }}),
+            )
+            .await?;
         assert_eq!(1, session.fsm.control.active_protocols.len());
         assert_eq!(1, session.fsm.control.mux.len());
         assert_eq!(ControlState::Connecting, session.fsm.state);
@@ -424,10 +409,9 @@ mod test {
     #[async_std::test]
     async fn data_plane_mediation() -> Result<()> {
         let stream_id = 0 as StreamId;
-        let onrampq = async_channel::bounded(1);
-        let offrampq = async_channel::bounded(1);
-        let pipelineq = async_channel::bounded(1);
-        let control = ControlProtocol::new(onrampq.0, offrampq.0, pipelineq.0);
+        let (tx, _rx) = bounded::<system::ManagerMsg>(1);
+        let conductor = Conductor::new(tx);
+        let control = ControlProtocol::new(&conductor);
         let mut session = NetworkSession::new(stream_id, control)?;
 
         let (sender, _receiver) = async_channel::bounded(1);
@@ -437,40 +421,50 @@ mod test {
         assert_eq!(1, session.fsm.control.mux.len());
         assert_eq!(ControlState::Connecting, session.fsm.state);
 
-        session.on_event(
-            &sender,
-            &event!({
-                "tremor": {
-                "connect": {
-                    "protocol": "echo"
-                }
-            }}),
-        )?;
+        session
+            .on_event(
+                &sender,
+                &event!({
+                    "tremor": {
+                    "connect": {
+                        "protocol": "echo"
+                    }
+                }}),
+            )
+            .await?;
         assert_eq!(2, session.fsm.control.active_protocols.len());
         assert_eq!(2, session.fsm.control.mux.len());
         assert_eq!(ControlState::Active, session.fsm.state);
 
-        session.on_event(
-            &sender,
-            &event!({
-                "tremor": {
-                "connect": {
-                    "protocol": "echo",
-                    "alias": "snot",
-                }
-            }}),
-        )?;
+        session
+            .on_event(
+                &sender,
+                &event!({
+                    "tremor": {
+                    "connect": {
+                        "protocol": "echo",
+                        "alias": "snot",
+                    }
+                }}),
+            )
+            .await?;
         assert_eq!(3, session.fsm.control.active_protocols.len());
         assert_eq!(3, session.fsm.control.mux.len());
         assert_eq!(ControlState::Active, session.fsm.state);
 
-        let actual = session.on_event(&sender, &event!({"echo": "badger"}))?;
+        let actual = session
+            .on_event(&sender, &event!({"echo": "badger"}))
+            .await?;
         assert_eq!(NetworkCont::SourceReply(event!({"echo": "badger"})), actual);
 
-        let actual = session.on_event(&sender, &event!({"snot": "badger"}))?;
+        let actual = session
+            .on_event(&sender, &event!({"snot": "badger"}))
+            .await?;
         assert_eq!(NetworkCont::SourceReply(event!({"snot": "badger"})), actual);
 
-        let actual = session.on_event(&sender, &event!({"badger": "badger"}))?;
+        let actual = session
+            .on_event(&sender, &event!({"badger": "badger"}))
+            .await?;
         assert_eq!(
             NetworkCont::Close(
                 event!({"tremor": {"close": "protocol session not found for badger"}})
@@ -478,50 +472,73 @@ mod test {
             actual,
         );
 
-        let actual = session.on_event(&sender, &event!({"fleek": 1, "flook": 2}))?;
+        let actual = session
+            .on_event(&sender, &event!({"fleek": 1, "flook": 2}))
+            .await?;
         assert_eq!(
-            NetworkCont::Close(event!({"tremor": {"close": "expected 1 record field"}})),
+            NetworkCont::Close(event!({"tremor": {"close": "expected one record field"}})),
             actual,
         );
 
-        let actual = session.on_event(&sender, &event!({}))?;
+        let actual = session.on_event(&sender, &event!({})).await?;
         assert_eq!(
-            NetworkCont::Close(event!({"tremor": {"close": "expected 1 record field"}})),
+            NetworkCont::Close(event!({"tremor": {"close": "expected one record field"}})),
             actual,
         );
 
-        let actual = session.on_event(&sender, &event!("snot"))?;
+        let actual = session.on_event(&sender, &event!("snot")).await?;
         assert_eq!(
-            NetworkCont::Close(event!({"tremor": {"close": "record expected"}})),
+            NetworkCont::Close(event!({"tremor": {"close": "control record expected"}})),
             actual,
         );
 
-        let actual = session.on_event(
-            &sender,
-            &event!({
-                "tremor": {
-                "connect": {
-                    "protocol": "control",
-                }
-            }}),
-        )?;
+        let actual = session
+            .on_event(
+                &sender,
+                &event!({
+                    "tremor": {
+                    "connect": {
+                        "protocol": "control",
+                    }
+                }}),
+            )
+            .await?;
         assert_eq!(
-            NetworkCont::Close(event!({"tremor": {"close": "already connected"}})),
+            NetworkCont::Close(event!({"tremor": {"close": "control already connected"}})),
             actual,
         );
 
-        let actual = session.on_event(
-            &sender,
-            &event!({
-                "tremor": {
-                "connect": {
-                    "protocol": "control",
-                    "alias": "control",
-                }
-            }}),
-        )?;
+        let actual = session
+            .on_event(
+                &sender,
+                &event!({
+                    "tremor": {
+                    "connect": {
+                        "protocol": "control",
+                        "alias": "control",
+                    }
+                }}),
+            )
+            .await?;
         assert_eq!(
-            NetworkCont::Close(event!({"tremor": {"close": "already connected"}})),
+            NetworkCont::Close(event!({"tremor": {"close": "control already connected"}})),
+            actual,
+        );
+
+        let actual = session
+            .on_event(
+                &sender,
+                &event!({
+                    "tremor": {
+                    "connect": {
+                        "protocol": "snot",
+                        "alias": "control",
+                    }
+                }}),
+            )
+            .await?;
+        assert_eq!(
+            NetworkCont::Close(event!({"tremor": {"close": "protocol not found error"}})),
             actual,
         );
 

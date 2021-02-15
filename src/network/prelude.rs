@@ -21,18 +21,44 @@ use super::{
 pub(crate) use crate::errors::Result;
 use crate::{network::control::ControlProtocol, source::tnt::SerializedResponse};
 use async_channel::Sender;
-use simd_json::json;
 pub(crate) use tremor_pipeline::Event;
-use tremor_script::{LineValue, ValueAndMeta};
+use tremor_value::json;
+use tremor_value::Value;
+
+/// Given a serializable rust struct, produces a tremor value
+pub(crate) fn destructurize<T>(value: &T) -> Result<Value>
+where
+    T: serde::ser::Serialize,
+{
+    let mut value: String = simd_json::to_string(&value)?;
+    let value = unsafe { value.as_mut_vec() };
+    let value: Value = tremor_value::to_value(value)?.into_static();
+    Ok(value)
+}
+
+// Given a tremor value, produces a rust struct via deserialization
+pub(crate) fn structurize<'de, T>(value: Value<'de>) -> Result<T>
+where
+    T: serde::de::Deserialize<'de>,
+{
+    Ok(T::deserialize(value)?)
+}
 
 /// Macro that creates an event based on a json type template
 #[macro_export]
 macro_rules! event {
     ($json:tt) => {{
+        // Convenience for macro call-sites to avoid needing to define
+        // these deps
+        use halfbrown::HashMap;
+        use tremor_script::LineValue;
+        use tremor_script::ValueAndMeta;
+        use tremor_value::json;
+
         let value: Value = json!($json).into();
         let mut event = Event::default();
         event.data = LineValue::new(vec![], |_| {
-            ValueAndMeta::from_parts(value, Value::Object(Box::new(hashmap! {})))
+            ValueAndMeta::from_parts(value, Value::Object(Box::new(HashMap::new())))
         });
         event as Event
     }};
@@ -41,7 +67,10 @@ macro_rules! event {
 /// Macro that creates a continuation for network protocol event actions
 #[macro_export]
 macro_rules! wsc_reply {
-    ( $event:ident, $v:tt) => {
+    ( $event:ident, $v:tt) => {{
+        use tremor_script::LineValue;
+        use tremor_script::ValueAndMeta;
+        use tremor_value::json;
         Ok(NetworkCont::SourceReply(Event {
             id: $event.id.clone(),
             data: LineValue::new(vec![], |_| {
@@ -55,7 +84,19 @@ macro_rules! wsc_reply {
             op_meta: $event.op_meta.clone(),
             transactional: false,
         })) as Result<NetworkCont>
-    };
+    }};
+}
+
+#[allow(dead_code)] // FIXME remove
+enum ProtocolErrorReasons {
+    InvalidApiCommand,
+}
+
+pub(crate) fn protocol_error(reason: &str) -> Result<NetworkCont> {
+    // FIXME str -> enum + error code
+    Ok(NetworkCont::Close(
+        event!({"tremor": { "close": reason.to_string() } }),
+    ))
 }
 
 // A stream represents a distinct connection such as a tcp client
@@ -63,11 +104,16 @@ macro_rules! wsc_reply {
 //
 pub(crate) type StreamId = usize;
 
-pub(crate) trait NetworkProtocol: NetworkProtocolClone {
+#[async_trait::async_trait()]
+pub(crate) trait NetworkProtocol: NetworkProtocolClone + Send + Sync {
     /// A new protocol session has been initiated by a connected participant
     fn on_init(&mut self) -> Result<()>;
     /// A data plane event for this protocol has been received
-    fn on_event(&mut self, event: &Event) -> Result<NetworkCont>;
+    async fn on_event(&mut self, sid: StreamId, event: &Event) -> Result<NetworkCont>;
+
+    async fn on_data(&mut self) -> Result<Option<Vec<Event>>> {
+        Ok(None) // Do nothing by default
+    } // FIXME exploration REMOVE/DELETE when done
 }
 
 pub(crate) trait NetworkProtocolClone {
@@ -90,9 +136,6 @@ pub(crate) struct NetworkSession {
     pub(crate) fsm: ControlLifecycleFsm,
 }
 
-unsafe impl Sync for NetworkSession {}
-unsafe impl Send for NetworkSession {}
-
 impl NetworkSession {
     pub(crate) fn new(sid: StreamId, control: ControlProtocol) -> Result<Self> {
         Ok(Self {
@@ -102,12 +145,16 @@ impl NetworkSession {
         })
     }
 
-    pub(crate) fn on_event(
+    pub(crate) async fn on_data(&mut self) -> Result<Option<Vec<Event>>> {
+        self.fsm.on_data().await
+    }
+
+    pub(crate) async fn on_event(
         &mut self,
         _origin: &Sender<SerializedResponse>,
         event: &Event,
     ) -> Result<NetworkCont> {
-        match self.fsm.on_event(event) {
+        match self.fsm.on_event(event).await {
             // We are connecting and activating a protocol session channel
             Ok(NetworkCont::ConnectProtocol(protocol, alias, next_state)) => {
                 if self.fsm.control.active_protocols.len() > 1 {
@@ -124,14 +171,43 @@ impl NetworkSession {
                 return Ok(NetworkCont::DisconnectProtocol(alias));
             }
 
-            // Transmit data from tremor to the network connected participant
-            Ok(NetworkCont::SourceReply(r)) => return Ok(NetworkCont::SourceReply(r)),
-
-            // A known error was detected, propagate
+            // Propagate to caller - loopback transitions so no state change
+            on_reply @ Ok(NetworkCont::SourceReply(_)) => return on_reply,
             on_close @ Ok(NetworkCont::Close(_)) => return on_close,
+            on_none @ Ok(NetworkCont::None) => return on_none,
 
-            // By construction, we should really never get an error here
-            Err(_) => return wsc_reply!(event, { "tremor": { "close": "unknown server error" }}),
+            // By construction, this is a protocol bug and unexpected
+            Err(_e) => {
+                self.fsm.transition(ControlState::Invalid)?;
+                return wsc_reply!(event, { "tremor": { "close": "unknown server error" }});
+            }
         }
     }
+}
+
+#[cfg(test)]
+macro_rules! assert_cont {
+    ($actual:expr, $expected:tt) => {{
+        match $actual {
+            NetworkCont::SourceReply(Event { data, .. }) => {
+                let value: Value = json!($expected).into();
+                assert_eq!(&value, data.parts().0);
+            }
+            NetworkCont::Close(Event { data, .. }) => {
+                let value: Value = json!($expected).into();
+                assert_eq!(&value, data.parts().0);
+            }
+            _ => {
+                assert!(false, "nope not supported in assert");
+            }
+        };
+    }};
+}
+
+#[cfg(test)]
+macro_rules! assert_err {
+    ($actual:expr, $expected:expr) => {{
+        assert!($actual.is_err());
+        assert_eq!($expected, $actual.unwrap_err().to_string());
+    }};
 }

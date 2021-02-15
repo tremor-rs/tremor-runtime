@@ -12,42 +12,34 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::{prelude::NetworkProtocol, NetworkCont};
+use super::{
+    prelude::{NetworkProtocol, StreamId},
+    NetworkCont,
+};
 use crate::errors::Result;
 use crate::network::control::ControlProtocol;
-use crate::offramp;
-use crate::onramp;
-use crate::pipeline;
-use async_channel::Sender;
 use tremor_pipeline::Event;
 use tremor_value::Value;
 
 #[derive(Clone)]
-pub(crate) struct EchoProtocol {
-    _onramp: Sender<onramp::ManagerMsg>,
-    _offramp: Sender<offramp::ManagerMsg>,
-    _pipeline: Sender<pipeline::ManagerMsg>,
-}
+pub(crate) struct EchoProtocol {}
 
 impl EchoProtocol {
-    pub(crate) fn new(ns: &mut ControlProtocol, _headers: Value) -> Self {
-        Self {
-            _onramp: ns.onramp.clone(),
-            _offramp: ns.offramp.clone(),
-            _pipeline: ns.pipeline.clone(),
-        }
+    pub(crate) fn new(_unused: &mut ControlProtocol, _headers: Value) -> Self {
+        Self {}
     }
 }
 
-unsafe impl Send for EchoProtocol {}
-unsafe impl Sync for EchoProtocol {}
+// unsafe impl Send for EchoProtocol {}
+// unsafe impl Sync for EchoProtocol {}
 
+#[async_trait::async_trait]
 impl NetworkProtocol for EchoProtocol {
     fn on_init(&mut self) -> Result<()> {
         trace!("Initializing Echo network protocol");
         Ok(())
     }
-    fn on_event(&mut self, event: &Event) -> Result<NetworkCont> {
+    async fn on_event(&mut self, _sid: StreamId, event: &Event) -> Result<NetworkCont> {
         trace!("Received echo network protocol event");
         Ok(NetworkCont::SourceReply(event.clone()))
     }
@@ -56,26 +48,29 @@ impl NetworkProtocol for EchoProtocol {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{errors::Result, event};
+    use crate::{errors::Result, event, system, system::Conductor};
+    use async_channel::bounded;
     use halfbrown::hashmap;
     use simd_json::json;
-    use tremor_script::LineValue;
     use tremor_script::Value;
-    use tremor_script::ValueAndMeta;
 
     #[async_std::test]
     async fn network_session_cannot_override_control() -> Result<()> {
-        let onrampq = async_channel::bounded(1);
-        let offrampq = async_channel::bounded(1);
-        let pipelineq = async_channel::bounded(1);
-        let mut control = ControlProtocol::new(onrampq.0, offrampq.0, pipelineq.0);
+        let (tx, _rx) = bounded::<system::ManagerMsg>(1);
+        let conductor = Conductor::new(tx);
+        let mut control = ControlProtocol::new(&conductor);
         let mut echo = EchoProtocol::new(&mut control, Value::Object(Box::new(hashmap! {})));
 
         assert_eq!(Ok(()), echo.on_init());
 
-        let actual = echo.on_event(&event!({
-            "snot": "badger"
-        }))?;
+        let actual = echo
+            .on_event(
+                0,
+                &event!({
+                    "snot": "badger"
+                }),
+            )
+            .await?;
         assert_eq!(
             NetworkCont::SourceReply(event!({
                 "snot": "badger",
@@ -83,10 +78,10 @@ mod test {
             actual
         );
 
-        let actual = echo.on_event(&event!([1, 2, 3, 4]))?;
+        let actual = echo.on_event(0, &event!([1, 2, 3, 4])).await?;
         assert_eq!(NetworkCont::SourceReply(event!([1, 2, 3, 4])), actual);
 
-        let actual = echo.on_event(&event!("snot"))?;
+        let actual = echo.on_event(0, &event!("snot")).await?;
         assert_eq!(NetworkCont::SourceReply(event!("snot")), actual);
 
         Ok(())

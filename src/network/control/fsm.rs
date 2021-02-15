@@ -45,8 +45,26 @@ impl ControlLifecycleFsm {
         Ok(instance)
     }
 
-    pub fn on_event(&mut self, event: &Event) -> Result<NetworkCont> {
-        self.control.on_event(event)
+    pub(crate) async fn on_event(&mut self, event: &Event) -> Result<NetworkCont> {
+        self.control.on_event(self.sid, event).await
+    }
+
+    // FIXME TODO temporary for exploration / refactor and remove
+    pub(crate) async fn on_data(&mut self) -> Result<Option<Vec<Event>>> {
+        let mut data = vec![];
+        for values in self.control.mux.values_mut() {
+            let values = values.on_data().await?;
+            match values {
+                Some(mut msgs) => data.append(&mut msgs),
+                None => continue,
+            }
+        }
+
+        if data.len() > 0 {
+            Ok(Some(data))
+        } else {
+            Ok(None)
+        }
     }
 }
 
