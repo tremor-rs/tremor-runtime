@@ -18,13 +18,14 @@ use crate::offramp;
 use crate::onramp;
 use crate::pipeline;
 use crate::registry::ServantId;
-use crate::system::{self, World};
+use crate::system::{self};
 use crate::url::{ResourceType, TremorURL};
 use crate::{codec, network};
 use beef::Cow;
 use hashbrown::HashMap;
 use network::Network;
 use std::collections::HashSet;
+use system::Conductor;
 use tremor_pipeline::query;
 pub(crate) type Id = TremorURL;
 pub(crate) use crate::OffRamp as OfframpArtefact;
@@ -52,20 +53,20 @@ pub trait Artefact: Clone {
     type LinkLHS: Clone;
     type LinkRHS: Clone;
     /// Move from Repository to Registry
-    async fn spawn(&self, system: &World, servant_id: ServantId) -> Result<Self::SpawnResult>;
+    async fn spawn(&self, system: &Conductor, servant_id: ServantId) -> Result<Self::SpawnResult>;
     /// Move from Registry(instantiated) to Registry(Active) or from one form of active to another
     /// This acts differently on bindings and the rest. Where the binding takers a mapping of string
     /// replacements, the others take a from and to id
     async fn link(
         &self,
-        system: &World,
+        system: &Conductor,
         id: &TremorURL,
         mappings: HashMap<Self::LinkLHS, Self::LinkRHS>,
     ) -> Result<Self::LinkResult>;
 
     async fn unlink(
         &self,
-        system: &World,
+        system: &Conductor,
         id: &TremorURL,
         mappings: HashMap<Self::LinkLHS, Self::LinkRHS>,
     ) -> Result<bool>;
@@ -80,13 +81,17 @@ impl Artefact for Network {
     type LinkLHS = String;
     type LinkRHS = TremorURL;
 
-    async fn spawn(&self, _world: &World, _servant_id: ServantId) -> Result<Self::SpawnResult> {
-        Ok(network::Addr { id: 0 })
+    async fn spawn(
+        &self,
+        _system: &Conductor,
+        _servant_id: ServantId,
+    ) -> Result<Self::SpawnResult> {
+        unimplemented!()
     }
 
     async fn link(
         &self,
-        _system: &World,
+        _system: &Conductor,
         _id: &TremorURL,
         _mappings: HashMap<Self::LinkLHS, Self::LinkRHS>,
     ) -> Result<Self::LinkResult> {
@@ -95,7 +100,7 @@ impl Artefact for Network {
 
     async fn unlink(
         &self,
-        _system: &World,
+        _system: &Conductor,
         _id: &TremorURL,
         _mappings: HashMap<Self::LinkLHS, Self::LinkRHS>,
     ) -> Result<bool> {
@@ -118,14 +123,17 @@ impl Artefact for Pipeline {
     type LinkLHS = String;
     type LinkRHS = TremorURL;
 
-    //    type Configuration = tremor_pipeline::Pipeline;
-    async fn spawn(&self, world: &World, servant_id: ServantId) -> Result<Self::SpawnResult> {
-        world.start_pipeline(self.clone(), servant_id).await
+    async fn spawn(
+        &self,
+        conductor: &Conductor,
+        servant_id: ServantId,
+    ) -> Result<Self::SpawnResult> {
+        conductor.start_pipeline(self.clone(), servant_id).await
     }
 
     async fn link(
         &self,
-        system: &World,
+        system: &Conductor,
         id: &TremorURL,
         mappings: HashMap<Self::LinkLHS, Self::LinkRHS>,
     ) -> Result<Self::LinkResult> {
@@ -187,7 +195,7 @@ impl Artefact for Pipeline {
 
     async fn unlink(
         &self,
-        system: &World,
+        system: &Conductor,
         id: &TremorURL,
         mappings: HashMap<Self::LinkLHS, Self::LinkRHS>,
     ) -> Result<Self::LinkResult> {
@@ -239,7 +247,11 @@ impl Artefact for OfframpArtefact {
     type LinkResult = bool;
     type LinkLHS = TremorURL;
     type LinkRHS = TremorURL;
-    async fn spawn(&self, world: &World, servant_id: ServantId) -> Result<Self::SpawnResult> {
+    async fn spawn(
+        &self,
+        conductor: &Conductor,
+        servant_id: ServantId,
+    ) -> Result<Self::SpawnResult> {
         //TODO: define offramp by config!
         let offramp = offramp::lookup(&self.binding_type, &self.config)?;
         // lookup codecs already here
@@ -269,10 +281,9 @@ impl Artefact for OfframpArtefact {
             vec![]
         };
         let metrics_reporter = RampReporter::new(servant_id.clone(), self.metrics_interval_s);
-
         let (tx, rx) = bounded(1);
 
-        world
+        conductor
             .system
             .send(system::ManagerMsg::CreateOfframp(
                 tx,
@@ -288,12 +299,13 @@ impl Artefact for OfframpArtefact {
                 }),
             ))
             .await?;
+
         rx.recv().await?
     }
 
     async fn link(
         &self,
-        system: &World,
+        system: &Conductor,
         id: &TremorURL,
         mappings: HashMap<Self::LinkLHS, Self::LinkRHS>,
     ) -> Result<Self::LinkResult> {
@@ -320,7 +332,7 @@ impl Artefact for OfframpArtefact {
 
     async fn unlink(
         &self,
-        system: &World,
+        system: &Conductor,
         id: &TremorURL,
         mappings: HashMap<Self::LinkLHS, Self::LinkRHS>,
     ) -> Result<Self::LinkResult> {
@@ -372,7 +384,11 @@ impl Artefact for OnrampArtefact {
     type LinkResult = bool;
     type LinkLHS = String;
     type LinkRHS = TremorURL;
-    async fn spawn(&self, world: &World, servant_id: ServantId) -> Result<Self::SpawnResult> {
+    async fn spawn(
+        &self,
+        conductor: &Conductor,
+        servant_id: ServantId,
+    ) -> Result<Self::SpawnResult> {
         let stream = onramp::lookup(&self.binding_type, &servant_id, &self.config)?;
         let codec = self.codec.as_ref().map_or_else(
             || stream.default_codec().to_string(),
@@ -396,7 +412,7 @@ impl Artefact for OnrampArtefact {
         let metrics_reporter = RampReporter::new(servant_id.clone(), self.metrics_interval_s);
         let (tx, rx) = bounded(1);
 
-        world
+        conductor
             .system
             .send(system::ManagerMsg::CreateOnramp(
                 tx,
@@ -418,7 +434,7 @@ impl Artefact for OnrampArtefact {
 
     async fn link(
         &self,
-        system: &World,
+        system: &Conductor,
         id: &TremorURL,
         mappings: HashMap<Self::LinkLHS, Self::LinkRHS>,
     ) -> Result<Self::LinkResult> {
@@ -460,7 +476,7 @@ impl Artefact for OnrampArtefact {
 
     async fn unlink(
         &self,
-        system: &World,
+        system: &Conductor,
         id: &TremorURL,
         mappings: HashMap<Self::LinkLHS, Self::LinkRHS>,
     ) -> Result<bool> {
@@ -518,14 +534,14 @@ impl Artefact for Binding {
     type LinkResult = Self;
     type LinkLHS = String;
     type LinkRHS = String;
-    async fn spawn(&self, _: &World, _: ServantId) -> Result<Self::SpawnResult> {
+    async fn spawn(&self, _conductor: &Conductor, _: ServantId) -> Result<Self::SpawnResult> {
         //TODO: Validate
         Ok(self.clone())
     }
 
     async fn link(
         &self,
-        system: &World,
+        system: &Conductor,
         id: &TremorURL,
         mappings: HashMap<Self::LinkLHS, Self::LinkRHS>,
     ) -> Result<Self::LinkResult> {
@@ -646,7 +662,7 @@ impl Artefact for Binding {
 
     async fn unlink(
         &self,
-        system: &World,
+        system: &Conductor,
         _: &TremorURL,
         _: HashMap<Self::LinkLHS, Self::LinkRHS>,
     ) -> Result<bool> {

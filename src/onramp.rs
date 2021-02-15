@@ -11,7 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-use crate::errors::Result;
 use crate::metrics::RampReporter;
 use crate::pipeline;
 use crate::repository::ServantId;
@@ -20,6 +19,7 @@ use crate::source::{
     blaster, crononome, discord, file, kafka, metronome, postgres, rest, tcp, tnt, udp, ws,
 };
 use crate::url::TremorURL;
+use crate::{errors::Result, network};
 use async_std::task::{self, JoinHandle};
 use serde_yaml::Value;
 use std::fmt;
@@ -34,11 +34,21 @@ pub(crate) trait Impl {
 
 #[derive(Clone, Debug)]
 pub enum Msg {
+    // Pipeline
     Connect(Cow<'static, str>, Vec<(TremorURL, pipeline::Addr)>),
     Disconnect {
         id: TremorURL,
         tx: async_channel::Sender<bool>,
     },
+
+    // Network
+    OpenTap(TremorURL, TremorURL, network::Addr),
+    CloseTap {
+        source: TremorURL,
+        target: TremorURL,
+        ctrl: network::Addr,
+    },
+
     Cb(CBAction, EventId),
     // TODO pick good naming here: LinkedEvent / Response / Result?
     Response(tremor_pipeline::Event),
@@ -250,6 +260,7 @@ mod test {
             let onramp: crate::config::OnRamp = serde_yaml::from_value(config)?;
             let onramp_url = TremorURL::from_onramp_id("test").expect("bad url");
             world
+                .conductor
                 .repo
                 .publish_onramp(&onramp_url, false, onramp)
                 .await?;
@@ -259,6 +270,7 @@ mod test {
             let offramp: crate::config::OffRamp = serde_yaml::from_value(config2)?;
             let offramp_url = TremorURL::from_offramp_id("test").expect("bad url");
             world
+                .conductor
                 .repo
                 .publish_offramp(&offramp_url, false, offramp)
                 .await?;
@@ -275,7 +287,7 @@ mod test {
                 &*tremor_pipeline::FN_REGISTRY.lock()?,
                 &aggr_reg,
             )?;
-            world.repo.publish_pipeline(&id, false, artefact).await?;
+            world.conductor.repo.publish_pipeline(&id, false, artefact).await?;
 
             let binding: Binding = serde_yaml::from_str(
                 r#"
@@ -287,6 +299,7 @@ links:
             )?;
 
             world
+                .conductor
                 .repo
                 .publish_binding(
                     &TremorURL::parse(&format!("/binding/{}", "test"))?,
@@ -306,7 +319,7 @@ links:
             )?;
 
             let id = TremorURL::parse(&format!("/binding/{}/01", "test"))?;
-            world.link_binding(&id, mapping[&id].clone()).await?;
+            world.conductor.link_binding(&id, mapping[&id].clone()).await?;
 
             std::thread::sleep(std::time::Duration::from_millis(1000));
 

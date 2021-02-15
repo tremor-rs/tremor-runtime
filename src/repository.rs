@@ -211,7 +211,7 @@ impl<A: Artefact + Send + Sync + 'static> Repository<A> {
 #[derive(Clone)]
 pub struct Repositories {
     pipeline: async_channel::Sender<Msg<PipelineArtefact>>,
-    onramp: async_channel::Sender<Msg<OnrampArtefact>>,
+    pub(crate) onramp: async_channel::Sender<Msg<OnrampArtefact>>,
     offramp: async_channel::Sender<Msg<OfframpArtefact>>,
     binding: async_channel::Sender<Msg<BindingArtefact>>,
 }

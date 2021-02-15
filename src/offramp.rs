@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::codec::Codec;
 use crate::errors::Result;
 use crate::metrics::RampReporter;
 use crate::permge::PriorityMerge;
@@ -25,6 +24,7 @@ use crate::sink::{
 use crate::source::Processors;
 use crate::url::ports::{IN, METRICS};
 use crate::url::TremorURL;
+use crate::{codec::Codec, network};
 use crate::{Event, OpConfig};
 use async_channel::{self, bounded, unbounded};
 use async_std::stream::StreamExt; // for .next() on PriorityMerge
@@ -52,6 +52,14 @@ pub enum Msg {
         port: Cow<'static, str>,
         id: TremorURL,
         tx: async_channel::Sender<bool>,
+    },
+
+    // Network
+    OpenTap(TremorURL, TremorURL, network::Addr),
+    CloseTap {
+        source: TremorURL,
+        target: TremorURL,
+        addr: network::Addr,
     },
 }
 
@@ -335,6 +343,21 @@ impl Manager {
                                     "[Offramp::{}] Pipeline {} disconnected from port {}",
                                     offramp_url, &id, &port
                                 );
+                            }
+                            Msg::OpenTap(source, target, addr) => {
+                                addr.send_control(network::ControlMsg::ConnectOfframp {
+                                    source,
+                                    target,
+                                    addr: addr.clone(),
+                                })
+                                .await?;
+                            }
+                            Msg::CloseTap { addr, .. } => {
+                                let msg = network::ControlMsg::DisconnectOfframp {
+                                    addr: addr.clone(),
+                                    reply: false,
+                                };
+                                addr.send_control(msg).await?;
                             }
                         }
                     }

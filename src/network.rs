@@ -12,27 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::source::tnt::{Config as TntSourceConfig, SerializedResponse, TntImpl as TntSource};
-use crate::source::Source;
 use crate::{
-    codec,
-    errors::Result,
-    metrics::RampReporter,
-    offramp,
-    onramp::{self, OnrampConfig},
-    pipeline,
-    source::tnt::TntImpl,
-    source::Processors,
-    source::SourceReply,
-    source::SourceState,
-    url::ports::ERR,
-    url::ports::OUT,
-    url::TremorURL,
+    codec, errors::Result, metrics::RampReporter, onramp::OnrampConfig, pipeline,
+    source::tnt::TntImpl, source::Processors, source::SourceReply, source::SourceState,
+    system::Conductor, url::ports::ERR, url::ports::OUT, url::TremorURL,
+};
+use crate::{onramp, source::Source};
+use crate::{
+    source::tnt::{Config as TntSourceConfig, SerializedResponse, TntImpl as TntSource},
+    version,
 };
 use async_channel::{bounded, unbounded, Sender};
 use async_std::task::{self, JoinHandle};
 use control::{ControlProtocol, ControlState};
-use halfbrown::hashmap;
 use simd_json::{json, StaticNode};
 use std::collections::HashMap;
 use std::time::Duration;
@@ -44,6 +36,7 @@ use tremor_script::{LineValue, Value, ValueAndMeta};
 pub(crate) mod prelude;
 
 // Supported network protocol variants
+mod api;
 mod control;
 mod echo;
 mod pubsub;
@@ -53,20 +46,86 @@ use prelude::*;
 /// Address for a network
 #[derive(Debug, Clone)]
 pub struct Addr {
-    //    addr: async_channel::Sender<Msg>,
-    //    cf_addr: async_channel::Sender<CfMsg>,
-    //    mgmt_addr: async_channel::Sender<MgmtMsg>,
+    pub(crate) addr: async_channel::Sender<Msg>,
+    pub(crate) ctrl: async_channel::Sender<ControlMsg>,
     pub(crate) id: StreamId,
+    pub(crate) url: TremorURL,
 }
 
-// #[derive(Debug)]
-// pub enum Msg {
-//     Event {
-//         event: Event,
-//         input: Cow<'static, str>,
-//     },
-//     //    Signal(Event),
-// }
+impl Addr {
+    /// creates a new address
+    pub(crate) fn new(
+        addr: async_channel::Sender<Msg>,
+        ctrl_addr: async_channel::Sender<ControlMsg>,
+        id: StreamId,
+        url: TremorURL,
+    ) -> Self {
+        Self {
+            addr,
+            ctrl: ctrl_addr,
+            id,
+            url,
+        }
+    }
+
+    #[cfg(not(tarpaulin_include))]
+    pub fn len(&self) -> usize {
+        self.addr.len()
+    }
+
+    #[cfg(not(tarpaulin_include))]
+    pub fn id(&self) -> &StreamId {
+        &self.id
+    }
+
+    pub(crate) async fn send(&self, msg: Msg) -> Result<()> {
+        Ok(self.addr.send(msg).await?)
+    }
+
+    // pub(crate) fn try_send(&self, msg: Msg) -> bool {
+    //     self.addr.try_send(msg).is_ok()
+    // }
+
+    pub(crate) async fn send_control(&self, msg: ControlMsg) -> Result<()> {
+        Ok(self.ctrl.send(msg).await?)
+    }
+}
+
+#[derive(Debug)]
+pub enum Msg {
+    Event { event: Event },
+}
+
+#[derive(Debug, Clone)]
+pub enum ControlMsg {
+    ConnectOnramp {
+        source: TremorURL,
+        target: TremorURL,
+        addr: Addr,
+    },
+    DisconnectOnramp {
+        addr: Addr,
+        reply: bool,
+    },
+    // ConnectPipeline {
+    //     source: TremorURL,
+    //     target: TremorURL,
+    //     addr: Addr,
+    // },
+    // DisconnectPipeline {
+    //     addr: Addr,
+    //     reply: bool,
+    // },
+    ConnectOfframp {
+        source: TremorURL,
+        target: TremorURL,
+        addr: Addr,
+    },
+    DisconnectOfframp {
+        addr: Addr,
+        reply: bool,
+    },
+}
 
 /// Representation of the network abstraction
 #[derive(Clone)]
@@ -93,38 +152,28 @@ impl std::fmt::Display for ManagerMsg {
     }
 }
 
-pub(crate) struct NetworkManager
-//<T>
-where
-//    T: Source,
-{
+pub(crate) struct NetworkManager {
     control: ControlProtocol,
     network_id: TremorURL,
     pub source: TntImpl,
-    // rx: Receiver<onramp::Msg>,
-    // tx: Sender<onramp::Msg>,
     metrics_reporter: RampReporter,
-    //    triggered: bool,
     pipelines_out: Vec<(TremorURL, pipeline::Addr)>,
     pipelines_err: Vec<(TremorURL, pipeline::Addr)>,
-    //    err_required: bool,
     id: u64,
-    //    is_transactional: bool,
     /// Unique Id for the source
     uid: u64,
-    //    is_stopping: bool,
     sessions: HashMap<StreamId, NetworkSession>,
 }
 unsafe impl Send for NetworkManager {}
 unsafe impl Sync for NetworkManager {}
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) enum NetworkCont {
     ConnectProtocol(String, String, ControlState),
     DisconnectProtocol(String),
-    //    Dispatch(String, Event),
     SourceReply(Event),
     Close(Event),
+    None,
 }
 
 impl NetworkManager {
@@ -139,83 +188,70 @@ impl NetworkManager {
     }
 
     async fn handle_raw_text<'event>(&mut self, sid: StreamId, event: Event) -> Result<()> {
-        {
-            let codec = codec::lookup("json")?;
-            let codec = codec.as_ref();
-            if let Some(session) = self.sessions.get_mut(&sid) {
-                let origin = self.source.streams.get(&sid).unwrap();
-                match session.on_event(origin, &event) {
-                    Ok(NetworkCont::ConnectProtocol(protocol, alias, _next_state)) => {
-                        let origin = self.source.streams.get(&sid).unwrap();
-                        origin
-                            .send(SerializedResponse {
-                                event_id: EventId::new(0, sid as u64, 0), // FIXME TODO
-                                ingest_ns: event.ingest_ns,
-                                binary: false,
-                                data: simd_json::to_string(&json!({ "control": {
+        let codec = codec::lookup("json")?;
+        let codec = codec.as_ref();
+        if let Some(session) = self.sessions.get_mut(&sid) {
+            let origin = self.source.streams.get(&sid).unwrap();
+            match session.on_event(origin, &event).await? {
+                NetworkCont::ConnectProtocol(protocol, alias, _next_state) => {
+                    let origin = self.source.streams.get(&sid).unwrap();
+                    origin
+                        .send(SerializedResponse {
+                            event_id: EventId::new(0, sid as u64, 0), // FIXME TODO
+                            ingest_ns: event.ingest_ns,
+                            binary: false,
+                            data: simd_json::to_string(&json!({ "tremor": {
+                                "connect-ack": {
                                     "protocol": protocol,
                                     "alias": alias,
-                                    "state": "connected"
-                                }}))?
-                                .as_bytes()
-                                .to_vec(),
-                                should_close: false,
-                            })
-                            .await?;
-                    }
-                    Ok(NetworkCont::DisconnectProtocol(protocol)) => {
-                        self.source
-                            .reply_event(
-                                event!({"control": { "disconnect": { "alias": protocol }}}),
-                                codec,
-                                &codec::builtin_codec_map(),
-                            )
-                            .await?;
-                        session.fsm.transition(ControlState::Disconnecting)?;
-                    }
-                    Ok(NetworkCont::SourceReply(event)) => {
-                        let origin = self.source.streams.get(&sid).unwrap();
-                        origin
-                            .send(SerializedResponse {
-                                event_id: EventId::new(0, sid as u64, 0), // FIXME TODO
-                                ingest_ns: event.ingest_ns,
-                                binary: false,
-                                data: simd_json::to_vec(event.data.parts().0)?,
-                                should_close: false,
-                            })
-                            .await?;
-                    }
-                    Ok(NetworkCont::Close(event)) => {
-                        let origin = self.source.streams.get(&sid).unwrap();
-                        origin
-                            .send(SerializedResponse {
-                                event_id: EventId::new(0, sid as u64, 0), // FIXME TODO
-                                ingest_ns: event.ingest_ns,
-                                binary: false,
-                                data: simd_json::to_vec(event.data.parts().0)?,
-                                should_close: true,
-                            })
-                            .await?;
-                    }
-                    _unsupported_or_error => {
-                        let origin = self.source.streams.get(&sid).unwrap();
-                        origin
-                            .send(SerializedResponse {
-                                event_id: EventId::new(0, sid as u64, 0), // FIXME TODO
-                                ingest_ns: event.ingest_ns,
-                                binary: false,
-                                data: simd_json::to_vec(&json!({
-                                    "control": {
-                                        "close": "unsupported network operation"
-                                    }
-                                }))?,
-                                should_close: true,
-                            })
-                            .await?;
-                    }
+                                }
+                            }}))?
+                            .as_bytes()
+                            .to_vec(),
+                            should_close: false,
+                        })
+                        .await?;
                 }
-            }
+                NetworkCont::DisconnectProtocol(protocol) => {
+                    self.source
+                        .reply_event(
+                            event!({"tremor": { "disconnect-ack": { "alias": protocol }}}),
+                            codec,
+                            &codec::builtin_codec_map(),
+                        )
+                        .await?;
+                    session.fsm.transition(ControlState::Disconnecting)?;
+                }
+                NetworkCont::SourceReply(event) => {
+                    let origin = self.source.streams.get(&sid).unwrap();
+                    origin
+                        .send(SerializedResponse {
+                            event_id: EventId::new(0, sid as u64, 0), // FIXME TODO
+                            ingest_ns: event.ingest_ns,
+                            binary: false,
+                            data: simd_json::to_vec(event.data.parts().0)?,
+                            should_close: false,
+                        })
+                        .await?;
+                }
+                NetworkCont::Close(event) => {
+                    let origin = self.source.streams.get(&sid).unwrap();
+                    origin
+                        .send(SerializedResponse {
+                            event_id: EventId::new(0, sid as u64, 0), // FIXME TODO
+                            ingest_ns: event.ingest_ns,
+                            binary: false,
+                            data: simd_json::to_vec(event.data.parts().0)?,
+                            should_close: true,
+                        })
+                        .await?;
+                }
+                NetworkCont::None => (),
+            };
+        } else {
+            // FIXME log an error
         }
+
         Ok(())
     }
 
@@ -349,18 +385,24 @@ impl NetworkManager {
 
     pub async fn run(mut self) -> Result<()> {
         loop {
-            // if self.handle_pipelines().await? {
-            //     return Ok(());
-            // }
-
-            // let pipelines_out_empty = self.pipelines_out.is_empty();
-
-            // TODO: add a flag to the onramp to wait for the error pipelines to be populated as well
-            //       lets call it `wait_for_error_pipelines` (horrible name)
             match self.source.pull_event(self.id).await {
-                Ok(SourceReply::StartStream(id)) => {
+                Ok(SourceReply::StartStream(sid)) => {
                     self.sessions
-                        .insert(id, NetworkSession::new(id, self.control.clone())?);
+                        .insert(sid, NetworkSession::new(sid, self.control.clone())?);
+                    let origin = self.source.streams.get(&sid).unwrap();
+                    origin
+                        .send(SerializedResponse {
+                            event_id: EventId::new(0, sid as u64, 0), // FIXME TODO
+                            ingest_ns: nanotime(),
+                            binary: false,
+                            data: simd_json::to_string(&json!({ "tremor": {
+                                "version": version::VERSION,
+                            }}))?
+                            .as_bytes()
+                            .to_vec(),
+                            should_close: false,
+                        })
+                        .await?;
                 }
                 Ok(SourceReply::EndStream(id)) => {
                     self.sessions.remove(&id);
@@ -422,20 +464,34 @@ impl NetworkManager {
                     self.metrics_reporter.increment_err();
                 }
             }
+
+            for s in &mut self.sessions {
+                let stream_id = *s.0;
+                let origin = self.source.streams.get(&stream_id).unwrap();
+                let data = s.1.on_data().await?;
+                if let Some(data) = data {
+                    for d in data {
+                        origin
+                            .send(SerializedResponse {
+                                event_id: EventId::new(0, stream_id as u64, 0), // FIXME TODO
+                                ingest_ns: d.ingest_ns,
+                                binary: false,
+                                data: simd_json::to_vec(d.data.parts().0)?,
+                                should_close: false,
+                            })
+                            .await?;
+                    }
+                }
+            }
         }
     }
 }
 
 impl Manager {
-    pub fn new(
-        onramp: Sender<onramp::ManagerMsg>,
-        offramp: Sender<offramp::ManagerMsg>,
-        pipeline: Sender<pipeline::ManagerMsg>,
-        qsize: usize,
-    ) -> Self {
+    pub fn new(conductor: &Conductor, qsize: usize) -> Self {
         let onramp_id = TremorURL::from_network_id("self").unwrap();
         Self {
-            control: ControlProtocol::new(onramp.clone(), offramp.clone(), pipeline.clone()),
+            control: ControlProtocol::new(conductor),
             qsize,
             source: TntSource::from_config(
                 0u64,

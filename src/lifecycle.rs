@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::Result;
-use crate::registry::ServantId;
 use crate::repository::Artefact;
-use crate::system::World;
+use crate::{errors::Result};
+use crate::{registry::ServantId};
 use std::fmt;
+use crate::system::Conductor;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum ActivationState {
@@ -28,7 +28,7 @@ pub enum ActivationState {
 #[derive(Clone)]
 pub struct ActivatorLifecycleFsm<A: Artefact> {
     pub artefact: A,
-    world: World,
+    conductor: Conductor,
     pub state: ActivationState,
     pub resolution: Option<A::SpawnResult>,
     id: ServantId,
@@ -45,10 +45,14 @@ impl<A: Artefact> fmt::Debug for ActivatorLifecycleFsm<A> {
 }
 
 impl<A: Artefact> ActivatorLifecycleFsm<A> {
-    pub async fn new(world: World, artefact: A, id: ServantId) -> Result<Self> {
+    pub async fn new(
+        conductor: &Conductor,
+        artefact: A,
+        id: ServantId,
+    ) -> Result<Self> {
         let mut fresh = Self {
             artefact,
-            world,
+            conductor: conductor.clone(),
             state: ActivationState::Deactivated,
             resolution: None,
             id,
@@ -59,7 +63,7 @@ impl<A: Artefact> ActivatorLifecycleFsm<A> {
     }
 
     async fn on_spawn(&self) -> Result<A::SpawnResult> {
-        self.artefact.spawn(&self.world, self.id.clone()).await
+        self.artefact.spawn(&self.conductor, self.id.clone()).await
     }
 
     fn on_activate(&self) {
@@ -141,19 +145,20 @@ mod test {
     #[async_std::test]
     async fn onramp_activation_lifecycle() {
         let (world, _) = World::start(10, None).await.expect("failed to start world");
+        let conductor = world.conductor;
 
         let config = slurp("tests/configs/ut.passthrough.yaml");
         let mut runtime = incarnate(config).expect("failed to incarnate runtime");
         let artefact = runtime.onramps.pop().expect("artefact not found");
         let id = TremorURL::parse("/onramp/blaster/00").expect("artefact not found");
-        assert!(world
+        assert!(conductor
             .repo
             .find_onramp(&id)
             .await
             .expect("failed to communicate to repository")
             .is_none());
 
-        assert!(world
+        assert!(conductor
             .repo
             .publish_onramp(&id, false, artefact)
             .await
@@ -162,13 +167,13 @@ mod test {
         // Legal <initial> -> Deactivated
         assert_eq!(
             Ok(ActivationState::Deactivated),
-            world.bind_onramp(&id).await,
+            conductor.bind_onramp(&id).await,
         );
 
         // Legal Deactivated -> Activated
         assert_eq!(
             Ok(ActivationState::Activated),
-            world
+            conductor
                 .reg
                 .transition_onramp(&id, ActivationState::Activated)
                 .await
@@ -177,7 +182,7 @@ mod test {
         // Legal Activated -> Zombie ( via hidden transition trampoline )
         assert_eq!(
             Ok(ActivationState::Zombie),
-            world
+            conductor
                 .reg
                 .transition_onramp(&id, ActivationState::Zombie)
                 .await
@@ -186,7 +191,7 @@ mod test {
         // Zombies don't return from the dead
         assert_eq!(
             Ok(ActivationState::Zombie),
-            world
+            conductor
                 .reg
                 .transition_onramp(&id, ActivationState::Deactivated)
                 .await
@@ -195,7 +200,7 @@ mod test {
         // Zombies don't return from the deady
         assert_eq!(
             Ok(ActivationState::Zombie),
-            world
+            conductor
                 .reg
                 .transition_onramp(&id, ActivationState::Activated)
                 .await
@@ -205,6 +210,7 @@ mod test {
     #[async_std::test]
     async fn offramp_activation_lifecycle() {
         let (world, _) = World::start(10, None).await.expect("failed to start world");
+        let world = world.conductor;
 
         let config = slurp("tests/configs/ut.passthrough.yaml");
         let mut runtime = incarnate(config).expect("failed to incarnate runtime");
@@ -269,6 +275,7 @@ mod test {
     #[async_std::test]
     async fn binding_activation_lifecycle() {
         let (world, _) = World::start(10, None).await.expect("failed to start world");
+        let world = world.conductor;
 
         let config = slurp("tests/configs/ut.passthrough.yaml");
         let mut runtime = incarnate(config).expect("failed to incarnate runtime");

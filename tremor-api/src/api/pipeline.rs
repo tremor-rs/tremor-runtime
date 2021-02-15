@@ -23,7 +23,7 @@ struct PipelineWrap {
 }
 
 pub async fn list_artefact(req: Request) -> Result<Response> {
-    let repo = &req.state().world.repo;
+    let repo = &req.state().world.conductor.repo;
 
     let result: Vec<_> = repo
         .list_pipelines()
@@ -57,7 +57,7 @@ pub async fn publish_artefact(mut req: Request) -> Result<Response> {
             })?;
 
             let url = build_url(&["pipeline", &id])?;
-            let repo = &req.state().world.repo;
+            let repo = &req.state().world.conductor.repo;
             let result = repo
                 .publish_pipeline(&url, false, query)
                 .await
@@ -120,7 +120,7 @@ pub async fn reply_trickle_instanced(
 pub async fn unpublish_artefact(req: Request) -> Result<Response> {
     let id = req.param("aid").unwrap_or_default();
     let url = build_url(&["pipeline", id])?;
-    let repo = &req.state().world.repo;
+    let repo = &req.state().world.conductor.repo;
     let result = repo
         .unpublish_pipeline(&url)
         .await
@@ -131,7 +131,7 @@ pub async fn unpublish_artefact(req: Request) -> Result<Response> {
 pub async fn get_artefact(req: Request) -> Result<Response> {
     let id = req.param("aid").unwrap_or_default();
     let url = build_url(&["pipeline", id])?;
-    let repo = &req.state().world.repo;
+    let repo = &req.state().world.conductor.repo;
     let result = repo
         .find_pipeline(&url)
         .await?

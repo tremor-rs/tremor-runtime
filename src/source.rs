@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::codec::{self, Codec};
 use crate::errors::Error;
 use crate::metrics::RampReporter;
 use crate::onramp;
@@ -20,10 +19,15 @@ use crate::pipeline;
 use crate::preprocessor::{make_preprocessors, preprocess, Preprocessors};
 use crate::url::ports::{ERR, METRICS, OUT};
 use crate::url::TremorURL;
+use crate::{
+    codec::{self, Codec},
+    network,
+};
 
 use crate::Result;
 use async_channel::{self, unbounded, Receiver, Sender};
 use async_std::task;
+// use async_tungstenite::async_std::ConnectStream;
 use beef::Cow;
 use halfbrown::HashMap;
 use std::collections::BTreeMap;
@@ -172,6 +176,7 @@ where
     triggered: bool,
     pipelines_out: Vec<(TremorURL, pipeline::Addr)>,
     pipelines_err: Vec<(TremorURL, pipeline::Addr)>,
+    taps: Vec<network::ControlMsg>,
     err_required: bool,
     id: u64,
     is_transactional: bool,
@@ -334,6 +339,43 @@ where
                         tx.send(false).await?;
                     }
                 }
+                onramp::Msg::OpenTap(source, target, addr) => {
+                    let msg = network::ControlMsg::ConnectOnramp {
+                        source, // network source
+                        target, // target artefact
+                        //                        ctrl: self.tx.clone(),
+                        addr: addr.clone(),
+                    };
+                    addr.send_control(msg.clone()).await?;
+                    self.taps.push(msg);
+                }
+                onramp::Msg::CloseTap {
+                    source,
+                    target,
+                    ctrl,
+                } => {
+                    let msg = network::ControlMsg::DisconnectOnramp {
+                        addr: ctrl.clone(),
+                        reply: false,
+                    };
+                    let mut index = 0;
+                    let s = &source;
+                    let t = &target;
+                    for tap in &self.taps {
+                        if let network::ControlMsg::ConnectOnramp { source, target, .. } = tap {
+                            if *s == *source && *t == *target {
+                                break;
+                            }
+                            index += 1;
+                        }
+                    }
+                    if index == self.taps.len() {
+                        error!("Scanning network taps for removal failed to find instance")
+                    } else {
+                        self.taps.remove(index);
+                    }
+                    ctrl.send_control(msg).await?;
+                }
                 onramp::Msg::Cb(CBAction::Fail, ids) => {
                     // TODO: stream handling
                     // when failing, we use the earliest/min event within the tracked set
@@ -431,12 +473,13 @@ where
                     }
                 }
             }
+
             if let Some(input) = last.0.instance_port() {
                 if let Err(e) = last
                     .1
                     .send(pipeline::Msg::Event {
                         input: input.to_string().into(),
-                        event,
+                        event: event.clone(),
                     })
                     .await
                 {
@@ -448,6 +491,21 @@ where
                 }
             }
         }
+
+        for tap in &self.taps {
+            let event = event.clone();
+            let msg = network::Msg::Event { event };
+            if let network::ControlMsg::ConnectOnramp { addr, .. } = tap {
+                if let Err(e) = addr.send(msg).await {
+                    error!(
+                        "[Source::{}] [Onramp] failed to send to network: {}",
+                        self.source_id, e
+                    );
+                    error = true; // TODO FIXME consider errors in the context of network protocol data flow ...
+                }
+            }
+        }
+
         error
     }
 
@@ -500,6 +558,7 @@ where
                 id: 0,
                 pipelines_out: Vec::new(),
                 pipelines_err: Vec::new(),
+                taps: Vec::new(),
                 uid: config.onramp_uid,
                 is_transactional,
                 err_required: config.err_required,

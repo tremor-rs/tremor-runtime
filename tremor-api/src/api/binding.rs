@@ -23,7 +23,7 @@ struct BindingWrap {
 }
 
 pub async fn list_artefact(req: Request) -> Result<Response> {
-    let repo = &req.state().world.repo;
+    let repo = &req.state().world.conductor.repo;
 
     let result: Vec<_> = repo
         .list_bindings()
@@ -38,7 +38,7 @@ pub async fn publish_artefact(req: Request) -> Result<Response> {
     let (req, binding): (_, tremor_runtime::config::Binding) = decode(req).await?;
     let url = build_url(&["binding", &binding.id])?;
 
-    let repo = &req.state().world.repo;
+    let repo = &req.state().world.conductor.repo;
     let result = repo
         .publish_binding(
             &url,
@@ -56,7 +56,7 @@ pub async fn publish_artefact(req: Request) -> Result<Response> {
 pub async fn unpublish_artefact(req: Request) -> Result<Response> {
     let id = req.param("aid").unwrap_or_default();
     let url = build_url(&["binding", id])?;
-    let repo = &req.state().world.repo;
+    let repo = &req.state().world.conductor.repo;
     let result = repo.unpublish_binding(&url).await?;
     reply(req, result.binding, true, StatusCode::Ok).await
 }
@@ -65,7 +65,7 @@ pub async fn get_artefact(req: Request) -> Result<Response> {
     let id = req.param("aid").unwrap_or_default();
     let url = build_url(&["binding", id])?;
 
-    let repo = &req.state().world.repo;
+    let repo = &req.state().world.conductor.repo;
     let result = repo
         .find_binding(&url)
         .await?
@@ -88,7 +88,7 @@ pub async fn get_servant(req: Request) -> Result<Response> {
     let s_id = req.param("sid").unwrap_or_default();
     let url = build_url(&["binding", a_id, s_id])?;
 
-    let registry = &req.state().world.reg;
+    let registry = &req.state().world.conductor.reg;
     let result = registry
         .find_binding(&url)
         .await?
@@ -107,7 +107,7 @@ pub async fn link_servant(req: Request) -> Result<Response> {
     let url = build_url(&["binding", a_id, s_id])?;
     let world = &req.state().world;
 
-    let result = world.link_binding(&url, decoded_data).await?.binding;
+    let result = world.conductor.link_binding(&url, decoded_data).await?.binding;
 
     reply(req, result, true, StatusCode::Created).await
 }
@@ -119,7 +119,7 @@ pub async fn unlink_servant(req: Request) -> Result<Response> {
     let url = build_url(&["binding", a_id, s_id])?;
 
     let world = &req.state().world;
-    let result = world.unlink_binding(&url, HashMap::new()).await?.binding;
+    let result = world.conductor.unlink_binding(&url, HashMap::new()).await?.binding;
 
     reply(req, result, true, StatusCode::NoContent).await
 }

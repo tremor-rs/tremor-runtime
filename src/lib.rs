@@ -182,7 +182,11 @@ pub async fn load_query_file(world: &World, file_name: &str) -> Result<usize> {
 
     let id = TremorURL::parse(&format!("/pipeline/{}", id))?;
     info!("Loading {} from file {}.", id, file_name);
-    world.repo.publish_pipeline(&id, false, query).await?;
+    world
+        .conductor
+        .repo
+        .publish_pipeline(&id, false, query)
+        .await?;
 
     Ok(1)
 }
@@ -201,20 +205,21 @@ pub async fn load_cfg_file(world: &World, file_name: &str) -> Result<usize> {
     for o in config.offramps {
         let id = TremorURL::parse(&format!("/offramp/{}", o.id))?;
         info!("Loading {} from file.", id);
-        world.repo.publish_offramp(&id, false, o).await?;
+        world.conductor.repo.publish_offramp(&id, false, o).await?;
         count += 1;
     }
 
     for o in config.onramps {
         let id = TremorURL::parse(&format!("/onramp/{}", o.id))?;
         info!("Loading {} from file.", id);
-        world.repo.publish_onramp(&id, false, o).await?;
+        world.conductor.repo.publish_onramp(&id, false, o).await?;
         count += 1;
     }
     for binding in config.bindings {
         let id = TremorURL::parse(&format!("/binding/{}", binding.id))?;
         info!("Loading {} from file.", id);
         world
+            .conductor
             .repo
             .publish_binding(
                 &id,
@@ -228,7 +233,7 @@ pub async fn load_cfg_file(world: &World, file_name: &str) -> Result<usize> {
         count += 1;
     }
     for (binding, mapping) in config.mappings {
-        world.link_binding(&binding, mapping).await?;
+        world.conductor.link_binding(&binding, mapping).await?;
         count += 1;
     }
     Ok(count)
