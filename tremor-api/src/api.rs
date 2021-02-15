@@ -20,6 +20,7 @@ use tremor_runtime::system::World;
 use tremor_runtime::url::TremorURL;
 
 pub mod binding;
+pub mod cluster;
 pub mod offramp;
 pub mod onramp;
 pub mod pipeline;

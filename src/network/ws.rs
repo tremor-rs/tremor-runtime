@@ -16,7 +16,7 @@ mod client;
 mod server;
 
 use crate::network::{Error as NetworkError, Network as NetworkTrait};
-use crate::raft_node::{NodeId, RaftNetworkMsg};
+use crate::raft_node::{NodeId, ProposalId, RaftNetworkMsg};
 use async_channel::{unbounded, Receiver, Sender};
 use async_std::task;
 use async_trait::async_trait;
@@ -55,6 +55,10 @@ pub enum UrMsg {
     // Raft related
     /// blah
     RaftMsg(RaftMessage),
+    /// blah
+    AckProposal(ProposalId, bool),
+    /// blah
+    AddNode(NodeId, Sender<bool>),
 }
 
 // TODO this will be using the websocket driver for the tremor network protocol
@@ -83,7 +87,8 @@ pub enum CtrlMsg {
     Hello(NodeId, String),
     /// Hello ack message
     HelloAck(NodeId, String, Vec<(NodeId, String)>),
-    //AckProposal(ProposalId, bool),
+    /// Ack proposal mesage
+    AckProposal(ProposalId, bool),
     //ForwardProposal(NodeId, ProposalId, ServiceId, EventId, Vec<u8>),
 }
 
@@ -271,6 +276,8 @@ impl NetworkTrait for Network {
             }
             UrMsg::Status(rid, reply) => Some(RaftNetworkMsg::Status(rid, reply)),
             UrMsg::RaftMsg(msg) => Some(RaftNetworkMsg::RaftMsg(msg)),
+            UrMsg::AckProposal(pid, success) => Some(RaftNetworkMsg::AckProposal(pid, success)),
+            UrMsg::AddNode(id, reply) => Some(RaftNetworkMsg::AddNode(id, reply)),
             //_ => {
             //    // temp logging
             //    error!(
@@ -298,5 +305,38 @@ impl NetworkTrait for Network {
             // Err(Error::NotConnected(to)) this is not an error we'll retry
             Ok(())
         }
+    }
+
+    async fn ack_proposal(
+        &mut self,
+        to: NodeId,
+        pid: ProposalId,
+        success: bool,
+    ) -> Result<(), NetworkError> {
+        if let Some(remote) = self.local_mailboxes.get_mut(&to) {
+            remote
+                .send(WsMessage::Ctrl(CtrlMsg::AckProposal(pid, success)))
+                .await
+                .map_err(|e| NetworkError::Io(io::Error::new(io::ErrorKind::ConnectionAborted, e)))
+        } else if let Some(remote) = self.remote_mailboxes.get_mut(&to) {
+            remote
+                .send(WsMessage::Ctrl(CtrlMsg::AckProposal(pid, success)))
+                .await
+                .map_err(|e| NetworkError::Io(io::Error::new(io::ErrorKind::ConnectionAborted, e)))
+        } else {
+            Err(NetworkError::Io(io::Error::new(
+                io::ErrorKind::ConnectionAborted,
+                format!("send ack proposla to {} fail, let Raft retry it", to),
+            )))
+        }
+    }
+
+    fn connections(&self) -> Vec<NodeId> {
+        let mut k1: Vec<NodeId> = self.local_mailboxes.keys().copied().collect();
+        let mut k2: Vec<NodeId> = self.remote_mailboxes.keys().copied().collect();
+        k1.append(&mut k2);
+        k1.sort();
+        k1.dedup();
+        k1
     }
 }

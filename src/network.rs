@@ -15,7 +15,7 @@
 /// Websocket-based network
 pub mod ws;
 
-use crate::raft_node::RaftNetworkMsg;
+use crate::raft_node::{NodeId, ProposalId, RaftNetworkMsg};
 use async_trait::async_trait;
 use raft::eraftpb::Message as RaftMessage;
 use std::{fmt, io};
@@ -27,6 +27,15 @@ pub trait Network: Send + Sync {
     async fn next(&mut self) -> Option<RaftNetworkMsg>;
     /// blah
     async fn send_msg(&mut self, msg: RaftMessage) -> Result<(), Error>;
+    /// blah
+    fn connections(&self) -> Vec<NodeId>;
+    /// blah
+    async fn ack_proposal(
+        &mut self,
+        to: NodeId,
+        pid: ProposalId,
+        success: bool,
+    ) -> Result<(), Error>;
 }
 
 /// blah

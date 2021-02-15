@@ -67,13 +67,10 @@ impl Connection {
                             .await
                     );
                 }
-                //CtrlMsg::AckProposal(pid, success) => {
-                //    eat_error_and_blow!(
-                //        self.logger,
-                //        self.handler
-                //            .unbounded_send(UrMsg::AckProposal(pid, success))
-                //    );
-                //}
+                CtrlMsg::AckProposal(pid, success) => {
+                    // unbounded send
+                    eat_error_and_blow!(self.handler.try_send(UrMsg::AckProposal(pid, success)));
+                }
                 _ => (),
             }
         } else {

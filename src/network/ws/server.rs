@@ -65,11 +65,11 @@ impl Connection {
                         .try_send(UrMsg::RegisterRemote(id, peer, self.ws_tx.clone()))
                         .is_ok()
                 }
-                //Ok(CtrlMsg::AckProposal(pid, success)) => self
-                //    .node
-                //    .tx
-                //    .try_send(UrMsg::AckProposal(pid, success))
-                //    .is_ok(),
+                Ok(CtrlMsg::AckProposal(pid, success)) => self
+                    .node
+                    .tx
+                    .try_send(UrMsg::AckProposal(pid, success))
+                    .is_ok(),
                 //Ok(CtrlMsg::ForwardProposal(from, pid, sid, eid, value)) => self
                 //    .node
                 //    .tx
