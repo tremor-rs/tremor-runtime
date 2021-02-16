@@ -1,0 +1,6 @@
+
+# make the test exit after all events have been sent
+select {
+  "exit": 0,
+  "delay": 1000
+} from in where event == "exit" into out;
