@@ -35,9 +35,9 @@ mod imut_expr;
 
 pub use self::expr::Cont;
 use crate::ast::{
-    ArrayPattern, ArrayPredicatePattern, BaseExpr, BinOpKind, GroupBy, GroupByInt, ImutExprInt,
-    InvokeAggrFn, NodeMetas, Patch, PatchOperation, Path, Pattern, PredicatePattern, RecordPattern,
-    Segment, TuplePattern, UnaryOpKind,
+    ArrayPattern, ArrayPredicatePattern, BaseExpr, BinOpKind, Consts, GroupBy, GroupByInt,
+    ImutExprInt, InvokeAggrFn, NodeMetas, Patch, PatchOperation, Path, Pattern, PredicatePattern,
+    RecordPattern, ReservedPath, Segment, TuplePattern, UnaryOpKind,
 };
 use crate::errors::{
     error_array_out_of_bound, error_bad_array_index, error_bad_key, error_decreasing_range,
@@ -47,7 +47,7 @@ use crate::errors::{
     Result,
 };
 use crate::prelude::*;
-use crate::{stry, EventContext, Value};
+use crate::{stry, EventContext, Value, NO_AGGRS, NO_CONSTS};
 use simd_json::StaticNode;
 use std::borrow::Borrow;
 use std::borrow::Cow;
@@ -83,7 +83,7 @@ where
     /// Context of the event
     pub context: &'run EventContext,
     /// Constants
-    pub consts: &'run [Value<'event>],
+    pub consts: &'run Consts<'event>,
     /// Aggregates
     pub aggrs: &'run [InvokeAggrFn<'script>],
     /// Node metadata
@@ -527,6 +527,9 @@ where
         Path::Meta(_path) => meta,
         Path::Event(_path) => event,
         Path::State(_path) => state,
+        Path::Reserved(ReservedPath::Args { .. }) => &env.consts.args,
+        Path::Reserved(ReservedPath::Group { .. }) => &env.consts.group,
+        Path::Reserved(ReservedPath::Window { .. }) => &env.consts.window,
     };
 
     // Resolve the targeted value by applying all path segments
@@ -1438,15 +1441,13 @@ impl<'script> GroupByInt<'script> {
         'script: 'event,
         'event: 'run,
     {
-        const NO_AGGRS: [InvokeAggrFn<'static>; 0] = [];
         let opts = ExecOpts {
             result_needed: true,
             aggr: AggrType::Emit,
         };
-        let consts = vec![];
         let local_stack = LocalStack::with_size(0);
         let env = Env {
-            consts: &consts,
+            consts: &NO_CONSTS,
             context: ctx,
             aggrs: &NO_AGGRS,
             meta: node_meta,

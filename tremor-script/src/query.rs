@@ -135,11 +135,8 @@ where
                     .into_iter()
                     .filter_map(Result::ok)
                     .filter(|t| !t.value.is_ignorable());
-
-                let (script, local_count, ws) = crate::parser::g::QueryParser::new()
-                    .parse(filtered_tokens)?
-                    .up_script(&mut helper)?;
-
+                let script_stage_1 = crate::parser::g::QueryParser::new().parse(filtered_tokens)?;
+                let (script, local_count, ws) = script_stage_1.up_script(&mut helper)?;
                 warnings = ws;
                 locals = local_count;
                 Ok(script)

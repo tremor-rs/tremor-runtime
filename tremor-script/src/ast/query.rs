@@ -13,69 +13,14 @@
 // limitations under the License.
 
 pub(crate) mod raw;
-use super::raw::BaseExpr;
 use super::{
-    error_generic, error_no_consts, error_no_locals, AggrRegistry, Builder, EventPath, HashMap,
-    Helper, Ident, ImutExpr, ImutExprInt, InvokeAggrFn, Location, NodeMetas, Path, Registry,
-    Result, Script, Serialize, Stmts, Upable, Value, Warning,
+    error_generic, error_no_consts, error_no_locals, AggrRegistry, EventPath, HashMap, Helper,
+    Ident, ImutExpr, ImutExprInt, InvokeAggrFn, Location, NodeMetas, Path, Registry, Result,
+    Script, Serialize, Stmts, Upable, Value, Warning,
 };
-use crate::{
-    errors::{Error, ErrorKind},
-    impl_expr_mid,
-};
+use super::{raw::BaseExpr, Consts};
+use crate::impl_expr_mid;
 use raw::WindowDefnRaw;
-
-/// The Constant ID of the `window` constant
-pub const WINDOW_CONST_ID: usize = 0;
-/// The Constant ID of the `group` constant
-pub const GROUP_CONST_ID: usize = 1;
-/// The Constant ID of the `args` constant
-pub const ARGS_CONST_ID: usize = 2;
-/// Last constant that is reserved for execution and can not be inlined.
-pub const LAST_RESERVED_CONST: usize = ARGS_CONST_ID;
-
-/// Sets `WINDOW_CONST_ID`
-pub fn set_window(consts: &mut [Value<'static>], window: Value<'static>) -> Result<()> {
-    *get_window_mut(consts)? = window;
-    Ok(())
-}
-
-/// Sets `ARGS_CONST_ID`
-pub fn set_args(consts: &mut [Value<'static>], args: Value<'static>) -> Result<()> {
-    *get_args_mut(consts)? = args;
-    Ok(())
-}
-/// Sets `GROUP_CONST_ID`
-pub fn set_group(consts: &mut [Value<'static>], group: Value<'static>) -> Result<()> {
-    *get_group_mut(consts)? = group;
-    Ok(())
-}
-
-/// gets `GROUP_CONST_ID` mutably
-pub fn get_group_mut<'consts, 'event>(
-    consts: &'consts mut [Value<'event>],
-) -> Result<&'consts mut Value<'event>> {
-    consts
-        .get_mut(GROUP_CONST_ID)
-        .ok_or_else(|| Error::from(ErrorKind::CantSetGroupConst))
-}
-
-/// gets `ARGS_CONST_ID` mutably
-pub fn get_args_mut<'consts, 'event>(
-    consts: &'consts mut [Value<'event>],
-) -> Result<&'consts mut Value<'event>> {
-    consts
-        .get_mut(ARGS_CONST_ID)
-        .ok_or_else(|| Error::from(ErrorKind::CantSetGroupConst))
-}
-/// gets `WINDOW_CONST_ID` mutably
-pub fn get_window_mut<'consts, 'event>(
-    consts: &'consts mut [Value<'event>],
-) -> Result<&'consts mut Value<'event>> {
-    consts
-        .get_mut(WINDOW_CONST_ID)
-        .ok_or_else(|| Error::from(ErrorKind::CantSetWindowConst))
-}
 
 /// A Tremor query
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -127,7 +72,7 @@ pub struct SelectStmt<'script> {
     /// only necessary if we have multiple windows, otherwise empty
     pub aggregate_scratches: Option<(Aggregates<'script>, Aggregates<'script>)>,
     /// Constants
-    pub consts: Vec<Value<'script>>,
+    pub consts: Consts<'script>,
     /// Number of locals
     pub locals: usize,
     /// Node metadata nodes

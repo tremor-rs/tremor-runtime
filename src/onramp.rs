@@ -16,7 +16,9 @@ use crate::metrics::RampReporter;
 use crate::pipeline;
 use crate::repository::ServantId;
 use crate::source::prelude::*;
-use crate::source::{blaster, crononome, file, kafka, metronome, postgres, rest, tcp, udp, ws, discord};
+use crate::source::{
+    blaster, crononome, discord, file, kafka, metronome, postgres, rest, tcp, udp, ws,
+};
 use crate::url::TremorURL;
 use async_std::task::{self, JoinHandle};
 use serde_yaml::Value;

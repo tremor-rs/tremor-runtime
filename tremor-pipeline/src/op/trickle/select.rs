@@ -24,16 +24,14 @@ use halfbrown::{HashMap, RawEntryMut};
 use std::borrow::Cow as SCow;
 use std::mem;
 use std::sync::Arc;
+use tremor_script::interpreter::Env;
 use tremor_script::{
     self,
-    ast::{
-        set_args, set_group, set_window, Aggregates, InvokeAggrFn, Select, SelectStmt, WindowDecl,
-    },
+    ast::{Aggregates, InvokeAggrFn, Select, SelectStmt, WindowDecl},
     prelude::*,
     query::StmtRental,
     Value,
 };
-use tremor_script::{ast::get_group_mut, interpreter::Env};
 use tremor_script::{ast::NodeMetas, utils::sorted_serialize};
 use tremor_script::{interpreter::LocalStack, query::StmtRentalWrapper};
 
@@ -598,9 +596,9 @@ impl Operator for TrickleSelect {
             node_meta,
         }: &mut SelectStmt = unsafe { mem::transmute(self.select.suffix()) };
         let local_stack = tremor_script::interpreter::LocalStack::with_size(*locals);
-        set_window(consts, Value::null())?;
-        set_group(consts, Value::null())?;
-        set_args(consts, Value::null())?;
+        consts.window = Value::null();
+        consts.group = Value::null();
+        consts.args = Value::null();
         // TODO avoid origin_uri clone here
         let ctx = EventContext::new(event.ingest_ns, event.origin_uri.clone());
 
@@ -657,8 +655,8 @@ impl Operator for TrickleSelect {
             let unwind_event = unsafe { data.force_value_mut() };
             let event_meta = data.meta();
 
-            set_group(consts, group_value.clone_static())?;
-            get_group_mut(consts)?.push(group_str)?;
+            consts.group = group_value.clone_static();
+            consts.group.push(group_str)?;
 
             let env = Env {
                 context: &ctx,
@@ -717,8 +715,8 @@ impl Operator for TrickleSelect {
         for group_value in group_values {
             let group_str = sorted_serialize(&group_value)?;
 
-            set_group(consts, group_value.clone_static())?;
-            get_group_mut(consts)?.push(group_str.clone())?;
+            consts.group = group_value.clone_static();
+            consts.group.push(group_str.clone())?;
 
             match self.windows.len() {
                 0 => {
@@ -761,7 +759,7 @@ impl Operator for TrickleSelect {
 
                     // ALLOW: we verified that an element exists
                     let window = &mut self.windows[0];
-                    set_window(consts, Value::from(window.name.to_string()))?;
+                    consts.window = Value::from(window.name.to_string());
 
                     // get current window group
                     let this_group = get_or_create_group(
@@ -914,7 +912,7 @@ impl Operator for TrickleSelect {
                         let mut emit_window_events = Vec::with_capacity(self.windows.len());
                         let step1_iter = self.windows.iter_mut();
                         for window in step1_iter {
-                            set_window(consts, Value::from(window.name.to_string()))?;
+                            consts.window = Value::from(window.name.to_string());
                             // get current window group
                             let this_group = get_or_create_group(
                                 window,
@@ -941,7 +939,7 @@ impl Operator for TrickleSelect {
                             // postpone
                             true
                         } else if let Some(first_window) = self.windows.first_mut() {
-                            set_window(consts, Value::from(first_window.name.to_string()))?;
+                            consts.window = Value::from(first_window.name.to_string());
 
                             // get current window group
                             let this_group = get_or_create_group(
@@ -980,7 +978,7 @@ impl Operator for TrickleSelect {
                         let emit_window_iter =
                             emit_window_events.iter().zip(self.windows.iter_mut());
                         for (window_event, window) in emit_window_iter {
-                            set_window(consts, Value::from(window.name.to_string()))?;
+                            consts.window = Value::from(window.name.to_string());
 
                             // get current window group
                             let this_group = get_or_create_group(
@@ -1094,7 +1092,7 @@ impl Operator for TrickleSelect {
                         // execute the pending accumulate (if window_event.include == false of first window)
                         if pending_accumulate {
                             if let Some(first_window) = self.windows.first_mut() {
-                                set_window(consts, Value::from(first_window.name.to_string()))?;
+                                consts.window = Value::from(first_window.name.to_string());
                                 // get current window group
                                 let this_group = get_or_create_group(
                                     first_window,
@@ -1129,7 +1127,7 @@ impl Operator for TrickleSelect {
                             if let Some(non_emit_window) =
                                 self.windows.get_mut(emit_window_events.len())
                             {
-                                set_window(consts, Value::from(non_emit_window.name.to_string()))?;
+                                consts.window = Value::from(non_emit_window.name.to_string());
 
                                 // get current window group
                                 let this_group = get_or_create_group(
@@ -1192,16 +1190,16 @@ impl Operator for TrickleSelect {
             };
             let local_stack = tremor_script::interpreter::LocalStack::with_size(*locals);
 
-            set_window(consts, Value::null())?;
-            set_group(consts, Value::null())?;
-            set_args(consts, Value::null())?;
+            consts.window = Value::null();
+            consts.group = Value::null();
+            consts.args = Value::null();
 
             match self.windows.len() {
                 0 => {} // we shouldnt get here
                 1 => {
                     let ctx = EventContext::new(signal.ingest_ns, None);
                     for window in &mut self.windows {
-                        set_window(consts, Value::from(window.name.to_string()))?;
+                        consts.window = Value::from(window.name.to_string());
                         // iterate all groups, including the ones from last_dims
                         for (group_str, group_data) in window
                             .dims
@@ -1209,8 +1207,8 @@ impl Operator for TrickleSelect {
                             .iter_mut()
                             .chain(window.last_dims.groups.iter_mut())
                         {
-                            set_group(consts, group_data.group.clone_static())?;
-                            get_group_mut(consts)?.push(group_str.clone())?;
+                            consts.group = group_data.group.clone_static();
+                            consts.group.push(group_str.clone())?;
 
                             let window_event = group_data.window.on_tick(ingest_ns)?;
                             if window_event.emit {
@@ -1282,15 +1280,15 @@ impl Operator for TrickleSelect {
                         .collect();
 
                     for (group_str, group_value) in distinct_groups {
-                        set_group(consts, group_value.clone_static())?;
-                        get_group_mut(consts)?.push(group_str.clone())?;
+                        consts.group = group_value.clone_static();
+                        consts.group.push(group_str.clone())?;
 
                         if let Some((scratch1, scratch2)) = aggregate_scratches.as_mut() {
                             // gather window events
                             let mut emit_window_events = Vec::with_capacity(self.windows.len());
                             let step1_iter = self.windows.iter_mut();
                             for window in step1_iter {
-                                set_window(consts, Value::from(window.name.to_string()))?;
+                                consts.window = Value::from(window.name.to_string());
                                 // get current window group
                                 let this_group = get_or_create_group(
                                     window,
@@ -1312,7 +1310,7 @@ impl Operator for TrickleSelect {
                             let emit_window_iter =
                                 emit_window_events.iter().zip(self.windows.iter_mut());
                             for (window_event, window) in emit_window_iter {
-                                set_window(consts, Value::from(window.name.to_string()))?;
+                                consts.window = Value::from(window.name.to_string());
 
                                 // get current window group
                                 let this_group = get_or_create_group(
@@ -1428,10 +1426,7 @@ impl Operator for TrickleSelect {
                                 if let Some(non_emit_window) =
                                     self.windows.get_mut(emit_window_events.len())
                                 {
-                                    set_window(
-                                        consts,
-                                        Value::from(non_emit_window.name.to_string()),
-                                    )?;
+                                    consts.window = Value::from(non_emit_window.name.to_string());
 
                                     // get current window group
                                     let this_group = get_or_create_group(
@@ -1477,7 +1472,7 @@ mod test {
     use super::*;
     use rental::RentalError;
     use simd_json::{json, StaticNode};
-    use tremor_script::Value;
+    use tremor_script::{ast::Consts, Value};
     use tremor_script::{ast::Stmt, Query};
     use tremor_script::{
         ast::{self, Ident, ImutExpr, Literal},
@@ -2189,7 +2184,7 @@ mod test {
             stmt: Box::new(stmt),
             aggregates,
             aggregate_scratches,
-            consts: vec![Value::null(), Value::null(), Value::null()],
+            consts: Consts::default(),
             locals: 0,
             node_meta: ast::NodeMetas::new(vec![]),
         })

@@ -329,6 +329,11 @@ where
                 let name = env.meta.name_dflt(p.mid).to_string();
                 return error_assign_to_const(self, name, &env.meta);
             }
+            Path::Reserved(p) => {
+                let name = env.meta.name_dflt(p.mid()).to_string();
+                return error_assign_to_const(self, name, &env.meta);
+            }
+
             Path::Local(lpath) => {
                 if let Some(l) = stry!(local.get(lpath.idx, self, lpath.mid(), &env.meta)) {
                     let l: &mut Value<'event> = unsafe { mem::transmute(l) };
@@ -405,6 +410,9 @@ where
         match path {
             Path::Const(p) => {
                 error_assign_to_const(self, env.meta.name_dflt(p.mid).into(), &env.meta)
+            }
+            Path::Reserved(p) => {
+                error_assign_to_const(self, env.meta.name_dflt(p.mid()).into(), &env.meta)
             }
             Path::Local(lpath) => match stry!(local.get(lpath.idx, self, lpath.mid(), &env.meta)) {
                 Some(l) => {

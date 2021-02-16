@@ -5,7 +5,10 @@
 ### Fixes
 
 * Ensure blaster sends all events from the source [#759](https://github.com/tremor-rs/tremor-runtime/pull/759)
+* Allow the use of const and custom functions using const in select queries [#749](https://github.com/tremor-rs/tremor-runtime/issues/749)
+### New features
 
+* Add discord connector to allow communicating with the discord API
 ## 0.10.1
 
 ### Fixes

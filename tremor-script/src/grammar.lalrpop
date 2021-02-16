@@ -758,26 +758,23 @@ MetaPath: PathRaw<'input> = {
 AggrPath: PathRaw<'input> = {
     <start:@L> "group" <mid:@L> <segments:PathSegments> <end:@L> => {
         let mut segments = segments;
-        segments.insert(0, SegmentRaw::from_str("group", start, mid));
-        PathRaw::Local(LocalPathRaw { segments, start, end })
+        PathRaw::Reserved(ReservedPathRaw::Group { segments, start, end })
     },
-    <start:@L> "group" <end:@L> => PathRaw::Local(LocalPathRaw { segments: vec![SegmentRaw::from_str("group", start, end)], start, end }),
+    <start:@L> "group" <end:@L> => PathRaw::Reserved(ReservedPathRaw::Group { segments: vec![], start, end }),
     <start:@L> "window" <mid:@L> <segments:PathSegments> <end:@L> => {
         let mut segments = segments;
-        segments.insert(0, SegmentRaw::from_str("window", start, mid));
-        PathRaw::Local(LocalPathRaw { segments, start, end })
+        PathRaw::Reserved(ReservedPathRaw::Window { segments, start, end })
     },
-    <start:@L> "window" <end:@L> => PathRaw::Local(LocalPathRaw { segments: vec![SegmentRaw::from_str("window", start, end)], start, end }),
+    <start:@L> "window" <end:@L> => PathRaw::Reserved(ReservedPathRaw::Window { segments: vec![], start, end }),
 }
 
 /// Arguments to a script or function
 ArgsPath: PathRaw<'input> = {
     <start:@L> "args" <mid:@L> <segments:PathSegments> <end:@L> => {
         let mut segments = segments;
-        segments.insert(0, SegmentRaw::from_str("args", start, mid));
-        PathRaw::Local(LocalPathRaw { segments, start, end })
+        PathRaw::Reserved(ReservedPathRaw::Args { segments, start, end })
     },
-    <start:@L> "args" <end:@L> => PathRaw::Local(LocalPathRaw { segments: vec![SegmentRaw::from_str("args", start, end)], start, end }),
+    <start:@L> "args" <end:@L> => PathRaw::Reserved(ReservedPathRaw::Args { segments: vec![], start, end }),
 }
 
 /// Local path

@@ -32,13 +32,14 @@ use crate::registry::{
 };
 use crate::script::Return;
 use crate::KnownKey;
-use crate::{stry, tilde::Extractor, EventContext, Value};
+use crate::{stry, tilde::Extractor, EventContext, Value, NO_AGGRS, NO_CONSTS};
 pub use base_expr::BaseExpr;
 use beef::Cow;
 use halfbrown::HashMap;
 pub use query::*;
-use raw::{reduce2, NO_AGGRS, NO_CONSTS};
+use raw::reduce2;
 use serde::Serialize;
+use simd_json::StaticNode;
 use std::borrow::Borrow;
 use std::mem;
 use upable::Upable;
@@ -329,6 +330,59 @@ impl<'script> Default for Docs<'script> {
     }
 }
 
+/// Constants and special keyword values
+#[derive(Debug, Default, Clone, PartialEq, Serialize)]
+pub struct Consts<'script> {
+    names: HashMap<Vec<String>, usize>,
+    values: Vec<Value<'script>>,
+    // always present 'special' constants
+    /// the `args` keyword
+    pub args: Value<'script>,
+    /// the `group` keyword
+    pub group: Value<'script>,
+    /// the `window` keyword
+    pub window: Value<'script>,
+}
+
+impl<'script> Consts<'script> {
+    pub(crate) fn new() -> Self {
+        Consts {
+            names: HashMap::new(),
+            values: Vec::new(),
+            args: Value::Static(StaticNode::Null),
+            group: Value::Static(StaticNode::Null),
+            window: Value::Static(StaticNode::Null),
+        }
+    }
+    fn is_const(&self, id: &[String]) -> Option<&usize> {
+        self.names.get(id)
+    }
+
+    fn len(&self) -> usize {
+        self.values.len()
+    }
+
+    fn insert(
+        &mut self,
+        name_v: Vec<String>,
+        val: Value<'script>,
+    ) -> std::result::Result<usize, usize> {
+        let idx = self.values.len();
+
+        self.names.insert(name_v, idx).map_or_else(
+            || {
+                self.values.push(val);
+                Ok(idx)
+            },
+            Err,
+        )
+    }
+
+    pub(crate) fn get(&self, idx: usize) -> Option<&Value<'script>> {
+        self.values.get(idx)
+    }
+}
+
 #[allow(clippy::struct_excessive_bools)]
 pub(crate) struct Helper<'script, 'registry>
 where
@@ -351,10 +405,9 @@ where
     func_vec: Vec<CustomFn<'script>>,
     pub locals: HashMap<String, usize>,
     pub functions: HashMap<Vec<String>, usize>,
-    pub consts: HashMap<Vec<String>, usize>,
+    pub consts: Consts<'script>,
     pub streams: HashMap<Vec<String>, usize>,
     pub meta: NodeMetas,
-    pub const_values: Vec<Value<'script>>,
     docs: Docs<'script>,
     module: Vec<String>,
     possible_leaf: bool,
@@ -368,15 +421,10 @@ impl<'script, 'registry> Helper<'script, 'registry>
 where
     'script: 'registry,
 {
-    pub fn init_consts(&mut self) {
-        self.consts
-            .insert(vec!["window".to_owned()], WINDOW_CONST_ID);
-        self.consts.insert(vec!["group".to_owned()], GROUP_CONST_ID);
-        self.consts.insert(vec!["args".to_owned()], ARGS_CONST_ID);
-
-        // TODO: Document why three `null` values are put in the constants vector.
-        self.const_values = vec![Value::null(); 3];
+    fn is_const(&self, id: &[String]) -> Option<&usize> {
+        self.consts.is_const(id)
     }
+
     fn add_const_doc(
         &mut self,
         name: Cow<'script, str>,
@@ -410,25 +458,13 @@ where
             .iter()
             .any(|(n, _)| !n.starts_with(" __SHADOW "))
     }
+
     pub fn swap(
         &mut self,
         aggregates: &mut Vec<InvokeAggrFn<'script>>,
-        consts: &mut HashMap<Vec<String>, usize>,
         locals: &mut HashMap<String, usize>,
     ) {
         mem::swap(&mut self.aggregates, aggregates);
-        mem::swap(&mut self.consts, consts);
-        mem::swap(&mut self.locals, locals);
-    }
-
-    pub fn swap2(
-        &mut self,
-        aggregates: &mut Vec<InvokeAggrFn<'script>>,
-        //consts: &mut HashMap<Vec<String>, usize>,
-        locals: &mut HashMap<String, usize>,
-    ) {
-        mem::swap(&mut self.aggregates, aggregates);
-        //mem::swap(&mut self.consts, consts);
         mem::swap(&mut self.locals, locals);
     }
 
@@ -448,7 +484,7 @@ where
             aggregates: Vec::new(),
             warnings: Vec::new(),
             locals: HashMap::new(),
-            consts: HashMap::new(),
+            consts: Consts::default(),
             streams: HashMap::new(),
             functions: HashMap::new(),
             func_vec: Vec::new(),
@@ -459,7 +495,6 @@ where
             possible_leaf: false,
             fn_argc: 0,
             is_open: false,
-            const_values: Vec::new(),
             file_offset: Location::default(),
             cu: 0,
         }
@@ -518,9 +553,6 @@ where
             self.locals.len() - 1
         })
     }
-    fn is_const(&self, id: &[String]) -> Option<&usize> {
-        self.consts.get(id)
-    }
 }
 
 /// A tremor script instance
@@ -531,7 +563,7 @@ pub struct Script<'script> {
     /// Expressions of the script
     pub exprs: Exprs<'script>,
     /// Constants defined in this script
-    pub consts: Vec<Value<'script>>,
+    pub consts: Consts<'script>,
     /// Aggregate functions
     pub aggregates: Vec<InvokeAggrFn<'script>>,
     windows: HashMap<String, WindowDecl<'script>>,
@@ -1518,6 +1550,8 @@ pub enum Path<'script> {
     State(StatePath<'script>),
     /// Runtime type information ( meta-state )
     Meta(MetadataPath<'script>),
+    /// Special reserved path
+    Reserved(ReservedPath<'script>),
 }
 
 impl<'script> Path<'script> {
@@ -1529,6 +1563,7 @@ impl<'script> Path<'script> {
             Path::Meta(path) => &path.segments,
             Path::Event(path) => &path.segments,
             Path::State(path) => &path.segments,
+            Path::Reserved(path) => path.segments(),
         }
     }
     fn try_reduce(self, helper: &Helper<'script, '_>) -> Result<ImutExprInt<'script>> {
@@ -1538,8 +1573,8 @@ impl<'script> Path<'script> {
                 segments,
                 idx,
                 mid,
-            }) if segments.is_empty() && idx > LAST_RESERVED_CONST => {
-                if let Some(v) = helper.const_values.get(idx) {
+            }) if segments.is_empty() => {
+                if let Some(v) = helper.consts.get(idx) {
                     let lit = Literal {
                         mid,
                         value: v.clone(),
@@ -1625,6 +1660,52 @@ pub struct MetadataPath<'script> {
     pub segments: Segments<'script>,
 }
 impl_expr_mid!(MetadataPath);
+
+/// Reserved keyword path
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub enum ReservedPath<'script> {
+    /// `args` keyword
+    Args {
+        /// Id
+        mid: usize,
+        /// Segments
+        segments: Segments<'script>,
+    },
+    /// `window` keyword
+    Window {
+        /// Id
+        mid: usize,
+        /// Segments
+        segments: Segments<'script>,
+    },
+    /// `group` keyword
+    Group {
+        /// Id
+        mid: usize,
+        /// Segments
+        segments: Segments<'script>,
+    },
+}
+
+impl<'script> ReservedPath<'script> {
+    fn segments(&self) -> &Segments<'script> {
+        match self {
+            ReservedPath::Args { segments, .. }
+            | ReservedPath::Window { segments, .. }
+            | ReservedPath::Group { segments, .. } => segments,
+        }
+    }
+}
+
+impl<'script> BaseExpr for ReservedPath<'script> {
+    fn mid(&self) -> usize {
+        match self {
+            ReservedPath::Args { mid, .. }
+            | ReservedPath::Window { mid, .. }
+            | ReservedPath::Group { mid, .. } => *mid,
+        }
+    }
+}
 
 #[derive(Clone, Debug, Serialize)]
 /// The path representing the current in-flight event

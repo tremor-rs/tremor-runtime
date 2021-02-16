@@ -70,18 +70,19 @@ extern crate serde_derive;
 #[macro_use]
 extern crate rental;
 
-use crate::prelude::*;
-use std::sync::atomic::{AtomicU32, Ordering};
-
-pub use crate::ast::query::{SelectType, ARGS_CONST_ID};
+pub use crate::ast::query::SelectType;
 pub use crate::ctx::{EventContext, EventOriginUri};
+use crate::prelude::*;
 pub use crate::query::Query;
 pub use crate::registry::{
     aggr as aggr_registry, registry, Aggr as AggrRegistry, CustomFn, Registry, TremorAggrFn,
     TremorAggrFnWrapper, TremorFn, TremorFnWrapper,
 };
 pub use crate::script::{Return, Script};
+use lazy_static::lazy_static;
+use std::sync::atomic::{AtomicU32, Ordering};
 
+use ast::{Consts, InvokeAggrFn};
 pub use interpreter::{AggrType, FALSE, NULL, TRUE};
 pub use tremor_value::{KnownKey, Object, Value};
 
@@ -313,6 +314,11 @@ impl PartialEq for LineValue {
 }
 
 pub use rentals::Value as LineValue;
+
+pub(crate) const NO_AGGRS: [InvokeAggrFn<'static>; 0] = [];
+lazy_static! {
+    static ref NO_CONSTS: Consts<'static> = Consts::new();
+}
 
 #[cfg(test)]
 mod tests {
