@@ -1123,16 +1123,12 @@ pub(crate) fn error_array_out_of_bound<'script, T, O: BaseExpr, I: BaseExpr>(
     // -> ideally: put the `path` into the `ErrorKind::ArrayOutOfRange`, handle in display
     //        but: not trivial: `Path` is parametric in non-'static lifetime 'script
     Err(match path {
-        ast::Path::Local(_path) | ast::Path::Const(_path) => {
-            ErrorKind::ArrayOutOfRange(expr, inner.extent(meta), r, len).into()
-        }
-        ast::Path::Meta(_path) => {
-            ErrorKind::ArrayOutOfRange(expr, inner.extent(meta), r, len).into()
-        }
-        ast::Path::Event(_path) => {
-            ErrorKind::ArrayOutOfRange(expr, inner.extent(meta), r, len).into()
-        }
-        ast::Path::State(_path) => {
+        ast::Path::Meta(_)
+        | ast::Path::Event(_)
+        | ast::Path::State(_)
+        | ast::Path::Reserved(_)
+        | ast::Path::Local(_)
+        | ast::Path::Const(_) => {
             ErrorKind::ArrayOutOfRange(expr, inner.extent(meta), r, len).into()
         }
     })
@@ -1149,16 +1145,12 @@ pub(crate) fn error_bad_array_index<'script, 'idx, T, O: BaseExpr, I: BaseExpr>(
     let expr: Range = outer.extent(meta);
     let idx = idx.clone_static();
     Err(match path {
-        ast::Path::Local(_path) | ast::Path::Const(_path) => {
-            ErrorKind::BadArrayIndex(expr, inner.extent(meta), idx, len).into()
-        }
-        ast::Path::Meta(_path) => {
-            ErrorKind::BadArrayIndex(expr, inner.extent(meta), idx, len).into()
-        }
-        ast::Path::Event(_path) => {
-            ErrorKind::BadArrayIndex(expr, inner.extent(meta), idx, len).into()
-        }
-        ast::Path::State(_path) => {
+        ast::Path::Reserved(_)
+        | ast::Path::State(_)
+        | ast::Path::Event(_)
+        | ast::Path::Meta(_)
+        | ast::Path::Local(_)
+        | ast::Path::Const(_) => {
             ErrorKind::BadArrayIndex(expr, inner.extent(meta), idx, len).into()
         }
     })
@@ -1173,16 +1165,12 @@ pub(crate) fn error_decreasing_range<'script, T, O: BaseExpr, I: BaseExpr>(
 ) -> Result<T> {
     let expr: Range = outer.extent(meta);
     Err(match path {
-        ast::Path::Local(_path) | ast::Path::Const(_path) => {
-            ErrorKind::DecreasingRange(expr, inner.extent(meta), start_idx, end_idx).into()
-        }
-        ast::Path::Meta(_path) => {
-            ErrorKind::DecreasingRange(expr, inner.extent(meta), start_idx, end_idx).into()
-        }
-        ast::Path::Event(_path) => {
-            ErrorKind::DecreasingRange(expr, inner.extent(meta), start_idx, end_idx).into()
-        }
-        ast::Path::State(_path) => {
+        ast::Path::Meta(_)
+        | ast::Path::Event(_)
+        | ast::Path::State(_)
+        | ast::Path::Reserved(_)
+        | ast::Path::Local(_)
+        | ast::Path::Const(_) => {
             ErrorKind::DecreasingRange(expr, inner.extent(meta), start_idx, end_idx).into()
         }
     })
@@ -1198,7 +1186,7 @@ pub(crate) fn error_bad_key<'script, T, O: BaseExpr, I: BaseExpr>(
 ) -> Result<T> {
     let expr: Range = outer.extent(meta);
     Err(match path {
-        ast::Path::Local(_p) | ast::Path::Const(_p) => {
+        ast::Path::Reserved(_) | ast::Path::Local(_) | ast::Path::Const(_) => {
             ErrorKind::BadAccessInLocal(expr, inner.extent(meta), key, options).into()
         }
         ast::Path::Meta(_p) => {

@@ -19,7 +19,6 @@ use std::{
 };
 
 use crate::{codec::Codec, source::prelude::*, QSIZE};
-use async_trait;
 use halfbrown::HashMap;
 use serde::Serialize;
 use serenity::{
@@ -155,6 +154,7 @@ struct Handler {
     is_loop_running: AtomicBool,
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Serialize)]
 enum DiscordMessage {
     AddReaction(Reaction),
@@ -259,23 +259,23 @@ enum DiscordMessage {
 }
 
 fn to_reaction(v: &Value) -> Option<ReactionType> {
-    if let Some(c) = v.as_char() {
-        Some(ReactionType::Unicode(c.to_string()))
-    } else if let Some(id) = v.get_u64("id") {
-        Some(ReactionType::Custom {
-            id: EmojiId(id),
-            animated: v.get_bool("animated").unwrap_or_default(),
-            name: v.get_str("name").map(|s| s.to_string()),
-        })
-    } else {
-        None
-    }
+    v.as_char().map_or_else(
+        || {
+            v.get_u64("id").map(|id| ReactionType::Custom {
+                id: EmojiId(id),
+                animated: v.get_bool("animated").unwrap_or_default(),
+                name: v.get_str("name").map(ToString::to_string),
+            })
+        },
+        |c| Some(ReactionType::Unicode(c.to_string())),
+    )
 }
 fn to_reactions(v: &Value) -> Option<Vec<ReactionType>> {
     v.as_array()
         .map(|a| a.iter().filter_map(to_reaction).collect::<Vec<_>>())
 }
 
+#[allow(clippy::too_many_lines)]
 async fn reply_loop(rx: Receiver<Value<'static>>, ctx: Context) {
     while let Ok(reply) = rx.recv().await {
         if let Some(reply) = reply.get("guild") {
@@ -298,8 +298,7 @@ async fn reply_loop(rx: Receiver<Value<'static>>, ctx: Context) {
                     if let Some(to_remove) = member.get_array("remove_roles") {
                         let to_remove: Vec<_> = to_remove
                             .iter()
-                            .filter_map(Value::as_u64)
-                            .map(RoleId)
+                            .filter_map(|v| v.as_u64().map(RoleId))
                             .collect();
                         if let Err(e) = current_member.remove_roles(&ctx, &to_remove).await {
                             error!("Role removal error: {}", e);
@@ -309,8 +308,7 @@ async fn reply_loop(rx: Receiver<Value<'static>>, ctx: Context) {
                     if let Some(to_roles) = member.get_array("add_roles") {
                         let to_roles: Vec<_> = to_roles
                             .iter()
-                            .filter_map(Value::as_u64)
-                            .map(RoleId)
+                            .filter_map(|v| v.as_u64().map(RoleId))
                             .collect();
                         if let Err(e) = current_member.add_roles(&ctx, &to_roles).await {
                             error!("Role add error: {}", e);
@@ -370,13 +368,9 @@ async fn reply_loop(rx: Receiver<Value<'static>>, ctx: Context) {
                         };
                         // Reference to another message
                         if let Some(reference_message) = reply.get_u64("reference_message") {
-                            let reference_channel = if let Some(reference_channel) =
-                                reply.get_u64("reference_channel")
-                            {
-                                ChannelId(reference_channel)
-                            } else {
-                                channel
-                            };
+                            let reference_channel = reply
+                                .get_u64("reference_channel")
+                                .map_or(channel, ChannelId);
                             m.reference_message((reference_channel, MessageId(reference_message)));
                         };
 
@@ -385,7 +379,6 @@ async fn reply_loop(rx: Receiver<Value<'static>>, ctx: Context) {
                         };
 
                         if let Some(embed) = reply.get("embed") {
-                            // FIXME: todo;
                             m.embed(|e| {
                                 if let Some(author) = embed.get("author") {
                                     e.author(|a| {
@@ -787,7 +780,7 @@ impl EventHandler for Handler {
     }
 }
 
-#[async_trait::async_trait()]
+#[async_trait::async_trait]
 impl Source for Discord {
     fn id(&self) -> &TremorURL {
         &self.onramp_id
@@ -844,7 +837,9 @@ impl Source for Discord {
             is_loop_running: AtomicBool::from(false),
         });
 
-        let client = if !self.config.intents.is_empty() {
+        let client = if self.config.intents.is_empty() {
+            client
+        } else {
             let intents = self
                 .config
                 .intents
@@ -853,10 +848,10 @@ impl Source for Discord {
                 .map(Intents::into)
                 .fold(GatewayIntents::default(), |a, b| a | b);
             client.intents(intents)
-        } else {
-            client
         };
-        let mut client = client.await.expect("Err creating client");
+        let mut client = client
+            .await
+            .map_err(|e| Error::from(format!("Err discord creating client: {}", e)))?;
         task::spawn(async move { client.start().await });
 
         Ok(SourceState::Connected)

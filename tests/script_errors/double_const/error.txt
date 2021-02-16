@@ -1,4 +1,4 @@
 Error: 
     1 | const one = 1;
-    2 | const one = two;
-      | ^^^^^^^^^^^^^^^ Can't declare the constant `one` twice
+    2 | const one = "two";
+      | ^^^^^^^^^^^^^^^^^ Can't declare the constant `one` twice

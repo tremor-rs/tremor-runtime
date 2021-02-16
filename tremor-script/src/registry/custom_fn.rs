@@ -13,8 +13,7 @@
 // limitations under the License.
 
 use super::{FResult, FunctionError, Result};
-use crate::ast::get_args_mut;
-use crate::ast::{Expr, Exprs, FnDecl, ImutExpr, ImutExprInt, ImutExprs, InvokeAggrFn};
+use crate::ast::{Consts, Expr, Exprs, FnDecl, ImutExpr, ImutExprInt, ImutExprs, InvokeAggrFn};
 use crate::interpreter::{AggrType, Cont, Env, ExecOpts, LocalStack};
 use crate::prelude::*;
 use crate::Value;
@@ -148,9 +147,9 @@ impl<'script> CustomFn<'script> {
 
         // We are swapping out the var args for constants
 
-        let consts: &'run mut [Value<'event>] = unsafe { mem::transmute(env.consts) };
+        let consts: &'run mut Consts<'event> = unsafe { mem::transmute(env.consts) };
 
-        mem::swap(get_args_mut(consts)?, &mut args_const);
+        mem::swap(&mut consts.args, &mut args_const);
 
         let mut this_local = LocalStack::with_size(self.locals);
         for (arg, local) in args.iter().zip(this_local.values.iter_mut()) {
@@ -184,7 +183,7 @@ impl<'script> CustomFn<'script> {
                         &mut this_local,
                     );
                     if r.is_err() {
-                        mem::swap(get_args_mut(consts)?, &mut args_const);
+                        mem::swap(&mut consts.args, &mut args_const);
                     };
                     match r? {
                         Cont::Cont(v) => {
@@ -193,7 +192,7 @@ impl<'script> CustomFn<'script> {
                         Cont::Drop => {
                             recursion_depth += 1;
                             if recursion_depth == env.recursion_limit {
-                                mem::swap(get_args_mut(consts)?, &mut args_const);
+                                mem::swap(&mut consts.args, &mut args_const);
                                 return Err(FunctionError::RecursionLimit);
                             }
                             // clear the local variables (that are not the
@@ -205,7 +204,7 @@ impl<'script> CustomFn<'script> {
                             continue 'recur;
                         }
                         _ => {
-                            mem::swap(get_args_mut(consts)?, &mut args_const);
+                            mem::swap(&mut consts.args, &mut args_const);
                             return Err(FunctionError::Error(Box::new("can't emit here".into())));
                         }
                     };
@@ -219,7 +218,7 @@ impl<'script> CustomFn<'script> {
                         &mut this_local,
                     );
                     if r.is_err() {
-                        mem::swap(get_args_mut(consts)?, &mut args_const);
+                        mem::swap(&mut consts.args, &mut args_const);
                     };
                     r?;
                 }

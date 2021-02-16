@@ -16,7 +16,6 @@ use crate::op::prelude::*;
 use std::mem;
 use std::sync::Arc;
 use tremor_script::prelude::*;
-use tremor_script::ARGS_CONST_ID;
 
 rental! {
     pub mod rentals {
@@ -114,12 +113,8 @@ impl Trickle {
             let mut decl = mem::transmute::<ScriptDecl<'_>, ScriptDecl<'static>>(*script);
             let args: Value<'static> = mem::transmute(args);
 
-            decl.script.consts = vec![Value::null(), Value::null(), Value::null()];
-            *decl
-                .script
-                .consts
-                .get_mut(ARGS_CONST_ID)
-                .ok_or_else(|| Error::from("Can't access ARGS_CONST_ID!"))? = args;
+            // decl.script.consts = vec![Value::null(), Value::null(), Value::null()];
+            decl.script.consts.args = args;
             Ok(decl)
         })
         .map_err(|e: rental::RentalError<Error, _>| e.0)?;

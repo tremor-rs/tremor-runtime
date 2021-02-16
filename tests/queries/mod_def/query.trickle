@@ -1,0 +1,4 @@
+mod c with
+  const one = 1;
+end;
+select event + c::one from in into out;

@@ -59,6 +59,7 @@ unicode-xid = "0.2"
 url = "2"
 value-trait = "0.1"
 xz2 = "0.1"
+lazy_static = "1.4"
 
 [build-dependencies]
 lalrpop = "0.19"

@@ -23,12 +23,12 @@ use super::{
     ImutExpr, ImutExprInt, ImutMatch, ImutPredicateClause, Invocable, Invoke, InvokeAggr,
     InvokeAggrFn, List, Literal, LocalPath, Match, Merge, MetadataPath, ModDoc, NodeMetas, Patch,
     PatchOperation, Path, Pattern, PredicateClause, PredicatePattern, Predicates, Record,
-    RecordPattern, Recur, Script, Segment, StatePath, StrLitElement, StringLit, TestExpr,
-    TuplePattern, UnaryExpr, UnaryOpKind, Warning,
+    RecordPattern, Recur, ReservedPath, Script, Segment, StatePath, StrLitElement, StringLit,
+    TestExpr, TuplePattern, UnaryExpr, UnaryOpKind, Warning,
 };
 use super::{upable::Upable, BytesPart};
 use crate::errors::{
-    err_generic, error_generic, error_missing_effector, error_oops, ErrorKind, Result,
+    err_generic, error_generic, error_missing_effector, error_oops, Error, ErrorKind, Result,
 };
 use crate::impl_expr;
 use crate::pos::{Location, Range};
@@ -41,9 +41,6 @@ use beef::Cow;
 use halfbrown::HashMap;
 pub use query::*;
 use serde::Serialize;
-
-pub(crate) const NO_AGGRS: [InvokeAggrFn<'static>; 0] = [];
-pub(crate) const NO_CONSTS: Vec<Value<'static>> = Vec::new();
 
 /// A raw script we got to put this here because of silly lalrpoop focing it to be public
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -60,7 +57,6 @@ impl<'script> ScriptRaw<'script> {
         self,
         mut helper: &mut Helper<'script, 'registry>,
     ) -> Result<(Script<'script>, Vec<Warning>)> {
-        helper.init_consts();
         let mut exprs = vec![];
         let last_idx = self.exprs.len() - 1;
         for (i, e) in self.exprs.into_iter().enumerate() {
@@ -76,15 +72,19 @@ impl<'script> ScriptRaw<'script> {
                     comment,
                 } => {
                     let name_v = vec![name.to_string()];
-                    let idx = helper.const_values.len();
-                    if helper.consts.insert(name_v, idx).is_some() {
-                        let r = Range::from((start, end));
-                        return Err(
-                            ErrorKind::DoubleConst(r.expand_lines(2), r, name.to_string()).into(),
-                        );
-                    }
+                    let r = Range::from((start, end));
 
-                    let expr = expr.up(&mut helper)?;
+                    let expr = expr.up(&mut helper)?.try_reduce(&helper)?;
+                    let v = reduce2(expr, &helper)?;
+                    let value_type = v.value_type();
+
+                    let idx = helper.consts.insert(name_v, v).map_err(|_old| {
+                        Error::from(ErrorKind::DoubleConst(
+                            r.expand_lines(2),
+                            r,
+                            name.to_string(),
+                        ))
+                    })?;
                     if i == last_idx {
                         exprs.push(Expr::Imut(ImutExprInt::Local {
                             is_const: true,
@@ -92,11 +92,6 @@ impl<'script> ScriptRaw<'script> {
                             mid: helper.add_meta_w_name(start, end, &name),
                         }))
                     }
-                    let expr = expr.try_reduce(&helper)?;
-
-                    let v = reduce2(expr, &helper)?;
-                    let value_type = v.value_type();
-                    helper.const_values.push(v);
                     helper.add_const_doc(name, comment, value_type);
                 }
                 ExprRaw::FnDecl(f) => {
@@ -145,7 +140,7 @@ impl<'script> ScriptRaw<'script> {
             Script {
                 imports: vec![], // Compiled out
                 exprs,
-                consts: helper.const_values.clone(),
+                consts: helper.consts.clone(),
                 aggregates: helper.aggregates.clone(),
                 windows: helper.windows.clone(),
                 locals: helper.locals.len(),
@@ -314,20 +309,15 @@ impl<'script> ModuleRaw<'script> {
                 } => {
                     let mut name_v = helper.module.clone();
                     name_v.push(name.to_string());
-                    if helper.consts.contains_key(&name_v) {
-                        return Err(ErrorKind::DoubleConst(
+                    let expr = expr.up(helper)?;
+                    let v = reduce2(expr, &helper)?;
+                    helper.consts.insert(name_v, v).map_err(|_old| {
+                        Error::from(ErrorKind::DoubleConst(
                             Range::from((start, end)).expand_lines(2),
                             Range::from((start, end)),
                             name.to_string(),
-                        )
-                        .into());
-                    }
-                    helper
-                        .consts
-                        .insert(name_v.clone(), helper.const_values.len());
-                    let expr = expr.up(helper)?;
-                    let v = reduce2(expr, &helper)?;
-                    helper.const_values.push(v);
+                        ))
+                    })?;
                 }
                 ExprRaw::FnDecl(f) => {
                     let f = f.up(helper)?;
@@ -728,11 +718,11 @@ impl<'script> Upable<'script> for FnDeclRaw<'script> {
         helper.is_open = self.open;
         helper.fn_argc = self.args.len();
 
-        helper.swap2(&mut aggrs, &mut locals);
+        helper.swap(&mut aggrs, &mut locals);
         helper.possible_leaf = true;
         let body = self.body.up(helper)?;
         helper.possible_leaf = false;
-        helper.swap2(&mut aggrs, &mut locals);
+        helper.swap(&mut aggrs, &mut locals);
         helper.can_emit = can_emit;
         let name = self.name.up(helper)?;
         Ok(FnDecl {
@@ -828,8 +818,6 @@ impl<'script> Upable<'script> for MatchFnDeclRaw<'script> {
         let can_emit = helper.can_emit;
         let mut aggrs = Vec::new();
         let mut locals = HashMap::new();
-        let mut consts = HashMap::new();
-        consts.insert(vec!["args".to_owned()], ARGS_CONST_ID);
 
         for (i, a) in self.args.iter().enumerate() {
             locals.insert(a.id.to_string(), i);
@@ -839,7 +827,8 @@ impl<'script> Upable<'script> for MatchFnDeclRaw<'script> {
         helper.fn_argc = self.args.len();
 
         helper.can_emit = false;
-        helper.swap(&mut aggrs, &mut consts, &mut locals);
+
+        helper.swap(&mut aggrs, &mut locals);
 
         let target = self
             .args
@@ -911,7 +900,7 @@ impl<'script> Upable<'script> for MatchFnDeclRaw<'script> {
         helper.possible_leaf = false;
         let body = vec![body];
 
-        helper.swap(&mut aggrs, &mut consts, &mut locals);
+        helper.swap(&mut aggrs, &mut locals);
         helper.can_emit = can_emit;
         let name = self.name.up(helper)?;
         Ok(FnDecl {
@@ -1845,12 +1834,14 @@ pub enum PathRaw<'script> {
     Meta(MetadataPathRaw<'script>),
     /// we're forced to make this pub because of lalrpop
     Const(ConstPathRaw<'script>),
+    /// Special reserved path
+    Reserved(ReservedPathRaw<'script>),
 }
 
 impl<'script> Upable<'script> for PathRaw<'script> {
     type Target = Path<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        use PathRaw::{Const, Event, Local, Meta, State};
+        use PathRaw::{Const, Event, Local, Meta, Reserved, State};
         Ok(match self {
             Local(p) => {
                 let p = p.up(helper)?;
@@ -1864,6 +1855,7 @@ impl<'script> Upable<'script> for PathRaw<'script> {
             Event(p) => Path::Event(p.up(helper)?),
             State(p) => Path::State(p.up(helper)?),
             Meta(p) => Path::Meta(p.up(helper)?),
+            Reserved(p) => Path::Reserved(p.up(helper)?),
         })
     }
 }
@@ -2064,6 +2056,80 @@ impl<'script> Upable<'script> for ConstPathRaw<'script> {
         }
     }
 }
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub enum ReservedPathRaw<'script> {
+    Args {
+        start: Location,
+        end: Location,
+        segments: SegmentsRaw<'script>,
+    },
+    Window {
+        start: Location,
+        end: Location,
+        segments: SegmentsRaw<'script>,
+    },
+    Group {
+        start: Location,
+        end: Location,
+        segments: SegmentsRaw<'script>,
+    },
+}
+impl<'script> BaseExpr for ReservedPathRaw<'script> {
+    fn s(&self, _meta: &NodeMetas) -> Location {
+        match self {
+            ReservedPathRaw::Args { start, .. }
+            | ReservedPathRaw::Window { start, .. }
+            | ReservedPathRaw::Group { start, .. } => *start,
+        }
+    }
+
+    fn e(&self, _meta: &NodeMetas) -> Location {
+        match self {
+            ReservedPathRaw::Args { end, .. }
+            | ReservedPathRaw::Window { end, .. }
+            | ReservedPathRaw::Group { end, .. } => *end,
+        }
+    }
+
+    fn mid(&self) -> usize {
+        0
+    }
+}
+impl<'script> Upable<'script> for ReservedPathRaw<'script> {
+    type Target = ReservedPath<'script>;
+
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+        let r = match self {
+            ReservedPathRaw::Args {
+                start,
+                end,
+                segments,
+            } => ReservedPath::Args {
+                mid: helper.add_meta_w_name(start, end, &"args"),
+                segments: segments.up(helper)?,
+            },
+            ReservedPathRaw::Window {
+                start,
+                end,
+                segments,
+            } => ReservedPath::Window {
+                mid: helper.add_meta_w_name(start, end, &"window"),
+                segments: segments.up(helper)?,
+            },
+            ReservedPathRaw::Group {
+                start,
+                end,
+                segments,
+            } => ReservedPath::Group {
+                mid: helper.add_meta_w_name(start, end, &"group"),
+                segments: segments.up(helper)?,
+            },
+        };
+        Ok(r)
+    }
+}
+
 /// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct LocalPathRaw<'script> {

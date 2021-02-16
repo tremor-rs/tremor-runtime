@@ -19,11 +19,10 @@ use super::super::raw::{
     reduce2, BaseExpr, ExprRaw, IdentRaw, ImutExprRaw, ModuleRaw, ScriptRaw, WithExprsRaw,
 };
 use super::{
-    error_generic, error_no_consts, error_no_locals, AggrRegistry, Builder, GroupBy, GroupByInt,
-    HashMap, Helper, ImutExpr, Location, NodeMetas, OperatorDecl, OperatorKind, OperatorStmt,
-    Query, Registry, Result, ScriptDecl, ScriptStmt, Select, SelectStmt, Serialize, Stmt,
-    StreamStmt, Upable, Value, Warning, WindowDecl, WindowKind, ARGS_CONST_ID, GROUP_CONST_ID,
-    WINDOW_CONST_ID,
+    error_generic, error_no_consts, error_no_locals, AggrRegistry, GroupBy, GroupByInt, HashMap,
+    Helper, ImutExpr, Location, NodeMetas, OperatorDecl, OperatorKind, OperatorStmt, Query,
+    Registry, Result, ScriptDecl, ScriptStmt, Select, SelectStmt, Serialize, Stmt, StreamStmt,
+    Upable, Value, Warning, WindowDecl, WindowKind,
 };
 use crate::impl_expr;
 use beef::Cow;
@@ -144,13 +143,10 @@ impl<'script> Upable<'script> for StmtRaw<'script> {
         match self {
             StmtRaw::Select(stmt) => {
                 let mut aggregates = Vec::new();
-                let mut consts = HashMap::new();
                 let mut locals = HashMap::new();
-                helper.swap(&mut aggregates, &mut consts, &mut locals);
+                helper.swap(&mut aggregates, &mut locals);
                 let stmt: Select<'script> = stmt.up(helper)?;
-                helper.swap(&mut aggregates, &mut consts, &mut locals);
-                // We know that select statements have exactly three consts
-                let consts = vec![Value::null(), Value::null(), Value::null()];
+                helper.swap(&mut aggregates, &mut locals);
                 // only allocate scratches if they are really needed - when we have multiple windows
                 let aggregate_scratches = if stmt.windows.len() > 1 {
                     Some((aggregates.clone(), aggregates.clone()))
@@ -162,7 +158,7 @@ impl<'script> Upable<'script> for StmtRaw<'script> {
                     stmt: Box::new(stmt),
                     aggregates,
                     aggregate_scratches,
-                    consts,
+                    consts: helper.consts.clone(),
                     locals: locals.len(),
                     node_meta: helper.meta.clone(),
                 }))
@@ -473,17 +469,8 @@ impl_expr!(SelectRaw);
 impl<'script> Upable<'script> for SelectRaw<'script> {
     type Target = Select<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        if !helper.consts.is_empty() {
-            return error_no_consts(&(self.start, self.end), &self.target, &helper.meta);
-        }
-        // reserve const ids for builtin const
-        helper
-            .consts
-            .insert(vec!["window".to_owned()], WINDOW_CONST_ID);
-        helper
-            .consts
-            .insert(vec!["group".to_owned()], GROUP_CONST_ID);
-        helper.consts.insert(vec!["args".to_owned()], ARGS_CONST_ID);
+        let const_count = helper.consts.len();
+
         let target = self.target.up(helper)?;
 
         if helper.has_locals() {
@@ -496,11 +483,8 @@ impl<'script> Upable<'script> for SelectRaw<'script> {
                 return error_no_locals(&(self.start, self.end), &definitely, &helper.meta);
             }
         };
-        if helper.consts.remove(&vec!["window".to_owned()]) != Some(WINDOW_CONST_ID)
-            || helper.consts.remove(&vec!["group".to_owned()]) != Some(GROUP_CONST_ID)
-            || helper.consts.remove(&vec!["args".to_owned()]) != Some(ARGS_CONST_ID)
-            || !helper.consts.is_empty()
-        {
+        // We ensure that no new constatns were added
+        if const_count != helper.consts.len() {
             return error_no_consts(&(self.start, self.end), &target, &helper.meta);
         }
 

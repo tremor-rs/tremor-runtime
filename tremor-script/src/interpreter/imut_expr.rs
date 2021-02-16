@@ -30,7 +30,7 @@ use crate::{ast::StringLit, interpreter::value_to_index};
 use crate::{
     ast::{
         BaseExpr, BinExpr, ImutComprehension, ImutExpr, ImutExprInt, ImutMatch, Invoke, InvokeAggr,
-        LocalPath, Merge, Patch, Path, Recur, Segment, UnaryExpr, ARGS_CONST_ID,
+        LocalPath, Merge, Patch, Path, Recur, ReservedPath, Segment, UnaryExpr,
     },
     errors::error_oops_err,
 };
@@ -422,6 +422,9 @@ where
             Path::Meta(_path) => meta,
             Path::Event(_path) => event,
             Path::State(_path) => state,
+            Path::Reserved(ReservedPath::Args { .. }) => &env.consts.args,
+            Path::Reserved(ReservedPath::Group { .. }) => &env.consts.group,
+            Path::Reserved(ReservedPath::Window { .. }) => &env.consts.window,
         };
 
         // Resolve the targeted value by applying all path segments
@@ -721,7 +724,7 @@ where
     'event: 'run,
 {
     match arg.0 {
-        ImutExprInt::Path(Path::Const(LocalPath { idx, .. })) if idx == ARGS_CONST_ID => arg
+        ImutExprInt::Path(Path::Reserved(ReservedPath::Args { .. })) => arg
             .0
             .run(opts, env, event, state, meta, local)
             .map(|v| Cow::Owned(v.clone_static())),
