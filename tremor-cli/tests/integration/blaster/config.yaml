@@ -1,0 +1,35 @@
+onramp:
+  - id: blaster
+    type: blaster
+    codec: json
+    config:
+      source: in.json
+      interval: 1000000
+      iters: 11
+
+offramp:
+  - id: out_file
+    type: file
+    codec: json
+    config:
+      file: out.log
+  - id: exit
+    type: exit
+  - id: err_file
+    type: file
+    codec: json
+    config:
+      file: err.log
+
+binding:
+  - id: "blast"
+    links:
+      "/onramp/blaster/{instance}/out": [ "/pipeline/main/{instance}/in", "/pipeline/exit/{instance}/in" ]
+      "/pipeline/main/{instance}/out":  [ "/offramp/out_file/{instance}/in"]
+      "/pipeline/main/{instance}/err":  [ "/offramp/err_file/{instance}/in"]
+      "/pipeline/exit/{instance}/out":  [ "/offramp/exit/{instance}/in"    ]
+      "/pipeline/exit/{instance}/err":  [ "/offramp/err_file/{instance}/in"]
+
+mapping:
+  /binding/blast/01:
+    instance: "01"
