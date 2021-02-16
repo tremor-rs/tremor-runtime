@@ -1,10 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+
+* Ensure blaster sends all events from the source [#759](https://github.com/tremor-rs/tremor-runtime/pull/759)
+
 ## 0.10.1
 
 ### Fixes
 
 * Update tremor-value to 0.2 to include binary changes and thus unbreak the 0.10 tremor-script crate
+
 ## 0.10.0
 
 ### Breaking Changes

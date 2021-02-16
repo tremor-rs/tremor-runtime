@@ -88,11 +88,14 @@ struct Acc {
 }
 impl Acc {
     fn next(&mut self) -> Vec<u8> {
-        unsafe {
+        // actually safe because we only get element from a slot < elements.len()
+        let next = unsafe {
             self.elements
                 .get_unchecked(self.count % self.elements.len())
                 .clone()
-        }
+        };
+        self.count += 1;
+        next
     }
 }
 
