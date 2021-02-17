@@ -16,7 +16,7 @@ rustc-args = [ "-C target-cpu=native" ]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-lexical = "5.2.0"
+lexical = "5.2.1"
 value-trait = "0.1"
 
 
