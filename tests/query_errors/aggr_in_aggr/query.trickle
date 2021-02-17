@@ -1,0 +1,1 @@
+select aggr::stats::sum(aggr::stats::sum(event)) from in into out;

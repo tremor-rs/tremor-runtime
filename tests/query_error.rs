@@ -138,6 +138,8 @@ test_cases!(
     pp_embed_unrecognized_token4,
     pp_embed_unrecognized_token5,
     //INSERT
+    aggr_arity,
+    aggr_in_aggr,
     bad_into,
     bad_from,
     node_duplicate_name_operator,

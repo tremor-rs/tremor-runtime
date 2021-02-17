@@ -1,0 +1,6 @@
+mod snot with
+  fn boo() with
+    42
+  end;
+end;
+snot::badger(event)

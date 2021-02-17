@@ -1,0 +1,3 @@
+Error: 
+    1 | select aggr::stats::sum(event, 1, 2, 3) from in into out;
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Bad arity for function stats::sum/1..=1 but was called with 4 arguments

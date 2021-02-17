@@ -2149,32 +2149,18 @@ impl<'script> Upable<'script> for LocalPathRaw<'script> {
             let id = helper.meta.name_dflt(mid).to_string();
             let mid = helper.add_meta_w_name(self.start, self.end, &id);
 
-            // NOTE We never modularise `window`, `args` or `group`
-            //
-            let mut rel_path = if id != "args" && id != "window" && id != "group" {
-                helper.module.clone()
-            } else {
-                vec![]
-            };
+            let mut rel_path = helper.module.clone();
             rel_path.push(id.to_string());
-            #[allow(clippy::option_if_let_else)]
-            // we cannot use map_or_else here because of the borrow checker
-            if let Some(idx) = helper.is_const(&rel_path) {
-                Ok(LocalPath {
-                    is_const: true,
-                    idx: *idx,
-                    mid,
-                    segments,
-                })
-            } else {
-                let idx = helper.var_id(&id);
-                Ok(LocalPath {
-                    is_const: false,
-                    idx,
-                    mid,
-                    segments,
-                })
-            }
+            let (idx, is_const) = helper
+                .is_const(&rel_path)
+                .copied()
+                .map_or_else(|| (helper.var_id(&id), false), |idx| (idx, true));
+            Ok(LocalPath {
+                is_const,
+                idx,
+                mid,
+                segments,
+            })
         } else {
             // We should never encounter this
             error_oops(

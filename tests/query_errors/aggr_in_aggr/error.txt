@@ -1,0 +1,3 @@
+Error: 
+    1 | select aggr::stats::sum(aggr::stats::sum(event)) from in into out;
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Aggregates can not be called inside of aggregates
