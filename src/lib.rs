@@ -86,6 +86,8 @@ pub(crate) use serde_yaml::Value as OpConfig;
 use system::World;
 pub(crate) use tremor_pipeline::Event;
 use tremor_pipeline::{query::Query, FN_REGISTRY};
+use tremor_script::highlighter::Term as TermHighlighter;
+use tremor_script::Script;
 
 /// Default Q Size
 pub const QSIZE: usize = 128;
@@ -159,7 +161,18 @@ pub async fn load_query_file(world: &World, file_name: &str) -> Result<usize> {
         vec![],
         &*FN_REGISTRY.lock()?,
         &aggr_reg,
-    )?;
+    );
+    let query = match query {
+        Ok(query) => query,
+        Err(e) => {
+            let mut h = TermHighlighter::stderr();
+            if let Err(e) = Script::format_error_from_script(&raw, &mut h, &e) {
+                eprintln!("Error: {}", e);
+            };
+
+            return Err(format!("failed to load trickle script: {}", file_name).into());
+        }
+    };
     let id = query.id().unwrap_or(&file_id);
 
     let id = TremorURL::parse(&format!("/pipeline/{}", id))?;
