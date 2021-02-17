@@ -134,6 +134,7 @@ test_cases!(
     pp_cyclic,
     pp_nest_cyclic,
     //INSERT
+    missing_function,
     string_interpolation_empty,
     fn_bad_recur,
     script_without_newline,
