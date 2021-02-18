@@ -151,8 +151,8 @@ impl Operator for Batch {
         _state: &Value<'static>,
         signal: &mut Event,
     ) -> Result<EventAndInsights> {
-        self.max_delay_ns.map_or_else(
-            || Ok(EventAndInsights::default()),
+        Ok(self.max_delay_ns.map_or_else(
+            || EventAndInsights::default(),
             |delay_ns| {
                 if signal.ingest_ns - self.first_ns > delay_ns {
                     // We don't want to modify the original signal we clone it to
@@ -170,12 +170,12 @@ impl Operator for Batch {
                     };
 
                     swap(&mut self.batch_event_id, &mut event.id);
-                    Ok(EventAndInsights::from(event))
+                    EventAndInsights::from(event)
                 } else {
-                    Ok(EventAndInsights::default())
+                    EventAndInsights::default()
                 }
             },
-        )
+        ))
     }
 }
 
