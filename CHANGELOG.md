@@ -5,6 +5,7 @@
 ### New features
 
 * Allow using '_' as seperators in numeric literals [#645](https://github.com/tremor-rs/tremor-runtime/issues/645)
+* Add support for Kafka message headers, available through the `$kafka_headers` metadata variable.
 
 ## 0.10.2
 

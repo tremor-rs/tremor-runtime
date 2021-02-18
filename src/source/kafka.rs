@@ -25,7 +25,7 @@ use rdkafka::config::ClientConfig;
 use rdkafka::consumer::stream_consumer::{self, StreamConsumer};
 use rdkafka::consumer::{CommitMode, Consumer, ConsumerContext};
 use rdkafka::error::KafkaResult;
-use rdkafka::message::BorrowedMessage;
+use rdkafka::message::{BorrowedMessage, Headers};
 use rdkafka::util::AsyncRuntime;
 use rdkafka::{Message, Offset, TopicPartitionList};
 use std::collections::BTreeMap;
@@ -275,16 +275,39 @@ impl Source for Int {
                         m.offset().to_string(),
                     ];
                     let data = data.to_vec();
-                    if !self.auto_commit {
-                        self.messages.insert(id, MsgOffset::from(m));
+                    if let Some(headers) = m.headers() {
+                        let mut meta_data = Value::object_with_capacity(1);
+                        let mut key_val = Value::object_with_capacity(headers.count());
+                        for i in 0..headers.count() {
+                            if let Some(header) = headers.get(i) {
+                                let key = String::from(header.0);
+                                let val = Value::Bytes(Vec::from(header.1).into());
+                                key_val.insert(key, val)?;
+                            }
+                        }
+                        meta_data.insert("kafka_headers", key_val)?;
+                        if !self.auto_commit {
+                            self.messages.insert(id, MsgOffset::from(m));
+                        }
+                        Ok(SourceReply::Data {
+                            origin_uri,
+                            data,
+                            meta: Some(meta_data),
+                            codec_override: None,
+                            stream: 0,
+                        })
+                    } else {
+                        if !self.auto_commit {
+                            self.messages.insert(id, MsgOffset::from(m));
+                        }
+                        Ok(SourceReply::Data {
+                            origin_uri,
+                            data,
+                            meta: None,
+                            codec_override: None,
+                            stream: 0,
+                        })
                     }
-                    Ok(SourceReply::Data {
-                        origin_uri,
-                        data,
-                        meta: None, // TODO: what can we put in meta here?
-                        codec_override: None,
-                        stream: 0,
-                    })
                 } else {
                     error!("Failed to fetch kafka message.");
                     Ok(SourceReply::Empty(100))

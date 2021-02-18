@@ -28,6 +28,7 @@ use halfbrown::HashMap;
 use rdkafka::config::ClientConfig;
 use rdkafka::{
     error::KafkaError,
+    message::OwnedHeaders,
     producer::{FutureProducer, FutureRecord},
 };
 use std::{fmt, time::Duration};
@@ -246,6 +247,7 @@ impl Sink for Kafka {
             let encoded = codec.encode(value)?;
             let processed = postprocess(self.postprocessors.as_mut_slice(), ingest_ns, encoded)?;
             let meta_kafka_key = meta.get_str("kafka_key");
+            let meta_kafka_headers = meta.get_object("kafka_headers");
             for payload in processed {
                 // TODO: allow defining partition and timestamp in meta
                 let mut record = FutureRecord::to(self.config.topic.as_str());
@@ -255,7 +257,15 @@ impl Sink for Kafka {
                 } else if let Some(kafka_key) = &self.config.key {
                     record = record.key(kafka_key.as_str());
                 }
-
+                if let Some(kafka_headers) = meta_kafka_headers {
+                    let mut headers = OwnedHeaders::new_with_capacity(kafka_headers.len());
+                    for (key, val) in kafka_headers.iter() {
+                        if let Some(val_str) = val.as_str() {
+                            headers = headers.add(key, val_str);
+                        }
+                    }
+                    record = record.headers(headers);
+                }
                 // send out without blocking on delivery
                 match self.producer.send_result(record) {
                     Ok(delivery_future) => {
