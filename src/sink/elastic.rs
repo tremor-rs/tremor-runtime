@@ -282,7 +282,10 @@ impl Elastic {
                 data.insert("error", Value::from("Invalid ES Payload"))?;
                 let source = build_source(&event.id, event.origin_uri.as_ref());
                 data.insert("source", source)?;
-                responses.push(((data, Value::null()).into(), ERR)); // send response
+                // send error response
+                if let Err(e) = response_tx.send(((data, Value::null()).into(), ERR)).await {
+                    error!("Failed to send build_event_payload error response: {}", e);
+                }
                 return Err(e); // this will bubble up the error to the calling on_event, sending a CB fail back
             }
         };
