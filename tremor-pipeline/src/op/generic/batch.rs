@@ -20,9 +20,19 @@ use tremor_script::prelude::*;
 pub struct Config {
     /// Name of the event history ( path ) to track
     pub count: usize,
-    /// The amount time between messags to flush
+    /// The amount time between messags to flush in milliseconds
     #[serde(default = "Default::default")]
     pub timeout: Option<u64>,
+
+    /// Allow empty batches in case `timeout` is used.
+    /// If set to false, empty batches are not returned.
+    #[serde(default = "default_allow_empty_batches")]
+    pub allow_empty_batches: bool,
+}
+
+/// use true as default to maintain backward compatibility
+fn default_allow_empty_batches() -> bool {
+    true
 }
 
 impl ConfigImpl for Config {}
@@ -160,17 +170,20 @@ impl Operator for Batch {
 
                     let mut data = empty();
                     swap(&mut data, &mut self.data);
-                    self.len = 0;
-                    let mut event = Event {
-                        id: self.event_id_gen.next_id(),
-                        data,
-                        ingest_ns: self.first_ns,
-                        is_batch: true,
-                        ..Event::default()
-                    };
-
-                    swap(&mut self.batch_event_id, &mut event.id);
-                    EventAndInsights::from(event)
+                    if self.len > 0 || self.config.allow_empty_batches {
+                        self.len = 0; // reset len
+                        let mut event = Event {
+                            id: self.event_id_gen.next_id(),
+                            data,
+                            ingest_ns: self.first_ns,
+                            is_batch: true,
+                            ..Event::default()
+                        };
+                        swap(&mut self.batch_event_id, &mut event.id);
+                        EventAndInsights::from(event)
+                    } else {
+                        EventAndInsights::default()
+                    }
                 } else {
                     EventAndInsights::default()
                 }
@@ -192,6 +205,7 @@ mod test {
             config: Config {
                 count: 2,
                 timeout: None,
+                allow_empty_batches: true,
             },
             first_ns: 0,
             max_delay_ns: None,
@@ -254,6 +268,7 @@ mod test {
             Config {
                 count: 100,
                 timeout: Some(1),
+                allow_empty_batches: true,
             },
         )?;
         let mut op = BatchFactory::new().from_node(42, &node_config)?;
@@ -328,6 +343,7 @@ mod test {
             config: Config {
                 count: 100,
                 timeout: Some(1),
+                allow_empty_batches: true,
             },
             first_ns: 0,
             max_delay_ns: Some(1_000_000),
@@ -392,5 +408,67 @@ mod test {
             .on_event(0, "in", &mut state, event)
             .expect("failed to run piepeline");
         assert_eq!(r.len(), 0);
+    }
+
+    #[test]
+    fn forbid_empty_batches() -> Result<()> {
+        let mut idgen = EventIdGenerator::new(0);
+        let mut op = Batch {
+            config: Config {
+                count: 2,
+                timeout: Some(1),
+                allow_empty_batches: false,
+            },
+            first_ns: 0,
+            max_delay_ns: Some(100_000),
+            data: empty(),
+            len: 0,
+            id: "badger".into(),
+            batch_event_id: idgen.next_id(),
+            event_id_gen: idgen,
+        };
+
+        let mut state = Value::null();
+        let mut signal = Event {
+            id: (1, 1, 1).into(),
+            ingest_ns: 1_000_000,
+            data: Value::null().into(),
+            ..Event::default()
+        };
+
+        let r = op
+            .on_signal(0, &state, &mut signal)
+            .expect("failed to run pipeline")
+            .events;
+        assert_eq!(r.len(), 0);
+
+        let event1 = Event {
+            id: (1, 1, 1).into(),
+            ingest_ns: 2_000_000,
+            data: Value::from("snot").into(),
+            ..Event::default()
+        };
+        let r = op
+            .on_event(0, "in", &mut state, event1)
+            .expect("failed to run peipeline");
+        assert_eq!(r.len(), 0);
+
+        signal.ingest_ns = 3_000_000;
+        signal.id = (1, 1, 2).into();
+        let r = op
+            .on_signal(0, &state, &mut signal)
+            .expect("failed to run pipeline")
+            .events;
+        assert_eq!(r.len(), 1);
+
+        signal.ingest_ns = 4_000_000;
+        signal.id = (1, 1, 3).into();
+        let r = op
+            .on_signal(0, &state, &mut signal)
+            .expect("failed to run pipeline")
+            .events;
+        assert_eq!(r.len(), 0);
+
+        Ok(())
     }
 }
