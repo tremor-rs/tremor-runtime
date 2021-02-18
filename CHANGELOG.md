@@ -6,11 +6,16 @@
 
 * Ensure blaster sends all events from the source [#759](https://github.com/tremor-rs/tremor-runtime/pull/759)
 * Allow the use of const and custom functions using const in select queries [#749](https://github.com/tremor-rs/tremor-runtime/issues/749)
+<<<<<<< HEAD
 * Print hygenic errors when invalid `trickle` files are loaded in `server run -f ...` [#761](https://github.com/tremor-rs/tremor-runtime/issues/761)
 
+=======
+* Ensure `elastic` sink does not issue empty bulk requests.
+>>>>>>> 78abc1d9 (Update changelog)
 ### New features
 
 * Add discord connector to allow communicating with the discord API
+* Add batch operator config `allow_empty_batches` to filter out empty batches if set to `false`.
 ## 0.10.1
 
 ### Fixes
