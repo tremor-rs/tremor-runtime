@@ -77,8 +77,8 @@ impl Event {
         }
     }
 
-    /// Creates a new ack insight from the event, consums the `op_meta` and
-    /// `origin_uri` of the event may return None if no insight is needed
+    /// Creates a new ack insight from the event, consumes the `op_meta` and
+    /// `origin_uri` of the event
     #[must_use]
     pub fn insight_ack(&mut self) -> Event {
         let mut e = Event::cb_ack(self.ingest_ns, self.id.clone());
@@ -87,8 +87,8 @@ impl Event {
         e
     }
 
-    /// Creates a new fail insight from the event, consums the `op_meta` of the
-    /// event may return None if no insight is needed
+    /// Creates a new fail insight from the event, consumes the `op_meta` and `origin_uri` of the
+    /// event
     #[must_use]
     pub fn insight_fail(&mut self) -> Event {
         let mut e = Event::cb_fail(self.ingest_ns, self.id.clone());
@@ -97,8 +97,8 @@ impl Event {
         e
     }
 
-    /// Creates a restore insight from the event, consums the `op_meta` of the
-    /// event may return None if no insight is needed
+    /// Creates a restore insight from the event, consumes the `op_meta` and `origin_uri` of the
+    /// event
     #[must_use]
     pub fn insight_restore(&mut self) -> Event {
         let mut e = Event::cb_restore(self.ingest_ns);
@@ -107,8 +107,8 @@ impl Event {
         e
     }
 
-    /// Creates a trigger insight from the event, consums the `op_meta` of the
-    /// event may return None if no insight is needed
+    /// Creates a trigger insight from the event, consums the `op_meta` and `origin_uri` of the
+    /// event
     #[must_use]
     pub fn insight_trigger(&mut self) -> Event {
         let mut e = Event::cb_trigger(self.ingest_ns);

@@ -122,7 +122,7 @@ fn build_source(id: &EventId, origin_uri: Option<&EventOriginUri>) -> Value<'sta
 ///        "origin": "..."
 ///    },
 ///    "payload": {
-///        <original event payload>    
+///        <original event payload>
 ///    },
 ///    "success": false,
 ///    "error": {
@@ -174,7 +174,7 @@ fn build_bulk_error_data(
 ///        "origin": "..."
 ///    },
 ///    "payload": {
-///        <original event payload>    
+///        <original event payload>
 ///    },
 ///    "success": true
 /// }
@@ -410,7 +410,7 @@ impl Elastic {
                 let insight = Event {
                     id: event.id,
                     data: (Value::null(), m).into(),
-                    ingest_ns: nanotime(),
+                    ingest_ns: event.ingest_ns,
                     cb: CBAction::Fail,
                     ..Event::default()
                 };
@@ -499,10 +499,20 @@ impl Sink for Elastic {
         _input: &str,
         _codec: &dyn Codec,
         _codec_map: &HashMap<String, Box<dyn Codec>>,
-        event: Event,
+        mut event: Event,
     ) -> ResultVec {
-        self.maybe_enque(event).await?;
-        Ok(None) // insights are sent via reply_channel directly
+        if event.is_empty() {
+            // nothing to send to ES, an empty event would result in
+            debug!(
+                "[Sink::{}] Received empty event. Won't send it to ES",
+                self.sink_url
+            );
+            Ok(Some(vec![Reply::Insight(event.insight_ack())]))
+        } else {
+            // we have either one event or a batched one with > 1 event
+            self.maybe_enque(event).await?;
+            Ok(None) // insights are sent via reply_channel directly
+        }
     }
 
     #[allow(clippy::too_many_arguments)]
