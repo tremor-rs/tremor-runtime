@@ -19,7 +19,7 @@ pub(crate) use crate::postprocessor::{
     make_postprocessors, postprocess, Postprocessor, Postprocessors,
 };
 pub(crate) use crate::preprocessor::{make_preprocessors, preprocess, Preprocessor, Preprocessors};
-pub(crate) use crate::sink::{self, ResultVec, Sink, SinkManager};
+pub(crate) use crate::sink::{self, Reply, ResultVec, Sink, SinkManager};
 pub(crate) use crate::source::Processors;
 pub(crate) use crate::url::ports::{ERR, OUT};
 pub(crate) use crate::url::TremorURL;

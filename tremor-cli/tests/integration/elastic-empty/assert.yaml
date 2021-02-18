@@ -1,0 +1,7 @@
+status: 0
+name: elastic-empty
+asserts:
+  - source: err.log
+    equals_file: expected_err.json
+  - source: ok.log
+    equals_file: expected_ok.json
