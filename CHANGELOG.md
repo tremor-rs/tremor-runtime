@@ -8,10 +8,12 @@
 * Allow the use of const and custom functions using const in select queries [#749](https://github.com/tremor-rs/tremor-runtime/issues/749)
 * Print hygenic errors when invalid `trickle` files are loaded in `server run -f ...` [#761](https://github.com/tremor-rs/tremor-runtime/issues/761)
 * Ensure `elastic` sink does not issue empty bulk requests.
+* Avoid sending empty batches from the `batch` operator.
+
 ### New features
 
 * Add discord connector to allow communicating with the discord API
-* Add batch operator config `allow_empty_batches` to filter out empty batches if set to `false`.
+
 ## 0.10.1
 
 ### Fixes
