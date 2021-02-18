@@ -158,9 +158,10 @@ impl Operator for Batch {
                     // We don't want to modify the original signal we clone it to
                     // create a new event.
 
-                    let mut data = empty();
-                    swap(&mut data, &mut self.data);
                     if self.len > 0 {
+                        let mut data = empty();
+                        swap(&mut data, &mut self.data);
+
                         self.len = 0; // reset len
                         let mut event = Event {
                             id: self.event_id_gen.next_id(),
