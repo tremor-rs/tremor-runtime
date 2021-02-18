@@ -8,10 +8,12 @@ end;
 create script my_little_script;
 
 define generic::batch operator batch with
-  count = 3,
-  timeout = core::datetime::with_milliseconds(1) # when we hit this timeout we are going to issue empty batches
+  count = 1,
+  timeout = 1 # ms - if no event arrived, we get an empty batched event
 end;
 create operator batch;
+
+create stream exit;
 
 select event from in where event != "exit" into my_little_script;
 select event from my_little_script into batch;
