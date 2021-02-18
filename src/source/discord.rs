@@ -19,6 +19,7 @@ use std::{
 };
 
 use crate::{codec::Codec, source::prelude::*, QSIZE};
+use async_channel::{Receiver, Sender, TryRecvError};
 use halfbrown::HashMap;
 use serde::Serialize;
 use serenity::{
@@ -35,8 +36,6 @@ use serenity::{
     },
     prelude::*,
 };
-// use simd_json::json;
-use async_channel::{Receiver, Sender, TryRecvError};
 use tremor_script::prelude::*;
 use tremor_value::to_value;
 
@@ -819,10 +818,6 @@ impl Source for Discord {
         } else {
             Err("snot! we got no receiver".into())
         }
-        // if let Some(trigger) = self.cq.next() {
-        // } else {
-
-        // }
     }
 
     async fn init(&mut self) -> Result<SourceState> {
