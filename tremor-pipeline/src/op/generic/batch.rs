@@ -23,16 +23,6 @@ pub struct Config {
     /// The amount time between messags to flush in milliseconds
     #[serde(default = "Default::default")]
     pub timeout: Option<u64>,
-
-    /// Allow empty batches in case `timeout` is used.
-    /// If set to false, empty batches are not returned.
-    #[serde(default = "default_allow_empty_batches")]
-    pub allow_empty_batches: bool,
-}
-
-/// use true as default to maintain backward compatibility
-fn default_allow_empty_batches() -> bool {
-    true
 }
 
 impl ConfigImpl for Config {}
@@ -170,7 +160,7 @@ impl Operator for Batch {
 
                     let mut data = empty();
                     swap(&mut data, &mut self.data);
-                    if self.len > 0 || self.config.allow_empty_batches {
+                    if self.len > 0 {
                         self.len = 0; // reset len
                         let mut event = Event {
                             id: self.event_id_gen.next_id(),
@@ -204,7 +194,6 @@ mod test {
             config: Config {
                 count: 2,
                 timeout: None,
-                allow_empty_batches: true,
             },
             first_ns: 0,
             max_delay_ns: None,
@@ -267,7 +256,6 @@ mod test {
             Config {
                 count: 100,
                 timeout: Some(1),
-                allow_empty_batches: true,
             },
         )?;
         let mut op = BatchFactory::new().from_node(42, &node_config)?;
@@ -342,7 +330,6 @@ mod test {
             config: Config {
                 count: 100,
                 timeout: Some(1),
-                allow_empty_batches: true,
             },
             first_ns: 0,
             max_delay_ns: Some(1_000_000),
@@ -416,7 +403,6 @@ mod test {
             config: Config {
                 count: 2,
                 timeout: Some(1),
-                allow_empty_batches: false,
             },
             first_ns: 0,
             max_delay_ns: Some(100_000),
