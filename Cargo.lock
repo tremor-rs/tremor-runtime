@@ -2265,7 +2265,7 @@ dependencies = [
  "serde_json",
  "serde_qs",
  "serde_urlencoded 0.7.0",
- "url 2.2.0",
+ "url 2.2.1",
 ]
 
 [[package]]
@@ -2531,7 +2531,7 @@ dependencies = [
  "sluice",
  "tracing",
  "tracing-futures",
- "url 2.2.0",
+ "url 2.2.1",
  "waker-fn",
 ]
 
@@ -3697,7 +3697,7 @@ dependencies = [
  "idna 0.2.0",
  "lazy_static",
  "regex",
- "url 2.2.0",
+ "url 2.2.1",
 ]
 
 [[package]]
@@ -4157,7 +4157,7 @@ dependencies = [
  "serde_urlencoded 0.7.0",
  "tokio 0.2.25",
  "tokio-tls",
- "url 2.2.0",
+ "url 2.2.1",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
@@ -4193,7 +4193,7 @@ dependencies = [
  "serde_urlencoded 0.7.0",
  "tokio 1.1.1",
  "tokio-rustls",
- "url 2.2.0",
+ "url 2.2.1",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
@@ -4565,7 +4565,7 @@ dependencies = [
  "tracing",
  "tracing-futures",
  "typemap_rev",
- "url 2.2.0",
+ "url 2.2.1",
 ]
 
 [[package]]
@@ -5711,7 +5711,7 @@ dependencies = [
  "tremor-pipeline",
  "tremor-runtime",
  "tremor-script",
- "url 2.2.0",
+ "url 2.2.1",
 ]
 
 [[package]]
@@ -5771,7 +5771,7 @@ dependencies = [
  "tremor-common",
  "tremor-influx",
  "tremor-script",
- "url 2.2.0",
+ "url 2.2.1",
  "value-trait",
  "window",
  "xz2",
@@ -5843,7 +5843,7 @@ dependencies = [
  "tremor-script",
  "tremor-value",
  "tungstenite 0.13.0",
- "url 2.2.0",
+ "url 2.2.1",
  "value-trait",
  "xz2",
 ]
@@ -5895,7 +5895,7 @@ dependencies = [
  "tremor-kv",
  "tremor-value",
  "unicode-xid 0.2.1",
- "url 2.2.0",
+ "url 2.2.1",
  "value-trait",
  "xz2",
 ]
@@ -5947,7 +5947,7 @@ dependencies = [
  "log",
  "rand 0.7.3",
  "sha-1",
- "url 2.2.0",
+ "url 2.2.1",
  "utf-8",
 ]
 
@@ -5967,7 +5967,7 @@ dependencies = [
  "rand 0.8.3",
  "sha-1",
  "thiserror",
- "url 2.2.0",
+ "url 2.2.1",
  "utf-8",
 ]
 
@@ -6090,9 +6090,9 @@ dependencies = [
 
 [[package]]
 name = "url"
-version = "2.2.0"
+version = "2.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5909f2b0817350449ed73e8bcd81c8c3c8d9a7a5d8acba4b27db277f1868976e"
+checksum = "9ccd964113622c8e9322cfac19eb1004a07e636c545f325da085d5cdde6f1f8b"
 dependencies = [
  "form_urlencoded",
  "idna 0.2.0",
