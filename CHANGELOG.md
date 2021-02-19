@@ -7,8 +7,9 @@
 * Ensure blaster sends all events from the source [#759](https://github.com/tremor-rs/tremor-runtime/pull/759)
 * Allow the use of const and custom functions using const in select queries [#749](https://github.com/tremor-rs/tremor-runtime/issues/749)
 * Print hygenic errors when invalid `trickle` files are loaded in `server run -f ...` [#761](https://github.com/tremor-rs/tremor-runtime/issues/761)
-* Ensure `elastic` sink does not issue empty bulk requests.
+* Ensure `elastic` offramp does not issue empty bulk requests.
 * Avoid sending empty batches from the `batch` operator.
+* Ensure `elastic` offramp includes event `payload` in every error response.
 
 ### New features
 
