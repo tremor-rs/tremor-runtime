@@ -234,7 +234,7 @@ impl onramp::Impl for Kafka {
                 onramp_id: id.clone(),
             }))
         } else {
-            Err("Missing config for blaster onramp".into())
+            Err("Missing config for kafka onramp".into())
         }
     }
 }

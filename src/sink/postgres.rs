@@ -54,7 +54,7 @@ impl offramp::Impl for Postgres {
                 client: None,
             }))
         } else {
-            Err("Missing config for onramp".into())
+            Err("Missing config for postgres offramp".into())
         }
     }
 }

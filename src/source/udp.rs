@@ -68,7 +68,7 @@ impl onramp::Impl for Udp {
                 onramp_id: onramp_id.clone(),
             }))
         } else {
-            Err("Missing config for blaster onramp".into())
+            Err("Missing config for udp onramp".into())
         }
     }
 }

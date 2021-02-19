@@ -74,7 +74,7 @@ impl offramp::Impl for GCS {
                 postprocessors: vec![],
             }))
         } else {
-            Err("Missing config for gpub offramp".into())
+            Err("Missing config for gcs offramp".into())
         }
     }
 }
