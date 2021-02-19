@@ -35,7 +35,7 @@ impl Sink for CB {
     async fn on_event(
         &mut self,
         _input: &str,
-        _codec: &dyn Codec,
+        _codec: &mut dyn Codec,
         _codec_map: &halfbrown::HashMap<String, Box<dyn Codec>>,
         event: Event,
     ) -> ResultVec {
@@ -123,6 +123,8 @@ impl Sink for CB {
 
 #[cfg(test)]
 mod tests {
+    use std::borrow::BorrowMut;
+
     use simd_json::json;
     use tremor_pipeline::{EventId, OpMeta};
 
@@ -130,9 +132,9 @@ mod tests {
 
     #[async_std::test]
     async fn cb_meta() -> Result<()> {
+        let mut codec = crate::codec::lookup("json")?;
         let mut cb = CB {};
         let url = TremorURL::parse("/offramp/cb/instance")?;
-        let codec = crate::codec::lookup("json")?;
         let codec_map = halfbrown::HashMap::new();
         let (tx, _rx) = async_channel::bounded(1);
         let in_ = "IN";
@@ -166,7 +168,10 @@ mod tests {
             origin_uri: origin_uri.clone(),
             ..Event::default()
         };
-        let res = cb.on_event(in_, codec.as_ref(), &codec_map, event).await?;
+
+        let c: &mut dyn Codec = codec.borrow_mut();
+        let res = cb.on_event(in_, c, &codec_map, event).await?;
+
         assert!(res.is_some(), "got nothing back");
         if let Some(replies) = res {
             assert_eq!(1, replies.len());
@@ -182,6 +187,7 @@ mod tests {
                 );
             }
         }
+
         // meta takes precedence
         let mut meta = Value::object_with_capacity(1);
         meta.insert("cb", "fail")?;
@@ -194,7 +200,8 @@ mod tests {
             origin_uri: origin_uri.clone(),
             ..Event::default()
         };
-        let res = cb.on_event(in_, codec.as_ref(), &codec_map, event).await?;
+        let c: &mut dyn Codec = codec.borrow_mut();
+        let res = cb.on_event(in_, c, &codec_map, event).await?;
         assert!(res.is_some(), "got nothing back");
         if let Some(replies) = res {
             assert_eq!(1, replies.len());
@@ -210,6 +217,7 @@ mod tests {
                 );
             }
         }
+
         // array data - second ack/fail will be ignored, just one from ack/fail or open/close (trigger/restore) is returned
         let meta = json!(
         {"cb": ["ack", "open", "fail"]}
@@ -221,7 +229,9 @@ mod tests {
             origin_uri: origin_uri.clone(),
             ..Event::default()
         };
-        let res = cb.on_event(in_, codec.as_ref(), &codec_map, event).await?;
+
+        let c: &mut dyn Codec = codec.borrow_mut();
+        let res = cb.on_event(in_, c, &codec_map, event).await?;
         assert!(res.is_some(), "got nothing back");
         if let Some(replies) = res {
             assert_eq!(2, replies.len());
@@ -254,7 +264,8 @@ mod tests {
             origin_uri: origin_uri.clone(),
             ..Event::default()
         };
-        let res = cb.on_event(in_, codec.as_ref(), &codec_map, event).await?;
+        let c: &mut dyn Codec = codec.borrow_mut();
+        let res = cb.on_event(in_, c, &codec_map, event).await?;
         assert!(res.is_some(), "got nothing back");
         if let Some(replies) = res {
             assert_eq!(2, replies.len());

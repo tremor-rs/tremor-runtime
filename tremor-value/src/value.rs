@@ -21,8 +21,9 @@ use beef::Cow;
 use halfbrown::HashMap;
 use simd_json::prelude::*;
 use simd_json::{AlignedBuf, Deserializer, Node, StaticNode};
-use std::fmt;
+use std::hash::Hash;
 use std::ops::{Index, IndexMut};
+use std::{borrow::Borrow, fmt};
 
 pub use crate::serde::to_value;
 
@@ -123,6 +124,17 @@ impl<'value> Value<'value> {
         }
     }
 
+    /// Tries to get an element of an object as bytes
+    #[inline]
+    #[must_use]
+    pub fn get_bytes<Q: ?Sized>(&self, k: &Q) -> Option<&[u8]>
+    where
+        Cow<'value, str>: Borrow<Q> + Hash + Eq,
+        Q: Hash + Eq + Ord,
+    {
+        self.get(k).and_then(Self::as_bytes)
+    }
+
     /// Tries to get the value as a char
     #[inline]
     #[must_use]
@@ -131,6 +143,18 @@ impl<'value> Value<'value> {
             Self::String(s) => s.chars().next(),
             _ => None,
         }
+    }
+
+    /// Tries to get an element of an object as char, takes the first one if it
+    /// is a string
+    #[inline]
+    #[must_use]
+    pub fn get_char<Q: ?Sized>(&self, k: &Q) -> Option<char>
+    where
+        Cow<'value, str>: Borrow<Q> + Hash + Eq,
+        Q: Hash + Eq + Ord,
+    {
+        self.get(k).and_then(Self::as_char)
     }
 }
 
@@ -270,7 +294,6 @@ impl<'value> ValueTrait for Value<'value> {
     #[inline]
     #[must_use]
     fn as_str(&self) -> Option<&str> {
-        use std::borrow::Borrow;
         match self {
             Self::String(s) => Some(s.borrow()),
             _ => None,
@@ -410,7 +433,20 @@ mod test {
     #![allow(clippy::cognitive_complexity)]
     use super::*;
     use proptest::proptest;
+    use simd_json::json;
 
+    #[test]
+    fn char_access() {
+        let v = Value::from(json!({"snot": "🦡"}));
+
+        assert_eq!(Some('🦡'), v.get_char("snot"));
+    }
+    #[test]
+    fn bytes_access() {
+        let v = Value::from(json!({"snot": "🦡"}));
+
+        assert_eq!(Some("🦡".as_bytes()), v.get_bytes("snot"));
+    }
     #[test]
     fn object_access() {
         let mut v = Value::null();

@@ -26,6 +26,7 @@ pub(crate) mod elastic;
 pub(crate) mod exit;
 pub(crate) mod file;
 pub(crate) mod kafka;
+pub(crate) mod kv;
 pub(crate) mod newrelic;
 pub(crate) mod postgres;
 pub(crate) mod prelude;
@@ -59,7 +60,7 @@ pub(crate) trait Sink {
     async fn on_event(
         &mut self,
         input: &str,
-        codec: &dyn Codec,
+        codec: &mut dyn Codec,
         codec_map: &HashMap<String, Box<dyn Codec>>,
         event: Event,
     ) -> ResultVec;
@@ -164,7 +165,7 @@ where
 
     async fn on_event(
         &mut self,
-        codec: &dyn Codec,
+        codec: &mut dyn Codec,
         codec_map: &HashMap<String, Box<dyn Codec>>,
         input: &str,
         event: Event,

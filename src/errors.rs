@@ -29,6 +29,12 @@ impl Clone for Error {
     }
 }
 
+impl From<sled::transaction::TransactionError<()>> for Error {
+    fn from(e: sled::transaction::TransactionError<()>) -> Self {
+        Self::from(format!("Sled Transaction Error: {:?}", e))
+    }
+}
+
 impl From<hdr_s::DeserializeError> for Error {
     fn from(e: hdr_s::DeserializeError) -> Self {
         Self::from(format!("{:?}", e))
@@ -146,6 +152,7 @@ error_chain! {
         CronError(cron::error::Error);
         Postgres(postgres::Error);
         Common(tremor_common::Error);
+        Sled(sled::Error);
     }
 
     errors {

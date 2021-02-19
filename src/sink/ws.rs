@@ -492,7 +492,7 @@ impl Sink for Ws {
     async fn on_event(
         &mut self,
         _input: &str,
-        _codec: &dyn Codec,
+        _codec: &mut dyn Codec,
         _codec_map: &HashMap<String, Box<dyn Codec>>,
         event: Event,
     ) -> ResultVec {
@@ -692,7 +692,7 @@ mod test {
         let (reply_tx, reply_rx) = bounded(1000);
 
         let url = TremorURL::parse("/offramp/ws/instance")?;
-        let codec: Box<dyn Codec> = Box::new(crate::codec::json::JSON::default());
+        let mut codec: Box<dyn Codec> = Box::new(crate::codec::json::JSON::default());
         let config = Config {
             url: "http://idonotexist:65535/path".to_string(),
             binary: true,
@@ -730,7 +730,7 @@ mod test {
         // lets try to send an event
         let mut event = Event::default();
         event.id = EventId::new(1, 1, 1);
-        sink.on_event("in", codec.as_ref(), &HashMap::new(), event)
+        sink.on_event("in", codec.as_mut(), &HashMap::new(), event)
             .await?;
 
         while let Ok(msg) = reply_rx.try_recv() {

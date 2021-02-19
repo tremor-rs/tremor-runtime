@@ -67,7 +67,7 @@ impl Sink for StdOut {
     async fn on_event(
         &mut self,
         _input: &str,
-        codec: &dyn Codec,
+        codec: &mut dyn Codec,
         _codec_map: &HashMap<String, Box<dyn Codec>>,
         event: Event,
     ) -> ResultVec {

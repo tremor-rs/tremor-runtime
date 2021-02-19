@@ -19,8 +19,8 @@ use crate::permge::PriorityMerge;
 use crate::pipeline;
 use crate::registry::ServantId;
 use crate::sink::{
-    self, blackhole, cb, debug, elastic, exit, file, handle_response, kafka, newrelic, postgres,
-    rest, stderr, stdout, tcp, udp, ws,
+    self, blackhole, cb, debug, elastic, exit, file, handle_response, kafka, kv, newrelic,
+    postgres, rest, stderr, stdout, tcp, udp, ws,
 };
 use crate::source::Processors;
 use crate::url::ports::{IN, METRICS};
@@ -31,7 +31,7 @@ use async_std::stream::StreamExt; // for .next() on PriorityMerge
 use async_std::task::{self, JoinHandle};
 use beef::Cow;
 use halfbrown::HashMap;
-use std::borrow::Borrow;
+use std::borrow::{Borrow, BorrowMut};
 use std::fmt;
 use tremor_common::ids::OfframpIdGen;
 use tremor_common::time::nanotime;
@@ -73,7 +73,7 @@ pub trait Offramp: Send {
     ) -> Result<()>;
     async fn on_event(
         &mut self,
-        codec: &dyn Codec,
+        codec: &mut dyn Codec,
         codec_map: &HashMap<String, Box<dyn Codec>>,
         input: &str,
         event: Event,
@@ -107,17 +107,18 @@ pub trait Impl {
 pub fn lookup(name: &str, config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
     match name {
         "blackhole" => blackhole::Blackhole::from_config(config),
+        "cb" => cb::CB::from_config(config),
         "debug" => debug::Debug::from_config(config),
         "elastic" => elastic::Elastic::from_config(config),
         "exit" => exit::Exit::from_config(config),
-        "cb" => cb::CB::from_config(config),
         "file" => file::File::from_config(config),
         "kafka" => kafka::Kafka::from_config(config),
+        "kv" => kv::Kv::from_config(config),
         "newrelic" => newrelic::NewRelic::from_config(config),
         "postgres" => postgres::Postgres::from_config(config),
         "rest" => rest::Rest::from_config(config),
-        "stdout" => stdout::StdOut::from_config(config),
         "stderr" => stderr::StdErr::from_config(config),
+        "stdout" => stdout::StdOut::from_config(config),
         "tcp" => tcp::Tcp::from_config(config),
         "udp" => udp::Udp::from_config(config),
         "ws" => ws::Ws::from_config(config),
@@ -187,7 +188,7 @@ impl Manager {
         &self,
         r: async_channel::Sender<Result<Addr>>,
         Create {
-            codec,
+            mut codec,
             codec_map,
             mut offramp,
             preprocessors,
@@ -251,9 +252,9 @@ impl Manager {
                                 metrics_reporter.periodic_flush(ingest_ns);
                                 metrics_reporter.increment_in();
 
-                                let fail = if let Err(err) = offramp
-                                    .on_event(codec.borrow(), &codec_map, input.borrow(), event)
-                                    .await
+                                let c: &mut dyn Codec = codec.borrow_mut();
+                                let fail = if let Err(err) =
+                                    offramp.on_event(c, &codec_map, input.borrow(), event).await
                                 {
                                     error!("[Offramp::{}] On Event error: {}", offramp_url, err);
                                     metrics_reporter.increment_err();

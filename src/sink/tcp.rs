@@ -78,7 +78,7 @@ impl Sink for Tcp {
     async fn on_event(
         &mut self,
         _input: &str,
-        codec: &dyn Codec,
+        codec: &mut dyn Codec,
         _codec_map: &HashMap<String, Box<dyn Codec>>,
         mut event: Event,
     ) -> ResultVec {

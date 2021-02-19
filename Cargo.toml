@@ -106,6 +106,10 @@ tide = "0.16"
 # discord
 serenity = {version = "0.10", default-features = false, features = ["client", "gateway", "rustls_backend", "model", "cache"]}
 
+# kv
+sled = "0.34"
+
+
 [dependencies.tungstenite]
 default-features = false
 version = "0.13"
