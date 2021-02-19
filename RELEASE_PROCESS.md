@@ -14,6 +14,8 @@
 * Update CHANGELOG.md
   - Change unreleased section to have the new version for the upcoming release
 * Update tests in tremor-cli/tests/ that match against the current version number
+* Create a PR with those changes
+* Pull the PR once accepted and merged
 * `git tag -a -m"Release v<MAJOR>.<MINOR>.<BUGFIX>" <COMMIT>`
 * `git push origin --tag`
 * Draft a new release on github
@@ -32,7 +34,7 @@
   - Verify new language server installation via `cargo install tremor-language-server`
 * Wait for the docker image to build and publish
   - Verify docker image with some usage examples
-  - Tag the published dockerhub image as latest: 
+  - Tag the published dockerhub image as latest:
 
   ```sh
   export VERSION=<version>
