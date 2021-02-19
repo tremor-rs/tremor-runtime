@@ -310,7 +310,7 @@ impl Sink for Rest {
     async fn on_event(
         &mut self,
         _input: &str,
-        _codec: &dyn Codec,
+        _codec: &mut dyn Codec,
         _codec_map: &HashMap<String, Box<dyn Codec>>,
         event: Event,
     ) -> ResultVec {
@@ -1018,7 +1018,7 @@ mod test {
     #[test]
     fn deserialize_from_object() -> Result<()> {
         let config_s = r#"
-            endpoint: 
+            endpoint:
                 host: example.org
                 query: via=tremor
             concurrency: 4

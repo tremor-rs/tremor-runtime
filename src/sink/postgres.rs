@@ -74,7 +74,7 @@ impl Sink for Postgres {
     async fn on_event(
         &mut self,
         _input: &str,
-        _codec: &dyn Codec,
+        _codec: &mut dyn Codec,
         _codec_map: &HashMap<String, Box<dyn Codec>>,
         event: Event,
     ) -> ResultVec {

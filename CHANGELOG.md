@@ -8,6 +8,7 @@
 * Add support for Kafka message headers, available through the `$kafka_headers` metadata variable.
 * Add the `cb` offramp for testing upstream circuit breaker behaviour [#779](https://github.com/tremor-rs/tremor-runtime/pull/779)
 * Add the `kafka` onramp config `retry_failed_events` to acoid retrying failed events, and `polling_interval` to control how often kafka is polled for new messages if none were available previously [#779](https://github.com/tremor-rs/tremor-runtime/pull/779)
+* Add `kv` connector (`put`, `get`, `delete`, `scan`, `cas`)
 
 ### Fixes
 
