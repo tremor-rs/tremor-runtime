@@ -4,7 +4,7 @@ description = "Tremor Pipeline DAG Runtime"
 edition = "2018"
 license = "Apache-2.0"
 name = "tremor-pipeline"
-version = "0.10.1"
+version = "0.10.2"
 
 [dependencies]
 beef = {version = "0.5", features = ["impl_serde"]}
