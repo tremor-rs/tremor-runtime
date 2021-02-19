@@ -278,13 +278,18 @@ impl Elastic {
             Err(e) => {
                 // send error response about event not being able to be serialized into ES payload
                 let mut data = Value::object_with_capacity(2);
+                let payload = event.data.suffix().value().clone_static();
                 data.insert("success", Value::from(false))?;
                 data.insert("error", Value::from("Invalid ES Payload"))?;
+                data.insert("payload", payload)?;
                 let source = build_source(&event.id, event.origin_uri.as_ref());
                 data.insert("source", source)?;
                 // send error response
                 if let Err(e) = response_tx.send(((data, Value::null()).into(), ERR)).await {
-                    error!("Failed to send build_event_payload error response: {}", e);
+                    error!(
+                        "[Sink::{}] Failed to send build_event_payload error response: {}",
+                        self.sink_url, e
+                    );
                 }
                 return Err(e); // this will bubble up the error to the calling on_event, sending a CB fail back
             }
@@ -433,6 +438,7 @@ impl Elastic {
                     let mut meta = Object::with_capacity(1);
                     data.insert("success".into(), Value::from(false));
                     data.insert("error".into(), Value::from(error_msg));
+                    data.insert("payload".into(), event.data.suffix().value().clone_static());
                     meta.insert("error".into(), Value::from(error_msg));
 
                     if let Err(e) = self.response_sender.send(((data, meta).into(), ERR)).await {
