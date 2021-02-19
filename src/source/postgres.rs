@@ -76,7 +76,7 @@ impl onramp::Impl for Postgres {
                 onramp_id: id.clone(),
             }))
         } else {
-            Err("Missing config for onramp".into())
+            Err("Missing config for postgres onramp".into())
         }
     }
 }

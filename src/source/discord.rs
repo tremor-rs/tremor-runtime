@@ -142,7 +142,7 @@ impl onramp::Impl for Discord {
                 client: None,
             }))
         } else {
-            Err("Missing config for crononome onramp".into())
+            Err("Missing config for discord onramp".into())
         }
     }
 }
