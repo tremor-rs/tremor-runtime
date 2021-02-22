@@ -80,11 +80,15 @@ impl ControlLifecycleFsm {
                     break;
                 }
                 (ControlState::Active, ControlState::Connecting) => {
-                    self.state = ControlState::Connecting;
+                    self.state = ControlState::Active;
                     break;
                 }
                 (ControlState::Active, ControlState::Disconnecting) => {
-                    self.state = ControlState::Disconnecting;
+                    if self.control.num_active_protocols() > 1 {
+                        self.state = ControlState::Active;
+                    } else {
+                        self.state = ControlState::Disconnecting;
+                    }
                     break;
                 }
                 (ControlState::Disconnecting, ControlState::Zombie) => {

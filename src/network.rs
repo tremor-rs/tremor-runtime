@@ -34,6 +34,7 @@ use tremor_script::{LineValue, Value, ValueAndMeta};
 
 #[macro_use]
 pub(crate) mod prelude;
+pub(crate) mod nana;
 
 // Supported network protocol variants
 mod api;
@@ -81,10 +82,6 @@ impl Addr {
     pub(crate) async fn send(&self, msg: Msg) -> Result<()> {
         Ok(self.addr.send(msg).await?)
     }
-
-    // pub(crate) fn try_send(&self, msg: Msg) -> bool {
-    //     self.addr.try_send(msg).is_ok()
-    // }
 
     pub(crate) async fn send_control(&self, msg: ControlMsg) -> Result<()> {
         Ok(self.ctrl.send(msg).await?)
@@ -188,8 +185,6 @@ impl NetworkManager {
     }
 
     async fn handle_raw_text<'event>(&mut self, sid: StreamId, event: Event) -> Result<()> {
-        let codec = codec::lookup("json")?;
-        let codec = codec.as_ref();
         if let Some(session) = self.sessions.get_mut(&sid) {
             let origin = self.source.streams.get(&sid).unwrap();
             match session.on_event(origin, &event).await? {
@@ -212,13 +207,22 @@ impl NetworkManager {
                         })
                         .await?;
                 }
-                NetworkCont::DisconnectProtocol(protocol) => {
-                    self.source
-                        .reply_event(
-                            event!({"tremor": { "disconnect-ack": { "alias": protocol }}}),
-                            codec,
-                            &codec::builtin_codec_map(),
-                        )
+                NetworkCont::DisconnectProtocol(alias) => {
+                    let origin = self.source.streams.get(&sid).unwrap();
+                    origin
+                        .send(SerializedResponse {
+                            event_id: EventId::new(0, sid as u64, 0), // FIXME TODO
+                            ingest_ns: event.ingest_ns,
+                            binary: false,
+                            data: simd_json::to_string(&json!({ "tremor": {
+                                "disconnect-ack": {
+                                    "alias": alias
+                                }
+                            }}))?
+                            .as_bytes()
+                            .to_vec(),
+                            should_close: false,
+                        })
                         .await?;
                     session.fsm.transition(ControlState::Disconnecting)?;
                 }
@@ -267,7 +271,7 @@ impl NetworkManager {
         port: beef::Cow<'static, str>,
     ) -> bool {
         let event = Event {
-            id: EventId::new(self.uid, self.id, 0), // FIXME
+            id: EventId::new(self.uid, self.id, 0), // FIXME TODO
             data,
             ingest_ns,
             // TODO make origin_uri non-optional here too?
@@ -361,22 +365,16 @@ impl NetworkManager {
             resolved_codec_map.insert(k, codec::lookup(&v)?);
         }
         source.init().await?;
-        // let is_transactional = source.is_transactional();
         Ok((
             Self {
                 control,
                 network_id: source.id().clone(),
                 source,
-                // rx,
-                // tx: tx.clone(),
                 metrics_reporter: config.metrics_reporter,
-                //                triggered: false,
                 id: 0,
                 pipelines_out: Vec::new(),
                 pipelines_err: Vec::new(),
                 uid: config.onramp_uid,
-                // is_transactional,
-                // err_required: config.err_required,
                 sessions: HashMap::new(),
             },
             tx,

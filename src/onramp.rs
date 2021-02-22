@@ -16,7 +16,7 @@ use crate::pipeline;
 use crate::repository::ServantId;
 use crate::source::prelude::*;
 use crate::source::{
-    blaster, crononome, discord, file, kafka, metronome, postgres, rest, tcp, tnt, udp, ws,
+    blaster, crononome, discord, file, kafka, metronome, postgres, rest, tcp, udp, ws,
 };
 use crate::url::TremorURL;
 use crate::{errors::Result, network};
@@ -90,7 +90,8 @@ pub(crate) fn lookup(
         "rest" => rest::Rest::from_config(id, config),
         "ws" => ws::Ws::from_config(id, config),
         "discord" => discord::Discord::from_config(id, config),
-        "tnt" => tnt::Tnt::from_config(id, config),
+        // TODO Consider network protocol as an `onramp`
+        // "tnt" => tnt::Tnt::from_config(id, config),
         _ => Err(format!("[onramp:{}] Onramp type {} not known", id, name).into()),
     }
 }
@@ -287,7 +288,11 @@ mod test {
                 &*tremor_pipeline::FN_REGISTRY.lock()?,
                 &aggr_reg,
             )?;
-            world.conductor.repo.publish_pipeline(&id, false, artefact).await?;
+            world
+                .conductor
+                .repo
+                .publish_pipeline(&id, false, artefact)
+                .await?;
 
             let binding: Binding = serde_yaml::from_str(
                 r#"
@@ -319,7 +324,10 @@ links:
             )?;
 
             let id = TremorURL::parse(&format!("/binding/{}/01", "test"))?;
-            world.conductor.link_binding(&id, mapping[&id].clone()).await?;
+            world
+                .conductor
+                .link_binding(&id, mapping[&id].clone())
+                .await?;
 
             std::thread::sleep(std::time::Duration::from_millis(1000));
 

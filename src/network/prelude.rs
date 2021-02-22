@@ -16,6 +16,7 @@
 
 use super::{
     control::{fsm::ControlLifecycleFsm, ControlState},
+    nana::StatusCode,
     NetworkCont,
 };
 pub(crate) use crate::errors::Result;
@@ -87,16 +88,14 @@ macro_rules! wsc_reply {
     }};
 }
 
-#[allow(dead_code)] // FIXME remove
-enum ProtocolErrorReasons {
-    InvalidApiCommand,
-}
-
-pub(crate) fn protocol_error(reason: &str) -> Result<NetworkCont> {
-    // FIXME str -> enum + error code
-    Ok(NetworkCont::Close(
-        event!({"tremor": { "close": reason.to_string() } }),
-    ))
+pub(crate) fn close(reason: StatusCode) -> Result<NetworkCont> {
+    Ok(NetworkCont::Close(event!(
+        {"tremor":
+        { "close":
+            &format!("{}.{}: {}", reason.base(), reason.code(), reason.canonical_reason())
+        }
+    }
+    )))
 }
 
 // A stream represents a distinct connection such as a tcp client

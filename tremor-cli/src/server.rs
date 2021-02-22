@@ -164,8 +164,8 @@ pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
             .value_of("api-host")
             .ok_or_else(|| Error::from("host argument missing"))?;
         let app = api_server(&world)?;
-        eprintln!("Listening at: http://{}", host);
-        info!("Listening at: http://{}", host);
+        eprintln!("API Listening at: http://{}", host);
+        info!("API Listening at: http://{}", host);
 
         if let Err(e) = app.listen(host).await {
             error!("API Error: {}", e);

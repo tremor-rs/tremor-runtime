@@ -13,7 +13,8 @@
 // limitations under the License.
 
 use super::{
-    prelude::{destructurize, protocol_error, structurize, NetworkProtocol, StreamId},
+    nana::StatusCode,
+    prelude::{close, destructurize, structurize, NetworkProtocol, StreamId},
     NetworkCont,
 };
 use crate::errors::Result;
@@ -175,7 +176,7 @@ impl ApiProtocol {
             ResourceType::Offramp => self.conductor.repo.list_offramps().await,
             ResourceType::Pipeline => self.conductor.repo.list_pipelines().await,
             ResourceType::Binding => self.conductor.repo.list_bindings().await,
-            _other => return protocol_error("invalid api command - expected record"),
+            _other => return close(StatusCode::API_OPERATION_INVALID),
         };
 
         match artefacts {
@@ -186,11 +187,8 @@ impl ApiProtocol {
                 ));
             }
             Err(x) => {
-                debug!("List operation failed {}", x);
-                return protocol_error(&format!(
-                    "internal server error - list failed for `{}`",
-                    request.kind,
-                ));
+                error!("List operation failed {}", x);
+                return close(StatusCode::API_OPERATION_FAILED);
             }
         }
     }
@@ -262,15 +260,12 @@ impl ApiProtocol {
                     }
                 }
                 _other => {
-                    return protocol_error(
-                        "Invalid api command - unsupported artefact type for fetch",
-                    );
+                    return close(StatusCode::API_OPERATION_INVALID);
                 }
             };
         }
 
-        // Fallthrough - id required error
-        return protocol_error("Invalid api command - cannot fetch without `name` field");
+        return close(StatusCode::API_OPERATION_INVALID);
     }
 
     async fn on_create<'a>(
@@ -284,17 +279,14 @@ impl ApiProtocol {
                     let url = TremorURL::from_onramp_id(&name)?;
                     let artefact = self.conductor.repo.find_onramp(&url).await?;
                     if let Some(_already_exists_error) = artefact {
-                        return protocol_error(&format!(
-                            "invalid api command - cannot create onramp `{}`, already exists error",
-                            &name
-                        ));
+                        return close(StatusCode::API_CONNECTOR_ALREADY_EXISTS);
                     } else {
                         if let Value::Object(fields) = cmd {
                             if let Some(body) = fields.get("body") {
                                 let value: Result<config::OnRamp> = structurize(body.clone());
 
                                 if let Err(_) = value {
-                                    return protocol_error("Invalid api command - invalid body (json) for `onramp` - valid config expected");
+                                    return close(StatusCode::API_BODY_RECORD_EXPECTED);
                                 }
 
                                 let result = self
@@ -308,12 +300,10 @@ impl ApiProtocol {
                                     }
                                 })));
                             } else {
-                                return protocol_error("Invalid api command - expected record");
+                                return close(StatusCode::API_RECORD_EXPECTED);
                             }
                         } else {
-                            return protocol_error(
-                                "Invalid api command - create cmd record `body` field required",
-                            );
+                            return close(StatusCode::API_OPERATION_FAILED);
                         }
                     }
                 }
@@ -321,17 +311,14 @@ impl ApiProtocol {
                     let url = TremorURL::from_offramp_id(&name)?;
                     let artefact = self.conductor.repo.find_offramp(&url).await?;
                     if let Some(_already_exists_error) = artefact {
-                        return protocol_error(&format!(
-                            "invalid api command - cannot create offramp `{}`, already exists error",
-                            &name
-                        ));
+                        return close(StatusCode::API_CONNECTOR_ALREADY_EXISTS);
                     } else {
                         if let Value::Object(fields) = cmd {
                             if let Some(body) = fields.get("body") {
                                 let value: Result<config::OffRamp> = structurize(body.clone());
 
                                 if let Err(_) = value {
-                                    return protocol_error("Invalid api command - invalid body (json) for `offramp` - valid config expected");
+                                    return close(StatusCode::API_BODY_RECORD_EXPECTED);
                                 }
 
                                 let result = self
@@ -345,12 +332,10 @@ impl ApiProtocol {
                                     }
                                 })));
                             } else {
-                                return protocol_error("Invalid api command - expected record");
+                                return close(StatusCode::API_BODY_RECORD_EXPECTED);
                             }
                         } else {
-                            return protocol_error(
-                                "Invalid api command - create cmd record `body` field required",
-                            );
+                            return close(StatusCode::API_BODY_FIELD_EXPECTED);
                         }
                     }
                 }
@@ -358,10 +343,7 @@ impl ApiProtocol {
                     let url = TremorURL::from_pipeline_id(&name)?;
                     let artefact = self.conductor.repo.find_pipeline(&url).await?;
                     if let Some(_already_exists_error) = artefact {
-                        return protocol_error(&format!(
-                            "invalid api command - cannot create pipeline `{}`, already exists error",
-                            &name
-                        ));
+                        return close(StatusCode::API_PROCESSING_ELEMENT_ALREADY_EXISTS);
                     } else {
                         if let Value::Object(fields) = cmd {
                             if let Some(body) = fields.get("body") {
@@ -369,7 +351,7 @@ impl ApiProtocol {
                                 let query = parse_trickle(body);
 
                                 if let Err(_) = query {
-                                    return protocol_error("Invalid api command - invalid body (string) for `pipeline` - valid trickle expected");
+                                    return close(StatusCode::API_STRING_EXPECTED);
                                 }
 
                                 self.conductor
@@ -383,12 +365,10 @@ impl ApiProtocol {
                                     }
                                 })));
                             } else {
-                                return protocol_error("Invalid api command - expected record");
+                                return close(StatusCode::API_RECORD_EXPECTED);
                             }
                         } else {
-                            return protocol_error(
-                                "Invalid api command - create cmd record `body` field required",
-                            );
+                            return close(StatusCode::API_BODY_STRING_FIELD_EXPECTED);
                         }
                     }
                 }
@@ -396,17 +376,14 @@ impl ApiProtocol {
                     let url = TremorURL::from_binding_id(&name)?;
                     let artefact = self.conductor.repo.find_binding(&url).await?;
                     if let Some(_already_exists_error) = artefact {
-                        return protocol_error(&format!(
-                            "invalid api command - cannot create pipeline `{}`, already exists error",
-                            &name
-                        ));
+                        return close(StatusCode::API_BINDING_ALREADY_EXISTS);
                     } else {
                         if let Value::Object(fields) = cmd {
                             if let Some(body) = fields.get("body") {
                                 let value: Result<config::BindingMap> = structurize(body.clone());
 
                                 if let Err(_) = value {
-                                    return protocol_error("Invalid api command - invalid body (json) for `binding` - valid config expected");
+                                    return close(StatusCode::API_BODY_RECORD_EXPECTED);
                                 }
 
                                 let result = self
@@ -431,23 +408,19 @@ impl ApiProtocol {
                                     }
                                 })));
                             } else {
-                                return protocol_error("Invalid api command - expected record");
+                                return close(StatusCode::API_BODY_RECORD_EXPECTED);
                             }
                         } else {
-                            return protocol_error(
-                                "Invalid api command - create cmd record `body` field required",
-                            );
+                            return close(StatusCode::API_BODY_RECORD_EXPECTED);
                         }
                     }
                 }
                 _other => {
-                    return protocol_error(
-                        "Invalid api command - unsupported artefact type for create",
-                    );
+                    return close(StatusCode::API_OPERATION_INVALID);
                 }
             };
         } else {
-            return protocol_error("Invalid api command - expected `name` field for `create`");
+            return close(StatusCode::API_NAME_FIELD_EXPECTED);
         }
     }
 
@@ -471,9 +444,7 @@ impl ApiProtocol {
                 }
             }
             _unsupported_artefact_kind => {
-                return protocol_error(
-                    "Invalid api command - unsupported artefact type for instance",
-                );
+                return close(StatusCode::API_ARTEFACT_KIND_UNKNOWN);
             }
         }
     }
@@ -510,13 +481,11 @@ impl ApiProtocol {
                         );
                     }
                 } else {
-                    return protocol_error("Invalid api command - expected record");
+                    return close(StatusCode::API_RECORD_EXPECTED);
                 }
             }
             _unsupported_artefact_kind => {
-                return protocol_error(
-                    "Invalid api command - unsupported artefact type for activate",
-                );
+                return close(StatusCode::API_ARTEFACT_KIND_UNKNOWN);
             }
         }
     }
@@ -541,9 +510,7 @@ impl ApiProtocol {
                 }
             }
             _unsupported_artefact_kind => {
-                return protocol_error(
-                    "Invalid api command - unsupported artefact type for deactivate",
-                );
+                return close(StatusCode::API_ARTEFACT_KIND_UNKNOWN);
             }
         }
     }
@@ -598,7 +565,7 @@ impl ApiProtocol {
                     }
                 }
                 _other => {
-                    return protocol_error("Invalid api command - expected record");
+                    return close(StatusCode::API_OPERATION_INVALID);
                 }
             };
         }
@@ -848,7 +815,7 @@ mod test {
         let actual = sut
             .on_event(0, &event!({"api": { "op": "fetch", "kind": "offramp"}}))
             .await?;
-        assert_cont!(actual, {"tremor": { "close": "Invalid api command - cannot fetch without `name` field"}});
+        assert_cont!(actual, {"tremor": { "close": "1.200: Network API Protocol operation not supported"}});
 
         // If an artefact isn't found ...
         for op in vec!["fetch", "remove"] {
@@ -870,7 +837,7 @@ mod test {
                     &event!({"api": { "op": "create", "kind": "pipeline", "name": "snot", "body": "bogus"}}),
                 )
                 .await?;
-        assert_cont!(actual, {"tremor": { "close": "Invalid api command - invalid body (string) for `pipeline` - valid trickle expected"}});
+        assert_cont!(actual, {"tremor": { "close": "1.207: Network API Protocol -  string expected"}});
 
         // Create onramp - bad json
         let actual = sut
@@ -879,7 +846,7 @@ mod test {
                     &event!({"api": { "op": "create", "kind": "onramp", "name": "snot", "body": "bogus"}}),
                 )
                 .await?;
-        assert_cont!(actual, {"tremor": { "close": "Invalid api command - invalid body (json) for `onramp` - valid config expected"}});
+        assert_cont!(actual, {"tremor": { "close": "1.201: Network API Protocol -  record expected for body"}});
 
         // Create offramp - bad json
         let actual = sut
@@ -888,7 +855,7 @@ mod test {
                     &event!({"api": { "op": "create", "kind": "offramp", "name": "snot", "body": "bogus"}}),
                 )
                 .await?;
-        assert_cont!(actual, {"tremor": { "close": "Invalid api command - invalid body (json) for `offramp` - valid config expected"}});
+        assert_cont!(actual, {"tremor": { "close": "1.201: Network API Protocol -  record expected for body"}});
 
         // Create binding - bad json
         let actual = sut
@@ -897,7 +864,7 @@ mod test {
                     &event!({"api": { "op": "create", "kind": "binding", "name": "snot", "body": "bogus"}}),
                 )
                 .await?;
-        assert_cont!(actual, {"tremor": { "close": "Invalid api command - invalid body (json) for `binding` - valid config expected"}});
+        assert_cont!(actual, {"tremor": { "close": "1.201: Network API Protocol -  record expected for body"}});
 
         // TODO activate deactivate only for bindings
 
