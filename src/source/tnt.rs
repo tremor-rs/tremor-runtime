@@ -174,13 +174,7 @@ async fn handle_connection(
                             ws_write.send(msg).await?;                            
                         }
                         if should_close {
-                            dbg!("closing stream");
-
                             break;
-                            // ws_stream.close(None).await;
-//                            ws_write.close().await.expect("close out");
-//                            ws_write.close(Some(CloseFrame { code: CloseCode::Normal, reason: "blork".into()})).await?; // FIXME configurable
-//                            return Ok(())
                         }
                     }
                 }
@@ -310,7 +304,6 @@ impl Source for TntImpl {
         // FIXME reconsider event id mapping for network protocol
         //
         let eid = event.id.stream_id();
-        dbg!(eid);
         if let Some(tx) = self.get_stream_sender_for_id(eid) {
             dbg!(&tx);
             dbg!(&event);
@@ -347,7 +340,10 @@ impl Source for TntImpl {
     }
 
     async fn init(&mut self) -> Result<SourceState> {
+        let listen_host = &self.config.host;
         let listen_port = self.config.port;
+        eprintln!("Network listening at: ws://{}:{}", listen_host, listen_port);
+        info!("Network listening at: ws://{}:{}", listen_host, listen_port);
         let listener = TcpListener::bind((self.config.host.as_str(), listen_port)).await?;
         let (tx, rx) = bounded(crate::QSIZE);
         let uid = self.uid;

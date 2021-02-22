@@ -18,7 +18,9 @@
 
 use crate::{errors::Result, system::Conductor};
 
-use super::{api::ApiProtocol, echo::EchoProtocol, pubsub::PubSubProtocol, NetworkCont};
+use super::{
+    api::ApiProtocol, echo::EchoProtocol, nana::StatusCode, pubsub::PubSubProtocol, NetworkCont,
+};
 use crate::network::prelude::*;
 use halfbrown::HashMap as HalfMap;
 use std::collections::HashMap;
@@ -79,6 +81,10 @@ impl ControlProtocol {
 
         instance
     }
+
+    pub(crate) fn num_active_protocols(&self) -> usize {
+        self.mux.len()
+    }
 }
 
 #[async_trait::async_trait]
@@ -107,7 +113,7 @@ impl NetworkProtocol for ControlProtocol {
                         };
 
                         if "control" == protocol || self.active_protocols.contains_key(&alias) {
-                            return protocol_error("control already connected");
+                            return close(StatusCode::PROTOCOL_ALREADY_REGISTERED);
                         }
 
                         // If we get here we have a new protocol alias to register
@@ -129,7 +135,7 @@ impl NetworkProtocol for ControlProtocol {
                                 self.mux.insert(alias.to_string(), proto);
                             }
                             _unknown_protocol => {
-                                return protocol_error("protocol not found error");
+                                return close(StatusCode::PROTOCOL_NOT_FOUND);
                             }
                         }
 
@@ -139,10 +145,10 @@ impl NetworkProtocol for ControlProtocol {
                             ControlState::Active,
                         ));
                     } else {
-                        return protocol_error("protocol not specified error");
+                        return close(StatusCode::PROTOCOL_NOT_SPECIFIED);
                     }
                 } else if let Some(Value::Object(disconnect)) = control.get("disconnect") {
-                    let alias = disconnect.get("protocol");
+                    let alias = disconnect.get("alias");
                     match alias {
                         Some(Value::String(alias)) => {
                             let alias = alias.to_string();
@@ -151,17 +157,26 @@ impl NetworkProtocol for ControlProtocol {
                             return Ok(NetworkCont::DisconnectProtocol(alias.to_string()));
                         }
                         _otherwise => {
-                            return protocol_error("protocol not found error");
+                            return close(StatusCode::PROTOCOL_SESSION_NOT_FOUND);
                         }
                     }
                 } else {
-                    return protocol_error("unsupported control operation");
+                    return close(StatusCode::PROTOCOL_OPERATION_INVALID);
+                }
+            } else if let Some(Value::String(maybe_close)) = value.get(CONTROL_ALIAS) {
+                let maybe_close = maybe_close.to_string();
+                if "close" == &maybe_close {
+                    return Ok(NetworkCont::Close(
+                        event!({"tremor": { "close-ack": "ok".to_string() } }),
+                    ));
+                } else {
+                    return close(StatusCode::PROTOCOL_RECORD_EXPECTED);
                 }
             }
 
             // Each well-formed message record MUST have only 1 field
             if value.len() != 1 {
-                return protocol_error("expected one record field");
+                return close(StatusCode::PROTOCOL_RECORD_ONE_FIELD_EXPECTED);
             } else {
                 match value.keys().next() {
                     Some(key) => match self.mux.get_mut(&key.to_string()) {
@@ -170,20 +185,17 @@ impl NetworkProtocol for ControlProtocol {
                             return Ok(resp);
                         }
                         None => {
-                            return protocol_error(&format!(
-                                "protocol session not found for {}",
-                                &key.to_string()
-                            ));
+                            return close(StatusCode::PROTOCOL_SESSION_NOT_FOUND);
                         }
                     },
                     None => {
-                        return protocol_error("expected one record field");
+                        return close(StatusCode::PROTOCOL_RECORD_ONE_FIELD_EXPECTED);
                     }
                 }
             }
-        } else {
-            return protocol_error("control record expected");
         }
+
+        return close(StatusCode::PROTOCOL_RECORD_EXPECTED);
     }
 }
 
@@ -218,7 +230,7 @@ mod test {
             actual,
             NetworkCont::Close(event!({
                 "tremor": {
-                    "close": "protocol not specified error"
+                    "close": "0.201: Protocol not specified error"
                 }
             }))
         );
@@ -239,7 +251,7 @@ mod test {
             actual,
             NetworkCont::Close(event!({
                 "tremor": {
-                    "close": "protocol not found error"
+                    "close": "0.200: Protocol not found error"
                 }
             }))
         );
@@ -270,7 +282,7 @@ mod test {
             actual,
             NetworkCont::Close(event!({
                 "tremor": {
-                    "close": "protocol not specified error",
+                    "close": "0.201: Protocol not specified error",
                 }
             }))
         );
@@ -292,7 +304,7 @@ mod test {
             actual,
             NetworkCont::Close(event!({
                 "tremor": {
-                    "close": "protocol not found error"
+                    "close": "0.200: Protocol not found error"
                 }
             }))
         );
@@ -320,7 +332,7 @@ mod test {
             actual,
             NetworkCont::Close(event!({
                 "tremor": {
-                    "close": "unsupported control operation",
+                    "close": "0.202: Protocol operation not supported",
                 }
             }))
         );
@@ -388,14 +400,14 @@ mod test {
                 &event!({
                     "tremor": {
                     "disconnect": {
-                        "protocol": "echo"
+                        "alias": "echo"
                     }
                 }}),
             )
             .await?;
         assert_eq!(1, session.fsm.control.active_protocols.len());
         assert_eq!(1, session.fsm.control.mux.len());
-        assert_eq!(ControlState::Connecting, session.fsm.state);
+        assert_eq!(ControlState::Active, session.fsm.state);
 
         session.fsm.transition(ControlState::Active)?;
         session.fsm.transition(ControlState::Disconnecting)?;
@@ -467,7 +479,7 @@ mod test {
             .await?;
         assert_eq!(
             NetworkCont::Close(
-                event!({"tremor": {"close": "protocol session not found for badger"}})
+                event!({"tremor": {"close": "0.207: Protocol session not connected error"}})
             ),
             actual,
         );
@@ -476,19 +488,25 @@ mod test {
             .on_event(&sender, &event!({"fleek": 1, "flook": 2}))
             .await?;
         assert_eq!(
-            NetworkCont::Close(event!({"tremor": {"close": "expected one record field"}})),
+            NetworkCont::Close(
+                event!({"tremor": {"close": "0.205: Protocol operation - record requires one field only"}})
+            ),
             actual,
         );
 
         let actual = session.on_event(&sender, &event!({})).await?;
         assert_eq!(
-            NetworkCont::Close(event!({"tremor": {"close": "expected one record field"}})),
+            NetworkCont::Close(
+                event!({"tremor": {"close": "0.205: Protocol operation - record requires one field only"}})
+            ),
             actual,
         );
 
         let actual = session.on_event(&sender, &event!("snot")).await?;
         assert_eq!(
-            NetworkCont::Close(event!({"tremor": {"close": "control record expected"}})),
+            NetworkCont::Close(
+                event!({"tremor": {"close": "0.203: Protocol operation expected a record"}})
+            ),
             actual,
         );
 
@@ -504,7 +522,9 @@ mod test {
             )
             .await?;
         assert_eq!(
-            NetworkCont::Close(event!({"tremor": {"close": "control already connected"}})),
+            NetworkCont::Close(
+                event!({"tremor": {"close": "0.206: Protocol already registered error"}})
+            ),
             actual,
         );
 
@@ -521,7 +541,9 @@ mod test {
             )
             .await?;
         assert_eq!(
-            NetworkCont::Close(event!({"tremor": {"close": "control already connected"}})),
+            NetworkCont::Close(
+                event!({"tremor": {"close": "0.206: Protocol already registered error"}})
+            ),
             actual,
         );
 
@@ -538,11 +560,24 @@ mod test {
             )
             .await?;
         assert_eq!(
-            NetworkCont::Close(event!({"tremor": {"close": "protocol not found error"}})),
+            NetworkCont::Close(event!({"tremor": {"close": "0.200: Protocol not found error"}})),
             actual,
         );
 
         session.fsm.transition(ControlState::Active)?;
+        session
+            .on_event(
+                &sender,
+                &event!({ "tremor": { "disconnect": { "alias": "snot"}}}),
+            )
+            .await?;
+        session.fsm.transition(ControlState::Active)?;
+        session
+            .on_event(
+                &sender,
+                &event!({ "tremor": { "disconnect": { "alias": "echo"}}}),
+            )
+            .await?;
         session.fsm.transition(ControlState::Disconnecting)?;
         assert_eq!(ControlState::Disconnecting, session.fsm.state);
         session.fsm.transition(ControlState::Zombie)?;

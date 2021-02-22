@@ -19,7 +19,7 @@ use crate::pipeline;
 use crate::registry::ServantId;
 use crate::sink::{
     self, blackhole, debug, elastic, exit, file, handle_response, kafka, newrelic, postgres, rest,
-    stderr, stdout, tcp, tnt, udp, ws,
+    stderr, stdout, tcp, udp, ws,
 };
 use crate::source::Processors;
 use crate::url::ports::{IN, METRICS};
@@ -128,7 +128,8 @@ pub fn lookup(name: &str, config: &Option<OpConfig>) -> Result<Box<dyn Offramp>>
         "tcp" => tcp::Tcp::from_config(config),
         "udp" => udp::Udp::from_config(config),
         "ws" => ws::Ws::from_config(config),
-        "tnt" => tnt::Tnt::from_config(config),
+        // TODO consider network protocol as an offramp
+        // "tnt" => tnt::Tnt::from_config(config),
         _ => Err(format!("Offramp {} not known", name).into()),
     }
 }
