@@ -1349,10 +1349,21 @@ impl<'input> Lexer<'input> {
         self.input.get(start..).and_then(|f| f.split('\n').next())
     }
 
-    // return a sluce from start to the end of the input
+    // return a slice from start to the end of the input
     fn slice_until_eof(&self, start: &Location) -> Option<&'input str> {
         let start = start.absolute() - self.start_index.to_usize();
         self.input.get(start..)
+    }
+
+    // return a String without any seperators
+    fn extract_number<F>(&mut self, start: Location, mut is_valid: F) -> (Location, String)
+    where
+        F: FnMut(char) -> bool,
+    {
+        let seperator = '_';
+        let (end, number) = self.take_while(start, |c| is_valid(c) || c == seperator);
+        // Remove seperators from number
+        (end, number.replace(seperator, ""))
     }
 
     fn take_while<F>(&mut self, start: Location, mut keep_going: F) -> (Location, &'input str)
@@ -2334,11 +2345,11 @@ impl<'input> Lexer<'input> {
     /// handle numbers (with or without leading '-')
     #[allow(clippy::too_many_lines)]
     fn nm(&mut self, start: Location) -> Result<TokenSpan<'input>> {
-        let (end, int) = self.take_while(start, is_dec_digit);
+        let (end, int) = self.extract_number(start, is_dec_digit);
         let (start, end, token) = match self.lookahead() {
             Some((_, '.')) => {
                 self.bump(); // Skip '.'
-                let (end, float) = self.take_while(start, is_dec_digit);
+                let (end, float) = self.extract_number(start, is_dec_digit);
                 match self.lookahead() {
                     Some((_, 'e')) => {
                         self.bump();
@@ -2352,7 +2363,7 @@ impl<'input> Lexer<'input> {
                                 _ => Some((exp_location, "")),
                             }
                             .unwrap_or((exp_location, ""));
-                            let (end, exp) = self.take_while(exp_location, is_dec_digit);
+                            let (end, exp) = self.extract_number(exp_location, is_dec_digit);
                             let float = &format!("{}e{}{}", float, sign, exp);
                             (
                                 start,
@@ -2423,8 +2434,9 @@ impl<'input> Lexer<'input> {
             Some((_, 'x')) => {
                 self.bump(); // Skip 'x'
                 let int_start = self.next_index()?;
-                let (end, hex) = self.take_while(int_start, is_hex);
-                match int {
+                let (end, hex) = self.extract_number(int_start, is_hex);
+                // ALLOW: this takes the whole string and can not panic
+                match &int[..] {
                     "0" | "-0" => match self.lookahead() {
                         Some((_, ch)) if is_ident_start(ch) => {
                             return Err(ErrorKind::UnexpectedCharacter(
@@ -2453,7 +2465,8 @@ impl<'input> Lexer<'input> {
                                 .into());
                             }
                             let is_positive = int == "0";
-                            match i64_from_hex(hex, is_positive) {
+                            // ALLOW: this takes the whole string and can not panic
+                            match i64_from_hex(&hex[..], is_positive) {
                                 Ok(val) => (start, end, Token::IntLiteral(val)),
                                 Err(_err) => {
                                     return Err(ErrorKind::InvalidHexLiteral(
@@ -2503,7 +2516,6 @@ impl<'input> Lexer<'input> {
                 if let Ok(val) = int.parse() {
                     (start, end, Token::IntLiteral(val))
                 } else {
-                    // return self.error(start, NonParseableInt);
                     return Err(ErrorKind::InvalidIntLiteral(
                         Range::from((start, end)).expand_lines(2),
                         Range::from((start, end)),
@@ -2658,7 +2670,7 @@ mod tests {
     }
 
     #[test]
-    fn interpolat() -> Result<()> {
+    fn interpolate() -> Result<()> {
         lex_ok! {
             r#"  "" "#,
             r#"  ~ "# => Token::DQuote,
@@ -2707,6 +2719,20 @@ mod tests {
         };
         Ok(())
     }
+
+    #[test]
+    fn number_parsing() -> Result<()> {
+        lex_ok! { "1_000_000", " ~~~~~~~~~ " => Token::IntLiteral(1000000), };
+        lex_ok! { "1_000_000_", " ~~~~~~~~~~ " => Token::IntLiteral(1000000), };
+
+        lex_ok! { "100.0000", " ~~~~~~~ " => Token::FloatLiteral(100.0000, "100.0000".to_string()), };
+        lex_ok! { "1_00.0_000_", " ~~~~~~~~~~ " => Token::FloatLiteral(100.0000, "100.0000".to_string()), };
+
+        lex_ok! { "0xFFAA00", " ~~~~~~~~ " => Token::IntLiteral(16755200), };
+        lex_ok! { "0xFF_AA_00", " ~~~~~~~~~~ " => Token::IntLiteral(16755200), };
+        Ok(())
+    }
+
     #[test]
     fn paths() -> Result<()> {
         lex_ok! {
