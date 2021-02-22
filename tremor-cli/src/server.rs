@@ -52,6 +52,10 @@ fn api_server(world: &World) -> Result<tide::Server<api::State>> {
         .get(|r| handle_api_request(r, api::status::get));
     app.at("/cluster/:nid")
         .post(|r| handle_api_request(r, api::cluster::add_node));
+    app.at("/kv/:id")
+        .get(|r| handle_api_request(r, api::kv::get))
+        .post(|r| handle_api_request(r, api::kv::post));
+    //.delete(|r| handle_api_request(r, api::kv::delete));
     app.at("/binding")
         .get(|r| handle_api_request(r, api::binding::list_artefact))
         .post(|r| handle_api_request(r, api::binding::publish_artefact));

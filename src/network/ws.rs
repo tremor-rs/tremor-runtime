@@ -16,7 +16,7 @@ mod client;
 mod server;
 
 use crate::network::{Error as NetworkError, Network as NetworkTrait};
-use crate::raft_node::{NodeId, ProposalId, RaftNetworkMsg};
+use crate::raft_node::{EventId, NodeId, ProposalId, RaftNetworkMsg};
 use async_channel::{unbounded, Receiver, Sender};
 use async_std::task;
 use async_trait::async_trait;
@@ -58,7 +58,19 @@ pub enum UrMsg {
     /// blah
     AckProposal(ProposalId, bool),
     /// blah
+    ForwardProposal(NodeId, ProposalId, EventId, Vec<u8>),
+    /// blah
     AddNode(NodeId, Sender<bool>),
+
+    // KV related
+    /// blah
+    KVGet(Vec<u8>, Sender<WsMessage>),
+    /// blah
+    KVPut(Vec<u8>, Vec<u8>, Sender<WsMessage>),
+    /*
+    /// blah
+    KvDelete(Vec<u8>, Reply),
+    */
 }
 
 // TODO this will be using the websocket driver for the tremor network protocol
@@ -89,7 +101,8 @@ pub enum CtrlMsg {
     HelloAck(NodeId, String, Vec<(NodeId, String)>),
     /// Ack proposal mesage
     AckProposal(ProposalId, bool),
-    //ForwardProposal(NodeId, ProposalId, ServiceId, EventId, Vec<u8>),
+    /// Forward proposal mesage
+    ForwardProposal(NodeId, ProposalId, EventId, Vec<u8>),
 }
 
 #[derive(Serialize, Deserialize, Debug, Hash, PartialEq, Eq, Ord, PartialOrd, Clone, Copy)]
@@ -142,8 +155,10 @@ pub struct Network {
     rx: Receiver<UrMsg>,
     /// blah
     pub tx: Sender<UrMsg>,
-    //next_eid: u64,
-    //pending: HashMap<EventId, Reply>,
+    /// blah
+    next_eid: u64,
+    /// blah
+    pending: HashMap<EventId, Sender<WsMessage>>,
     //prot_pending: HashMap<EventId, (RequestId, protocol_driver::HandlerOutboundChannelSender)>,
 }
 
@@ -186,10 +201,17 @@ impl Network {
             known_peers: HashMap::new(),
             local_mailboxes: HashMap::new(),
             remote_mailboxes: HashMap::new(),
-            //next_eid: 1,
-            //pending: HashMap::new(),
+            next_eid: 1,
+            pending: HashMap::new(),
             //prot_pending: HashMap::new(),
         }
+    }
+
+    fn register_reply(&mut self, reply: Sender<WsMessage>) -> EventId {
+        let eid = EventId(self.next_eid);
+        self.next_eid += 1;
+        self.pending.insert(eid, reply);
+        eid
     }
 }
 
@@ -277,15 +299,21 @@ impl NetworkTrait for Network {
             UrMsg::Status(rid, reply) => Some(RaftNetworkMsg::Status(rid, reply)),
             UrMsg::RaftMsg(msg) => Some(RaftNetworkMsg::RaftMsg(msg)),
             UrMsg::AckProposal(pid, success) => Some(RaftNetworkMsg::AckProposal(pid, success)),
+            UrMsg::ForwardProposal(from, pid, eid, data) => {
+                Some(RaftNetworkMsg::ForwardProposal(from, pid, eid, data))
+            }
             UrMsg::AddNode(id, reply) => Some(RaftNetworkMsg::AddNode(id, reply)),
-            //_ => {
-            //    // temp logging
-            //    error!(
-            //        "Handling not implemented for uring message type: {:?}",
-            //        &msg
-            //    );
-            //    unimplemented!()
-            //}
+            UrMsg::KVGet(key, reply) => {
+                //let eid = self.register_reply(reply);
+                Some(RaftNetworkMsg::KVGet(key, reply))
+            }
+            UrMsg::KVPut(key, value, reply) => {
+                let eid = self.register_reply(reply);
+                Some(RaftNetworkMsg::Event(
+                    eid,
+                    serde_json::to_vec(&(key, value)).unwrap(),
+                ))
+            }
         }
     }
 
@@ -338,5 +366,60 @@ impl NetworkTrait for Network {
         k1.sort();
         k1.dedup();
         k1
+    }
+
+    async fn forward_proposal(
+        &mut self,
+        from: NodeId,
+        to: NodeId,
+        pid: ProposalId,
+        eid: EventId,
+        data: Vec<u8>,
+    ) -> Result<(), NetworkError> {
+        let msg = WsMessage::Ctrl(CtrlMsg::ForwardProposal(from, pid, eid, data));
+        if let Some(remote) = self.local_mailboxes.get_mut(&to) {
+            remote
+                .send(msg)
+                .await
+                .map_err(|e| NetworkError::Generic(format!("{}", e)))
+        } else if let Some(remote) = self.remote_mailboxes.get_mut(&to) {
+            remote
+                .send(msg)
+                .await
+                .map_err(|e| NetworkError::Generic(format!("{}", e)))
+        } else {
+            Err(NetworkError::NotConnected(to))
+        }
+    }
+
+    async fn event_reply(
+        &mut self,
+        id: EventId,
+        code: u16,
+        data: Vec<u8>,
+    ) -> Result<(), NetworkError> {
+        if let Some(sender) = self.pending.remove(&id) {
+            let data: serde_json::Value = serde_json::from_slice(&data).unwrap();
+            sender
+                .send(
+                    WsMessage::Reply {
+                        code,
+                        rid: RequestId(42),
+                        data,
+                    }
+                    .into(),
+                )
+                .await
+                .unwrap()
+        //} else if let Some((rid, mut sender)) = self.prot_pending.remove(&id) {
+        //    sender
+        //        .send(protocol_driver::HandlerOutboundMessage::ok(rid, data))
+        //        .await
+        //        .unwrap()
+        } else {
+            error!("Unknown event id {} for reply: {:?}", id, data)
+        };
+
+        Ok(())
     }
 }

@@ -75,9 +75,16 @@ pub enum RaftNetworkMsg {
 
     /// blah
     AckProposal(ProposalId, bool),
-    //ForwardProposal(NodeId, ProposalId, EventId, Vec<u8>),
+    /// blah
+    ForwardProposal(NodeId, ProposalId, EventId, Vec<u8>),
     /// blah
     AddNode(NodeId, async_channel::Sender<bool>),
+
+    /// blah
+    KVGet(Vec<u8>, async_channel::Sender<WsMessage>),
+    //KVPut(Vec<u8>, Vec<u8>, async_channel::Sender<WsMessage>),
+    /// blah
+    Event(EventId, Vec<u8>),
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
@@ -205,6 +212,9 @@ pub struct RaftNode {
     // FIXME swap out MemStorage
     /// FIXME
     pub raft_group: Option<RawNode<MemStorage>>,
+    // TODO this will be part of storage. here right now since
+    // MemStorage only contains raft logs
+    kv_storage: HashMap<String, String>,
     network: Network,
     proposals: VecDeque<Proposal>,
     pending_proposals: HashMap<ProposalId, Proposal>,
@@ -259,15 +269,54 @@ impl RaftNode {
                                 //self.network.event_reply(eid, Some(vec![skilled])).await.unwrap();
                             }
                         }
+                        RaftNetworkMsg::ForwardProposal(from, pid, eid, data) => {
+                            if let Err(e) = self.propose_event(from, pid, eid, data).await {
+                                error!("Proposal forward error: {}", e);
+                            }
+                        }
                         RaftNetworkMsg::AddNode(id, reply) => {
                             info!("Adding node id: {}", id);
                             reply.send(self.add_node(id).await).await.unwrap();
                         }
-                        //RaftNetworkMsg::ForwardProposal(from, pid, sid, eid, data) => {
-                        //    if let Err(e) = self.propose_event(from, pid, sid, eid, data).await {
-                        //        error!("Proposal forward error: {}", e);
-                        //    }
-                        //}
+                        RaftNetworkMsg::KVGet(key, reply) => {
+                            //info!("GET KV {:?}", key);
+                            //let raft = self.raft_group.as_ref().unwrap();
+                            //let storage = raft.store();
+                            //let scope: u16 = 0;
+                            // temp thing for memstorage
+                            let message = if let Some(s) = self.kv_storage
+                                .get(&String::from_utf8(key).unwrap())
+                            {
+                                WsMessage::Reply {
+                                    code: 200,
+                                    // dummy
+                                    rid: RequestId(42),
+                                    data: serde_json::to_value(&s).unwrap(),
+                                }
+                            } else {
+                                WsMessage::Reply {
+                                    code: 400,
+                                    // dummy
+                                    rid: RequestId(42),
+                                    data: serde_json::to_value("not found").unwrap(),
+                                }
+                            };
+                            reply
+                                .send(message)
+                                .await
+                                .unwrap();
+                        }
+                        //RaftNetworkMsg::KVPut(key, value, reply) => {
+                        RaftNetworkMsg::Event(eid, data) => {
+                            let pid = self.next_pid();
+                            let from = self.id;
+                            if let Err(e) = self.propose_event(from, pid, eid, data).await {
+                                error!("Post forward error: {}", e);
+                                self.network.event_reply(eid, 500u16, serde_json::to_vec(&format!("{}", e)).unwrap()).await.unwrap();
+                            } else {
+                                self.pending_acks.insert(pid, eid);
+                            }
+                        }
                     }
                 }
                 _tick = ticks.next().fuse() => {
@@ -319,45 +368,30 @@ impl RaftNode {
         Ok(())
     }
 
-    /*
+    /// blah
     pub async fn propose_event(
         &mut self,
         from: NodeId,
         pid: ProposalId,
-        sid: ServiceId,
         eid: EventId,
         data: Vec<u8>,
-    ) -> Result<()> {
-        self.pubsub
-            .send(pubsub::Msg::new(
-                "uring",
-                PSURing::ProposalReceived {
-                    from,
-                    pid,
-                    sid,
-                    eid,
-                    node: self.id,
-                },
-            ))
-            .await
-            .unwrap();
+    ) -> raft::Result<()> {
         if self.is_leader() {
             self.proposals
-                .push_back(Proposal::normal(pid, from, eid, sid, data));
+                .push_back(Proposal::normal(pid, from, eid, data));
             Ok(())
         } else {
             self.network
-                .forward_proposal(from, self.leader(), pid, sid, eid, data)
+                .forward_proposal(from, self.leader(), pid, eid, data)
                 .await
                 .map_err(|e| {
-                    Error::Io(IoError::new(
+                    raft::Error::Io(IoError::new(
                         IoErrorKind::ConnectionAborted,
                         format!("{}", e),
                     ))
                 })
         }
     }
-    */
 
     pub(crate) async fn add_node(&mut self, id: NodeId) -> bool {
         //dbg!("add_node fn called");
@@ -431,38 +465,29 @@ impl RaftNode {
                         .unwrap();
                     self.set_conf_state(cs).await;
                 } else {
-                    unimplemented!()
-                    /*
                     // For normal proposals, extract the key-value pair and then
-                    // insert them into the kv engine.
+                    // insert them into the kv engine (only supported service right now).
                     if let Ok(event) = serde_json::from_slice::<Event>(&entry.data) {
-                        if let Some(service) = self.services.get_mut(&event.sid) {
-                            // let _store = &self
-                            //     .raft_group
-                            //     .as_ref()
-                            //     .unwrap()
-                            //     .lock()
-                            //     .await
-                            //     .raft
-                            //     .raft_log
-                            //     .store;
-                            let (code, value) = service
-                                .execute(
-                                    self.raft_group.as_ref().unwrap(),
-                                    &mut self.pubsub,
-                                    event.data,
-                                )
+                        let (key, value): (Vec<u8>, Vec<u8>) =
+                            serde_json::from_slice(&event.data).unwrap();
+                        //dbg!(String::from_utf8(key.clone()).unwrap());
+                        //dbg!(String::from_utf8(value.clone()).unwrap());
+                        let result = self.kv_storage.insert(
+                            String::from_utf8(key).unwrap(),
+                            String::from_utf8(value).unwrap(),
+                        );
+                        if event.nid == Some(self.id) {
+                            let reply_data = if let Some(old) = result {
+                                serde_json::to_vec(&old).unwrap()
+                            } else {
+                                serde_json::to_vec(&serde_json::Value::Null).unwrap()
+                            };
+                            self.network
+                                .event_reply(event.eid, 201u16, reply_data)
                                 .await
                                 .unwrap();
-                            if event.nid == Some(self.id) {
-                                self.network
-                                    .event_reply(event.eid, code, value)
-                                    .await
-                                    .unwrap();
-                            }
                         }
                     }
-                    */
                 }
                 if self.raft_group.as_ref().unwrap().raft.state == StateRole::Leader {
                     // The leader should response to the clients, tell them if their proposals
@@ -633,6 +658,16 @@ impl RaftNode {
         self.tick_duration = d;
     }
 
+    /// blah
+    pub fn leader(&self) -> NodeId {
+        NodeId(
+            self.raft_group
+                .as_ref()
+                .map(|g| g.raft.leader_id)
+                .unwrap_or_default(),
+        )
+    }
+
     /// Create a raft leader
     pub async fn create_raft_leader(logger: &Logger, id: NodeId, network: Network) -> Self {
         let mut config = example_config();
@@ -674,6 +709,7 @@ impl RaftNode {
             tick_duration: Duration::from_millis(100),
             //services: HashMap::new(),
             last_state: StateRole::PreCandidate,
+            kv_storage: HashMap::new(),
         }
     }
 
@@ -701,6 +737,7 @@ impl RaftNode {
             tick_duration: Duration::from_millis(100),
             //services: HashMap::new(),
             last_state: StateRole::PreCandidate,
+            kv_storage: HashMap::new(),
         }
     }
 }

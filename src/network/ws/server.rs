@@ -70,11 +70,11 @@ impl Connection {
                     .tx
                     .try_send(UrMsg::AckProposal(pid, success))
                     .is_ok(),
-                //Ok(CtrlMsg::ForwardProposal(from, pid, sid, eid, value)) => self
-                //    .node
-                //    .tx
-                //    .try_send(UrMsg::ForwardProposal(from, pid, sid, eid, value))
-                //    .is_ok(),
+                Ok(CtrlMsg::ForwardProposal(from, pid, eid, value)) => self
+                    .node
+                    .tx
+                    .try_send(UrMsg::ForwardProposal(from, pid, eid, value))
+                    .is_ok(),
                 Ok(_) => true,
                 Err(e) => {
                     error!(

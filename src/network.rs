@@ -15,7 +15,7 @@
 /// Websocket-based network
 pub mod ws;
 
-use crate::raft_node::{NodeId, ProposalId, RaftNetworkMsg};
+use crate::raft_node::{EventId, NodeId, ProposalId, RaftNetworkMsg};
 use async_trait::async_trait;
 use raft::eraftpb::Message as RaftMessage;
 use std::{fmt, io};
@@ -36,6 +36,17 @@ pub trait Network: Send + Sync {
         pid: ProposalId,
         success: bool,
     ) -> Result<(), Error>;
+    /// blah
+    async fn forward_proposal(
+        &mut self,
+        from: NodeId,
+        to: NodeId,
+        pid: ProposalId,
+        eid: EventId,
+        data: Vec<u8>,
+    ) -> Result<(), Error>;
+    /// blah
+    async fn event_reply(&mut self, id: EventId, code: u16, reply: Vec<u8>) -> Result<(), Error>;
 }
 
 /// blah
@@ -43,8 +54,10 @@ pub trait Network: Send + Sync {
 pub enum Error {
     /// blah
     Io(io::Error),
-    //Generic(String),
-    //NotConnected(NodeId),
+    /// blah
+    Generic(String),
+    /// blah
+    NotConnected(NodeId),
 }
 impl std::error::Error for Error {}
 impl fmt::Display for Error {
