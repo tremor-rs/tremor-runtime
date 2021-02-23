@@ -20,6 +20,7 @@ use async_channel::Sender;
 use halfbrown::HashMap;
 
 pub(crate) mod blackhole;
+pub(crate) mod cb;
 pub(crate) mod debug;
 pub(crate) mod elastic;
 pub(crate) mod exit;
