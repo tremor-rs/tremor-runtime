@@ -33,7 +33,7 @@ where
 {
     let mut value: String = simd_json::to_string(&value)?;
     let value = unsafe { value.as_mut_vec() };
-    let value: Value = tremor_value::to_value(value)?.into_static();
+    let value: Value = tremor_value::parse_to_value(value)?.into_static();
     Ok(value)
 }
 

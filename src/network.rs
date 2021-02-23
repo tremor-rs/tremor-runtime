@@ -417,7 +417,7 @@ impl NetworkManager {
                     ..
                 }) => {
                     let ingest_ns = nanotime();
-                    match tremor_value::to_value(&mut data) {
+                    match tremor_value::parse_to_value(&mut data) {
                         Ok(x) => {
                             let x = x.into_static();
                             let event = Event {
