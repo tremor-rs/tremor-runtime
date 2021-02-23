@@ -408,7 +408,6 @@ impl Elastic {
     }
 
     async fn maybe_enque(&mut self, event: Event) -> Result<()> {
-        // TODO: write overflow messages to overflow port
         match self.queue.dequeue() {
             Err(SinkDequeueError::NotReady) if !self.queue.has_capacity() => {
                 let mut m = Object::with_capacity(1);
@@ -432,21 +431,19 @@ impl Elastic {
                     error!("[Sink::{}] Failed to send insight", &self.sink_url)
                 };
 
-                if self.is_linked {
-                    // send error message on overflow to ERR port
-                    let mut data = Object::with_capacity(2);
-                    let mut meta = Object::with_capacity(1);
-                    data.insert("success".into(), Value::from(false));
-                    data.insert("error".into(), Value::from(error_msg));
-                    data.insert("payload".into(), event.data.suffix().value().clone_static());
-                    meta.insert("error".into(), Value::from(error_msg));
+                // send error message on overflow to ERR port
+                let mut data = Object::with_capacity(2);
+                let mut meta = Object::with_capacity(1);
+                data.insert("success".into(), Value::from(false));
+                data.insert("error".into(), Value::from(error_msg));
+                data.insert("payload".into(), event.data.suffix().value().clone_static());
+                meta.insert("error".into(), Value::from(error_msg));
 
-                    if let Err(e) = self.response_sender.send(((data, meta).into(), ERR)).await {
-                        error!(
-                            "[Sink::{}] Failed to send error response on overflow: {}.",
-                            self.sink_url, e
-                        );
-                    }
+                if let Err(e) = self.response_sender.send(((data, meta).into(), ERR)).await {
+                    error!(
+                        "[Sink::{}] Failed to send error response on overflow: {}.",
+                        self.sink_url, e
+                    );
                 }
 
                 error!("[Sink::{}] {}", &self.sink_url, error_msg);
