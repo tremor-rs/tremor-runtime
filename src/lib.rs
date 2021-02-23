@@ -46,8 +46,6 @@ pub mod functions;
 pub(crate) mod lifecycle;
 /// Runtime metrics helper
 pub mod metrics;
-/// Network for clustering communication
-pub mod network;
 pub(crate) mod offramp;
 pub(crate) mod onramp;
 pub(crate) mod permge;
@@ -57,8 +55,6 @@ pub mod postprocessor;
 /// Offramp Postprocessors
 pub mod preprocessor;
 pub(crate) mod raft;
-/// Raft node primitives
-pub mod raft_node;
 pub(crate) mod ramp;
 /// Tremor registry
 pub mod registry;
@@ -68,6 +64,9 @@ pub(crate) mod sink;
 pub(crate) mod source;
 /// Tremor runtime system
 pub mod system;
+// FIXME subsume the functionality here in the proper tremor network
+/// Network for clustering communication
+pub mod temp_network;
 /// Tremor URI
 pub mod url;
 /// Utility functions

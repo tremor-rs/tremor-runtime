@@ -15,8 +15,7 @@
 use crate::api::prelude::*;
 use async_channel::bounded;
 use futures::StreamExt;
-use tremor_runtime::network::ws::UrMsg;
-use tremor_runtime::raft_node::NodeId;
+use tremor_runtime::temp_network::ws::{NodeId, UrMsg};
 
 pub async fn add_node(req: Request) -> Result<Response> {
     let uring = &req.state().world.uring;

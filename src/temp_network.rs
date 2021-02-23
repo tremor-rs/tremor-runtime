@@ -15,7 +15,7 @@
 /// Websocket-based network
 pub mod ws;
 
-use crate::raft_node::{EventId, NodeId, ProposalId, RaftNetworkMsg};
+use crate::raft::node::{EventId, NodeId, ProposalId, RaftNetworkMsg};
 use async_trait::async_trait;
 use raft::eraftpb::Message as RaftMessage;
 use std::{fmt, io};

@@ -14,7 +14,7 @@
 // use crate::{NodeId, KV};
 
 use super::*;
-use crate::raft_node::NodeId;
+use crate::raft::node::NodeId;
 use async_channel::{bounded, Receiver, Sender};
 use async_std::io::{Read, Write};
 use async_std::net::TcpListener;

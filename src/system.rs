@@ -15,12 +15,12 @@
 use crate::config::{BindingVec, Config, MappingMap, OffRampVec, OnRampVec};
 use crate::errors::{Error, ErrorKind, Result};
 use crate::lifecycle::{ActivationState, ActivatorLifecycleFsm};
-use crate::network::ws::{self, UrMsg};
-use crate::raft_node::{start_raft, NodeId};
+use crate::raft::node::{start_raft, NodeId};
 use crate::registry::{Registries, ServantId};
 use crate::repository::{
     Artefact, BindingArtefact, OfframpArtefact, OnrampArtefact, PipelineArtefact, Repositories,
 };
+use crate::temp_network::ws::{self, UrMsg};
 use crate::url::ports::METRICS;
 use crate::url::TremorURL;
 use async_channel::bounded;

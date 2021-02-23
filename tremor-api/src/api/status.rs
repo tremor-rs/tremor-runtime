@@ -15,7 +15,7 @@
 use crate::api::prelude::*;
 use async_channel::bounded;
 use futures::StreamExt;
-use tremor_runtime::network::ws::{RequestId, UrMsg, WsMessage};
+use tremor_runtime::temp_network::ws::{RequestId, UrMsg, WsMessage};
 
 pub async fn get(req: Request) -> Result<Response> {
     let uring = &req.state().world.uring;

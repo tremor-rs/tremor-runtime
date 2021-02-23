@@ -13,8 +13,8 @@
 // limitations under the License.
 
 use crate::errors::Result;
-use crate::network::ws::{Network, RequestId, WsMessage};
-use crate::network::Network as NetworkTrait;
+use crate::temp_network::ws::{Network, RequestId, WsMessage};
+use crate::temp_network::Network as NetworkTrait;
 use async_std::task::{self, JoinHandle};
 use futures::{select, FutureExt, StreamExt};
 use halfbrown::HashMap;

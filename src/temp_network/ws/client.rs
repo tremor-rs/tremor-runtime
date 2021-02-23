@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use super::*;
-use crate::raft_node::NodeId;
+use crate::raft::node::NodeId;
 use async_std::net::TcpStream;
 use async_tungstenite::async_std::connect_async;
 //use futures::channel::mpsc::{channel, Receiver};

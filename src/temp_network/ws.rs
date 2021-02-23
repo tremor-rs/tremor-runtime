@@ -15,8 +15,9 @@
 mod client;
 mod server;
 
-use crate::network::{Error as NetworkError, Network as NetworkTrait};
-use crate::raft_node::{EventId, NodeId, ProposalId, RaftNetworkMsg};
+pub use crate::raft::node::NodeId;
+use crate::raft::node::{EventId, ProposalId, RaftNetworkMsg};
+use crate::temp_network::{Error as NetworkError, Network as NetworkTrait};
 use async_channel::{unbounded, Receiver, Sender};
 use async_std::task;
 use async_trait::async_trait;
