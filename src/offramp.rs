@@ -19,8 +19,8 @@ use crate::permge::PriorityMerge;
 use crate::pipeline;
 use crate::registry::ServantId;
 use crate::sink::{
-    self, blackhole, debug, elastic, exit, file, handle_response, kafka, newrelic, postgres, rest,
-    stderr, stdout, tcp, udp, ws,
+    self, blackhole, cb, debug, elastic, exit, file, handle_response, kafka, newrelic, postgres,
+    rest, stderr, stdout, tcp, udp, ws,
 };
 use crate::source::Processors;
 use crate::url::ports::{IN, METRICS};
@@ -110,6 +110,7 @@ pub fn lookup(name: &str, config: &Option<OpConfig>) -> Result<Box<dyn Offramp>>
         "debug" => debug::Debug::from_config(config),
         "elastic" => elastic::Elastic::from_config(config),
         "exit" => exit::Exit::from_config(config),
+        "cb" => cb::CB::from_config(config),
         "file" => file::File::from_config(config),
         "kafka" => kafka::Kafka::from_config(config),
         "newrelic" => newrelic::NewRelic::from_config(config),

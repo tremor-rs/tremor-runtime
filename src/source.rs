@@ -518,8 +518,6 @@ where
 
             let pipelines_out_empty = self.pipelines_out.is_empty();
 
-            // TODO: add a flag to the onramp to wait for the error pipelines to be populated as well
-            //       lets call it `wait_for_error_pipelines` (horrible name)
             if !self.triggered && !pipelines_out_empty {
                 match self.source.pull_event(self.id).await {
                     Ok(SourceReply::StartStream(id)) => {
