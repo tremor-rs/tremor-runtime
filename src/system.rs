@@ -751,12 +751,10 @@ impl World {
             slog::Logger::root(drain, o!())
         };
         // FIXME allow for non-numeric
-        let numeric_instance_id = instance!().parse::<u64>()?;
+        //let numeric_instance_id = instance!().parse::<u64>()?;
+        let numeric_instance_id = instance!().parse::<u64>().unwrap_or(42);
         let node_id = NodeId(numeric_instance_id);
         let temp_network = ws::Network::new(&logger, node_id, cluster_endpoint, cluster_peers);
-
-        let repo = Repositories::new();
-        let reg = Registries::new();
 
         let mut world = Self {
             uring: temp_network.tx.clone(),
