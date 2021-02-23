@@ -13,6 +13,7 @@
 * Add discord badge to README.md.
 * Handle signals and terminate properly on Ctrl+C in docker [#806](https://github.com/tremor-rs/tremor-runtime/pull/806)
 * Update to rust 1.50.0
+* Emit error events to the `err` port on exceeding concurrent requests limit for `rest` and `elastic` offramps.
 
 ### Fixes
 

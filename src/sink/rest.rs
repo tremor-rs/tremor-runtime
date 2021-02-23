@@ -264,7 +264,7 @@ enum CodecTaskInMsg {
         response: Response,
         duration: u64,
     },
-    ReportFailure(EventId, OpMeta, EventOriginUri, Error),
+    ReportFailure(EventId, OpMeta, EventOriginUri, Error, u16),
 }
 
 enum SendTaskInMsg {
@@ -317,24 +317,22 @@ impl Sink for Rest {
         if self.is_linked && event.is_batch {
             return Err("Batched events are not supported for linked rest offramps".into());
         }
+        let sink_uid = self.uid;
+        let id = event.id.clone();
+        let op_meta = event.op_meta.clone();
+
+        let codec_task_channel = match &self.codec_task_tx {
+            Some(codec_task_channel) => codec_task_channel.clone(),
+            None => return Err("Offramp in invalid state: No codec task channel available.".into()),
+        };
         // limit concurrency
         if let Ok(current_inflights) = self.num_inflight_requests.inc() {
-            let codec_task_channel = match &self.codec_task_tx {
-                Some(codec_task_channel) => codec_task_channel.clone(),
-                None => {
-                    return Err("Offramp in invalid state: No codec task channel available.".into())
-                }
-            };
             let (tx, rx) = bounded::<SendTaskInMsg>(1);
             let max_counter = self.num_inflight_requests.clone();
-            let sink_uid = self.uid;
             let http_client = self.client.clone(); // should be quite cheap, just some Arcs
 
             // spawn send task
             task::spawn(async move {
-                let id = event.id.clone();
-                let op_meta = event.op_meta.clone();
-
                 let start = Instant::now();
                 // send command to codec task
                 codec_task_channel
@@ -377,6 +375,7 @@ impl Sink for Rest {
                                         op_meta,
                                         event_origin_uri,
                                         e.into(),
+                                        503,
                                     ))
                                     .await?;
                             }
@@ -392,7 +391,21 @@ impl Sink for Rest {
             Ok(None)
         } else {
             error!("Dropped data due to overload");
-            Err("Dropped data due to overload".into())
+            codec_task_channel
+                .send(CodecTaskInMsg::ReportFailure(
+                    id,
+                    op_meta,
+                    EventOriginUri {
+                        uid: sink_uid,
+                        scheme: "tremor-rest".to_string(),
+                        host: hostname(),
+                        ..EventOriginUri::default()
+                    },
+                    Error::from(String::from("Dropped data due to overload")),
+                    429,
+                ))
+                .await?;
+            Ok(None)
         }
     }
 
@@ -422,7 +435,7 @@ impl Sink for Rest {
         let default_method = self.config.method.0;
         let endpoint = self.config.endpoint.clone();
         let config_headers = self.config.headers.clone();
-        let sink_url = sink_url.clone();
+        let cloned_sink_url = sink_url.clone();
 
         // inbound channel towards codec task
         // sending events to be turned into requests
@@ -434,7 +447,7 @@ impl Sink for Rest {
         self.codec_task_handle = Some(task::spawn(async move {
             codec_task(
                 sink_uid,
-                sink_url,
+                cloned_sink_url,
                 postprocessors,
                 preprocessors,
                 my_codec,
@@ -642,7 +655,7 @@ async fn codec_task(
                     error!("[Sink::{}] Error sending CB event {}", &sink_url, e);
                 };
             }
-            CodecTaskInMsg::ReportFailure(id, op_meta, event_origin_uri, e) => {
+            CodecTaskInMsg::ReportFailure(id, op_meta, event_origin_uri, e, status) => {
                 // report send error as CB fail and response via ERROR port
                 // sending a CB close would mean we need to take measures to reopen - introduce a healthcheck
                 let mut insight = Event::cb_fail(nanotime(), id.clone());
@@ -657,7 +670,7 @@ async fn codec_task(
                     // TODO: stream handling
                     response_ids.next_id(),
                     &id,
-                    503,
+                    status,
                     event_origin_uri,
                     &e,
                 );
