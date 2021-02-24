@@ -29,8 +29,6 @@ extern crate serde_derive;
 extern crate log;
 #[macro_use]
 extern crate lazy_static;
-//#[macro_use]
-//extern crate rental;
 
 #[macro_use]
 pub(crate) mod macros;
