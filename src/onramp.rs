@@ -255,7 +255,17 @@ mod test {
     macro_rules! rampercize {
         ($onramp_config:expr, $offramp_config:expr, $test:tt) => {
             let storage_directory = Some("./storage".to_string());
-            let (world, _handle) = system::World::start(50, storage_directory).await?;
+            // FIXME remove. dummy values for testing right now
+            let cluster_endpoint = String::from("127.0.0.1:8139");
+            let cluster_peers = vec![];
+            let (world, _handle) = system::World::start(
+                50,
+                storage_directory,
+                cluster_endpoint,
+                cluster_peers,
+                false,
+            )
+            .await?;
             let config = serde_yaml::to_value($onramp_config).expect("json to yaml not ok");
 
             let onramp: crate::config::OnRamp = serde_yaml::from_value(config)?;

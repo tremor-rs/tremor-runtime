@@ -842,7 +842,11 @@ mod test {
 
     #[async_std::test]
     async fn pubsub_ok_pub_offramp_list() -> Result<()> {
-        let (world, _handle) = World::start(64, None).await?;
+        // FIXME remove. dummy values for testing right now
+        let cluster_endpoint = String::from("127.0.0.1:8139");
+        let cluster_peers = vec![];
+        let (world, _handle) =
+            World::start(64, None, cluster_endpoint, cluster_peers, false).await?;
         let conductor = world.conductor;
         let mut control = ControlProtocol::new(&conductor);
         let mut api = ApiProtocol::new(

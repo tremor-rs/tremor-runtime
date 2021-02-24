@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::errors::Result;
+use crate::registry::ServantId;
 use crate::repository::Artefact;
-use crate::{errors::Result};
-use crate::{registry::ServantId};
-use std::fmt;
 use crate::system::Conductor;
+use std::fmt;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum ActivationState {
@@ -45,11 +45,7 @@ impl<A: Artefact> fmt::Debug for ActivatorLifecycleFsm<A> {
 }
 
 impl<A: Artefact> ActivatorLifecycleFsm<A> {
-    pub async fn new(
-        conductor: &Conductor,
-        artefact: A,
-        id: ServantId,
-    ) -> Result<Self> {
+    pub async fn new(conductor: &Conductor, artefact: A, id: ServantId) -> Result<Self> {
         let mut fresh = Self {
             artefact,
             conductor: conductor.clone(),
@@ -144,7 +140,12 @@ mod test {
 
     #[async_std::test]
     async fn onramp_activation_lifecycle() {
-        let (world, _) = World::start(10, None).await.expect("failed to start world");
+        // FIXME remove. dummy values for testing right now
+        let cluster_endpoint = String::from("127.0.0.1:8139");
+        let cluster_peers = vec![];
+        let (world, _) = World::start(10, None, cluster_endpoint, cluster_peers, false)
+            .await
+            .expect("failed to start world");
         let conductor = world.conductor;
 
         let config = slurp("tests/configs/ut.passthrough.yaml");
@@ -209,7 +210,12 @@ mod test {
 
     #[async_std::test]
     async fn offramp_activation_lifecycle() {
-        let (world, _) = World::start(10, None).await.expect("failed to start world");
+        // FIXME remove. dummy values for testing right now
+        let cluster_endpoint = String::from("127.0.0.1:8139");
+        let cluster_peers = vec![];
+        let (world, _) = World::start(10, None, cluster_endpoint, cluster_peers, false)
+            .await
+            .expect("failed to start world");
         let world = world.conductor;
 
         let config = slurp("tests/configs/ut.passthrough.yaml");
@@ -274,7 +280,12 @@ mod test {
 
     #[async_std::test]
     async fn binding_activation_lifecycle() {
-        let (world, _) = World::start(10, None).await.expect("failed to start world");
+        // FIXME remove. dummy values for testing right now
+        let cluster_endpoint = String::from("127.0.0.1:8139");
+        let cluster_peers = vec![];
+        let (world, _) = World::start(10, None, cluster_endpoint, cluster_peers, false)
+            .await
+            .expect("failed to start world");
         let world = world.conductor;
 
         let config = slurp("tests/configs/ut.passthrough.yaml");
