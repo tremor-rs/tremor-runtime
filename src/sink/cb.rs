@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use simd_json_derive::Serialize;
-
+use crate::errors::Result;
 use crate::sink::prelude::*;
+use simd_json_derive::Serialize;
 pub struct CB {}
 
 ///
@@ -41,7 +41,7 @@ impl Sink for CB {
     ) -> ResultVec {
         let mut res = Vec::with_capacity(event.len());
         for (value, meta) in event.value_meta_iter() {
-            info!(
+            debug!(
                 "[Sink::CB] {} {}",
                 event.id.event_id(),
                 value.json_string()?
@@ -118,5 +118,165 @@ impl Sink for CB {
 
     fn default_codec(&self) -> &str {
         "json"
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use simd_json::json;
+    use tremor_pipeline::{EventId, OpMeta};
+
+    use super::*;
+
+    #[async_std::test]
+    async fn cb_meta() -> Result<()> {
+        let mut cb = CB {};
+        let url = TremorURL::parse("/offramp/cb/instance")?;
+        let codec = crate::codec::lookup("json")?;
+        let codec_map = halfbrown::HashMap::new();
+        let (tx, _rx) = async_channel::bounded(1);
+        let in_ = "IN";
+        cb.init(
+            0x00,
+            &url,
+            codec.as_ref(),
+            &codec_map,
+            Processors::default(),
+            false,
+            tx,
+        )
+        .await?;
+        let mut data = Value::object_with_capacity(1);
+        data.insert("cb", "ack")?;
+        let id = EventId::new(1, 2, 3);
+        let origin_uri = Some(EventOriginUri {
+            uid: 1,
+            scheme: "test".to_string(),
+            host: "localhost".to_string(),
+            port: Some(1),
+            path: vec![],
+        });
+        let mut op_meta = OpMeta::default();
+        op_meta.insert(1, "foo");
+
+        let event = Event {
+            id: id.clone(),
+            data: (data, Value::null()).into(),
+            op_meta: op_meta.clone(),
+            origin_uri: origin_uri.clone(),
+            ..Event::default()
+        };
+        let res = cb.on_event(in_, codec.as_ref(), &codec_map, event).await?;
+        assert!(res.is_some(), "got nothing back");
+        if let Some(replies) = res {
+            assert_eq!(1, replies.len());
+            if let Some(Reply::Insight(insight)) = replies.get(0) {
+                assert_eq!(CBAction::Ack, insight.cb);
+                assert_eq!(id, insight.id);
+                assert_eq!(op_meta, insight.op_meta);
+                assert_eq!(origin_uri, insight.origin_uri);
+            } else {
+                assert!(
+                    false,
+                    format!("expected to get anm insight back. Got {:?}", replies.get(0))
+                );
+            }
+        }
+        // meta takes precedence
+        let mut meta = Value::object_with_capacity(1);
+        meta.insert("cb", "fail")?;
+        let mut data = Value::object_with_capacity(1);
+        data.insert("cb", "ack")?;
+        let event = Event {
+            id: id.clone(),
+            data: (data, meta).into(),
+            op_meta: op_meta.clone(),
+            origin_uri: origin_uri.clone(),
+            ..Event::default()
+        };
+        let res = cb.on_event(in_, codec.as_ref(), &codec_map, event).await?;
+        assert!(res.is_some(), "got nothing back");
+        if let Some(replies) = res {
+            assert_eq!(1, replies.len());
+            if let Some(Reply::Insight(insight)) = replies.get(0) {
+                assert_eq!(CBAction::Fail, insight.cb);
+                assert_eq!(id, insight.id);
+                assert_eq!(op_meta, insight.op_meta);
+                assert_eq!(origin_uri, insight.origin_uri);
+            } else {
+                assert!(
+                    false,
+                    format!("expected to get anm insight back. Got {:?}", replies.get(0))
+                );
+            }
+        }
+        // array data - second ack/fail will be ignored, just one from ack/fail or open/close (trigger/restore) is returned
+        let meta = json!(
+        {"cb": ["ack", "open", "fail"]}
+        );
+        let event = Event {
+            id: id.clone(),
+            data: (Value::null(), meta).into(),
+            op_meta: op_meta.clone(),
+            origin_uri: origin_uri.clone(),
+            ..Event::default()
+        };
+        let res = cb.on_event(in_, codec.as_ref(), &codec_map, event).await?;
+        assert!(res.is_some(), "got nothing back");
+        if let Some(replies) = res {
+            assert_eq!(2, replies.len());
+            match replies.as_slice() {
+                [Reply::Insight(insight1), Reply::Insight(insight2)] => {
+                    assert_eq!(CBAction::Ack, insight1.cb);
+                    assert_eq!(id, insight1.id);
+                    assert_eq!(op_meta, insight1.op_meta);
+                    assert_eq!(origin_uri, insight1.origin_uri);
+
+                    assert_eq!(CBAction::Open, insight2.cb);
+                    assert_eq!(op_meta, insight2.op_meta);
+                    assert_eq!(origin_uri, insight2.origin_uri);
+                }
+                _ => assert!(
+                    false,
+                    format!("expected to get two insights back. Got {:?}", replies)
+                ),
+            }
+        }
+
+        // array data - second ack/fail will be ignored, just one from ack/fail or open/close (trigger/restore) is returned
+        let data = json!(
+        {"cb": ["trigger", "fail"]}
+        );
+        let event = Event {
+            id: id.clone(),
+            data: (data, Value::null()).into(),
+            op_meta: op_meta.clone(),
+            origin_uri: origin_uri.clone(),
+            ..Event::default()
+        };
+        let res = cb.on_event(in_, codec.as_ref(), &codec_map, event).await?;
+        assert!(res.is_some(), "got nothing back");
+        if let Some(replies) = res {
+            assert_eq!(2, replies.len());
+            match replies.as_slice() {
+                [Reply::Insight(insight1), Reply::Insight(insight2)] => {
+                    assert_eq!(CBAction::Fail, insight1.cb);
+                    assert_eq!(id, insight1.id);
+                    assert_eq!(op_meta, insight1.op_meta);
+                    assert_eq!(origin_uri, insight1.origin_uri);
+
+                    assert_eq!(CBAction::Close, insight2.cb);
+                    assert_eq!(op_meta, insight2.op_meta);
+                    assert_eq!(origin_uri, insight2.origin_uri);
+                }
+                _ => assert!(
+                    false,
+                    format!("expected to get two insights back. Got {:?}", replies)
+                ),
+            }
+        }
+
+        cb.terminate().await;
+        Ok(())
     }
 }
