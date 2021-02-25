@@ -227,7 +227,6 @@ impl Sink for Kv {
         });
 
         for c in cmds {
-            println!("command: {:?}", c);
             let data = self.execute(c, codec, ingest_ns)?;
             let e = Event {
                 data: data.into(),
