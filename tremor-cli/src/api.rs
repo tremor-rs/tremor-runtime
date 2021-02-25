@@ -23,19 +23,19 @@ use tremor_script::prelude::*;
 
 use crate::util::{accept, content_type, load, save_config, ser, TremorApp};
 
-pub(crate) async fn run_cmd(app: &mut TremorApp, cmd: &ArgMatches) -> Result<()> {
+pub(crate) async fn run_cmd(mut app: TremorApp, cmd: &ArgMatches) -> Result<()> {
     if let Some(matches) = cmd.subcommand_matches("version") {
-        conductor_version_cmd(app, &matches).await
+        conductor_version_cmd(&app, &matches).await
     } else if let Some(matches) = cmd.subcommand_matches("binding") {
-        conductor_binding_cmd(app, &matches).await
+        conductor_binding_cmd(&app, &matches).await
     } else if let Some(matches) = cmd.subcommand_matches("pipeline") {
-        conductor_pipeline_cmd(app, &matches).await
+        conductor_pipeline_cmd(&app, &matches).await
     } else if let Some(matches) = cmd.subcommand_matches("onramp") {
-        conductor_onramp_cmd(app, &matches).await
+        conductor_onramp_cmd(&app, &matches).await
     } else if let Some(matches) = cmd.subcommand_matches("offramp") {
-        conductor_offramp_cmd(app, &matches).await
+        conductor_offramp_cmd(&app, &matches).await
     } else if let Some(matches) = cmd.subcommand_matches("target") {
-        conductor_target_cmd(app, &matches).await
+        conductor_target_cmd(&mut app, &matches).await
     } else {
         Err(Error::from("Invalid command"))
     }

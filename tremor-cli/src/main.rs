@@ -124,11 +124,6 @@ fn run(mut app: App, cmd: &ArgMatches) -> Result<()> {
         _ => FormatKind::Yaml,
     };
 
-    let mut config = TremorApp {
-        format,
-        config: load_config()?,
-    };
-
     match cmd
         .subcommand_name()
         .map(|name| (name, cmd.subcommand_matches(name)))
@@ -138,7 +133,13 @@ fn run(mut app: App, cmd: &ArgMatches) -> Result<()> {
         Some(("server", Some(matches))) => server::run_cmd(app, matches),
         Some(("run", Some(matches))) => run::run_cmd(&matches),
         Some(("doc", Some(matches))) => doc::run_cmd(&matches),
-        Some(("api", Some(matches))) => task::block_on(api::run_cmd(&mut config, &matches)),
+        Some(("api", Some(matches))) => task::block_on(api::run_cmd(
+            TremorApp {
+                format,
+                config: load_config()?,
+            },
+            &matches,
+        )),
         Some(("dbg", Some(matches))) => debug::run_cmd(&matches),
         Some(("test", Some(matches))) => test::run_cmd(&matches),
         _ => app
