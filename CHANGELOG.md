@@ -21,6 +21,7 @@
 * Fix markdown for discord link.
 * Fix lalrpop builds when extra folders exist.
 * Refactor operator metrics collection to eliminate clones in most cases.
+* Fix systemd spec file to load tremor files in `/etc/tremor/config` [#784](https://github.com/tremor-rs/tremor-runtime/issues/784)
 
 ## 0.10.2
 
