@@ -5,12 +5,6 @@ set -x
 # TREMOR_DIR: The base directory for tremor config (`/etc/tremor`)
 # CFG_DIR: Directory to load config from (`${TREMOR_DIR}/config`)
 # LOGGER_FILE: the logger configuration (`${TREMOR_DIR}/logger.yaml`)
-# SLEEP: Number of seconds to sleep before starting tremor
-
-if [ -n "${SLEEP+x}" ]
-then
-    sleep "$SLEEP"
-fi
 
 if [ -z ${TREMOR_DIR+x} ]
 then
@@ -63,4 +57,4 @@ else
 fi
 
 # IMPORTANT: do not quote ARGS, no matter what shellcheck tells you
-exec /tremor ${ARGS}
+exec /usr/bin/tremor ${ARGS}
