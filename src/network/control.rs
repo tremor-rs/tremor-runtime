@@ -223,8 +223,10 @@ mod test {
 
     #[async_std::test]
     async fn control_connect_bad_protocol() -> Result<()> {
+        use crate::temp_network::ws::UrMsg;
+        let (uring_tx, _) = bounded::<UrMsg>(1);
         let (tx, _rx) = bounded::<system::ManagerMsg>(1);
-        let conductor = Conductor::new(tx);
+        let conductor = Conductor::new(tx, uring_tx);
         let mut control = ControlProtocol::new(&conductor);
 
         let actual = control
@@ -274,8 +276,10 @@ mod test {
 
     #[async_std::test]
     async fn control_alias_connect_bad_protocol() -> Result<()> {
+        use crate::temp_network::ws::UrMsg;
+        let (uring_tx, _) = bounded::<UrMsg>(1);
         let (tx, _rx) = bounded::<system::ManagerMsg>(1);
-        let conductor = Conductor::new(tx);
+        let conductor = Conductor::new(tx, uring_tx);
         let mut control = ControlProtocol::new(&conductor);
 
         let actual = control
@@ -327,8 +331,10 @@ mod test {
 
     #[async_std::test]
     async fn control_bad_operation() -> Result<()> {
+        use crate::temp_network::ws::UrMsg;
+        let (uring_tx, _) = bounded::<UrMsg>(1);
         let (tx, _rx) = bounded::<system::ManagerMsg>(1);
-        let conductor = Conductor::new(tx);
+        let conductor = Conductor::new(tx, uring_tx);
         let mut control = ControlProtocol::new(&conductor);
 
         let actual = control
@@ -355,9 +361,11 @@ mod test {
 
     #[async_std::test]
     async fn network_session_cannot_override_control() -> Result<()> {
+        use crate::temp_network::ws::UrMsg;
+        let (uring_tx, _) = bounded::<UrMsg>(1);
         let stream_id = 0 as StreamId;
         let (tx, _rx) = bounded::<system::ManagerMsg>(1);
-        let conductor = Conductor::new(tx);
+        let conductor = Conductor::new(tx, uring_tx);
         let control = ControlProtocol::new(&conductor);
         let mut session = NetworkSession::new(stream_id, control)?;
         let (sender, _receiver) = async_channel::bounded(1);
@@ -380,9 +388,11 @@ mod test {
 
     #[async_std::test]
     async fn network_session_control_connect_disconnect_lifecycle() -> Result<()> {
+        use crate::temp_network::ws::UrMsg;
+        let (uring_tx, _) = bounded::<UrMsg>(1);
         let stream_id = 0 as StreamId;
         let (tx, _rx) = bounded::<system::ManagerMsg>(1);
-        let conductor = Conductor::new(tx);
+        let conductor = Conductor::new(tx, uring_tx);
         let control = ControlProtocol::new(&conductor);
         let mut session = NetworkSession::new(stream_id, control)?;
 
@@ -433,9 +443,11 @@ mod test {
 
     #[async_std::test]
     async fn data_plane_mediation() -> Result<()> {
+        use crate::temp_network::ws::UrMsg;
+        let (uring_tx, _) = bounded::<UrMsg>(1);
         let stream_id = 0 as StreamId;
         let (tx, _rx) = bounded::<system::ManagerMsg>(1);
-        let conductor = Conductor::new(tx);
+        let conductor = Conductor::new(tx, uring_tx);
         let control = ControlProtocol::new(&conductor);
         let mut session = NetworkSession::new(stream_id, control)?;
 

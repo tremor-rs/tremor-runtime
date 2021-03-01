@@ -506,14 +506,8 @@ impl Manager {
                 onramp_id,
                 &[],
                 &TntSourceConfig {
-<<<<<<< HEAD
-                    // TODO make this configurable
-                    port: 9899,
-                    host: "0.0.0.0".into(),
-=======
                     port: network_addr.port(),
                     host: network_addr.ip().to_string(),
->>>>>>> 8746247d... Make network host:port configurable for tremor cli server run command
                 },
                 true, // is always linked
             )

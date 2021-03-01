@@ -759,8 +759,10 @@ mod test {
 
     #[async_std::test]
     async fn api_ko_client_cmd() -> Result<()> {
+        use crate::temp_network::ws::UrMsg;
+        let (uring_tx, _) = bounded::<UrMsg>(1);
         let (tx, _rx) = bounded::<system::ManagerMsg>(1);
-        let conductor = Conductor::new(tx);
+        let conductor = Conductor::new(tx, uring_tx);
         let mut control = ControlProtocol::new(&conductor);
         let mut sut = ApiProtocol::new(
             &mut control,
@@ -873,8 +875,10 @@ mod test {
 
     #[async_std::test]
     async fn api_protocol_crud() -> Result<()> {
+        use crate::temp_network::ws::UrMsg;
+        let (uring_tx, _) = bounded::<UrMsg>(1);
         let (tx, _rx) = bounded::<system::ManagerMsg>(1);
-        let conductor = Conductor::new(tx);
+        let conductor = Conductor::new(tx, uring_tx);
         let mut control = ControlProtocol::new(&conductor);
         let mut sut = ApiProtocol::new(
             &mut control,

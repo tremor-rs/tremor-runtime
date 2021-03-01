@@ -140,10 +140,14 @@ mod test {
 
     #[async_std::test]
     async fn onramp_activation_lifecycle() {
+        use std::net::SocketAddr;
+
         // FIXME remove. dummy values for testing right now
+        let network_endpoint = String::from("127.0.0.1:8140");
         let cluster_endpoint = String::from("127.0.0.1:8139");
+        let network_addr: SocketAddr = network_endpoint.parse().unwrap();
         let cluster_peers = vec![];
-        let (world, _) = World::start(10, None, cluster_endpoint, cluster_peers, false)
+        let (world, _) = World::start(10, None, network_addr, cluster_endpoint, cluster_peers, false)
             .await
             .expect("failed to start world");
         let conductor = world.conductor;
@@ -210,10 +214,14 @@ mod test {
 
     #[async_std::test]
     async fn offramp_activation_lifecycle() {
+        use std::net::SocketAddr;
+
         // FIXME remove. dummy values for testing right now
+        let network_endpoint = String::from("127.0.0.1:8140");
+        let network_addr: SocketAddr = network_endpoint.parse().unwrap();
         let cluster_endpoint = String::from("127.0.0.1:8139");
         let cluster_peers = vec![];
-        let (world, _) = World::start(10, None, cluster_endpoint, cluster_peers, false)
+        let (world, _) = World::start(10, None, network_addr, cluster_endpoint, cluster_peers, false)
             .await
             .expect("failed to start world");
         let world = world.conductor;
@@ -280,10 +288,15 @@ mod test {
 
     #[async_std::test]
     async fn binding_activation_lifecycle() {
+        use std::net::SocketAddr;
+
+        let network_endpoint = String::from("127.0.0.1:8140");
+        let network_addr: SocketAddr = network_endpoint.parse().unwrap();
+
         // FIXME remove. dummy values for testing right now
         let cluster_endpoint = String::from("127.0.0.1:8139");
         let cluster_peers = vec![];
-        let (world, _) = World::start(10, None, cluster_endpoint, cluster_peers, false)
+        let (world, _) = World::start(10, None, network_addr, cluster_endpoint, cluster_peers, false)
             .await
             .expect("failed to start world");
         let world = world.conductor;

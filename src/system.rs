@@ -746,8 +746,6 @@ impl World {
         let mut conductor = Conductor::new(fake_system_tx.clone(), temp_network.tx.clone());
 
         // where it all begins
-        let (network_h, network) = network::Manager::new(&conductor, qsize).start();
-
         let (onramp_h, onramp) = onramp::Manager::new(qsize).start();
         let (offramp_h, offramp) = offramp::Manager::new(qsize).start();
         let (pipeline_h, pipeline) = pipeline::Manager::new(qsize).start();

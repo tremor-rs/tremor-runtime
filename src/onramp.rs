@@ -200,6 +200,7 @@ mod test {
     use crate::url::TremorURL;
     use simd_json::json;
     use std::io::Write;
+    use std::net::SocketAddr;
     use std::net::TcpListener;
     use std::net::TcpStream;
     use std::net::UdpSocket;
@@ -256,11 +257,14 @@ mod test {
         ($onramp_config:expr, $offramp_config:expr, $test:tt) => {
             let storage_directory = Some("./storage".to_string());
             // FIXME remove. dummy values for testing right now
+            let network_endpoint = String::from("127.0.0.1:8140");
+            let network_addr: SocketAddr = network_endpoint.parse().unwrap();
             let cluster_endpoint = String::from("127.0.0.1:8139");
             let cluster_peers = vec![];
             let (world, _handle) = system::World::start(
                 50,
                 storage_directory,
+                network_addr,
                 cluster_endpoint,
                 cluster_peers,
                 false,

@@ -627,6 +627,8 @@ impl NetworkProtocol for PubSubProtocol {
 
 #[cfg(test)]
 mod test {
+    use std::net::SocketAddr;
+
     use super::*;
     use crate::system;
     use crate::{errors::Result, event, system::Conductor};
@@ -744,8 +746,10 @@ mod test {
 
     #[async_std::test]
     async fn pubsub_ko_client_cmd() -> Result<()> {
+        use crate::temp_network::ws::UrMsg;
+        let (uring_tx, _) = bounded::<UrMsg>(1);
         let (tx, _rx) = bounded::<system::ManagerMsg>(1);
-        let conductor = Conductor::new(tx);
+        let conductor = Conductor::new(tx, uring_tx);
         let mut control = ControlProtocol::new(&conductor);
         let mut sut = PubSubProtocol::new(
             &mut control,
@@ -821,8 +825,10 @@ mod test {
 
     #[async_std::test]
     async fn pubsub_ok_list_empty() -> Result<()> {
+        use crate::temp_network::ws::UrMsg;
+        let (uring_tx, _) = bounded::<UrMsg>(1);
         let (tx, _rx) = bounded::<system::ManagerMsg>(1);
-        let conductor = Conductor::new(tx);
+        let conductor = Conductor::new(tx, uring_tx);
         let mut control = ControlProtocol::new(&conductor);
 
         let mut sut = PubSubProtocol::new(
@@ -843,10 +849,19 @@ mod test {
     #[async_std::test]
     async fn pubsub_ok_pub_offramp_list() -> Result<()> {
         // FIXME remove. dummy values for testing right now
+        let network_endpoint = String::from("127.0.0.1:8140");
+        let network_addr: SocketAddr = network_endpoint.parse().unwrap();
         let cluster_endpoint = String::from("127.0.0.1:8139");
         let cluster_peers = vec![];
-        let (world, _handle) =
-            World::start(64, None, cluster_endpoint, cluster_peers, false).await?;
+        let (world, _handle) = World::start(
+            64,
+            None,
+            network_addr,
+            cluster_endpoint,
+            cluster_peers,
+            false,
+        )
+        .await?;
         let conductor = world.conductor;
         let mut control = ControlProtocol::new(&conductor);
         let mut api = ApiProtocol::new(

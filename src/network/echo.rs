@@ -30,9 +30,6 @@ impl EchoProtocol {
     }
 }
 
-// unsafe impl Send for EchoProtocol {}
-// unsafe impl Sync for EchoProtocol {}
-
 #[async_trait::async_trait]
 impl NetworkProtocol for EchoProtocol {
     fn on_init(&mut self) -> Result<()> {
@@ -56,8 +53,10 @@ mod test {
 
     #[async_std::test]
     async fn network_session_cannot_override_control() -> Result<()> {
+        use crate::temp_network::ws::UrMsg;
+        let (uring_tx, _) = bounded::<UrMsg>(1);
         let (tx, _rx) = bounded::<system::ManagerMsg>(1);
-        let conductor = Conductor::new(tx);
+        let conductor = Conductor::new(tx, uring_tx);
         let mut control = ControlProtocol::new(&conductor);
         let mut echo = EchoProtocol::new(&mut control, Value::Object(Box::new(hashmap! {})));
 
