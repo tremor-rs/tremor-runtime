@@ -155,6 +155,9 @@ pub struct Conductor {
     /// Runtime type information
     pub(crate) system: Sender,
 
+    /// Sender for the raft-based micro-ring
+    pub(crate) uring: async_channel::Sender<UrMsg>,
+
     /// Configuration ( code ) models of managed tremor artefacts
     pub reg: Registries,
 
@@ -164,10 +167,15 @@ pub struct Conductor {
 
 impl Conductor {
     /// Create a new conductor
-    pub(crate) fn new(system: Sender) -> Self {
+    pub(crate) fn new(system: Sender, uring: async_channel::Sender<UrMsg>) -> Self {
         let repo = Repositories::new();
         let reg = Registries::new();
-        Self { system, reg, repo }
+        Self {
+            system,
+            uring,
+            reg,
+            repo,
+        }
     }
 
     /// Ensures the existance of an onramp, creating it if required.
@@ -715,15 +723,31 @@ impl World {
         cluster_peers: Vec<String>,
         cluster_bootstrap: bool,
     ) -> Result<(Self, JoinHandle<Result<()>>)> {
+        // TODO direct these logs to a separate file? also include the json option
+        let logger = {
+            let decorator = slog_term::TermDecorator::new().build();
+            let drain = slog_term::FullFormat::new(decorator).build().fuse();
+            let drain = slog_async::Async::new(drain).build().fuse();
+            // temp filter for only showing warnings
+            //let drain = slog::LevelFilter::new(drain, slog::Level::Warning).fuse();
+            slog::Logger::root(drain, o!())
+        };
+        // FIXME allow for non-numeric
+        //let numeric_instance_id = instance!().parse::<u64>()?;
+        let numeric_instance_id = instance!().parse::<u64>().unwrap_or(42);
+        let node_id = NodeId(numeric_instance_id);
+        let temp_network = ws::Network::new(&logger, node_id, cluster_endpoint, cluster_peers);
+
         let (fake_system_tx, _not_used) = bounded(crate::QSIZE);
 
-        let mut conductor = Conductor::new(fake_system_tx.clone());
+        let mut conductor = Conductor::new(fake_system_tx.clone(), temp_network.tx.clone());
+
+        // where it all begins
+        let (network_h, network) = network::Manager::new(&conductor, qsize).start();
 
         let (onramp_h, onramp) = onramp::Manager::new(qsize).start();
         let (offramp_h, offramp) = offramp::Manager::new(qsize).start();
         let (pipeline_h, pipeline) = pipeline::Manager::new(qsize).start();
-
-        let (network_h, network) = network::Manager::new(&conductor, qsize).start();
 
         let (system_h, system) = Manager {
             offramp,
@@ -740,21 +764,6 @@ impl World {
 
         // Rebind system in conductor
         conductor.system = system.clone();
-
-        // TODO direct these logs to a separate file? also include the json option
-        let logger = {
-            let decorator = slog_term::TermDecorator::new().build();
-            let drain = slog_term::FullFormat::new(decorator).build().fuse();
-            let drain = slog_async::Async::new(drain).build().fuse();
-            // temp filter for only showing warnings
-            //let drain = slog::LevelFilter::new(drain, slog::Level::Warning).fuse();
-            slog::Logger::root(drain, o!())
-        };
-        // FIXME allow for non-numeric
-        //let numeric_instance_id = instance!().parse::<u64>()?;
-        let numeric_instance_id = instance!().parse::<u64>().unwrap_or(42);
-        let node_id = NodeId(numeric_instance_id);
-        let temp_network = ws::Network::new(&logger, node_id, cluster_endpoint, cluster_peers);
 
         let mut world = Self {
             uring: temp_network.tx.clone(),

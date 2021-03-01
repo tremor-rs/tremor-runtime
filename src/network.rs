@@ -40,6 +40,7 @@ pub(crate) mod nana;
 mod api;
 mod control;
 mod echo;
+mod microring;
 mod pubsub;
 
 use prelude::*;
@@ -187,9 +188,11 @@ impl NetworkManager {
     async fn handle_raw_text<'event>(&mut self, sid: StreamId, event: Event) -> Result<()> {
         if let Some(session) = self.sessions.get_mut(&sid) {
             let origin = self.source.streams.get(&sid).unwrap();
+            //dbg!("handling raw text via the control protocol");
             match session.on_event(origin, &event).await? {
                 NetworkCont::ConnectProtocol(protocol, alias, _next_state) => {
                     let origin = self.source.streams.get(&sid).unwrap();
+                    //dbg!("sending back connect-ack");
                     origin
                         .send(SerializedResponse {
                             event_id: EventId::new(0, sid as u64, 0), // FIXME TODO
@@ -227,6 +230,7 @@ impl NetworkManager {
                     session.fsm.transition(ControlState::Disconnecting)?;
                 }
                 NetworkCont::SourceReply(event) => {
+                    //dbg!("sending back source reply");
                     let origin = self.source.streams.get(&sid).unwrap();
                     origin
                         .send(SerializedResponse {
@@ -382,11 +386,14 @@ impl NetworkManager {
     }
 
     pub async fn run(mut self) -> Result<()> {
+        //dbg!("running core network run loop");
         loop {
             match self.source.pull_event(self.id).await {
                 Ok(SourceReply::StartStream(sid)) => {
+                    //dbg!("network start stream");
                     self.sessions
                         .insert(sid, NetworkSession::new(sid, self.control.clone())?);
+                    // how we talk back to the other end
                     let origin = self.source.streams.get(&sid).unwrap();
                     origin
                         .send(SerializedResponse {
@@ -416,6 +423,7 @@ impl NetworkManager {
                     stream,
                     ..
                 }) => {
+                    //dbg!("network got data");
                     let ingest_ns = nanotime();
                     match tremor_value::parse_to_value(&mut data) {
                         Ok(x) => {
@@ -436,6 +444,7 @@ impl NetworkManager {
                             if let Some(Value::Object(m)) = &meta {
                                 if Some(&Value::Static(StaticNode::Bool(false))) == m.get("binary")
                                 {
+                                    // here is where incoming text is firt handled
                                     if let Err(e) = self.handle_raw_text(stream, event).await {
                                         error!("Unexpected error during client connect {}", e)
                                     }
@@ -488,6 +497,7 @@ impl NetworkManager {
 impl Manager {
     pub fn new(conductor: &Conductor, qsize: usize) -> Self {
         let onramp_id = TremorURL::from_network_id("self").unwrap();
+        //dbg!("creating control protocol/network");
         Self {
             control: ControlProtocol::new(conductor),
             qsize,
@@ -496,6 +506,7 @@ impl Manager {
                 onramp_id,
                 &[],
                 &TntSourceConfig {
+                    // TODO make this configurable
                     port: 9899,
                     host: "0.0.0.0".into(),
                 },
@@ -510,6 +521,7 @@ impl Manager {
         let mut codec_map: HashMap<String, String> = HashMap::new();
         codec_map.insert("application/json".into(), "json".into());
 
+        //dbg!("initializing control protocol/network");
         let h = task::spawn::<_, Result<()>>(async move {
             let (manager, _tx2) = NetworkManager::new(
                 self.control,

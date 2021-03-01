@@ -153,6 +153,7 @@ impl NetworkSession {
         _origin: &Sender<SerializedResponse>,
         event: &Event,
     ) -> Result<NetworkCont> {
+        //dbg!("calling network session's fsm on_event (ultimately control protocol)");
         match self.fsm.on_event(event).await {
             // We are connecting and activating a protocol session channel
             Ok(NetworkCont::ConnectProtocol(protocol, alias, next_state)) => {

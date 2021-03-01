@@ -19,7 +19,8 @@
 use crate::{errors::Result, system::Conductor};
 
 use super::{
-    api::ApiProtocol, echo::EchoProtocol, nana::StatusCode, pubsub::PubSubProtocol, NetworkCont,
+    api::ApiProtocol, echo::EchoProtocol, microring::MicroRingProtocol, nana::StatusCode,
+    pubsub::PubSubProtocol, NetworkCont,
 };
 use crate::network::prelude::*;
 use halfbrown::HashMap as HalfMap;
@@ -96,7 +97,9 @@ impl NetworkProtocol for ControlProtocol {
 
     async fn on_event(&mut self, sid: StreamId, event: &Event) -> Result<NetworkCont> {
         trace!("Received control protocol event");
+        //dbg!("Processing control protocol event");
         if let (Value::Object(value), ..) = event.data.parts() {
+            // CONTROL_ALIAS is the first initial "tremor"
             if let Some(Value::Object(control)) = value.get(CONTROL_ALIAS) {
                 if let Some(Value::Object(connect)) = control.get("connect") {
                     if let Some(Value::String(protocol)) = connect.get("protocol") {
@@ -121,6 +124,7 @@ impl NetworkProtocol for ControlProtocol {
                             .insert(alias.to_string(), protocol.to_string());
                         match protocol {
                             "echo" => {
+                                //dbg!("registering echo");
                                 let proto = Box::new(EchoProtocol::new(self, headers));
                                 self.mux.insert(alias.to_string(), proto);
                             }
@@ -132,6 +136,14 @@ impl NetworkProtocol for ControlProtocol {
                             "api" => {
                                 let proto =
                                     Box::new(ApiProtocol::new(self, alias.to_string(), headers));
+                                self.mux.insert(alias.to_string(), proto);
+                            }
+                            "microring" => {
+                                let proto = Box::new(MicroRingProtocol::new(
+                                    self,
+                                    alias.to_string(),
+                                    headers,
+                                ));
                                 self.mux.insert(alias.to_string(), proto);
                             }
                             _unknown_protocol => {
@@ -178,6 +190,7 @@ impl NetworkProtocol for ControlProtocol {
             if value.len() != 1 {
                 return close(StatusCode::PROTOCOL_RECORD_ONE_FIELD_EXPECTED);
             } else {
+                //dbg!("choosing protocol to respond with");
                 match value.keys().next() {
                     Some(key) => match self.mux.get_mut(&key.to_string()) {
                         Some(active_protocol) => {

@@ -750,13 +750,13 @@ pub async fn start_raft(
     network: Network,
 ) -> JoinHandle<()> {
     let mut node = if bootstrap {
-        dbg!("bootstrap on");
+        //dbg!("bootstrap on");
         RaftNode::create_raft_leader(&logger, id, network).await
     } else {
         RaftNode::create_raft_follower(&logger, id, network).await
     };
-    dbg!(&node.id);
-    dbg!(&node.last_state);
+    //dbg!(&node.last_state);
+    warn!("{:?}", &node.last_state);
 
     node.set_raft_tick_duration(Duration::from_millis(100));
     node.log().await;
