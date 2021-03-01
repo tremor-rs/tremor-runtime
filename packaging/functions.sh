@@ -37,6 +37,7 @@ function package_archive {
   # TREMOR_PATH needs to be set to wherever this folder gets extracted to
   mkdir -p "${temp_archive_dir}/lib/tremor"
   cp -vR "${ROOT_DIR}/tremor-script/lib/" "${temp_archive_dir}/lib/tremor/tremor-script/"
+  cp -vR "${ROOT_DIR}/packaging/distribution/usr/lib/tremor/tremor.service" "${temp_archive_dir}/lib/tremor/tremor.service"
 
   echo "Creating archive file: ${archive_file}"
   tar czf $archive_file -C "$TARGET_BUILD_DIR" "$archive_name"

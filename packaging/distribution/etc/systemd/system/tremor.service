@@ -7,7 +7,7 @@ Requires=network-online.target
 [Service]
 User=tremor
 Group=tremor
-ExecStart=/bin/sh -c 'usr/bin/tremor server run --logger-config /etc/tremor/logger.yaml -f /etc/tremor/config/*.yaml -f /etc/tremor/config/*.trickle'
+ExecStart=/usr/lib/tremor/tremor.service
 Restart=always
 SyslogIdentifier=tremor
 
