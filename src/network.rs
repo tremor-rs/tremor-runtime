@@ -26,8 +26,8 @@ use async_channel::{bounded, unbounded, Sender};
 use async_std::task::{self, JoinHandle};
 use control::{ControlProtocol, ControlState};
 use simd_json::{json, StaticNode};
-use std::collections::HashMap;
 use std::time::Duration;
+use std::{collections::HashMap, net::SocketAddr};
 use tremor_common::time::nanotime;
 use tremor_pipeline::{CBAction, Event, EventId, EventOriginUri, OpMeta};
 use tremor_script::{LineValue, Value, ValueAndMeta};
@@ -495,7 +495,7 @@ impl NetworkManager {
 }
 
 impl Manager {
-    pub fn new(conductor: &Conductor, qsize: usize) -> Self {
+    pub fn new(conductor: &Conductor, network_addr: SocketAddr, qsize: usize) -> Self {
         let onramp_id = TremorURL::from_network_id("self").unwrap();
         //dbg!("creating control protocol/network");
         Self {
@@ -506,9 +506,14 @@ impl Manager {
                 onramp_id,
                 &[],
                 &TntSourceConfig {
+<<<<<<< HEAD
                     // TODO make this configurable
                     port: 9899,
                     host: "0.0.0.0".into(),
+=======
+                    port: network_addr.port(),
+                    host: network_addr.ip().to_string(),
+>>>>>>> 8746247d... Make network host:port configurable for tremor cli server run command
                 },
                 true, // is always linked
             )

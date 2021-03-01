@@ -74,6 +74,12 @@ subcommands:
                   long: api-host
                   takes_value: true
                   default_value: "0.0.0.0:9898"
+              - network-host:
+                  help: The `host:port` to listen for the Network layer
+                  short: w
+                  long: network-host
+                  takes_value: true
+                  default_value: "0.0.0.0:9899"
               # FIXME better args here
               - cluster-host:
                   help: The `host:port` to listen for cluster communication

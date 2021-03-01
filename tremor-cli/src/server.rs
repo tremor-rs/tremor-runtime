@@ -16,7 +16,9 @@ use crate::errors::{Error, Result};
 use crate::util::{get_source_kind, SourceKind};
 use async_std::task;
 use clap::{App, ArgMatches};
+use rand::seq::IteratorRandom;
 use std::io::Write;
+use std::net::ToSocketAddrs;
 use std::sync::atomic::Ordering;
 use tremor_api as api;
 use tremor_common::file;
@@ -122,6 +124,30 @@ pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
         .ok_or_else(|| Error::from("invalid recursion limit"))?;
     tremor_script::RECURSION_LIMIT.store(l, Ordering::Relaxed);
 
+    let network_host = matches
+        .value_of("network-host")
+        .unwrap_or("127.0.0.1:9899")
+        .to_string();
+
+    // NOTE should probably have policies around dns lookup and ip address resolution
+    let network_addr = match network_host.to_socket_addrs() {
+        Ok(network_addr) => {
+            if let Some(choice) = network_addr.choose(&mut rand::thread_rng()) {
+                choice
+            } else {
+                error!(
+                    "Invalid Network Endpoint Error: Could not find IP address for hostname {}",
+                    &network_host
+                );
+                return Ok(());
+            }
+        }
+        Err(e) => {
+            error!("Invalid Network Endpoint Error: {}", e);
+            return Ok(());
+        }
+    };
+
     let storage_directory = matches
         .value_of("storage-directory")
         .map(std::string::ToString::to_string);
@@ -136,6 +162,7 @@ pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
     let (world, handle) = World::start(
         64,
         storage_directory,
+        network_addr,
         cluster_host,
         cluster_peers,
         cluster_bootstrap,

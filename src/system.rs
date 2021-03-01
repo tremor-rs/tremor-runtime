@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::net::SocketAddr;
+
 use crate::config::{BindingVec, Config, MappingMap, OffRampVec, OnRampVec};
 use crate::errors::{Error, ErrorKind, Result};
 use crate::lifecycle::{ActivationState, ActivatorLifecycleFsm};
@@ -719,6 +721,7 @@ impl World {
     pub async fn start(
         qsize: usize,
         storage_directory: Option<String>,
+        network_addr: SocketAddr,
         cluster_endpoint: String,
         cluster_peers: Vec<String>,
         cluster_bootstrap: bool,
@@ -748,6 +751,8 @@ impl World {
         let (onramp_h, onramp) = onramp::Manager::new(qsize).start();
         let (offramp_h, offramp) = offramp::Manager::new(qsize).start();
         let (pipeline_h, pipeline) = pipeline::Manager::new(qsize).start();
+
+        let (network_h, network) = network::Manager::new(&conductor, network_addr, qsize).start();
 
         let (system_h, system) = Manager {
             offramp,

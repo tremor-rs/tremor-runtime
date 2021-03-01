@@ -52,6 +52,7 @@ error_chain! {
         SendError(std::sync::mpsc::SendError<String>);
         AnyhowError(anyhow::Error);
         TestKindError(crate::test::UnknownKind);
+        NetworkAddrError(std::net::AddrParseError) #[doc = "Error parsing network address and port"];
         Url(url::ParseError) #[doc = "Error while parsing a url"];
         Common(tremor_common::Error);
         ParseIntError(std::num::ParseIntError);

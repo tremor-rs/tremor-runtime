@@ -5865,6 +5865,7 @@ dependencies = [
  "matches",
  "port_scanner",
  "pretty_assertions",
+ "rand 0.8.3",
  "rental",
  "serde",
  "serde_derive",
