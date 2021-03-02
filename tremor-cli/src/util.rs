@@ -15,11 +15,11 @@
 use crate::errors::{Error, Result};
 use halfbrown::HashMap;
 use serde::Deserialize;
-use std::ffi::OsStr;
 use std::fs;
 use std::io::prelude::*;
 use std::io::BufReader;
 use std::path::Path;
+use std::{ffi::OsStr, fmt};
 use tremor_common::file as cfile;
 use tremor_script::highlighter::{Highlighter, Term as TermHighlighter};
 use tremor_script::{lexer, Value};
@@ -261,13 +261,25 @@ pub(crate) fn visit_path<'a>(base: &Path, path: &Path, visitor: &'a PathVisitor)
     Ok(())
 }
 
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub(crate) enum SourceKind {
     Tremor,
     Trickle,
     Json,
-    Unsupported,
-    Default,
+    Unsupported(Option<String>),
+    Yaml,
+}
+impl fmt::Display for SourceKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+        match self {
+            SourceKind::Tremor => write!(f, "tremor"),
+            SourceKind::Trickle => write!(f, "trickle"),
+            SourceKind::Json => write!(f, "JSON"),
+            SourceKind::Unsupported(None) => write!(f, "<NONE>"),
+            SourceKind::Unsupported(Some(ext)) => write!(f, "{}", ext),
+            SourceKind::Yaml => write!(f, "YAML"),
+        }
+    }
 }
 
 pub(crate) fn get_source_kind(path: &str) -> SourceKind {
@@ -275,7 +287,8 @@ pub(crate) fn get_source_kind(path: &str) -> SourceKind {
         Some("json") => SourceKind::Json,
         Some("tremor") => SourceKind::Tremor,
         Some("trickle") => SourceKind::Trickle,
-        _otherwise => SourceKind::Unsupported,
+        Some("yml") | Some("yaml") => SourceKind::Yaml,
+        otherwise => SourceKind::Unsupported(otherwise.map(ToString::to_string)),
     }
 }
 

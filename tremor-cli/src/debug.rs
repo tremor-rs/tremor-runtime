@@ -61,14 +61,12 @@ where
     W: Highlighter,
 {
     banner(h, opts, "Source", "Source code listing")?;
-    match opts.kind {
-        SourceKind::Tremor | SourceKind::Json | SourceKind::Default => {
-            Script::highlight_script_with(&opts.raw, h)?
-        }
+    match &opts.kind {
+        SourceKind::Tremor | SourceKind::Json => Script::highlight_script_with(&opts.raw, h)?,
         SourceKind::Trickle => Query::highlight_script_with(&opts.raw, h)?,
-        SourceKind::Unsupported => {
-            eprintln!("Unsupported");
-        }
+        SourceKind::Yaml => error!("Unsupported: yaml"),
+        SourceKind::Unsupported(Some(t)) => error!("Unsupported: {}", t),
+        SourceKind::Unsupported(None) => error!("Unsupported: no file type"),
     }
 
     Ok(())
@@ -211,7 +209,7 @@ where
     let mp = load_module_path();
     let reg: Registry = registry::registry();
     match opts.kind {
-        SourceKind::Tremor | SourceKind::Json | SourceKind::Default => {
+        SourceKind::Tremor | SourceKind::Json => {
             match Script::parse(&mp, opts.src, opts.raw.clone(), &reg) {
                 Ok(runnable) => {
                     let ast = simd_json::to_string_pretty(&runnable.script.suffix())?;
@@ -240,7 +238,7 @@ where
                 }
             };
         }
-        SourceKind::Unsupported => {
+        SourceKind::Unsupported(_) | SourceKind::Yaml => {
             eprintln!("Unsupported");
         }
     };
@@ -284,7 +282,7 @@ fn dbg_dot<W>(h: &mut W, opts: &Opts) -> Result<()>
 where
     W: Highlighter,
 {
-    if opts.kind != SourceKind::Trickle && opts.kind != SourceKind::Default {
+    if opts.kind != SourceKind::Trickle {
         return Err("Dot visualisation is only supported for trickle files.".into());
     }
     let mp = load_module_path();
