@@ -4,6 +4,7 @@
 
 ### New features
 
+* Removed the vsn.sh script which checks if the lockfile is up to date and replaces it with the --locked flag [#798](https://github.com/tremor-rs/tremor-runtime/pull/798)
 * Allow using '_' as seperators in numeric literals [#645](https://github.com/tremor-rs/tremor-runtime/issues/645)
 * Add support for Kafka message headers, available through the `$kafka_headers` metadata variable.
 * Add the `cb` offramp for testing upstream circuit breaker behaviour [#779](https://github.com/tremor-rs/tremor-runtime/pull/779)
