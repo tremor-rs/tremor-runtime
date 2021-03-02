@@ -41,8 +41,11 @@ offramp:
     type: rest
     codec: influx
     config:
-      nodes:
-        - http://influx:8086/write?db=tremor
+      endpoint:
+        host: influx
+        port: 8086
+        path: /write
+        query: db=tremor
       headers:
         "Client": "Tremor"
 

@@ -121,19 +121,28 @@ pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
     let (world, handle) = World::start(64, storage_directory).await?;
 
     if let Some(config_files) = matches.values_of("artefacts") {
+        let mut yaml_files = Vec::with_capacity(16);
         // We process trickle files first
-        for config_file in config_files.clone() {
-            match get_source_kind(config_file) {
-                SourceKind::Trickle => tremor_runtime::load_query_file(&world, config_file).await?,
-                _ => continue,
+        for config_file in config_files {
+            let kind = get_source_kind(config_file);
+            match kind {
+                SourceKind::Trickle => {
+                    if let Err(e) = tremor_runtime::load_query_file(&world, config_file).await {
+                        error!("Failed to load trickle script file {}: {}", config_file, e);
+                    }
+                }
+                SourceKind::Tremor | SourceKind::Json | SourceKind::Unsupported(_) => {
+                    error!("Unsupported file format {}: {}", kind, config_file);
+                }
+                SourceKind::Yaml => yaml_files.push(config_file),
             };
         }
+
         // We process config files thereafter
-        for config_file in config_files {
-            match get_source_kind(config_file) {
-                SourceKind::Trickle | SourceKind::Tremor => continue,
-                _ => tremor_runtime::load_cfg_file(&world, config_file).await?,
-            };
+        for config_file in yaml_files {
+            if let Err(e) = tremor_runtime::load_cfg_file(&world, config_file).await {
+                error!("Failed to load config file {}: {}", config_file, e)
+            }
         }
     }
 
