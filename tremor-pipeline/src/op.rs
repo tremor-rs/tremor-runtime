@@ -116,7 +116,7 @@ pub trait Operator: std::fmt::Debug + Send {
     /// Returns metrics for this operator, defaults to no extra metrics.
     fn metrics(
         &self,
-        _tags: HashMap<Cow<'static, str>, Value<'static>>,
+        _tags: &HashMap<Cow<'static, str>, Value<'static>>,
         _timestamp: u64,
     ) -> Result<Vec<Value<'static>>> {
         // Make the trait signature nicer

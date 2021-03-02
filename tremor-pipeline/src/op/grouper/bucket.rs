@@ -200,18 +200,21 @@ impl Operator for Grouper {
 
     fn metrics(
         &self,
-        mut tags: HashMap<Cow<'static, str>, Value<'static>>,
+        tags: &HashMap<Cow<'static, str>, Value<'static>>,
         timestamp: u64,
     ) -> Result<Vec<Value<'static>>> {
         let mut res = Vec::with_capacity(self.buckets.len() * 2);
-        for (class, b) in &self.buckets {
-            tags.insert(CLASS, class.clone().into());
-            tags.insert(ACTION, PASS.into());
-            // Count good cases
-            res.push(influx_value(BUCKETING, tags.clone(), b.pass, timestamp));
-            // Count bad cases
-            tags.insert(ACTION, OVERFLOW.into());
-            res.push(influx_value(BUCKETING, tags.clone(), b.overflow, timestamp));
+        if !self.buckets.is_empty() {
+            let mut tags = tags.clone();
+            for (class, b) in &self.buckets {
+                tags.insert(CLASS, class.clone().into());
+                tags.insert(ACTION, PASS.into());
+                // Count good cases
+                res.push(influx_value(BUCKETING, tags.clone(), b.pass, timestamp));
+                // Count bad cases
+                tags.insert(ACTION, OVERFLOW.into());
+                res.push(influx_value(BUCKETING, tags.clone(), b.overflow, timestamp));
+            }
         }
         Ok(res)
     }
@@ -307,7 +310,7 @@ mod test {
         assert_eq!(port, "out");
         assert_eq!(e, event3);
 
-        let mut m = op.metrics(HashMap::new(), 0).unwrap();
+        let mut m = op.metrics(&HashMap::new(), 0).unwrap();
         let overflow = m.pop().unwrap();
         let pass = m.pop().unwrap();
         assert!(m.is_empty());

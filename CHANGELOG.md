@@ -20,6 +20,7 @@
 * Add performance section to PR template.
 * Fix markdown for discord link.
 * Fix lalrpop builds when extra folders exist.
+* Refactor operator metrics collection to eliminate clones in most cases.
 
 ## 0.10.2
 
