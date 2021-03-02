@@ -8,7 +8,6 @@ unlicensed= "deny"
 allow = [
     "Apache-2.0",
     "BSD-2-Clause",
-    "BSD-2-Clause-FreeBSD",
     "BSD-3-Clause",
     "BSL-1.0",
     "ISC",
