@@ -13,7 +13,7 @@
 [![Dependabot Status]][dependabot.com]
 [![CII Best Practices]][bestpractices]
 [![GitHub]](LICENSE)
-[![Discord]][discord]
+[![Discord]][discord-invite]
 
 [Build Status]: https://github.com/tremor-rs/tremor-runtime/workflows/Tests/badge.svg
 [actions-Tests]: https://github.com/tremor-rs/tremor-runtime/actions?query=workflow%3ATests
@@ -31,7 +31,7 @@
 [bestpractices]: https://bestpractices.coreinfrastructure.org/projects/4356
 [GitHub]: https://img.shields.io/github/license/tremor-rs/tremor-runtime
 [Discord]: https://img.shields.io/discord/752801695066488843.svg?label=&logo=discord&logoColor=ffffff&color=7389D8&labelColor=6A7EC2
-[discord]: https://bit.ly/tremor-discord
+[discord-invite]: https://bit.ly/tremor-discord
 
 ---
 
