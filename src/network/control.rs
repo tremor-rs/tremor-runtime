@@ -40,6 +40,19 @@ pub(crate) enum ControlState {
     Invalid,
 }
 
+impl std::fmt::Display for ControlState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let str = match *self {
+            ControlState::Connecting => "connecting",
+            ControlState::Active => "active",
+            ControlState::Disconnecting => "disconnecting",
+            ControlState::Zombie => "zombie",
+            ControlState::Invalid => "invalid",
+        };
+        write!(f, "{}", str)
+    }
+}
+
 type ProtocolAlias = String;
 #[derive(Clone)]
 pub(crate) struct ControlProtocol {

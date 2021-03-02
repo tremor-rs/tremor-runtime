@@ -177,7 +177,8 @@ impl NetworkSession {
             on_none @ Ok(NetworkCont::None) => return on_none,
 
             // By construction, this is a protocol bug and unexpected
-            Err(_e) => {
+            Err(e) => {
+                error!("Network session server error {}", e);
                 self.fsm.transition(ControlState::Invalid)?;
                 return wsc_reply!(event, { "tremor": { "close": "unknown server error" }});
             }

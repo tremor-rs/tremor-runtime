@@ -97,6 +97,11 @@ impl ControlLifecycleFsm {
                 }
                 (ControlState::Zombie, _) => break,
                 _ => {
+                    error!(
+                        "Illegal Control Lifecycle FSM transition from {} to {} attempted",
+                        ControlState::Zombie,
+                        to
+                    );
                     self.state = ControlState::Invalid;
                     return Err("Illegel State Transition".into());
                 }
