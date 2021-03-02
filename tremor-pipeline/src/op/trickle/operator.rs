@@ -114,7 +114,7 @@ impl Operator for TrickleOperator {
 
     fn metrics(
         &self,
-        tags: HashMap<Cow<'static, str>, Value<'static>>,
+        tags: &HashMap<Cow<'static, str>, Value<'static>>,
         timestamp: u64,
     ) -> Result<Vec<Value<'static>>> {
         self.op.metrics(tags, timestamp)

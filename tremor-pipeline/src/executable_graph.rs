@@ -25,7 +25,7 @@ use crate::{
 use crate::{op::EventAndInsights, Event, NodeKind, Operator};
 use beef::Cow;
 use halfbrown::HashMap;
-use tremor_script::{query::StmtRentalWrapper, LineValue, Value, ValueAndMeta};
+use tremor_script::{query::StmtRentalWrapper, Value};
 
 /// Configuration for a node
 #[derive(Debug, Clone, PartialOrd, Eq, Default)]
@@ -163,7 +163,7 @@ impl Operator for OperatorNode {
 
     fn metrics(
         &self,
-        tags: HashMap<Cow<'static, str>, Value<'static>>,
+        tags: &HashMap<Cow<'static, str>, Value<'static>>,
         timestamp: u64,
     ) -> Result<Vec<Value<'static>>> {
         self.op.metrics(tags, timestamp)
@@ -223,7 +223,7 @@ impl NodeMetrics {
         metric_name: &str,
         tags: &mut HashMap<Cow<'static, str>, Value<'static>>,
         timestamp: u64,
-    ) -> Result<Vec<Value<'static>>> {
+    ) -> Vec<Value<'static>> {
         let mut res = Vec::with_capacity(self.inputs.len() + self.outputs.len());
         tags.insert("direction".into(), "input".into());
         for (k, v) in &self.inputs {
@@ -245,7 +245,7 @@ impl NodeMetrics {
                 timestamp,
             ));
         }
-        Ok(res)
+        res
     }
 }
 
@@ -494,22 +494,20 @@ impl ExecutableGraph {
         &mut self,
         metric_name: &str,
         mut tags: HashMap<Cow<'static, str>, Value<'static>>,
-        timestamp: u64,
+        ingest_ns: u64,
     ) {
         for (i, m) in self.metrics.iter().enumerate() {
             tags.insert("node".into(), unsafe {
                 self.graph.get_unchecked(i).id.clone().into()
             });
-            if let Ok(metrics) =
-                unsafe { self.graph.get_unchecked(i) }.metrics(tags.clone(), timestamp)
-            {
+            if let Ok(metrics) = unsafe { self.graph.get_unchecked(i) }.metrics(&tags, ingest_ns) {
                 for value in metrics {
                     self.stack.push((
                         self.metrics_idx,
                         IN,
                         Event {
-                            data: LineValue::new(vec![], |_| ValueAndMeta::from(value)),
-                            ingest_ns: timestamp,
+                            data: value.into(),
+                            ingest_ns,
                             // TODO update this to point to tremor instance producing the metrics?
                             origin_uri: None,
                             ..Event::default()
@@ -517,20 +515,19 @@ impl ExecutableGraph {
                     ));
                 }
             }
-            if let Ok(metrics) = m.to_value(&metric_name, &mut tags, timestamp) {
-                for value in metrics {
-                    self.stack.push((
-                        self.metrics_idx,
-                        IN,
-                        Event {
-                            data: LineValue::new(vec![], |_| ValueAndMeta::from(value)),
-                            ingest_ns: timestamp,
-                            // TODO update this to point to tremor instance producing the metrics?
-                            origin_uri: None,
-                            ..Event::default()
-                        },
-                    ));
-                }
+
+            for value in m.to_value(&metric_name, &mut tags, ingest_ns) {
+                self.stack.push((
+                    self.metrics_idx,
+                    IN,
+                    Event {
+                        data: value.into(),
+                        ingest_ns,
+                        // TODO update this to point to tremor instance producing the metrics?
+                        origin_uri: None,
+                        ..Event::default()
+                    },
+                ));
             }
         }
     }
@@ -643,7 +640,7 @@ mod test {
             EventAndInsights::default()
         );
         assert_eq!(e, Event::default());
-        assert!(n.metrics(HashMap::default(), 0).unwrap().is_empty());
+        assert!(n.metrics(&HashMap::default(), 0).unwrap().is_empty());
     }
 
     fn test_metric<'value>(v: &Value<'value>, m: &str, c: u64) {
@@ -661,7 +658,7 @@ mod test {
         m.inc_output(&port);
         m.inc_output_n(&port, 22);
         let mut tags = HashMap::default();
-        let mut v = m.to_value("test", &mut tags, 123).unwrap();
+        let mut v = m.to_value("test", &mut tags, 123);
         assert_eq!(v.len(), 2);
 
         let mo = v.pop().unwrap();
@@ -708,10 +705,9 @@ mod test {
 
         fn metrics(
             &self,
-            _tags: HashMap<Cow<'static, str>, Value<'static>>,
+            _tags: &HashMap<Cow<'static, str>, Value<'static>>,
             _timestamp: u64,
         ) -> Result<Vec<Value<'static>>> {
-            // Make the trait signature nicer
             Ok(Vec::new())
         }
 
