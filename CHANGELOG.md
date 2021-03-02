@@ -17,6 +17,7 @@
 * Fail the `kafka` onramp if any of the configured topics could not be subscribed to [#779](https://github.com/tremor-rs/tremor-runtime/pull/779)
 * Tremor no longer requires a home dir for operations that do not need a config [#782](https://github.com/tremor-rs/tremor-runtime/issues/782)
 * Add performance section to PR template.
+* Fix markdown for discord link.
 
 ## 0.10.2
 
