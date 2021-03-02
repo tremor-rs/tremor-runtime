@@ -9,12 +9,14 @@
 * Add the `cb` offramp for testing upstream circuit breaker behaviour [#779](https://github.com/tremor-rs/tremor-runtime/pull/779)
 * Add the `kafka` onramp config `retry_failed_events` to acoid retrying failed events, and `polling_interval` to control how often kafka is polled for new messages if none were available previously [#779](https://github.com/tremor-rs/tremor-runtime/pull/779)
 * Add `kv` connector with the supported operations `put`, `get`, `delete`, `scan`, `cas`.
+* Add discord badge to README.md.
 
 ### Fixes
 
 * Fix `kafka` onramp hanging with no message in the queue, leading to delayed offset commits [#779](https://github.com/tremor-rs/tremor-runtime/pull/779)
 * Fail the `kafka` onramp if any of the configured topics could not be subscribed to [#779](https://github.com/tremor-rs/tremor-runtime/pull/779)
 * Tremor no longer requires a home dir for operations that do not need a config [#782](https://github.com/tremor-rs/tremor-runtime/issues/782)
+* Add performance section to PR template.
 
 ## 0.10.2
 
