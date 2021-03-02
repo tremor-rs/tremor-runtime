@@ -110,7 +110,6 @@ impl NetworkProtocol for ControlProtocol {
 
     async fn on_event(&mut self, sid: StreamId, event: &Event) -> Result<NetworkCont> {
         trace!("Received control protocol event");
-        //dbg!("Processing control protocol event");
         if let (Value::Object(value), ..) = event.data.parts() {
             // CONTROL_ALIAS is the first initial "tremor"
             if let Some(Value::Object(control)) = value.get(CONTROL_ALIAS) {

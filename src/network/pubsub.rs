@@ -12,7 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::{prelude::destructurize, NetworkCont, NetworkProtocol};
+use super::{
+    nana::StatusCode, prelude::close, prelude::destructurize, NetworkCont, NetworkProtocol,
+};
 use crate::onramp;
 use crate::pipeline;
 use crate::url::TremorURL;
@@ -40,6 +42,38 @@ impl PubSubRegistry {
     }
 }
 
+#[derive(Clone, Debug, PartialEq)]
+enum PubSubCommandPolicy {
+    Strict,
+    NonStrict,
+}
+
+impl std::fmt::Display for PubSubCommandPolicy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match *self {
+                PubSubCommandPolicy::Strict => "strict",
+                PubSubCommandPolicy::NonStrict => "non-strict",
+            }
+        )
+    }
+}
+
+#[derive(Clone, Debug)]
+struct PubSubHeaders {
+    policy: PubSubCommandPolicy,
+}
+
+const PUBSUB_HEADER_COMMAND_POLICY: &'static str = "command.policy";
+
+impl std::fmt::Display for PubSubHeaders {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {}", PUBSUB_HEADER_COMMAND_POLICY, self.policy)
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct PubSubProtocol {
     alias: String,
@@ -49,6 +83,13 @@ pub(crate) struct PubSubProtocol {
     rx: Receiver<network::Msg>,
     tx: Sender<network::Msg>,
     state: PubSubRegistry,
+    headers: PubSubHeaders,
+}
+
+impl PubSubProtocol {
+    fn is_strict(&self) -> bool {
+        PubSubCommandPolicy::Strict == self.headers.policy
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -67,13 +108,40 @@ struct PubSubOperation<'op> {
     body: Option<Value<'op>>,
 }
 
+fn parse_headers(headers: Value) -> PubSubHeaders {
+    if let Value::Object(headers) = headers {
+        let policy = match headers.get(PUBSUB_HEADER_COMMAND_POLICY) {
+            Some(Value::String(policy_str)) => {
+                dbg!(policy_str);
+                match policy_str.to_lowercase().as_str() {
+                    // Preferred
+                    "strict" => PubSubCommandPolicy::Strict,
+                    // Relaxed policy suitable for IDE integration, humans
+                    "non-strict" => PubSubCommandPolicy::NonStrict,
+                    // FIXME This should really be a fatal protocol error
+                    _otherwise => PubSubCommandPolicy::Strict,
+                }
+            }
+            _otherwise => PubSubCommandPolicy::Strict,
+        };
+
+        PubSubHeaders { policy }
+    } else {
+        // Strict by default - any runtime errors are fatal protocol errors
+        PubSubHeaders {
+            policy: PubSubCommandPolicy::Strict,
+        }
+    }
+}
+
 impl PubSubProtocol {
-    pub(crate) fn new(ns: &ControlProtocol, alias: String, _headers: Value) -> Self {
+    pub(crate) fn new(ns: &ControlProtocol, alias: String, headers: Value) -> Self {
         let qsize = 10;
         let (tx, rx) = bounded::<network::Msg>(qsize);
         let (ctrl_tx, ctrl_rx) = bounded::<network::ControlMsg>(qsize);
 
         Self {
+            headers: parse_headers(headers),
             alias,
             reg: ns.conductor.reg.clone(),
             addr: network::Addr::new(
@@ -247,7 +315,13 @@ impl PubSubProtocol {
                     }
                 }
             }
-            None => Err("Onramp not found".into()),
+            None => {
+                if PubSubCommandPolicy::Strict == self.headers.policy {
+                    Err("Onramp not found".into())
+                } else {
+                    Ok(false) // We ignore not found onramps in non-strict
+                }
+            }
         }
     }
 
@@ -273,7 +347,13 @@ impl PubSubProtocol {
                     }
                 }
             }
-            None => Err("Pipeline not found".into()),
+            None => {
+                if PubSubCommandPolicy::Strict == self.headers.policy {
+                    Err("Pipeline not found".into())
+                } else {
+                    Ok(false) // We ignore not found pipelines in non-strict
+                }
+            }
         }
     }
 
@@ -318,8 +398,13 @@ impl PubSubProtocol {
                     }
                 }
             }
-            // STRICT None => Err("Onramp not found".into()),
-            None => Ok(true), // Unsubscibing to a non-existant onramp is harmless
+            None => {
+                if PubSubCommandPolicy::Strict == self.headers.policy {
+                    Err("Onramp not found".into())
+                } else {
+                    Ok(false) // We ignore not found onramps in non-strict
+                }
+            }
         }
     }
 
@@ -349,7 +434,13 @@ impl PubSubProtocol {
                     }
                 }
             }
-            None => Ok(true), // Unsubscibing to a non-existant pipeline is harmless
+            None => {
+                if PubSubCommandPolicy::Strict == self.headers.policy {
+                    Err("Pipeline not found".into())
+                } else {
+                    Ok(false) // We ignore not found pipelines in non-strict
+                }
+            }
         }
     }
 
@@ -379,7 +470,13 @@ impl PubSubProtocol {
                     }
                 }
             }
-            None => Ok(true), // Unsubscibing to a non-existant offramp is harmless
+            None => {
+                if PubSubCommandPolicy::Strict == self.headers.policy {
+                    Err("Offramp not found".into())
+                } else {
+                    Ok(false) // We ignore not found offramps in non-strict
+                }
+            }
         }
     }
 
@@ -414,7 +511,13 @@ impl PubSubProtocol {
 
                 Ok(())
             }
-            None => Err("Pipeline not found".into()),
+            None => {
+                if PubSubCommandPolicy::Strict == self.headers.policy {
+                    Err("Cannot send, not subscribed for publication".into())
+                } else {
+                    Ok(()) // We ignore not found pipelines in non-strict
+                }
+            }
         }
     }
 
@@ -433,7 +536,13 @@ impl PubSubProtocol {
 
                 Ok(())
             }
-            None => Err("Offramp not found".into()),
+            None => {
+                if PubSubCommandPolicy::Strict == self.headers.policy {
+                    Err("Cannot send, not subscribed for publication".into())
+                } else {
+                    Ok(()) // We ignore not found offramps in non-strict
+                }
+            }
         }
     }
 
@@ -483,13 +592,23 @@ impl NetworkProtocol for PubSubProtocol {
                     for endpoint in a {
                         let url = TremorURL::parse(&endpoint.to_string())?;
 
-                        if self.subscribe(sid, url.clone()).await? {
-                            // FIXME check if already subscribed
-                            self.state.subs.push(url.clone());
-                            subs_ok.push(endpoint.to_string())
+                        match self.subscribe(sid, url.clone()).await {
+                            Ok(true) => {
+                                // FIXME check if already subscribed
+                                self.state.subs.push(url.clone());
+                                subs_ok.push(endpoint.to_string())
+                            }
+                            Ok(_) => (), // Ignore - modeled as acknowledging the empty set
+                            Err(_error) => {
+                                if self.is_strict() {
+                                    return close(StatusCode::PUBSUB_SUBSCRIPTION_FAILED);
+                                }
+                            }
                         }
                     }
                 }
+
+                // Empty acks imply subscription failure for non-strict
                 let subs_ok: Value = subs_ok.into();
                 return Ok(NetworkCont::SourceReply(
                     event!({ self.alias.to_string(): { "subscribe-ack": subs_ok }}),
@@ -513,8 +632,17 @@ impl NetworkProtocol for PubSubProtocol {
                             self.state.subs.remove(idx as usize);
                         }
 
-                        if self.unsubscribe(sid, url).await? {
-                            subs_ok.push(endpoint.to_string())
+                        match self.unsubscribe(sid, url.clone()).await {
+                            Ok(true) => {
+                                // FIXME check if already subscribed
+                                subs_ok.push(endpoint.to_string())
+                            }
+                            Ok(_) => (), // Ignore - modeled as acknowledging the empty set
+                            Err(_error) => {
+                                if self.is_strict() {
+                                    return close(StatusCode::PUBSUB_UNSUBSCRIPTION_FAILED);
+                                }
+                            }
                         }
                     }
                 }
@@ -529,10 +657,18 @@ impl NetworkProtocol for PubSubProtocol {
                     for endpoint in a {
                         let url = TremorURL::parse(&endpoint.to_string())?;
 
-                        if self.publish(sid, url.clone()).await? {
-                            // FIXME check if already subscribed
-                            self.state.pubs.push(url.clone());
-                            pubs_ok.push(endpoint.to_string())
+                        match self.publish(sid, url.clone()).await {
+                            Ok(true) => {
+                                // FIXME check if already subscribed
+                                self.state.pubs.push(url.clone());
+                                pubs_ok.push(endpoint.to_string())
+                            }
+                            Ok(_) => (), // Ignore - modeled as acknowledging the empty set
+                            Err(_error) => {
+                                if self.is_strict() {
+                                    return close(StatusCode::PUBSUB_PUBLICATION_FAILED);
+                                }
+                            }
                         }
                     }
                 }
@@ -559,8 +695,17 @@ impl NetworkProtocol for PubSubProtocol {
                             self.state.pubs.remove(idx as usize);
                         }
 
-                        if self.unsubscribe(sid, url).await? {
-                            pubs_ok.push(endpoint.to_string())
+                        match self.unsubscribe(sid, url.clone()).await {
+                            Ok(true) => {
+                                // FIXME check if already subscribed for publication
+                                pubs_ok.push(endpoint.to_string())
+                            }
+                            Ok(_) => (), // Ignore - modeled as acknowledging the empty set
+                            Err(_error) => {
+                                if self.is_strict() {
+                                    return close(StatusCode::PUBSUB_UNPUBLICATION_FAILED);
+                                }
+                            }
                         }
                     }
                 }

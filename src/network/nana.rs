@@ -141,6 +141,7 @@ status_codes! {
 
     // Malformed UTF-8 data
     (0, 100, WIRE_MALFORMED_UTF8_VALUE, "Malformed value - not UTF-8 valid");
+
     /// Malformed structural value
     (0, 101, WIRE_MALFORMED_VALUE, "Malformed value - not a well-formed tremor value");
 
@@ -200,6 +201,18 @@ status_codes! {
 
     /// The artefact kind specified is not a known type of artefact
     (1, 211, API_ARTEFACT_KIND_UNKNOWN, "Network API Protocol - invalid artefact kind");
+
+    /// An artefact that was the subject of the command was not found
+    (2, 200, PUBSUB_SUBSCRIPTION_FAILED, "Network PubSub Protocol - subscription not found in strict mode is an error");
+
+    /// An artefact that was the subject of the command was not found
+    (2, 201, PUBSUB_UNSUBSCRIPTION_FAILED, "Network PubSub Protocol - unsubscription not found in strict mode is an error");
+
+    /// An artefact that was the subject of the command was not found
+    (2, 202, PUBSUB_PUBLICATION_FAILED, "Network PubSub Protocol - publication not found in strict mode is an error");
+
+    /// An artefact that was the subject of the command was not found
+    (2, 203, PUBSUB_UNPUBLICATION_FAILED, "Network PubSub Protocol - unpublication not found in strict mode is an error");
 }
 
 impl fmt::Display for InvalidStatusCode {
