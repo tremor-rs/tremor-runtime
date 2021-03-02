@@ -17,10 +17,8 @@ jobs:
         with:
           override: true
           profile: minimal
-      - name: Run tests
-        run: cargo test --all
-      - name: Validate lockfile
-        run: .github/checks/vsn.sh
+      - name: Run tests and validate lockfile
+        run: cargo test --all --locked
   code-coverage:
     runs-on: ubuntu-latest
     steps:
