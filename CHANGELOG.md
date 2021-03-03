@@ -11,6 +11,7 @@
 * Add the `kafka` onramp config `retry_failed_events` to acoid retrying failed events, and `polling_interval` to control how often kafka is polled for new messages if none were available previously [#779](https://github.com/tremor-rs/tremor-runtime/pull/779)
 * Add `kv` connector with the supported operations `put`, `get`, `delete`, `scan`, `cas`.
 * Add discord badge to README.md.
+* Handle signals and terminate properly on Ctrl+C in docker [#806](https://github.com/tremor-rs/tremor-runtime/pull/806)
 
 ### Fixes
 
