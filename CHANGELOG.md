@@ -19,6 +19,7 @@
 * Tremor no longer requires a home dir for operations that do not need a config [#782](https://github.com/tremor-rs/tremor-runtime/issues/782)
 * Add performance section to PR template.
 * Fix markdown for discord link.
+* Fix lalrpop builds when extra folders exist.
 
 ## 0.10.2
 
