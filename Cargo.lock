@@ -169,7 +169,7 @@ dependencies = [
  "futures-core",
  "futures-io",
  "once_cell",
- "pin-project-lite 0.2.4",
+ "pin-project-lite 0.2.5",
  "tokio 1.2.0",
 ]
 
@@ -183,7 +183,7 @@ dependencies = [
  "futures-core",
  "futures-io",
  "memchr",
- "pin-project-lite 0.2.4",
+ "pin-project-lite 0.2.5",
  "xz2",
 ]
 
@@ -359,7 +359,7 @@ dependencies = [
  "memchr",
  "num_cpus",
  "once_cell",
- "pin-project-lite 0.2.4",
+ "pin-project-lite 0.2.5",
  "pin-utils",
  "slab",
  "wasm-bindgen-futures",
@@ -408,7 +408,7 @@ dependencies = [
  "futures-io",
  "futures-util",
  "log",
- "pin-project-lite 0.2.4",
+ "pin-project-lite 0.2.5",
  "tungstenite 0.13.0",
 ]
 
@@ -1785,7 +1785,7 @@ dependencies = [
  "futures-io",
  "memchr",
  "parking",
- "pin-project-lite 0.2.4",
+ "pin-project-lite 0.2.5",
  "waker-fn",
 ]
 
@@ -1826,7 +1826,7 @@ dependencies = [
  "futures-sink",
  "futures-task",
  "memchr",
- "pin-project-lite 0.2.4",
+ "pin-project-lite 0.2.5",
  "pin-utils",
  "proc-macro-hack",
  "proc-macro-nested",
@@ -2245,7 +2245,7 @@ dependencies = [
  "cookie 0.14.3",
  "futures-lite",
  "infer",
- "pin-project-lite 0.2.4",
+ "pin-project-lite 0.2.5",
  "rand 0.7.3",
  "serde",
  "serde_json",
@@ -3430,9 +3430,9 @@ checksum = "c917123afa01924fc84bb20c4c03f004d9c38e5127e3c039bbf7f4b9c76a2f6b"
 
 [[package]]
 name = "pin-project-lite"
-version = "0.2.4"
+version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "439697af366c49a6d0a010c56a0d97685bc140ce0d377b13a2ea2aa42d64a827"
+checksum = "0cf491442e4b033ed1c722cb9f0df5fcfcf4de682466c46469c36bc47dc5548a"
 
 [[package]]
 name = "pin-utils"
@@ -4125,7 +4125,7 @@ dependencies = [
  "mime_guess",
  "native-tls",
  "percent-encoding 2.1.0",
- "pin-project-lite 0.2.4",
+ "pin-project-lite 0.2.5",
  "serde",
  "serde_urlencoded 0.7.0",
  "tokio 0.2.25",
@@ -4159,7 +4159,7 @@ dependencies = [
  "mime",
  "mime_guess",
  "percent-encoding 2.1.0",
- "pin-project-lite 0.2.4",
+ "pin-project-lite 0.2.5",
  "rustls",
  "serde",
  "serde_json",
@@ -5122,7 +5122,7 @@ dependencies = [
  "http-types",
  "kv-log-macro",
  "log",
- "pin-project-lite 0.2.4",
+ "pin-project-lite 0.2.5",
  "route-recognizer",
  "serde",
  "serde_json",
@@ -5260,7 +5260,7 @@ checksum = "46409491c9375a693ce7032101970a54f8a2010efb77e13f70788f0d84489e39"
 dependencies = [
  "autocfg 1.0.1",
  "num_cpus",
- "pin-project-lite 0.2.4",
+ "pin-project-lite 0.2.5",
  "slab",
 ]
 
@@ -5276,7 +5276,7 @@ dependencies = [
  "memchr",
  "mio 0.7.8",
  "num_cpus",
- "pin-project-lite 0.2.4",
+ "pin-project-lite 0.2.5",
  "tokio-macros",
 ]
 
@@ -5370,7 +5370,7 @@ dependencies = [
  "parking_lot 0.11.1",
  "percent-encoding 2.1.0",
  "phf",
- "pin-project-lite 0.2.4",
+ "pin-project-lite 0.2.5",
  "postgres-protocol",
  "postgres-types",
  "socket2",
@@ -5528,7 +5528,7 @@ dependencies = [
  "futures-core",
  "futures-sink",
  "log",
- "pin-project-lite 0.2.4",
+ "pin-project-lite 0.2.5",
  "tokio 1.2.0",
 ]
 
@@ -5569,7 +5569,7 @@ checksum = "f77d3842f76ca899ff2dbcf231c5c65813dea431301d6eb686279c15c4464f12"
 dependencies = [
  "cfg-if 1.0.0",
  "log",
- "pin-project-lite 0.2.4",
+ "pin-project-lite 0.2.5",
  "tracing-attributes",
  "tracing-core",
 ]
@@ -5769,7 +5769,7 @@ dependencies = [
  "mapr",
  "matches",
  "openssl",
- "pin-project-lite 0.2.4",
+ "pin-project-lite 0.2.5",
  "postgres",
  "postgres-protocol",
  "pretty_assertions",
