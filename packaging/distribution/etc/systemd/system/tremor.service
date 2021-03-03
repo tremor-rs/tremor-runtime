@@ -7,7 +7,7 @@ Requires=network-online.target
 [Service]
 User=tremor
 Group=tremor
-ExecStart=/usr/lib/tremor/tremor.service
+ExecStart=/usr/lib/tremor/tremor.sh
 Restart=always
 SyslogIdentifier=tremor
 
