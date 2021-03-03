@@ -31,7 +31,7 @@ static ERL_NIF_TERM ts_eval(ErlNifEnv *env, int argc,
     {
         return enif_make_badarg(env);
     }
-    char *ast_c_str = malloc(ast.size + 1);
+    unsigned char *ast_c_str = malloc(ast.size + 1);
     if (!ast_c_str)
     {
         return enif_make_atom(env, "error");

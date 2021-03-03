@@ -19,105 +19,99 @@
 
 -export([eval/1, eval/2]).
 
-
 resolve(#state{locals = L}, {local, _} = K) ->
     maps:get(K, L).
 
+-spec ast_eval(#vars{}, {}) -> {#vars{},
+				integer() | float() | boolean() | binary()}.
 
--spec ast_eval(#vars{}, {}) -> {#vars{}, integer() | float() | boolean() | binary()}.
-ast_eval(#vars{}=S, {'+', A, B}) when is_binary(A) andalso is_binary(B) -> {S, <<A/binary, B/binary>>};
-ast_eval(#vars{}=S, {'+', A, B}) ->
+ast_eval(#vars{} = S, {'+', A, B})
+    when is_binary(A) andalso is_binary(B) ->
+    {S, <<A/binary, B/binary>>};
+ast_eval(#vars{} = S, {'+', A, B}) ->
     {S1, A1} = ast_eval(S, A),
     {S2, B1} = ast_eval(S1, B),
-    case {A1, B1} of 
-        {A1, B1} when is_binary(A1) andalso is_binary(B1) ->
-            {S, <<A1/binary, B1/binary>>};
-        {A1, B1} ->
-            {S2, A1 + B1}
+    case {A1, B1} of
+      {A1, B1} when is_binary(A1) andalso is_binary(B1) ->
+	  {S, <<A1/binary, B1/binary>>};
+      {A1, B1} -> {S2, A1 + B1}
     end;
-ast_eval(#vars{}=S, {'-', A, B}) ->
+ast_eval(#vars{} = S, {'-', A, B}) ->
     {S1, A1} = ast_eval(S, A),
     {S2, B1} = ast_eval(S1, B),
     {S2, A1 - B1};
-ast_eval(#vars{}=S, {'/', A, B}) ->
+ast_eval(#vars{} = S, {'/', A, B}) ->
     {S1, A1} = ast_eval(S, A),
     {S2, B1} = ast_eval(S1, B),
     {S2, A1 / B1};
-
-ast_eval(#vars{}=S, {'*', A, B}) ->
+ast_eval(#vars{} = S, {'*', A, B}) ->
     {S1, A1} = ast_eval(S, A),
     {S2, B1} = ast_eval(S1, B),
     {S2, A1 * B1};
-
-ast_eval(#vars{}=S, {'%', A, B}) ->
+ast_eval(#vars{} = S, {'%', A, B}) ->
     {S1, A1} = ast_eval(S, A),
     {S2, B1} = ast_eval(S1, B),
-    {S2, util:mod(A1 ,B1)};
-
-ast_eval(#vars{}=S, {'==', A, B}) ->
+    {S2, util:mod(A1, B1)};
+ast_eval(#vars{} = S, {'==', A, B}) ->
     {S1, A1} = ast_eval(S, A),
     {S2, B1} = ast_eval(S1, B),
     {S2, A1 == B1};
-ast_eval(#vars{}=S, {'!=', A, B}) ->
+ast_eval(#vars{} = S, {'!=', A, B}) ->
     {S1, A1} = ast_eval(S, A),
     {S2, B1} = ast_eval(S1, B),
     {S2, A1 /= B1};
-ast_eval(#vars{}=S, {'>=', A, B}) ->
+ast_eval(#vars{} = S, {'>=', A, B}) ->
     {S1, A1} = ast_eval(S, A),
     {S2, B1} = ast_eval(S1, B),
     {S2, A1 >= B1};
-ast_eval(#vars{}=S, {'>', A, B}) ->
+ast_eval(#vars{} = S, {'>', A, B}) ->
     {S1, A1} = ast_eval(S, A),
     {S2, B1} = ast_eval(S1, B),
     {S2, A1 > B1};
-ast_eval(#vars{}=S, {'<', A, B}) ->
+ast_eval(#vars{} = S, {'<', A, B}) ->
     {S1, A1} = ast_eval(S, A),
     {S2, B1} = ast_eval(S1, B),
     {S2, A1 < B1};
-ast_eval(#vars{}=S, {'<=', A, B}) ->
+ast_eval(#vars{} = S, {'<=', A, B}) ->
     {S1, A1} = ast_eval(S, A),
     {S2, B1} = ast_eval(S1, B),
     {S2, A1 =< B1};
-ast_eval(#vars{}=S, {'and', A, B}) ->
+ast_eval(#vars{} = S, {'and', A, B}) ->
     {S1, A1} = ast_eval(S, A),
     {S2, B1} = ast_eval(S1, B),
     {S2, A1 andalso B1};
-ast_eval(#vars{}=S, {'or', A, B}) ->
+ast_eval(#vars{} = S, {'or', A, B}) ->
     {S1, A1} = ast_eval(S, A),
     {S2, B1} = ast_eval(S1, B),
     {S2, A1 orelse B1};
-ast_eval(#vars{}=S, {'not', A}) ->
-    {S1, A1} = ast_eval(S, A),
-    {S1, not A1};
-ast_eval(#vars{}=S, {'+', A})  ->
-    {S1, A1} = ast_eval(S, A),
-    {S1, A1};
-ast_eval(#vars{}=S, {'-', A})  ->
-    {S1, A1} = ast_eval(S, A),
-    {S1,-A1};
-ast_eval(#vars{locals=L}=S, {'let', Path, Expr}) ->
-    {S1, R} = ast_eval(S,Expr),
+ast_eval(#vars{} = S, {'not', A}) ->
+    {S1, A1} = ast_eval(S, A), {S1, not A1};
+ast_eval(#vars{} = S, {'+', A}) ->
+    {S1, A1} = ast_eval(S, A), {S1, A1};
+ast_eval(#vars{} = S, {'-', A}) ->
+    {S1, A1} = ast_eval(S, A), {S1, -A1};
+ast_eval(#vars{locals = L} = S, {'let', Path, Expr}) ->
+    {S1, R} = ast_eval(S, Expr),
     LL = maps:put(Path, R, L),
-    {S1#vars{locals=LL}, R};
+    {S1#vars{locals = LL}, R};
 ast_eval(S, true) -> {S, true};
 ast_eval(S, false) -> {S, false};
 ast_eval(S, null) -> {S, null};
 ast_eval(S, N) when is_number(N) -> {S, N};
 ast_eval(S, B) when is_binary(B) -> {S, B};
 ast_eval(S, {local, _} = L) -> {S, resolve(S, L)};
-
-
-ast_eval(#vars{}=S, {emit, A}) -> {S1, R} = ast_eval(S, A), {S1, {emit, R}};
-ast_eval(#vars{}=S, drop) -> {S, drop}.
+ast_eval(#vars{} = S, {emit, A}) ->
+    {S1, R} = ast_eval(S, A), {S1, {emit, R}};
+ast_eval(#vars{} = S, drop) -> {S, drop}.
 
 %% We run the model specification through a simple implementation of
 %% tremor-script implemented in Erlang natively.
-eval(Spec) ->
-    eval(#vars{}, Spec).
+eval(Spec) -> eval(#vars{}, Spec).
 
-eval(#vars{}=SNOT, Spec) ->
+eval(#vars{} = SNOT, Spec) ->
     case ast_eval(SNOT, Spec) of
-        {S, {emit, X}} -> {S, [{<<"emit">>, util:clamp(X,13)}]};
-        {S, drop} -> {S, [{<<"drop">>, null}]};
-        {S, X} -> {S, [{<<"emit">>, util:clamp(X,13)}]}
+      {S, {emit, X}} ->
+	  {S, #{<<"emit">> => util:clamp(X, 13)}};
+      {S, drop} -> {S, #{<<"drop">> => null}};
+      {S, X} -> {S, #{<<"emit">> => util:clamp(X, 13)}}
     end.
