@@ -37,7 +37,7 @@ serde_derive = "1"
 serde_yaml = "0.8"
 simd-json = {version = "0.3", features = ["known-key"]}
 snmalloc-rs = {version = "0.2", optional = false}
-surf = "=2.1.0"
+surf = "=2.2.0"
 tide = "0.16"
 tremor-api = {path = "../tremor-api"}
 tremor-common = {path = "../tremor-common"}
