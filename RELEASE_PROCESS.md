@@ -16,7 +16,7 @@
 * Update tests in tremor-cli/tests/ that match against the current version number
 * Create a PR with those changes
 * Pull the PR once accepted and merged
-* `git tag -a -m"Release v<MAJOR>.<MINOR>.<BUGFIX>" <COMMIT>`
+* `git tag -a -m"Release v<MAJOR>.<MINOR>.<BUGFIX>" v<MAJOR>.<MINOR>.<BUGFIX> <COMMIT>`
 * `git push origin --tag`
 * Draft a new release on github
   - This will trigger the docker image build jobs
@@ -30,6 +30,9 @@
     - ./tremor-script
 * Release https://github.com/tremor-rs/tremor-language-server
   - Bump version and update dependency `tremor-script` to the new version.
+  - Create a github tag and draft a release from it:
+    - `git tag -a -m"Release v<MAJOR>.<MINOR>.<BUGFIX>" v<MAJOR>.<MINOR>.<BUGFIX> <COMMIT>`
+    - `git push origin --tag`
   - Execute `cargo publish` from the language server repository root.
   - Verify new language server installation via `cargo install tremor-language-server`
 * Wait for the docker image to build and publish
