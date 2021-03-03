@@ -15,7 +15,10 @@
 extern crate lalrpop;
 
 fn main() {
-    lalrpop::process_root().expect("Unable to initialize LALRPOP");
+    lalrpop::Configuration::new()
+        .use_cargo_dir_conventions()
+        .process()
+        .expect("Unable to initialize LALRPOP");
 
     println!("cargo:rustc-cfg=can_join_spans");
     println!("cargo:rustc-cfg=can_show_location_of_runtime_parse_error");
