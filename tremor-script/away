@@ -1,8 +1,0 @@
-let this = "that";
-let bla = "blubb";
-match true of
-  case true when "snot" => `this`
-  default => bla
-end;
-let the = "line";
-let `won't` = "show";
