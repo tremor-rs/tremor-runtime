@@ -4518,9 +4518,9 @@ dependencies = [
 
 [[package]]
 name = "serenity"
-version = "0.10.2"
+version = "0.10.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4dac8367ecfd3380c00dcedf5eb9a47888ae74ae391419b5b1f7735895ed8df4"
+checksum = "f86e9dc74c89931fe12f3af64ae484268c0a4864a90fb2b7d2e867a301f173c4"
 dependencies = [
  "async-trait",
  "async-tungstenite 0.11.0",
@@ -4536,7 +4536,6 @@ dependencies = [
  "serde_json",
  "tokio 1.2.0",
  "tracing",
- "tracing-futures",
  "typemap_rev",
  "url 2.2.1",
 ]
