@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::{Error, Result};
+use crate::errors::{Error, ErrorKind, Result};
 use crate::util::{get_source_kind, SourceKind};
 use async_std::task;
 use clap::{App, ArgMatches};
@@ -128,11 +128,16 @@ pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
             match kind {
                 SourceKind::Trickle => {
                     if let Err(e) = tremor_runtime::load_query_file(&world, config_file).await {
-                        error!("Failed to load trickle script file {}: {}", config_file, e);
+                        return Err(ErrorKind::FileLoadError(config_file.to_string(), e).into());
                     }
                 }
                 SourceKind::Tremor | SourceKind::Json | SourceKind::Unsupported(_) => {
-                    error!("Unsupported file format {}: {}", kind, config_file);
+                    return Err(ErrorKind::UnsupportedFileType(
+                        config_file.to_string(),
+                        kind,
+                        "yaml",
+                    )
+                    .into());
                 }
                 SourceKind::Yaml => yaml_files.push(config_file),
             };
@@ -141,7 +146,7 @@ pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
         // We process config files thereafter
         for config_file in yaml_files {
             if let Err(e) = tremor_runtime::load_cfg_file(&world, config_file).await {
-                error!("Failed to load config file {}: {}", config_file, e)
+                return Err(ErrorKind::FileLoadError(config_file.to_string(), e).into());
             }
         }
     }
@@ -155,7 +160,7 @@ pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
         info!("Listening at: http://{}", host);
 
         if let Err(e) = app.listen(host).await {
-            error!("API Error: {}", e);
+            return Err(format!("API Error: {}", e).into());
         }
         warn!("API stopped");
         world.stop().await?;
@@ -170,18 +175,10 @@ fn server_run(matches: &ArgMatches) -> Result<()> {
     version::print();
     if let Err(ref e) = task::block_on(run_dun(matches)) {
         error!("error: {}", e);
-        eprintln!("error: {}", e);
         for e in e.iter().skip(1) {
             error!("error: {}", e);
-            eprintln!("error: {}", e);
         }
-
-        // The backtrace is not always generated. Try to run this example
-        // with `RUST_BACKTRACE=1`.
-        if let Some(backtrace) = e.backtrace() {
-            error!("backtrace: {:?}", backtrace);
-            eprintln!("backtrace: {:?}", backtrace);
-        }
+        error!("We are SHUTTING DOWN due to errors during initialization!");
 
         // ALLOW: main.rs
         ::std::process::exit(1);
@@ -191,7 +188,6 @@ fn server_run(matches: &ArgMatches) -> Result<()> {
 }
 
 #[cfg(not(tarpaulin_include))]
-
 pub(crate) fn run_cmd(mut app: App, cmd: &ArgMatches) -> Result<()> {
     if let Some(matches) = cmd.subcommand_matches("run") {
         server_run(matches)

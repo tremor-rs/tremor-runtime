@@ -261,23 +261,28 @@ pub(crate) fn visit_path<'a>(base: &Path, path: &Path, visitor: &'a PathVisitor)
     Ok(())
 }
 
-#[derive(Clone, PartialEq)]
-pub(crate) enum SourceKind {
+#[derive(Clone, PartialEq, Debug)]
+pub enum SourceKind {
+    /// A tremor source file
     Tremor,
+    /// A trickle source file
     Trickle,
+    /// A json file
     Json,
-    Unsupported(Option<String>),
+    /// A yaml file
     Yaml,
+    /// An unsuported file
+    Unsupported(Option<String>),
 }
 impl fmt::Display for SourceKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
         match self {
             SourceKind::Tremor => write!(f, "tremor"),
             SourceKind::Trickle => write!(f, "trickle"),
-            SourceKind::Json => write!(f, "JSON"),
+            SourceKind::Json => write!(f, "json"),
             SourceKind::Unsupported(None) => write!(f, "<NONE>"),
             SourceKind::Unsupported(Some(ext)) => write!(f, "{}", ext),
-            SourceKind::Yaml => write!(f, "YAML"),
+            SourceKind::Yaml => write!(f, "yaml"),
         }
     }
 }
