@@ -17,6 +17,7 @@
 #![allow(missing_docs)]
 #![allow(clippy::large_enum_variant)]
 
+use crate::util::SourceKind;
 use error_chain::error_chain;
 
 impl From<http_types::Error> for Error {
@@ -60,6 +61,14 @@ error_chain! {
         TestFailures(stats: crate::test::stats::Stats) {
             description("Some tests failed")
                 display("{} out of {} tests failed.", stats.fail, stats.skip + stats.pass)
+        }
+        FileLoadError(file: String, error: tremor_runtime::errors::Error) {
+            description("Failed to load config file")
+                display("An error occurred while loading the file `{}`: {}", file, error)
+        }
+        UnsupportedFileType(file: String, file_type: SourceKind, expected: &'static str) {
+            description("Unsupported file type")
+                display("The file `{}` has the type `{}`, but tremor expected: {}", file, file_type, expected)
         }
     }
 }
