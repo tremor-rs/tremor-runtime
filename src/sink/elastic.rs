@@ -198,7 +198,7 @@ fn build_bulk_success_data(
     id: &EventId,
     payload: Value<'static>,
     origin_uri: Option<&EventOriginUri>,
-) -> Result<LineValue> {
+) -> LineValue {
     let mut meta = Object::with_capacity(1);
     let mut es_meta = Object::with_capacity(4);
     es_meta.insert("id".into(), Value::from(item.id().to_string()));
@@ -215,7 +215,7 @@ fn build_bulk_success_data(
     value.insert("source".into(), source);
     value.insert("payload".into(), payload);
     value.insert("success".into(), Value::from(true));
-    Ok((value, meta).into())
+    (value, meta).into()
 }
 
 /// Build event payload for elasticsearch _bulk request
@@ -315,12 +315,12 @@ impl Elastic {
                         let item_res = match item {
                             Ok(ok_item) => (
                                 OUT,
-                                build_bulk_success_data(
+                                Ok(build_bulk_success_data(
                                     ok_item,
                                     &id,
                                     value.clone_static(), // uaarrghhh
                                     event.origin_uri.as_ref(),
-                                ),
+                                )),
                             ),
                             Err(err_item) => (
                                 ERR,

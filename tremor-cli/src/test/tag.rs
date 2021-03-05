@@ -25,14 +25,11 @@ pub(crate) struct TagFilter {
 
 pub(crate) type Tags = Vec<String>;
 
-pub(crate) fn maybe_slurp_tags(path: &str) -> Result<Tags> {
+pub(crate) fn maybe_slurp_tags(path: &str) -> Tags {
     let tags_data = slurp_string(path);
     match tags_data {
-        Ok(tags_data) => match serde_json::from_str(&tags_data) {
-            Ok(s) => Ok(s),
-            Err(_not_well_formed) => Ok(vec![]),
-        },
-        Err(_not_found) => Ok(vec![]),
+        Ok(tags_data) => serde_json::from_str(&tags_data).unwrap_or_default(),
+        Err(_not_found) => vec![],
     }
 }
 
@@ -142,11 +139,11 @@ pub(crate) fn resolve(base: &Path, other: &Path) -> Result<TagFilter> {
         let mut base = base.to_string_lossy().to_string();
         let tags_file = format!("{}/tags.json", &base);
         let mut tags = TagFilter::new(vec![], vec![]);
-        tags = tags.join(Some(maybe_slurp_tags(&tags_file)?));
+        tags = tags.join(Some(maybe_slurp_tags(&tags_file)));
         for dirname in rel.split('/') {
             base = format!("{}/{}", base, dirname);
             let tags_file = format!("{}/tags.json", &base);
-            tags = tags.join(Some(maybe_slurp_tags(&tags_file)?));
+            tags = tags.join(Some(maybe_slurp_tags(&tags_file)));
         }
         Ok(tags)
     } else {

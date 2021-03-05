@@ -343,11 +343,13 @@ impl<'input> Token<'input> {
     /// Is the token ignorable except when syntax or error highlighting.
     /// Is the token insignificant when parsing ( a correct ... ) source.
     pub(crate) fn is_ignorable(&self) -> bool {
-        matches!(*self,
+        matches!(
+            *self,
             Token::SingleLineComment(_)
-            | Token::Whitespace(_)
-            | Token::NewLine
-            | Token::LineDirective(_, _))
+                | Token::Whitespace(_)
+                | Token::NewLine
+                | Token::LineDirective(_, _)
+        )
     }
 
     // tarpaulin falsely only marks the first and last as covered
@@ -413,12 +415,14 @@ impl<'input> Token<'input> {
     #[cfg(not(tarpaulin_include))]
     /// Is the token a literal, excluding list and record literals
     pub(crate) fn is_literal(&self) -> bool {
-        matches!(*self,
+        matches!(
+            *self,
             Token::DontCare
-            | Token::Nil
-            | Token::BoolLiteral(_)
-            | Token::IntLiteral(_)
-            | Token::FloatLiteral(_, _))
+                | Token::Nil
+                | Token::BoolLiteral(_)
+                | Token::IntLiteral(_)
+                | Token::FloatLiteral(_, _)
+        )
     }
 
     // tarpaulin falsely only marks the first and last as covered
@@ -426,11 +430,10 @@ impl<'input> Token<'input> {
     #[cfg(not(tarpaulin_include))]
     // It's text-like or string-like notation such as String, char, regex ...
     pub(crate) fn is_string_like(&self) -> bool {
-        matches!(*self,
-            Token::StringLiteral(_)
-            | Token::DQuote
-            | Token::TestLiteral(_, _)
-            | Token::HereDoc)
+        matches!(
+            *self,
+            Token::StringLiteral(_) | Token::DQuote | Token::TestLiteral(_, _) | Token::HereDoc
+        )
     }
 
     // tarpaulin falsely only marks the first and last as covered
@@ -438,8 +441,9 @@ impl<'input> Token<'input> {
     #[cfg(not(tarpaulin_include))]
     /// Is the token a builtin delimiter symbol
     pub(crate) fn is_symbol(&self) -> bool {
-        matches!(*self,
-                Token::BSlash
+        matches!(
+            *self,
+            Token::BSlash
                 | Token::Colon
                 | Token::ColonColon
                 | Token::Comma
@@ -456,7 +460,8 @@ impl<'input> Token<'input> {
                 | Token::RBracket
                 | Token::RParen
                 | Token::Semi
-                | Token::TildeEq)
+                | Token::TildeEq
+        )
     }
 
     // tarpaulin falsely only marks the first and last as covered
@@ -784,9 +789,8 @@ macro_rules! take_while {
             if let Some(Ok(Spanned { value: $token, .. })) = $let {
                 $let = $iter.next();
                 continue;
-            } else {
-                break;
             }
+            break;
         }
     };
 }
@@ -798,12 +802,12 @@ pub struct CompilationUnit {
 }
 
 impl CompilationUnit {
-    fn from_file(file: &Path) -> Result<Self> {
+    fn from_file(file: &Path) -> Self {
         let mut p = PathBuf::new();
         p.push(file);
-        Ok(Self {
+        Self {
             file_path: p.into_boxed_path(),
-        })
+        }
     }
     /// String representation of the computational unit
     #[must_use]
@@ -855,14 +859,7 @@ impl IncludeStack {
 
     /// Pushes a a compilation unit onto the include stack
     pub fn push<S: AsRef<OsStr> + ?Sized>(&mut self, file: &S) -> Result<usize> {
-        let e = CompilationUnit::from_file(Path::new(file)).map_err(|e| {
-            let file: &OsStr = file.as_ref();
-            Error::from(format!(
-                "Could not open compilation unit `{}`: {}",
-                file.to_string_lossy(),
-                e
-            ))
-        })?;
+        let e = CompilationUnit::from_file(Path::new(file));
         if self.contains(&e) {
             Err(format!(
                 "Cyclic dependency detected: {} -> {}",
@@ -1383,13 +1380,11 @@ impl<'input> Lexer<'input> {
             if terminate(ch) {
                 if let Some(slice) = self.slice(start, e) {
                     return (end, slice);
-                } else {
-                    // Invalid start end case :(
-                    return (end, "<ERROR>");
                 }
-            } else {
-                self.bump();
+                // Invalid start end case :(
+                return (end, "<ERROR>");
             }
+            self.bump();
         }
         // EOF
         // we need to shift by 1, otherwise we take the location of the previous char.
@@ -1445,63 +1440,63 @@ impl<'input> Lexer<'input> {
     }
 
     /// handle equals
-    fn eq(&mut self, start: Location) -> Result<TokenSpan<'input>> {
+    fn eq(&mut self, start: Location) -> TokenSpan<'input> {
         match self.lookahead() {
             Some((end, '>')) => {
                 self.bump();
-                Ok(self.spanned2(start, end, Token::EqArrow))
+                self.spanned2(start, end, Token::EqArrow)
             }
             Some((end, '=')) => {
                 self.bump();
-                Ok(self.spanned2(start, end, Token::EqEq))
+                self.spanned2(start, end, Token::EqEq)
             }
-            _ => Ok(self.spanned2(start, start, Token::Eq)),
+            _ => self.spanned2(start, start, Token::Eq),
         }
     }
 
     /// handle colons
-    fn cn(&mut self, start: Location) -> Result<TokenSpan<'input>> {
+    fn cn(&mut self, start: Location) -> TokenSpan<'input> {
         let (end, lexeme) = self.take_while(start, |ch| ch == ':');
 
         match lexeme {
-            "::" => Ok(self.spanned2(start, end, Token::ColonColon)),
-            ":" => Ok(self.spanned2(start, end, Token::Colon)),
-            _ => Ok(self.spanned2(start, end, Token::Bad(lexeme.to_string()))),
+            "::" => self.spanned2(start, end, Token::ColonColon),
+            ":" => self.spanned2(start, end, Token::Colon),
+            _ => self.spanned2(start, end, Token::Bad(lexeme.to_string())),
         }
     }
 
-    fn gt(&mut self, start: Location) -> Result<TokenSpan<'input>> {
+    fn gt(&mut self, start: Location) -> TokenSpan<'input> {
         match self.lookahead() {
             Some((end, '>')) => {
                 self.bump();
                 if let Some((end, '>')) = self.lookahead() {
                     self.bump();
-                    Ok(self.spanned2(start, end, Token::RBitShiftUnsigned))
+                    self.spanned2(start, end, Token::RBitShiftUnsigned)
                 } else {
-                    Ok(self.spanned2(start, end, Token::RBitShiftSigned))
+                    self.spanned2(start, end, Token::RBitShiftSigned)
                 }
             }
             Some((end, '=')) => {
                 self.bump();
-                Ok(self.spanned2(start, end, Token::Gte))
+                self.spanned2(start, end, Token::Gte)
             }
-            Some((end, _)) => Ok(self.spanned2(start, end, Token::Gt)),
-            None => Ok(self.spanned2(start, start, Token::Bad(">".to_string()))),
+            Some((end, _)) => self.spanned2(start, end, Token::Gt),
+            None => self.spanned2(start, start, Token::Bad(">".to_string())),
         }
     }
 
-    fn lt(&mut self, start: Location) -> Result<TokenSpan<'input>> {
+    fn lt(&mut self, start: Location) -> TokenSpan<'input> {
         match self.lookahead() {
             Some((end, '<')) => {
                 self.bump();
-                Ok(self.spanned2(start, end, Token::LBitShift))
+                self.spanned2(start, end, Token::LBitShift)
             }
             Some((end, '=')) => {
                 self.bump();
-                Ok(self.spanned2(start, end, Token::Lte))
+                self.spanned2(start, end, Token::Lte)
             }
-            Some((end, _)) => Ok(self.spanned2(start, end, Token::Lt)),
-            None => Ok(self.spanned2(start, start, Token::Bad("<".to_string()))),
+            Some((end, _)) => self.spanned2(start, end, Token::Lt),
+            None => self.spanned2(start, start, Token::Bad("<".to_string())),
         }
     }
 
@@ -1549,7 +1544,7 @@ impl<'input> Lexer<'input> {
         }
     }
 
-    fn id(&mut self, start: Location) -> Result<TokenSpan<'input>> {
+    fn id(&mut self, start: Location) -> TokenSpan<'input> {
         let (end, ident) = self.take_while(start, is_ident_continue);
 
         let token = match ident {
@@ -1612,7 +1607,7 @@ impl<'input> Lexer<'input> {
             src => Token::Ident(src.into(), false),
         };
 
-        Ok(self.spanned2(start, end, token))
+        self.spanned2(start, end, token)
     }
 
     fn next_index(&mut self) -> Result<Location> {
@@ -1728,11 +1723,10 @@ impl<'input> Lexer<'input> {
                     if let Some(slice) = self.slice(s, e) {
                         let token = Token::Ident(slice.into(), true);
                         return Ok(self.spanned2(start, end, token));
-                    } else {
-                        // Invalid start end case :(
-                        let token = Token::Ident(string.into(), true);
-                        return Ok(self.spanned2(start, end, token));
                     }
+                    // Invalid start end case :(
+                    let token = Token::Ident(string.into(), true);
+                    return Ok(self.spanned2(start, end, token));
                 }
                 Some((end, '\n')) => {
                     let range = Range::from((start, end));
@@ -2122,9 +2116,8 @@ impl<'input> Lexer<'input> {
                             heredoc_end.shift('"');
                             res.push(self.spanned2(segment_start, heredoc_end, Token::HereDoc));
                             return Ok(res);
-                        } else {
-                            e
                         }
+                        e
                     } else {
                         e
                     };
@@ -2534,9 +2527,9 @@ impl<'input> Lexer<'input> {
     }
 
     /// Consume whitespace
-    fn ws(&mut self, start: Location) -> Result<TokenSpan<'input>> {
+    fn ws(&mut self, start: Location) -> TokenSpan<'input> {
         let (end, src) = self.take_while(start, is_ws);
-        Ok(self.spanned2(start, end, Token::Whitespace(src)))
+        self.spanned2(start, end, Token::Whitespace(src))
     }
 }
 
@@ -2592,22 +2585,22 @@ impl<'input> Iterator for Lexer<'input> {
                     //'|' => Some(Ok(self.spanned2(start, start, Token::BitOr))),
                     '^' => Some(Ok(self.spanned2(start, start, Token::BitXor))),
                     '&' => Some(Ok(self.spanned2(start, start, Token::BitAnd))),
-                    ':' => Some(self.cn(start)),
+                    ':' => Some(Ok(self.cn(start))),
                     '-' => match self.lookahead() {
                         Some((_loc, c)) if is_dec_digit(c) => Some(self.nm(start)),
                         _ => Some(Ok(self.spanned2(start, start, Token::Sub))),
                     },
                     '#' => Some(self.cx(start)),
-                    '=' => Some(self.eq(start)),
-                    '<' => Some(self.lt(start)),
-                    '>' => Some(self.gt(start)),
+                    '=' => Some(Ok(self.eq(start))),
+                    '<' => Some(Ok(self.lt(start))),
+                    '>' => Some(Ok(self.gt(start))),
                     '%' => Some(self.pb(start)),
                     '~' => Some(self.tl(start)),
                     '`' => Some(self.id2(start)),
                     // TODO account for bitwise not operator
                     '!' => Some(self.pe(start)),
                     '\n' => Some(Ok(self.spanned2(start, start, Token::NewLine))),
-                    ch if is_ident_start(ch) => Some(self.id(start)),
+                    ch if is_ident_start(ch) => Some(Ok(self.id(start))),
                     '"' => match self.qs_or_hd(start) {
                         Ok(mut tokens) => {
                             for t in tokens.drain(..) {
@@ -2619,7 +2612,7 @@ impl<'input> Iterator for Lexer<'input> {
                     },
                     ch if is_test_start(ch) => Some(self.pl(start)),
                     ch if is_dec_digit(ch) => Some(self.nm(start)),
-                    ch if ch.is_whitespace() => Some(self.ws(start)),
+                    ch if ch.is_whitespace() => Some(Ok(self.ws(start))),
                     _ => {
                         let str = format!("{}", ch);
                         Some(Ok(self.spanned2(start, start, Token::Bad(str))))

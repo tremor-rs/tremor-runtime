@@ -113,7 +113,7 @@ impl Sink for NewRelic {
             logs: event
                 .value_iter()
                 .map(Self::value_to_newrelic_log)
-                .collect::<Result<_>>()?,
+                .collect(),
         };
 
         debug!("Sending a batch of {} items", payload.logs.len());
@@ -230,7 +230,7 @@ impl NewRelic {
         }
     }
 
-    fn value_to_newrelic_log<'a>(value: &'a Value<'_>) -> Result<NewRelicLog<'a>> {
+    fn value_to_newrelic_log<'a>(value: &'a Value<'_>) -> NewRelicLog<'a> {
         let mut new_value = value.clone();
         let timestamp = new_value
             .remove("timestamp")
@@ -249,11 +249,11 @@ impl NewRelic {
             .unwrap_or("")
             .to_string();
 
-        Ok(NewRelicLog {
+        NewRelicLog {
             timestamp,
             message,
             attributes: Some(new_value),
-        })
+        }
     }
 }
 

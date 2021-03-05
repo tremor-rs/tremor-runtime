@@ -78,11 +78,8 @@ fn parse_ipv4_fast(ipstr: &str) -> Option<IpCidr> {
             b'a'..=b'f' | b'A'..=b'F' => return parse_ipv6_fast(ipstr),
             b'/' => return parse_network(Ipv4Addr::new(a, 0, 0, 0), itr),
             b'.' => {
-                if itr.peek().is_none() {
-                    return None;
-                } else {
-                    break;
-                }
+                itr.peek()?;
+                break;
             }
             _ => return None,
         }
@@ -100,11 +97,8 @@ fn parse_ipv4_fast(ipstr: &str) -> Option<IpCidr> {
             b'0'..=b'9' => b = b.checked_mul(10).and_then(|b| b.checked_add(e - b'0'))?,
             b'/' => return parse_network(Ipv4Addr::new(a, 0, 0, b), itr),
             b'.' => {
-                if itr.peek().is_none() {
-                    return None;
-                } else {
-                    break;
-                }
+                itr.peek()?;
+                break;
             }
             _ => return None,
         }
@@ -122,11 +116,8 @@ fn parse_ipv4_fast(ipstr: &str) -> Option<IpCidr> {
             b'0'..=b'9' => c = c.checked_mul(10).and_then(|c| c.checked_add(e - b'0'))?,
             b'/' => return parse_network(Ipv4Addr::new(a, b, 0, c), itr),
             b'.' => {
-                if itr.peek().is_none() {
-                    return None;
-                } else {
-                    break;
-                }
+                itr.peek()?;
+                break;
             }
             _ => return None,
         }

@@ -41,7 +41,7 @@ async fn handle_api_request<
     })
 }
 
-fn api_server(world: &World) -> Result<tide::Server<api::State>> {
+fn api_server(world: &World) -> tide::Server<api::State> {
     let mut app = tide::Server::with_state(api::State {
         world: world.clone(),
     });
@@ -77,7 +77,7 @@ fn api_server(world: &World) -> Result<tide::Server<api::State>> {
         .get(|r| handle_api_request(r, api::offramp::get_artefact))
         .delete(|r| handle_api_request(r, api::offramp::unpublish_artefact));
 
-    Ok(app)
+    app
 }
 
 #[cfg(not(tarpaulin_include))]
@@ -155,7 +155,7 @@ pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
         let host = matches
             .value_of("api-host")
             .ok_or_else(|| Error::from("host argument missing"))?;
-        let app = api_server(&world)?;
+        let app = api_server(&world);
         eprintln!("Listening at: http://{}", host);
         info!("Listening at: http://{}", host);
 
@@ -171,7 +171,7 @@ pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
     Ok(())
 }
 
-fn server_run(matches: &ArgMatches) -> Result<()> {
+fn server_run(matches: &ArgMatches) {
     version::print();
     if let Err(ref e) = task::block_on(run_dun(matches)) {
         error!("error: {}", e);
@@ -182,15 +182,14 @@ fn server_run(matches: &ArgMatches) -> Result<()> {
 
         // ALLOW: main.rs
         ::std::process::exit(1);
-    } else {
-        Ok(())
     }
 }
 
 #[cfg(not(tarpaulin_include))]
 pub(crate) fn run_cmd(mut app: App, cmd: &ArgMatches) -> Result<()> {
     if let Some(matches) = cmd.subcommand_matches("run") {
-        server_run(matches)
+        server_run(matches);
+        Ok(())
     } else {
         app.print_long_help()
             .map_err(|e| Error::from(format!("Failed to print help: {}", e)))?;

@@ -438,10 +438,9 @@ where
                         current = c;
                         subrange = None;
                         continue;
-                    } else {
-                        // No field for that id: not present
-                        return Ok(Cow::Borrowed(&FALSE));
                     }
+                    // No field for that id: not present
+                    return Ok(Cow::Borrowed(&FALSE));
                 }
                 // Next segment is an index: index into `current`, if it's an array
                 Segment::Idx { idx, .. } => {
@@ -453,13 +452,11 @@ where
                             current = c;
                             subrange = None;
                             continue;
-                        } else {
-                            // No element at the index: not present
-                            return Ok(Cow::Borrowed(&FALSE));
                         }
-                    } else {
+                        // No element at the index: not present
                         return Ok(Cow::Borrowed(&FALSE));
                     }
+                    return Ok(Cow::Borrowed(&FALSE));
                 }
                 // Next segment is an index range: index into `current`, if it's an array
                 Segment::Range {
@@ -483,13 +480,11 @@ where
                         } else if end_idx > array.len() {
                             // Index is out of array bounds: not present
                             return Ok(Cow::Borrowed(&FALSE));
-                        } else {
-                            subrange = array.get(start_idx..end_idx);
-                            continue;
                         }
-                    } else {
-                        return Ok(Cow::Borrowed(&FALSE));
+                        subrange = array.get(start_idx..end_idx);
+                        continue;
                     }
+                    return Ok(Cow::Borrowed(&FALSE));
                 }
                 // Next segment is an expression: run `expr` to know which key it signifies at runtime
                 Segment::Element { expr, .. } => {
@@ -511,9 +506,8 @@ where
                         current = next;
                         subrange = None;
                         continue;
-                    } else {
-                        return Ok(Cow::Borrowed(&FALSE));
                     }
+                    return Ok(Cow::Borrowed(&FALSE));
                 }
             }
         }

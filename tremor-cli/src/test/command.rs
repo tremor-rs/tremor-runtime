@@ -117,15 +117,15 @@ pub(crate) fn suite_command(
                             status::tags(&current_tags, Some(includes), Some(excludes))?;
                         }
                         continue; // SKIP
-                    } else {
-                        if !header_printed {
-                            status::h0("Command Suite: ", &suite.name)?;
-                            status::hr()?;
-                            header_printed = true;
-                        }
-                        status::h1("Command Test", &case.name)?;
-                        status::tags(&current_tags, Some(includes), Some(excludes))?;
                     }
+                    if !header_printed {
+                        status::h0("Command Suite: ", &suite.name)?;
+                        status::hr();
+                        header_printed = true;
+                    }
+                    status::h1("Command Test", &case.name)?;
+                    status::tags(&current_tags, Some(includes), Some(excludes))?;
+
                     let args = shell_words::split(&case.command).unwrap_or_default();
 
                     if let Some((cmd, args)) = args.split_first() {
@@ -154,7 +154,7 @@ pub(crate) fn suite_command(
                         casex.merge(&case_stats);
 
                         status::stats(&case_stats, "    Test")?;
-                        status::hr()?;
+                        status::hr();
                         let suite = report::TestSuite {
                             name: case.name.trim().into(),
                             description: "Command-driven test".to_string(),
@@ -175,7 +175,7 @@ pub(crate) fn suite_command(
                 }
                 api_stats.merge(&casex); // BEEP BOOP
                 status::stats(&casex, "Suite")?;
-                status::hr()?;
+                status::hr();
             }
 
             before::update_evidence(base_str, &mut evidence)?;
@@ -195,7 +195,7 @@ pub(crate) fn suite_command(
 
     let elapsed = nanotime() - report_start;
     status::duration(elapsed, "")?;
-    status::hr()?;
+    status::hr();
 
     Ok((
         api_stats.clone(),

@@ -167,12 +167,13 @@ mod tests {
     fn no_match() {
         let codec = Pattern::new(&"{}").expect("bad pattern");
         let decoded = codec.matches(b"cookie monster");
-        match decoded {
-            Err(decoded) => assert_eq!(
+        if let Err(decoded) = decoded {
+            assert_eq!(
                 "No match for log text: cookie monster",
                 decoded.description()
-            ),
-            _ => eprintln!("{}", "Expected no match"),
+            )
+        } else {
+            eprintln!("Expected no match")
         };
     }
 

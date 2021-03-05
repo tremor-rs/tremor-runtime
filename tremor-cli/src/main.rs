@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// #![forbid(warnings)]
+// #![deny(warnings)]
 // This isn't a external crate so we don't worry about docs
 // #![deny(missing_docs)]
 #![recursion_limit = "1024"]

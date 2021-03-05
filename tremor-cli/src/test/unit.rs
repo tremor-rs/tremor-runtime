@@ -159,15 +159,14 @@ fn eval_suite_tests(
                                     )?;
                                     stats.skip();
                                     continue;
-                                } else {
-                                    status::h1("    Test", "")?;
-                                    status::tagsx(
-                                        "        ",
-                                        &case_tags,
-                                        Some(includes),
-                                        Some(excludes),
-                                    )?;
                                 }
+                                status::h1("    Test", "")?;
+                                status::tagsx(
+                                    "        ",
+                                    &case_tags,
+                                    Some(includes),
+                                    Some(excludes),
+                                )?;
 
                                 let prefix = if status { "(+)" } else { "(-)" };
                                 // Test record

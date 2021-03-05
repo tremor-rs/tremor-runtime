@@ -75,21 +75,16 @@ fn humanize(ts: u64) -> String {
                     if mins > 59 {
                         let hrs = (ts / 3_600_000_000_000) as u64;
                         return format!("{}h {}m {:02}s", hrs, mins % 60, secs % 60);
-                    } else {
-                        return format!("{}m {}s", mins, secs % 60);
                     }
-                } else {
-                    return format!("{}s {}ms", secs, ms % 1000);
+                    return format!("{}m {}s", mins, secs % 60);
                 }
-            } else {
-                return format!("{}ms {}us", ms, us % 1000);
+                return format!("{}s {}ms", secs, ms % 1000);
             }
-        } else {
-            return format!("{}us {}ns", us, ns % 1000);
+            return format!("{}ms {}us", ms, us % 1000);
         }
-    } else {
-        return format!("{}ns", ns);
+        return format!("{}us {}ns", us, ns % 1000);
     }
+    return format!("{}ns", ns);
 }
 
 pub(crate) fn duration(what: u64, prefix: &str) -> Result<()> {
@@ -196,9 +191,8 @@ pub(crate) fn stats(stats: &stats::Stats, prefix: &str) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn hr() -> Result<()> {
+pub(crate) fn hr() {
     println!();
-    Ok(())
 }
 
 pub(crate) fn rollups(label: &str, stats: &stats::Stats) -> Result<()> {

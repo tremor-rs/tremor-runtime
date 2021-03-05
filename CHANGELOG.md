@@ -12,6 +12,7 @@
 * Add `kv` connector with the supported operations `put`, `get`, `delete`, `scan`, `cas`.
 * Add discord badge to README.md.
 * Handle signals and terminate properly on Ctrl+C in docker [#806](https://github.com/tremor-rs/tremor-runtime/pull/806)
+* Update to rust 1.50.0
 
 ### Fixes
 
