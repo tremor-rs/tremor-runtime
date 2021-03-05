@@ -85,10 +85,9 @@ impl Before {
                 }
                 if success {
                     break;
-                } else {
-                    // do not overload the system, try a little (100ms) tenderness
-                    std::thread::sleep(Duration::from_millis(100));
                 }
+                // do not overload the system, try a little (100ms) tenderness
+                std::thread::sleep(Duration::from_millis(100));
             }
         }
         std::thread::sleep(Duration::from_secs(self.before_start_delay));

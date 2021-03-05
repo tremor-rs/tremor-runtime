@@ -324,12 +324,10 @@ where
                     self.pipelines_err.retain(|(pipeline, _)| pipeline != &id);
                     empty_pipelines &= self.pipelines_err.is_empty();
 
+                    tx.send(empty_pipelines).await?;
                     if empty_pipelines {
-                        tx.send(true).await?;
                         self.source.terminate().await;
                         return Ok(true);
-                    } else {
-                        tx.send(false).await?;
                     }
                 }
                 onramp::Msg::Cb(CBAction::Fail, ids) => {

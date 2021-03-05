@@ -208,20 +208,19 @@ impl<'script> CustomFn<'script> {
                             return Err(FunctionError::Error(Box::new("can't emit here".into())));
                         }
                     };
-                } else {
-                    let r = expr.run(
-                        opts,
-                        &env,
-                        &mut no_event,
-                        &mut state,
-                        &mut no_meta,
-                        &mut this_local,
-                    );
-                    if r.is_err() {
-                        mem::swap(&mut consts.args, &mut args_const);
-                    };
-                    r?;
                 }
+                let r = expr.run(
+                    opts,
+                    &env,
+                    &mut no_event,
+                    &mut state,
+                    &mut no_meta,
+                    &mut this_local,
+                );
+                if r.is_err() {
+                    mem::swap(&mut consts.args, &mut args_const);
+                };
+                r?;
             }
         }
     }

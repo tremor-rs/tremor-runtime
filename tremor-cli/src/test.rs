@@ -266,7 +266,7 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
                 let (stats, test_reports) = suite_bench(base, root, &meta, tag_filter)?;
                 reports.insert("bench".to_string(), test_reports);
                 bench_stats.merge(&stats);
-                status::hr()?;
+                status::hr();
             }
 
             if meta.kind == TestKind::Integration
@@ -276,7 +276,7 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
                     suite_integration(base, root, &meta, &["integration"], &includes, &excludes)?;
                 reports.insert("integration".to_string(), test_reports);
                 integration_stats.merge(&stats);
-                status::hr()?;
+                status::hr();
             }
 
             if meta.kind == TestKind::Command
@@ -293,7 +293,7 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
                 )?;
                 reports.insert("command".to_string(), test_reports);
                 cmd_stats.merge(&stats);
-                status::hr()?;
+                status::hr();
             }
 
             if meta.kind == TestKind::Unit && (kind == TestKind::All || kind == TestKind::Unit) {
@@ -301,15 +301,15 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
                     suite_unit(base, root, &meta, &["unit"], &includes, &excludes)?;
                 reports.insert("unit".to_string(), test_reports);
                 unit_stats.merge(&stats);
-                status::hr()?;
+                status::hr();
             }
         }
 
         elapsed = nanotime() - start;
     }
 
-    status::hr()?;
-    status::hr()?;
+    status::hr();
+    status::hr();
     status::rollups("All Benchmark", &bench_stats)?;
     status::rollups("All Integration", &integration_stats)?;
     status::rollups("All Command", &cmd_stats)?;

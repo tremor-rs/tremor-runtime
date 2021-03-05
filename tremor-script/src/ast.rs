@@ -623,15 +623,14 @@ where
                         })
                     }
                 }
-            } else {
-                match stry!(expr.run(opts.without_result(), &env, event, state, meta, &mut local)) {
-                    Cont::Drop => return Ok(Return::Drop),
-                    Cont::Emit(value, port) => return Ok(Return::Emit { value, port }),
-                    Cont::EmitEvent(port) => {
-                        return Ok(Return::EmitEvent { port });
-                    }
-                    Cont::Cont(_v) => (),
+            }
+            match stry!(expr.run(opts.without_result(), &env, event, state, meta, &mut local)) {
+                Cont::Drop => return Ok(Return::Drop),
+                Cont::Emit(value, port) => return Ok(Return::Emit { value, port }),
+                Cont::EmitEvent(port) => {
+                    return Ok(Return::EmitEvent { port });
                 }
+                Cont::Cont(_v) => (),
             }
         }
 

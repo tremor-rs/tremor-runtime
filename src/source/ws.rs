@@ -96,10 +96,10 @@ impl Int {
         post_processors: &[String],
         config: &Config,
         is_linked: bool,
-    ) -> Result<Self> {
+    ) -> Self {
         let config = config.clone();
 
-        Ok(Self {
+        Self {
             uid,
             config,
             listener: None,
@@ -108,7 +108,7 @@ impl Int {
             is_linked,
             messages: BTreeMap::new(),
             streams: BTreeMap::new(),
-        })
+        }
     }
 
     fn get_stream_sender_for_id(&self, id: u64) -> Option<&Sender<SerializedResponse>> {
@@ -390,7 +390,7 @@ impl Onramp for Ws {
             config.processors.post,
             &self.config,
             config.is_linked,
-        )?;
+        );
         SourceManager::start(source, config).await
     }
 

@@ -550,9 +550,8 @@ where
                         outer, segment, //&Expr::dummy(*start, *end),
                         &path, key, options, &env.meta,
                     );
-                } else {
-                    return error_need_obj(outer, segment, current.value_type(), &env.meta);
                 }
+                return error_need_obj(outer, segment, current.value_type(), &env.meta);
             }
             // Next segment is an index: index into `current`, if it's an array
             Segment::Idx { idx, .. } => {
@@ -564,14 +563,12 @@ where
                         current = c;
                         subrange = None;
                         continue;
-                    } else {
-                        let r = idx..idx;
-                        let l = range_to_consider.len();
-                        return error_array_out_of_bound(outer, segment, &path, r, l, &env.meta);
                     }
-                } else {
-                    return error_need_arr(outer, segment, current.value_type(), &env.meta);
+                    let r = idx..idx;
+                    let l = range_to_consider.len();
+                    return error_array_out_of_bound(outer, segment, &path, r, l, &env.meta);
                 }
+                return error_need_arr(outer, segment, current.value_type(), &env.meta);
             }
             // Next segment is an index range: index into `current`, if it's an array
             Segment::Range {
@@ -594,13 +591,11 @@ where
                         let r = start_idx..end_idx;
                         let l = array.len();
                         return error_array_out_of_bound(outer, segment, &path, r, l, &env.meta);
-                    } else {
-                        subrange = array.get(start_idx..end_idx);
-                        continue;
                     }
-                } else {
-                    return error_need_arr(outer, segment, current.value_type(), &env.meta);
-                }
+                    subrange = array.get(start_idx..end_idx);
+                    continue;
+                };
+                return error_need_arr(outer, segment, current.value_type(), &env.meta);
             }
             // Next segment is an expression: run `expr` to know which key it signifies at runtime
             Segment::Element { expr, .. } => {
@@ -613,11 +608,10 @@ where
                             current = v;
                             subrange = None;
                             continue;
-                        } else {
-                            let key = id.to_string();
-                            let options = o.keys().map(ToString::to_string).collect();
-                            return error_bad_key(outer, segment, &path, key, options, &env.meta);
-                        }
+                        };
+                        let key = id.to_string();
+                        let options = o.keys().map(ToString::to_string).collect();
+                        return error_bad_key(outer, segment, &path, key, options, &env.meta);
                     }
                     // The segment did not resolve to an identifier, but `current` is an object: err
                     (Value::Object(_), other) => {
@@ -632,13 +626,10 @@ where
                             current = v;
                             subrange = None;
                             continue;
-                        } else {
-                            let r = idx..idx;
-                            let l = array.len();
-                            return error_array_out_of_bound(
-                                outer, segment, &path, r, l, &env.meta,
-                            );
-                        }
+                        };
+                        let r = idx..idx;
+                        let l = array.len();
+                        return error_array_out_of_bound(outer, segment, &path, r, l, &env.meta);
                     }
                     // The segment resolved to an identifier, but `current` isn't an object: err
                     (other, key) if key.is_str() => {
@@ -837,9 +828,8 @@ where
                     if obj.contains_key(&ident) {
                         let key = ident.to_string();
                         return error_patch_key_exists(patch_expr, ident_expr, key, &env.meta);
-                    } else {
-                        obj.insert(ident, value);
-                    }
+                    };
+                    obj.insert(ident, value);
                 }
                 PreEvaluatedPatchOperation::Update {
                     ident,

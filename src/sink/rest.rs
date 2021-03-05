@@ -944,8 +944,8 @@ impl AtomicMaxCounter {
         }
         while self
             .counter
-            .compare_and_swap(real_cur, real_cur + 1, Ordering::AcqRel)
-            != real_cur
+            .compare_exchange(real_cur, real_cur + 1, Ordering::AcqRel, Ordering::Acquire)
+            .is_err()
         {
             real_cur = self.load();
             if (real_cur + 1) > self.max {
@@ -967,8 +967,8 @@ impl AtomicMaxCounter {
         }
         while self
             .counter
-            .compare_and_swap(real_cur, real_cur - 1, Ordering::AcqRel)
-            != real_cur
+            .compare_exchange(real_cur, real_cur - 1, Ordering::AcqRel, Ordering::Acquire)
+            .is_err()
         {
             real_cur = self.load();
             if real_cur == 0 {
