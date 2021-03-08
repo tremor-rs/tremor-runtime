@@ -71,8 +71,12 @@ fn suite_bench(
                 status::tags(&tags, Some(&matched), Some(&by_tag.1))?;
                 let test_report = process::run_process("bench", base, root, &tags)?;
                 status::duration(test_report.duration, "  ")?;
+                if test_report.stats.is_pass() {
+                    stats.pass();
+                } else {
+                    stats.fail();
+                }
                 suite.push(test_report);
-                stats.pass(); // TODO invent a better way of capturing benchmark status
             } else {
                 stats.skip();
                 status::h1(

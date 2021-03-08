@@ -68,7 +68,7 @@ pub(crate) fn run_process(
 
     let mut process =
         job::TargetProcess::new_with_stderr(&job::which("tremor")?, &args, &HashMap::default())?;
-    let process_status = process.wait_with_output();
+    let process_status = process.wait_with_output()?;
 
     let fg_out_file = format!("{}/fg.out.log", bench_root);
     let fg_err_file = format!("{}/fg.err.log", bench_root);
@@ -103,7 +103,7 @@ pub(crate) fn run_process(
         Some(assert::process(
             &fg_out_file,
             &fg_err_file,
-            process_status?.code(),
+            process_status.code(),
             &assert_yaml,
         )?)
     } else {
@@ -143,6 +143,14 @@ pub(crate) fn run_process(
         status::text("      ", &slurp_string(&fg_out_file)?)?;
         let mut report = HashMap::new();
         let elapsed = nanotime() - process_start;
+        if process_status.success() {
+            stats.pass();
+        } else {
+            // TODO It would be nicer if there was something like a status::err() that would print
+            // the errors in a nicer way
+            println!("ERROR: \n{}", &slurp_string(&fg_err_file)?);
+            stats.fail();
+        };
         report.insert(
             "bench".to_string(),
             report::TestSuite {
@@ -150,14 +158,14 @@ pub(crate) fn run_process(
                 description: format!("{} test suite", kind),
                 elements: vec![],
                 evidence: Some(evidence),
-                stats: stats::Stats::new(),
+                stats: stats.clone(),
                 duration: elapsed,
             },
         );
         Ok(report::TestReport {
             description: "Tremor Test Report".into(),
             elements: report,
-            stats: stats::Stats::new(),
+            stats,
             duration: elapsed,
         })
     }
