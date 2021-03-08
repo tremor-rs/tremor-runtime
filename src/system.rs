@@ -739,7 +739,8 @@ impl World {
         //let numeric_instance_id = instance!().parse::<u64>()?;
         let numeric_instance_id = instance!().parse::<u64>().unwrap_or(42);
         let node_id = NodeId(numeric_instance_id);
-        let temp_network = ws::Network::new(&logger, node_id, cluster_endpoint, cluster_peers);
+        let temp_network =
+            ws::Network::new(&logger, node_id, cluster_endpoint, cluster_peers.clone());
 
         let (fake_system_tx, _not_used) = bounded(crate::QSIZE);
 
@@ -750,7 +751,8 @@ impl World {
         let (offramp_h, offramp) = offramp::Manager::new(qsize).start();
         let (pipeline_h, pipeline) = pipeline::Manager::new(qsize).start();
 
-        let (network_h, network) = network::Manager::new(&conductor, network_addr, qsize).start();
+        let (network_h, network) =
+            network::Manager::new(&conductor, network_addr, Some(cluster_peers), qsize).start();
 
         let (system_h, system) = Manager {
             offramp,

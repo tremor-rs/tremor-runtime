@@ -8,7 +8,7 @@ set -o errexit
 # catch exit status for piped commands
 set -o pipefail
 
-WS_ENDPOINT="ws://localhost:9899"
+WS_ENDPOINT="ws://localhost:8080"
 
 TCP_IP="127.0.0.1"
 TCP_PORT=1234
@@ -28,10 +28,10 @@ send_message ""
 
 ##############################################################################
 
-echo -e "Testing echo protocol...\n"
-send_message '{"tremor":{"connect":{"protocol":"echo","alias":"echo-example"}}}'
-send_message '{"echo-example":{"beep":"boop"}}'
-send_message '{"echo-example":{"snot":"badger"}}'
+#echo -e "Testing echo protocol...\n"
+#send_message '{"tremor":{"connect":{"protocol":"echo","alias":"echo-example"}}}'
+#send_message '{"echo-example":{"beep":"boop"}}'
+#send_message '{"echo-example":{"snot":"badger"}}'
 
 echo -e "Testing microring protocol...\n"
 send_message '{"tremor":{"connect":{"protocol":"microring"}}}'

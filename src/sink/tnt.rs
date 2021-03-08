@@ -395,7 +395,8 @@ impl offramp::Impl for Tnt {
             let (reply_tx, _) = bounded(1);
 
             Ok(SinkManager::new_box(Self {
-                sink_url: TremorURL::from_onramp_id("ws")?,  // dummy value
+                // TODO should be offramp?
+                sink_url: TremorURL::from_offramp_id("ws")?, // dummy value
                 event_origin_uri: EventOriginUri::default(), // dummy
                 config,
                 connection_lifecycle_tx: tx,
@@ -415,6 +416,33 @@ impl offramp::Impl for Tnt {
 }
 
 impl Tnt {
+    pub fn from_config2(config: Config) -> Result<Self> {
+        //dbg!(&config.url);
+        // ensure we have valid url
+        Url::parse(&config.url)?;
+
+        let (tx, rx) = unbounded();
+
+        // This is a dummy so we can set it later
+        let (reply_tx, _) = bounded(1);
+
+        Ok(Self {
+            // TODO should be offramp?
+            sink_url: TremorURL::from_offramp_id("ws")?, // dummy value
+            event_origin_uri: EventOriginUri::default(), // dummy
+            config,
+            connection_lifecycle_tx: tx,
+            connection_lifecycle_rx: rx,
+            connections: HashMap::new(),
+            is_linked: false,
+            merged_meta: OpMeta::default(),
+            reply_tx,
+            preprocessors: vec![],  // dummy, overwritten in init
+            postprocessors: vec![], // dummy, overwritten in init
+            shared_codec: Box::new(crate::codec::null::Null {}), //dummy, overwritten in init
+        })
+    }
+
     async fn handle_connection_lifecycle_events(&mut self, ingest_ns: u64) -> Result<()> {
         let len = self.connection_lifecycle_rx.len();
         for _ in 0..len {

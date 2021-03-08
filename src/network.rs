@@ -14,11 +14,12 @@
 
 use crate::{
     codec, errors::Result, metrics::RampReporter, onramp::OnrampConfig, pipeline,
-    source::tnt::TntImpl, source::Processors, source::SourceReply, source::SourceState,
-    system::Conductor, url::ports::ERR, url::ports::OUT, url::TremorURL,
+    source::Processors, source::SourceReply, source::SourceState, system::Conductor,
+    url::ports::ERR, url::ports::OUT, url::TremorURL,
 };
-use crate::{onramp, source::Source};
+use crate::{onramp, sink::Sink, source::Source};
 use crate::{
+    sink::tnt::{Config as TntSinkConfig, Tnt as TntSink},
     source::tnt::{Config as TntSourceConfig, SerializedResponse, TntImpl as TntSource},
     version,
 };
@@ -134,6 +135,7 @@ pub(crate) struct Manager {
     pub(crate) control: ControlProtocol,
     qsize: usize,
     source: TntSource,
+    sinks: Vec<TntSink>,
 }
 
 pub(crate) enum ManagerMsg {
@@ -153,7 +155,7 @@ impl std::fmt::Display for ManagerMsg {
 pub(crate) struct NetworkManager {
     control: ControlProtocol,
     network_id: TremorURL,
-    pub source: TntImpl,
+    pub source: TntSource,
     metrics_reporter: RampReporter,
     pipelines_out: Vec<(TremorURL, pipeline::Addr)>,
     pipelines_err: Vec<(TremorURL, pipeline::Addr)>,
@@ -342,7 +344,8 @@ impl NetworkManager {
 
     pub async fn new(
         control: ControlProtocol,
-        mut source: TntImpl,
+        mut source: TntSource,
+        mut sinks: Vec<TntSink>,
         config: OnrampConfig<'_>,
     ) -> Result<(Self, Sender<onramp::Msg>)> {
         // We use a unbounded channel for counterflow, while an unbounded channel seems dangerous
@@ -362,13 +365,37 @@ impl NetworkManager {
         // N is the maximum number of counterflow events a single event can trigger.
         // N is normally < 1.
         let (tx, _rx) = unbounded();
-        let _codec = codec::lookup(&config.codec)?;
+        let codec = codec::lookup(&config.codec)?;
         let mut resolved_codec_map = codec::builtin_codec_map();
         // override the builtin map
         for (k, v) in config.codec_map {
             resolved_codec_map.insert(k, codec::lookup(&v)?);
         }
         source.init().await?;
+
+        // TODO do better here
+        let mut sink_uid: u64 = 0;
+        for sink in &mut sinks {
+            let (reply_tx, _reply_rx) = bounded(crate::QSIZE);
+
+            let sink_url = TremorURL::from_network_id(&sink_uid.to_string())?;
+            sink.init(
+                sink_uid,
+                &sink_url,
+                &*codec,
+                &resolved_codec_map,
+                Processors {
+                    pre: &[],
+                    post: &[],
+                },
+                true,
+                //reply_channel: Sender<sink::Reply>,
+                reply_tx.clone(),
+            )
+            .await?;
+            sink_uid += 1;
+        }
+
         Ok((
             Self {
                 control,
@@ -412,6 +439,7 @@ impl NetworkManager {
                 Ok(SourceReply::EndStream(id)) => {
                     self.sessions.remove(&id);
                 }
+                // TODO use this for node-to-node?
                 Ok(SourceReply::Structured { origin_uri, data }) => {
                     let ingest_ns = nanotime();
                     self.handle_value(ingest_ns, data, origin_uri).await?;
@@ -495,9 +523,30 @@ impl NetworkManager {
 }
 
 impl Manager {
-    pub fn new(conductor: &Conductor, network_addr: SocketAddr, qsize: usize) -> Self {
+    pub fn new(
+        conductor: &Conductor,
+        network_addr: SocketAddr,
+        network_peers: Option<Vec<String>>,
+        qsize: usize,
+    ) -> Self {
         let onramp_id = TremorURL::from_network_id("self").unwrap();
         //dbg!("creating control protocol/network");
+
+        let sinks = if let Some(peers) = network_peers {
+            peers
+                .iter()
+                .map(|peer| {
+                    TntSink::from_config2(TntSinkConfig {
+                        url: peer.clone(),
+                        binary: false,
+                    })
+                    .unwrap()
+                })
+                .collect()
+        } else {
+            vec![]
+        };
+
         Self {
             control: ControlProtocol::new(conductor),
             qsize,
@@ -512,6 +561,7 @@ impl Manager {
                 true, // is always linked
             )
             .unwrap(),
+            sinks,
         }
     }
 
@@ -525,6 +575,7 @@ impl Manager {
             let (manager, _tx2) = NetworkManager::new(
                 self.control,
                 self.source,
+                self.sinks,
                 OnrampConfig {
                     onramp_uid: 0u64,
                     codec: "json",
