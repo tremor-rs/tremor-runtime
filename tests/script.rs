@@ -155,6 +155,10 @@ test_cases!(
     // const_in_const_lookup,
     // INSERT
     xz_compressed_fixtures,
+    match_assign,
+    match_reorder1,
+    tilde_extractor_assign,
+    tilde_extractor,
     role_map,
     string_interpolation_nested,
     string_interpolation_escaped_hash,

@@ -13,12 +13,12 @@
 // limitations under the License.
 
 use super::{
-    merge_values, patch_value, resolve, set_local_shadow, test_guard, test_predicate_expr, Env,
-    ExecOpts, LocalStack, NULL,
+    merge_values, patch_value, resolve, resolve_value, set_local_shadow, test_guard,
+    test_predicate_expr, Env, ExecOpts, LocalStack, NULL,
 };
 use crate::ast::{
-    BaseExpr, Comprehension, EmitExpr, EventPath, Expr, ImutExprInt, Match, Merge, Patch, Path,
-    Segment,
+    BaseExpr, ClauseGroup, ClausePreCondition, Comprehension, DefaultCase, EmitExpr, EventPath,
+    Expr, IfElse, ImutExprInt, Match, Merge, Patch, Path, Segment,
 };
 use crate::errors::{
     error_assign_array, error_assign_to_const, error_bad_key, error_invalid_assign_target,
@@ -33,7 +33,6 @@ use std::{
     borrow::{Borrow, Cow},
     iter,
 };
-
 #[derive(Debug)]
 /// Continuation context to control program flow
 pub enum Cont<'run, 'event>
@@ -67,7 +66,7 @@ where
     'event: 'run,
 {
     #[inline]
-    fn execute_effectors(
+    pub(crate) fn execute_effectors(
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
         event: &'run mut Value<'event>,
@@ -86,6 +85,7 @@ where
     }
 
     #[inline]
+    #[allow(clippy::clippy::too_many_lines)]
     fn match_expr(
         &'script self,
         opts: ExecOpts,
@@ -94,22 +94,135 @@ where
         state: &'run mut Value<'static>,
         meta: &'run mut Value<'event>,
         local: &'run mut LocalStack<'event>,
-        expr: &'script Match,
+        expr: &'script Match<Expr<'script>>,
     ) -> Result<Cont<'run, 'event>> {
+        use super::DUMMY_PATH as D;
         let target = stry!(expr.target.run(opts, env, event, state, meta, local));
-
-        for predicate in &expr.patterns {
-            let p = &predicate.pattern;
-            let g = &predicate.guard;
-            if stry!(test_predicate_expr(
-                self, opts, env, event, state, meta, local, &target, p, g,
-            )) {
-                let e = &predicate.exprs;
-                let l = &predicate.last_expr;
-                return Self::execute_effectors(opts, env, event, state, meta, local, e, l);
+        for cg in &expr.patterns {
+            let maybe_target =
+                if let Some(ClausePreCondition { segments: seg, .. }) = cg.precondition() {
+                    let v = resolve_value(
+                        self, opts, env, event, state, meta, local, &D, &target, &seg,
+                    );
+                    if let Ok(target) = v {
+                        Some(target)
+                    } else {
+                        // We couldn't look up the value, it doesn't exist so we look at the next group
+                        continue;
+                    }
+                } else {
+                    None
+                };
+            let target: &Value = maybe_target.as_ref().map_or(&target, |target| target);
+            macro_rules! execute {
+                ($predicate:ident) => {{
+                    let pat = &$predicate.pattern;
+                    let grd = &$predicate.guard;
+                    if stry!(test_predicate_expr(
+                        expr, opts, env, event, state, meta, local, &target, pat, grd,
+                    )) {
+                        let expr = &$predicate.exprs;
+                        let last = &$predicate.last_expr;
+                        return Expr::execute_effectors(
+                            opts, env, event, state, meta, local, expr, last,
+                        );
+                    }
+                }};
+            };
+            match cg {
+                ClauseGroup::Single { pattern, .. } => {
+                    execute!(pattern);
+                }
+                ClauseGroup::Simple { patterns, .. } => {
+                    for predicate in patterns {
+                        execute!(predicate);
+                    }
+                }
+                ClauseGroup::SearchTree { tree, rest, .. } => {
+                    let target: &Value<'script> = unsafe { mem::transmute(target) };
+                    if let Some((e, l)) = tree.get(&target) {
+                        return Expr::execute_effectors(opts, env, event, state, meta, local, e, l);
+                    }
+                    for predicate in rest {
+                        execute!(predicate);
+                    }
+                }
+                ClauseGroup::Combined { groups, .. } => {
+                    // we have to inline this
+                    for cg in groups {
+                        match cg {
+                            ClauseGroup::Single { pattern, .. } => {
+                                execute!(pattern);
+                            }
+                            ClauseGroup::Simple { patterns, .. } => {
+                                for predicate in patterns {
+                                    execute!(predicate);
+                                }
+                            }
+                            ClauseGroup::SearchTree { tree, rest, .. } => {
+                                let target: &Value<'script> = unsafe { mem::transmute(target) };
+                                if let Some((e, l)) = tree.get(&target) {
+                                    return Expr::execute_effectors(
+                                        opts, env, event, state, meta, local, e, l,
+                                    );
+                                }
+                                for predicate in rest {
+                                    execute!(predicate);
+                                }
+                            }
+                            ClauseGroup::Combined { .. } => {
+                                return Err(
+                                    "Nested combined clause groups are not permitted!".into()
+                                )
+                            }
+                        }
+                    }
+                }
+            };
+        }
+        match &expr.default {
+            DefaultCase::None => error_no_clause_hit(self, &env.meta),
+            DefaultCase::Null => Ok(Cont::Cont(Cow::Borrowed(&NULL))),
+            DefaultCase::Many { exprs, last_expr } => {
+                Expr::execute_effectors(opts, env, event, state, meta, local, exprs, last_expr)
+            }
+            DefaultCase::One(last_expr) => {
+                Expr::execute_effectors(opts, env, event, state, meta, local, &[], last_expr)
             }
         }
-        error_no_clause_hit(self, &env.meta)
+    }
+
+    #[inline]
+    fn if_expr(
+        &'script self,
+        opts: ExecOpts,
+        env: &'run Env<'run, 'event, 'script>,
+        event: &'run mut Value<'event>,
+        state: &'run mut Value<'static>,
+        meta: &'run mut Value<'event>,
+        local: &'run mut LocalStack<'event>,
+        expr: &'script IfElse<'script, Expr<'script>>,
+    ) -> Result<Cont<'run, 'event>> {
+        let target = stry!(expr.target.run(opts, env, event, state, meta, local));
+        let p = &expr.if_clause.pattern;
+        let g = &expr.if_clause.guard;
+        let p = test_predicate_expr(expr, opts, env, event, state, meta, local, &target, p, g);
+        if stry!(p) {
+            let e = &expr.if_clause.exprs;
+            let l = &expr.if_clause.last_expr;
+            Expr::execute_effectors(opts, env, event, state, meta, local, e, l)
+        } else {
+            match &expr.else_clause {
+                DefaultCase::None => error_no_clause_hit(self, &env.meta),
+                DefaultCase::Null => Ok(Cont::Cont(Cow::Borrowed(&NULL))),
+                DefaultCase::Many { exprs, last_expr } => {
+                    Expr::execute_effectors(opts, env, event, state, meta, local, exprs, last_expr)
+                }
+                DefaultCase::One(last_expr) => {
+                    Expr::execute_effectors(opts, env, event, state, meta, local, &[], last_expr)
+                }
+            }
+        }
     }
 
     #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
@@ -218,7 +331,7 @@ where
         state: &'run mut Value<'static>,
         meta: &'run mut Value<'event>,
         local: &'run mut LocalStack<'event>,
-        expr: &'script Comprehension,
+        expr: &'script Comprehension<Expr>,
     ) -> Result<Cont<'run, 'event>> {
         type BI<'v, 'r> = (usize, Box<dyn Iterator<Item = (Value<'v>, Value<'v>)> + 'r>);
         fn kv<'k, K>((k, v): (K, Value)) -> (Value<'k>, Value)
@@ -532,6 +645,7 @@ where
                     .map(Cont::Cont)
             }
             Expr::Match(ref expr) => self.match_expr(opts, env, event, state, meta, local, expr),
+            Expr::IfElse(ref expr) => self.if_expr(opts, env, event, state, meta, local, expr),
             Expr::MergeInPlace(ref expr) => self
                 .merge_in_place(opts, env, event, state, meta, local, expr)
                 .map(Cont::Cont),

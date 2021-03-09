@@ -1,0 +1,9 @@
+let a = true;
+let event = match event of
+  case a = _ => a
+end;
+
+match a of
+  case true => event
+  default => snot
+end

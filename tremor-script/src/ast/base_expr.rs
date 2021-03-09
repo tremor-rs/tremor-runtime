@@ -13,6 +13,7 @@
 // limitations under the License.
 
 // Don't cover this file it's only getters
+#![cfg(not(tarpaulin_include))]
 
 use super::raw::{GroupBy, GroupByInt, ImutExprRaw, PathRaw, TestExprRaw};
 use super::{Expr, ImutExprInt, InvokeAggr, NodeMetas, Path, Segment, TestExpr};
@@ -24,6 +25,28 @@ use crate::pos::{Location, Range};
 macro_rules! impl_expr {
     ($name:ident) => {
         impl<'script> BaseExpr for $name<'script> {
+            fn s(&self, _meta: &NodeMetas) -> Location {
+                self.start
+            }
+            fn e(&self, _meta: &NodeMetas) -> Location {
+                self.end
+            }
+            fn mid(&self) -> usize {
+                0
+            }
+        }
+    };
+}
+#[doc(hidden)]
+/// Implements the BaseExpr trait for a given expression
+#[macro_export]
+macro_rules! impl_expr_exraw {
+    ($name:ident) => {
+        impl<'script, Ex> BaseExpr for $name<'script, Ex>
+        where
+            <Ex as Upable<'script>>::Target: Expression + 'script,
+            Ex: ExpressionRaw<'script> + 'script,
+        {
             fn s(&self, _meta: &NodeMetas) -> Location {
                 self.start
             }
@@ -47,7 +70,6 @@ macro_rules! impl_expr_no_lt {
             fn s(&self, _meta: &NodeMetas) -> Location {
                 self.start
             }
-
             fn e(&self, _meta: &NodeMetas) -> Location {
                 self.end
             }
@@ -76,6 +98,19 @@ impl BaseExpr for Range {
 macro_rules! impl_expr_mid {
     ($name:ident) => {
         impl<'script> BaseExpr for $name<'script> {
+            fn mid(&self) -> usize {
+                self.mid
+            }
+        }
+    };
+}
+
+#[doc(hidden)]
+/// Implements the BaseExpr trait for a given expression that generalizes over Expression
+#[macro_export]
+macro_rules! impl_expr_ex_mid {
+    ($name:ident) => {
+        impl<'script, Ex: Expression + 'script> BaseExpr for $name<'script, Ex> {
             fn mid(&self) -> usize {
                 self.mid
             }
@@ -207,6 +242,7 @@ impl<'script> BaseExpr for Expr<'script> {
             Expr::Match(e) => e.mid(),
             Expr::MergeInPlace(e) => e.mid(),
             Expr::PatchInPlace(e) => e.mid(),
+            Expr::IfElse(e) => e.mid(),
         }
     }
 }

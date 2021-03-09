@@ -1,0 +1,71 @@
+let event = match event of
+  case 2 => {"k": "two"}
+  case 1 => {"k": "one"}
+  case 3 => {"k": "three"}
+  default => {"k": event}
+end;
+
+match event of
+  case %{v == 1} => let event = "snot"
+  case %{v == 2} => let event = "snot"
+  case %{k == 4} => let event = "four"
+  case %{k ~= glob|two*|} => let event = 2
+  case %{k == 6} => let event = "six"
+  case %{k ~= re|one+|} => let event = 1
+  case %{k == 5} => let event = "five"
+  case %{k == 7} => let event = 7
+  case %{k == 8} => let event = 8
+  case %{present k} => let event = event.k
+  default => null
+end;
+
+let event = {"k": match event of
+  case 1 => 1
+  case 2 => 2
+  case 3 => 3
+  case 4 => 4
+  case ~ glob|five| => 5
+  case "six" => 6
+  case 7 => "seven"
+  case ~ re|four| => 4
+  case 8 => "eight"
+  default => event
+end};
+
+let a = match event of 
+  case %{k ~= re|snot|} => "snot"
+  case %{k == 1} => "one"
+  case %{k ~= re|badger|} => "badger"
+  case %{k == 2} => "two"
+  case %{absent k} => "snot"
+  case %{k == 3} => "three"
+  case %{k ~= glob|*six|} => 6
+  case %{k ~= glob|eight*|} => 8
+  case a = _ => match a.k of
+      case 4 => a.k
+      case 5 => "five"
+      default => a.k
+    end
+end;
+
+let event = match match event of
+  case %{k ~= re|snot|} => "snot"
+  case %{k == 1} => "one"
+  case %{k ~= re|badger|} => "badger"
+  case %{k == 2} => "two"
+  case %{k == 3} => "three"
+  case %{k ~= glob|*six|} => 6
+  case %{k ~= glob|eight*|} => 8
+  default => event.k
+end of
+  case a = _ => match a of
+      case 4 => a
+      case 5 => "five"
+      default => a
+    end
+end;
+
+match a of
+  case event => event
+  default => "snot: #{a}"
+end

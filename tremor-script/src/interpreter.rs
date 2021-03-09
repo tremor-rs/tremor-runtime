@@ -36,8 +36,8 @@ mod imut_expr;
 pub use self::expr::Cont;
 use crate::ast::{
     ArrayPattern, ArrayPredicatePattern, BaseExpr, BinOpKind, Consts, GroupBy, GroupByInt,
-    ImutExprInt, InvokeAggrFn, NodeMetas, Patch, PatchOperation, Path, Pattern, PredicatePattern,
-    RecordPattern, ReservedPath, Segment, TuplePattern, UnaryOpKind,
+    ImutExprInt, InvokeAggrFn, LocalPath, NodeMetas, Patch, PatchOperation, Path, Pattern,
+    PredicatePattern, RecordPattern, ReservedPath, Segment, TuplePattern, UnaryOpKind,
 };
 use crate::errors::{
     error_array_out_of_bound, error_bad_array_index, error_bad_key, error_decreasing_range,
@@ -53,6 +53,13 @@ use std::borrow::Borrow;
 use std::borrow::Cow;
 use std::convert::TryInto;
 use std::iter::Iterator;
+
+static DUMMY_PATH: Path<'static> = Path::Local(LocalPath {
+    idx: 0,
+    mid: 0,
+    is_const: false,
+    segments: Vec::new(),
+});
 
 /// constant `true` value
 pub const TRUE: Value<'static> = Value::Static(StaticNode::Bool(true));
@@ -498,7 +505,7 @@ pub(crate) fn exec_unary<'run, 'event: 'run>(
 #[inline]
 #[allow(clippy::too_many_lines)]
 pub(crate) fn resolve<'run, 'event, 'script, Expr>(
-    outer: &'script Expr,
+    outer: &'run Expr,
     opts: ExecOpts,
     env: &'run Env<'run, 'event, 'script>,
     event: &'run Value<'event>,
@@ -532,10 +539,43 @@ where
         Path::Reserved(ReservedPath::Window { .. }) => &env.consts.window,
     };
 
+    resolve_value(
+        outer,
+        opts,
+        env,
+        event,
+        state,
+        meta,
+        local,
+        path,
+        base_value,
+        path.segments(),
+    )
+}
+
+#[inline]
+#[allow(clippy::too_many_lines)]
+pub(crate) fn resolve_value<'run, 'event, 'script, Expr>(
+    outer: &'run Expr,
+    opts: ExecOpts,
+    env: &'run Env<'run, 'event, 'script>,
+    event: &'run Value<'event>,
+    state: &'run Value<'static>,
+    meta: &'run Value<'event>,
+    local: &'run LocalStack<'event>,
+    path: &'run Path,
+    base_value: &'run Value<'event>,
+    segments: &'run [Segment<'script>],
+) -> Result<Cow<'run, Value<'event>>>
+where
+    Expr: BaseExpr,
+    'script: 'event,
+    'event: 'run,
+{
     // Resolve the targeted value by applying all path segments
     let mut subrange: Option<&[Value]> = None;
     let mut current = base_value;
-    for segment in path.segments() {
+    for segment in segments {
         match segment {
             // Next segment is an identifier: lookup the identifier on `current`, if it's an object
             Segment::Id { mid, key, .. } => {
@@ -930,7 +970,7 @@ where
 
 #[inline]
 #[allow(clippy::too_many_lines)]
-fn test_predicate_expr<'run, 'event, 'script, Expr>(
+pub(crate) fn test_predicate_expr<'run, 'event, 'script, Expr>(
     outer: &'script Expr,
     opts: ExecOpts,
     env: &'run Env<'run, 'event, 'script>,
@@ -948,10 +988,21 @@ where
     'script: 'event,
     'event: 'run,
 {
-    let opts_wo = opts.without_result();
     match pattern {
+        Pattern::Extract(test) => {
+            if test
+                .extractor
+                .extract(false, &target, &env.context)
+                .is_match()
+            {
+                test_guard(outer, opts, env, event, state, meta, local, guard)
+            } else {
+                Ok(false)
+            }
+        }
         Pattern::DoNotCare => test_guard(outer, opts, env, event, state, meta, local, guard),
         Pattern::Tuple(ref tp) => {
+            let opts_wo = opts.without_result();
             if stry!(match_tp_expr(
                 outer, opts_wo, env, event, state, meta, local, &target, &tp,
             ))
@@ -963,6 +1014,7 @@ where
             }
         }
         Pattern::Record(ref rp) => {
+            let opts_wo = opts.without_result();
             if stry!(match_rp_expr(
                 outer, opts_wo, env, event, state, meta, local, &target, &rp,
             ))
@@ -974,6 +1026,7 @@ where
             }
         }
         Pattern::Array(ref ap) => {
+            let opts_wo = opts.without_result();
             if stry!(match_ap_expr(
                 outer, opts_wo, env, event, state, meta, local, &target, &ap,
             ))
@@ -997,34 +1050,48 @@ where
             let opts_w = opts.with_result();
 
             match *a.pattern {
+                Pattern::Extract(ref test) => {
+                    if let Some(v) = test
+                        .extractor
+                        .extract(true, &target, &env.context)
+                        .into_match()
+                    {
+                        // we need to assign prior to the guard so we can check
+                        // against the pattern expressions
+                        stry!(set_local_shadow(outer, local, &env.meta, a.idx, v));
+                        test_guard(outer, opts, env, event, state, meta, local, guard)
+                    } else {
+                        Ok(false)
+                    }
+                }
                 Pattern::DoNotCare => {
+                    let v = target.clone();
+                    stry!(set_local_shadow(outer, local, &env.meta, a.idx, v));
                     test_guard(outer, opts, env, event, state, meta, local, guard)
                 }
                 Pattern::Array(ref ap) => {
-                    if let Some(v) = stry!(match_ap_expr(
+                    stry!(match_ap_expr(
                         outer, opts_w, env, event, state, meta, local, &target, &ap,
-                    )) {
+                    ))
+                    .map_or(Ok(false), |v| {
                         // we need to assign prior to the guard so we can check
                         // against the pattern expressions
                         stry!(set_local_shadow(outer, local, &env.meta, a.idx, v));
 
                         test_guard(outer, opts, env, event, state, meta, local, guard)
-                    } else {
-                        Ok(false)
-                    }
+                    })
                 }
                 Pattern::Record(ref rp) => {
-                    if let Some(v) = stry!(match_rp_expr(
+                    stry!(match_rp_expr(
                         outer, opts_w, env, event, state, meta, local, &target, &rp,
-                    )) {
+                    ))
+                    .map_or(Ok(false), |v| {
                         // we need to assign prior to the guard so we can check
                         // against the pattern expressions
                         stry!(set_local_shadow(outer, local, &env.meta, a.idx, v));
 
                         test_guard(outer, opts, env, event, state, meta, local, guard)
-                    } else {
-                        Ok(false)
-                    }
+                    })
                 }
                 Pattern::Expr(ref expr) => {
                     let v = stry!(expr.run(opts, env, event, state, meta, local));
@@ -1041,16 +1108,15 @@ where
                     }
                 }
                 Pattern::Tuple(ref tp) => {
-                    if let Some(v) = stry!(match_tp_expr(
+                    stry!(match_tp_expr(
                         outer, opts_w, env, event, state, meta, local, &target, &tp,
-                    )) {
+                    ))
+                    .map_or(Ok(false), |v| {
                         // we need to assign prior to the guard so we can cehck
                         // against the pattern expressions
                         stry!(set_local_shadow(outer, local, &env.meta, a.idx, v));
                         test_guard(outer, opts, env, event, state, meta, local, guard)
-                    } else {
-                        Ok(false)
-                    }
+                    })
                 }
                 Pattern::Assign(_) => {
                     error_oops(outer, 0xdead_0004, "nested assign pattern", &env.meta)
@@ -1118,9 +1184,10 @@ where
                 } else {
                     return Ok(None);
                 };
-                if let Ok(x) = test
+                if let Some(x) = test
                     .extractor
                     .extract(opts.result_needed, &testee, &env.context)
+                    .into_match()
                 {
                     store!(x);
                 } else {
@@ -1242,9 +1309,10 @@ where
                     }
                     ArrayPredicatePattern::Tilde(test) => {
                         'inner_tilde: for (idx, candidate) in a.iter().enumerate() {
-                            if let Ok(r) =
-                                test.extractor
-                                    .extract(opts.result_needed, &candidate, &env.context)
+                            if let Some(r) = test
+                                .extractor
+                                .extract(opts.result_needed, &candidate, &env.context)
+                                .into_match()
                             {
                                 matched |= true;
                                 if opts.result_needed {
@@ -1332,9 +1400,10 @@ where
                     }
                 }
                 ArrayPredicatePattern::Tilde(test) => {
-                    if let Ok(r) =
-                        test.extractor
-                            .extract(opts.result_needed, &candidate, &env.context)
+                    if let Some(r) = test
+                        .extractor
+                        .extract(opts.result_needed, &candidate, &env.context)
+                        .into_match()
                     {
                         if opts.result_needed {
                             acc.push(r);

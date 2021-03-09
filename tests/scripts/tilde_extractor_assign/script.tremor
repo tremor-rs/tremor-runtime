@@ -1,0 +1,4 @@
+match event of
+  case snot = ~ json|| => snot
+  default => "error"
+end

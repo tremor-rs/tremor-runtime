@@ -9,11 +9,7 @@
       "request": "launch",
       "name": "Debug tremor-cli",
       "cargo": {
-        "args": [
-          "build",
-          "-p",
-          "tremor-cli",
-        ],
+        "args": ["build", "-p", "tremor-cli"],
         "filter": {
           "name": "tremor",
           "kind": "bin"
@@ -51,21 +47,32 @@
     {
       "type": "lldb",
       "request": "launch",
-      "name": "Debug script_error unit test",
+      "name": "Debug value::test::obj_eq unit test",
       "cargo": {
         "args": [
           "test",
           "--no-run",
-          "pp_embed_unrecognized_token2"
-        ],
+          "--package",
+          "tremor-value",
+          "value::test::obj_eq"
+        ]
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug script_error unit test",
+      "cargo": {
+        "args": ["test", "--no-run", "pp_embed_unrecognized_token2"],
         "filter": {
           "name": "script_error",
           "kind": "test"
         }
       },
-      "args": [
-        "${selectedText}"
-      ],
+      "args": ["${selectedText}"],
       "cwd": "${workspaceFolder}"
     },
     {
@@ -73,12 +80,7 @@
       "request": "launch",
       "name": "Debug unit tests in library 'tremor-api'",
       "cargo": {
-        "args": [
-          "test",
-          "--no-run",
-          "--lib",
-          "--package=tremor-api"
-        ],
+        "args": ["test", "--no-run", "--lib", "--package=tremor-api"],
         "filter": {
           "name": "tremor-api",
           "kind": "lib"
@@ -92,12 +94,7 @@
       "request": "launch",
       "name": "Debug unit tests in library 'tremor-pipeline'",
       "cargo": {
-        "args": [
-          "test",
-          "--no-run",
-          "--lib",
-          "--package=tremor-pipeline"
-        ],
+        "args": ["test", "--no-run", "--lib", "--package=tremor-pipeline"],
         "filter": {
           "name": "tremor-pipeline",
           "kind": "lib"
@@ -111,19 +108,13 @@
       "request": "launch",
       "name": "Debug integration test 'query'",
       "cargo": {
-        "args": [
-          "test",
-          "--no-run",
-          "--test=query",
-        ],
+        "args": ["test", "--no-run", "--test=query"],
         "filter": {
           "name": "query",
           "kind": "test"
         }
       },
-      "args": [
-        "window_mixed_1"
-      ],
+      "args": ["window_mixed_1"],
       "cwd": "${workspaceFolder}"
     },
     {
@@ -131,12 +122,7 @@
       "request": "launch",
       "name": "Debug unit tests in library 'tremor-influx'",
       "cargo": {
-        "args": [
-          "test",
-          "--no-run",
-          "--lib",
-          "--package=tremor-influx"
-        ],
+        "args": ["test", "--no-run", "--lib", "--package=tremor-influx"],
         "filter": {
           "name": "tremor-influx",
           "kind": "lib"
@@ -169,12 +155,7 @@
       "request": "launch",
       "name": "Debug unit tests in library 'tremor_script'",
       "cargo": {
-        "args": [
-          "test",
-          "--no-run",
-          "--lib",
-          "--package=tremor-script"
-        ],
+        "args": ["test", "--no-run", "--lib", "--package=tremor-script"],
         "filter": {
           "name": "tremor_script",
           "kind": "lib"
@@ -188,11 +169,7 @@
       "request": "launch",
       "name": "Debug executable 'tremor-script'",
       "cargo": {
-        "args": [
-          "build",
-          "--bin=tremor-script",
-          "--package=tremor-script"
-        ],
+        "args": ["build", "--bin=tremor-script", "--package=tremor-script"],
         "filter": {
           "name": "tremor-script",
           "kind": "bin"
@@ -225,12 +202,7 @@
       "request": "launch",
       "name": "Debug unit tests in library 'tremor-runtime'",
       "cargo": {
-        "args": [
-          "test",
-          "--no-run",
-          "--lib",
-          "--package=tremor-runtime"
-        ],
+        "args": ["test", "--no-run", "--lib", "--package=tremor-runtime"],
         "filter": {
           "name": "tremor-runtime",
           "kind": "lib"
@@ -377,11 +349,7 @@
       "request": "launch",
       "name": "Debug executable 'tremor-query'",
       "cargo": {
-        "args": [
-          "build",
-          "--bin=tremor-query",
-          "--package=tremor-query"
-        ],
+        "args": ["build", "--bin=tremor-query", "--package=tremor-query"],
         "filter": {
           "name": "tremor-query",
           "kind": "bin"
@@ -414,11 +382,7 @@
       "request": "launch",
       "name": "Debug executable 'tremor'",
       "cargo": {
-        "args": [
-          "build",
-          "--bin=tremor",
-          "--package=tremor-cli"
-        ],
+        "args": ["build", "--bin=tremor", "--package=tremor-cli"],
         "filter": {
           "name": "tremor",
           "kind": "bin"
@@ -432,11 +396,7 @@
       "request": "launch",
       "name": "Debug real-workflow-throughput-json",
       "cargo": {
-        "args": [
-          "build",
-          "--bin=tremor",
-          "--package=tremor-cli"
-        ],
+        "args": ["build", "--bin=tremor", "--package=tremor-cli"],
         "filter": {
           "name": "tremor",
           "kind": "bin"
@@ -455,12 +415,7 @@
       "request": "launch",
       "name": "Release real-workflow-throughput-json",
       "cargo": {
-        "args": [
-          "build",
-          "--bin=tremor",
-          "--package=tremor-cli",
-          "--release"
-        ],
+        "args": ["build", "--bin=tremor", "--package=tremor-cli", "--release"],
         "filter": {
           "name": "tremor",
           "kind": "bin"
@@ -479,12 +434,7 @@
       "request": "launch",
       "name": "Debug unit tests in executable 'tremor'",
       "cargo": {
-        "args": [
-          "test",
-          "--no-run",
-          "--bin=tremor",
-          "--package=tremor-cli"
-        ],
+        "args": ["test", "--no-run", "--bin=tremor", "--package=tremor-cli"],
         "filter": {
           "name": "tremor",
           "kind": "bin"
@@ -498,11 +448,7 @@
       "request": "launch",
       "name": "Debug executable 'tremor-tool'",
       "cargo": {
-        "args": [
-          "build",
-          "--bin=tremor-tool",
-          "--package=tremor-tool"
-        ],
+        "args": ["build", "--bin=tremor-tool", "--package=tremor-tool"],
         "filter": {
           "name": "tremor-tool",
           "kind": "bin"

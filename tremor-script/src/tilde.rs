@@ -43,6 +43,34 @@ use std::str::FromStr;
 use tremor_influx as influx;
 use tremor_kv as kv;
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum ExtractorResult<'result> {
+    // a match without a value
+    MatchNull,
+    // We matched and captured a result
+    Match(Value<'result>),
+    // We didn't match
+    NoMatch,
+    // We encountered an error
+    Err(ExtractorError),
+}
+
+impl<'result> ExtractorResult<'result> {
+    pub fn is_match(&self) -> bool {
+        match self {
+            ExtractorResult::Match(_) | ExtractorResult::MatchNull => true,
+            ExtractorResult::NoMatch | ExtractorResult::Err(_) => false,
+        }
+    }
+    pub fn into_match(self) -> Option<Value<'result>> {
+        match self {
+            ExtractorResult::MatchNull => Some(TRUE),
+            ExtractorResult::Match(v) => Some(v),
+            ExtractorResult::NoMatch | ExtractorResult::Err(_) => None,
+        }
+    }
+}
+
 fn parse_network(address: Ipv4Addr, mut itr: Peekable<Iter<u8>>) -> Option<IpCidr> {
     let mut network_length = match itr.next()? {
         c if *c >= b'0' && *c <= b'9' => *c - b'0',
@@ -76,7 +104,7 @@ fn parse_ipv4_fast(ipstr: &str) -> Option<IpCidr> {
                 };
             }
             b'a'..=b'f' | b'A'..=b'F' => return parse_ipv6_fast(ipstr),
-            b'/' => return parse_network(Ipv4Addr::new(a, 0, 0, 0), itr),
+            b'/' => return parse_network(Ipv4Addr::new(0, 0, 0, a), itr),
             b'.' => {
                 itr.peek()?;
                 break;
@@ -86,7 +114,7 @@ fn parse_ipv4_fast(ipstr: &str) -> Option<IpCidr> {
     }
     if itr.peek().is_none() {
         return Some(IpCidr::V4(
-            Ipv4Cidr::from_prefix_and_bits(Ipv4Addr::new(a, 0, 0, 0), 32).ok()?,
+            Ipv4Cidr::from_prefix_and_bits(Ipv4Addr::new(0, 0, 0, a), 32).ok()?,
         ));
     };
 
@@ -150,6 +178,10 @@ fn parse_ipv6_fast(s: &str) -> Option<IpCidr> {
 #[derive(Debug, Clone, Serialize)]
 /// Encapsulates supported extractors
 pub enum Extractor {
+    /// Tests if a string starts with a prefix
+    Prefix(String),
+    /// Tests if a string ends with a suffix
+    Suffix(String),
     /// Glob recognizer
     Glob {
         rule: String,
@@ -257,13 +289,77 @@ impl fmt::Display for ExtractorError {
 }
 
 impl Extractor {
+    pub fn cost(&self) -> u64 {
+        match self {
+            Extractor::Prefix(..) | Extractor::Suffix(..) => 25,
+            Extractor::Base64 | Extractor::Grok { .. } => 50,
+            Extractor::Glob { .. } => 100,
+            Extractor::Cidr { .. } | Extractor::Datetime { .. } => 200,
+            Extractor::Kv(_) | Extractor::Json | Extractor::Dissect { .. } => 500,
+            Extractor::Influx => 750,
+            Extractor::Re { .. } | Extractor::Rerg { .. } => 1000,
+        }
+    }
+    /// This is affected only if we use == compairisons
+    pub fn is_exclusive_to(&self, value: &Value) -> bool {
+        value.as_str().map_or(true, |s| {
+            match self {
+                // If the glob pattern does not match the string we compare to,
+                // we know that the two are exclusive
+                // match event of
+                //   case %{a ~= glob|my*glob|} => ...
+                //   case %{a == "snot"} => ...
+                // end
+                // the same holds true for regular expressions
+                Extractor::Prefix(pfx) => !s.starts_with(pfx),
+                Extractor::Suffix(sfx) => !s.ends_with(sfx),
+                Extractor::Glob { compiled, .. } => !compiled.matches(s),
+                Extractor::Rerg { compiled, .. } | Extractor::Re { compiled, .. } => {
+                    !compiled.is_match(s)
+                }
+                Extractor::Base64 => base64::decode(s).is_err(),
+                Extractor::Kv(p) => p.run::<Value>(s).is_none(),
+                Extractor::Json => {
+                    let mut s = String::from(s);
+                    let r = {
+                        let s1 = s.as_mut_str();
+                        // ALLOW: This is a temporary value
+                        let s2 = unsafe { s1.as_bytes_mut() };
+                        tremor_value::parse_to_value(s2).is_err()
+                    };
+                    r
+                }
+                Extractor::Dissect { compiled, .. } => {
+                    let mut s = String::from(s);
+                    compiled.run(s.as_mut_str()).is_none()
+                }
+                Extractor::Grok { compiled, .. } => compiled.matches(s.as_bytes()).is_err(),
+                Extractor::Cidr { .. } => false, // IpAddr::from_str(s).is_err(), Never assume this is exclusive since it may have a lot of edge cases
+                Extractor::Influx => influx::decode::<Value>(s, 0).is_err(),
+                Extractor::Datetime {
+                    format,
+                    has_timezone,
+                } => datetime::_parse(s, format, *has_timezone).is_err(),
+            }
+        })
+    }
     pub fn new(id: &str, rule_text: &str) -> Result<Self, ExtractorError> {
         let id = id.to_lowercase();
         let e = match id.as_str() {
-            "glob" => Extractor::Glob {
-                compiled: glob::Pattern::new(&rule_text)?,
-                rule: rule_text.to_string(),
-            },
+            "glob" => {
+                if is_prefix(&rule_text) {
+                    // ALLOW: we know the rule has a `*` at the end
+                    Extractor::Prefix(rule_text[..rule_text.len() - 1].to_string())
+                } else if is_suffix(rule_text) {
+                    // ALLOW: we know the rule has a `*` at the b eginning
+                    Extractor::Suffix(rule_text[1..].to_string())
+                } else {
+                    Extractor::Glob {
+                        compiled: glob::Pattern::new(&rule_text)?,
+                        rule: rule_text.to_string(),
+                    }
+                }
+            }
             "re" => Extractor::Re {
                 compiled: Regex::new(&rule_text)?,
                 rule: rule_text.to_string(),
@@ -338,19 +434,31 @@ impl Extractor {
         result_needed: bool,
         v: &'run Value<'event>,
         ctx: &'run EventContext,
-    ) -> Result<Value<'event>, ExtractorError>
+    ) -> ExtractorResult<'event>
     where
         'script: 'event,
         'event: 'run,
         'run: 'influx,
     {
+        use ExtractorResult::{Err, Match, MatchNull, NoMatch};
         if let Some(s) = v.as_str() {
             match self {
-                Self::Re { compiled: re, .. } => {
-                    if let Some(caps) = re.captures(s) {
-                        if !result_needed {
-                            return Ok(Value::null());
-                        }
+                Self::Prefix(pfx) => {
+                    if s.starts_with(pfx) {
+                        MatchNull
+                    } else {
+                        NoMatch
+                    }
+                }
+                Self::Suffix(sfx) => {
+                    if s.ends_with(sfx) {
+                        MatchNull
+                    } else {
+                        NoMatch
+                    }
+                }
+                Self::Re { compiled: re, .. } => re.captures(s).map_or(NoMatch, |caps| {
+                    if result_needed {
                         let matches: HashMap<beef::Cow<str>, Value> = re
                             .capture_names()
                             .flatten()
@@ -358,21 +466,24 @@ impl Extractor {
                                 Some((n.into(), Value::from(caps.name(n)?.as_str().to_string())))
                             })
                             .collect();
-                        Ok(Value::from(matches))
+                        Match(Value::from(matches))
                     } else {
-                        Err(ExtractorError {
-                            msg: "regular expression didn't match'".into(),
-                        })
+                        MatchNull
                     }
-                }
+                }),
                 Self::Rerg { compiled: re, .. } => {
                     if !result_needed {
-                        return Ok(Value::null());
+                        return if re.captures(s).is_some() {
+                            MatchNull
+                        } else {
+                            NoMatch
+                        };
                     }
 
                     let names: Vec<&str> = re.capture_names().flatten().collect();
                     let mut results = Value::object_with_capacity(names.len());
                     let captures = re.captures_iter(s);
+
                     for c in captures {
                         for name in &names {
                             if let Some(cap) = c.name(name) {
@@ -385,145 +496,145 @@ impl Extractor {
                                         // make compiler happy - silently ignore and continue
                                     }
                                     None => {
-                                        let mut value = Value::array();
-                                        value.push(cap.as_str())?;
-                                        results.insert(*name, value)?;
+                                        if results.insert(*name, vec![cap.as_str()]).is_err() {
+                                            // ALLOW: we know results is an object
+                                            unreachable!()
+                                        }
                                     }
                                 }
                             }
                         }
                     }
-                    Ok(results.into_static())
+                    Match(results.into_static())
                 }
                 Self::Glob { compiled: glob, .. } => {
                     if glob.matches(s) {
-                        Ok(Value::from(true))
+                        MatchNull
                     } else {
-                        Err(ExtractorError {
-                            msg: "glob expression didn't match".into(),
-                        })
+                        NoMatch
                     }
                 }
-                Self::Kv(kv) => {
-                    if let Some(r) = kv.run::<Value>(s) {
-                        if !result_needed {
-                            return Ok(Value::null());
-                        }
-                        Ok(r.into_static())
+                Self::Kv(kv) => kv.run::<Value>(s).map_or(NoMatch, |r| {
+                    if result_needed {
+                        Match(r.into_static())
                     } else {
-                        Err(ExtractorError {
-                            msg: "Failed to split kv list".into(),
-                        })
+                        MatchNull
                     }
-                }
+                }),
                 Self::Base64 => {
-                    let decoded = base64::decode(s)?;
-                    if !result_needed {
-                        return Ok(Value::null());
-                    }
-
-                    Ok(Value::from(String::from_utf8(decoded).map_err(|e| {
-                        ExtractorError {
-                            msg: format!("failed to decode: {}", e),
+                    let decoded = match base64::decode(s) {
+                        Ok(d) => d,
+                        Result::Err(_) => return NoMatch,
+                    };
+                    if result_needed {
+                        match String::from_utf8(decoded) {
+                            Ok(s) => Match(Value::from(s)),
+                            Result::Err(e) => Err(ExtractorError {
+                                msg: format!("failed to decode: {}", e),
+                            }),
                         }
-                    })?))
+                    } else {
+                        MatchNull
+                    }
                 }
                 Self::Json => {
                     let mut s = s.as_bytes().to_vec();
                     // We will never use s afterwards so it's OK to destroy it's content
                     let encoded = s.as_mut_slice();
-                    let decoded = tremor_value::parse_to_value(encoded)
-                        .map_err(|e| ExtractorError {
-                            msg: format!("Error in decoding to a json object: {}", e),
-                        })?
-                        .into_static();
-                    if !result_needed {
-                        return Ok(Value::null());
-                    }
-                    Ok(decoded)
+                    tremor_value::parse_to_value(encoded).map_or(NoMatch, |decoded| {
+                        if result_needed {
+                            Match(decoded.into_static())
+                        } else {
+                            MatchNull
+                        }
+                    })
                 }
                 Self::Cidr {
                     range: Some(combiner),
                     ..
-                } => {
-                    let input = IpAddr::from_str(s).map_err(|e| ExtractorError {
-                        msg: format!("Invalid IP '{}': {}", s, e),
-                    })?;
+                } => IpAddr::from_str(s).map_or(NoMatch, |input| {
                     if combiner.combiner.contains(input) {
-                        if !result_needed {
-                            return Ok(Value::null());
+                        if result_needed {
+                            Cidr::from_str(s)
+                                .map_or(NoMatch, |cidr| Match(Value::from(Object::from(cidr))))
+                        } else {
+                            MatchNull
                         }
-
-                        Ok(Value::from(Object::from(Cidr::from_str(s)?)))
                     } else {
-                        Err(ExtractorError {
-                            msg: "IP does not belong to any CIDR specified".into(),
-                        })
+                        NoMatch
                     }
-                }
-                Self::Cidr { range: None, .. } => {
-                    let c = Cidr::from_str(s)?;
-                    if !result_needed {
-                        return Ok(Value::null());
-                    };
-                    Ok(Value::from(Object::from(c)))
-                }
+                }),
+                Self::Cidr { range: None, .. } => Cidr::from_str(s).map_or(NoMatch, |c| {
+                    if result_needed {
+                        Match(Value::from(Object::from(c)))
+                    } else {
+                        MatchNull
+                    }
+                }),
                 Self::Dissect {
                     compiled: pattern, ..
-                } => pattern.run(s).map_or_else(
-                    || {
-                        Err(ExtractorError {
-                            msg: "No match".into(),
-                        })
-                    },
-                    |o| {
-                        Ok(o.into_iter()
-                            .map(|(k, v)| {
-                                let v: simd_json::BorrowedValue<'static> = v.into_static();
-                                let v: Value<'static> = Value::from(v);
-                                (beef::Cow::from(k.to_string()), v)
-                            })
-                            .collect())
-                    },
-                ),
+                } => pattern.run(s).map_or(NoMatch, |o| {
+                    if result_needed {
+                        Match(
+                            o.into_iter()
+                                .map(|(k, v)| {
+                                    let v: simd_json::BorrowedValue<'static> = v.into_static();
+                                    let v: Value<'static> = Value::from(v);
+                                    (beef::Cow::from(k.to_string()), v)
+                                })
+                                .collect(),
+                        )
+                    } else {
+                        MatchNull
+                    }
+                }),
                 Self::Grok {
                     compiled: ref pattern,
                     ..
-                } => {
-                    let o = pattern.matches(s.as_bytes())?;
-                    if !result_needed {
-                        return Ok(Value::null());
-                    };
-                    Ok(o)
-                }
-                Self::Influx => match influx::decode::<'influx, Value<'influx>>(s, ctx.ingest_ns())
-                {
-                    Ok(ref _x) if !result_needed => Ok(Value::null()),
-                    Ok(Some(r)) => Ok(r.into_static()),
-                    Ok(None) | Err(_) => Err(ExtractorError {
-                        msg: "The input is invalid".into(),
+                } => pattern.matches(s.as_bytes()).map_or(NoMatch, |o| {
+                    if result_needed {
+                        Match(o)
+                    } else {
+                        MatchNull
+                    }
+                }),
+                Self::Influx => influx::decode::<'influx, Value<'influx>>(s, ctx.ingest_ns())
+                    .ok()
+                    .and_then(|v| v)
+                    .map_or(NoMatch, |r| {
+                        if result_needed {
+                            Match(r.into_static())
+                        } else {
+                            MatchNull
+                        }
                     }),
-                },
                 Self::Datetime {
                     ref format,
                     has_timezone,
-                } => {
-                    let d =
-                        datetime::_parse(s, format, *has_timezone).map_err(|e| ExtractorError {
-                            msg: format!("Invalid datetime specified: {}", e.to_string()),
-                        })?;
-                    if !result_needed {
-                        return Ok(Value::null());
-                    };
-                    Ok(Value::from(d))
-                }
+                } => datetime::_parse(s, format, *has_timezone).map_or(NoMatch, |d| {
+                    if result_needed {
+                        Match(Value::from(d))
+                    } else {
+                        MatchNull
+                    }
+                }),
             }
         } else {
-            Err(ExtractorError {
-                msg: "Extractors are currently only supported against Strings".into(),
-            })
+            NoMatch
         }
     }
+}
+
+fn is_prefix(rule_text: &str) -> bool {
+    Regex::new(r"^[^*?]+\*$")
+        .map(|re| re.is_match(rule_text))
+        .unwrap_or_default()
+}
+
+fn is_suffix(rule_text: &str) -> bool {
+    Regex::new(r"^\*[^*?]+$")
+        .map(|re| re.is_match(rule_text))
+        .unwrap_or_default()
 }
 
 impl<T: std::error::Error> From<T> for ExtractorError {
@@ -542,13 +653,14 @@ impl PartialEq<Extractor> for Extractor {
             | (Self::Glob { rule: rule_l, .. }, Self::Glob { rule: rule_r, .. })
             | (Self::Dissect { rule: rule_l, .. }, Self::Dissect { rule: rule_r, .. })
             | (Self::Grok { rule: rule_l, .. }, Self::Grok { rule: rule_r, .. })
-            | (Self::Datetime { format: rule_l, .. }, Self::Datetime { format: rule_r, .. }) => {
-                rule_l == rule_r
-            }
+            | (Self::Datetime { format: rule_l, .. }, Self::Datetime { format: rule_r, .. })
+            | (Self::Prefix(rule_l), Self::Prefix(rule_r))
+            | (Self::Suffix(rule_l), Self::Suffix(rule_r)) => rule_l == rule_r,
             (Self::Kv(rule_l), Self::Kv(rule_r)) => rule_l == rule_r,
             (Self::Cidr { range: rule_l, .. }, Self::Cidr { range: rule_r, .. }) => {
                 rule_l == rule_r
             }
+
             _ => false,
         }
     }
@@ -596,9 +708,11 @@ impl<'cidr> From<Cidr>
 
 #[cfg(test)]
 mod test {
+    use super::ExtractorResult::*;
     use super::*;
     use crate::Value;
     use halfbrown::hashmap;
+    use matches::assert_matches;
     use simd_json::json;
     #[test]
     fn test_reg_extractor() {
@@ -611,7 +725,7 @@ mod test {
                         &Value::from("foo=bar&baz=bat&"),
                         &EventContext::new(0, None)
                     ),
-                    Ok(Value::from(hashmap! {
+                    Match(Value::from(hashmap! {
                         "key".into() => Value::from(vec!["foo", "baz"]),
                         "val".into() => Value::from(vec!["bar", "bat"])
                     }))
@@ -627,7 +741,7 @@ mod test {
             Extractor::Re { .. } => {
                 assert_eq!(
                     ex.extract(true, &Value::from("foobar"), &EventContext::new(0, None)),
-                    Ok(Value::from(hashmap! {
+                    Match(Value::from(hashmap! {
                     "snot".into() => Value::from("bar") }))
                 );
             }
@@ -641,7 +755,7 @@ mod test {
             Extractor::Kv { .. } => {
                 assert_eq!(
                     ex.extract(true, &Value::from("a:b c:d"), &EventContext::new(0, None)),
-                    Ok(Value::from(hashmap! {
+                    Match(Value::from(hashmap! {
                         "a".into() => "b".into(),
                        "c".into() => "d".into()
                     }))
@@ -662,7 +776,7 @@ mod test {
                         &Value::from(r#"{"a":"b", "c":"d"}"#),
                         &EventContext::new(0, None)
                     ),
-                    Ok(Value::from(hashmap! {
+                    Match(Value::from(hashmap! {
                         "a".into() => "b".into(),
                         "c".into() => "d".into()
                     }))
@@ -679,7 +793,7 @@ mod test {
             Extractor::Glob { .. } => {
                 assert_eq!(
                     ex.extract(true, &Value::from("INFO"), &EventContext::new(0, None)),
-                    Ok(Value::from(true))
+                    MatchNull
                 );
             }
             _ => unreachable!(),
@@ -697,7 +811,7 @@ mod test {
                         &Value::from("8J+agHNuZWFreSByb2NrZXQh"),
                         &EventContext::new(0, None)
                     ),
-                    Ok("🚀sneaky rocket!".into())
+                    Match("🚀sneaky rocket!".into())
                 );
             }
             _ => unreachable!(),
@@ -710,11 +824,13 @@ mod test {
         match ex {
             Extractor::Dissect { .. } => {
                 assert_eq!(
-                    ex.extract(true, &Value::from("John"), &EventContext::new(0, None))
-                        .unwrap(),
-                    json!({
-                        "name": "John"
-                    })
+                    ex.extract(true, &Value::from("John"), &EventContext::new(0, None)),
+                    Match(
+                        json!({
+                            "name": "John"
+                        })
+                        .into()
+                    )
                 );
             }
             _ => unreachable!(),
@@ -733,18 +849,21 @@ mod test {
                 ), &EventContext::new(0, None));
 
                 assert_eq!(
-                    output.unwrap(),
-                    json!({
-                              "syslog_timestamp1": "",
-                              "syslog_ingest_timestamp": "2019-04-01T09:59:19+0010",
-                              "wf_datacenter": "dc",
-                              "syslog_hostname": "hostname",
-                              "syslog_pri": "1",
-                              "wf_pod": "pod",
-                              "syslog_message": "foo bar baz",
-                              "syslog_version": "123",
-                              "syslog_timestamp0": "Jul   7 10:51:24"
-                    })
+                    output,
+                    Match(
+                        json!({
+                                  "syslog_timestamp1": "",
+                                  "syslog_ingest_timestamp": "2019-04-01T09:59:19+0010",
+                                  "wf_datacenter": "dc",
+                                  "syslog_hostname": "hostname",
+                                  "syslog_pri": "1",
+                                  "wf_pod": "pod",
+                                  "syslog_message": "foo bar baz",
+                                  "syslog_version": "123",
+                                  "syslog_timestamp0": "Jul   7 10:51:24"
+                        })
+                        .into()
+                    )
                 );
             }
 
@@ -762,7 +881,7 @@ mod test {
                         &Value::from("192.168.1.0"),
                         &EventContext::new(0, None)
                     ),
-                    Ok(Value::from(hashmap! (
+                    Match(Value::from(hashmap! (
                         "prefix".into() => Value::from(vec![Value::from(192), 168.into(), 1.into(), 0.into()]),
                         "mask".into() => Value::from(vec![Value::from(255), 255.into(), 255.into(), 255.into()])
 
@@ -775,7 +894,7 @@ mod test {
                         &Value::from("192.168.1.0/24"),
                         &EventContext::new(0, None)
                     ),
-                    Ok(Value::from(hashmap! (
+                    Match(Value::from(hashmap! (
                                         "prefix".into() => Value::from(vec![Value::from(192), 168.into(), 1.into(), 0.into()]),
                                         "mask".into() => Value::from(vec![Value::from(255), 255.into(), 255.into(), 0.into()])
 
@@ -789,7 +908,7 @@ mod test {
                         &Value::from("192.168.1.0"),
                         &EventContext::new(0, None)
                     ),
-                    Ok(Value::from(hashmap!(
+                    Match(Value::from(hashmap!(
                                 "prefix".into() => Value::from(vec![Value::from(192), 168.into(), 1.into(), 0.into()]),
                                 "mask".into() => Value::from(vec![Value::from(255), 255.into(), 255.into(), 255.into()])
                     )))
@@ -801,7 +920,7 @@ mod test {
                         &Value::from("2001:4860:4860:0000:0000:0000:0000:8888"),
                         &EventContext::new(0, None)
                     ),
-                    Ok(Value::from(hashmap!(
+                    Match(Value::from(hashmap!(
                                 "prefix".into() => Value::from(vec![Value::from(8193),  18528.into(), 18528.into(), 0.into(), 0.into(), 0.into(), 0.into(), 34952.into()]),
                                 "mask".into() => Value::from(vec![Value::from(65535), 65535.into(), 65535.into(), 65535.into(), 65535.into(), 65535.into(), 65535.into(), 65535.into()])
                     )))
@@ -819,7 +938,7 @@ mod test {
                         &Value::from("10.22.0.254"),
                         &EventContext::new(0, None)
                     ),
-                    Ok(Value::from(hashmap! (
+                    Match(Value::from(hashmap! (
                             "prefix".into() => Value::from(vec![Value::from(10), 22.into(), 0.into(), 254.into()]),
                             "mask".into() => Value::from(vec![Value::from(255), 255.into(), 255.into(), 255.into()]),
                     )))
@@ -831,9 +950,7 @@ mod test {
                         &Value::from("99.98.97.96"),
                         &EventContext::new(0, None)
                     ),
-                    Err(ExtractorError {
-                        msg: "IP does not belong to any CIDR specified".into()
-                    })
+                    NoMatch
                 );
             }
             _ => unreachable!(),
@@ -852,7 +969,7 @@ mod test {
                     ),
                     &EventContext::new(0, None)
                 ),
-                Ok(Value::from(hashmap! (
+                Match(Value::from(hashmap! (
                        "measurement".into() => "wea ther".into(),
                        "tags".into() => Value::from(hashmap!("location".into() => "us-midwest".into())),
                        "fields".into() => Value::from(hashmap!("temperature".into() => 82.0f64.into())),
@@ -873,9 +990,141 @@ mod test {
                     &Value::from("2019-06-20 00:00:00"),
                     &EventContext::new(0, None)
                 ),
-                Ok(Value::from(1_560_988_800_000_000_000_u64))
+                Match(Value::from(1_560_988_800_000_000_000_u64))
             ),
             _ => unreachable!(),
         }
+    }
+
+    #[test]
+    fn opt_glob() -> Result<(), ExtractorError> {
+        assert_eq!(
+            Extractor::new("glob", "snot*")?,
+            Extractor::Prefix("snot".into())
+        );
+        assert_eq!(
+            Extractor::new("glob", "*badger")?,
+            Extractor::Suffix("badger".into())
+        );
+        assert_matches!(
+            Extractor::new("glob", "sont*badger")?,
+            Extractor::Glob { .. }
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn text_exclusive_glob() -> Result<(), ExtractorError> {
+        let e = Extractor::new("glob", "snot*")?;
+        assert!(!e.is_exclusive_to(&Value::from("snot")));
+        assert!(!e.is_exclusive_to(&Value::from("snot badger")));
+        assert!(e.is_exclusive_to(&Value::from("badger snot")));
+
+        let e = Extractor::new("glob", "*badger")?;
+        assert!(e.is_exclusive_to(&Value::from("snot")));
+        assert!(e.is_exclusive_to(&Value::from("badger snot")));
+        assert!(!e.is_exclusive_to(&Value::from("snot badger")));
+
+        let e = Extractor::new("glob", "snot*badger")?;
+        assert!(e.is_exclusive_to(&Value::from("snot")));
+        assert!(e.is_exclusive_to(&Value::from("badger snot")));
+        assert!(!e.is_exclusive_to(&Value::from("snot badger")));
+        assert!(!e.is_exclusive_to(&Value::from("snot snot badger")));
+        Ok(())
+    }
+
+    #[test]
+    fn text_exclusive_re() -> Result<(), ExtractorError> {
+        let e = Extractor::new("re", "^snot.*badger$")?;
+        assert!(e.is_exclusive_to(&Value::from("snot")));
+        assert!(e.is_exclusive_to(&Value::from("badger snot")));
+        assert!(!e.is_exclusive_to(&Value::from("snot badger")));
+        assert!(!e.is_exclusive_to(&Value::from("snot snot badger")));
+
+        let e = Extractor::new("rerg", "^snot.*badger$")?;
+        assert!(e.is_exclusive_to(&Value::from("snot")));
+        assert!(e.is_exclusive_to(&Value::from("badger snot")));
+        assert!(!e.is_exclusive_to(&Value::from("snot badger")));
+        assert!(!e.is_exclusive_to(&Value::from("snot snot badger")));
+        Ok(())
+    }
+
+    #[test]
+    fn text_exclusive_base64() -> Result<(), ExtractorError> {
+        let e = Extractor::new("base64", "")?;
+        assert!(e.is_exclusive_to(&Value::from("sn!ot")));
+        assert!(e.is_exclusive_to(&Value::from("badger snot")));
+        assert!(!e.is_exclusive_to(&Value::from("abc")));
+        assert!(!e.is_exclusive_to(&Value::from("124")));
+        Ok(())
+    }
+
+    #[test]
+    fn text_exclusive_kv() -> Result<(), ExtractorError> {
+        let e = Extractor::new("kv", "")?;
+        assert!(e.is_exclusive_to(&Value::from("sn!ot")));
+        assert!(e.is_exclusive_to(&Value::from("badger snot")));
+        assert!(!e.is_exclusive_to(&Value::from("a:2")));
+        assert!(!e.is_exclusive_to(&Value::from("ip:1.2.3.4 error:REFUSED")));
+        Ok(())
+    }
+
+    #[test]
+    fn text_exclusive_json() -> Result<(), ExtractorError> {
+        let e = Extractor::new("json", "")?;
+        assert!(e.is_exclusive_to(&Value::from("\"sn!ot")));
+        assert!(e.is_exclusive_to(&Value::from("{badger snot")));
+        assert!(!e.is_exclusive_to(&Value::from("2")));
+        assert!(!e.is_exclusive_to(&Value::from("[]")));
+        Ok(())
+    }
+
+    #[test]
+    fn text_exclusive_dissect() -> Result<(), ExtractorError> {
+        let e = Extractor::new("dissect", "snot%{name}")?;
+        assert!(!e.is_exclusive_to(&Value::from("snot")));
+        assert!(!e.is_exclusive_to(&Value::from("snot badger")));
+        assert!(e.is_exclusive_to(&Value::from("badger snot")));
+        Ok(())
+    }
+
+    #[test]
+    fn text_exclusive_grok() -> Result<(), ExtractorError> {
+        let e = Extractor::new("grok", "%{NUMBER:duration}")?;
+        assert!(e.is_exclusive_to(&Value::from("snot")));
+        assert!(!e.is_exclusive_to(&Value::from("snot 123 badger")));
+        assert!(!e.is_exclusive_to(&Value::from("123")));
+        Ok(())
+    }
+
+    #[test]
+    fn text_exclusive_cidr() -> Result<(), ExtractorError> {
+        let e = Extractor::new("cidr", "")?;
+        assert!(!e.is_exclusive_to(&Value::from("1")));
+        assert!(!e.is_exclusive_to(&Value::from("127.0.0.1")));
+        assert!(!e.is_exclusive_to(&Value::from("snot")));
+        assert!(!e.is_exclusive_to(&Value::from("123")));
+        Ok(())
+    }
+    #[test]
+    fn text_exclusive_influx() -> Result<(), ExtractorError> {
+        let e = Extractor::new("influx", "")?;
+        assert!(!e.is_exclusive_to(&Value::from(
+            "weather,location=us-midwest temperature=82 1465839830100400200"
+        )));
+        assert!(!e.is_exclusive_to(&Value::from("weather,location=us-midwest temperature=82")));
+        assert!(e.is_exclusive_to(&Value::from("snot")));
+        assert!(e.is_exclusive_to(&Value::from("123")));
+        Ok(())
+    }
+
+    #[test]
+    fn text_exclusive_datetime() -> Result<(), ExtractorError> {
+        let e = Extractor::new("datetime", "%Y-%m-%d %H:%M:%S")?;
+        assert!(!e.is_exclusive_to(&Value::from("2019-06-20 00:00:00")));
+        assert!(e.is_exclusive_to(&Value::from("snot")));
+        assert!(e.is_exclusive_to(&Value::from("123")));
+        assert!(e.is_exclusive_to(&Value::from("2019-06-20 00:00:71")));
+        Ok(())
     }
 }

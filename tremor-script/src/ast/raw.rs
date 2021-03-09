@@ -17,24 +17,26 @@
 #![allow(clippy::module_name_repetitions)]
 
 use super::{
-    base_expr, eq::AstEq, query, replace_last_shadow_use, ArrayPattern, ArrayPredicatePattern,
-    AssignPattern, BinExpr, BinOpKind, Bytes, Comprehension, ComprehensionCase, EmitExpr,
-    EventPath, Expr, Field, FnDecl, FnDoc, Helper, Ident, ImutComprehension, ImutComprehensionCase,
-    ImutExpr, ImutExprInt, ImutMatch, ImutPredicateClause, Invocable, Invoke, InvokeAggr,
-    InvokeAggrFn, List, Literal, LocalPath, Match, Merge, MetadataPath, ModDoc, NodeMetas, Patch,
-    PatchOperation, Path, Pattern, PredicateClause, PredicatePattern, Predicates, Record,
-    RecordPattern, Recur, ReservedPath, Script, Segment, StatePath, StrLitElement, StringLit,
-    TestExpr, TuplePattern, UnaryExpr, UnaryOpKind, Warning,
+    base_expr, eq::AstEq, query, ArrayPattern, ArrayPredicatePattern, AssignPattern, BinExpr,
+    BinOpKind, Bytes, ClauseGroup, Comprehension, ComprehensionCase, Costly, DefaultCase, EmitExpr,
+    EventPath, Expr, Expression, Field, FnDecl, FnDoc, Helper, Ident, IfElse, ImutExpr,
+    ImutExprInt, Invocable, Invoke, InvokeAggr, InvokeAggrFn, List, Literal, LocalPath, Match,
+    Merge, MetadataPath, ModDoc, NodeMetas, Patch, PatchOperation, Path, Pattern, PredicateClause,
+    PredicatePattern, Record, RecordPattern, Recur, ReservedPath, Script, Segment, StatePath,
+    StrLitElement, StringLit, TestExpr, TuplePattern, UnaryExpr, UnaryOpKind, Warning,
 };
 use super::{upable::Upable, BytesPart};
-use crate::errors::{
-    err_generic, error_generic, error_missing_effector, error_oops, Error, ErrorKind, Result,
-};
 use crate::impl_expr;
 use crate::pos::{Location, Range};
 use crate::prelude::*;
 use crate::registry::CustomFn;
 use crate::tilde::Extractor;
+use crate::{
+    errors::{
+        err_generic, error_generic, error_missing_effector, error_oops, Error, ErrorKind, Result,
+    },
+    impl_expr_exraw,
+};
 use crate::{KnownKey, Value};
 pub use base_expr::BaseExpr;
 use beef::Cow;
@@ -504,7 +506,7 @@ impl<'script> ImutExprInt<'script> {
             ImutExprInt::Binary(b) => b.try_reduce(helper),
             ImutExprInt::List(l) => l.try_reduce(helper),
             ImutExprInt::Record(r) => r.try_reduce(helper),
-            ImutExprInt::Path(p) => p.try_reduce(helper),
+            ImutExprInt::Path(p) => Ok(p.try_reduce(helper)),
             ImutExprInt::Invoke1(i)
             | ImutExprInt::Invoke2(i)
             | ImutExprInt::Invoke3(i)
@@ -533,11 +535,11 @@ pub enum ExprRaw<'script> {
     /// we're forced to make this pub because of lalrpop
     Module(ModuleRaw<'script>),
     /// we're forced to make this pub because of lalrpop
-    MatchExpr(Box<MatchRaw<'script>>),
+    MatchExpr(Box<MatchRaw<'script, Self>>),
     /// we're forced to make this pub because of lalrpop
     Assign(Box<AssignRaw<'script>>),
     /// we're forced to make this pub because of lalrpop
-    Comprehension(Box<ComprehensionRaw<'script>>),
+    Comprehension(Box<ComprehensionRaw<'script, Self>>),
     Drop {
         /// we're forced to make this pub because of lalrpop
         start: Location,
@@ -551,9 +553,11 @@ pub enum ExprRaw<'script> {
     /// we're forced to make this pub because of lalrpop
     Imut(ImutExprRaw<'script>),
 }
+impl<'script> ExpressionRaw<'script> for ExprRaw<'script> {}
 
 impl<'script> Upable<'script> for ExprRaw<'script> {
     type Target = Expr<'script>;
+    #[allow(clippy::clippy::too_many_lines)]
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(match self {
             ExprRaw::Module(ModuleRaw { start, end, .. }) => {
@@ -578,7 +582,51 @@ impl<'script> Upable<'script> for ExprRaw<'script> {
                 )
                 .into());
             }
-            ExprRaw::MatchExpr(m) => Expr::Match(Box::new(m.up(helper)?)),
+            ExprRaw::MatchExpr(m) => match m.up(helper)? {
+                Match {
+                    mid,
+                    target,
+                    mut patterns,
+                    default,
+                } if patterns.len() == 1
+                    && patterns
+                        .get(0)
+                        .map(|cg| {
+                            if let ClauseGroup::Simple {
+                                precondition: None,
+                                patterns,
+                            } = cg
+                            {
+                                patterns.len() == 1
+                            } else {
+                                false
+                            }
+                        })
+                        .unwrap_or_default() =>
+                {
+                    if let Some(ClauseGroup::Simple {
+                        precondition: None,
+                        mut patterns,
+                    }) = patterns.pop()
+                    {
+                        if let Some(if_clause) = patterns.pop() {
+                            let ie = IfElse {
+                                mid,
+                                target,
+                                if_clause,
+                                else_clause: default,
+                            };
+                            Expr::IfElse(Box::new(ie))
+                        } else {
+                            return Err("Invalid group clause with 0 patterns".into());
+                        }
+                    } else {
+                        // ALLOW: we check patterns.len() above
+                        unreachable!()
+                    }
+                }
+                m => Expr::Match(Box::new(m)),
+            },
             ExprRaw::Assign(a) => {
                 let path = a.path.up(helper)?;
                 let mid = helper.add_meta(a.start, a.end);
@@ -788,7 +836,7 @@ pub struct MatchFnDeclRaw<'script> {
     pub(crate) end: Location,
     pub(crate) name: IdentRaw<'script>,
     pub(crate) args: Vec<IdentRaw<'script>>,
-    pub(crate) cases: Vec<PredicateClauseRaw<'script>>,
+    pub(crate) cases: Vec<PredicateClauseRaw<'script, ExprRaw<'script>>>,
     pub(crate) doc: Option<Vec<Cow<'script, str>>>,
     pub(crate) open: bool,
     pub(crate) inline: bool,
@@ -845,11 +893,11 @@ impl<'script> Upable<'script> for MatchFnDeclRaw<'script> {
 
         let patterns = patterns
             .into_iter()
-            .map(|mut c: PredicateClauseRaw| {
+            .map(|mut c: PredicateClauseRaw<_>| {
                 if c.pattern == PatternRaw::Default {
                     c
                 } else {
-                    let mut exprs: ExprsRaw<'script> = self
+                    let mut exprs: Vec<_> = self
                         .args
                         .iter()
                         .enumerate()
@@ -912,6 +960,14 @@ impl<'script> Upable<'script> for MatchFnDeclRaw<'script> {
     }
 }
 
+/// A raw expression
+pub trait ExpressionRaw<'script>:
+    Clone + std::fmt::Debug + PartialEq + Serialize + Upable<'script>
+where
+    <Self as Upable<'script>>::Target: Expression + 'script,
+{
+}
+
 /// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum ImutExprRaw<'script> {
@@ -924,9 +980,9 @@ pub enum ImutExprRaw<'script> {
     /// we're forced to make this pub because of lalrpop
     Merge(Box<MergeRaw<'script>>),
     /// we're forced to make this pub because of lalrpop
-    Match(Box<ImutMatchRaw<'script>>),
+    Match(Box<MatchRaw<'script, Self>>),
     /// we're forced to make this pub because of lalrpop
-    Comprehension(Box<ImutComprehensionRaw<'script>>),
+    Comprehension(Box<ComprehensionRaw<'script, Self>>),
     /// we're forced to make this pub because of lalrpop
     Path(PathRaw<'script>),
     /// we're forced to make this pub because of lalrpop
@@ -953,6 +1009,7 @@ pub enum ImutExprRaw<'script> {
     /// bytes
     Bytes(BytesRaw<'script>),
 }
+impl<'script> ExpressionRaw<'script> for ImutExprRaw<'script> {}
 
 impl<'script> Upable<'script> for ImutExprRaw<'script> {
     type Target = ImutExprInt<'script>;
@@ -1168,16 +1225,24 @@ impl_expr!(AssignRaw);
 
 /// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct PredicateClauseRaw<'script> {
+pub struct PredicateClauseRaw<'script, Ex>
+where
+    <Ex as Upable<'script>>::Target: Expression + 'script,
+    Ex: ExpressionRaw<'script> + 'script,
+{
     pub(crate) start: Location,
     pub(crate) end: Location,
     pub(crate) pattern: PatternRaw<'script>,
     pub(crate) guard: Option<ImutExprRaw<'script>>,
-    pub(crate) exprs: ExprsRaw<'script>,
+    pub(crate) exprs: Vec<Ex>,
 }
 
-impl<'script> Upable<'script> for PredicateClauseRaw<'script> {
-    type Target = PredicateClause<'script>;
+impl<'script, Ex> Upable<'script> for PredicateClauseRaw<'script, Ex>
+where
+    <Ex as Upable<'script>>::Target: Expression + 'script,
+    Ex: ExpressionRaw<'script> + 'script,
+{
+    type Target = PredicateClause<'script, <Ex as Upable<'script>>::Target>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let was_leaf = helper.possible_leaf;
         helper.possible_leaf = false;
@@ -1193,6 +1258,12 @@ impl<'script> Upable<'script> for PredicateClauseRaw<'script> {
             helper.end_shadow_var();
         }
 
+        if let Pattern::Assign(AssignPattern { idx, .. }) = &pattern {
+            if let Some(expr) = exprs.last_mut() {
+                expr.replace_last_shadow_use(*idx);
+            };
+        }
+
         let span = Range::from((self.start, self.end));
         let last_expr = exprs
             .pop()
@@ -1204,42 +1275,6 @@ impl<'script> Upable<'script> for PredicateClauseRaw<'script> {
             guard,
             exprs,
             last_expr,
-        })
-    }
-}
-/// we're forced to make this pub because of lalrpop
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct ImutPredicateClauseRaw<'script> {
-    pub(crate) start: Location,
-    pub(crate) end: Location,
-    pub(crate) pattern: PatternRaw<'script>,
-    pub(crate) guard: Option<ImutExprRaw<'script>>,
-    pub(crate) exprs: ImutExprsRaw<'script>,
-}
-
-impl<'script> Upable<'script> for ImutPredicateClauseRaw<'script> {
-    type Target = ImutPredicateClause<'script>;
-    fn up<'registry>(mut self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        // We run the pattern first as this might reserve a local shadow
-        let pattern = self.pattern.up(helper)?;
-
-        let span = Range::from((self.start, self.end));
-        let expr = self
-            .exprs
-            .pop()
-            .ok_or_else(|| error_missing_effector(&span, &span, &helper.meta))?;
-        let expr = ImutExpr(expr.up(helper)?);
-        let guard = self.guard.up(helper)?;
-        // If we are in an assign pattern we'd have created
-        // a shadow variable, this needs to be undoine at the end
-        if pattern.is_assign() {
-            helper.end_shadow_var();
-        }
-        Ok(ImutPredicateClause {
-            mid: helper.add_meta(self.start, self.end),
-            pattern,
-            guard,
-            expr,
         })
     }
 }
@@ -1382,16 +1417,24 @@ impl<'script> Upable<'script> for MergeRaw<'script> {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct ComprehensionRaw<'script> {
+pub struct ComprehensionRaw<'script, Ex>
+where
+    <Ex as Upable<'script>>::Target: Expression + 'script,
+    Ex: ExpressionRaw<'script> + 'script,
+{
     pub start: Location,
     pub end: Location,
     pub target: ImutExprRaw<'script>,
-    pub cases: ComprehensionCasesRaw<'script>,
+    pub cases: ComprehensionCasesRaw<'script, Ex>,
 }
-impl_expr!(ComprehensionRaw);
+impl_expr_exraw!(ComprehensionRaw);
 
-impl<'script> Upable<'script> for ComprehensionRaw<'script> {
-    type Target = Comprehension<'script>;
+impl<'script, Ex> Upable<'script> for ComprehensionRaw<'script, Ex>
+where
+    <Ex as Upable<'script>>::Target: Expression + 'script,
+    Ex: ExpressionRaw<'script> + 'script,
+{
+    type Target = Comprehension<'script, Ex::Target>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         // We compute the target before shadowing the key and value
 
@@ -1422,43 +1465,27 @@ pub struct ImutComprehensionRaw<'script> {
     pub cases: ImutComprehensionCasesRaw<'script>,
 }
 
-impl<'script> Upable<'script> for ImutComprehensionRaw<'script> {
-    type Target = ImutComprehension<'script>;
-    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        // We compute the target before shadowing the key and value
-
-        let target = self.target.up(helper)?;
-
-        // We know that each case wiull have a key and a value as a shadowed
-        // variable so we reserve two ahead of time so we know what id's those
-        // will be.
-        let (key_id, val_id) = helper.reserve_2_shadow();
-
-        let cases = self.cases.up(helper)?;
-
-        Ok(ImutComprehension {
-            mid: helper.add_meta(self.start, self.end),
-            target,
-            cases,
-            key_id,
-            val_id,
-        })
-    }
-}
-
 /// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct ComprehensionCaseRaw<'script> {
+pub struct ComprehensionCaseRaw<'script, Ex>
+where
+    <Ex as Upable<'script>>::Target: Expression + 'script,
+    Ex: ExpressionRaw<'script> + 'script,
+{
     pub(crate) start: Location,
     pub(crate) end: Location,
     pub(crate) key_name: Cow<'script, str>,
     pub(crate) value_name: Cow<'script, str>,
     pub(crate) guard: Option<ImutExprRaw<'script>>,
-    pub(crate) exprs: ExprsRaw<'script>,
+    pub(crate) exprs: Vec<Ex>,
 }
 
-impl<'script> Upable<'script> for ComprehensionCaseRaw<'script> {
-    type Target = ComprehensionCase<'script>;
+impl<'script, Ex> Upable<'script> for ComprehensionCaseRaw<'script, Ex>
+where
+    <Ex as Upable<'script>>::Target: Expression + 'script,
+    Ex: ExpressionRaw<'script> + 'script,
+{
+    type Target = ComprehensionCase<'script, Ex::Target>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         // regiter key and value as shadowed variables
         let key_idx = helper.register_shadow_var(&self.key_name);
@@ -1467,11 +1494,9 @@ impl<'script> Upable<'script> for ComprehensionCaseRaw<'script> {
         let guard = self.guard.up(helper)?;
         let mut exprs = self.exprs.up(helper)?;
 
-        if let Some(expr) = exprs.pop() {
-            exprs.push(replace_last_shadow_use(
-                val_idx,
-                replace_last_shadow_use(key_idx, expr),
-            ));
+        if let Some(expr) = exprs.last_mut() {
+            expr.replace_last_shadow_use(key_idx);
+            expr.replace_last_shadow_use(val_idx);
         };
 
         // unregister them again
@@ -1502,36 +1527,6 @@ pub struct ImutComprehensionCaseRaw<'script> {
     pub(crate) exprs: ImutExprsRaw<'script>,
 }
 
-impl<'script> Upable<'script> for ImutComprehensionCaseRaw<'script> {
-    type Target = ImutComprehensionCase<'script>;
-    fn up<'registry>(mut self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        // regiter key and value as shadowed variables
-        helper.register_shadow_var(&self.key_name);
-        helper.register_shadow_var(&self.value_name);
-
-        let guard = self.guard.up(helper)?;
-
-        let span = Range::from((self.start, self.end));
-        let expr = self
-            .exprs
-            .pop()
-            .ok_or_else(|| error_missing_effector(&span, &span, &helper.meta))?;
-
-        let expr = ImutExpr(expr.up(helper)?);
-
-        // unregister them again
-        helper.end_shadow_var();
-        helper.end_shadow_var();
-        Ok(ImutComprehensionCase {
-            mid: helper.add_meta(self.start, self.end),
-            key_name: self.key_name,
-            value_name: self.value_name,
-            guard,
-            expr,
-        })
-    }
-}
-
 /// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum PatternRaw<'script> {
@@ -1545,6 +1540,8 @@ pub enum PatternRaw<'script> {
     Expr(ImutExprRaw<'script>),
     /// we're forced to make this pub because of lalrpop
     Assign(AssignPatternRaw<'script>),
+    /// a test expression
+    Extract(TestExprRaw),
     /// we're forced to make this pub because of lalrpop
     DoNotCare,
     /// we're forced to make this pub because of lalrpop
@@ -1554,7 +1551,7 @@ pub enum PatternRaw<'script> {
 impl<'script> Upable<'script> for PatternRaw<'script> {
     type Target = Pattern<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        use PatternRaw::{Array, Assign, Default, DoNotCare, Expr, Record, Tuple};
+        use PatternRaw::{Array, Assign, Default, DoNotCare, Expr, Extract, Record, Tuple};
         Ok(match self {
             //Predicate(pp) => Pattern::Predicate(pp.up(helper)?),
             Record(rp) => Pattern::Record(rp.up(helper)?),
@@ -1562,6 +1559,7 @@ impl<'script> Upable<'script> for PatternRaw<'script> {
             Tuple(tp) => Pattern::Tuple(tp.up(helper)?),
             Expr(expr) => Pattern::Expr(expr.up(helper)?),
             Assign(ap) => Pattern::Assign(ap.up(helper)?),
+            Extract(e) => Pattern::Extract(Box::new(e.up(helper)?)),
             DoNotCare => Pattern::DoNotCare,
             Default => Pattern::Default,
         })
@@ -2268,18 +2266,51 @@ impl<'script> Upable<'script> for UnaryExprRaw<'script> {
 
 /// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct MatchRaw<'script> {
+pub struct MatchRaw<'script, Ex>
+where
+    <Ex as Upable<'script>>::Target: Expression + 'script,
+    Ex: ExpressionRaw<'script> + 'script,
+{
     pub(crate) start: Location,
     pub(crate) end: Location,
     pub(crate) target: ImutExprRaw<'script>,
-    pub(crate) patterns: PredicatesRaw<'script>,
+    pub(crate) patterns: PredicatesRaw<'script, Ex>,
 }
-impl_expr!(MatchRaw);
+impl_expr_exraw!(MatchRaw);
 
-impl<'script> Upable<'script> for MatchRaw<'script> {
-    type Target = Match<'script>;
+// Sort clauses, move up cheaper clauses as long as they're exclusive
+fn sort_clauses<Ex: Expression>(patterns: &mut [PredicateClause<Ex>]) {
+    for i in (0..patterns.len()).rev() {
+        for j in (1..=i).rev() {
+            #[allow(
+                // No clippy, we really mean j.exclusive(k) || k.exclusive(j)...
+                clippy::suspicious_operation_groupings,
+                // also what is wrong with you clippy ...
+                clippy::blocks_in_if_conditions
+            )]
+            if patterns
+                .get(j)
+                .and_then(|jv| Some((jv, patterns.get(j - 1)?)))
+                .map(|(j, k)| {
+                    j.cost() <= k.cost() && (j.is_exclusive_to(k) || k.is_exclusive_to(j))
+                })
+                .unwrap_or_default()
+            {
+                patterns.swap(j, j - 1)
+            }
+        }
+    }
+}
+
+impl<'script, Ex> Upable<'script> for MatchRaw<'script, Ex>
+where
+    <Ex as Upable<'script>>::Target: Expression + 'script,
+    Ex: ExpressionRaw<'script> + 'script,
+{
+    type Target = Match<'script, Ex::Target>;
+    #[allow(clippy::too_many_lines)]
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        let patterns: Predicates = self
+        let mut patterns: Vec<PredicateClause<_>> = self
             .patterns
             .into_iter()
             .map(|v| v.up(helper))
@@ -2287,66 +2318,119 @@ impl<'script> Upable<'script> for MatchRaw<'script> {
 
         let defaults = patterns
             .iter()
-            .filter(|p| {
-                p.pattern.is_default() || (p.pattern == Pattern::Default && p.guard.is_none())
-            })
+            .filter(|p| p.pattern.is_default() && p.guard.is_none())
             .count();
-        match defaults {
-            0 => helper.warn(Warning::new_with_scope(
-                Range(self.start, self.end),
-                "This match expression has no default clause, if the other clauses do not cover all possibilities this will lead to events being discarded with runtime errors.".into()
-            )),
-            x if x > 1 => helper.warn(Warning::new_with_scope(
-                Range(self.start, self.end),
-                "A match statement with more then one default clause will never reach any but the first default clause.".into()
-            )),
-
+            match defaults {
+                0 => helper.warn(Warning::new_with_scope(
+                    Range(self.start, self.end),
+                    "This match expression has no default clause, if the other clauses do not cover all possibilities this will lead to events being discarded with runtime errors.".into()
+                )),
+                x if x > 1 => helper.warn(Warning::new_with_scope(
+                    Range(self.start, self.end),
+                    "A match statement with more then one default clause will never reach any but the first default clause.".into()
+                )),
             _ => ()
+        };
+        // If the last statement is a global default we can simply remove it
+        let default = if let Some(PredicateClause {
+            pattern: Pattern::Default,
+            guard: None,
+            exprs,
+            last_expr,
+            ..
+        }) = patterns.last_mut()
+        {
+            let mut es = Vec::new();
+            let mut last = Ex::Target::null_lit();
+            std::mem::swap(exprs, &mut es);
+            std::mem::swap(last_expr, &mut last);
+            if exprs.is_empty() {
+                if last.is_null_lit() {
+                    DefaultCase::Null
+                } else {
+                    DefaultCase::One(last)
+                }
+            } else {
+                DefaultCase::Many {
+                    exprs: es,
+                    last_expr: Box::new(last),
+                }
+            }
+        } else {
+            DefaultCase::None
+        };
+
+        if default != DefaultCase::None {
+            patterns.pop();
         }
 
+        // This shortcuts for if / else style matches
+        if patterns.len() == 1 {
+            let patterns = patterns
+                .into_iter()
+                .map(|p| ClauseGroup::Simple {
+                    precondition: None,
+                    patterns: vec![p],
+                })
+                .collect();
+            return Ok(Match {
+                mid: helper.add_meta(self.start, self.end),
+                target: self.target.up(helper)?,
+                patterns,
+                default,
+            });
+        }
+        sort_clauses(&mut patterns);
+        let mut groups = Vec::new();
+        let mut group: Vec<PredicateClause<_>> = Vec::new();
+
+        for p in patterns {
+            if group
+                .iter()
+                .all(|g| p.is_exclusive_to(g) || g.is_exclusive_to(&p))
+            {
+                group.push(p);
+            } else {
+                group.sort_by_key(Costly::cost);
+
+                let mut g = ClauseGroup::Simple {
+                    patterns: group,
+                    precondition: None,
+                };
+                g.optimize(0);
+                groups.push(g);
+                group = Vec::new();
+                group.push(p);
+            }
+        }
+        group.sort_by_key(Costly::cost);
+        let mut g = ClauseGroup::Simple {
+            patterns: group,
+            precondition: None,
+        };
+        g.optimize(0);
+        groups.push(g);
+
+        let mut patterns: Vec<ClauseGroup<_>> = Vec::new();
+
+        for g in groups {
+            #[allow(clippy::option_if_let_else)]
+            if let Some(last) = patterns.last_mut() {
+                if last.combinable(&g) {
+                    last.combine(g);
+                } else {
+                    patterns.push(g);
+                }
+            } else {
+                patterns.push(g);
+            }
+        }
         Ok(Match {
             mid: helper.add_meta(self.start, self.end),
             target: self.target.up(helper)?,
             patterns,
+            default,
         })
-    }
-}
-
-/// we're forced to make this pub because of lalrpop
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct ImutMatchRaw<'script> {
-    pub(crate) start: Location,
-    pub(crate) end: Location,
-    pub(crate) target: ImutExprRaw<'script>,
-    pub(crate) patterns: ImutPredicatesRaw<'script>,
-}
-
-impl<'script> Upable<'script> for ImutMatchRaw<'script> {
-    type Target = ImutMatch<'script>;
-    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        let patterns = self.patterns.up(helper)?;
-        let defaults = patterns.iter().filter(|p| p.pattern.is_default()).count();
-        match defaults {
-            0 => helper.warn(Warning::new_with_scope(
-                Range(self.start, self.end),
-                "This match expression has no default clause, if the other clauses do not cover all possibilities this will lead to events being discarded with runtime errors.".into()
-            )),
-            x if x > 1 => helper.warn(Warning::new_with_scope(
-                Range(self.start, self.end),
-                "A match statement with more then one default clause will never reach any but the first default clause.".into()
-            )),
-
-            _ => ()
-        }
-        let was_leaf = helper.possible_leaf;
-        helper.possible_leaf = false;
-        let r = Ok(ImutMatch {
-            mid: helper.add_meta(self.start, self.end),
-            target: self.target.up(helper)?,
-            patterns,
-        });
-        helper.possible_leaf = was_leaf;
-        r
     }
 }
 
@@ -2540,10 +2624,9 @@ pub type ImutExprsRaw<'script> = Vec<ImutExprRaw<'script>>;
 pub type FieldsRaw<'script> = Vec<FieldRaw<'script>>;
 pub type SegmentsRaw<'script> = Vec<SegmentRaw<'script>>;
 pub type PatternFieldsRaw<'script> = Vec<PredicatePatternRaw<'script>>;
-pub type PredicatesRaw<'script> = Vec<PredicateClauseRaw<'script>>;
-pub type ImutPredicatesRaw<'script> = Vec<ImutPredicateClauseRaw<'script>>;
+pub type PredicatesRaw<'script, Ex> = Vec<PredicateClauseRaw<'script, Ex>>;
 pub type PatchOperationsRaw<'script> = Vec<PatchOperationRaw<'script>>;
-pub type ComprehensionCasesRaw<'script> = Vec<ComprehensionCaseRaw<'script>>;
+pub type ComprehensionCasesRaw<'script, Ex> = Vec<ComprehensionCaseRaw<'script, Ex>>;
 pub type ImutComprehensionCasesRaw<'script> = Vec<ImutComprehensionCaseRaw<'script>>;
 pub type ArrayPredicatePatternsRaw<'script> = Vec<ArrayPredicatePatternRaw<'script>>;
 pub type WithExprsRaw<'script> = Vec<(IdentRaw<'script>, ImutExprRaw<'script>)>;

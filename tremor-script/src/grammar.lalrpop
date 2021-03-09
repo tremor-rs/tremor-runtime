@@ -552,7 +552,7 @@ FnDecl: AnyFnRaw<'input> = {
   <doc:DocComment> <start:@L> "fn" <name:Ident> "(" <args:FnArgs> ")" "of" <cases:FnCases> "end" <end:@L> => AnyFnRaw::Match(MatchFnDeclRaw{name, args, start, end, cases, doc, open: false, inline: false}),
 }
 
-FnCases: Vec<PredicateClauseRaw<'input>> = {
+FnCases: Vec<PredicateClauseRaw<'input, ExprRaw<'input>>> = {
     <cases:FnCaseClauses> <default:FnCaseDefault> => {
         let mut cases = cases;
         cases.push(default);
@@ -565,13 +565,13 @@ FnCases: Vec<PredicateClauseRaw<'input>> = {
     }
 }
 
-FnCaseDefault: PredicateClauseRaw<'input> = {
+FnCaseDefault: PredicateClauseRaw<'input, ExprRaw<'input>> = {
     <start:@L> "default" <exprs:Effectors> <end:@L> => {
         PredicateClauseRaw { pattern: PatternRaw::Default, exprs, guard: None, start, end}
     }
 }
 
-FnCase: PredicateClauseRaw<'input> = {
+FnCase: PredicateClauseRaw<'input, ExprRaw<'input>> = {
     <start:@L> "case" <pstart:@L> "(" <pattern:ArrayPredicatePatterns>  ")" <guard:WhenClause> <pend:@L> <exprs:Effectors> <end:@L> => PredicateClauseRaw {
         pattern: PatternRaw::Assign(AssignPatternRaw {
             id: FN_RES_NAME.into(),
@@ -584,7 +584,7 @@ FnCase: PredicateClauseRaw<'input> = {
     },
 }
 
-FnCaseClauses: Vec<PredicateClauseRaw<'input>> = {
+FnCaseClauses: Vec<PredicateClauseRaw<'input, ExprRaw<'input>>> = {
     <e:FnCase> => vec![e],
     <v:FnCaseClauses> <e:FnCase> => {
         let mut v = v;
@@ -949,11 +949,11 @@ Merge: MergeRaw<'input> = {
 ////////////////////////////// for comprehension (mut)  //////////////////////////////
 // Merges a perge spec (record) into the target
 
-For: ComprehensionRaw<'input> = {
+For: ComprehensionRaw<'input, ExprRaw<'input>> = {
     <start:@L> "for" <target:ComplexExprImut> "of" <cases:ForCaseClauses> "end" <end:@L> => ComprehensionRaw{target, cases, start, end},
 }
 
-ForCaseClauses: ComprehensionCasesRaw<'input> = {
+ForCaseClauses: ComprehensionCasesRaw<'input, ExprRaw<'input>> = {
     <e:ForCaseClause> => vec![e],
     <v:ForCaseClauses> <e:ForCaseClause> => {
         let mut v = v;
@@ -962,18 +962,18 @@ ForCaseClauses: ComprehensionCasesRaw<'input> = {
     }
 }
 
-ForCaseClause: ComprehensionCaseRaw<'input> = {
+ForCaseClause: ComprehensionCaseRaw<'input, ExprRaw<'input>> = {
     "case" <start:@L>  "(" <k:Ident> "," <v:Ident> ")" <end:@L> <guard:WhenClause> <exprs:Effectors>  => ComprehensionCaseRaw { key_name: k.id, value_name: v.id, exprs, guard, start, end },
 }
 
 // ////////////////////////////// for comprehension (imutmut)  //////////////////////////////
 // // Merges a perge spec (record) into the target
 
-ForImut: ImutComprehensionRaw<'input> = {
-    <start:@L> "for" <target:ComplexExprImut> "of" <cases:ForCaseClausesImut> "end" <end:@L> => ImutComprehensionRaw{target, cases, start, end},
+ForImut: ComprehensionRaw<'input, ImutExprRaw<'input>> = {
+    <start:@L> "for" <target:ComplexExprImut> "of" <cases:ForCaseClausesImut> "end" <end:@L> => ComprehensionRaw{target, cases, start, end},
 }
 
-ForCaseClausesImut: ImutComprehensionCasesRaw<'input> = {
+ForCaseClausesImut: ComprehensionCasesRaw<'input, ImutExprRaw<'input>> = {
     <e:ForCaseClauseImut> => vec![e],
     <v:ForCaseClausesImut> <e:ForCaseClauseImut> => {
         let mut v = v;
@@ -982,20 +982,20 @@ ForCaseClausesImut: ImutComprehensionCasesRaw<'input> = {
     }
 }
 
-ForCaseClauseImut: ImutComprehensionCaseRaw<'input> = {
-    "case" <start:@L>  "(" <k:Ident> "," <v:Ident> ")" <end:@L> <guard:WhenClause> <exprs:EffectorsImut>  => ImutComprehensionCaseRaw { key_name: k.id, value_name: v.id, exprs, guard, start, end },
+ForCaseClauseImut: ComprehensionCaseRaw<'input, ImutExprRaw<'input>> = {
+    "case" <start:@L>  "(" <k:Ident> "," <v:Ident> ")" <end:@L> <guard:WhenClause> <exprs:EffectorsImut>  => ComprehensionCaseRaw { key_name: k.id, value_name: v.id, exprs, guard, start, end },
 }
 
 ////////////////////////////// match expression (mutating)  //////////////////////////////
 // An expression that assigns a value to a variable
 
 /// A match expression
-Match: MatchRaw<'input> = {
+Match: MatchRaw<'input, ExprRaw<'input>> = {
     <start:@L> "match" <target:ComplexExprImut> "of" <patterns:Predicates> "end" <end:@L> => MatchRaw { target, patterns, start, end },
 }
 
 /// Predicates for a match statement (aka list of case statements)
-Predicates: PredicatesRaw<'input> = {
+Predicates: PredicatesRaw<'input, ExprRaw<'input>> = {
     <e:PredicateClause> => vec![e],
     <v:Predicates> <e:PredicateClause> => {
         let mut v = v;
@@ -1005,12 +1005,8 @@ Predicates: PredicatesRaw<'input> = {
 }
 
 /// A case statement
-PredicateClause: PredicateClauseRaw<'input> = {
-    <start:@L> "case" <rp:RecordCaseClause> <guard:WhenClause> <exprs:Effectors> <end:@L> => PredicateClauseRaw { pattern: rp, exprs, guard, start, end },
-    <start:@L> "case" <ap:ArrayCaseClause> <guard:WhenClause> <exprs:Effectors> <end:@L> => PredicateClauseRaw { pattern: ap, exprs, guard, start, end },
-    <start:@L> "case" <tp:TupleCaseClause> <guard:WhenClause> <exprs:Effectors> <end:@L> => PredicateClauseRaw { pattern: tp, exprs, guard, start, end },
-    <start:@L> "case" <lhs:ExprCaseClause> <guard:WhenClause> <rhs:Effectors> <end:@L> => PredicateClauseRaw { pattern: lhs, exprs: rhs, guard, start, end},
-    <start:@L> "case" "_" <guard:WhenClause> <rhs:Effectors> <end:@L> => PredicateClauseRaw { pattern: PatternRaw::DoNotCare, exprs: rhs, guard, start, end},
+PredicateClause: PredicateClauseRaw<'input, ExprRaw<'input>> = {
+    <start:@L> "case" <pattern:CasePattern> <guard:WhenClause> <exprs:Effectors> <end:@L> => PredicateClauseRaw { pattern, exprs, guard, start, end },
     <start:@L> "default" <exprs:Effectors> <end:@L> => PredicateClauseRaw { pattern: PatternRaw::Default, exprs, guard: None, start, end },
 }
 
@@ -1033,12 +1029,12 @@ Block: ExprsRaw<'input> = {
 // An expression that assigns a value to a variable
 
 /// A match expression
-MatchImut: ImutMatchRaw<'input> = {
-    <start:@L> "match" <target:ComplexExprImut> "of" <patterns:PredicatesImut> "end" <end:@L> => ImutMatchRaw { target, patterns, start, end },
+MatchImut: MatchRaw<'input, ImutExprRaw<'input>> = {
+    <start:@L> "match" <target:ComplexExprImut> "of" <patterns:PredicatesImut> "end" <end:@L> => MatchRaw { target, patterns, start, end },
 }
 
 /// Predicates for a match statement (aka list of case statements)
-PredicatesImut: ImutPredicatesRaw<'input> = {
+PredicatesImut: PredicatesRaw<'input, ImutExprRaw<'input>> = {
     <e:PredicateClauseImut> => vec![e],
     <v:PredicatesImut> <e:PredicateClauseImut> => {
         let mut v = v;
@@ -1047,13 +1043,19 @@ PredicatesImut: ImutPredicatesRaw<'input> = {
     }
 }
 
+CasePattern: PatternRaw<'input> = {
+    <RecordPattern> => PatternRaw::Record(<>),
+    <ArrayPattern> => PatternRaw::Array(<>),
+    <TuplePattern> => PatternRaw::Tuple(<>),
+    <ComplexExprImut> => PatternRaw::Expr(<>),
+    "_"  => PatternRaw::DoNotCare,
+    "~" <TestExpr> => PatternRaw::Extract(<>),
+    <segment:Ident> "=" <pattern:CasePattern> => PatternRaw::Assign(AssignPatternRaw { id: segment.id, pattern: Box::new(pattern) }),
+}
 /// A case statement
-PredicateClauseImut: ImutPredicateClauseRaw<'input> = {
-    <start:@L> "case" <rp:RecordCaseClause> <guard:WhenClause> <exprs:EffectorsImut> <end:@L> => ImutPredicateClauseRaw { pattern: rp, exprs, guard, start, end },
-    <start:@L> "case" <ap:ArrayCaseClause> <guard:WhenClause> <exprs:EffectorsImut> <end:@L> => ImutPredicateClauseRaw { pattern: ap, exprs, guard, start, end },
-    <start:@L> "case" <tp:TupleCaseClause> <guard:WhenClause> <exprs:EffectorsImut> <end:@L> => ImutPredicateClauseRaw { pattern: tp, exprs, guard, start, end },
-    <start:@L> "case" <lhs:ExprCaseClause> <guard:WhenClause> <rhs:EffectorsImut> <end:@L> => ImutPredicateClauseRaw { pattern: lhs, exprs: rhs, guard, start, end},
-    <start:@L> "default" <exprs:EffectorsImut> <end:@L> => ImutPredicateClauseRaw { pattern: PatternRaw::Default, exprs, guard: None, start, end },
+PredicateClauseImut: PredicateClauseRaw<'input, ImutExprRaw<'input>> = {
+    <start:@L> "case" <pattern:CasePattern> <guard:WhenClause> <exprs:EffectorsImut> <end:@L> => PredicateClauseRaw { pattern, exprs, guard, start, end },
+    <start:@L> "default" <exprs:EffectorsImut> <end:@L> => PredicateClauseRaw { pattern: PatternRaw::Default, exprs, guard: None, start, end },
 }
 
 /// Effoectors aka (=>  ... )
@@ -1073,30 +1075,6 @@ BlockImut: ImutExprsRaw<'input> = {
 
 ////////////////////////////// match expression (shared)  //////////////////////////////
 // An expression that assigns a value to a variable
-
-/// A record pattern aka [name = ] %{...}
-RecordCaseClause: PatternRaw<'input> = {
-    <start:@L> <segment:Ident> "=" <rp:RecordPattern> <end:@L> => PatternRaw::Assign(AssignPatternRaw { id: segment.id, pattern: Box::new(PatternRaw::Record(rp)) }),
-    <rp:RecordPattern> => PatternRaw::Record(rp),
-}
-
-/// A array pattern aka [name = ] %[...]
-ArrayCaseClause: PatternRaw<'input> = {
-    <start:@L> <segment:Ident> "=" <ap:ArrayPattern> <end:@L> => PatternRaw::Assign(AssignPatternRaw { id:segment.id, pattern: Box::new(PatternRaw::Array(ap)) }),
-    <ap:ArrayPattern> => PatternRaw::Array(ap),
-}
-
-/// A array pattern aka [name = ] %[...]
-TupleCaseClause: PatternRaw<'input> = {
-    <start:@L> <segment:Ident> "=" <tp:TuplePattern> <end:@L> => PatternRaw::Assign(AssignPatternRaw { id:segment.id, pattern: Box::new(PatternRaw::Tuple(tp)) }),
-    <tp:TuplePattern> => PatternRaw::Tuple(tp),
-}
-
-/// An expression clause aka [name = ] <expr>
-ExprCaseClause: PatternRaw<'input> = {
-    <start:@L> <segment:Ident> "=" <expr:ComplexExprImut> <end:@L> => PatternRaw::Assign(AssignPatternRaw { id:  segment.id, pattern: Box::new(PatternRaw::Expr(expr)) }),
-    <expr:ComplexExprImut> => PatternRaw::Expr(expr),
-}
 
 /// When part of an expression (when ...)
 WhenClause: Option<ImutExprRaw<'input>> = {

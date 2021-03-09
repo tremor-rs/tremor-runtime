@@ -21,9 +21,12 @@ use beef::Cow;
 use halfbrown::HashMap;
 use simd_json::prelude::*;
 use simd_json::{AlignedBuf, Deserializer, Node, StaticNode};
-use std::hash::Hash;
-use std::ops::{Index, IndexMut};
-use std::{borrow::Borrow, fmt};
+use std::{borrow::Borrow, convert::TryInto, fmt};
+use std::{cmp::Ord, hash::Hash};
+use std::{
+    cmp::Ordering,
+    ops::{Index, IndexMut},
+};
 
 pub use crate::serde::to_value;
 
@@ -81,6 +84,173 @@ pub enum Value<'value> {
     /// A binary type
     Bytes(Bytes<'value>),
 }
+
+impl<'value> Eq for Value<'value> {}
+
+#[derive(PartialEq)]
+struct Static(StaticNode);
+
+impl Eq for Static {}
+
+impl PartialOrd for Static {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl Ord for Static {
+    // We allow this since we check bounds before we cast
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_precision_loss,
+        clippy::clippy::cast_sign_loss
+    )]
+    fn cmp(&self, other: &Self) -> Ordering {
+        match (self.0, other.0) {
+            (StaticNode::Null, StaticNode::Null) => Ordering::Equal,
+            (StaticNode::Null, _) => Ordering::Greater,
+            (_, StaticNode::Null) => Ordering::Less,
+            (StaticNode::Bool(v1), StaticNode::Bool(v2)) => v1.cmp(&v2),
+            (StaticNode::Bool(_b), _) => Ordering::Greater,
+            (_, StaticNode::Bool(_b)) => Ordering::Less,
+            (StaticNode::U64(v1), StaticNode::U64(v2)) => v1.cmp(&v2),
+            (StaticNode::U64(v1), StaticNode::I64(v2)) => {
+                if let Ok(v2) = v2.try_into() {
+                    v1.cmp(&v2)
+                } else {
+                    Ordering::Greater
+                }
+            }
+            (StaticNode::U64(v1), StaticNode::F64(v2)) => {
+                if v2 < u64::min_value() as f64 {
+                    Ordering::Greater
+                } else if v2 > u64::max_value() as f64 {
+                    Ordering::Less
+                } else {
+                    v1.cmp(&(v2 as u64))
+                }
+            }
+            (StaticNode::I64(v1), StaticNode::I64(v2)) => v1.cmp(&v2),
+            (StaticNode::I64(v1), StaticNode::U64(v2)) => {
+                if let Ok(v1) = v1.try_into() {
+                    let v1: u64 = v1;
+                    v1.cmp(&v2)
+                } else {
+                    Ordering::Less
+                }
+            }
+            (StaticNode::I64(v1), StaticNode::F64(v2)) => {
+                if v2 < i64::min_value() as f64 {
+                    Ordering::Greater
+                } else if v2 > i64::max_value() as f64 {
+                    Ordering::Less
+                } else {
+                    v1.cmp(&(v2 as i64))
+                }
+            }
+            // This is not great!
+            // While we don't expose it NaN but float doesn't implement Ord since it refuses to
+            // compare Nan==Nan which makes sense so we kind of cheat around it by saying if it is
+            // decide if one is greater or smaller then the other they're the same
+            (StaticNode::F64(v1), StaticNode::F64(v2)) => {
+                if v1 > v2 {
+                    Ordering::Greater
+                } else if v1 < v2 {
+                    Ordering::Less
+                } else {
+                    Ordering::Equal
+                }
+            }
+            (StaticNode::F64(v1), StaticNode::U64(v2)) => {
+                if v1 < u64::min_value() as f64 {
+                    Ordering::Less
+                } else if v1 > u64::max_value() as f64 {
+                    Ordering::Greater
+                } else {
+                    (v1 as u64).cmp(&v2)
+                }
+            }
+            (StaticNode::F64(v1), StaticNode::I64(v2)) => {
+                if v1 < i64::min_value() as f64 {
+                    Ordering::Less
+                } else if v1 > i64::max_value() as f64 {
+                    Ordering::Greater
+                } else {
+                    (v1 as i64).cmp(&v2)
+                }
+            }
+        }
+    }
+}
+
+impl<'value> PartialOrd for Value<'value> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl<'value> Ord for Value<'value> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match (self, other) {
+            (Value::Static(v1), Value::Static(v2)) => Static(*v1).cmp(&Static(*v2)),
+            (Value::Static(_s), _) => Ordering::Greater,
+            (_, Value::Static(_s)) => Ordering::Less,
+            (Value::Bytes(v1), Value::Bytes(v2)) => v1.cmp(v2),
+            (Value::Bytes(v1), Value::String(v2)) => {
+                let v1: &[u8] = &v1;
+                v1.cmp(v2.as_bytes())
+            }
+            (Value::String(v1), Value::Bytes(v2)) => v1.as_bytes().cmp(&v2),
+            (Value::Bytes(_b), _) => Ordering::Greater,
+            (_, Value::Bytes(_b)) => Ordering::Less,
+            (Value::String(v1), Value::String(v2)) => v1.cmp(v2),
+            (Value::String(_s), _) => Ordering::Greater,
+            (_, Value::String(_s)) => Ordering::Less,
+            (Value::Array(v1), Value::Array(v2)) => v1.cmp(v2),
+            (Value::Array(_a), _) => Ordering::Greater,
+            (_, Value::Array(_a)) => Ordering::Less,
+            (Value::Object(v1), Value::Object(v2)) => cmp_map(v1.as_ref(), v2.as_ref()),
+        }
+    }
+}
+fn cmp_map(left: &Object, right: &Object) -> Ordering {
+    // Compare length first
+
+    match left.len().cmp(&right.len()) {
+        Ordering::Equal => (),
+        o @ Ordering::Greater | o @ Ordering::Less => return o,
+    };
+
+    // compare keyspace (sorted keys cmp)
+    let mut keys_left: Vec<_> = left.keys().collect();
+    let mut keys_right: Vec<_> = right.keys().collect();
+    keys_left.sort();
+    keys_right.sort();
+
+    match keys_left.cmp(&keys_right) {
+        Ordering::Equal => (),
+        o @ Ordering::Greater | o @ Ordering::Less => return o,
+    };
+    // Compare values (the first sorted value being non equal determines order)
+    for k in keys_left {
+        if let Some(left_val) = left.get(k) {
+            if let Some(right_val) = right.get(k) {
+                let c = left_val.cmp(right_val);
+                if c != Ordering::Equal {
+                    return c;
+                }
+            }
+        }
+    }
+    Ordering::Equal
+}
+
+// impl<'value> Ord for Value<'value> {
+//     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+//         match (self, other) {
+//             (Value::Static(n1), Value::Static(n2)) => n1.cmp(n2),
+//             (Value::Static(_), _) => Ordering::Less,
+//         }
+//     }
+// }
 
 impl<'value> Value<'value> {
     /// Enforces static lifetime on a borrowed value, this will
@@ -435,6 +605,22 @@ mod test {
     use proptest::proptest;
     use simd_json::json;
 
+    #[test]
+    fn obj_eq() {
+        let o1: Value = json!({"k": 1, "v":2}).into();
+        let o2: Value = json!({"k": 1, "v":2}).into();
+        assert_eq!(o1, o2);
+        assert_eq!(o2, o1);
+        let o1: Value = json!({"k": (), "v":()}).into();
+        let o2: Value = json!({"k": (),  "":()}).into();
+        assert!(!(o1 == o2));
+        assert!(!(o2 == o1));
+
+        let v1: Value = json!({"¢": (), "¡": (), "": (), "\u{0}": ()}).into();
+        let v2: Value = json!({"¦": (), "¥": (), "£": (), "¤": ()}).into();
+        assert!(v1 != v2);
+        assert!(v2 != v1);
+    }
     #[test]
     fn char_access() {
         let v = Value::from(json!({"snot": "🦡"}));
@@ -878,7 +1064,61 @@ mod test {
         assert_eq!(Value::default(), Value::null())
     }
 
+    #[test]
+    fn float_cmp() {
+        use std::cmp::Ordering;
+        assert_eq!(Value::from(1u64).cmp(&Value::from(1f64)), Ordering::Equal);
+        assert_eq!(Value::from(1i64).cmp(&Value::from(1f64)), Ordering::Equal);
+        assert_eq!(Value::from(1f64).cmp(&Value::from(1f64)), Ordering::Equal);
+        assert_eq!(Value::from(1f64).cmp(&Value::from(1u64)), Ordering::Equal);
+        assert_eq!(Value::from(1f64).cmp(&Value::from(1i64)), Ordering::Equal);
+        assert_eq!(Value::from(1u64).cmp(&Value::from(2f64)), Ordering::Less);
+        assert_eq!(Value::from(1i64).cmp(&Value::from(2f64)), Ordering::Less);
+        assert_eq!(Value::from(1f64).cmp(&Value::from(2f64)), Ordering::Less);
+        assert_eq!(Value::from(1f64).cmp(&Value::from(2u64)), Ordering::Less);
+        assert_eq!(Value::from(1f64).cmp(&Value::from(2i64)), Ordering::Less);
+        assert_eq!(Value::from(2u64).cmp(&Value::from(1f64)), Ordering::Greater);
+        assert_eq!(Value::from(2i64).cmp(&Value::from(1f64)), Ordering::Greater);
+        assert_eq!(Value::from(2f64).cmp(&Value::from(1f64)), Ordering::Greater);
+        assert_eq!(Value::from(2f64).cmp(&Value::from(1u64)), Ordering::Greater);
+        assert_eq!(Value::from(2f64).cmp(&Value::from(1i64)), Ordering::Greater);
+    }
+
     use proptest::prelude::*;
+
+    fn arb_tremor_value() -> BoxedStrategy<Value<'static>> {
+        let leaf = prop_oneof![
+            Just(Value::Static(StaticNode::Null)),
+            any::<bool>()
+                .prop_map(StaticNode::Bool)
+                .prop_map(Value::Static),
+            any::<i64>()
+                .prop_map(StaticNode::I64)
+                .prop_map(Value::Static),
+            any::<u64>()
+                .prop_map(StaticNode::U64)
+                .prop_map(Value::Static),
+            any::<Vec<u8>>().prop_map(Cow::from).prop_map(Value::Bytes),
+            any::<f64>()
+                .prop_map(StaticNode::F64)
+                .prop_map(Value::Static),
+            ".*".prop_map(Value::from),
+        ];
+        leaf.prop_recursive(
+            8,   // 8 levels deep
+            256, // Shoot for maximum size of 256 nodes
+            10,  // We put up to 10 items per collection
+            |inner| {
+                prop_oneof![
+                    // Take the inner strategy and make the two recursive cases.
+                    prop::collection::vec(inner.clone(), 0..10).prop_map(Value::Array),
+                    prop::collection::hash_map(".*".prop_map(Cow::from), inner, 0..10)
+                        .prop_map(|m| m.into_iter().collect()),
+                ]
+            },
+        )
+        .boxed()
+    }
 
     fn arb_value() -> BoxedStrategy<Value<'static>> {
         let leaf = prop_oneof![
@@ -915,13 +1155,29 @@ mod test {
 
     proptest! {
         #[test]
+        fn prop_cmq(v1 in arb_tremor_value(), v2 in arb_tremor_value()) {
+            if v1 > v2 {
+               prop_assert!(v2 < v1);
+            } else if v1 < v2 {
+               prop_assert!(v2 > v1);
+            } else if v1 == v2 {
+                dbg!(v1 == v2, v2 == v1);
+                prop_assert!(v2 == v1);
+            } else {
+                dbg!(v1 == v2, v2 == v1);
+                dbg!(v1.cmp(&v2), v2.cmp(&v1));
+                prop_assert!(false)
+            };
+        }
+
+        #[test]
         fn prop_to_owned(borrowed in arb_value()) {
             use simd_json::OwnedValue;
             let owned: OwnedValue = borrowed.clone().into();
             prop_assert_eq!(borrowed, owned);
         }
         #[test]
-        fn prop_into_static(borrowed in arb_value()) {
+        fn prop_into_static(borrowed in arb_tremor_value()) {
             let static_borrowed = borrowed.clone().into_static();
             assert_eq!(borrowed, static_borrowed);
         }

@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::base_expr::BaseExpr;
-use super::eq::AstEq;
+use super::{base_expr::BaseExpr, ClauseGroup, Comprehension};
+use super::{eq::AstEq, PredicateClause};
 use super::{
     ArrayPattern, ArrayPredicatePattern, BinExpr, Bytes, EventPath, GroupBy, GroupByInt,
-    ImutComprehension, ImutExprInt, ImutMatch, Invoke, InvokeAggr, List, Literal, LocalPath, Merge,
-    MetadataPath, NodeMetas, Patch, PatchOperation, Path, Pattern, PredicatePattern, Record,
-    RecordPattern, Recur, ReservedPath, Segment, StatePath, StrLitElement, StringLit, UnaryExpr,
+    ImutExprInt, Invoke, InvokeAggr, List, Literal, LocalPath, Match, Merge, MetadataPath,
+    NodeMetas, Patch, PatchOperation, Path, Pattern, PredicatePattern, Record, RecordPattern,
+    Recur, ReservedPath, Segment, StatePath, StrLitElement, StringLit, UnaryExpr,
 };
 use crate::errors::{error_event_ref_not_allowed, Result};
 /// Return value from visit methods for `ImutExprIntVisitor`
@@ -84,6 +84,11 @@ pub trait ImutExprIntVisitor<'script> {
     fn visit_patch(&mut self, _patch: &mut Patch<'script>) -> Result<VisitRes> {
         Ok(Walk)
     }
+
+    /// visit a match expr
+    fn visit_match(&mut self, _mmatch: &mut Match<'script, ImutExprInt>) -> Result<VisitRes> {
+        Ok(Walk)
+    }
     /// walk a patch expr
     fn walk_patch(&mut self, patch: &mut Patch<'script>) -> Result<()> {
         self.walk_expr(&mut patch.target)?;
@@ -110,21 +115,102 @@ pub trait ImutExprIntVisitor<'script> {
         }
         Ok(())
     }
-    /// visit a match expr
-    fn visit_match(&mut self, _mmatch: &mut ImutMatch<'script>) -> Result<VisitRes> {
-        Ok(Walk)
-    }
-    /// walk a match expr
-    fn walk_match(&mut self, mmatch: &mut ImutMatch<'script>) -> Result<()> {
-        self.walk_expr(&mut mmatch.target)?;
-        for predicate in &mut mmatch.patterns {
-            self.walk_match_patterns(&mut predicate.pattern)?;
-            if let Some(guard) = &mut predicate.guard {
-                self.walk_expr(guard)?;
-            }
-            self.walk_expr(&mut predicate.expr.0)?;
+
+    /// Walks a precondition
+    fn walk_precondition(
+        &mut self,
+        precondition: &mut super::ClausePreCondition<'script>,
+    ) -> Result<()> {
+        for segment in &mut precondition.segments {
+            self.walk_segment(segment)?;
         }
         Ok(())
+    }
+
+    /// walk a match expr
+    fn walk_match(&mut self, mmatch: &mut Match<'script, ImutExprInt<'script>>) -> Result<()> {
+        self.walk_expr(&mut mmatch.target)?;
+        for group in &mut mmatch.patterns {
+            self.walk_clause_group(group)?;
+        }
+        Ok(())
+    }
+
+    /// Walks a predicate clause
+    fn walk_predicate_clause(
+        &mut self,
+        predicate: &mut PredicateClause<'script, ImutExprInt<'script>>,
+    ) -> Result<()> {
+        self.walk_match_patterns(&mut predicate.pattern)?;
+        if let Some(guard) = &mut predicate.guard {
+            self.walk_expr(guard)?;
+        }
+        for expr in &mut predicate.exprs {
+            self.walk_expr(expr)?;
+        }
+        self.walk_expr(&mut predicate.last_expr)?;
+        Ok(())
+    }
+
+    /// Walks a clause group
+    fn walk_clause_group(
+        &mut self,
+        group: &mut ClauseGroup<'script, ImutExprInt<'script>>,
+    ) -> Result<()> {
+        match group {
+            ClauseGroup::Single {
+                precondition,
+                pattern,
+            } => {
+                if let Some(precondition) = precondition {
+                    self.walk_precondition(precondition)?;
+                }
+                self.walk_predicate_clause(pattern)
+            }
+            ClauseGroup::Simple {
+                precondition,
+                patterns,
+            } => {
+                if let Some(precondition) = precondition {
+                    self.walk_precondition(precondition)?;
+                }
+                for predicate in patterns {
+                    self.walk_predicate_clause(predicate)?;
+                }
+                Ok(())
+            }
+            ClauseGroup::SearchTree {
+                precondition,
+                tree,
+                rest,
+            } => {
+                if let Some(precondition) = precondition {
+                    self.walk_precondition(precondition)?;
+                }
+                for (_v, (es, e)) in tree.iter_mut() {
+                    for e in es {
+                        self.walk_expr(e)?;
+                    }
+                    self.walk_expr(e)?;
+                }
+                for predicate in rest {
+                    self.walk_predicate_clause(predicate)?;
+                }
+                Ok(())
+            }
+            ClauseGroup::Combined {
+                precondition,
+                groups,
+            } => {
+                if let Some(precondition) = precondition {
+                    self.walk_precondition(precondition)?;
+                }
+                for g in groups {
+                    self.walk_clause_group(g)?;
+                }
+                Ok(())
+            }
+        }
     }
     /// walk match patterns
     fn walk_match_patterns(&mut self, pattern: &mut Pattern<'script>) -> Result<()> {
@@ -193,17 +279,26 @@ pub trait ImutExprIntVisitor<'script> {
     }
 
     /// visit a comprehension
-    fn visit_comprehension(&mut self, _comp: &mut ImutComprehension<'script>) -> Result<VisitRes> {
+    fn visit_comprehension(
+        &mut self,
+        _comp: &mut Comprehension<'script, ImutExprInt<'script>>,
+    ) -> Result<VisitRes> {
         Ok(Walk)
     }
     /// walk a comprehension
-    fn walk_comprehension(&mut self, comp: &mut ImutComprehension<'script>) -> Result<()> {
+    fn walk_comprehension(
+        &mut self,
+        comp: &mut Comprehension<'script, ImutExprInt<'script>>,
+    ) -> Result<()> {
         self.walk_expr(&mut comp.target)?;
         for comp_case in &mut comp.cases {
             if let Some(guard) = &mut comp_case.guard {
                 self.walk_expr(guard)?;
             }
-            self.walk_expr(&mut comp_case.expr.0)?;
+            for expr in &mut comp_case.exprs {
+                self.walk_expr(expr)?;
+            }
+            self.walk_expr(&mut comp_case.last_expr)?;
         }
         Ok(())
     }
@@ -218,10 +313,27 @@ pub trait ImutExprIntVisitor<'script> {
         self.walk_expr(&mut merge.expr)
     }
 
+    /// walk a path segment
+    fn walk_segment(&mut self, segment: &mut Segment<'script>) -> Result<()> {
+        match segment {
+            Segment::Element { expr, .. } => self.walk_expr(expr),
+            Segment::Range {
+                range_start,
+                range_end,
+                ..
+            } => {
+                self.walk_expr(range_start.as_mut())?;
+                self.walk_expr(range_end.as_mut())
+            }
+            _ => Ok(()),
+        }
+    }
+
     /// visit a path
     fn visit_path(&mut self, _path: &mut Path<'script>) -> Result<VisitRes> {
         Ok(Walk)
     }
+
     /// walk a path
     fn walk_path(&mut self, path: &mut Path<'script>) -> Result<()> {
         let segments = match path {
@@ -235,20 +347,7 @@ pub trait ImutExprIntVisitor<'script> {
             | Path::Reserved(ReservedPath::Window { segments, .. }) => segments,
         };
         for segment in segments {
-            match segment {
-                Segment::Element { expr, .. } => {
-                    self.walk_expr(expr)?;
-                }
-                Segment::Range {
-                    range_start,
-                    range_end,
-                    ..
-                } => {
-                    self.walk_expr(range_start.as_mut())?;
-                    self.walk_expr(range_end.as_mut())?;
-                }
-                _ => {}
-            }
+            self.walk_segment(segment)?
         }
         Ok(())
     }

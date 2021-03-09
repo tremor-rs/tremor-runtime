@@ -200,7 +200,7 @@ where
     Ok(())
 }
 
-fn dbg_ast<'src, W>(h: &mut W, opts: &Opts<'src>) -> Result<()>
+fn dbg_ast<'src, W>(h: &mut W, opts: &Opts<'src>, exprs_only: bool) -> Result<()>
 where
     W: Highlighter,
 {
@@ -212,7 +212,11 @@ where
         SourceKind::Tremor | SourceKind::Json => {
             match Script::parse(&mp, opts.src, opts.raw.clone(), &reg) {
                 Ok(runnable) => {
-                    let ast = simd_json::to_string_pretty(&runnable.script.suffix())?;
+                    let ast = if exprs_only {
+                        simd_json::to_string_pretty(&runnable.script.suffix().exprs)?
+                    } else {
+                        simd_json::to_string_pretty(&runnable.script.suffix())?
+                    };
                     println!();
                     Script::highlight_script_with(&ast, h)?;
                 }
@@ -312,7 +316,8 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
         let mut h = TermNoHighlighter::new();
         let r = if let Some(args) = matches.subcommand_matches("ast") {
             let opts = script_opts(args, no_banner)?;
-            dbg_ast(&mut h, &opts)
+            let exprs_only = args.is_present("exprs-only");
+            dbg_ast(&mut h, &opts, exprs_only)
         } else if let Some(args) = matches.subcommand_matches("preprocess") {
             let opts = script_opts(args, no_banner)?;
             dbg_pp(&mut h, &opts)
@@ -336,7 +341,8 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
         let mut h = TermHighlighter::default();
         let r = if let Some(args) = matches.subcommand_matches("ast") {
             let opts = script_opts(args, no_banner)?;
-            dbg_ast(&mut h, &opts)
+            let exprs_only = args.is_present("exprs-only");
+            dbg_ast(&mut h, &opts, exprs_only)
         } else if let Some(args) = matches.subcommand_matches("preprocess") {
             let opts = script_opts(args, no_banner)?;
             dbg_pp(&mut h, &opts)
