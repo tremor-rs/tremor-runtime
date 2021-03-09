@@ -15,8 +15,11 @@
 use super::Helper;
 use crate::errors::Result;
 
-pub(crate) trait Upable<'script> {
+/// Updatable structure
+pub trait Upable<'script> {
+    /// Target to update to
     type Target;
+    /// Update function
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target>;
 }
 

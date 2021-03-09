@@ -39,6 +39,8 @@ gen_({'-', A}) -> ["(- ", gen_(A), ")"];
 gen_({'let', Path, Expr}) -> ["let ", gen_(Path), " = ", gen_(Expr)];
 gen_({local, Path}) -> Path;
 gen_({emit, A}) -> ["emit (", gen_(A), ")"];
+%                                          "This is    #{1}      example"
+gen_({'#', String1, String2, Sub}) -> ["(", String1, gen_(Sub), String2, ")"];
 gen_(drop) -> "drop";
 gen_(true) -> "true";
 gen_(false) -> "false";

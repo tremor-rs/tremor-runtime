@@ -17,8 +17,6 @@ use super::{
     test_predicate_expr, AggrType, Env, ExecOpts, LocalStack, FALSE, TRUE,
 };
 
-use crate::registry::{Registry, TremorAggrFnWrapper, RECUR_REF};
-use crate::stry;
 use crate::{
     ast::binary::extend_bytes_from_value,
     errors::{
@@ -26,11 +24,16 @@ use crate::{
         error_no_clause_hit, error_oops, Result,
     },
 };
+use crate::{ast::Comprehension, stry};
+use crate::{
+    ast::Match,
+    registry::{Registry, TremorAggrFnWrapper, RECUR_REF},
+};
 use crate::{ast::StringLit, interpreter::value_to_index};
 use crate::{
     ast::{
-        BaseExpr, BinExpr, ImutComprehension, ImutExpr, ImutExprInt, ImutMatch, Invoke, InvokeAggr,
-        LocalPath, Merge, Patch, Path, Recur, ReservedPath, Segment, UnaryExpr,
+        BaseExpr, BinExpr, ImutExpr, ImutExprInt, Invoke, InvokeAggr, LocalPath, Merge, Patch,
+        Path, Recur, ReservedPath, Segment, UnaryExpr,
     },
     errors::error_oops_err,
 };
@@ -64,6 +67,13 @@ where
     'script: 'event,
     'event: 'run,
 {
+    /// Checks if the expression is a literal expression
+    #[inline]
+    #[must_use]
+    pub fn is_lit(&self) -> bool {
+        matches!(self, ImutExprInt::Literal(_))
+    }
+
     /// Evaluates the expression to a string.
     #[inline]
     pub fn eval_to_string(
@@ -181,19 +191,13 @@ where
                 let mut buf = 0;
                 for part in &bytes.value {
                     let value = stry!(part.data.run(opts, env, event, state, meta, local));
-
-                    stry!(extend_bytes_from_value(
-                        self,
-                        part,
-                        &env.meta,
-                        part.data_type,
-                        part.endianess,
-                        part.bits,
-                        &mut buf,
-                        &mut used,
-                        &mut bs,
+                    let tpe = part.data_type;
+                    let end = part.endianess;
+                    let ex = extend_bytes_from_value(
+                        self, part, &env.meta, tpe, end, part.bits, &mut buf, &mut used, &mut bs,
                         &value,
-                    ));
+                    );
+                    stry!(ex);
                 }
                 if used > 0 {
                     bs.push(buf >> (8 - used))
@@ -269,7 +273,7 @@ where
         state: &'run Value<'static>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
-        expr: &'script ImutComprehension,
+        expr: &'script Comprehension<ImutExprInt>,
     ) -> Result<Cow<'run, Value<'event>>> {
         type BI<'v, 'r> = (usize, Box<dyn Iterator<Item = (Value<'v>, Value<'v>)> + 'r>);
         fn kv<'v, K>((k, v): (K, &Value<'v>)) -> (Value<'v>, Value<'v>)
@@ -314,11 +318,12 @@ where
                 if stry!(test_guard(
                     self, opts, env, event, state, meta, local, &e.guard
                 )) {
+                    let l = &e.last_expr;
                     let v = stry!(Self::execute_effectors(
-                        opts, env, event, state, meta, local, &e.expr
+                        opts, env, event, state, meta, local, l
                     ));
-                    // NOTE: We are creating a new value so we have to clone;
                     value_vec.push(v.into_owned());
+                    // NOTE: We are creating a new value so we have to clone;
                     continue 'outer;
                 }
             }
@@ -334,11 +339,12 @@ where
         state: &'run Value<'static>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
-        effector: &'script ImutExpr<'script>,
+        effector: &'script ImutExprInt<'script>,
     ) -> Result<Cow<'run, Value<'event>>> {
         effector.run(opts, env, event, state, meta, local)
     }
 
+    #[allow(clippy::too_many_lines)]
     fn match_expr(
         &'script self,
         opts: ExecOpts,
@@ -347,21 +353,102 @@ where
         state: &'run Value<'static>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
-        expr: &'script ImutMatch,
+        expr: &'script Match<ImutExprInt>,
     ) -> Result<Cow<'run, Value<'event>>> {
+        use super::{resolve_value, DUMMY_PATH as D};
+        use crate::ast::{ClauseGroup, ClausePreCondition, DefaultCase};
         let target = stry!(expr.target.run(opts, env, event, state, meta, local));
 
-        for predicate in &expr.patterns {
-            let p = &predicate.pattern;
-            let g = &predicate.guard;
-            if stry!(test_predicate_expr(
-                self, opts, env, event, state, meta, local, &target, p, g,
-            )) {
-                let e = &predicate.expr;
-                return Self::execute_effectors(opts, env, event, state, meta, local, e);
+        for cg in &expr.patterns {
+            let maybe_target =
+                if let Some(ClausePreCondition { segments: seg, .. }) = cg.precondition() {
+                    let v = resolve_value(
+                        self, opts, env, event, state, meta, local, &D, &target, &seg,
+                    );
+                    if let Ok(target) = v {
+                        Some(target)
+                    } else {
+                        // We couldn't look up the value, it doesn't exist so we look at the next group
+                        continue;
+                    }
+                } else {
+                    None
+                };
+            let target: &Value = maybe_target.as_ref().map_or(&target, |target| target);
+            macro_rules! execute {
+                ($predicate:ident) => {{
+                    let p = &$predicate.pattern;
+                    let g = &$predicate.guard;
+                    if stry!(test_predicate_expr(
+                        expr, opts, env, event, state, meta, local, &target, p, g,
+                    )) {
+                        let l = &$predicate.last_expr;
+                        return Self::execute_effectors(opts, env, event, state, meta, local, l);
+                    }
+                }};
+            };
+            match cg {
+                ClauseGroup::Simple { patterns, .. } => {
+                    for predicate in patterns {
+                        execute!(predicate)
+                    }
+                }
+                ClauseGroup::SearchTree { tree, rest, .. } => {
+                    let target: &Value<'script> = unsafe { mem::transmute(target) };
+                    if let Some((_, l)) = tree.get(&target) {
+                        return Self::execute_effectors(opts, env, event, state, meta, local, l);
+                    }
+                    for predicate in rest {
+                        execute!(predicate)
+                    }
+                }
+                ClauseGroup::Combined { groups, .. } => {
+                    // we have to inline this
+                    for cg in groups {
+                        match cg {
+                            ClauseGroup::Simple { patterns, .. } => {
+                                for predicate in patterns {
+                                    execute!(predicate)
+                                }
+                            }
+                            ClauseGroup::SearchTree { tree, rest, .. } => {
+                                let target: &Value<'script> = unsafe { mem::transmute(target) };
+                                if let Some((_, l)) = tree.get(&target) {
+                                    return Self::execute_effectors(
+                                        opts, env, event, state, meta, local, l,
+                                    );
+                                }
+                                for predicate in rest {
+                                    execute!(predicate)
+                                }
+                            }
+                            ClauseGroup::Combined { .. } => {
+                                return Err(
+                                    "Nested combined clause groups are not permitted!".into()
+                                )
+                            }
+                            ClauseGroup::Single { pattern, .. } => {
+                                execute!(pattern);
+                            }
+                        }
+                    }
+                }
+                ClauseGroup::Single { pattern, .. } => {
+                    execute!(pattern);
+                }
+            };
+        }
+
+        match &expr.default {
+            DefaultCase::None => error_no_clause_hit(self, &env.meta),
+            DefaultCase::Null => Ok(Cow::Borrowed(&NULL)),
+            DefaultCase::Many { last_expr, .. } => {
+                Self::execute_effectors(opts, env, event, state, meta, local, last_expr)
+            }
+            DefaultCase::One(last_expr) => {
+                Self::execute_effectors(opts, env, event, state, meta, local, last_expr)
             }
         }
-        error_no_clause_hit(self, &env.meta)
     }
 
     fn binary(

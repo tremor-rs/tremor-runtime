@@ -20,6 +20,12 @@
 * Improve default visibility of tremor info logs from packages [#850](https://github.com/tremor-rs/tremor-runtime/pull/850)
 * Include the request info of a response for a linked rest offramp, available through the `$response.request` metadata variable.
 * Emit warnings when a window with `emit_empty_windows` without guards is used.
+* Extend match to handle top-level `~` extractors in match [#834](https://github.com/tremor-rs/tremor-runtime/issues/834)
+* Extend match to allow more assign expressions (i.e. `case a = ~ glob|snot*| =>` or `case v = _ =>`)
+* Match pipeline improvements: tree search for `==`, grouping based on shared keys, re-ordering of exclusive case statements
+* Optimize glob matches of the form `glob|snot*|` or `glob|*badger|` to cheaper prefix and suffix checks
+* Remove warnings for match w/o default if a `_` case or a `v = _` case exists
+* Add `--exprs-only` to `dbg ast` to not show metadata
 
 ### Fixes
 

@@ -147,6 +147,10 @@ subcommands:
         - ast:
             about: prints the AST of the source
             args:
+              - exprs-only:
+                  help: only prints the expressions
+                  short: x
+                  long: exprs-only
               - SCRIPT:
                   help: tremor/json/trickle script filename
                   required: true

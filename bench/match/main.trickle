@@ -1,0 +1,1531 @@
+define script runtime
+script
+  use tremor::system;
+  let output_port = "out";
+  let event.timestamp = system::ingest_ns();
+  match event.timestamp > (system::ingest_ns() + (3600 * 1000000000)) of
+      case true => emit => "out"
+      default => let output_port = "out"
+  end;
+
+  match event of
+      case %{measurement == "text001"}
+      =>  let $class = "class1",
+          let $rate = 24,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text002"}
+      =>  let $class = "class2",
+          let $rate = 24,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text003"}
+      =>  let $class = "class3",
+          let $rate = 24,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text004"}
+      =>  let $class = "class4",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text005"}
+      =>  let $class = "class5",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text006"}
+      =>  let $class = "class6",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "test007"}
+      =>  let $class = "class7",
+          let $rate = 98,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text008"}
+      =>  let $class = "class8",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text009"}
+      =>  let $class = "class9",
+          let $rate = 98,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text010"}
+      =>  let $class = "class10",
+          let $rate = 196,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement ~= glob|text011*| }
+      =>  let $class = "class11",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text012"}
+      =>  let $class = "class12",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text013"}
+      =>  let $class = "class13",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text014"}
+      =>  let $class = "class14",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement ~= glob|text015*| }
+      =>  let $class = "class15",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text016"}
+      =>  let $class = "claqss16",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text017"}
+      =>  let $class = "class17",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text018"}
+      =>  let $class = "class18",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text019"}
+      =>  let $class = "class19",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text020"}
+      =>  let $class = "class20",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text021"}
+      =>  let $class = "class21",
+          let $rate = 49,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text022"}
+      =>  let $class = "class22",
+          let $rate = 49,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text023"}
+      =>  let $class = "class23",
+          let $rate = 49,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text024"}
+      =>  let $class = "class24",
+          let $rate = 49,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text024"}
+      =>  let $class = "class24",
+          let $rate = 49,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text025"}
+      =>  let $class = "class25",
+          let $rate = 49,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "test26"}
+      =>  let $class = "class26",
+          let $rate = 49,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text027"}
+      =>  let $class = "class27",
+          let $rate = 49,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text028"}
+      =>  let $class = "class28",
+          let $rate = 49,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text029"}
+      =>  let $class = "class29",
+          let $rate = 49,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text030"}
+      =>  let $class = "class30",
+          let $rate = 245,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement  == "text031"}
+      =>  let $class = "class31",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text032"}
+      =>  let $class = "class32",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text033"}
+      =>  let $class = "class33",
+          let $rate = 98,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text034"}
+      =>  let $class = "class34",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement ~= glob|text035*| }
+      =>  let $class = "class35",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text036"}
+      =>  let $class = "class36",
+          let $rate = 78,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text037"}
+      =>  let $class = "class37",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text038"}
+      =>  let $class = "class38",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text039"}
+      =>  let $class = "class39",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "class40"}
+      =>  let $class = "class40",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text041"}
+      =>  let $class = "class41",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "test42"}
+      =>  let $class = "class42",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text043"}
+      =>  let $class = "class43",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text044"}
+      =>  let $class = "class44",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text045"}
+      =>  let $class = "class45",
+          let $rate = 49,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text046"}
+      =>  let $class = "class46",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text047"}
+      =>  let $class = "class47",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text048"}
+      =>  let $class = "class48",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement ~= glob|text049*| }
+      =>  let $class = "class49",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text050"}
+      =>  let $class = "class50",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text051"}
+      =>  let $class = "class51",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text052"}
+      =>  let $class = "class52",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text052"}
+      =>  let $class = "class52",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text052"}
+      =>  let $class = "class52",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text053"}
+      =>  let $class = "class53",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement ~= glob|text054a*| }
+      =>  let $class = "class54a",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text054"}
+      =>  let $class = "class54",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text055"}
+      =>  let $class = "class55",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text056"}
+      =>  let $class = "class56",
+          let $rate = 49,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement ~= glob|text057*| }
+      =>  let $class = "class57",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text058"}
+      =>  let $class = "class58",
+          let $rate = 49,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement ~= glob|text059*| }
+      =>  let $class = "class59",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement ~= glob|text060*| }
+      =>  let $class = "class60",
+          let $rate = 147,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement ~= glob|text061*| }
+      =>  let $class = "class61",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text062"}
+      =>  let $class = "class62",
+          let $rate = 78,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text063"}
+      =>  let $class = "class63",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text064"}
+      =>  let $class = "class64",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text065"}
+      =>  let $class = "class66",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement ~= glob|text066*| }
+      =>  let $class = "class66",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text067"}
+      =>  let $class = "class67",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement ~= glob|text068*| }
+      =>  let $class = "class68",
+          let $rate = 49,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text069"}
+      =>  let $class = "class69",
+          let $rate = 49,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text070"}
+      =>  let $class = "class70",
+          let $rate = 49,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text071"}
+      =>  let $class = "class71",
+          let $rate = 49,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text072"}
+      =>  let $class = "class72",
+          let $rate = 49,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement ~= glob|text073*| }
+      =>  let $class = "class73",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text074"}
+      =>  let $class = "class74",
+          let $rate = 49,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement ~= glob|text075*| }
+      =>  let $class = "class75",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement ~= glob|text076*| }
+      =>  let $class = "class76",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement ~= glob|text077*| }
+      =>  let $class = "class77",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement ~= glob|text078*| }
+      =>  let $class = "class78",
+          let $rate = 245,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text079"}
+      =>  let $class = "class79",
+          let $rate = 137,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text080"}
+      =>  let $class = "class80",
+          let $rate = 137,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text081"}
+      =>  let $class = "class81",
+          let $rate = 245,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement ~= glob|text082*| }
+      =>  let $class = "class82",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement ~= glob|text083*| }
+      =>  let $class = "class83",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement ~= glob|text084*| }
+      =>  let $class = "class84",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement ~= glob|text085*| }
+      =>  let $class = "class85",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement ~= glob|text086*| }
+      =>  let $class = "class86",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement ~= glob|text087*| }
+      =>  let $class = "class87",
+          let $rate = 980,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text088"}
+      =>  let $class = "text088",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement ~= glob|text089*| }
+      =>  let $class = "class89",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement ~= glob|text090*| }
+      =>  let $class = "class90",
+          let $rate = 245,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement ~= glob|text091*| }
+      =>  let $class = "class91",
+          let $rate = 98,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement ~= glob|text092*| }
+      =>  let $class = "class92",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement ~= glob|text093*| }
+      =>  let $class = "class93",
+          let $rate = 49,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement ~= glob|class94*| }
+      =>  let $class = "text094",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text095"}
+      =>  let $class = "class95",
+          let $rate = 49,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text096"}
+      =>  let $class = "class96",
+          let $rate = 49,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement ~= glob|text097*| }
+      =>  let $class = "class97",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement ~= glob|text098*| }
+      =>  let $class = "class98",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement ~= glob|text100*| }
+      =>  let $class = "class100",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement ~= glob|text101*| }
+      =>  let $class = "class101",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement ~= glob|text102*| }
+      =>  let $class = "class102",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement ~= glob|text103*| }
+      =>  let $class = "class103",
+          let $rate = 49,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text104", tags ~= %{pipeline == "type2"}}
+      =>  let $class = "class104",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement ~= glob|text105*| }
+      =>  let $class = "class105",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement ~= glob|text106*| }
+      =>  let $class = "class106",
+          let $rate = 147,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement ~= glob|text107*| }
+      =>  let $class = "class107",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement ~= glob|text108*| }
+      =>  let $class = "class108",
+          let $rate = 98,
+          let $dimensions = event.measurement,
+          let output_port = "type2"
+      case %{measurement == "text109"}
+      =>  let $class = "class109",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement ~= glob|text110*| }
+      =>  let $class = "class110",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text111"}
+      =>  let $class = "class111",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement ~= glob|text112*| }
+      =>  let $class = "class112",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text113"}
+      =>  let $class = "class113",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text114"}
+      =>  let $class = "class114",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text115"}
+      =>  let $class = "class115",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text116"}
+      =>  let $class = "class116",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text117"}
+      =>  let $class = "class117",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text118"}
+      =>  let $class = "class118",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text119"}
+      =>  let $class = "class119",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text120"}
+      =>  let $class = "class120",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text121"}
+      =>  let $class = "class121",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text122"}
+      =>  let $class = "class122",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement ~= glob|text123*| }
+      =>  let $class = "class123",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text124"}
+      =>  let $class = "class124",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement ~= glob|text125*| }
+      =>  let $class = "class125",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text126"}
+      =>  let $class = "class126",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement ~= glob|text127*| }
+      =>  let $class = "class127",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement ~= glob|text128*| }
+      =>  let $class = "class128",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement ~= glob|text129*| }
+      =>  let $class = "class129",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text130"}
+      =>  let $class = "class130",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text131"}
+      =>  let $class = "class131",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement ~= glob|text132*| }
+      =>  let $class = "class132",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement ~= glob|text133*| }
+      =>  let $class = "class133",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement ~= glob|text134*| }
+      =>  let $class = "class134",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement ~= glob|text135*| }
+      =>  let $class = "class135",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement ~= glob|text136*| }
+      =>  let $class = "class136",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement ~= glob|text137*| }
+      =>  let $class = "class137",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement ~= glob|text138*| }
+      =>  let $class = "class138",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement ~= glob|Leadtext139*| }
+      =>  let $class = "class130",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement ~= glob|Leadtext140*| }
+      =>  let $class = "class140",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement ~= glob|RoundRobintext141*| }
+      =>  let $class = "class141",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement ~= glob|RoundRobintext142*| }
+      =>  let $class = "class142",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement ~= glob|text143*| }
+      =>  let $class = "class143",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement ~= glob|text144*| }
+      =>  let $class = "class144",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text145"}
+      =>  let $class = "class145",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text146"}
+      =>  let $class = "class146",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement ~= glob|text147*| }
+      =>  let $class = "class147",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement ~= glob|text148*| }
+      =>  let $class = "class148",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement ~= glob|text149*| }
+      =>  let $class = "class149",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement ~= glob|text150*| }
+      =>  let $class = "class150",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text151"}
+      =>  let $class = "class151",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement ~= glob|text152*| }
+      =>  let $class = "class153",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text153"}
+      =>  let $class = "class153",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text154"}
+      =>  let $class = "class154",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text155"}
+      =>  let $class = "class155",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text156"}
+      =>  let $class = "class156",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text157"}
+      =>  let $class = "class157",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text158"}
+      =>  let $class = "class158",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text159"}
+      =>  let $class = "class159",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text160"}
+      =>  let $class = "class160",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text161"}
+      =>  let $class = "class161",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text162"}
+      =>  let $class = "class162",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement ~= glob|text163*| }
+      =>  let $class = "class163",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text164"}
+      =>  let $class = "class164",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement ~= glob|text165*| }
+      =>  let $class = "class165",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text166"}
+      =>  let $class = "class166",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text167"}
+      =>  let $class = "class167",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text168"}
+      =>  let $class = "class168",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text169"}
+      =>  let $class = "class169",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement ~= glob|services.text170*| }
+      =>  let $class = "class170",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement ~= glob|services.text171*| }
+      =>  let $class = "class171",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text172"}
+      =>  let $class = "class172",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text173"}
+      =>  let $class = "class173",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text174"}
+      =>  let $class = "class174",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text175"}
+      =>  let $class = "class175",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text176"}
+      =>  let $class = "class176",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text177"}
+      =>  let $class = "class177",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text178"}
+      =>  let $class = "class178",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text179"}
+      =>  let $class = "class179",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text180"}
+      =>  let $class = "class180",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text181"}
+      =>  let $class = "class181",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text182"}
+      =>  let $class = "class182",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "class183"}
+      =>  let $class = "text183",
+          let $rate = 0,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text184", tags ~= %{pipeline == "gen"}}
+      =>  let $class = "class184",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text185"}
+      =>  let $class = "class185",
+          let $rate = 24,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text186"}
+      =>  let $class = "class186",
+          let $rate = 24,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text187"}
+      =>  let $class = "class187",
+          let $rate = 24,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text188"}
+      =>  let $class = "class188",
+          let $rate = 24,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text189"}
+      =>  let $class = "class189",
+          let $rate = 24,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text190"}
+      =>  let $class = "class190",
+          let $rate = 24,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement ~= glob|text191*| }
+      =>  let $class = "class191",
+          let $rate = 24,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement ~= glob|text192*| }
+      =>  let $class = "class192",
+          let $rate = 24,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement ~= glob|text193*| }
+      =>  let $class = "class193",
+          let $rate = 9,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text194"}
+      =>  let $class = "class194",
+          let $rate = 9,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement ~= glob|text195*| }
+      =>  let $class = "class195",
+          let $rate = 9,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text196"}
+      =>  let $class = "class196",
+          let $rate = 9,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text197"}
+      =>  let $class = "class197",
+          let $rate = 9,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text198"}
+      =>  let $class = "class198",
+          let $rate = 24,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text199"}
+      =>  let $class = "class199",
+          let $rate = 24,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text200"}
+      =>  let $class = "class201",
+          let $rate = 24,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text201"}
+      =>  let $class = "class201",
+          let $rate = 24,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text202"}
+      =>  let $class = "class202",
+          let $rate = 24,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text203"}
+      =>  let $class = "class203",
+          let $rate = 24,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text204"}
+      =>  let $class = "class204",
+          let $rate = 24,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text205"}
+      =>  let $class = "class205",
+          let $rate = 24,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text206"}
+      =>  let $class = "class206",
+          let $rate = 24,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text207"}
+      =>  let $class = "class207",
+          let $rate = 24,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text208"}
+      =>  let $class = "clas208",
+          let $rate = 24,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text209"}
+      =>  let $class = "class209",
+          let $rate = 98,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text210"}
+      =>  let $class = "class210",
+          let $rate = 98,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement ~= glob|text211*|}
+      =>  let $class = "class211",
+          let $rate = 24,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text212"}
+      =>  let $class = "class212",
+          let $rate = 24,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement ~= glob|text213*| }
+      =>  let $class = "class213",
+          let $rate = 24,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text214"}
+      =>  let $class = "class214",
+          let $rate = 9,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text215"}
+      =>  let $class = "class215",
+          let $rate = 49,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text216"}
+      =>  let $class = "class216",
+          let $rate = 49,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text217"}
+      =>  let $class = "class217",
+          let $rate = 78,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text218"}
+      =>  let $class = "class218",
+          let $rate = 9,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text219"}
+      =>  let $class = "class219",
+          let $rate = 9,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text220"}
+      =>  let $class = "class220",
+          let $rate = 44,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text221"}
+      =>  let $class = "class221",
+          let $rate = 44,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text222"}
+      =>  let $class = "class222",
+          let $rate = 34,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement ~= glob|*text223| }
+      =>  let $class = "class223",
+          let $rate = 34,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement ~= glob|text224*| }
+      =>  let $class = "class224",
+          let $rate = 9,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement ~= glob|text225*| }
+      =>  let $class = "class225",
+          let $rate = 9,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text226"}
+      =>  let $class = "class226",
+          let $rate = 9,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text227"}
+      =>  let $class = "class227",
+          let $rate = 9,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text228"}
+      =>  let $class = "class228",
+          let $rate = 9,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text229"}
+      =>  let $class = "class229",
+          let $rate = 9,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text230"}
+      =>  let $class = "class230",
+          let $rate = 9,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text231"}
+      =>  let $class = "class231",
+          let $rate = 22,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text232"}
+      =>  let $class = "class232",
+          let $rate = 9,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text233"}
+      =>  let $class = "class233",
+          let $rate = 11,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text234"}
+      =>  let $class = "class234",
+          let $rate = 29,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text235"}
+      =>  let $class = "class235",
+          let $rate = 72,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text236"}
+      =>  let $class = "class236",
+          let $rate = 98,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text237"}
+      =>  let $class = "class237",
+          let $rate = 9,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text238"}
+      =>  let $class = "class238",
+          let $rate = 98,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text239"}
+      =>  let $class = "class239",
+          let $rate = 9,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text240"}
+      =>  let $class = "class240",
+          let $rate = 9,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text241"}
+      =>  let $class = "class241",
+          let $rate = 7,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text242"}
+      =>  let $class = "class242",
+          let $rate = 49,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text234"}
+      =>  let $class = "class243",
+          let $rate = 14,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text235"}
+      =>  let $class = "class235",
+          let $rate = 39,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text236"}
+      =>  let $class = "class236",
+          let $rate = 39,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text237"}
+      =>  let $class = "class237",
+          let $rate = 29,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text238"}
+      =>  let $class = "class238",
+          let $rate = 9,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text239"}
+      =>  let $class = "class239",
+          let $rate = 34,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text240"}
+      =>  let $class = "class240",
+          let $rate = 49,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text241"}
+      =>  let $class = "class241",
+          let $rate = 24,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text242"}
+      =>  let $class = "class242",
+          let $rate = 98,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text243"}
+      =>  let $class = "class243",
+          let $rate = 49,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text244"}
+      =>  let $class = "class244",
+          let $rate = 98,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text245"}
+      =>  let $class = "class245",
+          let $rate = 98,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text246"}
+      =>  let $class = "class246",
+          let $rate = 49,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text247"}
+      =>  let $class = "class247",
+          let $rate = 49,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text248"}
+      =>  let $class = "class248",
+          let $rate = 49,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text249"}
+      =>  let $class = "class249",
+          let $rate = 9,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text250"}
+      =>  let $class = "class250",
+          let $rate = 9,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text251"}
+      =>  let $class = "class251",
+          let $rate = 9,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text252"}
+      =>  let $class = "class252",
+          let $rate = 9,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement ~= glob|text253*| }
+      =>  let $class = "class253",
+          let $rate = 49,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text254"}
+      =>  let $class = "class254",
+          let $rate = 2,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text255"}
+      =>  let $class = "class255",
+          let $rate = 245,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement ~= glob|text256*| }
+      =>  let $class = "class256",
+          let $rate = 245,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text257"}
+      =>  let $class = "class257",
+          let $rate = 245,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text258"}
+      =>  let $class = "class258",
+          let $rate = 147,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text259"}
+      =>  let $class = "class259",
+          let $rate = 245,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text260"}
+      =>  let $class = "class260",
+          let $rate = 98,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text261"}
+      =>  let $class = "class261",
+          let $rate = 245,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text262"}
+      =>  let $class = "class262",
+          let $rate = 245,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text263"}
+      =>  let $class = "class263",
+          let $rate = 245,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text264"}
+      =>  let $class = "class264",
+          let $rate = 245,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text265"}
+      =>  let $class = "class265",
+          let $rate = 245,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text265"}
+      =>  let $class = "class265",
+          let $rate = 245,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text266"}
+      =>  let $class = "class266",
+          let $rate = 245,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text267"}
+      =>  let $class = "class267",
+          let $rate = 98,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text268"}
+      =>  let $class = "class268",
+          let $rate = 245,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text269"}
+      =>  let $class = "class269",
+          let $rate = 245,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text270"}
+      =>  let $class = "class270",
+          let $rate = 245,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text271"}
+      =>  let $class = "class271",
+          let $rate = 245,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text272"}
+      =>  let $class = "class272",
+          let $rate = 245,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text273"}
+      =>  let $class = "class273",
+          let $rate = 245,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text274"}
+      =>  let $class = "class274",
+          let $rate = 245,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement == "text275"}
+      =>  let $class = "class275",
+          let $rate = 245,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement ~= glob|text276*| }
+      =>  let $class = "class276",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement ~= glob|text277*| }
+      =>  let $class = "class277",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement ~= glob|text278*| }
+      =>  let $class = "class278",
+          let $rate = 294,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement ~= glob|text279*| }
+      =>  let $class = "class279",
+          let $rate = 3267,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement ~= glob|text280*| }
+      =>  let $class = "class280",
+          let $rate = 3267,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement ~= glob|text281*| }
+      =>  let $class = "class281",
+          let $rate = 3267,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement ~= glob|text282*| }
+      =>  let $class = "class282",
+          let $rate = 3267,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement ~= glob|text283*| }
+      =>  let $class = "class283",
+          let $rate = 3267,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement ~= glob|text284*| }
+      =>  let $class = "class284",
+          let $rate = 3267,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement ~= glob|text285*| }
+      =>  let $class = "class285",
+          let $rate = 3267,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+      case %{measurement ~= glob|text286*| }
+      =>  let $class = "class286",
+          let $rate = 98039,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+
+      default
+      =>  let $class = "default",
+          let $rate = 98039,
+          let $dimensions = event.measurement,
+          let output_port = "out"
+
+  end;
+  emit event => "#{ output_port }";
+end;
+
+create script runtime;
+
+define grouper::bucket operator bucket;
+define grouper::bucket operator bucket2;
+create operator bucket;
+create operator bucket2;
+
+select event from in into runtime;
+select event from runtime into bucket;
+select event from runtime/type2 into bucket2;
+select event from bucket into out;
+select event from bucket/overflow into out;
+select event from bucket2 into out;
+select event from bucket2/overflow into out;

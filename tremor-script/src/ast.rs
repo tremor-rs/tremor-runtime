@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+pub(crate) mod analyzer;
 /// Base definition for expressions
 pub mod base_expr;
 pub(crate) mod binary;
@@ -25,8 +26,7 @@ mod support;
 mod upable;
 /// collection of AST visitors
 pub mod visitors;
-use crate::errors::{error_generic, error_no_consts, error_no_locals, ErrorKind, Result};
-use crate::impl_expr_mid;
+use self::eq::AstEq;
 use crate::interpreter::{exec_binary, exec_unary, AggrType, Cont, Env, ExecOpts, LocalStack};
 pub use crate::lexer::CompilationUnit;
 use crate::pos::{Location, Range};
@@ -36,8 +36,13 @@ use crate::registry::{
     Aggr as AggrRegistry, CustomFn, Registry, TremorAggrFnWrapper, TremorFnWrapper,
 };
 use crate::script::Return;
-use crate::KnownKey;
-use crate::{stry, tilde::Extractor, EventContext, Value, NO_AGGRS, NO_CONSTS};
+use crate::{
+    errors::{error_generic, error_no_consts, error_no_locals, ErrorKind, Result},
+    impl_expr_ex_mid, impl_expr_mid, stry,
+    tilde::Extractor,
+    EventContext, KnownKey, Value, NO_AGGRS, NO_CONSTS,
+};
+pub(crate) use analyzer::*;
 pub use base_expr::BaseExpr;
 use beef::Cow;
 use halfbrown::HashMap;
@@ -45,14 +50,46 @@ pub use query::*;
 use raw::reduce2;
 use serde::Serialize;
 use simd_json::StaticNode;
-use std::mem;
-use std::{borrow::Borrow, collections::BTreeSet};
+
+use std::{collections::{BTreeMap, BTreeSet}, mem};
+
 use upable::Upable;
 
 use self::{
     binary::extend_bytes_from_value,
     raw::{BytesDataType, Endian},
 };
+
+pub(crate) type Exprs<'script> = Vec<Expr<'script>>;
+/// A list of lexical compilation units
+pub type Imports<'script> = Vec<LexicalUnit<'script>>;
+/// A list of immutable expressions
+pub type ImutExprs<'script> = Vec<ImutExpr<'script>>;
+pub(crate) type Fields<'script> = Vec<Field<'script>>;
+pub(crate) type Segments<'script> = Vec<Segment<'script>>;
+pub(crate) type PatternFields<'script> = Vec<PredicatePattern<'script>>;
+pub(crate) type Predicates<'script, Ex> = Vec<ClauseGroup<'script, Ex>>;
+pub(crate) type PatchOperations<'script> = Vec<PatchOperation<'script>>;
+pub(crate) type ComprehensionCases<'script, Ex> = Vec<ComprehensionCase<'script, Ex>>;
+pub(crate) type ArrayPredicatePatterns<'script> = Vec<ArrayPredicatePattern<'script>>;
+/// A vector of statements
+pub type Stmts<'script> = Vec<Stmt<'script>>;
+
+/// A generalisation of both mutable and imutable exressions
+pub trait Expression: Clone + std::fmt::Debug + PartialEq + Serialize {
+    /// replaces the last shadow
+    fn replace_last_shadow_use(&mut self, replace_idx: usize);
+
+    /// tests if the expression is a null literal
+    fn is_null_lit(&self) -> bool;
+
+    /// a null literal
+    fn null_lit() -> Self;
+}
+
+fn shadow_name(id: usize) -> String {
+    format!(" __SHADOW {}__ ", id)
+}
 
 #[derive(Default, Clone, Serialize, Debug, PartialEq)]
 struct NodeMeta {
@@ -205,7 +242,7 @@ impl<'script> Bytes<'script> {
                 Ok(v)
             })
             .collect::<Result<Vec<BytesPart>>>()?;
-        if self.value.iter().all(|v| is_lit(&v.data.0)) {
+        if self.value.iter().all(|v| v.data.0.is_lit()) {
             let mut bytes: Vec<u8> = Vec::with_capacity(self.value.len());
             let outer = self.extent(&helper.meta);
             let mut used = 0;
@@ -400,8 +437,9 @@ impl<'script> Consts<'script> {
 /// ordered collection of warnings
 pub type Warnings = std::collections::BTreeSet<Warning>;
 
+/// don't use
 #[allow(clippy::struct_excessive_bools)]
-pub(crate) struct Helper<'script, 'registry>
+pub struct Helper<'script, 'registry>
 where
     'script: 'registry,
 {
@@ -413,14 +451,14 @@ where
     scripts: HashMap<String, ScriptDecl<'script>>,
     operators: HashMap<String, OperatorDecl<'script>>,
     aggregates: Vec<InvokeAggrFn<'script>>,
+    /// Warnings
     pub warnings: Warnings,
     shadowed_vars: Vec<String>,
     func_vec: Vec<CustomFn<'script>>,
-    pub locals: HashMap<String, usize>,
-    pub functions: HashMap<Vec<String>, usize>,
-    pub consts: Consts<'script>,
-    pub streams: HashMap<Vec<String>, usize>,
-    pub meta: NodeMetas,
+    pub(crate) locals: HashMap<String, usize>,
+    pub(crate) functions: HashMap<Vec<String>, usize>,
+    pub(crate) consts: Consts<'script>,
+    pub(crate) meta: NodeMetas,
     docs: Docs<'script>,
     module: Vec<String>,
     possible_leaf: bool,
@@ -451,11 +489,11 @@ where
             value_type,
         })
     }
-    pub fn add_meta(&mut self, start: Location, end: Location) -> usize {
+    pub(crate) fn add_meta(&mut self, start: Location, end: Location) -> usize {
         self.meta
             .add_meta(start - self.file_offset, end - self.file_offset, self.cu)
     }
-    pub fn add_meta_w_name<S>(&mut self, start: Location, end: Location, name: &S) -> usize
+    pub(crate) fn add_meta_w_name<S>(&mut self, start: Location, end: Location, name: &S) -> usize
     where
         S: ToString,
     {
@@ -466,13 +504,13 @@ where
             self.cu,
         )
     }
-    pub fn has_locals(&self) -> bool {
+    pub(crate) fn has_locals(&self) -> bool {
         self.locals
             .iter()
             .any(|(n, _)| !n.starts_with(" __SHADOW "))
     }
 
-    pub fn swap(
+    pub(crate) fn swap(
         &mut self,
         aggregates: &mut Vec<InvokeAggrFn<'script>>,
         locals: &mut HashMap<String, usize>,
@@ -481,7 +519,7 @@ where
         mem::swap(&mut self.locals, locals);
     }
 
-    pub fn new(
+    pub(crate) fn new(
         reg: &'registry Registry,
         aggr_reg: &'registry AggrRegistry,
         cus: Vec<crate::lexer::CompilationUnit>,
@@ -498,7 +536,6 @@ where
             warnings: BTreeSet::new(),
             locals: HashMap::new(),
             consts: Consts::default(),
-            streams: HashMap::new(),
             functions: HashMap::new(),
             func_vec: Vec::new(),
             shadowed_vars: Vec::new(),
@@ -722,7 +759,7 @@ impl<'script> Record<'script> {
         if self
             .fields
             .iter()
-            .all(|f| is_lit(&f.name) && is_lit(&f.value))
+            .all(|f| f.name.is_lit() && f.value.is_lit())
         {
             let obj: Result<crate::Object> = self
                 .fields
@@ -781,7 +818,7 @@ impl_expr_mid!(List);
 
 impl<'script> List<'script> {
     fn try_reduce(self, helper: &Helper<'script, '_>) -> Result<ImutExprInt<'script>> {
-        if self.exprs.iter().map(|v| &v.0).all(is_lit) {
+        if self.exprs.iter().map(|v| &v.0).all(ImutExprInt::is_lit) {
             let elements: Result<Vec<Value>> = self
                 .exprs
                 .into_iter()
@@ -798,7 +835,7 @@ impl<'script> List<'script> {
 }
 
 /// A Literal
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Default)]
 pub struct Literal<'script> {
     /// Id
     pub mid: usize,
@@ -807,15 +844,16 @@ pub struct Literal<'script> {
 }
 impl_expr_mid!(Literal);
 
+/// Damn you public interfaces
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub(crate) struct FnDecl<'script> {
-    pub mid: usize,
-    pub name: Ident<'script>,
-    pub args: Vec<Ident<'script>>,
-    pub body: Exprs<'script>,
-    pub locals: usize,
-    pub open: bool,
-    pub inline: bool,
+pub struct FnDecl<'script> {
+    pub(crate) mid: usize,
+    pub(crate) name: Ident<'script>,
+    pub(crate) args: Vec<Ident<'script>>,
+    pub(crate) body: Exprs<'script>,
+    pub(crate) locals: usize,
+    pub(crate) open: bool,
+    pub(crate) inline: bool,
 }
 impl_expr_mid!(FnDecl);
 
@@ -823,7 +861,9 @@ impl_expr_mid!(FnDecl);
 /// Legal expression forms
 pub enum Expr<'script> {
     /// Match expression
-    Match(Box<Match<'script>>),
+    Match(Box<Match<'script, Self>>),
+    /// IfElse style match expression
+    IfElse(Box<IfElse<'script, Self>>),
     /// In place patch expression
     PatchInPlace(Box<Patch<'script>>),
     /// In place merge expression
@@ -835,7 +875,7 @@ pub enum Expr<'script> {
         /// Target
         path: Path<'script>,
         /// Value expression
-        expr: Box<Expr<'script>>,
+        expr: Box<Self>,
     },
     /// Assignment from local expression
     AssignMoveLocal {
@@ -847,7 +887,7 @@ pub enum Expr<'script> {
         idx: usize,
     },
     /// A structure comprehension
-    Comprehension(Box<Comprehension<'script>>),
+    Comprehension(Box<Comprehension<'script, Self>>),
     /// A drop expression
     Drop {
         /// Id
@@ -859,6 +899,41 @@ pub enum Expr<'script> {
     Imut(ImutExprInt<'script>),
 }
 
+impl<'script> Expression for Expr<'script> {
+    fn replace_last_shadow_use(&mut self, replace_idx: usize) {
+        match self {
+            Expr::Assign { path, expr, mid } => match expr.as_ref() {
+                Expr::Imut(ImutExprInt::Local { idx, .. }) if idx == &replace_idx => {
+                    *self = Expr::AssignMoveLocal {
+                        mid: *mid,
+                        idx: *idx,
+                        path: path.clone(),
+                    };
+                }
+                _ => (),
+            },
+            Expr::Match(m) => {
+                // In each pattern we can replace the use in the last assign
+                for cg in &mut m.patterns {
+                    cg.replace_last_shadow_use(replace_idx);
+                }
+            }
+            _ => (),
+        }
+    }
+
+    fn is_null_lit(&self) -> bool {
+        matches!(self, Expr::Imut(ImutExprInt::Literal(Literal { value, .. })) if value.is_null())
+    }
+
+    fn null_lit() -> Self {
+        Expr::Imut(ImutExprInt::Literal(Literal {
+            value: Value::null(),
+            mid: 0,
+        }))
+    }
+}
+
 impl<'script> From<ImutExprInt<'script>> for Expr<'script> {
     fn from(imut: ImutExprInt<'script>) -> Expr<'script> {
         Expr::Imut(imut)
@@ -868,6 +943,18 @@ impl<'script> From<ImutExprInt<'script>> for Expr<'script> {
 /// An immutable expression
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ImutExpr<'script>(pub ImutExprInt<'script>);
+#[cfg(not(tarpaulin_include))] // this is a simple passthrough
+impl<'script> Expression for ImutExpr<'script> {
+    fn replace_last_shadow_use(&mut self, replace_idx: usize) {
+        self.0.replace_last_shadow_use(replace_idx)
+    }
+    fn is_null_lit(&self) -> bool {
+        self.0.is_null_lit()
+    }
+    fn null_lit() -> Self {
+        Self(ImutExprInt::null_lit())
+    }
+}
 
 impl<'script> From<Literal<'script>> for ImutExpr<'script> {
     fn from(lit: Literal<'script>) -> Self {
@@ -875,6 +962,7 @@ impl<'script> From<Literal<'script>> for ImutExpr<'script> {
     }
 }
 
+#[cfg(not(tarpaulin_include))] // this is a simple passthrough
 impl<'script> BaseExpr for ImutExpr<'script> {
     fn mid(&self) -> usize {
         self.0.mid()
@@ -907,9 +995,9 @@ pub enum ImutExprInt<'script> {
     /// Patch
     Patch(Box<Patch<'script>>),
     /// Match
-    Match(Box<ImutMatch<'script>>),
+    Match(Box<Match<'script, ImutExprInt<'script>>>),
     /// Comprehension
-    Comprehension(Box<ImutComprehension<'script>>),
+    Comprehension(Box<Comprehension<'script, Self>>),
     /// Merge
     Merge(Box<Merge<'script>>),
     /// Path
@@ -950,8 +1038,22 @@ pub enum ImutExprInt<'script> {
     Bytes(Bytes<'script>),
 }
 
-fn is_lit(e: &ImutExprInt) -> bool {
-    matches!(e, ImutExprInt::Literal(_))
+impl<'script> Expression for ImutExprInt<'script> {
+    #[cfg(not(tarpaulin_include))] // this has no function
+    fn replace_last_shadow_use(&mut self, replace_idx: usize) {
+        if let ImutExprInt::Match(m) = self {
+            // In each pattern we can replace the use in the last assign
+            for cg in &mut m.patterns {
+                cg.replace_last_shadow_use(replace_idx);
+            }
+        }
+    }
+    fn is_null_lit(&self) -> bool {
+        matches!(self, ImutExprInt::Literal(Literal { value, .. }) if value.is_null())
+    }
+    fn null_lit() -> Self {
+        Self::Literal(Literal::default())
+    }
 }
 
 /// A string literal with interpolation
@@ -1014,7 +1116,7 @@ impl<'script> Invoke<'script> {
     }
 
     fn try_reduce(self, helper: &Helper<'script, '_>) -> Result<ImutExprInt<'script>> {
-        if self.invocable.is_const() && self.args.iter().all(|f| is_lit(&f.0)) {
+        if self.invocable.is_const() && self.args.iter().all(|f| f.0.is_lit()) {
             let ex = self.extent(&helper.meta);
             let args: Result<Vec<Value<'script>>> = self
                 .args
@@ -1152,33 +1254,353 @@ pub struct TestExpr {
     pub extractor: Extractor,
 }
 
+/// default case for a match expression
 #[derive(Clone, Debug, PartialEq, Serialize)]
+pub enum DefaultCase<Ex: Expression> {
+    /// No default case
+    None,
+    /// Null default case (default => null)
+    Null,
+    /// Many expressions
+    Many {
+        /// Expressions in the clause
+        exprs: Vec<Ex>,
+        /// last expression in the clause
+        last_expr: Box<Ex>,
+    },
+    /// One Expression
+    One(Ex),
+}
+
 /// Encapsulates a match expression form
-pub struct Match<'script> {
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct Match<'script, Ex: Expression + 'script> {
     /// Id
     pub mid: usize,
     /// The target of the match
     pub target: ImutExprInt<'script>,
     /// Patterns to match against the target
-    pub patterns: Predicates<'script>,
+    pub patterns: Predicates<'script, Ex>,
+    /// Default case
+    pub default: DefaultCase<Ex>,
 }
-impl_expr_mid!(Match);
+impl_expr_ex_mid!(Match);
 
+/// If / Else style match
 #[derive(Clone, Debug, PartialEq, Serialize)]
-/// Encapsulates an immutable match expression form
-pub struct ImutMatch<'script> {
+pub struct IfElse<'script, Ex: Expression + 'script> {
     /// Id
     pub mid: usize,
     /// The target of the match
     pub target: ImutExprInt<'script>,
-    /// The patterns against the match target
-    pub patterns: ImutPredicates<'script>,
+    /// The if case
+    pub if_clause: PredicateClause<'script, Ex>,
+    /// Default/else case
+    pub else_clause: DefaultCase<Ex>,
 }
-impl_expr_mid!(ImutMatch);
+impl_expr_ex_mid!(IfElse);
+
+/// Precondition for a case group
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct ClausePreCondition<'script> {
+    /// Segments to look up
+    pub segments: Segments<'script>,
+}
+/// A group of case statements
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub enum ClauseGroup<'script, Ex: Expression + 'script> {
+    /// A simple group consisting of multiple patterns
+    Simple {
+        /// pre-condition for this group
+        precondition: Option<ClausePreCondition<'script>>,
+        /// Clauses in a group
+        patterns: Vec<PredicateClause<'script, Ex>>,
+    },
+
+    /// A search tree based group
+    SearchTree {
+        /// pre-condition for this group
+        precondition: Option<ClausePreCondition<'script>>,
+        /// Clauses in a group
+        tree: BTreeMap<Value<'script>, (Vec<Ex>, Ex)>,
+        /// Non tree patterns
+        rest: Vec<PredicateClause<'script, Ex>>,
+    },
+    /// A Combination of multiple groups that share a precondition
+    Combined {
+        /// pre-condition for this group
+        precondition: Option<ClausePreCondition<'script>>,
+        /// Clauses in a group
+        groups: Vec<ClauseGroup<'script, Ex>>,
+    },
+    /// A single precondition
+    Single {
+        /// pre-condition for this group
+        precondition: Option<ClausePreCondition<'script>>,
+        /// Clauses in a group
+        pattern: PredicateClause<'script, Ex>,
+    },
+}
+
+impl<'script, Ex: Expression + 'script> Default for ClauseGroup<'script, Ex> {
+    fn default() -> Self {
+        Self::Simple {
+            precondition: None,
+            patterns: Vec::new(),
+        }
+    }
+}
+
+impl<'script, Ex: Expression + 'script> ClauseGroup<'script, Ex> {
+    const MAX_OPT_RUNS: u64 = 128;
+    const MIN_BTREE_SIZE: usize = 16;
+
+    fn combinable(&self, other: &Self) -> bool {
+        self.precondition().ast_eq(&other.precondition()) && self.precondition().is_some()
+    }
+
+    fn combine(&mut self, other: Self) {
+        match (self, other) {
+            (
+                Self::Combined {
+                    groups: patterns, ..
+                },
+                Self::Combined {
+                    groups: mut other_groups,
+                    ..
+                },
+            ) => patterns.append(&mut other_groups),
+            (
+                Self::Combined {
+                    groups: patterns, ..
+                },
+                mut other,
+            ) => {
+                other.clear_precondition();
+                patterns.push(other)
+            }
+            (this, other) => {
+                // Swap out precondition
+                let mut precondition = None;
+                mem::swap(&mut precondition, this.precondition_mut());
+                // Set up new combined self
+                let mut new = Self::Combined {
+                    groups: Vec::with_capacity(2),
+                    precondition,
+                };
+                mem::swap(&mut new, this);
+                // combine old self into new self
+                this.combine(new);
+                // combine other into new self
+                this.combine(other);
+            }
+        }
+    }
+    fn clear_precondition(&mut self) {
+        *(self.precondition_mut()) = None
+    }
+
+    pub(crate) fn precondition(&self) -> Option<&ClausePreCondition<'script>> {
+        match self {
+            ClauseGroup::Single { precondition, .. }
+            | ClauseGroup::Simple { precondition, .. }
+            | ClauseGroup::SearchTree { precondition, .. }
+            | ClauseGroup::Combined { precondition, .. } => precondition.as_ref(),
+        }
+    }
+
+    pub(crate) fn precondition_mut(&mut self) -> &mut Option<ClausePreCondition<'script>> {
+        match self {
+            ClauseGroup::Single { precondition, .. }
+            | ClauseGroup::Simple { precondition, .. }
+            | ClauseGroup::SearchTree { precondition, .. }
+            | ClauseGroup::Combined { precondition, .. } => precondition,
+        }
+    }
+
+    fn replace_last_shadow_use(&mut self, replace_idx: usize) {
+        match self {
+            Self::Simple { patterns, .. } => {
+                for PredicateClause { last_expr, .. } in patterns {
+                    last_expr.replace_last_shadow_use(replace_idx)
+                }
+            }
+            Self::SearchTree { tree, rest, .. } => {
+                for p in tree.values_mut() {
+                    p.1.replace_last_shadow_use(replace_idx)
+                }
+                for PredicateClause { last_expr, .. } in rest {
+                    last_expr.replace_last_shadow_use(replace_idx)
+                }
+            }
+            Self::Combined { groups, .. } => {
+                for cg in groups {
+                    cg.replace_last_shadow_use(replace_idx)
+                }
+            }
+            Self::Single {
+                pattern: PredicateClause { last_expr, .. },
+                ..
+            } => last_expr.replace_last_shadow_use(replace_idx),
+        }
+    }
+
+    // allow this otherwise clippy complains after telling us to use matches
+    #[allow(
+        clippy::blocks_in_if_conditions,
+        clippy::too_many_lines,
+        // we allow this because of the borrow checker
+        clippy::option_if_let_else
+    )]
+    fn optimize(&mut self, n: u64) {
+        if let Self::Simple {
+            patterns,
+            precondition,
+        } = self
+        {
+            if n > Self::MAX_OPT_RUNS {
+                return;
+            };
+            let mut first_key = None;
+
+            // if all patterns
+            if patterns.iter().all(|p| {
+                match p {
+                    PredicateClause {
+                        pattern: Pattern::Record(RecordPattern { fields, .. }),
+                        mid,
+                        ..
+                    } if fields.len() == 1 => fields
+                        .get(0)
+                        .map(|f| {
+                            // where the record key is a binary equal
+                            match f {
+                                PredicatePattern::Bin {
+                                    kind: BinOpKind::Eq,
+                                    key,
+                                    ..
+                                }
+                                | PredicatePattern::TildeEq { key, .. } => {
+                                    // and the key of this equal is the same in all patterns
+                                    if let Some((first, _)) = &first_key {
+                                        first == key
+                                    } else {
+                                        first_key = Some((key.clone(), *mid));
+                                        // this is the first item so we can assume so far it's all OK
+                                        true
+                                    }
+                                }
+                                _ => false,
+                            }
+                        })
+                        .unwrap_or_default(),
+                    _ => false,
+                }
+            }) {
+                // optimisation for:
+                // match event of
+                //   case %{a == "b"} =>...
+                //   case %{a == "c"} =>...
+                // end;
+                //        TO
+                // match event.a of
+                //   case "b" =>...
+                //   case "c" =>...
+                // end;
+                if let Some((key, mid)) = &first_key {
+                    // We want to make sure that our key exists
+                    *precondition = Some(ClausePreCondition {
+                        segments: vec![Segment::Id {
+                            mid: *mid,
+                            key: key.clone(),
+                        }],
+                    });
+
+                    // we now have:
+                    // match event.a of ...
+
+                    for pattern in patterns {
+                        let p = match pattern {
+                            PredicateClause {
+                                pattern: Pattern::Record(RecordPattern { fields, .. }),
+                                ..
+                            } => match fields.pop() {
+                                Some(PredicatePattern::Bin { rhs, .. }) => Some(Pattern::Expr(rhs)),
+                                Some(PredicatePattern::TildeEq { test, .. }) => {
+                                    Some(Pattern::Extract(test))
+                                }
+                                _other => {
+                                    // ALLOW: checked before in the if-condition
+                                    unreachable!()
+                                }
+                            },
+                            _ => None,
+                        };
+
+                        if let Some(p) = p {
+                            pattern.pattern = p
+                        }
+                    }
+                }
+                self.optimize(n + 1);
+            } else if patterns
+                .iter()
+                .filter(|p| {
+                    matches!(
+                        p,
+                        PredicateClause {
+                            pattern: Pattern::Expr(ImutExprInt::Literal(_)),
+                            guard: None,
+                            ..
+                        }
+                    )
+                })
+                .count()
+                >= Self::MIN_BTREE_SIZE
+            {
+                // We swap out the precondition and patterns so we can construct a new self
+                let mut precondition1 = None;
+                mem::swap(&mut precondition1, precondition);
+                let mut patterns1 = Vec::new();
+                mem::swap(&mut patterns1, patterns);
+                let mut rest = Vec::new();
+
+                let mut tree = BTreeMap::new();
+                for p in patterns1 {
+                    match p {
+                        PredicateClause {
+                            pattern: Pattern::Expr(ImutExprInt::Literal(Literal { value, .. })),
+                            exprs,
+                            last_expr,
+                            ..
+                        } => {
+                            tree.insert(value, (exprs, last_expr));
+                        }
+                        _ => rest.push(p),
+                    }
+                }
+                *self = Self::SearchTree {
+                    precondition: precondition1,
+                    tree,
+                    rest,
+                }
+            } else if patterns.len() == 1 {
+                if let Some(pattern) = patterns.pop() {
+                    let mut this_precondition = None;
+                    mem::swap(precondition, &mut this_precondition);
+                    *self = Self::Single {
+                        pattern,
+                        precondition: this_precondition,
+                    };
+                }
+            }
+        }
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulates a predicate expression form
-pub struct PredicateClause<'script> {
+pub struct PredicateClause<'script, Ex: Expression + 'script> {
     /// Id
     pub mid: usize,
     /// Predicate pattern
@@ -1186,25 +1608,30 @@ pub struct PredicateClause<'script> {
     /// Optional guard expression
     pub guard: Option<ImutExprInt<'script>>,
     /// Expressions to evaluate if predicate test and guard pass
-    pub exprs: Exprs<'script>,
+    pub exprs: Vec<Ex>,
     /// The last expression
-    pub last_expr: Expr<'script>,
+    pub last_expr: Ex,
 }
-impl_expr_mid!(PredicateClause);
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
-/// Encapsulates an immutable predicate expression form
-pub struct ImutPredicateClause<'script> {
-    /// Id
-    pub mid: usize,
-    /// Predicate pattern
-    pub pattern: Pattern<'script>,
-    /// Optional guard expression
-    pub guard: Option<ImutExprInt<'script>>,
-    /// Expressions to evaluate if predicate test and guard pass
-    pub expr: ImutExpr<'script>,
+impl<'script, Ex: Expression + 'script> PredicateClause<'script, Ex> {
+    fn is_exclusive_to(&self, other: &Self) -> bool {
+        // If we have guards we assume they are not exclusive
+        // this saves us analyzing guards
+        if self.guard.is_some() || other.guard.is_some() {
+            false
+        } else {
+            self.pattern.is_exclusive_to(&other.pattern)
+        }
+    }
 }
-impl_expr_mid!(ImutPredicateClause);
+impl_expr_ex_mid!(PredicateClause);
+
+/// A group of case statements
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct ImutClauseGroup<'script> {
+    /// Clauses in a group
+    pub patterns: Vec<PredicateClause<'script, ImutExpr<'script>>>,
+}
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulates a path expression form
@@ -1289,7 +1716,7 @@ impl_expr_mid!(Merge);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulates a structure comprehension form
-pub struct Comprehension<'script> {
+pub struct Comprehension<'script, Ex: Expression + 'script> {
     /// Id
     pub mid: usize,
     /// Key binding
@@ -1299,29 +1726,13 @@ pub struct Comprehension<'script> {
     /// Target of the comprehension
     pub target: ImutExprInt<'script>,
     /// Case applications against target elements
-    pub cases: ComprehensionCases<'script>,
+    pub cases: ComprehensionCases<'script, Ex>,
 }
-impl_expr_mid!(Comprehension);
-
-#[derive(Clone, Debug, PartialEq, Serialize)]
-/// Encapsulates an immutable comprehension form
-pub struct ImutComprehension<'script> {
-    /// Id
-    pub mid: usize,
-    /// Key binding
-    pub key_id: usize,
-    /// Value binding
-    pub val_id: usize,
-    /// Target of the comprehension
-    pub target: ImutExprInt<'script>,
-    /// Case applications against target elements
-    pub cases: ImutComprehensionCases<'script>,
-}
-impl_expr_mid!(ImutComprehension);
+impl_expr_ex_mid!(Comprehension);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulates a comprehension case application
-pub struct ComprehensionCase<'script> {
+pub struct ComprehensionCase<'script, Ex: Expression + 'script> {
     /// Id
     pub mid: usize,
     /// Key binding
@@ -1331,27 +1742,11 @@ pub struct ComprehensionCase<'script> {
     /// Guard expression
     pub guard: Option<ImutExprInt<'script>>,
     /// Case application against target on passing guard
-    pub exprs: Exprs<'script>,
+    pub exprs: Vec<Ex>,
     /// Last case application against target on passing guard
-    pub last_expr: Expr<'script>,
+    pub last_expr: Ex,
 }
-impl_expr_mid!(ComprehensionCase);
-
-#[derive(Clone, Debug, PartialEq, Serialize)]
-/// Encapsulates an immutable comprehension case application
-pub struct ImutComprehensionCase<'script> {
-    /// id
-    pub mid: usize,
-    /// Key binding
-    pub key_name: Cow<'script, str>,
-    /// value binding
-    pub value_name: Cow<'script, str>,
-    /// Guard expression
-    pub guard: Option<ImutExprInt<'script>>,
-    /// Case application against target on passing guard
-    pub expr: ImutExpr<'script>,
-}
-impl_expr_mid!(ImutComprehensionCase);
+impl_expr_ex_mid!(ComprehensionCase);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulates predicate pattern form
@@ -1367,6 +1762,8 @@ pub enum Pattern<'script> {
     Assign(AssignPattern<'script>),
     /// Tuple pattern
     Tuple(TuplePattern<'script>),
+    /// A extractor
+    Extract(Box<TestExpr>),
     /// Don't care condition
     DoNotCare,
     /// Gates if no other pattern matches
@@ -1375,9 +1772,39 @@ pub enum Pattern<'script> {
 impl<'script> Pattern<'script> {
     fn is_default(&self) -> bool {
         matches!(self, Pattern::Default)
+            || matches!(self, Pattern::DoNotCare)
+            || if let Pattern::Assign(AssignPattern { pattern, .. }) = self {
+                pattern.as_ref() == &Pattern::DoNotCare
+            } else {
+                false
+            }
     }
     fn is_assign(&self) -> bool {
         matches!(self, Pattern::Assign(_))
+    }
+    fn is_exclusive_to(&self, other: &Self) -> bool {
+        match (self, other) {
+            // Two literals that are different are distinct
+            (Pattern::Expr(ImutExprInt::Literal(l1)), Pattern::Expr(ImutExprInt::Literal(l2))) => {
+                l1 != l2
+            }
+            // For record patterns we compare directly
+            (Pattern::Record(r1), Pattern::Record(r2)) => {
+                r1.is_exclusive_to(r2) || r2.is_exclusive_to(r1)
+            }
+            // for assignments we compare internal value
+            (Pattern::Assign(AssignPattern { pattern, .. }), p2) => pattern.is_exclusive_to(p2),
+            (p1, Pattern::Assign(AssignPattern { pattern, .. })) => p1.is_exclusive_to(pattern),
+            // else we're just not accepting equality
+            (
+                Pattern::Tuple(TuplePattern { exprs: exprs1, .. }),
+                Pattern::Tuple(TuplePattern { exprs: exprs2, .. }),
+            ) => exprs1
+                .iter()
+                .zip(exprs2.iter())
+                .any(|(e1, e2)| e1.is_exclusive_to(e2) || e2.is_exclusive_to(e1)),
+            _ => false,
+        }
     }
 }
 
@@ -1447,6 +1874,93 @@ pub enum PredicatePattern<'script> {
 }
 
 impl<'script> PredicatePattern<'script> {
+    fn is_exclusive_to(&self, other: &Self) -> bool {
+        match (self, other) {
+            (
+                PredicatePattern::Bin {
+                    lhs: lhs1,
+                    kind: BinOpKind::Eq,
+                    rhs: rhs1,
+                    ..
+                },
+                PredicatePattern::Bin {
+                    lhs: lhs2,
+                    kind: BinOpKind::Eq,
+                    rhs: rhs2,
+                    ..
+                },
+            ) if lhs1 == lhs2 && !rhs1.ast_eq(rhs2) => true,
+            (
+                PredicatePattern::Bin { lhs: lhs1, .. },
+                PredicatePattern::FieldAbsent { lhs: lhs2, .. },
+            ) if lhs1 == lhs2 => true,
+            (
+                PredicatePattern::FieldPresent { lhs: lhs1, .. },
+                PredicatePattern::FieldAbsent { lhs: lhs2, .. },
+            ) if lhs1 == lhs2 => true,
+            (
+                PredicatePattern::Bin {
+                    lhs: lhs1,
+                    kind: BinOpKind::Eq,
+                    rhs: ImutExprInt::Literal(Literal { value, .. }),
+                    ..
+                },
+                PredicatePattern::TildeEq {
+                    lhs: lhs2, test, ..
+                },
+            ) if lhs1 == lhs2 => test.extractor.is_exclusive_to(value),
+            (
+                PredicatePattern::TildeEq {
+                    lhs: lhs2, test, ..
+                },
+                PredicatePattern::Bin {
+                    lhs: lhs1,
+                    kind: BinOpKind::Eq,
+                    rhs: ImutExprInt::Literal(Literal { value, .. }),
+                    ..
+                },
+            ) if lhs1 == lhs2 => test.extractor.is_exclusive_to(value),
+            (
+                PredicatePattern::TildeEq {
+                    lhs: lhs1,
+                    test: test1,
+                    ..
+                },
+                PredicatePattern::TildeEq {
+                    lhs: lhs2,
+                    test: test2,
+                    ..
+                },
+            ) if lhs1 == lhs2 => match (test1.as_ref(), test2.as_ref()) {
+                // For two prefix extractors we know that if one isn't the prefix for the
+                // other they are exclusive
+                (
+                    TestExpr {
+                        extractor: Extractor::Prefix(p1),
+                        ..
+                    },
+                    TestExpr {
+                        extractor: Extractor::Prefix(p2),
+                        ..
+                    },
+                ) => !(p1.starts_with(p2.as_str()) || p2.starts_with(p1.as_str())),
+                // For two suffix extractors we know that if one isn't the suffix for the
+                // other they are exclusive
+                (
+                    TestExpr {
+                        extractor: Extractor::Suffix(p1),
+                        ..
+                    },
+                    TestExpr {
+                        extractor: Extractor::Suffix(p2),
+                        ..
+                    },
+                ) => !(p1.ends_with(p2.as_str()) || p2.ends_with(p1.as_str())),
+                _ => false,
+            },
+            (_l, _r) => false,
+        }
+    }
     /// Get key
     #[must_use]
     pub fn key(&self) -> &KnownKey<'script> {
@@ -1486,6 +2000,20 @@ pub struct RecordPattern<'script> {
     /// Pattern fields
     pub fields: PatternFields<'script>,
 }
+
+impl<'script> RecordPattern<'script> {
+    fn is_exclusive_to(&self, other: &Self) -> bool {
+        if self.fields.len() == 1 && other.fields.len() == 1 {
+            self.fields
+                .get(0)
+                .and_then(|f1| Some((f1, other.fields.get(0)?)))
+                .map(|(f1, f2)| f1.is_exclusive_to(f2) || f2.is_exclusive_to(f1))
+                .unwrap_or_default()
+        } else {
+            false
+        }
+    }
+}
 impl_expr_mid!(RecordPattern);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -1499,6 +2027,17 @@ pub enum ArrayPredicatePattern<'script> {
     Record(RecordPattern<'script>),
     /// Don't care condition
     Ignore,
+}
+
+impl<'script> ArrayPredicatePattern<'script> {
+    fn is_exclusive_to(&self, other: &Self) -> bool {
+        match (self, other) {
+            (ArrayPredicatePattern::Record(r1), ArrayPredicatePattern::Record(r2)) => {
+                r1.is_exclusive_to(r2) || r2.is_exclusive_to(r1)
+            }
+            _ => false,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -1563,7 +2102,7 @@ impl<'script> Path<'script> {
             Path::Reserved(path) => path.segments(),
         }
     }
-    fn try_reduce(self, helper: &Helper<'script, '_>) -> Result<ImutExprInt<'script>> {
+    fn try_reduce(self, helper: &Helper<'script, '_>) -> ImutExprInt<'script> {
         match self {
             Path::Const(LocalPath {
                 is_const: true,
@@ -1576,20 +2115,13 @@ impl<'script> Path<'script> {
                         mid,
                         value: v.clone(),
                     };
-                    Ok(ImutExprInt::Literal(lit))
+                    ImutExprInt::Literal(lit)
                 } else {
-                    let r = Range::from((
-                        helper.meta.start(mid).unwrap_or_default(),
-                        helper.meta.end(mid).unwrap_or_default(),
-                    ));
-                    let e = format!(
-                        "Invalid const reference to '{}'",
-                        helper.meta.name_dflt(mid),
-                    );
-                    error_generic(&r.expand_lines(2), &r, &e, &helper.meta)
+                    // ALLOW: if something is is_const: true it is a constant.
+                    unreachable!()
                 }
             }
-            other => Ok(ImutExprInt::Path(other)),
+            other => ImutExprInt::Path(other),
         }
     }
 }
@@ -1634,7 +2166,7 @@ pub enum Segment<'script> {
     },
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Default)]
 /// A path local to the current program
 pub struct LocalPath<'script> {
     /// Local Index
@@ -1790,21 +2322,19 @@ impl_expr_mid!(BinExpr);
 
 impl<'script> BinExpr<'script> {
     fn try_reduce(self, helper: &Helper<'script, '_>) -> Result<ImutExprInt<'script>> {
-        match self {
-            b
-            @
-            BinExpr {
-                lhs: ImutExprInt::Literal(_),
-                rhs: ImutExprInt::Literal(_),
-                ..
-            } => {
-                let lhs = reduce2(b.lhs.clone(), helper)?;
-                let rhs = reduce2(b.rhs.clone(), helper)?;
-                let value = exec_binary(&b, &b, &helper.meta, b.kind, &lhs, &rhs)?.into_owned();
-                let lit = Literal { mid: b.mid, value };
+        match &self {
+            BinExpr { lhs, rhs, .. } if lhs.is_lit() && rhs.is_lit() => {
+                let l = reduce2(lhs.clone(), helper)?;
+                let r = reduce2(rhs.clone(), helper)?;
+                let value =
+                    exec_binary(&self, &self, &helper.meta, self.kind, &l, &r)?.into_owned();
+                let lit = Literal {
+                    mid: self.mid,
+                    value,
+                };
                 Ok(ImutExprInt::Literal(lit))
             }
-            b => Ok(ImutExprInt::Binary(Box::new(b))),
+            _ => Ok(ImutExprInt::Binary(Box::new(self))),
         }
     }
 }
@@ -1836,83 +2366,26 @@ impl_expr_mid!(UnaryExpr);
 
 impl<'script> UnaryExpr<'script> {
     fn try_reduce(self, helper: &Helper<'script, '_>) -> Result<ImutExprInt<'script>> {
-        match self {
-            u1
-            @
+        match &self {
             UnaryExpr {
-                expr: ImutExprInt::Literal(_),
-                ..
-            } => {
-                let expr = reduce2(u1.expr.clone(), &helper)?;
-                let value = if let Some(v) = exec_unary(u1.kind, &expr) {
+                expr, mid, kind, ..
+            } if expr.is_lit() => {
+                let expr = reduce2(expr.clone(), &helper)?;
+                let value = if let Some(v) = exec_unary(*kind, &expr) {
                     v.into_owned()
                 } else {
-                    let ex = u1.extent(&helper.meta);
-                    return Err(ErrorKind::InvalidUnary(
-                        ex.expand_lines(2),
-                        ex,
-                        u1.kind,
-                        expr.value_type(),
-                    )
-                    .into());
+                    let ex = self.extent(&helper.meta);
+                    let outer = ex.expand_lines(2);
+                    let e = ErrorKind::InvalidUnary(outer, ex, *kind, expr.value_type());
+                    return Err(e.into());
                 };
 
-                let lit = Literal { mid: u1.mid, value };
+                let lit = Literal { mid: *mid, value };
                 Ok(ImutExprInt::Literal(lit))
             }
-            u1 => Ok(ImutExprInt::Unary(Box::new(u1))),
+            _ => Ok(ImutExprInt::Unary(Box::new(self))),
         }
     }
-}
-
-pub(crate) type Exprs<'script> = Vec<Expr<'script>>;
-/// A list of lexical compilation units
-pub type Imports<'script> = Vec<LexicalUnit<'script>>;
-/// A list of immutable expressions
-pub type ImutExprs<'script> = Vec<ImutExpr<'script>>;
-pub(crate) type Fields<'script> = Vec<Field<'script>>;
-pub(crate) type Segments<'script> = Vec<Segment<'script>>;
-pub(crate) type PatternFields<'script> = Vec<PredicatePattern<'script>>;
-pub(crate) type Predicates<'script> = Vec<PredicateClause<'script>>;
-pub(crate) type ImutPredicates<'script> = Vec<ImutPredicateClause<'script>>;
-pub(crate) type PatchOperations<'script> = Vec<PatchOperation<'script>>;
-pub(crate) type ComprehensionCases<'script> = Vec<ComprehensionCase<'script>>;
-pub(crate) type ImutComprehensionCases<'script> = Vec<ImutComprehensionCase<'script>>;
-pub(crate) type ArrayPredicatePatterns<'script> = Vec<ArrayPredicatePattern<'script>>;
-/// A vector of statements
-pub type Stmts<'script> = Vec<Stmt<'script>>;
-
-fn replace_last_shadow_use<'script>(replace_idx: usize, expr: Expr<'script>) -> Expr<'script> {
-    match expr {
-        Expr::Assign { path, expr, mid } => match expr.borrow() {
-            Expr::Imut(ImutExprInt::Local { idx, .. }) if idx == &replace_idx => {
-                Expr::AssignMoveLocal {
-                    mid,
-                    idx: *idx,
-                    path,
-                }
-            }
-
-            _ => Expr::Assign { path, expr, mid },
-        },
-        Expr::Match(m) => {
-            let mut m: Match<'script> = *m;
-
-            // In each pattern we can replace the use in the last assign
-            for p in &mut m.patterns {
-                if let Some(expr) = p.exprs.pop() {
-                    p.exprs.push(replace_last_shadow_use(replace_idx, expr))
-                }
-            }
-
-            Expr::Match(Box::new(m))
-        }
-        other => other,
-    }
-}
-
-fn shadow_name(id: usize) -> String {
-    format!(" __SHADOW {}__ ", id)
 }
 
 #[cfg(test)]

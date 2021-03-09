@@ -1,11 +1,12 @@
 use crate::{CustomFn, TremorFnWrapper};
 
 use super::{
-    ArrayPattern, ArrayPredicatePattern, AssignPattern, BinExpr, Bytes, BytesPart, EventPath,
-    ImutComprehension, ImutComprehensionCase, ImutExprInt, ImutMatch, ImutPredicateClause,
-    Invocable, Invoke, InvokeAggr, List, Literal, LocalPath, Merge, MetadataPath, Patch,
-    PatchOperation, Path, Pattern, PredicatePattern, Record, RecordPattern, Recur, ReservedPath,
-    Segment, StatePath, StrLitElement, StringLit, TestExpr, TuplePattern, UnaryExpr,
+    ArrayPattern, ArrayPredicatePattern, AssignPattern, BinExpr, Bytes, BytesPart, ClauseGroup,
+    ClausePreCondition, Comprehension, ComprehensionCase, DefaultCase, EventPath, Expression,
+    Field, ImutExpr, ImutExprInt, Invocable, Invoke, InvokeAggr, List, Literal, LocalPath, Match,
+    Merge, MetadataPath, Patch, PatchOperation, Path, Pattern, PredicateClause, PredicatePattern,
+    Record, RecordPattern, Recur, ReservedPath, Segment, StatePath, StrLitElement, StringLit,
+    TestExpr, TuplePattern, UnaryExpr,
 };
 
 // Copyright 2020-2021, The Tremor Team
@@ -28,6 +29,43 @@ use super::{
 pub trait AstEq<T = Self> {
     /// returns true if both self and other are the same, ignoring the `mid`
     fn ast_eq(&self, other: &T) -> bool;
+}
+
+impl<T> AstEq for Vec<T>
+where
+    T: AstEq,
+{
+    fn ast_eq(&self, other: &Self) -> bool {
+        self.len() == other.len() && self.iter().zip(other.iter()).all(|(p1, p2)| p1.ast_eq(&p2))
+    }
+}
+
+impl<T> AstEq for Option<T>
+where
+    T: AstEq,
+{
+    fn ast_eq(&self, other: &Self) -> bool {
+        match (self.as_ref(), other.as_ref()) {
+            (Some(a1), Some(a2)) => a1.ast_eq(a2),
+            (None, None) => true,
+            _ => false,
+        }
+    }
+}
+
+impl<T> AstEq for &T
+where
+    T: AstEq,
+{
+    fn ast_eq(&self, other: &Self) -> bool {
+        (*self).ast_eq(other)
+    }
+}
+
+impl<'script> AstEq for ImutExpr<'script> {
+    fn ast_eq(&self, other: &Self) -> bool {
+        self.0.ast_eq(&other.0)
+    }
 }
 
 impl<'script> AstEq for ImutExprInt<'script> {
@@ -89,33 +127,25 @@ impl<'script> AstEq for BytesPart<'script> {
 
 impl<'script> AstEq for Bytes<'script> {
     fn ast_eq(&self, other: &Self) -> bool {
-        self.value.len() == other.value.len()
-            && self
-                .value
-                .iter()
-                .zip(other.value.iter())
-                .all(|(b1, b2)| b1.ast_eq(b2))
+        self.value.ast_eq(&other.value)
     }
 }
+
+impl<'script> AstEq for Field<'script> {
+    fn ast_eq(&self, other: &Self) -> bool {
+        self.name.ast_eq(&other.name) && self.value.ast_eq(&other.value)
+    }
+}
+
 impl<'script> AstEq for Record<'script> {
     fn ast_eq(&self, other: &Self) -> bool {
-        self.fields.len() == other.fields.len()
-            && self
-                .fields
-                .iter()
-                .zip(other.fields.iter())
-                .all(|(f1, f2)| f1.name.ast_eq(&f2.name) && f1.value.ast_eq(&f2.value))
+        self.fields.ast_eq(&other.fields)
     }
 }
 
 impl<'script> AstEq for List<'script> {
     fn ast_eq(&self, other: &Self) -> bool {
-        self.exprs.len() == other.exprs.len()
-            && self
-                .exprs
-                .iter()
-                .zip(other.exprs.iter())
-                .all(|(e1, e2)| e1.0.ast_eq(&e2.0))
+        self.exprs.ast_eq(&other.exprs)
     }
 }
 
@@ -127,12 +157,7 @@ impl<'script> AstEq for Literal<'script> {
 
 impl<'script> AstEq for StringLit<'script> {
     fn ast_eq(&self, other: &Self) -> bool {
-        self.elements.len() == other.elements.len()
-            && self
-                .elements
-                .iter()
-                .zip(other.elements.iter())
-                .all(|(e1, e2)| e1.ast_eq(e2))
+        self.elements.ast_eq(&other.elements)
     }
 }
 
@@ -150,12 +175,7 @@ impl<'script> AstEq for Invoke<'script> {
         self.module.eq(&other.module)
             && self.fun == other.fun
             && self.invocable.ast_eq(&other.invocable)
-            && self.args.len() == other.args.len()
-            && self
-                .args
-                .iter()
-                .zip(other.args.iter())
-                .all(|(a1, a2)| a1.0.ast_eq(&a2.0))
+            && self.args.ast_eq(&other.args)
     }
 }
 
@@ -171,14 +191,7 @@ impl<'script> AstEq for Invocable<'script> {
 
 impl<'script> AstEq for Recur<'script> {
     fn ast_eq(&self, other: &Self) -> bool {
-        self.argc == other.argc
-            && self.open == other.open
-            && self.exprs.len() == other.exprs.len()
-            && self
-                .exprs
-                .iter()
-                .zip(other.exprs.iter())
-                .all(|(e1, e2)| e1.0.ast_eq(&e2.0))
+        self.argc == other.argc && self.open == other.open && self.exprs.ast_eq(&other.exprs)
     }
 }
 
@@ -194,39 +207,124 @@ impl AstEq for TestExpr {
     }
 }
 
-impl<'script> AstEq for ImutMatch<'script> {
+impl<'script> AstEq for ClausePreCondition<'script> {
     fn ast_eq(&self, other: &Self) -> bool {
-        self.target.ast_eq(&other.target)
-            && self.patterns.len() == other.patterns.len()
-            && self
-                .patterns
-                .iter()
-                .zip(other.patterns.iter())
-                .all(|(p1, p2)| p1.ast_eq(&p2))
+        self.segments.ast_eq(&other.segments)
     }
 }
 
-impl<'script> AstEq for ImutPredicateClause<'script> {
+impl<'script, Ex> AstEq for ClauseGroup<'script, Ex>
+where
+    Ex: Expression + AstEq + 'script,
+{
+    #[allow(clippy::suspicious_operation_groupings)]
     fn ast_eq(&self, other: &Self) -> bool {
-        self.expr.0.ast_eq(&other.expr.0)
-            && match (self.guard.as_ref(), other.guard.as_ref()) {
-                (Some(expr1), Some(expr2)) => expr1.ast_eq(expr2),
-                (None, None) => true,
-                _ => false,
+        match (self, other) {
+            (
+                ClauseGroup::Single {
+                    precondition: precon1,
+                    pattern: p1,
+                },
+                ClauseGroup::Single {
+                    precondition: precon2,
+                    pattern: p2,
+                },
+            ) => precon1.ast_eq(precon2) && p1.ast_eq(p2),
+            (
+                ClauseGroup::Simple {
+                    precondition: precon1,
+                    patterns: ps1,
+                },
+                ClauseGroup::Simple {
+                    precondition: precon2,
+                    patterns: ps2,
+                },
+            ) => precon1.ast_eq(precon2) && ps1.ast_eq(ps2),
+            (
+                ClauseGroup::SearchTree {
+                    precondition: precon1,
+                    tree: t1,
+                    rest: rest1,
+                },
+                ClauseGroup::SearchTree {
+                    precondition: precon2,
+                    tree: t2,
+                    rest: rest2,
+                },
+            ) => {
+                precon1.ast_eq(precon2)
+                    && rest1.ast_eq(rest2)
+                    && t1.len() == t2.len()
+                    && t1
+                        .iter()
+                        .zip(t2.iter())
+                        .all(|((k1, (v1, vs1)), (k2, (v2, vs2)))| {
+                            k1 == k2 && v1.ast_eq(v2) && vs1.ast_eq(vs2)
+                        })
             }
+            (
+                ClauseGroup::Combined {
+                    precondition: pc1,
+                    groups: g1,
+                },
+                ClauseGroup::Combined {
+                    precondition: pc2,
+                    groups: g2,
+                },
+            ) => pc1.ast_eq(pc2) && g1.ast_eq(g2),
+            _ => false,
+        }
+    }
+}
+
+impl<'script, Ex> AstEq for DefaultCase<Ex>
+where
+    Ex: Expression + AstEq + 'script,
+{
+    fn ast_eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (DefaultCase::None, DefaultCase::None) | (DefaultCase::Null, DefaultCase::Null) => true,
+            (
+                DefaultCase::Many {
+                    exprs: es1,
+                    last_expr: e1,
+                },
+                DefaultCase::Many {
+                    exprs: es2,
+                    last_expr: e2,
+                },
+            ) => e1.ast_eq(e2) && es1.ast_eq(es2),
+            (DefaultCase::One(e1), DefaultCase::One(e2)) => e1.ast_eq(e2),
+            _ => false,
+        }
+    }
+}
+impl<'script, Ex> AstEq for Match<'script, Ex>
+where
+    Ex: Expression + AstEq + 'script,
+{
+    fn ast_eq(&self, other: &Self) -> bool {
+        self.target.ast_eq(&other.target)
+            && self.patterns.ast_eq(&self.patterns)
+            && self.default.ast_eq(&other.default)
+    }
+}
+
+impl<'script, Ex> AstEq for PredicateClause<'script, Ex>
+where
+    Ex: Expression + AstEq + 'script,
+{
+    fn ast_eq(&self, other: &Self) -> bool {
+        self.exprs.ast_eq(&other.exprs)
+            && self.last_expr.ast_eq(&other.last_expr)
+            && self.guard.ast_eq(&other.guard)
             && self.pattern.ast_eq(&other.pattern)
     }
 }
 
 impl<'script> AstEq for Patch<'script> {
     fn ast_eq(&self, other: &Self) -> bool {
-        self.target.ast_eq(&other.target)
-            && self.operations.len() == other.operations.len()
-            && self
-                .operations
-                .iter()
-                .zip(other.operations.iter())
-                .all(|(o1, o2)| o1.ast_eq(o2))
+        self.target.ast_eq(&other.target) && self.operations.ast_eq(&other.operations)
     }
 }
 
@@ -290,30 +388,27 @@ impl<'script> AstEq for Merge<'script> {
     }
 }
 
-impl<'script> AstEq for ImutComprehension<'script> {
+impl<'script, Ex> AstEq for Comprehension<'script, Ex>
+where
+    Ex: Expression + AstEq + 'script,
+{
     fn ast_eq(&self, other: &Self) -> bool {
         self.key_id == other.key_id
             && self.val_id == other.val_id
             && self.target.ast_eq(&other.target)
-            && self.cases.len() == other.cases.len()
-            && self
-                .cases
-                .iter()
-                .zip(other.cases.iter())
-                .all(|(c1, c2)| c1.ast_eq(c2))
+            && self.cases.ast_eq(&other.cases)
     }
 }
 
-impl<'script> AstEq for ImutComprehensionCase<'script> {
+impl<'script, Ex> AstEq for ComprehensionCase<'script, Ex>
+where
+    Ex: Expression + AstEq + 'script,
+{
     fn ast_eq(&self, other: &Self) -> bool {
         self.key_name == other.key_name
             && self.value_name == other.value_name
-            && match (self.guard.as_ref(), other.guard.as_ref()) {
-                (Some(g1), Some(g2)) => g1.ast_eq(g2),
-                (None, None) => true,
-                _ => false,
-            }
-            && self.expr.0.ast_eq(&other.expr.0)
+            && self.guard.ast_eq(&other.guard)
+            && self.exprs.ast_eq(&other.exprs)
     }
 }
 
@@ -392,12 +487,7 @@ impl<'script> AstEq for PredicatePattern<'script> {
 
 impl<'script> AstEq for RecordPattern<'script> {
     fn ast_eq(&self, other: &Self) -> bool {
-        self.fields.len() == other.fields.len()
-            && self
-                .fields
-                .iter()
-                .zip(other.fields.iter())
-                .all(|(f1, f2)| f1.ast_eq(&f2))
+        self.fields.ast_eq(&other.fields)
     }
 }
 
@@ -414,12 +504,7 @@ impl<'script> AstEq for ArrayPredicatePattern<'script> {
 
 impl<'script> AstEq for ArrayPattern<'script> {
     fn ast_eq(&self, other: &Self) -> bool {
-        self.exprs.len() == other.exprs.len()
-            && self
-                .exprs
-                .iter()
-                .zip(other.exprs.iter())
-                .all(|(e1, e2)| e1.ast_eq(e2))
+        self.exprs.ast_eq(&other.exprs)
     }
 }
 
@@ -431,13 +516,7 @@ impl<'script> AstEq for AssignPattern<'script> {
 
 impl<'script> AstEq for TuplePattern<'script> {
     fn ast_eq(&self, other: &Self) -> bool {
-        self.open == other.open
-            && self.exprs.len() == other.exprs.len()
-            && self
-                .exprs
-                .iter()
-                .zip(other.exprs.iter())
-                .all(|(e1, e2)| e1.ast_eq(e2))
+        self.open == other.open && self.exprs.ast_eq(&other.exprs)
     }
 }
 
@@ -497,23 +576,13 @@ impl<'script> AstEq for LocalPath<'script> {
     fn ast_eq(&self, other: &Self) -> bool {
         self.idx == other.idx
             && self.is_const == other.is_const
-            && self.segments.len() == other.segments.len()
-            && self
-                .segments
-                .iter()
-                .zip(other.segments.iter())
-                .all(|(s1, s2)| s1.ast_eq(s2))
+            && self.segments.ast_eq(&other.segments)
     }
 }
 
 impl<'script> AstEq for MetadataPath<'script> {
     fn ast_eq(&self, other: &Self) -> bool {
-        self.segments.len() == other.segments.len()
-            && self
-                .segments
-                .iter()
-                .zip(other.segments.iter())
-                .all(|(s1, s2)| s1.ast_eq(s2))
+        self.segments.ast_eq(&other.segments)
     }
 }
 
@@ -532,23 +601,13 @@ impl<'script> AstEq for ReservedPath<'script> {
 
 impl<'script> AstEq for EventPath<'script> {
     fn ast_eq(&self, other: &Self) -> bool {
-        self.segments.len() == other.segments.len()
-            && self
-                .segments
-                .iter()
-                .zip(other.segments.iter())
-                .all(|(s1, s2)| s1.ast_eq(s2))
+        self.segments.ast_eq(&other.segments)
     }
 }
 
 impl<'script> AstEq for StatePath<'script> {
     fn ast_eq(&self, other: &Self) -> bool {
-        self.segments.len() == other.segments.len()
-            && self
-                .segments
-                .iter()
-                .zip(other.segments.iter())
-                .all(|(s1, s2)| s1.ast_eq(s2))
+        self.segments.ast_eq(&other.segments)
     }
 }
 
@@ -764,6 +823,46 @@ mod tests {
         end);
         (match x of
             case "literal string" => "string"
+            case event.foo => "event.foo"
+            case %( _, 12, ... ) => "has 12 at index 1"
+            case %[] => "empty_array"
+            case %[ %{ present x } ] => "complex"
+            case object = %{ absent y, snot == "badger", superhero ~= %{absent name}} when object.superhero.is_snotty => "snotty_badger"
+            default => null
+        end)
+        "#
+    );
+    eq_test!(
+        test_match_eq_2,
+        r#"
+        let x = {"foo": "foo"};
+        (match x of
+            case "literal string" => "string"
+            case "other literal string" => "string"
+            case "other other literal string" => "string"
+            case %{g == 1} => "obj"
+            case %{g == 2} => "obj"
+            case %{g == 3} => "obj"
+            case %{g ~= re|.*|} => "obj"
+            case %{g ~= re|.*|} => "obj"
+            case %{g == 4} => "obj"
+            case event.foo => "event.foo"
+            case %( _, 12, ... ) => "has 12 at index 1"
+            case %[] => "empty_array"
+            case %[ %{ present x } ] => "complex"
+            case object = %{ absent y, snot == "badger", superhero ~= %{absent name}} when object.superhero.is_snotty => "snotty_badger"
+            default => null
+        end);
+        (match x of
+            case "literal string" => "string"
+            case "other literal string" => "string"
+            case "other other literal string" => "string"
+            case %{g == 1} => "obj"
+            case %{g == 2} => "obj"
+            case %{g == 3} => "obj"
+            case %{g ~= re|.*|} => "obj"
+            case %{g ~= re|.*|} => "obj"
+            case %{g == 4} => "obj"
             case event.foo => "event.foo"
             case %( _, 12, ... ) => "has 12 at index 1"
             case %[] => "empty_array"
