@@ -370,6 +370,7 @@ impl Sink for Rest {
                                     .await?
                             }
                             Err(e) => {
+                                error!("Error sending HTTP request: {}", e);
                                 codec_task_channel
                                     .send(CodecTaskInMsg::ReportFailure(
                                         id,
