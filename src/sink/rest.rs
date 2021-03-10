@@ -261,6 +261,7 @@ enum CodecTaskInMsg {
         id: EventId,
         origin_uri: Box<EventOriginUri>, // box to avoid becoming the struct too big
         op_meta: Box<OpMeta>,
+        request_meta: Value<'static>,
         response: Response,
         duration: u64,
     },
@@ -351,6 +352,7 @@ impl Sink for Rest {
                                 segments.map(String::from).collect()
                             }),
                         };
+                        let request_meta = build_request_metadata(&request)?;
                         // send request
                         match http_client.send(request).await {
                             Ok(response) => {
@@ -362,6 +364,7 @@ impl Sink for Rest {
                                         id,
                                         origin_uri: Box::new(event_origin_uri),
                                         op_meta: Box::new(op_meta),
+                                        request_meta,
                                         response,
                                         duration,
                                     })
@@ -563,6 +566,7 @@ async fn codec_task(
                 id,
                 origin_uri,
                 op_meta,
+                request_meta,
                 mut response,
                 duration,
             } => {
@@ -595,6 +599,7 @@ async fn codec_task(
                         &id,
                         &mut response_ids,
                         origin_uri.as_ref(),
+                        request_meta,
                         response,
                         codec,
                         &mut codec_map,
@@ -831,16 +836,56 @@ fn build_request(
     Ok(request_builder.build())
 }
 
+fn build_request_metadata(request: &Request) -> Result<Value<'static>> {
+    let mut request_meta = Value::object_with_capacity(3);
+    let method = request.method().to_string();
+    request_meta.insert("method", Value::from(method))?;
+
+    let mut request_headers = Value::object_with_capacity(request.header_values().count());
+    {
+        for (name, values) in request.iter() {
+            let header_values: Value = values
+                .iter()
+                .map(ToString::to_string)
+                .map(Value::from)
+                .collect();
+            request_headers.insert(name.to_string(), header_values)?;
+        }
+    }
+    request_meta.insert("headers", request_headers)?;
+
+    let mut endpoint = Value::object_with_capacity(8);
+    let scheme = none_if_empty(request.url().scheme());
+    endpoint.insert("scheme", Value::from(scheme))?;
+    let username = none_if_empty(request.url().username());
+    endpoint.insert("username", Value::from(username))?;
+    let password = request.url().password().map(ToString::to_string);
+    endpoint.insert("password", Value::from(password))?;
+    let host = request.url().host_str().map(ToString::to_string);
+    endpoint.insert("host", Value::from(host))?;
+    let port = request.url().port();
+    endpoint.insert("port", Value::from(port))?;
+    let path = none_if_empty(request.url().path());
+    endpoint.insert("path", Value::from(path))?;
+    let query = request.url().query().map(ToString::to_string);
+    endpoint.insert("query", Value::from(query))?;
+    let fragment = request.url().fragment().map(ToString::to_string);
+    endpoint.insert("fragment", Value::from(fragment))?;
+    request_meta.insert("endpoint", endpoint)?; // temp variable for debugging aid
+    Ok(request_meta)
+}
+
 #[allow(clippy::too_many_arguments)]
-async fn build_response_events(
-    sink_url: &TremorURL,
-    event_id: &EventId,
-    response_ids: &mut EventIdGenerator,
-    event_origin_uri: &EventOriginUri,
+async fn build_response_events<'response>(
+    sink_url: &'response TremorURL,
+    event_id: &'response EventId,
+    response_ids: &'response mut EventIdGenerator,
+    event_origin_uri: &'response EventOriginUri,
+    request_meta: Value<'static>,
     mut response: Response,
-    codec: &mut dyn Codec,
-    codec_map: &mut HashMap<String, Box<dyn Codec>>,
-    preprocessors: &mut [Box<dyn Preprocessor>],
+    codec: &'response mut dyn Codec,
+    codec_map: &'response mut HashMap<String, Box<dyn Codec>>,
+    preprocessors: &'response mut [Box<dyn Preprocessor>],
 ) -> Result<Vec<Event>> {
     let mut meta = Value::object_with_capacity(1);
     let mut response_meta = Value::object_with_capacity(2);
@@ -848,7 +893,7 @@ async fn build_response_events(
     let numeric_status: u16 = response.status().into();
     response_meta.insert("status", numeric_status)?;
 
-    let mut headers = Value::object_with_capacity(8);
+    let mut response_headers = Value::object_with_capacity(8);
     {
         for (name, values) in response.iter() {
             let header_values: Value = values
@@ -856,10 +901,14 @@ async fn build_response_events(
                 .map(ToString::to_string)
                 .map(Value::from)
                 .collect();
-            headers.insert(name.to_string(), header_values)?;
+            response_headers.insert(name.to_string(), header_values)?;
         }
     }
-    response_meta.insert("headers", headers)?;
+
+    response_meta.insert("headers", response_headers)?;
+
+    response_meta.insert("request", request_meta)?;
+
     meta.insert("response", response_meta)?;
     // chose a codec
     let the_chosen_one = response
@@ -1144,7 +1193,7 @@ mod test {
         let mut default_headers = halfbrown::HashMap::with_capacity(2);
         default_headers.insert_nocheck("Server".to_string(), "Tremor".to_string());
         default_headers.insert_nocheck("Overwrite-Me".to_string(), "oh noes!".to_string());
-        let endpoint = Endpoint::from_str("http://localhost:65535/path&query=value#fragment")?;
+        let endpoint = Endpoint::from_str("http://localhost:65535/path?query=value#fragment")?;
         let request = build_request(
             &event,
             codec.as_ref(),
@@ -1178,6 +1227,13 @@ mod test {
         let mut response_id_gen = EventIdGenerator::new(sink_uid);
         let id = EventId::default();
         let event_origin_uri = EventOriginUri::default();
+        let mut request = http_types::Request::new(
+            Method::Get,
+            http_types::Url::parse("http://localhost:3000/path?query=value#fragment")?,
+        );
+        request.insert_header("Content-Type", "application/json");
+        let metadata = build_request_metadata(&Request::from(request))?;
+        println!("{:?}", metadata); // this is None
         let mut body = Body::from_string(r#"{"foo": true}"#.to_string());
         body.set_mime(http_types::mime::JSON);
         let mut response = http_types::Response::new(StatusCode::Ok);
@@ -1194,6 +1250,7 @@ mod test {
             &id,
             &mut response_id_gen,
             &event_origin_uri,
+            metadata,
             Response::from(response),
             codec.as_mut(),
             &mut codec_map,
@@ -1212,6 +1269,22 @@ mod test {
                         "multiple": ["first", "second"],
                         "server": ["Upstream"],
                         "content-type": ["application/json"]
+                    },
+                    "request": {
+                        "method": "GET",
+                        "headers": {
+                            "content-type": ["application/json"]
+                        },
+                        "endpoint": {
+                            "scheme": "http",
+                            "username": null,
+                            "password": null,
+                            "host": "localhost",
+                            "port": 3000_u64,
+                            "path": "/path",
+                            "query": "query=value",
+                            "fragment": "fragment"
+                        }
                     }
                 }
             })
