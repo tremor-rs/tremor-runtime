@@ -303,13 +303,12 @@ pub(crate) trait GroupByVisitor<'script> {
 
     fn walk_group_by(&mut self, group_by: &GroupByInt<'script>) {
         match group_by {
-            GroupByInt::Expr { expr, .. } => self.visit_expr(expr),
+            GroupByInt::Expr { expr, .. } | GroupByInt::Each { expr, .. } => self.visit_expr(expr),
             GroupByInt::Set { items, .. } => {
                 for inner_group_by in items {
                     self.walk_group_by(&inner_group_by.0)
                 }
             }
-            GroupByInt::Each { expr, .. } => self.visit_expr(expr),
         }
     }
 }
