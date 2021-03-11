@@ -15,11 +15,16 @@
 /// Base definition for expressions
 pub mod base_expr;
 pub(crate) mod binary;
+/// custom equality definition - checking for equivalence of different AST nodes
+/// e.g. two different event paths with different metadata
+pub mod eq;
 /// Query AST
 pub mod query;
 pub(crate) mod raw;
 mod support;
 mod upable;
+/// collection of AST visitors
+pub mod visitors;
 use crate::errors::{error_generic, error_no_consts, error_no_locals, ErrorKind, Result};
 use crate::impl_expr_mid;
 use crate::interpreter::{exec_binary, exec_unary, AggrType, Cont, Env, ExecOpts, LocalStack};
@@ -172,15 +177,6 @@ pub struct BytesPart<'script> {
 }
 impl_expr_mid!(BytesPart);
 
-impl<'script> AstEq for BytesPart<'script> {
-    fn ast_eq(&self, other: &Self) -> bool {
-        self.data_type == other.data_type
-            && self.endianess == other.endianess
-            && self.bits == other.bits
-            && self.data.0.ast_eq(&other.data.0)
-    }
-}
-
 /// Binary semiliteral
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Bytes<'script> {
@@ -232,17 +228,6 @@ impl<'script> Bytes<'script> {
         } else {
             Ok(ImutExprInt::Bytes(self))
         }
-    }
-}
-
-impl<'script> AstEq for Bytes<'script> {
-    fn ast_eq(&self, other: &Self) -> bool {
-        self.value.len() == other.value.len()
-            && self
-                .value
-                .iter()
-                .zip(other.value.iter())
-                .all(|(b1, b2)| b1.ast_eq(b2))
     }
 }
 
@@ -772,17 +757,6 @@ impl<'script> Record<'script> {
     }
 }
 
-impl<'script> AstEq for Record<'script> {
-    fn ast_eq(&self, other: &Self) -> bool {
-        self.fields.len() == other.fields.len()
-            && self
-                .fields
-                .iter()
-                .zip(other.fields.iter())
-                .all(|(f1, f2)| f1.name.ast_eq(&f2.name) && f1.value.ast_eq(&f2.value))
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulation of a list structure
 pub struct List<'script> {
@@ -811,17 +785,6 @@ impl<'script> List<'script> {
     }
 }
 
-impl<'script> AstEq for List<'script> {
-    fn ast_eq(&self, other: &Self) -> bool {
-        self.exprs.len() == other.exprs.len()
-            && self
-                .exprs
-                .iter()
-                .zip(other.exprs.iter())
-                .all(|(e1, e2)| e1.0.ast_eq(&e2.0))
-    }
-}
-
 /// A Literal
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Literal<'script> {
@@ -831,12 +794,6 @@ pub struct Literal<'script> {
     pub value: Value<'script>,
 }
 impl_expr_mid!(Literal);
-
-impl<'script> AstEq for Literal<'script> {
-    fn ast_eq(&self, other: &Self) -> bool {
-        self.value == other.value
-    }
-}
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub(crate) struct FnDecl<'script> {
@@ -850,26 +807,6 @@ pub(crate) struct FnDecl<'script> {
 }
 impl_expr_mid!(FnDecl);
 
-fn path_eq<'script>(path: &Path<'script>, expr: &ImutExprInt<'script>) -> bool {
-    let path_expr: ImutExprInt = ImutExprInt::Path(path.clone());
-
-    let target_expr = match expr.clone() {
-        ImutExprInt::Local {
-            //id,
-            idx,
-            mid,
-            is_const,
-        } => ImutExprInt::Path(Path::Local(LocalPath {
-            //id,
-            segments: vec![],
-            idx,
-            mid,
-            is_const,
-        })),
-        other => other,
-    };
-    path_expr == target_expr
-}
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Legal expression forms
 pub enum Expr<'script> {
@@ -944,14 +881,6 @@ impl<'script> BaseExpr for ImutExpr<'script> {
     }
 }
 
-/// some special kind of equivalence between expressions
-/// ignoring metadata ids
-#[allow(clippy::module_name_repetitions)]
-pub trait AstEq<T = Self> {
-    /// returns true if both self and other are the same, ignoring the `mid`
-    fn ast_eq(&self, other: &T) -> bool;
-}
-
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulates an immutable expression
 pub enum ImutExprInt<'script> {
@@ -1009,49 +938,6 @@ pub enum ImutExprInt<'script> {
     Bytes(Bytes<'script>),
 }
 
-impl<'script> AstEq for ImutExprInt<'script> {
-    fn ast_eq(&self, other: &Self) -> bool {
-        use ImutExprInt::{
-            Binary, Bytes, Comprehension, Invoke, Invoke1, Invoke2, Invoke3, InvokeAggr, List,
-            Literal, Local, Match, Merge, Patch, Path, Present, Record, Recur, String, Unary,
-        };
-        match (self, other) {
-            (Record(r1), Record(r2)) => r1.ast_eq(r2),
-            (List(l1), List(l2)) => l1.ast_eq(l2),
-            (Binary(b1), Binary(b2)) => b1.ast_eq(b2),
-            (Unary(u1), Unary(u2)) => u1.ast_eq(u2),
-            (Patch(p1), Patch(p2)) => p1.ast_eq(p2),
-            (Match(m1), Match(m2)) => m1.ast_eq(m2),
-            (Comprehension(c1), Comprehension(c2)) => c1.ast_eq(c2),
-            (Merge(m1), Merge(m2)) => m1.ast_eq(m2),
-            (Path(p1), Path(p2)) => p1.ast_eq(p2),
-            (String(s1), String(s2)) => s1.ast_eq(s2),
-            (
-                Local {
-                    idx: idx1,
-                    is_const: const1,
-                    ..
-                },
-                Local {
-                    idx: idx2,
-                    is_const: const2,
-                    ..
-                },
-            ) => idx1 == idx2 && const1 == const2,
-            (Literal(l1), Literal(l2)) => l1.ast_eq(l2),
-            (Present { path: path1, .. }, Present { path: path2, .. }) => path1.ast_eq(path2),
-            (Invoke1(i1), Invoke1(i2))
-            | (Invoke2(i1), Invoke2(i2))
-            | (Invoke3(i1), Invoke3(i2))
-            | (Invoke(i1), Invoke(i2)) => i1.ast_eq(i2),
-            (InvokeAggr(i1), InvokeAggr(i2)) => i1.ast_eq(i2),
-            (Recur(r1), Recur(r2)) => r1.ast_eq(r2),
-            (Bytes(b1), Bytes(b2)) => b1.ast_eq(b2),
-            _ => false,
-        }
-    }
-}
-
 fn is_lit(e: &ImutExprInt) -> bool {
     matches!(e, ImutExprInt::Literal(_))
 }
@@ -1066,17 +952,6 @@ pub struct StringLit<'script> {
 }
 impl_expr_mid!(StringLit);
 
-impl<'script> AstEq for StringLit<'script> {
-    fn ast_eq(&self, other: &Self) -> bool {
-        self.elements.len() == other.elements.len()
-            && self
-                .elements
-                .iter()
-                .zip(other.elements.iter())
-                .all(|(e1, e2)| e1.ast_eq(e2))
-    }
-}
-
 /// A part of a string literal with interpolation
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum StrLitElement<'script> {
@@ -1084,15 +959,6 @@ pub enum StrLitElement<'script> {
     Lit(Cow<'script, str>),
     /// An expression in a string interpolation
     Expr(ImutExprInt<'script>),
-}
-
-impl<'script> AstEq for StrLitElement<'script> {
-    fn ast_eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::Expr(e1), Self::Expr(e2)) => e1.ast_eq(e2),
-            _ => self == other,
-        }
-    }
 }
 
 /// we're forced to make this pub because of lalrpop
@@ -1174,20 +1040,6 @@ impl<'script> Invoke<'script> {
     }
 }
 
-impl<'script> AstEq for Invoke<'script> {
-    fn ast_eq(&self, other: &Self) -> bool {
-        self.module.eq(&other.module)
-            && self.fun == other.fun
-            && self.invocable.ast_eq(&other.invocable)
-            && self.args.len() == other.args.len()
-            && self
-                .args
-                .iter()
-                .zip(other.args.iter())
-                .all(|(a1, a2)| a1.0.ast_eq(&a2.0))
-    }
-}
-
 #[derive(Clone)]
 /// An invocable expression form
 pub enum Invocable<'script> {
@@ -1234,16 +1086,6 @@ impl<'script> Invocable<'script> {
     }
 }
 
-impl<'script> AstEq for Invocable<'script> {
-    fn ast_eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::Intrinsic(wrapper1), Self::Intrinsic(wrapper2)) => wrapper1.ast_eq(wrapper2),
-            (Self::Tremor(custom1), Self::Tremor(custom2)) => custom1.ast_eq(custom2),
-            _ => false,
-        }
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulates the tail-recursion entry-point in a tail-recursive function
 pub struct Recur<'script> {
@@ -1258,19 +1100,6 @@ pub struct Recur<'script> {
 }
 impl_expr_mid!(Recur);
 
-impl<'script> AstEq for Recur<'script> {
-    fn ast_eq(&self, other: &Self) -> bool {
-        self.argc == other.argc
-            && self.open == other.open
-            && self.exprs.len() == other.exprs.len()
-            && self
-                .exprs
-                .iter()
-                .zip(other.exprs.iter())
-                .all(|(e1, e2)| e1.0.ast_eq(&e2.0))
-    }
-}
-
 #[derive(Clone, Serialize)]
 /// Encapsulates an Aggregate function invocation
 pub struct InvokeAggr {
@@ -1282,12 +1111,6 @@ pub struct InvokeAggr {
     pub fun: String,
     /// Unique Id of this instance
     pub aggr_id: usize,
-}
-
-impl AstEq for InvokeAggr {
-    fn ast_eq(&self, other: &Self) -> bool {
-        self.aggr_id == other.aggr_id && self.module == other.module && self.fun == other.fun
-    }
 }
 
 /// A Invocable aggregate function
@@ -1317,12 +1140,6 @@ pub struct TestExpr {
     pub extractor: Extractor,
 }
 
-impl AstEq for TestExpr {
-    fn ast_eq(&self, other: &Self) -> bool {
-        self.id == other.id && self.test == other.test && self.extractor == other.extractor
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulates a match expression form
 pub struct Match<'script> {
@@ -1347,17 +1164,6 @@ pub struct ImutMatch<'script> {
 }
 impl_expr_mid!(ImutMatch);
 
-impl<'script> AstEq for ImutMatch<'script> {
-    fn ast_eq(&self, other: &Self) -> bool {
-        self.target.ast_eq(&other.target)
-            && self.patterns.len() == other.patterns.len()
-            && self
-                .patterns
-                .iter()
-                .zip(other.patterns.iter())
-                .all(|(p1, p2)| p1.ast_eq(&p2))
-    }
-}
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulates a predicate expression form
 pub struct PredicateClause<'script> {
@@ -1388,18 +1194,6 @@ pub struct ImutPredicateClause<'script> {
 }
 impl_expr_mid!(ImutPredicateClause);
 
-impl<'script> AstEq for ImutPredicateClause<'script> {
-    fn ast_eq(&self, other: &Self) -> bool {
-        self.expr.0.ast_eq(&other.expr.0)
-            && match (self.guard.as_ref(), other.guard.as_ref()) {
-                (Some(expr1), Some(expr2)) => expr1.ast_eq(expr2),
-                (None, None) => true,
-                _ => false,
-            }
-            && self.pattern.ast_eq(&other.pattern)
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulates a path expression form
 pub struct Patch<'script> {
@@ -1411,18 +1205,6 @@ pub struct Patch<'script> {
     pub operations: PatchOperations<'script>,
 }
 impl_expr_mid!(Patch);
-
-impl<'script> AstEq for Patch<'script> {
-    fn ast_eq(&self, other: &Self) -> bool {
-        self.target.ast_eq(&other.target)
-            && self.operations.len() == other.operations.len()
-            && self
-                .operations
-                .iter()
-                .zip(other.operations.iter())
-                .all(|(o1, o2)| o1.ast_eq(o2))
-    }
-}
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulates patch operation forms
@@ -1481,60 +1263,6 @@ pub enum PatchOperation<'script> {
     },
 }
 
-impl<'script> AstEq for PatchOperation<'script> {
-    fn ast_eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (
-                Self::Insert {
-                    ident: i1,
-                    expr: e1,
-                },
-                Self::Insert {
-                    ident: i2,
-                    expr: e2,
-                },
-            )
-            | (
-                Self::Upsert {
-                    ident: i1,
-                    expr: e1,
-                },
-                Self::Upsert {
-                    ident: i2,
-                    expr: e2,
-                },
-            )
-            | (
-                Self::Update {
-                    ident: i1,
-                    expr: e1,
-                },
-                Self::Update {
-                    ident: i2,
-                    expr: e2,
-                },
-            )
-            | (
-                Self::Merge {
-                    ident: i1,
-                    expr: e1,
-                },
-                Self::Merge {
-                    ident: i2,
-                    expr: e2,
-                },
-            ) => i1.ast_eq(i2) && e1.ast_eq(e2),
-            (Self::Erase { ident: i1 }, Self::Erase { ident: i2 }) => i1.ast_eq(i2),
-            (Self::Copy { from: f1, to: t1 }, Self::Copy { from: f2, to: t2 })
-            | (Self::Move { from: f1, to: t1 }, Self::Move { from: f2, to: t2 }) => {
-                f1.ast_eq(f2) && t1.ast_eq(t2)
-            }
-            (Self::TupleMerge { expr: e1 }, Self::TupleMerge { expr: e2 }) => e1.ast_eq(e2),
-            _ => false,
-        }
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulates a merge form
 pub struct Merge<'script> {
@@ -1546,12 +1274,6 @@ pub struct Merge<'script> {
     pub expr: ImutExprInt<'script>,
 }
 impl_expr_mid!(Merge);
-
-impl<'script> AstEq for Merge<'script> {
-    fn ast_eq(&self, other: &Self) -> bool {
-        self.target.ast_eq(&other.target) && self.expr.ast_eq(&other.expr)
-    }
-}
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulates a structure comprehension form
@@ -1584,20 +1306,6 @@ pub struct ImutComprehension<'script> {
     pub cases: ImutComprehensionCases<'script>,
 }
 impl_expr_mid!(ImutComprehension);
-
-impl<'script> AstEq for ImutComprehension<'script> {
-    fn ast_eq(&self, other: &Self) -> bool {
-        self.key_id == other.key_id
-            && self.val_id == other.val_id
-            && self.target.ast_eq(&other.target)
-            && self.cases.len() == other.cases.len()
-            && self
-                .cases
-                .iter()
-                .zip(other.cases.iter())
-                .all(|(c1, c2)| c1.ast_eq(c2))
-    }
-}
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulates a comprehension case application
@@ -1633,19 +1341,6 @@ pub struct ImutComprehensionCase<'script> {
 }
 impl_expr_mid!(ImutComprehensionCase);
 
-impl<'script> AstEq for ImutComprehensionCase<'script> {
-    fn ast_eq(&self, other: &Self) -> bool {
-        self.key_name == other.key_name
-            && self.value_name == other.value_name
-            && match (self.guard.as_ref(), other.guard.as_ref()) {
-                (Some(g1), Some(g2)) => g1.ast_eq(g2),
-                (None, None) => true,
-                _ => false,
-            }
-            && self.expr.0.ast_eq(&other.expr.0)
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulates predicate pattern form
 pub enum Pattern<'script> {
@@ -1671,19 +1366,6 @@ impl<'script> Pattern<'script> {
     }
     fn is_assign(&self) -> bool {
         matches!(self, Pattern::Assign(_))
-    }
-}
-
-impl<'script> AstEq for Pattern<'script> {
-    fn ast_eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::Record(r1), Self::Record(r2)) => r1.ast_eq(r2),
-            (Self::Array(a1), Self::Array(a2)) => a1.ast_eq(a2),
-            (Self::Expr(e1), Self::Expr(e2)) => e1.ast_eq(e2),
-            (Self::Assign(a1), Self::Assign(a2)) => a1.ast_eq(a2),
-            (Self::Tuple(t1), Self::Tuple(t2)) => t1.ast_eq(t2),
-            _ => self == other,
-        }
     }
 }
 
@@ -1784,66 +1466,6 @@ impl<'script> PredicatePattern<'script> {
     }
 }
 
-impl<'script> AstEq for PredicatePattern<'script> {
-    fn ast_eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (
-                Self::TildeEq {
-                    assign: a1,
-                    lhs: l1,
-                    key: k1,
-                    test: t1,
-                },
-                Self::TildeEq {
-                    assign: a2,
-                    lhs: l2,
-                    key: k2,
-                    test: t2,
-                },
-            ) => a1 == a2 && l1 == l2 && k1 == k2 && t1.ast_eq(t2.as_ref()),
-            (
-                Self::Bin {
-                    lhs: l1,
-                    key: k1,
-                    rhs: r1,
-                    kind: kind1,
-                },
-                Self::Bin {
-                    lhs: l2,
-                    key: k2,
-                    rhs: r2,
-                    kind: kind2,
-                },
-            ) => l1 == l2 && k1 == k2 && kind1 == kind2 && r1.ast_eq(r2),
-            (
-                Self::RecordPatternEq {
-                    lhs: l1,
-                    key: k1,
-                    pattern: p1,
-                },
-                Self::RecordPatternEq {
-                    lhs: l2,
-                    key: k2,
-                    pattern: p2,
-                },
-            ) => l1 == l2 && k1 == k2 && p1.ast_eq(p2),
-            (
-                Self::ArrayPatternEq {
-                    lhs: l1,
-                    key: k1,
-                    pattern: p1,
-                },
-                Self::ArrayPatternEq {
-                    lhs: l2,
-                    key: k2,
-                    pattern: p2,
-                },
-            ) => l1 == l2 && k1 == k2 && p1.ast_eq(p2),
-            _ => self == other,
-        }
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulates a record pattern
 pub struct RecordPattern<'script> {
@@ -1853,17 +1475,6 @@ pub struct RecordPattern<'script> {
     pub fields: PatternFields<'script>,
 }
 impl_expr_mid!(RecordPattern);
-
-impl<'script> AstEq for RecordPattern<'script> {
-    fn ast_eq(&self, other: &Self) -> bool {
-        self.fields.len() == other.fields.len()
-            && self
-                .fields
-                .iter()
-                .zip(other.fields.iter())
-                .all(|(f1, f2)| f1.ast_eq(&f2))
-    }
-}
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulates an array predicate pattern
@@ -1878,17 +1489,6 @@ pub enum ArrayPredicatePattern<'script> {
     Ignore,
 }
 
-impl<'script> AstEq for ArrayPredicatePattern<'script> {
-    fn ast_eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::Expr(e1), Self::Expr(e2)) => e1.ast_eq(e2),
-            (Self::Tilde(t1), Self::Tilde(t2)) => t1.ast_eq(t2.as_ref()),
-            (Self::Record(r1), Self::Record(r2)) => r1.ast_eq(r2),
-            _ => self == other,
-        }
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulates an array pattern
 pub struct ArrayPattern<'script> {
@@ -1899,17 +1499,6 @@ pub struct ArrayPattern<'script> {
 }
 impl_expr_mid!(ArrayPattern);
 
-impl<'script> AstEq for ArrayPattern<'script> {
-    fn ast_eq(&self, other: &Self) -> bool {
-        self.exprs.len() == other.exprs.len()
-            && self
-                .exprs
-                .iter()
-                .zip(other.exprs.iter())
-                .all(|(e1, e2)| e1.ast_eq(e2))
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulates an assignment pattern
 pub struct AssignPattern<'script> {
@@ -1919,12 +1508,6 @@ pub struct AssignPattern<'script> {
     pub idx: usize,
     /// Nested predicate pattern
     pub pattern: Box<Pattern<'script>>,
-}
-
-impl<'script> AstEq for AssignPattern<'script> {
-    fn ast_eq(&self, other: &Self) -> bool {
-        self.id == other.id && self.idx == other.idx && self.pattern.ast_eq(other.pattern.as_ref())
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -1938,18 +1521,6 @@ pub struct TuplePattern<'script> {
     pub open: bool,
 }
 impl_expr_mid!(TuplePattern);
-
-impl<'script> AstEq for TuplePattern<'script> {
-    fn ast_eq(&self, other: &Self) -> bool {
-        self.open == other.open
-            && self.exprs.len() == other.exprs.len()
-            && self
-                .exprs
-                .iter()
-                .zip(other.exprs.iter())
-                .all(|(e1, e2)| e1.ast_eq(e2))
-    }
-}
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Represents a path-like-structure
@@ -2011,20 +1582,6 @@ impl<'script> Path<'script> {
     }
 }
 
-impl<'script> AstEq for Path<'script> {
-    fn ast_eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::Const(c1), Self::Const(c2)) => c1.ast_eq(c2),
-            (Self::Local(l1), Self::Local(l2)) => l1.ast_eq(l2),
-            (Self::Event(e1), Self::Event(e2)) => e1.ast_eq(e2),
-            (Self::State(s1), Self::State(s2)) => s1.ast_eq(s2),
-            (Self::Meta(m1), Self::Meta(m2)) => m1.ast_eq(m2),
-            (Self::Reserved(r1), Self::Reserved(r2)) => r1.ast_eq(r2),
-            _ => false,
-        }
-    }
-}
-
 #[derive(Clone, Debug, Serialize)]
 /// A Path segment
 pub enum Segment<'script> {
@@ -2065,29 +1622,6 @@ pub enum Segment<'script> {
     },
 }
 
-impl<'script> AstEq for Segment<'script> {
-    fn ast_eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::Id { key: k1, .. }, Self::Id { key: k2, .. }) => k1 == k2,
-            (Self::Idx { idx: i1, .. }, Self::Idx { idx: i2, .. }) => i1 == i2,
-            (Self::Element { expr: e1, .. }, Self::Element { expr: e2, .. }) => e1.ast_eq(e2),
-            (
-                Self::Range {
-                    range_start: s1,
-                    range_end: e1,
-                    ..
-                },
-                Self::Range {
-                    range_start: s2,
-                    range_end: e2,
-                    ..
-                },
-            ) => s1.ast_eq(s2.as_ref()) && e1.ast_eq(e2.as_ref()),
-            _ => false,
-        }
-    }
-}
-
 #[derive(Clone, Debug, Serialize)]
 /// A path local to the current program
 pub struct LocalPath<'script> {
@@ -2102,19 +1636,6 @@ pub struct LocalPath<'script> {
 }
 impl_expr_mid!(LocalPath);
 
-impl<'script> AstEq for LocalPath<'script> {
-    fn ast_eq(&self, other: &Self) -> bool {
-        self.idx == other.idx
-            && self.is_const == other.is_const
-            && self.segments.len() == other.segments.len()
-            && self
-                .segments
-                .iter()
-                .zip(other.segments.iter())
-                .all(|(s1, s2)| s1.ast_eq(s2))
-    }
-}
-
 #[derive(Clone, Debug, Serialize)]
 /// A metadata path
 pub struct MetadataPath<'script> {
@@ -2124,17 +1645,6 @@ pub struct MetadataPath<'script> {
     pub segments: Segments<'script>,
 }
 impl_expr_mid!(MetadataPath);
-
-impl<'script> AstEq for MetadataPath<'script> {
-    fn ast_eq(&self, other: &Self) -> bool {
-        self.segments.len() == other.segments.len()
-            && self
-                .segments
-                .iter()
-                .zip(other.segments.iter())
-                .all(|(s1, s2)| s1.ast_eq(s2))
-    }
-}
 
 /// Reserved keyword path
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -2182,19 +1692,6 @@ impl<'script> BaseExpr for ReservedPath<'script> {
     }
 }
 
-impl<'script> AstEq for ReservedPath<'script> {
-    fn ast_eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::Args { segments: s1, .. }, Self::Args { segments: s2, .. })
-            | (Self::Window { segments: s1, .. }, Self::Window { segments: s2, .. })
-            | (Self::Group { segments: s1, .. }, Self::Group { segments: s2, .. }) => {
-                s1.len() == s2.len() && s1.iter().zip(s2.iter()).all(|(s1, s2)| s1.ast_eq(s2))
-            }
-            _ => false,
-        }
-    }
-}
-
 #[derive(Clone, Debug, Serialize)]
 /// The path representing the current in-flight event
 pub struct EventPath<'script> {
@@ -2205,17 +1702,6 @@ pub struct EventPath<'script> {
 }
 impl_expr_mid!(EventPath);
 
-impl<'script> AstEq for EventPath<'script> {
-    fn ast_eq(&self, other: &Self) -> bool {
-        self.segments.len() == other.segments.len()
-            && self
-                .segments
-                .iter()
-                .zip(other.segments.iter())
-                .all(|(s1, s2)| s1.ast_eq(s2))
-    }
-}
-
 #[derive(Clone, Debug, Serialize)]
 /// The path representing captured program state
 pub struct StatePath<'script> {
@@ -2225,17 +1711,6 @@ pub struct StatePath<'script> {
     pub segments: Segments<'script>,
 }
 impl_expr_mid!(StatePath);
-
-impl<'script> AstEq for StatePath<'script> {
-    fn ast_eq(&self, other: &Self) -> bool {
-        self.segments.len() == other.segments.len()
-            && self
-                .segments
-                .iter()
-                .zip(other.segments.iter())
-                .all(|(s1, s2)| s1.ast_eq(s2))
-    }
-}
 
 /// we're forced to make this pub because of lalrpop
 #[derive(Copy, Clone, Debug, PartialEq, Serialize)]
@@ -2322,12 +1797,6 @@ impl<'script> BinExpr<'script> {
     }
 }
 
-impl<'script> AstEq for BinExpr<'script> {
-    fn ast_eq(&self, other: &Self) -> bool {
-        self.kind == other.kind && self.lhs.ast_eq(&other.lhs) && self.rhs.ast_eq(&other.rhs)
-    }
-}
-
 /// we're forced to make this pub because of lalrpop
 #[derive(Copy, Clone, Debug, PartialEq, Serialize)]
 pub enum UnaryOpKind {
@@ -2381,437 +1850,6 @@ impl<'script> UnaryExpr<'script> {
             }
             u1 => Ok(ImutExprInt::Unary(Box::new(u1))),
         }
-    }
-}
-
-impl<'script> AstEq for UnaryExpr<'script> {
-    fn ast_eq(&self, other: &Self) -> bool {
-        self.kind == other.kind && self.expr.ast_eq(&other.expr)
-    }
-}
-
-/// Return value from visit methods for `ImutExprIntVisitor`
-/// controlling whether to continue walking the subtree or not
-pub enum VisitRes {
-    /// carry on walking
-    Walk,
-    /// stop walking
-    Stop,
-}
-
-use VisitRes::Walk;
-
-/// Visitor for traversing all `ImutExprInt`s within the given `ImutExprInt`
-///
-/// Implement your custom expr visiting logic by overwriting the visit_* methods.
-/// You do not need to traverse further down. This is done by the provided `walk_*` methods.
-/// The walk_* methods implement walking the expression tree, those do not need to be changed.
-pub trait ImutExprIntVisitor<'script> {
-    /// visit a record
-    fn visit_record(&mut self, _record: &mut Record<'script>) -> Result<VisitRes> {
-        Ok(Walk)
-    }
-    /// walk a record
-    fn walk_record(&mut self, record: &mut Record<'script>) -> Result<()> {
-        for field in &mut record.fields {
-            self.walk_expr(&mut field.name)?;
-            self.walk_expr(&mut field.value)?;
-        }
-        Ok(())
-    }
-    /// visit a list
-    fn visit_list(&mut self, _list: &mut List<'script>) -> Result<VisitRes> {
-        Ok(Walk)
-    }
-    /// walk a list
-    fn walk_list(&mut self, list: &mut List<'script>) -> Result<()> {
-        for element in &mut list.exprs {
-            self.walk_expr(&mut element.0)?;
-        }
-        Ok(())
-    }
-    /// visit a binary
-    fn visit_binary(&mut self, _binary: &mut BinExpr<'script>) -> Result<VisitRes> {
-        Ok(Walk)
-    }
-    /// walk a binary
-    fn walk_binary(&mut self, binary: &mut BinExpr<'script>) -> Result<()> {
-        self.walk_expr(&mut binary.lhs)?;
-        self.walk_expr(&mut binary.rhs)
-    }
-
-    /// visit a unary expr
-    fn visit_unary(&mut self, _unary: &mut UnaryExpr<'script>) -> Result<VisitRes> {
-        Ok(Walk)
-    }
-    /// walk a unary
-    fn walk_unary(&mut self, unary: &mut UnaryExpr<'script>) -> Result<()> {
-        self.walk_expr(&mut unary.expr)
-    }
-
-    /// visit a patch expr
-    fn visit_patch(&mut self, _patch: &mut Patch<'script>) -> Result<VisitRes> {
-        Ok(Walk)
-    }
-    /// walk a patch expr
-    fn walk_patch(&mut self, patch: &mut Patch<'script>) -> Result<()> {
-        self.walk_expr(&mut patch.target)?;
-        for op in &mut patch.operations {
-            match op {
-                PatchOperation::Insert { ident, expr }
-                | PatchOperation::Merge { ident, expr }
-                | PatchOperation::Update { ident, expr }
-                | PatchOperation::Upsert { ident, expr } => {
-                    self.walk_expr(ident)?;
-                    self.walk_expr(expr)?;
-                }
-                PatchOperation::Copy { from, to } | PatchOperation::Move { from, to } => {
-                    self.walk_expr(from)?;
-                    self.walk_expr(to)?;
-                }
-                PatchOperation::Erase { ident } => {
-                    self.walk_expr(ident)?;
-                }
-                PatchOperation::TupleMerge { expr } => {
-                    self.walk_expr(expr)?;
-                }
-            }
-        }
-        Ok(())
-    }
-    /// visit a match expr
-    fn visit_match(&mut self, _mmatch: &mut ImutMatch<'script>) -> Result<VisitRes> {
-        Ok(Walk)
-    }
-    /// walk a match expr
-    fn walk_match(&mut self, mmatch: &mut ImutMatch<'script>) -> Result<()> {
-        self.walk_expr(&mut mmatch.target)?;
-        for predicate in &mut mmatch.patterns {
-            self.walk_match_patterns(&mut predicate.pattern)?;
-            if let Some(guard) = &mut predicate.guard {
-                self.walk_expr(guard)?;
-            }
-            self.walk_expr(&mut predicate.expr.0)?;
-        }
-        Ok(())
-    }
-    /// walk match patterns
-    fn walk_match_patterns(&mut self, pattern: &mut Pattern<'script>) -> Result<()> {
-        match pattern {
-            Pattern::Record(record_pat) => {
-                self.walk_record_pattern(record_pat)?;
-            }
-            Pattern::Array(array_pat) => {
-                self.walk_array_pattern(array_pat)?;
-            }
-            Pattern::Expr(expr) => {
-                self.walk_expr(expr)?;
-            }
-            Pattern::Assign(assign_pattern) => {
-                self.walk_match_patterns(assign_pattern.pattern.as_mut())?;
-            }
-            Pattern::Tuple(tuple_pattern) => {
-                for elem in &mut tuple_pattern.exprs {
-                    match elem {
-                        ArrayPredicatePattern::Expr(expr) => {
-                            self.walk_expr(expr)?;
-                        }
-                        ArrayPredicatePattern::Record(record_pattern) => {
-                            self.walk_record_pattern(record_pattern)?;
-                        }
-                        _ => {}
-                    }
-                }
-            }
-            _ => {}
-        }
-        Ok(())
-    }
-    /// walk a record pattern
-    fn walk_record_pattern(&mut self, record_pattern: &mut RecordPattern<'script>) -> Result<()> {
-        for field in &mut record_pattern.fields {
-            match field {
-                PredicatePattern::RecordPatternEq { pattern, .. } => {
-                    self.walk_record_pattern(pattern)?;
-                }
-                PredicatePattern::Bin { rhs, .. } => {
-                    self.walk_expr(rhs)?;
-                }
-                PredicatePattern::ArrayPatternEq { pattern, .. } => {
-                    self.walk_array_pattern(pattern)?;
-                }
-                _ => {}
-            }
-        }
-        Ok(())
-    }
-    /// walk an array pattern
-    fn walk_array_pattern(&mut self, array_pattern: &mut ArrayPattern<'script>) -> Result<()> {
-        for elem in &mut array_pattern.exprs {
-            match elem {
-                ArrayPredicatePattern::Expr(expr) => {
-                    self.walk_expr(expr)?;
-                }
-                ArrayPredicatePattern::Record(record_pattern) => {
-                    self.walk_record_pattern(record_pattern)?;
-                }
-                _ => {}
-            }
-        }
-        Ok(())
-    }
-
-    /// visit a comprehension
-    fn visit_comprehension(&mut self, _comp: &mut ImutComprehension<'script>) -> Result<VisitRes> {
-        Ok(Walk)
-    }
-    /// walk a comprehension
-    fn walk_comprehension(&mut self, comp: &mut ImutComprehension<'script>) -> Result<()> {
-        self.walk_expr(&mut comp.target)?;
-        for comp_case in &mut comp.cases {
-            if let Some(guard) = &mut comp_case.guard {
-                self.walk_expr(guard)?;
-            }
-            self.walk_expr(&mut comp_case.expr.0)?;
-        }
-        Ok(())
-    }
-
-    /// visit a merge expr
-    fn visit_merge(&mut self, _merge: &mut Merge<'script>) -> Result<VisitRes> {
-        Ok(Walk)
-    }
-    /// walk a merge expr
-    fn walk_merge(&mut self, merge: &mut Merge<'script>) -> Result<()> {
-        self.walk_expr(&mut merge.target)?;
-        self.walk_expr(&mut merge.expr)
-    }
-
-    /// visit a path
-    fn visit_path(&mut self, _path: &mut Path<'script>) -> Result<VisitRes> {
-        Ok(Walk)
-    }
-    /// walk a path
-    fn walk_path(&mut self, path: &mut Path<'script>) -> Result<()> {
-        let segments = match path {
-            Path::Const(LocalPath { segments, .. })
-            | Path::Local(LocalPath { segments, .. })
-            | Path::Event(EventPath { segments, .. })
-            | Path::State(StatePath { segments, .. })
-            | Path::Meta(MetadataPath { segments, .. })
-            | Path::Reserved(ReservedPath::Args { segments, .. })
-            | Path::Reserved(ReservedPath::Group { segments, .. })
-            | Path::Reserved(ReservedPath::Window { segments, .. }) => segments,
-        };
-        for segment in segments {
-            match segment {
-                Segment::Element { expr, .. } => {
-                    self.walk_expr(expr)?;
-                }
-                Segment::Range {
-                    range_start,
-                    range_end,
-                    ..
-                } => {
-                    self.walk_expr(range_start.as_mut())?;
-                    self.walk_expr(range_end.as_mut())?;
-                }
-                _ => {}
-            }
-        }
-        Ok(())
-    }
-
-    /// visit a string
-    fn visit_string(&mut self, _string: &mut StringLit<'script>) -> Result<VisitRes> {
-        Ok(Walk)
-    }
-    /// walk a string
-    fn walk_string(&mut self, string: &mut StringLit<'script>) -> Result<()> {
-        for element in &mut string.elements {
-            if let StrLitElement::Expr(expr) = element {
-                self.walk_expr(expr)?
-            }
-        }
-        Ok(())
-    }
-
-    /// visit a local
-    fn visit_local(&mut self, _local_idx: &mut usize) -> Result<VisitRes> {
-        Ok(Walk)
-    }
-
-    /// visit a present expr
-    fn visit_present(&mut self, _path: &mut Path<'script>) -> Result<VisitRes> {
-        Ok(Walk)
-    }
-
-    /// visit an invoke expr
-    fn visit_invoke(&mut self, _invoke: &mut Invoke<'script>) -> Result<VisitRes> {
-        Ok(Walk)
-    }
-    /// walk an invoke expr
-    fn walk_invoke(&mut self, invoke: &mut Invoke<'script>) -> Result<()> {
-        for arg in &mut invoke.args {
-            self.walk_expr(&mut arg.0)?;
-        }
-        Ok(())
-    }
-
-    /// visit an invoke1 expr
-    fn visit_invoke1(&mut self, _invoke: &mut Invoke<'script>) -> Result<VisitRes> {
-        Ok(Walk)
-    }
-    /// visit an invoke2 expr
-    fn visit_invoke2(&mut self, _invoke: &mut Invoke<'script>) -> Result<VisitRes> {
-        Ok(Walk)
-    }
-    /// visit an invoke3 expr
-    fn visit_invoke3(&mut self, _invoke: &mut Invoke<'script>) -> Result<VisitRes> {
-        Ok(Walk)
-    }
-
-    /// visit an `invoke_aggr` expr
-    fn visit_invoke_aggr(&mut self, _invoke_aggr: &mut InvokeAggr) -> Result<VisitRes> {
-        Ok(Walk)
-    }
-
-    /// visit a recur expr
-    fn visit_recur(&mut self, _recur: &mut Recur<'script>) -> Result<VisitRes> {
-        Ok(Walk)
-    }
-    /// walk a recur expr
-    fn walk_recur(&mut self, recur: &mut Recur<'script>) -> Result<()> {
-        for expr in &mut recur.exprs {
-            self.walk_expr(&mut expr.0)?;
-        }
-        Ok(())
-    }
-
-    /// visit bytes
-    fn visit_bytes(&mut self, _bytes: &mut Bytes<'script>) -> Result<VisitRes> {
-        Ok(Walk)
-    }
-    /// walk bytes
-    fn walk_bytes(&mut self, bytes: &mut Bytes<'script>) -> Result<()> {
-        for part in &mut bytes.value {
-            self.walk_expr(&mut part.data.0)?;
-        }
-        Ok(())
-    }
-
-    /// visit a literal
-    fn visit_literal(&mut self, _literal: &mut Literal<'script>) -> Result<VisitRes> {
-        Ok(Walk)
-    }
-
-    /// visit a generic `ImutExprInt` (this is called before the concrete `visit_*` method)
-    fn visit_expr(&mut self, _e: &mut ImutExprInt<'script>) -> Result<VisitRes> {
-        Ok(Walk)
-    }
-
-    /// entry point into this visitor - call this to start visiting the given expression `e`
-    fn walk_expr(&mut self, e: &mut ImutExprInt<'script>) -> Result<()> {
-        if let Walk = self.visit_expr(e)? {
-            match e {
-                ImutExprInt::Record(record) => {
-                    if let Walk = self.visit_record(record)? {
-                        self.walk_record(record)?;
-                    }
-                }
-                ImutExprInt::List(list) => {
-                    if let Walk = self.visit_list(list)? {
-                        self.walk_list(list)?;
-                    }
-                }
-                ImutExprInt::Binary(binary) => {
-                    if let Walk = self.visit_binary(binary.as_mut())? {
-                        self.walk_binary(binary.as_mut())?;
-                    }
-                }
-                ImutExprInt::Unary(unary) => {
-                    if let Walk = self.visit_unary(unary.as_mut())? {
-                        self.walk_unary(unary.as_mut())?;
-                    }
-                }
-                ImutExprInt::Patch(patch) => {
-                    if let Walk = self.visit_patch(patch.as_mut())? {
-                        self.walk_patch(patch.as_mut())?;
-                    }
-                }
-                ImutExprInt::Match(mmatch) => {
-                    if let Walk = self.visit_match(mmatch.as_mut())? {
-                        self.walk_match(mmatch.as_mut())?;
-                    }
-                }
-                ImutExprInt::Comprehension(comp) => {
-                    if let Walk = self.visit_comprehension(comp.as_mut())? {
-                        self.walk_comprehension(comp.as_mut())?;
-                    }
-                }
-                ImutExprInt::Merge(merge) => {
-                    if let Walk = self.visit_merge(merge.as_mut())? {
-                        self.walk_merge(merge.as_mut())?;
-                    }
-                }
-                ImutExprInt::Path(path) => {
-                    if let Walk = self.visit_path(path)? {
-                        self.walk_path(path)?;
-                    }
-                }
-                ImutExprInt::String(string) => {
-                    if let Walk = self.visit_string(string)? {
-                        self.walk_string(string)?;
-                    }
-                }
-                ImutExprInt::Local { idx, .. } => {
-                    let _ = self.visit_local(idx)?;
-                }
-                ImutExprInt::Present { path, .. } => {
-                    if let Walk = self.visit_present(path)? {
-                        self.walk_path(path)?;
-                    }
-                }
-                ImutExprInt::Invoke(invoke) => {
-                    if let Walk = self.visit_invoke(invoke)? {
-                        self.walk_invoke(invoke)?;
-                    }
-                }
-                ImutExprInt::Invoke1(invoke1) => {
-                    if let Walk = self.visit_invoke1(invoke1)? {
-                        self.walk_invoke(invoke1)?;
-                    }
-                }
-                ImutExprInt::Invoke2(invoke2) => {
-                    if let Walk = self.visit_invoke2(invoke2)? {
-                        self.walk_invoke(invoke2)?;
-                    }
-                }
-                ImutExprInt::Invoke3(invoke3) => {
-                    if let Walk = self.visit_invoke3(invoke3)? {
-                        self.walk_invoke(invoke3)?;
-                    }
-                }
-                ImutExprInt::InvokeAggr(invoke_aggr) => {
-                    let _ = self.visit_invoke_aggr(invoke_aggr)?;
-                }
-                ImutExprInt::Recur(recur) => {
-                    if let Walk = self.visit_recur(recur)? {
-                        self.walk_recur(recur)?;
-                    }
-                }
-                ImutExprInt::Bytes(bytes) => {
-                    if let Walk = self.visit_bytes(bytes)? {
-                        self.walk_bytes(bytes)?;
-                    }
-                }
-                ImutExprInt::Literal(lit) => {
-                    let _ = self.visit_literal(lit)?;
-                }
-            }
-        }
-
-        Ok(())
     }
 }
 

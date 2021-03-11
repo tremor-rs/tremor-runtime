@@ -17,7 +17,7 @@
 #![allow(clippy::module_name_repetitions)]
 
 use super::{
-    base_expr, path_eq, query, replace_last_shadow_use, ArrayPattern, ArrayPredicatePattern,
+    base_expr, eq::AstEq, query, replace_last_shadow_use, ArrayPattern, ArrayPredicatePattern,
     AssignPattern, BinExpr, BinOpKind, Bytes, Comprehension, ComprehensionCase, EmitExpr,
     EventPath, Expr, Field, FnDecl, FnDoc, Helper, Ident, ImutComprehension, ImutComprehensionCase,
     ImutExpr, ImutExprInt, ImutMatch, ImutPredicateClause, Invocable, Invoke, InvokeAggr,
@@ -587,7 +587,7 @@ impl<'script> Upable<'script> for ExprRaw<'script> {
                 let mid = helper.add_meta(a.start, a.end);
                 match a.expr.up(helper)? {
                     Expr::Imut(ImutExprInt::Merge(m)) => {
-                        if path_eq(&path, &m.target) {
+                        if path.ast_eq(&m.target) {
                             Expr::MergeInPlace(Box::new(*m))
                         } else {
                             Expr::Assign {
@@ -598,7 +598,7 @@ impl<'script> Upable<'script> for ExprRaw<'script> {
                         }
                     }
                     Expr::Imut(ImutExprInt::Patch(m)) => {
-                        if path_eq(&path, &m.target) {
+                        if path.ast_eq(&m.target) {
                             Expr::PatchInPlace(Box::new(*m))
                         } else {
                             Expr::Assign {
