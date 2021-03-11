@@ -62,6 +62,7 @@ test_cases!(
     match_multiple_default,
     match_imut_no_default,
     match_imut_multiple_default,
+    // INSERT
     recordpattern_absence_and_extractor,
     recordpattern_presence_and_extractor,
 );

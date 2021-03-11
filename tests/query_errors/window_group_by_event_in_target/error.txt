@@ -1,3 +1,4 @@
 Error: 
    13 |     "bad": string::trim(event.snot)
       |                         ^^^^^^^^^^ References to `event` or `$` are not allowed in this context
+      |                                    NOTE: Here you operate in the whole window, not a single event. You need to wrap this reference in an aggregate function (e.g. aggr::win::last(...)) or use it in the group by clause of this query.
