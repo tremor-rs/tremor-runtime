@@ -709,7 +709,6 @@ impl Operator for TrickleSelect {
         // Handle eviction
         // retire the group data that didnt receive an event in `eviction_ns()` nanoseconds
         // if no event came after `2 * eviction_ns()` this group is finally cleared out
-        // FIXME: put this in on_signal too
         for window in &mut self.windows {
             if let Some(eviction_ns) = window.window_impl.eviction_ns() {
                 if window.next_swap < event.ingest_ns {
@@ -1168,7 +1167,6 @@ impl Operator for TrickleSelect {
         Ok(events.into())
     }
 
-    // FIXME: verify that we never actually create groups or move them from last_dims to dims
     #[allow(
         mutable_transmutes,
         clippy::clippy::too_many_lines,
@@ -1182,6 +1180,19 @@ impl Operator for TrickleSelect {
     ) -> Result<EventAndInsights> {
         // we only react on ticks and when we have windows
         if signal.kind == Some(SignalKind::Tick) && !self.windows.is_empty() {
+            // Handle eviction
+            // retire the group data that didnt receive an event in `eviction_ns()` nanoseconds
+            // if no event came after `2 * eviction_ns()` this group is finally cleared out
+            for window in &mut self.windows {
+                if let Some(eviction_ns) = window.window_impl.eviction_ns() {
+                    if window.next_swap < signal.ingest_ns {
+                        window.next_swap = signal.ingest_ns + eviction_ns;
+                        window.last_dims.groups.clear();
+                        std::mem::swap(&mut window.dims, &mut window.last_dims);
+                    }
+                }
+            }
+
             let ingest_ns = signal.ingest_ns;
             let opts = Self::opts();
             // TODO: reason about soundness
