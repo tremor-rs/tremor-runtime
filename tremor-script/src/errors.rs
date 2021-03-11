@@ -181,14 +181,14 @@ impl ErrorKind {
             InvalidExtractor, InvalidFloatLiteral, InvalidFn, InvalidHexLiteral, InvalidInfluxData,
             InvalidIntLiteral, InvalidMod, InvalidRecur, InvalidToken, InvalidUTF8Sequence,
             InvalidUnary, Io, JSONError, MergeTypeConflict, MissingEffectors, MissingFunction,
-            MissingModule, ModuleNotFound, Msg, NoClauseHit, NoConstsAllowed, NoLocalsAllowed,
-            NoObjectError, NotConstant, NotFound, Oops, ParseIntError, ParserError, PatchKeyExists,
-            PreprocessorError, QueryNodeDuplicateName, QueryNodeReservedName,
-            QueryStreamNotDefined, RecursionLimit, RuntimeError, TailingHereDoc, TypeConflict,
-            UnexpectedCharacter, UnexpectedEndOfStream, UnexpectedEscapeCode, UnrecognizedToken,
-            UnterminatedExtractor, UnterminatedHereDoc, UnterminatedIdentLiteral,
-            UnterminatedInterpolation, UnterminatedStringLiteral, UpdateKeyMissing, Utf8Error,
-            ValueError,
+            MissingModule, ModuleNotFound, Msg, NoClauseHit, NoConstsAllowed,
+            NoEventReferencesAllowed, NoLocalsAllowed, NoObjectError, NotConstant, NotFound, Oops,
+            ParseIntError, ParserError, PatchKeyExists, PreprocessorError, QueryNodeDuplicateName,
+            QueryNodeReservedName, QueryStreamNotDefined, RecursionLimit, RuntimeError,
+            TailingHereDoc, TypeConflict, UnexpectedCharacter, UnexpectedEndOfStream,
+            UnexpectedEscapeCode, UnrecognizedToken, UnterminatedExtractor, UnterminatedHereDoc,
+            UnterminatedIdentLiteral, UnterminatedInterpolation, UnterminatedStringLiteral,
+            UpdateKeyMissing, Utf8Error, ValueError,
         };
         match self {
             NoClauseHit(outer)
@@ -233,6 +233,7 @@ impl ErrorKind {
             | MissingFunction(outer, inner, _, _, _)
             | MissingModule(outer, inner, _, _)
             | ModuleNotFound(outer, inner, _, _)
+            | NoEventReferencesAllowed(outer, inner)
             | NoLocalsAllowed(outer, inner)
             | NoConstsAllowed(outer, inner)
             | QueryStreamNotDefined(outer, inner, _)
@@ -460,7 +461,7 @@ error_chain! {
         /*
          * ParserError
          */
-         /// A unrecognized token
+         /// An unrecognized token
         UnrecognizedToken(range: Range, loc: Range, token: String, expected: Vec<String>) {
             description("Unrecognized token")
                 display("Found the token `{}` but expected {}", token, choices(expected))
@@ -798,6 +799,10 @@ error_chain! {
             description("Constants are not allowed here")
                 display("Constants are not allowed here")
         }
+        NoEventReferencesAllowed(stmt: Range, inner: Range) {
+            description("References to `event` or `$` are not allowed in this context")
+                display("References to `event` or `$` are not allowed in this context")
+        }
 
         CantSetWindowConst {
             description("Failed to initialize window constant")
@@ -928,6 +933,14 @@ pub(crate) fn error_no_consts<T, O: BaseExpr, I: BaseExpr>(
     meta: &NodeMetas,
 ) -> Result<T> {
     Err(ErrorKind::NoConstsAllowed(outer.extent(meta), inner.extent(meta)).into())
+}
+
+pub(crate) fn error_event_ref_not_allowed<T, O: BaseExpr, I: BaseExpr>(
+    outer: &O,
+    inner: &I,
+    meta: &NodeMetas,
+) -> Result<T> {
+    Err(ErrorKind::NoEventReferencesAllowed(outer.extent(meta), inner.extent(meta)).into())
 }
 
 pub(crate) fn error_need_obj<T, O: BaseExpr, I: BaseExpr>(

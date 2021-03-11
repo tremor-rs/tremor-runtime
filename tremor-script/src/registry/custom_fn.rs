@@ -13,7 +13,9 @@
 // limitations under the License.
 
 use super::{FResult, FunctionError, Result};
-use crate::ast::{Consts, Expr, Exprs, FnDecl, ImutExpr, ImutExprInt, ImutExprs, InvokeAggrFn};
+use crate::ast::{
+    AstEq, Consts, Expr, Exprs, FnDecl, ImutExpr, ImutExprInt, ImutExprs, InvokeAggrFn,
+};
 use crate::interpreter::{AggrType, Cont, Env, ExecOpts, LocalStack};
 use crate::prelude::*;
 use crate::Value;
@@ -223,5 +225,17 @@ impl<'script> CustomFn<'script> {
                 r?;
             }
         }
+    }
+}
+
+impl<'script> AstEq for CustomFn<'script> {
+    fn ast_eq(&self, other: &Self) -> bool {
+        // TODO: add body handling
+        self.name == other.name
+            && self.args == other.args
+            && self.open == other.open
+            && self.locals == other.locals
+            && self.is_const == other.is_const
+            && self.inline == other.inline
     }
 }

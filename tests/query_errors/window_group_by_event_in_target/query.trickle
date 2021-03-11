@@ -1,0 +1,18 @@
+use std::string;
+
+define tumbling window my_window
+with
+  interval = 1000
+end;
+
+select
+  {
+    "ok1": string::lowercase(string::substr(event.foo, 1, 10)),
+    "ok2": event.bar,
+    "ok3": string::len(event.baz) / 2,
+    "bad": string::trim(event.snot)
+  }
+from in[my_window]
+group by set(event.foo, event.bar, event.baz)
+into out;
+

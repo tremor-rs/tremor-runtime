@@ -1,0 +1,8 @@
+status: 0
+name: select target rewrite verification
+asserts:
+  - source: out.log
+    equals_file: expected.json
+    contains:
+      - |
+        ["my_window","badger",true,[],[{},{}]]

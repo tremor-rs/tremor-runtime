@@ -1,0 +1,3 @@
+Error: 
+    9 |   "min": math::min(event.number + 1, 0),
+      |                    ^^^^^^^^^^^^ References to `event` or `$` are not allowed in this context

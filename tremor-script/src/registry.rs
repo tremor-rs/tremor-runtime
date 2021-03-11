@@ -15,7 +15,7 @@
 mod custom_fn;
 pub use self::custom_fn::CustomFn;
 pub(crate) use self::custom_fn::{RECUR_PTR, RECUR_REF};
-use crate::ast::{BaseExpr, NodeMetas};
+use crate::ast::{AstEq, BaseExpr, NodeMetas};
 use crate::errors::{best_hint, Error, ErrorKind, Result};
 use crate::utils::hostname as get_hostname;
 use crate::Value;
@@ -309,6 +309,16 @@ impl fmt::Debug for TremorFnWrapper {
 impl PartialEq for TremorFnWrapper {
     fn eq(&self, other: &Self) -> bool {
         self.module == other.module && self.name == other.name
+    }
+}
+
+impl AstEq for TremorFnWrapper {
+    fn ast_eq(&self, other: &Self) -> bool {
+        self.module == other.module
+            && self.name == other.name
+            // maybe module and name are enough
+            && self.fun.arity() == other.fun.arity()
+            && self.fun.is_const() == other.fun.is_const()
     }
 }
 

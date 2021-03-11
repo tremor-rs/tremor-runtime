@@ -264,7 +264,7 @@ pub struct Select<'script> {
     pub into: (Ident<'script>, Ident<'script>),
     /// The target (select part)
     pub target: ImutExpr<'script>,
-    /// Where claus
+    /// Where clause
     pub maybe_where: Option<ImutExpr<'script>>,
 
     /// Having clause
@@ -296,6 +296,22 @@ pub(crate) enum GroupByInt<'script> {
         mid: usize,
         expr: ImutExprInt<'script>,
     },
+}
+
+pub(crate) trait GroupByVisitor<'script> {
+    fn visit_expr(&mut self, expr: &ImutExprInt<'script>);
+
+    fn walk_group_by(&mut self, group_by: &GroupByInt<'script>) {
+        match group_by {
+            GroupByInt::Expr { expr, .. } => self.visit_expr(expr),
+            GroupByInt::Set { items, .. } => {
+                for inner_group_by in items {
+                    self.walk_group_by(&inner_group_by.0)
+                }
+            }
+            GroupByInt::Each { expr, .. } => self.visit_expr(expr),
+        }
+    }
 }
 
 /// A stream statement

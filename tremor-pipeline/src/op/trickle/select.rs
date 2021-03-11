@@ -137,7 +137,9 @@ impl std::default::Default for WindowImpl {
     fn default() -> Self {
         TumblingWindowOnTime {
             size: 15_000_000_000,
+            emit_empty_windows: false,
             next_window: None,
+            events: 0,
             script: None,
             ttl: None,
         }
@@ -220,6 +222,8 @@ impl WindowTrait for NoWindow {
 #[derive(Default, Debug, Clone)]
 pub struct TumblingWindowOnTime {
     next_window: Option<u64>,
+    emit_empty_windows: bool,
+    events: u64,
     size: u64,
     ttl: Option<u64>,
     script: Option<rentals::Window>,
@@ -227,6 +231,7 @@ pub struct TumblingWindowOnTime {
 impl TumblingWindowOnTime {
     pub fn from_stmt(
         size: u64,
+        emit_empty_windows: bool,
         ttl: Option<u64>,
         script: Option<&WindowDecl>,
         stmt: &StmtRentalWrapper,
@@ -240,6 +245,8 @@ impl TumblingWindowOnTime {
         });
         Self {
             next_window: None,
+            emit_empty_windows,
+            events: 0,
             size,
             ttl,
             script,
@@ -257,11 +264,13 @@ impl TumblingWindowOnTime {
                 }
             }
             Some(next_window) if next_window <= time => {
+                let emit = self.events > 0 || self.emit_empty_windows;
                 self.next_window = Some(time + self.size);
+                self.events = 0;
                 WindowEvent {
                     opened: true,   // this event has been put into the newly opened window
                     include: false, // event is beyond the current window, put it into the next
-                    emit: true,
+                    emit,           // only emit if we had any events in this interval
                 }
             }
             Some(_) => WindowEvent {
@@ -278,6 +287,7 @@ impl WindowTrait for TumblingWindowOnTime {
         self.ttl
     }
     fn on_event(&mut self, event: &Event) -> Result<WindowEvent> {
+        self.events += 1; // count events to check if we should emit, as we avoid to emit if we have no events
         let time = self
             .script
             .as_ref()
@@ -308,6 +318,7 @@ impl WindowTrait for TumblingWindowOnTime {
         if self.script.is_none() {
             Ok(self.get_window_event(ns))
         } else {
+            // we basically ignore ticks when we have a script with a custom timestamp
             Ok(WindowEvent {
                 opened: false,
                 include: false,
@@ -698,6 +709,7 @@ impl Operator for TrickleSelect {
         // Handle eviction
         // retire the group data that didnt receive an event in `eviction_ns()` nanoseconds
         // if no event came after `2 * eviction_ns()` this group is finally cleared out
+        // FIXME: put this in on_signal too
         for window in &mut self.windows {
             if let Some(eviction_ns) = window.window_impl.eviction_ns() {
                 if window.next_swap < event.ingest_ns {
@@ -1156,6 +1168,7 @@ impl Operator for TrickleSelect {
         Ok(events.into())
     }
 
+    // FIXME: verify that we never actually create groups or move them from last_dims to dims
     #[allow(
         mutable_transmutes,
         clippy::clippy::too_many_lines,
@@ -1453,6 +1466,7 @@ impl Operator for TrickleSelect {
                     }
                 }
             }
+            // lets reset the
             Ok(res)
         } else {
             Ok(EventAndInsights::default())
@@ -1537,9 +1551,11 @@ mod test {
             (
                 "w15s".into(),
                 TumblingWindowOnTime {
+                    emit_empty_windows: false,
                     ttl: None,
                     size: 15_000_000_000,
                     next_window: None,
+                    events: 0,
                     script: None,
                 }
                 .into(),
@@ -1547,9 +1563,11 @@ mod test {
             (
                 "w30s".into(),
                 TumblingWindowOnTime {
+                    emit_empty_windows: false,
                     ttl: None,
                     size: 30_000_000_000,
                     next_window: None,
+                    events: 0,
                     script: None,
                 }
                 .into(),
@@ -2270,7 +2288,8 @@ mod test {
     fn tumbling_window_on_time_emit() -> Result<()> {
         let stmt = stmt_rental()?;
         // interval = 10 seconds
-        let mut window = TumblingWindowOnTime::from_stmt(10 * 1_000_000_000, None, None, &stmt);
+        let mut window =
+            TumblingWindowOnTime::from_stmt(10 * 1_000_000_000, false, None, None, &stmt);
         assert_eq!(
             WindowEvent {
                 include: false,
@@ -2348,7 +2367,8 @@ mod test {
             .get("interval")
             .and_then(Value::as_u64)
             .ok_or(Error::from("no interval found"))?;
-        let mut window = TumblingWindowOnTime::from_stmt(interval, None, Some(&window_decl), &stmt);
+        let mut window =
+            TumblingWindowOnTime::from_stmt(interval, false, None, Some(&window_decl), &stmt);
         let json1 = json!({
             "timestamp": 1_000_000_000
         });
@@ -2397,8 +2417,7 @@ mod test {
     #[test]
     fn tumbling_window_on_time_on_tick() -> Result<()> {
         let stmt = stmt_rental()?;
-        // create a WindowDecl with a custom script
-        let mut window = TumblingWindowOnTime::from_stmt(100, None, None, &stmt);
+        let mut window = TumblingWindowOnTime::from_stmt(100, false, None, None, &stmt);
         assert_eq!(
             WindowEvent {
                 opened: true,
@@ -2419,7 +2438,7 @@ mod test {
             WindowEvent {
                 opened: true,
                 include: false,
-                emit: true
+                emit: false // we dont emit if we had no event
             },
             window.on_tick(100)?
         );
@@ -2429,8 +2448,80 @@ mod test {
                 include: false,
                 emit: false
             },
-            window.on_tick(101)?
+            window.on_event(&json_event(101, json!({})))?
         );
+        assert_eq!(
+            WindowEvent {
+                opened: false,
+                include: false,
+                emit: false
+            },
+            window.on_tick(102)?
+        );
+        assert_eq!(
+            WindowEvent {
+                opened: true,
+                include: false,
+                emit: true // we had an event yeah
+            },
+            window.on_tick(200)?
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn tumbling_window_on_time_emit_empty_windows() -> Result<()> {
+        let stmt = stmt_rental()?;
+        let mut window = TumblingWindowOnTime::from_stmt(100, true, None, None, &stmt);
+        assert_eq!(
+            WindowEvent {
+                opened: true,
+                include: false,
+                emit: false
+            },
+            window.on_tick(0)?
+        );
+        assert_eq!(
+            WindowEvent {
+                opened: false,
+                include: false,
+                emit: false
+            },
+            window.on_tick(99)?
+        );
+        assert_eq!(
+            WindowEvent {
+                opened: true,
+                include: false,
+                emit: true // we **DO** emit even if we had no event
+            },
+            window.on_tick(100)?
+        );
+        assert_eq!(
+            WindowEvent {
+                opened: false,
+                include: false,
+                emit: false
+            },
+            window.on_event(&json_event(101, json!({})))?
+        );
+        assert_eq!(
+            WindowEvent {
+                opened: false,
+                include: false,
+                emit: false
+            },
+            window.on_tick(102)?
+        );
+        assert_eq!(
+            WindowEvent {
+                opened: true,
+                include: false,
+                emit: true // we had an event yeah
+            },
+            window.on_tick(200)?
+        );
+
         Ok(())
     }
 
