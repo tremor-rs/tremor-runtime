@@ -946,6 +946,7 @@ impl<'script> BaseExpr for ImutExpr<'script> {
 
 /// some special kind of equivalence between expressions
 /// ignoring metadata ids
+#[allow(clippy::module_name_repetitions)]
 pub trait AstEq<T = Self> {
     /// returns true if both self and other are the same, ignoring the `mid`
     fn ast_eq(&self, other: &T) -> bool;
@@ -1010,7 +1011,10 @@ pub enum ImutExprInt<'script> {
 
 impl<'script> AstEq for ImutExprInt<'script> {
     fn ast_eq(&self, other: &Self) -> bool {
-        use ImutExprInt::*;
+        use ImutExprInt::{
+            Binary, Bytes, Comprehension, Invoke, Invoke1, Invoke2, Invoke3, InvokeAggr, List,
+            Literal, Local, Match, Merge, Patch, Path, Present, Record, Recur, String, Unary,
+        };
         match (self, other) {
             (Record(r1), Record(r2)) => r1.ast_eq(r2),
             (List(l1), List(l2)) => l1.ast_eq(l2),
@@ -1036,10 +1040,10 @@ impl<'script> AstEq for ImutExprInt<'script> {
             ) => idx1 == idx2 && const1 == const2,
             (Literal(l1), Literal(l2)) => l1.ast_eq(l2),
             (Present { path: path1, .. }, Present { path: path2, .. }) => path1.ast_eq(path2),
-            (Invoke1(i1), Invoke1(i2)) => i1.ast_eq(i2),
-            (Invoke2(i1), Invoke2(i2)) => i1.ast_eq(i2),
-            (Invoke3(i1), Invoke3(i2)) => i1.ast_eq(i2),
-            (Invoke(i1), Invoke(i2)) => i1.ast_eq(i2),
+            (Invoke1(i1), Invoke1(i2))
+            | (Invoke2(i1), Invoke2(i2))
+            | (Invoke3(i1), Invoke3(i2))
+            | (Invoke(i1), Invoke(i2)) => i1.ast_eq(i2),
             (InvokeAggr(i1), InvokeAggr(i2)) => i1.ast_eq(i2),
             (Recur(r1), Recur(r2)) => r1.ast_eq(r2),
             (Bytes(b1), Bytes(b2)) => b1.ast_eq(b2),
@@ -1489,8 +1493,8 @@ impl<'script> AstEq for PatchOperation<'script> {
                     ident: i2,
                     expr: e2,
                 },
-            ) => i1.ast_eq(i2) && e1.ast_eq(e2),
-            (
+            )
+            | (
                 Self::Upsert {
                     ident: i1,
                     expr: e1,
@@ -1499,34 +1503,32 @@ impl<'script> AstEq for PatchOperation<'script> {
                     ident: i2,
                     expr: e2,
                 },
-            ) => i1.ast_eq(i2) && e1.ast_eq(e2),
-            (
+            )
+            | (
                 Self::Update {
                     ident: i1,
                     expr: e1,
                 },
                 Self::Update {
+                    ident: i2,
+                    expr: e2,
+                },
+            )
+            | (
+                Self::Merge {
+                    ident: i1,
+                    expr: e1,
+                },
+                Self::Merge {
                     ident: i2,
                     expr: e2,
                 },
             ) => i1.ast_eq(i2) && e1.ast_eq(e2),
             (Self::Erase { ident: i1 }, Self::Erase { ident: i2 }) => i1.ast_eq(i2),
-            (Self::Copy { from: f1, to: t1 }, Self::Copy { from: f2, to: t2 }) => {
+            (Self::Copy { from: f1, to: t1 }, Self::Copy { from: f2, to: t2 })
+            | (Self::Move { from: f1, to: t1 }, Self::Move { from: f2, to: t2 }) => {
                 f1.ast_eq(f2) && t1.ast_eq(t2)
             }
-            (Self::Move { from: f1, to: t1 }, Self::Move { from: f2, to: t2 }) => {
-                f1.ast_eq(f2) && t1.ast_eq(t2)
-            }
-            (
-                Self::Merge {
-                    ident: i1,
-                    expr: e1,
-                },
-                Self::Merge {
-                    ident: i2,
-                    expr: e2,
-                },
-            ) => i1.ast_eq(i2) && e1.ast_eq(e2),
             (Self::TupleMerge { expr: e1 }, Self::TupleMerge { expr: e2 }) => e1.ast_eq(e2),
             _ => false,
         }
@@ -2397,9 +2399,9 @@ pub enum VisitRes {
     Stop,
 }
 
-use VisitRes::*;
+use VisitRes::Walk;
 
-/// Visitor for traversing all ImutExprInts within the given ImutExprInt
+/// Visitor for traversing all `ImutExprInt`s within the given `ImutExprInt`
 ///
 /// Implement your custom expr visiting logic by overwriting the visit_* methods.
 /// You do not need to traverse further down. This is done by the provided `walk_*` methods.
@@ -2456,34 +2458,21 @@ pub trait ImutExprIntVisitor<'script> {
         self.walk_expr(&mut patch.target)?;
         for op in &mut patch.operations {
             match op {
-                PatchOperation::Insert { ident, expr } => {
+                PatchOperation::Insert { ident, expr }
+                | PatchOperation::Merge { ident, expr }
+                | PatchOperation::Update { ident, expr }
+                | PatchOperation::Upsert { ident, expr } => {
                     self.walk_expr(ident)?;
                     self.walk_expr(expr)?;
                 }
-                PatchOperation::Copy { from, to } => {
+                PatchOperation::Copy { from, to } | PatchOperation::Move { from, to } => {
                     self.walk_expr(from)?;
                     self.walk_expr(to)?;
                 }
                 PatchOperation::Erase { ident } => {
                     self.walk_expr(ident)?;
                 }
-                PatchOperation::Merge { ident, expr } => {
-                    self.walk_expr(ident)?;
-                    self.walk_expr(expr)?;
-                }
-                PatchOperation::Move { from, to } => {
-                    self.walk_expr(from)?;
-                    self.walk_expr(to)?;
-                }
                 PatchOperation::TupleMerge { expr } => {
-                    self.walk_expr(expr)?;
-                }
-                PatchOperation::Update { ident, expr } => {
-                    self.walk_expr(ident)?;
-                    self.walk_expr(expr)?;
-                }
-                PatchOperation::Upsert { ident, expr } => {
-                    self.walk_expr(ident)?;
                     self.walk_expr(expr)?;
                 }
             }
@@ -2640,9 +2629,8 @@ pub trait ImutExprIntVisitor<'script> {
     /// walk a string
     fn walk_string(&mut self, string: &mut StringLit<'script>) -> Result<()> {
         for element in &mut string.elements {
-            match element {
-                StrLitElement::Expr(expr) => self.walk_expr(expr)?,
-                _ => {}
+            if let StrLitElement::Expr(expr) = element {
+                self.walk_expr(expr)?
             }
         }
         Ok(())
@@ -2683,7 +2671,7 @@ pub trait ImutExprIntVisitor<'script> {
         Ok(Walk)
     }
 
-    /// visit an invoke_aggr expr
+    /// visit an `invoke_aggr` expr
     fn visit_invoke_aggr(&mut self, _invoke_aggr: &mut InvokeAggr) -> Result<VisitRes> {
         Ok(Walk)
     }
@@ -2717,7 +2705,7 @@ pub trait ImutExprIntVisitor<'script> {
         Ok(Walk)
     }
 
-    /// visit a generic ImutExprInt (this is called before the concrete `visit_*` method)
+    /// visit a generic `ImutExprInt` (this is called before the concrete `visit_*` method)
     fn visit_expr(&mut self, _e: &mut ImutExprInt<'script>) -> Result<VisitRes> {
         Ok(Walk)
     }
