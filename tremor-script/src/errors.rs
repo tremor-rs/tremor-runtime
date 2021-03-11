@@ -305,8 +305,8 @@ impl ErrorKind {
     pub(crate) fn hint(&self) -> Option<String> {
         use ErrorKind::{
             BadAccessInEvent, BadAccessInGlobal, BadAccessInLocal, EmptyInterpolation,
-            MissingFunction, MissingModule, NoClauseHit, Oops, TypeConflict, UnrecognizedToken,
-            UnterminatedInterpolation,
+            MissingFunction, MissingModule, NoClauseHit, NoEventReferencesAllowed, Oops,
+            TypeConflict, UnrecognizedToken, UnterminatedInterpolation,
         };
         match self {
             UnrecognizedToken(outer, inner, t, _) if t.is_empty() && inner.0.absolute() == outer.1.absolute() => Some("It looks like a `;` is missing at the end of the script".into()),
@@ -353,6 +353,8 @@ impl ErrorKind {
             },
             MissingModule(_, _, m, _) if m == "object" => Some("Did you mean to use the `record` module".into()),
             MissingModule(_, _, _, Some((_, suggestion))) | MissingFunction(_, _, _, _, Some((_, suggestion))) => Some(format!("Did you mean `{}`?", suggestion)),
+
+            NoEventReferencesAllowed(_, _) => Some("Here you operate in the whole window, not a single event. You need to wrap this reference in an aggregate function (e.g. aggr::win::last(...)) or use it in the group by clause of this query.".to_owned()),
 
             NoClauseHit(_) => Some("Consider adding a `default => null` clause at the end of your match or validate full coverage beforehand.".into()),
             Oops(_, id, _) => Some(format!("Please take the error output script and test data and open a ticket, this should not happen.\nhttps://github.com/tremor-rs/tremor-runtime/issues/new?labels=bug&template=bug_report.md&title=Opps%20{}", id)),

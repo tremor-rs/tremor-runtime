@@ -15,11 +15,8 @@
 // We want to keep the names here
 #![allow(clippy::module_name_repetitions)]
 
-use super::{
-    super::raw::{
-        reduce2, BaseExpr, ExprRaw, IdentRaw, ImutExprRaw, ModuleRaw, ScriptRaw, WithExprsRaw,
-    },
-    GroupByVisitor,
+use super::super::raw::{
+    reduce2, BaseExpr, ExprRaw, IdentRaw, ImutExprRaw, ModuleRaw, ScriptRaw, WithExprsRaw,
 };
 use super::{
     error_generic, error_no_consts, error_no_locals, AggrRegistry, GroupBy, GroupByInt, HashMap,
@@ -27,11 +24,8 @@ use super::{
     Registry, Result, ScriptDecl, ScriptStmt, Select, SelectStmt, Serialize, Stmt, StreamStmt,
     Upable, Value, Warning, WindowDecl, WindowKind,
 };
-use crate::{
-    ast::{AstEq, ImutExprInt, ImutExprIntVisitor, Path, VisitRes},
-    errors::error_event_ref_not_allowed,
-    impl_expr,
-};
+use crate::ast::visitors::{GroupByExprExtractor, TargetEventRefVisitor};
+use crate::impl_expr;
 use beef::Cow;
 
 fn up_params<'script, 'registry>(
@@ -472,83 +466,6 @@ pub struct SelectRaw<'script> {
     pub(crate) windows: Option<Vec<WindowDefnRaw<'script>>>,
 }
 impl_expr!(SelectRaw);
-
-/// analyze the select target expr if it references the event outside of an aggregate function
-/// rewrite what we can to group references
-///
-/// at a later stage we will only allow expressions with event references, if they are
-/// also in the group by clause - so we can simply rewrite those to reference `group` and thus we dont need to copy.
-struct TargetEventRefVisitor<'script, 'meta> {
-    rewritten: bool,
-    meta: &'meta NodeMetas,
-    group_expressions: Vec<ImutExprInt<'script>>,
-}
-
-impl<'script, 'meta> TargetEventRefVisitor<'script, 'meta> {
-    fn new(group_expressions: Vec<ImutExprInt<'script>>, meta: &'meta NodeMetas) -> Self {
-        Self {
-            rewritten: false,
-            meta,
-            group_expressions,
-        }
-    }
-
-    fn rewrite_target(&mut self, target: &mut ImutExprInt<'script>) -> Result<bool> {
-        self.walk_expr(target)?;
-        Ok(self.rewritten)
-    }
-}
-impl<'script, 'meta> ImutExprIntVisitor<'script> for TargetEventRefVisitor<'script, 'meta> {
-    fn visit_expr(&mut self, e: &mut ImutExprInt<'script>) -> Result<VisitRes> {
-        for (idx, group_expr) in self.group_expressions.iter().enumerate() {
-            // check if we have an equivalent expression :)
-            if e.ast_eq(group_expr) {
-                // rewrite it:
-                *e = ImutExprInt::Path(Path::Reserved(crate::ast::ReservedPath::Group {
-                    mid: e.mid(),
-                    segments: vec![crate::ast::Segment::Idx { mid: e.mid(), idx }],
-                }));
-                self.rewritten = true;
-                // we do not need to visit this expression further, we already replaced it.
-                return Ok(VisitRes::Stop);
-            }
-        }
-        Ok(VisitRes::Walk)
-    }
-    fn visit_path(&mut self, path: &mut Path<'script>) -> Result<VisitRes> {
-        match path {
-            // these are the only exprs that can get a hold of the event payload or its metadata
-            Path::Event(_) | Path::Meta(_) => {
-                // fail if we see an event or meta ref in the select target
-                return error_event_ref_not_allowed(path, path, self.meta);
-            }
-            _ => {}
-        }
-        Ok(VisitRes::Walk)
-    }
-}
-
-struct GroupByExprExtractor<'script> {
-    expressions: Vec<ImutExprInt<'script>>,
-}
-
-impl<'script> GroupByExprExtractor<'script> {
-    fn new() -> Self {
-        Self {
-            expressions: vec![],
-        }
-    }
-
-    fn extract_expressions(&mut self, group_by: &GroupBy<'script>) {
-        self.walk_group_by(&group_by.0);
-    }
-}
-
-impl<'script> GroupByVisitor<'script> for GroupByExprExtractor<'script> {
-    fn visit_expr(&mut self, expr: &ImutExprInt<'script>) {
-        self.expressions.push(expr.clone()); // take this, lifetimes (yes, i am stupid)
-    }
-}
 
 impl<'script> Upable<'script> for SelectRaw<'script> {
     type Target = Select<'script>;

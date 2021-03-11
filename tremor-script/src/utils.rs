@@ -15,7 +15,7 @@
 use crate::errors::{Error, ErrorKind, Result};
 use crate::prelude::*;
 use crate::Value;
-use std::io::prelude::*;
+use std::{io::prelude::*, path::Path};
 
 /// Fetches a hostname with `tremor-host.local` being the default
 #[must_use]
@@ -85,13 +85,32 @@ fn sorted_serialize_<'v, W: Write>(j: &Value<'v>, w: &mut W) -> Result<()> {
 }
 
 /// Loads an event file required for tests
-pub fn load_event_file(name: &str) -> crate::errors::Result<Vec<Value<'static>>> {
+/// tries to load file and without .xz suffix
+pub fn load_event_file(base_name: &str) -> crate::errors::Result<Vec<Value<'static>>> {
     use tremor_common::file as cfile;
     use xz2::read::XzDecoder;
 
-    let file = cfile::open(name)?;
+    let (xz_name, name) = if base_name.ends_with(".xz") {
+        (base_name.to_owned(), base_name.trim_end_matches(".xz"))
+    } else {
+        let mut tmp = base_name.to_owned();
+        tmp.push_str(".xz");
+        (tmp, base_name)
+    };
+    let (effective_name, mut file) = if Path::new(xz_name.as_str()).exists() {
+        (xz_name.as_str(), cfile::open(xz_name.as_str())?)
+    } else if Path::new(name).exists() {
+        (name, cfile::open(name)?)
+    } else {
+        return Err(format!("File not found or not readable: {}", base_name).into());
+    };
     let mut in_data = Vec::new();
-    XzDecoder::new(file).read_to_end(&mut in_data)?;
+    if effective_name.ends_with(".xz") {
+        XzDecoder::new(file).read_to_end(&mut in_data)?
+    } else {
+        file.read_to_end(&mut in_data)?
+    };
+
     let mut in_lines = in_data
         .lines()
         .collect::<std::result::Result<Vec<String>, _>>()?;

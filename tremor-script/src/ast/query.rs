@@ -298,21 +298,6 @@ pub(crate) enum GroupByInt<'script> {
     },
 }
 
-pub(crate) trait GroupByVisitor<'script> {
-    fn visit_expr(&mut self, expr: &ImutExprInt<'script>);
-
-    fn walk_group_by(&mut self, group_by: &GroupByInt<'script>) {
-        match group_by {
-            GroupByInt::Expr { expr, .. } | GroupByInt::Each { expr, .. } => self.visit_expr(expr),
-            GroupByInt::Set { items, .. } => {
-                for inner_group_by in items {
-                    self.walk_group_by(&inner_group_by.0)
-                }
-            }
-        }
-    }
-}
-
 /// A stream statement
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct StreamStmt {
