@@ -27,6 +27,7 @@
 * Fix systemd spec file to load tremor files in `/etc/tremor/config` [#784](https://github.com/tremor-rs/tremor-runtime/issues/784)
 * Do not crash when we can not execute a config file [#792](https://github.com/tremor-rs/tremor-runtime/issues/792)
 * Sort the artefacts while running the benchmarks so that the benchmark run is more deterministic [#825](https://github.com/tremor-rs/tremor-runtime/issues/825)
+* Remove the bench_pipe_passthrough_csv benchmark [#825](https://github.com/tremor-rs/tremor-runtime/issues/825)
 
 ## 0.10.2
 
