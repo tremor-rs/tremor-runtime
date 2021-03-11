@@ -52,7 +52,7 @@ macro_rules! test_cases {
                 let query_file = concat!("tests/query_errors/", stringify!($file), "/query.trickle");
                 let err_file = concat!("tests/query_errors/", stringify!($file), "/error.txt");
                 let err_re_file = concat!("tests/query_errors/", stringify!($file), "/error.re");
-                let module_path = &ModulePath { mounts: vec![query_dir] };
+                let module_path = &ModulePath { mounts: vec![query_dir, "tremor-script/lib/".to_string()] };
 
                 println!("Loading query: {}", query_file);
                 let mut file = file::open(query_file)?;
@@ -138,6 +138,8 @@ test_cases!(
     pp_embed_unrecognized_token4,
     pp_embed_unrecognized_token5,
     //INSERT
+    window_group_by_event_in_target,
+    window_event_in_target,
     aggr_arity,
     aggr_in_aggr,
     bad_into,

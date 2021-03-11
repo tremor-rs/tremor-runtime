@@ -1,0 +1,8 @@
+["my_window",1,"SNOT",false,[1,2,3],[{}]]
+["my_window",1,"BADGER",false,[4,5,6],[{}]]
+["my_window",1,"SNOT",true,[7,8,9],[{}]]
+["my_window",2,"BADGER",true,[],[{},{}]]
+["my_window",0,"SNOT",false,null,[]]
+["my_window",0,"BADGER",false,null,[]]
+["my_window",0,"SNOT",true,null,[]]
+["my_window",0,"BADGER",true,null,[]]

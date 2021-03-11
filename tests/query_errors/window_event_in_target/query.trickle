@@ -1,0 +1,11 @@
+use std::math;
+
+define tumbling window my_win
+with
+  size = 2
+end;
+
+select {
+  "min": math::min(event.number + 1, 0),
+  "last": aggr::win::last(event.foo)
+} from in[my_win] into out;

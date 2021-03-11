@@ -95,6 +95,11 @@ pub(crate) fn window_decl_to_impl<'script>(
         WindowKind::Tumbling => {
             let script = if d.script.is_some() { Some(d) } else { None };
             let ttl = d.params.get("eviction_period").and_then(Value::as_u64);
+            let emit_empty_windows = d
+                .params
+                .get("emit_empty_windows")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
 
             d.params
                 .get("interval")
@@ -114,7 +119,14 @@ pub(crate) fn window_decl_to_impl<'script>(
                         )
                     },
                     |interval| {
-                        Ok(TumblingWindowOnTime::from_stmt(interval, ttl, script, stmt).into())
+                        Ok(TumblingWindowOnTime::from_stmt(
+                            interval,
+                            emit_empty_windows,
+                            ttl,
+                            script,
+                            stmt,
+                        )
+                        .into())
                     },
                 )
         }

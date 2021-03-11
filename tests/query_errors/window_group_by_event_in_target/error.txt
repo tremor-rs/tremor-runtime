@@ -1,0 +1,3 @@
+Error: 
+   13 |     "bad": string::trim(event.snot)
+      |                         ^^^^^^^^^^ References to `event` or `$` are not allowed in this context

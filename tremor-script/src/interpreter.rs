@@ -148,7 +148,7 @@ impl<'stack> LocalStack<'stack> {
 pub enum AggrType {
     /// This is a normal execution
     Tick,
-    /// This us an emit event
+    /// This is an emit event
     Emit,
 }
 
