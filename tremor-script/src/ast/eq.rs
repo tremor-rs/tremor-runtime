@@ -581,3 +581,105 @@ impl AstEq for TremorFnWrapper {
         self == other
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::ast::Expr;
+    use crate::errors::Result;
+    use crate::path::ModulePath;
+    use crate::registry::registry;
+
+    use super::*;
+
+    /// tests the ast equality of the two last `ImutExprInt` in the given script
+    fn test_ast_eq(script: &str, check_equality: bool) -> Result<()> {
+        let module_path = ModulePath::load();
+        let mut registry = registry();
+        crate::std_lib::load(&mut registry);
+        let script_script: crate::script::Script =
+            crate::script::Script::parse(&module_path, "test", script.to_owned(), &registry)?;
+        let script: &crate::ast::Script = script_script.script.suffix();
+        let imut_exprs: Vec<&ImutExprInt> = script
+            .exprs
+            .iter()
+            .filter_map(|e| {
+                if let Expr::Imut(expr) = e {
+                    Some(expr)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        let len = imut_exprs.len();
+        assert!(len >= 2);
+        let res = imut_exprs[len - 2].ast_eq(imut_exprs[len - 1]);
+        assert!(
+            res == check_equality,
+            "Expressions not AST_eq:\n\n\t{:?}\n\t{:?}",
+            imut_exprs[len - 2],
+            imut_exprs[len - 1]
+        );
+        Ok(())
+    }
+
+    macro_rules! eq_test {
+        ($name:ident, $script:expr) => {
+            #[test]
+            fn $name() -> Result<()> {
+                test_ast_eq($script, true)
+            }
+        };
+    }
+
+    macro_rules! not_eq_test {
+        ($name:ident, $script:expr) => {
+            #[test]
+            fn $name() -> Result<()> {
+                test_ast_eq($script, false)
+            }
+        };
+    }
+
+    eq_test!(test_event_path_eq, r#"event.foo ; event["foo"]"#);
+    eq_test!(
+        test_record_eq,
+        r#"
+    # setting the stage
+    let local = 1 + 2;
+
+    # eq check expressions
+    {
+        "foo": local
+    };
+    {
+        "foo": local
+    }
+    "#
+    );
+    eq_test!(
+        test_string_eq,
+        r#"
+        const answer = 42;
+        "hello { answer + 1 } interpolated { answer }";
+        "hello { answer + 1 } interpolated { answer }"
+        "#
+    );
+    not_eq_test!(
+        test_string_not_eq,
+        r#"
+        const answer = 42;
+        "hello { answer + 1 } interpolated { answer + 2 }";
+        "hello { answer + 1 } interpolated { answer }"
+        "#
+    );
+    eq_test!(
+        test_invocation_eq,
+        r#"
+        fn add(x, y) with
+          x + y
+        end;
+        add(add(4, state[1]), 4.2);
+        add(add(4, state[1]), 4.2);
+        "#
+    );
+}
