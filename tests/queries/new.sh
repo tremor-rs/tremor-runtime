@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 
 BASEDIR=$(dirname "$0")
-TEST_SUITE_FILE="${BASEDIR}/../query_error.rs"
+TEST_SUITE_FILE="${BASEDIR}/../query.rs"
 TMPDIR="${BASEDIR}/tmp"
 
 if [ -z "${1}" ]
