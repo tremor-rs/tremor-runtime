@@ -41,6 +41,7 @@ pub(crate) fn run_process(
         &["*.{yaml,tremor,trickle}", "!assert.yaml", "!logger.yaml"],
     )
     .case_insensitive(true)
+    .sort_by(|a, b| a.file_name().cmp(b.file_name()))
     .max_depth(1)
     .build()
     .map_err(|e| Error::from(format!("Unable to walk path for artefacts capture: {}", e)))?
