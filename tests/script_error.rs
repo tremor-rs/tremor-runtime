@@ -133,7 +133,7 @@ test_cases!(
     mod_bound_cross,
     pp_cyclic,
     pp_nest_cyclic,
-    //INSERT
+    // INSERT
     missing_function,
     string_interpolation_empty,
     fn_bad_recur,

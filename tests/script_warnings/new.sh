@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 
 BASEDIR=$(dirname "$0")
-TEST_SUITE_FILE="${BASEDIR}/../script_error.rs"
+TEST_SUITE_FILE="${BASEDIR}/../script_warning.rs"
 TMPDIR="${BASEDIR}/tmp"
 
 if [ -z "${1}" ]

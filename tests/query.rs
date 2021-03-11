@@ -128,7 +128,7 @@ test_cases!(
     pp_alias_script,
     pp_alias_operator,
     pp_config_directive,
-    //INSERT
+    // INSERT
     mod_def,
     window_mixed_2,
     window_mixed_1,
