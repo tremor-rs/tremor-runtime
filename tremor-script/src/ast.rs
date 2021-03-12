@@ -1100,7 +1100,7 @@ pub struct Recur<'script> {
 }
 impl_expr_mid!(Recur);
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Serialize, PartialEq)]
 /// Encapsulates an Aggregate function invocation
 pub struct InvokeAggr {
     /// Id
@@ -1582,7 +1582,7 @@ impl<'script> Path<'script> {
     }
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 /// A Path segment
 pub enum Segment<'script> {
     /// An identifier
@@ -1622,7 +1622,7 @@ pub enum Segment<'script> {
     },
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 /// A path local to the current program
 pub struct LocalPath<'script> {
     /// Local Index
@@ -1636,7 +1636,7 @@ pub struct LocalPath<'script> {
 }
 impl_expr_mid!(LocalPath);
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 /// A metadata path
 pub struct MetadataPath<'script> {
     /// Id
@@ -1692,7 +1692,7 @@ impl<'script> BaseExpr for ReservedPath<'script> {
     }
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 /// The path representing the current in-flight event
 pub struct EventPath<'script> {
     /// Id
@@ -1702,7 +1702,7 @@ pub struct EventPath<'script> {
 }
 impl_expr_mid!(EventPath);
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 /// The path representing captured program state
 pub struct StatePath<'script> {
     /// Id
