@@ -540,3 +540,147 @@ impl<'script> GroupByVisitor<'script> for GroupByExprExtractor<'script> {
         self.expressions.push(expr.clone()); // take this, lifetimes (yes, i am stupid)
     }
 }
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+    use crate::ast::Expr;
+    use crate::errors::Result;
+    use crate::path::ModulePath;
+    use crate::registry::registry;
+    use simd_json::Value;
+
+    #[derive(Default)]
+    struct Find42Visitor {
+        found: usize,
+    }
+
+    impl<'script> ImutExprIntVisitor<'script> for Find42Visitor {
+        fn visit_literal(&mut self, literal: &mut Literal<'script>) -> Result<VisitRes> {
+            if let Some(42) = literal.value.as_u64() {
+                self.found += 1;
+                return Ok(VisitRes::Stop);
+            }
+            Ok(VisitRes::Walk)
+        }
+    }
+
+    fn test_walk<'script>(script: &'script str, expected_42s: usize) -> Result<()> {
+        let module_path = ModulePath::load();
+        let mut registry = registry();
+        crate::std_lib::load(&mut registry);
+        let script_script: crate::script::Script =
+            crate::script::Script::parse(&module_path, "test", script.to_owned(), &registry)?;
+        let script: &crate::ast::Script = script_script.script.suffix();
+        let mut imut_expr = script
+            .exprs
+            .iter()
+            .filter_map(|e| {
+                if let Expr::Imut(expr) = e {
+                    Some(expr)
+                } else {
+                    None
+                }
+            })
+            .cloned()
+            .last()
+            .unwrap();
+        let mut visitor = Find42Visitor::default();
+        visitor.walk_expr(&mut imut_expr)?;
+        assert_eq!(
+            expected_42s, visitor.found,
+            "Did not find {} 42s in {:?}, only {}",
+            expected_42s, imut_expr, visitor.found
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_visitor_walking() -> Result<()> {
+        test_walk(
+            r#"
+            fn hide_the_42(x) with
+                x + 1
+            end;
+            hide_the_42(
+                match event.foo of
+                  case %{ field == " {42} ", present foo, absent bar } => event.bar
+                  default => event.snot
+                end
+            );
+        "#,
+            1,
+        )
+    }
+
+    #[test]
+    fn test_walk_list() -> Result<()> {
+        test_walk(
+            r#"
+        let x = event.bla + 1;
+        fn add(x, y) with
+          recur(x + y, 1)
+        end;
+        [
+            -event.foo,
+            (patch event of insert "snot" => 42 end),
+            (merge event of {"foo": event[42]} end),
+            "~~~ #{ state[1] } ~~~",
+            x,
+            x[x],
+            add(event.foo, 42),
+            <<event.foo:8/unsigned>>
+        ]
+        "#,
+            3,
+        )
+    }
+
+    #[test]
+    fn test_walk_comprehension() -> Result<()> {
+        test_walk(
+            r#"
+            (for group[0] of
+              case (i, e) =>
+                42 + i
+            end
+            )
+        "#,
+            1,
+        )
+    }
+
+    #[test]
+    fn test_group_expr_extractor() -> Result<()> {
+        let mut visitor = GroupByExprExtractor::new();
+        let lit_42 = ImutExprInt::Literal(Literal {
+            mid: 3,
+            value: tremor_value::Value::from(42),
+        });
+        let false_array = ImutExprInt::List(List {
+            mid: 5,
+            exprs: vec![crate::ast::ImutExpr(ImutExprInt::Literal(Literal {
+                mid: 6,
+                value: tremor_value::Value::from(false),
+            }))],
+        });
+        let group_by = GroupBy(GroupByInt::Set {
+            mid: 1,
+            items: vec![
+                GroupBy(GroupByInt::Expr {
+                    mid: 2,
+                    expr: lit_42.clone(),
+                }),
+                GroupBy(GroupByInt::Each {
+                    mid: 4,
+                    expr: false_array.clone(),
+                }),
+            ],
+        });
+        visitor.extract_expressions(&group_by);
+        assert_eq!(2, visitor.expressions.len());
+        assert_eq!(&[lit_42, false_array], visitor.expressions.as_slice());
+        Ok(())
+    }
+}

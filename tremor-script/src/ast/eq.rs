@@ -577,6 +577,7 @@ impl<'script> AstEq for CustomFn<'script> {
 }
 
 impl AstEq for TremorFnWrapper {
+    #[cfg(not(tarpaulin_include))]
     fn ast_eq(&self, other: &Self) -> bool {
         self == other
     }
@@ -802,11 +803,11 @@ mod tests {
         r#"
         (for event[1] of
             case (i, e) =>
-                {"{i}": e}
+                {" #{i}": e}
         end);
         (for event[1] of
             case (i, e) =>
-                {"{i}": e}
+                {" #{i}": e}
         end)
         "#
     );
@@ -815,12 +816,20 @@ mod tests {
         r#"
         (for event[1] of
             case (i, e) =>
-                {"{i}": e}
+                {" #{i}": e}
         end);
         (for event[1] of
             case (i, x) =>
-                {"{i}": x}
+                {" #{i}": x}
         end)
+        "#
+    );
+
+    eq_test!(
+        merge_eq_test,
+        r#"
+        (merge event["foo"] of event["bar"] end);
+        (merge event.foo of event.bar end);
         "#
     );
 
@@ -829,6 +838,64 @@ mod tests {
         r#"
         (present event.foo);
         (present event["foo"])
+        "#
+    );
+    eq_test!(
+        group_path_eq_test,
+        r#"
+        group[1];
+        group[1]
+        "#
+    );
+    not_eq_test!(
+        group_path_not_eq_test,
+        r#"
+        group[1];
+        group[0]
+        "#
+    );
+    eq_test!(
+        window_path_eq_test,
+        r#"
+        window;
+        window
+        "#
+    );
+    eq_test!(
+        args_path_eq_test,
+        r#"
+        args[0];
+        args[0]
+        "#
+    );
+    eq_test!(
+        meta_path_eq_test,
+        r#"
+        $meta[1];
+        $meta[1]
+        "#
+    );
+    eq_test!(
+        complex_path_eq_test,
+        r#"
+        let local = {};
+        local[event.path][event.start:event.end];
+        local[event.path][event.start:event.end]
+        "#
+    );
+    eq_test!(
+        string_eq_test,
+        r#"
+        " #{ event.foo } bar #{ $ }";
+        " #{event.foo} bar #{$}";
+        "#
+    );
+
+    eq_test!(
+        mul_eq_test,
+        r#"
+        event.m1 * event.m2;
+        event.m1 * event.m2;
         "#
     );
 

@@ -21,7 +21,7 @@ impl<'script> fmt::Debug for InvokeAggrFn<'script> {
     }
 }
 
-/// custom impl becauyse field `invocable` does not implement PartialEq
+/// custom impl becauyse field `invocable` does not implement `PartialEq`
 impl<'script> PartialEq for InvokeAggrFn<'script> {
     fn eq(&self, other: &Self) -> bool {
         self.module == other.module && self.fun == other.fun && self.args == other.args
