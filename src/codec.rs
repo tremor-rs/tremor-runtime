@@ -22,6 +22,7 @@ pub(crate) mod msgpack;
 pub(crate) mod null;
 pub(crate) mod statsd;
 pub(crate) mod string;
+pub(crate) mod syslog;
 pub(crate) mod yaml;
 
 const MIME_TYPES: [&str; 8] = [
@@ -106,6 +107,7 @@ pub fn lookup(name: &str) -> Result<Box<dyn Codec>> {
         "statsd" => Ok(Box::new(statsd::StatsD {})),
         "yaml" => Ok(Box::new(yaml::Yaml {})),
         "binary" => Ok(Box::new(binary::Binary {})),
+        "syslog" => Ok(Box::new(syslog::Syslog {})),
         _ => Err(format!("Codec '{}' not found.", name).into()),
     }
 }
@@ -153,6 +155,7 @@ mod test {
         assert!(super::lookup("string").is_ok());
         assert!(super::lookup("statsd").is_ok());
         assert!(super::lookup("yaml").is_ok());
+        assert!(super::lookup("syslog").is_ok());
         assert_eq!(
             super::lookup("snot").err().unwrap().to_string(),
             "Codec 'snot' not found."
