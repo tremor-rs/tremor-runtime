@@ -582,6 +582,7 @@ impl AstEq for TremorFnWrapper {
     }
 }
 
+#[cfg(not(tarpaulin_include))]
 #[cfg(test)]
 mod tests {
     use crate::ast::Expr;
@@ -682,4 +683,226 @@ mod tests {
         add(add(4, state[1]), 4.2);
         "#
     );
+    eq_test!(
+        test_list_eq,
+        r#"
+        let x = event.len;
+        [1, -x, <<x:7/unsigned-integer>>, "foo"];
+        [1, -x, <<x:7/unsigned-integer>>, "foo"]
+        "#
+    );
+    not_eq_test!(
+        test_list_not_eq,
+        r#"
+        let x = event.len;
+        [1, -x, <<x:7/unsigned-integer>>, "foo"];
+        [1, -x, <<x:7/signed-integer>>, "foo"]
+        "#
+    );
+    eq_test!(
+        test_patch_eq,
+        r#"
+        let x = {"snot": $meta};
+        patch x of
+          insert "i" => event.foo,
+          upsert "snotty" => state.badger[1],
+          update "snot" => null,
+          erase "snot",
+          copy "snot" => ["badger"],
+          merge "beep" => {"fun": not false},
+          merge => {"tuple": 4 * 12}
+        end;
+        patch x of
+          insert "i" => event.foo,
+          upsert "snotty" => state.badger[1],
+          update "snot" => null,
+          erase "snot",
+          copy "snot" => ["badger"],
+          merge "beep" => {"fun": not false},
+          merge => {"tuple": 4 * 12}
+        end
+        "#
+    );
+    not_eq_test!(
+        test_path_not_eq,
+        r#"
+        let x = {"snot": $meta};
+        patch x of
+          insert "i" => event.foo,
+          upsert "snotty" => state.badger[1],
+          update "snot" => null,
+          erase "snot",
+          copy "snot" => ["badger"],
+          merge "beep" => {"fun": not false},
+          merge => {"tuple": 4 * 12}
+        end;
+        patch x of
+          insert "i" => event.foo,
+          upsert "snotty" => state.badger[1],
+          erase "snot",
+          update "snot" => null, # order swapped
+          copy "snot" => ["badger"],
+          merge "beep" => {"fun": not false},
+          merge => {"tuple": 4 * 12}
+        end
+        "#
+    );
+
+    eq_test!(
+        test_match_eq,
+        r#"
+        let x = {"foo": "foo"};
+        (match x of
+            case "literal string" => "string"
+            case event.foo => "event.foo"
+            case %( _, 12, ... ) => "has 12 at index 1"
+            case %[] => "empty_array"
+            case %[ %{ present x } ] => "complex"
+            case object = %{ absent y, snot == "badger", superhero ~= %{absent name}} when object.superhero.is_snotty => "snotty_badger"
+            default => null
+        end);
+        (match x of
+            case "literal string" => "string"
+            case event.foo => "event.foo"
+            case %( _, 12, ... ) => "has 12 at index 1"
+            case %[] => "empty_array"
+            case %[ %{ present x } ] => "complex"
+            case object = %{ absent y, snot == "badger", superhero ~= %{absent name}} when object.superhero.is_snotty => "snotty_badger"
+            default => null
+        end)
+        "#
+    );
+    not_eq_test!(
+        test_match_not_eq,
+        r#"
+        let x = {"foo": "foo"};
+        (match x of
+            case "literal string" => "string"
+            case event.foo => "event.foo"
+            case %( _, 12, ... ) => "has 12 at index 1"
+            case %[] => "empty_array"
+            case %[ %{ present x } ] => "complex"
+            case %{ absent y, snot == "badger", superhero ~= %{absent name}} when event.superhero.is_snotty => "snotty_badger"
+            default => null
+        end);
+        (match x of
+            case "literal string" => "string"
+            case event.foo => "event.foo"
+            case %( _, 12, ... ) => "has 12 at index 1"
+            case %[] => "empty_array"
+            case %[ %{ present x } ] => "complex"
+            case %{ absent y, snot == "badger", superhero ~= %{absent name}} when event.superhero.is_snotty => "snotty_badger"
+            default => "not_null"
+        end)
+        "#
+    );
+
+    eq_test!(
+        test_comprehension_eq,
+        r#"
+        (for event[1] of
+            case (i, e) =>
+                {"{i}": e}
+        end);
+        (for event[1] of
+            case (i, e) =>
+                {"{i}": e}
+        end)
+        "#
+    );
+    not_eq_test!(
+        test_comprehension_not_eq,
+        r#"
+        (for event[1] of
+            case (i, e) =>
+                {"{i}": e}
+        end);
+        (for event[1] of
+            case (i, x) =>
+                {"{i}": x}
+        end)
+        "#
+    );
+
+    eq_test!(
+        present_eq_test,
+        r#"
+        (present event.foo);
+        (present event["foo"])
+        "#
+    );
+
+    #[test]
+    fn recur_eq_test() -> Result<()> {
+        let imut_expr = crate::ast::ImutExpr(ImutExprInt::Path(Path::Event(EventPath {
+            mid: 1,
+            segments: vec![],
+        })));
+        let e: crate::ast::ImutExprs = vec![imut_expr];
+        let recur1 = Recur {
+            mid: 1,
+            argc: 2,
+            open: true,
+            exprs: e.clone(),
+        };
+        let mut recur2 = Recur {
+            mid: 2,
+            argc: 2,
+            open: true,
+            exprs: e,
+        };
+        assert!(recur1.ast_eq(&recur2));
+        recur2.open = false;
+        assert!(!recur1.ast_eq(&recur2));
+        Ok(())
+    }
+
+    #[test]
+    fn test_path_local_special_case() -> Result<()> {
+        let path = ImutExprInt::Path(Path::Local(LocalPath {
+            idx: 1,
+            mid: 1,
+            is_const: false,
+            segments: vec![Segment::Idx { idx: 1, mid: 15 }],
+        }));
+        let local = ImutExprInt::Local {
+            idx: 1,
+            mid: 42,
+            is_const: false,
+        };
+        // has segments
+        assert!(!path.ast_eq(&local));
+        let path2 = ImutExprInt::Path(Path::Local(LocalPath {
+            idx: 1,
+            mid: 1212432,
+            is_const: false,
+            segments: vec![],
+        }));
+        assert!(path2.ast_eq(&local));
+        // different index
+        assert!(!ImutExprInt::Path(Path::Local(LocalPath {
+            idx: 2,
+            mid: 42,
+            is_const: false,
+            segments: vec![]
+        }))
+        .ast_eq(&local));
+        // is_const different
+        assert!(!ImutExprInt::Path(Path::Local(LocalPath {
+            idx: 1,
+            mid: 42,
+            is_const: true,
+            segments: vec![]
+        }))
+        .ast_eq(&local));
+
+        assert!(Path::Local(LocalPath {
+            idx: 1,
+            mid: 34786752389,
+            is_const: false,
+            segments: vec![]
+        })
+        .ast_eq(&local));
+        Ok(())
+    }
 }
