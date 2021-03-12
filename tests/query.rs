@@ -48,8 +48,8 @@ macro_rules! test_cases {
                 tremor_runtime::functions::load()?;
                 let query_dir = concat!("tests/queries/", stringify!($file), "/").to_string();
                 let query_file = concat!("tests/queries/", stringify!($file), "/query.trickle");
-                let in_file = concat!("tests/queries/", stringify!($file), "/in.xz");
-                let out_file = concat!("tests/queries/", stringify!($file), "/out.xz");
+                let in_file = concat!("tests/queries/", stringify!($file), "/in");
+                let out_file = concat!("tests/queries/", stringify!($file), "/out");
                 let module_path = ModulePath { mounts: vec![query_dir, "tremor-script/lib/".to_string()] };
 
                 println!("Loading query: {}", query_file);
