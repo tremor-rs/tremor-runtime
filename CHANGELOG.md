@@ -6,6 +6,7 @@
 
 * Change `qos::wal` operator to only require one of `max_elements` or `max_bytes` (using both is still possible).
 * Add DNS sink
+* Add syslog codec.
 
 ### Fixes
 

@@ -5292,6 +5292,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "syslog_loose"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b87c43adeba9354cdb8527ad333bae41caf5cad5ce5cbeb8b11eafcf9de5e07a"
+dependencies = [
+ "chrono",
+ "nom 6.1.2",
+]
+
+[[package]]
 name = "tap"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6215,6 +6225,7 @@ dependencies = [
  "smol",
  "snap",
  "surf",
+ "syslog_loose",
  "tempfile",
  "test-case",
  "tide",

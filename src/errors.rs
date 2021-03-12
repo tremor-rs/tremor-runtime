@@ -256,6 +256,10 @@ error_chain! {
             description("Invalid BInflux Line Protocol data")
                 display("Invalid BInflux Line Protocol data: {}", s)
         }
+        InvalidSyslogData(s: &'static str) {
+            description("Invalid Syslog Protocol data")
+                display("Invalid Syslog Protocol data: {}", s)
+        }
         BadOutputid(i: usize) {
             description("Bad output pipeline id.")
                 display("Bad output pipeline id {}", i - 1)
