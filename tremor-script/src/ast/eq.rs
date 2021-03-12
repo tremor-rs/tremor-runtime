@@ -879,8 +879,8 @@ mod tests {
         complex_path_eq_test,
         r#"
         let local = {};
-        local[event.path][event.start:event.end];
-        local[event.path][event.start:event.end]
+        local[event.path][event.start:event["end"]];
+        local[event.path][event.start:event["end"]]
         "#
     );
     eq_test!(
