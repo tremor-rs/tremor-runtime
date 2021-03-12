@@ -605,7 +605,7 @@ mod tests {
             end;
             hide_the_42(
                 match event.foo of
-                  case %{ field == " {42} ", present foo, absent bar } => event.bar
+                  case %{ field == " #{42 + event.foo} ", present foo, absent bar } => event.bar
                   default => event.snot
                 end
             );
@@ -625,7 +625,7 @@ mod tests {
         [
             -event.foo,
             (patch event of insert "snot" => 42 end),
-            (merge event of {"foo": event[42]} end),
+            (merge event of {"foo": event[42:x]} end),
             "~~~ #{ state[1] } ~~~",
             x,
             x[x],
