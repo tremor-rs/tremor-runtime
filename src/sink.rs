@@ -28,6 +28,7 @@ pub(crate) mod file;
 pub(crate) mod kafka;
 pub(crate) mod kv;
 pub(crate) mod newrelic;
+pub(crate) mod otel;
 pub(crate) mod postgres;
 pub(crate) mod prelude;
 pub(crate) mod rest;
@@ -36,7 +37,6 @@ pub(crate) mod stdout;
 pub(crate) mod tcp;
 pub(crate) mod udp;
 pub(crate) mod ws;
-pub(crate) mod otel;
 
 #[derive(Debug)]
 pub enum Reply {

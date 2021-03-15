@@ -47,7 +47,7 @@ pub(crate) fn instrumentation_library_logs_to_json<'event>(
             }));
         }
         json.push(json!({
-            "instrumentation_library": common::maybe_instrumentation_library_to_json(data.instrumentation_library)?,
+            "instrumentation_library": common::maybe_instrumentation_library_to_json(data.instrumentation_library),
             "logs": logs
         }));
     }
@@ -55,8 +55,8 @@ pub(crate) fn instrumentation_library_logs_to_json<'event>(
     Ok(json!(json).into())
 }
 
-pub(crate) fn maybe_instrumentation_library_logs_to_pb<'event>(
-    data: Option<&Value<'event>>,
+pub(crate) fn maybe_instrumentation_library_logs_to_pb(
+    data: Option<&Value<'_>>,
 ) -> Result<InstrumentationLibraryLogs> {
     let mut logs = Vec::new();
     if let Some(Value::Object(data)) = data {
@@ -112,7 +112,7 @@ pub(crate) fn resource_logs_to_json<'event>(
     Ok(json!({ "logs": json }).into())
 }
 
-pub(crate) fn resource_logs_to_pb<'event>(json: &Value<'event>) -> Result<Vec<ResourceLogs>> {
+pub(crate) fn resource_logs_to_pb(json: &Value<'_>) -> Result<Vec<ResourceLogs>> {
     if let Value::Object(json) = json {
         if let Some(Value::Array(json)) = json.get("logs") {
             let mut pb = Vec::new();

@@ -73,21 +73,21 @@ impl offramp::Impl for OpenTelemetry {
     }
 }
 
-fn json_otel_logs_to_pb<'event>(json: &Value<'event>) -> Result<ExportLogsServiceRequest> {
+fn json_otel_logs_to_pb(json: &Value<'_>) -> Result<ExportLogsServiceRequest> {
     let pb = ExportLogsServiceRequest {
         resource_logs: logs::resource_logs_to_pb(json)?,
     };
     Ok(pb)
 }
 
-fn json_otel_trace_to_pb<'event>(json: &Value<'event>) -> Result<ExportTraceServiceRequest> {
+fn json_otel_trace_to_pb(json: &Value<'_>) -> Result<ExportTraceServiceRequest> {
     let pb = ExportTraceServiceRequest {
         resource_spans: trace::resource_spans_to_pb(json.get("trace"))?,
     };
     Ok(pb)
 }
 
-fn json_otel_metrics_to_pb<'event>(json: &Value<'event>) -> Result<ExportMetricsServiceRequest> {
+fn json_otel_metrics_to_pb(json: &Value<'_>) -> Result<ExportMetricsServiceRequest> {
     let pb = ExportMetricsServiceRequest {
         resource_metrics: metrics::resource_metrics_to_pb(json.get("metrics"))?,
     };
