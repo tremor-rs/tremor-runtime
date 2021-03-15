@@ -124,10 +124,10 @@ pub(crate) fn window_decl_to_impl<'script>(
                 )
                 .into()),
                 (Some(_), Some(_)) => Err(Error::from(
-                    "Bad window configuration, only one of `size` or `interval` is allowed",
+                    "Bad window configuration, only one of `size` or `interval` is allowed.",
                 )),
                 (None, None) => Err(Error::from(
-                    "Bad window configuration, either `size` or `interval` is required",
+                    "Bad window configuration, either `size` or `interval` is required.",
                 )),
             }
         }

@@ -1,0 +1,6 @@
+define tumbling window both_windows
+with
+  size = 1,
+  interval = 1
+end;
+select aggr::stats::count() from in[both_windows] into out;
