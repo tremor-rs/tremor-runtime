@@ -1996,9 +1996,9 @@ dependencies = [
 
 [[package]]
 name = "grok"
-version = "1.1.0"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "90fb44bc58a4498cb307425b787531381c41b455119033af8f541370362d6c0e"
+checksum = "840fbb5c3bf23c11b93fbccddb9e93e79d2eab3e21f0e111bff1793928602670"
 dependencies = [
  "glob",
  "onig",
@@ -3196,9 +3196,9 @@ checksum = "13bd41f508810a131401606d54ac32a467c97172d74ba7662562ebba5ad07fa0"
 
 [[package]]
 name = "onig"
-version = "5.0.0"
+version = "6.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e4e723fc996fff1aeab8f62205f3e8528bf498bdd5eadb2784d2d31f30077947"
+checksum = "30b46fd9edbc018f0be4e366c24c46db44fac49cd01c039ae85308088b089dd5"
 dependencies = [
  "bitflags",
  "lazy_static",
