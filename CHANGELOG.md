@@ -14,6 +14,8 @@
 * Handle signals and terminate properly on Ctrl+C in docker [#806](https://github.com/tremor-rs/tremor-runtime/pull/806)
 * Update to rust 1.50.0
 * Emit error events to the `err` port on exceeding concurrent requests limit for `rest` and `elastic` offramps.
+* Add the `max_groups` and `emit_empty_windows` settings on window definitions [#828](https://github.com/tremor-rs/tremor-runtime/pull/828)
+* Restrict event and event metadata references in the `SELECT` clause of a windowed select statement [#828](https://github.com/tremor-rs/tremor-runtime/pull/828)
 
 ### Fixes
 
@@ -29,6 +31,7 @@
 * Sort the artefacts while running the benchmarks so that the benchmark run is more deterministic [#825](https://github.com/tremor-rs/tremor-runtime/issues/825)
 * Remove the bench_pipe_passthrough_csv benchmark [#825](https://github.com/tremor-rs/tremor-runtime/issues/825)
 * Fix a bug in the `test bench` command that was giving false negatives when the benchmarks were failing [#816](https://github.com/tremor-rs/tremor-runtime/pull/816)
+* Fix time based windows to not emit empty windows anymore and to not error if they contain event references [#828](https://github.com/tremor-rs/tremor-runtime/pull/828)
 
 ## 0.10.2
 
