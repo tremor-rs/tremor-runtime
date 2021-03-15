@@ -386,6 +386,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-stream"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3670df70cbc01729f901f94c887814b3c68db038aad1329a418bae178bc5295c"
+dependencies = [
+ "async-stream-impl",
+ "futures-core",
+]
+
+[[package]]
+name = "async-stream-impl"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a3548b8efc9f8e8a5a0a2808c5bd8451a9031b9e5b879a79590304ae928b0a70"
+dependencies = [
+ "proc-macro2",
+ "quote 1.0.9",
+ "syn 1.0.60",
+]
+
+[[package]]
 name = "async-task"
 version = "4.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3677,6 +3698,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "prost"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9e6984d2f1a23009bd270b8bb56d0926810a3d483f59c987d77969e9d8e840b2"
+dependencies = [
+ "bytes 1.0.1",
+ "prost-derive",
+]
+
+[[package]]
+name = "prost-derive"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "169a15f3008ecb5160cba7d37bcd690a7601b6d30cfb87a117d45e59d52af5d4"
+dependencies = [
+ "anyhow",
+ "itertools 0.9.0",
+ "proc-macro2",
+ "quote 1.0.9",
+ "syn 1.0.60",
+]
+
+[[package]]
 name = "protobuf"
 version = "2.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5442,6 +5486,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "tokio-stream"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c535f53c0cfa1acace62995a8994fc9cc1f12d202420da96ff306ee24d576469"
+dependencies = [
+ "futures-core",
+ "pin-project-lite 0.2.6",
+ "tokio 1.2.0",
+]
+
+[[package]]
 name = "tokio-sync"
 version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5575,6 +5630,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "tonic"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3ba8f479158947373b6df40cf48f4779bb25c99ca3c661bd95e0ab1963ad8b0e"
+dependencies = [
+ "async-stream",
+ "async-trait",
+ "base64 0.13.0",
+ "bytes 1.0.1",
+ "futures-core",
+ "futures-util",
+ "h2 0.3.0",
+ "http 0.2.3",
+ "http-body 0.4.0",
+ "hyper 0.14.4",
+ "percent-encoding 2.1.0",
+ "pin-project",
+ "prost",
+ "prost-derive",
+ "tokio 1.2.0",
+ "tokio-rustls",
+ "tokio-stream",
+ "tokio-util 0.6.3",
+ "tower",
+ "tower-service",
+ "tracing",
+ "tracing-futures",
+]
+
+[[package]]
 name = "torch-sys"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5587,6 +5672,32 @@ dependencies = [
  "libc",
  "zip",
 ]
+
+[[package]]
+name = "tower"
+version = "0.4.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f715efe02c0862926eb463e49368d38ddb119383475686178e32e26d15d06a66"
+dependencies = [
+ "futures-core",
+ "futures-util",
+ "indexmap",
+ "pin-project",
+ "rand 0.8.3",
+ "slab",
+ "tokio 1.2.0",
+ "tokio-stream",
+ "tokio-util 0.6.3",
+ "tower-layer",
+ "tower-service",
+ "tracing",
+]
+
+[[package]]
+name = "tower-layer"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "343bc9466d3fe6b0f960ef45960509f84480bf4fd96f92901afe7ff3df9d3a62"
 
 [[package]]
 name = "tower-service"
@@ -5732,6 +5843,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "tremor-otelapis"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d32d9f22b8e6c6f3a9dc9f2b1c893fde999f7d1077e170c7a61f5b1063fed454"
+dependencies = [
+ "async-channel",
+ "prost",
+ "tonic",
+]
+
+[[package]]
 name = "tremor-pipeline"
 version = "0.10.2"
 dependencies = [
@@ -5824,8 +5946,10 @@ dependencies = [
  "tempfile",
  "tide",
  "tokio-postgres",
+ "tonic",
  "tremor-common",
  "tremor-influx",
+ "tremor-otelapis",
  "tremor-pipeline",
  "tremor-script",
  "tremor-value",
