@@ -314,7 +314,7 @@ async fn pipeline_task(
                                     |located| format!("\n{}", located),
                                 ) // add a newline to have the error nicely formatted in the log
                         } else {
-                            format!(" {:?}", e)
+                            format!(" {}", e)
                         };
                         error!("Error handling event:{}", err_str);
                     }
