@@ -263,7 +263,7 @@ impl Query {
 
                     let select_in = InputPort {
                         id: format!("select_{}", select_num).into(),
-                        port: OUT,
+                        port: OUT, // TODO: should this be IN?
                         had_port: false,
                         location: s.extent(&query.node_meta),
                     };
