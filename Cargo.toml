@@ -109,6 +109,9 @@ serenity = {version = "0.10", default-features = false, features = ["client", "g
 # kv
 sled = "0.34"
 
+# opentelemetry
+tremor-otelapis = "0.1"
+tonic = { version = "0.4", default-features = false, features = [ "transport", "tls" ] }
 
 [dependencies.tungstenite]
 default-features = false
