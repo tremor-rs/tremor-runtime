@@ -97,7 +97,7 @@ pub(crate) fn any_value_to_pb(data: &Value<'_>) -> AnyValue {
             }
         }
         Value::Bytes(b) => {
-            // FIXME TODO find a better binary mapping - the below is clearly not right!
+            // TODO find a better binary mapping - the below is clearly not right!
             let b: Vec<AnyValue> = b
                 .iter()
                 .map(|b| AnyValue {
