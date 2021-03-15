@@ -30,16 +30,16 @@ use simd_json::Value as SimdJsonValue;
 use tremor_value::Value;
 
 #[allow(deprecated)]
-pub(crate) fn status_to_json<'event>(data: Option<Status>) -> Result<Value<'event>> {
+pub(crate) fn status_to_json<'event>(data: Option<Status>) -> Value<'event> {
     if let Some(data) = data {
-        Ok(json!({
+        json!({
             "code": data.code,
             "deprecated_code": data.deprecated_code,
             "message": data.message
         })
-        .into())
+        .into()
     } else {
-        Ok(json!({ "code": 0, "deprecated_code": 0, "message": "status code unset" }).into())
+        json!({ "code": 0, "deprecated_code": 0, "message": "status code unset" }).into()
     }
 }
 
@@ -59,7 +59,7 @@ pub(crate) fn span_events_to_json<'event>(pb: Vec<Event>) -> Result<Value<'event
     Ok(Value::Array(json))
 }
 
-pub(crate) fn span_events_to_pb<'event>(json: Option<&Value<'event>>) -> Result<Vec<Event>> {
+pub(crate) fn span_events_to_pb(json: Option<&Value<'_>>) -> Result<Vec<Event>> {
     let mut pb = Vec::new();
     if let Some(Value::Array(json)) = json {
         for json in json {
@@ -96,7 +96,7 @@ pub(crate) fn span_links_to_json<'event>(pb: Vec<Link>) -> Result<Value<'event>>
     Ok(Value::Array(json))
 }
 
-pub(crate) fn span_links_to_pb<'event>(json: Option<&Value<'event>>) -> Result<Vec<Link>> {
+pub(crate) fn span_links_to_pb(json: Option<&Value<'_>>) -> Result<Vec<Link>> {
     let mut pb = Vec::new();
     if let Some(Value::Array(json)) = json {
         for json in json {
@@ -118,14 +118,18 @@ pub(crate) fn span_links_to_pb<'event>(json: Option<&Value<'event>>) -> Result<V
     Ok(pb)
 }
 
-pub(crate) fn span_id_to_pb<'event>(data: Option<&Value<'event>>) -> Result<Vec<u8>> {
+pub(crate) fn span_id_to_pb(data: Option<&Value<'_>>) -> Result<Vec<u8>> {
     let mut span_id = Vec::new();
     if let Some(Value::Array(a)) = data {
         for i in a {
-            if let &Value::Static(StaticNode::I64(i)) = i {
-                span_id.push(i as u8) // TODO check i <= 255
-            } else if let &Value::Static(StaticNode::U64(i)) = i {
-                span_id.push(i as u8) // TODO check i <= 255
+            if let Value::Static(StaticNode::I64(i)) = i {
+                #[allow(clippy::cast_possible_truncation)]
+                #[allow(clippy::cast_sign_loss)]
+                span_id.push(*i as u8) // TODO check i <= 255
+            } else if let Value::Static(StaticNode::U64(i)) = i {
+                #[allow(clippy::cast_possible_truncation)]
+                #[allow(clippy::cast_sign_loss)]
+                span_id.push(*i as u8) // TODO check i <= 255
             }
         }
         // TODO check span_id.len
@@ -134,14 +138,18 @@ pub(crate) fn span_id_to_pb<'event>(data: Option<&Value<'event>>) -> Result<Vec<
     Err("Invalid json mapping of otel span id".into())
 }
 
-pub(crate) fn trace_id_to_pb<'event>(data: Option<&Value<'event>>) -> Result<Vec<u8>> {
+pub(crate) fn trace_id_to_pb(data: Option<&Value<'_>>) -> Result<Vec<u8>> {
     let mut trace_id = Vec::new();
     if let Some(Value::Array(a)) = data {
-        for i in &*a {
-            if let &Value::Static(StaticNode::I64(i)) = i {
-                trace_id.push(i as u8) // TODO check i <= 255
-            } else if let &Value::Static(StaticNode::U64(i)) = i {
-                trace_id.push(i as u8) // TODO check i <= 255
+        for i in a {
+            if let Value::Static(StaticNode::I64(i)) = i {
+                #[allow(clippy::cast_possible_truncation)]
+                #[allow(clippy::cast_sign_loss)]
+                trace_id.push(*i as u8) // TODO check i <= 255
+            } else if let Value::Static(StaticNode::U64(i)) = i {
+                #[allow(clippy::cast_possible_truncation)]
+                #[allow(clippy::cast_sign_loss)]
+                trace_id.push(*i as u8) // TODO check i <= 255
             }
         }
         // TODO check trace_id.len
@@ -150,7 +158,7 @@ pub(crate) fn trace_id_to_pb<'event>(data: Option<&Value<'event>>) -> Result<Vec
     Err("Invalid json mapping of otel trace id".into())
 }
 
-pub(crate) fn status_to_pb<'event>(json: Option<&Value<'event>>) -> Result<Option<Status>> {
+pub(crate) fn status_to_pb(json: Option<&Value<'_>>) -> Result<Option<Status>> {
     match json {
         Some(Value::Object(json)) => {
             let code = pb::maybe_int_to_pbi32(json.get("code"))?;
@@ -170,8 +178,8 @@ pub(crate) fn status_to_pb<'event>(json: Option<&Value<'event>>) -> Result<Optio
     }
 }
 
-pub(crate) fn instrumentation_library_spans_to_pb<'event>(
-    data: Option<&Value<'event>>,
+pub(crate) fn instrumentation_library_spans_to_pb(
+    data: Option<&Value<'_>>,
 ) -> Result<InstrumentationLibrarySpans> {
     let mut spans = Vec::new();
     if let Some(Value::Object(data)) = data {
@@ -236,7 +244,7 @@ pub(crate) fn resource_spans_to_json<'event>(
         for el in span.instrumentation_library_spans {
             il.push(common::maybe_instrumentation_library_to_json(
                 el.instrumentation_library,
-            )?);
+            ));
             for span in el.spans {
                 il.push(
                     json!({
@@ -251,14 +259,14 @@ pub(crate) fn resource_spans_to_json<'event>(
                         "dropped_attributes_count": span.dropped_attributes_count,
                         "dropped_events_count": span.dropped_events_count,
                         "dropped_links_count": span.dropped_links_count,
-                        "status": status_to_json(span.status)?,
+                        "status": status_to_json(span.status),
                         "kind": span.kind
                     })
                     .into(),
                 )
             }
         }
-        for trace in span.resource {
+        if let Some(trace) = span.resource {
             ia.push(json!({"log": {
                 "attributes": common::key_value_list_to_json(trace.attributes)?,
                 "dropped_attribute_count": trace.dropped_attributes_count,
@@ -272,9 +280,7 @@ pub(crate) fn resource_spans_to_json<'event>(
     Ok(json!({ "trace": { "resource_spans": spans }}).into())
 }
 
-pub(crate) fn resource_spans_to_pb<'event>(
-    json: Option<&Value<'event>>,
-) -> Result<Vec<ResourceSpans>> {
+pub(crate) fn resource_spans_to_pb(json: Option<&Value<'_>>) -> Result<Vec<ResourceSpans>> {
     if let Some(Value::Object(json)) = json {
         if let Some(Value::Array(json)) = json.get("spans") {
             let mut pb = Vec::new();

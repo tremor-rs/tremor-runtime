@@ -31,7 +31,7 @@ pub(crate) fn resource_to_json<'event>(pb: Option<Resource>) -> Result<Value<'ev
     }
 }
 
-pub(crate) fn maybe_resource_to_pb<'event>(json: Option<&Value<'event>>) -> Result<Resource> {
+pub(crate) fn maybe_resource_to_pb(json: Option<&Value<'_>>) -> Result<Resource> {
     if let Some(Value::Object(json)) = json {
         let dropped_attributes_count: u32 =
             pb::maybe_int_to_pbu32(json.get("dropped_attributes_count"))?;

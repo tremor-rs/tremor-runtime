@@ -33,9 +33,7 @@ use tremor_otelapis::opentelemetry::proto::{
 use simd_json::{Builder, Mutable, Value as SimdJsonValue};
 use tremor_value::Value;
 
-pub(crate) fn int_exemplars_to_pb<'event>(
-    json: Option<&Value<'event>>,
-) -> Result<Vec<IntExemplar>> {
+pub(crate) fn int_exemplars_to_pb(json: Option<&Value<'_>>) -> Result<Vec<IntExemplar>> {
     if let Some(Value::Array(json)) = json {
         let mut pb = Vec::new();
         for data in json {
@@ -58,9 +56,7 @@ pub(crate) fn int_exemplars_to_pb<'event>(
     Err("Unable to map json value to Exemplars pb".into())
 }
 
-pub(crate) fn double_exemplars_to_pb<'event>(
-    json: Option<&Value<'event>>,
-) -> Result<Vec<DoubleExemplar>> {
+pub(crate) fn double_exemplars_to_pb(json: Option<&Value<'_>>) -> Result<Vec<DoubleExemplar>> {
     if let Some(Value::Array(json)) = json {
         let mut pb = Vec::new();
         for data in json {
@@ -83,9 +79,7 @@ pub(crate) fn double_exemplars_to_pb<'event>(
     Err("Unable to map json value to Exemplars pb".into())
 }
 
-pub(crate) fn quantile_values_to_pb<'event>(
-    json: Option<&Value<'event>>,
-) -> Result<Vec<ValueAtQuantile>> {
+pub(crate) fn quantile_values_to_pb(json: Option<&Value<'_>>) -> Result<Vec<ValueAtQuantile>> {
     if let Some(Value::Array(json)) = json {
         let mut arr = Vec::new();
         for data in json {
@@ -99,7 +93,7 @@ pub(crate) fn quantile_values_to_pb<'event>(
     Err("Unable to map json value to ValueAtQuantiles".into())
 }
 
-pub(crate) fn int_data_points_to_json<'event>(pb: Vec<IntDataPoint>) -> Result<Value<'event>> {
+pub(crate) fn int_data_points_to_json<'event>(pb: Vec<IntDataPoint>) -> Value<'event> {
     let mut json = Vec::new();
     for data in pb {
         let mut labels = Vec::new();
@@ -133,12 +127,10 @@ pub(crate) fn int_data_points_to_json<'event>(pb: Vec<IntDataPoint>) -> Result<V
         .into();
         json.push(v);
     }
-    Ok(Value::Array(json))
+    Value::Array(json)
 }
 
-pub(crate) fn double_data_points_to_json<'event>(
-    pb: Vec<DoubleDataPoint>,
-) -> Result<Value<'event>> {
+pub(crate) fn double_data_points_to_json<'event>(pb: Vec<DoubleDataPoint>) -> Value<'event> {
     let mut json = Vec::new();
     for data in pb {
         let mut labels = Vec::new();
@@ -172,12 +164,12 @@ pub(crate) fn double_data_points_to_json<'event>(
         .into();
         json.push(v);
     }
-    Ok(Value::Array(json))
+    Value::Array(json)
 }
 
 pub(crate) fn double_histo_data_points_to_json<'event>(
     pb: Vec<DoubleHistogramDataPoint>,
-) -> Result<Value<'event>> {
+) -> Value<'event> {
     let mut json = Vec::new();
     for points in pb {
         let mut labels = Vec::new();
@@ -215,12 +207,12 @@ pub(crate) fn double_histo_data_points_to_json<'event>(
         json.push(v);
     }
 
-    Ok(Value::Array(json))
+    Value::Array(json)
 }
 
 pub(crate) fn double_summary_data_points_to_json<'event>(
     pb: Vec<DoubleSummaryDataPoint>,
-) -> Result<Value<'event>> {
+) -> Value<'event> {
     let mut json = Vec::new();
     for points in pb {
         let mut labels = Vec::new();
@@ -244,12 +236,12 @@ pub(crate) fn double_summary_data_points_to_json<'event>(
         .into();
         json.push(v);
     }
-    Ok(Value::Array(json))
+    Value::Array(json)
 }
 
 pub(crate) fn int_histo_data_points_to_json<'event>(
     pb: Vec<IntHistogramDataPoint>,
-) -> Result<Value<'event>> {
+) -> Value<'event> {
     let mut json = Vec::new();
     for points in pb {
         let mut labels = Vec::new();
@@ -287,10 +279,10 @@ pub(crate) fn int_histo_data_points_to_json<'event>(
         json.push(v);
     }
 
-    Ok(Value::Array(json))
+    Value::Array(json)
 }
 
-pub(crate) fn int_sum_data_points_to_json<'event>(pb: Vec<IntDataPoint>) -> Result<Value<'event>> {
+pub(crate) fn int_sum_data_points_to_json<'event>(pb: Vec<IntDataPoint>) -> Value<'event> {
     let mut json = Vec::new();
     for points in pb {
         let mut labels = Vec::new();
@@ -324,10 +316,11 @@ pub(crate) fn int_sum_data_points_to_json<'event>(pb: Vec<IntDataPoint>) -> Resu
         .into();
         json.push(v);
     }
-    Ok(Value::Array(json))
+    Value::Array(json)
 }
 
-pub(crate) fn metric_data_to_pb<'event>(data: Option<&Value<'event>>) -> Result<metric::Data> {
+#[allow(clippy::too_many_lines)]
+pub(crate) fn metric_data_to_pb(data: Option<&Value<'_>>) -> Result<metric::Data> {
     if let Some(Value::Object(json)) = data {
         if let Some(Value::Object(json)) = json.get("int-gauge") {
             if let Some(Value::Array(arr)) = json.get("data_points") {
@@ -512,8 +505,8 @@ pub(crate) fn metric_data_to_pb<'event>(data: Option<&Value<'event>>) -> Result<
     Err("Invalid metric data point type - cannot convert to pb".into())
 }
 
-pub(crate) fn instrumentation_library_metrics_to_pb<'event>(
-    data: Option<&Value<'event>>,
+pub(crate) fn instrumentation_library_metrics_to_pb(
+    data: Option<&Value<'_>>,
 ) -> Result<InstrumentationLibraryMetrics> {
     let mut metrics = Vec::new();
     if let Some(Value::Object(data)) = data {
@@ -552,7 +545,7 @@ pub(crate) fn metrics_to_json<'event>(
         let mut ilm = Vec::new();
         for el in metric.instrumentation_library_metrics {
             let instrumentation_library =
-                common::maybe_instrumentation_library_to_json(el.instrumentation_library)?;
+                common::maybe_instrumentation_library_to_json(el.instrumentation_library);
 
             let mut im = Vec::new();
             for m in el.metrics {
@@ -560,7 +553,7 @@ pub(crate) fn metrics_to_json<'event>(
                     Some(Data::IntGauge(data)) => Some(
                         json!({
                             "int-gauge": {
-                            "data_points":  int_data_points_to_json(data.data_points)?
+                            "data_points":  int_data_points_to_json(data.data_points)
                         }})
                         .into(),
                     ),
@@ -568,7 +561,7 @@ pub(crate) fn metrics_to_json<'event>(
                         json!({
                             "double-sum": {
                             "is_monotonic": data.is_monotonic,
-                            "data_points":  double_data_points_to_json(data.data_points)?,
+                            "data_points":  double_data_points_to_json(data.data_points),
                             "aggregation_temporality": data.aggregation_temporality,
                         }})
                         .into(),
@@ -576,14 +569,14 @@ pub(crate) fn metrics_to_json<'event>(
                     Some(Data::DoubleGauge(data)) => Some(
                         json!({
                             "double-gauge": {
-                            "data_points":  double_data_points_to_json(data.data_points)?,
+                            "data_points":  double_data_points_to_json(data.data_points),
                         }})
                         .into(),
                     ),
                     Some(Data::DoubleHistogram(data)) => Some(
                         json!({
                             "double-histogram": {
-                            "data_points":  double_histo_data_points_to_json(data.data_points)?,
+                            "data_points":  double_histo_data_points_to_json(data.data_points),
                             "aggregation_temporality": data.aggregation_temporality,
                         }})
                         .into(),
@@ -591,14 +584,14 @@ pub(crate) fn metrics_to_json<'event>(
                     Some(Data::DoubleSummary(data)) => Some(
                         json!({
                             "double-summary": {
-                            "data_points":  double_summary_data_points_to_json(data.data_points)?,
+                            "data_points":  double_summary_data_points_to_json(data.data_points),
                         }})
                         .into(),
                     ),
                     Some(Data::IntHistogram(data)) => Some(
                         json!({
                             "int-histogram": {
-                            "data_points":  int_histo_data_points_to_json(data.data_points)?,
+                            "data_points":  int_histo_data_points_to_json(data.data_points),
                             "aggregation_temporality": data.aggregation_temporality,
                         }})
                         .into(),
@@ -607,7 +600,7 @@ pub(crate) fn metrics_to_json<'event>(
                         json!({
                             "int-sum": {
                             "is_monotonic": data.is_monotonic,
-                            "data_points":  int_sum_data_points_to_json(data.data_points)?,
+                            "data_points":  int_sum_data_points_to_json(data.data_points),
                             "aggregation_temporality": data.aggregation_temporality,
                             }
                         })
@@ -638,9 +631,7 @@ pub(crate) fn metrics_to_json<'event>(
     Ok(data)
 }
 
-pub(crate) fn resource_metrics_to_pb<'event>(
-    json: Option<&Value<'event>>,
-) -> Result<Vec<ResourceMetrics>> {
+pub(crate) fn resource_metrics_to_pb(json: Option<&Value<'_>>) -> Result<Vec<ResourceMetrics>> {
     if let Some(Value::Object(json)) = json {
         if let Some(Value::Array(json)) = json.get("resource_metrics") {
             let mut pb = Vec::new();

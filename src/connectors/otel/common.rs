@@ -54,52 +54,67 @@ pub(crate) fn any_value_to_json<'event>(
     };
     Ok(v)
 }
-
-pub(crate) fn maybe_any_value_to_pb<'event>(data: Option<&Value<'event>>) -> Result<AnyValue> {
+pub(crate) fn any_value_to_pb(data: &Value<'_>) -> AnyValue {
     use any_value::Value as PbAnyValue;
-    if let Some(data) = data {
-        return Ok(match data {
-            Value::Static(StaticNode::Null) => AnyValue { value: None },
-            Value::Static(StaticNode::Bool(v)) => AnyValue {
-                value: Some(PbAnyValue::BoolValue(*v)),
-            },
-            Value::Static(StaticNode::I64(v)) => AnyValue {
-                value: Some(PbAnyValue::IntValue(*v)),
-            },
-            Value::Static(StaticNode::U64(_)) => {
-                return Err("Cannot map u64 to i64 in pb - unimplemented".into())
+    match data {
+        Value::Static(StaticNode::Null) => AnyValue { value: None },
+        Value::Static(StaticNode::Bool(v)) => AnyValue {
+            value: Some(PbAnyValue::BoolValue(*v)),
+        },
+        Value::Static(StaticNode::I64(v)) => AnyValue {
+            value: Some(PbAnyValue::IntValue(*v)),
+        },
+        Value::Static(StaticNode::U64(v)) => {
+            #[allow(clippy::cast_sign_loss, clippy::cast_possible_wrap)]
+            let v = *v as i64;
+
+            AnyValue {
+                value: Some(PbAnyValue::IntValue(v)),
             }
-            Value::Static(StaticNode::F64(v)) => AnyValue {
-                value: Some(PbAnyValue::DoubleValue(*v)),
-            },
-            Value::String(v) => AnyValue {
-                value: Some(PbAnyValue::StringValue(v.to_string())),
-            },
-            Value::Array(va) => {
-                let a: Vec<AnyValue> = va
-                    .iter()
-                    .map(|v| maybe_any_value_to_pb(Some(v)).unwrap())
-                    .collect();
-                let x = PbAnyValue::ArrayValue(ArrayValue { values: a });
-                AnyValue { value: Some(x) }
+        }
+        Value::Static(StaticNode::F64(v)) => AnyValue {
+            value: Some(PbAnyValue::DoubleValue(*v)),
+        },
+        Value::String(v) => AnyValue {
+            value: Some(PbAnyValue::StringValue(v.to_string())),
+        },
+        Value::Array(va) => {
+            let a: Vec<AnyValue> = va.iter().map(|v| any_value_to_pb(v)).collect();
+            let x = PbAnyValue::ArrayValue(ArrayValue { values: a });
+            AnyValue { value: Some(x) }
+        }
+        Value::Object(vo) => {
+            let mut kvl = Vec::new();
+            for (k, v) in vo.iter() {
+                kvl.push(KeyValue {
+                    key: k.to_string(),
+                    value: Some(any_value_to_pb(v)),
+                });
             }
-            Value::Object(vo) => {
-                let mut kvl = Vec::new();
-                for (k, v) in vo.iter() {
-                    kvl.push(KeyValue {
-                        key: k.to_string(),
-                        value: Some(maybe_any_value_to_pb(Some(v))?),
-                    });
-                }
-                let pb = KeyValueList { values: kvl };
-                AnyValue {
-                    value: Some(PbAnyValue::KvlistValue(pb)),
-                }
+            let pb = KeyValueList { values: kvl };
+            AnyValue {
+                value: Some(PbAnyValue::KvlistValue(pb)),
             }
-            Value::Bytes(_) => return Err("Cannot map binary to pb - unimplemented".into()),
-        });
+        }
+        Value::Bytes(b) => {
+            // FIXME TODO find a better binary mapping - the below is clearly not right!
+            let b: Vec<AnyValue> = b
+                .iter()
+                .map(|b| AnyValue {
+                    value: Some(PbAnyValue::IntValue(i64::from(*b))),
+                })
+                .collect();
+            let x = PbAnyValue::ArrayValue(ArrayValue { values: b });
+            AnyValue { value: Some(x) }
+        }
     }
-    Err("Unable to map to pb otel any_value".into())
+}
+
+pub(crate) fn maybe_any_value_to_pb(data: Option<&Value<'_>>) -> Result<AnyValue> {
+    data.map_or_else(
+        || Err("Unable to map to pb otel any_value".into()),
+        |x| Ok(any_value_to_pb(x)),
+    )
 }
 
 pub(crate) fn maybe_any_value_to_json<'event>(
@@ -111,7 +126,7 @@ pub(crate) fn maybe_any_value_to_json<'event>(
     }
 }
 
-// pub(crate) fn string_key_value_to_json<'event>(pb: Vec<StringKeyValue>) -> Result<Value<'event>> {
+// pub(crate) fn string_key_value_to_json(pb: Vec<StringKeyValue>) -> Result<Value<'_>> {
 //     let mut json = Vec::new();
 //     for kv in pb {
 //         let v = json!({
@@ -124,9 +139,7 @@ pub(crate) fn maybe_any_value_to_json<'event>(
 //     Ok(json!(json).into())
 // }
 
-pub(crate) fn string_key_value_to_pb<'event>(
-    data: Option<&Value<'event>>,
-) -> Result<Vec<StringKeyValue>> {
+pub(crate) fn string_key_value_to_pb(data: Option<&Value<'_>>) -> Result<Vec<StringKeyValue>> {
     let mut pb = Vec::new();
     if let Some(Value::Array(data)) = data {
         for item in data {
@@ -154,9 +167,7 @@ pub(crate) fn key_value_list_to_json<'event>(pb: Vec<KeyValue>) -> Result<Value<
     Ok(Value::Array(json))
 }
 
-pub(crate) fn maybe_key_value_list_to_pb<'event>(
-    data: Option<&Value<'event>>,
-) -> Result<Vec<KeyValue>> {
+pub(crate) fn maybe_key_value_list_to_pb(data: Option<&Value<'_>>) -> Result<Vec<KeyValue>> {
     let mut pb: Vec<KeyValue> = Vec::new();
     if let Some(Value::Array(data)) = data {
         for data in data {
@@ -179,19 +190,19 @@ pub(crate) fn maybe_key_value_list_to_pb<'event>(
 
 pub(crate) fn maybe_instrumentation_library_to_json<'event>(
     pb: Option<InstrumentationLibrary>,
-) -> Result<Value<'event>> {
-    Ok(match pb {
+) -> Value<'event> {
+    match pb {
         None => Value::Static(StaticNode::Null),
         Some(il) => json!({
             "name": il.name,
             "version": il.version,
         })
         .into(),
-    })
+    }
 }
 
-pub(crate) fn maybe_instrumentation_library_to_pb<'event>(
-    data: Option<&Value<'event>>,
+pub(crate) fn maybe_instrumentation_library_to_pb(
+    data: Option<&Value<'_>>,
 ) -> Result<Option<InstrumentationLibrary>> {
     match data {
         Some(data) => Ok(Some(InstrumentationLibrary {

@@ -16,7 +16,7 @@ use crate::errors::Result;
 use simd_json::StaticNode;
 use tremor_value::Value;
 
-pub(crate) fn maybe_string_to_pb<'event>(data: Option<&Value<'event>>) -> Result<String> {
+pub(crate) fn maybe_string_to_pb(data: Option<&Value<'_>>) -> Result<String> {
     if let Some(Value::String(s)) = data {
         Ok(s.to_string())
     } else {
@@ -24,25 +24,28 @@ pub(crate) fn maybe_string_to_pb<'event>(data: Option<&Value<'event>>) -> Result
     }
 }
 
-pub(crate) fn maybe_int_to_pbu64<'event>(data: Option<&Value<'event>>) -> Result<u64> {
+pub(crate) fn maybe_int_to_pbu64(data: Option<&Value<'_>>) -> Result<u64> {
     if let Some(&Value::Static(StaticNode::U64(i))) = data {
         Ok(i)
     } else if let Some(&Value::Static(StaticNode::I64(i))) = data {
+        #[allow(clippy::clippy::cast_sign_loss)]
         Ok(i as u64)
     } else {
         Err("Expected an json u64 to convert to pb u64".into())
     }
 }
 
-pub(crate) fn maybe_int_to_pbi32<'event>(data: Option<&Value<'event>>) -> Result<i32> {
+pub(crate) fn maybe_int_to_pbi32(data: Option<&Value<'_>>) -> Result<i32> {
     if let Some(&Value::Static(StaticNode::I64(i))) = data {
+        #[allow(clippy::clippy::cast_sign_loss)]
+        #[allow(clippy::cast_possible_truncation)]
         Ok(i as i32)
     } else {
         Err("Expected an json i64 to convert to pb i32".into())
     }
 }
 
-pub(crate) fn maybe_int_to_pbi64<'event>(data: Option<&Value<'event>>) -> Result<i64> {
+pub(crate) fn maybe_int_to_pbi64(data: Option<&Value<'_>>) -> Result<i64> {
     if let Some(&Value::Static(StaticNode::I64(i))) = data {
         Ok(i)
     } else {
@@ -50,15 +53,17 @@ pub(crate) fn maybe_int_to_pbi64<'event>(data: Option<&Value<'event>>) -> Result
     }
 }
 
-pub(crate) fn maybe_int_to_pbu32<'event>(data: Option<&Value<'event>>) -> Result<u32> {
+pub(crate) fn maybe_int_to_pbu32(data: Option<&Value<'_>>) -> Result<u32> {
     if let Some(&Value::Static(StaticNode::I64(i))) = data {
+        #[allow(clippy::clippy::cast_sign_loss)]
+        #[allow(clippy::cast_possible_truncation)]
         Ok(i as u32) // TODO check for v > u32 max
     } else {
         Err("Expected an i64 to convert to pb u32".into())
     }
 }
 
-pub(crate) fn maybe_double_to_pb<'event>(data: Option<&Value<'event>>) -> Result<f64> {
+pub(crate) fn maybe_double_to_pb(data: Option<&Value<'_>>) -> Result<f64> {
     if let Some(&Value::Static(StaticNode::F64(i))) = data {
         Ok(i)
     } else {
@@ -66,7 +71,7 @@ pub(crate) fn maybe_double_to_pb<'event>(data: Option<&Value<'event>>) -> Result
     }
 }
 
-pub(crate) fn maybe_bool_to_pb<'event>(data: Option<&Value<'event>>) -> Result<bool> {
+pub(crate) fn maybe_bool_to_pb(data: Option<&Value<'_>>) -> Result<bool> {
     if let Some(&Value::Static(StaticNode::Bool(i))) = data {
         Ok(i)
     } else {
@@ -74,7 +79,7 @@ pub(crate) fn maybe_bool_to_pb<'event>(data: Option<&Value<'event>>) -> Result<b
     }
 }
 
-pub(crate) fn f64_repeated_to_pb<'event>(json: Option<&Value<'event>>) -> Result<Vec<f64>> {
+pub(crate) fn f64_repeated_to_pb(json: Option<&Value<'_>>) -> Result<Vec<f64>> {
     if let Some(Value::Array(json)) = json {
         let mut arr = Vec::new();
         for data in json {
@@ -87,7 +92,7 @@ pub(crate) fn f64_repeated_to_pb<'event>(json: Option<&Value<'event>>) -> Result
     Err("Unable to map json value to repeated f64 pb".into())
 }
 
-pub(crate) fn u64_repeated_to_pb<'event>(json: Option<&Value<'event>>) -> Result<Vec<u64>> {
+pub(crate) fn u64_repeated_to_pb(json: Option<&Value<'_>>) -> Result<Vec<u64>> {
     if let Some(Value::Array(json)) = json {
         let mut arr = Vec::new();
         for data in json {
