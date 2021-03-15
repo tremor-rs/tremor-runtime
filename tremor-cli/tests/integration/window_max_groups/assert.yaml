@@ -1,0 +1,9 @@
+status: 0
+name: window with max_groups
+asserts:
+  - source: out.log
+    equals_file: expected.json
+  - source: fg.err.log
+    contains:
+      - |
+        Error handling event: Maxmimum amount of groups reached (2). Ignoring group [3]

@@ -98,6 +98,11 @@ pub trait WindowTrait: std::fmt::Debug {
         })
     }
     fn eviction_ns(&self) -> Option<u64>;
+    /// maximum number of groups to keep around simultaneously
+    /// a value of `u64::MAX` allows as much simultaneous groups as possible
+    /// decreasing this value will guard against runwaway memory growth
+    /// when faced with unexpected huge cardinalities for grouping dimensions
+    fn max_groups(&self) -> u64;
 }
 
 #[derive(Debug)]
@@ -133,11 +138,22 @@ pub enum WindowImpl {
     No(NoWindow),
 }
 
+impl WindowImpl {
+    // allow all the groups we can take by default
+    // this preserves backward compatibility
+    pub const DEFAULT_MAX_GROUPS: u64 = u64::MAX;
+
+    // do not emit empty windows by default
+    // this preserves backward compatibility
+    pub const DEFAULT_EMIT_EMPTY_WINDOWS: bool = false;
+}
+
 impl std::default::Default for WindowImpl {
     fn default() -> Self {
         TumblingWindowOnTime {
-            size: 15_000_000_000,
-            emit_empty_windows: false,
+            interval: 15_000_000_000,
+            emit_empty_windows: Self::DEFAULT_EMIT_EMPTY_WINDOWS,
+            max_groups: Self::DEFAULT_MAX_GROUPS,
             next_window: None,
             events: 0,
             script: None,
@@ -169,6 +185,13 @@ impl WindowTrait for WindowImpl {
             Self::TumblingTimeBased(w) => w.eviction_ns(),
             Self::TumblingCountBased(w) => w.eviction_ns(),
             Self::No(w) => w.eviction_ns(),
+        }
+    }
+    fn max_groups(&self) -> u64 {
+        match self {
+            Self::TumblingTimeBased(w) => w.max_groups(),
+            Self::TumblingCountBased(w) => w.max_groups(),
+            Self::No(w) => w.max_groups(),
         }
     }
 }
@@ -217,21 +240,26 @@ impl WindowTrait for NoWindow {
             emit: true,
         })
     }
+    fn max_groups(&self) -> u64 {
+        u64::MAX
+    }
 }
 
 #[derive(Default, Debug, Clone)]
 pub struct TumblingWindowOnTime {
     next_window: Option<u64>,
     emit_empty_windows: bool,
+    max_groups: u64,
     events: u64,
-    size: u64,
+    interval: u64,
     ttl: Option<u64>,
     script: Option<rentals::Window>,
 }
 impl TumblingWindowOnTime {
     pub fn from_stmt(
-        size: u64,
+        interval: u64,
         emit_empty_windows: bool,
+        max_groups: u64,
         ttl: Option<u64>,
         script: Option<&WindowDecl>,
         stmt: &StmtRentalWrapper,
@@ -246,8 +274,9 @@ impl TumblingWindowOnTime {
         Self {
             next_window: None,
             emit_empty_windows,
+            max_groups,
             events: 0,
-            size,
+            interval,
             ttl,
             script,
         }
@@ -256,7 +285,7 @@ impl TumblingWindowOnTime {
     fn get_window_event(&mut self, time: u64) -> WindowEvent {
         match self.next_window {
             None => {
-                self.next_window = Some(time + self.size);
+                self.next_window = Some(time + self.interval);
                 WindowEvent {
                     opened: true,
                     include: false,
@@ -265,7 +294,7 @@ impl TumblingWindowOnTime {
             }
             Some(next_window) if next_window <= time => {
                 let emit = self.events > 0 || self.emit_empty_windows;
-                self.next_window = Some(time + self.size);
+                self.next_window = Some(time + self.interval);
                 self.events = 0;
                 WindowEvent {
                     opened: true,   // this event has been put into the newly opened window
@@ -285,6 +314,9 @@ impl TumblingWindowOnTime {
 impl WindowTrait for TumblingWindowOnTime {
     fn eviction_ns(&self) -> Option<u64> {
         self.ttl
+    }
+    fn max_groups(&self) -> u64 {
+        self.max_groups
     }
     fn on_event(&mut self, event: &Event) -> Result<WindowEvent> {
         self.events += 1; // count events to check if we should emit, as we avoid to emit if we have no events
@@ -331,6 +363,7 @@ impl WindowTrait for TumblingWindowOnTime {
 #[derive(Default, Debug, Clone)]
 pub struct TumblingWindowOnNumber {
     count: u64,
+    max_groups: u64,
     size: u64,
     ttl: Option<u64>,
     script: Option<rentals::Window>,
@@ -339,6 +372,7 @@ pub struct TumblingWindowOnNumber {
 impl TumblingWindowOnNumber {
     pub fn from_stmt(
         size: u64,
+        max_groups: u64,
         ttl: Option<u64>,
         script: Option<&WindowDecl>,
         stmt: &StmtRentalWrapper,
@@ -354,6 +388,7 @@ impl TumblingWindowOnNumber {
         });
         Self {
             count: 0,
+            max_groups,
             size,
             script,
             ttl,
@@ -363,6 +398,9 @@ impl TumblingWindowOnNumber {
 impl WindowTrait for TumblingWindowOnNumber {
     fn eviction_ns(&self) -> Option<u64> {
         self.ttl
+    }
+    fn max_groups(&self) -> u64 {
+        self.max_groups
     }
     fn on_event(&mut self, event: &Event) -> Result<WindowEvent> {
         let count = self
@@ -554,15 +592,15 @@ fn get_or_create_group<'window>(
     aggregates: &[InvokeAggrFn<'static>],
     group_str: &str,
     group_value: &Value,
-) -> &'window mut GroupData<'static> {
-    // TODO: move getting the current group to a method
+) -> Result<&'window mut GroupData<'static>> {
     let this_groups = &mut window.dims.groups;
+    let groups_len = this_groups.len() as u64;
     let last_groups = &mut window.last_dims.groups;
     let window_impl = &window.window_impl;
     let (_, this_group) = match this_groups.raw_entry_mut().from_key(group_str) {
         // avoid double-clojure
         RawEntryMut::Occupied(e) => e.into_key_value(),
-        RawEntryMut::Vacant(e) => {
+        RawEntryMut::Vacant(e) if groups_len < window.window_impl.max_groups() => {
             let k = group_str.to_string();
             let aggrs = aggregates.to_vec();
             let v = last_groups.remove(group_str).unwrap_or_else(|| {
@@ -575,8 +613,14 @@ fn get_or_create_group<'window>(
             });
             e.insert(k, v)
         }
+        _ => {
+            return Err(max_groups_reached(
+                window.window_impl.max_groups(),
+                group_str,
+            ))
+        }
     };
-    this_group
+    Ok(this_group)
 }
 
 impl Operator for TrickleSelect {
@@ -779,7 +823,7 @@ impl Operator for TrickleSelect {
                         aggregates,
                         &group_str,
                         &group_value,
-                    );
+                    )?;
 
                     let window_event = this_group.window.on_event(&event)?;
                     if window_event.emit && !window_event.include {
@@ -931,7 +975,7 @@ impl Operator for TrickleSelect {
                                 aggregates,
                                 &group_str,
                                 &group_value,
-                            );
+                            )?;
                             let window_event = this_group.window.on_event(&event)?;
                             if window_event.emit {
                                 emit_window_events.push(window_event);
@@ -959,7 +1003,7 @@ impl Operator for TrickleSelect {
                                 aggregates,
                                 &group_str,
                                 &group_value,
-                            );
+                            )?;
 
                             // accumulate the current event
                             let env = Env {
@@ -998,7 +1042,7 @@ impl Operator for TrickleSelect {
                                 aggregates,
                                 &group_str,
                                 &group_value,
-                            );
+                            )?;
 
                             if window_event.include {
                                 // add this event to the aggr state **BEFORE** emit and propagate to next windows
@@ -1111,7 +1155,7 @@ impl Operator for TrickleSelect {
                                     aggregates,
                                     &group_str,
                                     &group_value,
-                                );
+                                )?;
 
                                 // accumulate the current event
                                 let env = Env {
@@ -1147,7 +1191,7 @@ impl Operator for TrickleSelect {
                                     aggregates,
                                     &group_str,
                                     &group_value,
-                                );
+                                )?;
                                 for (this, prev) in this_group.aggrs.iter_mut().zip(scratch1.iter())
                                 {
                                     this.invocable.merge(&prev.invocable).map_err(|e| {
@@ -1320,7 +1364,7 @@ impl Operator for TrickleSelect {
                                     aggregates,
                                     group_str,
                                     group_value,
-                                );
+                                )?;
                                 let window_event = this_group.window.on_tick(ingest_ns)?;
                                 if window_event.emit {
                                     emit_window_events.push(window_event);
@@ -1343,7 +1387,7 @@ impl Operator for TrickleSelect {
                                     aggregates,
                                     group_str,
                                     group_value,
-                                );
+                                )?;
 
                                 if window_event.include {
                                     // add this event to the aggr state **BEFORE** emit and propagate to next windows
@@ -1459,7 +1503,7 @@ impl Operator for TrickleSelect {
                                         aggregates,
                                         group_str,
                                         group_value,
-                                    );
+                                    )?;
                                     for (this, prev) in
                                         this_group.aggrs.iter_mut().zip(scratch1.iter())
                                     {
@@ -1564,7 +1608,8 @@ mod test {
                 TumblingWindowOnTime {
                     emit_empty_windows: false,
                     ttl: None,
-                    size: 15_000_000_000,
+                    max_groups: WindowImpl::DEFAULT_MAX_GROUPS,
+                    interval: 15_000_000_000,
                     next_window: None,
                     events: 0,
                     script: None,
@@ -1576,7 +1621,8 @@ mod test {
                 TumblingWindowOnTime {
                     emit_empty_windows: false,
                     ttl: None,
-                    size: 30_000_000_000,
+                    max_groups: WindowImpl::DEFAULT_MAX_GROUPS,
+                    interval: 30_000_000_000,
                     next_window: None,
                     events: 0,
                     script: None,
@@ -2299,8 +2345,14 @@ mod test {
     fn tumbling_window_on_time_emit() -> Result<()> {
         let stmt = stmt_rental()?;
         // interval = 10 seconds
-        let mut window =
-            TumblingWindowOnTime::from_stmt(10 * 1_000_000_000, false, None, None, &stmt);
+        let mut window = TumblingWindowOnTime::from_stmt(
+            10 * 1_000_000_000,
+            WindowImpl::DEFAULT_EMIT_EMPTY_WINDOWS,
+            WindowImpl::DEFAULT_MAX_GROUPS,
+            None,
+            None,
+            &stmt,
+        );
         assert_eq!(
             WindowEvent {
                 include: false,
@@ -2378,8 +2430,14 @@ mod test {
             .get("interval")
             .and_then(Value::as_u64)
             .ok_or(Error::from("no interval found"))?;
-        let mut window =
-            TumblingWindowOnTime::from_stmt(interval, false, None, Some(&window_decl), &stmt);
+        let mut window = TumblingWindowOnTime::from_stmt(
+            interval,
+            WindowImpl::DEFAULT_EMIT_EMPTY_WINDOWS,
+            WindowImpl::DEFAULT_MAX_GROUPS,
+            None,
+            Some(&window_decl),
+            &stmt,
+        );
         let json1 = json!({
             "timestamp": 1_000_000_000
         });
@@ -2428,7 +2486,14 @@ mod test {
     #[test]
     fn tumbling_window_on_time_on_tick() -> Result<()> {
         let stmt = stmt_rental()?;
-        let mut window = TumblingWindowOnTime::from_stmt(100, false, None, None, &stmt);
+        let mut window = TumblingWindowOnTime::from_stmt(
+            100,
+            WindowImpl::DEFAULT_EMIT_EMPTY_WINDOWS,
+            WindowImpl::DEFAULT_MAX_GROUPS,
+            None,
+            None,
+            &stmt,
+        );
         assert_eq!(
             WindowEvent {
                 opened: true,
@@ -2483,7 +2548,14 @@ mod test {
     #[test]
     fn tumbling_window_on_time_emit_empty_windows() -> Result<()> {
         let stmt = stmt_rental()?;
-        let mut window = TumblingWindowOnTime::from_stmt(100, true, None, None, &stmt);
+        let mut window = TumblingWindowOnTime::from_stmt(
+            100,
+            true,
+            WindowImpl::DEFAULT_MAX_GROUPS,
+            None,
+            None,
+            &stmt,
+        );
         assert_eq!(
             WindowEvent {
                 opened: true,
@@ -2577,7 +2649,8 @@ mod test {
     #[test]
     fn tumbling_window_on_number_emit() -> Result<()> {
         let stmt = stmt_rental()?;
-        let mut window = TumblingWindowOnNumber::from_stmt(3, None, None, &stmt);
+        let mut window =
+            TumblingWindowOnNumber::from_stmt(3, WindowImpl::DEFAULT_MAX_GROUPS, None, None, &stmt);
         // do not emit yet
         assert_eq!(
             WindowEvent {

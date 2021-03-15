@@ -95,40 +95,41 @@ pub(crate) fn window_decl_to_impl<'script>(
         WindowKind::Tumbling => {
             let script = if d.script.is_some() { Some(d) } else { None };
             let ttl = d.params.get("eviction_period").and_then(Value::as_u64);
+            let max_groups = d
+                .params
+                .get("max_groups")
+                .and_then(Value::as_u64)
+                .unwrap_or(WindowImpl::DEFAULT_MAX_GROUPS);
             let emit_empty_windows = d
                 .params
                 .get("emit_empty_windows")
                 .and_then(Value::as_bool)
-                .unwrap_or(false);
+                .unwrap_or(WindowImpl::DEFAULT_EMIT_EMPTY_WINDOWS);
 
-            d.params
-                .get("interval")
-                .and_then(Value::as_u64)
-                .map_or_else(
-                    || {
-                        d.params.get("size").and_then(Value::as_u64).map_or_else(
-                            || {
-                                Err(Error::from(
-                            "Bad window configuration, either `size` or `interval` is required",
-                        ))
-                            },
-                            |size| {
-                                Ok(TumblingWindowOnNumber::from_stmt(size, ttl, script, stmt)
-                                    .into())
-                            },
-                        )
-                    },
-                    |interval| {
-                        Ok(TumblingWindowOnTime::from_stmt(
-                            interval,
-                            emit_empty_windows,
-                            ttl,
-                            script,
-                            stmt,
-                        )
-                        .into())
-                    },
+            match (
+                d.params.get("interval").and_then(Value::as_u64),
+                d.params.get("size").and_then(Value::as_u64),
+            ) {
+                (Some(interval), None) => Ok(TumblingWindowOnTime::from_stmt(
+                    interval,
+                    emit_empty_windows,
+                    max_groups,
+                    ttl,
+                    script,
+                    stmt,
                 )
+                .into()),
+                (None, Some(size)) => Ok(TumblingWindowOnNumber::from_stmt(
+                    size, max_groups, ttl, script, stmt,
+                )
+                .into()),
+                (Some(_), Some(_)) => Err(Error::from(
+                    "Bad window configuration, only one of `size` or `interval` is allowed",
+                )),
+                (None, None) => Err(Error::from(
+                    "Bad window configuration, either `size` or `interval` is required",
+                )),
+            }
         }
     }
 }

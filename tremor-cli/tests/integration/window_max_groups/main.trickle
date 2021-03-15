@@ -1,0 +1,12 @@
+define tumbling window my_window
+with
+  size = 2,
+  max_groups = 2
+end;
+
+select {
+  "win": window,
+  "group": group[0],
+  "count": aggr::stats::count(),
+  "collect": aggr::win::collect_flattened(event.payload)
+} from in[my_window] group by event["group"] into out;
