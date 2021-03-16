@@ -55,18 +55,6 @@ impl From<CompilerError> for Error {
     }
 }
 
-#[doc(hidden)]
-/// Optimized try
-#[macro_export]
-macro_rules! stry {
-    ($e:expr) => {
-        match $e {
-            ::std::result::Result::Ok(val) => val,
-            ::std::result::Result::Err(err) => return ::std::result::Result::Err(err),
-        }
-    };
-}
-
 #[cfg(test)]
 impl PartialEq for Error {
     fn eq(&self, _other: &Error) -> bool {

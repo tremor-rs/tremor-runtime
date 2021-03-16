@@ -40,3 +40,15 @@ impl Display for Error {
 }
 
 impl std::error::Error for Error {}
+
+#[doc(hidden)]
+/// Optimized try
+#[macro_export]
+macro_rules! stry {
+    ($e:expr) => {
+        match $e {
+            ::std::result::Result::Ok(val) => val,
+            ::std::result::Result::Err(err) => return ::std::result::Result::Err(err),
+        }
+    };
+}
