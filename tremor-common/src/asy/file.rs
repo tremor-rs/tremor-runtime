@@ -48,10 +48,10 @@ where
     })
 }
 
-/// A wrapper around `File::create` that will give a better error (including the filename)
+/// A wrapper around `fs::canonicalize` that will give a better error (including the filename)
 ///
 /// # Errors
-///   * if the file couldn't be created
+///   * if the path does not exist
 pub async fn canonicalize<S>(path: &S) -> Result<PathBuf, Error>
 where
     S: AsRef<Path> + ?Sized,
