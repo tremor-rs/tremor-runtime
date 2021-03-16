@@ -613,7 +613,7 @@ fn get_or_create_group<'window>(
             });
             e.insert(k, v)
         }
-        _ => {
+        RawEntryMut::Vacant(_) => {
             return Err(max_groups_reached(
                 window.window_impl.max_groups(),
                 group_str,
