@@ -4726,18 +4726,18 @@ checksum = "dc725476a1398f0480d56cd0ad381f6f32acf2642704456f8f59a35df464b59a"
 
 [[package]]
 name = "snmalloc-rs"
-version = "0.2.25"
+version = "0.2.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f3cc511c09c88ff9a01d0f2738069f22b3ae3a1438f9074d043e4a8e5bc65127"
+checksum = "4b07b1a977d4739816484e7c9333c085d3ad5ccf0294078b55218faabd03837f"
 dependencies = [
  "snmalloc-sys",
 ]
 
 [[package]]
 name = "snmalloc-sys"
-version = "0.2.25"
+version = "0.2.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ff889eba42bfadff5a6f20001f3691d05b0434f127c600344d808546efd83435"
+checksum = "73c59324cc36b140b6b46b1379f379eaa7ee9cfb06ec5d7dd0a650de35b9b902"
 dependencies = [
  "cmake",
  "libc",
