@@ -22,7 +22,7 @@ pub enum Error {
     FileCreate(std::io::Error, String),
     /// Failed to canonicalize a path
     FileCanonicalize(std::io::Error, String),
-    /// Failed to canonicalize a path
+    /// Failed to change working directory
     CWD(std::io::Error, String),
 }
 
