@@ -156,6 +156,7 @@ pub(crate) struct NetworkManager {
     control: ControlProtocol,
     network_id: TremorURL,
     pub source: TntSource,
+    pub sinks: Vec<TntSink>,
     metrics_reporter: RampReporter,
     pipelines_out: Vec<(TremorURL, pipeline::Addr)>,
     pipelines_err: Vec<(TremorURL, pipeline::Addr)>,
@@ -394,6 +395,8 @@ impl NetworkManager {
             )
             .await?;
             sink_uid += 1;
+
+            //sink.handle_connection_lifecycle_events(nanotime()).await?;
         }
 
         Ok((
@@ -401,6 +404,7 @@ impl NetworkManager {
                 control,
                 network_id: source.id().clone(),
                 source,
+                sinks,
                 metrics_reporter: config.metrics_reporter,
                 id: 0,
                 pipelines_out: Vec::new(),
@@ -413,8 +417,68 @@ impl NetworkManager {
     }
 
     pub async fn run(mut self) -> Result<()> {
+        // TODO move sink logic to another task...maybe via cluster manager?
+
+        /*
+        // lets try to send an event
+        // handle initial connection events for this to work
+        let mut event = Event::default();
+        event.id = EventId::new(1, 1, 1);
+        let codec: Box<dyn codec::Codec> = Box::new(crate::codec::json::JSON::default());
+        for sink in &mut self.sinks {
+            sink.on_event(
+                "in",
+                codec.as_ref(),
+                &halfbrown::HashMap::new(),
+                event.clone(),
+            )
+            .await
+            .unwrap();
+        }
+        */
+        //while let Ok(msg) = reply_rx.try_recv() {
+        //    match msg {
+        //        sink::Reply::Insight(event) => {
+        //            assert_eq!(CBAction::Fail, event.cb);
+        //            assert_eq!(1, event.id.stream_id());
+        //        }
+        //        sink::Reply::Response(port, event) => {
+        //            assert_eq!("err", port.as_ref());
+        //            assert_eq!(1, event.id.stream_id());
+        //        }
+        //    }
+        //}
+
+        // simulate signal ticks
+        let (tick_tx, tick_rx) = bounded::<Event>(crate::QSIZE);
+        task::spawn(async move {
+            let mut e = Event {
+                ingest_ns: nanotime(),
+                kind: Some(tremor_pipeline::SignalKind::Tick),
+                ..Event::default()
+            };
+            e.ingest_ns = nanotime();
+
+            while tick_tx.send(e.clone()).await.is_ok() {
+                task::sleep(Duration::from_millis(100)).await;
+                e.ingest_ns = nanotime();
+            }
+        });
+
         //dbg!("running core network run loop");
         loop {
+            match tick_rx.recv().await {
+                Ok(e) => {
+                    //dbg!("received signal tick");
+                    for sink in &mut self.sinks {
+                        sink.on_signal(e.clone()).await.unwrap();
+                    }
+                }
+                Err(e) => {
+                    info!("Error reciving signal tick... {}", e);
+                }
+            }
+
             match self.source.pull_event(self.id).await {
                 Ok(SourceReply::StartStream(sid)) => {
                     //dbg!("network start stream");
@@ -506,6 +570,7 @@ impl NetworkManager {
                 let data = s.1.on_data().await?;
                 if let Some(data) = data {
                     for d in data {
+                        dbg!("sending back serialized response");
                         origin
                             .send(SerializedResponse {
                                 event_id: EventId::new(0, stream_id as u64, 0), // FIXME TODO

@@ -732,7 +732,7 @@ impl World {
             let drain = slog_term::FullFormat::new(decorator).build().fuse();
             let drain = slog_async::Async::new(drain).build().fuse();
             // temp filter for only showing warnings
-            //let drain = slog::LevelFilter::new(drain, slog::Level::Warning).fuse();
+            let drain = slog::LevelFilter::new(drain, slog::Level::Warning).fuse();
             slog::Logger::root(drain, o!())
         };
         // FIXME allow for non-numeric

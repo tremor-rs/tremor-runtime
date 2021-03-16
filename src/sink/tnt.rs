@@ -135,7 +135,9 @@ async fn ws_connection_loop(
     loop {
         let codec: &mut dyn Codec = codec.as_mut();
         info!("[Sink::{}] Connecting to {} ...", &sink_url, url);
+        println!("[Sink::{}] Connecting to {} ...", &sink_url, url);
         let mut ws_stream = if let Ok((ws_stream, _)) = connect_async(&url).await {
+            dbg!("connected");
             if let Ok(peer) = ws_stream.get_ref().peer_addr() {
                 event_origin_url.port = Some(peer.port());
                 event_origin_url.host = peer.ip().to_string();
@@ -145,6 +147,8 @@ async fn ws_connection_loop(
             }
             ws_stream
         } else {
+            // TODO these will be handled better in clustering
+            // (connect to remote later once its up and talks to this node)
             error!(
                 "[Sink::{}] Failed to connect to {}, retrying in 1s",
                 &sink_url, url
@@ -155,10 +159,14 @@ async fn ws_connection_loop(
             task::sleep(Duration::from_secs(1)).await;
             continue;
         };
+        dbg!("sending connection lifecycle msg");
+        // TODO ensure we add the txes here to network
+        // also just send this info directly to network....
+        // or try sending an event and see if it works....
         connection_lifecycle_tx
             .send(WsConnectionMsg::Connected(url.clone(), tx.clone()))
             .await?;
-
+        dbg!("waiting to send event");
         'recv_loop: while let Ok(ConnectionTaskMsg::SendEvent(
             ids,
             message_meta,
@@ -443,30 +451,34 @@ impl Tnt {
         })
     }
 
-    async fn handle_connection_lifecycle_events(&mut self, ingest_ns: u64) -> Result<()> {
+    pub async fn handle_connection_lifecycle_events(&mut self, _ingest_ns: u64) -> Result<()> {
+        //dbg!("handling connection lifecycle events");
         let len = self.connection_lifecycle_rx.len();
         for _ in 0..len {
             match self.connection_lifecycle_rx.recv().await? {
                 WsConnectionMsg::Connected(url, addr) => {
+                    dbg!("handling ws sink connection");
                     // TODO trigger per url/connection (only resuming events with that url)
-                    if url == self.config.url {
-                        let mut e = Event::cb_restore(ingest_ns);
-                        e.op_meta = self.merged_meta.clone();
-                        self.reply_tx.send(sink::Reply::Insight(e)).await?;
-                    }
+                    //if url == self.config.url {
+                    //    let mut e = Event::cb_restore(ingest_ns);
+                    //    e.op_meta = self.merged_meta.clone();
+                    //    self.reply_tx.send(sink::Reply::Insight(e)).await?;
+                    //}
                     self.connections
                         .entry(url)
                         .and_modify(|mut tuple| tuple.0 = Some(addr));
                 }
                 WsConnectionMsg::Disconnected(url) => {
                     // TODO trigger per url/connection (only events with that url should be paused)
-                    if url == self.config.url {
-                        let mut e = Event::cb_trigger(ingest_ns);
-                        e.op_meta = self.merged_meta.clone();
-                        self.reply_tx.send(sink::Reply::Insight(e)).await?;
-                    }
-                    if let Some((_, handle)) = self.connections.remove(&url) {
-                        handle.cancel().await;
+                    //if url == self.config.url {
+                    //    let mut e = Event::cb_trigger(ingest_ns);
+                    //    e.op_meta = self.merged_meta.clone();
+                    //    self.reply_tx.send(sink::Reply::Insight(e)).await?;
+                    //}
+                    dbg!("handling ws sink disconnection");
+                    if let Some((_, _handle)) = self.connections.remove(&url) {
+                        dbg!("nothing on disconnection for now");
+                        //handle.cancel().await;
                     }
                 }
             }
@@ -546,12 +558,15 @@ impl Sink for Tnt {
             ..
         } = event;
 
+        // TODO eliminate meta logic for tnt use
         self.merged_meta.merge(op_meta);
         let msg_meta = self.get_message_meta(data.suffix().meta());
 
         // actually used when we have new connection to make (overridden from event-meta)
         let temp_conn_tx;
+        //dbg!(&self.connections);
         let ws_conn_tx = if let Some((ws_conn_tx, _)) = self.connections.get(&msg_meta.url) {
+            dbg!("found exsiting connection on event");
             ws_conn_tx
         } else {
             let (conn_tx, conn_rx) = bounded(crate::QSIZE);
@@ -579,6 +594,7 @@ impl Sink for Tnt {
             &temp_conn_tx
         };
 
+        dbg!(&ws_conn_tx);
         if let Some(conn_tx) = ws_conn_tx {
             conn_tx
                 .send(ConnectionTaskMsg::SendEvent(
@@ -655,6 +671,7 @@ impl Sink for Tnt {
             ))?;
         self.connections
             .insert(self.config.url.clone(), (None, handle));
+        //dbg!(&self.connections);
 
         Ok(())
     }
