@@ -3,7 +3,7 @@ onramp:
     type: file
     config:
       source: in.json
-      sleep_on_done: 2100
+      sleep_on_done: 2000
       close_on_done: true
 offramp:
   - id: out

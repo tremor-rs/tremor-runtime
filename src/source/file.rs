@@ -66,6 +66,8 @@ impl std::fmt::Debug for Int {
     }
 }
 impl Int {
+    const SLEEP_ON_DONE_MS: u64 = 10;
+
     async fn from_config(uid: u64, onramp_id: TremorURL, config: Config) -> Result<Self> {
         let source_data_file = BufReader::new(file::open(&config.source).await?);
         let ext = file::extension(&config.source);
@@ -128,9 +130,9 @@ impl Source for Int {
                 process::exit(0);
             }
             Ok(SourceReply::StateChange(SourceState::Disconnected))
-        } else if self.config.sleep_on_done >= 10 {
-            self.config.sleep_on_done -= 10;
-            Ok(SourceReply::Empty(10))
+        } else if self.config.sleep_on_done >= Self::SLEEP_ON_DONE_MS {
+            self.config.sleep_on_done -= Self::SLEEP_ON_DONE_MS;
+            Ok(SourceReply::Empty(Self::SLEEP_ON_DONE_MS))
         } else {
             let sleep = self.config.sleep_on_done;
             self.config.sleep_on_done = 0;
