@@ -138,6 +138,10 @@ error_chain! {
             description("Maximum amount of groups reached.")
                 display("Maxmimum amount of groups reached ({}). Ignoring group {}", max, group)
         }
+        InvalidInputStreamName(stream_name: String, pipeline: String) {
+            description("Invalid input stream name.")
+            display("Invalid input stream name '{}' for pipeline '{}'.", stream_name, pipeline)
+        }
 
     }
 }
