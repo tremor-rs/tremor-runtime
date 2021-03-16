@@ -24,6 +24,7 @@ use halfbrown::{HashMap, RawEntryMut};
 use std::borrow::Cow as SCow;
 use std::mem;
 use std::sync::Arc;
+use tremor_common::stry;
 use tremor_script::interpreter::Env;
 use tremor_script::{
     self,
@@ -787,7 +788,7 @@ impl Operator for TrickleSelect {
                         recursion_limit: tremor_script::recursion_limit(),
                     };
                     // here we have a 1:1 between input and output event and thus can keep the origin uri
-                    if let Some(port_and_event) = execute_select_and_having(
+                    if let Some(port_and_event) = stry!(execute_select_and_having(
                         &stmt,
                         &node_meta,
                         opts,
@@ -797,7 +798,7 @@ impl Operator for TrickleSelect {
                         &mut self.event_id_gen,
                         &event,
                         event.origin_uri.clone(),
-                    )? {
+                    )) {
                         events.push(port_and_event);
                     };
                 }
@@ -817,15 +818,15 @@ impl Operator for TrickleSelect {
                     consts.window = Value::from(window.name.to_string());
 
                     // get current window group
-                    let this_group = get_or_create_group(
+                    let this_group = stry!(get_or_create_group(
                         window,
                         &mut self.event_id_gen,
                         aggregates,
                         &group_str,
                         &group_value,
-                    )?;
+                    ));
 
-                    let window_event = this_group.window.on_event(&event)?;
+                    let window_event = stry!(this_group.window.on_event(&event));
                     if window_event.emit && !window_event.include {
                         // push
                         let env = Env {
@@ -835,7 +836,7 @@ impl Operator for TrickleSelect {
                             meta: &node_meta,
                             recursion_limit: tremor_script::recursion_limit(),
                         };
-                        if let Some(port_and_event) = execute_select_and_having(
+                        if let Some(port_and_event) = stry!(execute_select_and_having(
                             &stmt,
                             &node_meta,
                             opts,
@@ -845,7 +846,7 @@ impl Operator for TrickleSelect {
                             &mut self.event_id_gen,
                             &event,
                             None,
-                        )? {
+                        )) {
                             events.push(port_and_event);
                         };
                         // re-initialize aggr state for new window
@@ -864,7 +865,7 @@ impl Operator for TrickleSelect {
                         meta: &node_meta,
                         recursion_limit: tremor_script::recursion_limit(),
                     };
-                    accumulate(
+                    stry!(accumulate(
                         opts,
                         &node_meta,
                         &env,
@@ -872,7 +873,7 @@ impl Operator for TrickleSelect {
                         state,
                         this_group,
                         &event,
-                    )?;
+                    ));
 
                     if window_event.emit && window_event.include {
                         // push
@@ -883,7 +884,7 @@ impl Operator for TrickleSelect {
                             meta: &node_meta,
                             recursion_limit: tremor_script::recursion_limit(),
                         };
-                        if let Some(port_and_event) = execute_select_and_having(
+                        if let Some(port_and_event) = stry!(execute_select_and_having(
                             &stmt,
                             &node_meta,
                             opts,
@@ -893,7 +894,7 @@ impl Operator for TrickleSelect {
                             &mut self.event_id_gen,
                             &event,
                             None,
-                        )? {
+                        )) {
                             events.push(port_and_event);
                         };
                         // re-initialize aggr state for new window
@@ -969,14 +970,14 @@ impl Operator for TrickleSelect {
                         for window in step1_iter {
                             consts.window = Value::from(window.name.to_string());
                             // get current window group
-                            let this_group = get_or_create_group(
+                            let this_group = stry!(get_or_create_group(
                                 window,
                                 &mut self.event_id_gen,
                                 aggregates,
                                 &group_str,
                                 &group_value,
-                            )?;
-                            let window_event = this_group.window.on_event(&event)?;
+                            ));
+                            let window_event = stry!(this_group.window.on_event(&event));
                             if window_event.emit {
                                 emit_window_events.push(window_event);
                             } else {
@@ -997,13 +998,13 @@ impl Operator for TrickleSelect {
                             consts.window = Value::from(first_window.name.to_string());
 
                             // get current window group
-                            let this_group = get_or_create_group(
+                            let this_group = stry!(get_or_create_group(
                                 first_window,
                                 &mut self.event_id_gen,
                                 aggregates,
                                 &group_str,
                                 &group_value,
-                            )?;
+                            ));
 
                             // accumulate the current event
                             let env = Env {
@@ -1013,7 +1014,7 @@ impl Operator for TrickleSelect {
                                 meta: &node_meta,
                                 recursion_limit: tremor_script::recursion_limit(),
                             };
-                            accumulate(
+                            stry!(accumulate(
                                 opts,
                                 &node_meta,
                                 &env,
@@ -1021,7 +1022,7 @@ impl Operator for TrickleSelect {
                                 state,
                                 this_group,
                                 &event,
-                            )?;
+                            ));
                             false
                         } else {
                             // should not happen
@@ -1036,13 +1037,13 @@ impl Operator for TrickleSelect {
                             consts.window = Value::from(window.name.to_string());
 
                             // get current window group
-                            let this_group = get_or_create_group(
+                            let this_group = stry!(get_or_create_group(
                                 window,
                                 &mut self.event_id_gen,
                                 aggregates,
                                 &group_str,
                                 &group_value,
-                            )?;
+                            ));
 
                             if window_event.include {
                                 // add this event to the aggr state **BEFORE** emit and propagate to next windows
@@ -1066,7 +1067,7 @@ impl Operator for TrickleSelect {
                                     recursion_limit: tremor_script::recursion_limit(),
                                 };
 
-                                if let Some(port_and_event) = execute_select_and_having(
+                                if let Some(port_and_event) = stry!(execute_select_and_having(
                                     &stmt,
                                     &node_meta,
                                     opts,
@@ -1076,7 +1077,7 @@ impl Operator for TrickleSelect {
                                     &mut self.event_id_gen,
                                     &event,
                                     None,
-                                )? {
+                                )) {
                                     events.push(port_and_event);
                                 };
 
@@ -1097,7 +1098,7 @@ impl Operator for TrickleSelect {
                                     meta: &node_meta,
                                     recursion_limit: tremor_script::recursion_limit(),
                                 };
-                                if let Some(port_and_event) = execute_select_and_having(
+                                if let Some(port_and_event) = stry!(execute_select_and_having(
                                     &stmt,
                                     &node_meta,
                                     opts,
@@ -1107,7 +1108,7 @@ impl Operator for TrickleSelect {
                                     &mut self.event_id_gen,
                                     &event,
                                     None,
-                                )? {
+                                )) {
                                     events.push(port_and_event);
                                 };
 
@@ -1149,13 +1150,13 @@ impl Operator for TrickleSelect {
                             if let Some(first_window) = self.windows.first_mut() {
                                 consts.window = Value::from(first_window.name.to_string());
                                 // get current window group
-                                let this_group = get_or_create_group(
+                                let this_group = stry!(get_or_create_group(
                                     first_window,
                                     &mut self.event_id_gen,
                                     aggregates,
                                     &group_str,
                                     &group_value,
-                                )?;
+                                ));
 
                                 // accumulate the current event
                                 let env = Env {
@@ -1165,7 +1166,7 @@ impl Operator for TrickleSelect {
                                     meta: &node_meta,
                                     recursion_limit: tremor_script::recursion_limit(),
                                 };
-                                accumulate(
+                                stry!(accumulate(
                                     opts,
                                     &node_meta,
                                     &env,
@@ -1173,7 +1174,7 @@ impl Operator for TrickleSelect {
                                     state,
                                     this_group,
                                     &event,
-                                )?;
+                                ));
                             }
                         }
 
@@ -1185,13 +1186,13 @@ impl Operator for TrickleSelect {
                                 consts.window = Value::from(non_emit_window.name.to_string());
 
                                 // get current window group
-                                let this_group = get_or_create_group(
+                                let this_group = stry!(get_or_create_group(
                                     non_emit_window,
                                     &mut self.event_id_gen,
                                     aggregates,
                                     &group_str,
                                     &group_value,
-                                )?;
+                                ));
                                 for (this, prev) in this_group.aggrs.iter_mut().zip(scratch1.iter())
                                 {
                                     this.invocable.merge(&prev.invocable).map_err(|e| {
@@ -1278,7 +1279,7 @@ impl Operator for TrickleSelect {
                             consts.group = group_data.group.clone_static();
                             consts.group.push(group_str.clone())?;
 
-                            let window_event = group_data.window.on_tick(ingest_ns)?;
+                            let window_event = stry!(group_data.window.on_tick(ingest_ns));
                             if window_event.emit {
                                 // evaluate the event and push
                                 let env = Env {
@@ -1288,7 +1289,7 @@ impl Operator for TrickleSelect {
                                     meta: &node_meta,
                                     recursion_limit: tremor_script::recursion_limit(),
                                 };
-                                let executed = execute_select_and_having(
+                                let executed = stry!(execute_select_and_having(
                                     &stmt,
                                     node_meta,
                                     opts,
@@ -1298,7 +1299,7 @@ impl Operator for TrickleSelect {
                                     &mut self.event_id_gen,
                                     &artificial_event,
                                     None,
-                                )?;
+                                ));
                                 if let Some(port_and_event) = executed {
                                     res.events.push(port_and_event);
                                 }
@@ -1358,14 +1359,14 @@ impl Operator for TrickleSelect {
                             for window in step1_iter {
                                 consts.window = Value::from(window.name.to_string());
                                 // get current window group
-                                let this_group = get_or_create_group(
+                                let this_group = stry!(get_or_create_group(
                                     window,
                                     &mut self.event_id_gen,
                                     aggregates,
                                     group_str,
                                     group_value,
-                                )?;
-                                let window_event = this_group.window.on_tick(ingest_ns)?;
+                                ));
+                                let window_event = stry!(this_group.window.on_tick(ingest_ns));
                                 if window_event.emit {
                                     emit_window_events.push(window_event);
                                 } else {
@@ -1381,13 +1382,13 @@ impl Operator for TrickleSelect {
                                 consts.window = Value::from(window.name.to_string());
 
                                 // get current window group
-                                let this_group = get_or_create_group(
+                                let this_group = stry!(get_or_create_group(
                                     window,
                                     &mut self.event_id_gen,
                                     aggregates,
                                     group_str,
                                     group_value,
-                                )?;
+                                ));
 
                                 if window_event.include {
                                     // add this event to the aggr state **BEFORE** emit and propagate to next windows
@@ -1411,7 +1412,7 @@ impl Operator for TrickleSelect {
                                         recursion_limit: tremor_script::recursion_limit(),
                                     };
 
-                                    if let Some(port_and_event) = execute_select_and_having(
+                                    if let Some(port_and_event) = stry!(execute_select_and_having(
                                         &stmt,
                                         &node_meta,
                                         opts,
@@ -1421,7 +1422,7 @@ impl Operator for TrickleSelect {
                                         &mut self.event_id_gen,
                                         &artificial_event,
                                         None,
-                                    )? {
+                                    )) {
                                         res.events.push(port_and_event);
                                     };
 
@@ -1442,7 +1443,7 @@ impl Operator for TrickleSelect {
                                         meta: &node_meta,
                                         recursion_limit: tremor_script::recursion_limit(),
                                     };
-                                    if let Some(port_and_event) = execute_select_and_having(
+                                    if let Some(port_and_event) = stry!(execute_select_and_having(
                                         &stmt,
                                         &node_meta,
                                         opts,
@@ -1452,7 +1453,7 @@ impl Operator for TrickleSelect {
                                         &mut self.event_id_gen,
                                         &artificial_event,
                                         None,
-                                    )? {
+                                    )) {
                                         res.events.push(port_and_event);
                                     };
 
@@ -1497,13 +1498,13 @@ impl Operator for TrickleSelect {
                                     consts.window = Value::from(non_emit_window.name.to_string());
 
                                     // get current window group
-                                    let this_group = get_or_create_group(
+                                    let this_group = stry!(get_or_create_group(
                                         non_emit_window,
                                         &mut self.event_id_gen,
                                         aggregates,
                                         group_str,
                                         group_value,
-                                    )?;
+                                    ));
                                     for (this, prev) in
                                         this_group.aggrs.iter_mut().zip(scratch1.iter())
                                     {

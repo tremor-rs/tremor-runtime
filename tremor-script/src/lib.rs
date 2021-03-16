@@ -84,6 +84,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 
 use ast::{Consts, InvokeAggrFn};
 pub use interpreter::{AggrType, FALSE, NULL, TRUE};
+pub use tremor_common::stry;
 pub use tremor_value::{KnownKey, Object, Value};
 
 /// Default recursion limit
