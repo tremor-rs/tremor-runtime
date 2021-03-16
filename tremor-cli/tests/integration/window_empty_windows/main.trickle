@@ -7,7 +7,7 @@ with
 end;
 define tumbling window my_other_window
 with
-  interval = core::datetime::with_seconds(2),
+  interval = core::datetime::with_seconds(3),
   emit_empty_windows = true
 end;
 
