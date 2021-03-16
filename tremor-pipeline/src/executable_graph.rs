@@ -16,7 +16,7 @@ use std::{fmt, fmt::Display, sync::Arc};
 
 use crate::{
     common_cow,
-    errors::Error,
+    errors::ErrorKind,
     errors::Result,
     influx_value,
     op::{prelude::IN, trickle::select::WindowImpl},
@@ -440,10 +440,9 @@ impl ExecutableGraph {
                 self.last_metrics = event.ingest_ns;
             }
         }
-        let input = *self
-            .inputs
-            .get(stream_name)
-            .ok_or_else(|| Error::from(format!("invalid stream name: `{}`", stream_name)))?;
+        let input = *self.inputs.get(stream_name).ok_or_else(|| {
+            ErrorKind::InvalidInputStreamName(stream_name.to_owned(), self.id.clone())
+        })?;
         self.stack.push((input, IN, event));
         self.run(returns)
     }
