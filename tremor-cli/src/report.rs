@@ -16,7 +16,7 @@ use crate::test::stats;
 use std::collections::HashMap;
 
 /// A test run is a collection of test reports that
-/// have executed int he context of a test run
+/// have executed in the context of a test run
 ///
 #[derive(Serialize, Debug, Clone)]
 pub(crate) struct TestRun {

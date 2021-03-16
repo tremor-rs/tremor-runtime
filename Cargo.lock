@@ -89,6 +89,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "739f4a8db6605981345c5654f3a85b056ce52f37a39d34da03f25bf2151ea16e"
 
 [[package]]
+name = "ahash"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f200cbb1e856866d9eade941cf3aa0c5d7dd36f74311c4273b494f4ef036957"
+dependencies = [
+ "getrandom 0.2.2",
+ "once_cell",
+ "version_check",
+]
+
+[[package]]
 name = "aho-corasick"
 version = "0.7.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2096,6 +2107,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d7afe4a420e3fe79967a00898cc1f4db7c8a49a9333a29f8a4bd76a253d5cd04"
 dependencies = [
  "ahash 0.4.7",
+]
+
+[[package]]
+name = "hashbrown"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "362385356d610bd1e5a408ddf8d022041774b683f345a1d2cfcb4f60f8ae2db5"
+dependencies = [
+ "ahash 0.7.2",
  "serde",
 ]
 
@@ -4726,18 +4746,18 @@ checksum = "dc725476a1398f0480d56cd0ad381f6f32acf2642704456f8f59a35df464b59a"
 
 [[package]]
 name = "snmalloc-rs"
-version = "0.2.25"
+version = "0.2.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f3cc511c09c88ff9a01d0f2738069f22b3ae3a1438f9074d043e4a8e5bc65127"
+checksum = "4b07b1a977d4739816484e7c9333c085d3ad5ccf0294078b55218faabd03837f"
 dependencies = [
  "snmalloc-sys",
 ]
 
 [[package]]
 name = "snmalloc-sys"
-version = "0.2.25"
+version = "0.2.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ff889eba42bfadff5a6f20001f3691d05b0434f127c600344d808546efd83435"
+checksum = "73c59324cc36b140b6b46b1379f379eaa7ee9cfb06ec5d7dd0a650de35b9b902"
 dependencies = [
  "cmake",
  "libc",
@@ -5621,7 +5641,7 @@ checksum = "efd1f82c56340fdf16f2a953d7bda4f8fdffba13d93b00844c25572110b26079"
 name = "tremor-api"
 version = "0.10.2"
 dependencies = [
- "hashbrown 0.9.1",
+ "hashbrown 0.11.0",
  "http-types",
  "serde",
  "serde_derive",
@@ -5763,7 +5783,7 @@ dependencies = [
  "glob",
  "grok",
  "halfbrown",
- "hashbrown 0.9.1",
+ "hashbrown 0.11.0",
  "hdrhistogram",
  "hostname",
  "http-types",
