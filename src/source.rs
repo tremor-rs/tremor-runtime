@@ -41,6 +41,7 @@ pub(crate) mod discord;
 pub(crate) mod file;
 pub(crate) mod kafka;
 pub(crate) mod metronome;
+pub(crate) mod nats;
 pub(crate) mod otel;
 pub(crate) mod postgres;
 pub(crate) mod prelude;

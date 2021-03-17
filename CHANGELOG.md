@@ -30,6 +30,7 @@
 * Add more metadata to Kafka source [#874](https://github.com/tremor-rs/tremor-runtime/issues/874)
 * Update to simd-json 0.4
 * Add tests covering basic operations and string interpolation for tremor-script[#721](https://github.com/tremor-rs/tremor-runtime/issues/721) 
+* Add offramp and onramp for [NATS.io](https://nats.io/).
 
 ### Fixes
 
