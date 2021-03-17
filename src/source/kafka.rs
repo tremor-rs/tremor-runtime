@@ -243,8 +243,13 @@ impl Source for Int {
                         m.offset().to_string(),
                     ];
                     let data = data.to_vec();
+                    let mut kafka_meta_data = Value::object_with_capacity(1);
+                    let mut meta_key = None;
+                    if let Some(key) = m.key() {
+                        meta_key = Some(key);
+                    }
+                    let mut meta_headers = None;
                     if let Some(headers) = m.headers() {
-                        let mut meta_data = Value::object_with_capacity(1);
                         let mut key_val = Value::object_with_capacity(headers.count());
                         for i in 0..headers.count() {
                             if let Some(header) = headers.get(i) {
@@ -253,29 +258,27 @@ impl Source for Int {
                                 key_val.insert(key, val)?;
                             }
                         }
-                        meta_data.insert("kafka_headers", key_val)?;
-                        if !self.auto_commit {
-                            self.messages.insert(id, MsgOffset::from(m));
-                        }
-                        Ok(SourceReply::Data {
-                            origin_uri,
-                            data,
-                            meta: Some(meta_data),
-                            codec_override: None,
-                            stream: 0,
-                        })
-                    } else {
-                        if !self.auto_commit {
-                            self.messages.insert(id, MsgOffset::from(m));
-                        }
-                        Ok(SourceReply::Data {
-                            origin_uri,
-                            data,
-                            meta: None,
-                            codec_override: None,
-                            stream: 0,
-                        })
+                        meta_headers = Some(key_val);
                     }
+                    let mut meta_data = Value::object_with_capacity(2);
+                    if let Some(meta_key) = meta_key {
+                        meta_data.insert("key", Value::Bytes(Vec::from(meta_key).into()))?;
+                    }
+                    if let Some(meta_headers) = meta_headers {
+                        meta_data.insert("headers", meta_headers)?;
+                    }
+                    kafka_meta_data.insert("kafka", meta_data)?;
+
+                    if !self.auto_commit {
+                        self.messages.insert(id, MsgOffset::from(m));
+                    }
+                    Ok(SourceReply::Data {
+                        origin_uri,
+                        data,
+                        meta: Some(kafka_meta_data),
+                        codec_override: None,
+                        stream: 0,
+                    })
                 } else {
                     error!("Failed to fetch kafka message.");
                     Ok(SourceReply::Empty(self.config.poll_interval))
