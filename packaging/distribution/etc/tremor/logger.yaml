@@ -23,3 +23,8 @@ loggers:
     appenders:
       - file
     additive: false
+  tremor:
+    level: info
+    appenders:
+      - file
+    additive: false

@@ -16,6 +16,7 @@
 * Emit error events to the `err` port on exceeding concurrent requests limit for `rest` and `elastic` offramps.
 * Add the `max_groups` and `emit_empty_windows` settings on window definitions [#828](https://github.com/tremor-rs/tremor-runtime/pull/828)
 * Restrict event and event metadata references in the `SELECT` clause of a windowed select statement [#828](https://github.com/tremor-rs/tremor-runtime/pull/828)
+* Improve default visibility of tremor info logs from packages [#850](https://github.com/tremor-rs/tremor-runtime/pull/850)
 
 ### Fixes
 
