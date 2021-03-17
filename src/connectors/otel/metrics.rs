@@ -502,7 +502,7 @@ pub(crate) fn metrics_data_to_pb(data: Option<&Value<'_>>) -> Result<metric::Dat
 
 pub(crate) fn instrumentation_library_metrics_to_json<'event>(
     pb: Vec<tremor_otelapis::opentelemetry::proto::metrics::v1::InstrumentationLibraryMetrics>,
-) -> Result<Value<'event>> {
+) -> Value<'event> {
     let mut json = Vec::new();
     for data in pb {
         let mut metrics = Vec::new();
@@ -522,7 +522,7 @@ pub(crate) fn instrumentation_library_metrics_to_json<'event>(
         }));
     }
 
-    Ok(json!(json).into())
+    json!(json).into()
 }
 
 pub(crate) fn instrumentation_library_metrics_to_pb(
@@ -570,7 +570,7 @@ pub(crate) fn resource_metrics_to_json<'event>(
     let mut data = Value::object_with_capacity(0);
     let mut metrics = Vec::new();
     for metric in request.resource_metrics {
-        let ilm = instrumentation_library_metrics_to_json(metric.instrumentation_library_metrics)?;
+        let ilm = instrumentation_library_metrics_to_json(metric.instrumentation_library_metrics);
         metrics.push(json!({
             "instrumentation_library_metrics": ilm,
             "resource": resource::resource_to_json(metric.resource)?,
@@ -822,7 +822,7 @@ mod tests {
     }
 
     #[test]
-    fn metrics_data() -> Result<()> {
+    fn metrics_data_int_gauge() -> Result<()> {
         let pb = Some(metric::Data::IntGauge(IntGauge {
             data_points: vec![IntDataPoint {
                 value: 42,
@@ -843,6 +843,213 @@ mod tests {
                     "labels": [],
                     "exemplars": [],
                     "value": 42
+                }]
+        }})
+        .into();
+        assert_eq!(expected, json);
+        assert_eq!(pb, Some(back_again));
+        Ok(())
+    }
+
+    #[test]
+    fn metrics_data_double_sum() -> Result<()> {
+        let pb = Some(metric::Data::DoubleSum(DoubleSum {
+            is_monotonic: false,
+            aggregation_temporality: 0,
+            data_points: vec![DoubleDataPoint {
+                value: 43.43,
+                start_time_unix_nano: 0,
+                time_unix_nano: 0,
+                labels: vec![],
+                exemplars: vec![],
+            }],
+        }));
+
+        let json = metrics_data_to_json(pb.clone());
+        let back_again = metrics_data_to_pb(Some(&json))?;
+        let expected: Value = json!({
+            "double-sum": {
+                "is_monotonic": false,
+                "aggregation_temporality": 0,
+                "data_points": [{
+                    "start_time_unix_nano": 0,
+                    "time_unix_nano": 0,
+                    "labels": [],
+                    "exemplars": [],
+                    "value": 43.43
+                }]
+        }})
+        .into();
+        assert_eq!(expected, json);
+        assert_eq!(pb, Some(back_again));
+        Ok(())
+    }
+
+    #[test]
+    fn metrics_data_double_gauge() -> Result<()> {
+        let pb = Some(metric::Data::DoubleGauge(DoubleGauge {
+            data_points: vec![DoubleDataPoint {
+                value: 43.43,
+                start_time_unix_nano: 0,
+                time_unix_nano: 0,
+                labels: vec![],
+                exemplars: vec![],
+            }],
+        }));
+
+        let json = metrics_data_to_json(pb.clone());
+        let back_again = metrics_data_to_pb(Some(&json))?;
+        let expected: Value = json!({
+            "double-gauge": {
+                "data_points": [{
+                    "start_time_unix_nano": 0,
+                    "time_unix_nano": 0,
+                    "labels": [],
+                    "exemplars": [],
+                    "value": 43.43
+                }]
+        }})
+        .into();
+        assert_eq!(expected, json);
+        assert_eq!(pb, Some(back_again));
+        Ok(())
+    }
+
+    #[test]
+    fn metrics_data_double_histo() -> Result<()> {
+        let pb = Some(metric::Data::DoubleHistogram(DoubleHistogram {
+            aggregation_temporality: 0,
+            data_points: vec![DoubleHistogramDataPoint {
+                start_time_unix_nano: 0,
+                time_unix_nano: 0,
+                labels: vec![],
+                exemplars: vec![],
+                count: 5,
+                sum: 10.0,
+                bucket_counts: vec![],
+                explicit_bounds: vec![],
+            }],
+        }));
+
+        let json = metrics_data_to_json(pb.clone());
+        let back_again = metrics_data_to_pb(Some(&json))?;
+        let expected: Value = json!({
+            "double-histogram": {
+                "aggregation_temporality": 0,
+                "data_points": [{
+                    "start_time_unix_nano": 0,
+                    "time_unix_nano": 0,
+                    "labels": [],
+                    "exemplars": [],
+                    "sum": 10.0,
+                    "count": 5,
+                    "bucket_counts": [],
+                    "explicit_bounds": []
+                }]
+            }
+        })
+        .into();
+        assert_eq!(expected, json);
+        assert_eq!(pb, Some(back_again));
+        Ok(())
+    }
+
+    #[test]
+    fn metrics_data_double_summary() -> Result<()> {
+        let pb = Some(metric::Data::DoubleSummary(DoubleSummary {
+            data_points: vec![DoubleSummaryDataPoint {
+                start_time_unix_nano: 0,
+                time_unix_nano: 0,
+                labels: vec![],
+                count: 0,
+                sum: 0.0,
+                quantile_values: vec![],
+            }],
+        }));
+
+        let json = metrics_data_to_json(pb.clone());
+        let back_again = metrics_data_to_pb(Some(&json))?;
+        let expected: Value = json!({
+            "double-summary": {
+                "data_points": [{
+                    "start_time_unix_nano": 0,
+                    "time_unix_nano": 0,
+                    "labels": [],
+                    "count": 0,
+                    "sum": 0.0,
+                    "quantile_values": []
+                }]
+        }})
+        .into();
+        assert_eq!(expected, json);
+        assert_eq!(pb, Some(back_again));
+        Ok(())
+    }
+
+    #[test]
+    fn metrics_data_int_histo() -> Result<()> {
+        let pb = Some(metric::Data::IntHistogram(IntHistogram {
+            aggregation_temporality: 0,
+            data_points: vec![IntHistogramDataPoint {
+                start_time_unix_nano: 0,
+                time_unix_nano: 0,
+                labels: vec![],
+                exemplars: vec![],
+                count: 5,
+                sum: 10,
+                bucket_counts: vec![],
+                explicit_bounds: vec![],
+            }],
+        }));
+
+        let json = metrics_data_to_json(pb.clone());
+        let back_again = metrics_data_to_pb(Some(&json))?;
+        let expected: Value = json!({
+            "int-histogram": {
+                "aggregation_temporality": 0,
+                "data_points": [{
+                    "start_time_unix_nano": 0,
+                    "time_unix_nano": 0,
+                    "labels": [],
+                    "exemplars": [],
+                    "count": 5,
+                    "sum": 10,
+                    "bucket_counts": [],
+                    "explicit_bounds": []
+                }]
+        }})
+        .into();
+        assert_eq!(expected, json);
+        assert_eq!(pb, Some(back_again));
+        Ok(())
+    }
+
+    #[test]
+    fn metrics_data_int_sum() -> Result<()> {
+        let pb = Some(metric::Data::IntSum(IntSum {
+            is_monotonic: false,
+            aggregation_temporality: 0,
+            data_points: vec![IntDataPoint {
+                value: 4,
+                start_time_unix_nano: 0,
+                time_unix_nano: 0,
+                labels: vec![],
+                exemplars: vec![],
+            }],
+        }));
+
+        let json = metrics_data_to_json(pb.clone());
+        let back_again = metrics_data_to_pb(Some(&json))?;
+        let expected: Value = json!({
+            "int-sum": {
+                "is_monotonic": false,
+                "aggregation_temporality": 0,
+                "data_points": [{
+                    "start_time_unix_nano": 0,
+                    "time_unix_nano": 0,
+                    "labels": [],
+                    "exemplars": [],
+                    "value": 4
                 }]
         }})
         .into();
@@ -873,7 +1080,7 @@ mod tests {
                 })),
             }],
         }];
-        let json = instrumentation_library_metrics_to_json(pb.clone())?;
+        let json = instrumentation_library_metrics_to_json(pb.clone());
         let back_again = instrumentation_library_metrics_to_pb(Some(&json))?;
         let expected: Value = json!([{
             "instrumentation_library": { "name": "name", "version": "v0.1.2" },
