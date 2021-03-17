@@ -246,25 +246,34 @@ impl Sink for Kafka {
         for (value, meta) in event.value_meta_iter() {
             let encoded = codec.encode(value)?;
             let processed = postprocess(self.postprocessors.as_mut_slice(), ingest_ns, encoded)?;
-            let meta_kafka_key = meta.get_str("kafka_key");
-            let meta_kafka_headers = meta.get_object("kafka_headers");
+            let meta_kafka_data = meta.get_object("kafka");
+            let mut meta_kafka_key = None;
+            let mut meta_kafka_headers = None;
+            if let Some(meta_data) = meta_kafka_data {
+                meta_kafka_key = meta_data.get("key");
+                meta_kafka_headers = meta_data.get("headers");
+            }
             for payload in processed {
                 // TODO: allow defining partition and timestamp in meta
                 let mut record = FutureRecord::to(self.config.topic.as_str());
                 record = record.payload(&payload);
                 if let Some(kafka_key) = meta_kafka_key {
-                    record = record.key(kafka_key);
+                    if let Some(kafka_key_str) = kafka_key.as_str() {
+                        record = record.key(kafka_key_str);
+                    }
                 } else if let Some(kafka_key) = &self.config.key {
                     record = record.key(kafka_key.as_str());
                 }
                 if let Some(kafka_headers) = meta_kafka_headers {
-                    let mut headers = OwnedHeaders::new_with_capacity(kafka_headers.len());
-                    for (key, val) in kafka_headers.iter() {
-                        if let Some(val_str) = val.as_str() {
-                            headers = headers.add(key, val_str);
+                    if let Some(headers_obj) = kafka_headers.as_object() {
+                        let mut headers = OwnedHeaders::new_with_capacity(headers_obj.len());
+                        for (key, val) in headers_obj.iter() {
+                            if let Some(val_str) = val.as_str() {
+                                headers = headers.add(key, val_str);
+                            }
                         }
+                        record = record.headers(headers);
                     }
-                    record = record.headers(headers);
                 }
                 // send out without blocking on delivery
                 match self.producer.send_result(record) {
