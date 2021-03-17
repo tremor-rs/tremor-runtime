@@ -189,11 +189,7 @@ pub(crate) fn int_data_points_to_pb(json: Option<&Value<'_>>) -> Result<Vec<IntD
 pub(crate) fn double_data_points_to_json<'event>(pb: Vec<DoubleDataPoint>) -> Value<'event> {
     let mut json = Vec::new();
     for data in pb {
-        let mut labels = Vec::new();
-        for label in data.labels {
-            let v = json!({"key": label.key, "value": label.value });
-            labels.push(v);
-        }
+        let labels = common::string_key_value_to_json(data.labels);
         let exemplars = double_exemplars_to_json(data.exemplars);
 
         let v: Value = json!({
@@ -238,11 +234,7 @@ pub(crate) fn double_histo_data_points_to_json<'event>(
 ) -> Value<'event> {
     let mut json = Vec::new();
     for points in pb {
-        let mut labels = Vec::new();
-        for label in points.labels {
-            let v: Value = json!({"key": label.key, "value": label.value }).into();
-            labels.push(v);
-        }
+        let labels = common::string_key_value_to_json(points.labels);
         let exemplars = double_exemplars_to_json(points.exemplars);
         let v: Value = json!({
             "start_time_unix_nano": points.start_time_unix_nano,
@@ -298,11 +290,7 @@ pub(crate) fn double_summary_data_points_to_json<'event>(
 ) -> Value<'event> {
     let mut json = Vec::new();
     for points in pb {
-        let mut labels = Vec::new();
-        for label in points.labels {
-            let v: Value = json!({"key": label.key, "value": label.value }).into();
-            labels.push(v);
-        }
+        let labels = common::string_key_value_to_json(points.labels);
         let quantile_values = quantile_values_to_json(points.quantile_values);
         let v: Value = json!({
             "start_time_unix_nano": points.start_time_unix_nano,
@@ -351,11 +339,7 @@ pub(crate) fn int_histo_data_points_to_json<'event>(
 ) -> Value<'event> {
     let mut json = Vec::new();
     for points in pb {
-        let mut labels = Vec::new();
-        for label in points.labels {
-            let v: Value = json!({"key": label.key, "value": label.value }).into();
-            labels.push(v);
-        }
+        let labels = common::string_key_value_to_json(points.labels);
         let exemplars = int_exemplars_to_json(points.exemplars);
         let v: Value = json!({
             "start_time_unix_nano": points.start_time_unix_nano,
