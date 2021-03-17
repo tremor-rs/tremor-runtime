@@ -17,7 +17,7 @@ use super::common;
 use super::resource;
 use super::trace;
 use crate::errors::Result;
-use simd_json::json;
+use simd_json::{json, StaticNode};
 use tremor_otelapis::opentelemetry::proto::{
     collector::metrics::v1::ExportMetricsServiceRequest,
     metrics::v1::{
@@ -32,6 +32,24 @@ use tremor_otelapis::opentelemetry::proto::{
 
 use simd_json::{Builder, Mutable, Value as SimdJsonValue};
 use tremor_value::Value;
+
+pub(crate) fn int_exemplars_to_json<'event>(data: Vec<IntExemplar>) -> Value<'event> {
+    let mut json: Vec<Value> = Vec::new();
+
+    for exemplar in data {
+        json.push(
+            json!({
+                "span_id": exemplar.span_id,
+                "trace_id": exemplar.trace_id,
+                "filtered_labels": common::string_key_value_to_json(exemplar.filtered_labels),
+                "time_unix_nano": exemplar.time_unix_nano,
+                "value": exemplar.value
+            })
+            .into(),
+        )
+    }
+    Value::Array(json)
+}
 
 pub(crate) fn int_exemplars_to_pb(json: Option<&Value<'_>>) -> Result<Vec<IntExemplar>> {
     if let Some(Value::Array(json)) = json {
@@ -54,6 +72,24 @@ pub(crate) fn int_exemplars_to_pb(json: Option<&Value<'_>>) -> Result<Vec<IntExe
     }
 
     Err("Unable to map json value to Exemplars pb".into())
+}
+
+pub(crate) fn double_exemplars_to_json<'event>(data: Vec<DoubleExemplar>) -> Value<'event> {
+    let mut json: Vec<Value> = Vec::new();
+
+    for exemplar in data {
+        json.push(
+            json!({
+                "span_id": exemplar.span_id,
+                "trace_id": exemplar.trace_id,
+                "filtered_labels": common::string_key_value_to_json(exemplar.filtered_labels),
+                "time_unix_nano": exemplar.time_unix_nano,
+                "value": exemplar.value
+            })
+            .into(),
+        )
+    }
+    Value::Array(json)
 }
 
 pub(crate) fn double_exemplars_to_pb(json: Option<&Value<'_>>) -> Result<Vec<DoubleExemplar>> {
@@ -79,6 +115,21 @@ pub(crate) fn double_exemplars_to_pb(json: Option<&Value<'_>>) -> Result<Vec<Dou
     Err("Unable to map json value to Exemplars pb".into())
 }
 
+pub(crate) fn quantile_values_to_json<'event>(data: Vec<ValueAtQuantile>) -> Value<'event> {
+    let mut json: Vec<Value> = Vec::new();
+
+    for data in data {
+        json.push(
+            json!({
+                "value": data.value,
+                "quantile": data.quantile,
+            })
+            .into(),
+        )
+    }
+    Value::Array(json)
+}
+
 pub(crate) fn quantile_values_to_pb(json: Option<&Value<'_>>) -> Result<Vec<ValueAtQuantile>> {
     if let Some(Value::Array(json)) = json {
         let mut arr = Vec::new();
@@ -96,27 +147,8 @@ pub(crate) fn quantile_values_to_pb(json: Option<&Value<'_>>) -> Result<Vec<Valu
 pub(crate) fn int_data_points_to_json<'event>(pb: Vec<IntDataPoint>) -> Value<'event> {
     let mut json = Vec::new();
     for data in pb {
-        let mut labels = Vec::new();
-        for label in data.labels {
-            let v = json!({"key": label.key, "value": label.value });
-            labels.push(v);
-        }
-        let mut exemplars = Vec::new();
-        for exemplar in data.exemplars {
-            let mut filtered_labels = Vec::new();
-            for fl in exemplar.filtered_labels {
-                filtered_labels.push(json!({"key": fl.value, "value": fl.value}));
-            }
-            let v: Value = json!({
-                "span_id": exemplar.span_id,
-                "trace_id": exemplar.trace_id,
-                "time_unix_nano": exemplar.time_unix_nano,
-                "value": exemplar.value,
-                "filtered_labels": filtered_labels,
-            })
-            .into();
-            exemplars.push(v);
-        }
+        let labels = common::string_key_value_to_json(data.labels);
+        let exemplars = int_exemplars_to_json(data.exemplars);
         let v: Value = json!({
             "value": data.value,
             "start_time_unix_nano": data.start_time_unix_nano,
@@ -130,6 +162,30 @@ pub(crate) fn int_data_points_to_json<'event>(pb: Vec<IntDataPoint>) -> Value<'e
     Value::Array(json)
 }
 
+pub(crate) fn int_data_points_to_pb(json: Option<&Value<'_>>) -> Result<Vec<IntDataPoint>> {
+    let mut pb = Vec::new();
+    if let Some(Value::Array(data)) = json {
+        for item in data {
+            let labels = common::string_key_value_to_pb(item.get("labels"))?;
+            let exemplars = int_exemplars_to_pb(item.get("exemplars"))?;
+            let time_unix_nano = pb::maybe_int_to_pbu64(item.get("time_unix_nano"))?;
+            let start_time_unix_nano = pb::maybe_int_to_pbu64(item.get("start_time_unix_nano"))?;
+            let value = pb::maybe_int_to_pbi64(item.get("value"))?;
+            pb.push(IntDataPoint {
+                labels,
+                exemplars,
+                time_unix_nano,
+                start_time_unix_nano,
+                value,
+            })
+        }
+
+        return Ok(pb);
+    };
+
+    Err("Unable to map json value to otel pb IntDataPoint list".into())
+}
+
 pub(crate) fn double_data_points_to_json<'event>(pb: Vec<DoubleDataPoint>) -> Value<'event> {
     let mut json = Vec::new();
     for data in pb {
@@ -138,22 +194,8 @@ pub(crate) fn double_data_points_to_json<'event>(pb: Vec<DoubleDataPoint>) -> Va
             let v = json!({"key": label.key, "value": label.value });
             labels.push(v);
         }
-        let mut exemplars = Vec::new();
-        for exemplar in data.exemplars {
-            let mut filtered_labels: Vec<Value> = Vec::new();
-            for fl in exemplar.filtered_labels {
-                filtered_labels.push(json!({"key": fl.key, "value": fl.value}).into());
-            }
-            let v: Value = json!({
-                "span_id": exemplar.span_id,
-                "trace_id": exemplar.trace_id,
-                "time_unix_nano": exemplar.time_unix_nano,
-                "value": exemplar.value,
-                "filtered_labels": filtered_labels,
-            })
-            .into();
-            exemplars.push(v);
-        }
+        let exemplars = double_exemplars_to_json(data.exemplars);
+
         let v: Value = json!({
             "value": data.value,
             "start_time_unix_nano": data.start_time_unix_nano,
@@ -165,6 +207,30 @@ pub(crate) fn double_data_points_to_json<'event>(pb: Vec<DoubleDataPoint>) -> Va
         json.push(v);
     }
     Value::Array(json)
+}
+
+pub(crate) fn double_data_points_to_pb(json: Option<&Value<'_>>) -> Result<Vec<DoubleDataPoint>> {
+    let mut pb = Vec::new();
+    if let Some(Value::Array(data)) = json {
+        for item in data {
+            let labels = common::string_key_value_to_pb(item.get("labels"))?;
+            let exemplars = double_exemplars_to_pb(item.get("exemplars"))?;
+            let time_unix_nano = pb::maybe_int_to_pbu64(item.get("time_unix_nano"))?;
+            let start_time_unix_nano = pb::maybe_int_to_pbu64(item.get("start_time_unix_nano"))?;
+            let value = pb::maybe_double_to_pb(item.get("value"))?;
+            pb.push(DoubleDataPoint {
+                labels,
+                exemplars,
+                time_unix_nano,
+                start_time_unix_nano,
+                value,
+            })
+        }
+
+        return Ok(pb);
+    };
+
+    Err("Unable to map json value to otel pb DoubleDataPoint list".into())
 }
 
 pub(crate) fn double_histo_data_points_to_json<'event>(
@@ -177,22 +243,7 @@ pub(crate) fn double_histo_data_points_to_json<'event>(
             let v: Value = json!({"key": label.key, "value": label.value }).into();
             labels.push(v);
         }
-        let mut exemplars = Vec::new();
-        for exemplar in points.exemplars {
-            let mut filtered_labels: Vec<Value> = Vec::new();
-            for fl in exemplar.filtered_labels {
-                filtered_labels.push(json!({"key": fl.value, "value": fl.value}).into());
-            }
-            let v: Value = json!({
-                "span_id": exemplar.span_id,
-                "trace_id": exemplar.trace_id,
-                "time_unix_nano": exemplar.time_unix_nano,
-                "value": exemplar.value,
-                "filtered_labels": filtered_labels,
-            })
-            .into();
-            exemplars.push(v);
-        }
+        let exemplars = double_exemplars_to_json(points.exemplars);
         let v: Value = json!({
             "start_time_unix_nano": points.start_time_unix_nano,
             "time_unix_nano": points.time_unix_nano,
@@ -210,6 +261,38 @@ pub(crate) fn double_histo_data_points_to_json<'event>(
     Value::Array(json)
 }
 
+pub(crate) fn double_histo_data_points_to_pb(
+    json: Option<&Value<'_>>,
+) -> Result<Vec<DoubleHistogramDataPoint>> {
+    let mut pb = Vec::new();
+    if let Some(Value::Array(data)) = json {
+        for item in data {
+            let labels = common::string_key_value_to_pb(item.get("labels"))?;
+            let time_unix_nano = pb::maybe_int_to_pbu64(item.get("time_unix_nano"))?;
+            let start_time_unix_nano = pb::maybe_int_to_pbu64(item.get("start_time_unix_nano"))?;
+            let sum = pb::maybe_double_to_pb(item.get("sum"))?;
+            let count = pb::maybe_int_to_pbu64(item.get("count"))?;
+            let exemplars = double_exemplars_to_pb(item.get("exemplars"))?;
+            let explicit_bounds = pb::f64_repeated_to_pb(item.get("explicit_bounds"))?;
+            let bucket_counts = pb::u64_repeated_to_pb(item.get("explicit_bounds"))?;
+            pb.push(DoubleHistogramDataPoint {
+                labels,
+                time_unix_nano,
+                start_time_unix_nano,
+                sum,
+                count,
+                bucket_counts,
+                explicit_bounds,
+                exemplars,
+            })
+        }
+
+        return Ok(pb);
+    };
+
+    Err("Unable to map json value to otel pb DoubleHistogramDataPoint list".into())
+}
+
 pub(crate) fn double_summary_data_points_to_json<'event>(
     pb: Vec<DoubleSummaryDataPoint>,
 ) -> Value<'event> {
@@ -220,11 +303,7 @@ pub(crate) fn double_summary_data_points_to_json<'event>(
             let v: Value = json!({"key": label.key, "value": label.value }).into();
             labels.push(v);
         }
-        let mut quantile_values = Vec::new();
-        for qv in points.quantile_values {
-            let v: Value = json!({ "quantile": qv.quantile, "value": qv.value }).into();
-            quantile_values.push(v);
-        }
+        let quantile_values = quantile_values_to_json(points.quantile_values);
         let v: Value = json!({
             "start_time_unix_nano": points.start_time_unix_nano,
             "time_unix_nano": points.time_unix_nano,
@@ -239,6 +318,34 @@ pub(crate) fn double_summary_data_points_to_json<'event>(
     Value::Array(json)
 }
 
+pub(crate) fn double_summary_data_points_to_pb(
+    json: Option<&Value<'_>>,
+) -> Result<Vec<DoubleSummaryDataPoint>> {
+    let mut pb = Vec::new();
+    if let Some(Value::Array(data)) = json {
+        for item in data {
+            let labels = common::string_key_value_to_pb(item.get("labels"))?;
+            let time_unix_nano = pb::maybe_int_to_pbu64(item.get("time_unix_nano"))?;
+            let start_time_unix_nano = pb::maybe_int_to_pbu64(item.get("start_time_unix_nano"))?;
+            let sum = pb::maybe_double_to_pb(item.get("sum"))?;
+            let count = pb::maybe_int_to_pbu64(item.get("count"))?;
+            let quantile_values = quantile_values_to_pb(item.get("quantile_values"))?;
+            pb.push(DoubleSummaryDataPoint {
+                labels,
+                time_unix_nano,
+                start_time_unix_nano,
+                sum,
+                count,
+                quantile_values,
+            })
+        }
+
+        return Ok(pb);
+    };
+
+    Err("Unable to map json value to otel pb DoubleSummaryDataPoint list".into())
+}
+
 pub(crate) fn int_histo_data_points_to_json<'event>(
     pb: Vec<IntHistogramDataPoint>,
 ) -> Value<'event> {
@@ -249,22 +356,7 @@ pub(crate) fn int_histo_data_points_to_json<'event>(
             let v: Value = json!({"key": label.key, "value": label.value }).into();
             labels.push(v);
         }
-        let mut exemplars = Vec::new();
-        for exemplar in points.exemplars {
-            let mut filtered_labels: Vec<Value> = Vec::new();
-            for fl in exemplar.filtered_labels {
-                filtered_labels.push(json!({"key": fl.value, "value": fl.value}).into());
-            }
-            let v: Value = json!({
-                "span_id": exemplar.span_id,
-                "trace_id": exemplar.trace_id,
-                "time_unix_nano": exemplar.time_unix_nano,
-                "value": exemplar.value,
-                "filtered_labels": filtered_labels,
-            })
-            .into();
-            exemplars.push(v);
-        }
+        let exemplars = int_exemplars_to_json(points.exemplars);
         let v: Value = json!({
             "start_time_unix_nano": points.start_time_unix_nano,
             "time_unix_nano": points.time_unix_nano,
@@ -282,105 +374,106 @@ pub(crate) fn int_histo_data_points_to_json<'event>(
     Value::Array(json)
 }
 
-pub(crate) fn int_sum_data_points_to_json<'event>(pb: Vec<IntDataPoint>) -> Value<'event> {
-    let mut json = Vec::new();
-    for points in pb {
-        let mut labels = Vec::new();
-        for label in points.labels {
-            let v: Value = json!({"key": label.key, "value": label.value }).into();
-            labels.push(v);
-        }
-        let mut exemplars = Vec::new();
-        for exemplar in points.exemplars {
-            let mut filtered_labels: Vec<Value> = Vec::new();
-            for fl in exemplar.filtered_labels {
-                filtered_labels.push(json!({"key": fl.value, "value": fl.value}).into());
-            }
-            let v: Value = json!({
-                "span_id": exemplar.span_id,
-                "trace_id": exemplar.trace_id,
-                "time_unix_nano": exemplar.time_unix_nano,
-                "value": exemplar.value,
-                "filtered_labels": filtered_labels,
+pub(crate) fn int_histo_data_points_to_pb(
+    json: Option<&Value<'_>>,
+) -> Result<Vec<IntHistogramDataPoint>> {
+    let mut pb = Vec::new();
+    if let Some(Value::Array(data)) = json {
+        for item in data {
+            let labels = common::string_key_value_to_pb(item.get("labels"))?;
+            let time_unix_nano = pb::maybe_int_to_pbu64(item.get("time_unix_nano"))?;
+            let start_time_unix_nano = pb::maybe_int_to_pbu64(item.get("start_time_unix_nano"))?;
+            let sum = pb::maybe_int_to_pbi64(item.get("sum"))?;
+            let count = pb::maybe_int_to_pbu64(item.get("count"))?;
+            let exemplars = int_exemplars_to_pb(item.get("exemplars"))?;
+            let explicit_bounds = pb::f64_repeated_to_pb(item.get("explicit_bounds"))?;
+            let bucket_counts = pb::u64_repeated_to_pb(item.get("explicit_bounds"))?;
+            pb.push(IntHistogramDataPoint {
+                labels,
+                time_unix_nano,
+                start_time_unix_nano,
+                sum,
+                count,
+                bucket_counts,
+                explicit_bounds,
+                exemplars,
             })
-            .into();
-            exemplars.push(v);
         }
-        let v: Value = json!({
-            "value": points.value,
-            "start_time_unix_nano": points.start_time_unix_nano,
-            "time_unix_nano": points.time_unix_nano,
-            "labels": labels,
-            "exemplars": exemplars,
-        })
-        .into();
-        json.push(v);
+
+        return Ok(pb);
+    };
+
+    Err("Unable to map json value to otel pb IntHistogramDataPoint list".into())
+}
+
+pub(crate) fn int_sum_data_points_to_json<'event>(pb: Vec<IntDataPoint>) -> Value<'event> {
+    int_data_points_to_json(pb)
+}
+
+pub(crate) fn metrics_data_to_json<'event>(pb: Option<metric::Data>) -> Value<'event> {
+    if let Some(pb) = pb {
+        let json: Value = match pb {
+            Data::IntGauge(data) => json!({
+                "int-gauge": {
+                "data_points":  int_data_points_to_json(data.data_points)
+            }})
+            .into(),
+            Data::DoubleSum(data) => json!({
+                "double-sum": {
+                "is_monotonic": data.is_monotonic,
+                "data_points":  double_data_points_to_json(data.data_points),
+                "aggregation_temporality": data.aggregation_temporality,
+            }})
+            .into(),
+            Data::DoubleGauge(data) => json!({
+                "double-gauge": {
+                "data_points":  double_data_points_to_json(data.data_points),
+            }})
+            .into(),
+            Data::DoubleHistogram(data) => json!({
+                "double-histogram": {
+                "data_points":  double_histo_data_points_to_json(data.data_points),
+                "aggregation_temporality": data.aggregation_temporality,
+            }})
+            .into(),
+            Data::DoubleSummary(data) => json!({
+                "double-summary": {
+                "data_points":  double_summary_data_points_to_json(data.data_points),
+            }})
+            .into(),
+            Data::IntHistogram(data) => json!({
+                "int-histogram": {
+                "data_points":  int_histo_data_points_to_json(data.data_points),
+                "aggregation_temporality": data.aggregation_temporality,
+            }})
+            .into(),
+            Data::IntSum(data) => json!({
+                "int-sum": {
+                "is_monotonic": data.is_monotonic,
+                "data_points":  int_sum_data_points_to_json(data.data_points),
+                "aggregation_temporality": data.aggregation_temporality,
+                }
+            })
+            .into(),
+        };
+
+        json
+    } else {
+        Value::Static(StaticNode::Null)
     }
-    Value::Array(json)
 }
 
 #[allow(clippy::too_many_lines)]
-pub(crate) fn metric_data_to_pb(data: Option<&Value<'_>>) -> Result<metric::Data> {
+pub(crate) fn metrics_data_to_pb(data: Option<&Value<'_>>) -> Result<metric::Data> {
     if let Some(Value::Object(json)) = data {
         if let Some(Value::Object(json)) = json.get("int-gauge") {
-            if let Some(Value::Array(arr)) = json.get("data_points") {
-                let mut data_points = Vec::new();
-                for item in arr {
-                    let labels = common::string_key_value_to_pb(item.get("labels"))?;
-                    let exemplars = int_exemplars_to_pb(item.get("exemplars"))?;
-                    let time_unix_nano = pb::maybe_int_to_pbu64(item.get("time_unix_nano"))?;
-                    let start_time_unix_nano =
-                        pb::maybe_int_to_pbu64(item.get("start_time_unix_nano"))?;
-                    let value = pb::maybe_int_to_pbi64(item.get("value"))?;
-                    data_points.push(IntDataPoint {
-                        labels,
-                        exemplars,
-                        time_unix_nano,
-                        start_time_unix_nano,
-                        value,
-                    })
-                }
-                return Ok(metric::Data::IntGauge(IntGauge { data_points }));
-            }
+            let data_points = int_data_points_to_pb(json.get("data_points"))?;
+            return Ok(metric::Data::IntGauge(IntGauge { data_points }));
         } else if let Some(Value::Object(json)) = json.get("double-gauge") {
-            if let Some(Value::Array(arr)) = json.get("data_points") {
-                let mut data_points = Vec::new();
-                for item in arr {
-                    let labels = common::string_key_value_to_pb(item.get("labels"))?;
-                    let exemplars = double_exemplars_to_pb(item.get("exemplars"))?;
-                    let time_unix_nano = pb::maybe_int_to_pbu64(item.get("time_unix_nano"))?;
-                    let start_time_unix_nano =
-                        pb::maybe_int_to_pbu64(item.get("start_time_unix_nano"))?;
-                    let value = pb::maybe_double_to_pb(item.get("value"))?;
-                    data_points.push(DoubleDataPoint {
-                        labels,
-                        exemplars,
-                        time_unix_nano,
-                        start_time_unix_nano,
-                        value,
-                    })
-                }
-                return Ok(metric::Data::DoubleGauge(DoubleGauge { data_points }));
-            }
+            let data_points = double_data_points_to_pb(json.get("data_points"))?;
+            return Ok(metric::Data::DoubleGauge(DoubleGauge { data_points }));
         } else if let Some(Value::Object(json)) = json.get("int-sum") {
-            let mut data_points = Vec::new();
-            if let Some(Value::Array(arr)) = json.get("data_points") {
-                for item in arr {
-                    let labels = common::string_key_value_to_pb(item.get("labels"))?;
-                    let exemplars = int_exemplars_to_pb(item.get("exemplars"))?;
-                    let time_unix_nano = pb::maybe_int_to_pbu64(item.get("time_unix_nano"))?;
-                    let start_time_unix_nano =
-                        pb::maybe_int_to_pbu64(item.get("start_time_unix_nano"))?;
-                    let value = pb::maybe_int_to_pbi64(item.get("value"))?;
-                    data_points.push(IntDataPoint {
-                        labels,
-                        exemplars,
-                        time_unix_nano,
-                        start_time_unix_nano,
-                        value,
-                    })
-                }
-            }
+            let data_points = int_data_points_to_pb(json.get("data_points"))?;
             let is_monotonic = pb::maybe_bool_to_pb(json.get("is_monotonic"))?;
             let aggregation_temporality =
                 pb::maybe_int_to_pbi32(json.get("aggregation_temporality"))?;
@@ -390,24 +483,7 @@ pub(crate) fn metric_data_to_pb(data: Option<&Value<'_>>) -> Result<metric::Data
                 aggregation_temporality,
             }));
         } else if let Some(Value::Object(json)) = json.get("double-sum") {
-            let mut data_points = Vec::new();
-            if let Some(Value::Array(json)) = json.get("data_points") {
-                for item in json {
-                    let labels = common::string_key_value_to_pb(item.get("labels"))?;
-                    let exemplars = double_exemplars_to_pb(item.get("exemplars"))?;
-                    let time_unix_nano = pb::maybe_int_to_pbu64(item.get("time_unix_nano"))?;
-                    let start_time_unix_nano =
-                        pb::maybe_int_to_pbu64(item.get("start_time_unix_nano"))?;
-                    let value = pb::maybe_double_to_pb(item.get("value"))?;
-                    data_points.push(DoubleDataPoint {
-                        labels,
-                        exemplars,
-                        time_unix_nano,
-                        start_time_unix_nano,
-                        value,
-                    })
-                }
-            }
+            let data_points = double_data_points_to_pb(json.get("data_points"))?;
             let is_monotonic = pb::maybe_bool_to_pb(json.get("is_monotonic"))?;
             let aggregation_temporality =
                 pb::maybe_int_to_pbi32(json.get("aggregation_temporality"))?;
@@ -417,30 +493,7 @@ pub(crate) fn metric_data_to_pb(data: Option<&Value<'_>>) -> Result<metric::Data
                 aggregation_temporality,
             }));
         } else if let Some(Value::Object(json)) = json.get("int-histogram") {
-            let mut data_points = Vec::new();
-            if let Some(Value::Array(json)) = json.get("data_points") {
-                for item in json {
-                    let labels = common::string_key_value_to_pb(item.get("labels"))?;
-                    let time_unix_nano = pb::maybe_int_to_pbu64(item.get("time_unix_nano"))?;
-                    let start_time_unix_nano =
-                        pb::maybe_int_to_pbu64(item.get("start_time_unix_nano"))?;
-                    let sum = pb::maybe_int_to_pbi64(item.get("sum"))?;
-                    let count = pb::maybe_int_to_pbu64(item.get("count"))?;
-                    let exemplars = int_exemplars_to_pb(item.get("exemplars"))?;
-                    let explicit_bounds = pb::f64_repeated_to_pb(item.get("explicit_bounds"))?;
-                    let bucket_counts = pb::u64_repeated_to_pb(item.get("explicit_bounds"))?;
-                    data_points.push(IntHistogramDataPoint {
-                        labels,
-                        time_unix_nano,
-                        start_time_unix_nano,
-                        sum,
-                        count,
-                        bucket_counts,
-                        explicit_bounds,
-                        exemplars,
-                    });
-                }
-            }
+            let data_points = int_histo_data_points_to_pb(json.get("data_points"))?;
             let aggregation_temporality =
                 pb::maybe_int_to_pbi32(json.get("aggregation_temporality"))?;
             return Ok(metric::Data::IntHistogram(IntHistogram {
@@ -448,30 +501,7 @@ pub(crate) fn metric_data_to_pb(data: Option<&Value<'_>>) -> Result<metric::Data
                 aggregation_temporality,
             }));
         } else if let Some(Value::Object(json)) = json.get("double-histogram") {
-            let mut data_points = Vec::new();
-            if let Some(Value::Array(json)) = json.get("data_points") {
-                for item in json {
-                    let labels = common::string_key_value_to_pb(item.get("labels"))?;
-                    let time_unix_nano = pb::maybe_int_to_pbu64(item.get("time_unix_nano"))?;
-                    let start_time_unix_nano =
-                        pb::maybe_int_to_pbu64(item.get("start_time_unix_nano"))?;
-                    let sum = pb::maybe_double_to_pb(item.get("sum"))?;
-                    let count = pb::maybe_int_to_pbu64(item.get("count"))?;
-                    let exemplars = double_exemplars_to_pb(item.get("exemplars"))?;
-                    let explicit_bounds = pb::f64_repeated_to_pb(item.get("explicit_bounds"))?;
-                    let bucket_counts = pb::u64_repeated_to_pb(item.get("explicit_bounds"))?;
-                    data_points.push(DoubleHistogramDataPoint {
-                        labels,
-                        time_unix_nano,
-                        start_time_unix_nano,
-                        sum,
-                        count,
-                        bucket_counts,
-                        explicit_bounds,
-                        exemplars,
-                    });
-                }
-            }
+            let data_points = double_histo_data_points_to_pb(json.get("data_points"))?;
             let aggregation_temporality =
                 pb::maybe_int_to_pbi32(json.get("aggregation_temporality"))?;
             return Ok(metric::Data::DoubleHistogram(DoubleHistogram {
@@ -479,171 +509,103 @@ pub(crate) fn metric_data_to_pb(data: Option<&Value<'_>>) -> Result<metric::Data
                 aggregation_temporality,
             }));
         } else if let Some(Value::Object(json)) = json.get("double-summary") {
-            if let Some(Value::Array(json)) = json.get("data_points") {
-                let mut data_points = Vec::new();
-                for item in json {
-                    let labels = common::string_key_value_to_pb(item.get("labels"))?;
-                    let quantile_values = quantile_values_to_pb(item.get("quantile_values"))?;
-                    let time_unix_nano = pb::maybe_int_to_pbu64(item.get("time_unix_nano"))?;
-                    let start_time_unix_nano =
-                        pb::maybe_int_to_pbu64(item.get("start_time_unix_nano"))?;
-                    let sum = pb::maybe_double_to_pb(item.get("sum"))?;
-                    let count = pb::maybe_int_to_pbu64(item.get("count"))?;
-                    data_points.push(DoubleSummaryDataPoint {
-                        labels,
-                        quantile_values,
-                        time_unix_nano,
-                        start_time_unix_nano,
-                        sum,
-                        count,
-                    })
-                }
-                return Ok(metric::Data::DoubleSummary(DoubleSummary { data_points }));
-            }
+            let data_points = double_summary_data_points_to_pb(json.get("data_points"))?;
+            return Ok(metric::Data::DoubleSummary(DoubleSummary { data_points }));
         }
     }
     Err("Invalid metric data point type - cannot convert to pb".into())
 }
 
+pub(crate) fn instrumentation_library_metrics_to_json<'event>(
+    pb: Vec<tremor_otelapis::opentelemetry::proto::metrics::v1::InstrumentationLibraryMetrics>,
+) -> Result<Value<'event>> {
+    let mut json = Vec::new();
+    for data in pb {
+        let mut metrics = Vec::new();
+        for metric in data.metrics {
+            let data = metrics_data_to_json(metric.data);
+
+            metrics.push(json!({
+                "name": metric.name,
+                "description": metric.description,
+                "data": data,
+                "unit": metric.unit,
+            }));
+        }
+        json.push(json!({
+            "instrumentation_library": common::maybe_instrumentation_library_to_json(data.instrumentation_library),
+            "metrics": metrics
+        }));
+    }
+
+    Ok(json!(json).into())
+}
+
 pub(crate) fn instrumentation_library_metrics_to_pb(
     data: Option<&Value<'_>>,
-) -> Result<InstrumentationLibraryMetrics> {
-    let mut metrics = Vec::new();
-    if let Some(Value::Object(data)) = data {
-        if let Some(Value::Array(data)) = data.get("metrics") {
-            for metric in data {
-                let name: String = pb::maybe_string_to_pb(metric.get("name"))?;
-                let description: String = pb::maybe_string_to_pb(metric.get("description"))?;
-                let unit: String = pb::maybe_string_to_pb(metric.get("unit"))?;
-                let metric_data: Option<metric::Data> =
-                    Some(metric_data_to_pb(metric.get("data"))?);
+) -> Result<Vec<InstrumentationLibraryMetrics>> {
+    let mut pb = Vec::new();
+    if let Some(Value::Array(data)) = data {
+        for ilm in data {
+            if let Value::Object(data) = ilm {
+                let mut metrics = Vec::new();
+                if let Some(Value::Array(data)) = data.get("metrics") {
+                    for metric in data {
+                        let name: String = pb::maybe_string_to_pb(metric.get("name"))?;
+                        let description: String =
+                            pb::maybe_string_to_pb(metric.get("description"))?;
+                        let unit: String = pb::maybe_string_to_pb(metric.get("unit"))?;
+                        let metric_data: Option<metric::Data> =
+                            Some(metrics_data_to_pb(metric.get("data"))?);
 
-                metrics.push(Metric {
-                    name,
-                    description,
-                    unit,
-                    data: metric_data,
-                });
+                        metrics.push(Metric {
+                            name,
+                            description,
+                            unit,
+                            data: metric_data,
+                        });
+                    }
+                }
+                let il = data.get("instrumentation_library");
+                let e = InstrumentationLibraryMetrics {
+                    instrumentation_library: common::maybe_instrumentation_library_to_pb(il)?,
+                    metrics,
+                };
+                pb.push(e);
             }
         }
-        let il = data.get("instrumentation_library");
-        let e = InstrumentationLibraryMetrics {
-            instrumentation_library: common::maybe_instrumentation_library_to_pb(il)?,
-            metrics,
-        };
-        return Ok(e);
+        return Ok(pb);
     }
+
     Err("Invalid json mapping for InstrumentationLibraryMetrics".into())
 }
 
-pub(crate) fn metrics_to_json<'event>(
+pub(crate) fn resource_metrics_to_json<'event>(
     request: ExportMetricsServiceRequest,
 ) -> Result<Value<'event>> {
     let mut data = Value::object_with_capacity(0);
     let mut metrics = Vec::new();
     for metric in request.resource_metrics {
-        let mut ilm = Vec::new();
-        for el in metric.instrumentation_library_metrics {
-            let instrumentation_library =
-                common::maybe_instrumentation_library_to_json(el.instrumentation_library);
-
-            let mut im = Vec::new();
-            for m in el.metrics {
-                let data: Option<Value> = match m.data {
-                    Some(Data::IntGauge(data)) => Some(
-                        json!({
-                            "int-gauge": {
-                            "data_points":  int_data_points_to_json(data.data_points)
-                        }})
-                        .into(),
-                    ),
-                    Some(Data::DoubleSum(data)) => Some(
-                        json!({
-                            "double-sum": {
-                            "is_monotonic": data.is_monotonic,
-                            "data_points":  double_data_points_to_json(data.data_points),
-                            "aggregation_temporality": data.aggregation_temporality,
-                        }})
-                        .into(),
-                    ),
-                    Some(Data::DoubleGauge(data)) => Some(
-                        json!({
-                            "double-gauge": {
-                            "data_points":  double_data_points_to_json(data.data_points),
-                        }})
-                        .into(),
-                    ),
-                    Some(Data::DoubleHistogram(data)) => Some(
-                        json!({
-                            "double-histogram": {
-                            "data_points":  double_histo_data_points_to_json(data.data_points),
-                            "aggregation_temporality": data.aggregation_temporality,
-                        }})
-                        .into(),
-                    ),
-                    Some(Data::DoubleSummary(data)) => Some(
-                        json!({
-                            "double-summary": {
-                            "data_points":  double_summary_data_points_to_json(data.data_points),
-                        }})
-                        .into(),
-                    ),
-                    Some(Data::IntHistogram(data)) => Some(
-                        json!({
-                            "int-histogram": {
-                            "data_points":  int_histo_data_points_to_json(data.data_points),
-                            "aggregation_temporality": data.aggregation_temporality,
-                        }})
-                        .into(),
-                    ),
-                    Some(Data::IntSum(data)) => Some(
-                        json!({
-                            "int-sum": {
-                            "is_monotonic": data.is_monotonic,
-                            "data_points":  int_sum_data_points_to_json(data.data_points),
-                            "aggregation_temporality": data.aggregation_temporality,
-                            }
-                        })
-                        .into(),
-                    ),
-                    None => None,
-                };
-
-                im.push(json!({
-                    "name": m.name,
-                    "description": m.description,
-                    "data": data,
-                    "unit": m.unit,
-                }));
-            }
-            ilm.push(json!({
-                "instrumentation_library": instrumentation_library,
-                "metrics": im,
-            }));
-        }
+        let ilm = instrumentation_library_metrics_to_json(metric.instrumentation_library_metrics)?;
         metrics.push(json!({
             "instrumentation_library_metrics": ilm,
             "resource": resource::resource_to_json(metric.resource)?,
         }));
     }
-    data.insert("metrics", json!({ "resource_metrics": metrics }))?;
+    data.insert("metrics", metrics)?;
 
     Ok(data)
 }
 
 pub(crate) fn resource_metrics_to_pb(json: Option<&Value<'_>>) -> Result<Vec<ResourceMetrics>> {
     if let Some(Value::Object(json)) = json {
-        if let Some(Value::Array(json)) = json.get("resource_metrics") {
-            let mut pb = Vec::new();
+        let mut pb = Vec::new();
+        if let Some(Value::Array(json)) = json.get("metrics") {
             for json in json {
                 if let Value::Object(json) = json {
-                    let mut instrumentation_library_metrics = Vec::new();
-                    if let Some(Value::Array(json)) = json.get("instrumentation_library_metrics") {
-                        for data in json {
-                            let item = instrumentation_library_metrics_to_pb(Some(data))?;
-                            instrumentation_library_metrics.push(item);
-                        }
-                    }
+                    let instrumentation_library_metrics = instrumentation_library_metrics_to_pb(
+                        json.get("instrumentation_library_metrics"),
+                    )?;
                     let resource = Some(resource::maybe_resource_to_pb(json.get("resource"))?);
                     let item = ResourceMetrics {
                         resource,
@@ -652,9 +614,373 @@ pub(crate) fn resource_metrics_to_pb(json: Option<&Value<'_>>) -> Result<Vec<Res
                     pb.push(item);
                 }
             }
-            return Ok(pb);
         }
+        return Ok(pb);
     }
 
     Err("Invalid json mapping for otel metrics message - cannot convert to pb".into())
+}
+
+#[cfg(test)]
+mod tests {
+    use tremor_otelapis::opentelemetry::proto::{
+        common::v1::InstrumentationLibrary, resource::v1::Resource,
+    };
+
+    use super::*;
+
+    #[test]
+    fn int_exemplars() -> Result<()> {
+        let pb = vec![IntExemplar {
+            span_id: vec![],
+            trace_id: vec![],
+            time_unix_nano: 0,
+            filtered_labels: vec![],
+            value: 42,
+        }];
+        let json = int_exemplars_to_json(pb.clone());
+        let back_again = int_exemplars_to_pb(Some(&json))?;
+        let expected: Value = json!([{
+            "time_unix_nano": 0,
+            "span_id": [],
+            "trace_id": [],
+            "filtered_labels": [],
+            "value": 42
+        }])
+        .into();
+        assert_eq!(expected, json);
+        assert_eq!(pb, back_again);
+        Ok(())
+    }
+
+    #[test]
+    fn double_exemplars() -> Result<()> {
+        let pb = vec![DoubleExemplar {
+            span_id: vec![],
+            trace_id: vec![],
+            time_unix_nano: 0,
+            filtered_labels: vec![],
+            value: 42.42,
+        }];
+        let json = double_exemplars_to_json(pb.clone());
+        let back_again = double_exemplars_to_pb(Some(&json))?;
+        let expected: Value = json!([{
+            "time_unix_nano": 0,
+            "span_id": [],
+            "trace_id": [],
+            "filtered_labels": [],
+            "value": 42.42
+        }])
+        .into();
+        assert_eq!(expected, json);
+        assert_eq!(pb, back_again);
+        Ok(())
+    }
+
+    #[test]
+    fn quantile_values() -> Result<()> {
+        let pb = vec![ValueAtQuantile {
+            value: 42.42,
+            quantile: 0.3,
+        }];
+        let json = quantile_values_to_json(pb.clone());
+        let back_again = quantile_values_to_pb(Some(&json))?;
+        let expected: Value = json!([{
+            "value": 42.42,
+            "quantile": 0.3,
+        }])
+        .into();
+        assert_eq!(expected, json);
+        assert_eq!(pb, back_again);
+        Ok(())
+    }
+
+    #[test]
+    fn int_data_points() -> Result<()> {
+        let pb = vec![IntDataPoint {
+            value: 42,
+            start_time_unix_nano: 0,
+            time_unix_nano: 0,
+            labels: vec![],
+            exemplars: vec![],
+        }];
+        let json = int_data_points_to_json(pb.clone());
+        let back_again = int_data_points_to_pb(Some(&json))?;
+        let expected: Value = json!([{
+            "value": 42,
+            "start_time_unix_nano": 0,
+            "time_unix_nano": 0,
+            "labels": [],
+            "exemplars": []
+        }])
+        .into();
+        assert_eq!(expected, json);
+        assert_eq!(pb, back_again);
+
+        Ok(())
+    }
+
+    #[test]
+    fn double_data_points() -> Result<()> {
+        let pb = vec![DoubleDataPoint {
+            value: 42.42,
+            start_time_unix_nano: 0,
+            time_unix_nano: 0,
+            labels: vec![],
+            exemplars: vec![],
+        }];
+        let json = double_data_points_to_json(pb.clone());
+        let back_again = double_data_points_to_pb(Some(&json))?;
+        let expected: Value = json!([{
+            "value": 42.42,
+            "start_time_unix_nano": 0,
+            "time_unix_nano": 0,
+            "labels": [],
+            "exemplars": []
+        }])
+        .into();
+        assert_eq!(expected, json);
+        assert_eq!(pb, back_again);
+
+        Ok(())
+    }
+
+    #[test]
+    fn int_histo_data_points() -> Result<()> {
+        let pb = vec![IntHistogramDataPoint {
+            start_time_unix_nano: 0,
+            time_unix_nano: 0,
+            labels: vec![],
+            exemplars: vec![],
+            sum: 0,
+            count: 0,
+            explicit_bounds: vec![],
+            bucket_counts: vec![],
+        }];
+        let json = int_histo_data_points_to_json(pb.clone());
+        let back_again = int_histo_data_points_to_pb(Some(&json))?;
+        let expected: Value = json!([{
+            "start_time_unix_nano": 0,
+            "time_unix_nano": 0,
+            "labels": [],
+            "exemplars": [],
+            "sum": 0,
+            "count": 0,
+            "explicit_bounds": [],
+            "bucket_counts": [],
+        }])
+        .into();
+        assert_eq!(expected, json);
+        assert_eq!(pb, back_again);
+
+        Ok(())
+    }
+
+    #[test]
+    fn double_histo_data_points() -> Result<()> {
+        let pb = vec![DoubleHistogramDataPoint {
+            start_time_unix_nano: 0,
+            time_unix_nano: 0,
+            labels: vec![],
+            exemplars: vec![],
+            sum: 0.0,
+            count: 0,
+            explicit_bounds: vec![],
+            bucket_counts: vec![],
+        }];
+        let json = double_histo_data_points_to_json(pb.clone());
+        let back_again = double_histo_data_points_to_pb(Some(&json))?;
+        let expected: Value = json!([{
+            "start_time_unix_nano": 0,
+            "time_unix_nano": 0,
+            "labels": [],
+            "exemplars": [],
+            "sum": 0.0,
+            "count": 0,
+            "explicit_bounds": [],
+            "bucket_counts": [],
+        }])
+        .into();
+        assert_eq!(expected, json);
+        assert_eq!(pb, back_again);
+
+        Ok(())
+    }
+
+    #[test]
+    fn double_summary_data_points() -> Result<()> {
+        let pb = vec![DoubleSummaryDataPoint {
+            start_time_unix_nano: 0,
+            time_unix_nano: 0,
+            labels: vec![],
+            sum: 0.0,
+            count: 0,
+            quantile_values: vec![ValueAtQuantile {
+                value: 0.1,
+                quantile: 0.2,
+            }],
+        }];
+        let json = double_summary_data_points_to_json(pb.clone());
+        let back_again = double_summary_data_points_to_pb(Some(&json))?;
+        let expected: Value = json!([{
+            "start_time_unix_nano": 0,
+            "time_unix_nano": 0,
+            "labels": [],
+            "sum": 0.0,
+            "count": 0,
+            "quantile_values": [ { "value": 0.1, "quantile": 0.2 }]
+        }])
+        .into();
+        assert_eq!(expected, json);
+        assert_eq!(pb, back_again);
+
+        Ok(())
+    }
+
+    #[test]
+    fn metrics_data() -> Result<()> {
+        let pb = Some(metric::Data::IntGauge(IntGauge {
+            data_points: vec![IntDataPoint {
+                value: 42,
+                start_time_unix_nano: 0,
+                time_unix_nano: 0,
+                labels: vec![],
+                exemplars: vec![],
+            }],
+        }));
+
+        let json = metrics_data_to_json(pb.clone());
+        let back_again = metrics_data_to_pb(Some(&json))?;
+        let expected: Value = json!({
+            "int-gauge": {
+                "data_points": [{
+                    "start_time_unix_nano": 0,
+                    "time_unix_nano": 0,
+                    "labels": [],
+                    "exemplars": [],
+                    "value": 42
+                }]
+        }})
+        .into();
+        assert_eq!(expected, json);
+        assert_eq!(pb, Some(back_again));
+        Ok(())
+    }
+
+    #[test]
+    fn instrumentation_library_metrics() -> Result<()> {
+        let pb = vec![InstrumentationLibraryMetrics {
+            instrumentation_library: Some(InstrumentationLibrary {
+                name: "name".into(),
+                version: "v0.1.2".into(),
+            }), // TODO For now its an error for this to be None - may need to revisit
+            metrics: vec![Metric {
+                name: "test".into(),
+                description: "blah blah blah blah".into(),
+                unit: "badgerfeet".into(),
+                data: Some(metric::Data::IntGauge(IntGauge {
+                    data_points: vec![IntDataPoint {
+                        value: 42,
+                        start_time_unix_nano: 0,
+                        time_unix_nano: 0,
+                        labels: vec![],
+                        exemplars: vec![],
+                    }],
+                })),
+            }],
+        }];
+        let json = instrumentation_library_metrics_to_json(pb.clone())?;
+        let back_again = instrumentation_library_metrics_to_pb(Some(&json))?;
+        let expected: Value = json!([{
+            "instrumentation_library": { "name": "name", "version": "v0.1.2" },
+            "metrics": [{
+                "name": "test",
+                "description": "blah blah blah blah",
+                "unit": "badgerfeet",
+                "data": {
+                    "int-gauge": {
+                        "data_points": [{
+                            "start_time_unix_nano": 0,
+                            "time_unix_nano": 0,
+                            "labels": [],
+                            "exemplars": [],
+                            "value": 42
+                        }]
+                    }
+                },
+            }]
+        }])
+        .into();
+
+        assert_eq!(expected, json);
+        assert_eq!(pb, back_again);
+
+        Ok(())
+    }
+
+    #[test]
+    fn resource_metrics() -> Result<()> {
+        let pb = ExportMetricsServiceRequest {
+            resource_metrics: vec![ResourceMetrics {
+                resource: Some(Resource {
+                    attributes: vec![],
+                    dropped_attributes_count: 8,
+                }),
+                instrumentation_library_metrics: vec![InstrumentationLibraryMetrics {
+                    instrumentation_library: Some(InstrumentationLibrary {
+                        name: "name".into(),
+                        version: "v0.1.2".into(),
+                    }), // TODO For now its an error for this to be None - may need to revisit
+                    metrics: vec![Metric {
+                        name: "test".into(),
+                        description: "blah blah blah blah".into(),
+                        unit: "badgerfeet".into(),
+                        data: Some(metric::Data::IntGauge(IntGauge {
+                            data_points: vec![IntDataPoint {
+                                value: 42,
+                                start_time_unix_nano: 0,
+                                time_unix_nano: 0,
+                                labels: vec![],
+                                exemplars: vec![],
+                            }],
+                        })),
+                    }],
+                }],
+            }],
+        };
+        let json = resource_metrics_to_json(pb.clone())?;
+        let back_again = resource_metrics_to_pb(Some(&json))?;
+        let expected: Value = json!({
+            "metrics": [
+                {
+                    "resource": { "attributes": [], "dropped_attributes_count": 8 },
+                    "instrumentation_library_metrics": [{
+                            "instrumentation_library": { "name": "name", "version": "v0.1.2" },
+                            "metrics": [{
+                                "name": "test",
+                                "description": "blah blah blah blah",
+                                "unit": "badgerfeet",
+                                "data": {
+                                    "int-gauge": {
+                                        "data_points": [{
+                                            "start_time_unix_nano": 0,
+                                            "time_unix_nano": 0,
+                                            "labels": [],
+                                            "exemplars": [],
+                                            "value": 42
+                                        }]
+                                    }
+                                },
+                            }]
+                    }]
+                }
+            ]
+        })
+        .into();
+
+        assert_eq!(expected, json);
+        assert_eq!(pb.resource_metrics, back_again);
+
+        Ok(())
+    }
 }

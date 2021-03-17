@@ -96,7 +96,7 @@ impl Source for Int {
     async fn pull_event(&mut self, _id: u64) -> Result<SourceReply> {
         match self.rx.try_recv() {
             Ok(OpenTelemetryEvents::Metrics(metrics)) => {
-                let data: Value = metrics::metrics_to_json(metrics)?;
+                let data: Value = metrics::resource_metrics_to_json(metrics)?;
                 return Ok(SourceReply::Structured {
                     origin_uri: self.origin.clone(),
                     data: data.into(),

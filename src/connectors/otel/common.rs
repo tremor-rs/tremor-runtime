@@ -126,18 +126,19 @@ pub(crate) fn maybe_any_value_to_json<'event>(
     }
 }
 
-// pub(crate) fn string_key_value_to_json(pb: Vec<StringKeyValue>) -> Result<Value<'_>> {
-//     let mut json = Vec::new();
-//     for kv in pb {
-//         let v = json!({
-//             "key": kv.key,
-//             "value": kv.value
-//         });
-//         json.push(v);
-//     }
+#[allow(dead_code)] // Used in tests
+pub(crate) fn string_key_value_to_json<'event>(pb: Vec<StringKeyValue>) -> Value<'event> {
+    let mut json = Vec::new();
+    for kv in pb {
+        let v = json!({
+            "key": kv.key,
+            "value": kv.value
+        });
+        json.push(v);
+    }
 
-//     Ok(json!(json).into())
-// }
+    json!(json).into()
+}
 
 pub(crate) fn string_key_value_to_pb(data: Option<&Value<'_>>) -> Result<Vec<StringKeyValue>> {
     let mut pb = Vec::new();
@@ -222,8 +223,17 @@ mod tests {
     #[test]
     fn any_value_none() -> Result<()> {
         let pb = AnyValue { value: None };
-        let json = any_value_to_json(pb)?;
+        let json = any_value_to_json(pb.clone())?;
+        let back_again = any_value_to_pb(&json);
         assert_eq!(Value::Static(StaticNode::Null), json);
+        assert_eq!(pb, back_again);
+
+        let pb = AnyValue { value: None };
+        let json = any_value_to_json(pb.clone())?;
+        let back_again = maybe_any_value_to_pb(Some(&json))?;
+        assert_eq!(Value::Static(StaticNode::Null), json);
+        assert_eq!(pb, back_again);
+
         Ok(())
     }
 
@@ -232,14 +242,18 @@ mod tests {
         let pb = AnyValue {
             value: Some(any_value::Value::StringValue("snot".into())),
         };
-        let json = any_value_to_json(pb)?;
+        let json = any_value_to_json(pb.clone())?;
+        let back_again = any_value_to_pb(&json);
         assert_eq!(Value::String("snot".into()), json);
+        assert_eq!(pb, back_again);
 
         let pb = AnyValue {
             value: Some(any_value::Value::StringValue("".into())),
         };
-        let json = any_value_to_json(pb)?;
+        let json = any_value_to_json(pb.clone())?;
+        let back_again = any_value_to_pb(&json);
         assert_eq!(Value::String("".into()), json);
+        assert_eq!(pb, back_again);
 
         Ok(())
     }
@@ -249,14 +263,18 @@ mod tests {
         let pb = AnyValue {
             value: Some(any_value::Value::BoolValue(true)),
         };
-        let json = any_value_to_json(pb)?;
+        let json = any_value_to_json(pb.clone())?;
+        let back_again = any_value_to_pb(&json);
         assert_eq!(Value::Static(StaticNode::Bool(true)), json);
+        assert_eq!(pb, back_again);
 
         let pb = AnyValue {
             value: Some(any_value::Value::BoolValue(false)),
         };
-        let json = any_value_to_json(pb)?;
+        let json = any_value_to_json(pb.clone())?;
+        let back_again = any_value_to_pb(&json);
         assert_eq!(Value::Static(StaticNode::Bool(false)), json);
+        assert_eq!(pb, back_again);
 
         Ok(())
     }
@@ -266,20 +284,26 @@ mod tests {
         let pb = AnyValue {
             value: Some(any_value::Value::IntValue(0i64)),
         };
-        let json = any_value_to_json(pb)?;
+        let json = any_value_to_json(pb.clone())?;
+        let back_again = any_value_to_pb(&json);
         assert_eq!(Value::Static(StaticNode::I64(0)), json);
+        assert_eq!(pb, back_again);
 
         let pb = AnyValue {
             value: Some(any_value::Value::IntValue(std::i64::MAX)),
         };
-        let json = any_value_to_json(pb)?;
+        let json = any_value_to_json(pb.clone())?;
+        let back_again = any_value_to_pb(&json);
         assert_eq!(Value::Static(StaticNode::I64(std::i64::MAX)), json);
+        assert_eq!(pb, back_again);
 
         let pb = AnyValue {
             value: Some(any_value::Value::IntValue(std::i64::MIN)),
         };
-        let json = any_value_to_json(pb)?;
+        let json = any_value_to_json(pb.clone())?;
+        let back_again = any_value_to_pb(&json);
         assert_eq!(Value::Static(StaticNode::I64(std::i64::MIN)), json);
+        assert_eq!(pb, back_again);
 
         Ok(())
     }
@@ -289,20 +313,26 @@ mod tests {
         let pb = AnyValue {
             value: Some(any_value::Value::DoubleValue(0f64)),
         };
-        let json = any_value_to_json(pb)?;
+        let json = any_value_to_json(pb.clone())?;
+        let back_again = any_value_to_pb(&json);
         assert_eq!(Value::Static(StaticNode::F64(0f64)), json);
+        assert_eq!(pb, back_again);
 
         let pb = AnyValue {
             value: Some(any_value::Value::DoubleValue(std::f64::MAX)),
         };
-        let json = any_value_to_json(pb)?;
+        let json = any_value_to_json(pb.clone())?;
+        let back_again = any_value_to_pb(&json);
         assert_eq!(Value::Static(StaticNode::F64(std::f64::MAX)), json);
+        assert_eq!(pb, back_again);
 
         let pb = AnyValue {
             value: Some(any_value::Value::DoubleValue(std::f64::MIN)),
         };
-        let json = any_value_to_json(pb)?;
+        let json = any_value_to_json(pb.clone())?;
+        let back_again = any_value_to_pb(&json);
         assert_eq!(Value::Static(StaticNode::F64(std::f64::MIN)), json);
+        assert_eq!(pb, back_again);
 
         Ok(())
     }
@@ -317,16 +347,20 @@ mod tests {
                 values: vec![snot],
             })),
         };
-        let json = any_value_to_json(pb)?;
+        let json = any_value_to_json(pb.clone())?;
+        let back_again = any_value_to_pb(&json);
         let expected: Value = json!(["snot"]).into();
         assert_eq!(expected, json);
+        assert_eq!(pb, back_again);
 
         let pb = AnyValue {
             value: Some(any_value::Value::ArrayValue(ArrayValue { values: vec![] })),
         };
-        let json = any_value_to_json(pb)?;
+        let json = any_value_to_json(pb.clone())?;
+        let back_again = any_value_to_pb(&json);
         let expected: Value = json!([]).into();
         assert_eq!(expected, json);
+        assert_eq!(pb, back_again);
         Ok(())
     }
 
@@ -343,18 +377,23 @@ mod tests {
                 }],
             })),
         };
-        let json = any_value_to_json(pb)?;
+        let json = any_value_to_json(pb.clone())?;
+        let back_again = any_value_to_pb(&json);
         let expected: Value = json!({"badger": "snot"}).into();
         assert_eq!(expected, json);
+        assert_eq!(pb, back_again);
 
         let pb = AnyValue {
             value: Some(any_value::Value::KvlistValue(KeyValueList {
                 values: vec![],
             })),
         };
-        let json = any_value_to_json(pb)?;
+        let json = any_value_to_json(pb.clone())?;
+        let back_again = any_value_to_pb(&json);
         let expected: Value = json!({}).into();
         assert_eq!(expected, json);
+        assert_eq!(pb, back_again);
+
         Ok(())
     }
 
@@ -367,9 +406,39 @@ mod tests {
             key: "snot".into(),
             value: Some(snot),
         }];
-        let json = key_value_list_to_json(pb)?;
+        let json = key_value_list_to_json(pb.clone())?;
+        let back_again = maybe_key_value_list_to_pb(Some(&json))?;
         let expected: Value = json!([{"key": "snot", "value": "snot"}]).into();
         assert_eq!(expected, json);
+        assert_eq!(pb, back_again);
+        Ok(())
+    }
+
+    #[test]
+    fn string_key_value_list() -> Result<()> {
+        let pb = vec![StringKeyValue {
+            key: "snot".into(),
+            value: "badger".into(),
+        }];
+        let json = string_key_value_to_json(pb.clone());
+        let back_again = string_key_value_to_pb(Some(&json))?;
+        let expected: Value = json!([{"key": "snot", "value": "badger"}]).into();
+        assert_eq!(expected, json);
+        assert_eq!(pb, back_again);
+        Ok(())
+    }
+
+    #[test]
+    fn instrumentation_library() -> Result<()> {
+        let pb = InstrumentationLibrary {
+            name: "name".into(),
+            version: "v0.1.2".into(),
+        };
+        let json = maybe_instrumentation_library_to_json(Some(pb.clone()));
+        let back_again = maybe_instrumentation_library_to_pb(Some(&json))?;
+        let expected: Value = json!({"name": "name", "version": "v0.1.2"}).into();
+        assert_eq!(expected, json);
+        assert_eq!(Some(pb), back_again);
         Ok(())
     }
 }
