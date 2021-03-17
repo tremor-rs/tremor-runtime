@@ -140,14 +140,18 @@ pub(crate) struct Manager {
 
 pub(crate) enum ManagerMsg {
     Stop,
+    // TODO reuse Msg and place elsewhere?
+    Message(Event),
 }
 
 pub(crate) type NetworkSender = async_channel::Sender<ManagerMsg>;
+pub(crate) type NetworkReceiver = async_channel::Receiver<ManagerMsg>;
 
 impl std::fmt::Display for ManagerMsg {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match *self {
             ManagerMsg::Stop => write!(f, "Network Manager Stop Command"),
+            ManagerMsg::Message(_) => write!(f, "Network Manager Message Command"),
         }
     }
 }
@@ -164,6 +168,7 @@ pub(crate) struct NetworkManager {
     /// Unique Id for the source
     uid: u64,
     sessions: HashMap<StreamId, NetworkSession>,
+    receiver: NetworkReceiver,
 }
 unsafe impl Send for NetworkManager {}
 unsafe impl Sync for NetworkManager {}
@@ -348,6 +353,7 @@ impl NetworkManager {
         mut source: TntSource,
         mut sinks: Vec<TntSink>,
         config: OnrampConfig<'_>,
+        receiver: NetworkReceiver,
     ) -> Result<(Self, Sender<onramp::Msg>)> {
         // We use a unbounded channel for counterflow, while an unbounded channel seems dangerous
         // there is soundness to this.
@@ -405,6 +411,7 @@ impl NetworkManager {
                 network_id: source.id().clone(),
                 source,
                 sinks,
+                receiver,
                 metrics_reporter: config.metrics_reporter,
                 id: 0,
                 pipelines_out: Vec::new(),
@@ -419,23 +426,6 @@ impl NetworkManager {
     pub async fn run(mut self) -> Result<()> {
         // TODO move sink logic to another task...maybe via cluster manager?
 
-        /*
-        // lets try to send an event
-        // handle initial connection events for this to work
-        let mut event = Event::default();
-        event.id = EventId::new(1, 1, 1);
-        let codec: Box<dyn codec::Codec> = Box::new(crate::codec::json::JSON::default());
-        for sink in &mut self.sinks {
-            sink.on_event(
-                "in",
-                codec.as_ref(),
-                &halfbrown::HashMap::new(),
-                event.clone(),
-            )
-            .await
-            .unwrap();
-        }
-        */
         //while let Ok(msg) = reply_rx.try_recv() {
         //    match msg {
         //        sink::Reply::Insight(event) => {
@@ -465,8 +455,14 @@ impl NetworkManager {
             }
         });
 
+        let codec: Box<dyn codec::Codec> = Box::new(codec::json::JSON::default());
+        let codec_map: halfbrown::HashMap<String, Box<dyn codec::Codec>> =
+            halfbrown::HashMap::new();
+
         //dbg!("running core network run loop");
         loop {
+            // TODO eliminate the need for this
+            //dbg!("waiting to receive ticks");
             match tick_rx.recv().await {
                 Ok(e) => {
                     //dbg!("received signal tick");
@@ -476,6 +472,20 @@ impl NetworkManager {
                 }
                 Err(e) => {
                     info!("Error reciving signal tick... {}", e);
+                }
+            }
+
+            match self.receiver.try_recv() {
+                Ok(ManagerMsg::Stop) => return Ok(()),
+                Ok(ManagerMsg::Message(event)) => {
+                    for sink in &mut self.sinks {
+                        sink.on_event("in", codec.as_ref(), &codec_map, event.clone())
+                            .await
+                            .unwrap();
+                    }
+                }
+                Err(e) => {
+                    info!("Error reciving network manager message... {}", e);
                 }
             }
 
@@ -631,7 +641,7 @@ impl Manager {
     }
 
     pub fn start(self) -> (JoinHandle<Result<()>>, NetworkSender) {
-        let (tx, _rx) = bounded(self.qsize);
+        let (tx, rx) = bounded(self.qsize);
         let mut codec_map: HashMap<String, String> = HashMap::new();
         codec_map.insert("application/json".into(), "json".into());
 
@@ -656,6 +666,7 @@ impl Manager {
                         Some(1),
                     ),
                 },
+                rx,
             )
             .await
             .unwrap();

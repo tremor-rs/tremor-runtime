@@ -157,6 +157,9 @@ pub struct Conductor {
     /// Runtime type information
     pub(crate) system: Sender,
 
+    /// Network sender
+    pub(crate) network: network::NetworkSender,
+
     /// Sender for the raft-based micro-ring
     pub(crate) uring: async_channel::Sender<UrMsg>,
 
@@ -169,11 +172,16 @@ pub struct Conductor {
 
 impl Conductor {
     /// Create a new conductor
-    pub(crate) fn new(system: Sender, uring: async_channel::Sender<UrMsg>) -> Self {
+    pub(crate) fn new(
+        system: Sender,
+        network: network::NetworkSender,
+        uring: async_channel::Sender<UrMsg>,
+    ) -> Self {
         let repo = Repositories::new();
         let reg = Registries::new();
         Self {
             system,
+            network,
             uring,
             reg,
             repo,
@@ -743,8 +751,13 @@ impl World {
             ws::Network::new(&logger, node_id, cluster_endpoint, cluster_peers.clone());
 
         let (fake_system_tx, _not_used) = bounded(crate::QSIZE);
+        let (fake_network_tx, _not_used) = bounded(crate::QSIZE);
 
-        let mut conductor = Conductor::new(fake_system_tx.clone(), temp_network.tx.clone());
+        let mut conductor = Conductor::new(
+            fake_system_tx.clone(),
+            fake_network_tx.clone(),
+            temp_network.tx.clone(),
+        );
 
         // where it all begins
         let (onramp_h, onramp) = onramp::Manager::new(qsize).start();
@@ -753,6 +766,9 @@ impl World {
 
         let (network_h, network) =
             network::Manager::new(&conductor, network_addr, Some(cluster_peers), qsize).start();
+
+        // Rebind network in conductor
+        conductor.network = network.clone();
 
         let (system_h, system) = Manager {
             offramp,

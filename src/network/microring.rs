@@ -30,6 +30,7 @@ pub(crate) struct MicroRingProtocol {
     // TODO add other
     alias: String,
     uring: async_channel::Sender<UrMsg>,
+    network: crate::network::NetworkSender,
 }
 
 #[derive(Debug, PartialEq)]
@@ -49,6 +50,7 @@ impl MicroRingProtocol {
         Self {
             alias,
             uring: ns.conductor.uring.clone(),
+            network: ns.conductor.network.clone(),
         }
     }
 
@@ -56,6 +58,13 @@ impl MicroRingProtocol {
         // FIXME dummy implementation for now
         // TODO send a raftnetworkmsg from here for status, with reply sender that will be used to
         // send the response back
+
+        // test peer send
+        let mut event = Event::default();
+        event.id = tremor_pipeline::EventId::new(1, 1, 1);
+        self.network
+            .try_send(crate::network::ManagerMsg::Message(event))
+            .unwrap();
 
         let (tx, mut rx) = async_channel::bounded(64);
         //dbg!(&self.uring);
