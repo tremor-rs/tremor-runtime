@@ -17,7 +17,8 @@ use crate::pipeline;
 use crate::repository::ServantId;
 use crate::source::prelude::*;
 use crate::source::{
-    blaster, cb, crononome, discord, file, kafka, metronome, otel, postgres, rest, tcp, udp, ws,
+    blaster, cb, crononome, discord, file, kafka, metronome, nats, otel, postgres, rest, tcp, udp,
+    ws,
 };
 use crate::url::TremorUrl;
 use async_std::task::{self, JoinHandle};
@@ -82,6 +83,7 @@ pub(crate) fn lookup(
         "ws" => ws::Ws::from_config(id, config),
         "discord" => discord::Discord::from_config(id, config),
         "otel" => otel::OpenTelemetry::from_config(id, config),
+        "nats" => nats::Nats::from_config(id, config),
         _ => Err(format!("[onramp:{}] Onramp type {} not known", id, name).into()),
     }
 }

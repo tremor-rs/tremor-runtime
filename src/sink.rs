@@ -27,6 +27,7 @@ pub(crate) mod exit;
 pub(crate) mod file;
 pub(crate) mod kafka;
 pub(crate) mod kv;
+pub(crate) mod nats;
 pub(crate) mod newrelic;
 pub(crate) mod otel;
 pub(crate) mod postgres;
