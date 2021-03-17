@@ -44,3 +44,35 @@ pub(crate) fn maybe_resource_to_pb(json: Option<&Value<'_>>) -> Result<Resource>
     }
     Err("Invalid json mapping for Resource".into())
 }
+
+#[cfg(test)]
+mod tests {
+    use tremor_otelapis::opentelemetry::proto::common::v1::{any_value, AnyValue, KeyValue};
+
+    use super::*;
+
+    #[test]
+    fn resource() -> Result<()> {
+        let pb = Resource {
+            attributes: vec![KeyValue {
+                key: "snot".into(),
+                value: Some(AnyValue {
+                    value: Some(any_value::Value::StringValue("badger".into())),
+                }),
+            }],
+            dropped_attributes_count: 9,
+        };
+        let json = resource_to_json(Some(pb.clone()))?;
+        let back_again = maybe_resource_to_pb(Some(&json))?;
+        let expected: Value = json!({
+            "attributes": [ { "key": "snot", "value": "badger" }],
+            "dropped_attributes_count": 9
+        })
+        .into();
+
+        assert_eq!(expected, json);
+        assert_eq!(pb, back_again);
+
+        Ok(())
+    }
+}
