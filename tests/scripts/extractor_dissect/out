@@ -1,0 +1,1 @@
+[{"test": {"protocol": "http", "host": "example", ".tld": "com/"}},{"test": {"date": "2019-04-20", "high": "3", "snot": "foo-bar"}}]

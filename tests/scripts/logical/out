@@ -1,0 +1,1 @@
+{"and":{"01":false,"10":false,"00":false,"11":true},"assert":{"0":true},"or":{"01":true,"10":true,"00":false,"11":true},"xor":{"00":false,"01":true,"10":true,"11":false}}

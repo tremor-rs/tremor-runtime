@@ -1,0 +1,1 @@
+{"origin::as_uri_record":{"host":"test","path":["snot"],"port":23,"scheme":"snot"},"origin::as_uri_string":"snot://test:23/snot","origin::host":"test","origin::path":["snot"],"origin::port":23,"origin::scheme":"snot"}
