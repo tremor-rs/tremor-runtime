@@ -1,0 +1,15 @@
+{"count":2,"group":1,"ingest":[0,2],"sum":2.0}
+{"count":2,"group":2,"ingest":[1,3],"sum":0.2}
+{"count":2,"group":1,"ingest":[4,6],"sum":2.0}
+{"count":2,"group":2,"ingest":[5,7],"sum":0.2}
+{"count":2,"group":1,"ingest":[8,10],"sum":2.0}
+{"count":4,"group":1,"ingest":[0,2,4,6],"sum":4.0}
+{"count":2,"group":2,"ingest":[9,11],"sum":0.2}
+{"count":4,"group":2,"ingest":[1,3,5,7],"sum":0.4}
+{"count":2,"group":1,"ingest":[12,14],"sum":2.0}
+{"count":2,"group":2,"ingest":[13,15],"sum":0.2}
+{"count":2,"group":1,"ingest":[16,18],"sum":2.0}
+{"count":4,"group":1,"ingest":[8,10,12,14],"sum":4.0}
+{"count":2,"group":2,"ingest":[17,19],"sum":0.2}
+{"count":4,"group":2,"ingest":[9,11,13,15],"sum":0.4}
+{"count":2,"group":1,"ingest":[20,21],"sum":2.0}

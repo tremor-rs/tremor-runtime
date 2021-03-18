@@ -1,0 +1,2 @@
+{"error":"Error: \n    3 |   match event.snot of\n      |               ^^^^ Conflicting types, got integer but expected record\n\n","event":2}
+3
