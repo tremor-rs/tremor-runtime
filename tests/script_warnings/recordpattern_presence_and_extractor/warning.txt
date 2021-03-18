@@ -1,11 +1,11 @@
-Warning:
+Warning: 
     1 | match event of
     2 |   case %{ present key, key ~= re|snot| } => true
       |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ The field key is checked with both present and another extractor, this is redundant as extractors imply presence. It may also overwrite the result of the extractor.
     3 |   case %{ key ~= re|snot|, present key } => true
     4 |   default => true
 
-Warning:
+Warning: 
     1 | match event of
     2 |   case %{ present key, key ~= re|snot| } => true
     3 |   case %{ key ~= re|snot|, present key } => true
