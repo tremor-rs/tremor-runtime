@@ -19,6 +19,7 @@
 * Restrict event and event metadata references in the `SELECT` clause of a windowed select statement [#828](https://github.com/tremor-rs/tremor-runtime/pull/828)
 * Improve default visibility of tremor info logs from packages [#850](https://github.com/tremor-rs/tremor-runtime/pull/850)
 * Include the request info of a response for a linked rest offramp, available through the `$response.request` metadata variable.
+* Emit warnings when a window with `emit_empty_windows` without guards is used.
 
 ### Fixes
 

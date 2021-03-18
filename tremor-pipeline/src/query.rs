@@ -94,21 +94,24 @@ pub(crate) fn window_decl_to_impl<'script>(
         WindowKind::Sliding => Err("Sliding windows are not yet implemented".into()),
         WindowKind::Tumbling => {
             let script = if d.script.is_some() { Some(d) } else { None };
-            let ttl = d.params.get("eviction_period").and_then(Value::as_u64);
+            let ttl = d
+                .params
+                .get(WindowDecl::EVICTION_PERIOD)
+                .and_then(Value::as_u64);
             let max_groups = d
                 .params
-                .get("max_groups")
+                .get(WindowDecl::MAX_GROUPS)
                 .and_then(Value::as_u64)
                 .unwrap_or(WindowImpl::DEFAULT_MAX_GROUPS);
             let emit_empty_windows = d
                 .params
-                .get("emit_empty_windows")
+                .get(WindowDecl::EMIT_EMPTY_WINDOWS)
                 .and_then(Value::as_bool)
                 .unwrap_or(WindowImpl::DEFAULT_EMIT_EMPTY_WINDOWS);
 
             match (
-                d.params.get("interval").and_then(Value::as_u64),
-                d.params.get("size").and_then(Value::as_u64),
+                d.params.get(WindowDecl::INTERVAL).and_then(Value::as_u64),
+                d.params.get(WindowDecl::SIZE).and_then(Value::as_u64),
             ) {
                 (Some(interval), None) => Ok(TumblingWindowOnTime::from_stmt(
                     interval,
@@ -356,9 +359,10 @@ impl Query {
                     };
                     let id = pipe_graph.add_node(node.clone());
 
-                    let mut ww: HashMap<String, WindowImpl> = HashMap::new();
-                    for w in &query.windows {
-                        ww.insert(w.0.clone(), window_decl_to_impl(&w.1, &that)?);
+                    let mut ww: HashMap<String, WindowImpl> =
+                        HashMap::with_capacity(query.windows.len());
+                    for (name, decl) in &query.windows {
+                        ww.insert(name.clone(), window_decl_to_impl(&decl, &that)?);
                     }
                     let op = node.to_op(
                         idgen.next_id(),

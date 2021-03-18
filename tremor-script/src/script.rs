@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::ast::{Docs, Helper, Warning};
+use crate::ast::{Docs, Helper, Warning, Warnings};
 use crate::ctx::EventContext;
 use crate::errors::{CompilerError, Error, Result};
 use crate::highlighter::{Dumb as DumbHighlighter, Highlighter};
@@ -56,14 +56,13 @@ pub struct Script {
     /// Source code for this script
     pub source: String,
     /// A set of warnings if any
-    pub(crate) warnings: Vec<Warning>,
+    pub(crate) warnings: Warnings,
 }
 
 impl Script {
     /// Get script warnings
-    #[must_use]
-    pub fn warnings(&self) -> &[Warning] {
-        &self.warnings
+    pub fn warnings(&self) -> impl Iterator<Item = &Warning> {
+        self.warnings.iter()
     }
 }
 
@@ -102,7 +101,7 @@ where
     ) -> std::result::Result<Self, CompilerError> {
         let mut include_stack = lexer::IncludeStack::default();
         let r = |include_stack: &mut lexer::IncludeStack| -> Result<Self> {
-            let mut warnings = vec![];
+            let mut warnings = Warnings::new();
 
             let rented_script =
                 rentals::Script::try_new(Box::new(script.clone()), |script: &mut String| {
@@ -122,9 +121,8 @@ where
                     let script_raw = grammar::ScriptParser::new().parse(filtered_tokens)?;
                     let fake_aggr_reg = AggrRegistry::default();
                     let mut helper = Helper::new(&reg, &fake_aggr_reg, include_stack.cus.clone());
-                    let (screw_rust, ws) = script_raw.up_script(&mut helper)?;
-
-                    warnings = ws;
+                    let screw_rust = script_raw.up_script(&mut helper)?;
+                    std::mem::swap(&mut warnings, &mut helper.warnings);
                     Ok(screw_rust)
                 })
                 .map_err(|e: rental::RentalError<Error, Box<String>>| e.0)?;
@@ -252,12 +250,9 @@ where
         h.finalize()
     }
 
-    /// Format an error given a script source.
+    /// Format warnings with the given `Highligher`.
     pub fn format_warnings_with<H: Highlighter>(&self, h: &mut H) -> io::Result<()> {
-        let mut warnings = self.warnings.clone();
-        warnings.sort();
-        warnings.dedup();
-        for w in &warnings {
+        for w in &self.warnings {
             let tokens: Vec<_> = lexer::Tokenizer::new(&self.source)
                 .tokenize_until_err()
                 .collect();

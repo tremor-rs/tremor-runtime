@@ -246,6 +246,17 @@ pub struct WindowDecl<'script> {
 impl_expr_mid!(WindowDecl);
 
 impl<'script> WindowDecl<'script> {
+    /// `emit_empty_windows` setting
+    pub const EMIT_EMPTY_WINDOWS: &'static str = "emit_empty_windows";
+    /// `eviction_period` setting
+    pub const EVICTION_PERIOD: &'static str = "eviction_period";
+    /// `max_groups` setting
+    pub const MAX_GROUPS: &'static str = "max_groups";
+    /// `interval` setting
+    pub const INTERVAL: &'static str = "interval";
+    /// `size` setting
+    pub const SIZE: &'static str = "size";
+
     /// Calculate the fully qualified window name
     #[must_use]
     pub fn fqwn(&self, module: &[String]) -> String {

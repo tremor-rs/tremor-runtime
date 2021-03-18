@@ -1,0 +1,7 @@
+Warning: 
+    1 | define tumbling window my_window
+    2 | with
+    3 |   interval = core::datetime::with_seconds(2),
+    4 |   emit_empty_windows = true
+    5 | end;
+      | ^^^ Using `emit_empty_windows` without guard is potentially dangerous. Consider limiting the amount of groups maintained internally by using `max_groups` and/or `eviction_period`.

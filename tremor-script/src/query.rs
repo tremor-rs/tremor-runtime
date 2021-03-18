@@ -20,9 +20,9 @@ use crate::path::ModulePath;
 use crate::pos::Range;
 use crate::prelude::*;
 use rental::rental;
-use std::boxed::Box;
 use std::io::Write;
 use std::sync::Arc;
+use std::{boxed::Box, collections::BTreeSet};
 
 /// Rental wrapper
 #[derive(Debug, PartialEq, PartialOrd, Eq, Clone)]
@@ -86,7 +86,7 @@ pub struct Query {
     /// Source of the query
     pub source: String,
     /// Warnings emitted by the script
-    pub warnings: Vec<Warning>,
+    pub warnings: BTreeSet<Warning>,
     /// Number of local variables (should be 0)
     pub locals: usize,
 }
@@ -112,7 +112,7 @@ where
     ) -> std::result::Result<Self, CompilerError> {
         let mut source = script.to_string();
 
-        let mut warnings = vec![];
+        let mut warnings = BTreeSet::new();
         let mut locals = 0;
 
         // TODO make lexer EOS tolerant to avoid this kludge
@@ -136,9 +136,10 @@ where
                     .filter_map(Result::ok)
                     .filter(|t| !t.value.is_ignorable());
                 let script_stage_1 = crate::parser::g::QueryParser::new().parse(filtered_tokens)?;
-                let (script, local_count, ws) = script_stage_1.up_script(&mut helper)?;
-                warnings = ws;
-                locals = local_count;
+                let script = script_stage_1.up_script(&mut helper)?;
+
+                std::mem::swap(&mut warnings, &mut helper.warnings);
+                locals = helper.locals.len();
                 Ok(script)
             })
             .map_err(|e: rental::RentalError<Error, Box<String>>| e.0)?;
@@ -194,10 +195,7 @@ where
 
     /// Format an error given a script source.
     pub fn format_warnings_with<H: Highlighter>(&self, h: &mut H) -> std::io::Result<()> {
-        let mut warnings = self.warnings.clone();
-        warnings.sort();
-        warnings.dedup();
-        for w in &warnings {
+        for w in &self.warnings {
             let tokens: Vec<_> = lexer::Tokenizer::new(&self.source)
                 .tokenize_until_err()
                 .collect();
