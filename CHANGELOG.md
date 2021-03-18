@@ -34,6 +34,7 @@
 * Remove the bench_pipe_passthrough_csv benchmark [#825](https://github.com/tremor-rs/tremor-runtime/issues/825)
 * Fix a bug in the `test bench` command that was giving false negatives when the benchmarks were failing [#816](https://github.com/tremor-rs/tremor-runtime/pull/816)
 * Fix time based windows to not emit empty windows anymore and to not error if they contain event references [#828](https://github.com/tremor-rs/tremor-runtime/pull/828)
+* Do not commit an empty topic-partition-list in the kafka onramp and improve logging for better debugging
 
 ## 0.10.2
 

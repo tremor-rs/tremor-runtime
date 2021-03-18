@@ -19,11 +19,14 @@ use crate::source::prelude::*;
 //NOTE: This is required for StreamHandlers stream
 use halfbrown::HashMap;
 use log::Level::Debug;
-use rdkafka::consumer::{BaseConsumer, CommitMode, Consumer, ConsumerContext};
 use rdkafka::error::KafkaResult;
 use rdkafka::message::{BorrowedMessage, Headers};
 use rdkafka::{client::ClientContext, util::Timeout};
 use rdkafka::{config::ClientConfig, TopicPartitionList};
+use rdkafka::{
+    consumer::{BaseConsumer, CommitMode, Consumer, ConsumerContext},
+    error::KafkaError,
+};
 use rdkafka::{Message, Offset};
 use std::collections::BTreeMap;
 use std::collections::HashMap as StdMap;
@@ -143,8 +146,6 @@ impl Int {
                 *old = (*old).max(new)
             }
         }
-        debug!("topic map for {}: {:?}", id, tm);
-        debug!("self.messages: {:?}", &self.messages);
         tm
     }
     fn from_config(uid: u64, onramp_id: TremorURL, config: &Config) -> Self {
@@ -184,14 +185,16 @@ impl onramp::Impl for Kafka {
                 onramp_id: id.clone(),
             }))
         } else {
-            Err("Missing config for kafka onramp".into())
+            Err(format!("[Source::{}] Missing config for kafka onramp.", id).into())
         }
     }
 }
 
 // A simple context to customize the consumer behavior and print a log line every time
 // offsets are committed
-pub struct LoggingConsumerContext;
+pub struct LoggingConsumerContext {
+    onramp_id: TremorURL,
+}
 
 impl ClientContext for LoggingConsumerContext {}
 
@@ -199,24 +202,38 @@ impl ConsumerContext for LoggingConsumerContext {
     fn commit_callback(&self, result: KafkaResult<()>, offsets: &rdkafka::TopicPartitionList) {
         match result {
             Ok(_) => {
-                info!("Offsets committed successfully");
-                if !log_enabled!(Debug) {
-                    let offset_strings: Vec<String> = offsets
-                        .elements()
-                        .iter()
-                        .map(|elem| {
-                            format!(
-                                "[Topic: {}, Partition: {}, Offset: {:?}]",
-                                elem.topic(),
-                                elem.partition(),
-                                elem.offset()
-                            )
-                        })
-                        .collect();
-                    debug!("Offsets: {}", offset_strings.join(" "));
+                if offsets.count() > 0 {
+                    info!(
+                        "[Source::{}] Offsets committed successfully",
+                        self.onramp_id
+                    );
+                    if log_enabled!(Debug) {
+                        let offset_strings: Vec<String> = offsets
+                            .elements()
+                            .iter()
+                            .map(|elem| {
+                                format!(
+                                    "[Topic: {}, Partition: {}, Offset: {:?}]",
+                                    elem.topic(),
+                                    elem.partition(),
+                                    elem.offset()
+                                )
+                            })
+                            .collect();
+                        debug!(
+                            "[Source::{}] Offsets: {}",
+                            self.onramp_id,
+                            offset_strings.join(" ")
+                        );
+                    }
                 }
             }
-            Err(e) => warn!("Error while committing offsets: {}", e),
+            // this is actually not an error - we just didnt have any offset to commit
+            Err(KafkaError::ConsumerCommit(rdkafka_sys::RDKafkaError::NoOffset)) => {}
+            Err(e) => warn!(
+                "[Source::{}] Error while committing offsets: {}",
+                self.onramp_id, e
+            ),
         };
     }
 }
@@ -235,6 +252,12 @@ impl Source for Int {
     async fn pull_event(&mut self, id: u64) -> Result<SourceReply> {
         if let Some(stream) = self.consumer.as_mut() {
             if let Some(Ok(m)) = stream.poll(self.kafka_poll_timeout) {
+                debug!(
+                    "[Source::{}] EventId: {} Offset: {}",
+                    self.onramp_id,
+                    id,
+                    m.offset()
+                );
                 if let Some(Ok(data)) = m.payload_view::<[u8]>() {
                     let mut origin_uri = self.origin_uri.clone();
                     origin_uri.path = vec![
@@ -280,7 +303,10 @@ impl Source for Int {
                         stream: 0,
                     })
                 } else {
-                    error!("Failed to fetch kafka message.");
+                    error!(
+                        "[Source::{}] Failed to fetch kafka message.",
+                        self.onramp_id
+                    );
                     Ok(SourceReply::Empty(self.config.poll_interval))
                 }
             } else {
@@ -292,7 +318,9 @@ impl Source for Int {
     }
 
     async fn init(&mut self) -> Result<SourceState> {
-        let context = LoggingConsumerContext;
+        let context = LoggingConsumerContext {
+            onramp_id: self.onramp_id.clone(),
+        };
         let mut client_config = ClientConfig::new();
         let tid = task::current().id();
 
@@ -300,7 +328,7 @@ impl Source for Int {
         let first_broker: Vec<&str> = if let Some(broker) = self.config.brokers.first() {
             broker.split(':').collect()
         } else {
-            return Err(format!("No brokers provided for Kafka onramp {}", self.onramp_id).into());
+            return Err(format!("[Source::{}] No brokers provided.", self.onramp_id).into());
         };
         // picking the first host for these
         let (host, port) = match first_broker.as_slice() {
@@ -308,7 +336,7 @@ impl Source for Int {
             [host, port] => ((*host).to_string(), Some(port.parse()?)),
             _ => {
                 return Err(format!(
-                    "Invalid broker config for {}: {}",
+                    "[Source::{}] Invalid broker config: {}",
                     self.onramp_id,
                     first_broker.join(":")
                 )
@@ -323,7 +351,7 @@ impl Source for Int {
             path: vec![],
         };
 
-        info!("Starting kafka onramp {}", self.onramp_id);
+        info!("[Source::{}] Starting kafka onramp", self.onramp_id);
         // Setting up the configuration with default and then overwriting
         // them with custom settings.
         //
@@ -353,6 +381,11 @@ impl Source for Int {
                 client_config.set(k, v);
             });
 
+        debug!(
+            "[Source::{}] Consuming from Kafka with config: {:?}",
+            self.onramp_id, &client_config
+        );
+
         // Set up the the consumer
         let consumer: LoggingConsumer = client_config.create_with_context(context)?;
 
@@ -363,7 +396,7 @@ impl Source for Int {
             .iter()
             .map(std::string::String::as_str)
             .collect();
-        info!("[kafka] subscribing to: {:?}", topics);
+        info!("[Source::{}] Subscribing to: {:?}", self.onramp_id, topics);
 
         // This is terribly ugly, thank you rdkafka!
         // We need to do this because:
@@ -387,32 +420,42 @@ impl Source for Int {
                     match errors.as_slice() {
                         [None] => good_topics.push(topic),
                         [Some(e)] => error!(
-                            "Kafka error for topic '{}': {:?}. Not subscribing!",
-                            topic, e
+                            "[Source::{}] Kafka error for topic '{}': {:?}. Not subscribing!",
+                            self.onramp_id, topic, e
                         ),
                         _ => error!(
-                            "Unknown kafka error for topic '{}'. Not subscribing!",
-                            topic
+                            "[Source::{}] Unknown kafka error for topic '{}'. Not subscribing!",
+                            self.onramp_id, topic
                         ),
                     }
                 }
-                Err(e) => error!("Kafka error for topic '{}': {}. Not subscribing!", topic, e),
+                Err(e) => error!(
+                    "[Source::{}] Kafka error for topic '{}': {}. Not subscribing!",
+                    self.onramp_id, topic, e
+                ),
             };
         }
 
         // bail out if there is no topic left to subscribe to
         if good_topics.len() < self.config.topics.len() {
             return Err(format!(
-                "Unable to subscribe to all configured topics: {}",
+                "[Source::{}] Unable to subscribe to all configured topics: {}",
+                self.onramp_id,
                 self.config.topics.join(", ")
             )
             .into());
         }
 
         match consumer.subscribe(&good_topics) {
-            Ok(()) => info!("Subscribed to topics: {:?}", good_topics),
+            Ok(()) => info!(
+                "[Source::{}] Subscribed to topics: {:?}",
+                self.onramp_id, good_topics
+            ),
             Err(e) => {
-                error!("Kafka error for topics '{:?}': {}", good_topics, e);
+                error!(
+                    "[Source::{}] Kafka error for topics '{:?}': {}",
+                    self.onramp_id, good_topics, e
+                );
                 return Err(e.into());
             }
         };
@@ -433,7 +476,7 @@ impl Source for Int {
     // If this is undesirable, multiple onramps with an onramp per topic
     // should be used.
     fn fail(&mut self, id: u64) {
-        trace!("[Sink::Kafka] Fail {}", id);
+        trace!("[Source::{}] Fail {}", self.onramp_id, id);
         if !self.auto_commit && self.config.retry_failed_events {
             let tm = self.get_topic_map_for_id(id);
             if let Some(consumer) = self.consumer.as_mut() {
@@ -441,20 +484,25 @@ impl Source for Int {
                     if let Err(e) =
                         consumer.seek(&topic, partition, offset, self.kafka_poll_timeout)
                     {
-                        error!("[kafka] failed to seek message: {}", e)
+                        error!("[Source::{}] failed to seek message: {}", self.onramp_id, e)
                     }
                 }
             }
         }
     }
     fn ack(&mut self, id: u64) {
-        trace!("[Sink::Kafka] Ack {}", id);
+        trace!("[Source::{}] Ack {}", self.onramp_id, id);
         if !self.auto_commit {
             let tm = self.get_topic_map_for_id(id);
-            if let Some(consumer) = self.consumer.as_mut() {
-                let topic_partition_list = TopicPartitionList::from_topic_map(&tm);
-                if let Err(e) = consumer.commit(&topic_partition_list, CommitMode::Async) {
-                    error!("[kafka] failed to commit message: {}", e)
+            if !tm.is_empty() {
+                if let Some(consumer) = self.consumer.as_mut() {
+                    let topic_partition_list = TopicPartitionList::from_topic_map(&tm);
+                    if let Err(e) = consumer.commit(&topic_partition_list, CommitMode::Async) {
+                        error!(
+                            "[Source::{}] failed to commit message: {}",
+                            self.onramp_id, e
+                        )
+                    }
                 }
             }
         }
