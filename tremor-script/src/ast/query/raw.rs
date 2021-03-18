@@ -24,9 +24,13 @@ use super::{
     Registry, Result, ScriptDecl, ScriptStmt, Select, SelectStmt, Serialize, Stmt, StreamStmt,
     Upable, Value, Warning, WindowDecl, WindowKind,
 };
-use crate::ast::visitors::{GroupByExprExtractor, TargetEventRefVisitor};
 use crate::impl_expr;
+use crate::{
+    ast::visitors::{GroupByExprExtractor, TargetEventRefVisitor},
+    lexer::Range,
+};
 use beef::Cow;
+use value_trait::Value as ValueTrait;
 
 fn up_params<'script, 'registry>(
     params: WithExprsRaw<'script>,
@@ -55,7 +59,7 @@ impl<'script> QueryRaw<'script> {
     pub(crate) fn up_script<'registry>(
         self,
         mut helper: &mut Helper<'script, 'registry>,
-    ) -> Result<(Query<'script>, usize, Vec<Warning>)> {
+    ) -> Result<Query<'script>> {
         let mut stmts = vec![];
         for (_i, e) in self.stmts.into_iter().enumerate() {
             match e {
@@ -68,18 +72,14 @@ impl<'script> QueryRaw<'script> {
             }
         }
 
-        Ok((
-            Query {
-                config: up_params(self.config, helper)?,
-                stmts,
-                node_meta: helper.meta.clone(),
-                windows: helper.windows.clone(),
-                scripts: helper.scripts.clone(),
-                operators: helper.operators.clone(),
-            },
-            helper.locals.len(),
-            helper.warnings.clone(),
-        ))
+        Ok(Query {
+            config: up_params(self.config, helper)?,
+            stmts,
+            node_meta: helper.meta.clone(),
+            windows: helper.windows.clone(),
+            scripts: helper.scripts.clone(),
+            operators: helper.operators.clone(),
+        })
     }
 }
 
@@ -341,11 +341,8 @@ impl<'script> Upable<'script> for ScriptDeclRaw<'script> {
         // below. The actual function registration occurs in the up() call in the usual way.
         //
         helper.module.push(self.id.to_string());
-        let (script, mut warnings) = self.script.up_script(helper)?;
-        helper.warnings.append(&mut warnings);
+        let script = self.script.up_script(helper)?;
 
-        helper.warnings.sort();
-        helper.warnings.dedup();
         let script_decl = ScriptDecl {
             mid: helper.add_meta_w_name(self.start, self.end, &self.id),
             module: helper.module.clone(),
@@ -405,19 +402,36 @@ pub struct WindowDeclRaw<'script> {
 impl<'script> Upable<'script> for WindowDeclRaw<'script> {
     type Target = WindowDecl<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        let mut maybe_script = self.script.map(|s| s.up_script(helper)).transpose()?;
-        if let Some((_, ref mut warnings)) = maybe_script {
-            helper.warnings.append(warnings);
-            helper.warnings.sort();
-            helper.warnings.dedup();
-        };
+        let maybe_script = self.script.map(|s| s.up_script(helper)).transpose()?;
+
+        // warn params if `emit_empty_windows` is defined, but neither `max_groups` nor `evicition_period` is defined
+        let params = up_params(self.params, helper)?;
+        let custom_max_groups = params
+            .get(WindowDecl::MAX_GROUPS)
+            .and_then(Value::as_u64)
+            .map(|x| x < u64::MAX)
+            .unwrap_or_default();
+        let emit_empty_windows = params
+            .get(WindowDecl::EMIT_EMPTY_WINDOWS)
+            .and_then(Value::as_bool)
+            .unwrap_or_default();
+        if emit_empty_windows
+            && !(custom_max_groups || params.contains_key(WindowDecl::EVICTION_PERIOD))
+        {
+            let range: Range = (self.start, self.end).into();
+            helper.warn(Warning::new_with_scope(
+                range,
+                "Using `emit_empty_windows` without guard is potentially dangerous. Consider limiting the amount of groups maintained internally by using `max_groups` and/or `eviction_period`.".to_owned(),
+            ));
+        }
+
         Ok(WindowDecl {
             mid: helper.add_meta_w_name(self.start, self.end, &self.id),
             module: helper.module.clone(),
             id: self.id,
             kind: self.kind,
-            params: up_params(self.params, helper)?,
-            script: maybe_script.map(|s| s.0),
+            params,
+            script: maybe_script,
         })
     }
 }

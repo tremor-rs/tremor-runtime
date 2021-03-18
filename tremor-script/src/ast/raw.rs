@@ -56,7 +56,7 @@ impl<'script> ScriptRaw<'script> {
     pub(crate) fn up_script<'registry>(
         self,
         mut helper: &mut Helper<'script, 'registry>,
-    ) -> Result<(Script<'script>, Vec<Warning>)> {
+    ) -> Result<Script<'script>> {
         let mut exprs = vec![];
         let last_idx = self.exprs.len() - 1;
         for (i, e) in self.exprs.into_iter().enumerate() {
@@ -136,20 +136,17 @@ impl<'script> ScriptRaw<'script> {
                 .map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n")),
         });
 
-        Ok((
-            Script {
-                imports: vec![], // Compiled out
-                exprs,
-                consts: helper.consts.clone(),
-                aggregates: helper.aggregates.clone(),
-                windows: helper.windows.clone(),
-                locals: helper.locals.len(),
-                node_meta: helper.meta.clone(),
-                functions: helper.func_vec.clone(),
-                docs: helper.docs.clone(),
-            },
-            helper.warnings.clone(),
-        ))
+        Ok(Script {
+            imports: vec![], // Compiled out
+            exprs,
+            consts: helper.consts.clone(),
+            aggregates: helper.aggregates.clone(),
+            windows: helper.windows.clone(),
+            locals: helper.locals.len(),
+            node_meta: helper.meta.clone(),
+            functions: helper.func_vec.clone(),
+            docs: helper.docs.clone(),
+        })
     }
 }
 
@@ -1702,11 +1699,11 @@ impl<'script> Upable<'script> for RecordPatternRaw<'script> {
             });
             if duplicated {
                 let extent = (self.start, self.end).into();
-                helper.warnings.push(Warning {
-                    inner: extent,
-                    outer: extent.expand_lines(2),
-                    msg: format!("The field {} is checked with both present and another extractor, this is redundant as extractors imply presence. It may also overwrite the result of th extractor.", present),
-                })
+                helper.warn(Warning::new(
+                    extent,
+                    extent.expand_lines(2),
+                    format!("The field {} is checked with both present and another extractor, this is redundant as extractors imply presence. It may also overwrite the result of the extractor.", present),
+                ));
             }
         }
 
@@ -1720,11 +1717,11 @@ impl<'script> Upable<'script> for RecordPatternRaw<'script> {
             });
             if duplicated {
                 let extent = (self.start, self.end).into();
-                helper.warnings.push(Warning {
-                    inner: extent,
-                    outer: extent.expand_lines(2),
-                    msg: format!("The field {} is checked with both absence and another extractor, this test can never be true.", absent),
-                })
+                helper.warn(Warning::new(
+                    extent,
+                    extent.expand_lines(2),
+                    format!("The field {} is checked with both absence and another extractor, this test can never be true.", absent),
+                ))
             }
         }
 
@@ -2295,16 +2292,14 @@ impl<'script> Upable<'script> for MatchRaw<'script> {
             })
             .count();
         match defaults {
-            0 => helper.warnings.push(Warning{
-                outer: Range(self.start, self.end),
-                inner: Range(self.start, self.end),
-                msg: "This match expression has no default clause, if the other clauses do not cover all possibilities this will lead to events being discarded with runtime errors.".into()
-            }),
-            x if x > 1 => helper.warnings.push(Warning{
-                outer: Range(self.start, self.end),
-                inner: Range(self.start, self.end),
-                msg: "A match statement with more then one default clause will never reach any but the first default clause.".into()
-            }),
+            0 => helper.warn(Warning::new_with_scope(
+                Range(self.start, self.end),
+                "This match expression has no default clause, if the other clauses do not cover all possibilities this will lead to events being discarded with runtime errors.".into()
+            )),
+            x if x > 1 => helper.warn(Warning::new_with_scope(
+                Range(self.start, self.end),
+                "A match statement with more then one default clause will never reach any but the first default clause.".into()
+            )),
 
             _ => ()
         }
@@ -2332,16 +2327,14 @@ impl<'script> Upable<'script> for ImutMatchRaw<'script> {
         let patterns = self.patterns.up(helper)?;
         let defaults = patterns.iter().filter(|p| p.pattern.is_default()).count();
         match defaults {
-            0 => helper.warnings.push(Warning{
-                outer: Range(self.start, self.end),
-                inner: Range(self.start, self.end),
-                msg: "This match expression has no default clause, if the other clauses do not cover all possibilities this will lead to events being discarded with runtime errors.".into()
-            }),
-            x if x > 1 => helper.warnings.push(Warning{
-                outer: Range(self.start, self.end),
-                inner: Range(self.start, self.end),
-                msg: "A match statement with more then one default clause will never reach any but the first default clause.".into()
-            }),
+            0 => helper.warn(Warning::new_with_scope(
+                Range(self.start, self.end),
+                "This match expression has no default clause, if the other clauses do not cover all possibilities this will lead to events being discarded with runtime errors.".into()
+            )),
+            x if x > 1 => helper.warn(Warning::new_with_scope(
+                Range(self.start, self.end),
+                "A match statement with more then one default clause will never reach any but the first default clause.".into()
+            )),
 
             _ => ()
         }
@@ -2485,11 +2478,7 @@ impl<'script> Upable<'script> for InvokeAggrRaw<'script> {
             .into());
         }
         if let Some(warning) = invocable.warning() {
-            helper.warnings.push(Warning {
-                inner: self.extent(&helper.meta),
-                outer: self.extent(&helper.meta),
-                msg: warning,
-            });
+            helper.warn(Warning::new_with_scope(self.extent(&helper.meta), warning));
         }
         let aggr_id = helper.aggregates.len();
         let args = self.args.up(helper)?.into_iter().map(ImutExpr).collect();

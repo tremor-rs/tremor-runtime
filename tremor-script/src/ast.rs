@@ -45,8 +45,8 @@ pub use query::*;
 use raw::reduce2;
 use serde::Serialize;
 use simd_json::StaticNode;
-use std::borrow::Borrow;
 use std::mem;
+use std::{borrow::Borrow, collections::BTreeSet};
 use upable::Upable;
 
 use self::{
@@ -152,6 +152,15 @@ pub struct Warning {
     pub inner: Range,
     /// Warning message
     pub msg: String,
+}
+
+impl Warning {
+    fn new(inner: Range, outer: Range, msg: String) -> Self {
+        Self { outer, inner, msg }
+    }
+    fn new_with_scope(warning_scope: Range, msg: String) -> Self {
+        Self::new(warning_scope, warning_scope, msg)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -388,6 +397,9 @@ impl<'script> Consts<'script> {
     }
 }
 
+/// ordered collection of warnings
+pub type Warnings = std::collections::BTreeSet<Warning>;
+
 #[allow(clippy::struct_excessive_bools)]
 pub(crate) struct Helper<'script, 'registry>
 where
@@ -401,11 +413,7 @@ where
     scripts: HashMap<String, ScriptDecl<'script>>,
     operators: HashMap<String, OperatorDecl<'script>>,
     aggregates: Vec<InvokeAggrFn<'script>>,
-    // TODO: Users of the `warnings` field might be helped if `warnings` were a Set. Right now,
-    // some places (twice in query/raw.rs) do `append + sort + dedup`. With, e.g., a `BTreeSet`,
-    // this could be achieved in a cleaner and faster way, and `Warning` already implements `Ord`
-    // anyway.
-    warnings: Vec<Warning>,
+    pub warnings: Warnings,
     shadowed_vars: Vec<String>,
     func_vec: Vec<CustomFn<'script>>,
     pub locals: HashMap<String, usize>,
@@ -487,7 +495,7 @@ where
             scripts: HashMap::new(),
             operators: HashMap::new(),
             aggregates: Vec::new(),
-            warnings: Vec::new(),
+            warnings: BTreeSet::new(),
             locals: HashMap::new(),
             consts: Consts::default(),
             streams: HashMap::new(),
@@ -557,6 +565,10 @@ where
             self.locals.insert(id.to_string(), self.locals.len());
             self.locals.len() - 1
         })
+    }
+
+    fn warn(&mut self, warning: Warning) {
+        self.warnings.insert(warning);
     }
 }
 

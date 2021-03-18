@@ -1,0 +1,7 @@
+define tumbling window my_window
+with
+  interval = core::datetime::with_seconds(2),
+  emit_empty_windows = true
+end;
+
+select aggr::win::last(event) from in[my_window] into out;

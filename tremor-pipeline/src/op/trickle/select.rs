@@ -1522,7 +1522,6 @@ impl Operator for TrickleSelect {
                     }
                 }
             }
-            // lets reset the
             Ok(res)
         } else {
             Ok(EventAndInsights::default())
@@ -1596,7 +1595,7 @@ mod test {
         }
     }
 
-    use std::sync::Arc;
+    use std::{collections::BTreeSet, sync::Arc};
 
     fn test_select(
         uid: u64,
@@ -2028,7 +2027,7 @@ mod test {
             query: query_rental,
             locals: 0,
             source: script,
-            warnings: vec![],
+            warnings: BTreeSet::new(),
         };
 
         let stmt_rental =
@@ -2069,7 +2068,7 @@ mod test {
             query: query_rental,
             locals: 0,
             source: script,
-            warnings: vec![],
+            warnings: BTreeSet::new(),
         };
 
         let stmt_rental =
@@ -2111,7 +2110,7 @@ mod test {
             query: query_rental,
             locals: 0,
             source: script,
-            warnings: vec![],
+            warnings: BTreeSet::new(),
         };
 
         let stmt_rental =
@@ -2147,7 +2146,7 @@ mod test {
             query: query_rental,
             locals: 0,
             source: script,
-            warnings: vec![],
+            warnings: BTreeSet::new(),
         };
 
         let stmt_rental =
@@ -2188,7 +2187,7 @@ mod test {
             query: query_rental,
             locals: 0,
             source: script,
-            warnings: vec![],
+            warnings: BTreeSet::new(),
         };
 
         let stmt_rental =
@@ -2234,7 +2233,7 @@ mod test {
             query: query_rental,
             locals: 0,
             source: script,
-            warnings: vec![],
+            warnings: BTreeSet::new(),
         };
 
         let stmt_rental =
@@ -2292,7 +2291,7 @@ mod test {
             query: query_rental,
             locals: 0,
             source: script,
-            warnings: vec![],
+            warnings: BTreeSet::new(),
         };
 
         let stmt_rental =
