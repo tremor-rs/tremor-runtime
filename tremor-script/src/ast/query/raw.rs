@@ -24,6 +24,7 @@ use super::{
     Registry, Result, ScriptDecl, ScriptStmt, Select, SelectStmt, Serialize, Stmt, StreamStmt,
     Upable, Value, Warning, WindowDecl, WindowKind,
 };
+use crate::ast::visitors::{GroupByExprExtractor, TargetEventRefVisitor};
 use crate::impl_expr;
 use beef::Cow;
 
@@ -471,7 +472,7 @@ impl<'script> Upable<'script> for SelectRaw<'script> {
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let const_count = helper.consts.len();
 
-        let target = self.target.up(helper)?;
+        let mut target = self.target.up(helper)?;
 
         if helper.has_locals() {
             return error_no_locals(&(self.start, self.end), &target, &helper.meta);
@@ -501,7 +502,23 @@ impl<'script> Upable<'script> for SelectRaw<'script> {
             }
         };
 
+        // check if target has references to event that are not inside an aggregate function.
+        // if so, we need to clone the event and keep it around to evaluate those expressions
+        // as during signal ticks we might not have an event around (don't ask, also this is only temporary)
+        let group_by_expressions = if let Some(group_by) = maybe_group_by.as_ref() {
+            let mut extractor = GroupByExprExtractor::new();
+            extractor.extract_expressions(group_by);
+            extractor.expressions
+        } else {
+            vec![]
+        };
         let windows = self.windows.unwrap_or_default();
+        if !windows.is_empty() {
+            // if we have windows we need to forbid free event references in the target if they are not
+            // inside an aggregate function or can be rewritten to a group reference
+            TargetEventRefVisitor::new(group_by_expressions, &helper.meta)
+                .rewrite_target(&mut target)?;
+        }
 
         let from = match self.from {
             (stream, None) => {

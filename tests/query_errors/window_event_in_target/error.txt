@@ -1,0 +1,4 @@
+Error: 
+    9 |   "min": math::min(event.number + 1, 0),
+      |                    ^^^^^^^^^^^^ References to `event` or `$` are not allowed in this context
+      |                                 NOTE: Here you operate in the whole window, not a single event. You need to wrap this reference in an aggregate function (e.g. aggr::win::last(...)) or use it in the group by clause of this query.

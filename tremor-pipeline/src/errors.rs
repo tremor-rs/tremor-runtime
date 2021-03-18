@@ -54,7 +54,7 @@ error_chain! {
 
     errors {
         /*
-         * Query langauge pipeline conversion errors
+         * Query language pipeline conversion errors
          */
         PipelineError(g: String) {
             description("Error detected in pipeline conversion")
@@ -133,6 +133,16 @@ error_chain! {
                 display("Bad output pipeline id {}", i - 1)
         }
 
+        // runtime errors
+        MaxGroups(max: u64, group: String) {
+            description("Maximum amount of groups reached.")
+                display("Maxmimum amount of groups reached ({}). Ignoring group {}", max, group)
+        }
+        InvalidInputStreamName(stream_name: String, pipeline: String) {
+            description("Invalid input stream name.")
+            display("Invalid input stream name '{}' for pipeline '{}'.", stream_name, pipeline)
+        }
+
     }
 }
 
@@ -140,4 +150,9 @@ error_chain! {
 #[must_use]
 pub fn missing_config(f: &str) -> Error {
     ErrorKind::MissingOpConfig(format!("missing field {}", f)).into()
+}
+
+#[must_use]
+pub fn max_groups_reached(max: u64, group: &str) -> Error {
+    ErrorKind::MaxGroups(max, group.to_owned()).into()
 }

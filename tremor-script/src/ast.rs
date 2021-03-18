@@ -15,11 +15,16 @@
 /// Base definition for expressions
 pub mod base_expr;
 pub(crate) mod binary;
+/// custom equality definition - checking for equivalence of different AST nodes
+/// e.g. two different event paths with different metadata
+pub mod eq;
 /// Query AST
 pub mod query;
 pub(crate) mod raw;
 mod support;
 mod upable;
+/// collection of AST visitors
+pub mod visitors;
 use crate::errors::{error_generic, error_no_consts, error_no_locals, ErrorKind, Result};
 use crate::impl_expr_mid;
 use crate::interpreter::{exec_binary, exec_unary, AggrType, Cont, Env, ExecOpts, LocalStack};
@@ -802,26 +807,6 @@ pub(crate) struct FnDecl<'script> {
 }
 impl_expr_mid!(FnDecl);
 
-fn path_eq<'script>(path: &Path<'script>, expr: &ImutExprInt<'script>) -> bool {
-    let path_expr: ImutExprInt = ImutExprInt::Path(path.clone());
-
-    let target_expr = match expr.clone() {
-        ImutExprInt::Local {
-            //id,
-            idx,
-            mid,
-            is_const,
-        } => ImutExprInt::Path(Path::Local(LocalPath {
-            //id,
-            segments: vec![],
-            idx,
-            mid,
-            is_const,
-        })),
-        other => other,
-    };
-    path_expr == target_expr
-}
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Legal expression forms
 pub enum Expr<'script> {
@@ -975,6 +960,7 @@ pub enum StrLitElement<'script> {
     /// An expression in a string interpolation
     Expr(ImutExprInt<'script>),
 }
+
 /// we're forced to make this pub because of lalrpop
 pub type StrLitElements<'script> = Vec<StrLitElement<'script>>;
 
@@ -1114,7 +1100,7 @@ pub struct Recur<'script> {
 }
 impl_expr_mid!(Recur);
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Serialize, PartialEq)]
 /// Encapsulates an Aggregate function invocation
 pub struct InvokeAggr {
     /// Id
@@ -1596,7 +1582,7 @@ impl<'script> Path<'script> {
     }
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 /// A Path segment
 pub enum Segment<'script> {
     /// An identifier
@@ -1636,7 +1622,7 @@ pub enum Segment<'script> {
     },
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 /// A path local to the current program
 pub struct LocalPath<'script> {
     /// Local Index
@@ -1650,7 +1636,7 @@ pub struct LocalPath<'script> {
 }
 impl_expr_mid!(LocalPath);
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 /// A metadata path
 pub struct MetadataPath<'script> {
     /// Id
@@ -1706,7 +1692,7 @@ impl<'script> BaseExpr for ReservedPath<'script> {
     }
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 /// The path representing the current in-flight event
 pub struct EventPath<'script> {
     /// Id
@@ -1716,7 +1702,7 @@ pub struct EventPath<'script> {
 }
 impl_expr_mid!(EventPath);
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 /// The path representing captured program state
 pub struct StatePath<'script> {
     /// Id

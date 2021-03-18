@@ -1,0 +1,22 @@
+onramp:
+  - id: in
+    type: file
+    config:
+      source: in.json
+offramp:
+  - id: out
+    type: file
+    config:
+      file: out.log
+  - id: exit
+    type: exit
+
+binding:
+  - id: bind
+    links:
+      "/onramp/in/{i}/out": ["/pipeline/main/{i}/in"]
+      "/pipeline/main/{i}/out": ["/offramp/out/{i}/in"]
+      "/pipeline/main/{i}/err": ["/offramp/exit/{i}/in"]
+mapping:
+  /binding/bind/01:
+    i: "01"

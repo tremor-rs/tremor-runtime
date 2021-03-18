@@ -1,0 +1,22 @@
+use std::string;
+
+define tumbling window my_window
+with
+  interval = core::datetime::with_seconds(1)
+end;
+define tumbling window my_other_window
+with
+  interval = core::datetime::with_seconds(2)
+end;
+
+select
+  [
+    window,
+    string::lowercase(event.name),
+    not not event.bool,
+    aggr::win::last(event.array),
+    aggr::win::collect_flattened($)
+  ]
+from in[my_window, my_other_window]
+group by set(event.name, not event.bool)
+into out;

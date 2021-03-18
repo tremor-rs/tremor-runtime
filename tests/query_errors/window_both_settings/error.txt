@@ -1,0 +1,1 @@
+Bad window configuration, only one of `size` or `interval` is allowed.

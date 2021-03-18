@@ -52,7 +52,7 @@ macro_rules! test_cases {
                 let query_file = concat!("tests/query_errors/", stringify!($file), "/query.trickle");
                 let err_file = concat!("tests/query_errors/", stringify!($file), "/error.txt");
                 let err_re_file = concat!("tests/query_errors/", stringify!($file), "/error.re");
-                let module_path = &ModulePath { mounts: vec![query_dir] };
+                let module_path = &ModulePath { mounts: vec![query_dir, "tremor-script/lib/".to_string()] };
 
                 println!("Loading query: {}", query_file);
                 let mut file = file::open(query_file)?;
@@ -83,7 +83,7 @@ macro_rules! test_cases {
                     let err = err.trim();
 
                     match to_pipe(&module_path, err_file, &contents) {
-                        Err(Error(ErrorKind::Pipeline(tremor_pipeline::errors::ErrorKind::Script(e)), o)) =>{
+                        Err(Error(ErrorKind::Pipeline(tremor_pipeline::errors::ErrorKind::Script(e)), o)) => {
                             let e = tremor_script::errors::Error(e, o);
                             let mut h = Dumb::new();
                             tremor_script::query::Query::format_error_from_script(&contents, &mut h, &e)?;
@@ -103,7 +103,11 @@ macro_rules! test_cases {
                             println!("{}", got);
                             assert_eq!(err, got);
                         }
-                        Err(e) =>{
+                        Err(Error(ErrorKind::Pipeline(e), _)) =>{
+                            let got = format!("{}", e);
+                            assert_eq!(err, got, "unexpected error message: {}", got);
+                        }
+                        Err(e) => {
                             println!("got wrong error: {:?}", e);
                             assert!(false);
                         }
@@ -137,7 +141,10 @@ test_cases!(
     pp_embed_unrecognized_token3,
     pp_embed_unrecognized_token4,
     pp_embed_unrecognized_token5,
-    //INSERT
+    // INSERT
+    window_both_settings,
+    window_group_by_event_in_target,
+    window_event_in_target,
     aggr_arity,
     aggr_in_aggr,
     bad_into,

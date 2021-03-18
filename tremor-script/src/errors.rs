@@ -55,18 +55,6 @@ impl From<CompilerError> for Error {
     }
 }
 
-#[doc(hidden)]
-/// Optimized try
-#[macro_export]
-macro_rules! stry {
-    ($e:expr) => {
-        match $e {
-            ::std::result::Result::Ok(val) => val,
-            ::std::result::Result::Err(err) => return ::std::result::Result::Err(err),
-        }
-    };
-}
-
 #[cfg(test)]
 impl PartialEq for Error {
     fn eq(&self, _other: &Error) -> bool {
@@ -181,14 +169,14 @@ impl ErrorKind {
             InvalidExtractor, InvalidFloatLiteral, InvalidFn, InvalidHexLiteral, InvalidInfluxData,
             InvalidIntLiteral, InvalidMod, InvalidRecur, InvalidToken, InvalidUTF8Sequence,
             InvalidUnary, Io, JSONError, MergeTypeConflict, MissingEffectors, MissingFunction,
-            MissingModule, ModuleNotFound, Msg, NoClauseHit, NoConstsAllowed, NoLocalsAllowed,
-            NoObjectError, NotConstant, NotFound, Oops, ParseIntError, ParserError, PatchKeyExists,
-            PreprocessorError, QueryNodeDuplicateName, QueryNodeReservedName,
-            QueryStreamNotDefined, RecursionLimit, RuntimeError, TailingHereDoc, TypeConflict,
-            UnexpectedCharacter, UnexpectedEndOfStream, UnexpectedEscapeCode, UnrecognizedToken,
-            UnterminatedExtractor, UnterminatedHereDoc, UnterminatedIdentLiteral,
-            UnterminatedInterpolation, UnterminatedStringLiteral, UpdateKeyMissing, Utf8Error,
-            ValueError,
+            MissingModule, ModuleNotFound, Msg, NoClauseHit, NoConstsAllowed,
+            NoEventReferencesAllowed, NoLocalsAllowed, NoObjectError, NotConstant, NotFound, Oops,
+            ParseIntError, ParserError, PatchKeyExists, PreprocessorError, QueryNodeDuplicateName,
+            QueryNodeReservedName, QueryStreamNotDefined, RecursionLimit, RuntimeError,
+            TailingHereDoc, TypeConflict, UnexpectedCharacter, UnexpectedEndOfStream,
+            UnexpectedEscapeCode, UnrecognizedToken, UnterminatedExtractor, UnterminatedHereDoc,
+            UnterminatedIdentLiteral, UnterminatedInterpolation, UnterminatedStringLiteral,
+            UpdateKeyMissing, Utf8Error, ValueError,
         };
         match self {
             NoClauseHit(outer)
@@ -233,6 +221,7 @@ impl ErrorKind {
             | MissingFunction(outer, inner, _, _, _)
             | MissingModule(outer, inner, _, _)
             | ModuleNotFound(outer, inner, _, _)
+            | NoEventReferencesAllowed(outer, inner)
             | NoLocalsAllowed(outer, inner)
             | NoConstsAllowed(outer, inner)
             | QueryStreamNotDefined(outer, inner, _)
@@ -304,8 +293,8 @@ impl ErrorKind {
     pub(crate) fn hint(&self) -> Option<String> {
         use ErrorKind::{
             BadAccessInEvent, BadAccessInGlobal, BadAccessInLocal, EmptyInterpolation,
-            MissingFunction, MissingModule, NoClauseHit, Oops, TypeConflict, UnrecognizedToken,
-            UnterminatedInterpolation,
+            MissingFunction, MissingModule, NoClauseHit, NoEventReferencesAllowed, Oops,
+            TypeConflict, UnrecognizedToken, UnterminatedInterpolation,
         };
         match self {
             UnrecognizedToken(outer, inner, t, _) if t.is_empty() && inner.0.absolute() == outer.1.absolute() => Some("It looks like a `;` is missing at the end of the script".into()),
@@ -352,6 +341,8 @@ impl ErrorKind {
             },
             MissingModule(_, _, m, _) if m == "object" => Some("Did you mean to use the `record` module".into()),
             MissingModule(_, _, _, Some((_, suggestion))) | MissingFunction(_, _, _, _, Some((_, suggestion))) => Some(format!("Did you mean `{}`?", suggestion)),
+
+            NoEventReferencesAllowed(_, _) => Some("Here you operate in the whole window, not a single event. You need to wrap this reference in an aggregate function (e.g. aggr::win::last(...)) or use it in the group by clause of this query.".to_owned()),
 
             NoClauseHit(_) => Some("Consider adding a `default => null` clause at the end of your match or validate full coverage beforehand.".into()),
             Oops(_, id, _) => Some(format!("Please take the error output script and test data and open a ticket, this should not happen.\nhttps://github.com/tremor-rs/tremor-runtime/issues/new?labels=bug&template=bug_report.md&title=Opps%20{}", id)),
@@ -460,7 +451,7 @@ error_chain! {
         /*
          * ParserError
          */
-         /// A unrecognized token
+         /// An unrecognized token
         UnrecognizedToken(range: Range, loc: Range, token: String, expected: Vec<String>) {
             description("Unrecognized token")
                 display("Found the token `{}` but expected {}", token, choices(expected))
@@ -798,6 +789,10 @@ error_chain! {
             description("Constants are not allowed here")
                 display("Constants are not allowed here")
         }
+        NoEventReferencesAllowed(stmt: Range, inner: Range) {
+            description("References to `event` or `$` are not allowed in this context")
+                display("References to `event` or `$` are not allowed in this context")
+        }
 
         CantSetWindowConst {
             description("Failed to initialize window constant")
@@ -928,6 +923,14 @@ pub(crate) fn error_no_consts<T, O: BaseExpr, I: BaseExpr>(
     meta: &NodeMetas,
 ) -> Result<T> {
     Err(ErrorKind::NoConstsAllowed(outer.extent(meta), inner.extent(meta)).into())
+}
+
+pub(crate) fn error_event_ref_not_allowed<T, O: BaseExpr, I: BaseExpr>(
+    outer: &O,
+    inner: &I,
+    meta: &NodeMetas,
+) -> Result<T> {
+    Err(ErrorKind::NoEventReferencesAllowed(outer.extent(meta), inner.extent(meta)).into())
 }
 
 pub(crate) fn error_need_obj<T, O: BaseExpr, I: BaseExpr>(

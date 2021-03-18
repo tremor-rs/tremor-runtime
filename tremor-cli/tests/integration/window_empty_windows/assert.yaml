@@ -1,0 +1,5 @@
+status: 0
+name: emit empty windows
+asserts:
+  - source: out.log
+    equals_file: expected.json

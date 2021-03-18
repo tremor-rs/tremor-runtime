@@ -19,6 +19,7 @@ use super::{
     Script, Serialize, Stmts, Upable, Value, Warning,
 };
 use super::{raw::BaseExpr, Consts};
+use crate::ast::eq::AstEq;
 use crate::impl_expr_mid;
 use raw::WindowDefnRaw;
 
@@ -95,11 +96,14 @@ impl SelectStmt<'_> {
     /// Determine how complex a select statement is
     #[must_use]
     pub fn complexity(&self) -> SelectType {
-        if self.stmt.target.0
-            == ImutExprInt::Path(Path::Event(EventPath {
+        if self
+            .stmt
+            .target
+            .0
+            .ast_eq(&ImutExprInt::Path(Path::Event(EventPath {
                 mid: 0,
                 segments: vec![],
-            }))
+            })))
             && self.stmt.maybe_group_by.is_none()
             && self.stmt.windows.is_empty()
         {
@@ -264,7 +268,7 @@ pub struct Select<'script> {
     pub into: (Ident<'script>, Ident<'script>),
     /// The target (select part)
     pub target: ImutExpr<'script>,
-    /// Where claus
+    /// Where clause
     pub maybe_where: Option<ImutExpr<'script>>,
 
     /// Having clause

@@ -1,0 +1,15 @@
+define tumbling window win
+with
+  interval = core::datetime::with_milliseconds(1000)
+end;
+
+# checking for all the possible references possible
+select {
+  "aggregate": aggr::stats::count(),
+  "group": group,
+  "from_group": event.values,
+  "event_last": aggr::win::last(event.foo),
+  "meta": aggr::win::collect_flattened($),
+  "state": state,
+  "window": window
+} from in[win] group by set(each(event.values)) into out;

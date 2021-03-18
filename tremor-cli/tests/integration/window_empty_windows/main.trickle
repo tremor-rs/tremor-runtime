@@ -1,0 +1,51 @@
+use std::string;
+use std::record;
+
+define tumbling window my_window
+with
+  interval = core::datetime::with_seconds(1),
+  emit_empty_windows = true
+end;
+define tumbling window my_other_window
+with
+  interval = core::datetime::with_seconds(3),
+  emit_empty_windows = true
+end;
+
+# expect 4 empty window events
+define script handle_exit_condition
+script
+    use std::type;
+    let state = match [state, event[1]] of
+      case %(null, 0) => {"count": 1}
+      case %(_, 0) => {"count": state.count + 1}
+      default => state
+    end;
+
+    match state of
+      case %{ count == 5 } =>
+        emit {"exit": 0} => "err"
+      case %{ present count } when state.count > 5 =>
+        drop
+      default =>
+        emit event => "out"
+    end
+end;
+
+create script handle_exit_condition;
+
+select
+  [
+    window,
+    aggr::stats::count(),
+    string::uppercase(event.name),
+    not not event.bool,
+    aggr::win::last(event.array),
+    aggr::win::collect_flattened($)
+  ]
+from in[my_window, my_other_window]
+group by set(event.name, not event.bool)
+into handle_exit_condition;
+
+select event from handle_exit_condition/out into out;
+select event from handle_exit_condition/err into err;

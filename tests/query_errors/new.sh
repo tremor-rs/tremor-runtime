@@ -1,9 +1,13 @@
 #!/usr/bin/env sh
 
 BASEDIR=$(dirname "$0")
-if [ -z "x${1}x" ]
+TEST_SUITE_FILE="${BASEDIR}/../query_error.rs"
+TMPDIR="${BASEDIR}/tmp"
+
+if [ -z "${1}" ]
 then
-	echo "Please give the test a name";
+	echo "Usage: $0 TEST_NAME";
+	exit 1
 fi
 
 NAME="${1}"
@@ -11,15 +15,17 @@ TARGET="${BASEDIR}/${1}"
 
 if [ -d "${TARGET}" ]
 then
-	echo "Please give the test a name";
+	echo "A test dir with that name already exists.";
+	exit 1
 fi
 
 cp -r ${BASEDIR}/_template ${TARGET}
 git add ${TARGET}
 
-sed -e "s;//INSERT;//INSERT\n    ${NAME},;" ${BASEDIR}/../query_error.rs > ${BASEDIR}/tmp && mv ${BASEDIR}/tmp ${BASEDIR}/../query_error.rs
+sed -e '/^    \/\/ INSERT/a\
+'"${NAME}," "${TEST_SUITE_FILE}" > "${TMPDIR}" && mv "${TMPDIR}" "${TEST_SUITE_FILE}"
 
 for f in ${TARGET}/*
 do
-        echo "$f"
+    echo "$f"
 done
