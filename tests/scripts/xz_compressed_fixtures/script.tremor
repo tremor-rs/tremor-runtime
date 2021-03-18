@@ -1,0 +1,4 @@
+# The purpose of this test is to make sure that fixutres
+# like in.xz and out.xz can be xz compressed
+# we don't do anything codewise
+event
