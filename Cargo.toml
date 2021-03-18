@@ -112,6 +112,7 @@ sled = "0.34"
 # opentelemetry
 tremor-otelapis = "0.1"
 tonic = { version = "0.4", default-features = false, features = [ "transport", "tls" ] }
+proptest = "1.0"
 
 [dependencies.tungstenite]
 default-features = false

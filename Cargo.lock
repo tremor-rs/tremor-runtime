@@ -5928,6 +5928,7 @@ dependencies = [
  "postgres",
  "postgres-protocol",
  "pretty_assertions",
+ "proptest",
  "rand 0.8.3",
  "rdkafka",
  "rdkafka-sys",
