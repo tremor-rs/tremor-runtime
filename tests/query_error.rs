@@ -44,6 +44,7 @@ macro_rules! test_cases {
 
     ($($file:ident),* ,) => {
         $(
+            #[cfg(not(tarpaulin_include))]
             #[test]
             fn $file() -> Result<()> {
 
