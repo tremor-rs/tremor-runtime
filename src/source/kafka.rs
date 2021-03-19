@@ -141,9 +141,19 @@ impl Int {
             },
         ) in split
         {
-            let this_offset = tm.entry((topic, partition)).or_insert(offset);
-            if let (Offset::Offset(old), Offset::Offset(new)) = (this_offset, offset) {
-                *old = (*old).max(new)
+            if let Offset::Offset(msg_offset) = offset {
+                // we need to commit the message offset + 1, dont ask
+                // The `KafkaConsumer` javadocs say:
+                //
+                // Note: The committed offset should always be the offset of the next message that your application will read. Thus, when calling commitSync(offsets) you should add one to the offset of the last message processed.
+                //
+                // See: https://kafka.apache.org/10/javadoc/org/apache/kafka/clients/consumer/KafkaConsumer.html
+                //
+                let commit_offset = Offset::Offset(msg_offset + 1);
+                let this_offset = tm.entry((topic, partition)).or_insert(commit_offset);
+                if let (Offset::Offset(old), Offset::Offset(new)) = (this_offset, commit_offset) {
+                    *old = (*old).max(new)
+                }
             }
         }
         tm
