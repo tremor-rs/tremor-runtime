@@ -297,7 +297,10 @@ impl NetworkTrait for Network {
                 }
                 self.next().await
             }
-            UrMsg::Status(rid, reply) => Some(RaftNetworkMsg::Status(rid, reply)),
+            UrMsg::Status(_rid, _reply) => {
+                //Some(RaftNetworkMsg::Status(rid, reply))
+                unimplemented!()
+            }
             UrMsg::RaftMsg(msg) => Some(RaftNetworkMsg::RaftMsg(msg)),
             UrMsg::AckProposal(pid, success) => Some(RaftNetworkMsg::AckProposal(pid, success)),
             UrMsg::ForwardProposal(from, pid, eid, data) => {

@@ -71,7 +71,7 @@ pub struct Event {
 /// Raft Network Message
 pub enum RaftNetworkMsg {
     /// Status requests
-    Status(RequestId, async_channel::Sender<WsMessage>),
+    Status(RequestId, async_channel::Sender<RaftReply>),
 
     /// Core raft mesages
     RaftMsg(RaftMessage),
@@ -92,6 +92,9 @@ pub enum RaftNetworkMsg {
 
 pub(crate) type RaftSender = async_channel::Sender<RaftNetworkMsg>;
 pub(crate) type RaftReceiver = async_channel::Receiver<RaftNetworkMsg>;
+
+// TODO use tremor value here
+pub struct RaftReply(pub u16, pub serde_json::Value);
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 struct RaftNodeStatus {
@@ -251,17 +254,18 @@ impl RaftNode {
                         break;
                     };
                     match msg {
-                        RaftNetworkMsg::Status(rid, reply) => {
+                        RaftNetworkMsg::Status(_rid, reply) => {
                             info!("Getting node status");
                             let raft = self.raft_group.as_ref().unwrap();
-                            reply
-                                .send(WsMessage::Reply {
-                                    code: 200,
-                                    rid,
-                                    data: serde_json::to_value(status(&raft).await.unwrap()).unwrap(),
-                                })
-                                .await
-                                .unwrap();
+                            //reply
+                            //    .send(WsMessage::Reply {
+                            //        code: 200,
+                            //        rid,
+                            //        data: serde_json::to_value(status(&raft).await.unwrap()).unwrap(),
+                            //    })
+                            //    .await
+                            //    .unwrap();
+                            reply.send(RaftReply(200, serde_json::to_value(status(&raft).await.unwrap()).unwrap())).await.unwrap();
 
                             // test peer send. TODO remove
                             //let mut event = tremor_pipeline::Event::default();

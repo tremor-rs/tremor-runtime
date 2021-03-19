@@ -18,12 +18,12 @@ use super::{
 };
 use crate::errors::Result;
 use crate::network::control::ControlProtocol;
-use crate::raft::node::{RaftNetworkMsg, RaftSender};
+use crate::raft::node::{RaftNetworkMsg, RaftReply, RaftSender};
 use futures::StreamExt;
 use tremor_pipeline::Event;
 use tremor_value::Value;
 // TODO eliminate this import
-use crate::temp_network::ws::{RequestId, UrMsg, WsMessage};
+use crate::temp_network::ws::{RequestId, UrMsg};
 use simd_json::{Builder, Mutable};
 
 #[derive(Clone)]
@@ -67,7 +67,7 @@ impl MicroRingProtocol {
             .unwrap();
 
         match rx.next().await {
-            Some(WsMessage::Reply { data, .. }) => {
+            Some(RaftReply(.., data)) => {
                 let value = destructurize(&data).unwrap().into_static();
                 //dbg!(&value);
 
@@ -87,7 +87,6 @@ impl MicroRingProtocol {
                 //));
             }
             // FIXME
-            Some(_) => unimplemented!(),
             None => unimplemented!(),
             //_ => unreachable!(),
         }
