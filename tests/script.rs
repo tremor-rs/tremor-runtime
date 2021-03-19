@@ -32,8 +32,8 @@ macro_rules! test_cases {
                 tremor_runtime::functions::load()?;
                 let script_dir = concat!("tests/scripts/", stringify!($file), "/").to_string();
                 let script_file = concat!("tests/scripts/", stringify!($file), "/script.tremor");
-                let in_file = concat!("tests/scripts/", stringify!($file), "/in.xz");
-                let out_file = concat!("tests/scripts/", stringify!($file), "/out.xz");
+                let in_file = concat!("tests/scripts/", stringify!($file), "/in");
+                let out_file = concat!("tests/scripts/", stringify!($file), "/out");
 
                 println!("Loading script: {}", script_file);
                 let mut file = file::open(script_file)?;
@@ -153,6 +153,7 @@ test_cases!(
     // TODO
     // const_in_const_lookup,
     // INSERT
+    xz_compressed_fixtures,
     role_map,
     string_interpolation_nested,
     string_interpolation_escaped_hash,

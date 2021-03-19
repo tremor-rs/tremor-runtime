@@ -1,0 +1,2 @@
+{ "event": {"test": "foo:bar snot:badger"}, "s1": 10, "s2": 100 }
+{ "event": {"test": "foo:bar snot:badger"}, "s1": 11, "s2": 101 }

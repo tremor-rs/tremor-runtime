@@ -1,0 +1,2 @@
+{ "count": 1, "event": {"test": "foo:bar snot:badger"} }
+{ "count": 2, "event": {"test": "foo:bar snot:badger"} }
