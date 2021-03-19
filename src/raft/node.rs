@@ -13,9 +13,10 @@
 // limitations under the License.
 
 use crate::errors::Result;
+use crate::event;
 use crate::network::NetworkSender;
 // TODO better naming
-//use crate::network::ManagerMsg::Message as NetworkMsg;
+use crate::network::ManagerMsg::Message as NetworkMsg;
 use crate::temp_network::ws::{Network, RequestId, WsMessage};
 use crate::temp_network::Network as NetworkTrait;
 use async_std::task::{self, JoinHandle};
@@ -267,13 +268,17 @@ impl RaftNode {
                             //    .unwrap();
                             reply.send(RaftReply(200, serde_json::to_value(status(&raft).await.unwrap()).unwrap())).await.unwrap();
 
-                            // test peer send. TODO remove
+                            // TODO remove. test peer send
                             //let mut event = tremor_pipeline::Event::default();
                             //event.id = tremor_pipeline::EventId::new(1, 1, 1);
-                            //self.network
-                            //    .try_send(crate::network::ManagerMsg::Message(event))
-                            //    .unwrap();
-
+                            //async_std::task::sleep(std::time::Duration::from_secs(3)).await;
+                            self.network.try_send(NetworkMsg(event!({
+                                "tremor":{"connect":{"protocol":"microring"}}
+                            }))).unwrap();
+                            //async_std::task::sleep(std::time::Duration::from_secs(3)).await;
+                            self.network.try_send(NetworkMsg(event!({
+                                "microring":{"op":"status"}
+                            }))).unwrap();
                         }
                         RaftNetworkMsg::RaftMsg(msg) => {
                             //dbg!("Stepping raft!");

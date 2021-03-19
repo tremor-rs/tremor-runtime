@@ -197,12 +197,15 @@ impl NetworkManager {
 
     async fn handle_raw_text<'event>(&mut self, sid: StreamId, event: Event) -> Result<()> {
         if let Some(session) = self.sessions.get_mut(&sid) {
+            dbg!(&session);
             let origin = self.source.streams.get(&sid).unwrap();
-            //dbg!("handling raw text via the control protocol");
+            dbg!("handling raw text via the control protocol");
             match session.on_event(origin, &event).await? {
                 NetworkCont::ConnectProtocol(protocol, alias, _next_state) => {
                     let origin = self.source.streams.get(&sid).unwrap();
-                    //dbg!("sending back connect-ack");
+                    dbg!("sending back connect-ack");
+                    dbg!(origin.is_closed());
+                    // FIXME closed channel when origin is tnt sink
                     origin
                         .send(SerializedResponse {
                             event_id: EventId::new(0, sid as u64, 0), // FIXME TODO
@@ -481,6 +484,7 @@ impl NetworkManager {
                 Ok(ManagerMsg::Stop) => return Ok(()),
                 Ok(ManagerMsg::Message(event)) => {
                     for sink in &mut self.sinks {
+                        dbg!(&event.id);
                         sink.on_event("in", codec.as_ref(), &codec_map, event.clone())
                             .await
                             .unwrap();

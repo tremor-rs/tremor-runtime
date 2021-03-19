@@ -22,7 +22,7 @@ use async_std::task;
 use async_tungstenite::tungstenite::Message;
 use futures::{SinkExt, StreamExt};
 use halfbrown::HashMap;
-use std::{collections::BTreeMap};
+use std::collections::BTreeMap;
 use tremor_pipeline::EventId;
 use tremor_script::Value;
 
@@ -185,6 +185,7 @@ async fn handle_connection(
             }
             Ok(())
         });
+        dbg!(stream_tx.is_closed());
         Some(stream_tx)
     } else {
         None

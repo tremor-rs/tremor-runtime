@@ -186,8 +186,10 @@ async fn ws_connection_loop(
                     for msg_result in iter {
                         match msg_result {
                             Ok(msg) => {
+                                dbg!(&msg);
                                 match ws_stream.send(msg).await {
                                     Ok(_) => {
+                                        dbg!("sent!");
                                         let mut e = Event::cb_ack(nanotime(), ids.clone());
                                         e.op_meta = op_meta.clone();
                                         reply_tx.send(sink::Reply::Insight(e)).await?;
@@ -254,6 +256,8 @@ async fn ws_connection_loop(
             //       then we need to associate requests with responses and include the event id of the causing request
             if has_link {
                 if let Some(msg) = ws_stream.next().await {
+                    dbg!("received back");
+                    dbg!(&msg);
                     match msg {
                         Ok(message @ Message::Text(_)) | Ok(message @ Message::Binary(_)) => {
                             let mut ingest_ns = nanotime();
@@ -596,6 +600,7 @@ impl Sink for Tnt {
 
         dbg!(&ws_conn_tx);
         if let Some(conn_tx) = ws_conn_tx {
+            //dbg!(&id);
             conn_tx
                 .send(ConnectionTaskMsg::SendEvent(
                     id,
