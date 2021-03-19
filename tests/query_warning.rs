@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use pretty_assertions::assert_eq;
-use regex::Regex;
+//use regex::Regex;
 use std::io::prelude::*;
-use std::path::Path;
+//use std::path::Path;
 use tremor_common::file;
 use tremor_pipeline;
 use tremor_pipeline::query::Query;
@@ -49,7 +49,7 @@ macro_rules! test_cases {
                 let query_dir = concat!("tests/query_warnings/", stringify!($file), "/").to_string();
                 let query_file = concat!("tests/query_warnings/", stringify!($file), "/query.trickle");
                 let warning_file = concat!("tests/query_warnings/", stringify!($file), "/warning.txt");
-                let warning_re_file = concat!("tests/query_warnings/", stringify!($file), "/warning.re");
+                //let warning_re_file = concat!("tests/query_warnings/", stringify!($file), "/warning.re");
                 let module_path = &ModulePath { mounts: vec![query_dir, "tremor-script/lib/".to_string()] };
 
                 println!("Loading query: {}", query_file);
@@ -57,6 +57,8 @@ macro_rules! test_cases {
                 let mut contents = String::new();
                 file.read_to_string(&mut contents)?;
 
+                // commented out to save coverage, not needed now anyways
+                /*
                 if Path::new(warning_re_file).exists() {
                     println!("Loading warning: {}", warning_re_file);
                     let mut file = file::open(warning_re_file)?;
@@ -73,28 +75,28 @@ macro_rules! test_cases {
                         println!("Expected error, but got succeess");
                         assert!(false);
                     }
-                } else {
-                    println!("Loading error: {}", warning_file);
-                    let mut file = file::open(warning_file)?;
-                    let mut warning = String::new();
-                    file.read_to_string(&mut warning)?;
-                    let warning = warning.trim();
+                } else {*/
+                println!("Loading expected warning: {}", warning_file);
+                let mut file = file::open(warning_file)?;
+                let mut warning = String::new();
+                file.read_to_string(&mut warning)?;
+                let warning = warning.trim();
 
-                    match to_query(&module_path, warning_file, &contents) {
-                        Ok(query) => {
-                            let mut h = Dumb::new();
-                            query.0.format_warnings_with(&mut h)?;
-                            h.finalize()?;
-                            let got = h.to_string();
-                            let got = got.trim();
-                            println!("{}", got);
-                            assert_eq!(warning, got);
-                        }
-                        Err(e) => {
-                            assert!(false, "Expected successful parse to Query with warnings, got Error: {}", e);
-                        }
-                    };
+                match to_query(&module_path, warning_file, &contents) {
+                    Ok(query) => {
+                        let mut h = Dumb::new();
+                        query.0.format_warnings_with(&mut h)?;
+                        h.finalize()?;
+                        let got = h.to_string();
+                        let got = got.trim();
+                        println!("{}", got);
+                        assert_eq!(warning, got);
+                    }
+                    Err(e) => {
+                        assert!(false, "Expected successful parse to Query with warnings, got Error: {}", e);
+                    }
                 };
+                //};
                 Ok(())
             }
         )*
