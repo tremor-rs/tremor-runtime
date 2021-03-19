@@ -359,8 +359,7 @@ impl Query {
                     };
                     let id = pipe_graph.add_node(node.clone());
 
-                    let mut ww: HashMap<String, WindowImpl> =
-                        HashMap::with_capacity(query.windows.len());
+                    let mut ww = HashMap::with_capacity(query.windows.len());
                     for (name, decl) in &query.windows {
                         ww.insert(name.clone(), window_decl_to_impl(&decl, &that)?);
                     }

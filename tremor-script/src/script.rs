@@ -252,7 +252,7 @@ where
 
     /// Format warnings with the given `Highligher`.
     pub fn format_warnings_with<H: Highlighter>(&self, h: &mut H) -> io::Result<()> {
-        for w in &self.warnings {
+        for w in self.warnings() {
             let tokens: Vec<_> = lexer::Tokenizer::new(&self.source)
                 .tokenize_until_err()
                 .collect();
