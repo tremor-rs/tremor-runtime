@@ -17,7 +17,7 @@ use std::net::SocketAddr;
 use crate::config::{BindingVec, Config, MappingMap, OffRampVec, OnRampVec};
 use crate::errors::{Error, ErrorKind, Result};
 use crate::lifecycle::{ActivationState, ActivatorLifecycleFsm};
-use crate::raft::node::{start_raft, NodeId};
+use crate::raft::node::{start_raft, NodeId, RaftSender};
 use crate::registry::{Registries, ServantId};
 use crate::repository::{
     Artefact, BindingArtefact, OfframpArtefact, OnrampArtefact, PipelineArtefact, Repositories,
@@ -157,11 +157,11 @@ pub struct Conductor {
     /// Runtime type information
     pub(crate) system: Sender,
 
-    /// Network sender
-    pub(crate) network: network::NetworkSender,
+    /// Sender for the raft-based micro-ring
+    pub(crate) uring: RaftSender,
 
     /// Sender for the raft-based micro-ring
-    pub(crate) uring: async_channel::Sender<UrMsg>,
+    pub(crate) temp_uring: async_channel::Sender<UrMsg>,
 
     /// Configuration ( code ) models of managed tremor artefacts
     pub reg: Registries,
@@ -174,15 +174,15 @@ impl Conductor {
     /// Create a new conductor
     pub(crate) fn new(
         system: Sender,
-        network: network::NetworkSender,
-        uring: async_channel::Sender<UrMsg>,
+        uring: RaftSender,
+        temp_uring: async_channel::Sender<UrMsg>,
     ) -> Self {
         let repo = Repositories::new();
         let reg = Registries::new();
         Self {
             system,
-            network,
             uring,
+            temp_uring,
             reg,
             repo,
         }
@@ -751,13 +751,11 @@ impl World {
             ws::Network::new(&logger, node_id, cluster_endpoint, cluster_peers.clone());
 
         let (fake_system_tx, _not_used) = bounded(crate::QSIZE);
-        let (fake_network_tx, _not_used) = bounded(crate::QSIZE);
 
-        let mut conductor = Conductor::new(
-            fake_system_tx.clone(),
-            fake_network_tx.clone(),
-            temp_network.tx.clone(),
-        );
+        let (raft_tx, raft_rx) = bounded(crate::QSIZE);
+
+        let mut conductor =
+            Conductor::new(fake_system_tx.clone(), raft_tx, temp_network.tx.clone());
 
         // where it all begins
         let (onramp_h, onramp) = onramp::Manager::new(qsize).start();
@@ -767,14 +765,11 @@ impl World {
         let (network_h, network) =
             network::Manager::new(&conductor, network_addr, Some(cluster_peers), qsize).start();
 
-        // Rebind network in conductor
-        conductor.network = network.clone();
-
         let (system_h, system) = Manager {
             offramp,
             onramp,
             pipeline,
-            network,
+            network: network.clone(),
             offramp_h,
             onramp_h,
             pipeline_h,
@@ -793,7 +788,16 @@ impl World {
             storage_directory,
         };
 
-        start_raft(node_id, cluster_bootstrap, logger, temp_network).await;
+        // TODO shift this to a cluster manager?
+        start_raft(
+            node_id,
+            cluster_bootstrap,
+            logger,
+            raft_rx,
+            network,
+            temp_network,
+        )
+        .await;
 
         world.register_system().await?;
         Ok((world, system_h))

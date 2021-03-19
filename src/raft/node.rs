@@ -13,6 +13,9 @@
 // limitations under the License.
 
 use crate::errors::Result;
+use crate::network::NetworkSender;
+// TODO better naming
+//use crate::network::ManagerMsg::Message as NetworkMsg;
 use crate::temp_network::ws::{Network, RequestId, WsMessage};
 use crate::temp_network::Network as NetworkTrait;
 use async_std::task::{self, JoinHandle};
@@ -86,6 +89,9 @@ pub enum RaftNetworkMsg {
     /// blah
     Event(EventId, Vec<u8>),
 }
+
+pub(crate) type RaftSender = async_channel::Sender<RaftNetworkMsg>;
+pub(crate) type RaftReceiver = async_channel::Receiver<RaftNetworkMsg>;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 struct RaftNodeStatus {
@@ -215,7 +221,11 @@ pub struct RaftNode {
     // TODO this will be part of storage. here right now since
     // MemStorage only contains raft logs
     kv_storage: HashMap<String, String>,
-    network: Network,
+    raft_rx: RaftReceiver,
+    #[allow(dead_code)]
+    network: NetworkSender,
+    //#[allow(dead_code)]
+    temp_network: Network,
     proposals: VecDeque<Proposal>,
     pending_proposals: HashMap<ProposalId, Proposal>,
     pending_acks: HashMap<ProposalId, EventId>,
@@ -233,7 +243,8 @@ impl RaftNode {
 
         loop {
             select! {
-                msg = self.network.next().fuse() => {
+                //msg = self.temp_network.next().fuse() => {
+                msg = self.raft_rx.next().fuse() => {
                     let msg = if let Some(msg) = msg {
                         msg
                     } else {
@@ -251,6 +262,14 @@ impl RaftNode {
                                 })
                                 .await
                                 .unwrap();
+
+                            // test peer send. TODO remove
+                            //let mut event = tremor_pipeline::Event::default();
+                            //event.id = tremor_pipeline::EventId::new(1, 1, 1);
+                            //self.network
+                            //    .try_send(crate::network::ManagerMsg::Message(event))
+                            //    .unwrap();
+
                         }
                         RaftNetworkMsg::RaftMsg(msg) => {
                             //dbg!("Stepping raft!");
@@ -266,7 +285,7 @@ impl RaftNode {
                                 }
                             }
                             if let Some(_eid) = self.pending_acks.remove(&pid) {
-                                //self.network.event_reply(eid, Some(vec![skilled])).await.unwrap();
+                                //self.temp_network.event_reply(eid, Some(vec![skilled])).await.unwrap();
                             }
                         }
                         RaftNetworkMsg::ForwardProposal(from, pid, eid, data) => {
@@ -312,7 +331,7 @@ impl RaftNode {
                             let from = self.id;
                             if let Err(e) = self.propose_event(from, pid, eid, data).await {
                                 error!("Post forward error: {}", e);
-                                self.network.event_reply(eid, 500u16, serde_json::to_vec(&format!("{}", e)).unwrap()).await.unwrap();
+                                self.temp_network.event_reply(eid, 500u16, serde_json::to_vec(&format!("{}", e)).unwrap()).await.unwrap();
                             } else {
                                 self.pending_acks.insert(pid, eid);
                             }
@@ -350,7 +369,7 @@ impl RaftNode {
                         pending.push(prop);
                     }
                 } else {
-                    self.network
+                    self.temp_network
                         .ack_proposal(p.proposer, p.id, false)
                         .await
                         .map_err(|e| {
@@ -381,7 +400,7 @@ impl RaftNode {
                 .push_back(Proposal::normal(pid, from, eid, data));
             Ok(())
         } else {
-            self.network
+            self.temp_network
                 .forward_proposal(from, self.leader(), pid, eid, data)
                 .await
                 .map_err(|e| {
@@ -441,7 +460,7 @@ impl RaftNode {
         for msg in ready.messages.drain(..) {
             //dbg!("Sending raft message....");
             //dbg!(&msg);
-            self.network.send_msg(msg).await.unwrap()
+            self.temp_network.send_msg(msg).await.unwrap()
         }
 
         // Apply all committed proposals.
@@ -482,7 +501,7 @@ impl RaftNode {
                             } else {
                                 serde_json::to_vec(&serde_json::Value::Null).unwrap()
                             };
-                            self.network
+                            self.temp_network
                                 .event_reply(event.eid, 201u16, reply_data)
                                 .await
                                 .unwrap();
@@ -501,7 +520,7 @@ impl RaftNode {
                                 "Handling proposal(remote) proposal-id {} proposer: {}",
                                 proposal.id, proposal.proposer
                             );
-                            self.network
+                            self.temp_network
                                 .ack_proposal(proposal.proposer, proposal.id, true)
                                 .await
                                 .map_err(|e| {
@@ -620,12 +639,12 @@ impl RaftNode {
                 "election-elapsed" => raft.election_elapsed,
                 "randomized-election-timeout" => raft.randomized_election_timeout(),
 
-                "connections" => format!("{:?}", &self.network.connections()),
+                "connections" => format!("{:?}", &self.temp_network.connections()),
             )
             */
             info!(
                 "NODE STATE node-id: {} role: {:?} leader-id: {} term: {} voters: {:?} connections: {:?}",
-                &raft.id, role, raft.leader_id, raft.term, raft.prs().conf().voters(), &self.network.connections()
+                &raft.id, role, raft.leader_id, raft.term, raft.prs().conf().voters(), &self.temp_network.connections()
             );
         } else {
             error!("UNINITIALIZED NODE {}", self.id)
@@ -669,7 +688,13 @@ impl RaftNode {
     }
 
     /// Create a raft leader
-    pub async fn create_raft_leader(logger: &Logger, id: NodeId, network: Network) -> Self {
+    pub async fn create_raft_leader(
+        logger: &Logger,
+        id: NodeId,
+        raft_rx: RaftReceiver,
+        network: NetworkSender,
+        temp_network: Network,
+    ) -> Self {
         let mut config = example_config();
         config.id = id.0;
         config.validate().unwrap();
@@ -701,7 +726,9 @@ impl RaftNode {
             logger: logger.clone(),
             id,
             raft_group,
+            raft_rx,
             network,
+            temp_network,
             proposals: VecDeque::new(),
             pending_proposals: HashMap::new(),
             pending_acks: HashMap::new(),
@@ -714,7 +741,13 @@ impl RaftNode {
     }
 
     /// Create a raft follower.
-    pub async fn create_raft_follower(logger: &Logger, id: NodeId, network: Network) -> Self {
+    pub async fn create_raft_follower(
+        logger: &Logger,
+        id: NodeId,
+        raft_rx: RaftReceiver,
+        network: NetworkSender,
+        temp_network: Network,
+    ) -> Self {
         //let storage = MemStorage::new_with_conf_state((vec![id.0], vec![]));
         let storage = MemStorage::new();
         let raft_group = if storage.last_index().unwrap() == 1 {
@@ -729,7 +762,9 @@ impl RaftNode {
             logger: logger.clone(),
             id,
             raft_group,
+            raft_rx,
             network,
+            temp_network,
             proposals: VecDeque::new(),
             pending_proposals: HashMap::new(),
             pending_acks: HashMap::new(),
@@ -747,13 +782,15 @@ pub async fn start_raft(
     id: NodeId,
     bootstrap: bool,
     logger: Logger,
-    network: Network,
+    raft_rx: RaftReceiver,
+    network: NetworkSender,
+    temp_network: Network,
 ) -> JoinHandle<()> {
     let mut node = if bootstrap {
         //dbg!("bootstrap on");
-        RaftNode::create_raft_leader(&logger, id, network).await
+        RaftNode::create_raft_leader(&logger, id, raft_rx, network, temp_network).await
     } else {
-        RaftNode::create_raft_follower(&logger, id, network).await
+        RaftNode::create_raft_follower(&logger, id, raft_rx, network, temp_network).await
     };
     //dbg!(&node.last_state);
     warn!("{:?}", &node.last_state);

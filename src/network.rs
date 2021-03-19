@@ -138,9 +138,11 @@ pub(crate) struct Manager {
     sinks: Vec<TntSink>,
 }
 
-pub(crate) enum ManagerMsg {
+/// Network manager message
+pub enum ManagerMsg {
     Stop,
     // TODO reuse Msg and place elsewhere?
+    #[allow(dead_code)]
     Message(Event),
 }
 
