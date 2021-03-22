@@ -11,7 +11,8 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//! Tremmor common utility functions
+
+//! Tremor common utility functions
 #![deny(warnings)]
 #![deny(missing_docs)]
 #![recursion_limit = "1024"]
@@ -32,6 +33,9 @@ pub mod time;
 
 /// common id handling
 pub mod ids;
+
+/// Random numbers
+pub mod rand;
 
 pub use errors::Error;
 

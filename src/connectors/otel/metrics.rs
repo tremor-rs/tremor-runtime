@@ -38,6 +38,7 @@ pub(crate) fn int_exemplars_to_json<'event>(data: Vec<IntExemplar>) -> Value<'ev
 
     for exemplar in data {
         json.push(
+            // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
             json!({
                 "span_id": id::hex_span_id_to_json(&exemplar.span_id),
                 "trace_id": id::hex_trace_id_to_json(&exemplar.trace_id),
@@ -79,6 +80,7 @@ pub(crate) fn double_exemplars_to_json<'event>(data: Vec<DoubleExemplar>) -> Val
 
     for exemplar in data {
         json.push(
+            // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
             json!({
                 "span_id": id::hex_span_id_to_json(&exemplar.span_id),
                 "trace_id": id::hex_trace_id_to_json(&exemplar.trace_id),
@@ -120,6 +122,7 @@ pub(crate) fn quantile_values_to_json<'event>(data: Vec<ValueAtQuantile>) -> Val
 
     for data in data {
         json.push(
+            // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
             json!({
                 "value": data.value,
                 "quantile": data.quantile,
@@ -149,6 +152,7 @@ pub(crate) fn int_data_points_to_json<'event>(pb: Vec<IntDataPoint>) -> Value<'e
     for data in pb {
         let labels = common::string_key_value_to_json(data.labels);
         let exemplars = int_exemplars_to_json(data.exemplars);
+        // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
         let v: Value = json!({
             "value": data.value,
             "start_time_unix_nano": data.start_time_unix_nano,
@@ -192,6 +196,7 @@ pub(crate) fn double_data_points_to_json<'event>(pb: Vec<DoubleDataPoint>) -> Va
         let labels = common::string_key_value_to_json(data.labels);
         let exemplars = double_exemplars_to_json(data.exemplars);
 
+        // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
         let v: Value = json!({
             "value": data.value,
             "start_time_unix_nano": data.start_time_unix_nano,
@@ -236,6 +241,7 @@ pub(crate) fn double_histo_data_points_to_json<'event>(
     for points in pb {
         let labels = common::string_key_value_to_json(points.labels);
         let exemplars = double_exemplars_to_json(points.exemplars);
+        // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
         let v: Value = json!({
             "start_time_unix_nano": points.start_time_unix_nano,
             "time_unix_nano": points.time_unix_nano,
@@ -292,6 +298,7 @@ pub(crate) fn double_summary_data_points_to_json<'event>(
     for points in pb {
         let labels = common::string_key_value_to_json(points.labels);
         let quantile_values = quantile_values_to_json(points.quantile_values);
+        // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
         let v: Value = json!({
             "start_time_unix_nano": points.start_time_unix_nano,
             "time_unix_nano": points.time_unix_nano,
@@ -341,6 +348,7 @@ pub(crate) fn int_histo_data_points_to_json<'event>(
     for points in pb {
         let labels = common::string_key_value_to_json(points.labels);
         let exemplars = int_exemplars_to_json(points.exemplars);
+        // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
         let v: Value = json!({
             "start_time_unix_nano": points.start_time_unix_nano,
             "time_unix_nano": points.time_unix_nano,
@@ -397,11 +405,13 @@ pub(crate) fn int_sum_data_points_to_json<'event>(pb: Vec<IntDataPoint>) -> Valu
 pub(crate) fn metrics_data_to_json<'event>(pb: Option<metric::Data>) -> Value<'event> {
     if let Some(pb) = pb {
         let json: Value = match pb {
+            // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
             Data::IntGauge(data) => json!({
                 "int-gauge": {
                 "data_points":  int_data_points_to_json(data.data_points)
             }})
             .into(),
+            // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
             Data::DoubleSum(data) => json!({
                 "double-sum": {
                 "is_monotonic": data.is_monotonic,
@@ -409,28 +419,33 @@ pub(crate) fn metrics_data_to_json<'event>(pb: Option<metric::Data>) -> Value<'e
                 "aggregation_temporality": data.aggregation_temporality,
             }})
             .into(),
+            // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
             Data::DoubleGauge(data) => json!({
                 "double-gauge": {
                 "data_points":  double_data_points_to_json(data.data_points),
             }})
             .into(),
+            // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
             Data::DoubleHistogram(data) => json!({
                 "double-histogram": {
                 "data_points":  double_histo_data_points_to_json(data.data_points),
                 "aggregation_temporality": data.aggregation_temporality,
             }})
             .into(),
+            // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
             Data::DoubleSummary(data) => json!({
                 "double-summary": {
                 "data_points":  double_summary_data_points_to_json(data.data_points),
             }})
             .into(),
+            // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
             Data::IntHistogram(data) => json!({
                 "int-histogram": {
                 "data_points":  int_histo_data_points_to_json(data.data_points),
                 "aggregation_temporality": data.aggregation_temporality,
             }})
             .into(),
+            // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
             Data::IntSum(data) => json!({
                 "int-sum": {
                 "is_monotonic": data.is_monotonic,
@@ -509,6 +524,7 @@ pub(crate) fn instrumentation_library_metrics_to_json<'event>(
         for metric in data.metrics {
             let data = metrics_data_to_json(metric.data);
 
+            // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
             metrics.push(json!({
                 "name": metric.name,
                 "description": metric.description,
@@ -516,12 +532,14 @@ pub(crate) fn instrumentation_library_metrics_to_json<'event>(
                 "unit": metric.unit,
             }));
         }
+        // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
         json.push(json!({
             "instrumentation_library": common::maybe_instrumentation_library_to_json(data.instrumentation_library),
             "metrics": metrics
         }));
     }
 
+    // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
     json!(json).into()
 }
 
@@ -571,6 +589,7 @@ pub(crate) fn resource_metrics_to_json<'event>(
     let mut metrics = Vec::new();
     for metric in request.resource_metrics {
         let ilm = instrumentation_library_metrics_to_json(metric.instrumentation_library_metrics);
+        // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
         metrics.push(json!({
             "instrumentation_library_metrics": ilm,
             "resource": resource::resource_to_json(metric.resource)?,

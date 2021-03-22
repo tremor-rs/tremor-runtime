@@ -23,6 +23,7 @@
 #![cfg(not(tarpaulin_include))]
 
 use crate::connectors::otel::{logs, metrics, trace};
+use crate::connectors::qos;
 use crate::sink::prelude::*;
 use halfbrown::HashMap;
 use tonic::transport::Channel as TonicChannel;
@@ -111,44 +112,38 @@ impl Sink for OpenTelemetry {
                     if let Value::Object(o) = value {
                         if o.contains_key("metrics") {
                             let request = json_otel_metrics_to_pb(value)?;
-                            match remote.metrics_client.export(request).await {
-                                Ok(_response) => {}
-                                Err(_e) => {
-                                    // TODO enhance error handling
-                                    error!("Failed to dispatch otel/gRPC metrics message");
-                                }
+                            if let Err(e) = remote.metrics_client.export(request).await {
+                                error!("Failed to dispatch otel/gRPC metrics message: {}", e);
                             };
+                            continue;
                         } else if o.contains_key("logs") {
                             let request = json_otel_logs_to_pb(value)?;
-                            match remote.logs_client.export(request).await {
-                                Ok(_response) => {}
-                                Err(e) => {
-                                    error!("Failed to dispatch otel/gRPC log message, {}", e);
-                                }
-                            };
+                            if let Err(e) = remote.logs_client.export(request).await {
+                                error!("Failed to dispatch otel/gRPC logs message: {}", e);
+                            }
+                            continue;
                         } else if o.contains_key("trace") {
                             let request = json_otel_trace_to_pb(value)?;
-                            match remote.trace_client.export(request).await {
-                                Ok(_response) => {}
-                                Err(e) => {
-                                    error!("Failed to dispatch otel/gRPC trace message, {}", e);
-                                }
-                            };
-                        } else {
-                            // unknown / drop
+                            if let Err(e) = remote.trace_client.export(request).await {
+                                error!("Failed to dispatch otel/gRPC logs message: {}", e);
+                            }
+                            continue;
                         }
-                    } else {
-                        // Error
                     }
+
+                    // Any other event structure / form is invalid - log an error
+                    error!("Unsupported event received by OTEL sink: {}", value);
                 }
             }
         }
 
-        Ok(Some(vec![sink::Reply::Insight(event.insight_ack())]))
+        Ok(Some(vec![qos::ack(&mut event)]))
     }
+
     fn default_codec(&self) -> &str {
         "json"
     }
+
     #[allow(clippy::too_many_arguments)]
     async fn init(
         &mut self,

@@ -10,3 +10,4 @@ version = "0.10.2"
 
 [dependencies]
 async-std = "1"
+rand = "0.8"

@@ -73,6 +73,7 @@ pub(crate) fn instrumentation_library_logs_to_json<'event>(
     for data in pb {
         let mut logs = Vec::new();
         for log in data.logs {
+            // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
             logs.push(json!({
                 "name": log.name,
                 "time_unix_nano": log.time_unix_nano,
@@ -86,12 +87,14 @@ pub(crate) fn instrumentation_library_logs_to_json<'event>(
                 "body": common::maybe_any_value_to_json(log.body)?,
             }));
         }
+        // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
         json.push(json!({
             "instrumentation_library": common::maybe_instrumentation_library_to_json(data.instrumentation_library),
             "logs": logs
         }));
     }
 
+    // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
     Ok(json!(json).into())
 }
 
@@ -155,13 +158,14 @@ pub(crate) fn resource_logs_to_json<'event>(
 ) -> Result<Value<'event>> {
     let mut json = Vec::new();
     for log in request.resource_logs {
+        // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
         json.push(json!({
                 "instrumentation_library_logs":
                     instrumentation_library_logs_to_json(log.instrumentation_library_logs)?,
                 "resource": resource::resource_to_json(log.resource)?
         }));
     }
-
+    // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
     Ok(json!({ "logs": json }).into())
 }
 

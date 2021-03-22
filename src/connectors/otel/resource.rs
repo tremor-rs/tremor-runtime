@@ -21,12 +21,14 @@ use tremor_value::Value;
 
 pub(crate) fn resource_to_json<'event>(pb: Option<Resource>) -> Result<Value<'event>> {
     if let Some(data) = pb {
+        // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
         Ok(json!({
             "attributes": common::key_value_list_to_json(data.attributes)?,
             "dropped_attributes_count": data.dropped_attributes_count,
         })
         .into())
     } else {
+        // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
         Ok(json!({ "attributes": {}, "dropped_attributes_count": 0 }).into())
     }
 }
@@ -50,6 +52,11 @@ mod tests {
     use tremor_otelapis::opentelemetry::proto::common::v1::{any_value, AnyValue, KeyValue};
 
     use super::*;
+
+    #[test]
+    fn bad_mapping() {
+        assert!(maybe_resource_to_pb(None).is_err());
+    }
 
     #[test]
     fn resource() -> Result<()> {

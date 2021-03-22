@@ -33,6 +33,7 @@ use tremor_value::Value;
 #[allow(deprecated)]
 pub(crate) fn status_to_json<'event>(data: Option<Status>) -> Value<'event> {
     if let Some(data) = data {
+        // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
         json!({
             "code": data.code,
             "deprecated_code": data.deprecated_code,
@@ -40,6 +41,7 @@ pub(crate) fn status_to_json<'event>(data: Option<Status>) -> Value<'event> {
         })
         .into()
     } else {
+        // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
         json!({ "code": 0, "deprecated_code": 0, "message": "status code unset" }).into()
     }
 }
@@ -48,6 +50,7 @@ pub(crate) fn span_events_to_json<'event>(pb: Vec<Event>) -> Result<Value<'event
     let mut json = Vec::new();
     for data in pb {
         json.push(
+            // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
             json!({
                 "time_unix_nano" : data.time_unix_nano,
                 "name" : data.name.to_string(),
@@ -84,6 +87,7 @@ pub(crate) fn span_links_to_json<'event>(pb: Vec<Link>) -> Result<Value<'event>>
     let mut json = Vec::new();
     for data in pb {
         json.push(
+            // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
             json!({
                 "trace_id": id::hex_trace_id_to_json(&data.trace_id),
                 "span_id": id::hex_span_id_to_json(&data.span_id),
@@ -147,6 +151,7 @@ pub(crate) fn instrumentation_library_spans_to_json<'event>(
         let mut spans: Vec<Value> = Vec::new();
         for span in data.spans {
             spans.push(
+                // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
                 json!({
                     "attributes": common::key_value_list_to_json(span.attributes)?,
                     "events": span_events_to_json(span.events)?,
@@ -168,6 +173,7 @@ pub(crate) fn instrumentation_library_spans_to_json<'event>(
             );
         }
 
+        // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
         json.push(json!({
             "instrumentation_library": common::maybe_instrumentation_library_to_json(data.instrumentation_library),
             "spans": spans,
@@ -248,6 +254,7 @@ pub(crate) fn resource_spans_to_json<'event>(
 ) -> Result<Value<'event>> {
     let mut json = Vec::new();
     for span in request.resource_spans {
+        // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
         json.push(json!({
             "instrumentation_library_spans": instrumentation_library_spans_to_json(span.instrumentation_library_spans)?,
             "resource": resource::resource_to_json(span.resource)?,
