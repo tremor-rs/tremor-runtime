@@ -5831,6 +5831,7 @@ name = "tremor-common"
 version = "0.10.2"
 dependencies = [
  "async-std",
+ "rand 0.8.3",
 ]
 
 [[package]]

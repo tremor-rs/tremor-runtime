@@ -18,13 +18,13 @@ use simd_json::StaticNode;
 use tremor_script::Value;
 
 pub(crate) fn random_span_id_bytes() -> Vec<u8> {
-    let mut rng = rand::thread_rng();
+    let mut rng = tremor_common::rand::make_prng();
     let span_id: Vec<u8> = (0..8).map(|_| rng.gen_range(0_u8..=255_u8)).collect();
     span_id
 }
 
 pub(crate) fn random_span_id_string() -> String {
-    let mut rng = rand::thread_rng();
+    let mut rng = tremor_common::rand::make_prng();
     let span_id: String = (0..8)
         .map(|_| rng.gen_range(0_u8..=255_u8))
         .map(|b| format!("{:02x}", b))
@@ -46,13 +46,13 @@ pub(crate) fn random_span_id_value<'event>() -> Value<'event> {
 }
 
 pub(crate) fn random_trace_id_bytes() -> Vec<u8> {
-    let mut rng = rand::thread_rng();
+    let mut rng = tremor_common::rand::make_prng();
     let span_id: Vec<u8> = (0..16).map(|_| rng.gen_range(0_u8..=255_u8)).collect();
     span_id
 }
 
 pub(crate) fn random_trace_id_string() -> String {
-    let mut rng = rand::thread_rng();
+    let mut rng = tremor_common::rand::make_prng();
     let span_id: String = (0..16)
         .map(|_| rng.gen_range(0_u8..=255_u8))
         .map(|b| format!("{:02x}", b))
@@ -64,23 +64,19 @@ pub(crate) fn random_trace_id_value<'event>() -> Value<'event> {
     Value::String(random_trace_id_string().into())
 }
 
-fn hex_to_bytes(str_bytes: &[u8]) -> Vec<u8> {
-    let mut hex_bytes = str_bytes
-        .iter()
-        .filter_map(|b| match b {
-            b'0'..=b'9' => Some(b - b'0'),
-            b'a'..=b'f' => Some(b - b'a' + 10),
-            b'A'..=b'F' => Some(b - b'A' + 10),
-            _other => None, // ignore other characters
-        })
-        .fuse();
-
-    let mut bytes = Vec::new();
-    while let (Some(h), Some(l)) = (hex_bytes.next(), hex_bytes.next()) {
-        bytes.push(h << 4 | l)
+fn hex_to_bytes(str_bytes: &str) -> Option<Vec<u8>> {
+    if str_bytes.len() % 2 == 0 {
+        (0..str_bytes.len())
+            .step_by(2)
+            .map(|i| {
+                str_bytes
+                    .get(i..i + 2)
+                    .and_then(|sub| u8::from_str_radix(sub, 16).ok())
+            })
+            .collect()
+    } else {
+        None
     }
-
-    bytes
 }
 
 pub(crate) fn random_trace_id_array<'event>() -> Value<'event> {
@@ -121,17 +117,21 @@ fn hex_id_to_pb(
     allow_empty: bool,
 ) -> Result<Vec<u8>> {
     if let Some(Value::String(json)) = data {
-        let pb = json.as_bytes();
-        let pb = hex_to_bytes(pb);
+        let pb = json.to_string();
+        let pb = hex_to_bytes(&pb);
 
-        if (allow_empty && pb.is_empty()) || pb.len() == len_bytes {
-            Ok(pb)
+        if let Some(pb) = pb {
+            if (allow_empty && pb.is_empty()) || pb.len() == len_bytes {
+                Ok(pb)
+            } else {
+                Err(format!(
+                    "Invalid {} id ( wrong string length 1) - cannot convert to pb",
+                    kind
+                )
+                .into())
+            }
         } else {
-            Err(format!(
-                "Invalid {} id ( wrong string length 1) - cannot convert to pb",
-                kind
-            )
-            .into())
+            Err(format!("Invalid hex encoded string - cannot convert {} to pb", kind).into())
         }
     } else if let Some(Value::Bytes(json)) = data {
         let data = json.to_vec();
@@ -245,51 +245,36 @@ pub mod test {
         Ok(())
     }
 
+    #[test]
+    fn bad_hex() {
+        assert!(hex_to_bytes("snot").is_none());
+    }
+
     proptest! {
 
         #[test]
         fn prop_id_span(
-            arb_hexen in prop::collection::vec("[a-fA-F0-9]{16}", 16..=16)
+            arb_hexen in prop::collection::vec("[a-f0-9]{16}", 16..=16)
         ) {
             for expected in arb_hexen {
-                let bytes = hex_to_bytes(expected.as_bytes());
+                let bytes = hex_to_bytes(&expected).unwrap();
 
                 let json = Value::Bytes(bytes.clone().into());
                 let pb = hex_span_id_to_pb(Some(&json))?;
                 prop_assert_eq!(bytes.clone(), pb);
-
-                let mut rng = rand::thread_rng();
-                let mut modified = expected.clone();
-                for _ in 0..rng.gen_range(3..7) {
-                    let i = rng.gen_range(0..16);
-                    modified.insert(i, '-');
-                }
-                let json = Value::String(modified.into());
-                let pb = hex_span_id_to_pb(Some(&json))?;
-                prop_assert_eq!(bytes, pb);
             }
         }
 
         #[test]
         fn prop_id_trace(
-            arb_hexen in prop::collection::vec("[a-fA-F0-9]{32}", 32..=32)
+            arb_hexen in prop::collection::vec("[a-f0-9]{32}", 32..=32)
         ) {
             for expected in arb_hexen {
-                let bytes = hex_to_bytes(expected.as_bytes());
+                let bytes = hex_to_bytes(&expected).unwrap();
 
                 let json = Value::Bytes(bytes.clone().into());
                 let pb = hex_trace_id_to_pb(Some(&json))?;
                 prop_assert_eq!(bytes.clone(), pb);
-
-                let mut rng = rand::thread_rng();
-                let mut modified = expected.clone();
-                for _ in 0..rng.gen_range(3..7) {
-                    let i = rng.gen_range(0..32);
-                    modified.insert(i, '-');
-                }
-                let json = Value::String(modified.into());
-                let pb = hex_trace_id_to_pb(Some(&json))?;
-                prop_assert_eq!(bytes, pb);
             }
         }
     }

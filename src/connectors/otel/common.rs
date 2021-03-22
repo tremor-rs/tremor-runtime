@@ -181,6 +181,7 @@ pub(crate) fn maybe_instrumentation_library_to_json<'event>(
 ) -> Value<'event> {
     match pb {
         None => Value::Static(StaticNode::Null),
+        // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
         Some(il) => json!({
             "name": il.name,
             "version": il.version,

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::Result;
+use crate::errors::{Error, Result};
 use simd_json::StaticNode;
 use tremor_value::Value;
 
@@ -27,6 +27,21 @@ pub(crate) fn maybe_string_to_pb(data: Option<&Value<'_>>) -> Result<String> {
 }
 
 pub(crate) fn maybe_int_to_pbu64(data: Option<&Value<'_>>) -> Result<u64> {
+    // TODO when as_u64 passes `proptest` change to the comment out code
+    //
+    // proptest: Aborting shrinking after the PROPTEST_MAX_SHRINK_ITERS environment variable or ProptestConfig.max_shrink_iters iterations (set 1024 to a large(r) value to shrink more; current configuration: 1024 iterations)
+    // thread 'connectors::pb::test::prop_pb_u64_repeated' panicked at 'Test failed: not coercable to u64; minimal failing input: (vec, _index) = ([9270612287945480471], 0)
+    //         successes: 1
+    //         local rejects: 0
+    //         global rejects: 0
+    // ', src/connectors/pb.rs:158:5
+    //
+    // use simd_json::Value;
+    // if let Some(data) = data {
+    //     data.as_u64().ok_or(Error::from("not coercable to u64"))
+    // } else {
+    //     Err("Expected an json u64 to convert to pb u64".into())
+    // }
     if let Some(&Value::Static(StaticNode::U64(i))) = data {
         Ok(i)
     } else if let Some(&Value::Static(StaticNode::I64(i))) = data {
@@ -38,65 +53,63 @@ pub(crate) fn maybe_int_to_pbu64(data: Option<&Value<'_>>) -> Result<u64> {
 }
 
 pub(crate) fn maybe_int_to_pbi32(data: Option<&Value<'_>>) -> Result<i32> {
-    if let Some(&Value::Static(StaticNode::I64(i))) = data {
-        #[allow(clippy::clippy::cast_sign_loss)]
-        #[allow(clippy::cast_possible_truncation)]
-        Ok(i as i32)
-    } else {
-        Err("Expected an json i64 to convert to pb i32".into())
-    }
+    use simd_json::Value;
+    data.map_or_else(
+        || Err("Expected an json i64 to convert to pb i32".into()),
+        |data| {
+            data.as_i32()
+                .ok_or_else(|| Error::from("not coercable to i32"))
+        },
+    )
 }
 
 pub(crate) fn maybe_int_to_pbi64(data: Option<&Value<'_>>) -> Result<i64> {
-    if let Some(&Value::Static(StaticNode::I64(i))) = data {
-        Ok(i)
-    } else {
-        Err("Expected an json i64 to convert to pb i64".into())
-    }
+    use simd_json::Value;
+    data.map_or_else(
+        || Err("Expected an json i64 to convert to pb i64".into()),
+        |data| {
+            data.as_i64()
+                .ok_or_else(|| Error::from("not coercable to i64"))
+        },
+    )
 }
 
 pub(crate) fn maybe_int_to_pbu32(data: Option<&Value<'_>>) -> Result<u32> {
-    if let Some(&Value::Static(StaticNode::U64(i))) = data {
-        // json values originating from non-otel ( non otel sources )
-        // may reasonably be u64
-        if i > u64::from(u32::MAX) {
-            return Err("Truncation error converting int value to pb.u32".into());
-        }
-        #[allow(clippy::clippy::cast_sign_loss)]
-        #[allow(clippy::cast_possible_truncation)]
-        Ok(i as u32)
-    } else if let Some(&Value::Static(StaticNode::I64(i))) = data {
-        // NOTE: automatic conversion to json via simd-json:json! macro
-        // will default to i64 type which needs strict checking
-        // for correct mapping to pb!
-        if i > i64::from(u32::MAX) {
-            return Err("Truncation error converting int value to pb.u32".into());
-        }
-        if i < 0 {
-            return Err("Sign loss of negative signed int value to pb.u32".into());
-        }
-        #[allow(clippy::clippy::cast_sign_loss)]
-        #[allow(clippy::cast_possible_truncation)]
-        Ok(i as u32)
-    } else {
-        Err("Expected a json value convertible to pb u32 without truncation or sign loss".into())
-    }
+    use simd_json::Value;
+    data.map_or_else(
+        || {
+            Err(
+                "Expected a json value convertible to pb u32 without truncation or sign loss"
+                    .into(),
+            )
+        },
+        |data| {
+            data.as_u32()
+                .ok_or_else(|| Error::from("not coercable to u32"))
+        },
+    )
 }
 
 pub(crate) fn maybe_double_to_pb(data: Option<&Value<'_>>) -> Result<f64> {
-    if let Some(&Value::Static(StaticNode::F64(i))) = data {
-        Ok(i)
-    } else {
-        Err("Expected a json f64 to convert to pb f64".into())
-    }
+    use simd_json::Value;
+    data.map_or_else(
+        || Err("Expected a json f64 to convert to pb f64".into()),
+        |data| {
+            data.as_f64()
+                .ok_or_else(|| Error::from("not coercable to f64"))
+        },
+    )
 }
 
 pub(crate) fn maybe_bool_to_pb(data: Option<&Value<'_>>) -> Result<bool> {
-    if let Some(&Value::Static(StaticNode::Bool(i))) = data {
-        Ok(i)
-    } else {
-        Err("Expected a json bool to convert to pb bool".into())
-    }
+    use simd_json::Value;
+    data.map_or_else(
+        || Err("Expected a json bool to convert to pb bool".into()),
+        |data| {
+            data.as_bool()
+                .ok_or_else(|| Error::from("not coercable to bool"))
+        },
+    )
 }
 
 pub(crate) fn f64_repeated_to_pb(json: Option<&Value<'_>>) -> Result<Vec<f64>> {
@@ -134,6 +147,7 @@ mod test {
     use proptest::proptest;
     use proptest::{bits::u64, prelude::*};
     use simd_json::json;
+    use simd_json::StaticNode;
 
     // NOTE This is incomplete with respect to possible mappings of json values
     // to basic builtin protocol buffer types, but sufficient for the needs of
