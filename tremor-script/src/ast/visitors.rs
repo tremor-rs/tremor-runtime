@@ -705,11 +705,13 @@ mod tests {
             hide_the_42(
                 match event.foo of
                   case %{ field == " #{42 + event.foo} ", present foo, absent bar } => event.bar
+                  case %[42] => event.snake
+                  case a = %(42, ...) => a
                   default => event.snot
                 end
             );
         "#,
-            1,
+            3,
         )
     }
 
@@ -721,9 +723,17 @@ mod tests {
         fn add(x, y) with
           recur(x + y, 1)
         end;
+        let zero = 0;
         [
             -event.foo,
-            (patch event of insert "snot" => 42 end),
+            (patch event of
+                insert "snot" => 42,
+                merge => {"snot": 42 - zero},
+                merge "badger" => {"snot": 42 - zero},
+                upsert "snot" => 42,
+                copy "snot" => "snotter",
+                erase "snotter"
+            end),
             (merge event of {"foo": event[42:x]} end),
             "~~~ #{ state[1] } ~~~",
             x,
@@ -732,7 +742,7 @@ mod tests {
             <<event.foo:8/unsigned>>
         ]
         "#,
-            3,
+            6,
         )
     }
 

@@ -2,6 +2,12 @@ let event = match event of
   case 2 => {"k": "two"}
   case 1 => {"k": "one"}
   case 3 => {"k": "three"}
+  case 4 => {"k": "four"}
+  case 5 => {"k": "five"}
+  case 6 => {"k": "six"}
+  case 7 => {"k": "seven"}
+  case 8 => {"k": "eight"}
+
   default => {"k": event}
 end;
 
@@ -24,6 +30,10 @@ let event = {"k": match event of
   case 2 => 2
   case 3 => 3
   case 4 => 4
+  case 5 => 1
+  case 6 => 2
+  case 70 => "snot"
+  case 80 => "badger"
   case ~ glob|five| => 5
   case "six" => 6
   case 7 => "seven"

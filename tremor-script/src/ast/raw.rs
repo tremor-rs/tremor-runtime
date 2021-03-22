@@ -2320,7 +2320,7 @@ where
             .iter()
             .filter(|p| p.pattern.is_default() && p.guard.is_none())
             .count();
-            match defaults {
+        match defaults {
                 0 => helper.warn(Warning::new_with_scope(
                     Range(self.start, self.end),
                     "This match expression has no default clause, if the other clauses do not cover all possibilities this will lead to events being discarded with runtime errors.".into()

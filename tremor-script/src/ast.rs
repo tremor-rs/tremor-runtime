@@ -51,7 +51,10 @@ use raw::reduce2;
 use serde::Serialize;
 use simd_json::StaticNode;
 
-use std::{collections::{BTreeMap, BTreeSet}, mem};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    mem,
+};
 
 use upable::Upable;
 
