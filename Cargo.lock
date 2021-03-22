@@ -128,9 +128,9 @@ dependencies = [
 
 [[package]]
 name = "anyhow"
-version = "1.0.38"
+version = "1.0.39"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "afddf7f520a80dbf76e6f50a35bca42a2331ef227a28b3b6dc5c2e2338d114b1"
+checksum = "81cddc5f91628367664cc7c69714ff08deee8a3efc54623011c772544d7b2767"
 
 [[package]]
 name = "arc-swap"
@@ -182,9 +182,9 @@ dependencies = [
 
 [[package]]
 name = "async-compat"
-version = "0.2.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "061f9496add0ee6539db53f2f88b073c6ee564232aaafed2681731fcee8d28c2"
+checksum = "9b48b4ff0c2026db683dea961cd8ea874737f56cffca86fa84415eaddc51c00d"
 dependencies = [
  "futures-core",
  "futures-io",
@@ -2111,9 +2111,9 @@ dependencies = [
 
 [[package]]
 name = "hashbrown"
-version = "0.11.0"
+version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "362385356d610bd1e5a408ddf8d022041774b683f345a1d2cfcb4f60f8ae2db5"
+checksum = "a3de7a9a685bb301f5cb29587f13833270c59e7d2c6f457a66372996afad4504"
 dependencies = [
  "ahash 0.7.2",
  "serde",
@@ -4633,9 +4633,9 @@ dependencies = [
 
 [[package]]
 name = "simd-json"
-version = "0.3.25"
+version = "0.3.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "75554426dd9eb201d67cebeb365658da99766d4b6dac7e263c7af7e7084105fd"
+checksum = "469eceee006182897e6a2f4add05ebc82cc0531735c86535f4614df24afb39bc"
 dependencies = [
  "halfbrown",
  "serde",
@@ -5641,7 +5641,7 @@ checksum = "efd1f82c56340fdf16f2a953d7bda4f8fdffba13d93b00844c25572110b26079"
 name = "tremor-api"
 version = "0.10.2"
 dependencies = [
- "hashbrown 0.11.0",
+ "hashbrown 0.11.1",
  "http-types",
  "serde",
  "serde_derive",
@@ -5783,7 +5783,7 @@ dependencies = [
  "glob",
  "grok",
  "halfbrown",
- "hashbrown 0.11.0",
+ "hashbrown 0.11.1",
  "hdrhistogram",
  "hostname",
  "http-types",
