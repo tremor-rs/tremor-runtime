@@ -19,7 +19,7 @@ use crate::{tremor_const_fn, utils::sorted_serialize};
 
 pub fn load(registry: &mut Registry) {
     registry.insert(
-        tremor_const_fn! (chash::jump(_context, _key, _slot_count) {
+        tremor_const_fn! (chash|jump(_context, _key, _slot_count) {
             if let (Some(key), Some(slot_count)) =  (_key.as_str(), _slot_count.as_u32()) {
                 // This is 'tremor\0\0'  and '\0\0tremor' as integers
                 let jh = jumphash::JumpHasher::new_with_keys(8_390_880_576_440_238_080, 128_034_676_764_530);
@@ -29,7 +29,7 @@ pub fn load(registry: &mut Registry) {
             }
         }),
     ).insert(
-        tremor_const_fn!(chash::jump_with_keys(_context, _k1, _k2, _key, _slot_count) {
+        tremor_const_fn!(chash|jump_with_keys(_context, _k1, _k2, _key, _slot_count) {
             if let (Some(k1), Some(k2), Some(key), Some(slot_count)) =  (_k1.as_u64(), _k2.as_u64(), _key.as_str(), _slot_count.as_u32()) {
                 let jh = jumphash::JumpHasher::new_with_keys(k1, k2);
                 Ok(jh.slot(&key, slot_count).into())
@@ -38,7 +38,7 @@ pub fn load(registry: &mut Registry) {
             }
         }),
     ).insert(
-        tremor_const_fn!(chash::sorted_serialize(_context, _data) {
+        tremor_const_fn!(chash|sorted_serialize(_context, _data) {
             let ser = sorted_serialize(_data).map_err(|e| FunctionError::RuntimeError{mfa: this_mfa(), error: format!("Failed to serialize: {}", e)})?;
             Ok(Value::from(ser))
         }),

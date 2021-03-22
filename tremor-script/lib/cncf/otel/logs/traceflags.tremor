@@ -1,0 +1,39 @@
+### The `severity` module defines `severity_number` values
+### and associated utility functions
+###
+###
+### [OpenTelemetry Log Data Model - Trace Flags](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/logs/data-model.md#field-traceflags)
+###
+### [W3C Trace Context - Trace Flags](https://www.w3.org/TR/trace-context/#trace-flags)
+###
+
+use std::binary;
+
+## The `from_int` function interprets a `trace_flags` integer value argument
+## to see if it is `sampled-flag` ( decimal `128` ) is set. All other flags are
+## currently unused and SHOULD be `0` ( unset ) in conforming `W3C Trace Context`
+## and conformant `OpenTelemetry` implementations
+##
+fn from_int(trace_flags) with
+  {
+    # https://www.w3.org/TR/trace-context/#sampled-flag
+    "sampled": " #{ (trace_flags & 128) > 0 }",
+    "unused1": " #{ (trace_flags &  64) > 0 }",
+    "unused2": " #{ (trace_flags &  32) > 0 }",
+    "unused3": " #{ (trace_flags &  16) > 0 }",
+    "unused4": " #{ (trace_flags &  8) > 0 }",
+    "unused5": " #{ (trace_flags &  4) > 0 }",
+    "unused6": " #{ (trace_flags &  2) > 0 }",
+    "unused7": " #{ (trace_flags &  1) > 0 }",
+  }
+end;
+
+## Checks if a `trace_flags` instance is correct and valid
+fn is_valid(trace_flags) with
+  trace_flags == 128 # All unused flags must be set to `0`
+end;
+
+## Returns the default configuration of traceflags
+fn make_default() with
+  0
+end;

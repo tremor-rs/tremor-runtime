@@ -18,12 +18,12 @@ use crate::{tremor_const_fn, tremor_fn_};
 
 macro_rules! map_function {
     ($name:ident, $fun:ident) => {
-        tremor_const_fn! (type::$name(_context, _input) {
+        tremor_const_fn! (type|$name(_context, _input) {
             Ok(Value::from(_input.$fun()))
         })
     };
         ($fun:ident) => {
-            tremor_const_fn!(type::$fun(_context, _input) {
+            tremor_const_fn!(type|$fun(_context, _input) {
                 Ok(Value::from(_input.$fun()))
             })
         }
@@ -38,7 +38,7 @@ pub fn load(registry: &mut Registry) {
         .insert(map_function!(is_string, is_str))
         .insert(map_function!(is_array))
         .insert(map_function!(is_record, is_object))
-        .insert(tremor_const_fn! (type::as_string(_context, _input) {
+        .insert(tremor_const_fn! (type|as_string(_context, _input) {
             Ok(match _input.value_type() {
                 ValueType::Null => Value::from("null"),
                 ValueType::Bool => Value::from("bool"),
@@ -50,15 +50,15 @@ pub fn load(registry: &mut Registry) {
                 ValueType::Custom(c) => Value::from(c),
             })
         }))
-        .insert(tremor_const_fn! (type::is_number(_context, _input) {
+        .insert(tremor_const_fn! (type|is_number(_context, _input) {
             Ok(match _input.value_type() {
                 ValueType::I64 | ValueType::F64 | ValueType::U64 => Value::from(true),
                 _ => Value::from(false),
             })
         }))
-        .insert(tremor_const_fn! (type::is_binary(_context, _input) {
+        .insert(tremor_const_fn! (type|is_binary(_context, _input) {
             Ok(match _input.value_type() {
-                ValueType::Custom("binary") => Value::from(true),
+                ValueType::Custom("bytes") => Value::from(true),
                 _ => Value::from(false),
             })
         }));

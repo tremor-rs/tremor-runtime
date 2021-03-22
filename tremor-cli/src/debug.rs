@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::Result;
 use crate::util::{get_source_kind, SourceKind};
+use crate::{env, errors::Result};
 use clap::ArgMatches;
 use io::BufReader;
 use lexer::Tokenizer;
@@ -24,11 +24,8 @@ use tremor_common::ids::OperatorIdGen;
 use tremor_script::highlighter::{Dumb as TermNoHighlighter, Highlighter, Term as TermHighlighter};
 use tremor_script::lexer;
 use tremor_script::lexer::Token;
-use tremor_script::path::load as load_module_path;
 use tremor_script::pos::{Span, Spanned};
 use tremor_script::query::Query;
-use tremor_script::registry;
-use tremor_script::registry::Registry;
 use tremor_script::script::Script;
 
 struct Opts<'src> {
@@ -206,11 +203,10 @@ where
 {
     banner(h, &opts, "AST", "Abstract Syntax Tree")?;
 
-    let mp = load_module_path();
-    let reg: Registry = registry::registry();
+    let env = env::setup()?;
     match opts.kind {
         SourceKind::Tremor | SourceKind::Json => {
-            match Script::parse(&mp, opts.src, opts.raw.clone(), &reg) {
+            match Script::parse(&env.module_path, opts.src, opts.raw.clone(), &env.fun) {
                 Ok(runnable) => {
                     let ast = if exprs_only {
                         simd_json::to_string_pretty(&runnable.script.suffix().exprs)?
@@ -228,8 +224,14 @@ where
             }
         }
         SourceKind::Trickle => {
-            let aggr_reg = registry::aggr();
-            match Query::parse(&mp, opts.src, &opts.raw, vec![], &reg, &aggr_reg) {
+            match Query::parse(
+                &env.module_path,
+                opts.src,
+                &opts.raw,
+                vec![],
+                &env.fun,
+                &env.aggr,
+            ) {
                 Ok(runnable) => {
                     let ast = simd_json::to_string_pretty(&runnable.query.suffix())?;
                     println!();
@@ -289,10 +291,15 @@ where
     if opts.kind != SourceKind::Trickle {
         return Err("Dot visualisation is only supported for trickle files.".into());
     }
-    let mp = load_module_path();
-    let reg: Registry = registry::registry();
-    let aggr_reg = registry::aggr();
-    match Query::parse(&mp, opts.src, &opts.raw, vec![], &reg, &aggr_reg) {
+    let env = env::setup()?;
+    match Query::parse(
+        &env.module_path,
+        opts.src,
+        &opts.raw,
+        vec![],
+        &env.fun,
+        &env.aggr,
+    ) {
         Ok(runnable) => {
             let mut idgen = OperatorIdGen::new();
             let g = tremor_pipeline::query::Query(runnable).to_pipe(&mut idgen)?;

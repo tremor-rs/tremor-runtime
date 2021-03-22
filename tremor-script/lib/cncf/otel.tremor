@@ -1,0 +1,40 @@
+### `CNCF OpenTelemetry` utility functions
+###
+###
+
+use cncf::otel::span_id;
+use cncf::otel::trace_id;
+use cncf::otel::logs;
+use cncf::otel::trace;
+use cncf::otel::metrics;
+
+## Generate a random span id using the hex string representation
+##
+## Returns a `string`
+intrinsic fn gen_span_id_string() as cncf::otel::gen_span_id_string;
+
+## Generate a random span id using the binary representation
+##
+## Returns a `binary`
+intrinsic fn gen_span_id_bytes() as cncf::otel::gen_span_id_bytes;
+
+## Generate a random span id using the int array representation
+##
+## Returns a `array` of `int`
+intrinsic fn gen_span_id_array() as cncf::otel::gen_span_id_array;
+
+## Generate a random trace id using the hex string representation
+##
+## Returns a `string`
+intrinsic fn gen_trace_id_string() as cncf::otel::gen_trace_id_string;
+
+## Generate a random trace id using the binary representation
+##
+## Returns a `binary`
+intrinsic fn gen_trace_id_bytes() as cncf::otel::gen_trace_id_bytes;
+
+## Generate a random trace id using the binary representation
+##
+## Returns a `array` of `int`
+intrinsic fn gen_trace_id_array() as cncf::otel::gen_trace_id_array;
+

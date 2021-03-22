@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::env;
 use crate::errors::{Error, Result};
 use crate::report;
 use crate::test;
@@ -28,10 +29,8 @@ use tremor_script::ast::{Expr, ImutExpr, ImutExprInt, Invoke, List, NodeMetas, R
 use tremor_script::ctx::{EventContext, EventOriginUri};
 use tremor_script::highlighter::{Dumb as DumbHighlighter, Highlighter, Term as TermHighlighter};
 use tremor_script::interpreter::{AggrType, Env, ExecOpts, LocalStack};
-use tremor_script::path::load as load_module_path;
 use tremor_script::prelude::*;
 use tremor_script::Value;
-use tremor_script::{registry, Registry};
 const EXEC_OPTS: ExecOpts = ExecOpts {
     result_needed: true,
     aggr: AggrType::Tick,
@@ -276,12 +275,10 @@ pub(crate) fn run_suite(
     let mut input = crate::open_file(&path, None)?;
     input.read_to_string(&mut raw)?;
 
-    let module_path = load_module_path();
-    let reg: Registry = registry::registry();
-
+    let env = env::setup()?;
     let report_start = nanotime();
     let mut stat_x = stats::Stats::new();
-    match tremor_script::Script::parse(&module_path, &script, raw.clone(), &reg) {
+    match tremor_script::Script::parse(&env.module_path, &script, raw.clone(), &env.fun) {
         Ok(runnable) => {
             let local = LocalStack::default();
 

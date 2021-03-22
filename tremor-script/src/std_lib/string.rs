@@ -20,12 +20,12 @@ use crate::{tremor_const_fn, tremor_fn_};
 
 macro_rules! map_function {
     ($name:ident, $fun:ident) => {
-        tremor_const_fn! (string::$name(_context, _input: String) {
+        tremor_const_fn! (string|$name(_context, _input: String) {
             Ok(Value::from(_input.$fun()))
         })
     };
     ($fun:ident) => {
-        tremor_const_fn! (string::$fun(_context, _input: String) {
+        tremor_const_fn! (string|$fun(_context, _input: String) {
             Ok(Value::from(_input.$fun()))
         })
     }
@@ -114,38 +114,38 @@ impl TremorFn for StringFormat {
 pub fn load(registry: &mut Registry) {
     registry
         .insert(
-            tremor_const_fn! (string::replace(_context, _input: String, _from: String, _to: String) {
+            tremor_const_fn! (string|replace(_context, _input: String, _from: String, _to: String) {
                 let from: &str = _from;
                 let to: &str = _to;
                 Ok(Value::from(_input.replace(from, to)))
             }),
         )
         .insert(map_function!(is_empty))
-        .insert(tremor_const_fn! (string::len(_context, _input: String) {
+        .insert(tremor_const_fn! (string|len(_context, _input: String) {
             Ok(Value::from(_input.chars().count() as i64))
         }))
-        .insert(tremor_const_fn! (string::bytes(_context, _input: String) {
+        .insert(tremor_const_fn! (string|bytes(_context, _input: String) {
             Ok(Value::from(_input.len() as i64))
         }))
-        .insert(tremor_const_fn! (string::trim(_context, _input: String) {
+        .insert(tremor_const_fn! (string|trim(_context, _input: String) {
             Ok(Value::from(_input.trim().to_string()))
         }))
-        .insert(tremor_const_fn! (string::trim_start(_context, _input: String) {
+        .insert(tremor_const_fn! (string|trim_start(_context, _input: String) {
             Ok(Value::from(_input.trim_start().to_string()))
         }))
-        .insert(tremor_const_fn! (string::trim_end(_context, _input: String) {
+        .insert(tremor_const_fn! (string|trim_end(_context, _input: String) {
             Ok(Value::from(_input.trim_end().to_string()))
         }))
         .insert(map_function!(lowercase, to_lowercase))
         .insert(map_function!(uppercase, to_uppercase))
-        .insert(tremor_const_fn!(string::capitalize(_context, _input: String) {
+        .insert(tremor_const_fn!(string|capitalize(_context, _input: String) {
             let mut c = _input.chars();
             Ok(match c.next() {
                 None => Value::from(""),
                 Some(f) => Value::from(f.to_uppercase().collect::<String>() + c.as_str()),
             })
         }))
-        .insert(tremor_const_fn!(string::substr(_context, _input, _start, _end) {
+        .insert(tremor_const_fn!(string|substr(_context, _input, _start, _end) {
                 let (input, start, end) = if let (Some(input), Some(start), Some(end)) =  (_input.as_str(), _start.as_usize(), _end.as_usize()) {
                     (input, start, end)
                 } else {
@@ -161,20 +161,20 @@ pub fn load(registry: &mut Registry) {
                 Ok(Value::from(input.get(start..end).unwrap_or(input).to_string()))
             }),
         )
-        .insert(tremor_const_fn! (string::split(_context, _input: String, _sep: String) {
+        .insert(tremor_const_fn! (string|split(_context, _input: String, _sep: String) {
                 let sep: &str = _sep;
                 Ok(Value::from(_input.split(sep).map(|v| Value::from(v.to_string())).collect::<Vec<_>>()))
             }),
         )
-        .insert(tremor_const_fn! (string::from_utf8_lossy(_context, _bytes: Bytes) {
+        .insert(tremor_const_fn! (string|from_utf8_lossy(_context, _bytes: Bytes) {
                 Ok(Value::from(String::from_utf8_lossy(_bytes).to_string()))
             }),
-        ).insert(tremor_const_fn! (string::contains(_context, _input: String, _contains: String) {
+        ).insert(tremor_const_fn! (string|contains(_context, _input: String, _contains: String) {
                 use std::borrow::Borrow;
                 let s: &str = _contains.borrow();
                 Ok(Value::from(_input.contains(s)))
             }),
-        ).insert(tremor_const_fn! (string::into_binary(_context, _input: String) {
+        ).insert(tremor_const_fn! (string|into_binary(_context, _input: String) {
                 Ok(Value::Bytes(_input.as_bytes().to_vec().into()))
             }),
         ).insert(TremorFnWrapper::new(

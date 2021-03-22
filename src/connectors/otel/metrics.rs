@@ -14,8 +14,8 @@
 
 use super::super::pb;
 use super::common;
+use super::id;
 use super::resource;
-use super::trace;
 use crate::errors::Result;
 use simd_json::{json, StaticNode};
 use tremor_otelapis::opentelemetry::proto::{
@@ -39,8 +39,8 @@ pub(crate) fn int_exemplars_to_json<'event>(data: Vec<IntExemplar>) -> Value<'ev
     for exemplar in data {
         json.push(
             json!({
-                "span_id": exemplar.span_id,
-                "trace_id": exemplar.trace_id,
+                "span_id": id::hex_span_id_to_json(&exemplar.span_id),
+                "trace_id": id::hex_trace_id_to_json(&exemplar.trace_id),
                 "filtered_labels": common::string_key_value_to_json(exemplar.filtered_labels),
                 "time_unix_nano": exemplar.time_unix_nano,
                 "value": exemplar.value
@@ -56,8 +56,8 @@ pub(crate) fn int_exemplars_to_pb(json: Option<&Value<'_>>) -> Result<Vec<IntExe
         let mut pb = Vec::new();
         for data in json {
             let filtered_labels = common::string_key_value_to_pb(data.get("filtered_labels"))?;
-            let span_id = trace::span_id_to_pb(data.get("span_id"))?;
-            let trace_id = trace::trace_id_to_pb(data.get("trace_id"))?;
+            let span_id = id::hex_span_id_to_pb(data.get("span_id"))?;
+            let trace_id = id::hex_trace_id_to_pb(data.get("trace_id"))?;
             let time_unix_nano = pb::maybe_int_to_pbu64(data.get("time_unix_nano"))?;
             let value = pb::maybe_int_to_pbi64(data.get("value"))?;
             pb.push(IntExemplar {
@@ -80,8 +80,8 @@ pub(crate) fn double_exemplars_to_json<'event>(data: Vec<DoubleExemplar>) -> Val
     for exemplar in data {
         json.push(
             json!({
-                "span_id": exemplar.span_id,
-                "trace_id": exemplar.trace_id,
+                "span_id": id::hex_span_id_to_json(&exemplar.span_id),
+                "trace_id": id::hex_trace_id_to_json(&exemplar.trace_id),
                 "filtered_labels": common::string_key_value_to_json(exemplar.filtered_labels),
                 "time_unix_nano": exemplar.time_unix_nano,
                 "value": exemplar.value
@@ -97,8 +97,8 @@ pub(crate) fn double_exemplars_to_pb(json: Option<&Value<'_>>) -> Result<Vec<Dou
         let mut pb = Vec::new();
         for data in json {
             let filtered_labels = common::string_key_value_to_pb(data.get("filtered_labels"))?;
-            let span_id = trace::span_id_to_pb(data.get("span_id"))?;
-            let trace_id = trace::trace_id_to_pb(data.get("trace_id"))?;
+            let span_id = id::hex_span_id_to_pb(data.get("span_id"))?;
+            let trace_id = id::hex_trace_id_to_pb(data.get("trace_id"))?;
             let time_unix_nano = pb::maybe_int_to_pbu64(data.get("time_unix_nano"))?;
             let value = pb::maybe_double_to_pb(data.get("value"))?;
             pb.push(DoubleExemplar {
@@ -615,9 +615,14 @@ mod tests {
 
     #[test]
     fn int_exemplars() -> Result<()> {
+        let span_id_pb = id::random_span_id_bytes();
+        let span_id_json = id::test::pb_span_id_to_json(&span_id_pb);
+        let trace_id_json = id::random_trace_id_value();
+        let trace_id_pb = id::test::json_trace_id_to_pb(Some(&trace_id_json))?;
+
         let pb = vec![IntExemplar {
-            span_id: vec![],
-            trace_id: vec![],
+            span_id: span_id_pb.clone(),
+            trace_id: trace_id_pb,
             time_unix_nano: 0,
             filtered_labels: vec![],
             value: 42,
@@ -626,9 +631,9 @@ mod tests {
         let back_again = int_exemplars_to_pb(Some(&json))?;
         let expected: Value = json!([{
             "time_unix_nano": 0,
-            "span_id": [],
-            "trace_id": [],
-            "filtered_labels": [],
+            "span_id": span_id_json,
+            "trace_id": trace_id_json,
+            "filtered_labels": {},
             "value": 42
         }])
         .into();
@@ -639,9 +644,14 @@ mod tests {
 
     #[test]
     fn double_exemplars() -> Result<()> {
+        let span_id_pb = id::random_span_id_bytes();
+        let span_id_json = id::test::pb_span_id_to_json(&span_id_pb);
+        let trace_id_json = id::random_trace_id_value();
+        let trace_id_pb = id::test::json_trace_id_to_pb(Some(&trace_id_json))?;
+
         let pb = vec![DoubleExemplar {
-            span_id: vec![],
-            trace_id: vec![],
+            span_id: span_id_pb.clone(),
+            trace_id: trace_id_pb,
             time_unix_nano: 0,
             filtered_labels: vec![],
             value: 42.42,
@@ -650,9 +660,9 @@ mod tests {
         let back_again = double_exemplars_to_pb(Some(&json))?;
         let expected: Value = json!([{
             "time_unix_nano": 0,
-            "span_id": [],
-            "trace_id": [],
-            "filtered_labels": [],
+            "span_id": span_id_json,
+            "trace_id": trace_id_json,
+            "filtered_labels": {},
             "value": 42.42
         }])
         .into();
@@ -694,7 +704,7 @@ mod tests {
             "value": 42,
             "start_time_unix_nano": 0,
             "time_unix_nano": 0,
-            "labels": [],
+            "labels": {},
             "exemplars": []
         }])
         .into();
@@ -719,7 +729,7 @@ mod tests {
             "value": 42.42,
             "start_time_unix_nano": 0,
             "time_unix_nano": 0,
-            "labels": [],
+            "labels": {},
             "exemplars": []
         }])
         .into();
@@ -746,7 +756,7 @@ mod tests {
         let expected: Value = json!([{
             "start_time_unix_nano": 0,
             "time_unix_nano": 0,
-            "labels": [],
+            "labels": {},
             "exemplars": [],
             "sum": 0,
             "count": 0,
@@ -777,7 +787,7 @@ mod tests {
         let expected: Value = json!([{
             "start_time_unix_nano": 0,
             "time_unix_nano": 0,
-            "labels": [],
+            "labels": {},
             "exemplars": [],
             "sum": 0.0,
             "count": 0,
@@ -809,7 +819,7 @@ mod tests {
         let expected: Value = json!([{
             "start_time_unix_nano": 0,
             "time_unix_nano": 0,
-            "labels": [],
+            "labels": {},
             "sum": 0.0,
             "count": 0,
             "quantile_values": [ { "value": 0.1, "quantile": 0.2 }]
@@ -840,7 +850,7 @@ mod tests {
                 "data_points": [{
                     "start_time_unix_nano": 0,
                     "time_unix_nano": 0,
-                    "labels": [],
+                    "labels": {},
                     "exemplars": [],
                     "value": 42
                 }]
@@ -874,7 +884,7 @@ mod tests {
                 "data_points": [{
                     "start_time_unix_nano": 0,
                     "time_unix_nano": 0,
-                    "labels": [],
+                    "labels": {},
                     "exemplars": [],
                     "value": 43.43
                 }]
@@ -904,7 +914,7 @@ mod tests {
                 "data_points": [{
                     "start_time_unix_nano": 0,
                     "time_unix_nano": 0,
-                    "labels": [],
+                    "labels": {},
                     "exemplars": [],
                     "value": 43.43
                 }]
@@ -939,7 +949,7 @@ mod tests {
                 "data_points": [{
                     "start_time_unix_nano": 0,
                     "time_unix_nano": 0,
-                    "labels": [],
+                    "labels": {},
                     "exemplars": [],
                     "sum": 10.0,
                     "count": 5,
@@ -974,7 +984,7 @@ mod tests {
                 "data_points": [{
                     "start_time_unix_nano": 0,
                     "time_unix_nano": 0,
-                    "labels": [],
+                    "labels": {},
                     "count": 0,
                     "sum": 0.0,
                     "quantile_values": []
@@ -1010,7 +1020,7 @@ mod tests {
                 "data_points": [{
                     "start_time_unix_nano": 0,
                     "time_unix_nano": 0,
-                    "labels": [],
+                    "labels": {},
                     "exemplars": [],
                     "count": 5,
                     "sum": 10,
@@ -1047,7 +1057,7 @@ mod tests {
                 "data_points": [{
                     "start_time_unix_nano": 0,
                     "time_unix_nano": 0,
-                    "labels": [],
+                    "labels": {},
                     "exemplars": [],
                     "value": 4
                 }]
@@ -1093,7 +1103,7 @@ mod tests {
                         "data_points": [{
                             "start_time_unix_nano": 0,
                             "time_unix_nano": 0,
-                            "labels": [],
+                            "labels": {},
                             "exemplars": [],
                             "value": 42
                         }]
@@ -1144,7 +1154,7 @@ mod tests {
         let expected: Value = json!({
             "metrics": [
                 {
-                    "resource": { "attributes": [], "dropped_attributes_count": 8 },
+                    "resource": { "attributes": {}, "dropped_attributes_count": 8 },
                     "instrumentation_library_metrics": [{
                             "instrumentation_library": { "name": "name", "version": "v0.1.2" },
                             "metrics": [{
@@ -1156,7 +1166,7 @@ mod tests {
                                         "data_points": [{
                                             "start_time_unix_nano": 0,
                                             "time_unix_nano": 0,
-                                            "labels": [],
+                                            "labels": {},
                                             "exemplars": [],
                                             "value": 42
                                         }]

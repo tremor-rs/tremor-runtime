@@ -12,24 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::registry::Registry;
-use crate::tremor_const_fn;
+use crate::sink::prelude::*;
 
-pub fn load(registry: &mut Registry) {
-    registry.insert(tremor_const_fn! (float|parse(_context, _input: String) {
-        _input.parse::<f64>().map_err(to_runtime_error).map(Value::from)
-    }));
+pub(crate) fn ack(event: &mut Event) -> sink::Reply {
+    sink::Reply::Insight(event.insight_ack())
 }
 
-#[cfg(test)]
-mod test {
-    use crate::registry::fun;
-    use crate::Value;
+pub(crate) fn fail(event: &mut Event) -> sink::Reply {
+    sink::Reply::Insight(event.insight_fail())
+}
 
-    #[test]
-    fn parse() {
-        let f = fun("float", "parse");
-        let v = Value::from("42.314");
-        assert_val!(f(&[&v]), 42.314);
-    }
+pub(crate) fn close(event: &mut Event) -> sink::Reply {
+    sink::Reply::Insight(event.insight_trigger())
+}
+
+pub(crate) fn open(event: &mut Event) -> sink::Reply {
+    sink::Reply::Insight(event.insight_restore())
 }

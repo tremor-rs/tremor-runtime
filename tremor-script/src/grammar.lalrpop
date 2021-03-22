@@ -461,19 +461,19 @@ ComplexExprImut: ImutExprRaw<'input> = {
 }
 
 Intrinsic: AnyFnRaw<'input> = {
-    <doc:DocComment> <start:@L> "intrinsic" "fn" <name:Ident> "("  ")" "as" <imod:Ident> "::" <ifn:Ident>  <end:@L> => {
+    <doc:DocComment> <start:@L> "intrinsic" "fn" <name:Ident> "("  ")" "as" <imod:ModularTarget>  <end:@L> => {
         let invoce_args = vec![];
         let invoke = InvokeRaw{
             start,
             end,
-            module: vec!["core".into(), imod.id.to_string()],
-            fun: ifn.id.to_string(),
+            module: vec!["core".into(), imod.0.iter().map(|i|i.id.to_string()).collect::<Vec<String>>().join("::")],
+            fun: imod.1.id.to_string(),
             args: invoce_args
         };
         let body = vec![ExprRaw::Imut(ImutExprRaw::Invoke(invoke))];
         AnyFnRaw::Normal(FnDeclRaw{name, args: vec![], body, start, end, doc, open: false, inline: true})
     },
-    <doc:DocComment> <start:@L> "intrinsic" "fn" <name:Ident> "(" <args:FnArgs> ")" "as" <imod:Ident> "::" <ifn:Ident>  <end:@L> => {
+    <doc:DocComment> <start:@L> "intrinsic" "fn" <name:Ident> "(" <args:FnArgs> ")" "as" <imod:ModularTarget><end:@L> => {
         let invoce_args = args.iter().map(|a|
             ImutExprRaw::Path(
                 PathRaw::Local(
@@ -482,14 +482,14 @@ Intrinsic: AnyFnRaw<'input> = {
         let invoke = InvokeRaw{
             start,
             end,
-            module: vec!["core".into(), imod.id.to_string()],
-            fun: ifn.id.to_string(),
+            module: vec!["core".into(), imod.0.iter().map(|i|i.id.to_string()).collect::<Vec<String>>().join("::")],
+            fun: imod.1.id.to_string(),
             args: invoce_args
         };
         let body = vec![ExprRaw::Imut(ImutExprRaw::Invoke(invoke))];
         AnyFnRaw::Normal(FnDeclRaw{name, args, body, start, end, doc, open: false, inline: true})
     },
-    <doc:DocComment> <start:@L> "intrinsic" "fn" <name:Ident> "(" <args:FnArgs> "," "." "." "." ")" "as" <imod:Ident> "::" <ifn:Ident>  <end:@L> => {
+    <doc:DocComment> <start:@L> "intrinsic" "fn" <name:Ident> "(" <args:FnArgs> "," "." "." "." ")" "as" <imod:ModularTarget> <end:@L> => {
         let invoce_args = args.iter().map(|a|
             ImutExprRaw::Path(
                 PathRaw::Local(
@@ -498,21 +498,21 @@ Intrinsic: AnyFnRaw<'input> = {
         let invoke = InvokeRaw{
             start,
             end,
-            module: vec!["core".into(), imod.id.to_string()],
-            fun: ifn.id.to_string(),
+            module: vec!["core".into(), imod.0.iter().map(|i|i.id.to_string()).collect::<Vec<String>>().join("::")],
+            fun: imod.1.id.to_string(),
             args: invoce_args
         };
         let body = vec![ExprRaw::Imut(ImutExprRaw::Invoke(invoke))];
         AnyFnRaw::Normal(FnDeclRaw{name, args, body, start, end, doc, open: true, inline: true})
     },
-    <doc:DocComment> <start:@L> "intrinsic" "fn" <name:Ident> "(" "." "." "." ")" "as" <imod:Ident> "::" <ifn:Ident>  <end:@L> => {
+    <doc:DocComment> <start:@L> "intrinsic" "fn" <name:Ident> "(" "." "." "." ")" "as" <imod:ModularTarget> <end:@L> => {
         let args = vec![];
         let invoce_args = vec![];
         let invoke = InvokeRaw{
             start,
             end,
-            module: vec!["core".into(), imod.id.to_string()],
-            fun: ifn.id.to_string(),
+            module: vec!["core".into(), imod.0.iter().map(|i|i.id.to_string()).collect::<Vec<String>>().join("::")],
+            fun: imod.1.id.to_string(),
             args: invoce_args
         };
         let body = vec![ExprRaw::Imut(ImutExprRaw::Invoke(invoke))];

@@ -1,0 +1,122 @@
+### > The Status type defines a logical error model that is suitable for different
+### > programming environments, including REST APIs and RPC APIs.
+### >
+### > IMPORTANT: Backward compatibility notes:
+### >
+### > To ensure any pair of senders and receivers continues to correctly signal and
+### > interpret erroneous situations, the senders and receivers MUST follow these rules:
+### >
+### > 1. Old senders and receivers that are not aware of `code` field will continue using
+### > the `deprecated_code` field to signal and interpret erroneous situation.
+### >
+### > 2. New senders, which are aware of the `code` field MUST set both the
+### > `deprecated_code` and `code` fields according to the following rules:
+### >
+### >   if code==STATUS_CODE_UNSET then `deprecated_code` MUST be
+### >   set to DEPRECATED_STATUS_CODE_OK.
+### >
+### >   if code==STATUS_CODE_OK then `deprecated_code` MUST be
+### >   set to DEPRECATED_STATUS_CODE_OK.
+### >
+### >   if code==STATUS_CODE_ERROR then `deprecated_code` MUST be
+### >   set to DEPRECATED_STATUS_CODE_UNKNOWN_ERROR.
+### >
+### > These rules allow old receivers to correctly interpret data received from new senders.
+### >
+### > 3. New receivers MUST look at both the `code` and `deprecated_code` fields in order
+### > to interpret the overall status:
+### >
+### >   If code==STATUS_CODE_UNSET then the value of `deprecated_code` is the
+### >   carrier of the overall status according to these rules:
+### >
+### >     if deprecated_code==DEPRECATED_STATUS_CODE_OK then the receiver MUST interpret
+### >     the overall status to be STATUS_CODE_UNSET.
+### >
+### >     if deprecated_code!=DEPRECATED_STATUS_CODE_OK then the receiver MUST interpret
+### >     the overall status to be STATUS_CODE_ERROR.
+### >
+### >   If code!=STATUS_CODE_UNSET then the value of `deprecated_code` MUST be
+### >   ignored, the `code` field is the sole carrier of the status.
+### >
+### > These rules allow new receivers to correctly interpret data received from old senders.
+###
+
+mod code with
+  ### Represents the status code
+  ### > For the semantics of status codes see
+  ### >  https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/api.md#set-status
+
+  ## The default status.
+  const unset = 0;
+
+  ## The span has been validated to have been completed/processed successfully.
+  const ok = 1;
+
+  ## The span contains an error
+  const error = 2;
+end;
+
+mod deprecated with
+  ### Represents deprecated status codes
+
+  ## Deprecated status - Ok
+  const ok = 0;
+
+  ## Deprecated status - Cancelled
+  const cancelled = 1;
+
+  ## Deprecated status - Unknown error
+  const unknown_error = 2;
+
+  ## Deprecated status - Invalid argument
+  const invalid_argument = 3;
+
+  ## Deprecated status - Deadline exceeded
+  const deadline_exceeded = 4;
+
+  ## Deprecated status - Not found
+  const not_found = 5;
+
+  ## Deprecated status - Already exists
+  const already_exists = 6;
+
+  ## Deprecated status - Permission denied
+  const permission_denied = 7;
+
+  ## Deprecated status - Resource exhausted
+  const resource_exhausted = 8;
+
+  ## Deprecated status - Failed precodition
+  const failed_precondition = 9;
+
+  ## Deprecated status - Aborted
+  const aborted = 10;
+
+  ## Deprecated status - Out of range
+  const out_of_range = 11;
+
+  ## Deprecated status - Unimplemented
+  const unimplemented = 12;
+
+  ## Deprecated status - Internal error
+  const internal_error = 13;
+
+  ## Deprecated status - Unavailable
+  const unvailable = 14;
+
+  ## Deprecated status - Data loss
+  const data_loss = 15;
+
+  ## Deprecated status - Unauthenticated
+  const unauthenticated = 16;
+end;
+
+## Returns a success status code
+fn ok() with
+  { "code": code::ok, "deprecated_code": deprecated::ok, "message": "Ok" }
+end;
+
+## Returns an error status code, with user defined error messsage
+fn error(message) with
+  { "code": code::error, "deprecated_code": deprecated::unknown_error, "message": message }
+end;

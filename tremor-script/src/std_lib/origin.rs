@@ -21,10 +21,10 @@ use std::string::ToString;
 
 pub fn load(registry: &mut Registry) {
     registry
-        .insert(tremor_fn! (origin::as_uri_string(context) {
+        .insert(tremor_fn! (origin|as_uri_string(context) {
             Ok(context.origin_uri().map(ToString::to_string).map(Value::from).unwrap_or_default())
         }))
-        .insert(tremor_fn! (origin::as_uri_record(context) {
+        .insert(tremor_fn! (origin|as_uri_record(context) {
             if let Some(uri) = context.origin_uri() {
                 Ok(Value::from(
                     hashmap! {
@@ -44,16 +44,16 @@ pub fn load(registry: &mut Registry) {
                 Ok(Value::null())
             }
         }))
-        .insert(tremor_fn! (origin::scheme(context) {
+        .insert(tremor_fn! (origin|scheme(context) {
             Ok(context.origin_uri().map(|uri| uri.scheme().to_string()).map(Value::from).unwrap_or_default())
         }))
-        .insert(tremor_fn! (origin::host(context) {
+        .insert(tremor_fn! (origin|host(context) {
             Ok(context.origin_uri().map(|uri| uri.host().to_string()).map(Value::from).unwrap_or_default())
         }))
-        .insert(tremor_fn! (origin::port(context) {
+        .insert(tremor_fn! (origin|port(context) {
             Ok(context.origin_uri().and_then(EventOriginUri::port).map(Value::from).unwrap_or_default())
         }))
-        .insert(tremor_fn! (origin::path(context) {
+        .insert(tremor_fn! (origin|path(context) {
             Ok(context.origin_uri().map_or_else(
                 Value::null,
                 |uri| {

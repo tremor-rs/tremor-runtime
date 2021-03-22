@@ -15,6 +15,7 @@
 ### * [test](std/test.md) - test related functions
 ### * [type](std/type.md) - functions dealing with strings
 ### * [url](std/url.md) - url decoding/encoding functions
+### * [otel](std/otel.md) - CNCF OpenTelemetry functions
 
 use std::array;
 use std::base64;
@@ -31,3 +32,4 @@ use std::string;
 use std::test;
 use std::type;
 use std::url;
+use std::otel;

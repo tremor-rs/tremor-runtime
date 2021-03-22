@@ -1,0 +1,2 @@
+use cncf::otel::logs::severity;
+use cncf::otel::logs::traceflags;

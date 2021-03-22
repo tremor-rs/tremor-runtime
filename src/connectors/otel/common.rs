@@ -128,24 +128,20 @@ pub(crate) fn maybe_any_value_to_json<'event>(
 
 #[allow(dead_code)] // Used in tests
 pub(crate) fn string_key_value_to_json<'event>(pb: Vec<StringKeyValue>) -> Value<'event> {
-    let mut json = Vec::new();
+    let mut json = HashMap::new();
     for kv in pb {
-        let v = json!({
-            "key": kv.key,
-            "value": kv.value
-        });
-        json.push(v);
+        json.insert(kv.key.into(), kv.value.into());
     }
 
-    json!(json).into()
+    Value::Object(Box::new(json))
 }
 
 pub(crate) fn string_key_value_to_pb(data: Option<&Value<'_>>) -> Result<Vec<StringKeyValue>> {
     let mut pb = Vec::new();
-    if let Some(Value::Array(data)) = data {
-        for item in data {
-            let key = pb::maybe_string_to_pb(item.get("key"))?;
-            let value = pb::maybe_string_to_pb(item.get("value"))?;
+    if let Some(Value::Object(data)) = data {
+        for (key, value) in data.iter() {
+            let key: String = key.to_string();
+            let value: String = pb::maybe_string_to_pb(Some(value))?;
             pb.push(StringKeyValue { key, value });
         }
         return Ok(pb);
@@ -155,38 +151,29 @@ pub(crate) fn string_key_value_to_pb(data: Option<&Value<'_>>) -> Result<Vec<Str
 }
 
 pub(crate) fn key_value_list_to_json<'event>(pb: Vec<KeyValue>) -> Result<Value<'event>> {
-    let mut json = Vec::new();
+    let mut json: HashMap<beef::Cow<str>, Value> = HashMap::new();
     for kv in pb {
-        let v: Value = json!({
-            "key": kv.key,
-            "value": maybe_any_value_to_json(kv.value)?
-        })
-        .into();
-        json.push(v);
+        if let Some(v) = maybe_any_value_to_json(kv.value)? {
+            json.insert(kv.key.into(), v);
+        } else {
+            json.insert(kv.key.into(), Value::Static(StaticNode::Null));
+        }
     }
 
-    Ok(Value::Array(json))
+    Ok(Value::Object(Box::new(json)))
 }
 
 pub(crate) fn maybe_key_value_list_to_pb(data: Option<&Value<'_>>) -> Result<Vec<KeyValue>> {
     let mut pb: Vec<KeyValue> = Vec::new();
-    if let Some(Value::Array(data)) = data {
-        for data in data {
-            let key = if let Some(key) = data.get("key") {
-                key.to_string()
-            } else {
-                return Err("Expected valid otel pb KeyValue value".into());
-            };
-            let value = if let Some(value) = data.get("value") {
-                Some(maybe_any_value_to_pb(Some(value))?)
-            } else {
-                return Err("Expected valid otel pb KeyValue value".into());
-            };
+    if let Some(Value::Object(data)) = data {
+        for (key, value) in data.iter() {
+            let key = key.to_string();
+            let value = Some(maybe_any_value_to_pb(Some(&value))?);
             pb.push(KeyValue { key, value })
         }
         return Ok(pb);
     }
-    Err("Expected a json array, found otherwise - cannot map to pb".into())
+    Err("Expected a json object, found otherwise - cannot map to pb".into())
 }
 
 pub(crate) fn maybe_instrumentation_library_to_json<'event>(
@@ -408,7 +395,7 @@ mod tests {
         }];
         let json = key_value_list_to_json(pb.clone())?;
         let back_again = maybe_key_value_list_to_pb(Some(&json))?;
-        let expected: Value = json!([{"key": "snot", "value": "snot"}]).into();
+        let expected: Value = json!({"snot": "snot"}).into();
         assert_eq!(expected, json);
         assert_eq!(pb, back_again);
         Ok(())
@@ -422,7 +409,7 @@ mod tests {
         }];
         let json = string_key_value_to_json(pb.clone());
         let back_again = string_key_value_to_pb(Some(&json))?;
-        let expected: Value = json!([{"key": "snot", "value": "badger"}]).into();
+        let expected: Value = json!({"snot": "badger"}).into();
         assert_eq!(expected, json);
         assert_eq!(pb, back_again);
         Ok(())

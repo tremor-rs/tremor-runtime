@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::connectors::qos;
 use crate::errors::Result;
 use crate::sink::prelude::*;
 use simd_json_derive::Serialize;
@@ -41,9 +42,10 @@ impl Sink for Cb {
     ) -> ResultVec {
         let mut res = Vec::with_capacity(event.len());
         for (value, meta) in event.value_meta_iter() {
+            //            let event = event.clone();
             debug!(
                 "[Sink::CB] {} {}",
-                event.id.event_id(),
+                &event.id.event_id(),
                 value.json_string()?
             );
             if let Some(cb) = meta.get("cb").or_else(|| value.get("cb")) {
@@ -57,32 +59,25 @@ impl Sink for Cb {
                 } else {
                     vec![]
                 };
+
+                // Acknowledgement tracking
+                let mut insight = event.clone();
                 if cb_cmds.contains(&"ack".to_string()) {
-                    let mut ack = Event::cb_ack(event.ingest_ns, event.id.clone());
-                    ack.origin_uri = event.origin_uri.clone();
-                    ack.op_meta = event.op_meta.clone();
-                    res.push(sink::Reply::Insight(ack));
+                    res.push(qos::ack(&mut insight));
                 } else if cb_cmds.contains(&"fail".to_string()) {
-                    let mut fail = Event::cb_fail(event.ingest_ns, event.id.clone());
-                    fail.origin_uri = event.origin_uri.clone();
-                    fail.op_meta = event.op_meta.clone();
-                    res.push(sink::Reply::Insight(fail));
+                    res.push(qos::fail(&mut insight));
                 }
 
+                // Circuit breaker tracking
+                let mut insight = event.clone();
                 if cb_cmds.contains(&"close".to_string())
                     || cb_cmds.contains(&"trigger".to_string())
                 {
-                    let mut close = Event::cb_trigger(event.ingest_ns);
-                    close.origin_uri = event.origin_uri.clone();
-                    close.op_meta = event.op_meta.clone();
-                    res.push(sink::Reply::Insight(close));
+                    res.push(qos::close(&mut insight));
                 } else if cb_cmds.contains(&"open".to_string())
                     || cb_cmds.contains(&"restore".to_string())
                 {
-                    let mut open = Event::cb_restore(event.ingest_ns);
-                    open.origin_uri = event.origin_uri.clone();
-                    open.op_meta = event.op_meta.clone();
-                    res.push(sink::Reply::Insight(open));
+                    res.push(qos::open(&mut insight));
                 }
             }
         }
@@ -119,6 +114,8 @@ impl Sink for Cb {
     fn default_codec(&self) -> &str {
         "json"
     }
+
+    async fn terminate(&mut self) {}
 }
 
 #[cfg(test)]

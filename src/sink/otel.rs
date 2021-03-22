@@ -82,14 +82,14 @@ fn json_otel_logs_to_pb(json: &Value<'_>) -> Result<ExportLogsServiceRequest> {
 
 fn json_otel_trace_to_pb(json: &Value<'_>) -> Result<ExportTraceServiceRequest> {
     let pb = ExportTraceServiceRequest {
-        resource_spans: trace::resource_spans_to_pb(json.get("trace"))?,
+        resource_spans: trace::resource_spans_to_pb(Some(json))?,
     };
     Ok(pb)
 }
 
 fn json_otel_metrics_to_pb(json: &Value<'_>) -> Result<ExportMetricsServiceRequest> {
     let pb = ExportMetricsServiceRequest {
-        resource_metrics: metrics::resource_metrics_to_pb(json.get("metrics"))?,
+        resource_metrics: metrics::resource_metrics_to_pb(Some(json))?,
     };
     Ok(pb)
 }
@@ -122,18 +122,16 @@ impl Sink for OpenTelemetry {
                             let request = json_otel_logs_to_pb(value)?;
                             match remote.logs_client.export(request).await {
                                 Ok(_response) => {}
-                                Err(_e) => {
-                                    // TODO enhance error handling
-                                    error!("Failed to dispatch otel/gRPC log message");
+                                Err(e) => {
+                                    error!("Failed to dispatch otel/gRPC log message, {}", e);
                                 }
                             };
                         } else if o.contains_key("trace") {
                             let request = json_otel_trace_to_pb(value)?;
                             match remote.trace_client.export(request).await {
                                 Ok(_response) => {}
-                                Err(_e) => {
-                                    // TODO enhance error handling
-                                    error!("Failed to dispatch otel/gRPC trace message");
+                                Err(e) => {
+                                    error!("Failed to dispatch otel/gRPC trace message, {}", e);
                                 }
                             };
                         } else {

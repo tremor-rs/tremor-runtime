@@ -18,16 +18,20 @@ use crate::{tremor_const_fn, tremor_fn_};
 
 pub fn load(registry: &mut Registry) {
     registry
-        .insert(tremor_const_fn! (binary::len(_context, _input: Bytes) {
+        .insert(tremor_const_fn! (binary|len(_context, _input: Bytes) {
             Ok(Value::from(_input.len()))
         }))
         .insert(
-            tremor_const_fn! (binary::from_bytes(_context, _input: Array) {
+            tremor_const_fn! (binary|from_bytes(_context, _input: Array) {
                 _input.iter().map(|v| v.as_u8().ok_or_else(||to_runtime_error("array contains non bytes"))).collect::<FResult<Vec<u8>>>().map(beef::Cow::from).map(Value::Bytes)
             }),
         ).insert(
-            tremor_const_fn! (binary::into_bytes(_context, _input: Bytes) {
-                Ok(_input.iter().copied().map(Value::from).collect::<Value>())
+            tremor_const_fn! (binary|into_bytes(_context, input) {
+                if let Value::Bytes(input) = input {
+                    Ok(input.iter().copied().map(Value::from).collect::<Value>())
+                } else {
+                    Ok(Value::String("snot".into()))
+                }
             }),
         );
 }

@@ -18,3 +18,6 @@ intrinsic fn instance() as system::instance;
 
 ## Returns the current time in epoch nanoseconds
 intrinsic fn nanotime() as system::nanotime;
+
+## Returns the tremor version
+intrinsic fn version() as system::version;

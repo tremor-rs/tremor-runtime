@@ -13,7 +13,9 @@
 // limitations under the License.
 
 use crate::errors::Result;
+use crate::version::VERSION;
 use tremor_pipeline::FN_REGISTRY;
+use tremor_script::registry::Registry;
 use tremor_script::tremor_fn;
 
 /// Loads the function library
@@ -21,10 +23,23 @@ use tremor_script::tremor_fn;
 /// # Errors
 ///  * if we can't load the registry
 pub fn load() -> Result<()> {
-    FN_REGISTRY
-        .lock()?
-        .insert(tremor_fn!(system::instance(_context) {
-            Ok(Value::from(instance!()))
-        }));
+    let mut reg = FN_REGISTRY.lock()?;
+    install(&mut reg)
+}
+
+/// Install's common functions into a registry
+///
+/// # Errors
+///  * if we can't install extensions
+pub fn install(reg: &mut Registry) -> Result<()> {
+    crate::connectors::otel::load(reg);
+
+    reg.insert(tremor_fn!(system|instance(_context) {
+        Ok(Value::from(instance!()))
+    }))
+    .insert(tremor_fn!(system|version(_context) {
+        Ok(Value::String(VERSION.into()).into_static())
+    }));
+
     Ok(())
 }

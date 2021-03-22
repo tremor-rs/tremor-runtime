@@ -606,6 +606,14 @@ test::suite({
         "name": "is_record({})",
         "test": test::assert("is_record({})", type::is_record({}), true)
       }),
+      test::test({
+        "name": "is_binary(null)",
+        "test": test::assert("is_binary(null)", type::is_binary(null), false)
+      }),
+      test::test({
+        "name": "is_binary(<<>>)",
+        "test": test::assert("is_binary(<<>>)", type::is_binary(<<>>), true)
+      }),
     ]
   }
 });
@@ -660,9 +668,13 @@ test::suite({
         "name": "Tests the from_bytes function",
         "test": test::assert("binary::from_bytes", binary::from_bytes([115, 110, 111, 116]), << 115, 110, 111, 116 >>),
       }),
-            test::test({
+      test::test({
         "name": "Tests the into_bytes function",
         "test": test::assert("binary::into_bytes", binary::into_bytes(<< 115, 110, 111, 116 >>), [115, 110, 111, 116]),
+      }),
+      test::test({
+        "name": "Tests the into_bytes function",
+        "test": test::assert("binary::into_bytes", binary::into_bytes(<< 1:16 >>), [0, 1]),
       }),
 
     ],

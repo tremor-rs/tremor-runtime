@@ -27,7 +27,7 @@ pub(crate) fn resource_to_json<'event>(pb: Option<Resource>) -> Result<Value<'ev
         })
         .into())
     } else {
-        Ok(json!({ "attributes": [], "dropped_attributes_count": 0 }).into())
+        Ok(json!({ "attributes": {}, "dropped_attributes_count": 0 }).into())
     }
 }
 
@@ -65,7 +65,7 @@ mod tests {
         let json = resource_to_json(Some(pb.clone()))?;
         let back_again = maybe_resource_to_pb(Some(&json))?;
         let expected: Value = json!({
-            "attributes": [ { "key": "snot", "value": "badger" }],
+            "attributes": { "snot": "badger" },
             "dropped_attributes_count": 9
         })
         .into();
