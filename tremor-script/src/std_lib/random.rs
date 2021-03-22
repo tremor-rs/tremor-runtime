@@ -162,14 +162,14 @@ impl TremorFn for RandomFloat {
 
 pub fn load(registry: &mut Registry) {
     registry
-        .insert(tremor_fn! (random::bool(_context) {
+        .insert(tremor_fn! (random|bool(_context) {
             Ok(Value::from(
                 SmallRng::seed_from_u64(_context.ingest_ns())
                     .gen::<bool>()
             ))
         }))
         // TODO support specifying range of characters as a second (optional) arg
-        .insert(tremor_fn! (random::string(_context, _length) {
+        .insert(tremor_fn! (random|string(_context, _length) {
             _length.as_usize().map_or_else(
                 ||Err(FunctionError::BadType{mfa: this_mfa()}),
                 |n| {

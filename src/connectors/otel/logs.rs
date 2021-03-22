@@ -14,8 +14,8 @@
 
 use super::super::pb;
 use super::common;
+use super::id;
 use super::resource;
-use super::trace;
 use crate::errors::Result;
 use simd_json::json;
 use tremor_otelapis::opentelemetry::proto::{
@@ -25,6 +25,46 @@ use tremor_otelapis::opentelemetry::proto::{
 
 use simd_json::Value as SimdJsonValue;
 use tremor_value::Value;
+
+fn affirm_traceflags_valid(traceflags: u32) -> Result<u32> {
+    if traceflags == 128 {
+        Ok(traceflags)
+    } else {
+        Err(format!(
+            "The `traceflags` is invalid, expected: 0b10000000, actual: {}",
+            traceflags
+        )
+        .into())
+    }
+}
+
+fn affirm_severity_number_valid(severity_number: i32) -> Result<i32> {
+    if severity_number > 0 && severity_number <= 24 {
+        Ok(severity_number)
+    } else {
+        Err(format!(
+            "The `severity_number` is in the valid range 0 < {} <= 24",
+            severity_number
+        )
+        .into())
+    }
+}
+
+#[allow(clippy::unnecessary_wraps)] // NOTE until const / const fn support improves - see TODO
+fn affirm_severity_text_valid<T>(severity_text: &T) -> Result<String>
+where
+    T: ToString,
+{
+    let text = severity_text.to_string();
+    // TODO find a nice way to do this without RT regex comp
+    //
+    // if SEVERITY_TEXT_RE.is_match(&text) {
+    //     return Ok(text);
+    // } else {
+    //     Err(format!("The `severity_text` is invalid {}", text).into())
+    // }
+    Ok(text)
+}
 
 pub(crate) fn instrumentation_library_logs_to_json<'event>(
     pb: Vec<tremor_otelapis::opentelemetry::proto::logs::v1::InstrumentationLibraryLogs>,
@@ -36,11 +76,11 @@ pub(crate) fn instrumentation_library_logs_to_json<'event>(
             logs.push(json!({
                 "name": log.name,
                 "time_unix_nano": log.time_unix_nano,
-                "severity_number": log.severity_number,
-                "severity_text": log.severity_text,
-                "flags": log.flags,
-                "span_id": log.span_id,
-                "trace_id": log.trace_id,
+                "severity_number": affirm_severity_number_valid(log.severity_number)?,
+                "severity_text": affirm_severity_text_valid(&log.severity_text)?,
+                "flags": affirm_traceflags_valid(log.flags)?,
+                "span_id": id::hex_span_id_to_json(&log.span_id),
+                "trace_id": id::hex_trace_id_to_json(&log.trace_id),
                 "attributes": common::key_value_list_to_json(log.attributes)?,
                 "dropped_attributes_count": log.dropped_attributes_count,
                 "body": common::maybe_any_value_to_json(log.body)?,
@@ -68,13 +108,16 @@ pub(crate) fn maybe_instrumentation_library_logs_to_pb(
                         let name: String = pb::maybe_string_to_pb(log.get("name"))?;
                         let time_unix_nano: u64 =
                             pb::maybe_int_to_pbu64(log.get("time_unix_nano"))?;
-                        let severity_number: i32 =
-                            pb::maybe_int_to_pbi32(log.get("severity_number"))?;
-                        let severity_text: String =
-                            pb::maybe_string_to_pb(log.get("severity_text"))?;
-                        let flags = pb::maybe_int_to_pbu32(log.get("flags"))?;
-                        let span_id = trace::span_id_to_pb(log.get("span_id"))?;
-                        let trace_id = trace::trace_id_to_pb(log.get("trace_id"))?;
+                        let severity_number: i32 = affirm_severity_number_valid(
+                            pb::maybe_int_to_pbi32(log.get("severity_number"))?,
+                        )?;
+                        let severity_text: String = affirm_severity_text_valid(
+                            &pb::maybe_string_to_pb(log.get("severity_text"))?,
+                        )?;
+                        let flags =
+                            affirm_traceflags_valid(pb::maybe_int_to_pbu32(log.get("flags"))?)?;
+                        let span_id = id::hex_span_id_to_pb(log.get("span_id"))?;
+                        let trace_id = id::hex_trace_id_to_pb(log.get("trace_id"))?;
                         let dropped_attributes_count: u32 =
                             pb::maybe_int_to_pbu32(log.get("dropped_attributes_count"))?;
                         let attributes = common::maybe_key_value_list_to_pb(log.get("attributes"))?;
@@ -157,6 +200,11 @@ mod tests {
 
     #[test]
     fn instrumentation_library_logs() -> Result<()> {
+        let span_id_pb = id::random_span_id_bytes();
+        let span_id_json = id::test::pb_span_id_to_json(&span_id_pb);
+        let trace_id_json = id::random_trace_id_value();
+        let trace_id_pb = id::test::json_trace_id_to_pb(Some(&trace_id_json))?;
+
         let pb = vec![InstrumentationLibraryLogs {
             instrumentation_library: Some(InstrumentationLibrary {
                 name: "name".into(),
@@ -164,17 +212,17 @@ mod tests {
             }), // TODO For now its an error for this to be None - may need to revisit
             logs: vec![LogRecord {
                 time_unix_nano: 0,
-                severity_number: 0,
-                severity_text: "woo - not good at all".into(),
+                severity_number: 9,
+                severity_text: "INFO".into(),
                 name: "test".into(),
                 body: Some(AnyValue {
                     value: Some(any_value::Value::StringValue("snot".into())),
                 }), // TODO For now its an error for this to be None - may need to revisit
                 attributes: vec![],
                 dropped_attributes_count: 100,
-                flags: 0,
-                span_id: vec![],  // TODO enforce length
-                trace_id: vec![], // TODO enforce length
+                flags: 128,
+                span_id: span_id_pb.clone(),
+                trace_id: trace_id_pb,
             }],
         }];
         let json = instrumentation_library_logs_to_json(pb.clone())?;
@@ -182,15 +230,15 @@ mod tests {
         let expected: Value = json!([{
             "instrumentation_library": { "name": "name", "version": "v0.1.2" },
             "logs": [
-                { "severity_number": 0,
-                  "flags": 0,
-                  "span_id": [], // TODO proper span id assertions
-                  "trace_id": [], // TODO proper trace id assertions
+                { "severity_number": 9,
+                  "flags": 128,
+                  "span_id": span_id_json,
+                  "trace_id": trace_id_json,
                   "dropped_attributes_count": 100,
                   "time_unix_nano": 0,
-                  "severity_text": "woo - not good at all",
+                  "severity_text": "INFO",
                   "name": "test",
-                  "attributes": [],
+                  "attributes": {},
                   "body": "snot"
                 }
             ]
@@ -205,6 +253,11 @@ mod tests {
 
     #[test]
     fn resource_logs() -> Result<()> {
+        let span_id_pb = id::random_span_id_bytes();
+        let span_id_json = id::test::pb_span_id_to_json(&span_id_pb);
+        let trace_id_json = id::random_trace_id_value();
+        let trace_id_pb = id::test::json_trace_id_to_pb(Some(&trace_id_json))?;
+
         let pb = ExportLogsServiceRequest {
             resource_logs: vec![ResourceLogs {
                 resource: Some(Resource {
@@ -218,17 +271,17 @@ mod tests {
                     }), // TODO For now its an error for this to be None - may need to revisit
                     logs: vec![LogRecord {
                         time_unix_nano: 0,
-                        severity_number: 0,
-                        severity_text: "woo - not good at all".into(),
+                        severity_number: 9,
+                        severity_text: "INFO".into(),
                         name: "test".into(),
                         body: Some(AnyValue {
                             value: Some(any_value::Value::StringValue("snot".into())),
                         }), // TODO For now its an error for this to be None - may need to revisit
                         attributes: vec![],
                         dropped_attributes_count: 100,
-                        flags: 0,
-                        span_id: vec![],  // TODO enforce length
-                        trace_id: vec![], // TODO enforce length
+                        flags: 128,
+                        span_id: span_id_pb.clone(),
+                        trace_id: trace_id_pb,
                     }],
                 }],
             }],
@@ -238,23 +291,22 @@ mod tests {
         let expected: Value = json!({
             "logs": [
                 {
-                    "resource": { "attributes": [], "dropped_attributes_count": 8 },
+                    "resource": { "attributes": {}, "dropped_attributes_count": 8 },
                     "instrumentation_library_logs": [
                         {
                             "instrumentation_library": { "name": "name", "version": "v0.1.2" },
-                            "logs": [
-                                { "severity_number": 0,
-                                "flags": 0,
-                                "span_id": [], // TODO proper span id assertions
-                                "trace_id": [], // TODO proper trace id assertions
+                            "logs": [{
+                                "severity_number": 9,
+                                "flags": 128,
+                                "span_id": span_id_json,
+                                "trace_id": trace_id_json,
                                 "dropped_attributes_count": 100,
                                 "time_unix_nano": 0,
-                                "severity_text": "woo - not good at all",
+                                "severity_text": "INFO",
                                 "name": "test",
-                                "attributes": [],
+                                "attributes": {},
                                 "body": "snot"
-                                }
-                            ]
+                            }]
                         }
                     ]
                 }

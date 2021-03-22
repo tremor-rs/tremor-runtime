@@ -19,8 +19,10 @@ use tremor_value::Value;
 pub(crate) fn maybe_string_to_pb(data: Option<&Value<'_>>) -> Result<String> {
     if let Some(Value::String(s)) = data {
         Ok(s.to_string())
+    } else if data.is_none() {
+        Ok("".to_string())
     } else {
-        Err("Expected a string to convert from json to pb".into())
+        Err("Expected an json string to convert to pb string".into())
     }
 }
 
@@ -268,6 +270,9 @@ mod test {
     fn bad_string() {
         // NOTE no coercion, no casting
         assert!(maybe_string_to_pb(Some(&Value::Static(StaticNode::Bool(false)))).is_err());
+
+        // NOTE We allow None for string and map to pb default of "" ( empty string )
+        assert_eq!(Ok("".to_string()), maybe_string_to_pb(None));
     }
 
     #[test]
@@ -308,7 +313,6 @@ mod test {
         // As such attempting to convert a non-existent value is an
         // error by construction
         assert!(maybe_bool_to_pb(None).is_err());
-        assert!(maybe_string_to_pb(None).is_err());
         assert!(maybe_int_to_pbu64(None).is_err());
         assert!(maybe_int_to_pbi64(None).is_err());
         assert!(maybe_int_to_pbu32(None).is_err());

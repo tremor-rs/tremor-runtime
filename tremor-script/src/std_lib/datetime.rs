@@ -27,14 +27,14 @@ use chrono::{offset::Utc, DateTime, Datelike, NaiveDateTime, SubsecRound, Timeli
 
 macro_rules! time_fn {
     ($name:ident, $fn:ident) => {
-        tremor_const_fn! (datetime::$name(_context, _value) {
+        tremor_const_fn! (datetime|$name(_context, _value) {
             _value.as_u64().map($fn).map(Value::from).ok_or_else(||FunctionError::BadType{ mfa: this_mfa() })
         })
     };
 }
 macro_rules! time_fn_32 {
     ($name:ident, $fn:ident) => {
-        tremor_const_fn! (datetime::$name(_context, _value) {
+        tremor_const_fn! (datetime|$name(_context, _value) {
             _value.as_u32().map($fn).map(Value::from).ok_or_else(||FunctionError::BadType{ mfa: this_mfa() })
         })
     };
@@ -43,7 +43,7 @@ macro_rules! time_fn_32 {
 pub fn load(registry: &mut Registry) {
     registry
         .insert(
-            tremor_const_fn! (datetime::parse(_context, _input : String,  _input_fmt: String) {
+            tremor_const_fn! (datetime|parse(_context, _input : String,  _input_fmt: String) {
              let res = _parse(&_input, _input_fmt, has_tz(_input_fmt));
              match res {
                  Ok(x) => Ok(Value::from(x)),
@@ -52,7 +52,7 @@ pub fn load(registry: &mut Registry) {
 }}))
 
         .insert(time_fn!(iso8601, _iso8601))
-        .insert(tremor_const_fn!(datetime::format(_context, _datetime, _fmt) {
+        .insert(tremor_const_fn!(datetime|format(_context, _datetime, _fmt) {
             if let (Some(datetime), Some(fmt)) = (_datetime.as_u64(), _fmt.as_str()) {
                 Ok(Value::from(_format(datetime, fmt, has_tz(fmt))))
             } else {
@@ -68,14 +68,14 @@ pub fn load(registry: &mut Registry) {
         .insert(time_fn!(millisecond, _millisecond))
         .insert(time_fn!(microsecond, _microsecond))
         .insert(time_fn!(nanosecond, _nanosecond))
-        .insert(tremor_fn!(datetime::today(_context) {
+        .insert(tremor_fn!(datetime|today(_context) {
             Ok(Value::from(_today()))
         }))
         .insert(time_fn!(subsecond, _subsecond))
         .insert(time_fn!(to_nearest_millisecond, _to_nearest_millisecond))
         .insert(time_fn!(to_nearest_microsecond, _to_nearest_microsecond))
         .insert(time_fn!(to_nearest_second, _to_nearest_second))
-        .insert(tremor_const_fn!(datetime::from_human_format(_context, _value: String) {
+        .insert(tremor_const_fn!(datetime|from_human_format(_context, _value: String) {
             match _from_human_format(_value) {
                 Some(x) => Ok(Value::from(x)),
                 None => Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("The human format {} is invalid", _value)})

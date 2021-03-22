@@ -14,9 +14,10 @@
 
 use super::super::pb;
 use super::common;
+use super::id;
 use super::resource;
 use crate::errors::Result;
-use simd_json::{json, StaticNode};
+use simd_json::json;
 
 use tremor_otelapis::opentelemetry::proto::{
     collector::trace::v1::ExportTraceServiceRequest,
@@ -84,8 +85,8 @@ pub(crate) fn span_links_to_json<'event>(pb: Vec<Link>) -> Result<Value<'event>>
     for data in pb {
         json.push(
             json!({
-                "trace_id": data.trace_id,
-                "span_id": data.span_id,
+                "trace_id": id::hex_trace_id_to_json(&data.trace_id),
+                "span_id": id::hex_span_id_to_json(&data.span_id),
                 "trace_state": data.trace_state,
                 "attributes": common::key_value_list_to_json(data.attributes)?,
                 "dropped_attributes_count" : data.dropped_attributes_count
@@ -100,8 +101,8 @@ pub(crate) fn span_links_to_pb(json: Option<&Value<'_>>) -> Result<Vec<Link>> {
     let mut pb = Vec::new();
     if let Some(Value::Array(json)) = json {
         for json in json {
-            let span_id = span_id_to_pb(json.get("span_id"))?;
-            let trace_id = trace_id_to_pb(json.get("trace_id"))?;
+            let span_id = id::hex_span_id_to_pb(json.get("span_id"))?;
+            let trace_id = id::hex_trace_id_to_pb(json.get("trace_id"))?;
             let trace_state: String = pb::maybe_string_to_pb(json.get("trace_state"))?;
             let attributes = common::maybe_key_value_list_to_pb(json.get("attributes"))?;
             let dropped_attributes_count: u32 =
@@ -116,46 +117,6 @@ pub(crate) fn span_links_to_pb(json: Option<&Value<'_>>) -> Result<Vec<Link>> {
         }
     }
     Ok(pb)
-}
-
-pub(crate) fn span_id_to_pb(data: Option<&Value<'_>>) -> Result<Vec<u8>> {
-    let mut span_id = Vec::new();
-    if let Some(Value::Array(a)) = data {
-        for i in a {
-            if let Value::Static(StaticNode::I64(i)) = i {
-                #[allow(clippy::cast_possible_truncation)]
-                #[allow(clippy::cast_sign_loss)]
-                span_id.push(*i as u8) // TODO check i <= 255
-            } else if let Value::Static(StaticNode::U64(i)) = i {
-                #[allow(clippy::cast_possible_truncation)]
-                #[allow(clippy::cast_sign_loss)]
-                span_id.push(*i as u8) // TODO check i <= 255
-            }
-        }
-        // TODO check span_id.len
-        return Ok(span_id);
-    }
-    Err("Invalid json mapping of otel span id".into())
-}
-
-pub(crate) fn trace_id_to_pb(data: Option<&Value<'_>>) -> Result<Vec<u8>> {
-    let mut trace_id = Vec::new();
-    if let Some(Value::Array(a)) = data {
-        for i in a {
-            if let Value::Static(StaticNode::I64(i)) = i {
-                #[allow(clippy::cast_possible_truncation)]
-                #[allow(clippy::cast_sign_loss)]
-                trace_id.push(*i as u8) // TODO check i <= 255
-            } else if let Value::Static(StaticNode::U64(i)) = i {
-                #[allow(clippy::cast_possible_truncation)]
-                #[allow(clippy::cast_sign_loss)]
-                trace_id.push(*i as u8) // TODO check i <= 255
-            }
-        }
-        // TODO check trace_id.len
-        return Ok(trace_id);
-    }
-    Err("Invalid json mapping of otel trace id".into())
 }
 
 pub(crate) fn status_to_pb(json: Option<&Value<'_>>) -> Result<Option<Status>> {
@@ -190,9 +151,9 @@ pub(crate) fn instrumentation_library_spans_to_json<'event>(
                     "attributes": common::key_value_list_to_json(span.attributes)?,
                     "events": span_events_to_json(span.events)?,
                     "links": span_links_to_json(span.links)?,
-                    "span_id": span.span_id,
-                    "parent_span_id": span.parent_span_id,
-                    "trace_id": span.trace_id,
+                    "span_id": id::hex_span_id_to_json(&span.span_id),
+                    "parent_span_id": id::hex_span_id_to_json(&span.parent_span_id),
+                    "trace_id": id::hex_trace_id_to_json(&span.trace_id),
                     "start_time_unix_nano": span.start_time_unix_nano,
                     "end_time_unix_nano": span.end_time_unix_nano,
                     "trace_state": span.trace_state,
@@ -234,9 +195,10 @@ pub(crate) fn instrumentation_library_spans_to_pb(
                             pb::maybe_int_to_pbu64(span.get("end_time_unix_nano"))?;
                         let status = status_to_pb(span.get("status"))?;
                         let kind = pb::maybe_int_to_pbi32(span.get("kind"))?;
-                        let parent_span_id = span_id_to_pb(span.get("parent_span_id"))?;
-                        let span_id = span_id_to_pb(span.get("span_id"))?;
-                        let trace_id = trace_id_to_pb(span.get("trace_id"))?;
+                        let parent_span_id =
+                            id::hex_parent_span_id_to_pb(span.get("parent_span_id"))?;
+                        let span_id = id::hex_span_id_to_pb(span.get("span_id"))?;
+                        let trace_id = id::hex_trace_id_to_pb(span.get("trace_id"))?;
                         let trace_state: String = pb::maybe_string_to_pb(span.get("trace_state"))?;
                         let attributes =
                             common::maybe_key_value_list_to_pb(span.get("attributes"))?;
@@ -359,7 +321,7 @@ mod tests {
             {
                 "time_unix_nano": 0,
                 "name": "badger",
-                "attributes": [],
+                "attributes": {},
                 "dropped_attributes_count": 44,
             }
         ])
@@ -373,21 +335,26 @@ mod tests {
 
     #[test]
     fn span_link() -> Result<()> {
+        let span_id_pb = id::random_span_id_bytes();
+        let span_id_json = id::test::pb_span_id_to_json(&span_id_pb);
+        let trace_id_json = id::random_trace_id_value();
+        let trace_id_pb = id::test::json_trace_id_to_pb(Some(&trace_id_json))?;
+
         let pb = vec![Link {
             attributes: vec![],
             dropped_attributes_count: 42,
-            trace_id: vec![],
-            span_id: vec![],
+            span_id: span_id_pb.clone(),
+            trace_id: trace_id_pb,
             trace_state: "snot:badger".into(),
         }];
         let json = span_links_to_json(pb.clone())?;
         let back_again = span_links_to_pb(Some(&json))?;
         let expected: Value = json!([
             {
-                "trace_id": [],
-                "span_id": [],
+                "span_id": span_id_json,
+                "trace_id": trace_id_json,
                 "trace_state": "snot:badger",
-                "attributes": [],
+                "attributes": {},
                 "dropped_attributes_count": 42,
             }
         ])
@@ -400,34 +367,15 @@ mod tests {
     }
 
     #[test]
-    fn span_id() -> Result<()> {
-        let pb: Vec<u8> = vec![1, 2, 3, 4];
-        let json: Value = pb.clone().into(); // TODO consider a mapping fn
-        let back_again = span_id_to_pb(Some(&json))?;
-        let expected: Value = json!([1, 2, 3, 4]).into();
-
-        assert_eq!(expected, json);
-        assert_eq!(pb, back_again);
-
-        Ok(())
-    }
-
-    #[test]
-    fn trace_id() -> Result<()> {
-        let pb: Vec<u8> = vec![1, 2, 3, 4];
-        let json: Value = pb.clone().into(); // TODO consider a mapping fn
-        let back_again = trace_id_to_pb(Some(&json))?;
-        let expected: Value = json!([1, 2, 3, 4]).into();
-
-        assert_eq!(expected, json);
-        assert_eq!(pb, back_again);
-
-        Ok(())
-    }
-
-    #[test]
     #[allow(deprecated)]
     fn instrument_library_spans() -> Result<()> {
+        let parent_span_id_json = id::random_span_id_value();
+        let parent_span_id_pb = id::test::json_span_id_to_pb(Some(&parent_span_id_json))?;
+        let span_id_pb = id::random_span_id_bytes();
+        let span_id_json = id::test::pb_span_id_to_json(&span_id_pb);
+        let trace_id_json = id::random_trace_id_value();
+        let trace_id_pb = id::test::json_trace_id_to_pb(Some(&trace_id_json))?;
+
         let pb = vec![InstrumentationLibrarySpans {
             instrumentation_library: Some(InstrumentationLibrary {
                 name: "name".into(),
@@ -440,9 +388,9 @@ mod tests {
                 attributes: vec![],
                 dropped_attributes_count: 100,
                 trace_state: "snot:badger".into(),
-                parent_span_id: vec![], // TODO enforce span length
-                span_id: vec![],        // TODO enforce length
-                trace_id: vec![],       // TODO enforce length
+                parent_span_id: parent_span_id_pb.clone(),
+                span_id: span_id_pb.clone(),
+                trace_id: trace_id_pb,
                 kind: 0,
                 status: Some(Status {
                     code: 0,
@@ -464,11 +412,11 @@ mod tests {
                   "end_time_unix_nano": 0,
                   "name": "test",
                   "dropped_attributes_count": 100,
-                  "attributes": [],
+                  "attributes": {},
                   "trace_state": "snot:badger",
-                  "parent_span_id": [],
-                  "span_id": [],
-                  "trace_id": [],
+                  "parent_span_id": parent_span_id_json,
+                  "span_id": span_id_json,
+                  "trace_id": trace_id_json,
                   "kind": 0,
                   "status": {
                       "code": 0,
@@ -492,6 +440,13 @@ mod tests {
 
     #[test]
     fn resource_spans() -> Result<()> {
+        let parent_span_id_json = id::random_span_id_value();
+        let parent_span_id_pb = id::test::json_span_id_to_pb(Some(&parent_span_id_json))?;
+        let span_id_pb = id::random_span_id_bytes();
+        let span_id_json = id::test::pb_span_id_to_json(&span_id_pb);
+        let trace_id_json = id::random_trace_id_value();
+        let trace_id_pb = id::test::json_trace_id_to_pb(Some(&trace_id_json))?;
+
         #[allow(deprecated)]
         let pb = ExportTraceServiceRequest {
             resource_spans: vec![ResourceSpans {
@@ -511,9 +466,9 @@ mod tests {
                         attributes: vec![],
                         dropped_attributes_count: 100,
                         trace_state: "snot:badger".into(),
-                        parent_span_id: vec![], // TODO enforce span length
-                        span_id: vec![],        // TODO enforce length
-                        trace_id: vec![],       // TODO enforce length
+                        parent_span_id: parent_span_id_pb.clone(),
+                        span_id: span_id_pb.clone(),
+                        trace_id: trace_id_pb,
                         kind: 0,
                         status: Some(Status {
                             code: 0,
@@ -533,7 +488,7 @@ mod tests {
         let expected: Value = json!({
             "trace": [
                 {
-                    "resource": { "attributes": [], "dropped_attributes_count": 8 },
+                    "resource": { "attributes": {}, "dropped_attributes_count": 8 },
                     "instrumentation_library_spans": [{
                         "instrumentation_library": { "name": "name", "version": "v0.1.2" },
                         "spans": [{
@@ -541,11 +496,11 @@ mod tests {
                             "end_time_unix_nano": 0,
                             "name": "test",
                             "dropped_attributes_count": 100,
-                            "attributes": [],
+                            "attributes": {},
                             "trace_state": "snot:badger",
-                            "parent_span_id": [],
-                            "span_id": [],
-                            "trace_id": [],
+                            "parent_span_id": parent_span_id_json,
+                            "span_id": span_id_json,
+                            "trace_id": trace_id_json,
                             "kind": 0,
                             "status": {
                                 "code": 0,

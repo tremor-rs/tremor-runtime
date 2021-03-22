@@ -18,7 +18,7 @@ use percent_encoding::{percent_decode_str, utf8_percent_encode, NON_ALPHANUMERIC
 
 pub fn load(registry: &mut Registry) {
     registry
-        .insert(tremor_fn! (url::decode(ctx, s: String) {
+        .insert(tremor_fn! (url|decode(ctx, s: String) {
             let ds = percent_decode_str(&s).decode_utf8();
             if let Ok(decoded) = ds {
                 Ok(Value::from(decoded.to_string()))
@@ -26,7 +26,7 @@ pub fn load(registry: &mut Registry) {
                 Err(to_runtime_error(format!("Could not urldecode value: {}", s)))
             }
         }))
-        .insert(tremor_fn! (url::encode(ctx, s: String) {
+        .insert(tremor_fn! (url|encode(ctx, s: String) {
             Ok(Value::from(utf8_percent_encode(&s, NON_ALPHANUMERIC).to_string()))
         }));
 }

@@ -13,7 +13,62 @@
 // limitations under the License.
 
 pub(crate) mod common;
+pub(crate) mod id;
 pub(crate) mod logs;
 pub(crate) mod metrics;
 pub(crate) mod resource;
 pub(crate) mod trace;
+
+use tremor_script::tremor_fn;
+use tremor_script::Registry;
+
+/// Extend function registry with `CNCF OpenTelemetry` support
+pub fn load(registry: &mut Registry) {
+    registry
+        .insert(tremor_fn! (cncf::otel|gen_span_id_string(_context) {
+            Ok(id::random_span_id_value().into_static())
+        }))
+        .insert(tremor_fn! (cncf::otel|gen_span_id_array(_context) {
+            Ok(id::random_span_id_array().into_static())
+        }))
+        .insert(tremor_fn! (cncf::otel|gen_span_id_bytes(_context) {
+            Ok(Value::Bytes(id::random_span_id_bytes().into()).into_static())
+        }))
+        .insert(tremor_fn! (cncf::otel|gen_trace_id_string(_context) {
+            Ok(id::random_trace_id_value().into_static())
+        }))
+        .insert(tremor_fn! (cncf::otel|gen_trace_id_array(_context) {
+            Ok(id::random_trace_id_array().into_static())
+        }))
+        .insert(tremor_fn! (cncf::otel|gen_trace_id_bytes(_context) {
+            Ok(Value::Bytes(id::random_trace_id_bytes().into()).into_static())
+        }));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use test_case::test_case;
+    use tremor_script::{registry, EventContext};
+
+    #[test_case("gen_span_id_string" ; "cncf::otel::gen_span_id_string")]
+    #[test_case("gen_span_id_array" ; "cncf::otel::gen_span_id_array")]
+    #[test_case("gen_span_id_bytes" ; "cncf::otel::gen_span_id_bytes")]
+    #[test_case("gen_trace_id_string" ; "cncf::otel::gen_trace_id_string")]
+    #[test_case("gen_trace_id_array" ; "cncf::otel::gen_trace_id_array")]
+    #[test_case("gen_trace_id_bytes" ; "cncf::otel::gen_trace_id_bytes")]
+    fn test_tremor_fns(fun_name: &str) {
+        let mut reg = registry::registry();
+        load(&mut reg);
+
+        let f = reg.find("cncf::otel", fun_name);
+
+        if let Ok(f) = f {
+            let context = EventContext::default();
+            let r = f.invoke(&context, &[]);
+            assert!(r.is_ok());
+        } else {
+            assert!(false, "unknown function error for cncf::otel extension");
+        }
+    }
+}

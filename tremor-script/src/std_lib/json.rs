@@ -18,7 +18,7 @@ use tremor_value::parse_to_value;
 
 pub fn load(registry: &mut Registry) {
     registry
-        .insert(tremor_const_fn! (json::decode(_context, _input: String) {
+        .insert(tremor_const_fn! (json|decode(_context, _input: String) {
             // We need to clone here since we do not want to destroy the
             // original value
             let s: String = _input.to_string();
@@ -27,10 +27,10 @@ pub fn load(registry: &mut Registry) {
             // We need to do this since otherwise we depend on the clone of s
             parse_to_value(bytes.as_mut_slice()).map_err(to_runtime_error).map(Value::into_static)
         }))
-        .insert(tremor_const_fn! (json::encode(_context, _input) {
+        .insert(tremor_const_fn! (json|encode(_context, _input) {
             simd_json::to_string(_input).map(Value::from).map_err(to_runtime_error)
         }))
-        .insert(tremor_const_fn! (json::encode_pretty(_context, _input) {
+        .insert(tremor_const_fn! (json|encode_pretty(_context, _input) {
             simd_json::to_string_pretty(_input).map(Value::from).map_err(to_runtime_error)
         }));
 }

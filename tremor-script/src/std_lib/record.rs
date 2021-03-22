@@ -16,34 +16,36 @@ use crate::prelude::*;
 use crate::registry::Registry;
 use crate::tremor_const_fn;
 use crate::Object;
+use value_trait::ValueAccess;
+
 pub fn load(registry: &mut Registry) {
     registry
-        .insert(tremor_const_fn! (record::len(_context, _input: Object) {
+        .insert(tremor_const_fn! (record|len(_context, _input: Object) {
             Ok(Value::from(_input.len() as i64))
         }))
-        .insert(tremor_const_fn! (record::is_empty(_context, _input: Object) {
+        .insert(tremor_const_fn! (record|is_empty(_context, _input: Object) {
             Ok(Value::from(_input.is_empty()))
         }))
         .insert(
-            tremor_const_fn! (record::contains(_context, _input: Object, _contains: String) {
+            tremor_const_fn! (record|contains(_context, _input: Object, _contains: String) {
                 Ok(Value::from(_input.get(_contains).is_some()))
             }),
         )
-        .insert(tremor_const_fn! (record::keys(_context, _input: Object) {
+        .insert(tremor_const_fn! (record|keys(_context, _input: Object) {
             Ok(Value::from(_input.keys().map(|k| Value::from(k.to_string())).collect::<Vec<_>>()))
         }))
-        .insert(tremor_const_fn! (record::values(_context, _input: Object) {
+        .insert(tremor_const_fn! (record|values(_context, _input: Object) {
             Ok(Value::from(_input.values().cloned().map(Value::from).collect::<Vec<_>>()))
 
         }))
-        .insert(tremor_const_fn! (record::to_array(_context, _input: Object) {
+        .insert(tremor_const_fn! (record|to_array(_context, _input: Object) {
             Ok(Value::from(
                 _input.iter()
                     .map(|(k, v)| Value::from(vec![Value::from(k.clone()), v.clone()]))
                     .collect::<Vec<_>>(),
             ))
         }))
-        .insert(tremor_const_fn! (record::from_array(_context, _input: Array) {
+        .insert(tremor_const_fn! (record|from_array(_context, _input: Array) {
         let r: FResult<Object> = _input.iter().map(|a| match a {
             Value::Array(a) => if a.len() == 2 {
                 let mut a = a.clone(); // TODO: this is silly.
@@ -72,9 +74,9 @@ pub fn load(registry: &mut Registry) {
         }).collect();
         Ok(Value::from(r))
     }))
-        .insert(tremor_const_fn!(record::merge(_context, _left: Object, _right: Object) {
+        .insert(tremor_const_fn!(record|merge(_context, _left: Object, _right: Object) {
         Ok(Value::from(_left.iter().chain(_right.iter()).map(|(k, v)| (k.clone(), v.clone())).collect::<Object>()))
-        })).insert(tremor_const_fn!(record::rename(_context, _target: Object, _renameings: Object) {
+        })).insert(tremor_const_fn!(record|rename(_context, _target: Object, _renameings: Object) {
             Ok(Value::from(_target.iter().map(|(k, v)| if let Some(Value::String(k1)) = _renameings.get(k) {
                 (k1.clone(), v.clone())
             } else {

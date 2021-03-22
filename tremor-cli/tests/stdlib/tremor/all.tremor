@@ -19,7 +19,7 @@ test::suite({
       }),
       test::test({
         "name": "instance",
-        "test": test::assert("instance", system::instance(), "tremor-script"),
+        "test": test::assert("instance", system::instance(), "tremor"),
       }),
     ]
   }

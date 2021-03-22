@@ -1,0 +1,125 @@
+### The `severity` module defines `severity_number` values
+### and associated utility functions
+###
+
+## The severity wasn't specified
+const unspecified = 0; # Unspecified
+
+## Trace - default level
+const trace  = 1;	# TRACE
+
+## Trace - level 2
+const trace2 = 2;	# TRACE2
+
+## Trace - level 3
+const trace3 = 3;	# TRACE3
+
+## Trace - level 4
+const trace4 = 4;	# TRACE4
+
+## Debug - default level
+const debug  = 5;	# DEBUG
+
+## Debug - level 2
+const debug2 = 6;	# DEBUG2
+
+## Debug - level 3
+const debug3 = 7;	# DEBUG3
+
+## Debug - level 4
+const debug4 = 8;	# DEBUG4
+
+## Informational - default level
+const info   = 9;	# INFO
+
+## Informational - level 2
+const info2  = 10;	# INFO2
+
+## Informational - level 3
+const info3  = 11;	# INFO3
+
+## Informational - level 4
+const info4  = 12;	# INFO4
+
+## Warning - default level
+const warn   = 13;	# WARN
+
+## Warning - level 2
+const warn2  = 14;	# WARN2
+
+## Warning - level 3
+const warn3  = 15;	# WARN3
+
+## Warning - level 4
+const warn4  = 16;	# WARN4
+
+## Non-fatal ( recoverable ) Error - default level
+const error  = 17;	# ERROR
+
+## Non-fatal ( recoverable ) Error - level 2
+const error2 = 18;	# ERROR2
+
+## Non-fatal ( recoverable ) Error - level 3
+const error3 = 19;	# ERROR3
+
+## Non-fatal ( recoverable ) Error - level 4
+const error4 = 20;	# ERROR4
+
+## Fatal ( recoverable ) Error - default level
+const fatal  = 21;	# FATAL
+
+## Fatal ( recoverable ) Error - level 2
+const fatal2 = 22;	# FATAL2
+
+## Fatal ( recoverable ) Error - level 3
+const fatal3 = 23;	# FATAL3
+
+## Fatal ( recoverable ) Error - level 4
+const fatal4 = 24;  # FATAL4
+
+## Given a `severity_number` returns its normative string representation
+##
+## Returns a `string`
+fn to_string(severity_number) with
+  match severity_number of
+    case trace  => "TRACE"
+    case trace2 => "TRACE2"
+    case trace3 => "TRACE3"
+    case trace4 => "TRACE4"
+    case debug  => "DEBUG"
+    case debug2 => "DEBUG2"
+    case debug3 => "DEBUG3"
+    case debug4 => "DEBUG4"
+    case info   => "INFO"
+    case info1  => "INFO2"
+    case info2  => "INFO3"
+    case info3  => "INFO4"
+    case warn   => "WARN"
+    case warn1  => "WARN2"
+    case warn2  => "WARN3"
+    case warn3  => "WARN4"
+    case error   => "ERROR"
+    case error1  => "ERROR2"
+    case error2  => "ERROR3"
+    case error3  => "ERROR4"
+    case fatal   => "FATAL"
+    case fatal1  => "FATAL2"
+    case fatal2  => "FATAL3"
+    case fatal3  => "FATAL4"
+    default => "Unsupported severity code"
+  end
+end;
+
+## Given a `severity_number` is it indicative of a non-fatal or fatal error
+##
+## Returns a `bool`
+fn indicates_error(severity_number) with
+  severity_number >= error
+end;
+
+## Returns the default severity_number
+##
+## The default severity_number
+fn make_default() with
+  info
+end;

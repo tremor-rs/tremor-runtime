@@ -19,7 +19,7 @@ use crate::tremor_const_fn;
 // ALLOW: Until we have u64 support in clippy
 #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
 pub fn load(registry: &mut Registry) {
-    registry.insert(tremor_const_fn! (range::range(_context, a, b) {
+    registry.insert(tremor_const_fn! (range|range(_context, a, b) {
         if let (Some(a), Some(b)) = (a.as_u64(), b.as_u64()) {
             let range: Vec<Value> = (a..b).map(Value::from).collect();
             Ok(Value::from(range))

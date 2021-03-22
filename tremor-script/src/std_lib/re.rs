@@ -19,7 +19,7 @@ use regex::Regex;
 pub fn load(registry: &mut Registry) {
     registry
         .insert(
-            tremor_const_fn! (re::replace(_context, _re: String, _input: String, _to: String) {
+            tremor_const_fn! (re|replace(_context, _re: String, _input: String, _to: String) {
                 let re = Regex::new(_re).map_err(to_runtime_error)?;
                 let input: &str = _input;
                 let to: &str = _to;
@@ -27,7 +27,7 @@ pub fn load(registry: &mut Registry) {
             }),
         )
         .insert(
-            tremor_const_fn! (re::replace_all(_context, _re: String, _input: String, _to: String) {
+            tremor_const_fn! (re|replace_all(_context, _re: String, _input: String, _to: String) {
                 let re = Regex::new(_re).map_err(to_runtime_error)?;
                 let input: &str = _input;
                 let to: &str = _to;
@@ -35,14 +35,14 @@ pub fn load(registry: &mut Registry) {
             }),
         )
         .insert(
-            tremor_const_fn! (re::is_match(_context, _re: String, _input: String) {
+            tremor_const_fn! (re|is_match(_context, _re: String, _input: String) {
                 let re = Regex::new(_re).map_err(to_runtime_error)?;
                 let input: &str = _input;
                 Ok(Value::from(re.is_match(input)))
             }),
         )
         .insert(
-            tremor_const_fn! (re::split(_context, _re: String, _input: String) {
+            tremor_const_fn! (re|split(_context, _re: String, _input: String) {
                 let re = Regex::new(_re).map_err(to_runtime_error)?;
                 let input: &str = _input;
                 let res: Vec<Value> = re.split(input).map(|v| Value::from(v.to_string())).collect();

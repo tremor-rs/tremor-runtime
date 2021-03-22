@@ -17,10 +17,10 @@ use crate::{tremor_const_fn, tremor_fn_};
 
 pub fn load(registry: &mut Registry) {
     registry
-        .insert(tremor_const_fn! (base64::encode(_context, _input: Bytes) {
+        .insert(tremor_const_fn! (base64|encode(_context, _input: Bytes) {
             Ok(Value::from(base64::encode(&_input)))
         }))
-        .insert(tremor_const_fn! (base64::decode(_context, _input: String) {
+        .insert(tremor_const_fn! (base64|decode(_context, _input: String) {
             base64::decode(_input.as_bytes()).map(|v| Value::Bytes(v.into())).map_err(to_runtime_error)
         }));
 }

@@ -1,0 +1,8 @@
+### The tremor language CNCF library.
+###
+### It provides the following modules for cloud native computing:
+###
+### * [otel](cncf/otel.md) - functionality related to `CNCF OpenTelemetry`
+###
+
+use cncf::otel;

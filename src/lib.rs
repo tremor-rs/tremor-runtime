@@ -68,7 +68,8 @@ pub mod utils;
 /// Tremor runtime version tools
 pub mod version;
 
-pub(crate) mod connectors;
+/// Tremor connector extensions
+pub mod connectors;
 
 use std::{io::BufReader, path::Path};
 

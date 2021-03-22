@@ -93,13 +93,13 @@ pub fn registry() -> Registry {
     let mut registry = Registry::default();
 
     registry
-        .insert(tremor_fn!(system::hostname(_context) {
+        .insert(tremor_fn!(system|hostname(_context) {
             Ok(Value::from( get_hostname()))
         }))
-        .insert(tremor_fn! (system::ingest_ns(ctx) {
+        .insert(tremor_fn! (system|ingest_ns(ctx) {
             Ok(Value::from(ctx.ingest_ns()))
         }))
-        .insert(tremor_fn!(system::instance(_context) {
+        .insert(tremor_fn!(system|instance(_context) {
             Ok(Value::from("tremor-script"))
         }));
 
@@ -323,22 +323,41 @@ pub struct Registry {
 /// Creates a Tremor function from a given implementation
 #[macro_export]
 macro_rules! tremor_fn {
-    ($module:ident :: $name:ident($context:ident, $($arg:ident),*) $code:block) => {
+    // NOTE `type` is a rust keyword  and a tremor module - it needs special handling for macros
+    (type | $name:ident($context:ident, $($arg:ident),*) $code:block) => {
         {
             use $crate::tremor_fn_;
-            tremor_fn_!($module :: $name(false, $context, $($arg),*) $code)
+            tremor_fn_!(stringify!(type) ; $name(false, $context, $($arg),*) $code)
         }
     };
-    ($module:ident :: $name:ident($context:ident, $($arg:ident : $type:ident),*) $code:block) => {
+    (type | $name:ident($context:ident, $($arg:ident : $type:ident),*) $code:block) => {
         {
             use $crate::tremor_fn_;
-            tremor_fn_!($module :: $name(false, $context, $($arg : $type),*) $code)
+            tremor_fn_!(stringify!(type) ; $name(false, $context, $($arg : $type),*) $code)
         }
     };
-    ($module:ident :: $name:ident($context:ident) $code:block) => {
+    (type | $name:ident($context:ident) $code:block) => {
         {
             use $crate::tremor_fn_;
-            tremor_fn_!($module::$name(false, $context) $code)
+            tremor_fn_!(stringify!(type) ; $name(false, $context) $code)
+        }
+    };
+    ($module:path | $name:ident($context:ident, $($arg:ident),*) $code:block) => {
+        {
+            use $crate::tremor_fn_;
+            tremor_fn_!(stringify!($module) ; $name(false, $context, $($arg),*) $code)
+        }
+    };
+    ($module:path | $name:ident($context:ident, $($arg:ident : $type:ident),*) $code:block) => {
+        {
+            use $crate::tremor_fn_;
+            tremor_fn_!(stringify!($module) ; $name(false, $context, $($arg : $type),*) $code)
+        }
+    };
+    ($module:path | $name:ident($context:ident) $code:block) => {
+        {
+            use $crate::tremor_fn_;
+            tremor_fn_!(stringify!($module) ; $name(false, $context) $code)
         }
     };
 }
@@ -347,22 +366,41 @@ macro_rules! tremor_fn {
 /// Creates a constant Tremor function from a given implementation
 #[macro_export]
 macro_rules! tremor_const_fn {
-    ($module:ident :: $name:ident($context:ident, $($arg:ident),*) $code:block) => {
+    // NOTE `type` is a rust keyword  and a tremor module - it needs special handling for macros
+    (type | $name:ident($context:ident, $($arg:ident),*) $code:block) => {
         {
             use $crate::tremor_fn_;
-            tremor_fn_!($module :: $name(true, $context, $($arg),*) $code)
+            tremor_fn_!(stringify!(type) ; $name(true, $context, $($arg),*) $code)
         }
     };
-    ($module:ident :: $name:ident($context:ident, $($arg:ident : $type:ident),*) $code:block) => {
+    (type | $name:ident($context:ident, $($arg:ident : $type:ident),*) $code:block) => {
         {
             use $crate::tremor_fn_;
-            tremor_fn_!($module :: $name(true, $context, $($arg : $type),*) $code)
+            tremor_fn_!(stringify!(type) ; $name(true, $context, $($arg : $type),*) $code)
         }
     };
-    ($module:ident :: $name:ident($context:ident) $code:block) => {
+    (type | $name:ident($context:ident) $code:block) => {
         {
             use $crate::tremor_fn_;
-            tremor_fn_!($module::$name(true, $context) $code)
+            tremor_fn_!(stringify!(type) ; $name(true, $context) $code)
+        }
+    };
+    ($module:path | $name:ident($context:ident, $($arg:ident),*) $code:block) => {
+        {
+            use $crate::tremor_fn_;
+            tremor_fn_!(stringify!($module) ; $name(true, $context, $($arg),*) $code)
+        }
+    };
+    ($module:path | $name:ident($context:ident, $($arg:ident : $type:ident),*) $code:block) => {
+        {
+            use $crate::tremor_fn_;
+            tremor_fn_!(stringify!($module) ; $name(true, $context, $($arg : $type),*) $code)
+        }
+    };
+    ($module:path | $name:ident($context:ident) $code:block) => {
+        {
+            use $crate::tremor_fn_;
+            tremor_fn_!(stringify!($module) ; $name(true, $context) $code)
         }
     };
 }
@@ -371,7 +409,7 @@ macro_rules! tremor_const_fn {
 /// Internal tremor function creation macro - DO NOT USE
 #[macro_export]
 macro_rules! tremor_fn_ {
-    ($module:ident :: $name:ident($const:expr, $context:ident, $($arg:ident),*) $code:block) => {
+    ($module:expr ; $name:ident($const:expr, $context:ident, $($arg:ident),*) $code:block) => {
         {
             macro_rules! replace_expr {
                 ($_t:tt $sub:expr) => {
@@ -384,6 +422,7 @@ macro_rules! tremor_fn_ {
             #[allow(unused_imports)] // We might not use all of this imports
             use $crate::registry::{FResult, FunctionError, mfa, Mfa, to_runtime_error as to_runtime_error_ext};
             const ARGC: usize = {0_usize $(+ replace_expr!($arg 1_usize))*};
+            // const MOD: &'static str = $module;
             mod $name {
                 #[derive(Clone, Debug, Default)]
                 pub(crate) struct Func {}
@@ -396,7 +435,7 @@ macro_rules! tremor_fn_ {
                     args: &[&Value<'event>],
                 ) -> FResult<Value<'event>> {
                     fn this_mfa() -> Mfa {
-                        mfa(stringify!($module), stringify!($name), ARGC)
+                        mfa($module, stringify!($name), ARGC)
                     }
                     #[allow(dead_code)] // We need this as it is a macro and might not be used
                     fn to_runtime_error<E: core::fmt::Display>(error: E) -> FunctionError {
@@ -427,14 +466,14 @@ macro_rules! tremor_fn_ {
             }
 
             TremorFnWrapper::new(
-                stringify!($module).to_string(),
+                $module.to_string(),
                 stringify!($name).to_string(),
                  Box::new($name::Func{})
             )
         }
     };
 
-    ($module:ident :: $name:ident($const:expr, $context:ident, $($arg:ident : $type:ident),*) $code:block) => {
+    ($module:expr ; $name:ident($const:expr, $context:ident, $($arg:ident : $type:ident),*) $code:block) => {
         {
             macro_rules! replace_expr {
                 ($_t:tt $sub:expr) => {
@@ -447,6 +486,7 @@ macro_rules! tremor_fn_ {
             #[allow(unused_imports)] // We might not use all of this imports
             use $crate::registry::{FResult, FunctionError, mfa, Mfa, to_runtime_error as to_runtime_error_ext};
             const ARGC: usize = {0_usize $(+ replace_expr!($arg 1_usize))*};
+            // const MOD: &'static str = $module;
             mod $name {
                 #[derive(Clone, Debug, Default)]
                 pub(crate) struct Func {}
@@ -458,8 +498,8 @@ macro_rules! tremor_fn_ {
                     $context: &'c EventContext,
                     args: &[&Value<'event>],
                 ) -> FResult<Value<'event>> {
-                    fn this_mfa() -> Mfa {
-                        mfa(stringify!($module), stringify!($name), ARGC)
+                    fn this_mfa() -> MFA {
+                        mfa($module, stringify!($name), ARGC)
                     }
                     #[allow(dead_code)] // We need this as it is a macro and might not be used
                     fn to_runtime_error<E: core::fmt::Display>(error: E) -> FunctionError {
@@ -494,14 +534,14 @@ macro_rules! tremor_fn_ {
             }
 
             TremorFnWrapper::new(
-                stringify!($module).to_string(),
+                $module.to_string(),
                 stringify!($name).to_string(),
                 Box::new($name::Func{})
             )
         }
     };
 
-    ($module:ident :: $name:ident($const:expr, $context:ident) $code:block) => {
+    ($module:expr ; $name:ident($const:expr, $context:ident) $code:block) => {
         {
             use $crate::Value;
             use $crate::EventContext;
@@ -509,6 +549,7 @@ macro_rules! tremor_fn_ {
             #[allow(unused_imports)] // We might not use all of this imports
             use $crate::registry::{FResult, FunctionError, mfa, Mfa, to_runtime_error as to_runtime_error_ext};
             const ARGC: usize = 0;
+            // const MOD: &'static str = $module;
             mod $name {
                 #[derive(Clone, Debug, Default)]
                 pub(crate) struct Func {}
@@ -522,7 +563,7 @@ macro_rules! tremor_fn_ {
                 ) -> FResult<Value<'event>> {
 
                     fn this_mfa() -> Mfa {
-                        mfa(stringify!($module), stringify!($name), ARGC)
+                        mfa($module, stringify!($name), ARGC)
                     }
                     #[allow(dead_code)] // We need this as it is a macro and might not be used
                     fn to_runtime_error<E: core::fmt::Display>(error: E) -> FunctionError {
@@ -550,7 +591,7 @@ macro_rules! tremor_fn_ {
             }
 
             TremorFnWrapper::new(
-                stringify!($module).to_string(),
+                $module.to_string(),
                 stringify!($name).to_string(),
                 Box::new($name::Func{})
             )
@@ -595,9 +636,8 @@ impl Registry {
             module.insert(function.name.clone(), function);
         } else {
             let mut module = HashMap::new();
-            let module_name = function.module.clone();
-            module.insert(function.name.clone(), function);
-            self.functions.insert(module_name, module);
+            module.insert(function.name.clone(), function.clone());
+            self.functions.insert(function.module.clone(), module);
         }
         self
     }
@@ -774,7 +814,7 @@ mod tests {
 
     #[test]
     pub fn bad_arity() {
-        let f = tremor_fn! (module::name(_context, _a){
+        let f = tremor_fn! (module|name(_context, _a){
             Ok(format!("{}", _a).into())
         });
         let one = Value::from(1);
@@ -787,7 +827,7 @@ mod tests {
 
     #[test]
     pub fn bad_type() {
-        let f = tremor_fn!(module::name(_context, _a: String){
+        let f = tremor_fn!(module|name(_context, _a: String){
             Ok(format!("{}", _a).into())
         });
 
@@ -797,7 +837,7 @@ mod tests {
 
     #[test]
     pub fn add() {
-        let f = tremor_fn!(math::add(_context, _a, _b){
+        let f = tremor_fn!(math|add(_context, _a, _b){
             if let (Some(a), Some(b)) = (_a.as_i64(), _b.as_i64()) {
                 Ok(Value::from(a + b))
             } else if let (Some(a), Some(b)) = (_a.as_f64(), _b.as_f64()) {
@@ -819,7 +859,7 @@ mod tests {
 
     #[test]
     pub fn t3() {
-        let f = tremor_fn!(math::add(_context, _a, _b, _c){
+        let f = tremor_fn!(math|add(_context, _a, _b, _c){
             if let (Some(a), Some(b), Some(c)) = (_a.as_i64(), _b.as_i64(), _c.as_i64()) {
                 Ok(Value::from(a + b + c))
             } else {
@@ -984,5 +1024,35 @@ mod tests {
         let res = format(&[&v]);
 
         assert!(res.is_err());
+    }
+    #[test]
+    pub fn nested_module_path_fns() -> Result<()> {
+        let mut registry = registry();
+        registry.insert(tremor_const_fn!( foo::bar::baz | snot(_context) { Ok(Value::String("badger".into())) } ));
+        let x = registry.find("foo::bar::baz", "snot").unwrap();
+        assert_eq!("foo::bar::baz", x.module);
+        assert_eq!("snot", x.name);
+
+        Ok(())
+    }
+
+    #[test]
+    pub fn nested_module_path_fns2() -> Result<()> {
+        let mut registry = registry();
+        registry.insert(tremor_const_fn!( foo::bar::baz::beep::boop::fleek::flook::tick::tock::pop::weasel::snot | snot(_context) { Ok(Value::String("badger".into())) } ));
+        registry.insert(tremor_const_fn!( foo::bar::baz::beep::boop::fleek::flook::tick::tock::pop::weasel::snot | badger(_context) { Ok(Value::String("seal snot".into())) } ));
+        let x = registry
+            .find(
+                "foo::bar::baz::beep::boop::fleek::flook::tick::tock::pop::weasel::snot",
+                "badger",
+            )
+            .unwrap();
+        assert_eq!(
+            "foo::bar::baz::beep::boop::fleek::flook::tick::tock::pop::weasel::snot",
+            x.module
+        );
+        assert_eq!("badger", x.name);
+
+        Ok(())
     }
 }

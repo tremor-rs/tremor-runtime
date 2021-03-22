@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::env;
 use crate::errors::{Error, Result};
 use crate::util::{get_source_kind, highlight, slurp_string, SourceKind};
 use clap::ArgMatches;
@@ -24,10 +25,8 @@ use tremor_runtime::codec::Codec;
 use tremor_runtime::postprocessor::Postprocessor;
 use tremor_runtime::preprocessor::Preprocessor;
 use tremor_script::highlighter::Error as HighlighterError;
-use tremor_script::path::load as load_module_path;
 use tremor_script::prelude::*;
 use tremor_script::query::Query;
-use tremor_script::registry::Registry;
 use tremor_script::script::{AggrType, Return, Script};
 use tremor_script::{
     ctx::{EventContext, EventOriginUri},
@@ -37,7 +36,7 @@ use tremor_script::{
     highlighter::{Highlighter, Term as TermHighlighter},
     lexer::Range,
 };
-use tremor_script::{registry, LineValue, Value, ValueAndMeta};
+use tremor_script::{LineValue, Value, ValueAndMeta};
 struct Ingress {
     is_interactive: bool,
     is_pretty: bool,
@@ -237,11 +236,10 @@ fn run_tremor_source(matches: &ArgMatches, src: String) -> Result<()> {
     }
     let raw = raw?;
 
-    let reg: Registry = registry::registry();
-    let mp = load_module_path();
+    let env = env::setup()?;
 
     let mut outer = TermHighlighter::stderr();
-    match Script::parse(&mp, &src, raw.clone(), &reg) {
+    match Script::parse(&env.module_path, &src, raw.clone(), &env.fun) {
         Ok(mut script) => {
             script.format_warnings_with(&mut outer)?;
 
@@ -319,13 +317,10 @@ fn run_trickle_source(matches: &ArgMatches, src: String) -> Result<()> {
         std::process::exit(1);
     }
     let raw = raw?;
-
-    let reg: Registry = registry::registry();
-    let aggr = registry::aggr();
-    let mp = load_module_path();
+    let env = env::setup()?;
     let mut h = TermHighlighter::stderr();
 
-    let runnable = match Query::parse(&mp, &src, &raw, vec![], &reg, &aggr) {
+    let runnable = match Query::parse(&env.module_path, &src, &raw, vec![], &env.fun, &env.aggr) {
         Ok(runnable) => runnable,
         Err(e) => {
             if let Err(e) = Script::format_error_from_script(&raw, &mut h, &e) {

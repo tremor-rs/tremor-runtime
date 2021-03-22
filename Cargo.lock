@@ -5116,6 +5116,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "test-case"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "956044ef122917dde830c19dec5f76d0670329fde4104836d62ebcb14f4865f1"
+dependencies = [
+ "cfg-if 1.0.0",
+ "proc-macro2",
+ "quote 1.0.9",
+ "syn 1.0.60",
+ "version_check",
+]
+
+[[package]]
 name = "textwrap"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5945,6 +5958,7 @@ dependencies = [
  "snap",
  "surf",
  "tempfile",
+ "test-case",
  "tide",
  "tokio-postgres",
  "tonic",

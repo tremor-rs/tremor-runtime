@@ -20,7 +20,7 @@ use std::cmp::{max, min};
 
 macro_rules! math_fn {
     ($name:ident) => {
-        tremor_const_fn! (math::$name(_context, _input) {
+        tremor_const_fn! (math|$name(_context, _input) {
             if let Some(v) = _input.as_u64() {
                 Ok(Value::from(v))
             } else if let Some(v) = _input.as_i64() {
@@ -47,7 +47,7 @@ pub fn load(registry: &mut Registry) {
         .insert(math_fn!(ceil))
         .insert(math_fn!(round))
         .insert(math_fn!(trunc))
-        .insert(tremor_const_fn! (math::max(_context, a, b) {
+        .insert(tremor_const_fn! (math|max(_context, a, b) {
             if let (Some(a), Some(b)) = (a.as_u64(), b.as_u64()) {
                 Ok(Value::from(max(a, b)))
             } else if let (Some(a), Some(b)) = (a.as_i64(), b.as_i64()) {
@@ -62,7 +62,7 @@ pub fn load(registry: &mut Registry) {
                 Err(FunctionError::BadType{mfa: this_mfa()})
             }
         }))
-        .insert(tremor_const_fn! (math::min(_context, a, b) {
+        .insert(tremor_const_fn! (math|min(_context, a, b) {
             if let (Some(a), Some(b)) = (a.as_u64(), b.as_u64()) {
                 Ok(Value::from(min(a, b)))
             } else if let (Some(a), Some(b)) = (a.as_i64(), b.as_i64()) {

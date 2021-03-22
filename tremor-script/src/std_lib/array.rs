@@ -19,13 +19,13 @@ use crate::Value;
 
 pub fn load(registry: &mut Registry) {
     registry
-        .insert(tremor_const_fn! (array::len(_context, _input: Array) {
+        .insert(tremor_const_fn! (array|len(_context, _input: Array) {
             Ok(Value::from(_input.len() as i64))
         }))
-        .insert(tremor_const_fn! (array::is_empty(_context, _input: Array) {
+        .insert(tremor_const_fn! (array|is_empty(_context, _input: Array) {
             Ok(Value::from(_input.is_empty()))
         }))
-        .insert(tremor_const_fn! (array::contains(_context, _input, _contains) {
+        .insert(tremor_const_fn! (array|contains(_context, _input, _contains) {
             _input.as_array().map_or_else(
                 ||Err(FunctionError::BadType{mfa: mfa("array", "contains", 2)}),
                 |input| {
@@ -33,7 +33,7 @@ pub fn load(registry: &mut Registry) {
                 }
             )
         }))
-        .insert(tremor_const_fn! (array::push(_context, _input, _value) {
+        .insert(tremor_const_fn! (array|push(_context, _input, _value) {
             _input.as_array().map_or_else(
                 ||Err(FunctionError::BadType{mfa: mfa("array", "push", 2)}),
                 |input| {
@@ -46,7 +46,7 @@ pub fn load(registry: &mut Registry) {
                 }
             )
         }))
-        .insert(tremor_const_fn! (array::unzip(_context, _input: Array) {
+        .insert(tremor_const_fn! (array|unzip(_context, _input: Array) {
                 let r: FResult<Vec<(Value, Value)>> = _input.iter().map(|a| if let Some(a) = a.as_array() {
                     if let [ first, second] = a.as_slice() {
                         Ok((first.clone(), second.clone()))
@@ -59,7 +59,7 @@ pub fn load(registry: &mut Registry) {
                 let (l, r): (Vec<_>, Vec<_>) = r?.into_iter().unzip();
                 Ok(Value::from(vec![l, r]))
         }))
-        .insert(tremor_const_fn!(array::zip(_context, _left: Array, _right: Array) {
+        .insert(tremor_const_fn!(array|zip(_context, _left: Array, _right: Array) {
             if _left.len() != _right.len() {
                 return Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("Zipping two arrays requires them to have the same length, but the first array provided has {} elements while the second one has {} elements", _left.len(), _right.len())});
             };
@@ -70,16 +70,16 @@ pub fn load(registry: &mut Registry) {
                 .collect::<Vec<_>>()))
         }))
         .insert(
-            tremor_const_fn!(array::flatten(_context, _input) {
+            tremor_const_fn!(array|flatten(_context, _input) {
                 Ok(Value::from(flatten_value(_input)))
             }))
         .insert(
-            tremor_const_fn!(array::join(_context, _input: Array, _sep: String) {
+            tremor_const_fn!(array|join(_context, _input: Array, _sep: String) {
                 let input: Vec<String> = _input.iter().map(ToString::to_string).collect();
                 Ok(Value::from(input.join(_sep)))
             }),
         )
-        .insert(tremor_const_fn!(array::coalesce(_context, _input: Array) {
+        .insert(tremor_const_fn!(array|coalesce(_context, _input: Array) {
             Ok(Value::from(_input.iter().filter_map(|v| if v.is_null()  {
                 None
             }else {

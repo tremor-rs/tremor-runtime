@@ -54,3 +54,7 @@ intrinsic fn is_array(value) as type::is_array;
 ## Returns a `bool`
 intrinsic fn is_record(value) as type::is_record;
 
+## Returns if the value is a binary.
+##
+## Returns a `bool`
+intrinsic fn is_binary(value) as type::is_binary;

@@ -1,0 +1,46 @@
+### Span Identifiers
+###
+###
+
+use std::type;
+use std::binary;
+use std::array;
+use std::string;
+
+## Is the `span_id` valid
+##
+## Checks the `span_id` argument to see if it is a valid
+## span id. A legal span id is one of:
+##
+## * An array of integers in the range of [0..=255] of length 8
+## * A binary 8 byte value
+## * An array of 8 int values
+## * A 16-byte hex-encoded string
+## * Regardless of representation, the value must not be all zeroes
+##
+## Returns a record when the representation is well-formed of the form:
+##
+## ```tremor
+## {
+##    "kind": "string"|"binary"|"array", # Depends on input
+##    "valid": true|false,               # True if well-formed and valid
+##    "value": "<span_id>"               # Representation depends on `kind`
+## }
+## ```
+##
+## Returns an empty record `{}` when the representation not well-formed
+##
+fn is_valid(span_id) of
+    # String representation
+    case(span_id) when type::is_string(span_id) =>
+      { "string": span_id != "0000000000000000" and string::bytes(span_id) == 16, "value": span_id }
+    # Binary representation
+    case(span_id) when type::is_binary(span_id) =>
+      let arr = binary::into_bytes(span_id),
+      { "binary": array::len(arr) == 8 and span_id != << 0:64 >>, "value": span_id }
+    # Array representation
+    case(span_id) when type::is_array(span_id) =>
+      { "array": array::len(arr) == 8 and span_id != [ 0, 0, 0, 0, 0, 0, 0, 0], "value": span_id }
+    default =>
+      {}
+end

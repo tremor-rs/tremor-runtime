@@ -48,6 +48,7 @@ mod api;
 mod completions;
 mod debug;
 mod doc;
+mod env;
 mod errors;
 // mod explain;
 mod job;
