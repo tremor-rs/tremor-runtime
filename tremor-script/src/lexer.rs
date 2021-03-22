@@ -2770,7 +2770,7 @@ mod tests {
         " not null ", "  ~ " => Token::Not, "  ~ " => Token::Nil, };
         lex_ok! { " != null ", "  ~~ " => Token::NotEq, "   ~ " => Token::Nil, };
         // TODO fix this
-        //lex_ok! { " !1 ", " ~  " => Token::BitNot, "  ~ " => Token::IntLiteral(1), };
+        lex_ok! { " !1 ", " ~  " => Token::BitNot, "  ~ " => Token::IntLiteral(1), };
         lex_ok! { " ! ", " ~ " => Token::BitNot, };
         lex_ok! { " and ", " ~ " => Token::And, };
         lex_ok! { " or ", " ~ " => Token::Or, };
