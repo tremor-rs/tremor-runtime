@@ -1527,7 +1527,7 @@ impl<'input> Lexer<'input> {
                 self.bump();
                 Ok(self.spanned2(start, end, Token::NotEq))
             }
-            Some((end, ch)) => Ok(self.spanned2(start, end, Token::Bad(format!("!{}", ch)))),
+            Some((end, _ch)) => Ok(self.spanned2(start, end, Token::BitNot)),
             None => Err(ErrorKind::UnexpectedEndOfStream.into()),
         }
     }
@@ -2771,7 +2771,7 @@ mod tests {
         lex_ok! { " != null ", "  ~~ " => Token::NotEq, "   ~ " => Token::Nil, };
         // TODO fix this
         //lex_ok! { " !1 ", " ~  " => Token::BitNot, "  ~ " => Token::IntLiteral(1), };
-
+        lex_ok! { " ! ", " ~ " => Token::BitNot, };
         lex_ok! { " and ", " ~ " => Token::And, };
         lex_ok! { " or ", " ~ " => Token::Or, };
         lex_ok! { " xor ", " ~ " => Token::Xor, };

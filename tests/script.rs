@@ -92,6 +92,7 @@ test_cases!(
     binary_int,
     binary_string,
     binary_uint,
+    binary_not,
     binary,
     bit_ops,
     bit_shift,
