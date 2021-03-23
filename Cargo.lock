@@ -1067,12 +1067,13 @@ dependencies = [
 
 [[package]]
 name = "cron"
-version = "0.8.0"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "628a3464535cee4e75af89e8c293bab926deaddfa166553b75029066c846be3f"
+checksum = "e009ed0b762cf7a967a34dfdc67d5967d3f828f12901d37081432c3dd1668f8f"
 dependencies = [
  "chrono",
  "nom 4.1.1",
+ "once_cell",
 ]
 
 [[package]]
