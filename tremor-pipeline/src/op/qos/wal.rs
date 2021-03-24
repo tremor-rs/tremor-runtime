@@ -454,6 +454,7 @@ mod test {
 
         // Send a second event
         e.id = idgen.next_id();
+        e.transactional = true;
         let r = o.on_event(wal_uid, "in", &mut v, e.clone())?;
         // Since we are restored we now get 2 events (1 and 2)
         assert_eq!(r.len(), 2);
@@ -471,6 +472,7 @@ mod test {
 
         // Send a third event
         e.id = idgen.next_id();
+        e.transactional = false;
         let r = o.on_event(0, "in", &mut v, e.clone())?;
         // since we failed before we should see 2 events, 3 and the retransmit
         // of 2
