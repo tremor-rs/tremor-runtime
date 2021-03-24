@@ -279,6 +279,15 @@ mod test {
         assert_eq!(Value::from(vec![true, false]).encode(), "[true,false]");
     }
     #[test]
+    fn array_pp() {
+        assert_eq!(Value::array().encode_pp(), "[]");
+        assert_eq!(Value::from(vec![true]).encode_pp(), "[\n  true\n]");
+        assert_eq!(
+            Value::from(vec![true, false]).encode_pp(),
+            "[\n  true,\n  false\n]"
+        );
+    }
+    #[test]
     fn null() {
         assert_eq!(Value::Static(StaticNode::Null).encode(), "null")
     }
@@ -299,6 +308,27 @@ mod test {
         assert_eq!(o.encode(), r#"{"snot":"badger"}"#);
         o.insert("badger", "snot")?;
         assert_eq!(o.encode(), r#"{"snot":"badger","badger":"snot"}"#);
+        Ok(())
+    }
+    #[test]
+    fn obj_pp() -> Result<(), Box<dyn std::error::Error>> {
+        let mut o = Value::object();
+        assert_eq!(o.encode_pp(), "{}");
+        o.insert("snot", "badger")?;
+        assert_eq!(
+            o.encode_pp(),
+            r#"{
+  "snot": "badger"
+}"#
+        );
+        o.insert("badger", "snot")?;
+        assert_eq!(
+            o.encode_pp(),
+            r#"{
+  "snot": "badger",
+  "badger": "snot"
+}"#
+        );
         Ok(())
     }
 

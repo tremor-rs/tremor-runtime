@@ -7,7 +7,9 @@ let event = match event of
   case 6 => {"k": "six"}
   case 7 => {"k": "seven"}
   case 8 => {"k": "eight"}
-
+  case 9 => {"k": "nine"}
+  case 10 => {"k": "ten"}
+  case 11 => {"k": "eleven"}
   default => {"k": event}
 end;
 
@@ -39,6 +41,7 @@ let event = {"k": match event of
   case 7 => "seven"
   case ~ re|four| => 4
   case 8 => "eight"
+  case "nine" => 9
   default => event
 end};
 
