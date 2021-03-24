@@ -22,6 +22,8 @@
 //!
 //! See [Config](struct.Config.html) for details.
 
+use std::time::Instant;
+
 use crate::sink::prelude::*;
 use async_std::net::UdpSocket;
 use halfbrown::HashMap;
@@ -60,7 +62,7 @@ impl offramp::Impl for Udp {
 
 #[async_trait::async_trait]
 impl Sink for Udp {
-    // TODO
+    #[allow(clippy::cast_possible_truncation)]
     async fn on_event(
         &mut self,
         _input: &str,
@@ -69,6 +71,7 @@ impl Sink for Udp {
         mut event: Event,
     ) -> ResultVec {
         let mut success = true;
+        let processing_start = Instant::now();
         if let Some(socket) = &mut self.socket {
             let ingest_ns = event.ingest_ns;
             for value in event.value_iter() {
@@ -81,14 +84,17 @@ impl Sink for Udp {
         } else {
             success = false
         };
-        if success {
-            Ok(Some(vec![sink::Reply::Insight(event.insight_ack())]))
-        } else {
-            Ok(Some(vec![
+        Ok(match (success, event.transactional) {
+            (true, true) => Some(vec![sink::Reply::Insight(
+                event.insight_ack_with_timing(processing_start.elapsed().as_millis() as u64),
+            )]),
+            (true, false) => None, // no need to send acks
+            (false, true) => Some(vec![
+                sink::Reply::Insight(event.to_fail()),
                 sink::Reply::Insight(event.insight_trigger()),
-                sink::Reply::Insight(event.insight_fail()),
-            ]))
-        }
+            ]),
+            (false, false) => Some(vec![sink::Reply::Insight(event.insight_trigger())]), // we always send a trigger
+        })
     }
     fn default_codec(&self) -> &str {
         "json"

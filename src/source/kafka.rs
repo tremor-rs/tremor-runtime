@@ -272,7 +272,7 @@ impl Source for Int {
                     let mut origin_uri = self.origin_uri.clone();
                     origin_uri.path = vec![
                         m.topic().to_string(),
-                        // m.partition().to_string(),
+                        m.partition().to_string(),
                         m.offset().to_string(),
                     ];
                     let data = data.to_vec();

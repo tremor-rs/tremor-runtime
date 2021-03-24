@@ -265,6 +265,8 @@ impl Elastic {
         let mut op_meta = OpMeta::default();
         std::mem::swap(&mut op_meta, &mut event.op_meta);
         let insight_id = id.clone();
+        let transactional = event.transactional;
+        let ingest_ns = event.ingest_ns;
         let response_origin_uri = if is_linked {
             event.origin_uri.clone()
         } else {
@@ -276,14 +278,19 @@ impl Elastic {
         let payload = match build_event_payload(&event) {
             Ok(payload) => payload,
             Err(e) => {
+                // send fail
+                self.send_insight_fail(&event).await;
+
                 // send error response about event not being able to be serialized into ES payload
+                let error_msg = format!("Invalid ES Payload: {}", e);
                 let mut data = Value::object_with_capacity(2);
                 let payload = event.data.suffix().value().clone_static();
                 data.insert("success", Value::from(false))?;
-                data.insert("error", Value::from("Invalid ES Payload"))?;
+                data.insert("error", Value::from(error_msg))?;
                 data.insert("payload", payload)?;
                 let source = build_source(&event.id, event.origin_uri.as_ref());
                 data.insert("source", source)?;
+
                 // send error response
                 if let Err(e) = response_tx.send(((data, Value::null()).into(), ERR)).await {
                     error!(
@@ -291,7 +298,7 @@ impl Elastic {
                         self.sink_url, e
                     );
                 }
-                return Err(e); // this will bubble up the error to the calling on_event, sending a CB fail back
+                return Err(e);
             }
         };
         let req = self.client.request(BulkRequest::new(payload));
@@ -356,7 +363,11 @@ impl Elastic {
                 }
                 Err(e) => {
                     // request failed
-                    // TODO update error metric here?
+                    // TODO how to update error metric here?
+                    if m.insert("error", Value::from(e.to_string())).is_err() {
+                        // ALLOW: this is ok
+                        unreachable!()
+                    }
                     if is_linked {
                         // send error event via ERR port
                         let mut error_data = Object::with_capacity(1);
@@ -375,14 +386,6 @@ impl Elastic {
                     CBAction::Fail
                 }
             };
-            let insight = Event {
-                id: insight_id,
-                data: (Value::null(), m).into(),
-                ingest_ns: nanotime(),
-                op_meta,
-                cb,
-                ..Event::default()
-            };
 
             task::block_on(async move {
                 // send response events
@@ -392,9 +395,20 @@ impl Elastic {
                     }
                 }
 
-                // send insight
-                if let Err(e) = insight_tx.send(sink::Reply::Insight(insight)).await {
-                    error!("Failed to send insight: {}", e);
+                // send insight - if required
+                // TODO: we dont have the event here, so we cant use our other convenience functions
+                if transactional {
+                    let insight = Event {
+                        id: insight_id,
+                        data: (Value::null(), m).into(),
+                        ingest_ns,
+                        op_meta,
+                        cb,
+                        ..Event::default()
+                    };
+                    if let Err(e) = insight_tx.send(sink::Reply::Insight(insight)).await {
+                        error!("Failed to send insight: {}", e);
+                    }
                 }
 
                 // mark this task as done in order to free a slot
@@ -410,26 +424,8 @@ impl Elastic {
     async fn maybe_enque(&mut self, event: Event) -> Result<()> {
         match self.queue.dequeue() {
             Err(SinkDequeueError::NotReady) if !self.queue.has_capacity() => {
-                let mut m = Object::with_capacity(1);
                 let error_msg = "Dropped data due to es overload";
-                m.insert("error".into(), error_msg.into());
-
-                let insight = Event {
-                    id: event.id,
-                    data: (Value::null(), m).into(),
-                    ingest_ns: event.ingest_ns,
-                    cb: CBAction::Fail,
-                    ..Event::default()
-                };
-
-                if self
-                    .insight_tx
-                    .send(sink::Reply::Insight(insight))
-                    .await
-                    .is_err()
-                {
-                    error!("[Sink::{}] Failed to send insight", &self.sink_url)
-                };
+                self.send_insight_fail(&event).await;
 
                 // send error message on overflow to ERR port
                 let mut data = Object::with_capacity(2);
@@ -459,6 +455,19 @@ impl Elastic {
                 } else {
                     Ok(())
                 }
+            }
+        }
+    }
+
+    // we swallow send errors here, we only log them
+    async fn send_insight_fail(&mut self, event: &Event) {
+        if event.transactional {
+            if let Err(e) = self
+                .insight_tx
+                .send(sink::Reply::Insight(event.to_fail()))
+                .await
+            {
+                error!("[Sink::{}] Failed to send insight: {}", &self.sink_url, e)
             }
         }
     }
@@ -513,7 +522,11 @@ impl Sink for Elastic {
                 "[Sink::{}] Received empty event. Won't send it to ES",
                 self.sink_url
             );
-            Ok(Some(vec![Reply::Insight(event.insight_ack())]))
+            Ok(Some(if event.transactional {
+                vec![Reply::Insight(event.insight_ack())]
+            } else {
+                vec![]
+            }))
         } else {
             // we have either one event or a batched one with > 1 event
             self.maybe_enque(event).await?;

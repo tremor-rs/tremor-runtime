@@ -31,7 +31,10 @@ use rdkafka::{
     message::OwnedHeaders,
     producer::{FutureProducer, FutureRecord},
 };
-use std::{fmt, time::Duration};
+use std::{
+    fmt,
+    time::{Duration, Instant},
+};
 
 #[derive(Deserialize)]
 pub struct Config {
@@ -162,10 +165,12 @@ where
 
 /// Waits for actual delivery to kafka cluster and sends ack or fail.
 /// Also sends fatal errors for handling in offramp task.
+#[allow(clippy::cast_possible_truncation)]
 async fn wait_for_delivery(
     sink_url: String,
     futures: Vec<rdkafka::producer::DeliveryFuture>,
-    mut insight_event: Event,
+    processing_start: Instant,
+    maybe_event: Option<Event>,
     reply_tx: Sender<sink::Reply>,
     error_tx: Sender<KafkaError>,
 ) -> Result<()> {
@@ -177,7 +182,13 @@ async fn wait_for_delivery(
                     sink_url, &kafka_error
                 );
                 if is_fatal(&kafka_error) {
-                    error_tx.send(kafka_error).await?;
+                    let err_msg = format!("{}", &kafka_error);
+                    if error_tx.send(kafka_error).await.is_err() {
+                        error!(
+                            "[Sink::{}] Error notifying the system about kafka error: {}",
+                            &sink_url, &err_msg
+                        )
+                    }
                 }
                 CBAction::Fail
             } else {
@@ -194,8 +205,22 @@ async fn wait_for_delivery(
             CBAction::Fail
         }
     };
-    insight_event.cb = cb;
-    reply_tx.send(sink::Reply::Insight(insight_event)).await?;
+    if let Some(mut insight) = maybe_event {
+        insight.cb = cb;
+        if cb == CBAction::Ack {
+            let time = processing_start.elapsed().as_millis() as u64;
+            let mut m = Object::with_capacity(1);
+            m.insert("time".into(), time.into());
+            insight.data = (Value::null(), m).into();
+        }
+
+        if reply_tx.send(sink::Reply::Insight(insight)).await.is_err() {
+            error!(
+                "[Sink::{}] Error sending {:?} insight after delivery",
+                sink_url, cb
+            );
+        }
+    }
     Ok(())
 }
 
@@ -242,7 +267,7 @@ impl Sink for Kafka {
 
         let ingest_ns = event.ingest_ns;
         let mut delivery_futures = Vec::with_capacity(event.len()); // might not be enough
-        let mut insight_event = event.insight_ack(); // we gonna change the success status later, if need be
+        let processing_start = Instant::now();
         for (value, meta) in event.value_meta_iter() {
             let encoded = codec.encode(value)?;
             let processed = postprocess(self.postprocessors.as_mut_slice(), ingest_ns, encoded)?;
@@ -281,23 +306,35 @@ impl Sink for Kafka {
                         delivery_futures.push(delivery_future);
                     }
                     Err((e, _)) => {
-                        error!("[Sink::{}] failed to enque message: {}", &self.sink_url, e);
+                        error!(
+                            "[Sink::{}] failed to enqueue message: {}",
+                            &self.sink_url, e
+                        );
                         if is_fatal(&e) {
                             // handle fatal errors right here, without enqueueing
                             self.handle_fatal_error(&e)?;
                         }
                         // bail out with a CB fail on enqueue error
-                        insight_event.cb = CBAction::Fail;
-                        return Ok(Some(vec![sink::Reply::Insight(insight_event)]));
+                        if event.transactional {
+                            return Ok(Some(vec![sink::Reply::Insight(event.to_fail())]));
+                        }
+                        return Ok(None);
                     }
                 }
             }
         }
+        let insight_event = if event.transactional {
+            // we gonna change the success status later, if need be
+            Some(event.insight_ack())
+        } else {
+            None
+        };
         // successfully enqueued all messages
         // spawn the task waiting for delivery and send acks/fails then
         task::spawn(wait_for_delivery(
             self.sink_url.to_string(),
             delivery_futures,
+            processing_start,
             insight_event,
             self.reply_tx.clone(),
             self.error_tx.clone(),

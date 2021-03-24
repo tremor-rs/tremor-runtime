@@ -22,6 +22,8 @@
 //!
 //! See [Config](struct.Config.html) for details.
 
+use std::time::Instant;
+
 use crate::sink::prelude::*;
 use async_std::net::TcpStream;
 use halfbrown::HashMap;
@@ -75,6 +77,7 @@ impl Sink for Tcp {
         false
     }
 
+    #[allow(clippy::cast_possible_truncation)]
     async fn on_event(
         &mut self,
         _input: &str,
@@ -83,6 +86,7 @@ impl Sink for Tcp {
         mut event: Event,
     ) -> ResultVec {
         let mut success = true;
+        let processing_start = Instant::now();
         if let Some(stream) = &mut self.stream {
             for value in event.value_iter() {
                 let raw = codec.encode(value)?;
@@ -94,16 +98,20 @@ impl Sink for Tcp {
         } else {
             success = false
         };
-        if success {
-            Ok(Some(vec![sink::Reply::Insight(event.insight_ack())]))
-        } else {
-            self.stream = None;
-
-            Ok(Some(vec![
-                sink::Reply::Insight(event.insight_trigger()),
-                sink::Reply::Insight(event.insight_fail()),
-            ]))
-        }
+        Ok(match (success, event.transactional) {
+            (true, true) => Some(vec![sink::Reply::Insight(
+                event.insight_ack_with_timing(processing_start.elapsed().as_millis() as u64),
+            )]),
+            (true, false) => None, // no need for contraflow
+            (false, true) => {
+                // full blown error reporting
+                Some(vec![
+                    sink::Reply::Insight(event.to_fail()),
+                    sink::Reply::Insight(event.insight_trigger()),
+                ])
+            }
+            (false, false) => Some(vec![sink::Reply::Insight(event.insight_trigger())]), // we always send a trigger
+        })
     }
     fn default_codec(&self) -> &str {
         "json"
