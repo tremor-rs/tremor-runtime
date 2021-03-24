@@ -227,8 +227,9 @@ mod test {
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
-        let (out, _event) = r.pop().expect("no results");
+        let (out, event) = r.pop().expect("no results");
         assert_eq!("out", out);
+        assert!(event.transactional);
 
         // Without a timeout event sent a second event,
         // it too should pass
@@ -242,8 +243,9 @@ mod test {
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
-        let (out, _event) = r.pop().expect("no results");
+        let (out, event) = r.pop().expect("no results");
         assert_eq!("out", out);
+        assert!(event.transactional);
     }
 
     #[test]
@@ -269,8 +271,9 @@ mod test {
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
-        let (out, _event) = r.pop().expect("no results");
+        let (out, event) = r.pop().expect("no results");
         assert_eq!("out", out);
+        assert!(event.transactional);
 
         // Insert a timeout event with `time` set top `200`
         // this is over our limit of `100` so we syould move
@@ -321,8 +324,9 @@ mod test {
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
-        let (out, _event) = r.pop().expect("no results");
+        let (out, event) = r.pop().expect("no results");
         assert_eq!("out", out);
+        assert!(event.transactional);
 
         // Since now the last successful event was at 2_000_000
         // the next event should overflow at 2_000_001
