@@ -260,12 +260,17 @@ enum CodecTaskInMsg {
     ToEvent {
         id: EventId,
         origin_uri: Box<EventOriginUri>, // box to avoid becoming the struct too big
-        op_meta: Box<OpMeta>,
+        op_meta: Box<Option<OpMeta>>,
         request_meta: Value<'static>,
         response: Response,
         duration: u64,
     },
-    ReportFailure(EventId, OpMeta, EventOriginUri, Error, u16),
+    ReportFailure {
+        id: EventId,
+        op_meta: Option<OpMeta>,
+        e: Error,
+        status: u16,
+    },
 }
 
 enum SendTaskInMsg {
@@ -316,11 +321,21 @@ impl Sink for Rest {
         event: Event,
     ) -> ResultVec {
         if self.is_linked && event.is_batch {
-            return Err("Batched events are not supported for linked rest offramps".into());
+            let err_msg = "Batched events are not supported for linked rest offramps.";
+            if event.transactional {
+                if let Some(reply_tx) = self.reply_channel.as_ref() {
+                    reply_tx.send(sink::Reply::Insight(event.to_fail())).await?;
+                }
+            }
+            return Err(err_msg.into());
         }
         let sink_uid = self.uid;
         let id = event.id.clone();
-        let op_meta = event.op_meta.clone();
+        let op_meta = if event.transactional {
+            Some(event.op_meta.clone())
+        } else {
+            None
+        };
 
         let codec_task_channel = match &self.codec_task_tx {
             Some(codec_task_channel) => codec_task_channel.clone(),
@@ -373,13 +388,12 @@ impl Sink for Rest {
                             Err(e) => {
                                 error!("Error sending HTTP request: {}", e);
                                 codec_task_channel
-                                    .send(CodecTaskInMsg::ReportFailure(
+                                    .send(CodecTaskInMsg::ReportFailure {
                                         id,
                                         op_meta,
-                                        event_origin_uri,
-                                        e.into(),
-                                        503,
-                                    ))
+                                        e: e.into(),
+                                        status: 503,
+                                    })
                                     .await?;
                             }
                         }
@@ -390,26 +404,18 @@ impl Sink for Rest {
                 max_counter.dec_from(current_inflights); // be fair to others and free our spot
                 Ok::<(), Error>(())
             });
-
-            Ok(None)
         } else {
             error!("Dropped data due to overload");
             codec_task_channel
-                .send(CodecTaskInMsg::ReportFailure(
+                .send(CodecTaskInMsg::ReportFailure {
                     id,
                     op_meta,
-                    EventOriginUri {
-                        uid: sink_uid,
-                        scheme: "tremor-rest".to_string(),
-                        host: hostname(),
-                        ..EventOriginUri::default()
-                    },
-                    Error::from(String::from("Dropped data due to overload")),
-                    429,
-                ))
+                    e: Error::from(String::from("Dropped data due to overload")),
+                    status: 429,
+                })
                 .await?;
-            Ok(None)
         }
+        Ok(None)
     }
 
     fn default_codec(&self) -> &str {
@@ -500,11 +506,17 @@ async fn codec_task(
 ) -> Result<()> {
     debug!("[Sink::{}] Codec task started.", &sink_url);
     let mut response_ids = EventIdGenerator::new(sink_uid);
+    let response_origin_uri = EventOriginUri {
+        uid: sink_uid,
+        scheme: "tremor-rest".to_string(),
+        host: hostname(),
+        ..EventOriginUri::default()
+    };
 
     let codec: &mut dyn Codec = codec.as_mut();
     while let Ok(msg) = in_rx.recv().await {
         match msg {
-            CodecTaskInMsg::ToRequest(mut event, tx) => {
+            CodecTaskInMsg::ToRequest(event, tx) => {
                 match build_request(
                     &event,
                     codec,
@@ -531,11 +543,13 @@ async fn codec_task(
                                 &sink_url, e
                             );
                         }
-                        // send CB_fail
-                        let mut insight = event.insight_fail();
-                        insight.ingest_ns = nanotime();
-                        if let Err(e) = reply_tx.send(sink::Reply::Insight(insight)).await {
-                            error!("[Sink::{}] Error sending CB fail event {}", &sink_url, e);
+                        if event.transactional {
+                            // send CB_fail
+                            if let Err(e) =
+                                reply_tx.send(sink::Reply::Insight(event.to_fail())).await
+                            {
+                                error!("[Sink::{}] Error sending CB fail event {}", &sink_url, e);
+                            }
                         }
 
                         // send response through error port
@@ -544,12 +558,7 @@ async fn codec_task(
                             response_ids.next_id(),
                             &event.id,
                             400,
-                            EventOriginUri {
-                                uid: sink_uid,
-                                scheme: "tremor-rest".to_string(),
-                                host: hostname(),
-                                ..EventOriginUri::default()
-                            },
+                            &response_origin_uri,
                             &e,
                         );
                         if let Err(e) = reply_tx.send(sink::Reply::Response(ERR, error_event)).await
@@ -574,20 +583,22 @@ async fn codec_task(
                 let status = response.status();
 
                 let mut meta = Object::with_capacity(1);
+                meta.insert("time".into(), Value::from(duration));
                 let mut cb = if status.is_client_error() || status.is_server_error() {
                     // when the offramp is linked to pipeline, we want to send
                     // the response back and not consume it yet (or log about it)
                     if !is_linked {
-                        if let Ok(body) = response.body_string().await {
-                            error!(
-                                "[Sink::{}] HTTP request failed: {} => {}",
-                                &sink_url, status, body
-                            )
+                        if log::log_enabled!(log::Level::Debug) {
+                            if let Ok(body) = response.body_string().await {
+                                error!(
+                                    "[Sink::{}] HTTP request failed: {} => {}",
+                                    &sink_url, status, body
+                                )
+                            }
                         } else {
                             error!("[Sink::{}] HTTP request failed: {}", &sink_url, status)
                         }
                     }
-                    meta.insert("time".into(), Value::from(duration));
                     CBAction::Fail
                 } else {
                     CBAction::Ack
@@ -629,7 +640,7 @@ async fn codec_task(
                                 response_ids.next_id(),
                                 &id,
                                 500,
-                                origin_uri.as_ref().clone(),
+                                origin_uri.as_ref(),
                                 &e,
                             );
 
@@ -646,37 +657,49 @@ async fn codec_task(
                     }
                 }
                 // wait with sending CB Ack until response has been handled in linked case, might still fail
-                if let Err(e) = reply_tx
-                    .send(sink::Reply::Insight(Event {
-                        id: id.clone(),
-                        op_meta: *op_meta,
-                        data: (Value::null(), Value::from(meta)).into(),
-                        cb,
-                        ingest_ns: nanotime(),
-                        ..Event::default()
-                    }))
-                    .await
-                {
-                    error!("[Sink::{}] Error sending CB event {}", &sink_url, e);
-                };
-            }
-            CodecTaskInMsg::ReportFailure(id, op_meta, event_origin_uri, e, status) => {
-                // report send error as CB fail and response via ERROR port
-                // sending a CB close would mean we need to take measures to reopen - introduce a healthcheck
-                let mut insight = Event::cb_fail(nanotime(), id.clone());
-                insight.op_meta = op_meta;
-                if let Err(send_err) = reply_tx.send(sink::Reply::Insight(insight)).await {
-                    error!(
-                        "[Sink::{}] Error sending CB trigger event for event {}: {}",
-                        &sink_url, id, send_err
-                    );
+                // if op_meta is None, we dont need to send an insight
+                if let Some(op_meta) = *op_meta {
+                    if let Err(e) = reply_tx
+                        .send(sink::Reply::Insight(Event {
+                            id: id.clone(),
+                            op_meta,
+                            data: (Value::null(), Value::from(meta)).into(),
+                            cb,
+                            ingest_ns: nanotime(),
+                            ..Event::default()
+                        }))
+                        .await
+                    {
+                        error!("[Sink::{}] Error sending CB event {}", &sink_url, e);
+                    };
                 }
+            }
+            CodecTaskInMsg::ReportFailure {
+                id,
+                op_meta,
+                e,
+                status,
+            } => {
+                // report send error as CB fail
+                // sending a CB close would mean we need to take measures to reopen - introduce a healthcheck
+                if let Some(op_meta) = op_meta {
+                    let mut insight = Event::cb_fail(nanotime(), id.clone());
+                    insight.op_meta = op_meta;
+                    if let Err(send_err) = reply_tx.send(sink::Reply::Insight(insight)).await {
+                        error!(
+                            "[Sink::{}] Error sending CB trigger event for event {}: {}",
+                            &sink_url, id, send_err
+                        );
+                    }
+                }
+
+                // send response via ERR port
                 let error_event = create_error_response(
                     // TODO: stream handling
                     response_ids.next_id(),
                     &id,
                     status,
-                    event_origin_uri,
+                    &response_origin_uri,
                     &e,
                 );
                 if let Err(send_err) = reply_tx.send(sink::Reply::Response(ERR, error_event)).await
@@ -954,7 +977,7 @@ fn create_error_response(
     mut error_id: EventId,
     event_id: &EventId,
     status: u16,
-    origin_uri: EventOriginUri,
+    origin_uri: &EventOriginUri,
     e: &Error,
 ) -> Event {
     let mut error_data = Object::with_capacity(2);
@@ -975,7 +998,7 @@ fn create_error_response(
     Event {
         id: error_id,
         data: (error_data, meta).into(),
-        origin_uri: Some(origin_uri),
+        origin_uri: Some(origin_uri.clone()),
         ingest_ns: nanotime(),
         ..Event::default()
     }

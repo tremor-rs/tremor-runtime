@@ -392,20 +392,26 @@ impl Operator for WAL {
         event: Event,
     ) -> Result<EventAndInsights> {
         let id = event.id.clone();
-        let now = event.ingest_ns;
+        let ingest_ns = event.ingest_ns;
         let transactional = event.transactional;
-
+        let op_meta = if transactional {
+            Some(event.op_meta.clone())
+        } else {
+            None
+        };
         self.store_event(uid, event)?;
 
-        let insights = if transactional {
-            vec![Event::cb_ack(now, id)]
+        let insights = if let Some(op_meta) = op_meta {
+            let mut insight = Event::cb_ack(ingest_ns, id);
+            insight.op_meta = op_meta;
+            vec![insight]
         } else {
             vec![]
         };
         let events = if self.broken {
             Vec::new()
         } else {
-            self.read_events(now)?
+            self.read_events(ingest_ns)?
         };
         Ok(EventAndInsights { insights, events })
     }

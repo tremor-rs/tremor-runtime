@@ -29,7 +29,7 @@ use url::Url;
 
 type WsUrl = String;
 type WsConnectionHandle = (
-    Option<Sender<ConnectionTaskMsg>>,
+    Option<Sender<SendEventConnectionMsg>>,
     task::JoinHandle<Result<()>>,
 );
 
@@ -49,13 +49,16 @@ pub struct Config {
 }
 
 enum WsConnectionMsg {
-    Connected(WsUrl, Sender<ConnectionTaskMsg>),
+    Connected(WsUrl, Sender<SendEventConnectionMsg>),
     Disconnected(WsUrl),
 }
 
-enum ConnectionTaskMsg {
-    SendEvent(EventId, WsMessageMeta, OpMeta, u64, LineValue),
-    //ToEvent(Ids, u64, Message),
+struct SendEventConnectionMsg {
+    event_id: EventId,
+    msg_meta: WsMessageMeta,
+    maybe_op_meta: Option<OpMeta>,
+    ingest_ns: u64,
+    data: LineValue,
 }
 
 /// An offramp that writes to a websocket endpoint
@@ -70,44 +73,34 @@ pub struct Ws {
     connection_lifecycle_rx: Receiver<WsConnectionMsg>,
     connections: HashMap<WsUrl, WsConnectionHandle>,
     is_linked: bool,
+    /// We need to merge all op_metas we receive as we can receive
+    /// disconnect/connect events independent of event handling
+    /// so we dont know where to send it, so we need to gather all the operators
+    /// in a merged `OpMeta` to send the connection lifecycle events
+    /// to all operators through which we ever received events
     merged_meta: OpMeta,
     reply_tx: Sender<sink::Reply>,
 }
 
+/// sends standardized error response to `err` port and,
+/// if `maybe_op_meta` is `Some(_)`, send a fail insight as well
 #[inline]
-async fn handle_error_with_fail(
+async fn handle_error(
     sink_url: &TremorURL,
     e: &str,
     reply_tx: &Sender<sink::Reply>,
     ids: &EventId,
     event_origin_uri: &EventOriginUri,
-    op_meta: OpMeta,
+    maybe_op_meta: Option<OpMeta>,
 ) -> Result<()> {
     error!("[Sink::{}] {}", sink_url, e);
     // send fail
-    let mut fail_event = Event::cb_fail(nanotime(), ids.clone());
-    fail_event.op_meta = op_meta;
-    reply_tx.send(sink::Reply::Insight(fail_event)).await?;
+    if let Some(op_meta) = maybe_op_meta {
+        let mut fail_event = Event::cb_fail(nanotime(), ids.clone());
+        fail_event.op_meta = op_meta;
+        reply_tx.send(sink::Reply::Insight(fail_event)).await?;
+    }
 
-    // send standardized error response
-    reply_tx
-        .send(sink::Reply::Response(
-            ERR,
-            Ws::create_error_response(ids, e, event_origin_uri),
-        ))
-        .await?;
-    Ok(())
-}
-
-#[inline]
-async fn handle_error_no_fail(
-    sink_url: &TremorURL,
-    e: &str,
-    reply_tx: &Sender<sink::Reply>,
-    ids: &EventId,
-    event_origin_uri: &EventOriginUri,
-) -> Result<()> {
-    error!("[Sink::{}] {}", sink_url, e);
     // send standardized error response
     reply_tx
         .send(sink::Reply::Response(
@@ -125,8 +118,8 @@ async fn ws_connection_loop(
     mut event_origin_url: EventOriginUri,
     connection_lifecycle_tx: Sender<WsConnectionMsg>,
     reply_tx: Sender<sink::Reply>,
-    tx: Sender<ConnectionTaskMsg>,
-    rx: Receiver<ConnectionTaskMsg>,
+    tx: Sender<SendEventConnectionMsg>,
+    rx: Receiver<SendEventConnectionMsg>,
     has_link: bool,
     mut preprocessors: Preprocessors,
     mut postprocessors: Postprocessors,
@@ -159,20 +152,20 @@ async fn ws_connection_loop(
             .send(WsConnectionMsg::Connected(url.clone(), tx.clone()))
             .await?;
 
-        'recv_loop: while let Ok(ConnectionTaskMsg::SendEvent(
-            ids,
-            message_meta,
-            op_meta,
+        'recv_loop: while let Ok(SendEventConnectionMsg {
+            event_id,
+            msg_meta,
+            maybe_op_meta,
             ingest_ns,
             data,
-        )) = rx.recv().await
+        }) = rx.recv().await
         {
             match event_to_message(
                 codec,
                 &mut postprocessors,
                 ingest_ns,
                 &data,
-                message_meta.binary,
+                msg_meta.binary,
             ) {
                 Ok(iter) => {
                     for msg_result in iter {
@@ -180,22 +173,24 @@ async fn ws_connection_loop(
                             Ok(msg) => {
                                 match ws_stream.send(msg).await {
                                     Ok(_) => {
-                                        let mut e = Event::cb_ack(nanotime(), ids.clone());
-                                        e.op_meta = op_meta.clone();
-                                        reply_tx.send(sink::Reply::Insight(e)).await?;
+                                        if let Some(op_meta) = maybe_op_meta.as_ref() {
+                                            let mut e = Event::cb_ack(nanotime(), event_id.clone());
+                                            e.op_meta = op_meta.clone();
+                                            reply_tx.send(sink::Reply::Insight(e)).await?;
+                                        }
                                     }
                                     Err(e) => {
                                         let e = format!(
                                             "Error sending event to server {}: {}.",
                                             &url, e
                                         );
-                                        handle_error_with_fail(
+                                        handle_error(
                                             &sink_url,
                                             &e,
                                             &reply_tx,
-                                            &ids,
+                                            &event_id,
                                             &event_origin_url,
-                                            op_meta.clone(),
+                                            maybe_op_meta.clone(),
                                         )
                                         .await?;
 
@@ -210,13 +205,13 @@ async fn ws_connection_loop(
                             }
                             Err(msg_err) => {
                                 let e = format!("Invalid websocket message: {}", msg_err);
-                                handle_error_with_fail(
+                                handle_error(
                                     &sink_url,
                                     &e,
                                     &reply_tx,
-                                    &ids,
+                                    &event_id,
                                     &event_origin_url,
-                                    op_meta.clone(),
+                                    maybe_op_meta.clone(),
                                 )
                                 .await?;
                                 continue; // next message, lets hope it is better
@@ -229,21 +224,19 @@ async fn ws_connection_loop(
                         "Error during serialization (codec/postprocessors): {}",
                         encode_error
                     );
-                    handle_error_with_fail(
+                    handle_error(
                         &sink_url,
                         &e,
                         &reply_tx,
-                        &ids,
+                        &event_id,
                         &event_origin_url,
-                        op_meta,
+                        maybe_op_meta,
                     )
                     .await?;
                     continue; // next message, lets hope it is better
                 }
             }
 
-            // TODO: split ws_stream and spawn a separate task for receiving messages.
-            //       then we need to associate requests with responses and include the event id of the causing request
             if has_link {
                 if let Some(msg) = ws_stream.next().await {
                     match msg {
@@ -255,7 +248,7 @@ async fn ws_connection_loop(
                                 codec,
                                 &mut preprocessors,
                                 &mut ingest_ns,
-                                &ids,
+                                &event_id,
                                 message,
                             ) {
                                 Ok(events) => {
@@ -268,12 +261,13 @@ async fn ws_connection_loop(
                                         "Error deserializing Response message (codec/preprocessors): {}",
                                         decode_error
                                     );
-                                    handle_error_no_fail(
+                                    handle_error(
                                         &sink_url,
                                         &e_msg,
                                         &reply_tx,
-                                        &ids,
+                                        &event_id,
                                         &event_origin_url,
+                                        None,
                                     )
                                     .await?;
                                     continue;
@@ -294,12 +288,13 @@ async fn ws_connection_loop(
                         Err(e) => {
                             let e_msg =
                                 format!("Error while receiving reply from server {}: {}", &url, e);
-                            handle_error_no_fail(
+                            handle_error(
                                 &sink_url,
                                 &e_msg,
                                 &reply_tx,
-                                &ids,
+                                &event_id,
                                 &event_origin_url,
+                                None,
                             )
                             .await?;
                             // close connection explicitly
@@ -497,6 +492,11 @@ impl Sink for Ws {
         event: Event,
     ) -> ResultVec {
         if self.is_linked && event.is_batch {
+            if event.transactional {
+                self.reply_tx
+                    .send(sink::Reply::Insight(event.to_fail()))
+                    .await?;
+            }
             return Err("Batched events are not supported for linked websocket offramps".into());
         }
         // check for connects or disconnects
@@ -508,6 +508,7 @@ impl Sink for Ws {
             data,
             ingest_ns,
             op_meta,
+            transactional,
             ..
         } = event;
 
@@ -545,24 +546,34 @@ impl Sink for Ws {
         };
 
         if let Some(conn_tx) = ws_conn_tx {
+            let maybe_op_meta = if transactional {
+                Some(self.merged_meta.clone())
+            } else {
+                None
+            };
             conn_tx
-                .send(ConnectionTaskMsg::SendEvent(
-                    id,
+                .send(SendEventConnectionMsg {
+                    event_id: id,
                     msg_meta,
-                    self.merged_meta.clone(),
+                    maybe_op_meta,
                     ingest_ns,
                     data,
-                ))
+                })
                 .await?;
         } else {
             let err = format!("No connection available for {}.", &msg_meta.url);
-            handle_error_with_fail(
+            let maybe_op_meta = if (transactional) {
+                Some(self.merged_meta.clone())
+            } else {
+                None
+            };
+            handle_error(
                 &self.sink_url,
                 &err,
                 &self.reply_tx,
                 &id,
                 &self.event_origin_uri,
-                self.merged_meta.clone(),
+                maybe_op_meta,
             )
             .await?;
         }
