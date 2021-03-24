@@ -1,0 +1,7 @@
+fn a () with
+  1
+end;
+
+fn a () with
+  2
+end;

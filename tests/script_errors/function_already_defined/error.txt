@@ -1,0 +1,2 @@
+Error: 
+      | ^ function a already defined.

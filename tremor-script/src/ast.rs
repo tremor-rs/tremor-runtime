@@ -300,7 +300,7 @@ impl<'script> ToString for ConstDoc<'script> {
 *type*: {:?}
 
 {}
-        "#,
+"#,
             self.name,
             self.value_type,
             &self.doc.clone().unwrap_or_default()
@@ -339,9 +339,8 @@ impl<'script> ModDoc<'script> {
             r#"
 # {}
 
-
 {}
-        "#,
+"#,
             name,
             &self.doc.clone().unwrap_or_default()
         )
@@ -355,7 +354,7 @@ impl<'script> ToString for FnDoc<'script> {
 ### {}({})
 
 {}
-        "#,
+"#,
             self.name,
             self.args.join(", "),
             self.doc.clone().unwrap_or_default()
@@ -691,12 +690,8 @@ where
             }
         }
 
-        // We know that we never get here, sadly rust doesn't
-
-        Ok(Return::Emit {
-            value: Value::null(),
-            port: None,
-        })
+        // ALLOWL: We know that we never get here, sadly rust doesn't
+        unreachable!()
     }
 }
 
@@ -2393,6 +2388,7 @@ impl<'script> UnaryExpr<'script> {
 
 #[cfg(test)]
 mod test {
+    use super::{ConstDoc, FnDoc, ModDoc};
     use crate::prelude::*;
 
     fn v(s: &'static str) -> super::ImutExprInt<'static> {
@@ -2401,6 +2397,59 @@ mod test {
             value: Value::from(s),
         })
     }
+    #[test]
+    fn const_doc() {
+        let c = ConstDoc {
+            name: "const test".into(),
+            doc: Some("hello".into()),
+            value_type: ValueType::Null,
+        };
+        assert_eq!(
+            c.to_string(),
+            r#"
+### const test
+
+*type*: Null
+
+hello
+"#
+        );
+    }
+
+    #[test]
+    fn fn_doc() {
+        let c = FnDoc {
+            name: "fn_test".into(),
+            args: vec!["snot".into(), "badger".into()],
+            doc: Some("hello".into()),
+            open: false,
+        };
+        assert_eq!(
+            c.to_string(),
+            r#"
+### fn_test(snot, badger)
+
+hello
+"#
+        );
+    }
+
+    #[test]
+    fn mod_doc() {
+        let c = ModDoc {
+            name: "test mod".into(),
+            doc: Some("hello".into()),
+        };
+        assert_eq!(
+            c.print_with_name(&c.name),
+            r#"
+# test mod
+
+hello
+"#
+        );
+    }
+
     #[test]
     fn record() {
         let f1 = super::Field {
