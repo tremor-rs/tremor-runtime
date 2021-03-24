@@ -134,7 +134,7 @@ test_cases!(
     pp_cyclic,
     pp_nest_cyclic,
     // INSERT
-function_already_defined,
+    function_already_defined,
     missing_function,
     string_interpolation_empty,
     fn_bad_recur,

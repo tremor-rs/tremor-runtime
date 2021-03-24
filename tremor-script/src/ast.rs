@@ -690,7 +690,7 @@ where
             }
         }
 
-        // ALLOWL: We know that we never get here, sadly rust doesn't
+        // ALLOW: We know that we never get here, sadly rust doesn't
         unreachable!()
     }
 }

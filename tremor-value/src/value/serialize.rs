@@ -273,6 +273,12 @@ mod test {
     use simd_json::StaticNode;
 
     #[test]
+    fn array() {
+        assert_eq!(Value::array().encode(), "[]");
+        assert_eq!(Value::from(vec![true]).encode(), "[true]");
+        assert_eq!(Value::from(vec![true, false]).encode(), "[true,false]");
+    }
+    #[test]
     fn null() {
         assert_eq!(Value::Static(StaticNode::Null).encode(), "null")
     }
@@ -286,10 +292,14 @@ mod test {
     }
 
     #[test]
-    fn obj() {
+    fn obj() -> Result<(), Box<dyn std::error::Error>> {
         let mut o = Value::object();
-        o.insert("k", ()).unwrap();
-        assert_eq!(o.encode(), r#"{"k":null}"#)
+        assert_eq!(o.encode(), "{}");
+        o.insert("snot", "badger")?;
+        assert_eq!(o.encode(), r#"{"snot":"badger"}"#);
+        o.insert("badger", "snot")?;
+        assert_eq!(o.encode(), r#"{"snot":"badger","badger":"snot"}"#);
+        Ok(())
     }
 
     fn assert_str(from: &str, to: &str) {
