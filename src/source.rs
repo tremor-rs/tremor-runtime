@@ -387,6 +387,7 @@ where
             ingest_ns,
             // TODO make origin_uri non-optional here too?
             origin_uri: Some(origin_uri),
+            transactional: self.is_transactional,
             ..Event::default()
         };
         let mut error = false;

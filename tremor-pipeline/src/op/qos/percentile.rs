@@ -95,6 +95,11 @@ impl Operator for Percentile {
         mut event: Event,
     ) -> Result<EventAndInsights> {
         event.op_meta.insert(uid, OwnedValue::null());
+        // we need to mark the event as transactional as this triggers downstream sinks/operators
+        // to send contraflow CB events which we need to maintain our drop percentage
+        // if we dont set this, and the event isnt transactional already, we would not receive any CB events,
+        // and wouldnt be able to adapt the percentage
+        event.transactional = true;
         // We don't generate a real random number we use the last the 16 bit
         // of the nanosecond timestamp as a randum number.
         // This is both fairly random and completely deterministic.

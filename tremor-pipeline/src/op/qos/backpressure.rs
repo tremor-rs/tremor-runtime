@@ -34,7 +34,7 @@ const OVERFLOW: Cow<'static, str> = Cow::const_str("overflow");
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
-    /// The maximum allowed timeout before backoff is applied
+    /// The maximum allowed timeout before backoff is applied in ms
     pub timeout: f64,
     /// A list of backoff steps in ms, wich are progressed through as long
     /// as the maximum timeout is exceeded
@@ -118,6 +118,10 @@ impl Operator for Backpressure {
         mut event: Event,
     ) -> Result<EventAndInsights> {
         event.op_meta.insert(uid, OwnedValue::null());
+        // we need to mark the event as transactional in order to reliably receive CB events
+        // and thus do effective backpressure
+        // if we don't and the events arent transactional themselves, we won't be notified, which would render this operator useless
+        event.transactional = true;
         if self.output.next <= event.ingest_ns {
             self.output.next = event.ingest_ns + self.output.backoff;
             Ok(vec![(self.output.output.clone(), event)].into())
