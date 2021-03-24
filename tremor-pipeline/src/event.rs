@@ -87,6 +87,16 @@ impl Event {
         e
     }
 
+    /// produce a `CBAction::Ack` insight event with the given time (in ms) in the metadata
+    #[must_use]
+    pub fn insight_ack_with_timing(&mut self, processing_time: u64) -> Event {
+        let mut e = self.insight_ack();
+        let mut meta = Object::with_capacity(1);
+        meta.insert("time".into(), Value::from(processing_time));
+        e.data = (Value::null(), Value::from(meta)).into();
+        e
+    }
+
     /// Creates a new fail insight from the event, consumes the `op_meta` and `origin_uri` of the
     /// event
     #[must_use]
@@ -164,6 +174,19 @@ impl Event {
         Event {
             ingest_ns,
             id,
+            cb: CBAction::Fail,
+            ..Event::default()
+        }
+    }
+
+    /// Creates a CB fail insight from the given `event` (the cause of this fail)
+    /// and with the given `data`
+    #[must_use]
+    pub fn to_fail(&self) -> Self {
+        Event {
+            id: self.id.clone(),
+            ingest_ns: self.ingest_ns,
+            op_meta: self.op_meta.clone(),
             cb: CBAction::Fail,
             ..Event::default()
         }

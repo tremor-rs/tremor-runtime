@@ -90,8 +90,13 @@ pub(crate) trait Sink {
     /// Is the sink active and ready to process events
     fn is_active(&self) -> bool;
 
-    /// Is the sink automatically acknowleding events or engaged in some form of delivery
+    /// Is the sink automatically acknowledging events or engaged in some form of delivery
     /// guarantee
+    ///
+    /// If this sink returns `false` here, it needs to adhere to the following protocol for CB ack/fail insights:
+    /// send one `ack` or `fail` CB insight for each incoming event if `event.transaction == true`.
+    /// Otherwise dont send any.
+    /// For `ack` insights include a `time` field in the insight metadata with duration it took for handling the event in milliseconds, if it makes sense.
     fn auto_ack(&self) -> bool;
 
     fn default_codec(&self) -> &str;
