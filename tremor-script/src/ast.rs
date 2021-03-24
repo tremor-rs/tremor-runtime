@@ -1340,14 +1340,14 @@ pub enum ClauseGroup<'script, Ex: Expression + 'script> {
     },
 }
 
-impl<'script, Ex: Expression + 'script> Default for ClauseGroup<'script, Ex> {
-    fn default() -> Self {
-        Self::Simple {
-            precondition: None,
-            patterns: Vec::new(),
-        }
-    }
-}
+// impl<'script, Ex: Expression + 'script> Default for ClauseGroup<'script, Ex> {
+//     fn default() -> Self {
+//         Self::Simple {
+//             precondition: None,
+//             patterns: Vec::new(),
+//         }
+//     }
+// }
 
 impl<'script, Ex: Expression + 'script> ClauseGroup<'script, Ex> {
     const MAX_OPT_RUNS: u64 = 128;
@@ -1359,23 +1359,12 @@ impl<'script, Ex: Expression + 'script> ClauseGroup<'script, Ex> {
 
     fn combine(&mut self, other: Self) {
         match (self, other) {
-            (
-                Self::Combined {
-                    groups: patterns, ..
-                },
-                Self::Combined {
-                    groups: mut other_groups,
-                    ..
-                },
-            ) => patterns.append(&mut other_groups),
-            (
-                Self::Combined {
-                    groups: patterns, ..
-                },
-                mut other,
-            ) => {
+            (Self::Combined { groups, .. }, Self::Combined { groups: mut o, .. }) => {
+                groups.append(&mut o)
+            }
+            (Self::Combined { groups, .. }, mut other) => {
                 other.clear_precondition();
-                patterns.push(other)
+                groups.push(other)
             }
             (this, other) => {
                 // Swap out precondition
