@@ -447,6 +447,7 @@ mod test {
         let r = o.on_event(wal_uid, "in", &mut v, e.clone())?;
         // Since we are broken we should get nothing back
         assert_eq!(r.len(), 0);
+        assert_eq!(r.insights.len(), 0);
 
         // Restore the CB
         let mut i = Event::cb_restore(0);
@@ -455,9 +456,17 @@ mod test {
         // Send a second event
         e.id = idgen.next_id();
         e.transactional = true;
-        let r = o.on_event(wal_uid, "in", &mut v, e.clone())?;
+        let mut op_meta = OpMeta::default();
+        op_meta.insert(42, OwnedValue::null());
+        e.op_meta = op_meta;
+        let mut r = o.on_event(wal_uid, "in", &mut v, e.clone())?;
         // Since we are restored we now get 2 events (1 and 2)
         assert_eq!(r.len(), 2);
+        assert_eq!(r.insights.len(), 1); // we get an ack back
+        let insight = r.insights.pop().expect("no insight");
+        assert_eq!(insight.cb, CBAction::Ack);
+        assert!(insight.op_meta.contains_key(42));
+        assert!(!insight.op_meta.contains_key(wal_uid));
 
         // extract the ids assigned by the WAL and tracked in the event ids
         let id_e1 = r.events.get(0).map(|(_, event)| &event.id).unwrap();
