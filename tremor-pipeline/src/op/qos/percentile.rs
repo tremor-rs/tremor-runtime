@@ -56,17 +56,12 @@ impl ConfigImpl for Config {}
 #[derive(Debug, Clone)]
 pub struct Percentile {
     pub config: Config,
-    pub next: usize,
     pub perc: f64,
 }
 
 impl From<Config> for Percentile {
     fn from(config: Config) -> Self {
-        Self {
-            config,
-            perc: 1.0,
-            next: 0,
-        }
+        Self { config, perc: 1.0 }
     }
 }
 
@@ -145,195 +140,179 @@ impl Operator for Percentile {
     }
 }
 
-#[cfg(tests)]
+#[cfg(test)]
 mod test {
     use super::*;
-    use simd_json::value::borrowed::Object;
-    use std::collections::BTreeMap;
 
     #[test]
     fn pass_wo_error() {
-        let mut op: Backpressure = Config {
+        let mut op: Percentile = Config {
             timeout: 100.0,
-            steps: vec![1, 10, 100],
-            circuit_breaker: false,
+            step_up: d_step_up(),
+            step_down: d_step_down(),
         }
         .into();
+        let uid = 0;
 
         let mut state = Value::null();
 
         // Sent a first event, as all is initited clean
         // we syould see this pass
         let event1 = Event {
-            id: 1.into(),
+            id: (1, 1, 1).into(),
             ingest_ns: 1,
             ..Event::default()
         };
         let mut r = op
-            .on_event(0, "in", &mut state, event1.clone())
+            .on_event(uid, "in", &mut state, event1.clone())
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
-        let (out, _event) = r.pop().expect("no results");
+        let (out, event) = r.pop().expect("no results");
         assert_eq!("out", out);
+        assert!(event.transactional);
 
         // Without a timeout event sent a second event,
         // it too should pass
         let event2 = Event {
-            id: 2.into(),
+            id: (1, 1, 2).into(),
             ingest_ns: 2,
             ..Event::default()
         };
         let mut r = op
-            .on_event(0, "in", &mut state, event2.clone())
+            .on_event(uid, "in", &mut state, event2.clone())
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
-        let (out, _event) = r.pop().expect("no results");
+        let (out, event) = r.pop().expect("no results");
         assert_eq!("out", out);
+        assert!(event.transactional);
     }
 
     #[test]
-    fn block_on_error() {
-        let mut op: Backpressure = Config {
+    fn drop_on_timeout() {
+        let mut op: Percentile = Config {
             timeout: 100.0,
-            steps: vec![1, 10, 100],
-            circuit_breaker: false,
+            step_down: d_step_down(),
+            step_up: d_step_up(),
         }
         .into();
+        let uid = 42;
 
         let mut state = Value::null();
 
-        // Sent a first event, as all is initited clean
-        // we syould see this pass
+        // Sent a first event, as all is freshly initialized
+        // we should see this pass
         let event1 = Event {
-            id: 1.into(),
+            id: (1, 1, 1).into(),
             ingest_ns: 1_000_000,
             ..Event::default()
         };
         let mut r = op
-            .on_event(0, "in", &mut state, event1.clone())
+            .on_event(uid, "in", &mut state, event1.clone())
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
-        let (out, _event) = r.pop().expect("no results");
+        let (out, mut event) = r.pop().expect("no results");
         assert_eq!("out", out);
+        assert!(event.transactional);
 
         // Insert a timeout event with `time` set top `200`
         // this is over our limit of `100` so we syould move
         // one up the backup steps
-        let mut m = Object::new();
+        let mut m = Object::with_capacity(1);
         m.insert("time".into(), 200.0.into());
 
-        let mut op_meta = BTreeMap::new();
-        op_meta.insert(0, OwnedValue::null());
-        let mut insight = Event {
-            id: 1.into(),
-            ingest_ns: 1_000_000,
-            data: (Value::null(), m).into(),
-            op_meta,
-            ..Event::default()
-        };
+        // this will use the right op_meta
+        let mut insight = event.insight_ack_with_timing(101);
 
-        // Verify that we now have a backoff of 1ms
-        op.on_contraflow(0, &mut insight);
-        assert_eq!(op.output.backoff, 1_000_000);
+        // Verify that we increased our percentage
+        op.on_contraflow(uid, &mut insight);
+        assert_eq!(0.95, op.perc);
 
-        // The first event was sent at exactly 1ms
-        // our we should block all eventsup to
-        // 1_999_999
-        // this event syould overflow
+        // now we have a good and fast event
+        // this event should not overflow
         let event2 = Event {
-            id: 2.into(),
-            ingest_ns: 2_000_000 - 1,
-            ..Event::default()
-        };
-        let mut r = op
-            .on_event(0, "in", &mut state, event2.clone())
-            .expect("could not run pipeline")
-            .events;
-        assert_eq!(r.len(), 1);
-        let (out, _event) = r.pop().expect("no results");
-        assert_eq!("overflow", out);
-
-        // On exactly 2_000_000 we should be allowed to send
-        // again
-        let event3 = Event {
-            id: 3.into(),
+            id: (1, 1, 2).into(),
             ingest_ns: 2_000_000,
             ..Event::default()
         };
         let mut r = op
-            .on_event(0, "in", &mut state, event3.clone())
+            .on_event(uid, "in", &mut state, event2.clone())
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
-        let (out, _event) = r.pop().expect("no results");
+        let (out, mut event) = r.pop().expect("no results");
         assert_eq!("out", out);
+        assert!(event.transactional);
 
-        // Since now the last successful event was at 2_000_000
-        // the next event should overflow at 2_000_001
-        let event3 = Event {
-            id: 3.into(),
-            ingest_ns: 2_000_000 + 1,
-            ..Event::default()
-        };
-        let mut r = op
-            .on_event(0, "in", &mut state, event3.clone())
-            .expect("could not run pipeline")
-            .events;
-        assert_eq!(r.len(), 1);
-        let (out, _event) = r.pop().expect("no results");
-        assert_eq!("overflow", out);
+        // less than timeout, we reset percentage a little
+        let mut insight2 = event.insight_ack_with_timing(99);
+        op.on_contraflow(uid, &mut insight2);
+        assert_eq!(0.951, op.perc);
     }
 
     #[test]
-    fn walk_backoff() {
-        let mut op: Backpressure = Config {
+    fn drop_on_error() {
+        let mut op: Percentile = Config {
             timeout: 100.0,
-            steps: vec![1, 10, 100],
-            circuit_breaker: false,
+            step_down: 0.25,
+            step_up: 0.1,
         }
         .into();
+        let uid = 123;
         // An contraflow that fails the timeout
         let mut m = Object::new();
         m.insert("time".into(), 200.0.into());
 
+        let mut op_meta = OpMeta::default();
+        op_meta.insert(uid, OwnedValue::null());
+
         let mut insight = Event {
-            id: 1.into(),
+            id: (1, 1, 1).into(),
             ingest_ns: 2,
-            data: (Value::null(), m).into(),
+            cb: CBAction::Fail,
+            op_meta: op_meta.clone(),
             ..Event::default()
         };
 
-        // A contraflow that passes the timeout
-        let mut m = Object::new();
-        m.insert("time".into(), 99.0.into());
-
+        // A contraflow ack
         let mut insight_reset = Event {
-            id: 1.into(),
+            id: (1, 1, 2).into(),
             ingest_ns: 2,
-            data: (Value::null(), m).into(),
+            cb: CBAction::Ack,
+            op_meta,
             ..Event::default()
         };
 
         // Assert initial state
-        assert_eq!(op.output.backoff, 0);
-        // move one step up
-        op.on_contraflow(0, &mut insight);
-        assert_eq!(op.output.backoff, 1_000_000);
-        // move another step up
-        op.on_contraflow(0, &mut insight);
-        assert_eq!(op.output.backoff, 10_000_000);
-        // move another another step up
-        op.on_contraflow(0, &mut insight);
-        assert_eq!(op.output.backoff, 100_000_000);
-        // We are at the highest step everything
-        // should stay  the same
-        op.on_contraflow(0, &mut insight);
-        assert_eq!(op.output.backoff, 100_000_000);
+        assert_eq!(1.0, op.perc);
+        // move one step down
+        op.on_contraflow(uid, &mut insight);
+        assert_eq!(0.75, op.perc);
+        // move one step down
+        op.on_contraflow(uid, &mut insight);
+        assert_eq!(0.5, op.perc);
+
+        let event = Event {
+            id: (1, 1, 2).into(),
+            ingest_ns: 2_000_001, // we chose a ingest_ns which we know will be discarded with perc of 0.5
+            ..Event::default()
+        };
+        let mut state = Value::null();
+        let mut events = op
+            .on_event(uid, "in", &mut state, event)
+            .expect("could not run pipeline")
+            .events;
+
+        assert_eq!(events.len(), 1);
+
+        // should overflow
+        let (out, _event) = events.pop().expect("no results");
+        assert_eq!("overflow", out);
+
         // Now we should reset
-        op.on_contraflow(0, &mut insight_reset);
-        assert_eq!(op.output.backoff, 0);
+        op.on_contraflow(uid, &mut insight_reset);
+        assert_eq!(0.6, op.perc);
     }
 }

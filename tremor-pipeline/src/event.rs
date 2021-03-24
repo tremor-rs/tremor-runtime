@@ -296,6 +296,7 @@ impl<'value> Iterator for ValueIter<'value> {
 mod test {
     use super::*;
     use crate::errors::Result;
+    use simd_json::OwnedValue;
     use tremor_script::{Object, ValueAndMeta};
 
     #[test]
@@ -373,6 +374,14 @@ mod test {
         );
         assert_eq!(Event::cb_fail(0, EventId::default()).cb, CBAction::Fail);
         assert_eq!(e.insight_fail().cb, CBAction::Fail);
+
+        let mut clone = e.clone();
+        clone.op_meta.insert(1, OwnedValue::null());
+        let ack_with_timing = clone.insight_ack_with_timing(100);
+        assert_eq!(ack_with_timing.cb, CBAction::Ack);
+        assert!(ack_with_timing.op_meta.contains_key(1));
+        let (_, m) = ack_with_timing.data.parts();
+        assert_eq!(Some(100), m.get_u64("time"));
     }
 
     #[test]
