@@ -15,7 +15,7 @@
 use crate::errors::Result;
 use crate::sink::prelude::*;
 use simd_json_derive::Serialize;
-pub struct CB {}
+pub struct Cb {}
 
 ///
 /// CB event provoking offramp for testing sources and operators for their handling of CB events
@@ -24,14 +24,14 @@ pub struct CB {}
 ///
 /// Examples: `{"cb": "ack"}` or `{"cb": ["fail", "close"]}`
 ///
-impl offramp::Impl for CB {
+impl offramp::Impl for Cb {
     fn from_config(_config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         Ok(SinkManager::new_box(Self {}))
     }
 }
 
 #[async_trait::async_trait]
-impl Sink for CB {
+impl Sink for Cb {
     async fn on_event(
         &mut self,
         _input: &str,
@@ -133,7 +133,7 @@ mod tests {
     #[async_std::test]
     async fn cb_meta() -> Result<()> {
         let mut codec = crate::codec::lookup("json")?;
-        let mut cb = CB {};
+        let mut cb = Cb {};
         let url = TremorURL::parse("/offramp/cb/instance")?;
         let codec_map = halfbrown::HashMap::new();
         let (tx, _rx) = async_channel::bounded(1);

@@ -17,7 +17,7 @@ use crate::pipeline;
 use crate::repository::ServantId;
 use crate::source::prelude::*;
 use crate::source::{
-    blaster, crononome, discord, file, kafka, metronome, postgres, rest, tcp, udp, ws,
+    blaster, cb, crononome, discord, file, kafka, metronome, postgres, rest, tcp, udp, ws,
 };
 use crate::url::TremorURL;
 use async_std::task::{self, JoinHandle};
@@ -70,6 +70,7 @@ pub(crate) fn lookup(
 ) -> Result<Box<dyn Onramp>> {
     match name {
         "blaster" => blaster::Blaster::from_config(id, config),
+        "cb" => cb::Cb::from_config(id, config),
         "file" => file::File::from_config(id, config),
         "kafka" => kafka::Kafka::from_config(id, config),
         "postgres" => postgres::Postgres::from_config(id, config),

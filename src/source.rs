@@ -35,6 +35,7 @@ use tremor_script::prelude::*;
 use self::prelude::OnrampConfig;
 
 pub(crate) mod blaster;
+pub(crate) mod cb;
 pub(crate) mod crononome;
 pub(crate) mod discord;
 pub(crate) mod file;
@@ -381,7 +382,7 @@ where
         port: Cow<'static, str>,
     ) -> bool {
         let event = Event {
-            // TODO: stream handling
+            // TODO: use EventIdGen and stream handling
             id: EventId::new(self.uid, DEFAULT_STREAM_ID, self.id),
             data,
             ingest_ns,

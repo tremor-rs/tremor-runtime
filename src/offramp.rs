@@ -107,7 +107,7 @@ pub trait Impl {
 pub fn lookup(name: &str, config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
     match name {
         "blackhole" => blackhole::Blackhole::from_config(config),
-        "cb" => cb::CB::from_config(config),
+        "cb" => cb::Cb::from_config(config),
         "debug" => debug::Debug::from_config(config),
         "elastic" => elastic::Elastic::from_config(config),
         "exit" => exit::Exit::from_config(config),
