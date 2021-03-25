@@ -68,6 +68,9 @@ pub mod system;
 // FIXME subsume the functionality here in the proper tremor network
 /// Network for clustering communication
 pub mod temp_network;
+/// Tremor cluster microring
+#[allow(dead_code)]
+pub(crate) mod uring;
 /// Tremor URI
 pub mod url;
 /// Utility functions

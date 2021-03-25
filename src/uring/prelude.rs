@@ -20,11 +20,13 @@ use super::{
     NetworkCont,
 };
 pub(crate) use crate::errors::Result;
-use crate::{network::control::ControlProtocol, source::tnt::SerializedResponse};
+use crate::{source::tnt::SerializedResponse, uring::control::ControlProtocol};
 use async_channel::Sender;
 pub(crate) use tremor_pipeline::Event;
-use tremor_value::json;
+//use tremor_value::json;
 use tremor_value::Value;
+
+pub(crate) use crate::{event, wsc_reply};
 
 /// Given a serializable rust struct, produces a tremor value
 pub(crate) fn destructurize<T>(value: &T) -> Result<Value>
@@ -45,6 +47,7 @@ where
     Ok(T::deserialize(value)?)
 }
 
+/*
 /// Macro that creates an event based on a json type template
 #[macro_export]
 macro_rules! event {
@@ -88,6 +91,7 @@ macro_rules! wsc_reply {
         })) as Result<NetworkCont>
     }};
 }
+*/
 
 pub(crate) fn close(reason: StatusCode) -> Result<NetworkCont> {
     Ok(NetworkCont::Close(event!(

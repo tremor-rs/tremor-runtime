@@ -38,11 +38,9 @@ pub(crate) mod prelude;
 pub(crate) mod nana;
 
 // Supported network protocol variants
-mod api;
 mod control;
 mod echo;
 mod microring;
-mod pubsub;
 
 use prelude::*;
 

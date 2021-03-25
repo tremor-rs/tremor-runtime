@@ -18,11 +18,8 @@
 
 use crate::{errors::Result, system::Conductor};
 
-use super::{
-    api::ApiProtocol, echo::EchoProtocol, microring::MicroRingProtocol, nana::StatusCode,
-    pubsub::PubSubProtocol, NetworkCont,
-};
-use crate::network::prelude::*;
+use super::{echo::EchoProtocol, microring::MicroRingProtocol, nana::StatusCode, NetworkCont};
+use crate::uring::prelude::*;
 use halfbrown::HashMap as HalfMap;
 use std::collections::HashMap;
 pub(crate) use tremor_pipeline::Event;
@@ -140,16 +137,6 @@ impl NetworkProtocol for ControlProtocol {
                                 let proto = Box::new(EchoProtocol::new(self, headers));
                                 self.mux.insert(alias.to_string(), proto);
                             }
-                            "pubsub" => {
-                                let proto =
-                                    Box::new(PubSubProtocol::new(self, alias.to_string(), headers));
-                                self.mux.insert(alias.to_string(), proto);
-                            }
-                            "api" => {
-                                let proto =
-                                    Box::new(ApiProtocol::new(self, alias.to_string(), headers));
-                                self.mux.insert(alias.to_string(), proto);
-                            }
                             "microring" => {
                                 let proto = Box::new(MicroRingProtocol::new(
                                     self,
@@ -227,8 +214,8 @@ impl NetworkProtocol for ControlProtocol {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::network::prelude::NetworkSession;
     use crate::system;
+    use crate::uring::prelude::NetworkSession;
     use crate::{errors::Result, event, system::Conductor};
     use async_channel::bounded;
     use tremor_script::Value;

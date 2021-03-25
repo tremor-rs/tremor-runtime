@@ -38,6 +38,7 @@ pub(crate) use crate::network;
 pub(crate) use crate::offramp;
 pub(crate) use crate::onramp;
 pub(crate) use crate::pipeline;
+pub(crate) use crate::uring;
 
 lazy_static! {
     pub(crate) static ref METRICS_PIPELINE: TremorURL = {
@@ -763,7 +764,11 @@ impl World {
         let (pipeline_h, pipeline) = pipeline::Manager::new(qsize).start();
 
         let (network_h, network) =
-            network::Manager::new(&conductor, network_addr, Some(cluster_peers), qsize).start();
+            network::Manager::new(&conductor, network_addr, Some(cluster_peers.clone()), qsize)
+                .start();
+
+        let (_uring_h, _uring) =
+            uring::Manager::new(&conductor, network_addr, Some(cluster_peers), qsize).start();
 
         let (system_h, system) = Manager {
             offramp,

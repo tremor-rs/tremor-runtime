@@ -15,8 +15,8 @@
 use tremor_pipeline::Event;
 
 use super::{ControlProtocol, ControlState};
-use crate::network::prelude::{NetworkProtocol, StreamId};
-use crate::{errors::Result, network::NetworkCont};
+use crate::uring::prelude::{NetworkProtocol, StreamId};
+use crate::{errors::Result, uring::NetworkCont};
 use std::fmt;
 
 pub(crate) struct ControlLifecycleFsm {

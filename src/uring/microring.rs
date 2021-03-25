@@ -17,8 +17,8 @@ use super::{
     NetworkCont,
 };
 use crate::errors::Result;
-use crate::network::control::ControlProtocol;
 use crate::raft::node::{RaftNetworkMsg, RaftReply, RaftSender};
+use crate::uring::control::ControlProtocol;
 use futures::StreamExt;
 use tremor_pipeline::Event;
 use tremor_value::Value;

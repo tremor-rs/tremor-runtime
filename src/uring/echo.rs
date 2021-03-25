@@ -17,7 +17,7 @@ use super::{
     NetworkCont,
 };
 use crate::errors::Result;
-use crate::network::control::ControlProtocol;
+use crate::uring::control::ControlProtocol;
 use tremor_pipeline::Event;
 use tremor_value::Value;
 
