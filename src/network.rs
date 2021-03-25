@@ -14,12 +14,11 @@
 
 use crate::{
     codec, errors::Result, metrics::RampReporter, onramp::OnrampConfig, pipeline,
-    source::Processors, source::SourceReply, source::SourceState, system::Conductor,
-    url::ports::ERR, url::ports::OUT, url::TremorURL,
+    source::tnt::TntImpl, source::Processors, source::SourceReply, source::SourceState,
+    system::Conductor, url::ports::ERR, url::ports::OUT, url::TremorURL,
 };
-use crate::{onramp, sink::Sink, source::Source};
+use crate::{onramp, source::Source};
 use crate::{
-    sink::tnt::{Config as TntSinkConfig, Tnt as TntSink},
     source::tnt::{Config as TntSourceConfig, SerializedResponse, TntImpl as TntSource},
     version,
 };
@@ -135,25 +134,18 @@ pub(crate) struct Manager {
     pub(crate) control: ControlProtocol,
     qsize: usize,
     source: TntSource,
-    sinks: Vec<TntSink>,
 }
 
-/// Network manager message
-pub enum ManagerMsg {
+pub(crate) enum ManagerMsg {
     Stop,
-    // TODO reuse Msg and place elsewhere?
-    #[allow(dead_code)]
-    Message(Event),
 }
 
 pub(crate) type NetworkSender = async_channel::Sender<ManagerMsg>;
-pub(crate) type NetworkReceiver = async_channel::Receiver<ManagerMsg>;
 
 impl std::fmt::Display for ManagerMsg {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match *self {
             ManagerMsg::Stop => write!(f, "Network Manager Stop Command"),
-            ManagerMsg::Message(_) => write!(f, "Network Manager Message Command"),
         }
     }
 }
@@ -161,8 +153,7 @@ impl std::fmt::Display for ManagerMsg {
 pub(crate) struct NetworkManager {
     control: ControlProtocol,
     network_id: TremorURL,
-    pub source: TntSource,
-    pub sinks: Vec<TntSink>,
+    pub source: TntImpl,
     metrics_reporter: RampReporter,
     pipelines_out: Vec<(TremorURL, pipeline::Addr)>,
     pipelines_err: Vec<(TremorURL, pipeline::Addr)>,
@@ -170,7 +161,6 @@ pub(crate) struct NetworkManager {
     /// Unique Id for the source
     uid: u64,
     sessions: HashMap<StreamId, NetworkSession>,
-    receiver: NetworkReceiver,
 }
 unsafe impl Send for NetworkManager {}
 unsafe impl Sync for NetworkManager {}
@@ -197,15 +187,12 @@ impl NetworkManager {
 
     async fn handle_raw_text<'event>(&mut self, sid: StreamId, event: Event) -> Result<()> {
         if let Some(session) = self.sessions.get_mut(&sid) {
-            dbg!(&session);
             let origin = self.source.streams.get(&sid).unwrap();
-            dbg!("handling raw text via the control protocol");
+            //dbg!("handling raw text via the control protocol");
             match session.on_event(origin, &event).await? {
                 NetworkCont::ConnectProtocol(protocol, alias, _next_state) => {
                     let origin = self.source.streams.get(&sid).unwrap();
-                    dbg!("sending back connect-ack");
-                    dbg!(origin.is_closed());
-                    // FIXME closed channel when origin is tnt sink
+                    //dbg!("sending back connect-ack");
                     origin
                         .send(SerializedResponse {
                             event_id: EventId::new(0, sid as u64, 0), // FIXME TODO
@@ -355,10 +342,8 @@ impl NetworkManager {
 
     pub async fn new(
         control: ControlProtocol,
-        mut source: TntSource,
-        mut sinks: Vec<TntSink>,
+        mut source: TntImpl,
         config: OnrampConfig<'_>,
-        receiver: NetworkReceiver,
     ) -> Result<(Self, Sender<onramp::Msg>)> {
         // We use a unbounded channel for counterflow, while an unbounded channel seems dangerous
         // there is soundness to this.
@@ -377,46 +362,18 @@ impl NetworkManager {
         // N is the maximum number of counterflow events a single event can trigger.
         // N is normally < 1.
         let (tx, _rx) = unbounded();
-        let codec = codec::lookup(&config.codec)?;
+        let _codec = codec::lookup(&config.codec)?;
         let mut resolved_codec_map = codec::builtin_codec_map();
         // override the builtin map
         for (k, v) in config.codec_map {
             resolved_codec_map.insert(k, codec::lookup(&v)?);
         }
         source.init().await?;
-
-        // TODO do better here
-        let mut sink_uid: u64 = 0;
-        for sink in &mut sinks {
-            let (reply_tx, _reply_rx) = bounded(crate::QSIZE);
-
-            let sink_url = TremorURL::from_network_id(&sink_uid.to_string())?;
-            sink.init(
-                sink_uid,
-                &sink_url,
-                &*codec,
-                &resolved_codec_map,
-                Processors {
-                    pre: &[],
-                    post: &[],
-                },
-                true,
-                //reply_channel: Sender<sink::Reply>,
-                reply_tx.clone(),
-            )
-            .await?;
-            sink_uid += 1;
-
-            //sink.handle_connection_lifecycle_events(nanotime()).await?;
-        }
-
         Ok((
             Self {
                 control,
                 network_id: source.id().clone(),
                 source,
-                sinks,
-                receiver,
                 metrics_reporter: config.metrics_reporter,
                 id: 0,
                 pipelines_out: Vec::new(),
@@ -429,72 +386,8 @@ impl NetworkManager {
     }
 
     pub async fn run(mut self) -> Result<()> {
-        // TODO move sink logic to another task...maybe via cluster manager?
-
-        //while let Ok(msg) = reply_rx.try_recv() {
-        //    match msg {
-        //        sink::Reply::Insight(event) => {
-        //            assert_eq!(CBAction::Fail, event.cb);
-        //            assert_eq!(1, event.id.stream_id());
-        //        }
-        //        sink::Reply::Response(port, event) => {
-        //            assert_eq!("err", port.as_ref());
-        //            assert_eq!(1, event.id.stream_id());
-        //        }
-        //    }
-        //}
-
-        // simulate signal ticks
-        let (tick_tx, tick_rx) = bounded::<Event>(crate::QSIZE);
-        task::spawn(async move {
-            let mut e = Event {
-                ingest_ns: nanotime(),
-                kind: Some(tremor_pipeline::SignalKind::Tick),
-                ..Event::default()
-            };
-            e.ingest_ns = nanotime();
-
-            while tick_tx.send(e.clone()).await.is_ok() {
-                task::sleep(Duration::from_millis(100)).await;
-                e.ingest_ns = nanotime();
-            }
-        });
-
-        let codec: Box<dyn codec::Codec> = Box::new(codec::json::JSON::default());
-        let codec_map: halfbrown::HashMap<String, Box<dyn codec::Codec>> =
-            halfbrown::HashMap::new();
-
         //dbg!("running core network run loop");
         loop {
-            // TODO eliminate the need for this
-            //dbg!("waiting to receive ticks");
-            match tick_rx.recv().await {
-                Ok(e) => {
-                    //dbg!("received signal tick");
-                    for sink in &mut self.sinks {
-                        sink.on_signal(e.clone()).await.unwrap();
-                    }
-                }
-                Err(e) => {
-                    info!("Error reciving signal tick... {}", e);
-                }
-            }
-
-            match self.receiver.try_recv() {
-                Ok(ManagerMsg::Stop) => return Ok(()),
-                Ok(ManagerMsg::Message(event)) => {
-                    for sink in &mut self.sinks {
-                        dbg!(&event.id);
-                        sink.on_event("in", codec.as_ref(), &codec_map, event.clone())
-                            .await
-                            .unwrap();
-                    }
-                }
-                Err(e) => {
-                    info!("Error reciving network manager message... {}", e);
-                }
-            }
-
             match self.source.pull_event(self.id).await {
                 Ok(SourceReply::StartStream(sid)) => {
                     //dbg!("network start stream");
@@ -519,7 +412,6 @@ impl NetworkManager {
                 Ok(SourceReply::EndStream(id)) => {
                     self.sessions.remove(&id);
                 }
-                // TODO use this for node-to-node?
                 Ok(SourceReply::Structured { origin_uri, data }) => {
                     let ingest_ns = nanotime();
                     self.handle_value(ingest_ns, data, origin_uri).await?;
@@ -586,7 +478,6 @@ impl NetworkManager {
                 let data = s.1.on_data().await?;
                 if let Some(data) = data {
                     for d in data {
-                        dbg!("sending back serialized response");
                         origin
                             .send(SerializedResponse {
                                 event_id: EventId::new(0, stream_id as u64, 0), // FIXME TODO
@@ -604,30 +495,9 @@ impl NetworkManager {
 }
 
 impl Manager {
-    pub fn new(
-        conductor: &Conductor,
-        network_addr: SocketAddr,
-        network_peers: Option<Vec<String>>,
-        qsize: usize,
-    ) -> Self {
+    pub fn new(conductor: &Conductor, network_addr: SocketAddr, qsize: usize) -> Self {
         let onramp_id = TremorURL::from_network_id("self").unwrap();
         //dbg!("creating control protocol/network");
-
-        let sinks = if let Some(peers) = network_peers {
-            peers
-                .iter()
-                .map(|peer| {
-                    TntSink::from_config2(TntSinkConfig {
-                        url: peer.clone(),
-                        binary: false,
-                    })
-                    .unwrap()
-                })
-                .collect()
-        } else {
-            vec![]
-        };
-
         Self {
             control: ControlProtocol::new(conductor),
             qsize,
@@ -642,12 +512,11 @@ impl Manager {
                 true, // is always linked
             )
             .unwrap(),
-            sinks,
         }
     }
 
     pub fn start(self) -> (JoinHandle<Result<()>>, NetworkSender) {
-        let (tx, rx) = bounded(self.qsize);
+        let (tx, _rx) = bounded(self.qsize);
         let mut codec_map: HashMap<String, String> = HashMap::new();
         codec_map.insert("application/json".into(), "json".into());
 
@@ -656,7 +525,6 @@ impl Manager {
             let (manager, _tx2) = NetworkManager::new(
                 self.control,
                 self.source,
-                self.sinks,
                 OnrampConfig {
                     onramp_uid: 0u64,
                     codec: "json",
@@ -672,7 +540,6 @@ impl Manager {
                         Some(1),
                     ),
                 },
-                rx,
             )
             .await
             .unwrap();
