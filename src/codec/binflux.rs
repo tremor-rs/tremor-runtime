@@ -112,7 +112,7 @@ impl BInflux {
             let p = c.position() as usize;
             c.set_position((p + l) as u64);
             unsafe { Ok(str::from_utf8_unchecked(&c.get_ref()[p..p + l]).into()) }
-        };
+        }
         let mut c = Cursor::new(data);
         let vsn = c.read_u16::<BigEndian>()?;
         if vsn != 0 {

@@ -168,8 +168,8 @@ mod test {
         #[derive(serde::Deserialize)]
         struct C {
             _s: String,
-        };
-        impl ConfigImpl for C {};
+        }
+        impl ConfigImpl for C {}
 
         let y: serde_yaml::Value = serde_yaml::from_str("5").unwrap();
 

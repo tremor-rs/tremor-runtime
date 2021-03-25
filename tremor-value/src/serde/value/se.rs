@@ -736,12 +736,9 @@ mod tests {
     }
 
     macro_rules! fail {
-        ($msg:expr) => (
-            assert!(false, $msg);
-        );
-        ($msg:expr, $($args:expr),+) => (
-            assert!(false, format!($msg, $($args),*));
-        )
+        ( $($args:expr),+ ) => {
+            assert!( false, $($args),* )
+        }
     }
 
     #[test]

@@ -123,7 +123,7 @@ mod test {
         #[derive(Deserialize, Serialize)]
         struct TestStruct<'test> {
             value: Value<'test>,
-        };
+        }
         let mut v = br#"{"value":{"array":[1,1.0,true,null],"string":"badger"}}"#.to_vec();
         let orig = String::from_utf8(v.clone()).unwrap();
         let s = TestStruct::from_slice(&mut v).unwrap();

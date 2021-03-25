@@ -128,7 +128,7 @@ where
                         );
                     }
                 }};
-            };
+            }
             match cg {
                 ClauseGroup::Single { pattern, .. } => {
                     execute!(pattern);
