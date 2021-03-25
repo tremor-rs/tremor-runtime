@@ -86,12 +86,12 @@ impl ReceivedCbs {
 
     fn missing_ids(&self) -> Vec<u64> {
         let mut all_ids: Vec<u64> = self.ack.iter().chain(self.fail.iter()).copied().collect();
-        all_ids.sort();
+        all_ids.sort_unstable();
 
         all_ids
             .windows(2)
             .filter_map(|window| match window {
-                &[low, hi] if hi - low > 1 => Some((low + 1)..hi),
+                [low, hi] if hi - low > 1 => Some((low + 1)..*hi),
                 _ => None,
             })
             .flatten()
