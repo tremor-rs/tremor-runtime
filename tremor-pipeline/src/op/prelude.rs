@@ -14,7 +14,7 @@
 
 pub use super::*;
 pub use crate::errors::*;
-pub use crate::{CBAction, Event, OpMeta, Operator};
+pub use crate::{CbAction, Event, OpMeta, Operator};
 pub use beef::Cow;
 pub use halfbrown::{hashmap, HashMap};
 pub use serde_yaml;

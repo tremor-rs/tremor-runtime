@@ -103,7 +103,7 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
     let dest_path = matches.value_of("OUTDIR").ok_or("docs")?.to_string();
     let is_interactive: bool = matches.is_present("interactive");
 
-    Ok(visit_path_str(src_path, &move |rel_path, src_path| {
+    visit_path_str(src_path, &move |rel_path, src_path| {
         // The closure exposes a 1-arity capture conforming to the PathVisitor 1-arity alias'd fn
         // whilst binding the locally defined is_interactive and dest_path command parameters
         // thereby adapting the 3-arity gen_doc to a 1-arity visitor callback fn
@@ -111,5 +111,5 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
         // This would be so much more elegant in erlang! Surely there's a more convivial syntax in rust?
         //
         gen_doc(is_interactive, rel_path, Some(&dest_path), src_path)
-    })?)
+    })
 }

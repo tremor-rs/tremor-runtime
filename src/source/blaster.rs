@@ -37,7 +37,7 @@ impl ConfigImpl for Config {}
 #[derive(Clone)]
 pub struct Blaster {
     pub config: Config,
-    onramp_id: TremorURL,
+    onramp_id: TremorUrl,
     data: Vec<u8>,
     acc: Acc,
     origin_uri: EventOriginUri,
@@ -49,7 +49,7 @@ impl std::fmt::Debug for Blaster {
 }
 
 impl onramp::Impl for Blaster {
-    fn from_config(id: &TremorURL, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
+    fn from_config(id: &TremorUrl, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
             let mut source_data_file = file::open(&config.source)?;
@@ -101,7 +101,7 @@ impl Acc {
 
 #[async_trait::async_trait()]
 impl Source for Blaster {
-    fn id(&self) -> &TremorURL {
+    fn id(&self) -> &TremorUrl {
         &self.onramp_id
     }
 

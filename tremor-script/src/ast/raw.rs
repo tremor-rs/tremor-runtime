@@ -274,7 +274,7 @@ impl<'script> Upable<'script> for BytesRaw<'script> {
             value: self
                 .bytes
                 .into_iter()
-                .map(|b| Ok(b.up(helper)?))
+                .map(|b| b.up(helper))
                 .collect::<Result<_>>()?,
         })
     }
@@ -2399,8 +2399,7 @@ where
                 };
                 g.optimize(0);
                 groups.push(g);
-                group = Vec::new();
-                group.push(p);
+                group = vec![p];
             }
         }
         group.sort_by_key(Costly::cost);

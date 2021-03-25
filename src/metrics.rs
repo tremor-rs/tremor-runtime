@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::pipeline;
-use crate::url::TremorURL;
+use crate::url::TremorUrl;
 use beef::Cow;
 use halfbrown::HashMap;
 use tremor_pipeline::Event;
@@ -31,15 +31,15 @@ pub(crate) struct Ramp {
 
 #[derive(Debug)]
 pub(crate) struct RampReporter {
-    artefact_url: TremorURL,
+    artefact_url: TremorUrl,
     metrics: Ramp,
-    metrics_pipeline: Option<(TremorURL, pipeline::Addr)>,
+    metrics_pipeline: Option<(TremorUrl, pipeline::Addr)>,
     flush_interval: Option<u64>, // as nano-seconds
     last_flush_ns: u64,
 }
 
 impl RampReporter {
-    pub(crate) fn new(artefact_url: TremorURL, flush_interval_s: Option<u64>) -> Self {
+    pub(crate) fn new(artefact_url: TremorUrl, flush_interval_s: Option<u64>) -> Self {
         Self {
             artefact_url,
             metrics: Ramp {
@@ -53,7 +53,7 @@ impl RampReporter {
         }
     }
 
-    pub(crate) fn set_metrics_pipeline(&mut self, pipeline_tuple: (TremorURL, pipeline::Addr)) {
+    pub(crate) fn set_metrics_pipeline(&mut self, pipeline_tuple: (TremorUrl, pipeline::Addr)) {
         self.metrics_pipeline = Some(pipeline_tuple);
     }
 
@@ -124,7 +124,7 @@ mod test {
 
     #[test]
     fn test() {
-        let mut r = RampReporter::new(TremorURL::parse("/onramp/example/00").unwrap(), Some(1));
+        let mut r = RampReporter::new(TremorUrl::parse("/onramp/example/00").unwrap(), Some(1));
         r.increment_in();
         assert_eq!(r.metrics.r#in, 1);
         r.increment_out();

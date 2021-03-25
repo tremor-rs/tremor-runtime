@@ -63,7 +63,7 @@ struct SendEventConnectionMsg {
 
 /// An offramp that writes to a websocket endpoint
 pub struct Ws {
-    sink_url: TremorURL,
+    sink_url: TremorUrl,
     event_origin_uri: EventOriginUri,
     config: Config,
     preprocessors: Vec<String>,
@@ -86,7 +86,7 @@ pub struct Ws {
 /// if `maybe_op_meta` is `Some(_)`, send a fail insight as well
 #[inline]
 async fn handle_error(
-    sink_url: &TremorURL,
+    sink_url: &TremorUrl,
     e: &str,
     reply_tx: &Sender<sink::Reply>,
     ids: &EventId,
@@ -113,7 +113,7 @@ async fn handle_error(
 
 #[allow(clippy::too_many_arguments, clippy::too_many_lines)]
 async fn ws_connection_loop(
-    sink_url: TremorURL,
+    sink_url: TremorUrl,
     url: String,
     mut event_origin_url: EventOriginUri,
     connection_lifecycle_tx: Sender<WsConnectionMsg>,
@@ -333,7 +333,7 @@ fn event_to_message(
 }
 
 fn message_to_event(
-    sink_url: &TremorURL,
+    sink_url: &TremorUrl,
     event_origin_uri: &EventOriginUri,
     codec: &mut dyn Codec,
     preprocessors: &mut Preprocessors,
@@ -390,7 +390,7 @@ impl offramp::Impl for Ws {
             let (reply_tx, _) = bounded(1);
 
             Ok(SinkManager::new_box(Self {
-                sink_url: TremorURL::from_onramp_id("ws")?,  // dummy value
+                sink_url: TremorUrl::from_onramp_id("ws")?,  // dummy value
                 event_origin_uri: EventOriginUri::default(), // dummy
                 config,
                 connection_lifecycle_tx: tx,
@@ -588,7 +588,7 @@ impl Sink for Ws {
     async fn init(
         &mut self,
         sink_uid: u64,
-        sink_url: &TremorURL,
+        sink_url: &TremorUrl,
         codec: &dyn Codec,
         _codec_map: &HashMap<String, Box<dyn Codec>>,
         processors: Processors<'_>,
@@ -651,7 +651,7 @@ mod test {
 
     #[test]
     fn message_to_event_ok() -> Result<()> {
-        let sink_url = TremorURL::parse("/offramp/ws/instance")?;
+        let sink_url = TremorUrl::parse("/offramp/ws/instance")?;
         let origin_uri = EventOriginUri::default();
         let mut preprocessors = make_preprocessors(&["lines".to_string()])?;
         let mut ingest_ns = 42_u64;
@@ -679,7 +679,7 @@ mod test {
 
     #[test]
     fn event_to_message_ok() -> Result<()> {
-        let mut codec: Box<dyn Codec> = Box::new(crate::codec::json::JSON::default());
+        let mut codec: Box<dyn Codec> = Box::new(crate::codec::json::Json::default());
         let mut postprocessors = make_postprocessors(&["lines".to_string()])?;
         let mut data = Value::object_with_capacity(2);
         data.insert("snot", "badger")?;
@@ -702,8 +702,8 @@ mod test {
         let (conn_tx, conn_rx) = bounded(10);
         let (reply_tx, reply_rx) = bounded(1000);
 
-        let url = TremorURL::parse("/offramp/ws/instance")?;
-        let mut codec: Box<dyn Codec> = Box::new(crate::codec::json::JSON::default());
+        let url = TremorUrl::parse("/offramp/ws/instance")?;
+        let mut codec: Box<dyn Codec> = Box::new(crate::codec::json::Json::default());
         let config = Config {
             url: "http://idonotexist:65535/path".to_string(),
             binary: true,
@@ -747,7 +747,7 @@ mod test {
         while let Ok(msg) = reply_rx.try_recv() {
             match msg {
                 sink::Reply::Insight(event) => {
-                    assert_eq!(CBAction::Fail, event.cb);
+                    assert_eq!(CbAction::Fail, event.cb);
                     assert_eq!(Some((1, 1)), event.id.get_max_by_source(1));
                 }
                 sink::Reply::Response(port, event) => {

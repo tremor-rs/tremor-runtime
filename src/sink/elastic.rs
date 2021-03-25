@@ -62,7 +62,7 @@ fn concurrency() -> usize {
 impl ConfigImpl for Config {}
 
 pub struct Elastic {
-    sink_url: TremorURL,
+    sink_url: TremorUrl,
     client: SyncClient,
     queue: AsyncSink<u64>,
     postprocessors: Postprocessors,
@@ -86,7 +86,7 @@ impl offramp::Impl for Elastic {
             let (res_tx, _res_rx) = bounded(1); // dummy value
 
             Ok(SinkManager::new_box(Self {
-                sink_url: TremorURL::from_offramp_id("elastic")?, // just a dummy value, gonna be overwritten on init
+                sink_url: TremorUrl::from_offramp_id("elastic")?, // just a dummy value, gonna be overwritten on init
                 postprocessors: vec![],
                 client,
                 queue,
@@ -359,7 +359,7 @@ impl Elastic {
                         // ALLOW: this is OK
                         unreachable!()
                     };
-                    CBAction::Ack
+                    CbAction::Ack
                 }
                 Err(e) => {
                     // request failed
@@ -383,7 +383,7 @@ impl Elastic {
                         error_data.insert("error".into(), Value::from(e.to_string()));
                         responses.push(((error_data, Value::null()).into(), ERR));
                     }
-                    CBAction::Fail
+                    CbAction::Fail
                 }
             };
 
@@ -538,7 +538,7 @@ impl Sink for Elastic {
     async fn init(
         &mut self,
         sink_uid: u64,
-        sink_url: &TremorURL,
+        sink_url: &TremorUrl,
         _codec: &dyn Codec,
         _codec_map: &HashMap<String, Box<dyn Codec>>,
         processors: Processors<'_>,

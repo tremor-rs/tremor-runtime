@@ -79,7 +79,7 @@ pub(crate) type MappingMap = config::MappingMap;
 
 pub(crate) use crate::config::{Binding, OffRamp, OnRamp};
 use crate::repository::BindingArtefact;
-use crate::url::TremorURL;
+use crate::url::TremorUrl;
 pub(crate) use serde_yaml::Value as OpConfig;
 use system::World;
 pub(crate) use tremor_pipeline::Event;
@@ -173,7 +173,7 @@ pub async fn load_query_file(world: &World, file_name: &str) -> Result<usize> {
     };
     let id = query.id().unwrap_or(&file_id);
 
-    let id = TremorURL::parse(&format!("/pipeline/{}", id))?;
+    let id = TremorUrl::parse(&format!("/pipeline/{}", id))?;
     info!("Loading {} from file {}.", id, file_name);
     world.repo.publish_pipeline(&id, false, query).await?;
 
@@ -192,20 +192,20 @@ pub async fn load_cfg_file(world: &World, file_name: &str) -> Result<usize> {
     let config = crate::incarnate(config)?;
 
     for o in config.offramps {
-        let id = TremorURL::parse(&format!("/offramp/{}", o.id))?;
+        let id = TremorUrl::parse(&format!("/offramp/{}", o.id))?;
         info!("Loading {} from file.", id);
         world.repo.publish_offramp(&id, false, o).await?;
         count += 1;
     }
 
     for o in config.onramps {
-        let id = TremorURL::parse(&format!("/onramp/{}", o.id))?;
+        let id = TremorUrl::parse(&format!("/onramp/{}", o.id))?;
         info!("Loading {} from file.", id);
         world.repo.publish_onramp(&id, false, o).await?;
         count += 1;
     }
     for binding in config.bindings {
-        let id = TremorURL::parse(&format!("/binding/{}", binding.id))?;
+        let id = TremorUrl::parse(&format!("/binding/{}", binding.id))?;
         info!("Loading {} from file.", id);
         world
             .repo

@@ -41,7 +41,7 @@ use crate::lifecycle::{ActivationState, ActivatorLifecycleFsm};
 use crate::repository::{
     Artefact, ArtefactId, BindingArtefact, OfframpArtefact, OnrampArtefact, PipelineArtefact,
 };
-use crate::url::TremorURL;
+use crate::url::TremorUrl;
 use async_channel::bounded;
 use async_std::task;
 use hashbrown::HashMap;
@@ -236,7 +236,7 @@ impl Registries {
     ///  * if we can't find a pipeline
     pub async fn find_pipeline(
         &self,
-        id: &TremorURL,
+        id: &TremorUrl,
     ) -> Result<Option<<PipelineArtefact as Artefact>::SpawnResult>> {
         let (tx, rx) = bounded(1);
         self.pipeline.send(Msg::FindServant(tx, id.clone())).await?;
@@ -248,7 +248,7 @@ impl Registries {
     ///  * if I can't publish a pipeline
     pub async fn publish_pipeline(
         &self,
-        id: &TremorURL,
+        id: &TremorUrl,
         servant: PipelineServant,
     ) -> Result<ActivationState> {
         let (tx, rx) = bounded(1);
@@ -262,7 +262,7 @@ impl Registries {
     ///
     /// # Errors
     ///  * if we can't unpublish a pipeline
-    pub async fn unpublish_pipeline(&self, id: &TremorURL) -> Result<ActivationState> {
+    pub async fn unpublish_pipeline(&self, id: &TremorUrl) -> Result<ActivationState> {
         let (tx, rx) = bounded(1);
         self.pipeline
             .send(Msg::UnpublishServant(tx, id.clone()))
@@ -276,7 +276,7 @@ impl Registries {
     ///  * if we can't transition a pipeline
     pub async fn transition_pipeline(
         &self,
-        id: &TremorURL,
+        id: &TremorUrl,
         new_state: ActivationState,
     ) -> Result<ActivationState> {
         let (tx, rx) = bounded(1);
@@ -291,7 +291,7 @@ impl Registries {
     ///  * if we can't find a onramp
     pub async fn find_onramp(
         &self,
-        id: &TremorURL,
+        id: &TremorUrl,
     ) -> Result<Option<<OnrampArtefact as Artefact>::SpawnResult>> {
         let (tx, rx) = bounded(1);
         self.onramp.send(Msg::FindServant(tx, id.clone())).await?;
@@ -303,7 +303,7 @@ impl Registries {
     ///  * if we can't publish the onramp
     pub async fn publish_onramp(
         &self,
-        id: &TremorURL,
+        id: &TremorUrl,
         servant: OnrampServant,
     ) -> Result<ActivationState> {
         let (tx, rx) = bounded(1);
@@ -316,7 +316,7 @@ impl Registries {
     ///
     /// # Errors
     ///  * if we can't unpublish an onramp
-    pub async fn unpublish_onramp(&self, id: &TremorURL) -> Result<ActivationState> {
+    pub async fn unpublish_onramp(&self, id: &TremorUrl) -> Result<ActivationState> {
         let (tx, rx) = bounded(1);
         self.onramp
             .send(Msg::UnpublishServant(tx, id.clone()))
@@ -327,7 +327,7 @@ impl Registries {
     #[cfg(test)]
     pub async fn transition_onramp(
         &self,
-        id: &TremorURL,
+        id: &TremorUrl,
         new_state: ActivationState,
     ) -> Result<ActivationState> {
         let (tx, rx) = bounded(1);
@@ -343,7 +343,7 @@ impl Registries {
     ///  * if we can't find an offramp
     pub async fn find_offramp(
         &self,
-        id: &TremorURL,
+        id: &TremorUrl,
     ) -> Result<Option<<OfframpArtefact as Artefact>::SpawnResult>> {
         let (tx, rx) = bounded(1);
         self.offramp.send(Msg::FindServant(tx, id.clone())).await?;
@@ -356,7 +356,7 @@ impl Registries {
     ///  * if we can't pubish an offramp
     pub async fn publish_offramp(
         &self,
-        id: &TremorURL,
+        id: &TremorUrl,
         servant: OfframpServant,
     ) -> Result<ActivationState> {
         let (tx, rx) = bounded(1);
@@ -369,7 +369,7 @@ impl Registries {
     ///
     /// # Errors
     ///  * if we can't unpublish an offramp
-    pub async fn unpublish_offramp(&self, id: &TremorURL) -> Result<ActivationState> {
+    pub async fn unpublish_offramp(&self, id: &TremorUrl) -> Result<ActivationState> {
         let (tx, rx) = bounded(1);
         self.offramp
             .send(Msg::UnpublishServant(tx, id.clone()))
@@ -380,7 +380,7 @@ impl Registries {
     #[cfg(test)]
     pub async fn transition_offramp(
         &self,
-        id: &TremorURL,
+        id: &TremorUrl,
         new_state: ActivationState,
     ) -> Result<ActivationState> {
         let (tx, rx) = bounded(1);
@@ -396,7 +396,7 @@ impl Registries {
     ///  * if we can't find a binding
     pub async fn find_binding(
         &self,
-        id: &TremorURL,
+        id: &TremorUrl,
     ) -> Result<Option<<BindingArtefact as Artefact>::SpawnResult>> {
         let (tx, rx) = bounded(1);
         self.binding.send(Msg::FindServant(tx, id.clone())).await?;
@@ -408,7 +408,7 @@ impl Registries {
     ///  * if we can't publish a binding
     pub async fn publish_binding(
         &self,
-        id: &TremorURL,
+        id: &TremorUrl,
         servant: BindingServant,
     ) -> Result<ActivationState> {
         let (tx, rx) = bounded(1);
@@ -422,7 +422,7 @@ impl Registries {
     ///
     /// # Errors
     ///  * if we can't unpublish a binding
-    pub async fn unpublish_binding(&self, id: &TremorURL) -> Result<ActivationState> {
+    pub async fn unpublish_binding(&self, id: &TremorUrl) -> Result<ActivationState> {
         let (tx, rx) = bounded(1);
         self.binding
             .send(Msg::UnpublishServant(tx, id.clone()))
@@ -433,7 +433,7 @@ impl Registries {
     #[cfg(test)]
     pub async fn transition_binding(
         &self,
-        id: &TremorURL,
+        id: &TremorUrl,
         new_state: ActivationState,
     ) -> Result<ActivationState> {
         let (tx, rx) = bounded(1);

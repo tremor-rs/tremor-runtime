@@ -24,7 +24,7 @@ use crate::sink::{
 };
 use crate::source::Processors;
 use crate::url::ports::{IN, METRICS};
-use crate::url::TremorURL;
+use crate::url::TremorUrl;
 use crate::{Event, OpConfig};
 use async_channel::{self, bounded, unbounded};
 use async_std::stream::StreamExt; // for .next() on PriorityMerge
@@ -45,12 +45,12 @@ pub enum Msg {
     Signal(Event),
     Connect {
         port: Cow<'static, str>,
-        id: TremorURL,
+        id: TremorUrl,
         addr: Box<pipeline::Addr>,
     },
     Disconnect {
         port: Cow<'static, str>,
-        id: TremorURL,
+        id: TremorUrl,
         tx: async_channel::Sender<bool>,
     },
 }
@@ -64,7 +64,7 @@ pub trait Offramp: Send {
     async fn start(
         &mut self,
         offramp_uid: u64,
-        offramp_url: &TremorURL,
+        offramp_url: &TremorUrl,
         codec: &dyn Codec,
         codec_map: &HashMap<String, Box<dyn Codec>>,
         processors: Processors<'_>,
@@ -84,10 +84,10 @@ pub trait Offramp: Send {
     }
     async fn terminate(&mut self) {}
     fn default_codec(&self) -> &str;
-    fn add_pipeline(&mut self, id: TremorURL, addr: pipeline::Addr);
-    fn remove_pipeline(&mut self, id: TremorURL) -> bool;
-    fn add_dest_pipeline(&mut self, port: Cow<'static, str>, id: TremorURL, addr: pipeline::Addr);
-    fn remove_dest_pipeline(&mut self, port: Cow<'static, str>, id: TremorURL) -> bool;
+    fn add_pipeline(&mut self, id: TremorUrl, addr: pipeline::Addr);
+    fn remove_pipeline(&mut self, id: TremorUrl) -> bool;
+    fn add_dest_pipeline(&mut self, port: Cow<'static, str>, id: TremorUrl, addr: pipeline::Addr);
+    fn remove_dest_pipeline(&mut self, port: Cow<'static, str>, id: TremorUrl) -> bool;
     #[cfg(not(tarpaulin_include))]
     fn is_active(&self) -> bool {
         true
@@ -156,8 +156,8 @@ pub(crate) struct Manager {
 }
 
 async fn send_to_pipelines(
-    offramp_id: &TremorURL,
-    pipelines: &mut HashMap<TremorURL, pipeline::Addr>,
+    offramp_id: &TremorUrl,
+    pipelines: &mut HashMap<TremorUrl, pipeline::Addr>,
     e: Event,
 ) {
     let mut i = pipelines.values_mut();
@@ -227,10 +227,10 @@ impl Manager {
 
         let offramp_url = id.clone();
         task::spawn::<_, Result<()>>(async move {
-            let mut pipelines: HashMap<TremorURL, pipeline::Addr> = HashMap::new();
+            let mut pipelines: HashMap<TremorUrl, pipeline::Addr> = HashMap::new();
 
             // for linked offramp output (port to pipeline(s) mapping)
-            let mut dest_pipelines: HashMap<Cow<'static, str>, Vec<(TremorURL, pipeline::Addr)>> =
+            let mut dest_pipelines: HashMap<Cow<'static, str>, Vec<(TremorUrl, pipeline::Addr)>> =
                 HashMap::new();
 
             info!("[Offramp::{}] started", offramp_url);

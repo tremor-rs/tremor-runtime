@@ -72,7 +72,7 @@ where
 {
     std::env::set_current_dir(path).map_err(|e| {
         let p: &Path = path.as_ref();
-        Error::CWD(e, p.to_string_lossy().to_string())
+        Error::Cwd(e, p.to_string_lossy().to_string())
     })
 }
 /// Gets the extesion for a filename

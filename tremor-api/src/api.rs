@@ -17,7 +17,7 @@ use http_types::{headers, StatusCode};
 use serde::{Deserialize, Serialize};
 use tide::Response;
 use tremor_runtime::system::World;
-use tremor_runtime::url::TremorURL;
+use tremor_runtime::url::TremorUrl;
 
 pub mod binding;
 pub mod offramp;
@@ -147,9 +147,9 @@ where
     }
 }
 
-fn build_url(path: &[&str]) -> Result<TremorURL> {
+fn build_url(path: &[&str]) -> Result<TremorUrl> {
     let url = format!("/{}", path.join("/"));
-    TremorURL::parse(&url).map_err(|_e| {
+    TremorUrl::parse(&url).map_err(|_e| {
         Error::new(
             StatusCode::InternalServerError,
             format!("Could not decode Tremor URL: {}", url),

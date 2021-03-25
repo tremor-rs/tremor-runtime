@@ -20,7 +20,7 @@ use crate::repository::{
     Artefact, BindingArtefact, OfframpArtefact, OnrampArtefact, PipelineArtefact, Repositories,
 };
 use crate::url::ports::METRICS;
-use crate::url::TremorURL;
+use crate::url::TremorUrl;
 use async_channel::bounded;
 use async_std::io::prelude::*;
 use async_std::path::Path;
@@ -34,23 +34,23 @@ pub(crate) use crate::onramp;
 pub(crate) use crate::pipeline;
 
 lazy_static! {
-    pub(crate) static ref METRICS_PIPELINE: TremorURL = {
-        TremorURL::parse("/pipeline/system::metrics/system/in")
+    pub(crate) static ref METRICS_PIPELINE: TremorUrl = {
+        TremorUrl::parse("/pipeline/system::metrics/system/in")
             //ALLOW: We want this to panic, it only happens at startup time
             .expect("Failed to initialize id for metrics piepline")
     };
-    pub(crate) static ref PASSTHROUGH_PIPELINE: TremorURL = {
-        TremorURL::parse("/pipeline/system::passthrough/system/in")
+    pub(crate) static ref PASSTHROUGH_PIPELINE: TremorUrl = {
+        TremorUrl::parse("/pipeline/system::passthrough/system/in")
             //ALLOW: We want this to panic, it only happens at startup time
             .expect("Failed to initialize id for metrics piepline")
     };
-    pub(crate) static ref STDOUT_OFFRAMP: TremorURL = {
-        TremorURL::parse("/offramp/system::stdout/system/in")
+    pub(crate) static ref STDOUT_OFFRAMP: TremorUrl = {
+        TremorUrl::parse("/offramp/system::stdout/system/in")
             //ALLOW: We want this to panic, it only happens at startup time
             .expect("Failed to initialize id for stdout offramp")
     };
-    pub(crate) static ref STDERR_OFFRAMP: TremorURL = {
-        TremorURL::parse("/offramp/system::stderr/system/in")
+    pub(crate) static ref STDERR_OFFRAMP: TremorUrl = {
+        TremorUrl::parse("/offramp/system::stderr/system/in")
             //ALLOW: We want this to panic, it only happens at startup time
             .expect("Failed to initialize id for stderr offramp")
     };
@@ -137,7 +137,7 @@ impl World {
     ///
     /// # Errors
     ///  * if we can't ensure the onramp is bound
-    pub async fn ensure_onramp(&self, id: &TremorURL) -> Result<()> {
+    pub async fn ensure_onramp(&self, id: &TremorUrl) -> Result<()> {
         if self.reg.find_onramp(&id).await?.is_none() {
             info!(
                 "Onramp not found during binding process, binding {} to create a new instance.",
@@ -154,7 +154,7 @@ impl World {
     ///
     /// # Errors
     ///  * if we can't ensure the offramp is bound
-    pub async fn ensure_offramp(&self, id: &TremorURL) -> Result<()> {
+    pub async fn ensure_offramp(&self, id: &TremorUrl) -> Result<()> {
         if self.reg.find_offramp(&id).await?.is_none() {
             info!(
                 "Offramp not found during binding process, binding {} to create a new instance.",
@@ -170,7 +170,7 @@ impl World {
     ///
     /// # Errors
     ///  * if we can't ensure the pipeline is bound
-    pub async fn ensure_pipeline(&self, id: &TremorURL) -> Result<()> {
+    pub async fn ensure_pipeline(&self, id: &TremorUrl) -> Result<()> {
         if self.reg.find_pipeline(&id).await?.is_none() {
             info!(
                 "Pipeline not found during binding process, binding {} to create a new instance.",
@@ -187,7 +187,7 @@ impl World {
     ///
     /// # Errors
     ///  * if the id isn't a pipeline instance or can't be bound
-    pub async fn bind_pipeline(&self, id: &TremorURL) -> Result<ActivationState> {
+    pub async fn bind_pipeline(&self, id: &TremorUrl) -> Result<ActivationState> {
         info!("Binding pipeline {}", id);
         match (&self.repo.find_pipeline(id).await?, &id.instance()) {
             (Some(artefact), Some(_instance_id)) => {
@@ -217,7 +217,7 @@ impl World {
     ///
     /// # Errors
     ///  * if the id isn't an pipeline instance or the pipeline can't be unbound
-    pub async fn unbind_pipeline(&self, id: &TremorURL) -> Result<ActivationState> {
+    pub async fn unbind_pipeline(&self, id: &TremorUrl) -> Result<ActivationState> {
         info!("Unbinding pipeline {}", id);
         match (&self.repo.find_pipeline(id).await?, &id.instance()) {
             (Some(_artefact), Some(_instance_id)) => {
@@ -243,7 +243,7 @@ impl World {
     ///  * if the id isn't a pipeline or the pipeline can't be linked
     pub async fn link_pipeline(
         &self,
-        id: &TremorURL,
+        id: &TremorUrl,
         mappings: HashMap<
             <PipelineArtefact as Artefact>::LinkLHS,
             <PipelineArtefact as Artefact>::LinkRHS,
@@ -263,7 +263,7 @@ impl World {
     /// Links a pipeline
     async fn link_existing_pipeline(
         &self,
-        id: &TremorURL,
+        id: &TremorUrl,
         mappings: HashMap<
             <PipelineArtefact as Artefact>::LinkLHS,
             <PipelineArtefact as Artefact>::LinkRHS,
@@ -283,7 +283,7 @@ impl World {
     ///  * if the id isn't a pipeline or the pipeline can't be unlinked
     pub async fn unlink_pipeline(
         &self,
-        id: &TremorURL,
+        id: &TremorUrl,
         mappings: HashMap<
             <PipelineArtefact as Artefact>::LinkLHS,
             <PipelineArtefact as Artefact>::LinkRHS,
@@ -303,7 +303,7 @@ impl World {
     #[cfg(test)]
     pub async fn bind_pipeline_from_artefact(
         &self,
-        id: &TremorURL,
+        id: &TremorUrl,
         artefact: PipelineArtefact,
     ) -> Result<ActivationState> {
         self.repo.publish_pipeline(id, false, artefact).await?;
@@ -313,7 +313,7 @@ impl World {
     ///
     /// # Errors
     ///  * if the id isn't a onramp instance or the onramp can't be bound
-    pub async fn bind_onramp(&self, id: &TremorURL) -> Result<ActivationState> {
+    pub async fn bind_onramp(&self, id: &TremorUrl) -> Result<ActivationState> {
         info!("Binding onramp {}", id);
         match (&self.repo.find_onramp(id).await?, &id.instance()) {
             (Some(artefact), Some(_instance_id)) => {
@@ -342,7 +342,7 @@ impl World {
     ///
     /// # Errors
     ///  * if the id isn't an onramp or the onramp can't be unbound
-    pub async fn unbind_onramp(&self, id: &TremorURL) -> Result<ActivationState> {
+    pub async fn unbind_onramp(&self, id: &TremorUrl) -> Result<ActivationState> {
         info!("Unbinding onramp {}", id);
         match (&self.repo.find_onramp(id).await?, &id.instance()) {
             (Some(_artefact), Some(_instsance_id)) => {
@@ -361,7 +361,7 @@ impl World {
     ///  * if the id isn't an onramp or the onramp can't be linked
     pub async fn link_onramp(
         &self,
-        id: &TremorURL,
+        id: &TremorUrl,
         mappings: HashMap<
             <OnrampArtefact as Artefact>::LinkLHS,
             <OnrampArtefact as Artefact>::LinkRHS,
@@ -379,7 +379,7 @@ impl World {
 
     async fn link_existing_onramp(
         &self,
-        id: &TremorURL,
+        id: &TremorUrl,
         mappings: HashMap<
             <OnrampArtefact as Artefact>::LinkLHS,
             <OnrampArtefact as Artefact>::LinkRHS,
@@ -398,7 +398,7 @@ impl World {
     ///  * if the id isn't a onramp or it cna't be unlinked
     pub async fn unlink_onramp(
         &self,
-        id: &TremorURL,
+        id: &TremorUrl,
         mappings: HashMap<
             <OnrampArtefact as Artefact>::LinkLHS,
             <OnrampArtefact as Artefact>::LinkRHS,
@@ -419,7 +419,7 @@ impl World {
     ///
     /// # Errors
     ///  * if the id isn't a offramp instance or it can't be bound
-    pub async fn bind_offramp(&self, id: &TremorURL) -> Result<ActivationState> {
+    pub async fn bind_offramp(&self, id: &TremorUrl) -> Result<ActivationState> {
         info!("Binding offramp {}", id);
         match (&self.repo.find_offramp(id).await?, &id.instance()) {
             (Some(artefact), Some(_instance_id)) => {
@@ -449,7 +449,7 @@ impl World {
     ///
     /// # Errors
     ///  * if the id isn't an offramp instance or the offramp can't be unbound
-    pub async fn unbind_offramp(&self, id: &TremorURL) -> Result<ActivationState> {
+    pub async fn unbind_offramp(&self, id: &TremorUrl) -> Result<ActivationState> {
         info!("Unbinding offramp {} ..", id);
         match (&self.repo.find_offramp(id).await?, &id.instance()) {
             (Some(_artefact), Some(_instsance_id)) => {
@@ -468,7 +468,7 @@ impl World {
     ///  * if the id isn't an offramp or can't be linked
     pub async fn link_offramp(
         &self,
-        id: &TremorURL,
+        id: &TremorUrl,
         mappings: HashMap<
             <OfframpArtefact as Artefact>::LinkLHS,
             <OfframpArtefact as Artefact>::LinkRHS,
@@ -486,7 +486,7 @@ impl World {
 
     async fn link_existing_offramp(
         &self,
-        id: &TremorURL,
+        id: &TremorUrl,
         mappings: HashMap<
             <OfframpArtefact as Artefact>::LinkLHS,
             <OfframpArtefact as Artefact>::LinkRHS,
@@ -505,7 +505,7 @@ impl World {
     ///  * if the id isn't an offramp or it cna't be unlinked
     pub async fn unlink_offramp(
         &self,
-        id: &TremorURL,
+        id: &TremorUrl,
         mappings: HashMap<
             <OfframpArtefact as Artefact>::LinkLHS,
             <OfframpArtefact as Artefact>::LinkRHS,
@@ -524,7 +524,7 @@ impl World {
 
     pub(crate) async fn bind_binding_a(
         &self,
-        id: &TremorURL,
+        id: &TremorUrl,
         artefact: &BindingArtefact,
     ) -> Result<ActivationState> {
         info!("Binding binding {}", id);
@@ -542,7 +542,7 @@ impl World {
 
     pub(crate) async fn unbind_binding_a(
         &self,
-        id: &TremorURL,
+        id: &TremorUrl,
         _artefact: &BindingArtefact,
     ) -> Result<ActivationState> {
         info!("Unbinding binding {}", id);
@@ -562,7 +562,7 @@ impl World {
     ///  * If the id isn't a binding or the bindig can't be linked
     pub async fn link_binding(
         &self,
-        id: &TremorURL,
+        id: &TremorUrl,
         mappings: HashMap<
             <BindingArtefact as Artefact>::LinkLHS,
             <BindingArtefact as Artefact>::LinkRHS,
@@ -636,7 +636,7 @@ impl World {
     ///  * if the id isn't an binding or the binding can't be unbound
     pub async fn unlink_binding(
         &self,
-        id: &TremorURL,
+        id: &TremorUrl,
         mappings: HashMap<
             <BindingArtefact as Artefact>::LinkLHS,
             <BindingArtefact as Artefact>::LinkRHS,

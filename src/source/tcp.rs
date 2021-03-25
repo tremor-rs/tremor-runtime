@@ -30,14 +30,14 @@ impl ConfigImpl for Config {}
 
 pub struct Tcp {
     pub config: Config,
-    onramp_id: TremorURL,
+    onramp_id: TremorUrl,
 }
 
 pub struct Int {
     uid: u64,
     config: Config,
     listener: Option<Receiver<SourceReply>>,
-    onramp_id: TremorURL,
+    onramp_id: TremorUrl,
 }
 impl std::fmt::Debug for Int {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -45,7 +45,7 @@ impl std::fmt::Debug for Int {
     }
 }
 impl Int {
-    fn from_config(uid: u64, onramp_id: TremorURL, config: &Config) -> Self {
+    fn from_config(uid: u64, onramp_id: TremorUrl, config: &Config) -> Self {
         let config = config.clone();
 
         Self {
@@ -58,7 +58,7 @@ impl Int {
 }
 
 impl onramp::Impl for Tcp {
-    fn from_config(id: &TremorURL, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
+    fn from_config(id: &TremorUrl, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
             Ok(Box::new(Self {
@@ -73,7 +73,7 @@ impl onramp::Impl for Tcp {
 
 #[async_trait::async_trait()]
 impl Source for Int {
-    fn id(&self) -> &TremorURL {
+    fn id(&self) -> &TremorUrl {
         &self.onramp_id
     }
 

@@ -98,7 +98,7 @@ impl Sink for Cb {
     async fn init(
         &mut self,
         _sink_uid: u64,
-        _sink_url: &TremorURL,
+        _sink_url: &TremorUrl,
         _codec: &dyn Codec,
         _codec_map: &halfbrown::HashMap<String, Box<dyn Codec>>,
         _processors: Processors<'_>,
@@ -134,7 +134,7 @@ mod tests {
     async fn cb_meta() -> Result<()> {
         let mut codec = crate::codec::lookup("json")?;
         let mut cb = Cb {};
-        let url = TremorURL::parse("/offramp/cb/instance")?;
+        let url = TremorUrl::parse("/offramp/cb/instance")?;
         let codec_map = halfbrown::HashMap::new();
         let (tx, _rx) = async_channel::bounded(1);
         let in_ = "IN";
@@ -176,7 +176,7 @@ mod tests {
         if let Some(replies) = res {
             assert_eq!(1, replies.len());
             if let Some(Reply::Insight(insight)) = replies.get(0) {
-                assert_eq!(CBAction::Ack, insight.cb);
+                assert_eq!(CbAction::Ack, insight.cb);
                 assert_eq!(id, insight.id);
                 assert_eq!(op_meta, insight.op_meta);
                 assert_eq!(origin_uri, insight.origin_uri);
@@ -207,7 +207,7 @@ mod tests {
         if let Some(replies) = res {
             assert_eq!(1, replies.len());
             if let Some(Reply::Insight(insight)) = replies.get(0) {
-                assert_eq!(CBAction::Fail, insight.cb);
+                assert_eq!(CbAction::Fail, insight.cb);
                 assert_eq!(id, insight.id);
                 assert_eq!(op_meta, insight.op_meta);
                 assert_eq!(origin_uri, insight.origin_uri);
@@ -239,12 +239,12 @@ mod tests {
             assert_eq!(2, replies.len());
             match replies.as_slice() {
                 [Reply::Insight(insight1), Reply::Insight(insight2)] => {
-                    assert_eq!(CBAction::Ack, insight1.cb);
+                    assert_eq!(CbAction::Ack, insight1.cb);
                     assert_eq!(id, insight1.id);
                     assert_eq!(op_meta, insight1.op_meta);
                     assert_eq!(origin_uri, insight1.origin_uri);
 
-                    assert_eq!(CBAction::Open, insight2.cb);
+                    assert_eq!(CbAction::Open, insight2.cb);
                     assert_eq!(op_meta, insight2.op_meta);
                     assert_eq!(origin_uri, insight2.origin_uri);
                 }
@@ -274,12 +274,12 @@ mod tests {
             assert_eq!(2, replies.len());
             match replies.as_slice() {
                 [Reply::Insight(insight1), Reply::Insight(insight2)] => {
-                    assert_eq!(CBAction::Fail, insight1.cb);
+                    assert_eq!(CbAction::Fail, insight1.cb);
                     assert_eq!(id, insight1.id);
                     assert_eq!(op_meta, insight1.op_meta);
                     assert_eq!(origin_uri, insight1.origin_uri);
 
-                    assert_eq!(CBAction::Close, insight2.cb);
+                    assert_eq!(CbAction::Close, insight2.cb);
                     assert_eq!(op_meta, insight2.op_meta);
                     assert_eq!(origin_uri, insight2.origin_uri);
                 }

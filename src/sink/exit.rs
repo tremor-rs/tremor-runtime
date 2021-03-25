@@ -63,7 +63,7 @@ impl Sink for Exit {
     async fn init(
         &mut self,
         _sink_uid: u64,
-        _sink_url: &TremorURL,
+        _sink_url: &TremorUrl,
         _codec: &dyn Codec,
         _codec_map: &HashMap<String, Box<dyn Codec>>,
         _processors: Processors<'_>,

@@ -46,13 +46,13 @@ fn default_timeout() -> u64 {
 impl ConfigImpl for Config {}
 
 pub struct Cb {
-    onramp_id: TremorURL,
+    onramp_id: TremorUrl,
     origin_uri: EventOriginUri,
     config: Config,
 }
 
 impl onramp::Impl for Cb {
-    fn from_config(id: &TremorURL, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
+    fn from_config(id: &TremorUrl, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
             Ok(Box::new(Self {
@@ -101,7 +101,7 @@ impl ReceivedCbs {
 
 #[derive(Debug)]
 struct Int {
-    id: TremorURL,
+    id: TremorUrl,
     num_sent: usize,
     last_sent: u64, // we assume we have an increasing run of ids without gap, so we only store the latest
     received_cbs: ReceivedCbs,
@@ -111,7 +111,7 @@ struct Int {
 }
 
 impl Int {
-    async fn from_config(_uid: u64, onramp_id: TremorURL, config: Config) -> Result<Self> {
+    async fn from_config(_uid: u64, onramp_id: TremorUrl, config: Config) -> Result<Self> {
         let f = file::open(&config.source).await?;
         let lines = BufReader::new(f).lines();
         Ok(Self {
@@ -179,7 +179,7 @@ impl Source for Int {
         Ok(SourceState::Connected)
     }
 
-    fn id(&self) -> &TremorURL {
+    fn id(&self) -> &TremorUrl {
         &self.id
     }
 

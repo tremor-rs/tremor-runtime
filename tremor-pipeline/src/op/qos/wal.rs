@@ -157,7 +157,7 @@ impl ConfigImpl for Config {}
 ///
 /// The WAL operator should be used with caution, since every event that passes through it will be
 /// written to the hard drive it has a significant performance impact.
-pub struct WAL {
+pub struct Wal {
     /// Elements currently in the event storage
     cnt: u64,
     /// general DB
@@ -184,14 +184,14 @@ op!(WalFactory(_uid, node) {
     if let Some(map) = &node.config {
         let config: Config = Config::new(map)?;
 
-        Ok(Box::new(WAL::new(node.id.to_string(), config)?))
+        Ok(Box::new(Wal::new(node.id.to_string(), config)?))
 
     } else {
         Err(ErrorKind::MissingOpConfig(node.id.to_string()).into())
     }
 });
 
-impl WAL {
+impl Wal {
     fn new(id: String, config: Config) -> Result<Self> {
         let wal = if let Some(dir) = &config.dir {
             sled::open(&dir)?
@@ -203,7 +203,7 @@ impl WAL {
 
         #[allow(clippy::cast_possible_truncation)]
         let read = state_tree.get("read")?.map(Idx::from).unwrap_or_default();
-        Ok(WAL {
+        Ok(Wal {
             cnt: events_tree.len() as u64,
             wal,
             read,
@@ -282,17 +282,17 @@ fn maybe_parse_ivec(e: Option<IVec>) -> Option<Event> {
     Event::from_slice(e_slice).ok()
 }
 
-impl Operator for WAL {
+impl Operator for Wal {
     #[cfg(not(tarpaulin_include))]
     fn handles_contraflow(&self) -> bool {
         true
     }
     fn on_contraflow(&mut self, u_id: u64, insight: &mut Event) {
         match insight.cb {
-            CBAction::None => {}
-            CBAction::Open => self.broken = false,
-            CBAction::Close => self.broken = true,
-            CBAction::Ack => {
+            CbAction::None => {}
+            CbAction::Open => self.broken = false,
+            CbAction::Close => self.broken = true,
+            CbAction::Ack => {
                 let event_id =
                     if let Some((_stream_id, event_id)) = insight.id.get_max_by_source(u_id) {
                         event_id
@@ -314,7 +314,7 @@ impl Operator for WAL {
                     insight.id.track(&e.id);
                 }
             }
-            CBAction::Fail => {
+            CbAction::Fail => {
                 let event_id =
                     if let Some((_stream_id, event_id)) = insight.id.get_min_by_source(u_id) {
                         event_id
@@ -346,7 +346,7 @@ impl Operator for WAL {
                 }
             }
         }
-        insight.cb = CBAction::None;
+        insight.cb = CbAction::None;
     }
 
     #[cfg(not(tarpaulin_include))]
@@ -433,7 +433,7 @@ mod test {
             max_bytes: 1024 * 1024,
             flush_on_evnt: None,
         };
-        let mut o = WAL::new("test".to_string(), c)?;
+        let mut o = Wal::new("test".to_string(), c)?;
         let wal_uid = 0_u64;
         let source_uid = 42_u64;
         let mut idgen = EventIdGenerator::new(source_uid);
@@ -464,7 +464,7 @@ mod test {
         assert_eq!(r.len(), 2);
         assert_eq!(r.insights.len(), 1); // we get an ack back
         let insight = r.insights.pop().expect("no insight");
-        assert_eq!(insight.cb, CBAction::Ack);
+        assert_eq!(insight.cb, CbAction::Ack);
         assert!(insight.op_meta.contains_key(42));
         assert!(!insight.op_meta.contains_key(wal_uid));
 
@@ -476,7 +476,7 @@ mod test {
         // 2 failed and they need to be delivered again
         let mut i = Event::default();
         i.id = id_e2.clone();
-        i.cb = CBAction::Fail;
+        i.cb = CbAction::Fail;
         o.on_contraflow(0, &mut i);
 
         // Send a third event
@@ -492,7 +492,7 @@ mod test {
         let mut i = Event::default();
         i.id = id_e1.clone();
 
-        i.cb = CBAction::Fail;
+        i.cb = CbAction::Fail;
         o.on_contraflow(0, &mut i);
 
         // since we failed before we should see 3 events the retransmit of 1-3

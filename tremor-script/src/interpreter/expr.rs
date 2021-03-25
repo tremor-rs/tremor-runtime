@@ -333,7 +333,7 @@ where
         local: &'run mut LocalStack<'event>,
         expr: &'script Comprehension<Expr>,
     ) -> Result<Cont<'run, 'event>> {
-        type BI<'v, 'r> = (usize, Box<dyn Iterator<Item = (Value<'v>, Value<'v>)> + 'r>);
+        type Bi<'v, 'r> = (usize, Box<dyn Iterator<Item = (Value<'v>, Value<'v>)> + 'r>);
         fn kv<'k, K>((k, v): (K, Value)) -> (Value<'k>, Value)
         where
             K: 'k,
@@ -347,9 +347,9 @@ where
         let cases = &expr.cases;
         let t = stry!(target.run(opts, env, event, state, meta, local,));
 
-        let (l, items): BI = t.as_object().map_or_else(
+        let (l, items): Bi = t.as_object().map_or_else(
             || {
-                t.as_array().map_or_else::<BI, _, _>(
+                t.as_array().map_or_else::<Bi, _, _>(
                     || (0, Box::new(iter::empty())),
                     |t| (t.len(), Box::new(t.clone().into_iter().enumerate().map(kv))),
                 )

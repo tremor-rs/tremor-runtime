@@ -90,7 +90,7 @@ pub struct Crononome {
     pub config: Config,
     origin_uri: EventOriginUri,
     cq: ChronomicQueue,
-    onramp_id: TremorURL,
+    onramp_id: TremorUrl,
 }
 impl std::fmt::Debug for Crononome {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -99,7 +99,7 @@ impl std::fmt::Debug for Crononome {
 }
 
 impl onramp::Impl for Crononome {
-    fn from_config(id: &TremorURL, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
+    fn from_config(id: &TremorUrl, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
             let origin_uri = EventOriginUri {
@@ -272,7 +272,7 @@ impl ChronomicQueue {
 
 #[async_trait::async_trait()]
 impl Source for Crononome {
-    fn id(&self) -> &TremorURL {
+    fn id(&self) -> &TremorUrl {
         &self.onramp_id
     }
 

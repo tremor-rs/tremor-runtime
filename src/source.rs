@@ -19,7 +19,7 @@ use crate::onramp;
 use crate::pipeline;
 use crate::preprocessor::{make_preprocessors, preprocess, Preprocessors};
 use crate::url::ports::{ERR, METRICS, OUT};
-use crate::url::TremorURL;
+use crate::url::TremorUrl;
 
 use crate::Result;
 use async_channel::{self, unbounded, Receiver, Sender};
@@ -29,7 +29,7 @@ use halfbrown::HashMap;
 use std::collections::BTreeMap;
 use std::time::Duration;
 use tremor_common::time::nanotime;
-use tremor_pipeline::{CBAction, Event, EventId, EventOriginUri, DEFAULT_STREAM_ID};
+use tremor_pipeline::{CbAction, Event, EventId, EventOriginUri, DEFAULT_STREAM_ID};
 use tremor_script::prelude::*;
 
 use self::prelude::OnrampConfig;
@@ -149,7 +149,7 @@ pub(crate) trait Source {
     fn fail(&mut self, _id: u64) {}
 
     /// Gives a human readable ID for the source
-    fn id(&self) -> &TremorURL;
+    fn id(&self) -> &TremorUrl;
     /// Is this source transactional or can acks/fails be ignored
     fn is_transactional(&self) -> bool {
         false
@@ -160,7 +160,7 @@ pub(crate) struct SourceManager<T>
 where
     T: Source,
 {
-    source_id: TremorURL,
+    source_id: TremorUrl,
     source: T,
     rx: Receiver<onramp::Msg>,
     tx: Sender<onramp::Msg>,
@@ -170,8 +170,8 @@ where
     codec_map: HashMap<String, Box<dyn Codec>>,
     metrics_reporter: RampReporter,
     triggered: bool,
-    pipelines_out: Vec<(TremorURL, pipeline::Addr)>,
-    pipelines_err: Vec<(TremorURL, pipeline::Addr)>,
+    pipelines_out: Vec<(TremorUrl, pipeline::Addr)>,
+    pipelines_err: Vec<(TremorUrl, pipeline::Addr)>,
     err_required: bool,
     id: u64,
     is_transactional: bool,
@@ -331,7 +331,7 @@ where
                         return Ok(true);
                     }
                 }
-                onramp::Msg::Cb(CBAction::Fail, ids) => {
+                onramp::Msg::Cb(CbAction::Fail, ids) => {
                     // TODO: stream handling
                     // when failing, we use the earliest/min event within the tracked set
                     if let Some((_stream_id, id)) = ids.get_min_by_source(self.uid) {
@@ -339,7 +339,7 @@ where
                     }
                 }
                 // Circuit breaker explicit acknowledgement of an event
-                onramp::Msg::Cb(CBAction::Ack, ids) => {
+                onramp::Msg::Cb(CbAction::Ack, ids) => {
                     // TODO: stream handling
                     // when acknowledging, we use the latest/max event within the tracked set
                     if let Some((_stream_id, id)) = ids.get_max_by_source(self.uid) {
@@ -347,16 +347,16 @@ where
                     }
                 }
                 // Circuit breaker source failure - triggers close
-                onramp::Msg::Cb(CBAction::Close, _ids) => {
+                onramp::Msg::Cb(CbAction::Close, _ids) => {
                     self.source.trigger_breaker();
                     self.triggered = true;
                 }
                 //Circuit breaker source recovers - triggers open
-                onramp::Msg::Cb(CBAction::Open, _ids) => {
+                onramp::Msg::Cb(CbAction::Open, _ids) => {
                     self.source.restore_breaker();
                     self.triggered = false;
                 }
-                onramp::Msg::Cb(CBAction::None, _ids) => {}
+                onramp::Msg::Cb(CbAction::None, _ids) => {}
 
                 onramp::Msg::Response(event) => {
                     if let Err(e) = self
@@ -612,7 +612,7 @@ mod tests {
 
     #[derive(Debug)]
     struct FakeSource {
-        url: TremorURL,
+        url: TremorUrl,
     }
 
     #[async_trait::async_trait]
@@ -631,14 +631,14 @@ mod tests {
             Ok(SourceState::Connected)
         }
 
-        fn id(&self) -> &TremorURL {
+        fn id(&self) -> &TremorUrl {
             &self.url
         }
     }
 
     #[async_std::test]
     async fn fake_source_manager_connect_cb() -> Result<()> {
-        let onramp_url = TremorURL::from_onramp_id("fake")?;
+        let onramp_url = TremorUrl::from_onramp_id("fake")?;
         let s = FakeSource {
             url: onramp_url.clone(),
         };
@@ -654,7 +654,7 @@ mod tests {
         let (sm, sender) = SourceManager::new(s, o_config).await?;
         let handle = task::spawn(sm.run());
 
-        let pipeline_url = TremorURL::parse("/pipeline/bla/01/in")?;
+        let pipeline_url = TremorUrl::parse("/pipeline/bla/01/in")?;
         let (tx1, rx1) = async_channel::unbounded();
         let (tx2, _rx2) = async_channel::unbounded();
         let (tx3, rx3) = async_channel::unbounded();
@@ -662,7 +662,7 @@ mod tests {
 
         // trigger the source to ensure it is not being pulled from
         sender
-            .send(onramp::Msg::Cb(CBAction::Close, EventId::default()))
+            .send(onramp::Msg::Cb(CbAction::Close, EventId::default()))
             .await?;
 
         // connect our fake pipeline
@@ -686,7 +686,7 @@ mod tests {
 
         // send the initial open event
         sender
-            .send(onramp::Msg::Cb(CBAction::Open, EventId::default()))
+            .send(onramp::Msg::Cb(CbAction::Open, EventId::default()))
             .await?;
 
         // wait some time

@@ -120,8 +120,8 @@ impl Operator for Percentile {
         let (_, meta) = insight.data.parts();
 
         if meta.get("error").is_some()
-            || insight.cb == CBAction::Fail
-            || insight.cb == CBAction::Close
+            || insight.cb == CbAction::Fail
+            || insight.cb == CbAction::Close
             || meta
                 .get("time")
                 .and_then(Value::cast_f64)
@@ -271,7 +271,7 @@ mod test {
         let mut insight = Event {
             id: (1, 1, 1).into(),
             ingest_ns: 2,
-            cb: CBAction::Fail,
+            cb: CbAction::Fail,
             op_meta: op_meta.clone(),
             ..Event::default()
         };
@@ -280,7 +280,7 @@ mod test {
         let mut insight_reset = Event {
             id: (1, 1, 2).into(),
             ingest_ns: 2,
-            cb: CBAction::Ack,
+            cb: CbAction::Ack,
             op_meta,
             ..Event::default()
         };

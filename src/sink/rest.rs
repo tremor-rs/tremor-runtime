@@ -426,7 +426,7 @@ impl Sink for Rest {
     async fn init(
         &mut self,
         sink_uid: u64,
-        sink_url: &TremorURL,
+        sink_url: &TremorUrl,
         codec: &dyn Codec,
         codec_map: &HashMap<String, Box<dyn Codec>>,
         processors: Processors<'_>,
@@ -492,7 +492,7 @@ impl Sink for Rest {
 #[allow(clippy::too_many_arguments, clippy::too_many_lines)]
 async fn codec_task(
     sink_uid: u64,
-    sink_url: TremorURL,
+    sink_url: TremorUrl,
     mut postprocessors: Postprocessors,
     mut preprocessors: Preprocessors,
     mut codec: Box<dyn Codec>,
@@ -599,9 +599,9 @@ async fn codec_task(
                             error!("[Sink::{}] HTTP request failed: {}", &sink_url, status)
                         }
                     }
-                    CBAction::Fail
+                    CbAction::Fail
                 } else {
-                    CBAction::Ack
+                    CbAction::Ack
                 };
 
                 if is_linked {
@@ -633,7 +633,7 @@ async fn codec_task(
                             }
                         }
                         Err(e) => {
-                            cb = CBAction::Fail;
+                            cb = CbAction::Fail;
                             error!("[Sink::{}] Error encoding the request: {}", &sink_url, &e);
                             let error_event = create_error_response(
                                 // TODO: stream handling
@@ -900,7 +900,7 @@ fn build_request_metadata(request: &Request) -> Result<Value<'static>> {
 
 #[allow(clippy::too_many_arguments)]
 async fn build_response_events<'response>(
-    sink_url: &'response TremorURL,
+    sink_url: &'response TremorUrl,
     event_id: &'response EventId,
     response_ids: &'response mut EventIdGenerator,
     event_origin_uri: &'response EventOriginUri,
@@ -1245,7 +1245,7 @@ mod test {
     #[async_std::test]
     async fn build_response() -> Result<()> {
         use simd_json::json;
-        let sink_url = TremorURL::from_offramp_id("rest")?;
+        let sink_url = TremorUrl::from_offramp_id("rest")?;
         let sink_uid = 0_u64;
         let mut response_id_gen = EventIdGenerator::new(sink_uid);
         let id = EventId::default();

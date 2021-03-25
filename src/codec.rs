@@ -97,14 +97,14 @@ pub trait Codec: Send + Sync {
 ///  * if the codec doesn't exist
 pub fn lookup(name: &str) -> Result<Box<dyn Codec>> {
     match name {
-        "json" => Ok(Box::new(json::JSON::default())),
+        "json" => Ok(Box::new(json::Json::default())),
         "msgpack" => Ok(Box::new(msgpack::MsgPack {})),
         "influx" => Ok(Box::new(influx::Influx {})),
         "binflux" => Ok(Box::new(binflux::BInflux {})),
         "null" => Ok(Box::new(null::Null {})),
         "string" => Ok(Box::new(string::String {})),
         "statsd" => Ok(Box::new(statsd::StatsD {})),
-        "yaml" => Ok(Box::new(yaml::YAML {})),
+        "yaml" => Ok(Box::new(yaml::Yaml {})),
         "binary" => Ok(Box::new(binary::Binary {})),
         _ => Err(format!("Codec '{}' not found.", name).into()),
     }
@@ -116,14 +116,10 @@ pub fn lookup(name: &str) -> Result<Box<dyn Codec>> {
 /// like statsd for text/plain
 /// these must be specified in a source specific `codec_map`
 #[must_use]
-#[allow(clippy::unwrap_used)]
 pub fn builtin_codec_map() -> halfbrown::HashMap<String, Box<dyn Codec>> {
     MIME_TYPES
         .iter()
-        .map(|t| {
-            // ALLOW: we know that the codecs exist
-            ((*t).to_string(), by_mime_type(t).unwrap())
-        })
+        .filter_map(|t| Some(((*t).to_string(), by_mime_type(t).ok()?)))
         .collect()
 }
 
@@ -133,8 +129,8 @@ pub fn builtin_codec_map() -> halfbrown::HashMap<String, Box<dyn Codec>> {
 /// if no codec could be found for the given mime type
 pub fn by_mime_type(mime: &str) -> Result<Box<dyn Codec>> {
     match mime {
-        "application/json" => Ok(Box::new(json::JSON::default())),
-        "application/yaml" => Ok(Box::new(yaml::YAML {})),
+        "application/json" => Ok(Box::new(json::Json::default())),
+        "application/yaml" => Ok(Box::new(yaml::Yaml {})),
         "text/plain" | "text/html" => Ok(Box::new(string::String {})),
         "application/msgpack" | "application/x-msgpack" | "application/vnd.msgpack" => {
             Ok(Box::new(msgpack::MsgPack {}))

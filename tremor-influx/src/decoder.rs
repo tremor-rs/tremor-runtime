@@ -21,7 +21,8 @@ macro_rules! cant_error {
     ($e:expr) => {
         if $e.is_err() {
             // ALLOW: this errors can never happen
-            unreachable!()
+            // unreachable!()
+            ()
         }
     };
 }

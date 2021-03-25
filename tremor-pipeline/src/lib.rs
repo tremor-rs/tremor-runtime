@@ -215,7 +215,7 @@ impl Default for NodeKind {
 #[derive(
     Debug, Clone, Copy, PartialEq, simd_json_derive::Serialize, simd_json_derive::Deserialize,
 )]
-pub enum CBAction {
+pub enum CbAction {
     /// Nothing of note
     None,
     /// The circuit breaker is triggerd and should break
@@ -229,32 +229,32 @@ pub enum CBAction {
     /// All messages after and including this will be considered non delivered
     Fail,
 }
-impl Default for CBAction {
+impl Default for CbAction {
     fn default() -> Self {
         Self::None
     }
 }
 
-impl From<bool> for CBAction {
+impl From<bool> for CbAction {
     fn from(success: bool) -> Self {
         if success {
-            CBAction::Ack
+            CbAction::Ack
         } else {
-            CBAction::Fail
+            CbAction::Fail
         }
     }
 }
 
-impl CBAction {
+impl CbAction {
     /// This is a Circuit Breaker related message
     #[must_use]
     pub fn is_cb(self) -> bool {
-        self == CBAction::Close || self == CBAction::Open
+        self == CbAction::Close || self == CbAction::Open
     }
     /// This is a Guaranteed Delivery related message
     #[must_use]
     pub fn is_gd(self) -> bool {
-        self == CBAction::Ack || self == CBAction::Fail
+        self == CbAction::Ack || self == CbAction::Fail
     }
 }
 
@@ -540,14 +540,17 @@ impl TrackedEventIds {
 
     /// track everything from the given `event_id`
     pub fn track(&mut self, event_id: &EventId) {
-        debug_assert!(
-            self.source_id == event_id.source_id,
-            "incompatible source ids"
-        );
-        debug_assert!(
-            self.stream_id == event_id.stream_id,
-            "incompatible stream ids"
-        );
+        #[cfg(test)]
+        {
+            debug_assert!(
+                self.source_id == event_id.source_id,
+                "incompatible source ids"
+            );
+            debug_assert!(
+                self.stream_id == event_id.stream_id,
+                "incompatible stream ids"
+            );
+        }
         self.track_ids(event_id.event_id, event_id.event_id);
     }
 
@@ -564,8 +567,12 @@ impl TrackedEventIds {
 
     /// merge the other `ids` into this one
     pub fn merge(&mut self, ids: &TrackedEventIds) {
-        debug_assert!(self.source_id == ids.source_id, "incompatible source ids");
-        debug_assert!(self.stream_id == ids.stream_id, "incompatible stream ids");
+        // TODO: once https://github.com/rust-lang/rust-clippy/issues/6970 is fixed comment those in again
+        #[cfg(test)]
+        {
+            debug_assert!(self.source_id == ids.source_id, "incompatible source ids");
+            debug_assert!(self.stream_id == ids.stream_id, "incompatible stream ids");
+        }
         self.track_ids(ids.min_event_id, ids.max_event_id);
     }
 }
@@ -710,9 +717,6 @@ pub fn influx_value(
         obj.insert(TAGS, Value::from(tags));
         obj.insert(FIELDS, fields);
         obj.insert(TIMESTAMP, timestamp.into());
-    } else {
-        // ALLOW: we create this above so we
-        unreachable!()
     }
     res
 }
@@ -758,31 +762,31 @@ mod test {
 
     #[test]
     fn cbaction_creation() {
-        assert_eq!(CBAction::default(), CBAction::None);
-        assert_eq!(CBAction::from(true), CBAction::Ack);
-        assert_eq!(CBAction::from(false), CBAction::Fail);
+        assert_eq!(CbAction::default(), CbAction::None);
+        assert_eq!(CbAction::from(true), CbAction::Ack);
+        assert_eq!(CbAction::from(false), CbAction::Fail);
     }
 
     #[test]
     fn cbaction_is_gd() {
-        assert_eq!(CBAction::None.is_gd(), false);
+        assert_eq!(CbAction::None.is_gd(), false);
 
-        assert_eq!(CBAction::Fail.is_gd(), true);
-        assert_eq!(CBAction::Ack.is_gd(), true);
+        assert_eq!(CbAction::Fail.is_gd(), true);
+        assert_eq!(CbAction::Ack.is_gd(), true);
 
-        assert_eq!(CBAction::Open.is_gd(), false);
-        assert_eq!(CBAction::Close.is_gd(), false);
+        assert_eq!(CbAction::Open.is_gd(), false);
+        assert_eq!(CbAction::Close.is_gd(), false);
     }
 
     #[test]
     fn cbaction_is_cb() {
-        assert_eq!(CBAction::None.is_cb(), false);
+        assert_eq!(CbAction::None.is_cb(), false);
 
-        assert_eq!(CBAction::Fail.is_cb(), false);
-        assert_eq!(CBAction::Ack.is_cb(), false);
+        assert_eq!(CbAction::Fail.is_cb(), false);
+        assert_eq!(CbAction::Ack.is_cb(), false);
 
-        assert_eq!(CBAction::Open.is_cb(), true);
-        assert_eq!(CBAction::Close.is_cb(), true);
+        assert_eq!(CbAction::Open.is_cb(), true);
+        assert_eq!(CbAction::Close.is_cb(), true);
     }
 
     #[test]

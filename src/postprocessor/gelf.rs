@@ -16,12 +16,12 @@ use super::Postprocessor;
 use crate::errors::Result;
 
 #[derive(Clone)]
-pub struct GELF {
+pub struct Gelf {
     id: u64,
     chunk_size: usize,
 }
 
-impl Default for GELF {
+impl Default for Gelf {
     fn default() -> Self {
         Self {
             id: 0,
@@ -30,7 +30,7 @@ impl Default for GELF {
     }
 }
 
-impl GELF {
+impl Gelf {
     // We cut i and n to u8 but check that n <= 128 before so it is safe.
     #[allow(clippy::cast_possible_truncation)]
     fn encode_gelf(&mut self, data: &[u8]) -> Result<Vec<Vec<u8>>> {
@@ -68,7 +68,7 @@ impl GELF {
     }
 }
 
-impl Postprocessor for GELF {
+impl Postprocessor for Gelf {
     fn name(&self) -> &str {
         "gelf"
     }
@@ -91,12 +91,12 @@ mod test {
         let input_data = vec![
             0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
         ];
-        let mut encoder = postprocessor::GELF {
+        let mut encoder = postprocessor::Gelf {
             id: 0,
             chunk_size: 20,
         };
 
-        let mut decoder = preprocessor::GELF::default();
+        let mut decoder = preprocessor::Gelf::default();
 
         let encoded_data = encoder.process(ingest_ns, egest_ns, &input_data)?;
         assert_eq!(encoded_data.len(), 3);

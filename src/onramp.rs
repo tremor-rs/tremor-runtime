@@ -19,7 +19,7 @@ use crate::source::prelude::*;
 use crate::source::{
     blaster, cb, crononome, discord, file, kafka, metronome, postgres, rest, tcp, udp, ws,
 };
-use crate::url::TremorURL;
+use crate::url::TremorUrl;
 use async_std::task::{self, JoinHandle};
 use serde_yaml::Value;
 use std::fmt;
@@ -29,17 +29,17 @@ use tremor_pipeline::EventId;
 pub(crate) type Sender = async_channel::Sender<ManagerMsg>;
 
 pub(crate) trait Impl {
-    fn from_config(id: &TremorURL, config: &Option<Value>) -> Result<Box<dyn Onramp>>;
+    fn from_config(id: &TremorUrl, config: &Option<Value>) -> Result<Box<dyn Onramp>>;
 }
 
 #[derive(Clone, Debug)]
 pub enum Msg {
-    Connect(Cow<'static, str>, Vec<(TremorURL, pipeline::Addr)>),
+    Connect(Cow<'static, str>, Vec<(TremorUrl, pipeline::Addr)>),
     Disconnect {
-        id: TremorURL,
+        id: TremorUrl,
         tx: async_channel::Sender<bool>,
     },
-    Cb(CBAction, EventId),
+    Cb(CbAction, EventId),
     // TODO pick good naming here: LinkedEvent / Response / Result?
     Response(tremor_pipeline::Event),
 }
@@ -65,7 +65,7 @@ pub(crate) trait Onramp: Send {
 
 pub(crate) fn lookup(
     name: &str,
-    id: &TremorURL,
+    id: &TremorUrl,
     config: &Option<Value>,
 ) -> Result<Box<dyn Onramp>> {
     match name {
@@ -186,7 +186,7 @@ mod test {
     use crate::config::MappingMap;
     use crate::repository::BindingArtefact;
     use crate::system;
-    use crate::url::TremorURL;
+    use crate::url::TremorUrl;
     use simd_json::json;
     use std::io::Write;
     use std::net::TcpListener;
@@ -248,7 +248,7 @@ mod test {
             let config = serde_yaml::to_value($onramp_config).expect("json to yaml not ok");
 
             let onramp: crate::config::OnRamp = serde_yaml::from_value(config)?;
-            let onramp_url = TremorURL::from_onramp_id("test").expect("bad url");
+            let onramp_url = TremorUrl::from_onramp_id("test").expect("bad url");
             world
                 .repo
                 .publish_onramp(&onramp_url, false, onramp)
@@ -257,13 +257,13 @@ mod test {
             let config2 = serde_yaml::to_value($offramp_config).expect("json to yaml not ok");
 
             let offramp: crate::config::OffRamp = serde_yaml::from_value(config2)?;
-            let offramp_url = TremorURL::from_offramp_id("test").expect("bad url");
+            let offramp_url = TremorUrl::from_offramp_id("test").expect("bad url");
             world
                 .repo
                 .publish_offramp(&offramp_url, false, offramp)
                 .await?;
 
-            let id = TremorURL::parse(&format!("/pipeline/{}", "test"))?;
+            let id = TremorUrl::parse(&format!("/pipeline/{}", "test"))?;
 
             let module_path = &tremor_script::path::ModulePath { mounts: Vec::new() };
             let aggr_reg = tremor_script::aggr_registry();
@@ -289,7 +289,7 @@ links:
             world
                 .repo
                 .publish_binding(
-                    &TremorURL::parse(&format!("/binding/{}", "test"))?,
+                    &TremorUrl::parse(&format!("/binding/{}", "test"))?,
                     false,
                     BindingArtefact {
                         binding,
@@ -305,7 +305,7 @@ links:
 "#,
             )?;
 
-            let id = TremorURL::parse(&format!("/binding/{}/01", "test"))?;
+            let id = TremorUrl::parse(&format!("/binding/{}/01", "test"))?;
             world.link_binding(&id, mapping[&id].clone()).await?;
 
             std::thread::sleep(std::time::Duration::from_millis(1000));

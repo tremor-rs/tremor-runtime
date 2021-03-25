@@ -61,7 +61,7 @@ pub extern "C" fn tremor_script_c_eval(script: *const c_char, dst: *mut u8, len:
         Ok(result) => {
             if result.len() < len {
                 unsafe {
-                    let src = result.as_ptr() as *const u8;
+                    let src = result.as_ptr().cast::<u8>();
                     ptr::copy_nonoverlapping(src, dst, result.len());
                     *dst.add(result.len()) = 0;
                     0

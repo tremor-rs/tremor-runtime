@@ -1648,7 +1648,7 @@ impl<'input> Lexer<'input> {
                             let token_str =
                                 self.slice_full_lines(string_start, &e).unwrap_or_default();
                             let range = Range::from((escape_start, e));
-                            return Err(ErrorKind::InvalidUTF8Sequence(
+                            return Err(ErrorKind::InvalidUtf8Sequence(
                                 Range::from((start, e)).expand_lines(2),
                                 range,
                                 UnfinishedToken::new(range, token_str),
@@ -1664,7 +1664,7 @@ impl<'input> Lexer<'input> {
                             .unwrap_or_default();
                         let range = Range::from((escape_start, end));
 
-                        return Err(ErrorKind::InvalidUTF8Sequence(
+                        return Err(ErrorKind::InvalidUtf8Sequence(
                             Range::from((escape_start, end)).expand_lines(2),
                             range,
                             UnfinishedToken::new(range, token_str),
@@ -1681,7 +1681,7 @@ impl<'input> Lexer<'input> {
                         .unwrap_or_default();
                     end.shift(' ');
                     let range = Range::from((escape_start, end));
-                    Err(ErrorKind::InvalidUTF8Sequence(
+                    Err(ErrorKind::InvalidUtf8Sequence(
                         Range::from((escape_start, end)).expand_lines(2),
                         range,
                         UnfinishedToken::new(range, token_str),
@@ -1990,11 +1990,11 @@ impl<'input> Lexer<'input> {
                                 )
                             }
                         }
-                        ErrorKind::InvalidUTF8Sequence(outer, location, _) => {
+                        ErrorKind::InvalidUtf8Sequence(outer, location, _) => {
                             // expand to start line of heredoc, so we get a proper context
                             let outer = outer
                                 .expand_lines(outer.0.line().saturating_sub(total_start.line()));
-                            ErrorKind::InvalidUTF8Sequence(outer, location, unfinished_token)
+                            ErrorKind::InvalidUtf8Sequence(outer, location, unfinished_token)
                         }
                         e => e,
                     };

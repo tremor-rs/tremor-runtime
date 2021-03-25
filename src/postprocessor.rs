@@ -13,7 +13,7 @@
 // limitations under the License.
 
 mod gelf;
-pub(crate) use gelf::GELF;
+pub(crate) use gelf::Gelf;
 
 use crate::errors::{Error, Result};
 use byteorder::{BigEndian, WriteBytesExt};
@@ -53,7 +53,7 @@ pub fn lookup(name: &str) -> Result<Box<dyn Postprocessor>> {
         "lz4" => Ok(Box::new(Lz4::default())),
         "ingest-ns" => Ok(Box::new(AttachIngresTs {})),
         "length-prefixed" => Ok(Box::new(LengthPrefix::default())),
-        "gelf-chunking" => Ok(Box::new(GELF::default())),
+        "gelf-chunking" => Ok(Box::new(Gelf::default())),
         _ => Err(format!("Postprocessor '{}' not found.", name).into()),
     }
 }

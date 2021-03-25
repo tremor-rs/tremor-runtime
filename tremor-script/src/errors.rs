@@ -167,9 +167,9 @@ impl ErrorKind {
             EmptyInterpolation, EmptyScript, ExtraToken, Generic, Grok, InvalidAssign,
             InvalidBinary, InvalidBitshift, InvalidConst, InvalidDrop, InvalidEmit,
             InvalidExtractor, InvalidFloatLiteral, InvalidFn, InvalidHexLiteral, InvalidInfluxData,
-            InvalidIntLiteral, InvalidMod, InvalidRecur, InvalidToken, InvalidUTF8Sequence,
-            InvalidUnary, Io, JSONError, MergeTypeConflict, MissingEffectors, MissingFunction,
-            MissingModule, ModuleNotFound, Msg, NoClauseHit, NoConstsAllowed,
+            InvalidIntLiteral, InvalidMod, InvalidRecur, InvalidToken, InvalidUnary,
+            InvalidUtf8Sequence, Io, JsonError, MergeTypeConflict, MissingEffectors,
+            MissingFunction, MissingModule, ModuleNotFound, Msg, NoClauseHit, NoConstsAllowed,
             NoEventReferencesAllowed, NoLocalsAllowed, NoObjectError, NotConstant, NotFound, Oops,
             ParseIntError, ParserError, PatchKeyExists, PreprocessorError, QueryNodeDuplicateName,
             QueryNodeReservedName, QueryStreamNotDefined, RecursionLimit, RuntimeError,
@@ -229,7 +229,7 @@ impl ErrorKind {
             | TypeConflict(outer, inner, _, _)
             | UnexpectedCharacter(outer, inner, _, _)
             | UnexpectedEscapeCode(outer, inner, _, _)
-            | InvalidUTF8Sequence(outer, inner, _)
+            | InvalidUtf8Sequence(outer, inner, _)
             | UnrecognizedToken(outer, inner, _, _)
             | UnterminatedExtractor(outer, inner, _)
             | UnterminatedIdentLiteral(outer, inner, _)
@@ -248,7 +248,7 @@ impl ErrorKind {
             | Grok(_)
             | InvalidInfluxData(_, _)
             | Io(_)
-            | JSONError(_)
+            | JsonError(_)
             | ValueError(_)
             | AccessError(_)
             | Msg(_)
@@ -268,7 +268,7 @@ impl ErrorKind {
     pub(crate) fn token(&self) -> Option<UnfinishedToken> {
         use ErrorKind::{
             EmptyInterpolation, InvalidFloatLiteral, InvalidHexLiteral, InvalidIntLiteral,
-            InvalidUTF8Sequence, TailingHereDoc, UnexpectedCharacter, UnexpectedEscapeCode,
+            InvalidUtf8Sequence, TailingHereDoc, UnexpectedCharacter, UnexpectedEscapeCode,
             UnterminatedExtractor, UnterminatedHereDoc, UnterminatedIdentLiteral,
             UnterminatedInterpolation, UnterminatedStringLiteral,
         };
@@ -280,7 +280,7 @@ impl ErrorKind {
             | UnterminatedIdentLiteral(_, _, token)
             | UnterminatedHereDoc(_, _, token)
             | TailingHereDoc(_, _, token, _)
-            | InvalidUTF8Sequence(_, _, token)
+            | InvalidUtf8Sequence(_, _, token)
             | UnexpectedCharacter(_, _, token, _)
             | InvalidHexLiteral(_, _, token)
             | InvalidIntLiteral(_, _, token)
@@ -439,7 +439,7 @@ error_chain! {
     foreign_links {
         Grok(grok::Error);
         Io(std::io::Error);
-        JSONError(simd_json::Error);
+        JsonError(simd_json::Error);
         ValueError(tremor_value::Error);
         ParseIntError(num::ParseIntError);
         Utf8Error(std::str::Utf8Error);
@@ -574,7 +574,7 @@ error_chain! {
                 display("An unexpected escape code '{}' was found", found)
 
         }
-        InvalidUTF8Sequence(expr: Range, inner: Range, token: UnfinishedToken){
+        InvalidUtf8Sequence(expr: Range, inner: Range, token: UnfinishedToken){
             description("An invalid UTF8 escape sequence was found")
                 display("An invalid UTF8 escape sequence was found")
 

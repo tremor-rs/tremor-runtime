@@ -46,7 +46,7 @@ pub type Bytes<'value> = Cow<'value, [u8]>;
 pub fn parse_to_value(s: &mut [u8]) -> Result<Value> {
     match Deserializer::from_slice(s) {
         Ok(de) => Ok(ValueDeserializer::from_deserializer(de).parse()),
-        Err(e) => Err(Error::SimdJSON(e)),
+        Err(e) => Err(Error::SimdJson(e)),
     }
 }
 
@@ -65,7 +65,7 @@ pub fn parse_to_value_with_buffers<'value>(
 ) -> Result<Value<'value>> {
     match Deserializer::from_slice_with_buffers(s, input_buffer, string_buffer) {
         Ok(de) => Ok(ValueDeserializer::from_deserializer(de).parse()),
-        Err(e) => Err(Error::SimdJSON(e)),
+        Err(e) => Err(Error::SimdJson(e)),
     }
 }
 

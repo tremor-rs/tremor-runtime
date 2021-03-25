@@ -37,11 +37,11 @@ impl ConfigImpl for Config {}
 
 pub struct Ws {
     pub config: Config,
-    onramp_id: TremorURL,
+    onramp_id: TremorUrl,
 }
 
 impl onramp::Impl for Ws {
-    fn from_config(id: &TremorURL, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
+    fn from_config(id: &TremorUrl, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
             Ok(Box::new(Self {
@@ -71,7 +71,7 @@ pub struct SerializedResponse {
 
 pub struct Int {
     uid: u64,
-    onramp_id: TremorURL,
+    onramp_id: TremorUrl,
     config: Config,
     is_linked: bool,
     listener: Option<Receiver<WsSourceReply>>,
@@ -92,7 +92,7 @@ impl std::fmt::Debug for Int {
 impl Int {
     fn from_config(
         uid: u64,
-        onramp_id: TremorURL,
+        onramp_id: TremorUrl,
         post_processors: &[String],
         config: &Config,
         is_linked: bool,
@@ -124,7 +124,7 @@ impl Int {
 }
 
 async fn handle_connection(
-    source_url: TremorURL,
+    source_url: TremorUrl,
     tx: Sender<WsSourceReply>,
     raw_stream: TcpStream,
     origin_uri: EventOriginUri,
@@ -249,7 +249,7 @@ fn make_messages(
         .collect())
 }
 
-fn create_error_response(err: String, event_id: String, source_id: &TremorURL) -> Value<'static> {
+fn create_error_response(err: String, event_id: String, source_id: &TremorUrl) -> Value<'static> {
     let mut err_data = tremor_script::Object::with_capacity(3);
     err_data.insert_nocheck("error".into(), Value::from(err));
     err_data.insert_nocheck("event_id".into(), Value::from(event_id));
@@ -376,7 +376,7 @@ impl Source for Int {
 
         Ok(SourceState::Connected)
     }
-    fn id(&self) -> &TremorURL {
+    fn id(&self) -> &TremorUrl {
         &self.onramp_id
     }
 }

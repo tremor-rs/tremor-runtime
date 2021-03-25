@@ -45,16 +45,16 @@ impl std::fmt::Display for Error {
 }
 impl std::error::Error for Error {}
 
-impl Into<Response> for Error {
-    fn into(self) -> Response {
-        Response::builder(self.code)
+impl From<Error> for Response {
+    fn from(err: Error) -> Response {
+        Response::builder(err.code)
             .header(
                 headers::CONTENT_TYPE,
                 crate::api::ResourceType::Json.as_str(),
             )
             .body(format!(
                 r#"{{"code":{},"error":"{}"}}"#,
-                self.code, self.error
+                err.code, err.error
             ))
             .build()
     }
