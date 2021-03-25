@@ -82,11 +82,17 @@ subcommands:
                   default_value: "0.0.0.0:9899"
               # FIXME better args here
               - cluster-host:
-                  help: The `host:port` to listen for cluster communication
+                  help: The `host:port` to listen for uring cluster communication
                   short: c
                   long: cluster-host
                   takes_value: true
                   default_value: "0.0.0.0:8080"
+              - temp-cluster-host:
+                  help: The `host:port` to listen for cluster communication
+                  short: t
+                  long: temp-cluster-host
+                  takes_value: true
+                  default_value: "0.0.0.0:8180"
               - cluster-peer:
                   help: Peer to connect to in the cluster
                   short: e

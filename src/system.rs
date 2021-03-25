@@ -731,7 +731,8 @@ impl World {
         qsize: usize,
         storage_directory: Option<String>,
         network_addr: SocketAddr,
-        cluster_endpoint: String,
+        temp_cluster_endpoint: String,
+        cluster_addr: SocketAddr,
         cluster_peers: Vec<String>,
         cluster_bootstrap: bool,
     ) -> Result<(Self, JoinHandle<Result<()>>)> {
@@ -748,8 +749,12 @@ impl World {
         //let numeric_instance_id = instance!().parse::<u64>()?;
         let numeric_instance_id = instance!().parse::<u64>().unwrap_or(42);
         let node_id = NodeId(numeric_instance_id);
-        let temp_network =
-            ws::Network::new(&logger, node_id, cluster_endpoint, cluster_peers.clone());
+        let temp_network = ws::Network::new(
+            &logger,
+            node_id,
+            temp_cluster_endpoint,
+            cluster_peers.clone(),
+        );
 
         let (fake_system_tx, _not_used) = bounded(crate::QSIZE);
 
@@ -768,7 +773,7 @@ impl World {
                 .start();
 
         let (_uring_h, _uring) =
-            uring::Manager::new(&conductor, network_addr, Some(cluster_peers), qsize).start();
+            uring::Manager::new(&conductor, cluster_addr, Some(cluster_peers), qsize).start();
 
         let (system_h, system) = Manager {
             offramp,

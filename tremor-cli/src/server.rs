@@ -128,7 +128,6 @@ pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
         .value_of("network-host")
         .unwrap_or("127.0.0.1:9899")
         .to_string();
-
     // NOTE should probably have policies around dns lookup and ip address resolution
     let network_addr = match network_host.to_socket_addrs() {
         Ok(network_addr) => {
@@ -148,13 +147,36 @@ pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
         }
     };
 
-    let storage_directory = matches
-        .value_of("storage-directory")
-        .map(std::string::ToString::to_string);
     // FIXME better naming here
     let cluster_host = matches
         .value_of("cluster-host")
         .unwrap_or("127.0.0.1:8080")
+        .to_string();
+    // NOTE should probably have policies around dns lookup and ip address resolution
+    let cluster_addr = match cluster_host.to_socket_addrs() {
+        Ok(cluster_addr) => {
+            if let Some(choice) = cluster_addr.choose(&mut rand::thread_rng()) {
+                choice
+            } else {
+                error!(
+                    "Invalid Cluster Endpoint Error: Could not find IP address for hostname {}",
+                    &cluster_host
+                );
+                return Ok(());
+            }
+        }
+        Err(e) => {
+            error!("Invalid Cluster Endpoint Error: {}", e);
+            return Ok(());
+        }
+    };
+
+    let storage_directory = matches
+        .value_of("storage-directory")
+        .map(std::string::ToString::to_string);
+    let temp_cluster_host = matches
+        .value_of("temp-cluster-host")
+        .unwrap_or("127.0.0.1:8180")
         .to_string();
     let cluster_peers = matches.values_of_lossy("cluster-peer").unwrap_or(vec![]);
     let cluster_bootstrap = matches.is_present("cluster-bootstrap");
@@ -163,7 +185,8 @@ pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
         64,
         storage_directory,
         network_addr,
-        cluster_host,
+        temp_cluster_host,
+        cluster_addr,
         cluster_peers,
         cluster_bootstrap,
     )
