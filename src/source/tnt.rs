@@ -366,6 +366,7 @@ impl Source for TntImpl {
                 };
 
                 stream_id += 1;
+                dbg!(&stream_id);
                 task::spawn(handle_connection(
                     source_url.clone(),
                     tx.clone(),
