@@ -32,11 +32,11 @@ pub struct Metronome {
     pub config: Config,
     origin_uri: EventOriginUri,
     duration: Duration,
-    onramp_id: TremorURL,
+    onramp_id: TremorUrl,
 }
 
 impl onramp::Impl for Metronome {
-    fn from_config(id: &TremorURL, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
+    fn from_config(id: &TremorUrl, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
             let origin_uri = EventOriginUri {
@@ -61,7 +61,7 @@ impl onramp::Impl for Metronome {
 
 #[async_trait::async_trait()]
 impl Source for Metronome {
-    fn id(&self) -> &TremorURL {
+    fn id(&self) -> &TremorUrl {
         &self.onramp_id
     }
 

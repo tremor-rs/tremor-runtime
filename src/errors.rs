@@ -123,13 +123,13 @@ error_chain! {
     foreign_links {
         ValueError(tremor_value::Error);
         Base64Error(base64::DecodeError);
-        YAMLError(serde_yaml::Error) #[doc = "Error during yaml parsing"];
-        JSONError(simd_json::Error);
+        YamlError(serde_yaml::Error) #[doc = "Error during yaml parsing"];
+        JsonError(simd_json::Error);
         Io(std::io::Error);
         SinkDequeueError(async_sink::SinkDequeueError);
         SinkEnqueueError(async_sink::SinkEnqueueError);
-        FromUTF8Error(std::string::FromUtf8Error);
-        UTF8Error(std::str::Utf8Error);
+        FromUtf8Error(std::string::FromUtf8Error);
+        Utf8Error(std::str::Utf8Error);
         ElasticError(elastic::Error);
         KafkaError(rdkafka::error::KafkaError);
         ParseIntError(std::num::ParseIntError);
@@ -148,7 +148,7 @@ error_chain! {
         WsError(async_tungstenite::tungstenite::Error);
         InfluxEncoderError(influx::EncoderError);
         AsyncChannelRecvError(async_channel::RecvError);
-        JSONAccessError(value_trait::AccessError);
+        JsonAccessError(value_trait::AccessError);
         CronError(cron::error::Error);
         Postgres(postgres::Error);
         Common(tremor_common::Error);
@@ -212,7 +212,7 @@ error_chain! {
                 display("Unknown namespace: {}", n)
         }
 
-        InvalidGELFHeader(len: usize, initial: Option<[u8; 2]>) {
+        InvalidGelfHeader(len: usize, initial: Option<[u8; 2]>) {
             description("Invalid GELF header")
                 display("Invalid GELF header len: {}, prefix: {:?}", len, initial)
         }
@@ -259,7 +259,7 @@ error_chain! {
             description("Bad output pipeline id.")
                 display("Bad output pipeline id {}", i - 1)
         }
-        BadUTF8InString {
+        BadUtF8InString {
             description("Bad UTF8 in input string")
 
         }

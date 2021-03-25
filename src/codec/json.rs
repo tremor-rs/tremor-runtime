@@ -17,18 +17,18 @@ use std::cmp::max;
 use super::prelude::*;
 use tremor_value::AlignedBuf;
 
-pub struct JSON {
+pub struct Json {
     input_buffer: AlignedBuf,
     string_buffer: Vec<u8>,
 }
 
-impl Clone for JSON {
+impl Clone for Json {
     fn clone(&self) -> Self {
         Self::default()
     }
 }
 
-impl Default for JSON {
+impl Default for Json {
     fn default() -> Self {
         Self {
             input_buffer: AlignedBuf::with_capacity(1024),
@@ -37,7 +37,7 @@ impl Default for JSON {
     }
 }
 
-impl Codec for JSON {
+impl Codec for Json {
     #[cfg(not(tarpaulin_include))]
     fn name(&self) -> &str {
         "json"
@@ -91,7 +91,7 @@ mod test {
 
     #[test]
     fn decode() -> Result<()> {
-        let mut codec = JSON {
+        let mut codec = Json {
             input_buffer: AlignedBuf::with_capacity(0),
             string_buffer: Vec::new(),
         };
@@ -115,7 +115,7 @@ mod test {
         let seed: OwnedValue = json!({ "snot": "badger" });
         let seed: Value = seed.into();
 
-        let mut codec = JSON::default();
+        let mut codec = Json::default();
 
         let mut as_raw = codec.encode(&seed)?;
         let as_json = codec.decode(as_raw.as_mut_slice(), 0);

@@ -63,11 +63,11 @@ impl<'value> PartialEq<OwnedValue> for Value<'value> {
     }
 }
 
-impl<'value> Into<OwnedValue> for Value<'value> {
+impl<'value> From<Value<'value>> for OwnedValue {
     #[inline]
     #[must_use]
-    fn into(self) -> OwnedValue {
-        match self {
+    fn from(other: Value<'value>) -> OwnedValue {
+        match other {
             Value::Static(s) => OwnedValue::from(s),
             Value::String(s) => OwnedValue::from(s.to_string()),
             Value::Array(a) => a.into_iter().collect(),

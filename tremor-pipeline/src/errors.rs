@@ -40,13 +40,13 @@ error_chain! {
         Script(tremor_script::errors::Error, tremor_script::errors::ErrorKind);
     }
     foreign_links {
-        YAMLError(serde_yaml::Error) #[doc = "Error during yaml parsing"];
-        JSONError(simd_json::Error);
-        JSONAccessError(value_trait::AccessError);
+        YamlError(serde_yaml::Error) #[doc = "Error during yaml parsing"];
+        JsonError(simd_json::Error);
+        JsonAccessError(value_trait::AccessError);
         UrlParserError(url::ParseError);
         Io(std::io::Error);
-        FromUTF8Error(std::string::FromUtf8Error);
-        UTF8Error(std::str::Utf8Error);
+        FromUtf8Error(std::string::FromUtf8Error);
+        Utf8Error(std::str::Utf8Error);
         ParseIntError(std::num::ParseIntError);
         ParseFloatError(std::num::ParseFloatError);
         Sled(sled::Error);

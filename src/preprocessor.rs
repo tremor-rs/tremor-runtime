@@ -13,11 +13,11 @@
 // limitations under the License.
 
 mod gelf;
-pub(crate) use gelf::GELF;
+pub(crate) use gelf::Gelf;
 pub(crate) mod lines;
 
 use crate::errors::{Error, Result};
-use crate::url::TremorURL;
+use crate::url::TremorUrl;
 use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
 use bytes::buf::Buf;
 use bytes::BytesMut;
@@ -64,8 +64,8 @@ pub fn lookup(name: &str) -> Result<Box<dyn Preprocessor>> {
         "lz4" => Ok(Box::new(Lz4::default())),
         "decompress" => Ok(Box::new(Decompress {})),
         "remove-empty" => Ok(Box::new(FilterEmpty::default())),
-        "gelf-chunking" => Ok(Box::new(GELF::default())),
-        "gelf-chunking-tcp" => Ok(Box::new(GELF::tcp())),
+        "gelf-chunking" => Ok(Box::new(Gelf::default())),
+        "gelf-chunking-tcp" => Ok(Box::new(Gelf::tcp())),
         "ingest-ns" => Ok(Box::new(ExtractIngresTs {})),
         "length-prefixed" => Ok(Box::new(LengthPrefix::default())),
         _ => Err(format!("Preprocessor '{}' not found.", name).into()),
@@ -93,7 +93,7 @@ pub fn preprocess(
     preprocessors: &mut [Box<dyn Preprocessor>],
     ingest_ns: &mut u64,
     data: Vec<u8>,
-    instance_id: &TremorURL,
+    instance_id: &TremorUrl,
 ) -> Result<Vec<Vec<u8>>> {
     let mut data = vec![data];
     let mut data1 = Vec::new();
@@ -410,7 +410,7 @@ mod test {
         let data = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
         let wire = post_p.process(0, 0, &data)?;
         let (start, end) = wire[0].split_at(7);
-        let id = TremorURL::parse("/onramp/snot/00").unwrap();
+        let id = TremorUrl::parse("/onramp/snot/00").unwrap();
         let mut pps: Vec<Box<dyn Preprocessor>> = vec![Box::new(pre_p)];
         let recv = preprocess(pps.as_mut_slice(), &mut it, start.to_vec(), &id)?;
         assert!(recv.is_empty());

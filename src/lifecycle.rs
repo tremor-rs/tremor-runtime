@@ -128,7 +128,7 @@ mod test {
     use crate::incarnate;
     use crate::repository::BindingArtefact;
     use crate::system::World;
-    use crate::url::TremorURL;
+    use crate::url::TremorUrl;
     use std::io::BufReader;
     use tremor_common::file as cfile;
 
@@ -145,7 +145,7 @@ mod test {
         let config = slurp("tests/configs/ut.passthrough.yaml");
         let mut runtime = incarnate(config).expect("failed to incarnate runtime");
         let artefact = runtime.onramps.pop().expect("artefact not found");
-        let id = TremorURL::parse("/onramp/blaster/00").expect("artefact not found");
+        let id = TremorUrl::parse("/onramp/blaster/00").expect("artefact not found");
         assert!(world
             .repo
             .find_onramp(&id)
@@ -209,7 +209,7 @@ mod test {
         let config = slurp("tests/configs/ut.passthrough.yaml");
         let mut runtime = incarnate(config).expect("failed to incarnate runtime");
         let artefact = runtime.offramps.pop().expect("artefact not found");
-        let id = TremorURL::parse("/offramp/test/out/00").expect("artefact not found");
+        let id = TremorUrl::parse("/offramp/test/out/00").expect("artefact not found");
         assert!(world
             .repo
             .find_offramp(&id)
@@ -276,7 +276,7 @@ mod test {
             binding: runtime.bindings.pop().expect("artefact not found"),
             mapping: None,
         };
-        let id = TremorURL::parse("/binding/test/snot").expect("artefact not found");
+        let id = TremorUrl::parse("/binding/test/snot").expect("artefact not found");
 
         assert!(world
             .repo

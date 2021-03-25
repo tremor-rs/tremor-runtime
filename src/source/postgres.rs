@@ -20,7 +20,7 @@
 use crate::errors::Result;
 use crate::ramp;
 use crate::ramp::postgres::row_to_json;
-use crate::ramp::{Config as CacheConfig, KV};
+use crate::ramp::{Config as CacheConfig, Kv};
 use crate::source::prelude::*;
 use async_compat::Compat;
 use chrono::prelude::*;
@@ -46,16 +46,16 @@ pub struct Config {
 impl ConfigImpl for Config {}
 
 pub struct Postgres {
-    onramp_id: TremorURL,
+    onramp_id: TremorUrl,
     pub config: Config,
 }
 
 pub struct Int {
     pub config: Config,
     // onramp_uid: u64,
-    onramp_id: TremorURL,
+    onramp_id: TremorUrl,
     origin_uri: EventOriginUri,
-    cache: Box<dyn KV + Send>,
+    cache: Box<dyn Kv + Send>,
     cli: Option<Client>,
     stmt: Option<Statement>,
     rows: Vec<Row>,
@@ -67,7 +67,7 @@ impl fmt::Debug for Int {
 }
 
 impl onramp::Impl for Postgres {
-    fn from_config(id: &TremorURL, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
+    fn from_config(id: &TremorUrl, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
 
@@ -82,7 +82,7 @@ impl onramp::Impl for Postgres {
 }
 
 impl Int {
-    async fn from_config(uid: u64, onramp_id: TremorURL, config: &Config) -> Result<Self> {
+    async fn from_config(uid: u64, onramp_id: TremorUrl, config: &Config) -> Result<Self> {
         let origin_uri = EventOriginUri {
             uid,
             scheme: "tremor-file".to_string(),
@@ -217,7 +217,7 @@ impl Source for Int {
         Ok(SourceState::Connected)
     }
 
-    fn id(&self) -> &TremorURL {
+    fn id(&self) -> &TremorUrl {
         &self.onramp_id
     }
 }

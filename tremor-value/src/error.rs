@@ -25,7 +25,7 @@ pub enum Error {
     /// A generic serde error
     Serde(String),
     /// A SIMD Json error
-    SimdJSON(simd_json::Error),
+    SimdJson(simd_json::Error),
 }
 
 impl Display for Error {
@@ -33,7 +33,7 @@ impl Display for Error {
         match self {
             Error::ExpectedMap => write!(f, "Expected a struct, but did not find out"),
             Error::Serde(s) => f.write_str(&s),
-            Error::SimdJSON(e) => write!(f, "SIMD JSON error: {}", e),
+            Error::SimdJson(e) => write!(f, "SIMD JSON error: {}", e),
         }
     }
 }

@@ -23,7 +23,7 @@ pub enum Error {
     /// Failed to canonicalize a path
     FileCanonicalize(std::io::Error, String),
     /// Failed to change working directory
-    CWD(std::io::Error, String),
+    Cwd(std::io::Error, String),
 }
 
 impl Display for Error {
@@ -34,7 +34,7 @@ impl Display for Error {
             Error::FileCanonicalize(e, f) => {
                 write!(w, "Failed to canonicalize path `{}`: {}", f, e)
             }
-            Error::CWD(e, f) => write!(w, "Failed to change working directory `{}`: {}", f, e),
+            Error::Cwd(e, f) => write!(w, "Failed to change working directory `{}`: {}", f, e),
         }
     }
 }

@@ -49,11 +49,11 @@ fn dflt_port() -> u16 {
 
 pub struct Rest {
     pub config: Config,
-    onramp_id: TremorURL,
+    onramp_id: TremorUrl,
 }
 
 impl onramp::Impl for Rest {
-    fn from_config(id: &TremorURL, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
+    fn from_config(id: &TremorUrl, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
             Ok(Box::new(Self {
@@ -80,7 +80,7 @@ pub struct Int {
     config: Config,
     listener: Option<Receiver<RestSourceReply>>,
     post_processors: Postprocessors,
-    onramp_id: TremorURL,
+    onramp_id: TremorUrl,
     is_linked: bool,
     // TODO better way to manage this?
     response_txes: HashMap<u64, Sender<Response>>,
@@ -95,7 +95,7 @@ impl std::fmt::Debug for Int {
 impl Int {
     fn from_config(
         uid: u64,
-        onramp_id: TremorURL,
+        onramp_id: TremorUrl,
         config: &Config,
         post_processors: &[String],
         is_linked: bool,
@@ -464,7 +464,7 @@ impl Source for Int {
         // TODO ideally should happen only on successful server listen?
         Ok(SourceState::Connected)
     }
-    fn id(&self) -> &TremorURL {
+    fn id(&self) -> &TremorUrl {
         &self.onramp_id
     }
 }

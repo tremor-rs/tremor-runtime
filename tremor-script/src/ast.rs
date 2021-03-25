@@ -690,8 +690,8 @@ where
             }
         }
 
-        // ALLOW: We know that we never get here, sadly rust doesn't
-        unreachable!()
+        // We never reach here but rust can't figure that out
+        Ok(Return::Drop)
     }
 }
 

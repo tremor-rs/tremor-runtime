@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::{CBAction, EventId, OpMeta, SignalKind};
+use crate::{CbAction, EventId, OpMeta, SignalKind};
 use std::mem::swap;
 use tremor_script::prelude::*;
 use tremor_script::{EventOriginUri, LineValue, Value};
@@ -36,7 +36,7 @@ pub struct Event {
     pub is_batch: bool,
 
     /// Circuit breaker action
-    pub cb: CBAction,
+    pub cb: CbAction,
     /// Metadata for operators
     pub op_meta: OpMeta,
     /// this needs transactional data
@@ -142,7 +142,7 @@ impl Event {
     pub fn cb_restore(ingest_ns: u64) -> Self {
         Event {
             ingest_ns,
-            cb: CBAction::Open,
+            cb: CbAction::Open,
             ..Event::default()
         }
     }
@@ -152,7 +152,7 @@ impl Event {
     pub fn cb_trigger(ingest_ns: u64) -> Self {
         Event {
             ingest_ns,
-            cb: CBAction::Close,
+            cb: CbAction::Close,
             ..Event::default()
         }
     }
@@ -163,7 +163,7 @@ impl Event {
         Event {
             ingest_ns,
             id,
-            cb: CBAction::Ack,
+            cb: CbAction::Ack,
             ..Event::default()
         }
     }
@@ -174,7 +174,7 @@ impl Event {
         Event {
             ingest_ns,
             id,
-            cb: CBAction::Fail,
+            cb: CbAction::Fail,
             ..Event::default()
         }
     }
@@ -187,7 +187,7 @@ impl Event {
             id: self.id.clone(),
             ingest_ns: self.ingest_ns,
             op_meta: self.op_meta.clone(),
-            cb: CBAction::Fail,
+            cb: CbAction::Fail,
             ..Event::default()
         }
     }
@@ -358,27 +358,27 @@ mod test {
     #[test]
     fn cb() {
         let mut e = Event::default();
-        assert_eq!(e.clone().insight(true).cb, CBAction::Ack);
-        assert_eq!(e.clone().insight(false).cb, CBAction::Fail);
+        assert_eq!(e.clone().insight(true).cb, CbAction::Ack);
+        assert_eq!(e.clone().insight(false).cb, CbAction::Fail);
 
         assert_eq!(
             Event::ack_or_fail(true, 0, EventId::default()).cb,
-            CBAction::Ack
+            CbAction::Ack
         );
-        assert_eq!(Event::cb_ack(0, EventId::default()).cb, CBAction::Ack);
-        assert_eq!(e.insight_ack().cb, CBAction::Ack);
+        assert_eq!(Event::cb_ack(0, EventId::default()).cb, CbAction::Ack);
+        assert_eq!(e.insight_ack().cb, CbAction::Ack);
 
         assert_eq!(
             Event::ack_or_fail(false, 0, EventId::default()).cb,
-            CBAction::Fail
+            CbAction::Fail
         );
-        assert_eq!(Event::cb_fail(0, EventId::default()).cb, CBAction::Fail);
-        assert_eq!(e.insight_fail().cb, CBAction::Fail);
+        assert_eq!(Event::cb_fail(0, EventId::default()).cb, CbAction::Fail);
+        assert_eq!(e.insight_fail().cb, CbAction::Fail);
 
         let mut clone = e.clone();
         clone.op_meta.insert(1, OwnedValue::null());
         let ack_with_timing = clone.insight_ack_with_timing(100);
-        assert_eq!(ack_with_timing.cb, CBAction::Ack);
+        assert_eq!(ack_with_timing.cb, CbAction::Ack);
         assert!(ack_with_timing.op_meta.contains_key(1));
         let (_, m) = ack_with_timing.data.parts();
         assert_eq!(Some(100), m.get_u64("time"));
@@ -386,7 +386,7 @@ mod test {
         let mut clone2 = e.clone();
         clone2.op_meta.insert(42, OwnedValue::null());
         let clone_fail = clone2.to_fail();
-        assert_eq!(clone_fail.cb, CBAction::Fail);
+        assert_eq!(clone_fail.cb, CbAction::Fail);
         assert!(clone_fail.op_meta.contains_key(42));
     }
 
@@ -394,13 +394,13 @@ mod test {
     fn gd() {
         let mut e = Event::default();
 
-        assert_eq!(Event::restore_or_break(true, 0).cb, CBAction::Open);
-        assert_eq!(Event::cb_restore(0).cb, CBAction::Open);
-        assert_eq!(e.insight_restore().cb, CBAction::Open);
+        assert_eq!(Event::restore_or_break(true, 0).cb, CbAction::Open);
+        assert_eq!(Event::cb_restore(0).cb, CbAction::Open);
+        assert_eq!(e.insight_restore().cb, CbAction::Open);
 
-        assert_eq!(Event::restore_or_break(false, 0).cb, CBAction::Close);
-        assert_eq!(Event::cb_trigger(0).cb, CBAction::Close);
-        assert_eq!(e.insight_trigger().cb, CBAction::Close);
+        assert_eq!(Event::restore_or_break(false, 0).cb, CbAction::Close);
+        assert_eq!(Event::cb_trigger(0).cb, CbAction::Close);
+        assert_eq!(e.insight_trigger().cb, CbAction::Close);
     }
 
     #[test]

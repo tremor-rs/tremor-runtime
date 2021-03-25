@@ -22,7 +22,7 @@ pub(crate) use crate::preprocessor::{make_preprocessors, preprocess, Preprocesso
 pub(crate) use crate::sink::{self, Reply, ResultVec, Sink, SinkManager};
 pub(crate) use crate::source::Processors;
 pub(crate) use crate::url::ports::{ERR, OUT};
-pub(crate) use crate::url::TremorURL;
+pub(crate) use crate::url::TremorUrl;
 pub(crate) use crate::utils::hostname;
 pub(crate) use crate::{Event, OpConfig};
 pub(crate) use async_channel::Sender;
@@ -30,5 +30,5 @@ pub(crate) use async_std::prelude::*;
 pub(crate) use async_std::task;
 pub(crate) use beef::Cow;
 pub(crate) use tremor_common::time::nanotime;
-pub(crate) use tremor_pipeline::{CBAction, ConfigImpl};
+pub(crate) use tremor_pipeline::{CbAction, ConfigImpl};
 pub(crate) use tremor_script::prelude::*;

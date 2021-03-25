@@ -24,7 +24,7 @@ use tremor_script::prelude::*;
 
 pub mod postgres;
 
-pub trait KV {
+pub trait Kv {
     fn get(&mut self) -> Result<simd_json::OwnedValue>;
     fn set(&mut self, obj: simd_json::OwnedValue) -> Result<()>;
 }
@@ -64,7 +64,7 @@ impl MmapAnon {
     }
 }
 
-impl KV for MmapFile {
+impl Kv for MmapFile {
     fn get(&mut self) -> Result<simd_json::OwnedValue> {
         let obj = simd_json::to_owned_value(self.as_mut_slice())?;
 
@@ -84,7 +84,7 @@ impl KV for MmapFile {
     }
 }
 
-impl KV for MmapAnon {
+impl Kv for MmapAnon {
     fn get(&mut self) -> Result<simd_json::OwnedValue> {
         let mmap = self.as_slice();
         let mut bytes: Vec<u8> = Vec::with_capacity(mmap.len());
@@ -128,7 +128,7 @@ impl MmapAnon {
     fn from_config(
         config: Option<Config>,
         obj: &simd_json::OwnedValue,
-    ) -> Result<Box<dyn KV + Send>> {
+    ) -> Result<Box<dyn Kv + Send>> {
         if let Some(_config) = config {
             let string = obj.encode();
             let bytes = string.as_bytes();
@@ -152,7 +152,7 @@ impl MmapFile {
     fn from_config(
         config: Option<Config>,
         obj: &simd_json::OwnedValue,
-    ) -> Result<Box<dyn KV + Send>> {
+    ) -> Result<Box<dyn Kv + Send>> {
         if let Some(config) = config {
             let p = Path::new(&config.path);
             let mut file = OpenOptions::new()
@@ -185,7 +185,7 @@ pub fn lookup(
     name: &str,
     config: Option<Config>,
     obj: &simd_json::OwnedValue,
-) -> Result<Box<dyn KV + Send>> {
+) -> Result<Box<dyn Kv + Send>> {
     match name {
         "mmap_file" => MmapFile::from_config(config, &obj),
         "mmap_anon" => MmapAnon::from_config(config, &obj),

@@ -37,7 +37,7 @@ impl ConfigImpl for Config {}
 
 pub struct File {
     pub config: Config,
-    onramp_id: TremorURL,
+    onramp_id: TremorUrl,
 }
 
 enum ArghDyn {
@@ -58,7 +58,7 @@ struct Int {
     pub config: Config,
     lines: ArghDyn,
     origin_uri: EventOriginUri,
-    onramp_id: TremorURL,
+    onramp_id: TremorUrl,
 }
 impl std::fmt::Debug for Int {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -68,7 +68,7 @@ impl std::fmt::Debug for Int {
 impl Int {
     const SLEEP_ON_DONE_MS: u64 = 10;
 
-    async fn from_config(uid: u64, onramp_id: TremorURL, config: Config) -> Result<Self> {
+    async fn from_config(uid: u64, onramp_id: TremorUrl, config: Config) -> Result<Self> {
         let source_data_file = BufReader::new(file::open(&config.source).await?);
         let ext = file::extension(&config.source);
         let lines = if ext == Some("xz") {
@@ -96,7 +96,7 @@ impl Int {
 }
 
 impl onramp::Impl for File {
-    fn from_config(id: &TremorURL, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
+    fn from_config(id: &TremorUrl, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
             Ok(Box::new(Self {
@@ -111,7 +111,7 @@ impl onramp::Impl for File {
 
 #[async_trait::async_trait()]
 impl Source for Int {
-    fn id(&self) -> &TremorURL {
+    fn id(&self) -> &TremorUrl {
         &self.onramp_id
     }
 

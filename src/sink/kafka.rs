@@ -89,7 +89,7 @@ fn d_host() -> String {
 
 /// Kafka offramp connectoz
 pub struct Kafka {
-    sink_url: TremorURL,
+    sink_url: TremorUrl,
     config: Config,
     producer: FutureProducer,
     postprocessors: Postprocessors,
@@ -115,7 +115,7 @@ impl offramp::Impl for Kafka {
             // TODO: does this need to be unbounded?
             let (error_tx, error_rx) = bounded(crate::QSIZE);
             Ok(SinkManager::new_box(Self {
-                sink_url: TremorURL::from_offramp_id("kafka")?, // dummy
+                sink_url: TremorUrl::from_offramp_id("kafka")?, // dummy
                 config,
                 producer,
                 postprocessors: vec![],
@@ -190,10 +190,10 @@ async fn wait_for_delivery(
                         )
                     }
                 }
-                CBAction::Fail
+                CbAction::Fail
             } else {
                 // all good. send ack
-                CBAction::Ack
+                CbAction::Ack
             }
         }
         Err(e) => {
@@ -202,12 +202,12 @@ async fn wait_for_delivery(
                 sink_url, e
             );
             // oh noes, send fail
-            CBAction::Fail
+            CbAction::Fail
         }
     };
     if let Some(mut insight) = maybe_event {
         insight.cb = cb;
-        if cb == CBAction::Ack {
+        if cb == CbAction::Ack {
             let time = processing_start.elapsed().as_millis() as u64;
             let mut m = Object::with_capacity(1);
             m.insert("time".into(), time.into());
@@ -348,7 +348,7 @@ impl Sink for Kafka {
     async fn init(
         &mut self,
         _sink_uid: u64,
-        sink_url: &TremorURL,
+        sink_url: &TremorUrl,
         _codec: &dyn Codec,
         _codec_map: &HashMap<String, Box<dyn Codec>>,
         processors: Processors<'_>,

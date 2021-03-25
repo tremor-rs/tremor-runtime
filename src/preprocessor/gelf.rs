@@ -20,15 +20,15 @@ use rand::{self, RngCore};
 const FIVE_SEC: u64 = 5_000_000_000;
 
 #[derive(Clone)]
-pub struct GELF {
-    buffer: HashMap<u64, GELFMsgs>,
-    last_buffer: HashMap<u64, GELFMsgs>,
+pub struct Gelf {
+    buffer: HashMap<u64, GelfMsgs>,
+    last_buffer: HashMap<u64, GelfMsgs>,
     last_swap: u64,
     cnt: usize,
     is_tcp: bool,
 }
 
-impl GELF {
+impl Gelf {
     pub fn default() -> Self {
         Self {
             buffer: HashMap::new(),
@@ -50,7 +50,7 @@ impl GELF {
 }
 
 #[derive(Clone, Default)]
-struct GELFMsgs {
+struct GelfMsgs {
     count: u8,
     stored: u8,
     bytes: usize,
@@ -58,14 +58,14 @@ struct GELFMsgs {
 }
 
 #[derive(Clone, Default)]
-struct GELFSegment {
+struct GelfSegment {
     id: u64,
     seq: u8,
     count: u8,
     data: Vec<u8>,
 }
 
-fn decode_gelf(bin: &[u8]) -> Result<GELFSegment> {
+fn decode_gelf(bin: &[u8]) -> Result<GelfSegment> {
     // We got to do that for badly compressed / non standard conform
     // gelf messages
     match *bin {
@@ -73,10 +73,10 @@ fn decode_gelf(bin: &[u8]) -> Result<GELFSegment> {
         [0x1f, 0x3c, ref rest @ ..] => {
             // If we are less then 2 byte we can not be a proper Package
             if bin.len() < 2 {
-                Err(ErrorKind::InvalidGELFHeader(bin.len(), None).into())
+                Err(ErrorKind::InvalidGelfHeader(bin.len(), None).into())
             } else {
                 // we would allow up to 255 chunks
-                Ok(GELFSegment {
+                Ok(GelfSegment {
                     id: rand::rngs::OsRng.next_u64(),
                     seq: 0,
                     count: 1,
@@ -97,26 +97,26 @@ fn decode_gelf(bin: &[u8]) -> Result<GELFSegment> {
                 + (u64::from(b7) << 16)
                 + (u64::from(b8) << 8)
                 + u64::from(b9);
-            Ok(GELFSegment {
+            Ok(GelfSegment {
                 id,
                 seq,
                 count,
                 data: rest.to_vec(),
             })
         }
-        [b'{', _, ..] => Ok(GELFSegment {
+        [b'{', _, ..] => Ok(GelfSegment {
             id: 0,
             seq: 0,
             count: 1,
             data: bin.to_vec(),
         }),
-        [a, b, ..] => Err(ErrorKind::InvalidGELFHeader(bin.len(), Some([a, b])).into()),
-        [v] => Err(ErrorKind::InvalidGELFHeader(1, Some([v, 0])).into()),
-        [] => Err(ErrorKind::InvalidGELFHeader(0, None).into()),
+        [a, b, ..] => Err(ErrorKind::InvalidGelfHeader(bin.len(), Some([a, b])).into()),
+        [v] => Err(ErrorKind::InvalidGelfHeader(1, Some([v, 0])).into()),
+        [] => Err(ErrorKind::InvalidGelfHeader(0, None).into()),
     }
 }
 
-impl Preprocessor for GELF {
+impl Preprocessor for Gelf {
     #[cfg(not(tarpaulin_include))]
     fn name(&self) -> &str {
         "gelf"
@@ -142,8 +142,8 @@ impl Preprocessor for GELF {
     }
 }
 
-impl GELF {
-    fn enqueue(&mut self, ingest_ns: u64, msg: GELFSegment) -> Option<Vec<u8>> {
+impl Gelf {
+    fn enqueue(&mut self, ingest_ns: u64, msg: GelfSegment) -> Option<Vec<u8>> {
         // By sepc all incomplete chunks need to be destroyed after 5 seconds
         if ingest_ns - self.last_swap > FIVE_SEC {
             // clear the last buffer and swap current and last.
@@ -188,7 +188,7 @@ impl GELF {
                     }
                 }
                 Entry::Vacant(_v_last) => {
-                    let mut m = GELFMsgs {
+                    let mut m = GelfMsgs {
                         bytes: msg.data.len(),
                         count: msg.count,
                         stored: 1,
@@ -247,7 +247,7 @@ impl GELF {
     }
 }
 
-fn assemble(key: u64, m: GELFMsgs) -> Option<Vec<u8>> {
+fn assemble(key: u64, m: GelfMsgs) -> Option<Vec<u8>> {
     let mut result = Vec::with_capacity(m.bytes);
     for v in m.segments {
         if let Some(mut v) = v {

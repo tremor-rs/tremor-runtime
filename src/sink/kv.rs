@@ -28,7 +28,7 @@ pub struct Config {
     dir: String,
 }
 pub struct Kv {
-    sink_url: TremorURL,
+    sink_url: TremorUrl,
     event_origin_uri: EventOriginUri,
     db: sled::Db,
 }
@@ -135,7 +135,7 @@ impl offramp::Impl for Kv {
             };
 
             Ok(SinkManager::new_box(Kv {
-                sink_url: TremorURL::from_onramp_id("kv")?, // dummy value
+                sink_url: TremorUrl::from_onramp_id("kv")?, // dummy value
                 event_origin_uri,
                 db,
             }))
@@ -246,7 +246,7 @@ impl Sink for Kv {
     async fn init(
         &mut self,
         sink_uid: u64,
-        sink_url: &TremorURL,
+        sink_url: &TremorUrl,
         _codec: &dyn Codec,
         _codec_map: &HashMap<String, Box<dyn Codec>>,
         _processors: Processors<'_>,

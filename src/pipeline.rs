@@ -15,7 +15,7 @@ use crate::errors::Result;
 use crate::permge::{PriorityMerge, M};
 use crate::registry::ServantId;
 use crate::repository::PipelineArtefact;
-use crate::url::TremorURL;
+use crate::url::TremorUrl;
 use crate::{offramp, onramp};
 use async_channel::{bounded, unbounded};
 use async_std::stream::StreamExt;
@@ -26,12 +26,12 @@ use std::time::Duration;
 use tremor_common::ids::OperatorIdGen;
 use tremor_common::time::nanotime;
 use tremor_pipeline::errors::ErrorKind as PipelineErrorKind;
-use tremor_pipeline::{CBAction, Event, ExecutableGraph, SignalKind};
+use tremor_pipeline::{CbAction, Event, ExecutableGraph, SignalKind};
 
 const TICK_MS: u64 = 100;
 pub(crate) type Sender = async_channel::Sender<ManagerMsg>;
-type Onramps = halfbrown::HashMap<TremorURL, (bool, onramp::Addr)>;
-type Dests = halfbrown::HashMap<Cow<'static, str>, Vec<(TremorURL, Dest)>>;
+type Onramps = halfbrown::HashMap<TremorUrl, (bool, onramp::Addr)>;
+type Dests = halfbrown::HashMap<Cow<'static, str>, Vec<(TremorUrl, Dest)>>;
 type Eventset = Vec<(Cow<'static, str>, Event)>;
 /// Address for a a pipeline
 #[derive(Clone)]
@@ -96,16 +96,16 @@ pub(crate) enum CfMsg {
 
 #[derive(Debug)]
 pub(crate) enum MgmtMsg {
-    ConnectOfframp(Cow<'static, str>, TremorURL, offramp::Addr),
-    ConnectPipeline(Cow<'static, str>, TremorURL, Box<Addr>),
-    ConnectLinkedOnramp(Cow<'static, str>, TremorURL, onramp::Addr),
+    ConnectOfframp(Cow<'static, str>, TremorUrl, offramp::Addr),
+    ConnectPipeline(Cow<'static, str>, TremorUrl, Box<Addr>),
+    ConnectLinkedOnramp(Cow<'static, str>, TremorUrl, onramp::Addr),
     ConnectOnramp {
-        id: TremorURL,
+        id: TremorUrl,
         addr: onramp::Addr,
         reply: bool,
     },
-    DisconnectOutput(Cow<'static, str>, TremorURL),
-    DisconnectInput(TremorURL),
+    DisconnectOutput(Cow<'static, str>, TremorUrl),
+    DisconnectInput(TremorUrl),
 }
 
 #[derive(Debug)]
@@ -186,7 +186,7 @@ async fn send_events(eventset: &mut Eventset, dests: &mut Dests) -> Result<()> {
 }
 
 #[inline]
-async fn send_signal(own_id: &TremorURL, signal: Event, dests: &mut Dests) -> Result<()> {
+async fn send_signal(own_id: &TremorUrl, signal: Event, dests: &mut Dests) -> Result<()> {
     let mut offramps = dests.values_mut().flatten();
     let first = offramps.next();
     for (id, offramp) in offramps {
@@ -210,7 +210,7 @@ async fn handle_insight(
     onramps: &Onramps,
 ) {
     let insight = pipeline.contraflow(skip_to, insight);
-    if insight.cb != CBAction::None {
+    if insight.cb != CbAction::None {
         for (_k, (send, o)) in onramps {
             if *send || insight.cb.is_cb() {
                 if let Err(e) = o
@@ -267,7 +267,7 @@ fn maybe_send(r: Result<()>) {
 
 #[allow(clippy::too_many_lines)]
 async fn pipeline_task(
-    id: TremorURL,
+    id: TremorUrl,
     mut pipeline: ExecutableGraph,
     rx: async_channel::Receiver<Msg>,
     cf_rx: async_channel::Receiver<CfMsg>,
@@ -491,7 +491,7 @@ mod tests {
             &aggr_reg,
         )?;
         let config = tremor_pipeline::query::Query(q);
-        let id = TremorURL::parse("/pipeline/manager_error_test/instance")?;
+        let id = TremorUrl::parse("/pipeline/manager_error_test/instance")?;
         let manager = Manager::new(12);
         let (handle, sender) = manager.start();
         let (tx, rx) = async_channel::bounded(1);
@@ -500,7 +500,7 @@ mod tests {
         sender.send(create_msg).await?;
         let addr = rx.recv().await??;
         let (offramp_tx, offramp_rx) = async_channel::unbounded();
-        let offramp_url = TremorURL::parse("/offramp/fake_offramp/instance/in")?;
+        let offramp_url = TremorUrl::parse("/offramp/fake_offramp/instance/in")?;
         // connect a channel so we can receive events from the back of the pipeline :)
         addr.send_mgmt(MgmtMsg::ConnectOfframp(
             "out".into(),

@@ -52,7 +52,7 @@ impl ConfigImpl for Config {}
 pub struct Discord {
     pub config: Config,
     origin_uri: EventOriginUri,
-    onramp_id: TremorURL,
+    onramp_id: TremorUrl,
     client: Option<(Sender<Value<'static>>, Receiver<Value<'static>>)>,
 }
 impl std::fmt::Debug for Discord {
@@ -99,9 +99,9 @@ pub enum Intents {
     NonPrivileged,
 }
 
-impl Into<GatewayIntents> for Intents {
-    fn into(self) -> GatewayIntents {
-        match self {
+impl From<Intents> for GatewayIntents {
+    fn from(intent: Intents) -> GatewayIntents {
+        match intent {
             Intents::Guilds => GatewayIntents::GUILDS,
             Intents::GuildMembers => GatewayIntents::GUILD_MEMBERS,
             Intents::GuildBans => GatewayIntents::GUILD_BANS,
@@ -124,7 +124,7 @@ impl Into<GatewayIntents> for Intents {
 }
 
 impl onramp::Impl for Discord {
-    fn from_config(id: &TremorURL, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
+    fn from_config(id: &TremorUrl, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
             let origin_uri = EventOriginUri {
@@ -781,7 +781,7 @@ impl EventHandler for Handler {
 
 #[async_trait::async_trait]
 impl Source for Discord {
-    fn id(&self) -> &TremorURL {
+    fn id(&self) -> &TremorUrl {
         &self.onramp_id
     }
 

@@ -96,7 +96,7 @@ impl Sink for File {
     async fn init(
         &mut self,
         _sink_uid: u64,
-        _sink_url: &TremorURL,
+        _sink_url: &TremorUrl,
         _codec: &dyn Codec,
         _codec_map: &HashMap<String, Box<dyn Codec>>,
         processors: Processors<'_>,

@@ -117,17 +117,17 @@ pub fn aggr() -> Aggr {
 
 /// Module Function Arity triple
 #[derive(Clone, Debug, PartialEq)]
-pub struct MFA {
+pub struct Mfa {
     m: String,
     f: String,
     a: usize,
 }
 
-impl MFA {
-    /// creates a MFA
+impl Mfa {
+    /// creates a Mfa
     #[must_use]
     pub fn new(m: &str, f: &str, a: usize) -> Self {
-        MFA {
+        Mfa {
             m: m.to_string(),
             f: f.to_string(),
             a,
@@ -135,14 +135,14 @@ impl MFA {
     }
 }
 
-/// creates a MFA
+/// creates a Mfa
 #[must_use]
-pub fn mfa(m: &str, f: &str, a: usize) -> MFA {
-    MFA::new(m, f, a)
+pub fn mfa(m: &str, f: &str, a: usize) -> Mfa {
+    Mfa::new(m, f, a)
 }
 
-/// Turns an error and a MFA into a function error
-pub fn to_runtime_error<E: core::fmt::Display>(mfa: MFA, e: E) -> FunctionError {
+/// Turns an error and a Mfa into a function error
+pub fn to_runtime_error<E: core::fmt::Display>(mfa: Mfa, e: E) -> FunctionError {
     FunctionError::RuntimeError {
         mfa,
         error: format!("{}", e),
@@ -155,14 +155,14 @@ pub enum FunctionError {
     /// The function was called with a bad arity
     BadArity {
         /// The function was called with a bad arity
-        mfa: MFA,
+        mfa: Mfa,
         /// The function was called with a bad arity
         calling_a: usize,
     },
     /// The function encountered a runtime error
     RuntimeError {
         /// The function was called with a bad arity
-        mfa: MFA,
+        mfa: Mfa,
         /// The function was called with a bad arity
         error: String,
     },
@@ -181,7 +181,7 @@ pub enum FunctionError {
     /// A bad type was passed
     BadType {
         /// The function was called with a bad arity
-        mfa: MFA,
+        mfa: Mfa,
     },
     /// Recursion Limit Reached
     RecursionLimit,
@@ -382,7 +382,7 @@ macro_rules! tremor_fn_ {
             use $crate::EventContext;
             use $crate::registry::{TremorFnWrapper, TremorFn};
             #[allow(unused_imports)] // We might not use all of this imports
-            use $crate::registry::{FResult, FunctionError, mfa, MFA, to_runtime_error as to_runtime_error_ext};
+            use $crate::registry::{FResult, FunctionError, mfa, Mfa, to_runtime_error as to_runtime_error_ext};
             const ARGC: usize = {0_usize $(+ replace_expr!($arg 1_usize))*};
             mod $name {
                 #[derive(Clone, Debug, Default)]
@@ -395,7 +395,7 @@ macro_rules! tremor_fn_ {
                     $context: &'c EventContext,
                     args: &[&Value<'event>],
                 ) -> FResult<Value<'event>> {
-                    fn this_mfa() -> MFA {
+                    fn this_mfa() -> Mfa {
                         mfa(stringify!($module), stringify!($name), ARGC)
                     }
                     #[allow(dead_code)] // We need this as it is a macro and might not be used
@@ -445,7 +445,7 @@ macro_rules! tremor_fn_ {
             use $crate::EventContext;
             use $crate::registry::{TremorFnWrapper, TremorFn};
             #[allow(unused_imports)] // We might not use all of this imports
-            use $crate::registry::{FResult, FunctionError, mfa, MFA, to_runtime_error as to_runtime_error_ext};
+            use $crate::registry::{FResult, FunctionError, mfa, Mfa, to_runtime_error as to_runtime_error_ext};
             const ARGC: usize = {0_usize $(+ replace_expr!($arg 1_usize))*};
             mod $name {
                 #[derive(Clone, Debug, Default)]
@@ -458,7 +458,7 @@ macro_rules! tremor_fn_ {
                     $context: &'c EventContext,
                     args: &[&Value<'event>],
                 ) -> FResult<Value<'event>> {
-                    fn this_mfa() -> MFA {
+                    fn this_mfa() -> Mfa {
                         mfa(stringify!($module), stringify!($name), ARGC)
                     }
                     #[allow(dead_code)] // We need this as it is a macro and might not be used
@@ -507,7 +507,7 @@ macro_rules! tremor_fn_ {
             use $crate::EventContext;
             use $crate::registry::{TremorFnWrapper, TremorFn};
             #[allow(unused_imports)] // We might not use all of this imports
-            use $crate::registry::{FResult, FunctionError, mfa, MFA, to_runtime_error as to_runtime_error_ext};
+            use $crate::registry::{FResult, FunctionError, mfa, Mfa, to_runtime_error as to_runtime_error_ext};
             const ARGC: usize = 0;
             mod $name {
                 #[derive(Clone, Debug, Default)]
@@ -521,7 +521,7 @@ macro_rules! tremor_fn_ {
                     args: &[&Value<'event>],
                 ) -> FResult<Value<'event>> {
 
-                    fn this_mfa() -> MFA {
+                    fn this_mfa() -> Mfa {
                         mfa(stringify!($module), stringify!($name), ARGC)
                     }
                     #[allow(dead_code)] // We need this as it is a macro and might not be used

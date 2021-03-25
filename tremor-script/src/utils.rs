@@ -84,13 +84,21 @@ fn sorted_serialize_<'v, W: Write>(j: &Value<'v>, w: &mut W) -> Result<()> {
     Ok(())
 }
 
+fn is_xz_file(filename: &str) -> bool {
+    filename
+        .rsplit('.')
+        .next()
+        .map(|ext| ext.eq_ignore_ascii_case("xz"))
+        == Some(true)
+}
+
 /// Loads an event file required for tests
 /// tries to load file and without .xz suffix
 pub fn load_event_file(base_name: &str) -> crate::errors::Result<Vec<Value<'static>>> {
     use tremor_common::file as cfile;
     use xz2::read::XzDecoder;
 
-    let (xz_name, name) = if base_name.ends_with(".xz") {
+    let (xz_name, name) = if is_xz_file(&base_name) {
         (base_name.to_owned(), base_name.trim_end_matches(".xz"))
     } else {
         let mut tmp = base_name.to_owned();
@@ -105,7 +113,7 @@ pub fn load_event_file(base_name: &str) -> crate::errors::Result<Vec<Value<'stat
         return Err(format!("File not found or not readable: {}", base_name).into());
     };
     let mut in_data = Vec::new();
-    if effective_name.ends_with(".xz") {
+    if is_xz_file(&effective_name) {
         XzDecoder::new(file).read_to_end(&mut in_data)?
     } else {
         file.read_to_end(&mut in_data)?

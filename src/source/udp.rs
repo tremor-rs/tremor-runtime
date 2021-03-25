@@ -27,13 +27,13 @@ impl ConfigImpl for Config {}
 
 pub struct Udp {
     pub config: Config,
-    onramp_id: TremorURL,
+    onramp_id: TremorUrl,
 }
 
 struct Int {
     config: Config,
     socket: Option<UdpSocket>,
-    onramp_id: TremorURL,
+    onramp_id: TremorUrl,
     origin_uri: EventOriginUri,
 }
 impl std::fmt::Debug for Int {
@@ -43,7 +43,7 @@ impl std::fmt::Debug for Int {
 }
 
 impl Int {
-    fn from_config(uid: u64, onramp_id: TremorURL, config: &Config) -> Self {
+    fn from_config(uid: u64, onramp_id: TremorUrl, config: &Config) -> Self {
         let origin_uri = EventOriginUri {
             uid,
             scheme: "tremor-udp".to_string(),
@@ -60,7 +60,7 @@ impl Int {
     }
 }
 impl onramp::Impl for Udp {
-    fn from_config(onramp_id: &TremorURL, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
+    fn from_config(onramp_id: &TremorUrl, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
             Ok(Box::new(Self {
@@ -122,7 +122,7 @@ impl Source for Int {
         self.socket = Some(socket);
         Ok(SourceState::Connected)
     }
-    fn id(&self) -> &TremorURL {
+    fn id(&self) -> &TremorUrl {
         &self.onramp_id
     }
 }

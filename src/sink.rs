@@ -15,7 +15,7 @@
 #![cfg(not(tarpaulin_include))]
 use crate::pipeline;
 use crate::sink::prelude::*;
-use crate::url::TremorURL;
+use crate::url::TremorUrl;
 use async_channel::Sender;
 use halfbrown::HashMap;
 
@@ -74,7 +74,7 @@ pub(crate) trait Sink {
     async fn init(
         &mut self,
         sink_uid: u64,
-        sink_url: &TremorURL,
+        sink_url: &TremorUrl,
         codec: &dyn Codec,
         codec_map: &HashMap<String, Box<dyn Codec>>,
         processors: Processors<'_>,
@@ -106,11 +106,11 @@ pub(crate) struct SinkManager<T>
 where
     T: Sink,
 {
-    sink_url: Option<TremorURL>,
+    sink_url: Option<TremorUrl>,
     sink: T,
-    pipelines: HashMap<TremorURL, pipeline::Addr>,
+    pipelines: HashMap<TremorUrl, pipeline::Addr>,
     // for linked offramps
-    dest_pipelines: HashMap<Cow<'static, str>, Vec<(TremorURL, pipeline::Addr)>>,
+    dest_pipelines: HashMap<Cow<'static, str>, Vec<(TremorUrl, pipeline::Addr)>>,
 }
 
 impl<T> SinkManager<T>
@@ -147,7 +147,7 @@ where
     async fn start(
         &mut self,
         offramp_uid: u64,
-        offramp_url: &TremorURL,
+        offramp_url: &TremorUrl,
         codec: &dyn Codec,
         codec_map: &HashMap<String, Box<dyn Codec>>,
         processors: Processors<'_>,
@@ -194,11 +194,11 @@ where
         self.sink.default_codec()
     }
 
-    fn add_pipeline(&mut self, id: TremorURL, addr: pipeline::Addr) {
+    fn add_pipeline(&mut self, id: TremorUrl, addr: pipeline::Addr) {
         self.pipelines.insert(id, addr);
     }
 
-    fn add_dest_pipeline(&mut self, port: Cow<'static, str>, id: TremorURL, addr: pipeline::Addr) {
+    fn add_dest_pipeline(&mut self, port: Cow<'static, str>, id: TremorUrl, addr: pipeline::Addr) {
         let p = (id, addr);
         if let Some(port_ps) = self.dest_pipelines.get_mut(&port) {
             port_ps.push(p);
@@ -207,11 +207,11 @@ where
         }
     }
 
-    fn remove_pipeline(&mut self, id: TremorURL) -> bool {
+    fn remove_pipeline(&mut self, id: TremorUrl) -> bool {
         self.pipelines.remove(&id);
         self.pipelines.is_empty() && !self.has_dest_pipelines()
     }
-    fn remove_dest_pipeline(&mut self, port: Cow<'static, str>, id: TremorURL) -> bool {
+    fn remove_dest_pipeline(&mut self, port: Cow<'static, str>, id: TremorUrl) -> bool {
         if let Some(port_ps) = self.dest_pipelines.get_mut(&port) {
             port_ps.retain(|(url, _)| url != &id)
         }
@@ -287,7 +287,7 @@ where
 /// we explicitly do not fail upon send errors, just log errors
 pub(crate) async fn handle_response<'iter, T>(response: Event, mut pipelines: T) -> Result<()>
 where
-    T: Iterator<Item = &'iter (TremorURL, pipeline::Addr)>,
+    T: Iterator<Item = &'iter (TremorUrl, pipeline::Addr)>,
 {
     if let Some((first_id, first_addr)) = pipelines.next() {
         for (id, addr) in pipelines {
@@ -335,7 +335,7 @@ mod test {
             t11,
             t12,
             t13,
-            TremorURL::parse("tremor://host/pipeline/name1/instance1/port1")?,
+            TremorUrl::parse("tremor://host/pipeline/name1/instance1/port1")?,
         );
 
         let (t21, r21) = async_channel::unbounded();
@@ -345,7 +345,7 @@ mod test {
             t21,
             t22,
             t23,
-            TremorURL::parse("tremor://host/pipeline/name2/instance2/port2")?,
+            TremorUrl::parse("tremor://host/pipeline/name2/instance2/port2")?,
         );
 
         let p = vec![(p1.id().clone(), p1), (p2.id().clone(), p2)];

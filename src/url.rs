@@ -60,8 +60,10 @@ pub mod ports {
 }
 
 /// A tremor URL identifying an entity in tremor
+
+#[allow(clippy::module_name_repetitions)]
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
-pub struct TremorURL {
+pub struct TremorUrl {
     scope: Scope,
     host: String,
     resource_type: Option<ResourceType>,
@@ -91,7 +93,7 @@ impl fmt::Display for ResourceType {
     }
 }
 
-impl fmt::Display for TremorURL {
+impl fmt::Display for TremorUrl {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let r = write!(f, "tremor://{}", self.host);
         if let Some(resource_type) = &self.resource_type {
@@ -110,7 +112,7 @@ impl fmt::Display for TremorURL {
     }
 }
 
-impl TremorURL {
+impl TremorUrl {
     /// Generates a minimal id of the form "{pfx}-{artefact}.{instance}"
     #[must_use]
     pub fn short_id(&self, pfx: &str) -> String {
@@ -306,7 +308,7 @@ impl TremorURL {
     }
 }
 
-impl<'de> Deserialize<'de> for TremorURL {
+impl<'de> Deserialize<'de> for TremorUrl {
     fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -317,7 +319,7 @@ impl<'de> Deserialize<'de> for TremorURL {
     }
 }
 
-impl Serialize for TremorURL {
+impl Serialize for TremorUrl {
     fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -332,17 +334,17 @@ mod test {
 
     #[test]
     fn bad_url() {
-        assert!(TremorURL::parse("snot://").is_err())
+        assert!(TremorUrl::parse("snot://").is_err())
     }
 
     #[test]
     fn bad_url2() {
-        assert!(TremorURL::parse("foo/bar/baz/bogo/mips/snot").is_err())
+        assert!(TremorUrl::parse("foo/bar/baz/bogo/mips/snot").is_err())
     }
 
     #[test]
     fn url() -> Result<()> {
-        let url = TremorURL::parse("tremor://127.0.0.1:1234/pipeline/main/01/in?format=json")?;
+        let url = TremorUrl::parse("tremor://127.0.0.1:1234/pipeline/main/01/in?format=json")?;
 
         assert_eq!(Scope::Port, url.scope());
         assert_eq!(Some(ResourceType::Pipeline), url.resource_type());
@@ -354,7 +356,7 @@ mod test {
 
     #[test]
     fn short_url() -> Result<()> {
-        let url = TremorURL::parse("/pipeline/main/01/in")?;
+        let url = TremorUrl::parse("/pipeline/main/01/in")?;
 
         assert_eq!(Scope::Port, url.scope());
         assert_eq!(Some(ResourceType::Pipeline), url.resource_type());
@@ -366,7 +368,7 @@ mod test {
 
     #[test]
     fn from_onramp_id() -> Result<()> {
-        let url = TremorURL::from_onramp_id("test")?;
+        let url = TremorUrl::from_onramp_id("test")?;
         assert_eq!(Some(ResourceType::Onramp), url.resource_type());
         assert_eq!(Some("test"), url.artefact());
         Ok(())
@@ -374,7 +376,7 @@ mod test {
 
     #[test]
     fn from_offramp_id() -> Result<()> {
-        let url = TremorURL::from_offramp_id("test")?;
+        let url = TremorUrl::from_offramp_id("test")?;
         assert_eq!(Some(ResourceType::Offramp), url.resource_type());
         assert_eq!(Some("test"), url.artefact());
         Ok(())
@@ -382,7 +384,7 @@ mod test {
 
     #[test]
     fn test_servant_scope() -> Result<()> {
-        let url = TremorURL::parse("in")?;
+        let url = TremorUrl::parse("in")?;
         assert_eq!(Scope::Servant, url.scope());
         assert_eq!(None, url.resource_type());
         assert_eq!(None, url.artefact());
@@ -391,7 +393,7 @@ mod test {
 
     #[test]
     fn test_type_scope() -> Result<()> {
-        let url = TremorURL::parse("01/in")?;
+        let url = TremorUrl::parse("01/in")?;
         assert_eq!(Scope::Type, url.scope());
         assert_eq!(None, url.resource_type());
         assert_eq!(None, url.artefact());
@@ -402,7 +404,7 @@ mod test {
 
     #[test]
     fn test_artefact_scope() -> Result<()> {
-        let url = TremorURL::parse("pipe/01/in")?;
+        let url = TremorUrl::parse("pipe/01/in")?;
         assert_eq!(Scope::Artefact, url.scope());
         assert_eq!(None, url.resource_type());
         assert_eq!(Some("pipe"), url.artefact());
@@ -413,21 +415,21 @@ mod test {
 
     #[test]
     fn test_port_scope() -> Result<()> {
-        let url = TremorURL::parse("binding/pipe/01/in")?;
+        let url = TremorUrl::parse("binding/pipe/01/in")?;
         assert_eq!(Scope::Port, url.scope());
         assert_eq!(Some(ResourceType::Binding), url.resource_type());
         assert_eq!(Some("pipe"), url.artefact());
         assert_eq!(Some("01"), url.instance());
         assert_eq!(Some(ports::IN.as_ref()), url.instance_port());
 
-        let url = TremorURL::parse("onramp/id/01/out")?;
+        let url = TremorUrl::parse("onramp/id/01/out")?;
         assert_eq!(Scope::Port, url.scope());
         assert_eq!(Some(ResourceType::Onramp), url.resource_type());
         assert_eq!(Some("id"), url.artefact());
         assert_eq!(Some("01"), url.instance());
         assert_eq!(Some(ports::OUT.as_ref()), url.instance_port());
 
-        let url = TremorURL::parse("offramp/id/01/in")?;
+        let url = TremorUrl::parse("offramp/id/01/in")?;
         assert_eq!(Scope::Port, url.scope());
         assert_eq!(Some(ResourceType::Offramp), url.resource_type());
         assert_eq!(Some("id"), url.artefact());
@@ -439,7 +441,7 @@ mod test {
 
     #[test]
     fn test_set_instance() -> Result<()> {
-        let mut url = TremorURL::parse("tremor://127.0.0.1:1234/pipeline/main")?;
+        let mut url = TremorUrl::parse("tremor://127.0.0.1:1234/pipeline/main")?;
         assert_eq!(Scope::Artefact, url.scope());
         assert_eq!(Some(ResourceType::Pipeline), url.resource_type());
         assert_eq!(Some("main"), url.artefact());

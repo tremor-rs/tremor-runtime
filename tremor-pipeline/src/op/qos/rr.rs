@@ -153,22 +153,22 @@ impl Operator for RoundRobin {
             .and_then(OwnedValue::as_usize)
             .and_then(|id| outputs.get_mut(id))
         {
-            if insight.cb == CBAction::Close {
+            if insight.cb == CbAction::Close {
                 o.open = false;
-            } else if insight.cb == CBAction::Open {
+            } else if insight.cb == CbAction::Open {
                 o.open = true;
             }
         }
         let any_available = outputs.iter().any(|o| o.open);
 
         if any_available && !any_were_available {
-            insight.cb = CBAction::Open;
+            insight.cb = CbAction::Open;
             error!("Failed to restore circuit breaker");
         } else if any_were_available && !any_available {
-            insight.cb = CBAction::Close;
+            insight.cb = CbAction::Close;
             error!("Failed to trigger circuit breaker");
         } else if insight.cb.is_cb() {
-            insight.cb = CBAction::None;
+            insight.cb = CbAction::None;
         };
     }
 }
@@ -223,7 +223,7 @@ mod test {
         let mut insight = Event {
             id: (1, 1, 1).into(),
             ingest_ns: 1_000_000,
-            cb: CBAction::Close,
+            cb: CbAction::Close,
             op_meta,
             ..Event::default()
         };
@@ -268,7 +268,7 @@ mod test {
         let mut insight = Event {
             id: (1, 1, 1).into(),
             ingest_ns: 1_000_000,
-            cb: CBAction::Open,
+            cb: CbAction::Open,
             op_meta,
             ..Event::default()
         };

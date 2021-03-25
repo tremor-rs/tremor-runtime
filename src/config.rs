@@ -12,15 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::url::TremorURL;
+use crate::url::TremorUrl;
 use hashbrown::HashMap;
 
-pub(crate) type ID = String;
+pub(crate) type Id = String;
 pub(crate) type OnRampVec = Vec<OnRamp>;
 pub(crate) type OffRampVec = Vec<OffRamp>;
 pub(crate) type BindingVec = Vec<Binding>;
-pub(crate) type BindingMap = HashMap<TremorURL, Vec<TremorURL>>;
-pub(crate) type MappingMap = HashMap<TremorURL, HashMap<String, String>>;
+pub(crate) type BindingMap = HashMap<TremorUrl, Vec<TremorUrl>>;
+pub(crate) type MappingMap = HashMap<TremorUrl, HashMap<String, String>>;
 
 /// A full tremor config
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -41,7 +41,7 @@ pub struct Config {
 #[serde(deny_unknown_fields)]
 pub struct OnRamp {
     /// ID of the onramp
-    pub id: ID,
+    pub id: Id,
     #[serde(rename = "type")]
     pub(crate) binding_type: String,
     #[serde(default = "Default::default")]
@@ -81,7 +81,7 @@ pub struct OnRamp {
 #[serde(deny_unknown_fields)]
 pub struct OffRamp {
     /// ID of the offramp
-    pub id: ID,
+    pub id: Id,
     #[serde(rename = "type")]
     pub(crate) binding_type: String,
     #[serde(default = "Default::default")]
@@ -119,7 +119,7 @@ pub struct OffRamp {
 #[serde(deny_unknown_fields)]
 pub struct Binding {
     /// ID of the binding
-    pub id: ID,
+    pub id: Id,
     #[serde(default = "Default::default")]
     pub(crate) description: String,
     pub(crate) links: BindingMap, // is this right? this should be url to url?

@@ -15,9 +15,9 @@
 use super::prelude::*;
 
 #[derive(Clone)]
-pub struct YAML {}
+pub struct Yaml {}
 
-impl Codec for YAML {
+impl Codec for Yaml {
     #[cfg(not(tarpaulin_include))]
     fn name(&self) -> &str {
         "yaml"
@@ -58,7 +58,7 @@ mod test {
         let seed: OwnedValue = json!({ "snot": "badger" });
         let seed: Value = seed.into();
 
-        let mut codec = YAML {};
+        let mut codec = Yaml {};
         let mut as_raw = codec.encode(&seed)?;
         let as_json = codec.decode(as_raw.as_mut_slice(), 0);
 

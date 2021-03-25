@@ -88,7 +88,7 @@ impl ConfigImpl for Config {}
 
 pub struct Kafka {
     pub config: Config,
-    onramp_id: TremorURL,
+    onramp_id: TremorUrl,
 }
 
 #[derive(Debug)]
@@ -110,7 +110,7 @@ impl<'consumer> From<BorrowedMessage<'consumer>> for MsgOffset {
 pub struct Int {
     uid: u64,
     config: Config,
-    onramp_id: TremorURL,
+    onramp_id: TremorUrl,
     consumer: Option<LoggingConsumer>,
     kafka_poll_timeout: Timeout,
     origin_uri: EventOriginUri,
@@ -158,7 +158,7 @@ impl Int {
         }
         tm
     }
-    fn from_config(uid: u64, onramp_id: TremorURL, config: &Config) -> Self {
+    fn from_config(uid: u64, onramp_id: TremorUrl, config: &Config) -> Self {
         let origin_uri = EventOriginUri {
             uid,
             scheme: "tremor-kafka".to_string(),
@@ -187,7 +187,7 @@ impl Int {
 }
 
 impl onramp::Impl for Kafka {
-    fn from_config(id: &TremorURL, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
+    fn from_config(id: &TremorUrl, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
             Ok(Box::new(Self {
@@ -203,7 +203,7 @@ impl onramp::Impl for Kafka {
 // A simple context to customize the consumer behavior and print a log line every time
 // offsets are committed
 pub struct LoggingConsumerContext {
-    onramp_id: TremorURL,
+    onramp_id: TremorUrl,
 }
 
 impl ClientContext for LoggingConsumerContext {}
@@ -256,7 +256,7 @@ impl Source for Int {
     fn is_transactional(&self) -> bool {
         !self.auto_commit
     }
-    fn id(&self) -> &TremorURL {
+    fn id(&self) -> &TremorUrl {
         &self.onramp_id
     }
     async fn pull_event(&mut self, id: u64) -> Result<SourceReply> {

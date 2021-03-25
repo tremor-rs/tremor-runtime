@@ -20,12 +20,12 @@ use crate::onramp;
 use crate::pipeline;
 use crate::registry::ServantId;
 use crate::system::{self, World};
-use crate::url::{ResourceType, TremorURL};
+use crate::url::{ResourceType, TremorUrl};
 use beef::Cow;
 use hashbrown::HashMap;
 use std::collections::HashSet;
 use tremor_pipeline::query;
-pub(crate) type Id = TremorURL;
+pub(crate) type Id = TremorUrl;
 pub(crate) use crate::OffRamp as OfframpArtefact;
 pub(crate) use crate::OnRamp as OnrampArtefact;
 use async_channel::bounded;
@@ -58,18 +58,18 @@ pub trait Artefact: Clone {
     async fn link(
         &self,
         system: &World,
-        id: &TremorURL,
+        id: &TremorUrl,
         mappings: HashMap<Self::LinkLHS, Self::LinkRHS>,
     ) -> Result<Self::LinkResult>;
 
     async fn unlink(
         &self,
         system: &World,
-        id: &TremorURL,
+        id: &TremorUrl,
         mappings: HashMap<Self::LinkLHS, Self::LinkRHS>,
     ) -> Result<bool>;
-    fn artefact_id(u: &TremorURL) -> Result<Id>;
-    fn servant_id(u: &TremorURL) -> Result<ServantId>;
+    fn artefact_id(u: &TremorUrl) -> Result<Id>;
+    fn servant_id(u: &TremorUrl) -> Result<ServantId>;
 }
 
 #[async_trait]
@@ -77,7 +77,7 @@ impl Artefact for Pipeline {
     type SpawnResult = pipeline::Addr;
     type LinkResult = bool;
     type LinkLHS = String;
-    type LinkRHS = TremorURL;
+    type LinkRHS = TremorUrl;
 
     //    type Configuration = tremor_pipeline::Pipeline;
     async fn spawn(&self, world: &World, servant_id: ServantId) -> Result<Self::SpawnResult> {
@@ -87,7 +87,7 @@ impl Artefact for Pipeline {
     async fn link(
         &self,
         system: &World,
-        id: &TremorURL,
+        id: &TremorUrl,
         mappings: HashMap<Self::LinkLHS, Self::LinkRHS>,
     ) -> Result<Self::LinkResult> {
         if let Some(pipeline) = system.reg.find_pipeline(id).await? {
@@ -149,7 +149,7 @@ impl Artefact for Pipeline {
     async fn unlink(
         &self,
         system: &World,
-        id: &TremorURL,
+        id: &TremorUrl,
         mappings: HashMap<Self::LinkLHS, Self::LinkRHS>,
     ) -> Result<Self::LinkResult> {
         info!("Unlinking pipeline {} ..", id);
@@ -176,7 +176,7 @@ impl Artefact for Pipeline {
         }
     }
 
-    fn artefact_id(id: &TremorURL) -> Result<Id> {
+    fn artefact_id(id: &TremorUrl) -> Result<Id> {
         let mut id = id.clone();
         id.trim_to_artefact();
         match (id.resource_type(), id.artefact()) {
@@ -184,7 +184,7 @@ impl Artefact for Pipeline {
             _ => Err("URL does not contain a pipeline artifact id".into()),
         }
     }
-    fn servant_id(id: &TremorURL) -> Result<ServantId> {
+    fn servant_id(id: &TremorUrl) -> Result<ServantId> {
         let mut id = id.clone();
         id.trim_to_instance();
         match (id.resource_type(), id.instance()) {
@@ -198,8 +198,8 @@ impl Artefact for Pipeline {
 impl Artefact for OfframpArtefact {
     type SpawnResult = offramp::Addr;
     type LinkResult = bool;
-    type LinkLHS = TremorURL;
-    type LinkRHS = TremorURL;
+    type LinkLHS = TremorUrl;
+    type LinkRHS = TremorUrl;
     async fn spawn(&self, world: &World, servant_id: ServantId) -> Result<Self::SpawnResult> {
         //TODO: define offramp by config!
         let offramp = offramp::lookup(&self.binding_type, &self.config)?;
@@ -255,7 +255,7 @@ impl Artefact for OfframpArtefact {
     async fn link(
         &self,
         system: &World,
-        id: &TremorURL,
+        id: &TremorUrl,
         mappings: HashMap<Self::LinkLHS, Self::LinkRHS>,
     ) -> Result<Self::LinkResult> {
         info!("Linking offramp {} ..", id);
@@ -282,7 +282,7 @@ impl Artefact for OfframpArtefact {
     async fn unlink(
         &self,
         system: &World,
-        id: &TremorURL,
+        id: &TremorUrl,
         mappings: HashMap<Self::LinkLHS, Self::LinkRHS>,
     ) -> Result<Self::LinkResult> {
         info!("Unlinking offramp {} ..", id);
@@ -310,7 +310,7 @@ impl Artefact for OfframpArtefact {
         }
     }
 
-    fn artefact_id(id: &TremorURL) -> Result<Id> {
+    fn artefact_id(id: &TremorUrl) -> Result<Id> {
         let mut id = id.clone();
         id.trim_to_artefact();
         match (id.resource_type(), id.artefact()) {
@@ -318,7 +318,7 @@ impl Artefact for OfframpArtefact {
             _ => Err(format!("URL does not contain an offramp artifact id: {}", id).into()),
         }
     }
-    fn servant_id(id: &TremorURL) -> Result<ServantId> {
+    fn servant_id(id: &TremorUrl) -> Result<ServantId> {
         let mut id = id.clone();
         id.trim_to_instance();
         match (id.resource_type(), id.instance()) {
@@ -332,7 +332,7 @@ impl Artefact for OnrampArtefact {
     type SpawnResult = onramp::Addr;
     type LinkResult = bool;
     type LinkLHS = String;
-    type LinkRHS = TremorURL;
+    type LinkRHS = TremorUrl;
     async fn spawn(&self, world: &World, servant_id: ServantId) -> Result<Self::SpawnResult> {
         let stream = onramp::lookup(&self.binding_type, &servant_id, &self.config)?;
         let codec = self.codec.as_ref().map_or_else(
@@ -380,7 +380,7 @@ impl Artefact for OnrampArtefact {
     async fn link(
         &self,
         system: &World,
-        id: &TremorURL,
+        id: &TremorUrl,
         mappings: HashMap<Self::LinkLHS, Self::LinkRHS>,
     ) -> Result<Self::LinkResult> {
         // check if we have the right onramp
@@ -422,7 +422,7 @@ impl Artefact for OnrampArtefact {
     async fn unlink(
         &self,
         system: &World,
-        id: &TremorURL,
+        id: &TremorUrl,
         mappings: HashMap<Self::LinkLHS, Self::LinkRHS>,
     ) -> Result<bool> {
         info!("Unlinking onramp {} ..", id);
@@ -455,7 +455,7 @@ impl Artefact for OnrampArtefact {
         }
     }
 
-    fn artefact_id(id: &TremorURL) -> Result<Id> {
+    fn artefact_id(id: &TremorUrl) -> Result<Id> {
         let mut id = id.clone();
         id.trim_to_artefact();
         match (id.resource_type(), id.artefact()) {
@@ -463,7 +463,7 @@ impl Artefact for OnrampArtefact {
             _ => Err(format!("URL {} does not contain a onramp artifact id", id).into()),
         }
     }
-    fn servant_id(id: &TremorURL) -> Result<ServantId> {
+    fn servant_id(id: &TremorUrl) -> Result<ServantId> {
         let mut id = id.clone();
         id.trim_to_instance();
         match (id.resource_type(), id.instance()) {
@@ -487,12 +487,12 @@ impl Artefact for Binding {
     async fn link(
         &self,
         system: &World,
-        id: &TremorURL,
+        id: &TremorUrl,
         mappings: HashMap<Self::LinkLHS, Self::LinkRHS>,
     ) -> Result<Self::LinkResult> {
-        let mut pipelines: Vec<(TremorURL, TremorURL)> = Vec::new();
-        let mut onramps: Vec<(TremorURL, TremorURL)> = Vec::new();
-        let mut offramps: Vec<(TremorURL, TremorURL)> = Vec::new();
+        let mut pipelines: Vec<(TremorUrl, TremorUrl)> = Vec::new();
+        let mut onramps: Vec<(TremorUrl, TremorUrl)> = Vec::new();
+        let mut offramps: Vec<(TremorUrl, TremorUrl)> = Vec::new();
         let mut res = self.clone();
         res.binding.links.clear();
         for (src, dsts) in self.binding.links.clone() {
@@ -506,7 +506,7 @@ impl Artefact for Binding {
                 }
                 let mut from = src.clone();
                 from.set_instance(&instance);
-                let mut tos: Vec<TremorURL> = Vec::new();
+                let mut tos: Vec<TremorUrl> = Vec::new();
                 for dst in dsts {
                     // TODO: It should be validated ahead of time that every mapping has an instance!
                     if let Some(inst) = dst.instance() {
@@ -608,7 +608,7 @@ impl Artefact for Binding {
     async fn unlink(
         &self,
         system: &World,
-        _: &TremorURL,
+        _: &TremorUrl,
         _: HashMap<Self::LinkLHS, Self::LinkRHS>,
     ) -> Result<bool> {
         // TODO Quiescence Protocol ( termination correctness checks )
@@ -673,7 +673,7 @@ impl Artefact for Binding {
         Ok(true)
     }
 
-    fn artefact_id(id: &TremorURL) -> Result<Id> {
+    fn artefact_id(id: &TremorUrl) -> Result<Id> {
         let mut id = id.clone();
         id.trim_to_artefact();
         match (id.resource_type(), id.artefact()) {
@@ -681,7 +681,7 @@ impl Artefact for Binding {
             _ => Err(format!("URL {} does not contain a binding artifact id", id).into()),
         }
     }
-    fn servant_id(id: &TremorURL) -> Result<ServantId> {
+    fn servant_id(id: &TremorUrl) -> Result<ServantId> {
         let mut id = id.clone();
         id.trim_to_instance();
         match (id.resource_type(), id.instance()) {

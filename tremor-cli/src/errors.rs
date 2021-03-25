@@ -45,8 +45,8 @@ error_chain! {
         Runtime(tremor_runtime::errors::Error, tremor_runtime::errors::ErrorKind);
     }
     foreign_links {
-        YAMLError(serde_yaml::Error) #[doc = "Error during yaml parsing"];
-        JSONError(simd_json::Error) #[doc = "Error during json parsing"];
+        YamlError(serde_yaml::Error) #[doc = "Error during yaml parsing"];
+        JsonError(simd_json::Error) #[doc = "Error during json parsing"];
         Io(std::io::Error) #[doc = "Error during std::io"];
         FutureTimeoutError(async_std::future::TimeoutError) #[doc = "Error waiting for futures to complete"];
         Globwalk(globwalk::GlobError) #[doc = "Glob walker error"];

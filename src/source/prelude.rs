@@ -16,12 +16,12 @@
 pub(crate) use crate::errors::*;
 pub(crate) use crate::onramp::{self, Onramp, OnrampConfig};
 pub(crate) use crate::source::{Processors, Source, SourceManager, SourceReply, SourceState};
-pub(crate) use crate::url::TremorURL;
+pub(crate) use crate::url::TremorUrl;
 pub(crate) use crate::utils::hostname;
 pub(crate) use async_channel::{bounded, Receiver};
 pub(crate) use async_std::prelude::*;
 pub(crate) use async_std::task;
 pub(crate) use beef::Cow;
 pub(crate) use serde_yaml::Value as YamlValue;
-pub(crate) use tremor_pipeline::{CBAction, ConfigImpl, Event, EventOriginUri};
+pub(crate) use tremor_pipeline::{CbAction, ConfigImpl, Event, EventOriginUri};
 pub(crate) use tremor_script::prelude::*;
