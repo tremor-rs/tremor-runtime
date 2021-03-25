@@ -241,13 +241,36 @@ fn build_event_payload(event: &Event) -> Result<Vec<u8>> {
         if let Some(pipeline) = meta.get_str("pipeline") {
             index_meta.insert("pipeline", pipeline)?;
         };
-        let value_meta = json!({ "index": index_meta });
+        let key = match meta.get_str("es_op") {
+            Some("delete") => "delete",
+            Some("create") => "create",
+            Some("update") => "update",
+            Some("index") | None => "index",
+            Some(other) => {
+                return Err(format!(
+                    "invalid ES operation, use one of `delete`, `create`, `update`, `index`: {}",
+                    other
+                )
+                .into())
+            }
+        };
+        let value_meta = json!({ key: index_meta });
         value_meta.write(&mut payload)?;
-        payload.push(b'\n');
-        value.write(&mut payload)?;
+        match key {
+            "delete" => (),
+            "update" => {
+                payload.push(b'\n');
+                let value = json!({ "doc": value });
+                value.write(&mut payload)?;
+            }
+            "create" | "index" => {
+                payload.push(b'\n');
+                value.write(&mut payload)?;
+            }
+            other => error!("[ES::Sink] Unsupported action: {}", other),
+        }
         payload.push(b'\n');
     }
-
     Ok(payload)
 }
 

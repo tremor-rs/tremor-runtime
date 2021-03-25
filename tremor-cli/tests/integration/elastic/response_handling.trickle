@@ -10,6 +10,6 @@ select {
   "payload": event.payload,
   "success": event.success,
   "index": $elastic.index,
-  "doc": $elastic.doc_type
+  "doc": $elastic.doc_type,
 }
 from in where not event.success into err;
