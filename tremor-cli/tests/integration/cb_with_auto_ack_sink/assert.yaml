@@ -1,0 +1,9 @@
+status: 0
+name: cb_with_auto_ack_sink
+asserts:
+  - source: fg.out.log
+    equals_file: expected.json
+  - source: fg.err.log
+    contains:
+      - |
+        All required CB events received.
