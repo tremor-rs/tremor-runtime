@@ -94,7 +94,7 @@ fn decode(data: &[u8], _ingest_ns: u64) -> Result<Value> {
         Plus,
         Minus,
         None,
-    };
+    }
     let mut d = data.iter().enumerate().peekable();
     let mut m = Object::with_capacity(4);
     let value_start: usize;

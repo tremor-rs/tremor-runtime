@@ -2982,9 +2982,9 @@ mod tests {
                 Token::FloatLiteral(f_token, _) => {
                     assert_eq!(f, f_token);
                 }
-                t => assert!(false, format!("{:?} not a float", t)),
+                t => assert!(false, "{:?} not a float", t),
             },
-            e => assert!(false, format!("{:?} unexpected", e)),
+            e => assert!(false, "{:?} unexpected", e),
         };
         Ok(())
     }

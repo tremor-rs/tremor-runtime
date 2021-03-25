@@ -183,7 +183,8 @@ mod tests {
             } else {
                 assert!(
                     false,
-                    format!("expected to get anm insight back. Got {:?}", replies.get(0))
+                    "expected to get anm insight back. Got {:?}",
+                    replies.get(0)
                 );
             }
         }
@@ -213,7 +214,8 @@ mod tests {
             } else {
                 assert!(
                     false,
-                    format!("expected to get anm insight back. Got {:?}", replies.get(0))
+                    "expected to get anm insight back. Got {:?}",
+                    replies.get(0)
                 );
             }
         }
@@ -248,7 +250,8 @@ mod tests {
                 }
                 _ => assert!(
                     false,
-                    format!("expected to get two insights back. Got {:?}", replies)
+                    "expected to get two insights back. Got {:?}",
+                    replies
                 ),
             }
         }
@@ -282,7 +285,8 @@ mod tests {
                 }
                 _ => assert!(
                     false,
-                    format!("expected to get two insights back. Got {:?}", replies)
+                    "expected to get two insights back. Got {:?}",
+                    replies
                 ),
             }
         }

@@ -387,7 +387,7 @@ macro_rules! tremor_fn_ {
             mod $name {
                 #[derive(Clone, Debug, Default)]
                 pub(crate) struct Func {}
-            };
+            }
             impl TremorFn for $name::Func {
                 #[allow(unused_variables)]
                 fn invoke<'event, 'c>(
@@ -450,7 +450,7 @@ macro_rules! tremor_fn_ {
             mod $name {
                 #[derive(Clone, Debug, Default)]
                 pub(crate) struct Func {}
-            };
+            }
             impl TremorFn for $name::Func {
                 #[allow(unused_variables)]
                 fn invoke<'event, 'c>(
@@ -512,7 +512,7 @@ macro_rules! tremor_fn_ {
             mod $name {
                 #[derive(Clone, Debug, Default)]
                 pub(crate) struct Func {}
-            };
+            }
             impl TremorFn for $name::Func {
                 #[allow(unused_variables)]
                 fn invoke<'event, 'c>(

@@ -386,7 +386,7 @@ where
                         return Self::execute_effectors(opts, env, event, state, meta, local, l);
                     }
                 }};
-            };
+            }
             match cg {
                 ClauseGroup::Simple { patterns, .. } => {
                     for predicate in patterns {
