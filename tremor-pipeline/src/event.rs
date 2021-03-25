@@ -382,6 +382,12 @@ mod test {
         assert!(ack_with_timing.op_meta.contains_key(1));
         let (_, m) = ack_with_timing.data.parts();
         assert_eq!(Some(100), m.get_u64("time"));
+
+        let mut clone2 = e.clone();
+        clone2.op_meta.insert(42, OwnedValue::null());
+        let clone_fail = clone2.to_fail();
+        assert_eq!(clone_fail.cb, CBAction::Fail);
+        assert!(clone_fail.op_meta.contains_key(42));
     }
 
     #[test]
