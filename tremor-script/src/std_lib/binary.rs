@@ -30,7 +30,7 @@ pub fn load(registry: &mut Registry) {
                 if let Value::Bytes(input) = input {
                     Ok(input.iter().copied().map(Value::from).collect::<Value>())
                 } else {
-                    Ok(Value::String("snot".into()))
+                    Err(to_runtime_error("cannot convert a non-binary into an array of bytes"))
                 }
             }),
         );
@@ -60,5 +60,7 @@ mod test {
         let f = fun("binary", "into_bytes");
         let v = Value::Bytes("snot".as_bytes().into());
         assert_val!(f(&[&v]), Value::from(b"snot".to_vec()));
+        let v = Value::String("snot".into());
+        assert!(f(&[&v]).is_err());
     }
 }
