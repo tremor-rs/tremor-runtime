@@ -562,7 +562,7 @@ impl Sink for Ws {
                 .await?;
         } else {
             let err = format!("No connection available for {}.", &msg_meta.url);
-            let maybe_op_meta = if (transactional) {
+            let maybe_op_meta = if transactional {
                 Some(self.merged_meta.clone())
             } else {
                 None

@@ -2,7 +2,8 @@ select {
   "success": event.success,
   "payload": event.payload,
   "index": $elastic.index,
-  "doc": $elastic.doc_type
+  "doc": $elastic.doc_type,
+  "correlation": $correlation
 }
 from in where event.success into out;
 
@@ -11,5 +12,6 @@ select {
   "success": event.success,
   "index": $elastic.index,
   "doc": $elastic.doc_type,
+  "correlation": $correlation
 }
 from in where not event.success into err;

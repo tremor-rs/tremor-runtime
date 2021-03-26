@@ -4,6 +4,7 @@ script
   let $index = "my_little_index";
   let $doc_type = "my_little_doc";
   let $action = event.action;
+  let $correlation = event.snot;
   match event of
     case %{present doc_id} => let $doc_id = event.doc_id
     default => null
