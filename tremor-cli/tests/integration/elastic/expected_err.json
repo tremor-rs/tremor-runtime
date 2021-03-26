@@ -1,1 +1,1 @@
-{"payload":{"tremor":12,"cause":"this one has a different type underneath the same key and thus will fail elastic","es_op":null},"success":false,"index":"my_little_index","doc":"my_little_doc"}
+{"payload":{"tremor":12,"cause":"this one has a different type underneath the same key and thus will fail elastic","action":null},"success":false,"index":"my_little_index","doc":"my_little_doc"}
