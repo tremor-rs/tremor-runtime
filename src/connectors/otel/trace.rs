@@ -342,9 +342,10 @@ mod tests {
 
     #[test]
     fn span_link() -> Result<()> {
-        let span_id_pb = id::random_span_id_bytes();
+        let nanotime = tremor_common::time::nanotime();
+        let span_id_pb = id::random_span_id_bytes(nanotime);
         let span_id_json = id::test::pb_span_id_to_json(&span_id_pb);
-        let trace_id_json = id::random_trace_id_value();
+        let trace_id_json = id::random_trace_id_value(nanotime);
         let trace_id_pb = id::test::json_trace_id_to_pb(Some(&trace_id_json))?;
 
         let pb = vec![Link {
@@ -376,11 +377,12 @@ mod tests {
     #[test]
     #[allow(deprecated)]
     fn instrument_library_spans() -> Result<()> {
-        let parent_span_id_json = id::random_span_id_value();
+        let nanotime = tremor_common::time::nanotime();
+        let parent_span_id_json = id::random_span_id_value(nanotime);
         let parent_span_id_pb = id::test::json_span_id_to_pb(Some(&parent_span_id_json))?;
-        let span_id_pb = id::random_span_id_bytes();
+        let span_id_pb = id::random_span_id_bytes(nanotime);
         let span_id_json = id::test::pb_span_id_to_json(&span_id_pb);
-        let trace_id_json = id::random_trace_id_value();
+        let trace_id_json = id::random_trace_id_value(nanotime);
         let trace_id_pb = id::test::json_trace_id_to_pb(Some(&trace_id_json))?;
 
         let pb = vec![InstrumentationLibrarySpans {
@@ -447,11 +449,12 @@ mod tests {
 
     #[test]
     fn resource_spans() -> Result<()> {
-        let parent_span_id_json = id::random_span_id_value();
+        let nanotime = tremor_common::time::nanotime();
+        let parent_span_id_json = id::random_span_id_value(nanotime);
         let parent_span_id_pb = id::test::json_span_id_to_pb(Some(&parent_span_id_json))?;
-        let span_id_pb = id::random_span_id_bytes();
+        let span_id_pb = id::random_span_id_bytes(nanotime);
         let span_id_json = id::test::pb_span_id_to_json(&span_id_pb);
-        let trace_id_json = id::random_trace_id_value();
+        let trace_id_json = id::random_trace_id_value(nanotime);
         let trace_id_pb = id::test::json_trace_id_to_pb(Some(&trace_id_json))?;
 
         #[allow(deprecated)]

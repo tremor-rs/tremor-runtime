@@ -27,7 +27,9 @@ pub(crate) fn maybe_string_to_pb(data: Option<&Value<'_>>) -> Result<String> {
 }
 
 pub(crate) fn maybe_int_to_pbu64(data: Option<&Value<'_>>) -> Result<u64> {
+    // use simd_json::Value;
     // TODO when as_u64 passes `proptest` change to the comment out code
+    //   - Test again once https://github.com/simd-lite/simd-json/pull/174 is rolled into a release
     //
     // proptest: Aborting shrinking after the PROPTEST_MAX_SHRINK_ITERS environment variable or ProptestConfig.max_shrink_iters iterations (set 1024 to a large(r) value to shrink more; current configuration: 1024 iterations)
     // thread 'connectors::pb::test::prop_pb_u64_repeated' panicked at 'Test failed: not coercable to u64; minimal failing input: (vec, _index) = ([9270612287945480471], 0)

@@ -25,23 +25,23 @@ use tremor_script::Registry;
 /// Extend function registry with `CNCF OpenTelemetry` support
 pub fn load(registry: &mut Registry) {
     registry
-        .insert(tremor_fn! (cncf::otel|gen_span_id_string(_context) {
-            Ok(id::random_span_id_value().into_static())
+        .insert(tremor_fn! (cncf::otel|gen_span_id_string(ctx) {
+            Ok(id::random_span_id_value(ctx.ingest_ns()).into_static())
         }))
-        .insert(tremor_fn! (cncf::otel|gen_span_id_array(_context) {
-            Ok(id::random_span_id_array().into_static())
+        .insert(tremor_fn! (cncf::otel|gen_span_id_array(ctx) {
+            Ok(id::random_span_id_array(ctx.ingest_ns()).into_static())
         }))
-        .insert(tremor_fn! (cncf::otel|gen_span_id_bytes(_context) {
-            Ok(Value::Bytes(id::random_span_id_bytes().into()).into_static())
+        .insert(tremor_fn! (cncf::otel|gen_span_id_bytes(ctx) {
+            Ok(Value::Bytes(id::random_span_id_bytes(ctx.ingest_ns()).into()).into_static())
         }))
-        .insert(tremor_fn! (cncf::otel|gen_trace_id_string(_context) {
-            Ok(id::random_trace_id_value().into_static())
+        .insert(tremor_fn! (cncf::otel|gen_trace_id_string(ctx) {
+            Ok(id::random_trace_id_value(ctx.ingest_ns()).into_static())
         }))
-        .insert(tremor_fn! (cncf::otel|gen_trace_id_array(_context) {
-            Ok(id::random_trace_id_array().into_static())
+        .insert(tremor_fn! (cncf::otel|gen_trace_id_array(ctx) {
+            Ok(id::random_trace_id_array(ctx.ingest_ns()).into_static())
         }))
-        .insert(tremor_fn! (cncf::otel|gen_trace_id_bytes(_context) {
-            Ok(Value::Bytes(id::random_trace_id_bytes().into()).into_static())
+        .insert(tremor_fn! (cncf::otel|gen_trace_id_bytes(ctx) {
+            Ok(Value::Bytes(id::random_trace_id_bytes(ctx.ingest_ns()).into()).into_static())
         }));
 }
 

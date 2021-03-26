@@ -204,9 +204,10 @@ mod tests {
 
     #[test]
     fn instrumentation_library_logs() -> Result<()> {
-        let span_id_pb = id::random_span_id_bytes();
+        let nanos = tremor_common::time::nanotime();
+        let span_id_pb = id::random_span_id_bytes(nanos);
         let span_id_json = id::test::pb_span_id_to_json(&span_id_pb);
-        let trace_id_json = id::random_trace_id_value();
+        let trace_id_json = id::random_trace_id_value(nanos);
         let trace_id_pb = id::test::json_trace_id_to_pb(Some(&trace_id_json))?;
 
         let pb = vec![InstrumentationLibraryLogs {
@@ -257,9 +258,10 @@ mod tests {
 
     #[test]
     fn resource_logs() -> Result<()> {
-        let span_id_pb = id::random_span_id_bytes();
+        let nanos = tremor_common::time::nanotime();
+        let span_id_pb = id::random_span_id_bytes(nanos);
         let span_id_json = id::test::pb_span_id_to_json(&span_id_pb);
-        let trace_id_json = id::random_trace_id_value();
+        let trace_id_json = id::random_trace_id_value(nanos);
         let trace_id_pb = id::test::json_trace_id_to_pb(Some(&trace_id_json))?;
 
         let pb = ExportLogsServiceRequest {
