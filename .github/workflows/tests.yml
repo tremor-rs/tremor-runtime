@@ -18,6 +18,8 @@ jobs:
           override: true
           profile: minimal
       - name: Run tests and validate lockfile
+        env:
+          PROPTEST_CASES: 2500
         run: cargo test --all --locked
   code-coverage:
     runs-on: ubuntu-latest
@@ -32,6 +34,7 @@ jobs:
       - name: Run cargo-tarpaulin
         uses: actions-rs/tarpaulin@v0.1
         env:
+          PROPTEST_CASES: 2500
           RUSTFLAGS: -C target-cpu=native
         with:
           version: "0.16.0"
