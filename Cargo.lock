@@ -5939,6 +5939,7 @@ dependencies = [
  "matches",
  "openssl",
  "pin-project-lite 0.2.6",
+ "port_scanner",
  "postgres",
  "postgres-protocol",
  "pretty_assertions",

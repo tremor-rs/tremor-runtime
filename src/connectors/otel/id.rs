@@ -17,14 +17,14 @@ use rand::Rng;
 use simd_json::StaticNode;
 use tremor_script::Value;
 
-pub(crate) fn random_span_id_bytes() -> Vec<u8> {
-    let mut rng = tremor_common::rand::make_prng();
+pub(crate) fn random_span_id_bytes(ingest_ns_seed: u64) -> Vec<u8> {
+    let mut rng = tremor_common::rand::make_prng(ingest_ns_seed);
     let span_id: Vec<u8> = (0..8).map(|_| rng.gen_range(0_u8..=255_u8)).collect();
     span_id
 }
 
-pub(crate) fn random_span_id_string() -> String {
-    let mut rng = tremor_common::rand::make_prng();
+pub(crate) fn random_span_id_string(ingest_ns_seed: u64) -> String {
+    let mut rng = tremor_common::rand::make_prng(ingest_ns_seed);
     let span_id: String = (0..8)
         .map(|_| rng.gen_range(0_u8..=255_u8))
         .map(|b| format!("{:02x}", b))
@@ -32,27 +32,27 @@ pub(crate) fn random_span_id_string() -> String {
     span_id
 }
 
-pub(crate) fn random_span_id_array<'event>() -> Value<'event> {
+pub(crate) fn random_span_id_array<'event>(ingest_ns_seed: u64) -> Value<'event> {
     Value::Array(
-        random_span_id_bytes()
+        random_span_id_bytes(ingest_ns_seed)
             .iter()
             .map(|b| Value::Static(StaticNode::U64(u64::from(*b))))
             .collect(),
     )
 }
 
-pub(crate) fn random_span_id_value<'event>() -> Value<'event> {
-    Value::String(random_span_id_string().into())
+pub(crate) fn random_span_id_value<'event>(ingest_ns_seed: u64) -> Value<'event> {
+    Value::String(random_span_id_string(ingest_ns_seed).into())
 }
 
-pub(crate) fn random_trace_id_bytes() -> Vec<u8> {
-    let mut rng = tremor_common::rand::make_prng();
+pub(crate) fn random_trace_id_bytes(ingest_ns_seed: u64) -> Vec<u8> {
+    let mut rng = tremor_common::rand::make_prng(ingest_ns_seed);
     let span_id: Vec<u8> = (0..16).map(|_| rng.gen_range(0_u8..=255_u8)).collect();
     span_id
 }
 
-pub(crate) fn random_trace_id_string() -> String {
-    let mut rng = tremor_common::rand::make_prng();
+pub(crate) fn random_trace_id_string(ingest_ns_seed: u64) -> String {
+    let mut rng = tremor_common::rand::make_prng(ingest_ns_seed);
     let span_id: String = (0..16)
         .map(|_| rng.gen_range(0_u8..=255_u8))
         .map(|b| format!("{:02x}", b))
@@ -60,8 +60,8 @@ pub(crate) fn random_trace_id_string() -> String {
     span_id
 }
 
-pub(crate) fn random_trace_id_value<'event>() -> Value<'event> {
-    Value::String(random_trace_id_string().into())
+pub(crate) fn random_trace_id_value<'event>(ingest_ns_seed: u64) -> Value<'event> {
+    Value::String(random_trace_id_string(ingest_ns_seed).into())
 }
 
 fn hex_to_bytes(str_bytes: &str) -> Option<Vec<u8>> {
@@ -79,9 +79,9 @@ fn hex_to_bytes(str_bytes: &str) -> Option<Vec<u8>> {
     }
 }
 
-pub(crate) fn random_trace_id_array<'event>() -> Value<'event> {
+pub(crate) fn random_trace_id_array<'event>(ingest_ns_seed: u64) -> Value<'event> {
     Value::Array(
-        random_trace_id_bytes()
+        random_trace_id_bytes(ingest_ns_seed)
             .iter()
             .map(|b| Value::Static(StaticNode::U64(u64::from(*b))))
             .collect(),
@@ -215,8 +215,9 @@ pub mod test {
 
     #[test]
     fn test_utilities() -> Result<()> {
-        let span_bytes = random_span_id_bytes();
-        let trace_bytes = random_trace_id_bytes();
+        let nanos = tremor_common::time::nanotime();
+        let span_bytes = random_span_id_bytes(nanos);
+        let trace_bytes = random_trace_id_bytes(nanos);
 
         let span_json = pb_span_id_to_json(&span_bytes);
         let trace_json = pb_trace_id_to_json(&trace_bytes);
@@ -227,8 +228,8 @@ pub mod test {
         assert_eq!(span_bytes, span_pb);
         assert_eq!(trace_bytes, trace_pb);
 
-        let span_array = random_span_id_array();
-        let trace_array = random_trace_id_array();
+        let span_array = random_span_id_array(nanos);
+        let trace_array = random_trace_id_array(nanos);
 
         let span_pb = json_span_id_to_pb(Some(&span_array))?;
         let trace_pb = json_trace_id_to_pb(Some(&trace_array))?;

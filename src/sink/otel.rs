@@ -23,7 +23,7 @@
 #![cfg(not(tarpaulin_include))]
 
 use crate::connectors::otel::{logs, metrics, trace};
-use crate::connectors::qos;
+use crate::connectors::qos::{self, QoSFacilities, SinkQoS};
 use crate::sink::prelude::*;
 use halfbrown::HashMap;
 use tonic::transport::Channel as TonicChannel;
@@ -46,6 +46,10 @@ pub struct OpenTelemetry {
     config: Config,
     endpoint: String,
     remote: Option<RemoteOpenTelemetryEndpoint>,
+    is_down: bool,
+    qos_epoch: u64,
+    qos_interval: u64,
+    qos_facility: Box<dyn SinkQoS>,
 }
 
 #[derive(Deserialize)]
@@ -54,6 +58,19 @@ pub struct Config {
     pub host: String,
     /// The gRPC endpoint TCP port for the remote OpenTelemetry collector endpoint
     pub port: u16,
+    /// Enable the log service
+    #[serde(default = "d_true")]
+    pub logs: bool,
+    /// Enables the trace service
+    #[serde(default = "d_true")]
+    pub trace: bool,
+    /// Enables the metrics service
+    #[serde(default = "d_true")]
+    pub metrics: bool,
+}
+
+fn d_true() -> bool {
+    true
 }
 
 impl ConfigImpl for Config {}
@@ -62,11 +79,16 @@ impl offramp::Impl for OpenTelemetry {
     fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
+            let hostport = format!("{}:{}", config.host.clone(), config.port);
             let endpoint = format!("https://{}:{}", config.host.clone().as_str(), config.port);
             Ok(SinkManager::new_box(Self {
                 config,
                 endpoint,
                 remote: None,
+                is_down: false,
+                qos_epoch: nanotime(),
+                qos_interval: 1_000_000_000,
+                qos_facility: Box::new(QoSFacilities::recoverable(hostport)),
             }))
         } else {
             Err("Offramp otel requires a config".into())
@@ -107,27 +129,59 @@ impl Sink for OpenTelemetry {
         mut event: Event,
     ) -> ResultVec {
         if let Some(_remote) = &mut self.remote {
+            // Up
             for value in event.value_iter() {
                 if let Some(ref mut remote) = &mut self.remote {
                     if let Value::Object(o) = value {
                         if o.contains_key("metrics") {
-                            let request = json_otel_metrics_to_pb(value)?;
-                            if let Err(e) = remote.metrics_client.export(request).await {
-                                error!("Failed to dispatch otel/gRPC metrics message: {}", e);
-                            };
-                            continue;
+                            if self.config.metrics {
+                                let request = json_otel_metrics_to_pb(value)?;
+                                if let Err(e) = remote.metrics_client.export(request).await {
+                                    error!("Failed to dispatch otel/gRPC metrics message: {}", e);
+                                    self.is_down = true;
+                                    if event.transactional {
+                                        return Ok(Some(vec![qos::close(&mut event)]));
+                                    }
+                                    return Ok(Some(vec![
+                                        qos::fail(&mut event.clone()),
+                                        qos::close(&mut event),
+                                    ]));
+                                };
+                            } else {
+                                warn!("Otel Source received metrics event when metrics support is disabled. Dropping trace");
+                            }
                         } else if o.contains_key("logs") {
-                            let request = json_otel_logs_to_pb(value)?;
-                            if let Err(e) = remote.logs_client.export(request).await {
-                                error!("Failed to dispatch otel/gRPC logs message: {}", e);
+                            if self.config.logs {
+                                let request = json_otel_logs_to_pb(value)?;
+                                if let Err(e) = remote.logs_client.export(request).await {
+                                    error!("Failed to dispatch otel/gRPC logs message: {}", e);
+                                    self.is_down = true;
+                                    if event.transactional {
+                                        return Ok(Some(vec![qos::close(&mut event)]));
+                                    }
+                                    return Ok(Some(vec![
+                                        qos::fail(&mut event.clone()),
+                                        qos::close(&mut event),
+                                    ]));
+                                }
                             }
-                            continue;
+                            warn!("Otel Sink received log event when log support is disabled. Dropping trace");
                         } else if o.contains_key("trace") {
-                            let request = json_otel_trace_to_pb(value)?;
-                            if let Err(e) = remote.trace_client.export(request).await {
-                                error!("Failed to dispatch otel/gRPC logs message: {}", e);
+                            if self.config.trace {
+                                let request = json_otel_trace_to_pb(value)?;
+                                if let Err(e) = remote.trace_client.export(request).await {
+                                    error!("Failed to dispatch otel/gRPC logs message: {}", e);
+                                    self.is_down = true;
+                                    if event.transactional {
+                                        return Ok(Some(vec![qos::close(&mut event)]));
+                                    }
+                                    return Ok(Some(vec![
+                                        qos::fail(&mut event.clone()),
+                                        qos::close(&mut event),
+                                    ]));
+                                }
                             }
-                            continue;
+                            warn!("Otel Sink received trace event when trace support is disabled. Dropping trace");
                         }
                     }
 
@@ -135,9 +189,12 @@ impl Sink for OpenTelemetry {
                     error!("Unsupported event received by OTEL sink: {}", value);
                 }
             }
+
+            self.is_down = false;
+            return Ok(Some(vec![qos::ack(&mut event)]));
         }
 
-        Ok(Some(vec![qos::ack(&mut event)]))
+        Ok(Some(vec![]))
     }
 
     fn default_codec(&self) -> &str {
@@ -177,13 +234,25 @@ impl Sink for OpenTelemetry {
 
         Ok(())
     }
-    async fn on_signal(&mut self, _signal: Event) -> ResultVec {
+    async fn on_signal(&mut self, signal: Event) -> ResultVec {
+        if self.is_down && self.qos_facility.probe(signal.ingest_ns) {
+            self.is_down = false;
+            // This means the port is connectable
+            info!("CNCF OpenTelemetry -  sink remote endpoint - recovered and contactable");
+            self.is_down = false;
+            // Clone needed to make it mutable, lint is wrong
+            #[allow(clippy::redundant_clone)]
+            let mut signal = signal.clone();
+            return Ok(Some(vec![qos::open(&mut signal)]));
+        }
+
         Ok(None)
     }
+
     fn is_active(&self) -> bool {
         true
     }
     fn auto_ack(&self) -> bool {
-        true
+        false
     }
 }

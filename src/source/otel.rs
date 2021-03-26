@@ -25,6 +25,18 @@ pub struct Config {
     pub host: String,
     /// The TCP port for the remote OpenTelemetry collector endpoint
     pub port: u16,
+    #[serde(default = "d_true")]
+    pub logs: bool,
+    /// Enables the trace service
+    #[serde(default = "d_true")]
+    pub trace: bool,
+    /// Enables the metrics service
+    #[serde(default = "d_true")]
+    pub metrics: bool,
+}
+
+fn d_true() -> bool {
+    true
 }
 
 impl ConfigImpl for Config {}
@@ -96,25 +108,36 @@ impl Source for Int {
     async fn pull_event(&mut self, _id: u64) -> Result<SourceReply> {
         match self.rx.try_recv() {
             Ok(OpenTelemetryEvents::Metrics(metrics)) => {
-                let data: Value = metrics::resource_metrics_to_json(metrics)?;
-                return Ok(SourceReply::Structured {
-                    origin_uri: self.origin.clone(),
-                    data: data.into(),
-                });
+                if self.config.metrics {
+                    let data: Value = metrics::resource_metrics_to_json(metrics)?;
+                    return Ok(SourceReply::Structured {
+                        origin_uri: self.origin.clone(),
+                        data: data.into(),
+                    });
+                }
+                warn!("Otel Source received metrics event when trace support is disabled. Dropping trace");
             }
             Ok(OpenTelemetryEvents::Logs(logs)) => {
-                let data: Value = logs::resource_logs_to_json(logs)?;
-                return Ok(SourceReply::Structured {
-                    origin_uri: self.origin.clone(),
-                    data: data.into(),
-                });
+                if self.config.logs {
+                    let data: Value = logs::resource_logs_to_json(logs)?;
+                    return Ok(SourceReply::Structured {
+                        origin_uri: self.origin.clone(),
+                        data: data.into(),
+                    });
+                }
+                warn!(
+                    "Otel Source received log event when trace support is disabled. Dropping trace"
+                );
             }
             Ok(OpenTelemetryEvents::Trace(traces)) => {
-                let data: Value = trace::resource_spans_to_json(traces)?;
-                return Ok(SourceReply::Structured {
-                    origin_uri: self.origin.clone(),
-                    data: data.into(),
-                });
+                if self.config.trace {
+                    let data: Value = trace::resource_spans_to_json(traces)?;
+                    return Ok(SourceReply::Structured {
+                        origin_uri: self.origin.clone(),
+                        data: data.into(),
+                    });
+                }
+                warn!("Otel Source received trace event when trace support is disabled. Dropping trace");
             }
             _ => (),
         };
