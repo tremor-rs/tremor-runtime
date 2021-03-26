@@ -233,15 +233,30 @@ fn build_event_payload(event: &Event) -> Result<Vec<u8>> {
         });
         // _type is deprecated in ES 7.10, thus it is no longer required
         if let Some(doc_type) = meta.get_str("doc_type") {
+            warn!("[Sink::ES] $doc_type is deprecated please use `$elastic._type` instead");
+            index_meta.insert("_type", doc_type)?;
+        } else if let Some(doc_type) = meta.get("elastic").and_then(|v| v.get_str("_type")) {
             index_meta.insert("_type", doc_type)?;
         }
-        if let Some(doc_id) = meta.get_str("doc_id") {
-            index_meta.insert("_id", doc_id)?;
-        };
+        if let Some(id) = meta.get_str("doc_id") {
+            warn!("[Sink::ES] $doc_id is deprecated please use `$elastic._id` instead");
+            index_meta.insert("_id", id)?;
+        } else if let Some(id) = meta.get("elastic").and_then(|v| v.get_str("_id")) {
+            index_meta.insert("_id", id)?;
+        }
         if let Some(pipeline) = meta.get_str("pipeline") {
+            warn!("[Sink::ES] $pipeline is deprecated please use `$elastic.pipeline` instead");
+            index_meta.insert("pipeline", pipeline)?;
+        } else if let Some(pipeline) = meta.get("elastic").and_then(|v| v.get_str("pipeline")) {
             index_meta.insert("pipeline", pipeline)?;
         };
-        let key = match meta.get_str("action") {
+        let action = if meta.get_str("action").is_some() {
+            warn!("[Sink::ES] $action is deprecated please use `$elastic.action` instead");
+            meta.get_str("action")
+        } else {
+            meta.get("elastic").and_then(|v| v.get_str("action"))
+        };
+        let key = match action {
             Some("delete") => "delete",
             Some("create") => "create",
             Some("update") => "update",
