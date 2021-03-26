@@ -42,8 +42,8 @@ use elastic::{
 };
 use halfbrown::HashMap;
 use simd_json::json;
-use std::str;
 use std::time::Instant;
+use std::{iter, str};
 use tremor_pipeline::{EventId, EventIdGenerator, OpMeta};
 use tremor_script::prelude::*;
 use tremor_script::Object;
@@ -147,6 +147,7 @@ fn build_bulk_error_data(
     id: &EventId,
     payload: Value<'static>,
     origin_uri: Option<&EventOriginUri>,
+    maybe_correlation: Option<Value<'static>>,
 ) -> Result<LineValue> {
     let mut meta = Object::with_capacity(1);
     let mut es_meta = Object::with_capacity(6);
@@ -161,6 +162,9 @@ fn build_bulk_error_data(
     es_meta.insert("_type".into(), Value::from(item.ty().to_string()));
 
     meta.insert("elastic".into(), Value::from(es_meta));
+    if let Some(correlation) = maybe_correlation {
+        meta.insert("correlation".into(), correlation);
+    }
 
     let mut value = Object::with_capacity(4);
     let source = build_source(id, origin_uri);
@@ -205,8 +209,9 @@ fn build_bulk_success_data(
     id: &EventId,
     payload: Value<'static>,
     origin_uri: Option<&EventOriginUri>,
+    maybe_correlation: Option<Value<'static>>,
 ) -> LineValue {
-    let mut meta = Object::with_capacity(1);
+    let mut meta = Object::with_capacity(2);
     let mut es_meta = Object::with_capacity(7);
 
     // TODO: deprecated remove with removing top level es keys
@@ -223,6 +228,9 @@ fn build_bulk_success_data(
         item.version().map_or_else(Value::null, Value::from),
     );
     meta.insert("elastic".into(), Value::from(es_meta));
+    if let Some(correlation) = maybe_correlation {
+        meta.insert("correlation".into(), correlation);
+    }
 
     let mut value = Object::with_capacity(3);
     let source = build_source(id, origin_uri);
@@ -238,6 +246,7 @@ fn build_event_payload(event: &Event) -> Result<Vec<u8>> {
     // a guess
     let vec_size = 512 * event.len();
     let mut payload = Vec::with_capacity(vec_size);
+
     for (value, meta) in event.value_meta_iter() {
         let elastic = meta.get("elastic");
         let index = if let Some(idx) = meta.get_str("index") {
@@ -309,7 +318,16 @@ fn build_event_payload(event: &Event) -> Result<Vec<u8>> {
     Ok(payload)
 }
 
+fn extract_correlation_values(event: &Event) -> Vec<Option<Value<'static>>> {
+    let mut values = Vec::with_capacity(event.len());
+    for (_, meta) in event.value_meta_iter() {
+        values.push(meta.get("correlation").map(Value::clone_static));
+    }
+    values
+}
+
 impl Elastic {
+    #[allow(clippy::cast_possible_truncation)]
     #[allow(clippy::clippy::too_many_lines)]
     async fn enqueue_send_future(&mut self, mut event: Event) -> Result<()> {
         let (tx, rx) = bounded(1);
@@ -332,6 +350,7 @@ impl Elastic {
         };
 
         let mut responses = Vec::with_capacity(if is_linked { 8 } else { 0 });
+
         // build payload and request
         let payload = match build_event_payload(&event) {
             Ok(payload) => payload,
@@ -349,8 +368,25 @@ impl Elastic {
                 let source = build_source(&event.id, event.origin_uri.as_ref());
                 data.insert("source", source)?;
 
+                // if we have more than one event (batched), correlation will be an array with `null` or an actual value
+                // for the event at the batch position
+                let mut correlation_values = extract_correlation_values(&event);
+                let correlation_value = if correlation_values.len() == 1 {
+                    correlation_values.pop().flatten()
+                } else if correlation_values.len() > 1 {
+                    Some(Value::from(correlation_values))
+                } else {
+                    None
+                };
+                let meta = if let Some(correlation) = correlation_value {
+                    let mut meta = Value::object_with_capacity(1);
+                    meta.insert("correlation", correlation)?;
+                    meta
+                } else {
+                    Value::null()
+                };
                 // send error response
-                if let Err(e) = response_tx.send(((data, Value::null()).into(), ERR)).await {
+                if let Err(e) = response_tx.send(((data, meta).into(), ERR)).await {
                     error!(
                         "[Sink::{}] Failed to send build_event_payload error response: {}",
                         self.sink_url, e
@@ -361,72 +397,84 @@ impl Elastic {
         };
         let req = self.client.request(BulkRequest::new(payload));
 
+        let mut correlation_values = if is_linked {
+            extract_correlation_values(&event)
+        } else {
+            vec![]
+        };
         // go async
         task::spawn_blocking(move || {
             let ress = &mut responses;
 
-            // The truncation we do is sensible since we're only looking at a short timeframe
-            #[allow(clippy::cast_possible_truncation)]
-            let r: Result<u64> = (move || {
-                let start = Instant::now();
+            let start = Instant::now();
+            let r: Result<BulkResponse> = (move || {
                 // send event to elastic, blockingly
-                let bulk_res = req.send()?.into_response::<BulkResponse>()?;
-
-                if is_linked {
-                    // send out response events for each item
-                    // success events via OUT port
-                    // error   events via ERR port
-                    for (item, value) in bulk_res.iter().zip(event.value_iter()) {
-                        let item_res = match item {
-                            Ok(ok_item) => (
-                                OUT,
-                                Ok(build_bulk_success_data(
-                                    ok_item,
-                                    &id,
-                                    value.clone_static(), // uaarrghhh
-                                    event.origin_uri.as_ref(),
-                                )),
-                            ),
-                            Err(err_item) => (
-                                ERR,
-                                build_bulk_error_data(
-                                    err_item,
-                                    &id,
-                                    value.clone_static(), // uaarrrghhh
-                                    event.origin_uri.as_ref(),
-                                ),
-                            ),
-                        };
-                        if let (port, Ok(item_body)) = item_res {
-                            ress.push((item_body, port));
-                        } else {
-                            error!(
-                                "Error extracting bulk item response for document id {}",
-                                item.map_or_else(ErrorItem::id, OkItem::id)
-                            );
-                        }
-                    }
-                }
-                Ok(start.elapsed().as_millis() as u64)
+                Ok(req.send()?.into_response::<BulkResponse>()?)
             })();
 
-            let mut m = Value::object_with_capacity(1);
+            let time = start.elapsed().as_millis() as u64;
+            let mut m = Object::with_capacity(1);
             let cb = match &r {
-                Ok(time) => {
-                    if m.insert("time", *time).is_err() {
-                        // ALLOW: this is OK
-                        unreachable!()
+                Ok(bulk_response) => {
+                    // The truncation we do is sensible since we're only looking at a short timeframe
+                    m.insert("time".into(), Value::from(time));
+                    if is_linked {
+                        // send out response events for each item
+                        // success events via OUT port
+                        // error   events via ERR port
+                        for ((item, value), correlation) in bulk_response
+                            .iter()
+                            .zip(event.value_iter())
+                            .zip(correlation_values.into_iter().chain(iter::repeat(None)))
+                        {
+                            let item_res = match item {
+                                Ok(ok_item) => (
+                                    OUT,
+                                    Ok(build_bulk_success_data(
+                                        ok_item,
+                                        &id,
+                                        value.clone_static(), // uaarrghhh
+                                        event.origin_uri.as_ref(),
+                                        correlation,
+                                    )),
+                                ),
+                                Err(err_item) => (
+                                    ERR,
+                                    build_bulk_error_data(
+                                        err_item,
+                                        &id,
+                                        value.clone_static(), // uaarrrghhh
+                                        event.origin_uri.as_ref(),
+                                        correlation,
+                                    ),
+                                ),
+                            };
+                            if let (port, Ok(item_body)) = item_res {
+                                ress.push((item_body, port));
+                            } else {
+                                error!(
+                                    "Error extracting bulk item response for document id {}",
+                                    item.map_or_else(ErrorItem::id, OkItem::id)
+                                );
+                            }
+                        }
                     };
                     CbAction::Ack
                 }
                 Err(e) => {
                     // request failed
                     // TODO how to update error metric here?
-                    if m.insert("error", Value::from(e.to_string())).is_err() {
-                        // ALLOW: this is ok
-                        unreachable!()
-                    }
+                    m.insert("error".into(), Value::from(e.to_string()));
                     if is_linked {
+                        // if we have more than one event (batched), correlation will be an array with `null` or an actual value
+                        // for the event at the batch position
+                        if correlation_values.len() == 1 {
+                            if let Some(cv) = correlation_values.pop().flatten() {
+                                m.insert("correlation".into(), cv);
+                            }
+                        } else if correlation_values.len() > 1 {
+                            m.insert("correlation".into(), Value::from(correlation_values));
+                        };
                         // send error event via ERR port
                         let mut error_data = Object::with_capacity(1);
                         let mut source = Object::with_capacity(2);
@@ -440,11 +488,10 @@ impl Elastic {
                         error_data.insert("source".into(), Value::from(source));
                         error_data.insert("error".into(), Value::from(e.to_string()));
                         responses.push(((error_data, Value::null()).into(), ERR));
-                    }
+                    };
                     CbAction::Fail
                 }
             };
-
             task::block_on(async move {
                 // send response events
                 for response in responses {
@@ -465,13 +512,13 @@ impl Elastic {
                         ..Event::default()
                     };
                     if let Err(e) = insight_tx.send(sink::Reply::Insight(insight)).await {
-                        error!("Failed to send insight: {}", e);
+                        error!("[Sink::ES] Failed to send insight: {}", e);
                     }
                 }
 
                 // mark this task as done in order to free a slot
-                if let Err(e) = tx.send(r).await {
-                    error!("Failed to send AsyncSink done message: {}", e)
+                if let Err(e) = tx.send(r.map(|_| time)).await {
+                    error!("[Sink::ES] Failed to send AsyncSink done message: {}", e)
                 }
             });
         });
@@ -487,11 +534,20 @@ impl Elastic {
 
                 // send error message on overflow to ERR port
                 let mut data = Object::with_capacity(2);
-                let mut meta = Object::with_capacity(1);
+                let mut meta = Object::with_capacity(2);
                 data.insert("success".into(), Value::from(false));
                 data.insert("error".into(), Value::from(error_msg));
                 data.insert("payload".into(), event.data.suffix().value().clone_static());
                 meta.insert("error".into(), Value::from(error_msg));
+
+                let mut correlation_values = extract_correlation_values(&event);
+                if correlation_values.len() == 1 {
+                    if let Some(correlation) = correlation_values.pop().flatten() {
+                        meta.insert("correlation".into(), correlation);
+                    }
+                } else if correlation_values.len() > 1 {
+                    meta.insert("correlation".into(), Value::from(correlation_values));
+                }
 
                 if let Err(e) = self.response_sender.send(((data, meta).into(), ERR)).await {
                     error!(
