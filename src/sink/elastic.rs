@@ -225,9 +225,14 @@ fn build_event_payload(event: &Event) -> Result<Vec<u8>> {
     let vec_size = 512 * event.len();
     let mut payload = Vec::with_capacity(vec_size);
     for (value, meta) in event.value_meta_iter() {
-        let index = meta
-            .get_str("index")
-            .ok_or_else(|| Error::from("'index' not set for elastic offramp!"))?;
+        let index = if let Some(idx) = meta.get_str("index") {
+            warn!("[Sink::ES] $index is deprecated please use `$elastic._index` instead");
+            idx
+        } else if let Some(idx) = meta.get("elastic").and_then(|v| v.get_str("_index")) {
+            idx
+        } else {
+            return Err(Error::from("'index' not set for elastic offramp!"));
+        };
         let mut index_meta = json!({
             "_index": index,
         });
