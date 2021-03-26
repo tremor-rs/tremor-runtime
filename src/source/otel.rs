@@ -43,14 +43,14 @@ impl ConfigImpl for Config {}
 
 pub struct OpenTelemetry {
     pub config: Config,
-    onramp_id: TremorURL,
+    onramp_id: TremorUrl,
 }
 
 #[allow(dead_code)]
 pub struct Int {
     uid: u64,
     config: Config,
-    onramp_id: TremorURL,
+    onramp_id: TremorUrl,
     tx: tremor_otelapis::all::OpenTelemetrySender,
     rx: tremor_otelapis::all::OpenTelemetryReceiver,
     origin: EventOriginUri,
@@ -63,7 +63,7 @@ impl std::fmt::Debug for Int {
 }
 
 impl Int {
-    fn from_config(uid: u64, onramp_id: TremorURL, config: &Config) -> Self {
+    fn from_config(uid: u64, onramp_id: TremorUrl, config: &Config) -> Self {
         let (tx, rx) = bounded(128);
         let config = config.clone();
         let origin = EventOriginUri {
@@ -86,7 +86,7 @@ impl Int {
 }
 
 impl onramp::Impl for OpenTelemetry {
-    fn from_config(id: &TremorURL, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
+    fn from_config(id: &TremorUrl, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
             Ok(Box::new(Self {
@@ -101,7 +101,7 @@ impl onramp::Impl for OpenTelemetry {
 
 #[async_trait::async_trait()]
 impl Source for Int {
-    fn id(&self) -> &TremorURL {
+    fn id(&self) -> &TremorUrl {
         &self.onramp_id
     }
 
