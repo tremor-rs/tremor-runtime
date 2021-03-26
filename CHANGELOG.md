@@ -27,6 +27,7 @@
 * Remove warnings for match w/o default if a `_` case or a `v = _` case exists
 * Add `--exprs-only` to `dbg ast` to not show metadata
 * Add Delete and Update to ES sink [#822](https://github.com/tremor-rs/tremor-runtime/issues/822)
+* Add more metadata to Kafka source [#874](https://github.com/tremor-rs/tremor-runtime/issues/874)
 
 ### Fixes
 
