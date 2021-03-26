@@ -60,7 +60,6 @@ impl CanaryProbe for HostPortScanCanaryProbe {
     fn chirp(&self) -> bool {
         info!("Canary probe: {}", self.endpoint);
         let disposition = scan_port_addr(&self.endpoint);
-        dbg!(disposition);
         disposition
     }
 
