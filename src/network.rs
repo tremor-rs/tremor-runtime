@@ -40,8 +40,8 @@ pub(crate) mod nana;
 mod api;
 mod control;
 mod echo;
-mod microring;
 mod pubsub;
+mod uring;
 
 use prelude::*;
 

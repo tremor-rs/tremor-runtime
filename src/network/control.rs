@@ -19,8 +19,8 @@
 use crate::{errors::Result, system::Conductor};
 
 use super::{
-    api::ApiProtocol, echo::EchoProtocol, microring::MicroRingProtocol, nana::StatusCode,
-    pubsub::PubSubProtocol, NetworkCont,
+    api::ApiProtocol, echo::EchoProtocol, nana::StatusCode, pubsub::PubSubProtocol,
+    uring::UringProtocol, NetworkCont,
 };
 use crate::network::prelude::*;
 use halfbrown::HashMap as HalfMap;
@@ -150,12 +150,9 @@ impl NetworkProtocol for ControlProtocol {
                                     Box::new(ApiProtocol::new(self, alias.to_string(), headers));
                                 self.mux.insert(alias.to_string(), proto);
                             }
-                            "microring" => {
-                                let proto = Box::new(MicroRingProtocol::new(
-                                    self,
-                                    alias.to_string(),
-                                    headers,
-                                ));
+                            "uring" => {
+                                let proto =
+                                    Box::new(UringProtocol::new(self, alias.to_string(), headers));
                                 self.mux.insert(alias.to_string(), proto);
                             }
                             _unknown_protocol => {

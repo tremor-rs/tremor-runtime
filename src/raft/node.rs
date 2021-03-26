@@ -272,11 +272,11 @@ impl RaftNode {
                             //event.id = tremor_pipeline::EventId::new(1, 1, 1);
                             //async_std::task::sleep(std::time::Duration::from_secs(3)).await;
                             self.uring.try_send(UringMsg(event!({
-                                "tremor":{"connect":{"protocol":"microring"}}
+                                "tremor":{"connect":{"protocol":"uring"}}
                             }))).unwrap();
                             //async_std::task::sleep(std::time::Duration::from_secs(3)).await;
                             self.uring.try_send(UringMsg(event!({
-                                "microring":{"op":"status"}
+                                "uring":{"op":"status"}
                             }))).unwrap();
                         }
                         RaftNetworkMsg::RaftMsg(msg) => {

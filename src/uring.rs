@@ -40,7 +40,7 @@ pub(crate) mod nana;
 // Supported network protocol variants
 mod control;
 mod echo;
-mod microring;
+mod uring;
 
 use prelude::*;
 

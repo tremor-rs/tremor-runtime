@@ -33,11 +33,11 @@ send_message ""
 #send_message '{"echo-example":{"beep":"boop"}}'
 #send_message '{"echo-example":{"snot":"badger"}}'
 
-echo -e "Testing microring protocol...\n"
-send_message '{"tremor":{"connect":{"protocol":"microring"}}}'
-send_message '{"microring":{"op":"status"}}'
+echo -e "Testing uring protocol...\n"
+send_message '{"tremor":{"connect":{"protocol":"uring"}}}'
+send_message '{"uring":{"op":"status"}}'
 # FIXME gives Unexpected error during client connect Illegel State Transition
-#send_message '{"microring":{"op":"nonexistent"}}'
+#send_message '{"uring":{"op":"nonexistent"}}'
 
 ##############################################################################
 

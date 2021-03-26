@@ -17,8 +17,8 @@ use super::{
     NetworkCont,
 };
 use crate::errors::Result;
+use crate::network::control::ControlProtocol;
 use crate::raft::node::{RaftNetworkMsg, RaftReply, RaftSender};
-use crate::uring::control::ControlProtocol;
 use futures::StreamExt;
 use tremor_pipeline::Event;
 use tremor_value::Value;
@@ -27,7 +27,7 @@ use crate::temp_network::ws::{RequestId, UrMsg};
 use simd_json::{Builder, Mutable};
 
 #[derive(Clone)]
-pub(crate) struct MicroRingProtocol {
+pub(crate) struct UringProtocol {
     // TODO add other
     alias: String,
     uring: RaftSender,
@@ -35,18 +35,18 @@ pub(crate) struct MicroRingProtocol {
 }
 
 #[derive(Debug, PartialEq)]
-enum MicroRingOperationKind {
+enum UringOperationKind {
     // TODO add other
     Status,
 }
 
 #[derive(Debug)]
-struct MicroRingOperation {
+struct UringOperation {
     // TODO add other
-    op: MicroRingOperationKind,
+    op: UringOperationKind,
 }
 
-impl MicroRingProtocol {
+impl UringProtocol {
     pub(crate) fn new(ns: &mut ControlProtocol, alias: String, _headers: Value) -> Self {
         Self {
             alias,
@@ -55,7 +55,7 @@ impl MicroRingProtocol {
         }
     }
 
-    async fn on_status(&mut self, _request: &MicroRingOperation) -> Result<NetworkCont> {
+    async fn on_status(&mut self, _request: &UringOperation) -> Result<NetworkCont> {
         // FIXME dummy implementation for now
         // TODO send a raftnetworkmsg from here for status, with reply sender that will be used to
         // send the response back
@@ -93,7 +93,7 @@ impl MicroRingProtocol {
     }
 }
 
-fn parse_operation<'a>(alias: &str, request: &'a mut Value<'a>) -> Result<MicroRingOperation> {
+fn parse_operation<'a>(alias: &str, request: &'a mut Value<'a>) -> Result<UringOperation> {
     if let Value::Object(c) = request {
         if let Some(cmd) = c.get(alias) {
             if let Value::Object(o) = cmd {
@@ -101,11 +101,11 @@ fn parse_operation<'a>(alias: &str, request: &'a mut Value<'a>) -> Result<MicroR
                 let op = if let Some(Value::String(s)) = o.get("op") {
                     let s: &str = &s.to_string();
                     match s {
-                        "status" => MicroRingOperationKind::Status,
+                        "status" => UringOperationKind::Status,
                         // TODO this does not seem to bubble up
                         unsupported_operation => {
                             let reason: &str = &format!(
-                                "Invalid MicroRing operation - unsupported operation type `{}` - must be one of status",
+                                "Invalid Uring operation - unsupported operation type `{}` - must be one of status",
                                 unsupported_operation
                             );
                             return Err(reason.into());
@@ -113,36 +113,35 @@ fn parse_operation<'a>(alias: &str, request: &'a mut Value<'a>) -> Result<MicroR
                     }
                 } else {
                     return Err(
-                        "Required MicroRing command record field `op` (string) not found error"
-                            .into(),
+                        "Required Uring command record field `op` (string) not found error".into(),
                     );
                 };
 
-                Ok(MicroRingOperation { op })
+                Ok(UringOperation { op })
             } else {
-                return Err("Expect MicroRing command value to be a record".into());
+                return Err("Expect Uring command value to be a record".into());
             }
         } else {
             return Err("Expected protocol alias outer record not found".into());
         }
     } else {
-        return Err("Expected MicroRing request to be a record, it was not".into());
+        return Err("Expected Uring request to be a record, it was not".into());
     }
 }
 
 #[async_trait::async_trait]
-impl NetworkProtocol for MicroRingProtocol {
+impl NetworkProtocol for UringProtocol {
     fn on_init(&mut self) -> Result<()> {
-        trace!("Initializing MicroRing network protocol");
+        trace!("Initializing Uring network protocol");
         Ok(())
     }
     async fn on_event(&mut self, _sid: StreamId, event: &Event) -> Result<NetworkCont> {
-        trace!("Received MicroRing network protocol event");
+        trace!("Received Uring network protocol event");
         let cmd = event.data.parts().0;
         let alias: &str = self.alias.as_str();
         let request = parse_operation(alias, cmd)?;
         Ok(match request.op {
-            MicroRingOperationKind::Status => self.on_status(&request).await?,
+            UringOperationKind::Status => self.on_status(&request).await?,
         })
     }
 }
