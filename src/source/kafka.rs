@@ -293,12 +293,18 @@ impl Source for Int {
                         }
                         meta_headers = Some(key_val);
                     }
-                    let mut meta_data = Value::object_with_capacity(2);
+                    let mut meta_data = Value::object_with_capacity(6);
                     if let Some(meta_key) = meta_key {
                         meta_data.insert("key", Value::Bytes(Vec::from(meta_key).into()))?;
                     }
                     if let Some(meta_headers) = meta_headers {
                         meta_data.insert("headers", meta_headers)?;
+                    }
+                    meta_data.insert("topic", m.topic().to_string())?;
+                    meta_data.insert("offset", m.offset())?;
+                    meta_data.insert("partition", m.partition())?;
+                    if let Some(t) = m.timestamp().to_millis() {
+                        meta_data.insert("timestamp", t)?;
                     }
                     kafka_meta_data.insert("kafka", meta_data)?;
 
