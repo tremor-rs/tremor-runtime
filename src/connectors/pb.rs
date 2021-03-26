@@ -193,7 +193,7 @@ mod test {
     proptest! {
         #[test]
         fn prop_string(
-            arb_strings in prop::collection::vec(".*", 0..1000),
+            arb_strings in prop::collection::vec(".*", 0..100),
         ) {
             for expected in arb_strings {
                 let json = Value::String(expected.clone().into());
@@ -205,7 +205,7 @@ mod test {
 
         #[test]
         fn prop_pb_u64(
-            arb_ints in prop::collection::vec(u64::MIN..u64::MAX, 0..1000),
+            arb_ints in prop::collection::vec(u64::MIN..u64::MAX, 0..100),
         ) {
             for expected in arb_ints {
                 let json = Value::Static(StaticNode::U64(expected));
@@ -217,7 +217,7 @@ mod test {
 
         #[test]
         fn prop_pb_i64(
-            arb_ints in prop::collection::vec(i64::MIN..i64::MAX, 0..1000),
+            arb_ints in prop::collection::vec(i64::MIN..i64::MAX, 0..100),
         ) {
             for expected in arb_ints {
                 let json = Value::Static(StaticNode::I64(expected));
@@ -229,7 +229,7 @@ mod test {
 
         #[test]
         fn prop_pb_u32(
-            arb_ints in prop::collection::vec(u32::MIN..u32::MAX, 0..1000),
+            arb_ints in prop::collection::vec(u32::MIN..u32::MAX, 0..100),
         ) {
             for expected in arb_ints {
                 let json = Value::Static(StaticNode::U64(expected as u64));
@@ -240,7 +240,7 @@ mod test {
 
         #[test]
         fn prop_pb_i32(
-            arb_ints in prop::collection::vec(i32::MIN..i32::MAX, 0..1000),
+            arb_ints in prop::collection::vec(i32::MIN..i32::MAX, 0..100),
         ) {
             for expected in arb_ints {
                 let json = Value::Static(StaticNode::I64(expected as i64));
@@ -251,7 +251,7 @@ mod test {
 
         #[test]
         fn prop_pb_f64(
-            arb_ints in prop::collection::vec(f64::MIN..f64::MAX, 0..1000),
+            arb_ints in prop::collection::vec(f64::MIN..f64::MAX, 0..100),
         ) {
             for expected in arb_ints {
                 let json = Value::Static(StaticNode::F64(expected as f64));
