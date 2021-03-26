@@ -14,11 +14,11 @@
 
 use crate::errors::Result;
 use crate::event;
-use crate::network::NetworkSender;
-// TODO better naming
-use crate::network::ManagerMsg::Message as NetworkMsg;
 use crate::temp_network::ws::{Network, RequestId, WsMessage};
 use crate::temp_network::Network as NetworkTrait;
+use crate::uring::NetworkSender;
+// TODO better naming
+use crate::uring::ManagerMsg::Message as UringMsg;
 use async_std::task::{self, JoinHandle};
 use futures::{select, FutureExt, StreamExt};
 use halfbrown::HashMap;
@@ -226,8 +226,7 @@ pub struct RaftNode {
     // MemStorage only contains raft logs
     kv_storage: HashMap<String, String>,
     raft_rx: RaftReceiver,
-    #[allow(dead_code)]
-    network: NetworkSender,
+    uring: NetworkSender,
     //#[allow(dead_code)]
     temp_network: Network,
     proposals: VecDeque<Proposal>,
@@ -272,11 +271,11 @@ impl RaftNode {
                             //let mut event = tremor_pipeline::Event::default();
                             //event.id = tremor_pipeline::EventId::new(1, 1, 1);
                             //async_std::task::sleep(std::time::Duration::from_secs(3)).await;
-                            self.network.try_send(NetworkMsg(event!({
+                            self.uring.try_send(UringMsg(event!({
                                 "tremor":{"connect":{"protocol":"microring"}}
                             }))).unwrap();
                             //async_std::task::sleep(std::time::Duration::from_secs(3)).await;
-                            self.network.try_send(NetworkMsg(event!({
+                            self.uring.try_send(UringMsg(event!({
                                 "microring":{"op":"status"}
                             }))).unwrap();
                         }
@@ -701,7 +700,7 @@ impl RaftNode {
         logger: &Logger,
         id: NodeId,
         raft_rx: RaftReceiver,
-        network: NetworkSender,
+        uring: NetworkSender,
         temp_network: Network,
     ) -> Self {
         let mut config = example_config();
@@ -736,7 +735,7 @@ impl RaftNode {
             id,
             raft_group,
             raft_rx,
-            network,
+            uring,
             temp_network,
             proposals: VecDeque::new(),
             pending_proposals: HashMap::new(),
@@ -754,7 +753,7 @@ impl RaftNode {
         logger: &Logger,
         id: NodeId,
         raft_rx: RaftReceiver,
-        network: NetworkSender,
+        uring: NetworkSender,
         temp_network: Network,
     ) -> Self {
         //let storage = MemStorage::new_with_conf_state((vec![id.0], vec![]));
@@ -772,7 +771,7 @@ impl RaftNode {
             id,
             raft_group,
             raft_rx,
-            network,
+            uring,
             temp_network,
             proposals: VecDeque::new(),
             pending_proposals: HashMap::new(),

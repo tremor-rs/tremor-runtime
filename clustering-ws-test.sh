@@ -8,7 +8,7 @@ set -o errexit
 # catch exit status for piped commands
 set -o pipefail
 
-WS_ENDPOINT="ws://localhost:8080"
+WS_ENDPOINT="ws://localhost:9090"
 
 TCP_IP="127.0.0.1"
 TCP_PORT=1234

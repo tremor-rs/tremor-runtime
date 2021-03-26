@@ -52,9 +52,10 @@ macro_rules! event {
         // Convenience for macro call-sites to avoid needing to define
         // these deps
         use halfbrown::HashMap;
+        use tremor_pipeline::Event;
         use tremor_script::LineValue;
         use tremor_script::ValueAndMeta;
-        use tremor_value::json;
+        use tremor_value::{json, Value};
 
         let value: Value = json!($json).into();
         let mut event = Event::default();

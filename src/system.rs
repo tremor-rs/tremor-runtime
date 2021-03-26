@@ -92,10 +92,12 @@ pub(crate) struct Manager {
     pub onramp: onramp::Sender,
     pub pipeline: pipeline::Sender,
     pub network: network::NetworkSender,
+    pub uring: uring::NetworkSender,
     pub offramp_h: JoinHandle<Result<()>>,
     pub onramp_h: JoinHandle<Result<()>>,
     pub pipeline_h: JoinHandle<Result<()>>,
     pub network_h: JoinHandle<Result<()>>,
+    pub uring_h: JoinHandle<Result<()>>,
     pub qsize: usize,
 }
 
@@ -125,6 +127,8 @@ impl Manager {
                         self.onramp.send(onramp::ManagerMsg::Stop).await?;
                         info!("Stopping network...");
                         self.network.send(network::ManagerMsg::Stop).await?;
+                        info!("Stopping uring...");
+                        self.uring.send(uring::ManagerMsg::Stop).await?;
                         break;
                     }
                 }
@@ -763,16 +767,13 @@ impl World {
         let mut conductor =
             Conductor::new(fake_system_tx.clone(), raft_tx, temp_network.tx.clone());
 
-        // where it all begins
         let (onramp_h, onramp) = onramp::Manager::new(qsize).start();
         let (offramp_h, offramp) = offramp::Manager::new(qsize).start();
         let (pipeline_h, pipeline) = pipeline::Manager::new(qsize).start();
 
-        let (network_h, network) =
-            network::Manager::new(&conductor, network_addr, Some(cluster_peers.clone()), qsize)
-                .start();
+        let (network_h, network) = network::Manager::new(&conductor, network_addr, qsize).start();
 
-        let (_uring_h, _uring) =
+        let (uring_h, uring) =
             uring::Manager::new(&conductor, cluster_addr, Some(cluster_peers), qsize).start();
 
         let (system_h, system) = Manager {
@@ -780,10 +781,12 @@ impl World {
             onramp,
             pipeline,
             network: network.clone(),
+            uring: uring.clone(),
             offramp_h,
             onramp_h,
             pipeline_h,
             network_h,
+            uring_h,
             qsize,
         }
         .start();
@@ -804,7 +807,7 @@ impl World {
             cluster_bootstrap,
             logger,
             raft_rx,
-            network,
+            uring,
             temp_network,
         )
         .await;

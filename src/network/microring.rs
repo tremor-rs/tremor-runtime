@@ -18,18 +18,20 @@ use super::{
 };
 use crate::errors::Result;
 use crate::network::control::ControlProtocol;
+use crate::raft::node::{RaftNetworkMsg, RaftReply, RaftSender};
 use futures::StreamExt;
 use tremor_pipeline::Event;
 use tremor_value::Value;
 // TODO eliminate this import
-use crate::temp_network::ws::{RequestId, UrMsg, WsMessage};
+use crate::temp_network::ws::{RequestId, UrMsg};
 use simd_json::{Builder, Mutable};
 
 #[derive(Clone)]
 pub(crate) struct MicroRingProtocol {
     // TODO add other
     alias: String,
-    uring: async_channel::Sender<UrMsg>,
+    uring: RaftSender,
+    temp_uring: async_channel::Sender<UrMsg>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -49,6 +51,7 @@ impl MicroRingProtocol {
         Self {
             alias,
             uring: ns.conductor.uring.clone(),
+            temp_uring: ns.conductor.temp_uring.clone(),
         }
     }
 
@@ -56,15 +59,15 @@ impl MicroRingProtocol {
         // FIXME dummy implementation for now
         // TODO send a raftnetworkmsg from here for status, with reply sender that will be used to
         // send the response back
+        dbg!(&self.uring);
 
         let (tx, mut rx) = async_channel::bounded(64);
-        //dbg!(&self.uring);
         self.uring
-            .try_send(UrMsg::Status(RequestId(42), tx))
+            .try_send(RaftNetworkMsg::Status(RequestId(42), tx))
             .unwrap();
 
         match rx.next().await {
-            Some(WsMessage::Reply { data, .. }) => {
+            Some(RaftReply(.., data)) => {
                 let value = destructurize(&data).unwrap().into_static();
                 //dbg!(&value);
 
@@ -84,7 +87,6 @@ impl MicroRingProtocol {
                 //));
             }
             // FIXME
-            Some(_) => unimplemented!(),
             None => unimplemented!(),
             //_ => unreachable!(),
         }
