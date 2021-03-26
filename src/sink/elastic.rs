@@ -241,7 +241,7 @@ fn build_event_payload(event: &Event) -> Result<Vec<u8>> {
         if let Some(pipeline) = meta.get_str("pipeline") {
             index_meta.insert("pipeline", pipeline)?;
         };
-        let key = match meta.get_str("es_op") {
+        let key = match meta.get_str("action") {
             Some("delete") => "delete",
             Some("create") => "create",
             Some("update") => "update",
