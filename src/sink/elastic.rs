@@ -149,10 +149,17 @@ fn build_bulk_error_data(
     origin_uri: Option<&EventOriginUri>,
 ) -> Result<LineValue> {
     let mut meta = Object::with_capacity(1);
-    let mut es_meta = Object::with_capacity(3);
+    let mut es_meta = Object::with_capacity(6);
+
+    // TODO: deprecated remove with removing top level es keys
     es_meta.insert("id".into(), Value::from(item.id().to_string()));
     es_meta.insert("index".into(), Value::from(item.index().to_string()));
     es_meta.insert("doc_type".into(), Value::from(item.ty().to_string()));
+
+    es_meta.insert("_id".into(), Value::from(item.id().to_string()));
+    es_meta.insert("_index".into(), Value::from(item.index().to_string()));
+    es_meta.insert("_type".into(), Value::from(item.ty().to_string()));
+
     meta.insert("elastic".into(), Value::from(es_meta));
 
     let mut value = Object::with_capacity(4);
@@ -200,10 +207,17 @@ fn build_bulk_success_data(
     origin_uri: Option<&EventOriginUri>,
 ) -> LineValue {
     let mut meta = Object::with_capacity(1);
-    let mut es_meta = Object::with_capacity(4);
+    let mut es_meta = Object::with_capacity(7);
+
+    // TODO: deprecated remove with removing top level es keys
     es_meta.insert("id".into(), Value::from(item.id().to_string()));
     es_meta.insert("index".into(), Value::from(item.index().to_string()));
     es_meta.insert("doc_type".into(), Value::from(item.ty().to_string()));
+
+    es_meta.insert("_id".into(), Value::from(item.id().to_string()));
+    es_meta.insert("_index".into(), Value::from(item.index().to_string()));
+    es_meta.insert("_type".into(), Value::from(item.ty().to_string()));
+
     es_meta.insert(
         "version".into(),
         item.version().map_or_else(Value::null, Value::from),
