@@ -498,7 +498,7 @@ macro_rules! tremor_fn_ {
                     $context: &'c EventContext,
                     args: &[&Value<'event>],
                 ) -> FResult<Value<'event>> {
-                    fn this_mfa() -> MFA {
+                    fn this_mfa() -> Mfa {
                         mfa($module, stringify!($name), ARGC)
                     }
                     #[allow(dead_code)] // We need this as it is a macro and might not be used
