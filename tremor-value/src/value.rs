@@ -466,7 +466,6 @@ impl<'value> ValueAccess for Value<'value> {
 }
 
 impl<'value> ValueTrait for Value<'value> {
-
     #[inline]
     #[must_use]
     fn is_custom(&self) -> bool {
@@ -490,8 +489,6 @@ impl<'value> ValueTrait for Value<'value> {
     fn is_null(&self) -> bool {
         matches!(self, Self::Static(StaticNode::Null))
     }
-
-
 }
 
 #[cfg(not(tarpaulin_include))]

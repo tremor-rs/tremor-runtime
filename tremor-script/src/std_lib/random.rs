@@ -252,20 +252,20 @@ mod test {
         let v2 = 100.0;
         assert!(f(&[&Value::from(v1), &Value::from(v2)])
             .ok()
-            .and_then(|v| v.as_f64())
+            .as_f64()
             .map(|a| a >= v1 && a < v2)
             .unwrap_or_default());
         let v = 100.0;
         assert!(f(&[&Value::from(v)])
             .ok()
-            .and_then(|v| v.as_f64())
+            .as_f64()
             .map(|a| a >= 0.0 && a < v)
             .unwrap_or_default());
         let null = Value::from(0.0);
         assert!(f(&[&null]).is_err());
         assert!(f(&[])
             .ok()
-            .and_then(|v| v.as_f64())
+            .as_f64()
             .map(|a| a >= 0.0 && a < 1.0)
             .unwrap_or_default());
     }

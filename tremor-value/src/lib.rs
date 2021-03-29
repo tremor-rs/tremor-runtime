@@ -35,10 +35,10 @@ extern crate serde as serde_ext;
 
 mod error;
 mod known_key;
-mod serde;
-mod value;
 /// Prelude module
 pub mod prelude;
+mod serde;
+mod value;
 pub use error::*;
 pub use known_key::{Error as KnownKeyError, KnownKey};
 pub use simd_json::{json, AlignedBuf, StaticNode};

@@ -175,7 +175,7 @@ mod tests {
         assert!(res.is_some(), "got nothing back");
         if let Some(replies) = res {
             assert_eq!(1, replies.len());
-            if let Some(Reply::Insight(insight)) = replies.get(0) {
+            if let Some(Reply::Insight(insight)) = replies.first() {
                 assert_eq!(CbAction::Ack, insight.cb);
                 assert_eq!(id, insight.id);
                 assert_eq!(op_meta, insight.op_meta);
@@ -184,7 +184,7 @@ mod tests {
                 assert!(
                     false,
                     "expected to get anm insight back. Got {:?}",
-                    replies.get(0)
+                    replies.first()
                 );
             }
         }
@@ -206,7 +206,7 @@ mod tests {
         assert!(res.is_some(), "got nothing back");
         if let Some(replies) = res {
             assert_eq!(1, replies.len());
-            if let Some(Reply::Insight(insight)) = replies.get(0) {
+            if let Some(Reply::Insight(insight)) = replies.first() {
                 assert_eq!(CbAction::Fail, insight.cb);
                 assert_eq!(id, insight.id);
                 assert_eq!(op_meta, insight.op_meta);
@@ -215,7 +215,7 @@ mod tests {
                 assert!(
                     false,
                     "expected to get anm insight back. Got {:?}",
-                    replies.get(0)
+                    replies.first()
                 );
             }
         }

@@ -1326,7 +1326,7 @@ impl Operator for TrickleSelect {
                     // that is not also in the first.
                     let distinct_groups: Vec<(&String, &Value)> = self
                         .windows
-                        .get(0)
+                        .first()
                         .iter()
                         .flat_map(|window| {
                             (*window)
@@ -1685,7 +1685,7 @@ mod test {
         let stmt_rental = tremor_script::query::StmtRental::try_new(Arc::new(query.clone()), |q| {
             q.suffix()
                 .stmts
-                .get(0)
+                .first()
                 .cloned()
                 .ok_or_else(|| Error::from("Invalid query"))
         })
@@ -2330,7 +2330,7 @@ mod test {
         let stmt_rental = tremor_script::query::StmtRental::try_new(Arc::new(query.clone()), |q| {
             q.suffix()
                 .stmts
-                .get(0)
+                .first()
                 .cloned()
                 .ok_or_else(|| Error::from("Invalid query"))
         })
@@ -2419,7 +2419,7 @@ mod test {
             &aggr_reg,
         )
         .map_err(|ce| ce.error)?;
-        let window_decl = match q.query.suffix().stmts.get(0) {
+        let window_decl = match q.query.suffix().stmts.first() {
             Some(Stmt::WindowDecl(decl)) => decl.as_ref(),
             other => return Err(format!("Didnt get a window decl, got: {:?}", other).into()),
         };

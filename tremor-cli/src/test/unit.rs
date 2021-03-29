@@ -54,7 +54,7 @@ fn eval_suite_entrypoint(
     let mut stats = stats::Stats::new();
 
     let o = suite_result
-        .get(0)
+        .first()
         .and_then(ValueAccess::as_object)
         .ok_or_else(|| Error::from("bad suite results"))?;
     if o.contains_key("name") {
@@ -66,7 +66,7 @@ fn eval_suite_entrypoint(
             .ok_or_else(|| Error::from("Missing suite tests"))?;
 
         if let ImutExprInt::List(l) = spec {
-            if let Some(tests) = o.get("suite").and_then(|s| s.get("tests")) {
+            if let Some(tests) = o.get("suite").get("tests") {
                 if let Ok((s, mut e)) = eval_suite_tests(
                     &env, &local, script, meta, l, tests, &tags, sys_filter, includes, excludes,
                 ) {

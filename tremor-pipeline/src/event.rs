@@ -234,9 +234,11 @@ impl<'value> Iterator for ValueMetaIter<'value> {
                 .data
                 .suffix()
                 .value()
-                .as_array()
-                .and_then(|arr| arr.get(self.idx))
-                .and_then(|e| Some((e.get("data")?.get("value")?, e.get("data")?.get("meta")?)));
+                .get_idx(self.idx)
+                .and_then(|e| {
+                    let data = e.get("data")?;
+                    Some((data.get("value")?, data.get("meta")?))
+                });
             self.idx += 1;
             r
         } else if self.idx == 0 {
@@ -277,8 +279,7 @@ impl<'value> Iterator for ValueIter<'value> {
                 .data
                 .suffix()
                 .value()
-                .as_array()
-                .and_then(|arr| arr.get(self.idx))
+                .get_idx(self.idx)
                 .and_then(|e| e.get("data")?.get("value"));
             self.idx += 1;
             r

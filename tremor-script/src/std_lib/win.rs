@@ -23,7 +23,7 @@ struct First(Option<Value<'static>>);
 impl TremorAggrFn for First {
     fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
         if self.0.is_none() {
-            self.0 = args.get(0).map(|v| (*v).clone_static());
+            self.0 = args.first().map(|v| (*v).clone_static());
         }
         Ok(())
     }
@@ -64,7 +64,7 @@ impl TremorAggrFn for First {
 struct Last(Option<Value<'static>>);
 impl TremorAggrFn for Last {
     fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
-        self.0 = args.get(0).map(|v| (*v).clone_static());
+        self.0 = args.first().map(|v| (*v).clone_static());
         Ok(())
     }
     fn compensate<'event>(&mut self, _args: &[&Value<'event>]) -> FResult<()> {
@@ -104,7 +104,7 @@ impl TremorAggrFn for Last {
 struct CollectFlattened(Vec<Value<'static>>);
 impl TremorAggrFn for CollectFlattened {
     fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
-        if let Some(a) = args.get(0).map(|v| (*v).clone_static()) {
+        if let Some(a) = args.first().map(|v| (*v).clone_static()) {
             self.0.push(a);
         }
         Ok(())
@@ -150,7 +150,7 @@ impl TremorAggrFn for CollectFlattened {
 struct CollectNested(Vec<Value<'static>>);
 impl TremorAggrFn for CollectNested {
     fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
-        if let Some(a) = args.get(0).map(|v| (*v).clone_static()) {
+        if let Some(a) = args.first().map(|v| (*v).clone_static()) {
             self.0.push(a);
         }
         Ok(())

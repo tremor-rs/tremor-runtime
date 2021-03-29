@@ -600,7 +600,7 @@ impl Extractor {
                 }),
                 Self::Influx => influx::decode::<'influx, Value<'influx>>(s, ctx.ingest_ns())
                     .ok()
-                    .and_then(|v| v)
+                    .flatten()
                     .map_or(NoMatch, |r| {
                         if result_needed {
                             Match(r.into_static())

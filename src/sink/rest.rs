@@ -104,28 +104,28 @@ impl Endpoint {
 
     /// overwrite fields in self with existing properties in `endpoint_value`
     fn merge(&mut self, endpoint_value: &Value) {
-        if let Some(scheme) = endpoint_value.get("scheme").and_then(|s| s.as_str()) {
+        if let Some(scheme) = endpoint_value.get_str("scheme") {
             self.scheme = Some(scheme.to_string());
         }
-        if let Some(host) = endpoint_value.get("host").and_then(|s| s.as_str()) {
+        if let Some(host) = endpoint_value.get_str("host") {
             self.host = Some(host.to_string());
         }
-        if let Some(port) = endpoint_value.get("port").and_then(|s| s.as_u16()) {
+        if let Some(port) = endpoint_value.get_u16("port") {
             self.port = Some(port);
         }
-        if let Some(username) = endpoint_value.get("username").and_then(|s| s.as_str()) {
+        if let Some(username) = endpoint_value.get_str("username") {
             self.username = Some(username.to_string());
         }
-        if let Some(password) = endpoint_value.get("password").and_then(|s| s.as_str()) {
+        if let Some(password) = endpoint_value.get_str("password") {
             self.password = Some(password.to_string());
         }
-        if let Some(path) = endpoint_value.get("path").and_then(|s| s.as_str()) {
+        if let Some(path) = endpoint_value.get_str("path") {
             self.path = Some(path.to_string());
         }
-        if let Some(query) = endpoint_value.get("query").and_then(|s| s.as_str()) {
+        if let Some(query) = endpoint_value.get_str("query") {
             self.query = Some(query.to_string());
         }
-        if let Some(fragment) = endpoint_value.get("fragment").and_then(|s| s.as_str()) {
+        if let Some(fragment) = endpoint_value.get_str("fragment") {
             self.fragment = Some(fragment.to_string());
         }
     }
@@ -1281,7 +1281,7 @@ mod test {
         )
         .await?;
         assert_eq!(1, res.len());
-        if let Some(event) = res.get(0) {
+        if let Some(event) = res.first() {
             let mut expected_data = Value::object_with_capacity(1);
             expected_data.insert("foo", true)?;
             let data_parts = event.data.parts();

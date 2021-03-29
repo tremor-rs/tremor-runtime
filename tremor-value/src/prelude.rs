@@ -14,9 +14,6 @@
 
 pub use super::Value;
 pub use value_trait::{
-    Builder as BuilderTrait,
-    Mutable as MutableTrait,
-    Value as ValueTrait,
-    Writable as WritableTrait,
-    ValueAccess as ValueAccessTrait
+    Builder as BuilderTrait, Mutable as MutableTrait, Value as ValueTrait,
+    ValueAccess as ValueAccessTrait, Writable as WritableTrait,
 };

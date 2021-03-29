@@ -707,8 +707,11 @@ mod tests {
         let t_value = to_value(tuple)?;
         if let Value::Object(map) = t_value {
             if let Some(&Value::Array(values)) = map.get("TupleStruct".into()).as_ref() {
-                if let Some(&Value::Array(first_field)) = values.get(0).as_ref() {
-                    assert_eq!(Some(&Value::Static(StaticNode::I64(1))), first_field.get(0));
+                if let Some(&Value::Array(first_field)) = values.first().as_ref() {
+                    assert_eq!(
+                        Some(&Value::Static(StaticNode::I64(1))),
+                        first_field.first()
+                    );
                     assert_eq!(Some(&Value::Static(StaticNode::I64(2))), first_field.get(1));
                     assert_eq!(Some(&Value::Static(StaticNode::I64(3))), first_field.get(2));
                 } else {
@@ -819,7 +822,7 @@ mod tests {
         ));
         let res = to_value(x.clone())?;
         if let Value::Array(elems) = &res {
-            if let Value::Object(values) = elems.get(0).unwrap() {
+            if let Value::Object(values) = elems.first().unwrap() {
                 let key = values.get("key").ok_or(Error::Serde(
                     "struct fields not serialized correctly".to_string(),
                 ))?;
@@ -835,7 +838,7 @@ mod tests {
                 }
                 match values.get("tuple") {
                     Some(Value::Array(array)) => {
-                        assert_eq!(Value::String("".into()), array.get(0).unwrap());
+                        assert_eq!(Value::String("".into()), array.first().unwrap());
                         assert_eq!(
                             Value::Static(StaticNode::Bool(false)),
                             array.get(1).unwrap()
@@ -860,7 +863,7 @@ mod tests {
         // assert it is the same without the option wrapped around it
         let res = to_value(x.unwrap())?;
         if let Value::Array(elems) = &res {
-            if let Value::Object(values) = elems.get(0).unwrap() {
+            if let Value::Object(values) = elems.first().unwrap() {
                 let key = values.get("key").ok_or(Error::Serde(
                     "struct fields not serialized correctly".to_string(),
                 ))?;
@@ -876,7 +879,7 @@ mod tests {
                 }
                 match values.get("tuple") {
                     Some(Value::Array(array)) => {
-                        assert_eq!(Value::String("".into()), array.get(0).unwrap());
+                        assert_eq!(Value::String("".into()), array.first().unwrap());
                         assert_eq!(
                             Value::Static(StaticNode::Bool(false)),
                             array.get(1).unwrap()
@@ -926,9 +929,9 @@ mod tests {
         match to_value(t)? {
             Value::Array(values) => {
                 assert_eq!(2, values.len());
-                assert_eq!(Value::Static(StaticNode::Null), values.get(0).unwrap());
+                assert_eq!(Value::Static(StaticNode::Null), values.first().unwrap());
                 if let Value::Array(vec) = values.get(1).unwrap() {
-                    assert_eq!(Value::Static(StaticNode::Null), vec.get(0).unwrap());
+                    assert_eq!(Value::Static(StaticNode::Null), vec.first().unwrap());
                     if let Value::String(s) = vec.get(1).unwrap() {
                         assert_eq!("ABC".to_string(), s.to_string());
                     }
@@ -956,7 +959,7 @@ mod tests {
             Value::Object(kvs) => match kvs.get("k").unwrap() {
                 Value::Array(arr) => {
                     assert_eq!(3, arr.len());
-                    assert_eq!(Value::Static(StaticNode::F64(1.0)), arr.get(0).unwrap());
+                    assert_eq!(Value::Static(StaticNode::F64(1.0)), arr.first().unwrap());
                     assert_eq!(Value::Static(StaticNode::F64(0.5)), arr.get(1).unwrap());
                     assert_eq!(Value::Static(StaticNode::F64(-23.123)), arr.get(2).unwrap());
                 }
@@ -987,7 +990,7 @@ mod tests {
         match v {
             Value::Array(elems) => {
                 assert_eq!(3, elems.len());
-                assert_eq!(Value::String("bla".into()), elems.get(0).unwrap());
+                assert_eq!(Value::String("bla".into()), elems.first().unwrap());
                 assert_eq!(Value::String("".into()), elems.get(1).unwrap());
                 assert_eq!(Value::Static(StaticNode::Null), elems.get(2).unwrap());
             }
