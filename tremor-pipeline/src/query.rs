@@ -148,7 +148,7 @@ impl Query {
             .suffix()
             .config
             .get("id")
-            .and_then(ValueTrait::as_str)
+            .and_then(ValueAccess::as_str)
     }
     /// Source of the query
     #[must_use]
