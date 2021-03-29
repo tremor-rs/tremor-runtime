@@ -98,7 +98,7 @@ async fn conductor_target_create_cmd(app: &mut TremorApp, cmd: &ArgMatches) -> R
         .as_array()
         .ok_or_else(|| Error::from("Invalid Configuration"))?
         .iter()
-        .filter_map(|v| (ValueTrait::as_str(v).map(String::from)))
+        .filter_map(|v| v.as_str().map(String::from))
         .collect();
     app.config.instances.insert(id.to_string(), endpoints);
     save_config(&app.config)

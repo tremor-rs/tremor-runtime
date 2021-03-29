@@ -4658,20 +4658,6 @@ dependencies = [
 
 [[package]]
 name = "simd-json-derive"
-version = "0.1.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "83e79367d22297f428571144be8fa5ea75c7cacdfa89d012b9b2437fef0d2540"
-dependencies = [
- "chrono",
- "itoa",
- "ryu",
- "simd-json 0.3.26",
- "simd-json-derive-int",
- "value-trait 0.1.23",
-]
-
-[[package]]
-name = "simd-json-derive"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "11eaf44adeccff3d172fb559fe34816673509eb96b9af4605b13d3be3786db33"
@@ -5774,7 +5760,7 @@ dependencies = [
  "serde_derive",
  "serde_yaml",
  "simd-json 0.4.0",
- "simd-json-derive 0.2.0",
+ "simd-json-derive",
  "sled",
  "tempfile",
  "tremor-common",
@@ -5838,7 +5824,7 @@ dependencies = [
  "serde_yaml",
  "serenity",
  "simd-json 0.4.0",
- "simd-json-derive 0.1.15",
+ "simd-json-derive",
  "sled",
  "snap",
  "surf",
@@ -5852,7 +5838,7 @@ dependencies = [
  "tremor-value",
  "tungstenite 0.13.0",
  "url 2.2.1",
- "value-trait 0.1.23",
+ "value-trait 0.2.1",
  "xz2",
 ]
 
@@ -5893,7 +5879,7 @@ dependencies = [
  "serde",
  "serde_derive",
  "simd-json 0.4.0",
- "simd-json-derive 0.2.0",
+ "simd-json-derive",
  "sketches-ddsketch",
  "strip-ansi-escapes",
  "tempfile",
@@ -5921,7 +5907,7 @@ dependencies = [
  "serde",
  "serde_json",
  "simd-json 0.4.0",
- "simd-json-derive 0.2.0",
+ "simd-json-derive",
  "value-trait 0.2.1",
 ]
 

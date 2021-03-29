@@ -55,7 +55,7 @@ fn eval_suite_entrypoint(
 
     let o = suite_result
         .get(0)
-        .and_then(ValueTrait::as_object)
+        .and_then(ValueAccess::as_object)
         .ok_or_else(|| Error::from("bad suite results"))?;
     if o.contains_key("name") {
         // let name = suite_spec
