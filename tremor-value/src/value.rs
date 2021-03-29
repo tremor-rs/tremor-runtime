@@ -357,42 +357,18 @@ impl<'value> Mutable for Value<'value> {
     }
     #[inline]
     #[must_use]
-    fn as_object_mut(&mut self) -> Option<&mut HashMap<<Self as ValueTrait>::Key, Self>> {
+    fn as_object_mut(&mut self) -> Option<&mut HashMap<<Self as ValueAccess>::Key, Self>> {
         match self {
             Self::Object(m) => Some(m),
             _ => None,
         }
     }
 }
-
-impl<'value> ValueTrait for Value<'value> {
+impl<'value> ValueAccess for Value<'value> {
+    type Target = Self;
     type Key = Cow<'value, str>;
     type Array = Vec<Self>;
     type Object = HashMap<Self::Key, Self>;
-
-    #[inline]
-    #[must_use]
-    fn is_custom(&self) -> bool {
-        matches!(self, Value::Bytes(_))
-    }
-
-    #[inline]
-    #[must_use]
-    fn value_type(&self) -> ValueType {
-        match self {
-            Self::Static(s) => s.value_type(),
-            Self::String(_) => ValueType::String,
-            Self::Array(_) => ValueType::Array,
-            Self::Object(_) => ValueType::Object,
-            Self::Bytes(_) => ValueType::Custom("bytes"),
-        }
-    }
-
-    #[inline]
-    #[must_use]
-    fn is_null(&self) -> bool {
-        matches!(self, Self::Static(StaticNode::Null))
-    }
 
     #[inline]
     #[must_use]
@@ -487,6 +463,35 @@ impl<'value> ValueTrait for Value<'value> {
             _ => None,
         }
     }
+}
+
+impl<'value> ValueTrait for Value<'value> {
+
+    #[inline]
+    #[must_use]
+    fn is_custom(&self) -> bool {
+        matches!(self, Value::Bytes(_))
+    }
+
+    #[inline]
+    #[must_use]
+    fn value_type(&self) -> ValueType {
+        match self {
+            Self::Static(s) => s.value_type(),
+            Self::String(_) => ValueType::String,
+            Self::Array(_) => ValueType::Array,
+            Self::Object(_) => ValueType::Object,
+            Self::Bytes(_) => ValueType::Custom("bytes"),
+        }
+    }
+
+    #[inline]
+    #[must_use]
+    fn is_null(&self) -> bool {
+        matches!(self, Self::Static(StaticNode::Null))
+    }
+
+
 }
 
 #[cfg(not(tarpaulin_include))]

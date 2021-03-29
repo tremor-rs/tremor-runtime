@@ -16,8 +16,8 @@ beef = "0.5"
 halfbrown = "0.1"
 serde = "1.0"
 simd-json = "0.4"
-simd-json-derive = "0.1"
-value-trait = {version = "0.1", features = ["custom-types"]}
+simd-json-derive = "0.2"
+value-trait = {version = "0.2", features = ["custom-types"]}
 
 [dev-dependencies]
 float-cmp = "0.8"

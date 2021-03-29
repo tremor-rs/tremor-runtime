@@ -53,12 +53,12 @@ sketches-ddsketch = "0.1.2"
 strip-ansi-escapes = "0.1"
 termcolor = "1.1"
 tremor-common = {version = "0.10", path = "../tremor-common"}# FIXME tremor-influx v0.2"
-tremor-influx = {version = "0.2", path = "../tremor-influx"}# FIXME tremor-influx v0.2
+tremor-influx = {version = "0.3", path = "../tremor-influx"}# FIXME tremor-influx v0.2
 tremor-kv = "0.1"
 tremor-value = {version = "0.2", path = "../tremor-value"}# FIXME tremor-influx v0.2
 unicode-xid = "0.2"
 url = "2"
-value-trait = "0.1"
+value-trait = "0.2"
 xz2 = "0.1"
 
 [build-dependencies]

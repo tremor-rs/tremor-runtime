@@ -13,6 +13,10 @@
 // limitations under the License.
 
 pub use super::Value;
-pub use simd_json_value::{
-    Builder as BuilderTrait, Mutable as MutableTrait, Vale as ValueTrait, Writable as WritableTrait,
+pub use value_trait::{
+    Builder as BuilderTrait,
+    Mutable as MutableTrait,
+    Value as ValueTrait,
+    Writable as WritableTrait,
+    ValueAccess as ValueAccessTrait
 };
