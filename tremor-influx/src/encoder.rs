@@ -17,8 +17,8 @@ use crate::{EncoderError as Error, EncoderResult as Result};
 use std::hash::Hash;
 use std::io::Write;
 use std::{borrow::Borrow, slice::SliceIndex};
-use value_trait::{Object, Value, ValueType, Writable};
-
+use value_trait::prelude::*;
+use value_trait::ValueType;
 /// Tries to compile a value to a influx line value
 ///
 /// # Errors
@@ -26,9 +26,8 @@ use value_trait::{Object, Value, ValueType, Writable};
 ///  * if the input doesn't follow the expected schema
 pub fn encode<'input, V>(v: &V) -> Result<Vec<u8>>
 where
-    V: Value + Writable + 'input,
-    <V as Value>::Key: Borrow<str> + Hash + Eq + Ord + ToString,
-    // <V as Value>::Object: Iter,
+    V: Value + ValueAccess<Target = V> + Writable + 'input,
+    <V as ValueAccess>::Key: Borrow<str> + Hash + Eq + Ord + ToString + AsRef<str>,
 {
     let mut output: Vec<u8> = Vec::with_capacity(512);
     write_escaped_key(
@@ -41,14 +40,14 @@ where
     )?;
     //let mut output: String = v.get("measurement")?.as_str()?.escape();
 
-    let mut tag_collection = v
+    let mut tag_collection: Vec<(&str, &str)> = v
         .get("tags")
         .ok_or(Error::MissingField("tags"))?
         .as_object()
         .ok_or(Error::InvalidField("tags"))?
         .iter()
-        .filter_map(|(key, value)| Some((key, value.as_str()?.to_owned())))
-        .collect::<Vec<(&<V as Value>::Key, String)>>();
+        .filter_map(|(key, value)| Some((key.borrow(), value.as_str()?)))
+        .collect();
     tag_collection.sort_by_key(|v| v.0);
 
     for (key, value) in tag_collection {
@@ -62,11 +61,12 @@ where
     output.write_all(&[b' '])?;
 
     let fields = v
-        .get("fields")
-        .ok_or(Error::MissingField("fields"))?
-        .as_object()
+        .get_object("fields")
         .ok_or(Error::InvalidField("fields"))?;
-    let mut field_collection: Vec<(&<V as Value>::Key, &V)> = fields.iter().collect();
+    let mut field_collection: Vec<_> = fields
+        .iter()
+        .map(|(k, v)| -> (&str, _) { (k.borrow(), v) })
+        .collect();
     field_collection.sort_by_key(|v| v.0);
     let mut first = true;
     for (key, value) in field_collection {
