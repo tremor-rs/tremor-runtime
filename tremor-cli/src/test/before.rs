@@ -65,7 +65,7 @@ impl Before {
                     }
                     if "wait-for-ms" == k.as_str() {
                         success &= v
-                            .get(0)
+                            .first()
                             .and_then(|delay| delay.parse().ok())
                             .map(|delay| start.elapsed() > Duration::from_millis(delay))
                             .unwrap_or_default();

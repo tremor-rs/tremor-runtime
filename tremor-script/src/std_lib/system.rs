@@ -31,7 +31,7 @@ mod test {
     fn system_nanotime() {
         let f = fun("system", "nanotime");
         let r = f(&[]);
-        if let Some(x) = r.ok().and_then(|v| v.as_u64()) {
+        if let Some(x) = r.ok().as_u64() {
             let status = x <= nanotime();
             assert!(status);
         } else {

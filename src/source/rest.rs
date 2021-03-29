@@ -259,16 +259,13 @@ fn make_response(
     let (response_data, meta) = event.value_meta_iter().next().ok_or(err)?;
 
     if let Some(response_meta) = meta.get("response") {
-        let status = response_meta
-            .get("status")
-            .and_then(|s| s.as_u16())
-            .unwrap_or(200);
+        let status = response_meta.get_u16("status").unwrap_or(200);
 
         // hallo heinz! :)
         let mut builder = Response::builder(status);
         // extract headers
         let mut header_content_type: Option<&str> = None;
-        if let Some(headers) = response_meta.get("headers").and_then(|hs| hs.as_object()) {
+        if let Some(headers) = response_meta.get_object("headers") {
             for (name, values) in headers {
                 if let Some(header_values) = values.as_array() {
                     if name.eq_ignore_ascii_case("content-type") {

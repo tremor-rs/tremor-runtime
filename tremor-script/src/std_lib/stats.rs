@@ -81,7 +81,7 @@ impl TremorAggrFn for Count {
 struct Sum(f64);
 impl TremorAggrFn for Sum {
     fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
-        args.get(0).and_then(|v| v.cast_f64()).map_or_else(
+        args.first().cast_f64().map_or_else(
             || {
                 Err(FunctionError::BadType {
                     mfa: mfa("stats", "sum", 1),
@@ -94,7 +94,7 @@ impl TremorAggrFn for Sum {
         )
     }
     fn compensate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
-        args.get(0).and_then(|v| v.cast_f64()).map_or_else(
+        args.first().cast_f64().map_or_else(
             || {
                 Err(FunctionError::BadType {
                     mfa: mfa("stats", "sum", 1),
@@ -133,7 +133,7 @@ struct Mean(i64, f64);
 impl TremorAggrFn for Mean {
     fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
         self.0 += 1;
-        args.get(0).and_then(|v| v.cast_f64()).map_or_else(
+        args.first().cast_f64().map_or_else(
             || {
                 Err(FunctionError::BadType {
                     mfa: mfa("stats", "mean", 1),
@@ -147,7 +147,7 @@ impl TremorAggrFn for Mean {
     }
     fn compensate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
         self.0 -= 1;
-        args.get(0).and_then(|v| v.cast_f64()).map_or_else(
+        args.first().cast_f64().map_or_else(
             || {
                 Err(FunctionError::BadType {
                     mfa: mfa("stats", "mean", 1),
@@ -191,7 +191,7 @@ impl TremorAggrFn for Mean {
 struct Min(Option<f64>);
 impl TremorAggrFn for Min {
     fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
-        args.get(0).and_then(|v| v.cast_f64()).map_or_else(
+        args.first().cast_f64().map_or_else(
             || {
                 Err(FunctionError::BadType {
                     mfa: mfa("stats", "min", 1),
@@ -251,7 +251,7 @@ impl TremorAggrFn for Min {
 struct Max(Option<f64>);
 impl TremorAggrFn for Max {
     fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
-        args.get(0).and_then(|v| v.cast_f64()).map_or_else(
+        args.first().cast_f64().map_or_else(
             || {
                 Err(FunctionError::BadType {
                     mfa: mfa("stats", "max", 1),
@@ -303,7 +303,7 @@ struct Var {
 
 impl TremorAggrFn for Var {
     fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
-        args.get(0).and_then(|v| v.cast_f64()).map_or_else(
+        args.first().cast_f64().map_or_else(
             || {
                 Err(FunctionError::BadType {
                     mfa: mfa("stats", "var", 1),
@@ -321,7 +321,7 @@ impl TremorAggrFn for Var {
         )
     }
     fn compensate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
-        args.get(0).and_then(|v| v.cast_f64()).map_or_else(
+        args.first().cast_f64().map_or_else(
             || {
                 Err(FunctionError::BadType {
                     mfa: mfa("stats", "var", 1),
@@ -453,7 +453,7 @@ impl std::default::Default for Dds {
 
 impl TremorAggrFn for Dds {
     fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
-        if let Some(vals) = args.get(1).and_then(|v| v.as_array()) {
+        if let Some(vals) = args.get(1).as_array() {
             if !self.percentiles_set {
                 let percentiles: FResult<Vec<(String, f64)>> = vals
                     .iter()
@@ -470,7 +470,7 @@ impl TremorAggrFn for Dds {
                 self.percentiles_set = true
             }
         }
-        if let Some(v) = args.get(0).and_then(|v| v.cast_f64()) {
+        if let Some(v) = args.first().cast_f64() {
             if v < 0.0 {
                 return Ok(());
             } else if let Some(ref mut histo) = self.histo {
@@ -658,7 +658,7 @@ impl Hdr {
 }
 impl TremorAggrFn for Hdr {
     fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
-        if let Some(vals) = args.get(1).and_then(|v| v.as_array()) {
+        if let Some(vals) = args.get(1).as_array() {
             if !self.percentiles_set {
                 let percentiles: FResult<Vec<(String, f64)>> = vals
                     .iter()
@@ -675,7 +675,7 @@ impl TremorAggrFn for Hdr {
                 self.percentiles_set = true
             }
         }
-        if let Some(v) = args.get(0).and_then(|v| v.cast_f64()) {
+        if let Some(v) = args.first().cast_f64() {
             if v < 0.0 {
                 return Ok(());
             }

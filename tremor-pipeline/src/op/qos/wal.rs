@@ -469,7 +469,7 @@ mod test {
         assert!(!insight.op_meta.contains_key(wal_uid));
 
         // extract the ids assigned by the WAL and tracked in the event ids
-        let id_e1 = r.events.get(0).map(|(_, event)| &event.id).unwrap();
+        let id_e1 = r.events.first().map(|(_, event)| &event.id).unwrap();
         let id_e2 = r.events.get(1).map(|(_, event)| &event.id).unwrap();
 
         // Send a fail event beck to the source through the WAL, this tell the WAL that delivery of

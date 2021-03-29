@@ -68,7 +68,7 @@ impl<'script> CustomFn<'script> {
         if self.inline {
             return true;
         }
-        let i = match self.body.get(0) {
+        let i = match self.body.first() {
             Some(Expr::Imut(ImutExprInt::Invoke1(i)))
             | Some(Expr::Imut(ImutExprInt::Invoke2(i)))
             | Some(Expr::Imut(ImutExprInt::Invoke3(i)))
@@ -98,7 +98,7 @@ impl<'script> CustomFn<'script> {
             return Err(format!("can't inline {}: too large body", self.name).into());
         }
 
-        let i = match self.body.get(0) {
+        let i = match self.body.first() {
             Some(Expr::Imut(ImutExprInt::Invoke1(i)))
             | Some(Expr::Imut(ImutExprInt::Invoke2(i)))
             | Some(Expr::Imut(ImutExprInt::Invoke3(i)))

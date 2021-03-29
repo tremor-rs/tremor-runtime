@@ -237,15 +237,14 @@ impl NewRelic {
             .ok()
             .flatten()
             .as_ref()
-            .and_then(Value::as_i64)
+            .as_i64()
             .unwrap_or_else(|| Utc::now().timestamp_millis());
 
         let message = new_value
             .remove("message")
             .ok()
             .flatten()
-            .as_ref()
-            .and_then(Value::as_str)
+            .as_str()
             .unwrap_or("")
             .to_string();
 

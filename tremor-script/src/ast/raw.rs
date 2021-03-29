@@ -590,7 +590,7 @@ impl<'script> Upable<'script> for ExprRaw<'script> {
                     default,
                 } if patterns.len() == 1
                     && patterns
-                        .get(0)
+                        .first()
                         .map(|cg| {
                             if let ClauseGroup::Simple {
                                 precondition: None,
@@ -2447,7 +2447,7 @@ impl_expr!(InvokeRaw);
 impl<'script> Upable<'script> for InvokeRaw<'script> {
     type Target = Invoke<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        if self.module.get(0) == Some(&String::from("core")) && self.module.len() == 2 {
+        if self.module.first() == Some(&String::from("core")) && self.module.len() == 2 {
             // we know a second module exists
             let module = self.module.get(1).cloned().unwrap_or_default();
 
@@ -2502,7 +2502,7 @@ impl<'script> Upable<'script> for InvokeRaw<'script> {
 
 impl<'script> InvokeRaw<'script> {
     fn is_aggregate<'registry>(&self, helper: &mut Helper<'script, 'registry>) -> bool {
-        if self.module.get(0) == Some(&String::from("aggr")) && self.module.len() == 2 {
+        if self.module.first() == Some(&String::from("aggr")) && self.module.len() == 2 {
             let module = self.module.get(1).cloned().unwrap_or_default();
             helper.aggr_reg.find(&module, &self.fun).is_ok()
         } else {

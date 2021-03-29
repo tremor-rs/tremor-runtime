@@ -168,7 +168,7 @@ mod test {
 
         let history = event.data.suffix().meta().get(op.config.name.as_str());
 
-        match history.and_then(Value::as_array) {
+        match history.as_array() {
             Some(history) => {
                 assert_eq!(2, history.len());
             }

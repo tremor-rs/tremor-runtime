@@ -173,8 +173,7 @@ impl<'script> NodeMetas {
     pub(crate) fn name(&self, idx: usize) -> Option<&str> {
         self.nodes
             .get(idx)
-            .map(|v| v.name.as_ref())
-            .and_then(|v| v)
+            .and_then(|v| v.name.as_ref())
             .map(String::as_str)
     }
 
@@ -1458,7 +1457,7 @@ impl<'script, Ex: Expression + 'script> ClauseGroup<'script, Ex> {
                         mid,
                         ..
                     } if fields.len() == 1 => fields
-                        .get(0)
+                        .first()
                         .map(|f| {
                             // where the record key is a binary equal
                             match f {
@@ -1992,8 +1991,8 @@ impl<'script> RecordPattern<'script> {
     fn is_exclusive_to(&self, other: &Self) -> bool {
         if self.fields.len() == 1 && other.fields.len() == 1 {
             self.fields
-                .get(0)
-                .and_then(|f1| Some((f1, other.fields.get(0)?)))
+                .first()
+                .and_then(|f1| Some((f1, other.fields.first()?)))
                 .map(|(f1, f2)| f1.is_exclusive_to(f2) || f2.is_exclusive_to(f1))
                 .unwrap_or_default()
         } else {

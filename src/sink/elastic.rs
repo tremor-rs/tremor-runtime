@@ -239,10 +239,11 @@ fn build_event_payload(event: &Event) -> Result<Vec<u8>> {
     let vec_size = 512 * event.len();
     let mut payload = Vec::with_capacity(vec_size);
     for (value, meta) in event.value_meta_iter() {
+        let elastic = meta.get("elastic");
         let index = if let Some(idx) = meta.get_str("index") {
             warn!("[Sink::ES] $index is deprecated please use `$elastic._index` instead");
             idx
-        } else if let Some(idx) = meta.get("elastic").and_then(|v| v.get_str("_index")) {
+        } else if let Some(idx) = elastic.get_str("_index") {
             idx
         } else {
             return Err(Error::from("'index' not set for elastic offramp!"));
@@ -254,26 +255,26 @@ fn build_event_payload(event: &Event) -> Result<Vec<u8>> {
         if let Some(doc_type) = meta.get_str("doc_type") {
             warn!("[Sink::ES] $doc_type is deprecated please use `$elastic._type` instead");
             index_meta.insert("_type", doc_type)?;
-        } else if let Some(doc_type) = meta.get("elastic").and_then(|v| v.get_str("_type")) {
+        } else if let Some(doc_type) = elastic.get_str("_type") {
             index_meta.insert("_type", doc_type)?;
         }
         if let Some(id) = meta.get_str("doc_id") {
             warn!("[Sink::ES] $doc_id is deprecated please use `$elastic._id` instead");
             index_meta.insert("_id", id)?;
-        } else if let Some(id) = meta.get("elastic").and_then(|v| v.get_str("_id")) {
+        } else if let Some(id) = elastic.get_str("_id") {
             index_meta.insert("_id", id)?;
         }
         if let Some(pipeline) = meta.get_str("pipeline") {
             warn!("[Sink::ES] $pipeline is deprecated please use `$elastic.pipeline` instead");
             index_meta.insert("pipeline", pipeline)?;
-        } else if let Some(pipeline) = meta.get("elastic").and_then(|v| v.get_str("pipeline")) {
+        } else if let Some(pipeline) = elastic.get_str("pipeline") {
             index_meta.insert("pipeline", pipeline)?;
         };
         let action = if meta.get_str("action").is_some() {
             warn!("[Sink::ES] $action is deprecated please use `$elastic.action` instead");
             meta.get_str("action")
         } else {
-            meta.get("elastic").and_then(|v| v.get_str("action"))
+            elastic.get_str("action")
         };
         let key = match action {
             Some("delete") => "delete",

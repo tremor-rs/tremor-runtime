@@ -52,7 +52,7 @@ impl TremorApp {
         self.config
             .instances
             .get("default")
-            .and_then(|v| v.get(0))
+            .and_then(|v| v.first())
             .ok_or_else(|| Error::from("No default api endpoint provided in ~/.tremor/config"))
             .and_then(|s| Ok(url::Url::parse(s)?))
     }

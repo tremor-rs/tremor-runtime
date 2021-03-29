@@ -668,7 +668,7 @@ mod test {
             message,
         )?;
         assert_eq!(2, events.len());
-        let event0 = events.get(0).ok_or(Error::from("no event 0"))?;
+        let event0 = events.first().ok_or(Error::from("no event 0"))?;
         let (data, meta) = event0.data.parts();
         assert!(meta.is_object());
         assert_eq!(Some(&Value::from(false)), meta.get("binary"));

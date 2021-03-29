@@ -333,7 +333,7 @@ impl ExecutableGraph {
                 if let Some((_, dsts)) = next_nodes.next() {
                     // we only connect from one output
                     if next_nodes.next().is_none() && dsts.len() == 1 {
-                        let (next_id, next_input) = dsts.get(0)?;
+                        let (next_id, next_input) = dsts.first()?;
                         if next_input == input_name {
                             *target = *next_id;
                         }
