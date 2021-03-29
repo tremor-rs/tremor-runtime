@@ -318,14 +318,6 @@ fn build_event_payload(event: &Event) -> Result<Vec<u8>> {
     Ok(payload)
 }
 
-fn extract_correlation_values(event: &Event) -> Vec<Option<Value<'static>>> {
-    let mut values = Vec::with_capacity(event.len());
-    for (_, meta) in event.value_meta_iter() {
-        values.push(meta.get("correlation").map(Value::clone_static));
-    }
-    values
-}
-
 impl Elastic {
     #[allow(clippy::cast_possible_truncation)]
     #[allow(clippy::clippy::too_many_lines)]
@@ -370,14 +362,7 @@ impl Elastic {
 
                 // if we have more than one event (batched), correlation will be an array with `null` or an actual value
                 // for the event at the batch position
-                let mut correlation_values = extract_correlation_values(&event);
-                let correlation_value = if correlation_values.len() == 1 {
-                    correlation_values.pop().flatten()
-                } else if correlation_values.len() > 1 {
-                    Some(Value::from(correlation_values))
-                } else {
-                    None
-                };
+                let correlation_value = event.correlation_meta();
                 let meta = if let Some(correlation) = correlation_value {
                     let mut meta = Value::object_with_capacity(1);
                     meta.insert("correlation", correlation)?;
@@ -398,7 +383,7 @@ impl Elastic {
         let req = self.client.request(BulkRequest::new(payload));
 
         let mut correlation_values = if is_linked {
-            extract_correlation_values(&event)
+            event.correlation_metas()
         } else {
             vec![]
         };
@@ -468,12 +453,16 @@ impl Elastic {
                     if is_linked {
                         // if we have more than one event (batched), correlation will be an array with `null` or an actual value
                         // for the event at the batch position
-                        if correlation_values.len() == 1 {
-                            if let Some(cv) = correlation_values.pop().flatten() {
-                                m.insert("correlation".into(), cv);
+                        match correlation_values.len() {
+                            1 => {
+                                if let Some(cv) = correlation_values.pop().flatten() {
+                                    m.insert_nocheck("correlation".into(), cv);
+                                }
                             }
-                        } else if correlation_values.len() > 1 {
-                            m.insert("correlation".into(), Value::from(correlation_values));
+                            l if l > 1 => {
+                                m.insert("correlation".into(), Value::from(correlation_values));
+                            }
+                            _ => {}
                         };
                         // send error event via ERR port
                         let mut error_data = Object::with_capacity(1);
@@ -540,13 +529,8 @@ impl Elastic {
                 data.insert("payload".into(), event.data.suffix().value().clone_static());
                 meta.insert("error".into(), Value::from(error_msg));
 
-                let mut correlation_values = extract_correlation_values(&event);
-                if correlation_values.len() == 1 {
-                    if let Some(correlation) = correlation_values.pop().flatten() {
-                        meta.insert("correlation".into(), correlation);
-                    }
-                } else if correlation_values.len() > 1 {
-                    meta.insert("correlation".into(), Value::from(correlation_values));
+                if let Some(correlation) = event.correlation_meta() {
+                    meta.insert("correlation".into(), correlation);
                 }
 
                 if let Err(e) = self.response_sender.send(((data, meta).into(), ERR)).await {

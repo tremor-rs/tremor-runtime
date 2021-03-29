@@ -1,0 +1,18 @@
+define script processing
+script
+  match event of
+    case %{ present correlation } =>
+      let $correlation = event.correlation,
+      let $request.headers["x-correlation"] = event.correlation,
+      let event = patch event of erase "correlation" end
+    default =>
+      let $request.headers["x-correlation"] = "nope"
+  end;
+  event
+end;
+
+create script processing;
+
+select event from in into processing;
+select event from processing into out;
+select event from processing/err into err;

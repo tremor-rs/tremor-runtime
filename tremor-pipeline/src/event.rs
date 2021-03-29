@@ -203,8 +203,8 @@ impl Event {
         }
     }
 
-    #[must_use]
     /// returns true if this event is batched but has no wrapped events
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.is_batch
             && self
@@ -213,6 +213,38 @@ impl Event {
                 .value()
                 .as_array()
                 .map_or(true, Vec::is_empty)
+    }
+
+    /// Extracts the `$correlation` metadata into a `Vec` of `Option<Value<'static>>`.
+    /// We use a `Vec` to account for possibly batched events and `Option`s because single events might not have a value there.
+    /// We use `Value<'static>`, which requires a clone, as we need to pass the values on to another event anyways.
+    #[must_use]
+    pub fn correlation_metas(&self) -> Vec<Option<Value<'static>>> {
+        let mut res = Vec::with_capacity(self.len());
+        for (_, meta) in self.value_meta_iter() {
+            res.push(meta.get("correlation").map(Value::clone_static))
+        }
+        res
+    }
+
+    /// get the correlation metadata as a single value, if present
+    /// creates an array value for batched events
+    #[must_use]
+    pub fn correlation_meta(&self) -> Option<Value<'static>> {
+        if self.is_batch {
+            let cms = self.correlation_metas();
+            if cms.is_empty() {
+                None
+            } else {
+                Some(Value::from(cms))
+            }
+        } else {
+            self.data
+                .suffix()
+                .meta()
+                .get("correlation")
+                .map(Value::clone_static)
+        }
     }
 }
 
