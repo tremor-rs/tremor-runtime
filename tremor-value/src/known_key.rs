@@ -17,7 +17,7 @@ use beef::Cow;
 use halfbrown::RawEntryMut;
 use std::fmt;
 use std::hash::{BuildHasher, Hash, Hasher};
-use value_trait::{Mutable, Value as ValueTrait, ValueType};
+use value_trait::{Mutable, Value as ValueTrait, ValueType, ValueAccess};
 
 /// Well known key that can be looked up in a `Value` faster.
 /// It achives this by memorizing the hash.

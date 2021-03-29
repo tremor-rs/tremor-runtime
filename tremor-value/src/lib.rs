@@ -37,6 +37,8 @@ mod error;
 mod known_key;
 mod serde;
 mod value;
+/// Prelude module
+pub mod prelude;
 pub use error::*;
 pub use known_key::{Error as KnownKeyError, KnownKey};
 pub use simd_json::{json, AlignedBuf, StaticNode};
@@ -64,7 +66,7 @@ impl<'input, 'tape> ValueDeser<'input, 'tape> {
             Some(Node::String(s)) => Ok(Value::from(s)),
             Some(Node::Array(len, _)) => Ok(self.parse_array(len)),
             Some(Node::Object(len, _)) => Ok(self.parse_map(len)),
-            None => Err(simd_json::Error::generic(simd_json::ErrorType::EOF)),
+            None => Err(simd_json::Error::generic(simd_json::ErrorType::Eof)),
         }
     }
     #[inline(always)]
