@@ -5725,7 +5725,7 @@ dependencies = [
  "pretty_assertions",
  "simd-json 0.4.0",
  "snmalloc-rs",
- "value-trait 0.1.23",
+ "value-trait 0.2.1",
 ]
 
 [[package]]

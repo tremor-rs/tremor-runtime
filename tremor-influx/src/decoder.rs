@@ -15,7 +15,7 @@
 
 use crate::{DecoderError as Error, DecoderResult as Result};
 use std::borrow::Cow;
-use value_trait::{Builder, Mutable, Value};
+use value_trait::prelude::*;
 
 macro_rules! cant_error {
     ($e:expr) => {
@@ -34,8 +34,8 @@ macro_rules! cant_error {
 ///    * if the input isn't valid influx line protocol
 pub fn decode<'input, V>(data: &'input str, ingest_ns: u64) -> Result<Option<V>>
 where
-    V: Value + Mutable + Builder<'input> + 'input + std::fmt::Debug,
-    <V as Value>::Key: From<Cow<'input, str>> + From<&'input str>,
+    V: Value + Mutable + ValueAccess<Target = V> + Builder<'input> + 'input + std::fmt::Debug,
+    <V as ValueAccess>::Key: From<Cow<'input, str>> + From<&'input str>,
 {
     let mut data = data.trim();
 
@@ -202,8 +202,9 @@ where
 
 fn parse_fields<'input, V>(total_idx: usize, mut input: &'input str) -> Result<(V, usize)>
 where
-    V: Value + Mutable + Builder<'input> + 'input + std::fmt::Debug,
-    <V as Value>::Key: From<Cow<'input, str>>,
+    V: Value + Mutable + ValueAccess + Builder<'input> + 'input + std::fmt::Debug,
+    <V as ValueAccess>::Key: From<Cow<'input, str>>,
+    <V as ValueAccess>::Target: From<V>,
 {
     let mut offset = 0;
     let mut res = V::object_with_capacity(16);
@@ -230,8 +231,15 @@ where
 
 fn parse_tags<'input, V>(total_idx: usize, mut input: &'input str) -> Result<(V, usize)>
 where
-    V: Value + Mutable + Builder<'input> + 'input + From<Cow<'input, str>> + std::fmt::Debug,
-    <V as Value>::Key: From<Cow<'input, str>>,
+    V: Value
+        + Mutable
+        + ValueAccess
+        + Builder<'input>
+        + 'input
+        + From<Cow<'input, str>>
+        + std::fmt::Debug,
+    <V as ValueAccess>::Key: From<Cow<'input, str>>,
+    <V as ValueAccess>::Target: From<V>,
 {
     let mut res = V::object_with_capacity(16);
     let mut offset = 0;
