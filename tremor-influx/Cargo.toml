@@ -22,7 +22,7 @@ value-trait = "0.1"
 [dev-dependencies]
 criterion = "0.3"
 pretty_assertions = "0.7"
-simd-json = "0.3"
+simd-json = "0.4"
 snmalloc-rs = "0.2"
 
 [[bench]]

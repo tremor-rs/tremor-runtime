@@ -15,7 +15,7 @@ base64 = "0.13"
 beef = "0.5"
 halfbrown = "0.1"
 serde = "1.0"
-simd-json = "0.3"
+simd-json = "0.4"
 simd-json-derive = "0.1"
 value-trait = {version = "0.1", features = ["custom-types"]}
 
