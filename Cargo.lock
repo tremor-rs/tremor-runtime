@@ -1406,7 +1406,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b93ec2fc4df5aeba3c50bcee606404b60fb2d53ad798403d65c132e36c2f33b4"
 dependencies = [
  "halfbrown",
- "simd-json 0.4.0",
+ "simd-json",
 ]
 
 [[package]]
@@ -4634,51 +4634,39 @@ dependencies = [
 
 [[package]]
 name = "simd-json"
-version = "0.3.26"
+version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "469eceee006182897e6a2f4add05ebc82cc0531735c86535f4614df24afb39bc"
+checksum = "14174821a1056b3e4e4c8005f02aacbe0a8e5379a58fe6031b530f7e1bc18283"
 dependencies = [
  "halfbrown",
  "serde",
  "serde_json",
- "value-trait 0.1.23",
-]
-
-[[package]]
-name = "simd-json"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9bf3b0383867d0f90ffbc2fa376c7779cf6f248ee7eac560e436e2d9ac246b97"
-dependencies = [
- "halfbrown",
- "serde",
- "serde_json",
- "value-trait 0.2.2",
+ "value-trait",
 ]
 
 [[package]]
 name = "simd-json-derive"
-version = "0.2.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "11eaf44adeccff3d172fb559fe34816673509eb96b9af4605b13d3be3786db33"
+checksum = "837096c7764ff14cb3f2094645e02caa4421a2880a4a1ef03640695147b1a5f1"
 dependencies = [
  "chrono",
  "itoa",
  "ryu",
- "simd-json 0.4.0",
+ "simd-json",
  "simd-json-derive-int",
- "value-trait 0.2.2",
+ "value-trait",
 ]
 
 [[package]]
 name = "simd-json-derive-int"
-version = "0.1.4"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3de1ed12ac7ac93de77904fa5ead8229feccfc6531e2e237629de74ecb7c8733"
+checksum = "519eb2021f6450f0333cf10c3f0794e5c41e3c41c6a4816e425f0b0b42ed554d"
 dependencies = [
  "proc-macro2",
  "quote 1.0.9",
- "simd-json 0.3.26",
+ "simd-json",
  "syn 1.0.60",
 ]
 
@@ -5659,7 +5647,7 @@ dependencies = [
  "serde",
  "serde_derive",
  "serde_yaml",
- "simd-json 0.4.0",
+ "simd-json",
  "tide",
  "tremor-pipeline",
  "tremor-runtime",
@@ -5695,7 +5683,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "shell-words",
- "simd-json 0.4.0",
+ "simd-json",
  "snmalloc-rs",
  "surf",
  "tch",
@@ -5723,9 +5711,9 @@ dependencies = [
  "criterion",
  "lexical",
  "pretty_assertions",
- "simd-json 0.4.0",
+ "simd-json",
  "snmalloc-rs",
- "value-trait 0.2.2",
+ "value-trait",
 ]
 
 [[package]]
@@ -5735,7 +5723,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3e3865de0ff6397aefe564d36fd528c3ea0b96179ca019109e7fd0b7369d7fb0"
 dependencies = [
  "serde",
- "simd-json 0.4.0",
+ "simd-json",
 ]
 
 [[package]]
@@ -5759,7 +5747,7 @@ dependencies = [
  "serde",
  "serde_derive",
  "serde_yaml",
- "simd-json 0.4.0",
+ "simd-json",
  "simd-json-derive",
  "sled",
  "tempfile",
@@ -5767,7 +5755,7 @@ dependencies = [
  "tremor-influx",
  "tremor-script",
  "url 2.2.1",
- "value-trait 0.2.2",
+ "value-trait",
  "window",
  "xz2",
 ]
@@ -5823,7 +5811,7 @@ dependencies = [
  "serde_derive",
  "serde_yaml",
  "serenity",
- "simd-json 0.4.0",
+ "simd-json",
  "simd-json-derive",
  "sled",
  "snap",
@@ -5838,7 +5826,7 @@ dependencies = [
  "tremor-value",
  "tungstenite 0.13.0",
  "url 2.2.1",
- "value-trait 0.2.2",
+ "value-trait",
  "xz2",
 ]
 
@@ -5878,7 +5866,7 @@ dependencies = [
  "rental",
  "serde",
  "serde_derive",
- "simd-json 0.4.0",
+ "simd-json",
  "simd-json-derive",
  "sketches-ddsketch",
  "strip-ansi-escapes",
@@ -5890,7 +5878,7 @@ dependencies = [
  "tremor-value",
  "unicode-xid 0.2.1",
  "url 2.2.1",
- "value-trait 0.2.2",
+ "value-trait",
  "xz2",
 ]
 
@@ -5906,9 +5894,9 @@ dependencies = [
  "proptest",
  "serde",
  "serde_json",
- "simd-json 0.4.0",
+ "simd-json",
  "simd-json-derive",
- "value-trait 0.2.2",
+ "value-trait",
 ]
 
 [[package]]
@@ -6143,18 +6131,6 @@ checksum = "6b676010e055c99033117c2343b33a40a30b91fecd6c49055ac9cd2d6c305ab1"
 dependencies = [
  "ctor",
  "sval",
-]
-
-[[package]]
-name = "value-trait"
-version = "0.1.23"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4fd13485b764afe742226ad5a4906e9f7c1ae0029895473fa52855882661e06c"
-dependencies = [
- "float-cmp",
- "halfbrown",
- "itoa",
- "ryu",
 ]
 
 [[package]]
