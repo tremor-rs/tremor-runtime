@@ -28,6 +28,7 @@
 * Add `--exprs-only` to `dbg ast` to not show metadata
 * Add Delete and Update to ES sink [#822](https://github.com/tremor-rs/tremor-runtime/issues/822)
 * Add more metadata to Kafka source [#874](https://github.com/tremor-rs/tremor-runtime/issues/874)
+* Update to simd-json 0.4
 
 ### Fixes
 
