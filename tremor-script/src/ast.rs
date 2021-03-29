@@ -2461,7 +2461,7 @@ hello
         assert_eq!(r.get("nots"), None);
 
         assert_eq!(
-            r.get_literal("badger").and_then(ValueTrait::as_str),
+            r.get_literal("badger").and_then(ValueAccess::as_str),
             Some("snot")
         );
         assert_eq!(r.get("adgerb"), None);

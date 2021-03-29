@@ -1401,12 +1401,12 @@ checksum = "212d0f5754cb6769937f4501cc0e67f4f4483c8d2c3e1e922ee9edbe4ab4c7c0"
 
 [[package]]
 name = "dissect"
-version = "0.1.2"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "10640ccc9885ae2371120ad2b1f0db4fe805b60654c93a8d17e130c4651a73e6"
+checksum = "b93ec2fc4df5aeba3c50bcee606404b60fb2d53ad798403d65c132e36c2f33b4"
 dependencies = [
  "halfbrown",
- "simd-json 0.3.26",
+ "simd-json 0.4.0",
 ]
 
 [[package]]
@@ -5744,12 +5744,12 @@ dependencies = [
 
 [[package]]
 name = "tremor-kv"
-version = "0.1.4"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4e5b783151f084c0cb225aea29969a11d0389671ef877466949cf5e8c34440c1"
+checksum = "3e3865de0ff6397aefe564d36fd528c3ea0b96179ca019109e7fd0b7369d7fb0"
 dependencies = [
  "serde",
- "simd-json 0.3.26",
+ "simd-json 0.4.0",
 ]
 
 [[package]]
@@ -5893,7 +5893,7 @@ dependencies = [
  "serde",
  "serde_derive",
  "simd-json 0.4.0",
- "simd-json-derive 0.1.15",
+ "simd-json-derive 0.2.0",
  "sketches-ddsketch",
  "strip-ansi-escapes",
  "tempfile",

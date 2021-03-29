@@ -648,7 +648,7 @@ mod tests {
     use crate::errors::Result;
     use crate::path::ModulePath;
     use crate::registry::registry;
-    use simd_json::Value;
+    use simd_json::prelude::*;
 
     #[derive(Default)]
     struct Find42Visitor {

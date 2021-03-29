@@ -198,7 +198,7 @@ mod test {
     use crate::registry::fun;
     use crate::Value;
     use proptest::prelude::*;
-    use simd_json::Value as ValueTrait;
+    use simd_json::prelude::*;
 
     #[test]
     fn bool() {
