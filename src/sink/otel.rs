@@ -47,8 +47,6 @@ pub struct OpenTelemetry {
     endpoint: String,
     remote: Option<RemoteOpenTelemetryEndpoint>,
     is_down: bool,
-    qos_epoch: u64,
-    qos_interval: u64,
     qos_facility: Box<dyn SinkQoS>,
 }
 
@@ -86,8 +84,6 @@ impl offramp::Impl for OpenTelemetry {
                 endpoint,
                 remote: None,
                 is_down: false,
-                qos_epoch: nanotime(),
-                qos_interval: 1_000_000_000,
                 qos_facility: Box::new(QoSFacilities::recoverable(hostport)),
             }))
         } else {
