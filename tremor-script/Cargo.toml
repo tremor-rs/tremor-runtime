@@ -58,7 +58,7 @@ tremor-kv = "0.1"
 tremor-value = {version = "0.2", path = "../tremor-value"}# FIXME tremor-influx v0.2
 unicode-xid = "0.2"
 url = "2"
-value-trait = "0.1"
+value-trait = "0.2"
 xz2 = "0.1"
 
 [build-dependencies]

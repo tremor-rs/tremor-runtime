@@ -72,7 +72,7 @@ tremor-pipeline = {path = "tremor-pipeline"}
 tremor-script = {path = "tremor-script"}
 tremor-value = {path = "tremor-value"}
 url = "2.2"
-value-trait = "0.1"
+value-trait = "0.2"
 
 mapr = "0.8"
 tempfile = {version = "3.2"}

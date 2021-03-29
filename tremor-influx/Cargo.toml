@@ -17,7 +17,7 @@ rustc-args = ["-C target-cpu=native"]
 
 [dependencies]
 lexical = "5.2.1"
-value-trait = "0.1"
+value-trait = "0.2"
 
 [dev-dependencies]
 criterion = "0.3"
