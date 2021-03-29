@@ -30,7 +30,7 @@ use crate::{
     lexer::Range,
 };
 use beef::Cow;
-use value_trait::Value as ValueTrait;
+use value_trait::prelude::*;
 
 fn up_params<'script, 'registry>(
     params: WithExprsRaw<'script>,
@@ -408,12 +408,12 @@ impl<'script> Upable<'script> for WindowDeclRaw<'script> {
         let params = up_params(self.params, helper)?;
         let custom_max_groups = params
             .get(WindowDecl::MAX_GROUPS)
-            .and_then(Value::as_u64)
+            .and_then(ValueAccess::as_u64)
             .map(|x| x < u64::MAX)
             .unwrap_or_default();
         let emit_empty_windows = params
             .get(WindowDecl::EMIT_EMPTY_WINDOWS)
-            .and_then(Value::as_bool)
+            .and_then(ValueAccess::as_bool)
             .unwrap_or_default();
         if emit_empty_windows
             && !(custom_max_groups || params.contains_key(WindowDecl::EVICTION_PERIOD))

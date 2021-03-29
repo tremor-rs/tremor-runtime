@@ -754,7 +754,7 @@ pub use tests::fun;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use simd_json::Value as ValueTrait;
+    use simd_json::prelude::*;
 
     // Test utility to grab a function from the registry
     pub fn fun<'event>(m: &str, f: &str) -> impl Fn(&[&Value<'event>]) -> FResult<Value<'event>> {
