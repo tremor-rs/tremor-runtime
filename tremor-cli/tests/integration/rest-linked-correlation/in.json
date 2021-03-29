@@ -1,0 +1,5 @@
+{"foo":"bar", "correlation": ["1", "2", "3"]}
+{"foo":"baz", "correlation": "snot"}
+{"foo":"booze", "correlation": ["badger"]}
+{"foo": "snooze"}
+{"exit": true}

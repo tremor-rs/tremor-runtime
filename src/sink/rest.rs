@@ -255,6 +255,7 @@ fn dflt_method() -> SerdeMethod {
 
 impl ConfigImpl for Config {}
 
+#[allow(clippy::clippy::large_enum_variant)]
 enum CodecTaskInMsg {
     ToRequest(Event, Sender<SendTaskInMsg>),
     ToEvent {
@@ -262,12 +263,14 @@ enum CodecTaskInMsg {
         origin_uri: Box<EventOriginUri>, // box to avoid becoming the struct too big
         op_meta: Box<Option<OpMeta>>,
         request_meta: Value<'static>,
+        correlation: Option<Value<'static>>,
         response: Response,
         duration: u64,
     },
     ReportFailure {
         id: EventId,
         op_meta: Option<OpMeta>,
+        correlation: Option<Value<'static>>,
         e: Error,
         status: u16,
     },
@@ -350,6 +353,7 @@ impl Sink for Rest {
             // spawn send task
             task::spawn(async move {
                 let start = Instant::now();
+                let correlation = event.correlation_meta();
                 // send command to codec task
                 codec_task_channel
                     .send(CodecTaskInMsg::ToRequest(event, tx))
@@ -380,6 +384,7 @@ impl Sink for Rest {
                                         origin_uri: Box::new(event_origin_uri),
                                         op_meta: Box::new(op_meta),
                                         request_meta,
+                                        correlation,
                                         response,
                                         duration,
                                     })
@@ -391,6 +396,7 @@ impl Sink for Rest {
                                     .send(CodecTaskInMsg::ReportFailure {
                                         id,
                                         op_meta,
+                                        correlation,
                                         e: e.into(),
                                         status: 503,
                                     })
@@ -410,6 +416,7 @@ impl Sink for Rest {
                 .send(CodecTaskInMsg::ReportFailure {
                     id,
                     op_meta,
+                    correlation: event.correlation_meta(),
                     e: Error::from(String::from("Dropped data due to overload")),
                     status: 429,
                 })
@@ -557,6 +564,7 @@ async fn codec_task(
                             // TODO: add proper stream handling
                             response_ids.next_id(),
                             &event.id,
+                            event.correlation_meta(),
                             400,
                             &response_origin_uri,
                             &e,
@@ -576,6 +584,7 @@ async fn codec_task(
                 origin_uri,
                 op_meta,
                 request_meta,
+                correlation,
                 mut response,
                 duration,
             } => {
@@ -611,6 +620,7 @@ async fn codec_task(
                         &mut response_ids,
                         origin_uri.as_ref(),
                         request_meta,
+                        correlation.as_ref(),
                         response,
                         codec,
                         &mut codec_map,
@@ -639,6 +649,7 @@ async fn codec_task(
                                 // TODO: stream handling
                                 response_ids.next_id(),
                                 &id,
+                                correlation,
                                 500,
                                 origin_uri.as_ref(),
                                 &e,
@@ -677,6 +688,7 @@ async fn codec_task(
             CodecTaskInMsg::ReportFailure {
                 id,
                 op_meta,
+                correlation,
                 e,
                 status,
             } => {
@@ -698,6 +710,7 @@ async fn codec_task(
                     // TODO: stream handling
                     response_ids.next_id(),
                     &id,
+                    correlation,
                     status,
                     &response_origin_uri,
                     &e,
@@ -746,7 +759,7 @@ fn build_request(
                     },
                 );
             }
-            // use headers from event
+            // use headers from first event
             if headers.is_empty() {
                 if let Some(map) = request_meta.get_object("headers") {
                     for (header_name, v) in map {
@@ -905,12 +918,16 @@ async fn build_response_events<'response>(
     response_ids: &'response mut EventIdGenerator,
     event_origin_uri: &'response EventOriginUri,
     request_meta: Value<'static>,
+    correlation: Option<&Value<'static>>,
     mut response: Response,
     codec: &'response mut dyn Codec,
     codec_map: &'response mut HashMap<String, Box<dyn Codec>>,
     preprocessors: &'response mut [Box<dyn Preprocessor>],
 ) -> Result<Vec<Event>> {
-    let mut meta = Value::object_with_capacity(1);
+    let mut meta = Value::object_with_capacity(2);
+    if let Some(correlation) = correlation {
+        meta.insert("correlation", correlation.clone_static())?;
+    }
     let mut response_meta = Value::object_with_capacity(2);
 
     let numeric_status: u16 = response.status().into();
@@ -976,12 +993,13 @@ async fn build_response_events<'response>(
 fn create_error_response(
     mut error_id: EventId,
     event_id: &EventId,
+    correlation: Option<Value<'static>>,
     status: u16,
     origin_uri: &EventOriginUri,
     e: &Error,
 ) -> Event {
     let mut error_data = Object::with_capacity(2);
-    let mut meta = Object::with_capacity(2);
+    let mut meta = Object::with_capacity(2 + if correlation.is_some() { 1 } else { 0 });
     let mut response_meta = Object::with_capacity(2);
     response_meta.insert_nocheck("status".into(), Value::from(status));
     let mut headers = Object::with_capacity(2);
@@ -991,6 +1009,9 @@ fn create_error_response(
 
     meta.insert_nocheck("response".into(), Value::from(response_meta));
     meta.insert_nocheck("error".into(), Value::from(e.to_string()));
+    if let Some(correlation) = correlation {
+        meta.insert_nocheck("correlation".into(), correlation);
+    }
 
     error_data.insert_nocheck("error".into(), Value::from(e.to_string()));
     error_data.insert_nocheck("event_id".into(), Value::from(event_id.to_string()));
@@ -1070,6 +1091,7 @@ impl AtomicMaxCounter {
 mod test {
 
     use http_types::{headers::HeaderValues, StatusCode};
+    use simd_json::StaticNode;
 
     use super::*;
 
@@ -1274,6 +1296,7 @@ mod test {
             &mut response_id_gen,
             &event_origin_uri,
             metadata,
+            Some(&Value::Static(StaticNode::I64(-1))),
             Response::from(response),
             codec.as_mut(),
             &mut codec_map,
@@ -1287,6 +1310,7 @@ mod test {
             let data_parts = event.data.parts();
             assert_eq!(&mut expected_data, data_parts.0);
             let mut expected_meta: Value = json!({
+                "correlation": -1,
                 "response": {
                     "headers": {
                         "multiple": ["first", "second"],

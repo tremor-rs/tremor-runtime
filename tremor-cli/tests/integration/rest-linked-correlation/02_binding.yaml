@@ -1,0 +1,16 @@
+binding:
+  - id: server
+    links:
+      "/onramp/rest-in/{instance}/out":
+        - "/pipeline/server/{instance}/in"
+      "/pipeline/server/{instance}/out":
+        - "/onramp/rest-in/{instance}/in"
+      "/pipeline/server/{instance}/err":
+        - "/offramp/stdout-err/{instance}/in"
+      "/onramp/rest-in/{instance}/err":
+        - "/pipeline/system::passthrough/rest-err-{instance}/in"
+      "/pipeline/system::passthrough/rest-err-{instance}/out":
+        - "/offramp/stdout-err/{instance}/in"
+mapping:
+  /binding/server/01:
+    instance: "01"

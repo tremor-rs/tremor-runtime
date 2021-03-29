@@ -432,6 +432,7 @@ impl Source for Int {
             uid: self.uid,
             link: self.is_linked,
         });
+
         // TODO add override for path and method from config (defaulting to
         // all paths and methods like below if not provided)
         server.at("/").all(handle_request);
@@ -445,7 +446,10 @@ impl Source for Int {
         task::spawn::<_, Result<()>>(async move {
             info!("[Source::{}] Listening at {}", source_id, addr);
             if let Err(e) = server.listen(addr).await {
-                error!("Error while listening from the rest server: {}", e)
+                error!(
+                    "[Source::{}] Error while listening from the rest server: {}",
+                    e, source_id
+                )
             }
             warn!("[Source::{}] Server stopped", source_id);
 

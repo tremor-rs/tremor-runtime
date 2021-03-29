@@ -1,0 +1,17 @@
+define script server
+script
+  let $response = {
+    "status": 200,
+    "headers": {
+      "server": "Tremor/lol",
+      "content-type": "application/json"
+    }
+  };
+  event
+end;
+
+create script server;
+
+select event from in into server;
+select event from server into out;
+select event from server/err into err;

@@ -59,6 +59,7 @@ struct SendEventConnectionMsg {
     maybe_op_meta: Option<OpMeta>,
     ingest_ns: u64,
     data: LineValue,
+    correlation: Option<Value<'static>>,
 }
 
 /// An offramp that writes to a websocket endpoint
@@ -92,6 +93,7 @@ async fn handle_error(
     ids: &EventId,
     event_origin_uri: &EventOriginUri,
     maybe_op_meta: Option<OpMeta>,
+    correlation: Option<&Value<'static>>,
 ) -> Result<()> {
     error!("[Sink::{}] {}", sink_url, e);
     // send fail
@@ -105,7 +107,7 @@ async fn handle_error(
     reply_tx
         .send(sink::Reply::Response(
             ERR,
-            Ws::create_error_response(ids, e, event_origin_uri),
+            Ws::create_error_response(ids, e, event_origin_uri, correlation),
         ))
         .await?;
     Ok(())
@@ -158,6 +160,7 @@ async fn ws_connection_loop(
             maybe_op_meta,
             ingest_ns,
             data,
+            correlation,
         }) = rx.recv().await
         {
             match event_to_message(
@@ -191,6 +194,7 @@ async fn ws_connection_loop(
                                             &event_id,
                                             &event_origin_url,
                                             maybe_op_meta.clone(),
+                                            correlation.as_ref(),
                                         )
                                         .await?;
 
@@ -212,6 +216,7 @@ async fn ws_connection_loop(
                                     &event_id,
                                     &event_origin_url,
                                     maybe_op_meta.clone(),
+                                    correlation.as_ref(),
                                 )
                                 .await?;
                                 continue; // next message, lets hope it is better
@@ -231,6 +236,7 @@ async fn ws_connection_loop(
                         &event_id,
                         &event_origin_url,
                         maybe_op_meta,
+                        correlation.as_ref(),
                     )
                     .await?;
                     continue; // next message, lets hope it is better
@@ -249,6 +255,7 @@ async fn ws_connection_loop(
                                 &mut preprocessors,
                                 &mut ingest_ns,
                                 &event_id,
+                                correlation.as_ref(),
                                 message,
                             ) {
                                 Ok(events) => {
@@ -268,6 +275,7 @@ async fn ws_connection_loop(
                                         &event_id,
                                         &event_origin_url,
                                         None,
+                                        correlation.as_ref(),
                                     )
                                     .await?;
                                     continue;
@@ -295,6 +303,7 @@ async fn ws_connection_loop(
                                 &event_id,
                                 &event_origin_url,
                                 None,
+                                correlation.as_ref(),
                             )
                             .await?;
                             // close connection explicitly
@@ -332,6 +341,7 @@ fn event_to_message(
     }))
 }
 
+#[allow(clippy::clippy::too_many_arguments)]
 fn message_to_event(
     sink_url: &TremorUrl,
     event_origin_uri: &EventOriginUri,
@@ -339,15 +349,22 @@ fn message_to_event(
     preprocessors: &mut Preprocessors,
     ingest_ns: &mut u64,
     ids: &EventId,
+    correlation: Option<&Value<'static>>,
     message: Message,
 ) -> Result<Vec<Event>> {
-    let mut meta = Value::object_with_capacity(1);
+    let mut meta = Value::object_with_capacity(2);
+    if let Some(correlation) = correlation {
+        meta.insert("correlation", correlation.clone())?;
+    }
     let response_bytes = match message {
         Message::Text(d) => {
             meta.insert("binary", false)?;
             d.into_bytes()
         }
-        Message::Binary(d) => d,
+        Message::Binary(d) => {
+            meta.insert("binary", true)?;
+            d
+        }
         _ => {
             // we verified that we have binary or text above, all good
             let msg = "Invalid response Message";
@@ -441,13 +458,21 @@ impl Ws {
         Ok(())
     }
 
-    fn create_error_response(event_id: &EventId, e: &str, origin_uri: &EventOriginUri) -> Event {
+    fn create_error_response(
+        event_id: &EventId,
+        e: &str,
+        origin_uri: &EventOriginUri,
+        correlation: Option<&Value<'static>>,
+    ) -> Event {
         let mut error_data = tremor_script::Object::with_capacity(2);
         error_data.insert_nocheck("error".into(), Value::from(e.to_string()));
         error_data.insert_nocheck("event_id".into(), Value::from(event_id.to_string()));
 
-        let mut meta = tremor_script::Object::with_capacity(1);
+        let mut meta = tremor_script::Object::with_capacity(2);
         meta.insert_nocheck("error".into(), Value::from(e.to_string()));
+        if let Some(correlation) = correlation {
+            meta.insert_nocheck("correlation".into(), correlation.clone());
+        }
 
         Event {
             id: event_id.clone(),
@@ -502,7 +527,7 @@ impl Sink for Ws {
         // check for connects or disconnects
         // otherwise, we might lose some events to a connection, where connect is in progress
         self.handle_connection_lifecycle_events(nanotime()).await?;
-
+        let correlation = event.correlation_meta();
         let Event {
             id,
             data,
@@ -558,6 +583,7 @@ impl Sink for Ws {
                     maybe_op_meta,
                     ingest_ns,
                     data,
+                    correlation,
                 })
                 .await?;
         } else {
@@ -574,6 +600,7 @@ impl Sink for Ws {
                 &id,
                 &self.event_origin_uri,
                 maybe_op_meta,
+                correlation.as_ref(),
             )
             .await?;
         }
@@ -665,6 +692,7 @@ mod test {
             &mut preprocessors,
             &mut ingest_ns,
             &ids,
+            Some(&Value::String("snot".into())),
             message,
         )?;
         assert_eq!(2, events.len());
@@ -672,6 +700,7 @@ mod test {
         let (data, meta) = event0.data.parts();
         assert!(meta.is_object());
         assert_eq!(Some(&Value::from(false)), meta.get("binary"));
+        assert_eq!(Some(&Value::from("snot")), meta.get("correlation"));
         assert_eq!(&mut Value::from("hello"), data);
 
         Ok(())
