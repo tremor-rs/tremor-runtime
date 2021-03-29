@@ -3,7 +3,6 @@ name: Empty lines in file onramp should be ignored / handled gracefully
 asserts:
   - source: fg.err.log
     contains:
-      - EOF at character 0
+      - Eof at character 0
   - source: events.log
     equals_file: expected.json
-
