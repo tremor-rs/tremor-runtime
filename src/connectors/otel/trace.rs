@@ -27,8 +27,8 @@ use tremor_otelapis::opentelemetry::proto::{
     },
 };
 
-use simd_json::Value as SimdJsonValue;
 use tremor_value::Value;
+use value_trait::ValueAccess;
 
 #[allow(deprecated)]
 pub(crate) fn status_to_json<'event>(data: Option<Status>) -> Value<'event> {

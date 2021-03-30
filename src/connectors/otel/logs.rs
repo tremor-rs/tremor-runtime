@@ -23,8 +23,8 @@ use tremor_otelapis::opentelemetry::proto::{
     logs::v1::{InstrumentationLibraryLogs, LogRecord, ResourceLogs},
 };
 
-use simd_json::Value as SimdJsonValue;
 use tremor_value::Value;
+use value_trait::ValueAccess;
 
 fn affirm_traceflags_valid(traceflags: u32) -> Result<u32> {
     if (traceflags == 128) || (traceflags == 0) {
