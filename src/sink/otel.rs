@@ -143,9 +143,9 @@ impl Sink for OpenTelemetry {
                                         qos::close(&mut event),
                                     ]));
                                 };
-                            } else {
-                                warn!("Otel Source received metrics event when metrics support is disabled. Dropping trace");
+                                continue;
                             }
+                            warn!("Otel Source received metrics event when metrics support is disabled. Dropping trace");
                         } else if o.contains_key("logs") {
                             if self.config.logs {
                                 let request = json_otel_logs_to_pb(value)?;
@@ -160,6 +160,7 @@ impl Sink for OpenTelemetry {
                                         qos::close(&mut event),
                                     ]));
                                 }
+                                continue;
                             }
                             warn!("Otel Sink received log event when log support is disabled. Dropping trace");
                         } else if o.contains_key("trace") {
@@ -176,6 +177,7 @@ impl Sink for OpenTelemetry {
                                         qos::close(&mut event),
                                     ]));
                                 }
+                                continue;
                             }
                             warn!("Otel Sink received trace event when trace support is disabled. Dropping trace");
                         }

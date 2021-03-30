@@ -38,7 +38,7 @@ pub(crate) fn any_value_to_json<'event>(
             .map(|v| any_value_to_json(v).ok())
             .collect(),
         Some(Inner::KvlistValue(v)) => {
-            let mut record = HashMap::new();
+            let mut record = HashMap::with_capacity(v.values.len());
             for e in v.values {
                 record.insert(
                     e.key.into(),
@@ -54,6 +54,7 @@ pub(crate) fn any_value_to_json<'event>(
     };
     Ok(v)
 }
+
 pub(crate) fn any_value_to_pb(data: &Value<'_>) -> AnyValue {
     use any_value::Value as PbAnyValue;
     match data {
@@ -84,7 +85,7 @@ pub(crate) fn any_value_to_pb(data: &Value<'_>) -> AnyValue {
             AnyValue { value: Some(x) }
         }
         Value::Object(vo) => {
-            let mut kvl = Vec::new();
+            let mut kvl = Vec::with_capacity(vo.len());
             for (k, v) in vo.iter() {
                 kvl.push(KeyValue {
                     key: k.to_string(),
@@ -126,9 +127,8 @@ pub(crate) fn maybe_any_value_to_json<'event>(
     }
 }
 
-#[allow(dead_code)] // Used in tests
 pub(crate) fn string_key_value_to_json<'event>(pb: Vec<StringKeyValue>) -> Value<'event> {
-    let mut json = HashMap::new();
+    let mut json = HashMap::with_capacity(pb.len());
     for kv in pb {
         json.insert(kv.key.into(), kv.value.into());
     }
@@ -137,8 +137,8 @@ pub(crate) fn string_key_value_to_json<'event>(pb: Vec<StringKeyValue>) -> Value
 }
 
 pub(crate) fn string_key_value_to_pb(data: Option<&Value<'_>>) -> Result<Vec<StringKeyValue>> {
-    let mut pb = Vec::new();
     if let Some(Value::Object(data)) = data {
+        let mut pb = Vec::with_capacity(data.len());
         for (key, value) in data.iter() {
             let key: String = key.to_string();
             let value: String = pb::maybe_string_to_pb(Some(value))?;
@@ -151,7 +151,7 @@ pub(crate) fn string_key_value_to_pb(data: Option<&Value<'_>>) -> Result<Vec<Str
 }
 
 pub(crate) fn key_value_list_to_json<'event>(pb: Vec<KeyValue>) -> Result<Value<'event>> {
-    let mut json: HashMap<beef::Cow<str>, Value> = HashMap::new();
+    let mut json: HashMap<beef::Cow<str>, Value> = HashMap::with_capacity(pb.len());
     for kv in pb {
         if let Some(v) = maybe_any_value_to_json(kv.value)? {
             json.insert(kv.key.into(), v);
@@ -164,8 +164,8 @@ pub(crate) fn key_value_list_to_json<'event>(pb: Vec<KeyValue>) -> Result<Value<
 }
 
 pub(crate) fn maybe_key_value_list_to_pb(data: Option<&Value<'_>>) -> Result<Vec<KeyValue>> {
-    let mut pb: Vec<KeyValue> = Vec::new();
     if let Some(Value::Object(data)) = data {
+        let mut pb: Vec<KeyValue> = Vec::with_capacity(data.len());
         for (key, value) in data.iter() {
             let key = key.to_string();
             let value = Some(maybe_any_value_to_pb(Some(&value))?);
