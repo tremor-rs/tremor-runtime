@@ -27,7 +27,7 @@ use simd_json::Value as SimdJsonValue;
 use tremor_value::Value;
 
 fn affirm_traceflags_valid(traceflags: u32) -> Result<u32> {
-    if traceflags == 128 {
+    if (traceflags == 128) || (traceflags == 0) {
         Ok(traceflags)
     } else {
         Err(format!(
