@@ -15,7 +15,7 @@
 
 -module(util).
 
--export([clamp/2, mod/2, round/2]).
+-export([clamp/2, mod/2, round/2, unfloat/1]).
 
 mod(X, Y) when X > 0 -> X rem Y;
 mod(X, Y) when X < 0 -> Y + X rem Y;
@@ -27,7 +27,7 @@ round(Number, Precision) ->
 clamp(Number, Precision) when is_float(Number) ->
     list_to_float(float_to_list(round(Number,
 				      Precision + 1),
-				[{decimals, 10}]));
+				[{decimals, Precision}]));
 clamp({K, V}, Precision) -> {K, clamp(V, Precision)};
 clamp(#{<<"emit">> := V}, Precision) ->
     #{<<"emit">> => clamp(V, Precision)};
@@ -36,3 +36,15 @@ clamp(#{<<"drop">> := V}, Precision) ->
 clamp(L, Precision) when is_list(L) ->
     [clamp(E, Precision) || E <- L];
 clamp(Number, _) -> Number.
+
+%% replaces all floats with 42
+unfloat(Number) when is_float(Number) ->
+    42;
+unfloat({K, V}) -> {K, unfloat(V)};
+unfloat(#{<<"emit">> := V}) ->
+    #{<<"emit">> => unfloat(V)};
+unfloat(#{<<"drop">> := V}) ->
+    #{<<"drop">> => unfloat(V)};
+unfloat(L) when is_list(L) ->
+    [unfloat(E) || E <- L];
+unfloat(Number) -> Number. 

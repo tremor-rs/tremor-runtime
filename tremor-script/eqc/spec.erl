@@ -38,7 +38,7 @@ id() ->
 float() ->
     real().
 
-gen(#state{} = S) ->
+gen(#state{} = S) ->    
     resize(3, ?SIZED(N, gen(S, N))).
 
 gen(#state{} = S, N) ->
@@ -57,12 +57,12 @@ gen_bool(#state{} = S) ->
     resize(3, ?SIZED(N, spec_inner_bool(S, N))).
 
 spec_inner(#state{}=S, N) ->
-    frequency([
+    ?LAZY(frequency([
                {10, spec_inner_float(S, N)},
                {10, spec_inner_int(S, N)},
                {10, spec_inner_string(S, N)},
                {10, spec_inner_bool(S, N)}
-          ]).
+          ])).
 
 spec_inner_int(#state{}=S, N) ->
     ?LAZY(frequency([
@@ -77,7 +77,10 @@ spec_inner_float(#state{}=S, N) ->
               ])).
 
 spec_inner_string(#state{}=S, N) ->
-    ?LAZY(spec_bop_string(S, N)).
+    ?LAZY(frequency([
+        {5, spec_bop_string(S, N)},
+        {5, spec_string_interpolation(S, N)}
+    ])).
 
 spec_inner_bool(#state{}=S, N) ->
     ?LAZY(frequency([
@@ -86,16 +89,16 @@ spec_inner_bool(#state{}=S, N) ->
               ])).
 
 string() ->
-    utf8(10).
+    base64:encode(crypto:strong_rand_bytes(rand:uniform(10))).
 
 small_int() ->
     choose(1,100).
 
 spec_uop_float(S, N) when N =< 1 ->
-    {oneof(['+','-']), float_or_float_local(S)};
+    ?SHRINK({oneof(['+','-']), float_or_float_local(S)}, [float_or_float_local(S)]);
 
 spec_uop_float(S, N) ->
-    {oneof(['+','-']), spec_inner_float(S, N - 1)}.
+    ?SHRINK({oneof(['+','-']), spec_inner_float(S, N - 1)}, [spec_inner_float(S, N - 1)]).
 
 int_or_int_local(#state{locals = Ls}) ->
     IVs = [{1, {local, K}} || {K, int} <- maps:to_list(Ls)],
@@ -114,78 +117,97 @@ string_or_string_local(#state{locals = Ls}) ->
     frequency([{max(length(IVs), 1), string()} | IVs]).
 
 spec_uop_int(S, N) when N =< 1 ->
-    {oneof(['+','-']), int_or_int_local(S)};
+    ?SHRINK({oneof(['+','-']), int_or_int_local(S)}, [int_or_int_local(S)]);
 
 spec_uop_int(S, N) ->
-    {oneof(['+','-']), spec_inner_int(S, N - 1)}.
+    ?SHRINK({oneof(['+','-']), spec_inner_int(S, N - 1)}, [spec_inner_int(S, N - 1)]).
 
 spec_uop_bool(S, N) when N =< 1 ->
-    {'not', bool_or_bool_local(S)};
+    ?SHRINK({'not', bool_or_bool_local(S)},[bool_or_bool_local(S)]);
 
 spec_uop_bool(S, N) ->
-    {'not', spec_inner_bool(S, N - 1)}.
+    ?SHRINK({'not', spec_inner_bool(S, N - 1)}, [spec_inner_bool(S, N - 1)]).
+
+spec_string_interpolation(S, N) when N =< 1 ->
+    ?SHRINK(
+        {'#', string(), string(), oneof([float(), string(), small_int()])},
+        [string(), string(), oneof([float(), string(), small_int()])]
+    );
+
+spec_string_interpolation(S, N) ->
+    ?SHRINK(
+        {'#', string(), string(), spec_inner(S, N-1)},
+        [string(), string(), spec_inner(S, N-1)]
+    ).
 
 spec_bop_string(S, N) when N =< 1 ->
-    {oneof(['+']), string_or_string_local(S), string_or_string_local(S)};
+    ?SHRINK({oneof(['+']), string_or_string_local(S), string_or_string_local(S)},
+    [string_or_string_local(S), string_or_string_local(S)]);
 
 spec_bop_string(S, N) ->
     N1 = N div 2,
     N2 = N - N1,
-    {oneof(['+']), spec_bop_string(S, N1), spec_bop_string(S, N2)}.
+    ?SHRINK({oneof(['+']), spec_bop_string(S, N1), spec_bop_string(S, N2)},
+    [spec_bop_string(S, N1), spec_bop_string(S, N2)]).
 
 spec_bop_bool(S, N) when N =< 1 ->
-    {oneof(['and', 'or', '==', '!=']), bool_or_bool_local(S), bool_or_bool_local(S)};
+    ?SHRINK({oneof(['and', 'or', '==', '!=']), bool_or_bool_local(S), bool_or_bool_local(S)},
+    [bool_or_bool_local(S), bool_or_bool_local(S)]);
 
 spec_bop_bool(S, N) ->
     N1 = N div 2,
     N2 = N - N1,
     oneof([
-           {oneof(['and', 'or']), spec_bop_bool(S, N1), spec_bop_bool(S, N2)},
-           {oneof(['==','!=']), spec_inner(S, N1), spec_inner(S, N2)},
-           {oneof(['>=','>','<','<=']),
+           ?SHRINK({oneof(['and', 'or']), spec_bop_bool(S, N1), spec_bop_bool(S, N2)},
+           [spec_bop_bool(S, N1), spec_bop_bool(S, N2)]),
+           ?SHRINK({oneof(['==','!=']), spec_inner(S, N1), spec_inner(S, N2)},
+           [spec_inner(S, N1), spec_inner(S, N2)]),
+           ?SHRINK({oneof(['>=','>','<','<=']),
             oneof([spec_inner_int(S, N1), spec_inner_float(S, N1)]),
             oneof([spec_inner_int(S, N2), spec_inner_float(S, N2)])},
-           {oneof(['>=','>','<','<=']),
+            [oneof([spec_inner_int(S, N1), spec_inner_float(S, N1)]),
+            oneof([spec_inner_int(S, N2), spec_inner_float(S, N2)])]),
+           ?SHRINK({oneof(['>=','>','<','<=']),
             spec_inner_string(S, N1),
-            spec_inner_string(S, N2)}
+            spec_inner_string(S, N2)},[spec_inner_string(S, N1),spec_inner_string(S, N2)])
           ]).
 
 
 spec_bop_float(S, N) when N =< 1 ->
     oneof([
-           {oneof(['+','-','*','/']),
+           ?SHRINK({oneof(['+','-','*','/']),
             float_or_float_local(S),
-            float_or_float_local(S)},
-           {oneof(['+','-','*','/']),
+            float_or_float_local(S)}, [float_or_float_local(S), float_or_float_local(S)]),
+           ?SHRINK({oneof(['+','-','*','/']),
             float_or_float_local(S),
-            int_or_int_local(S)},
-           {oneof(['+','-','*','/']),
+            int_or_int_local(S)}, [float_or_float_local(S), int_or_int_local(S)]),
+           ?SHRINK({oneof(['+','-','*','/']),
             int_or_int_local(S),
-            float_or_float_local(S)}
+            float_or_float_local(S)}, [int_or_int_local(S), float_or_float_local(S)])
           ]);
 
 spec_bop_float(S, N) ->
     N1 = N div 2,
     N2 = N - N1,
     oneof([
-           {oneof(['+','-','*','/']),
+           ?SHRINK({oneof(['+','-','*','/']),
             spec_bop_float(S, N1),
-            spec_bop_float(S, N2)},
-           {oneof(['+','-','*','/']),
+            spec_bop_float(S, N2)}, [spec_bop_float(S, N1), spec_bop_float(S, N2)]),
+           ?SHRINK({oneof(['+','-','*','/']),
             spec_bop_float(S, N1),
-            spec_bop_int(S, N2)},
-           {oneof(['+','-','*','/']),
+            spec_bop_int(S, N2)}, [spec_bop_float(S, N1), spec_bop_int(S, N2)]),
+           ?SHRINK({oneof(['+','-','*','/']),
             spec_bop_int(S, N1),
-            spec_bop_float(S, N2)}
+            spec_bop_float(S, N2)}, [spec_bop_int(S, N1), spec_bop_float(S, N2)])
           ]).
 spec_bop_int(S, N) when N =< 1 ->
-    {oneof(['+','-','*','/']),
+    ?SHRINK({oneof(['+','-','*','/','band','bxor']),
      int_or_int_local(S),
-     int_or_int_local(S)};
+     int_or_int_local(S)}, [int_or_int_local(S), int_or_int_local(S)]); 
 
 spec_bop_int(S, N) ->
     N1 = N div 2,
     N2 = N - N1,
-    {oneof(['+','-','*','/']),
+    ?SHRINK({oneof(['+','-','*','/','band','bxor']),
      spec_bop_int(S, N1),
-     spec_bop_int(S, N2)}.
+     spec_bop_int(S, N2)}, [spec_bop_int(S, N1), spec_bop_int(S, N2)]).
