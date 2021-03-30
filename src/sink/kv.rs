@@ -195,7 +195,7 @@ impl Sink for Kv {
         let mut r = Vec::with_capacity(10);
         let ingest_ns = tremor_common::time::nanotime();
 
-        let cmds = event.value_iter().filter_map(|v| {
+        let mut cmds = event.value_iter().filter_map(|v| {
             if let Some(g) = v.get("get") {
                 Some(Command::Get {
                     key: g.get_bytes("key")?.to_vec(),
@@ -225,11 +225,21 @@ impl Sink for Kv {
                 None
             }
         });
-
-        for c in cmds {
+        let correlation = event.correlation_meta();
+        let first = cmds.next();
+        if let Some(c) = first {
+            for c in cmds {
+                let data = self.execute(c, codec, ingest_ns)?;
+                let e = Event {
+                    data: (data, correlation.clone().unwrap_or_default()).into(),
+                    origin_uri: Some(self.event_origin_uri.clone()),
+                    ..Event::default()
+                };
+                r.push(Reply::Response(OUT, e))
+            }
             let data = self.execute(c, codec, ingest_ns)?;
             let e = Event {
-                data: data.into(),
+                data: (data, correlation).into(),
                 origin_uri: Some(self.event_origin_uri.clone()),
                 ..Event::default()
             };
