@@ -328,10 +328,35 @@ impl<'value> Iterator for ValueIter<'value> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::errors::Result;
+    use crate::Result;
     use simd_json::OwnedValue;
     use tremor_script::{Object, ValueAndMeta};
 
+    fn merge(this: &mut ValueAndMeta<'static>, other: ValueAndMeta<'static>) -> Result<()> {
+        if let Some(ref mut a) = this.value_mut().as_array_mut() {
+            let mut e = Object::with_capacity(7);
+            // {"id":1,
+            // e.insert_nocheck("id".into(), id.into());
+            //  "data": {
+            //      "value": "snot", "meta":{}
+            //  },
+            let mut data = Object::with_capacity(2);
+            let (value, meta) = other.into_parts();
+            data.insert_nocheck("value".into(), value);
+            data.insert_nocheck("meta".into(), meta);
+            e.insert_nocheck("data".into(), Value::from(data));
+            //  "ingest_ns":1,
+            e.insert_nocheck("ingest_ns".into(), 1.into());
+            //  "kind":null,
+            // kind is always null on events
+            e.insert_nocheck("kind".into(), Value::null());
+            //  "is_batch":false
+            e.insert_nocheck("is_batch".into(), false.into());
+            // }
+            a.push(Value::from(e))
+        };
+        Ok(())
+    }
     #[test]
     fn value_iters() {
         let mut b = Event {
@@ -348,33 +373,6 @@ mod test {
             ..Event::default()
         };
 
-        let merge = move |this: &mut ValueAndMeta<'static>,
-                          other: ValueAndMeta<'static>|
-              -> crate::errors::Result<()> {
-            if let Some(ref mut a) = this.value_mut().as_array_mut() {
-                let mut e = Object::with_capacity(7);
-                // {"id":1,
-                // e.insert_nocheck("id".into(), id.into());
-                //  "data": {
-                //      "value": "snot", "meta":{}
-                //  },
-                let mut data = Object::with_capacity(2);
-                let (value, meta) = other.into_parts();
-                data.insert_nocheck("value".into(), value);
-                data.insert_nocheck("meta".into(), meta);
-                e.insert_nocheck("data".into(), Value::from(data));
-                //  "ingest_ns":1,
-                e.insert_nocheck("ingest_ns".into(), 1.into());
-                //  "kind":null,
-                // kind is always null on events
-                e.insert_nocheck("kind".into(), Value::null());
-                //  "is_batch":false
-                e.insert_nocheck("is_batch".into(), false.into());
-                // }
-                a.push(Value::from(e))
-            };
-            Ok(())
-        };
         assert!(b.data.consume(e1.data, merge).is_ok());
         assert!(b.data.consume(e2.data, merge).is_ok());
 
@@ -484,6 +482,26 @@ mod test {
         value.push(Value::from(false))?;
         e.data = (value, Value::object_with_capacity(0)).into();
         assert_eq!(false, e.is_empty());
+        Ok(())
+    }
+    #[test]
+    fn correlation_meta() -> Result<()> {
+        let mut e = Event::default();
+        assert!(e.correlation_meta().is_none());
+        let mut m = Value::object();
+        m.insert("correlation", 1).unwrap();
+        e.data = (Value::null(), m.clone()).into();
+
+        assert_eq!(e.correlation_meta().unwrap(), 1);
+        let mut e2 = Event::default();
+        e2.is_batch = true;
+        e2.data = (Value::array(), m.clone()).into();
+        e2.data.consume(e.data.clone(), merge).unwrap();
+        m.insert("correlation", 2).unwrap();
+        e.data = (Value::null(), m.clone()).into();
+        e2.data.consume(e.clone().data, merge).unwrap();
+        assert_eq!(e2.correlation_meta().unwrap(), Value::from(vec![1, 2]));
+
         Ok(())
     }
 }
