@@ -999,7 +999,7 @@ fn create_error_response(
     e: &Error,
 ) -> Event {
     let mut error_data = Object::with_capacity(2);
-    let mut meta = Object::with_capacity(2 + if correlation.is_some() { 1 } else { 0 });
+    let mut meta = Object::with_capacity(3);
     let mut response_meta = Object::with_capacity(2);
     response_meta.insert_nocheck("status".into(), Value::from(status));
     let mut headers = Object::with_capacity(2);
