@@ -403,7 +403,7 @@ checksum = "a3548b8efc9f8e8a5a0a2808c5bd8451a9031b9e5b879a79590304ae928b0a70"
 dependencies = [
  "proc-macro2",
  "quote 1.0.9",
- "syn 1.0.60",
+ "syn 1.0.64",
 ]
 
 [[package]]
@@ -3717,7 +3717,7 @@ dependencies = [
  "itertools 0.9.0",
  "proc-macro2",
  "quote 1.0.9",
- "syn 1.0.60",
+ "syn 1.0.64",
 ]
 
 [[package]]
@@ -5124,7 +5124,7 @@ dependencies = [
  "cfg-if 1.0.0",
  "proc-macro2",
  "quote 1.0.9",
- "syn 1.0.60",
+ "syn 1.0.64",
  "version_check",
 ]
 
@@ -5506,7 +5506,7 @@ checksum = "c535f53c0cfa1acace62995a8994fc9cc1f12d202420da96ff306ee24d576469"
 dependencies = [
  "futures-core",
  "pin-project-lite 0.2.6",
- "tokio 1.2.0",
+ "tokio 1.4.0",
 ]
 
 [[package]]
@@ -5654,18 +5654,18 @@ dependencies = [
  "bytes 1.0.1",
  "futures-core",
  "futures-util",
- "h2 0.3.0",
+ "h2 0.3.2",
  "http 0.2.3",
- "http-body 0.4.0",
+ "http-body 0.4.1",
  "hyper 0.14.4",
  "percent-encoding 2.1.0",
  "pin-project",
  "prost",
  "prost-derive",
- "tokio 1.2.0",
+ "tokio 1.4.0",
  "tokio-rustls",
  "tokio-stream",
- "tokio-util 0.6.3",
+ "tokio-util 0.6.5",
  "tower",
  "tower-service",
  "tracing",
@@ -5698,9 +5698,9 @@ dependencies = [
  "pin-project",
  "rand 0.8.3",
  "slab",
- "tokio 1.2.0",
+ "tokio 1.4.0",
  "tokio-stream",
- "tokio-util 0.6.3",
+ "tokio-util 0.6.5",
  "tower-layer",
  "tower-service",
  "tracing",
