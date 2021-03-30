@@ -30,8 +30,8 @@ use tremor_otelapis::opentelemetry::proto::{
     },
 };
 
-use simd_json::{Builder, Mutable, Value as SimdJsonValue};
 use tremor_value::Value;
+use value_trait::ValueAccess;
 
 pub(crate) fn int_exemplars_to_json<'event>(data: Vec<IntExemplar>) -> Value<'event> {
     let mut json: Vec<Value> = Vec::new();
@@ -585,19 +585,20 @@ pub(crate) fn instrumentation_library_metrics_to_pb(
 pub(crate) fn resource_metrics_to_json<'event>(
     request: ExportMetricsServiceRequest,
 ) -> Result<Value<'event>> {
-    let mut data = Value::object_with_capacity(0);
-    let mut metrics = Vec::new();
+    let mut metrics: Vec<Value> = Vec::with_capacity(request.resource_metrics.len());
     for metric in request.resource_metrics {
         let ilm = instrumentation_library_metrics_to_json(metric.instrumentation_library_metrics);
         // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
-        metrics.push(json!({
-            "instrumentation_library_metrics": ilm,
-            "resource": resource::resource_to_json(metric.resource)?,
-        }));
+        metrics.push(
+            json!({
+                "instrumentation_library_metrics": ilm,
+                "resource": resource::resource_to_json(metric.resource)?,
+            })
+            .into(),
+        );
     }
-    data.insert("metrics", metrics)?;
 
-    Ok(data)
+    Ok(json!({ "metrics": metrics }).into())
 }
 
 pub(crate) fn resource_metrics_to_pb(json: Option<&Value<'_>>) -> Result<Vec<ResourceMetrics>> {

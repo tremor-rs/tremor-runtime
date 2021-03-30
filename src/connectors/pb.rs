@@ -15,6 +15,7 @@
 use crate::errors::{Error, Result};
 use simd_json::StaticNode;
 use tremor_value::Value;
+use value_trait::ValueAccess;
 
 pub(crate) fn maybe_string_to_pb(data: Option<&Value<'_>>) -> Result<String> {
     if let Some(Value::String(s)) = data {
@@ -55,7 +56,6 @@ pub(crate) fn maybe_int_to_pbu64(data: Option<&Value<'_>>) -> Result<u64> {
 }
 
 pub(crate) fn maybe_int_to_pbi32(data: Option<&Value<'_>>) -> Result<i32> {
-    use simd_json::Value;
     data.map_or_else(
         || Err("Expected an json i64 to convert to pb i32".into()),
         |data| {
@@ -66,7 +66,6 @@ pub(crate) fn maybe_int_to_pbi32(data: Option<&Value<'_>>) -> Result<i32> {
 }
 
 pub(crate) fn maybe_int_to_pbi64(data: Option<&Value<'_>>) -> Result<i64> {
-    use simd_json::Value;
     data.map_or_else(
         || Err("Expected an json i64 to convert to pb i64".into()),
         |data| {
@@ -77,7 +76,6 @@ pub(crate) fn maybe_int_to_pbi64(data: Option<&Value<'_>>) -> Result<i64> {
 }
 
 pub(crate) fn maybe_int_to_pbu32(data: Option<&Value<'_>>) -> Result<u32> {
-    use simd_json::Value;
     data.map_or_else(
         || {
             Err(
@@ -93,7 +91,6 @@ pub(crate) fn maybe_int_to_pbu32(data: Option<&Value<'_>>) -> Result<u32> {
 }
 
 pub(crate) fn maybe_double_to_pb(data: Option<&Value<'_>>) -> Result<f64> {
-    use simd_json::Value;
     data.map_or_else(
         || Err("Expected a json f64 to convert to pb f64".into()),
         |data| {
@@ -104,7 +101,6 @@ pub(crate) fn maybe_double_to_pb(data: Option<&Value<'_>>) -> Result<f64> {
 }
 
 pub(crate) fn maybe_bool_to_pb(data: Option<&Value<'_>>) -> Result<bool> {
-    use simd_json::Value;
     data.map_or_else(
         || Err("Expected a json bool to convert to pb bool".into()),
         |data| {

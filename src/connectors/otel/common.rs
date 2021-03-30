@@ -20,8 +20,8 @@ use tremor_otelapis::opentelemetry::proto::common::v1::{
     any_value, AnyValue, ArrayValue, InstrumentationLibrary, KeyValue, KeyValueList, StringKeyValue,
 };
 
-use simd_json::Value as SimdJsonValue;
 use tremor_value::Value;
+use value_trait::ValueAccess;
 
 pub(crate) fn any_value_to_json<'event>(
     pb: tremor_otelapis::opentelemetry::proto::common::v1::AnyValue,

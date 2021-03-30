@@ -16,7 +16,6 @@ use crate::prelude::*;
 use crate::registry::Registry;
 use crate::tremor_const_fn;
 use crate::Object;
-use value_trait::ValueAccess;
 
 pub fn load(registry: &mut Registry) {
     registry
@@ -62,7 +61,7 @@ pub fn load(registry: &mut Registry) {
             other => Err(to_runtime_error(format!("Onlay arrays that consist of tuples (arrays of two elements) can be turned into records but this array contained: {:?}", other)))
         }).collect();
         Ok(Value::from(r?))
-        })).insert(tremor_const_fn!(record::select(_context, _input: Object, _keys: Array) {
+        })).insert(tremor_const_fn!(record|select(_context, _input: Object, _keys: Array) {
         let keys: Vec<_> = _keys.iter().filter_map(ValueAccess::as_str).collect();
         let r: Object =_input.iter().filter_map(|(k, v)| {
             let k: &str = &k;
