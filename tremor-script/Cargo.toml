@@ -74,3 +74,4 @@ tempfile = "3"
 
 [features]
 fns = []
+erlang-float-testing = []

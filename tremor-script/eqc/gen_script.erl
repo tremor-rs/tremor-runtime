@@ -24,6 +24,8 @@ gen_({'-', A, B}) ->  ["(", gen_(A), " - ", gen_(B), ")"];
 gen_({'/', A, B}) ->  ["(", gen_(A), " / ", gen_(B), ")"];
 gen_({'*', A, B}) ->  ["(", gen_(A), " * ", gen_(B), ")"];
 gen_({'%', A, B}) ->  ["(", gen_(A), " % ", gen_(B), ")"];
+gen_({'band', A, B}) ->  ["(", gen_(A), " & ", gen_(B), ")"];
+gen_({'bxor', A, B}) ->  ["(", gen_(A), " ^ ", gen_(B), ")"];
 
 gen_({'==', A, B}) ->  ["(", gen_(A), " == ", gen_(B), ")"];
 gen_({'!=', A, B}) ->  ["(", gen_(A), " != ", gen_(B), ")"];
@@ -36,6 +38,7 @@ gen_({'or', A, B}) ->  ["(", gen_(A), " or ", gen_(B), ")"];
 gen_({'not', A}) ->  ["not (", gen_(A), ")"];
 gen_({'+', A})  -> ["(+ ", gen_(A), ")"];
 gen_({'-', A}) -> ["(- ", gen_(A), ")"];
+gen_({'#',String1, String2, Sub}) -> ["(", string:trim(gen_(String1), trailing, "\""), "#{", gen(Sub), "}", string:trim(gen_(String2), leading, "\""), ")"];
 gen_({'let', Path, Expr}) -> ["let ", gen_(Path), " = ", gen_(Expr)];
 gen_({local, Path}) -> Path;
 gen_({emit, A}) -> ["emit (", gen_(A), ")"];

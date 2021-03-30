@@ -25,6 +25,14 @@ resolve(#state{locals = L}, {local, _} = K) ->
 -spec ast_eval(#vars{}, {}) -> {#vars{},
 				integer() | float() | boolean() | binary()}.
 
+ast_eval(#vars{} = S, {'#',A, B, Expr}) ->
+    {S1, Expr1} = ast_eval(S, Expr),
+    case Expr1 of
+        Expr1 when is_binary(Expr1) ->
+        {S1, <<A/binary, Expr1/binary, B/binary>>};
+        Expr1 ->
+        {S1, <<A/binary, (jsx:encode(util:unfloat(Expr1)))/binary, B/binary>>}
+    end;
 ast_eval(#vars{} = S, {'+', A, B})
     when is_binary(A) andalso is_binary(B) ->
     {S, <<A/binary, B/binary>>};
@@ -86,6 +94,14 @@ ast_eval(#vars{} = S, {'or', A, B}) ->
     {S2, A1 orelse B1};
 ast_eval(#vars{} = S, {'not', A}) ->
     {S1, A1} = ast_eval(S, A), {S1, not A1};
+ast_eval(#vars{} = S, {'band', A, B}) ->
+    {S1, A1} = ast_eval(S, A),
+    {S2, B1} = ast_eval(S1, B),
+    {S2, A1 band B1};
+ast_eval(#vars{} = S, {'bxor', A, B}) ->
+    {S1, A1} = ast_eval(S, A),
+    {S2, B1} = ast_eval(S1, B),
+    {S2, A1 bxor B1};
 ast_eval(#vars{} = S, {'+', A}) ->
     {S1, A1} = ast_eval(S, A), {S1, A1};
 ast_eval(#vars{} = S, {'-', A}) ->
