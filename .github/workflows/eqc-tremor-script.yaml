@@ -9,7 +9,7 @@ jobs:
       - uses: actions/checkout@v1.0.0
       - uses: gleam-lang/setup-erlang@v1.1.2
         with:
-          otp-version: 23.1
+          otp-version: 22.3.4.9
       - name: Install deps
         run: sudo apt-get -qy update && sudo apt-get install -y libssl-dev libssl1.1
       - name: install EQC
@@ -19,6 +19,6 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           override: true
-          profile: minimal    
+          profile: minimal
       - name: Run
         run: make -C tremor-script
