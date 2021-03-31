@@ -1,6 +1,11 @@
 ### `CNCF OpenTelemetry` utility functions
 ###
 ###
+### * [span_id](otel/span_id.md) - OpenTelemetry Span Id utilities
+### * [trace_id](otel/base64.md) - OpenTelemetry Trace Id utilities
+### * [logs](std/logs.md) - OpenTelemetry log event utilities
+### * [metrics](otel/metrics.md) - OpenTelemetry metrics event utilities
+### * [trace](otel/trace.md) - OpenTelemetry trace event utilities
 
 use cncf::otel::span_id;
 use cncf::otel::trace_id;
