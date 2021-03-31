@@ -1,4 +1,15 @@
-### `CNCF OpenTelemetry` utility functions
+### <p align=center>
+###   <img src="https://raw.githubusercontent.com/cncf/artwork/master/projects/tremor/horizontal/color/tremor-horizontal-color.png" width='35%'>
+###   <img src="https://raw.githubusercontent.com/cncf/artwork/master/projects/opentelemetry/horizontal/color/opentelemetry-horizontal-color.png" width='35%'>
+### </p>
+### <p align=center><a href="https://landscape.cncf.io/selected=tremor">CNCF Early Stage Sandbox Project</a></p>
+### <p align=center><a href="https://landscape.cncf.io/category=streaming-messaging&format=card-mode&grouping=category">CNCF Streaming &amp; Messaging</a></p>
+###
+### <hr/>
+###
+###
+### # `CNCF OpenTelemetry` utility functions
+###
 ###
 ###
 ### * [span_id](otel/span_id.md) - OpenTelemetry Span Id utilities
