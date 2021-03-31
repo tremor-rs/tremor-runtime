@@ -12,14 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::env;
 use crate::errors::{Error, Result};
 use crate::util::visit_path_str;
 use clap::ArgMatches;
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use tremor_script::path::load as load_module_path;
-use tremor_script::registry;
-use tremor_script::registry::Registry;
 use tremor_script::script::Script;
 
 fn gen_doc(
@@ -37,9 +35,7 @@ fn gen_doc(
     let mut input = crate::open_file(path, None)?;
     input.read_to_string(&mut raw)?;
 
-    let reg: Registry = registry::registry();
-
-    let mp = load_module_path();
+    let env = env::setup()?;
     let name = rel_path
         .to_string_lossy()
         .to_string()
@@ -50,7 +46,7 @@ fn gen_doc(
 
     let path = path.to_str().ok_or_else(|| Error::from("Bad path"))?;
 
-    let runnable = Script::parse(&mp, &path, raw, &reg)?;
+    let runnable = Script::parse(&env.module_path, &path, raw, &env.fun)?;
     let docs = runnable.docs();
     let consts = &docs.consts;
     let fns = &docs.fns;
