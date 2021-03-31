@@ -63,7 +63,7 @@ pub(crate) trait Onramp: Send {
 }
 
 // just a lookup
-
+#[cfg(not(tarpaulin_include))]
 pub(crate) fn lookup(
     name: &str,
     id: &TremorUrl,
