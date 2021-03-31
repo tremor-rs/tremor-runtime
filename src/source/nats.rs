@@ -73,6 +73,7 @@ impl Onramp for Nats {
 }
 
 pub struct Int {
+    uid: u64,
     onramp_id: TremorUrl,
     config: Config,
     subscription: Option<Subscription>,
@@ -97,6 +98,7 @@ impl Int {
             path: vec![],
         };
         Self {
+            uid,
             onramp_id,
             config,
             subscription: None,
@@ -158,6 +160,30 @@ impl Source for Int {
                 .await?
         } else {
             nc.subscribe(self.config.subject.as_str()).await?
+        };
+        let first_host: Vec<&str> = if let Some(host) = self.config.hosts.first() {
+            host.split(':').collect()
+        } else {
+            return Err(format!("[Source::{}] No hosts provided.", self.onramp_id).into());
+        };
+        let (host, port) = match first_host.as_slice() {
+            [host] => ((*host).to_string(), None),
+            [host, port] => ((*host).to_string(), Some(port.parse()?)),
+            _ => {
+                return Err(format!(
+                    "[Source::{}] Invalid host config: {}",
+                    self.onramp_id,
+                    first_host.join(":")
+                )
+                .into())
+            }
+        };
+        self.origin_uri = EventOriginUri {
+            uid: self.uid,
+            scheme: "tremor-nats".to_string(),
+            host,
+            port,
+            path: vec![],
         };
         self.connection = Some(nc);
         self.subscription = Some(sub);
