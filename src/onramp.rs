@@ -17,8 +17,8 @@ use crate::pipeline;
 use crate::repository::ServantId;
 use crate::source::prelude::*;
 use crate::source::{
-    blaster, cb, crononome, discord, file, kafka, metronome, nats, otel, postgres, rest, tcp, udp,
-    ws,
+    blaster, cb, crononome, discord, file, kafka, metronome, nats, otel, postgres, rest, stdin,
+    tcp, udp, ws,
 };
 use crate::url::TremorUrl;
 use async_std::task::{self, JoinHandle};
@@ -77,6 +77,7 @@ pub(crate) fn lookup(
         "postgres" => postgres::Postgres::from_config(id, config),
         "metronome" => metronome::Metronome::from_config(id, config),
         "crononome" => crononome::Crononome::from_config(id, config),
+        "stdin" => stdin::Stdin::from_config(id, config),
         "udp" => udp::Udp::from_config(id, config),
         "tcp" => tcp::Tcp::from_config(id, config),
         "rest" => rest::Rest::from_config(id, config),
