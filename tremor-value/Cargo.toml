@@ -14,6 +14,7 @@ version = "0.3.0"
 base64 = "0.13"
 beef = "0.5"
 halfbrown = { version = "0.1", features = ["fxhash"] }
+halfbrown = { version = "0.1", features = [ "fxhash" ] }
 serde = "1.0"
 simd-json = "0.4"
 simd-json-derive = "0.2"
