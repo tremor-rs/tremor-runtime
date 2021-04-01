@@ -4,6 +4,7 @@
 
 ### New features
 
+* CNCF OpenTelemetry source, sink and `cncf::otel` tremor-script library adds log, trace, metrics OpenTelemetry support
 * Removed the vsn.sh script which checks if the lockfile is up to date and replaces it with the --locked flag [#798](https://github.com/tremor-rs/tremor-runtime/pull/798)
 * Allow using '_' as seperators in numeric literals [#645](https://github.com/tremor-rs/tremor-runtime/issues/645)
 * Refactor kafka metadata variables to be under a single record `$kafka`.
@@ -31,6 +32,7 @@
 * Update to simd-json 0.4
 * Add tests covering basic operations and string interpolation for tremor-script[#721](https://github.com/tremor-rs/tremor-runtime/issues/721) 
 * Add offramp and onramp for [NATS.io](https://nats.io/).
+* Add a stdin onramp.
 
 ### Fixes
 
