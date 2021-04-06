@@ -1,6 +1,6 @@
 ---
 name: tremor
-version: "0.10"
+version: "0.11"
 author: The Tremor Team
 about: Tremor cli - Command Line Interface
 settings:
