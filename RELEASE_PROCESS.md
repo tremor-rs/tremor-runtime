@@ -1,5 +1,8 @@
 # Release Process
 
+
+## preperation
+
 * Update version in all Cargo.toml files in the repository
   - ./Cargo.toml
   - ./tremor-api/Cargo.toml
@@ -14,6 +17,11 @@
 * Update CHANGELOG.md
   - Change unreleased section to have the new version for the upcoming release
 * Update tests in tremor-cli/tests/ that match against the current version number
+  - ./tremor-cli/tests/api/command.yml
+  - ./tremor-cli/tests/api-cli/command.yml
+
+## release
+
 * Create a PR with those changes
 * Pull the PR once accepted and merged
 * `git tag -a -m"Release v<MAJOR>.<MINOR>.<BUGFIX>" v<MAJOR>.<MINOR>.<BUGFIX> <COMMIT>`
@@ -22,6 +30,9 @@
   - This will trigger the docker image build jobs
   - Add a catchy title
   - Add the relevant changelog entries for this release in the description
+
+## follow up
+
 * Release crates to crates.io:
   - Make sure you are an owner of the crates to publish
   - Execute `cargo publish` in these folders in the following order:
