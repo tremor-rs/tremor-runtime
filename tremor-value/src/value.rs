@@ -625,54 +625,115 @@ mod test {
     }
 
     #[test]
-    fn nuber_ord_u64_i64() {
+    fn nuber_ord_u64() {
         use std::cmp::Ordering;
+        assert_eq!(Value::from(1u64).cmp(&Value::from(1u64)), Ordering::Equal);
         assert_eq!(Value::from(1u64).cmp(&Value::from(1i64)), Ordering::Equal);
-        assert_eq!(Value::from(1i64).cmp(&Value::from(1u64)), Ordering::Equal);
+        assert_eq!(Value::from(1u64).cmp(&Value::from(1f64)), Ordering::Equal);
 
+        assert_eq!(Value::from(2u64).cmp(&Value::from(1u64)), Ordering::Greater);
         assert_eq!(Value::from(2u64).cmp(&Value::from(1i64)), Ordering::Greater);
-        assert_eq!(Value::from(2i64).cmp(&Value::from(1u64)), Ordering::Greater);
+        assert_eq!(Value::from(2u64).cmp(&Value::from(1f64)), Ordering::Greater);
         assert_eq!(
             Value::from(2u64).cmp(&Value::from(-1i64)),
             Ordering::Greater
         );
-
-        assert_eq!(Value::from(0u64).cmp(&Value::from(1i64)), Ordering::Less);
-        assert_eq!(Value::from(-1i64).cmp(&Value::from(1u64)), Ordering::Less);
-    }
-
-    #[test]
-    fn nuber_ord_u64_f64() {
-        use std::cmp::Ordering;
-        assert_eq!(Value::from(1u64).cmp(&Value::from(1f64)), Ordering::Equal);
-        assert_eq!(Value::from(1f64).cmp(&Value::from(1u64)), Ordering::Equal);
-
-        assert_eq!(Value::from(2u64).cmp(&Value::from(1f64)), Ordering::Greater);
-        assert_eq!(Value::from(2f64).cmp(&Value::from(1u64)), Ordering::Greater);
         assert_eq!(
             Value::from(2u64).cmp(&Value::from(-1f64)),
             Ordering::Greater
         );
-
+        assert_eq!(Value::from(0u64).cmp(&Value::from(1u64)), Ordering::Less);
+        assert_eq!(Value::from(0u64).cmp(&Value::from(1i64)), Ordering::Less);
         assert_eq!(Value::from(0u64).cmp(&Value::from(1f64)), Ordering::Less);
-        assert_eq!(Value::from(-1f64).cmp(&Value::from(1u64)), Ordering::Less);
     }
 
     #[test]
-    fn nuber_ord_f64_u64() {
+    fn nuber_ord_i64() {
         use std::cmp::Ordering;
-        assert_eq!(Value::from(1f64).cmp(&Value::from(1i64)), Ordering::Equal);
+        assert_eq!(Value::from(1i64).cmp(&Value::from(1u64)), Ordering::Equal);
+        assert_eq!(Value::from(1i64).cmp(&Value::from(1i64)), Ordering::Equal);
         assert_eq!(Value::from(1i64).cmp(&Value::from(1f64)), Ordering::Equal);
 
-        assert_eq!(Value::from(2f64).cmp(&Value::from(1i64)), Ordering::Greater);
+        assert_eq!(Value::from(2i64).cmp(&Value::from(1u64)), Ordering::Greater);
+        assert_eq!(Value::from(2i64).cmp(&Value::from(1i64)), Ordering::Greater);
         assert_eq!(Value::from(2i64).cmp(&Value::from(1f64)), Ordering::Greater);
+        assert_eq!(
+            Value::from(2i64).cmp(&Value::from(-1i64)),
+            Ordering::Greater
+        );
+        assert_eq!(
+            Value::from(2i64).cmp(&Value::from(-1f64)),
+            Ordering::Greater
+        );
+        assert_eq!(
+            Value::from(2i64).cmp(&Value::from(-1e100f64)),
+            Ordering::Greater
+        );
+        assert_eq!(Value::from(0i64).cmp(&Value::from(1u64)), Ordering::Less);
+        assert_eq!(Value::from(0i64).cmp(&Value::from(1i64)), Ordering::Less);
+        assert_eq!(Value::from(0i64).cmp(&Value::from(1f64)), Ordering::Less);
+        assert_eq!(
+            Value::from(0i64).cmp(&Value::from(1e100f64)),
+            Ordering::Less
+        );
+
+        assert_eq!(Value::from(-1i64).cmp(&Value::from(1u64)), Ordering::Less);
+        assert_eq!(Value::from(-1i64).cmp(&Value::from(1i64)), Ordering::Less);
+        assert_eq!(Value::from(-1i64).cmp(&Value::from(1f64)), Ordering::Less);
+    }
+
+    #[test]
+    fn nuber_ord_f64() {
+        use std::cmp::Ordering;
+        assert_eq!(Value::from(1f64).cmp(&Value::from(1u64)), Ordering::Equal);
+        assert_eq!(Value::from(1f64).cmp(&Value::from(1i64)), Ordering::Equal);
+        assert_eq!(Value::from(1f64).cmp(&Value::from(1f64)), Ordering::Equal);
+
+        assert_eq!(Value::from(2f64).cmp(&Value::from(1u64)), Ordering::Greater);
+        assert_eq!(Value::from(2f64).cmp(&Value::from(1i64)), Ordering::Greater);
+        assert_eq!(Value::from(2f64).cmp(&Value::from(1f64)), Ordering::Greater);
+
+        assert_eq!(
+            Value::from(2e100f64).cmp(&Value::from(1u64)),
+            Ordering::Greater
+        );
+        assert_eq!(
+            Value::from(2e100f64).cmp(&Value::from(1i64)),
+            Ordering::Greater
+        );
+        assert_eq!(
+            Value::from(2e100f64).cmp(&Value::from(1f64)),
+            Ordering::Greater
+        );
+
         assert_eq!(
             Value::from(2f64).cmp(&Value::from(-1i64)),
             Ordering::Greater
         );
-
+        assert_eq!(
+            Value::from(2f64).cmp(&Value::from(-1f64)),
+            Ordering::Greater
+        );
+        assert_eq!(Value::from(0f64).cmp(&Value::from(1u64)), Ordering::Less);
         assert_eq!(Value::from(0f64).cmp(&Value::from(1i64)), Ordering::Less);
-        assert_eq!(Value::from(-1i64).cmp(&Value::from(1f64)), Ordering::Less);
+        assert_eq!(Value::from(0f64).cmp(&Value::from(1f64)), Ordering::Less);
+
+        assert_eq!(Value::from(-1f64).cmp(&Value::from(1u64)), Ordering::Less);
+        assert_eq!(Value::from(-1f64).cmp(&Value::from(1i64)), Ordering::Less);
+        assert_eq!(Value::from(-1f64).cmp(&Value::from(1f64)), Ordering::Less);
+
+        assert_eq!(
+            Value::from(-1e100f64).cmp(&Value::from(1u64)),
+            Ordering::Less
+        );
+        assert_eq!(
+            Value::from(-1e100f64).cmp(&Value::from(1i64)),
+            Ordering::Less
+        );
+        assert_eq!(
+            Value::from(-1e100f64).cmp(&Value::from(1f64)),
+            Ordering::Less
+        );
     }
 
     #[test]
