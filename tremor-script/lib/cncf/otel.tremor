@@ -1,6 +1,18 @@
-### `CNCF OpenTelemetry` utility functions
+### <p align=center>
+###   <img src="https://raw.githubusercontent.com/cncf/artwork/master/projects/opentelemetry/horizontal/color/opentelemetry-horizontal-color.png" width='35%'>
+### </p>
+###
+### <hr/>
+###
+### # `CNCF OpenTelemetry` utility functions
 ###
 ###
+###
+### * [span_id](otel/span_id.md) - OpenTelemetry Span Id utilities
+### * [trace_id](otel/trace_id.md) - OpenTelemetry Trace Id utilities
+### * [logs](otel/logs.md) - OpenTelemetry log event utilities
+### * [metrics](otel/metrics.md) - OpenTelemetry metrics event utilities
+### * [trace](otel/trace.md) - OpenTelemetry trace event utilities
 
 use cncf::otel::span_id;
 use cncf::otel::trace_id;
