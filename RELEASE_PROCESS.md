@@ -59,9 +59,18 @@
     docker push tremorproject/tremor:latest
   ```
 
-* If syntax changed: Update the highlighers:
+* If syntax changed: Update the highlighters:
   - https://github.com/tremor-rs/tremor-vim
   - https://github.com/tremor-rs/highlightjs-tremor
   - https://github.com/tremor-rs/tremor-mkdocs-lexer
   - https://github.com/tremor-rs/tremor-vscode
 * Go to bed.
+
+## Announcements
+
+Any or all of the following (whichever makes sense)
+
+* Tremor Discord (announcements channel)
+* Tremor Twitter
+* CNCF Slack Tremor channel
+* Tremor Blog
