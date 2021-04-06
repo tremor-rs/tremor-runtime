@@ -645,6 +645,10 @@ mod test {
         assert_eq!(Value::from(0u64).cmp(&Value::from(1u64)), Ordering::Less);
         assert_eq!(Value::from(0u64).cmp(&Value::from(1i64)), Ordering::Less);
         assert_eq!(Value::from(0u64).cmp(&Value::from(1f64)), Ordering::Less);
+        assert_eq!(
+            Value::from(1u64).cmp(&Value::from(1e100f64)),
+            Ordering::Less
+        );
     }
 
     #[test]
