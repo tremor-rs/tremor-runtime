@@ -25,13 +25,25 @@ resolve(#state{locals = L}, {local, _} = K) ->
 -spec ast_eval(#vars{}, {}) -> {#vars{},
 				integer() | float() | boolean() | binary()}.
 
-ast_eval(#vars{} = S, {'#',A, B, Expr}) ->
+ast_eval(#vars{} = S, {record, Expr}) ->
+    Expr1 = [{ast_eval(S, Key), ast_eval(S, Value)}
+	     || {Key, Value} <- maps:to_list(Expr)],
+    Expr2 = [{Key, Value}
+	     || {{_, Key}, {_, Value}} <- Expr1],
+    {S, maps:from_list(Expr2)};
+ast_eval(#vars{} = S, {array, Expr}) ->
+    Expr1 = [ast_eval(S, X) || X <- Expr],
+    Expr2 = [Elem || {_, Elem} <- Expr1],
+    {S, Expr2};
+ast_eval(#vars{} = S, {'#', A, B, Expr}) ->
     {S1, Expr1} = ast_eval(S, Expr),
     case Expr1 of
-        Expr1 when is_binary(Expr1) ->
-        {S1, <<A/binary, Expr1/binary, B/binary>>};
-        Expr1 ->
-        {S1, <<A/binary, (jsx:encode(util:unfloat(Expr1)))/binary, B/binary>>}
+      Expr1 when is_binary(Expr1) ->
+	  {S1, <<A/binary, Expr1/binary, B/binary>>};
+      Expr1 ->
+	  {S1,
+	   <<A/binary, (jsx:encode(util:unfloat(Expr1)))/binary,
+	     B/binary>>}
     end;
 ast_eval(#vars{} = S, {'+', A, B})
     when is_binary(A) andalso is_binary(B) ->

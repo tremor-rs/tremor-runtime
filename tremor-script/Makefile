@@ -11,3 +11,6 @@ clean:
 	make -C c_src clean
 	rm -rf _build
 	rm -r priv 
+
+open-shell:
+	rebar3 as eqc shell
