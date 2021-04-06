@@ -17,8 +17,9 @@
 * Update CHANGELOG.md
   - Change unreleased section to have the new version for the upcoming release
 * Update tests in tremor-cli/tests/ that match against the current version number
-  - ./tremor-cli/tests/api/command.yml
-  - ./tremor-cli/tests/api-cli/command.yml
+  - ./tremor-cli/tests/api/command.yml (the version test)
+  - ./tremor-cli/tests/api-cli/command.yml (the version test)
+* run `cargo test --all` (this will ensure the Cargo.lock is up to date)
 
 ## release
 
