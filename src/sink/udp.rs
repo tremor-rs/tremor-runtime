@@ -62,7 +62,7 @@ impl offramp::Impl for Udp {
                 postprocessors: vec![],
             }))
         } else {
-            Err("Blackhole offramp requires a config".into())
+            Err("UDP offramp requires a config".into())
         }
     }
 }
