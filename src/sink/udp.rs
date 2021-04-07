@@ -42,7 +42,14 @@ pub struct Config {
     pub port: u16,
     pub dst_host: String,
     pub dst_port: u16,
+    #[serde(default = "t")]
+    pub bound: bool,
 }
+
+fn t() -> bool {
+    true
+}
+
 impl ConfigImpl for Config {}
 
 impl offramp::Impl for Udp {
@@ -78,7 +85,17 @@ impl Sink for Udp {
                 let raw = codec.encode(value)?;
                 for processed in postprocess(&mut self.postprocessors, ingest_ns, raw)? {
                     //TODO: Error handling
-                    socket.send(&processed).await?;
+                    if self.config.bound {
+                        socket.send(&processed).await?;
+                    } else {
+                        // reaquire the destination to handle DNS changes or multi IP dns entries
+                        socket
+                            .send_to(
+                                &processed,
+                                (self.config.dst_host.as_str(), self.config.dst_port),
+                            )
+                            .await?;
+                    }
                 }
             }
         } else {
@@ -121,9 +138,11 @@ impl Sink for Udp {
     async fn on_signal(&mut self, signal: Event) -> ResultVec {
         if self.socket.is_none() {
             let socket = UdpSocket::bind((self.config.host.as_str(), self.config.port)).await?;
-            socket
-                .connect((self.config.dst_host.as_str(), self.config.dst_port))
-                .await?;
+            if self.config.bound {
+                socket
+                    .connect((self.config.dst_host.as_str(), self.config.dst_port))
+                    .await?;
+            }
             self.socket = Some(socket);
             Ok(Some(vec![sink::Reply::Insight(Event::cb_restore(
                 signal.ingest_ns,
