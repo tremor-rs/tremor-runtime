@@ -34,7 +34,8 @@
 * Add tests covering basic operations and string interpolation for tremor-script[#721](https://github.com/tremor-rs/tremor-runtime/issues/721) 
 * Add offramp and onramp for [NATS.io](https://nats.io/).
 * Add a stdin onramp.
-* Add tests covering arrays and records for tremor-script[#721]
+* Add tests covering arrays and records for tremor-script[#721](https://github.com/tremor-rs/tremor-runtime/issues/721)
+* Support for non caching UDP sink [#900](https://github.com/tremor-rs/tremor-runtime/issues/900)
 
 ### Fixes
 
