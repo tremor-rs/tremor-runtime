@@ -56,6 +56,7 @@
 * Fix kafka consumer offset lag of at least `1` continually by using offset + 1 when committing.
 * Fix issue where binary not (`!`) was not getting lexed correctly [#833](https://github.com/tremor-rs/tremor-runtime/issues/833)
 * Fix missing ack/fail insight events with offramps that dont support guaranteed delivery (e.g. udp, stdout) [#870](https://github.com/tremor-rs/tremor-runtime/pull/870)
+* Fix wrong error message for misconfigured UDP sinks
 
 ## 0.10.2
 
