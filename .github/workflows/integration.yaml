@@ -29,6 +29,7 @@ jobs:
         with:
           override: true
           profile: minimal
+      - uses: Swatinem/rust-cache@v1
       - name: Build test runner
         run: cargo build -p tremor-cli
       - name: Run Integration Tests

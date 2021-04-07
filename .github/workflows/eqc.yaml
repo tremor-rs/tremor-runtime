@@ -7,6 +7,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v1.0.0
+      - uses: actions-rs/toolchain@v1
+        with:
+          override: true
+          profile: minimal
+      - uses: Swatinem/rust-cache@v1
       - uses: gleam-lang/setup-erlang@v1.1.2
         with:
           otp-version: 23.1
@@ -20,10 +25,6 @@ jobs:
         run: erl -noshell -eval 'eqc:registration("${{secrets.EQC_LICENSE}}")' -eval "eqc:start()" -eval "init:stop()"
       - name: generate yaml
         run: ~/go/bin/yaml2json < static/openapi.yaml > static/openapi.json
-      - uses: actions-rs/toolchain@v1
-        with:
-          override: true
-          profile: minimal
       - name: Build
         run: cargo build --all
       - name: Run eqc tests

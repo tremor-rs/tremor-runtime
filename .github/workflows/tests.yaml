@@ -17,6 +17,7 @@ jobs:
         with:
           override: true
           profile: minimal
+      - uses: Swatinem/rust-cache@v1
       - name: Run tests and validate lockfile
         env:
           PROPTEST_CASES: 2500
@@ -31,6 +32,7 @@ jobs:
         with:
           override: true
           profile: minimal
+      - uses: Swatinem/rust-cache@v1
       - name: Run cargo-tarpaulin
         uses: actions-rs/tarpaulin@v0.1
         env:
@@ -38,12 +40,6 @@ jobs:
           RUSTFLAGS: -C target-cpu=native
         with:
           version: "0.16.0"
-          # excluded files:
-          # - target: those are generated files
-          # - tremor-cli: cli logic, excluded since it's covered over integration tests
-          # - tremor-api: API logic, excluded since it's covered over integration tests and property based tests
-          # - deprecated: those files are deprecated
-          # - **/errors.rs: error-chain boilerplate
           args: " --exclude-files target* tremor-cli tremor-api deprecated **/errors.rs --out Lcov --all"
       - name: Coveralls
         uses: coverallsapp/github-action@master
