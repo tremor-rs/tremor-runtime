@@ -136,12 +136,12 @@ impl Sink for OpenTelemetry {
                                     error!("Failed to dispatch otel/gRPC metrics message: {}", e);
                                     self.is_down = true;
                                     if event.transactional {
-                                        return Ok(Some(vec![qos::close(&mut event)]));
+                                        return Ok(Some(vec![
+                                            qos::fail(&mut event.clone()),
+                                            qos::close(&mut event),
+                                        ]));
                                     }
-                                    return Ok(Some(vec![
-                                        qos::fail(&mut event.clone()),
-                                        qos::close(&mut event),
-                                    ]));
+                                    return Ok(Some(vec![qos::close(&mut event)]));
                                 };
                                 continue;
                             }
@@ -153,12 +153,12 @@ impl Sink for OpenTelemetry {
                                     error!("Failed to dispatch otel/gRPC logs message: {}", e);
                                     self.is_down = true;
                                     if event.transactional {
-                                        return Ok(Some(vec![qos::close(&mut event)]));
+                                        return Ok(Some(vec![
+                                            qos::fail(&mut event.clone()),
+                                            qos::close(&mut event),
+                                        ]));
                                     }
-                                    return Ok(Some(vec![
-                                        qos::fail(&mut event.clone()),
-                                        qos::close(&mut event),
-                                    ]));
+                                    return Ok(Some(vec![qos::close(&mut event)]));
                                 }
                                 continue;
                             }
@@ -170,12 +170,12 @@ impl Sink for OpenTelemetry {
                                     error!("Failed to dispatch otel/gRPC logs message: {}", e);
                                     self.is_down = true;
                                     if event.transactional {
-                                        return Ok(Some(vec![qos::close(&mut event)]));
+                                        return Ok(Some(vec![
+                                            qos::fail(&mut event.clone()),
+                                            qos::close(&mut event),
+                                        ]));
                                     }
-                                    return Ok(Some(vec![
-                                        qos::fail(&mut event.clone()),
-                                        qos::close(&mut event),
-                                    ]));
+                                    return Ok(Some(vec![qos::close(&mut event)]));
                                 }
                                 continue;
                             }
@@ -189,7 +189,11 @@ impl Sink for OpenTelemetry {
             }
 
             self.is_down = false;
-            return Ok(Some(vec![qos::ack(&mut event)]));
+            return Ok(Some(if event.transactional {
+                vec![qos::ack(&mut event)]
+            } else {
+                vec![]
+            }));
         }
 
         Ok(Some(vec![]))
