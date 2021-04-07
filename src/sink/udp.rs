@@ -88,6 +88,7 @@ impl Sink for Udp {
                     if self.config.bound {
                         socket.send(&processed).await?;
                     } else {
+                        // reaquire the destination to handle DNS changes or multi IP dns entries
                         socket
                             .send_to(
                                 &processed,
