@@ -7,6 +7,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v1.0.0
+      - uses: actions-rs/toolchain@v1
+        with:
+          override: true
+          profile: minimal
+      - uses: Swatinem/rust-cache@v1
       - uses: gleam-lang/setup-erlang@v1.1.2
         with:
           otp-version: 22.3.4.9
@@ -16,9 +21,5 @@ jobs:
         run: curl -O http://quviq-licencer.com/downloads/eqcR21.zip && unzip eqcR21.zip && cd Quviq* && sudo erl -noshell -eval 'eqc_install:install()' -eval 'init:stop()'
       - name: Activate EQC
         run: erl -noshell -eval 'eqc:registration("${{secrets.EQC_LICENSE}}")' -eval "eqc:start()" -eval "init:stop()"
-      - uses: actions-rs/toolchain@v1
-        with:
-          override: true
-          profile: minimal
       - name: Run
         run: make -C tremor-script
