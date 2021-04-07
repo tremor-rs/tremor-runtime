@@ -20,7 +20,7 @@ use tremor_script::prelude::*;
 pub struct Config {
     /// Name of the event history ( path ) to track
     pub op: String,
-    /// Name of the fiuled to store data in
+    /// Name of the field to store data in
     pub name: String,
 }
 
