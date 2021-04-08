@@ -63,6 +63,9 @@
     docker push tremorproject/tremor:latest
   ```
 
+* on tremor-www-docs and update the tremor version in `Makefile`
+* create a corresponding release on tremor-www-docs
+
 * If syntax changed: Update the highlighters:
   - https://github.com/tremor-rs/tremor-vim
   - https://github.com/tremor-rs/highlightjs-tremor
