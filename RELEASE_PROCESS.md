@@ -20,10 +20,14 @@
   - ./tremor-cli/tests/api/command.yml (the version test)
   - ./tremor-cli/tests/api-cli/command.yml (the version test)
 * run `cargo test --all` (this will ensure the Cargo.lock is up to date)
+* enter the sub crate directories and run `cargo test` in each one (this is important to make sure they compile stand alone!)
+  - `./tremor-common`
+  - `./tremor-value`
+  - `./tremor-script`
+* Create a PR with those changes
 
 ## release
 
-* Create a PR with those changes
 * Pull the PR once accepted and merged
 * `git tag -a -m"Release v<MAJOR>.<MINOR>.<BUGFIX>" v<MAJOR>.<MINOR>.<BUGFIX> <COMMIT>`
 * `git push origin --tag`
