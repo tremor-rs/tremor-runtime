@@ -17,7 +17,7 @@ jobs:
         include:
           - os: "macOS-latest"
             exclude_tests: "--excludes docker"
-            rust_flags: "-C target-feature=+avx,+sse4.2"
+            rust_flags: "-C target-feature=+sse4.2"
           - os: "ubuntu-latest"
             exclude_tests: ""
             rust_flags: "-C target-feature=+avx,+avx2,+sse4.2"
