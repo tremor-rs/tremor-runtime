@@ -39,24 +39,21 @@ jobs:
         env:
           RUSTFLAGS: "${{ matrix.rust_flags }}"
       - name: Run Integration Tests
-        run: cargo run -p tremor-cli -- test integration tremor-cli/tests ${{ matrix.exclude_tests }}
+        # TREMOR_PATH can't be in env since `GITHUB_WORKSPACE` seems not to be set 
+        run: TREMOR_PATH="$GITHUB_WORKSPACE/tremor-script/lib" cargo run -p tremor-cli -- test integration tremor-cli/tests ${{ matrix.exclude_tests }}
         env:
-          TREMOR_PATH: "$GITHUB_WORKSPACE/tremor-script/lib"
           RUSTFLAGS: "${{ matrix.rust_flags }}"
       - name: Run API Tests
-        run: cargo run -p tremor-cli -- test api tremor-cli/tests ${{ matrix.exclude_tests }}
+        run: TREMOR_PATH="$GITHUB_WORKSPACE/tremor-script/lib" cargo run -p tremor-cli -- test api tremor-cli/tests ${{ matrix.exclude_tests }}
         env:
-          TREMOR_PATH: "$GITHUB_WORKSPACE/tremor-script/lib"
           RUSTFLAGS: "${{ matrix.rust_flags }}"
       - name: Run Unit Tests
-        run: cargo run -p tremor-cli -- test unit tremor-cli/tests ${{ matrix.exclude_tests }}
+        run: TREMOR_PATH="$GITHUB_WORKSPACE/tremor-script/lib"  cargo run -p tremor-cli -- test unit tremor-cli/tests ${{ matrix.exclude_tests }}
         env:
-          TREMOR_PATH: "$GITHUB_WORKSPACE/tremor-script/lib"
           RUSTFLAGS: "${{ matrix.rust_flags }}"
       - name: Run Command Tests
-        run: cargo run -p tremor-cli -- test command tremor-cli/tests ${{ matrix.exclude_tests }}
+        run: TREMOR_PATH="$GITHUB_WORKSPACE/tremor-script/lib"  cargo run -p tremor-cli -- test command tremor-cli/tests ${{ matrix.exclude_tests }}
         env:
-          TREMOR_PATH: "$GITHUB_WORKSPACE/tremor-script/lib"
           RUSTFLAGS: "${{ matrix.rust_flags }}"
       - name: Upload error logs
         uses: actions/upload-artifact@v2
