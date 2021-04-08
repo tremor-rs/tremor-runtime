@@ -17,8 +17,10 @@ jobs:
         include:
           - os: "macOS-latest"
             exclude_tests: "--excludes docker"
+            rust_flags: "-C target-feature=+avx,+sse4.2"
           - os: "ubuntu-latest"
             exclude_tests: ""
+            rust_flags: "-C target-feature=+avx,+avx2,+sse4.2"
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v1
@@ -33,13 +35,25 @@ jobs:
       - name: Build test runner
         run: cargo build -p tremor-cli
       - name: Run Integration Tests
-        run: TREMOR_PATH="$GITHUB_WORKSPACE/tremor-script/lib" cargo run -p tremor-cli -- test integration tremor-cli/tests ${{ matrix.exclude_tests }}
+        run: cargo run -p tremor-cli -- test integration tremor-cli/tests ${{ matrix.exclude_tests }}
+        env:
+          TREMOR_PATH: "$GITHUB_WORKSPACE/tremor-script/lib"
+          RUSTFLAGS: "${{ matrix.rust_flags }}"
       - name: Run API Tests
-        run: TREMOR_PATH="$GITHUB_WORKSPACE/tremor-script/lib" cargo run -p tremor-cli -- test api tremor-cli/tests ${{ matrix.exclude_tests }}
+        run: cargo run -p tremor-cli -- test api tremor-cli/tests ${{ matrix.exclude_tests }}
+        env:
+          TREMOR_PATH: "$GITHUB_WORKSPACE/tremor-script/lib"
+          RUSTFLAGS: "${{ matrix.rust_flags }}"
       - name: Run Unit Tests
-        run: TREMOR_PATH="$GITHUB_WORKSPACE/tremor-script/lib" cargo run -p tremor-cli -- test unit tremor-cli/tests ${{ matrix.exclude_tests }}
+        run: cargo run -p tremor-cli -- test unit tremor-cli/tests ${{ matrix.exclude_tests }}
+        env:
+          TREMOR_PATH: "$GITHUB_WORKSPACE/tremor-script/lib"
+          RUSTFLAGS: "${{ matrix.rust_flags }}"
       - name: Run Command Tests
-        run: TREMOR_PATH="$GITHUB_WORKSPACE/tremor-script/lib" cargo run -p tremor-cli -- test command tremor-cli/tests ${{ matrix.exclude_tests }}
+        run: cargo run -p tremor-cli -- test command tremor-cli/tests ${{ matrix.exclude_tests }}
+        env:
+          TREMOR_PATH: "$GITHUB_WORKSPACE/tremor-script/lib"
+          RUSTFLAGS: "${{ matrix.rust_flags }}"
       - name: Upload error logs
         uses: actions/upload-artifact@v2
         if: failure()
