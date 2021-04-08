@@ -10,4 +10,4 @@ version = "0.11.0"
 
 [dependencies]
 async-std = "1"
-rand = "0.8"
+rand = { version = "0.8", features = ["small_rng"] }
