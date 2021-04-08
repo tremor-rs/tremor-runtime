@@ -79,7 +79,7 @@ if [ "$BUILD_MODE" == "release" ]; then
   RUSTC_TARGET_FEATURES+=("+avx" "+avx2" "+sse4.2")
 else
   echo "Ensuring simd-json compilation (optimizing for the current CPU)..."
-  CUSTOM_RUSTFLAGS+=("-C" "target-cpu=native")
+  CUSTOM_RUSTFLAGS+=("-C" "target-feature=+avx,+avx2,+sse4.2")
 fi
 
 if [[ "$TARGET" == *"alpine-linux-musl"* ]]; then
