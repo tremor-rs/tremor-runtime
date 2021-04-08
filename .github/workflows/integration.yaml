@@ -17,6 +17,8 @@ jobs:
         include:
           - os: "macOS-latest"
             exclude_tests: "--excludes docker"
+            # GH OS X runners only support very very very very old CPUs so we can't use anything
+            # fancy here and got to fall back to the minimal SSE4.2 requirement for simd_json
             rust_flags: "-C target-feature=+sse4.2"
           - os: "ubuntu-latest"
             exclude_tests: ""
