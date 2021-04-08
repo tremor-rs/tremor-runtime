@@ -34,6 +34,8 @@ jobs:
       - uses: Swatinem/rust-cache@v1
       - name: Build test runner
         run: cargo build -p tremor-cli
+        env:
+          RUSTFLAGS: "${{ matrix.rust_flags }}"
       - name: Run Integration Tests
         run: cargo run -p tremor-cli -- test integration tremor-cli/tests ${{ matrix.exclude_tests }}
         env:
