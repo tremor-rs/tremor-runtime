@@ -1,9 +1,9 @@
 [build]
-rustflags = ["-C", "target-cpu=native"]
+rustflags = ["-C", "target-feature=+avx,+avx2,+sse4.2"]
 
 [target.x86_64-unknown-linux-musl]
 rustflags = [
-        "-C", "target-cpu=native",
+        "-C", "target-feature=+avx,+avx2,+sse4.2",
         "-C", "link-arg=-lc",
         "-C", "link-arg=-lstdc++",
         "-C", "link-arg=-lgcc",
