@@ -213,7 +213,7 @@ impl ConsumerContext for LoggingConsumerContext {
         match result {
             Ok(_) => {
                 if offsets.count() > 0 {
-                    info!(
+                    debug!(
                         "[Source::{}] Offsets committed successfully",
                         self.onramp_id
                     );
