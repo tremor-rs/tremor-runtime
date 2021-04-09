@@ -154,6 +154,7 @@ test_cases!(
     // TODO
     // const_in_const_lookup,
     // INSERT
+    match_multiple_exprs,
     xz_compressed_fixtures,
     match_assign,
     match_reorder1,
