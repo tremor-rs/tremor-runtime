@@ -65,4 +65,4 @@ COPY docker/logger.yaml /etc/tremor/logger.yaml
 
 ENV TREMOR_PATH=/opt/local/tremor/lib
 
-ENTRYPOINT ["tini", "/entrypoint.sh"]
+ENTRYPOINT ["/entrypoint.sh"]
