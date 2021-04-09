@@ -315,6 +315,13 @@ impl<'value> Value<'value> {
         }
     }
 
+    /// Tests if the value can be represented as a char
+    #[inline]
+    #[must_use]
+    pub fn is_char(&self) -> bool {
+        self.as_char().is_some()
+    }
+
     /// Tries to get an element of an object as char, takes the first one if it
     /// is a string
     #[inline]
@@ -622,6 +629,30 @@ mod test {
         let v2: Value = json!({"¦": (), "¥": (), "£": (), "¤": ()}).into();
         assert!(v1 != v2);
         assert!(v2 != v1);
+    }
+
+    #[test]
+    fn as_char() {
+        assert_eq!(Value::from("badger").as_char(), Some('b'));
+        assert_eq!(Value::from(42).as_char(), None);
+
+        assert!(Value::from("badger").is_char());
+        assert!(!Value::from(42).is_char());
+    }
+
+    #[test]
+    fn cmp_byte_string() {
+        use std::cmp::Ordering;
+
+        let b = Value::Bytes(b"snot"[..].into());
+        assert_eq!(Value::from("snot").cmp(&b), Ordering::Equal);
+        assert_eq!(b.cmp(&Value::from("snot")), Ordering::Equal);
+
+        assert_eq!(Value::from("badger").cmp(&b), Ordering::Less);
+        assert_eq!(b.cmp(&Value::from("badger")), Ordering::Greater);
+
+        assert_eq!(Value::from("zoot").cmp(&b), Ordering::Greater);
+        assert_eq!(b.cmp(&Value::from("zoot")), Ordering::Less);
     }
 
     #[test]
