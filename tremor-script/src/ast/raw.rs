@@ -2361,7 +2361,7 @@ where
             let mut last = Ex::Target::null_lit();
             std::mem::swap(exprs, &mut es);
             std::mem::swap(last_expr, &mut last);
-            if exprs.is_empty() {
+            if es.is_empty() {
                 if last.is_null_lit() {
                     DefaultCase::Null
                 } else {
