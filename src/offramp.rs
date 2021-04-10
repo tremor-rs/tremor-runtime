@@ -256,6 +256,7 @@ impl Manager {
                                 metrics_reporter.increment_in();
 
                                 let c: &mut dyn Codec = codec.borrow_mut();
+                                // FIXME: also report error metrics for a fail insight
                                 let fail = if let Err(err) =
                                     offramp.on_event(c, &codec_map, input.borrow(), event).await
                                 {

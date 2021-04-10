@@ -272,5 +272,9 @@ error_chain! {
             description("Data can't be decompressed")
                 display("The data did not contain a known magic header to identify a supported compression")
         }
+        NoSocket {
+            description("No socket available")
+                display("No socket available")
+        }
     }
 }

@@ -111,6 +111,35 @@ impl offramp::Impl for Udp {
     }
 }
 
+impl Udp {
+    /// serialize event and send each serialized packet
+    async fn send_event(&mut self, codec: &mut dyn Codec, event: &Event) -> Result<()> {
+        let socket = self
+            .socket
+            .as_ref()
+            .ok_or_else(|| Error::from(ErrorKind::NoSocket))?;
+        let ingest_ns = event.ingest_ns;
+        for (value, meta) in event.value_meta_iter() {
+            let raw = codec.encode(value)?;
+            for processed in postprocess(&mut self.postprocessors, ingest_ns, raw)? {
+                let udp = meta.get("udp");
+                if let Some((host, port)) = udp.get_str("host").zip(udp.get_u16("port")) {
+                    socket.send_to(&processed, (host, port)).await?;
+                } else if self.config.bound {
+                    socket.send(&processed).await?;
+                } else {
+                    warn!("using `bound` in the UDP sink config is deprecated please use $udp.host and $udp.port instead!");
+                    // reaquire the destination to handle DNS changes or multi IP dns entries
+                    socket
+                        .send_to(&processed, (self.config.host.as_str(), self.config.port))
+                        .await?;
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
 #[async_trait::async_trait]
 impl Sink for Udp {
     #[allow(clippy::cast_possible_truncation)]
@@ -121,41 +150,43 @@ impl Sink for Udp {
         _codec_map: &HashMap<String, Box<dyn Codec>>,
         mut event: Event,
     ) -> ResultVec {
-        let mut success = true;
         let processing_start = Instant::now();
-        if let Some(socket) = &mut self.socket {
-            let ingest_ns = event.ingest_ns;
-            for (value, meta) in event.value_meta_iter() {
-                let raw = codec.encode(value)?;
-                for processed in postprocess(&mut self.postprocessors, ingest_ns, raw)? {
-                    let udp = meta.get("udp");
-                    if let Some((host, port)) = udp.get_str("host").zip(udp.get_u16("port")) {
-                        socket.send_to(&processed, (host, port)).await?;
-                    } else if self.config.bound {
-                        socket.send(&processed).await?;
-                    } else {
-                        warn!("using `bound` in the UDP sink config is deprecated please use $udp.host and $udp.port instead!");
-                        // reaquire the destination to handle DNS changes or multi IP dns entries
-                        socket
-                            .send_to(&processed, (self.config.host.as_str(), self.config.port))
-                            .await?;
-                    }
+
+        // TODO: how to properly report error metrics if we dont raise an error here?
+        let replies = match self.send_event(codec, &event).await {
+            Ok(()) => {
+                // success
+                if event.transactional {
+                    Some(vec![sink::Reply::Insight(event.insight_ack_with_timing(
+                        processing_start.elapsed().as_millis() as u64,
+                    ))])
+                } else {
+                    None
                 }
             }
-        } else {
-            success = false
+            Err(Error(ErrorKind::NoSocket, _)) => {
+                // trigger CB
+                debug!("[Source::UDP] Error sending event: socket not available");
+                if event.transactional {
+                    Some(vec![
+                        sink::Reply::Insight(event.to_fail()),
+                        sink::Reply::Insight(event.insight_trigger()),
+                    ])
+                } else {
+                    Some(vec![sink::Reply::Insight(event.insight_trigger())]) // we always send a trigger
+                }
+            }
+            Err(e) => {
+                // regular error, no reason for CB
+                debug!("[Source::UDP] Error sending event: {}", e);
+                if event.transactional {
+                    Some(vec![sink::Reply::Insight(event.to_fail())])
+                } else {
+                    None
+                }
+            }
         };
-        Ok(match (success, event.transactional) {
-            (true, true) => Some(vec![sink::Reply::Insight(
-                event.insight_ack_with_timing(processing_start.elapsed().as_millis() as u64),
-            )]),
-            (true, false) => None, // no need to send acks
-            (false, true) => Some(vec![
-                sink::Reply::Insight(event.to_fail()),
-                sink::Reply::Insight(event.insight_trigger()),
-            ]),
-            (false, false) => Some(vec![sink::Reply::Insight(event.insight_trigger())]), // we always send a trigger
-        })
+        Ok(replies)
     }
     fn default_codec(&self) -> &str {
         "json"
