@@ -14,7 +14,6 @@ onramp:
       topics:
         - info
         - error
-        - snotbadger
       group_id: demo
 
 offramp:
