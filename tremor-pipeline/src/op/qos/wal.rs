@@ -340,9 +340,9 @@ impl Operator for Wal {
                     confirmed
                 } else {
                     self.confirmed = Some(Idx::from(event_id));
-                    // ALLOW: we just set it upstairs
                     self.confirmed
                         .as_ref()
+                        // ALLOW: we just set it upstairs
                         .expect("`confirmed` not Some, although just set above, weird!")
                 };
                 if let Err(e) = self.state_tree.insert(Self::READ, confirmed) {
@@ -385,9 +385,9 @@ impl Operator for Wal {
                         event_id, c
                     );
                     self.confirmed = Some(Idx::from(event_id));
-                    // ALLOW we just set `self.confirmed` above
                     if let Err(e) = self.state_tree.insert(
                         Self::READ,
+                        // ALLOW: we just set `self.confirmed` above
                         self.confirmed.expect("we just set this above, weird!?"),
                     ) {
                         error!("Failed to persist confirm state: {}", e);
