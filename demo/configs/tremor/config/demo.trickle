@@ -1,7 +1,6 @@
 define script runtime
 script
-  let $index = "tremor";
-  let $doc_type = "log";
+  let $elastic = {"_index": "tremor", "_type": "log"};
   # The first class we define is named `info`,
   # it matches if `short_message`  contains the string `"info"`
   # we configure it to have a rate of 10 events/s
