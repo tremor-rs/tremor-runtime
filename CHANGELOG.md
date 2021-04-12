@@ -4,6 +4,8 @@
 
 ### New features
 
+* Change `qos::wal` operator to only require one of `max_elements` or `max_bytes` (using both is still possible).
+
 ### Fixes
 
 * Fix CI runners to work with caching
@@ -11,6 +13,7 @@
 * Fix docker entrypoint not forwarding arguments to tremor binary, unless `--` is used before them
 * Fix match default clause only executing the last statement in the block.
 * Kafka back to async with a timeout on waiting
+* Fix `qos::wal` operator never cleaning up the last event from its storage
 
 ## 0.11.0
 

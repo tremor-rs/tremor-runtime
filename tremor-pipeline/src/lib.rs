@@ -326,7 +326,7 @@ impl EventId {
         self.event_id = event_id;
     }
 
-    /// track the min and max of the given `event_id`    
+    /// track the min and max of the given `event_id`
     /// and also include all event ids `event_id` was tracking
     pub fn track(&mut self, event_id: &EventId) {
         self.track_ids(
@@ -400,6 +400,27 @@ impl EventId {
                 }
             })
         }
+    }
+
+    #[must_use]
+    /// checks if the given `EventId` is tracked by this one.
+    /// Also returns true, if the `event_id` has the same id as `self`.
+    pub fn is_tracking(&self, event_id: &EventId) -> bool {
+        let is_same = self.source_id() == event_id.source_id()
+            && self.stream_id() == event_id.stream_id()
+            && self.event_id() == event_id.event_id();
+        is_same
+            || match self.tracked_event_ids.binary_search_by(|probe| {
+                probe.compare_ids(event_id.source_id(), event_id.stream_id())
+            }) {
+                Ok(idx) => {
+                    let entry = unsafe { self.tracked_event_ids.get_unchecked(idx) };
+                    // this is only a heuristic, but is good enough for now
+                    (entry.min_event_id <= event_id.event_id)
+                        && (event_id.event_id <= entry.max_event_id)
+                }
+                Err(_) => false,
+            }
     }
 
     #[must_use]
