@@ -17,21 +17,45 @@ use crate::errors::Result;
 use crate::source::prelude::*;
 
 //NOTE: This is required for StreamHandlers stream
+use async_std::future::timeout;
+use futures::{future, StreamExt};
 use halfbrown::HashMap;
 use log::Level::Debug;
-use rdkafka::error::KafkaResult;
-use rdkafka::message::{BorrowedMessage, Headers};
-use rdkafka::{client::ClientContext, util::Timeout};
-use rdkafka::{config::ClientConfig, TopicPartitionList};
 use rdkafka::{
-    consumer::{BaseConsumer, CommitMode, Consumer, ConsumerContext},
-    error::KafkaError,
+    client::ClientContext,
+    config::ClientConfig,
+    consumer::{
+        stream_consumer::{self, StreamConsumer},
+        CommitMode, Consumer, ConsumerContext,
+    },
+    error::{KafkaError, KafkaResult},
+    message::{BorrowedMessage, Headers},
+    util::AsyncRuntime,
+    Message, Offset, TopicPartitionList,
 };
-use rdkafka::{Message, Offset};
-use std::collections::BTreeMap;
-use std::collections::HashMap as StdMap;
-use std::mem::{self};
-use std::time::Duration;
+use std::collections::{BTreeMap, HashMap as StdMap};
+use std::future::Future;
+use std::mem::{self, transmute};
+use std::time::{Duration, Instant};
+
+pub struct SmolRuntime;
+
+impl AsyncRuntime for SmolRuntime {
+    type Delay = future::Map<smol::Timer, fn(Instant)>;
+
+    fn spawn<T>(task: T)
+    where
+        T: Future<Output = ()> + Send + 'static,
+    {
+        // This needs to be smol::spawn we can't use async_std::task::spawn
+        smol::spawn(task).detach()
+    }
+
+    fn delay_for(duration: Duration) -> Self::Delay {
+        // This needs to be smol::Timer we can't use async_io::Timer
+        futures::FutureExt::map(smol::Timer::after(duration), |_| ())
+    }
+}
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Config {
@@ -56,11 +80,6 @@ pub struct Config {
     #[serde(default = "default_retry_failed_events")]
     pub retry_failed_events: bool,
 
-    /// poll interval to use for polling the kafka consumer in milliseconds.
-    /// default is 100 ms.
-    /// This is the duration to wait before polling again if no message is currently available in the queue.
-    #[serde(default = "default_poll_interval")]
-    pub poll_interval: u64,
     /// Optional rdkafka configuration
     ///
     /// Default settings:
@@ -79,11 +98,6 @@ fn default_retry_failed_events() -> bool {
     true
 }
 
-/// 100 milliseconds
-fn default_poll_interval() -> u64 {
-    100
-}
-
 impl ConfigImpl for Config {}
 
 pub struct Kafka {
@@ -97,6 +111,7 @@ struct MsgOffset {
     partition: i32,
     offset: Offset,
 }
+
 impl<'consumer> From<BorrowedMessage<'consumer>> for MsgOffset {
     fn from(m: BorrowedMessage) -> Self {
         Self {
@@ -107,12 +122,71 @@ impl<'consumer> From<BorrowedMessage<'consumer>> for MsgOffset {
     }
 }
 
+pub struct StreamAndMsgs<'consumer> {
+    pub stream: stream_consumer::MessageStream<'consumer, LoggingConsumerContext, SmolRuntime>,
+}
+
+impl<'consumer> StreamAndMsgs<'consumer> {
+    fn new(
+        stream: stream_consumer::MessageStream<'consumer, LoggingConsumerContext, SmolRuntime>,
+    ) -> Self {
+        Self { stream }
+    }
+}
+
+rental! {
+    #[allow(unused_imports)]
+    pub mod rentals {
+        use super::{StreamAndMsgs, LoggingConsumer};
+
+        #[rental(covariant)]
+        pub struct MessageStream {
+            consumer: Box<LoggingConsumer>,
+            stream: StreamAndMsgs<'consumer>
+        }
+    }
+}
+
+#[allow(clippy::transmute_ptr_to_ptr)]
+impl rentals::MessageStream {
+    #[allow(mutable_transmutes, clippy::mut_from_ref)]
+    unsafe fn mut_suffix(
+        &self,
+    ) -> &mut stream_consumer::MessageStream<'static, LoggingConsumerContext, SmolRuntime> {
+        transmute(&self.suffix().stream)
+    }
+
+    unsafe fn consumer(&mut self) -> &mut LoggingConsumer {
+        struct MessageStream {
+            consumer: Box<LoggingConsumer>,
+            _stream: StreamAndMsgs<'static>,
+        }
+        let s: &mut MessageStream = transmute(self);
+        &mut s.consumer
+    }
+    fn commit(&mut self, map: &StdMap<(String, i32), Offset>, mode: CommitMode) -> Result<()> {
+        let offsets = TopicPartitionList::from_topic_map(map);
+
+        unsafe { self.consumer().commit(&offsets, mode)? };
+
+        Ok(())
+    }
+
+    fn seek(&mut self, map: &StdMap<(String, i32), Offset>) -> Result<()> {
+        let consumer = unsafe { self.consumer() };
+        for ((t, p), o) in map.iter() {
+            consumer.seek(t, *p, *o, Duration::from_millis(100))?;
+        }
+
+        Ok(())
+    }
+}
+
 pub struct Int {
     uid: u64,
     config: Config,
     onramp_id: TremorUrl,
-    consumer: Option<LoggingConsumer>,
-    kafka_poll_timeout: Timeout,
+    stream: Option<rentals::MessageStream>,
     origin_uri: EventOriginUri,
     auto_commit: bool,
     messages: BTreeMap<u64, MsgOffset>,
@@ -177,8 +251,7 @@ impl Int {
             uid,
             config: config.clone(),
             onramp_id,
-            consumer: None,
-            kafka_poll_timeout: Timeout::After(Duration::new(0, 0)), // ensure non-blocking calls by using a zero duration here
+            stream: None,
             origin_uri,
             auto_commit,
             messages: BTreeMap::new(),
@@ -247,7 +320,7 @@ impl ConsumerContext for LoggingConsumerContext {
         };
     }
 }
-pub type LoggingConsumer = BaseConsumer<LoggingConsumerContext>;
+pub type LoggingConsumer = StreamConsumer<LoggingConsumerContext>;
 
 /// ensure a zero poll timeout to have a non-blocking call
 
@@ -260,8 +333,13 @@ impl Source for Int {
         &self.onramp_id
     }
     async fn pull_event(&mut self, id: u64) -> Result<SourceReply> {
-        if let Some(stream) = self.consumer.as_mut() {
-            if let Some(Ok(m)) = stream.poll(self.kafka_poll_timeout) {
+        if let Some(stream) = self.stream.as_mut() {
+            let s = unsafe { stream.mut_suffix() };
+            let r = match timeout(Duration::from_millis(100), s.next()).await {
+                Ok(r) => r,
+                Err(_) => return Ok(SourceReply::Empty(0)),
+            };
+            if let Some(Ok(m)) = r {
                 debug!(
                     "[Source::{}] EventId: {} Offset: {}",
                     self.onramp_id,
@@ -323,10 +401,10 @@ impl Source for Int {
                         "[Source::{}] Failed to fetch kafka message.",
                         self.onramp_id
                     );
-                    Ok(SourceReply::Empty(self.config.poll_interval))
+                    Ok(SourceReply::Empty(0))
                 }
             } else {
-                Ok(SourceReply::Empty(self.config.poll_interval))
+                Ok(SourceReply::Empty(0))
             }
         } else {
             Ok(SourceReply::StateChange(SourceState::Disconnected))
@@ -476,8 +554,12 @@ impl Source for Int {
                 return Err(e.into());
             }
         };
-
-        self.consumer = Some(consumer);
+        let stream = rentals::MessageStream::new(Box::new(consumer), |c| {
+            StreamAndMsgs::new(
+                c.start_with_runtime::<SmolRuntime>(Duration::from_millis(100), false),
+            )
+        });
+        self.stream = Some(stream);
 
         Ok(SourceState::Connected)
     }
@@ -496,13 +578,9 @@ impl Source for Int {
         trace!("[Source::{}] Fail {}", self.onramp_id, id);
         if !self.auto_commit && self.config.retry_failed_events {
             let tm = self.get_topic_map_for_id(id);
-            if let Some(consumer) = self.consumer.as_mut() {
-                for ((topic, partition), offset) in tm {
-                    if let Err(e) =
-                        consumer.seek(&topic, partition, offset, self.kafka_poll_timeout)
-                    {
-                        error!("[Source::{}] failed to seek message: {}", self.onramp_id, e)
-                    }
+            if let Some(consumer) = self.stream.as_mut() {
+                if let Err(e) = consumer.seek(&tm) {
+                    error!("[Source::{}] failed to seek message: {}", self.onramp_id, e)
                 }
             }
         }
@@ -512,9 +590,8 @@ impl Source for Int {
         if !self.auto_commit {
             let tm = self.get_topic_map_for_id(id);
             if !tm.is_empty() {
-                if let Some(consumer) = self.consumer.as_mut() {
-                    let topic_partition_list = TopicPartitionList::from_topic_map(&tm);
-                    if let Err(e) = consumer.commit(&topic_partition_list, CommitMode::Async) {
+                if let Some(consumer) = self.stream.as_mut() {
+                    if let Err(e) = consumer.commit(&tm, CommitMode::Async) {
                         error!(
                             "[Source::{}] failed to commit message: {}",
                             self.onramp_id, e

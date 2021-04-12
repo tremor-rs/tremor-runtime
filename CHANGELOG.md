@@ -10,6 +10,7 @@
 * Fix dependencies for `tremor-value` and `tremor-common`
 * Fix docker entrypoint not forwarding arguments to tremor binary, unless `--` is used before them
 * Fix match default clause only executing the last statement in the block.
+* Kafka back to async with a timeout on waiting
 
 ## 0.11.0
 
