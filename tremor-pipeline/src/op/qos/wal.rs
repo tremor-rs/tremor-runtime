@@ -115,6 +115,18 @@ impl From<Idx> for IVec {
     }
 }
 
+impl From<&Idx> for IVec {
+    fn from(i: &Idx) -> Self {
+        IVec::from(&i.0)
+    }
+}
+
+impl From<&mut Idx> for IVec {
+    fn from(i: &mut Idx) -> Self {
+        IVec::from(&i.0)
+    }
+}
+
 #[derive(Debug, Clone, Deserialize, serde::Deserialize, serde::Serialize)]
 pub struct Config {
     /// Maximum number of events to read per tick/event when filling
@@ -128,11 +140,11 @@ pub struct Config {
     /// The maximum elements to store before breaking the circuit
     /// note this is an approximation we might store a few elements
     /// above that to allow circuit breakers to kick in
-    pub max_elements: u64,
+    pub max_elements: Option<u64>,
 
     /// Maximum number of bytes the WAL is alloed to take on disk,
     /// note this is a soft maximum and might be overshot slighty
-    pub max_bytes: u64,
+    pub max_bytes: Option<u64>,
 
     /// Flush to disk on every write
     flush_on_evnt: Option<bool>,
@@ -169,7 +181,7 @@ pub struct Wal {
     /// Next read index
     read: Idx,
     /// The last
-    confirmed: Idx,
+    confirmed: Option<Idx>,
     /// The configuration
     config: Config,
     /// Are we currently in a broken CB state
@@ -184,7 +196,11 @@ op!(WalFactory(_uid, node) {
     if let Some(map) = &node.config {
         let config: Config = Config::new(map)?;
 
-        Ok(Box::new(Wal::new(node.id.to_string(), config)?))
+        if let (None, None) = (config.max_elements, config.max_bytes) {
+            Err(ErrorKind::BadOpConfig("WAL operator needs at least one of `max_elements` or `max_bytes` config entries.".to_owned()).into())
+        } else {
+            Ok(Box::new(Wal::new(node.id.to_string(), config)?))
+        }
 
     } else {
         Err(ErrorKind::MissingOpConfig(node.id.to_string()).into())
@@ -192,22 +208,30 @@ op!(WalFactory(_uid, node) {
 });
 
 impl Wal {
+    const URI_SCHEME: &'static str = "tremor-wal";
+    const READ: &'static str = "read";
+    const EVENTS: &'static str = "events";
+    const STATE: &'static str = "state";
+
     fn new(id: String, config: Config) -> Result<Self> {
         let wal = if let Some(dir) = &config.dir {
             sled::open(&dir)?
         } else {
             sled::Config::default().temporary(true).open()?
         };
-        let events_tree = wal.open_tree("events")?;
-        let state_tree = wal.open_tree("state")?;
+        let events_tree = wal.open_tree(Self::EVENTS)?;
+        let state_tree = wal.open_tree(Self::STATE)?;
 
         #[allow(clippy::cast_possible_truncation)]
-        let read = state_tree.get("read")?.map(Idx::from).unwrap_or_default();
+        let read = state_tree
+            .get(Self::READ)?
+            .map(Idx::from)
+            .unwrap_or_default();
         Ok(Wal {
             cnt: events_tree.len() as u64,
             wal,
             read,
-            confirmed: read,
+            confirmed: None,
             events_tree,
             state_tree,
             config,
@@ -215,7 +239,7 @@ impl Wal {
             full: false,
             origin_uri: Some(EventOriginUri {
                 uid: 0,
-                scheme: "tremor-wal".to_string(),
+                scheme: Self::URI_SCHEME.to_string(),
                 host: "pipeline".to_string(),
                 port: None,
                 path: vec![id],
@@ -223,8 +247,9 @@ impl Wal {
         })
     }
     fn limit_reached(&self) -> Result<bool> {
-        Ok(self.cnt >= self.config.max_elements
-            || self.wal.size_on_disk()? >= self.config.max_bytes)
+        let max_bytes = self.config.max_bytes.unwrap_or(u64::MAX);
+        let exceeds_max_bytes = self.wal.size_on_disk()? >= max_bytes;
+        Ok(self.config.max_elements.map_or(false, |me| self.cnt >= me) || exceeds_max_bytes)
     }
 
     fn read_events(&mut self, _now: u64) -> Result<Vec<(Cow<'static, str>, Event)>> {
@@ -267,11 +292,13 @@ impl Wal {
 
     fn gc(&mut self) -> Result<u64> {
         let mut i = 0;
-        for e in self.events_tree.range(..self.confirmed) {
-            i += 1;
-            self.cnt -= 1;
-            let (idx, _) = e?;
-            self.events_tree.remove(idx)?;
+        if let Some(confirmed) = self.confirmed {
+            for e in self.events_tree.range(..=confirmed) {
+                i += 1;
+                self.cnt -= 1;
+                let (idx, _) = e?;
+                self.events_tree.remove(idx)?;
+            }
         }
         Ok(i)
     }
@@ -287,11 +314,19 @@ impl Operator for Wal {
     fn handles_contraflow(&self) -> bool {
         true
     }
+
+    #[allow(clippy::clippy::option_if_let_else)] // borrow checker
     fn on_contraflow(&mut self, u_id: u64, insight: &mut Event) {
         match insight.cb {
             CbAction::None => {}
-            CbAction::Open => self.broken = false,
-            CbAction::Close => self.broken = true,
+            CbAction::Open => {
+                debug!("WAL CB open.");
+                self.broken = false
+            }
+            CbAction::Close => {
+                debug!("WAL CB close");
+                self.broken = true
+            }
             CbAction::Ack => {
                 let event_id =
                     if let Some((_stream_id, event_id)) = insight.id.get_max_by_source(u_id) {
@@ -300,13 +335,22 @@ impl Operator for Wal {
                         // This is not for us
                         return;
                     };
-                self.confirmed.set(event_id);
-                if let Err(e) = self.state_tree.insert("read", self.confirmed) {
+                let confirmed = if let Some(confirmed) = self.confirmed.as_mut() {
+                    confirmed.set(event_id);
+                    confirmed
+                } else {
+                    self.confirmed = Some(Idx::from(event_id));
+                    // ALLOW: we just set it upstairs
+                    self.confirmed
+                        .as_ref()
+                        .expect("`confirmed` not Some, although just set above, weird!")
+                };
+                if let Err(e) = self.state_tree.insert(Self::READ, confirmed) {
                     error!("Failed to persist confirm state: {}", e);
                 }
                 if let Some(e) = self
                     .events_tree
-                    .get(self.confirmed)
+                    .get(confirmed)
                     .ok()
                     .and_then(maybe_parse_ivec)
                 {
@@ -324,23 +368,28 @@ impl Operator for Wal {
                     };
                 self.read.set_min(event_id);
 
-                if let Some(e) = self
-                    .events_tree
-                    .get(self.confirmed)
-                    .ok()
-                    .and_then(maybe_parse_ivec)
-                {
+                if let Some(e) = self.confirmed.and_then(|confirmed| {
+                    self.events_tree
+                        .get(confirmed)
+                        .ok()
+                        .and_then(maybe_parse_ivec)
+                }) {
+                    debug!("WAL fail: {}", event_id);
                     insight.id.track(&e.id);
                 }
 
-                let c = u64::from(self.confirmed);
+                let c = self.confirmed.map(u64::from).unwrap_or_default();
                 if event_id < c {
                     error!(
                         "trying to fail a message({}) that was already confirmed({})",
                         event_id, c
                     );
-                    self.confirmed.set(event_id);
-                    if let Err(e) = self.state_tree.insert("read", self.confirmed) {
+                    self.confirmed = Some(Idx::from(event_id));
+                    // ALLOW we just set `self.confirmed` above
+                    if let Err(e) = self.state_tree.insert(
+                        Self::READ,
+                        self.confirmed.expect("we just set this above, weird!?"),
+                    ) {
                         error!("Failed to persist confirm state: {}", e);
                     }
                 }
@@ -360,15 +409,19 @@ impl Operator for Wal {
         signal: &mut Event,
     ) -> Result<EventAndInsights> {
         let now = signal.ingest_ns;
-        // Are we currently full
+        // Are we currently full?
+        trace!("WAL cnt: {}", self.cnt);
+        trace!("WAL bytes: {}", self.wal.size_on_disk()?);
         let now_full = self.limit_reached()?;
         // If we just became full or we went from full to non full
         // update the CB status
         let insights = if self.full && !now_full {
+            trace!("WAL not full any more.");
             let mut e = Event::cb_restore(signal.ingest_ns);
             e.origin_uri = self.origin_uri.clone();
             vec![e]
         } else if !self.full && now_full {
+            trace!("WAL full.");
             let mut e = Event::cb_trigger(signal.ingest_ns);
             e.origin_uri = self.origin_uri.clone();
             vec![e]
@@ -420,17 +473,124 @@ impl Operator for Wal {
 #[cfg(test)]
 mod test {
     use crate::EventIdGenerator;
+    use crate::SignalKind;
 
     use super::*;
     use tempfile::Builder as TempDirBuilder;
+
+    #[test]
+    fn test_gc() -> Result<()> {
+        let c = Config {
+            read_count: 1,
+            dir: None,
+            max_elements: Some(10),
+            max_bytes: None,
+            flush_on_evnt: None,
+        };
+        let mut o = Wal::new("test".to_string(), c)?;
+        let wal_uid = 0_u64;
+        let source_uid = 42_u64;
+        let mut idgen = EventIdGenerator::new(source_uid);
+
+        // we start in a broken state
+        let id = idgen.next_id();
+        let mut e = Event::default();
+        let mut state = Value::null();
+
+        //send first event
+        e.id = id.clone();
+        e.transactional = true;
+        let mut op_meta = OpMeta::default();
+        op_meta.insert(42, OwnedValue::null());
+        e.op_meta = op_meta;
+        let mut r = o.on_event(wal_uid, "in", &mut state, e.clone())?;
+        assert_eq!(0, r.events.len());
+        assert_eq!(1, r.insights.len());
+        let insight = &r.insights[0];
+        assert_eq!(CbAction::Ack, insight.cb);
+
+        // Restore the CB
+        let mut i = Event::cb_restore(0);
+        o.on_contraflow(wal_uid, &mut i);
+
+        // we have 1 event stored
+        assert_eq!(1, o.cnt);
+
+        // send second event, expect both events back
+        let id2 = idgen.next_id();
+        e.id = id2.clone();
+        e.transactional = true;
+        let mut op_meta = OpMeta::default();
+        op_meta.insert(42, OwnedValue::null());
+        e.op_meta = op_meta;
+        r = o.on_event(wal_uid, "in", &mut state, e.clone())?;
+        assert_eq!(2, r.events.len());
+        assert!(
+            r.events[0].1.id.is_tracking(&id),
+            "not tracking the origin event"
+        );
+        assert!(
+            r.events[1].1.id.is_tracking(&id2),
+            "not tracking the origin event"
+        );
+        assert_eq!(1, r.insights.len());
+        let insight = &r.insights[0];
+        assert_eq!(CbAction::Ack, insight.cb);
+
+        // we have two events stored
+        assert_eq!(2, o.cnt);
+
+        // acknowledge the first event
+        i = Event::cb_ack(e.ingest_ns, r.events[0].1.id.clone());
+        o.on_contraflow(wal_uid, &mut i);
+
+        // we still have two events stored
+        assert_eq!(2, o.cnt);
+
+        // apply gc on signal
+        let mut signal = Event {
+            id: idgen.next_id(),
+            ingest_ns: 1,
+            kind: Some(SignalKind::Tick),
+            ..Event::default()
+        };
+        let s = o.on_signal(wal_uid, &state, &mut signal)?;
+        assert_eq!(0, s.events.len());
+        assert_eq!(0, s.insights.len());
+
+        // now we have 1 left
+        assert_eq!(1, o.cnt);
+
+        // acknowledge the second event
+        i = Event::cb_ack(e.ingest_ns, r.events[1].1.id.clone());
+        o.on_contraflow(wal_uid, &mut i);
+
+        // still 1 left
+        assert_eq!(1, o.cnt);
+
+        // apply gc on signal
+        let mut signal2 = Event {
+            id: idgen.next_id(),
+            ingest_ns: 1,
+            kind: Some(SignalKind::Tick),
+            ..Event::default()
+        };
+        let s = o.on_signal(wal_uid, &state, &mut signal2)?;
+        assert_eq!(0, s.events.len());
+        assert_eq!(0, s.insights.len());
+
+        // we are clean now
+        assert_eq!(0, o.cnt);
+        Ok(())
+    }
 
     #[test]
     fn rw() -> Result<()> {
         let c = Config {
             read_count: 100,
             dir: None,
-            max_elements: 10,
-            max_bytes: 1024 * 1024,
+            max_elements: None,
+            max_bytes: Some(1024 * 1024),
             flush_on_evnt: None,
         };
         let mut o = Wal::new("test".to_string(), c)?;
@@ -515,8 +675,8 @@ mod test {
         let c = Config {
             read_count,
             dir: Some(temp_dir.path().to_string_lossy().into_owned()),
-            max_elements: 10,
-            max_bytes: 1024 * 1024,
+            max_elements: Some(10),
+            max_bytes: Some(1024 * 1024),
             flush_on_evnt: None,
         };
 
@@ -565,6 +725,27 @@ mod test {
             assert_eq!(r.events.len(), 1);
         }
 
+        Ok(())
+    }
+
+    #[test]
+    fn test_invalid_config() -> Result<()> {
+        let c = Config {
+            read_count: 10,
+            dir: None,
+            max_elements: None,
+            max_bytes: None,
+            flush_on_evnt: None,
+        };
+
+        let r = WalFactory::new().from_node(1, &NodeConfig::from_config("wal-test-1", c.clone())?);
+        assert!(r.is_err());
+        if let Err(Error(ErrorKind::BadOpConfig(s), _)) = r {
+            assert_eq!(
+                "WAL operator needs at least one of `max_elements` or `max_bytes` config entries.",
+                s.as_str()
+            );
+        }
         Ok(())
     }
 }
