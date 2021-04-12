@@ -335,6 +335,8 @@ impl Operator for Wal {
                         // This is not for us
                         return;
                     };
+
+                trace!("WAL confirm: {}", event_id);
                 let confirmed = if let Some(confirmed) = self.confirmed.as_mut() {
                     confirmed.set(event_id);
                     confirmed
@@ -354,7 +356,6 @@ impl Operator for Wal {
                     .ok()
                     .and_then(maybe_parse_ivec)
                 {
-                    debug!("WAL confirm: {}", event_id);
                     insight.id.track(&e.id);
                 }
             }
@@ -366,6 +367,7 @@ impl Operator for Wal {
                         // This is not for us
                         return;
                     };
+                trace!("WAL fail: {}", event_id);
                 self.read.set_min(event_id);
 
                 if let Some(e) = self.confirmed.and_then(|confirmed| {
@@ -374,7 +376,6 @@ impl Operator for Wal {
                         .ok()
                         .and_then(maybe_parse_ivec)
                 }) {
-                    debug!("WAL fail: {}", event_id);
                     insight.id.track(&e.id);
                 }
 
@@ -410,8 +411,6 @@ impl Operator for Wal {
     ) -> Result<EventAndInsights> {
         let now = signal.ingest_ns;
         // Are we currently full?
-        trace!("WAL cnt: {}", self.cnt);
-        trace!("WAL bytes: {}", self.wal.size_on_disk()?);
         let now_full = self.limit_reached()?;
         // If we just became full or we went from full to non full
         // update the CB status
