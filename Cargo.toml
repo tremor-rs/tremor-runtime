@@ -105,7 +105,7 @@ openssl = { version = "0.10", features = ["vendored"] }
 tide = "0.16"
 
 # nats
-async-nats = "0.9.9"
+async-nats = "0.9.12"
 
 # discord
 serenity = { version = "0.10", default-features = false, features = [
