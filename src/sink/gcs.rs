@@ -45,13 +45,12 @@ pub struct GoogleCloudStorage {
 #[derive(Deserialize)]
 pub struct Config {
     pem: String,
-   
 }
 
 enum StorageCommand {
     Create(String, String),
     Add(String, String, String),
-    Remove(String, String), 
+    Remove(String, String),
     ListBuckets(String),
     Fetch(String, String),
     Download(String, String),
@@ -62,17 +61,21 @@ enum StorageCommand {
 
 impl std::fmt::Display for StorageCommand {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", match *self{
-            StorageCommand::Create(_,_) => "create_bucket",
-            StorageCommand::Add(_,_,_) => "add_object",
-            StorageCommand::Remove(_,_) => "remove_object", 
-            StorageCommand::ListBuckets(_) => "list_buckets",
-            StorageCommand::Fetch(_,_) => "get_object",
-            StorageCommand::Download(_,_) => "download_object",
-            StorageCommand::Delete(_) => "delete_bucket",
-            StorageCommand::ListObjects(_) => "list_objects",
-            StorageCommand::Unknown => "Unknown",
-        })
+        write!(
+            f,
+            "{}",
+            match *self {
+                StorageCommand::Create(_, _) => "create_bucket",
+                StorageCommand::Add(_, _, _) => "add_object",
+                StorageCommand::Remove(_, _) => "remove_object",
+                StorageCommand::ListBuckets(_) => "list_buckets",
+                StorageCommand::Fetch(_, _) => "get_object",
+                StorageCommand::Download(_, _) => "download_object",
+                StorageCommand::Delete(_) => "delete_bucket",
+                StorageCommand::ListObjects(_) => "list_objects",
+                StorageCommand::Unknown => "Unknown",
+            }
+        )
     }
 }
 
@@ -84,7 +87,7 @@ impl offramp::Impl for GoogleCloudStorage {
             let config: Config = Config::new(config)?;
             let headers = HeaderMap::new();
             let remote = Some(block_on(auth::json_api_client(&config.pem, &headers))?);
-            let hostport = "storage.googleapis.com:443"; 
+            let hostport = "storage.googleapis.com:443";
             Ok(SinkManager::new_box(Self {
                 config,
                 remote,
@@ -101,13 +104,13 @@ impl offramp::Impl for GoogleCloudStorage {
 
 fn parse_command(value: &Value<'_>) -> Result<StorageCommand> {
     if let Value::Object(o) = value {
-        let _cmd_name: &str = if let Some(Value::String(cmd_name)) = o.get("command") {
+        let cmd_name: &str = if let Some(Value::String(cmd_name)) = o.get("command") {
             cmd_name
         } else {
             return Err("Invalid Command, expected `command` field".into());
         };
 
-        let command = match _cmd_name {
+        let command = match cmd_name {
             "fetch" => StorageCommand::Fetch(
                 if let Some(Value::String(bucket_name)) = o.get("bucket") {
                     bucket_name.to_string()
@@ -199,7 +202,7 @@ fn parse_command(value: &Value<'_>) -> Result<StorageCommand> {
         return Ok(command);
     }
 
-    return Err("Invalid Command".into());
+    Err("Invalid Command".into())
 }
 
 #[async_trait::async_trait]
@@ -217,18 +220,20 @@ impl Sink for GoogleCloudStorage {
             remote
         } else {
             self.remote = Some(auth::json_api_client(&self.config.pem, &HeaderMap::new()).await?);
-            let remote = self.remote.as_ref().unwrap();
+            let remote = self.remote.as_ref().ok_or("Client error!")?;
             remote
             // TODO - Qos checks
         };
         for value in event.value_iter() {
-            let command = parse_command(value)?; 
+            let command = parse_command(value)?;
             let command_str = command.to_string();
             let response = match command {
                 StorageCommand::Fetch(bucket_name, object_name) => {
                     storage::get_object(&remote, &bucket_name, &object_name).await?
                 }
-                StorageCommand::ListBuckets(project_id) => storage::list_buckets(&remote, &project_id).await?,
+                StorageCommand::ListBuckets(project_id) => {
+                    storage::list_buckets(&remote, &project_id).await?
+                }
                 StorageCommand::ListObjects(bucket_name) => {
                     storage::list_objects(&remote, &bucket_name).await?
                 }
@@ -248,15 +253,23 @@ impl Sink for GoogleCloudStorage {
                     storage::download_object(&remote, &bucket_name, &object_name).await?
                 }
                 StorageCommand::Unknown => {
-                    warn!("Unknown Google Cloud Storage command: `{}` attempted", command.to_string());
+                    warn!(
+                        "Unknown Google Cloud Storage command: `{}` attempted",
+                        command.to_string()
+                    );
 
-                    return Err(format!("Unknown Google Cloud Storage command: `{}` attempted", command.to_string()).into())
-                } 
+                    return Err(format!(
+                        "Unknown Google Cloud Storage command: `{}` attempted",
+                        command.to_string()
+                    )
+                    .into());
+                }
             };
             let response: Value = json!({
                 "cmd": command_str,
                 "data": response
-            }).into();
+            })
+            .into();
             if self.is_linked {
                 if let Some(reply_channel) = &self.reply_channel {
                     reply_channel

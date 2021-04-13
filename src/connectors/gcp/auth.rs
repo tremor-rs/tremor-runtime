@@ -26,7 +26,7 @@ pub(crate) async fn authenticate_bearer(_pem_path: &str) -> Result<String> {
     Ok(Token::new()?.header_value()?.to_string())
 }
 
-pub(crate) async fn json_api_client(pem_path: &str, _extra_headers: &HeaderMap) -> Result<Client> {
+pub(crate) async fn json_api_client(pem_path: &str, extra_headers: &HeaderMap) -> Result<Client> {
     let bearer = authenticate_bearer(pem_path).await?;
     let mut headers = reqwest::header::HeaderMap::new();
     headers.insert(
@@ -37,16 +37,16 @@ pub(crate) async fn json_api_client(pem_path: &str, _extra_headers: &HeaderMap) 
         "content-type",
         reqwest::header::HeaderValue::from_static("application/json"),
     );
-    for header in _extra_headers {
+    for header in extra_headers {
         headers.append(header.0, header.1.clone());
     }
 
     let mut buf = Vec::new();
     std::fs::File::open(pem_path)?.read_to_end(&mut buf)?;
-    let certificate = reqwest::Certificate::from_pem(&buf)?;
+    // let certificate = reqwest::Certificate::from_pem(&buf)?;
     // TODO: Enforce certificate authentication
     Ok(reqwest::Client::builder()
-        .add_root_certificate(certificate)
+        // .add_root_certificate(certificate)
         .default_headers(headers)
         .build()?)
 }
