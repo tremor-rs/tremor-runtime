@@ -12,90 +12,96 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::{
-    collections::HashMap,
-    fs::{self, File},
-    io::Read,
-};
+use std::collections::HashMap;
 
 use crate::errors::Result;
 use reqwest::Client;
 use tremor_value::Value;
 
-
-pub(crate) async fn get_object<'event>(
+pub(crate) async fn get_object(
     client: &Client,
     bucket_name: &str,
     object_name: &str,
-) -> Result<Value<'event>> {
+) -> Result<Value<'static>> {
     let url = format!(
         "{}/b/{}/o/{}",
         "https://storage.googleapis.com/storage/v1", bucket_name, object_name
     );
-    let body = client.get(url).send().await?.text().await?;
-    Ok(Value::from(body))
+    let mut body = client.get(url).send().await?.text().await?.into_bytes();
+    let body = tremor_value::parse_to_value(&mut body)?.into_static();
+    Ok(body)
 }
 
-pub(crate) async fn list_buckets<'event>(client: &Client, project_id: &str) -> Result<Value<'event>> {
-    let url = format!("https://storage.googleapis.com/storage/v1/b?project={}", project_id);
-    let body = client.get(url).send().await?.text().await?.into_bytes(); 
-    to_value(body)
-
+pub(crate) async fn list_buckets(client: &Client, project_id: &str) -> Result<Value<'static>> {
+    let url = format!(
+        "https://storage.googleapis.com/storage/v1/b?project={}",
+        project_id
+    );
+    let mut body = client.get(url).send().await?.text().await?.into_bytes();
+    let body = tremor_value::parse_to_value(&mut body)?.into_static();
+    Ok(body)
 }
 
-fn to_value<'event>(mut bytes: Vec<u8>) -> Result<Value<'event>> {
-    Ok(tremor_value::parse_to_value(&mut bytes)?)
-}
+// fn to_value<'event>(mut bytes: Vec<u8>) -> Result<Value<'event>> {
+//     Ok(tremor_value::parse_to_value(&mut bytes)?)
+// }
 
-pub(crate) async fn list_objects<'event>(
-    client: &Client,
-    bucket_name: &str,
-) -> Result<Value<'event>> {
+pub(crate) async fn list_objects(client: &Client, bucket_name: &str) -> Result<Value<'static>> {
     let url = format!(
         "{}/b/{}/o",
         "https://storage.googleapis.com/storage/v1",
         bucket_name.to_string()
     );
-    let body = client.get(url).send().await?.text().await?;
-    Ok(Value::from(body)) 
+    let mut body = client.get(url).send().await?.text().await?.into_bytes();
+    let body = tremor_value::parse_to_value(&mut body)?.into_static();
+    Ok(body)
 }
 
-pub(crate) async fn add_object<'event>(
+pub(crate) async fn add_object(
     client: &Client,
     bucket_name: &str,
     object_name: &str,
-    _file_path: &str,
-) -> Result<Value<'event>> {
+    file_path: &str,
+) -> Result<Value<'static>> {
     let url = format!(
         "https://storage.googleapis.com/upload/storage/v1/b/{}/o?uploadType=media&name={}",
         bucket_name, object_name
     );
-    let buffer = get_file_as_byte_vec(_file_path);
-    let body = client.post(url).body(buffer).send().await?.text().await?;
-    // println!("File uploaded!");
-    Ok(Value::from(body))
+    let buffer = std::fs::read(file_path)?;
+    let mut body = client
+        .post(url)
+        .body(buffer)
+        .send()
+        .await?
+        .text()
+        .await?
+        .into_bytes();
+    let body = tremor_value::parse_to_value(&mut body)?.into_static();
+    Ok(body)
+    // Ok(Value::from(body))
 }
 
-fn get_file_as_byte_vec(filename: &str) -> Vec<u8> {
-    let mut f = File::open(&filename).expect("no file found");
-    let metadata = fs::metadata(&filename).expect("unable to read metadata");
-    let mut buffer = vec![0; metadata.len() as usize];
-    f.read(&mut buffer).expect("buffer overflow");
+// fn get_file_as_byte_vec(filename: &str) -> Vec<u8> {
+//     let mut f = File::open(&filename).expect("no file found");
+//     let metadata = fs::metadata(&filename).expect("unable to read metadata");
+//     let mut buffer = vec![0; metadata.len() as usize];
+//     f.read(&mut buffer).expect("buffer overflow");
 
-    buffer
-}
+//     buffer
+// }
 
-pub(crate) async fn delete_object<'event>(
+pub(crate) async fn delete_object(
     client: &Client,
     bucket_name: &str,
     object_name: &str,
-) -> Result<Value<'event>> {
+) -> Result<Value<'static>> {
     let url = format!(
         "https://storage.googleapis.com/storage/v1/b/{}/o/{}",
         bucket_name, object_name
     );
-    let body = client.delete(url).send().await?.text().await?;
-    Ok(Value::from(body))
+    let mut body = client.delete(url).send().await?.text().await?.into_bytes();
+    let body = tremor_value::parse_to_value(&mut body)?.into_static();
+    Ok(body)
 }
 
 pub(crate) async fn download_object<'event>(
@@ -113,29 +119,36 @@ pub(crate) async fn download_object<'event>(
     Ok(Value::Bytes(bytes.to_vec().into()))
 }
 
-pub(crate) async fn create_bucket<'event>(
+pub(crate) async fn create_bucket(
     client: &Client,
     project_id: &str,
     bucket_name: &str,
-) -> Result<Value<'event>> {
+) -> Result<Value<'static>> {
     let url = format!(
         "https://storage.googleapis.com/storage/v1/b?project={}",
         project_id
     );
     let mut map = HashMap::new();
     map.insert("name", bucket_name);
-    let body = client.post(url).json(&map).send().await?.text().await?;
-    Ok(Value::from(body))
+    let mut body = client
+        .post(url)
+        .json(&map)
+        .send()
+        .await?
+        .text()
+        .await?
+        .into_bytes();
+    let body = tremor_value::parse_to_value(&mut body)?.into_static();
+    Ok(body)
 }
 
-pub(crate) async fn delete_bucket<'event>(
-    client: &Client,
-    bucket_name: &str,
-) -> Result<Value<'event>> {
+pub(crate) async fn delete_bucket(client: &Client, bucket_name: &str) -> Result<Value<'static>> {
     let url = format!(
         "https://storage.googleapis.com/storage/v1/b/{}",
         bucket_name
     );
-    let body = client.delete(url).send().await?.text().await?;
-    Ok(Value::from(body))
+    let mut body = client.delete(url).send().await?.text().await?.into_bytes();
+    let body = tremor_value::parse_to_value(&mut body)?.into_static();
+    Ok(body)
+    // Ok(Value::from(body))
 }
