@@ -14,6 +14,7 @@
 
 use super::Value;
 use simd_json::prelude::*;
+use simd_json::BorrowedValue;
 use simd_json::OwnedValue;
 
 #[allow(clippy::cast_sign_loss, clippy::default_trait_access)]
@@ -63,6 +64,26 @@ impl<'value> PartialEq<OwnedValue> for Value<'value> {
     }
 }
 
+impl<'value> PartialEq<BorrowedValue<'value>> for Value<'value> {
+    #[inline]
+    #[must_use]
+    fn eq(&self, other: &BorrowedValue) -> bool {
+        match (self, other) {
+            (Self::Static(s1), BorrowedValue::Static(s2)) => s1 == s2,
+            (Self::String(v1), BorrowedValue::String(v2)) => v1.as_ref().eq(v2.as_ref()),
+            (Self::Array(v1), BorrowedValue::Array(v2)) => v1.eq(v2),
+            (Self::Object(v1), BorrowedValue::Object(v2)) => {
+                if v1.len() != v2.len() {
+                    return false;
+                }
+                v2.iter()
+                    .all(|(key, value)| v1.get(key.as_ref()).map_or(false, |v| v.eq(value)))
+            }
+            _ => false,
+        }
+    }
+}
+
 impl<'value> From<Value<'value>> for OwnedValue {
     #[inline]
     #[must_use]
@@ -73,6 +94,20 @@ impl<'value> From<Value<'value>> for OwnedValue {
             Value::Array(a) => a.into_iter().collect(),
             Value::Object(m) => m.into_iter().collect(),
             Value::Bytes(b) => OwnedValue::from(base64::encode(b)),
+        }
+    }
+}
+
+impl<'value> From<Value<'value>> for BorrowedValue<'value> {
+    #[inline]
+    #[must_use]
+    fn from(other: Value<'value>) -> BorrowedValue<'value> {
+        match other {
+            Value::Static(s) => BorrowedValue::from(s),
+            Value::String(s) => BorrowedValue::from(s.to_string()),
+            Value::Array(a) => a.into_iter().collect(),
+            Value::Object(m) => m.into_iter().collect(),
+            Value::Bytes(b) => BorrowedValue::from(base64::encode(b)),
         }
     }
 }
@@ -90,6 +125,22 @@ impl<'v> PartialEq<bool> for Value<'v> {
     #[must_use]
     fn eq(&self, other: &bool) -> bool {
         self.as_bool().map(|t| t.eq(other)).unwrap_or_default()
+    }
+}
+
+impl<'v> PartialEq<beef::Cow<'v, str>> for Value<'v> {
+    #[inline]
+    #[must_use]
+    fn eq(&self, other: &beef::Cow<str>) -> bool {
+        self.as_str().map(|t| t.eq(other)).unwrap_or_default()
+    }
+}
+
+impl<'v> PartialEq<std::borrow::Cow<'v, str>> for Value<'v> {
+    #[inline]
+    #[must_use]
+    fn eq(&self, other: &std::borrow::Cow<str>) -> bool {
+        self.as_str().map(|t| t.eq(other)).unwrap_or_default()
     }
 }
 

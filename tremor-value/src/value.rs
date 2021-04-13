@@ -13,7 +13,8 @@
 // limitations under the License.
 
 mod cmp;
-mod from;
+/// Conversions from other types to the value type
+pub mod from;
 mod serialize;
 
 use crate::{Error, Result};
@@ -86,6 +87,13 @@ pub enum Value<'value> {
 }
 
 impl<'value> Eq for Value<'value> {}
+
+impl<'value> Value<'value> {
+    /// Creates an empty array value
+    pub fn array() -> Self {
+        Value::Array(vec![])
+    }
+}
 
 #[derive(PartialEq)]
 struct Static(StaticNode);
@@ -613,11 +621,12 @@ mod test {
     use super::*;
     use proptest::proptest;
     use simd_json::json;
+    use simd_json::json_typed;
 
     #[test]
     fn obj_eq() {
-        let o1: Value = json!({"k": 1, "v":2}).into();
-        let o2: Value = json!({"k": 1, "v":2}).into();
+        let o1: Value = json_typed!(borrowed, {"k": 1, "v":2}).into();
+        let o2: Value = json_typed!(borrowed, {"k": 1, "v":2}).into();
         assert_eq!(o1, o2);
         assert_eq!(o2, o1);
         let o1: Value = json!({"k": (), "v":()}).into();

@@ -35,18 +35,22 @@ extern crate serde as serde_ext;
 
 mod error;
 mod known_key;
+mod macros;
 /// Prelude module
 pub mod prelude;
 mod serde;
-mod value;
+/// The value modules defines a structural module of tremor supported types
+pub mod value;
 pub use error::*;
 pub use known_key::{Error as KnownKeyError, KnownKey};
-pub use simd_json::{json, AlignedBuf, StaticNode};
+pub use simd_json::{json, json_typed, AlignedBuf, StaticNode};
+pub use value::from::*;
 pub use value::{parse_to_value, parse_to_value_with_buffers, to_value, Object, Value};
 
 use simd_json::Node;
 use simd_json_derive::{Deserialize, Serialize, Tape};
 use value_trait::Writable;
+
 impl<'value> Serialize for Value<'value> {
     fn json_write<W>(&self, writer: &mut W) -> std::io::Result<()>
     where
