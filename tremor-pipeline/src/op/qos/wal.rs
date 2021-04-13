@@ -21,7 +21,7 @@ use std::mem;
 use std::ops::{Add, AddAssign};
 use tremor_script::prelude::*;
 
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Default, PartialEq)]
 struct Idx([u8; 8]);
 #[cfg(not(tarpaulin_include))]
 impl std::fmt::Debug for Idx {
@@ -209,9 +209,12 @@ op!(WalFactory(_uid, node) {
 
 impl Wal {
     const URI_SCHEME: &'static str = "tremor-wal";
-    const READ: &'static str = "read";
+    // tree names
     const EVENTS: &'static str = "events";
     const STATE: &'static str = "state";
+    // keys in the state tree
+    const CONFIRMED: &'static str = "confirmed";
+    const READ: &'static str = "read";
 
     fn new(id: String, config: Config) -> Result<Self> {
         let wal = if let Some(dir) = &config.dir {
@@ -223,6 +226,7 @@ impl Wal {
         let state_tree = wal.open_tree(Self::STATE)?;
 
         #[allow(clippy::cast_possible_truncation)]
+        let confirmed = state_tree.get(Self::CONFIRMED)?.map(Idx::from);
         let read = state_tree
             .get(Self::READ)?
             .map(Idx::from)
@@ -231,7 +235,7 @@ impl Wal {
             cnt: events_tree.len() as u64,
             wal,
             read,
-            confirmed: None,
+            confirmed,
             events_tree,
             state_tree,
             config,
@@ -267,6 +271,12 @@ impl Wal {
             let mut event = Event::from_slice(e_slice)?;
             event.transactional = true;
             events.push((OUT, event))
+        }
+        if events.len() > 0 {
+            // track the last read event
+            if let Err(e) = self.state_tree.insert(Self::READ, self.read) {
+                error!("WAL: failed to persist read state: {}", e);
+            }
         }
         self.gc()?;
         Ok(events)
@@ -347,7 +357,7 @@ impl Operator for Wal {
                         // ALLOW: we just set it upstairs
                         .expect("`confirmed` not Some, although just set above, weird!")
                 };
-                if let Err(e) = self.state_tree.insert(Self::READ, confirmed) {
+                if let Err(e) = self.state_tree.insert(Self::CONFIRMED, confirmed) {
                     error!("Failed to persist confirm state: {}", e);
                 }
                 if let Some(e) = self
@@ -379,18 +389,16 @@ impl Operator for Wal {
                     insight.id.track(&e.id);
                 }
 
-                let c = self.confirmed.map(u64::from).unwrap_or_default();
-                if event_id < c {
-                    error!(
+                let current_confirmed = self.confirmed.map(u64::from).unwrap_or_default();
+                if event_id < current_confirmed {
+                    warn!(
                         "trying to fail a message({}) that was already confirmed({})",
-                        event_id, c
+                        event_id, current_confirmed
                     );
-                    self.confirmed = Some(Idx::from(event_id));
-                    if let Err(e) = self.state_tree.insert(
-                        Self::READ,
-                        // ALLOW: we just set `self.confirmed` above
-                        self.confirmed.expect("we just set this above, weird!?"),
-                    ) {
+                    // resetting confirmed to older event_id
+                    let confirmed = Idx::from(event_id);
+                    self.confirmed = Some(confirmed);
+                    if let Err(e) = self.state_tree.insert(Self::CONFIRMED, &confirmed) {
                         error!("Failed to persist confirm state: {}", e);
                     }
                 }
@@ -415,12 +423,12 @@ impl Operator for Wal {
         // If we just became full or we went from full to non full
         // update the CB status
         let insights = if self.full && !now_full {
-            trace!("WAL not full any more.");
+            warn!("WAL not full any more. {} elements.", self.cnt);
             let mut e = Event::cb_restore(signal.ingest_ns);
             e.origin_uri = self.origin_uri.clone();
             vec![e]
         } else if !self.full && now_full {
-            trace!("WAL full.");
+            warn!("WAL full. {} elements.", self.cnt);
             let mut e = Event::cb_trigger(signal.ingest_ns);
             e.origin_uri = self.origin_uri.clone();
             vec![e]
@@ -508,12 +516,18 @@ mod test {
         let insight = &r.insights[0];
         assert_eq!(CbAction::Ack, insight.cb);
 
+        assert_eq!(1, o.cnt);
+        assert_eq!(Idx::default(), o.read);
+        assert_eq!(None, o.confirmed);
+
         // Restore the CB
         let mut i = Event::cb_restore(0);
         o.on_contraflow(wal_uid, &mut i);
 
         // we have 1 event stored
         assert_eq!(1, o.cnt);
+        assert_eq!(Idx::default(), o.read);
+        assert_eq!(None, o.confirmed);
 
         // send second event, expect both events back
         let id2 = idgen.next_id();
@@ -538,6 +552,8 @@ mod test {
 
         // we have two events stored
         assert_eq!(2, o.cnt);
+        assert_eq!(Idx::from(id2.event_id()) + 1_u64, o.read);
+        assert_eq!(None, o.confirmed);
 
         // acknowledge the first event
         i = Event::cb_ack(e.ingest_ns, r.events[0].1.id.clone());
@@ -545,6 +561,8 @@ mod test {
 
         // we still have two events stored
         assert_eq!(2, o.cnt);
+        assert_eq!(Idx::from(id2.event_id() + 1), o.read);
+        assert_eq!(Some(Idx::from(id.event_id())), o.confirmed);
 
         // apply gc on signal
         let mut signal = Event {
@@ -559,6 +577,8 @@ mod test {
 
         // now we have 1 left
         assert_eq!(1, o.cnt);
+        assert_eq!(Idx::from(id2.event_id() + 1), o.read);
+        assert_eq!(Some(Idx::from(id.event_id())), o.confirmed);
 
         // acknowledge the second event
         i = Event::cb_ack(e.ingest_ns, r.events[1].1.id.clone());
@@ -566,6 +586,8 @@ mod test {
 
         // still 1 left
         assert_eq!(1, o.cnt);
+        assert_eq!(Idx::from(id2.event_id() + 1), o.read);
+        assert_eq!(Some(Idx::from(id2.event_id())), o.confirmed);
 
         // apply gc on signal
         let mut signal2 = Event {
@@ -580,6 +602,8 @@ mod test {
 
         // we are clean now
         assert_eq!(0, o.cnt);
+        assert_eq!(Idx::from(id2.event_id() + 1), o.read);
+        assert_eq!(Some(Idx::from(id2.event_id())), o.confirmed);
         Ok(())
     }
 
