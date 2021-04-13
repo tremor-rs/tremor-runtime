@@ -19,8 +19,8 @@ use crate::permge::PriorityMerge;
 use crate::pipeline;
 use crate::registry::ServantId;
 use crate::sink::{
-    self, blackhole, cb, debug, elastic, exit, file, handle_response, kafka, kv, nats, newrelic,
-    otel, postgres, rest, stderr, stdout, tcp, udp, ws,
+    self, blackhole, cb, debug, dns, elastic, exit, file, handle_response, kafka, kv, nats,
+    newrelic, otel, postgres, rest, stderr, stdout, tcp, udp, ws,
 };
 use crate::source::Processors;
 use crate::url::ports::{IN, METRICS};
@@ -109,6 +109,7 @@ pub fn lookup(name: &str, config: &Option<OpConfig>) -> Result<Box<dyn Offramp>>
         "blackhole" => blackhole::Blackhole::from_config(config),
         "cb" => cb::Cb::from_config(config),
         "debug" => debug::Debug::from_config(config),
+        "dns" => dns::Dns::from_config(config),
         "elastic" => elastic::Elastic::from_config(config),
         "exit" => exit::Exit::from_config(config),
         "file" => file::File::from_config(config),
@@ -116,6 +117,7 @@ pub fn lookup(name: &str, config: &Option<OpConfig>) -> Result<Box<dyn Offramp>>
         "kv" => kv::Kv::from_config(config),
         "nats" => nats::Nats::from_config(config),
         "newrelic" => newrelic::NewRelic::from_config(config),
+        "otel" => otel::OpenTelemetry::from_config(config),
         "postgres" => postgres::Postgres::from_config(config),
         "rest" => rest::Rest::from_config(config),
         "stderr" => stderr::StdErr::from_config(config),
@@ -123,7 +125,6 @@ pub fn lookup(name: &str, config: &Option<OpConfig>) -> Result<Box<dyn Offramp>>
         "tcp" => tcp::Tcp::from_config(config),
         "udp" => udp::Udp::from_config(config),
         "ws" => ws::Ws::from_config(config),
-        "otel" => otel::OpenTelemetry::from_config(config),
         _ => Err(format!("Offramp {} not known", name).into()),
     }
 }

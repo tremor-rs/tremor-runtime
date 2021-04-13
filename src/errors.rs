@@ -153,6 +153,7 @@ error_chain! {
         Postgres(postgres::Error);
         Common(tremor_common::Error);
         Sled(sled::Error);
+        DnsError(async_std_resolver::ResolveError);
     }
 
     errors {
