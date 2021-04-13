@@ -22,6 +22,7 @@ use halfbrown::HashMap;
 pub(crate) mod blackhole;
 pub(crate) mod cb;
 pub(crate) mod debug;
+pub(crate) mod dns;
 pub(crate) mod elastic;
 pub(crate) mod exit;
 pub(crate) mod file;

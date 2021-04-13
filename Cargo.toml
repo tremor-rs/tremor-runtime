@@ -35,6 +35,7 @@ async-compression = { version = "0.3", features = ["xz", "futures-bufread", "str
 async-std = { version = "1.9.0", features = ["unstable", "attributes", "tokio03", "tokio1"] }
 async-trait = "0.1"
 async-tungstenite = { version = "0.13.1", features = ["async-std-runtime"] }
+async-std-resolver = "0.20"
 base64 = "0.13"
 beef = { version = "0.5", features = ["impl_serde"] }
 byteorder = "1"
