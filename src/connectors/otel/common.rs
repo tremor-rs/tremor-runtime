@@ -15,12 +15,12 @@
 use crate::connectors::pb;
 use crate::errors::Result;
 use halfbrown::HashMap;
-use simd_json::{json, StaticNode};
 use tremor_otelapis::opentelemetry::proto::common::v1::{
     any_value, AnyValue, ArrayValue, InstrumentationLibrary, KeyValue, KeyValueList, StringKeyValue,
 };
+use tremor_value::StaticNode;
 
-use tremor_value::Value;
+use tremor_value::{literal, Value};
 use value_trait::ValueAccess;
 
 pub(crate) fn any_value_to_json<'event>(
@@ -182,11 +182,10 @@ pub(crate) fn maybe_instrumentation_library_to_json<'event>(
     match pb {
         None => Value::Static(StaticNode::Null),
         // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
-        Some(il) => json!({
+        Some(il) => literal!({
             "name": il.name,
             "version": il.version,
-        })
-        .into(),
+        }),
     }
 }
 
@@ -337,7 +336,7 @@ mod tests {
         };
         let json = any_value_to_json(pb.clone())?;
         let back_again = any_value_to_pb(&json);
-        let expected: Value = json!(["snot"]).into();
+        let expected: Value = literal!(["snot"]);
         assert_eq!(expected, json);
         assert_eq!(pb, back_again);
 
@@ -346,7 +345,7 @@ mod tests {
         };
         let json = any_value_to_json(pb.clone())?;
         let back_again = any_value_to_pb(&json);
-        let expected: Value = json!([]).into();
+        let expected: Value = literal!([]);
         assert_eq!(expected, json);
         assert_eq!(pb, back_again);
         Ok(())
@@ -367,7 +366,7 @@ mod tests {
         };
         let json = any_value_to_json(pb.clone())?;
         let back_again = any_value_to_pb(&json);
-        let expected: Value = json!({"badger": "snot"}).into();
+        let expected: Value = literal!({"badger": "snot"});
         assert_eq!(expected, json);
         assert_eq!(pb, back_again);
 
@@ -378,7 +377,7 @@ mod tests {
         };
         let json = any_value_to_json(pb.clone())?;
         let back_again = any_value_to_pb(&json);
-        let expected: Value = json!({}).into();
+        let expected: Value = literal!({});
         assert_eq!(expected, json);
         assert_eq!(pb, back_again);
 
@@ -396,7 +395,7 @@ mod tests {
         }];
         let json = key_value_list_to_json(pb.clone())?;
         let back_again = maybe_key_value_list_to_pb(Some(&json))?;
-        let expected: Value = json!({"snot": "snot"}).into();
+        let expected: Value = literal!({"snot": "snot"});
         assert_eq!(expected, json);
         assert_eq!(pb, back_again);
         Ok(())
@@ -410,7 +409,7 @@ mod tests {
         }];
         let json = string_key_value_to_json(pb.clone());
         let back_again = string_key_value_to_pb(Some(&json))?;
-        let expected: Value = json!({"snot": "badger"}).into();
+        let expected: Value = literal!({"snot": "badger"});
         assert_eq!(expected, json);
         assert_eq!(pb, back_again);
         Ok(())
@@ -424,7 +423,7 @@ mod tests {
         };
         let json = maybe_instrumentation_library_to_json(Some(pb.clone()));
         let back_again = maybe_instrumentation_library_to_pb(Some(&json))?;
-        let expected: Value = json!({"name": "name", "version": "v0.1.2"}).into();
+        let expected: Value = literal!({"name": "name", "version": "v0.1.2"});
         assert_eq!(expected, json);
         assert_eq!(Some(pb), back_again);
         Ok(())

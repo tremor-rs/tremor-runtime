@@ -29,6 +29,7 @@ pub use self::value::*;
 mod test {
     use crate::Value;
     use simd_json::json;
+    use simd_json::json_typed;
 
     #[test]
     fn de_se() {
@@ -37,6 +38,18 @@ mod test {
         assert_eq!(
             v,
             json!({"value": {"array": [1, 1.0, true, ()], "string": "badger"}})
+        );
+        assert_eq!(s, serde_json::to_string(&v).unwrap());
+
+        assert_eq!(
+            v,
+            json_typed!(owned, {"value": {"array": [1, 1.0, true, ()], "string": "badger"}})
+        );
+        assert_eq!(s, serde_json::to_string(&v).unwrap());
+
+        assert_eq!(
+            v,
+            json_typed!(borrowed, {"value": {"array": [1, 1.0, true, ()], "string": "badger"}})
         );
         assert_eq!(s, serde_json::to_string(&v).unwrap());
     }

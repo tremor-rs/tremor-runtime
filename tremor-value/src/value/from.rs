@@ -66,7 +66,7 @@ impl<'value> From<&'value str> for Value<'value> {
     #[inline]
     #[must_use]
     fn from(s: &'value str) -> Self {
-        Value::String(Cow::from(s))
+        Self::String(Cow::from(s))
     }
 }
 
@@ -74,7 +74,7 @@ impl<'value> From<std::borrow::Cow<'value, str>> for Value<'value> {
     #[inline]
     #[must_use]
     fn from(c: std::borrow::Cow<'value, str>) -> Self {
-        Value::String(c.into())
+        Self::String(c.into())
     }
 }
 
@@ -90,7 +90,7 @@ impl<'value> From<String> for Value<'value> {
     #[inline]
     #[must_use]
     fn from(s: String) -> Self {
-        Value::String(s.into())
+        Self::String(s.into())
     }
 }
 
@@ -264,19 +264,27 @@ impl<'value> From<Object<'value>> for Value<'value> {
 #[cfg(test)]
 mod test {
     use crate::Value;
-    use simd_json::{json, BorrowedValue};
+    use simd_json::{json_typed, BorrowedValue, OwnedValue};
 
     #[test]
-    fn borrowed_value() {
-        let j_o = json!({
+    fn value_variations() {
+        // simd-json native variants
+        let j_b: BorrowedValue = json_typed!(borrowed, {
             "string": "something",
             "object": {
                 "array": [1, 1.2]
             }
         });
-        let j_b: BorrowedValue = j_o.clone().into();
-        let v_o = Value::from(j_o);
-        let v_b = Value::from(j_b);
+        let j_o: OwnedValue = json_typed!(owned, {
+            "string": "something",
+            "object": {
+                "array": [1, 1.2]
+            }
+        });
+
+        // tremor variant
+        let v_b: Value = Value::from(j_b);
+        let v_o: Value = Value::from(j_o);
 
         assert_eq!(v_o, v_b);
     }

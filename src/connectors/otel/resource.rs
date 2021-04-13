@@ -15,21 +15,18 @@
 use super::common;
 use crate::connectors::pb;
 use crate::errors::Result;
-use simd_json::json;
 use tremor_otelapis::opentelemetry::proto::resource::v1::Resource;
+use tremor_value::literal;
 use tremor_value::Value;
 
 pub(crate) fn resource_to_json<'event>(pb: Option<Resource>) -> Result<Value<'event>> {
     if let Some(data) = pb {
-        // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
-        Ok(json!({
+        Ok(literal!({
             "attributes": common::key_value_list_to_json(data.attributes)?,
             "dropped_attributes_count": data.dropped_attributes_count,
-        })
-        .into())
+        }))
     } else {
-        // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
-        Ok(json!({ "attributes": {}, "dropped_attributes_count": 0 }).into())
+        Ok(literal!({ "attributes": {}, "dropped_attributes_count": 0 }))
     }
 }
 
@@ -71,11 +68,10 @@ mod tests {
         };
         let json = resource_to_json(Some(pb.clone()))?;
         let back_again = maybe_resource_to_pb(Some(&json))?;
-        let expected: Value = json!({
+        let expected: Value = literal!({
             "attributes": { "snot": "badger" },
             "dropped_attributes_count": 9
-        })
-        .into();
+        });
 
         assert_eq!(expected, json);
         assert_eq!(pb, back_again);

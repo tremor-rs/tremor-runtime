@@ -17,7 +17,6 @@ use super::common;
 use super::id;
 use super::resource;
 use crate::errors::Result;
-use simd_json::{json, StaticNode};
 use tremor_otelapis::opentelemetry::proto::{
     collector::metrics::v1::ExportMetricsServiceRequest,
     metrics::v1::{
@@ -29,6 +28,8 @@ use tremor_otelapis::opentelemetry::proto::{
         ResourceMetrics,
     },
 };
+use tremor_value::literal;
+use tremor_value::StaticNode;
 
 use tremor_value::Value;
 use value_trait::ValueAccess;
@@ -37,17 +38,13 @@ pub(crate) fn int_exemplars_to_json<'event>(data: Vec<IntExemplar>) -> Value<'ev
     let mut json: Vec<Value> = Vec::new();
 
     for exemplar in data {
-        json.push(
-            // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
-            json!({
-                "span_id": id::hex_span_id_to_json(&exemplar.span_id),
-                "trace_id": id::hex_trace_id_to_json(&exemplar.trace_id),
-                "filtered_labels": common::string_key_value_to_json(exemplar.filtered_labels),
-                "time_unix_nano": exemplar.time_unix_nano,
-                "value": exemplar.value
-            })
-            .into(),
-        )
+        json.push(literal!({
+            "span_id": id::hex_span_id_to_json(&exemplar.span_id),
+            "trace_id": id::hex_trace_id_to_json(&exemplar.trace_id),
+            "filtered_labels": common::string_key_value_to_json(exemplar.filtered_labels),
+            "time_unix_nano": exemplar.time_unix_nano,
+            "value": exemplar.value
+        }))
     }
     Value::Array(json)
 }
@@ -79,17 +76,13 @@ pub(crate) fn double_exemplars_to_json<'event>(data: Vec<DoubleExemplar>) -> Val
     let mut json: Vec<Value> = Vec::new();
 
     for exemplar in data {
-        json.push(
-            // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
-            json!({
-                "span_id": id::hex_span_id_to_json(&exemplar.span_id),
-                "trace_id": id::hex_trace_id_to_json(&exemplar.trace_id),
-                "filtered_labels": common::string_key_value_to_json(exemplar.filtered_labels),
-                "time_unix_nano": exemplar.time_unix_nano,
-                "value": exemplar.value
-            })
-            .into(),
-        )
+        json.push(literal!({
+            "span_id": id::hex_span_id_to_json(&exemplar.span_id),
+            "trace_id": id::hex_trace_id_to_json(&exemplar.trace_id),
+            "filtered_labels": common::string_key_value_to_json(exemplar.filtered_labels),
+            "time_unix_nano": exemplar.time_unix_nano,
+            "value": exemplar.value
+        }))
     }
     Value::Array(json)
 }
@@ -121,14 +114,10 @@ pub(crate) fn quantile_values_to_json<'event>(data: Vec<ValueAtQuantile>) -> Val
     let mut json: Vec<Value> = Vec::new();
 
     for data in data {
-        json.push(
-            // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
-            json!({
-                "value": data.value,
-                "quantile": data.quantile,
-            })
-            .into(),
-        )
+        json.push(literal!({
+            "value": data.value,
+            "quantile": data.quantile,
+        }))
     }
     Value::Array(json)
 }
@@ -153,14 +142,13 @@ pub(crate) fn int_data_points_to_json<'event>(pb: Vec<IntDataPoint>) -> Value<'e
         let labels = common::string_key_value_to_json(data.labels);
         let exemplars = int_exemplars_to_json(data.exemplars);
         // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
-        let v: Value = json!({
+        let v: Value = literal!({
             "value": data.value,
             "start_time_unix_nano": data.start_time_unix_nano,
             "time_unix_nano": data.time_unix_nano,
             "labels": labels,
             "exemplars": exemplars,
-        })
-        .into();
+        });
         json.push(v);
     }
     Value::Array(json)
@@ -196,15 +184,13 @@ pub(crate) fn double_data_points_to_json<'event>(pb: Vec<DoubleDataPoint>) -> Va
         let labels = common::string_key_value_to_json(data.labels);
         let exemplars = double_exemplars_to_json(data.exemplars);
 
-        // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
-        let v: Value = json!({
+        let v: Value = literal!({
             "value": data.value,
             "start_time_unix_nano": data.start_time_unix_nano,
             "time_unix_nano": data.time_unix_nano,
             "labels": labels,
             "exemplars": exemplars,
-        })
-        .into();
+        });
         json.push(v);
     }
     Value::Array(json)
@@ -241,8 +227,7 @@ pub(crate) fn double_histo_data_points_to_json<'event>(
     for points in pb {
         let labels = common::string_key_value_to_json(points.labels);
         let exemplars = double_exemplars_to_json(points.exemplars);
-        // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
-        let v: Value = json!({
+        let v: Value = literal!({
             "start_time_unix_nano": points.start_time_unix_nano,
             "time_unix_nano": points.time_unix_nano,
             "labels": labels,
@@ -251,8 +236,7 @@ pub(crate) fn double_histo_data_points_to_json<'event>(
             "count": points.count,
             "explicit_bounds": points.explicit_bounds,
             "bucket_counts": points.bucket_counts,
-        })
-        .into();
+        });
         json.push(v);
     }
 
@@ -298,16 +282,14 @@ pub(crate) fn double_summary_data_points_to_json<'event>(
     for points in pb {
         let labels = common::string_key_value_to_json(points.labels);
         let quantile_values = quantile_values_to_json(points.quantile_values);
-        // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
-        let v: Value = json!({
+        let v: Value = literal!({
             "start_time_unix_nano": points.start_time_unix_nano,
             "time_unix_nano": points.time_unix_nano,
             "labels": labels,
             "quantile_values": quantile_values,
             "sum": points.sum,
             "count": points.count,
-        })
-        .into();
+        });
         json.push(v);
     }
     Value::Array(json)
@@ -348,8 +330,7 @@ pub(crate) fn int_histo_data_points_to_json<'event>(
     for points in pb {
         let labels = common::string_key_value_to_json(points.labels);
         let exemplars = int_exemplars_to_json(points.exemplars);
-        // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
-        let v: Value = json!({
+        let v: Value = literal!({
             "start_time_unix_nano": points.start_time_unix_nano,
             "time_unix_nano": points.time_unix_nano,
             "labels": labels,
@@ -358,8 +339,7 @@ pub(crate) fn int_histo_data_points_to_json<'event>(
             "count": points.count,
             "explicit_bounds": points.explicit_bounds,
             "bucket_counts": points.bucket_counts,
-        })
-        .into();
+        });
         json.push(v);
     }
 
@@ -405,55 +385,41 @@ pub(crate) fn int_sum_data_points_to_json<'event>(pb: Vec<IntDataPoint>) -> Valu
 pub(crate) fn metrics_data_to_json<'event>(pb: Option<metric::Data>) -> Value<'event> {
     if let Some(pb) = pb {
         let json: Value = match pb {
-            // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
-            Data::IntGauge(data) => json!({
+            Data::IntGauge(data) => literal!({
                 "int-gauge": {
                 "data_points":  int_data_points_to_json(data.data_points)
-            }})
-            .into(),
-            // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
-            Data::DoubleSum(data) => json!({
+            }}),
+            Data::DoubleSum(data) => literal!({
                 "double-sum": {
                 "is_monotonic": data.is_monotonic,
                 "data_points":  double_data_points_to_json(data.data_points),
                 "aggregation_temporality": data.aggregation_temporality,
-            }})
-            .into(),
-            // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
-            Data::DoubleGauge(data) => json!({
+            }}),
+            Data::DoubleGauge(data) => literal!({
                 "double-gauge": {
                 "data_points":  double_data_points_to_json(data.data_points),
-            }})
-            .into(),
-            // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
-            Data::DoubleHistogram(data) => json!({
+            }}),
+            Data::DoubleHistogram(data) => literal!({
                 "double-histogram": {
                 "data_points":  double_histo_data_points_to_json(data.data_points),
                 "aggregation_temporality": data.aggregation_temporality,
-            }})
-            .into(),
-            // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
-            Data::DoubleSummary(data) => json!({
+            }}),
+            Data::DoubleSummary(data) => literal!({
                 "double-summary": {
                 "data_points":  double_summary_data_points_to_json(data.data_points),
-            }})
-            .into(),
-            // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
-            Data::IntHistogram(data) => json!({
+            }}),
+            Data::IntHistogram(data) => literal!({
                 "int-histogram": {
                 "data_points":  int_histo_data_points_to_json(data.data_points),
                 "aggregation_temporality": data.aggregation_temporality,
-            }})
-            .into(),
-            // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
-            Data::IntSum(data) => json!({
+            }}),
+            Data::IntSum(data) => literal!({
                 "int-sum": {
                 "is_monotonic": data.is_monotonic,
                 "data_points":  int_sum_data_points_to_json(data.data_points),
                 "aggregation_temporality": data.aggregation_temporality,
                 }
-            })
-            .into(),
+            }),
         };
 
         json
@@ -524,8 +490,7 @@ pub(crate) fn instrumentation_library_metrics_to_json<'event>(
         for metric in data.metrics {
             let data = metrics_data_to_json(metric.data);
 
-            // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
-            metrics.push(json!({
+            metrics.push(literal!({
                 "name": metric.name,
                 "description": metric.description,
                 "data": data,
@@ -533,14 +498,13 @@ pub(crate) fn instrumentation_library_metrics_to_json<'event>(
             }));
         }
         // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
-        json.push(json!({
+        json.push(literal!({
             "instrumentation_library": common::maybe_instrumentation_library_to_json(data.instrumentation_library),
             "metrics": metrics
         }));
     }
 
-    // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
-    json!(json).into()
+    literal!(json)
 }
 
 pub(crate) fn instrumentation_library_metrics_to_pb(
@@ -589,16 +553,13 @@ pub(crate) fn resource_metrics_to_json<'event>(
     for metric in request.resource_metrics {
         let ilm = instrumentation_library_metrics_to_json(metric.instrumentation_library_metrics);
         // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
-        metrics.push(
-            json!({
-                "instrumentation_library_metrics": ilm,
-                "resource": resource::resource_to_json(metric.resource)?,
-            })
-            .into(),
-        );
+        metrics.push(literal!({
+            "instrumentation_library_metrics": ilm,
+            "resource": resource::resource_to_json(metric.resource)?,
+        }));
     }
 
-    Ok(json!({ "metrics": metrics }).into())
+    Ok(literal!({ "metrics": metrics }))
 }
 
 pub(crate) fn resource_metrics_to_pb(json: Option<&Value<'_>>) -> Result<Vec<ResourceMetrics>> {
@@ -650,14 +611,13 @@ mod tests {
         }];
         let json = int_exemplars_to_json(pb.clone());
         let back_again = int_exemplars_to_pb(Some(&json))?;
-        let expected: Value = json!([{
+        let expected: Value = literal!([{
             "time_unix_nano": 0,
             "span_id": span_id_json,
             "trace_id": trace_id_json,
             "filtered_labels": {},
             "value": 42
-        }])
-        .into();
+        }]);
         assert_eq!(expected, json);
         assert_eq!(pb, back_again);
         Ok(())
@@ -680,14 +640,13 @@ mod tests {
         }];
         let json = double_exemplars_to_json(pb.clone());
         let back_again = double_exemplars_to_pb(Some(&json))?;
-        let expected: Value = json!([{
+        let expected: Value = literal!([{
             "time_unix_nano": 0,
             "span_id": span_id_json,
             "trace_id": trace_id_json,
             "filtered_labels": {},
             "value": 42.42
-        }])
-        .into();
+        }]);
         assert_eq!(expected, json);
         assert_eq!(pb, back_again);
         Ok(())
@@ -701,11 +660,10 @@ mod tests {
         }];
         let json = quantile_values_to_json(pb.clone());
         let back_again = quantile_values_to_pb(Some(&json))?;
-        let expected: Value = json!([{
+        let expected: Value = literal!([{
             "value": 42.42,
             "quantile": 0.3,
-        }])
-        .into();
+        }]);
         assert_eq!(expected, json);
         assert_eq!(pb, back_again);
         Ok(())
@@ -722,14 +680,13 @@ mod tests {
         }];
         let json = int_data_points_to_json(pb.clone());
         let back_again = int_data_points_to_pb(Some(&json))?;
-        let expected: Value = json!([{
+        let expected: Value = literal!([{
             "value": 42,
             "start_time_unix_nano": 0,
             "time_unix_nano": 0,
             "labels": {},
             "exemplars": []
-        }])
-        .into();
+        }]);
         assert_eq!(expected, json);
         assert_eq!(pb, back_again);
 
@@ -747,14 +704,13 @@ mod tests {
         }];
         let json = double_data_points_to_json(pb.clone());
         let back_again = double_data_points_to_pb(Some(&json))?;
-        let expected: Value = json!([{
+        let expected: Value = literal!([{
             "value": 42.42,
             "start_time_unix_nano": 0,
             "time_unix_nano": 0,
             "labels": {},
             "exemplars": []
-        }])
-        .into();
+        }]);
         assert_eq!(expected, json);
         assert_eq!(pb, back_again);
 
@@ -775,7 +731,7 @@ mod tests {
         }];
         let json = int_histo_data_points_to_json(pb.clone());
         let back_again = int_histo_data_points_to_pb(Some(&json))?;
-        let expected: Value = json!([{
+        let expected: Value = literal!([{
             "start_time_unix_nano": 0,
             "time_unix_nano": 0,
             "labels": {},
@@ -784,8 +740,7 @@ mod tests {
             "count": 0,
             "explicit_bounds": [],
             "bucket_counts": [],
-        }])
-        .into();
+        }]);
         assert_eq!(expected, json);
         assert_eq!(pb, back_again);
 
@@ -806,7 +761,7 @@ mod tests {
         }];
         let json = double_histo_data_points_to_json(pb.clone());
         let back_again = double_histo_data_points_to_pb(Some(&json))?;
-        let expected: Value = json!([{
+        let expected: Value = literal!([{
             "start_time_unix_nano": 0,
             "time_unix_nano": 0,
             "labels": {},
@@ -815,8 +770,7 @@ mod tests {
             "count": 0,
             "explicit_bounds": [],
             "bucket_counts": [],
-        }])
-        .into();
+        }]);
         assert_eq!(expected, json);
         assert_eq!(pb, back_again);
 
@@ -838,15 +792,14 @@ mod tests {
         }];
         let json = double_summary_data_points_to_json(pb.clone());
         let back_again = double_summary_data_points_to_pb(Some(&json))?;
-        let expected: Value = json!([{
+        let expected: Value = literal!([{
             "start_time_unix_nano": 0,
             "time_unix_nano": 0,
             "labels": {},
             "sum": 0.0,
             "count": 0,
             "quantile_values": [ { "value": 0.1, "quantile": 0.2 }]
-        }])
-        .into();
+        }]);
         assert_eq!(expected, json);
         assert_eq!(pb, back_again);
 
@@ -867,7 +820,7 @@ mod tests {
 
         let json = metrics_data_to_json(pb.clone());
         let back_again = metrics_data_to_pb(Some(&json))?;
-        let expected: Value = json!({
+        let expected: Value = literal!({
             "int-gauge": {
                 "data_points": [{
                     "start_time_unix_nano": 0,
@@ -876,8 +829,7 @@ mod tests {
                     "exemplars": [],
                     "value": 42
                 }]
-        }})
-        .into();
+        }});
         assert_eq!(expected, json);
         assert_eq!(pb, Some(back_again));
         Ok(())
@@ -899,7 +851,7 @@ mod tests {
 
         let json = metrics_data_to_json(pb.clone());
         let back_again = metrics_data_to_pb(Some(&json))?;
-        let expected: Value = json!({
+        let expected: Value = literal!({
             "double-sum": {
                 "is_monotonic": false,
                 "aggregation_temporality": 0,
@@ -910,8 +862,7 @@ mod tests {
                     "exemplars": [],
                     "value": 43.43
                 }]
-        }})
-        .into();
+        }});
         assert_eq!(expected, json);
         assert_eq!(pb, Some(back_again));
         Ok(())
@@ -931,7 +882,7 @@ mod tests {
 
         let json = metrics_data_to_json(pb.clone());
         let back_again = metrics_data_to_pb(Some(&json))?;
-        let expected: Value = json!({
+        let expected: Value = literal!({
             "double-gauge": {
                 "data_points": [{
                     "start_time_unix_nano": 0,
@@ -940,8 +891,7 @@ mod tests {
                     "exemplars": [],
                     "value": 43.43
                 }]
-        }})
-        .into();
+        }});
         assert_eq!(expected, json);
         assert_eq!(pb, Some(back_again));
         Ok(())
@@ -965,7 +915,7 @@ mod tests {
 
         let json = metrics_data_to_json(pb.clone());
         let back_again = metrics_data_to_pb(Some(&json))?;
-        let expected: Value = json!({
+        let expected: Value = literal!({
             "double-histogram": {
                 "aggregation_temporality": 0,
                 "data_points": [{
@@ -979,8 +929,7 @@ mod tests {
                     "explicit_bounds": []
                 }]
             }
-        })
-        .into();
+        });
         assert_eq!(expected, json);
         assert_eq!(pb, Some(back_again));
         Ok(())
@@ -1001,7 +950,7 @@ mod tests {
 
         let json = metrics_data_to_json(pb.clone());
         let back_again = metrics_data_to_pb(Some(&json))?;
-        let expected: Value = json!({
+        let expected: Value = literal!({
             "double-summary": {
                 "data_points": [{
                     "start_time_unix_nano": 0,
@@ -1011,8 +960,7 @@ mod tests {
                     "sum": 0.0,
                     "quantile_values": []
                 }]
-        }})
-        .into();
+        }});
         assert_eq!(expected, json);
         assert_eq!(pb, Some(back_again));
         Ok(())
@@ -1036,7 +984,7 @@ mod tests {
 
         let json = metrics_data_to_json(pb.clone());
         let back_again = metrics_data_to_pb(Some(&json))?;
-        let expected: Value = json!({
+        let expected: Value = literal!({
             "int-histogram": {
                 "aggregation_temporality": 0,
                 "data_points": [{
@@ -1049,8 +997,7 @@ mod tests {
                     "bucket_counts": [],
                     "explicit_bounds": []
                 }]
-        }})
-        .into();
+        }});
         assert_eq!(expected, json);
         assert_eq!(pb, Some(back_again));
         Ok(())
@@ -1072,7 +1019,7 @@ mod tests {
 
         let json = metrics_data_to_json(pb.clone());
         let back_again = metrics_data_to_pb(Some(&json))?;
-        let expected: Value = json!({
+        let expected: Value = literal!({
             "int-sum": {
                 "is_monotonic": false,
                 "aggregation_temporality": 0,
@@ -1083,8 +1030,7 @@ mod tests {
                     "exemplars": [],
                     "value": 4
                 }]
-        }})
-        .into();
+        }});
         assert_eq!(expected, json);
         assert_eq!(pb, Some(back_again));
         Ok(())
@@ -1114,7 +1060,7 @@ mod tests {
         }];
         let json = instrumentation_library_metrics_to_json(pb.clone());
         let back_again = instrumentation_library_metrics_to_pb(Some(&json))?;
-        let expected: Value = json!([{
+        let expected: Value = literal!([{
             "instrumentation_library": { "name": "name", "version": "v0.1.2" },
             "metrics": [{
                 "name": "test",
@@ -1132,8 +1078,7 @@ mod tests {
                     }
                 },
             }]
-        }])
-        .into();
+        }]);
 
         assert_eq!(expected, json);
         assert_eq!(pb, back_again);
@@ -1173,7 +1118,7 @@ mod tests {
         };
         let json = resource_metrics_to_json(pb.clone())?;
         let back_again = resource_metrics_to_pb(Some(&json))?;
-        let expected: Value = json!({
+        let expected: Value = literal!({
             "metrics": [
                 {
                     "resource": { "attributes": {}, "dropped_attributes_count": 8 },
@@ -1198,8 +1143,7 @@ mod tests {
                     }]
                 }
             ]
-        })
-        .into();
+        });
 
         assert_eq!(expected, json);
         assert_eq!(pb.resource_metrics, back_again);

@@ -17,7 +17,7 @@ use super::common;
 use super::id;
 use super::resource;
 use crate::errors::Result;
-use simd_json::json;
+use tremor_value::literal;
 
 use tremor_otelapis::opentelemetry::proto::{
     collector::trace::v1::ExportTraceServiceRequest,
@@ -33,32 +33,25 @@ use value_trait::ValueAccess;
 #[allow(deprecated)]
 pub(crate) fn status_to_json<'event>(data: Option<Status>) -> Value<'event> {
     if let Some(data) = data {
-        // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
-        json!({
+        literal!({
             "code": data.code,
             "deprecated_code": data.deprecated_code,
             "message": data.message
         })
-        .into()
     } else {
-        // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
-        json!({ "code": 0, "deprecated_code": 0, "message": "status code unset" }).into()
+        literal!({ "code": 0, "deprecated_code": 0, "message": "status code unset" })
     }
 }
 
 pub(crate) fn span_events_to_json<'event>(pb: Vec<Event>) -> Result<Value<'event>> {
     let mut json = Vec::new();
     for data in pb {
-        json.push(
-            // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
-            json!({
-                "time_unix_nano" : data.time_unix_nano,
-                "name" : data.name.to_string(),
-                "attributes" : common::key_value_list_to_json(data.attributes)?,
-                "dropped_attributes_count" : data.dropped_attributes_count
-            })
-            .into(),
-        );
+        json.push(literal!({
+            "time_unix_nano" : data.time_unix_nano,
+            "name" : data.name.to_string(),
+            "attributes" : common::key_value_list_to_json(data.attributes)?,
+            "dropped_attributes_count" : data.dropped_attributes_count
+        }));
     }
     Ok(Value::Array(json))
 }
@@ -86,17 +79,13 @@ pub(crate) fn span_events_to_pb(json: Option<&Value<'_>>) -> Result<Vec<Event>> 
 pub(crate) fn span_links_to_json<'event>(pb: Vec<Link>) -> Result<Value<'event>> {
     let mut json = Vec::new();
     for data in pb {
-        json.push(
-            // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
-            json!({
-                "trace_id": id::hex_trace_id_to_json(&data.trace_id),
-                "span_id": id::hex_span_id_to_json(&data.span_id),
-                "trace_state": data.trace_state,
-                "attributes": common::key_value_list_to_json(data.attributes)?,
-                "dropped_attributes_count" : data.dropped_attributes_count
-            })
-            .into(),
-        );
+        json.push(literal!({
+            "trace_id": id::hex_trace_id_to_json(&data.trace_id),
+            "span_id": id::hex_span_id_to_json(&data.span_id),
+            "trace_state": data.trace_state,
+            "attributes": common::key_value_list_to_json(data.attributes)?,
+            "dropped_attributes_count" : data.dropped_attributes_count
+        }));
     }
     Ok(Value::Array(json))
 }
@@ -150,35 +139,30 @@ pub(crate) fn instrumentation_library_spans_to_json<'event>(
     for data in data {
         let mut spans: Vec<Value> = Vec::new();
         for span in data.spans {
-            spans.push(
-                // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
-                json!({
-                    "attributes": common::key_value_list_to_json(span.attributes)?,
-                    "events": span_events_to_json(span.events)?,
-                    "links": span_links_to_json(span.links)?,
-                    "span_id": id::hex_span_id_to_json(&span.span_id),
-                    "parent_span_id": id::hex_span_id_to_json(&span.parent_span_id),
-                    "trace_id": id::hex_trace_id_to_json(&span.trace_id),
-                    "start_time_unix_nano": span.start_time_unix_nano,
-                    "end_time_unix_nano": span.end_time_unix_nano,
-                    "trace_state": span.trace_state,
-                    "dropped_attributes_count": span.dropped_attributes_count,
-                    "dropped_events_count": span.dropped_events_count,
-                    "dropped_links_count": span.dropped_links_count,
-                    "status": status_to_json(span.status),
-                    "kind": span.kind,
-                    "name": span.name
-                })
-                .into(),
-            );
+            spans.push(literal!({
+                "attributes": common::key_value_list_to_json(span.attributes)?,
+                "events": span_events_to_json(span.events)?,
+                "links": span_links_to_json(span.links)?,
+                "span_id": id::hex_span_id_to_json(&span.span_id),
+                "parent_span_id": id::hex_span_id_to_json(&span.parent_span_id),
+                "trace_id": id::hex_trace_id_to_json(&span.trace_id),
+                "start_time_unix_nano": span.start_time_unix_nano,
+                "end_time_unix_nano": span.end_time_unix_nano,
+                "trace_state": span.trace_state,
+                "dropped_attributes_count": span.dropped_attributes_count,
+                "dropped_events_count": span.dropped_events_count,
+                "dropped_links_count": span.dropped_links_count,
+                "status": status_to_json(span.status),
+                "kind": span.kind,
+                "name": span.name
+            }));
         }
 
-        // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
-        json.push(json!({
+        json.push(literal!({
             "instrumentation_library": common::maybe_instrumentation_library_to_json(data.instrumentation_library),
             "spans": spans,
 
-        }).into());
+        }));
     }
 
     Ok(Value::Array(json))
@@ -254,13 +238,12 @@ pub(crate) fn resource_spans_to_json<'event>(
 ) -> Result<Value<'event>> {
     let mut json = Vec::new();
     for span in request.resource_spans {
-        // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
-        json.push(json!({
+        json.push(literal!({
             "instrumentation_library_spans": instrumentation_library_spans_to_json(span.instrumentation_library_spans)?,
             "resource": resource::resource_to_json(span.resource)?,
         }));
     }
-    Ok(json!({ "trace": json }).into())
+    Ok(literal!({ "trace": json }))
 }
 
 pub(crate) fn resource_spans_to_pb(json: Option<&Value<'_>>) -> Result<Vec<ResourceSpans>> {
@@ -306,7 +289,7 @@ mod tests {
         let json = status_to_json(Some(pb.clone()));
         let back_again = status_to_pb(Some(&json))?;
         let expected: Value =
-            json!({"deprecated_code": 0, "message": "everything is snot", "code": 1}).into();
+            literal!({"deprecated_code": 0, "message": "everything is snot", "code": 1});
 
         assert_eq!(expected, json);
         assert_eq!(Some(pb), back_again);
@@ -324,15 +307,14 @@ mod tests {
         }];
         let json = span_events_to_json(pb.clone())?;
         let back_again = span_events_to_pb(Some(&json))?;
-        let expected: Value = json!([
+        let expected: Value = literal!([
             {
                 "time_unix_nano": 0,
                 "name": "badger",
                 "attributes": {},
                 "dropped_attributes_count": 44,
             }
-        ])
-        .into();
+        ]);
 
         assert_eq!(expected, json);
         assert_eq!(pb, back_again);
@@ -357,7 +339,7 @@ mod tests {
         }];
         let json = span_links_to_json(pb.clone())?;
         let back_again = span_links_to_pb(Some(&json))?;
-        let expected: Value = json!([
+        let expected: Value = literal!([
             {
                 "span_id": span_id_json,
                 "trace_id": trace_id_json,
@@ -365,8 +347,7 @@ mod tests {
                 "attributes": {},
                 "dropped_attributes_count": 42,
             }
-        ])
-        .into();
+        ]);
 
         assert_eq!(expected, json);
         assert_eq!(pb, back_again);
@@ -414,7 +395,7 @@ mod tests {
         }];
         let json = instrumentation_library_spans_to_json(pb.clone())?;
         let back_again = instrumentation_library_spans_to_pb(Some(&json))?;
-        let expected: Value = json!([{
+        let expected: Value = literal!([{
             "instrumentation_library": { "name": "name", "version": "v0.1.2" },
             "spans": [{
                   "start_time_unix_nano": 0,
@@ -438,8 +419,7 @@ mod tests {
                   "dropped_links_count": 13,
                 }
             ]
-        }])
-        .into();
+        }]);
 
         assert_eq!(expected, json);
         assert_eq!(pb, back_again);
@@ -495,7 +475,7 @@ mod tests {
         };
         let json = resource_spans_to_json(pb.clone())?;
         let back_again = resource_spans_to_pb(Some(&json))?;
-        let expected: Value = json!({
+        let expected: Value = literal!({
             "trace": [
                 {
                     "resource": { "attributes": {}, "dropped_attributes_count": 8 },
@@ -526,8 +506,7 @@ mod tests {
                     }]
                 }
             ]
-        })
-        .into();
+        });
 
         assert_eq!(expected, json);
         assert_eq!(pb.resource_spans, back_again);

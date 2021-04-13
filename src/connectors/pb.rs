@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use crate::errors::{Error, Result};
-use simd_json::StaticNode;
 use tremor_value::Value;
 use value_trait::ValueAccess;
 
@@ -28,28 +27,8 @@ pub(crate) fn maybe_string_to_pb(data: Option<&Value<'_>>) -> Result<String> {
 }
 
 pub(crate) fn maybe_int_to_pbu64(data: Option<&Value<'_>>) -> Result<u64> {
-    // use simd_json::Value;
-    // TODO when as_u64 passes `proptest` change to the comment out code
-    //   - Test again once https://github.com/simd-lite/simd-json/pull/174 is rolled into a release
-    //
-    // proptest: Aborting shrinking after the PROPTEST_MAX_SHRINK_ITERS environment variable or ProptestConfig.max_shrink_iters iterations (set 1024 to a large(r) value to shrink more; current configuration: 1024 iterations)
-    // thread 'connectors::pb::test::prop_pb_u64_repeated' panicked at 'Test failed: not coercable to u64; minimal failing input: (vec, _index) = ([9270612287945480471], 0)
-    //         successes: 1
-    //         local rejects: 0
-    //         global rejects: 0
-    // ', src/connectors/pb.rs:158:5
-    //
-    // use simd_json::Value;
-    // if let Some(data) = data {
-    //     data.as_u64().ok_or(Error::from("not coercable to u64"))
-    // } else {
-    //     Err("Expected an json u64 to convert to pb u64".into())
-    // }
-    if let Some(&Value::Static(StaticNode::U64(i))) = data {
-        Ok(i)
-    } else if let Some(&Value::Static(StaticNode::I64(i))) = data {
-        #[allow(clippy::clippy::cast_sign_loss)]
-        Ok(i as u64)
+    if let Some(data) = data {
+        data.as_u64().ok_or(Error::from("not coercable to u64"))
     } else {
         Err("Expected an json u64 to convert to pb u64".into())
     }
@@ -144,8 +123,8 @@ mod test {
 
     use proptest::proptest;
     use proptest::{bits::u64, prelude::*};
-    use simd_json::json;
-    use simd_json::StaticNode;
+    use tremor_value::literal;
+    use tremor_value::StaticNode;
 
     // NOTE This is incomplete with respect to possible mappings of json values
     // to basic builtin protocol buffer types, but sufficient for the needs of
@@ -258,7 +237,7 @@ mod test {
 
         #[test]
         fn prop_pb_f64_repeated((vec, _index) in fveci()) {
-                let json: Value = json!(vec).into();
+                let json: Value = literal!(vec.clone());
                 let pb = f64_repeated_to_pb(Some(&json))?;
                 prop_assert_eq!(&vec, &pb);
                 prop_assert_eq!(pb.len(), vec.len());
@@ -266,7 +245,7 @@ mod test {
 
         #[test]
         fn prop_pb_u64_repeated((vec, _index) in uveci()) {
-                let json: Value = json!(vec).into();
+                let json: Value = literal!(vec.clone());
                 let pb = u64_repeated_to_pb(Some(&json))?;
                 prop_assert_eq!(&vec, &pb);
                 prop_assert_eq!(pb.len(), vec.len());

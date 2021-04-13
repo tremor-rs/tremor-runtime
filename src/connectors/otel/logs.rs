@@ -17,11 +17,11 @@ use super::common;
 use super::id;
 use super::resource;
 use crate::errors::Result;
-use simd_json::json;
 use tremor_otelapis::opentelemetry::proto::{
     collector::logs::v1::ExportLogsServiceRequest,
     logs::v1::{InstrumentationLibraryLogs, LogRecord, ResourceLogs},
 };
+use tremor_value::literal;
 
 use tremor_value::Value;
 use value_trait::ValueAccess;
@@ -73,8 +73,7 @@ pub(crate) fn instrumentation_library_logs_to_json<'event>(
     for data in pb {
         let mut logs = Vec::new();
         for log in data.logs {
-            // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
-            logs.push(json!({
+            logs.push(literal!({
                 "name": log.name,
                 "time_unix_nano": log.time_unix_nano,
                 "severity_number": affirm_severity_number_valid(log.severity_number)?,
@@ -87,15 +86,13 @@ pub(crate) fn instrumentation_library_logs_to_json<'event>(
                 "body": common::maybe_any_value_to_json(log.body)?,
             }));
         }
-        // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
-        json.push(json!({
+        json.push(literal!({
             "instrumentation_library": common::maybe_instrumentation_library_to_json(data.instrumentation_library),
             "logs": logs
         }));
     }
 
-    // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
-    Ok(json!(json).into())
+    Ok(literal!(json))
 }
 
 pub(crate) fn maybe_instrumentation_library_logs_to_pb(
@@ -158,15 +155,13 @@ pub(crate) fn resource_logs_to_json<'event>(
 ) -> Result<Value<'event>> {
     let mut json = Vec::new();
     for log in request.resource_logs {
-        // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
-        json.push(json!({
+        json.push(literal!({
                 "instrumentation_library_logs":
                     instrumentation_library_logs_to_json(log.instrumentation_library_logs)?,
                 "resource": resource::resource_to_json(log.resource)?
         }));
     }
-    // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
-    Ok(json!({ "logs": json }).into())
+    Ok(literal!({ "logs": json }))
 }
 
 pub(crate) fn resource_logs_to_pb(json: &Value<'_>) -> Result<Vec<ResourceLogs>> {
@@ -232,7 +227,7 @@ mod tests {
         }];
         let json = instrumentation_library_logs_to_json(pb.clone())?;
         let back_again = maybe_instrumentation_library_logs_to_pb(Some(&json))?;
-        let expected: Value = json!([{
+        let expected: Value = literal!([{
             "instrumentation_library": { "name": "name", "version": "v0.1.2" },
             "logs": [
                 { "severity_number": 9,
@@ -247,8 +242,7 @@ mod tests {
                   "body": "snot"
                 }
             ]
-        }])
-        .into();
+        }]);
 
         assert_eq!(expected, json);
         assert_eq!(pb, back_again);
@@ -294,7 +288,7 @@ mod tests {
         };
         let json = resource_logs_to_json(pb.clone())?;
         let back_again = resource_logs_to_pb(&json)?;
-        let expected: Value = json!({
+        let expected: Value = literal!({
             "logs": [
                 {
                     "resource": { "attributes": {}, "dropped_attributes_count": 8 },
@@ -317,8 +311,7 @@ mod tests {
                     ]
                 }
             ]
-        })
-        .into();
+        });
 
         assert_eq!(expected, json);
         assert_eq!(pb.resource_logs, back_again);
