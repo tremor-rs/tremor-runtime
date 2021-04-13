@@ -214,7 +214,6 @@ impl Wal {
     const STATE: &'static str = "state";
     // keys in the state tree
     const CONFIRMED: &'static str = "confirmed";
-    const READ: &'static str = "read";
 
     fn new(id: String, config: Config) -> Result<Self> {
         let wal = if let Some(dir) = &config.dir {
@@ -227,10 +226,7 @@ impl Wal {
 
         #[allow(clippy::cast_possible_truncation)]
         let confirmed = state_tree.get(Self::CONFIRMED)?.map(Idx::from);
-        let read = state_tree
-            .get(Self::READ)?
-            .map(Idx::from)
-            .unwrap_or_default();
+        let read = confirmed.unwrap_or_default();
         Ok(Wal {
             cnt: events_tree.len() as u64,
             wal,
@@ -271,12 +267,6 @@ impl Wal {
             let mut event = Event::from_slice(e_slice)?;
             event.transactional = true;
             events.push((OUT, event))
-        }
-        if !events.is_empty() {
-            // track the last read event
-            if let Err(e) = self.state_tree.insert(Self::READ, self.read) {
-                error!("WAL: failed to persist read state: {}", e);
-            }
         }
         self.gc()?;
         Ok(events)
@@ -347,17 +337,10 @@ impl Operator for Wal {
                     };
 
                 trace!("WAL confirm: {}", event_id);
-                let confirmed = if let Some(confirmed) = self.confirmed.as_mut() {
-                    confirmed.set(event_id);
-                    confirmed
-                } else {
-                    self.confirmed = Some(Idx::from(event_id));
-                    self.confirmed
-                        .as_ref()
-                        // ALLOW: we just set it upstairs
-                        .expect("`confirmed` not Some, although just set above, weird!")
-                };
-                if let Err(e) = self.state_tree.insert(Self::CONFIRMED, confirmed) {
+
+                let confirmed = self.confirmed.get_or_insert_with(|| Idx::from(event_id));
+                confirmed.set(event_id);
+                if let Err(e) = self.state_tree.insert(Self::CONFIRMED, &*confirmed) {
                     error!("Failed to persist confirm state: {}", e);
                 }
                 if let Some(e) = self
@@ -517,7 +500,6 @@ mod test {
         assert_eq!(CbAction::Ack, insight.cb);
 
         assert_eq!(1, o.cnt);
-        assert_eq!(Idx::default(), o.read);
         assert_eq!(None, o.confirmed);
 
         // Restore the CB
@@ -526,7 +508,6 @@ mod test {
 
         // we have 1 event stored
         assert_eq!(1, o.cnt);
-        assert_eq!(Idx::default(), o.read);
         assert_eq!(None, o.confirmed);
 
         // send second event, expect both events back
@@ -552,7 +533,6 @@ mod test {
 
         // we have two events stored
         assert_eq!(2, o.cnt);
-        assert_eq!(Idx::from(id2.event_id()) + 1_u64, o.read);
         assert_eq!(None, o.confirmed);
 
         // acknowledge the first event
@@ -561,7 +541,6 @@ mod test {
 
         // we still have two events stored
         assert_eq!(2, o.cnt);
-        assert_eq!(Idx::from(id2.event_id() + 1), o.read);
         assert_eq!(Some(Idx::from(id.event_id())), o.confirmed);
 
         // apply gc on signal
@@ -577,7 +556,6 @@ mod test {
 
         // now we have 1 left
         assert_eq!(1, o.cnt);
-        assert_eq!(Idx::from(id2.event_id() + 1), o.read);
         assert_eq!(Some(Idx::from(id.event_id())), o.confirmed);
 
         // acknowledge the second event
@@ -586,7 +564,6 @@ mod test {
 
         // still 1 left
         assert_eq!(1, o.cnt);
-        assert_eq!(Idx::from(id2.event_id() + 1), o.read);
         assert_eq!(Some(Idx::from(id2.event_id())), o.confirmed);
 
         // apply gc on signal
@@ -602,7 +579,6 @@ mod test {
 
         // we are clean now
         assert_eq!(0, o.cnt);
-        assert_eq!(Idx::from(id2.event_id() + 1), o.read);
         assert_eq!(Some(Idx::from(id2.event_id())), o.confirmed);
         Ok(())
     }
@@ -705,18 +681,20 @@ mod test {
 
         let mut v = Value::null();
         let e = Event::default();
+        let wal_uid = 0;
 
         {
             // create the operator - first time
+
             let mut o1 = WalFactory::new()
-                .from_node(1, &NodeConfig::from_config("wal-test-1", c.clone())?)?;
+                .from_node(wal_uid, &NodeConfig::from_config("wal-test-1", c.clone())?)?;
 
             // Restore the CB
             let mut i = Event::cb_restore(0);
-            o1.on_contraflow(0, &mut i);
+            o1.on_contraflow(wal_uid, &mut i);
 
             // send a first event - not acked. so it lingers around in our WAL
-            let r = o1.on_event(0, "in", &mut v, e.clone())?;
+            let r = o1.on_event(1, "in", &mut v, e.clone())?;
             assert_eq!(r.events.len(), 1);
             assert_eq!(r.insights.len(), 0);
         }
@@ -725,26 +703,27 @@ mod test {
             // create the operator - second time
             // simulating a tremor restart
             let mut o2 =
-                WalFactory::new().from_node(2, &NodeConfig::from_config("wal-test-2", c)?)?;
+                WalFactory::new().from_node(wal_uid, &NodeConfig::from_config("wal-test-2", c)?)?;
 
             // Restore the CB
             let mut i = Event::cb_restore(1);
-            o2.on_contraflow(0, &mut i);
+            o2.on_contraflow(wal_uid, &mut i);
 
-            // send a first event - not acked. so it lingers around in our
-            let r = o2.on_event(0, "in", &mut v, e.clone())?;
+            // send a first event - not acked. so it lingers around in our WAL
+            let r = o2.on_event(wal_uid, "in", &mut v, e.clone())?;
             assert_eq!(r.events.len(), 2);
             let id1 = &r.events[0].1.id;
             let id2 = &r.events[1].1.id;
-            assert_eq!(id1.get_max_by_stream(0, 0).unwrap(), 0);
+            assert_eq!(id1.get_max_by_stream(wal_uid, 0).unwrap(), 0);
             // ensure we actually had a gap bigger than read count, which triggers the error condition
             assert!(
-                id2.get_max_by_stream(0, 0).unwrap() - id1.get_max_by_stream(0, 0).unwrap()
+                id2.get_max_by_stream(wal_uid, 0).unwrap()
+                    - id1.get_max_by_stream(wal_uid, 0).unwrap()
                     > read_count as u64
             );
             assert_eq!(r.insights.len(), 0);
 
-            let r = o2.on_event(0, "in", &mut v, e.clone())?;
+            let r = o2.on_event(wal_uid, "in", &mut v, e.clone())?;
             assert_eq!(r.events.len(), 1);
         }
 
