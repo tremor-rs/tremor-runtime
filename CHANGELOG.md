@@ -11,6 +11,8 @@
 * Deprecate `udp.dst_*` config, introduce `udp.bind.*` config instead.
 * Allow insights/contraflow events to traverse through multiple connected pipelines
 
+* Add GCP Cloud Storage linked sink connector.
+
 ### Fixes
 
 * Fix CI runners to work with caching
