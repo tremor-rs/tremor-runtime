@@ -27,11 +27,13 @@ pub(crate) fn maybe_string_to_pb(data: Option<&Value<'_>>) -> Result<String> {
 }
 
 pub(crate) fn maybe_int_to_pbu64(data: Option<&Value<'_>>) -> Result<u64> {
-    if let Some(data) = data {
-        data.as_u64().ok_or(Error::from("not coercable to u64"))
-    } else {
-        Err("Expected an json u64 to convert to pb u64".into())
-    }
+    data.map_or_else(
+        || Err("Expected an json u64 to convert to pb u64".into()),
+        |data| {
+            data.as_u64()
+                .ok_or_else(|| Error::from("not coercable to u64"))
+        },
+    )
 }
 
 pub(crate) fn maybe_int_to_pbi32(data: Option<&Value<'_>>) -> Result<i32> {

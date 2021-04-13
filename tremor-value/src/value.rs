@@ -90,6 +90,7 @@ impl<'value> Eq for Value<'value> {}
 
 impl<'value> Value<'value> {
     /// Creates an empty array value
+    #[must_use]
     pub fn array() -> Self {
         Value::Array(vec![])
     }
