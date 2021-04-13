@@ -19,7 +19,7 @@ use crate::permge::PriorityMerge;
 use crate::pipeline;
 use crate::registry::ServantId;
 use crate::sink::{
-    self, blackhole, cb, debug, dns, elastic, exit, file, handle_response, kafka, kv, nats,
+    self, blackhole, cb, debug, dns, elastic, exit, file, gcs, handle_response, kafka, kv, nats,
     newrelic, otel, postgres, rest, stderr, stdout, tcp, udp, ws,
 };
 use crate::source::Processors;
@@ -126,6 +126,11 @@ pub fn lookup(name: &str, config: &Option<OpConfig>) -> Result<Box<dyn Offramp>>
         "tcp" => tcp::Tcp::from_config(config),
         "udp" => udp::Udp::from_config(config),
         "ws" => ws::Ws::from_config(config),
+<<<<<<< HEAD
+=======
+        "otel" => otel::OpenTelemetry::from_config(config),
+        "gcs" => gcs::GoogleCloudStorage::from_config(config),
+>>>>>>> c749f4ff (Initial draft of Google Cloud Storage connector)
         _ => Err(format!("Offramp {} not known", name).into()),
     }
 }

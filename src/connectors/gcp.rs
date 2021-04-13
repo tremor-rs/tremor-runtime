@@ -12,12 +12,5 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub(crate) mod qos;
-
-/// Extensions for `CNCF OpenTelemetry` support
-pub mod otel;
-
-/// Extensions for the `Google Cloud Platform`
-pub mod gcp;
-
-pub(crate) mod pb;
+pub(crate) mod auth;
+pub(crate) mod storage;
