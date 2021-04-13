@@ -272,7 +272,7 @@ impl Wal {
             event.transactional = true;
             events.push((OUT, event))
         }
-        if events.len() > 0 {
+        if !events.is_empty() {
             // track the last read event
             if let Err(e) = self.state_tree.insert(Self::READ, self.read) {
                 error!("WAL: failed to persist read state: {}", e);
