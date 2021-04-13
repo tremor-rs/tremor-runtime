@@ -160,6 +160,9 @@ error_chain! {
         Common(tremor_common::Error);
         Sled(sled::Error);
         DnsError(async_std_resolver::ResolveError);
+        GoogleAuthError(gouth::Error);
+        ReqwestError(reqwest::Error);
+        HttpHeaderError(http::header::InvalidHeaderValue);
     }
 
     errors {

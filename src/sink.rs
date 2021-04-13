@@ -26,6 +26,7 @@ pub(crate) mod dns;
 pub(crate) mod elastic;
 pub(crate) mod exit;
 pub(crate) mod file;
+pub(crate) mod gcs;
 pub(crate) mod kafka;
 pub(crate) mod kv;
 pub(crate) mod nats;

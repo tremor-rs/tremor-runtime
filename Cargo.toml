@@ -126,6 +126,11 @@ tremor-otelapis = "0.1"
 tonic = { version = "0.4", default-features = false, features = ["transport", "tls"] }
 port_scanner = "0.1.5"
 
+# gcp
+reqwest = "0.11.2" 
+gouth = { version = "0.1" }
+http = "0.2.3"
+
 [dependencies.tungstenite]
 default-features = false
 version = "0.13"
