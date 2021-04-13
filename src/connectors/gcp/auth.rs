@@ -41,12 +41,7 @@ pub(crate) async fn json_api_client(pem_path: &str, extra_headers: &HeaderMap) -
         headers.append(header.0, header.1.clone());
     }
 
-    let mut buf = Vec::new();
-    std::fs::File::open(pem_path)?.read_to_end(&mut buf)?;
-    // let certificate = reqwest::Certificate::from_pem(&buf)?;
-    // TODO: Enforce certificate authentication
     Ok(reqwest::Client::builder()
-        // .add_root_certificate(certificate)
         .default_headers(headers)
         .build()?)
 }
