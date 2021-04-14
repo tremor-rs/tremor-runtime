@@ -54,62 +54,101 @@ impl offramp::Impl for Dns {
     }
 }
 
-fn str_to_record_type(s: &str) -> Option<RecordType> {
+fn str_to_record_type(s: &str) -> Result<RecordType> {
     match s {
-        "A" => Some(RecordType::A),
-        "AAAA" => Some(RecordType::AAAA),
-        "ANAME" => Some(RecordType::ANAME),
-        "ANY" => Some(RecordType::ANY),
-        "AXFR" => Some(RecordType::AXFR),
-        "CAA" => Some(RecordType::CAA),
-        "CNAME" => Some(RecordType::CNAME),
-        "HINFO" => Some(RecordType::HINFO),
-        "HTTPS" => Some(RecordType::HTTPS),
-        "IXFR" => Some(RecordType::IXFR),
-        "MX" => Some(RecordType::MX),
-        "NAPTR" => Some(RecordType::NAPTR),
-        "NS" => Some(RecordType::NS),
-        "NULL" => Some(RecordType::NULL),
-        "OPENPGPKEY" => Some(RecordType::OPENPGPKEY),
-        "OPT" => Some(RecordType::OPT),
-        "PTR" => Some(RecordType::PTR),
-        "SOA" => Some(RecordType::SOA),
-        "SRV" => Some(RecordType::SRV),
-        "SSHFP" => Some(RecordType::SSHFP),
-        "SVCB" => Some(RecordType::SVCB),
-        "TLSA" => Some(RecordType::TLSA),
-        "TXT" => Some(RecordType::TXT),
-        "ZERO" => Some(RecordType::ZERO),
-        _ => None,
+        "A" => Ok(RecordType::A),
+        "AAAA" => Ok(RecordType::AAAA),
+        "ANAME" => Ok(RecordType::ANAME),
+        "ANY" => Ok(RecordType::ANY),
+        "AXFR" => Ok(RecordType::AXFR),
+        "CAA" => Ok(RecordType::CAA),
+        "CNAME" => Ok(RecordType::CNAME),
+        "HINFO" => Ok(RecordType::HINFO),
+        "HTTPS" => Ok(RecordType::HTTPS),
+        "IXFR" => Ok(RecordType::IXFR),
+        "MX" => Ok(RecordType::MX),
+        "NAPTR" => Ok(RecordType::NAPTR),
+        "NS" => Ok(RecordType::NS),
+        "NULL" => Ok(RecordType::NULL),
+        "OPENPGPKEY" => Ok(RecordType::OPENPGPKEY),
+        "OPT" => Ok(RecordType::OPT),
+        "PTR" => Ok(RecordType::PTR),
+        "SOA" => Ok(RecordType::SOA),
+        "SRV" => Ok(RecordType::SRV),
+        "SSHFP" => Ok(RecordType::SSHFP),
+        "SVCB" => Ok(RecordType::SVCB),
+        "TLSA" => Ok(RecordType::TLSA),
+        "TXT" => Ok(RecordType::TXT),
+        "ZERO" => Ok(RecordType::ZERO),
+        other => Err(format!("Invalid or unsupported record type: {}", other).into()),
     }
 }
 
 fn rdata_to_value(r: &RData) -> Option<Value<'static>> {
     Some(match r {
-        RData::A(v) => literal!({ "A": v.to_string() }).into(),
-        RData::AAAA(v) => literal!({ "AAAA": v.to_string() }).into(),
-        RData::ANAME(v) => literal!({ "ANAME": v.to_string() }).into(),
-        RData::CNAME(v) => literal!({ "CNAME": v.to_string() }).into(),
-        RData::TXT(v) => literal!({ "TXT": v.to_string() }).into(),
-        RData::PTR(v) => literal!({ "PTR": v.to_string() }).into(),
-        RData::CAA(v) => literal!({ "CAA": v.to_string() }).into(),
-        RData::HINFO(v) => literal!({ "HINFO": v.to_string() }).into(),
-        RData::HTTPS(v) => literal!({ "HTTPS": v.to_string() }).into(),
-        RData::MX(v) => literal!({ "MX": v.to_string() }).into(),
-        RData::NAPTR(v) => literal!({ "NAPTR": v.to_string() }).into(),
-        RData::NULL(v) => literal!({ "NULL": v.to_string() }).into(),
-        RData::NS(v) => literal!({ "NS": v.to_string() }).into(),
-        RData::OPENPGPKEY(v) => literal!({ "OPENPGPKEY": v.to_string() }).into(),
-        RData::SOA(v) => literal!({ "SOA": v.to_string() }).into(),
-        RData::SRV(v) => literal!({ "SRV": v.to_string() }).into(),
-        RData::SSHFP(v) => literal!({ "SSHFP": v.to_string() }).into(),
-        RData::SVCB(v) => literal!({ "SVCB": v.to_string() }).into(),
-        RData::TLSA(v) => literal!({ "TLSA": v.to_string() }).into(),
+        RData::A(v) => literal!({ "A": v.to_string() }),
+        RData::AAAA(v) => literal!({ "AAAA": v.to_string() }),
+        RData::ANAME(v) => literal!({ "ANAME": v.to_string() }),
+        RData::CNAME(v) => literal!({ "CNAME": v.to_string() }),
+        RData::TXT(v) => literal!({ "TXT": v.to_string() }),
+        RData::PTR(v) => literal!({ "PTR": v.to_string() }),
+        RData::CAA(v) => literal!({ "CAA": v.to_string() }),
+        RData::HINFO(v) => literal!({ "HINFO": v.to_string() }),
+        RData::HTTPS(v) => literal!({ "HTTPS": v.to_string() }),
+        RData::MX(v) => literal!({ "MX": v.to_string() }),
+        RData::NAPTR(v) => literal!({ "NAPTR": v.to_string() }),
+        RData::NULL(v) => literal!({ "NULL": v.to_string() }),
+        RData::NS(v) => literal!({ "NS": v.to_string() }),
+        RData::OPENPGPKEY(v) => literal!({ "OPENPGPKEY": v.to_string() }),
+        RData::SOA(v) => literal!({ "SOA": v.to_string() }),
+        RData::SRV(v) => literal!({ "SRV": v.to_string() }),
+        RData::SSHFP(v) => literal!({ "SSHFP": v.to_string() }),
+        RData::SVCB(v) => literal!({ "SVCB": v.to_string() }),
+        RData::TLSA(v) => literal!({ "TLSA": v.to_string() }),
         RData::OPT(_) | RData::Unknown { .. } | RData::ZERO => return None,
     })
 }
 fn lookup_to_value(l: &Lookup) -> Value<'static> {
     l.iter().filter_map(rdata_to_value).collect()
+}
+
+impl Dns {
+    async fn query<'event>(
+        &self,
+        e: &Value<'event>,
+        correlation: Option<&Value<'event>>,
+    ) -> Result<Event> {
+        let resolver = self.resolver.as_ref().ok_or("No resolver set")?;
+        let lookup = e.get("lookup").ok_or("Invalid DNS request")?;
+        let name = lookup
+            .as_str()
+            .or_else(|| lookup.get_str("name"))
+            .ok_or("Invaliud DNS request")?;
+
+        let data = if let Some(record_type) =
+            lookup.get_str("type").map(str_to_record_type).transpose()?
+        {
+            // type lookup
+            lookup_to_value(
+                &resolver
+                    .lookup(name, record_type, DnsRequestOptions::default())
+                    .await?,
+            )
+        } else {
+            // generic lookup
+            lookup_to_value(resolver.lookup_ip(name).await?.as_lookup())
+        };
+        let meta = correlation
+            .map(|c| literal!({ "correlation": c.clone_static() }))
+            .unwrap_or_default();
+        let e = Event {
+            data: (data, meta).into(),
+            origin_uri: Some(self.event_origin_uri.clone()),
+            ..Event::default()
+        };
+
+        Ok(e)
+    }
 }
 
 #[async_trait::async_trait]
@@ -121,38 +160,29 @@ impl Sink for Dns {
         _codec_map: &HashMap<String, Box<dyn Codec>>,
         event: Event,
     ) -> ResultVec {
-        let resolver = self
-            .resolver
-            .as_ref()
-            .ok_or_else(|| Error::from("No resolver set"))?;
         let mut res = Vec::with_capacity(event.len());
-        let correlation = event.correlation_meta();
 
-        for e in event.value_iter() {
-            if let Some(lookup) = e.get("lookup") {
-                if let Some(name) = lookup.as_str().or_else(|| lookup.get_str("name")) {
-                    let data = if let Some(record_type) =
-                        lookup.get_str("type").and_then(str_to_record_type)
-                    {
-                        // type lookup
-                        lookup_to_value(
-                            &resolver
-                                .lookup(name, record_type, DnsRequestOptions::default())
-                                .await?,
-                        )
+        for (e, m) in event.value_meta_iter() {
+            match self.query(e, m.get("correlation")).await {
+                Ok(out) => res.push(Reply::Response(OUT, out)),
+                Err(err) => {
+                    let data = literal!({
+                        "event": e.clone_static(),
+                        "error": format!("{}", err),
+                    });
+                    let meta = if let Some(c) = m.get("correlation") {
+                        literal!({ "correlation": c.clone_static() })
                     } else {
-                        // generic lookup
-                        lookup_to_value(resolver.lookup_ip(name).await?.as_lookup())
+                        Value::null()
                     };
-                    let e = Event {
-                        data: (data, correlation.clone().unwrap_or_default()).into(),
+
+                    let error_e = Event {
+                        data: (data, meta).into(),
                         origin_uri: Some(self.event_origin_uri.clone()),
                         ..Event::default()
                     };
 
-                    res.push(Reply::Response("out".into(), e))
-                } else {
-                    error!("Invalid DNS request: {}", e)
+                    res.push(Reply::Response(ERR, error_e))
                 }
             }
         }
