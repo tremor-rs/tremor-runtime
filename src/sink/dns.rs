@@ -28,6 +28,7 @@ use async_std_resolver::{
 };
 use halfbrown::HashMap;
 use std::boxed::Box;
+use tremor_value::literal;
 
 pub struct Dns {
     // sink_url: TremorUrl,
@@ -84,27 +85,26 @@ fn str_to_record_type(s: &str) -> Option<RecordType> {
 }
 
 fn rdata_to_value(r: &RData) -> Option<Value<'static>> {
-    use simd_json::json_typed;
     Some(match r {
-        RData::A(v) => json_typed!(borrowed, { "A": v.to_string() }).into(),
-        RData::AAAA(v) => json_typed!(borrowed, { "AAAA": v.to_string() }).into(),
-        RData::ANAME(v) => json_typed!(borrowed, { "ANAME": v.to_string() }).into(),
-        RData::CNAME(v) => json_typed!(borrowed, { "CNAME": v.to_string() }).into(),
-        RData::TXT(v) => json_typed!(borrowed, { "TXT": v.to_string() }).into(),
-        RData::PTR(v) => json_typed!(borrowed, { "PTR": v.to_string() }).into(),
-        RData::CAA(v) => json_typed!(borrowed, { "CAA": v.to_string() }).into(),
-        RData::HINFO(v) => json_typed!(borrowed, { "HINFO": v.to_string() }).into(),
-        RData::HTTPS(v) => json_typed!(borrowed, { "HTTPS": v.to_string() }).into(),
-        RData::MX(v) => json_typed!(borrowed, { "MX": v.to_string() }).into(),
-        RData::NAPTR(v) => json_typed!(borrowed, { "NAPTR": v.to_string() }).into(),
-        RData::NULL(v) => json_typed!(borrowed, { "NULL": v.to_string() }).into(),
-        RData::NS(v) => json_typed!(borrowed, { "NS": v.to_string() }).into(),
-        RData::OPENPGPKEY(v) => json_typed!(borrowed, { "OPENPGPKEY": v.to_string() }).into(),
-        RData::SOA(v) => json_typed!(borrowed, { "SOA": v.to_string() }).into(),
-        RData::SRV(v) => json_typed!(borrowed, { "SRV": v.to_string() }).into(),
-        RData::SSHFP(v) => json_typed!(borrowed, { "SSHFP": v.to_string() }).into(),
-        RData::SVCB(v) => json_typed!(borrowed, { "SVCB": v.to_string() }).into(),
-        RData::TLSA(v) => json_typed!(borrowed, { "TLSA": v.to_string() }).into(),
+        RData::A(v) => literal!({ "A": v.to_string() }).into(),
+        RData::AAAA(v) => literal!({ "AAAA": v.to_string() }).into(),
+        RData::ANAME(v) => literal!({ "ANAME": v.to_string() }).into(),
+        RData::CNAME(v) => literal!({ "CNAME": v.to_string() }).into(),
+        RData::TXT(v) => literal!({ "TXT": v.to_string() }).into(),
+        RData::PTR(v) => literal!({ "PTR": v.to_string() }).into(),
+        RData::CAA(v) => literal!({ "CAA": v.to_string() }).into(),
+        RData::HINFO(v) => literal!({ "HINFO": v.to_string() }).into(),
+        RData::HTTPS(v) => literal!({ "HTTPS": v.to_string() }).into(),
+        RData::MX(v) => literal!({ "MX": v.to_string() }).into(),
+        RData::NAPTR(v) => literal!({ "NAPTR": v.to_string() }).into(),
+        RData::NULL(v) => literal!({ "NULL": v.to_string() }).into(),
+        RData::NS(v) => literal!({ "NS": v.to_string() }).into(),
+        RData::OPENPGPKEY(v) => literal!({ "OPENPGPKEY": v.to_string() }).into(),
+        RData::SOA(v) => literal!({ "SOA": v.to_string() }).into(),
+        RData::SRV(v) => literal!({ "SRV": v.to_string() }).into(),
+        RData::SSHFP(v) => literal!({ "SSHFP": v.to_string() }).into(),
+        RData::SVCB(v) => literal!({ "SVCB": v.to_string() }).into(),
+        RData::TLSA(v) => literal!({ "TLSA": v.to_string() }).into(),
         RData::OPT(_) | RData::Unknown { .. } | RData::ZERO => return None,
     })
 }
