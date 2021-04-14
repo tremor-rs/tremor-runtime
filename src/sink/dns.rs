@@ -109,7 +109,13 @@ fn rdata_to_value(r: &RData) -> Option<Value<'static>> {
     })
 }
 fn lookup_to_value(l: &Lookup) -> Value<'static> {
-    l.iter().filter_map(rdata_to_value).collect()
+    l.record_iter()
+        .filter_map(|r| {
+            let mut v = rdata_to_value(r.rdata())?;
+            v.try_insert("ttl", r.ttl());
+            Some(v)
+        })
+        .collect()
 }
 
 impl Dns {
