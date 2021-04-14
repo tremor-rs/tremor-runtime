@@ -92,7 +92,7 @@ impl Sink for Udp {
                         socket.send(&processed).await?;
                     } else {
                         let udp = meta.get("udp");
-                        let host = udp.get_str("host").unwrap_or(self.config.dst_host.as_str());
+                        let host = udp.get_str("host").unwrap_or(&self.config.dst_host);
                         let port = udp.get_u16("port").unwrap_or(self.config.dst_port);
                         // reaquire the destination to handle DNS changes or multi IP dns entries
                         socket.send_to(&processed, (host, port)).await?;
