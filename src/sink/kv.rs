@@ -22,6 +22,7 @@ use halfbrown::HashMap;
 use serde::Deserialize;
 use sled::{CompareAndSwapError, IVec};
 use std::boxed::Box;
+use tremor_value::literal;
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Config {
@@ -195,8 +196,8 @@ impl Sink for Kv {
         let mut r = Vec::with_capacity(10);
         let ingest_ns = tremor_common::time::nanotime();
 
-        let mut cmds = event.value_iter().filter_map(|v| {
-            if let Some(g) = v.get("get") {
+        let mut cmds = event.value_meta_iter().filter_map(|(v, m)| {
+            let r = if let Some(g) = v.get("get") {
                 Some(Command::Get {
                     key: g.get_bytes("key")?.to_vec(),
                 })
@@ -223,23 +224,31 @@ impl Sink for Kv {
             } else {
                 error!("failed to decode command: {}", v);
                 None
-            }
+            };
+            r.map(|r| (r, m.get("correlation")))
         });
-        let correlation = event.correlation_meta();
         let first = cmds.next();
-        if let Some(c) = first {
-            for c in cmds {
-                let data = self.execute(c, codec, ingest_ns)?;
+        if let Some((cmd, correlation)) = first {
+            for (cmd, correlation) in cmds {
+                let meta = correlation
+                    .map(|c| literal!({ "correlation": c.clone_static() }))
+                    .unwrap_or_default();
+
+                let data = self.execute(cmd, codec, ingest_ns)?;
                 let e = Event {
-                    data: (data, correlation.clone().unwrap_or_default()).into(),
+                    data: (data, meta).into(),
                     origin_uri: Some(self.event_origin_uri.clone()),
                     ..Event::default()
                 };
                 r.push(Reply::Response(OUT, e))
             }
-            let data = self.execute(c, codec, ingest_ns)?;
+            let meta = correlation
+                .map(|c| literal!({ "correlation": c.clone_static() }))
+                .unwrap_or_default();
+
+            let data = self.execute(cmd, codec, ingest_ns)?;
             let e = Event {
-                data: (data, correlation).into(),
+                data: (data, meta).into(),
                 origin_uri: Some(self.event_origin_uri.clone()),
                 ..Event::default()
             };
