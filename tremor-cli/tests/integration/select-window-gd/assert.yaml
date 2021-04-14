@@ -1,0 +1,7 @@
+status: 0
+name: select-window-gd
+asserts:
+  - source: fg.err.log
+    contains:
+      - |
+        All required CB events received.

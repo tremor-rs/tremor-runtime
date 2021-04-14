@@ -1,0 +1,7 @@
+define tumbling window my_window
+with
+  size = 2
+end;
+
+# verify that a grouped select honours our cb/gs guarantees
+select aggr::win::last(event) from in[my_window] group by event.cb into out;

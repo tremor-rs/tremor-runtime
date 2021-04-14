@@ -1,0 +1,22 @@
+{
+    "run": "tests/integrations/elastic",
+    "cmd": "docker",
+    "args": [
+        "run",
+        "--name",
+        "tremor-elasticsearch-integration-blabla-unique",
+        "-p127.0.0.1:9200:9200",
+        "-p9300:9300",
+        "-e",
+        "discovery.type=single-node",
+        "-e",
+        "action.auto_create_index=true",
+        "elasticsearch:7.10.1"
+    ],
+    "await": {
+        "http-ok": [
+            "http://127.0.0.1:9200/"
+        ]
+    },
+    "max-await-secs": 120
+}

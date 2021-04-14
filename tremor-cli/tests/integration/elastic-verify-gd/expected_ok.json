@@ -1,0 +1,5 @@
+{"success":true,"payload":{"snot":"badger","action":null},"index":"my_little_index","doc":"my_little_doc","correlation":"badger"}
+{"success":true,"payload":{"snot":"racoon","tremor":[true,true,true,false],"action":null},"index":"my_little_index","doc":"my_little_doc","correlation":"racoon"}
+{"success":true,"payload":{"doc_id":"badger","snot":"badger","action":"delete"},"index":"my_little_index","doc":"my_little_doc","correlation":"badger"}
+{"success":true,"payload":{"doc_id":"badger","snot":"badger","action":"index"},"index":"my_little_index","doc":"my_little_doc","correlation":"badger"}
+{"success":true,"payload":{"doc_id":"badger","snot":"badger","action":"update"},"index":"my_little_index","doc":"my_little_doc","correlation":"badger"}
