@@ -81,20 +81,21 @@ impl Sink for Udp {
         let processing_start = Instant::now();
         if let Some(socket) = &mut self.socket {
             let ingest_ns = event.ingest_ns;
-            for value in event.value_iter() {
+            for (value, meta) in event.value_meta_iter() {
                 let raw = codec.encode(value)?;
                 for processed in postprocess(&mut self.postprocessors, ingest_ns, raw)? {
                     //TODO: Error handling
                     if self.config.bound {
+                        if meta.get("udp").is_some() {
+                            warn!("Setting $udp on a bound UDP sink has no effect");
+                        };
                         socket.send(&processed).await?;
                     } else {
+                        let udp = meta.get("udp");
+                        let host = udp.get_str("host").unwrap_or(self.config.dst_host.as_str());
+                        let port = udp.get_u16("port").unwrap_or(self.config.dst_port);
                         // reaquire the destination to handle DNS changes or multi IP dns entries
-                        socket
-                            .send_to(
-                                &processed,
-                                (self.config.dst_host.as_str(), self.config.dst_port),
-                            )
-                            .await?;
+                        socket.send_to(&processed, (host, port)).await?;
                     }
                 }
             }
