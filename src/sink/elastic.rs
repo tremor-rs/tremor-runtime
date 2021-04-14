@@ -44,9 +44,10 @@ use halfbrown::HashMap;
 use simd_json::json;
 use std::time::Instant;
 use std::{iter, str};
-use tremor_pipeline::{EventId, EventIdGenerator, OpMeta};
+use tremor_pipeline::{EventId, EventIdGenerator};
 use tremor_script::prelude::*;
 use tremor_script::Object;
+use tremor_value::literal;
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
@@ -112,36 +113,6 @@ fn build_source(id: &EventId, origin_uri: Option<&EventOriginUri>) -> Value<'sta
     Value::from(source)
 }
 
-///
-/// Error Event Payload Format:
-///
-/// ```json
-/// {
-///    "source": {
-///        "event_id": "...",
-///        "origin": "..."
-///    },
-///    "payload": {
-///        <original event payload>
-///    },
-///    "success": false,
-///    "error": {
-///        <es error struct>
-///    }
-/// }
-/// ```
-///
-/// Error Event Meta format:
-///
-/// ```json
-/// {
-///    "elastic": {
-///        "id": "...",
-///        "type": "...",
-///        "index": "..."
-///    }
-/// }
-/// ```
 fn build_bulk_error_data(
     item: &ErrorItem<String, String, String>,
     id: &EventId,
@@ -149,61 +120,30 @@ fn build_bulk_error_data(
     origin_uri: Option<&EventOriginUri>,
     maybe_correlation: Option<Value<'static>>,
 ) -> Result<LineValue> {
-    let mut meta = Object::with_capacity(1);
-    let mut es_meta = Object::with_capacity(6);
-
-    // TODO: deprecated remove with removing top level es keys
-    es_meta.insert("id".into(), Value::from(item.id().to_string()));
-    es_meta.insert("index".into(), Value::from(item.index().to_string()));
-    es_meta.insert("doc_type".into(), Value::from(item.ty().to_string()));
-
-    es_meta.insert("_id".into(), Value::from(item.id().to_string()));
-    es_meta.insert("_index".into(), Value::from(item.index().to_string()));
-    es_meta.insert("_type".into(), Value::from(item.ty().to_string()));
-
-    meta.insert("elastic".into(), Value::from(es_meta));
+    let mut meta = literal!({
+        "elastic": {
+            "_id": item.id().to_string(),
+            "_index": item.index().to_string(),
+            "_type": item.ty().to_string(),
+            // TODO: deprecated remove with removing top level es keys
+            "id": item.id().to_string(),
+            "index": item.index().to_string(),
+            "doc_type": item.ty().to_string(),
+        }
+    });
     if let Some(correlation) = maybe_correlation {
-        meta.insert("correlation".into(), correlation);
+        meta.try_insert("correlation", correlation);
     }
 
-    let mut value = Object::with_capacity(4);
-    let source = build_source(id, origin_uri);
-    value.insert("source".into(), source);
-    value.insert("payload".into(), payload);
-    value.insert("error".into(), tremor_value::to_value(item.err())?);
-    value.insert("success".into(), Value::from(false));
+    let value = literal!({
+        "source": build_source(id, origin_uri),
+        "payload": payload,
+        "error": tremor_value::to_value(item.err())?,
+        "success": false
+    });
     Ok((value, meta).into())
 }
 
-///
-/// Success Event Payload Format:
-///
-/// ```json
-/// {
-///    "source": {
-///        "event_id": "...",
-///        "origin": "..."
-///    },
-///    "payload": {
-///        <original event payload>
-///    },
-///    "success": true
-/// }
-/// ```
-///
-/// Success Event Meta Format:
-///
-/// ```json
-/// {
-///    "elastic": {
-///        "id": "...",
-///        "type": "...",
-///        "index": "...",
-///        "version": "..."
-///    }
-/// }
-/// ```
-///
 fn build_bulk_success_data(
     item: &OkItem<String, String, String>,
     id: &EventId,
@@ -211,32 +151,28 @@ fn build_bulk_success_data(
     origin_uri: Option<&EventOriginUri>,
     maybe_correlation: Option<Value<'static>>,
 ) -> LineValue {
-    let mut meta = Object::with_capacity(2);
-    let mut es_meta = Object::with_capacity(7);
+    let mut meta = literal!({
+        "elastic": {
+            "_id": item.id().to_string(),
+            "_index": item.index().to_string(),
+            "_type": item.ty().to_string(),
+            // TODO: deprecated remove with removing top level es keys
+            "id": item.id().to_string(),
+            "index": item.index().to_string(),
+            "doc_type": item.ty().to_string(),
 
-    // TODO: deprecated remove with removing top level es keys
-    es_meta.insert("id".into(), Value::from(item.id().to_string()));
-    es_meta.insert("index".into(), Value::from(item.index().to_string()));
-    es_meta.insert("doc_type".into(), Value::from(item.ty().to_string()));
-
-    es_meta.insert("_id".into(), Value::from(item.id().to_string()));
-    es_meta.insert("_index".into(), Value::from(item.index().to_string()));
-    es_meta.insert("_type".into(), Value::from(item.ty().to_string()));
-
-    es_meta.insert(
-        "version".into(),
-        item.version().map_or_else(Value::null, Value::from),
-    );
-    meta.insert("elastic".into(), Value::from(es_meta));
+            "version": item.version().map_or_else(Value::null, Value::from)
+        }
+    });
     if let Some(correlation) = maybe_correlation {
-        meta.insert("correlation".into(), correlation);
+        meta.try_insert("correlation", correlation);
     }
 
-    let mut value = Object::with_capacity(3);
-    let source = build_source(id, origin_uri);
-    value.insert("source".into(), source);
-    value.insert("payload".into(), payload);
-    value.insert("success".into(), Value::from(true));
+    let value = literal!({
+        "source": build_source(id, origin_uri),
+        "payload": payload,
+        "success": true
+    });
     (value, meta).into()
 }
 
@@ -321,19 +257,16 @@ fn build_event_payload(event: &Event) -> Result<Vec<u8>> {
 impl Elastic {
     #[allow(clippy::cast_possible_truncation)]
     #[allow(clippy::clippy::too_many_lines)]
-    async fn enqueue_send_future(&mut self, mut event: Event) -> Result<()> {
+    async fn enqueue_send_future(&mut self, event: Event) {
         let (tx, rx) = bounded(1);
         let insight_tx = self.insight_tx.clone();
         let response_tx = self.response_sender.clone();
         let is_linked = self.is_linked;
 
-        // extract values, we don't care about later, but we need to keep the event around
-        let mut id = EventId::default();
-        std::mem::swap(&mut id, &mut event.id);
-        let mut op_meta = OpMeta::default();
-        std::mem::swap(&mut op_meta, &mut event.op_meta);
-        let insight_id = id.clone();
         let transactional = event.transactional;
+        let id = event.id.clone();
+        let op_meta = event.op_meta.clone();
+
         let ingest_ns = event.ingest_ns;
         let response_origin_uri = if is_linked {
             event.origin_uri.clone()
@@ -348,28 +281,25 @@ impl Elastic {
             Ok(payload) => payload,
             Err(e) => {
                 // send fail
-                self.send_insight_fail(&event).await;
+                self.send_insight(event.to_fail()).await;
 
                 // send error response about event not being able to be serialized into ES payload
                 let error_msg = format!("Invalid ES Payload: {}", e);
                 let mut data = Value::object_with_capacity(2);
                 let payload = event.data.suffix().value().clone_static();
-                data.insert("success", Value::from(false))?;
-                data.insert("error", Value::from(error_msg))?;
-                data.insert("payload", payload)?;
+                data.try_insert("success", Value::from(false));
+                data.try_insert("error", Value::from(error_msg));
+                data.try_insert("payload", payload);
                 let source = build_source(&event.id, event.origin_uri.as_ref());
-                data.insert("source", source)?;
+                data.try_insert("source", source);
 
                 // if we have more than one event (batched), correlation will be an array with `null` or an actual value
                 // for the event at the batch position
                 let correlation_value = event.correlation_meta();
-                let meta = if let Some(correlation) = correlation_value {
-                    let mut meta = Value::object_with_capacity(1);
-                    meta.insert("correlation", correlation)?;
-                    meta
-                } else {
-                    Value::null()
-                };
+                let meta = correlation_value.map_or_else(Value::null, |correlation| {
+                    literal!({ "correlation": correlation })
+                });
+
                 // send error response
                 if let Err(e) = response_tx.send(((data, meta).into(), ERR)).await {
                     error!(
@@ -377,7 +307,7 @@ impl Elastic {
                         self.sink_url, e
                     );
                 }
-                return Err(e);
+                return;
             }
         };
         let req = self.client.request(BulkRequest::new(payload));
@@ -398,11 +328,11 @@ impl Elastic {
             })();
 
             let time = start.elapsed().as_millis() as u64;
-            let mut m = Object::with_capacity(1);
+            let mut m = Value::object_with_capacity(1);
             let cb = match &r {
                 Ok(bulk_response) => {
                     // The truncation we do is sensible since we're only looking at a short timeframe
-                    m.insert("time".into(), Value::from(time));
+                    m.try_insert("time", Value::from(time));
                     if is_linked {
                         // send out response events for each item
                         // success events via OUT port
@@ -449,25 +379,25 @@ impl Elastic {
                 Err(e) => {
                     // request failed
                     // TODO how to update error metric here?
-                    m.insert("error".into(), Value::from(e.to_string()));
+                    m.try_insert("error", Value::from(e.to_string()));
                     if is_linked {
                         // if we have more than one event (batched), correlation will be an array with `null` or an actual value
                         // for the event at the batch position
                         match correlation_values.len() {
                             1 => {
                                 if let Some(cv) = correlation_values.pop().flatten() {
-                                    m.insert_nocheck("correlation".into(), cv);
+                                    m.try_insert("correlation", cv);
                                 }
                             }
                             l if l > 1 => {
-                                m.insert("correlation".into(), Value::from(correlation_values));
+                                m.try_insert("correlation", Value::from(correlation_values));
                             }
                             _ => {}
                         };
                         // send error event via ERR port
                         let mut error_data = Object::with_capacity(1);
                         let mut source = Object::with_capacity(2);
-                        source.insert("event_id".into(), Value::from(insight_id.to_string()));
+                        source.insert("event_id".into(), Value::from(id.to_string()));
                         source.insert(
                             "origin".into(),
                             response_origin_uri
@@ -490,10 +420,9 @@ impl Elastic {
                 }
 
                 // send insight - if required
-                // TODO: we dont have the event here, so we cant use our other convenience functions
                 if transactional {
                     let insight = Event {
-                        id: insight_id,
+                        id,
                         data: (Value::null(), m).into(),
                         ingest_ns,
                         op_meta,
@@ -501,7 +430,7 @@ impl Elastic {
                         ..Event::default()
                     };
                     if let Err(e) = insight_tx.send(sink::Reply::Insight(insight)).await {
-                        error!("[Sink::ES] Failed to send insight: {}", e);
+                        error!("[Sink::ES] Failed to send insight: {}", e)
                     }
                 }
 
@@ -511,62 +440,57 @@ impl Elastic {
                 }
             });
         });
-        self.queue.enqueue(rx)?;
-        Ok(())
+        // this should actually never fail, given how we call this from maybe_enqueue
+        if let Err(e) = self.queue.enqueue(rx) {
+            // no need to send insight or response here, this should not affect event handling
+            // this might just mess with the concurrency limitation
+            error!(
+                "[Sink::{}] Error enqueuing the ready receiver for the Es request execution: {}",
+                &self.sink_url, e
+            );
+        }
     }
 
-    async fn maybe_enque(&mut self, event: Event) -> Result<()> {
+    async fn handle_error(&mut self, event: Event, error_msg: &'static str) {
+        self.send_insight(event.to_fail()).await;
+
+        let mut data = Object::with_capacity(2);
+        let mut meta = Object::with_capacity(2);
+        data.insert("success".into(), Value::from(false));
+        data.insert("error".into(), Value::from(error_msg));
+        data.insert("payload".into(), event.data.suffix().value().clone_static());
+        meta.insert("error".into(), Value::from(error_msg));
+
+        if let Some(correlation) = event.correlation_meta() {
+            meta.insert("correlation".into(), correlation);
+        }
+
+        if let Err(e) = self.response_sender.send(((data, meta).into(), ERR)).await {
+            error!(
+                "[Sink::{}] Failed to send error response on overflow: {}.",
+                self.sink_url, e
+            );
+        }
+
+        error!("[Sink::{}] {}", &self.sink_url, error_msg);
+    }
+
+    async fn maybe_enque(&mut self, event: Event) {
         match self.queue.dequeue() {
             Err(SinkDequeueError::NotReady) if !self.queue.has_capacity() => {
                 let error_msg = "Dropped data due to es overload";
-                self.send_insight_fail(&event).await;
-
-                // send error message on overflow to ERR port
-                let mut data = Object::with_capacity(2);
-                let mut meta = Object::with_capacity(2);
-                data.insert("success".into(), Value::from(false));
-                data.insert("error".into(), Value::from(error_msg));
-                data.insert("payload".into(), event.data.suffix().value().clone_static());
-                meta.insert("error".into(), Value::from(error_msg));
-
-                if let Some(correlation) = event.correlation_meta() {
-                    meta.insert("correlation".into(), correlation);
-                }
-
-                if let Err(e) = self.response_sender.send(((data, meta).into(), ERR)).await {
-                    error!(
-                        "[Sink::{}] Failed to send error response on overflow: {}.",
-                        self.sink_url, e
-                    );
-                }
-
-                error!("[Sink::{}] {}", &self.sink_url, error_msg);
-                Err(error_msg.into())
+                self.handle_error(event, error_msg).await;
             }
             _ => {
-                if self.enqueue_send_future(event).await.is_err() {
-                    error!(
-                        "[Sink::{}] Failed to enqueue send request to elastic",
-                        &self.sink_url
-                    );
-                    Err("Failed to enqueue send request to elastic".into())
-                } else {
-                    Ok(())
-                }
+                self.enqueue_send_future(event).await;
             }
         }
     }
 
     // we swallow send errors here, we only log them
-    async fn send_insight_fail(&mut self, event: &Event) {
-        if event.transactional {
-            if let Err(e) = self
-                .insight_tx
-                .send(sink::Reply::Insight(event.to_fail()))
-                .await
-            {
-                error!("[Sink::{}] Failed to send insight: {}", &self.sink_url, e)
-            }
+    async fn send_insight(&mut self, insight: Event) {
+        if let Err(e) = self.insight_tx.send(sink::Reply::Insight(insight)).await {
+            error!("[Sink::{}] Failed to send insight: {}", &self.sink_url, e)
         }
     }
 }
@@ -627,7 +551,7 @@ impl Sink for Elastic {
             }))
         } else {
             // we have either one event or a batched one with > 1 event
-            self.maybe_enque(event).await?;
+            self.maybe_enque(event).await;
             Ok(None) // insights are sent via reply_channel directly
         }
     }

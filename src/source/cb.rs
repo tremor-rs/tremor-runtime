@@ -36,6 +36,10 @@ pub struct Config {
     // timeout in millis
     #[serde(default = "default_timeout")]
     timeout: u64,
+
+    // only expect the latest event to be acked, the earliest to be failed
+    #[serde(default = "default_expect_batched")]
+    expect_batched: bool,
 }
 
 /// 10 seconds
@@ -43,11 +47,14 @@ fn default_timeout() -> u64 {
     10_000
 }
 
+fn default_expect_batched() -> bool {
+    false
+}
+
 impl ConfigImpl for Config {}
 
 pub struct Cb {
     onramp_id: TremorUrl,
-    origin_uri: EventOriginUri,
     config: Config,
 }
 
@@ -57,12 +64,6 @@ impl onramp::Impl for Cb {
             let config: Config = Config::new(config)?;
             Ok(Box::new(Self {
                 onramp_id: id.clone(),
-                origin_uri: EventOriginUri {
-                    uid: 0, // will be filled in start
-                    scheme: "tremor-cb".to_owned(),
-                    host: hostname(),
-                    ..EventOriginUri::default()
-                },
                 config,
             }))
         } else {
@@ -84,43 +85,40 @@ impl ReceivedCbs {
         self.ack.len() + self.fail.len()
     }
 
-    fn missing_ids(&self) -> Vec<u64> {
-        let mut all_ids: Vec<u64> = self.ack.iter().chain(self.fail.iter()).copied().collect();
-        all_ids.sort_unstable();
-
-        all_ids
-            .windows(2)
-            .filter_map(|window| match window {
-                [low, hi] if hi - low > 1 => Some((low + 1)..*hi),
-                _ => None,
-            })
-            .flatten()
-            .collect()
+    fn max(&self) -> Option<u64> {
+        self.ack
+            .iter()
+            .copied()
+            .max()
+            .max(self.fail.iter().copied().max())
     }
 }
 
 #[derive(Debug)]
 struct Int {
     id: TremorUrl,
+    uid: u64,
     num_sent: usize,
     last_sent: u64, // we assume we have an increasing run of ids without gap, so we only store the latest
     received_cbs: ReceivedCbs,
     lines: Lines<BufReader<FSFile>>,
-    timeout: u64,
+    config: Config,
     finished: bool,
 }
 
 impl Int {
-    async fn from_config(_uid: u64, onramp_id: TremorUrl, config: Config) -> Result<Self> {
+    async fn from_config(uid: u64, onramp_id: TremorUrl, config: Config) -> Result<Self> {
+        info!("[Source::{}] started with uid {}", onramp_id, uid);
         let f = file::open(&config.source).await?;
         let lines = BufReader::new(f).lines();
         Ok(Self {
             id: onramp_id,
+            uid,
             num_sent: 0,
             last_sent: 0,
             received_cbs: ReceivedCbs::default(),
             lines,
-            timeout: config.timeout,
+            config,
             finished: false,
         })
     }
@@ -135,7 +133,7 @@ impl Source for Int {
                 self.last_sent = self.last_sent.max(id);
                 Ok(SourceReply::Data {
                     origin_uri: EventOriginUri {
-                        uid: 0,
+                        uid: self.uid,
                         scheme: "tremor-cb".to_owned(),
                         host: hostname(),
                         ..EventOriginUri::default()
@@ -150,12 +148,19 @@ impl Source for Int {
             None => {
                 let wait = 100;
                 if self.finished {
-                    if self.timeout == 0 {
+                    if self.config.timeout == 0 {
                         // timeout reached check if we received all cb events
-                        let status = if self.received_cbs.count() < self.num_sent {
+                        let max_cb_received = self.received_cbs.max().unwrap_or_default();
+                        let cbs_missing = if self.config.expect_batched {
+                            max_cb_received < self.last_sent
+                        } else {
+                            self.received_cbs.count() < self.num_sent
+                        };
+                        let status = if cbs_missing {
                             // report failures to stderr and exit with 1
-                            let missing_ids = self.received_cbs.missing_ids();
-                            eprintln!("Missing CB insights for events: {:?}", missing_ids);
+                            eprintln!("Expected CB events up to id {}.", self.last_sent);
+                            eprintln!("Got acks: {:?}", self.received_cbs.ack);
+                            eprintln!("Got fails: {:?}", self.received_cbs.fail);
                             1
                         } else {
                             0
@@ -164,7 +169,7 @@ impl Source for Int {
                         // ALLOW: this is the supposed to exit
                         std::process::exit(status);
                     } else {
-                        self.timeout = self.timeout.saturating_sub(wait);
+                        self.config.timeout = self.config.timeout.saturating_sub(wait);
                     }
                 } else {
                     self.finished = true;
@@ -193,14 +198,28 @@ impl Source for Int {
 
     fn ack(&mut self, id: u64) {
         self.received_cbs.ack.push(id);
-        if self.finished && self.received_cbs.count() == self.num_sent {
+        if self.finished && self.received_cbs.count() == self.num_sent
+            || (self.config.expect_batched
+                && self
+                    .received_cbs
+                    .max()
+                    .map(|m| m == self.last_sent)
+                    .unwrap_or_default())
+        {
             eprintln!("All required CB events received.");
         }
     }
 
     fn fail(&mut self, id: u64) {
         self.received_cbs.fail.push(id);
-        if self.finished && self.received_cbs.count() == self.num_sent {
+        if self.finished && self.received_cbs.count() == self.num_sent
+            || (self.config.expect_batched
+                && self
+                    .received_cbs
+                    .max()
+                    .map(|m| m == self.last_sent)
+                    .unwrap_or_default())
+        {
             eprintln!("All required CB events received.");
         }
     }
@@ -213,7 +232,6 @@ impl Source for Int {
 #[async_trait::async_trait]
 impl Onramp for Cb {
     async fn start(&mut self, config: OnrampConfig<'_>) -> Result<onramp::Addr> {
-        self.origin_uri.uid = config.onramp_uid;
         let source = Int::from_config(
             config.onramp_uid,
             self.onramp_id.clone(),

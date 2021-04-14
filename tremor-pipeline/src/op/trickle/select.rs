@@ -542,10 +542,12 @@ fn execute_select_and_having(
         Event {
             id: event_id,
             ingest_ns: event.ingest_ns,
-            // TODO avoid origin_uri clone here
             origin_uri,
+            op_meta: event.op_meta.clone(),
             is_batch: false,
             data: (result.into_static(), event_meta.clone_static()).into(),
+            // FIXME: this needs to be tracked in the select somewhere and not extracted from the last event
+            transactional: event.transactional,
             ..Event::default()
         },
     )))
@@ -625,6 +627,7 @@ fn get_or_create_group<'window>(
 }
 
 impl Operator for TrickleSelect {
+    // FIXME: where to track transactional state for outgoing events?
     #[allow(
         mutable_transmutes,
         clippy::transmute_ptr_to_ptr,
