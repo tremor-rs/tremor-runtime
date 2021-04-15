@@ -524,7 +524,7 @@ fn execute_select_and_having(
     local_stack: &LocalStack,
     state: &Value<'static>,
     env: &Env,
-    event_id_gen: &mut EventIdGenerator,
+    event_id: EventId,
     event: &Event,
     origin_uri: Option<EventOriginUri>,
     transactional: bool,
@@ -551,14 +551,13 @@ fn execute_select_and_having(
             .into());
         }
     }
-    let mut event_id = event_id_gen.next_id();
-    event_id.track(&event.id);
     Ok(Some((
         OUT,
         Event {
             id: event_id,
             ingest_ns: event.ingest_ns,
             origin_uri,
+            // TODO: this will ignore op_metas from all other events this one is based upon and might break operators requiring this
             op_meta: event.op_meta.clone(),
             is_batch: false,
             data: (result.into_static(), event_meta.clone_static()).into(),
@@ -816,7 +815,7 @@ impl Operator for TrickleSelect {
                         &local_stack,
                         state,
                         &env,
-                        &mut self.event_id_gen,
+                        event.id.clone(),
                         &event,
                         event.origin_uri.clone(),
                         event.transactional // no windows, we can safely pass through the events field
@@ -857,6 +856,8 @@ impl Operator for TrickleSelect {
                             meta: &node_meta,
                             recursion_limit: tremor_script::recursion_limit(),
                         };
+                        let mut outgoing_event_id = self.event_id_gen.next_id();
+                        mem::swap(&mut outgoing_event_id, &mut this_group.id);
                         if let Some(port_and_event) = stry!(execute_select_and_having(
                             &stmt,
                             &node_meta,
@@ -864,19 +865,16 @@ impl Operator for TrickleSelect {
                             &local_stack,
                             state,
                             &env,
-                            &mut self.event_id_gen,
+                            outgoing_event_id,
                             &event,
                             None,
                             this_group.transactional
                         )) {
                             events.push(port_and_event);
                         };
-                        this_group.transactional = false; // reset transactional state for outgoing events
-
                         // re-initialize aggr state for new window
-                        for aggr in &mut this_group.aggrs {
-                            aggr.invocable.init();
-                        }
+                        // reset transactional state for outgoing events
+                        this_group.reset();
                     }
 
                     // accumulate
@@ -908,6 +906,9 @@ impl Operator for TrickleSelect {
                             meta: &node_meta,
                             recursion_limit: tremor_script::recursion_limit(),
                         };
+
+                        let mut outgoing_event_id = self.event_id_gen.next_id();
+                        mem::swap(&mut outgoing_event_id, &mut this_group.id);
                         if let Some(port_and_event) = stry!(execute_select_and_having(
                             &stmt,
                             &node_meta,
@@ -915,19 +916,16 @@ impl Operator for TrickleSelect {
                             &local_stack,
                             state,
                             &env,
-                            &mut self.event_id_gen,
+                            outgoing_event_id,
                             &event,
                             None,
                             this_group.transactional
                         )) {
                             events.push(port_and_event);
                         };
-                        this_group.transactional = false; // reset transactional state for outgoing events
-
                         // re-initialize aggr state for new window
-                        for aggr in &mut this_group.aggrs {
-                            aggr.invocable.init();
-                        }
+                        // reset transactional state for outgoing events
+                        this_group.reset();
                     }
                 }
                 _ => {
@@ -989,8 +987,14 @@ impl Operator for TrickleSelect {
                     //       | [9]    |        | [1, 2, 3, 4, 5, 6, 7, 8] // since we tilt up before we check
                     //       |        |        | emit                     // the next window we collect one too many elements
 
-                    // we need scratches for multiple window handling
+                    // we need scratches for multiple window handling, to avoid allocating on the hot path here
                     if let Some((scratch1, scratch2)) = scratches {
+                        // scratches for passing on the event id between windows to track all events contributing to an outgoing windowed event
+                        // cannot put them in AggregateScratch, as this is in tremor_script and doesnt know about EventId
+                        // cannot put AggregateScratch in TrickleSelect as it has lifetimes which we tried to avoid here
+                        let mut event_id_scratch1 = EventId::default();
+                        let mut event_id_scratch2 = EventId::default();
+
                         // gather window events
                         let mut emit_window_events = Vec::with_capacity(self.windows.len());
                         let step1_iter = self.windows.iter_mut();
@@ -1085,6 +1089,7 @@ impl Operator for TrickleSelect {
                                         })?;
                                     }
                                     this_group.track_transactional(scratch1.transactional);
+                                    this_group.id.track(&event_id_scratch1);
                                 }
                                 // push event
                                 let env = Env {
@@ -1095,6 +1100,9 @@ impl Operator for TrickleSelect {
                                     recursion_limit: tremor_script::recursion_limit(),
                                 };
 
+                                let mut outgoing_event_id = self.event_id_gen.next_id();
+                                event_id_scratch1 = this_group.id.clone(); // store the id for to be tracked by the next window
+                                mem::swap(&mut outgoing_event_id, &mut this_group.id);
                                 if let Some(port_and_event) = stry!(execute_select_and_having(
                                     &stmt,
                                     &node_meta,
@@ -1102,7 +1110,7 @@ impl Operator for TrickleSelect {
                                     &local_stack,
                                     state,
                                     &env,
-                                    &mut self.event_id_gen,
+                                    outgoing_event_id,
                                     &event,
                                     None,
                                     this_group.transactional
@@ -1128,6 +1136,14 @@ impl Operator for TrickleSelect {
                                     meta: &node_meta,
                                     recursion_limit: tremor_script::recursion_limit(),
                                 };
+
+                                let mut outgoing_event_id = self.event_id_gen.next_id();
+                                if !first {
+                                    // store old event_ids state from last window into scratch2
+                                    std::mem::swap(&mut event_id_scratch1, &mut event_id_scratch2);
+                                }
+                                event_id_scratch1 = this_group.id.clone(); // store the id for to be tracked by the next window
+                                mem::swap(&mut outgoing_event_id, &mut this_group.id);
                                 if let Some(port_and_event) = stry!(execute_select_and_having(
                                     &stmt,
                                     &node_meta,
@@ -1135,7 +1151,7 @@ impl Operator for TrickleSelect {
                                     &local_stack,
                                     state,
                                     &env,
-                                    &mut self.event_id_gen,
+                                    outgoing_event_id,
                                     &event,
                                     None,
                                     this_group.transactional
@@ -1170,6 +1186,7 @@ impl Operator for TrickleSelect {
                                         })?;
                                     }
                                     this_group.track_transactional(scratch2.transactional);
+                                    this_group.id.track(&event_id_scratch2);
                                 }
                             }
 
@@ -1233,6 +1250,7 @@ impl Operator for TrickleSelect {
                                     })?;
                                 }
                                 this_group.track_transactional(scratch1.transactional);
+                                this_group.id.track(&event_id_scratch1);
                             }
                         }
                     } else {
@@ -1322,6 +1340,8 @@ impl Operator for TrickleSelect {
                                     meta: &node_meta,
                                     recursion_limit: tremor_script::recursion_limit(),
                                 };
+                                let mut outgoing_event_id = self.event_id_gen.next_id();
+                                mem::swap(&mut group_data.id, &mut outgoing_event_id);
                                 let executed = stry!(execute_select_and_having(
                                     &stmt,
                                     node_meta,
@@ -1329,12 +1349,11 @@ impl Operator for TrickleSelect {
                                     &local_stack,
                                     state,
                                     &env,
-                                    &mut self.event_id_gen,
+                                    outgoing_event_id,
                                     &artificial_event,
                                     None,
                                     group_data.transactional
                                 ));
-                                group_data.transactional = false; // reset transactional status for outgoing events
                                 if let Some(port_and_event) = executed {
                                     res.events.push(port_and_event);
                                 }
@@ -1386,6 +1405,10 @@ impl Operator for TrickleSelect {
                         consts.group.push(group_str.clone())?;
 
                         if let Some((scratch1, scratch2)) = aggregate_scratches.as_mut() {
+                            // scratches for passing on the event id between windows to track all events contributing to an outgoing windowed event
+                            let mut event_id_scratch1 = EventId::default();
+                            let mut event_id_scratch2 = EventId::default();
+
                             // gather window events
                             let mut emit_window_events = Vec::with_capacity(self.windows.len());
                             let step1_iter = self.windows.iter_mut();
@@ -1438,6 +1461,7 @@ impl Operator for TrickleSelect {
                                             })?;
                                         }
                                         this_group.track_transactional(scratch1.transactional);
+                                        this_group.id.track(&event_id_scratch1);
                                     }
                                     // push event
                                     let env = Env {
@@ -1448,6 +1472,9 @@ impl Operator for TrickleSelect {
                                         recursion_limit: tremor_script::recursion_limit(),
                                     };
 
+                                    let mut outgoing_event_id = self.event_id_gen.next_id();
+                                    event_id_scratch1 = this_group.id.clone(); // store event_id in a scratch for tracking it in the next window in the tilt-frame
+                                    mem::swap(&mut this_group.id, &mut outgoing_event_id);
                                     if let Some(port_and_event) = stry!(execute_select_and_having(
                                         &stmt,
                                         &node_meta,
@@ -1455,7 +1482,7 @@ impl Operator for TrickleSelect {
                                         &local_stack,
                                         state,
                                         &env,
-                                        &mut self.event_id_gen,
+                                        outgoing_event_id,
                                         &artificial_event,
                                         None,
                                         this_group.transactional
@@ -1479,6 +1506,17 @@ impl Operator for TrickleSelect {
                                         meta: &node_meta,
                                         recursion_limit: tremor_script::recursion_limit(),
                                     };
+
+                                    let mut outgoing_event_id = self.event_id_gen.next_id();
+                                    if !first {
+                                        // store previous window event_id in scratch2
+                                        std::mem::swap(
+                                            &mut event_id_scratch1,
+                                            &mut event_id_scratch2,
+                                        );
+                                    }
+                                    event_id_scratch1 = this_group.id.clone(); // store event id before swapping it out, for tracking in next window
+                                    mem::swap(&mut this_group.id, &mut outgoing_event_id);
                                     if let Some(port_and_event) = stry!(execute_select_and_having(
                                         &stmt,
                                         &node_meta,
@@ -1486,7 +1524,7 @@ impl Operator for TrickleSelect {
                                         &local_stack,
                                         state,
                                         &env,
-                                        &mut self.event_id_gen,
+                                        outgoing_event_id,
                                         &artificial_event,
                                         None,
                                         this_group.transactional
@@ -1529,6 +1567,7 @@ impl Operator for TrickleSelect {
                                             })?;
                                         }
                                         this_group.track_transactional(scratch2.transactional);
+                                        this_group.id.track(&event_id_scratch2);
                                     }
                                 }
 
@@ -1559,6 +1598,7 @@ impl Operator for TrickleSelect {
                                         })?;
                                     }
                                     this_group.track_transactional(scratch1.transactional);
+                                    this_group.id.track(&event_id_scratch1);
                                 }
                             }
                         } else {
@@ -1641,6 +1681,16 @@ mod test {
                "h2g2" : 42,
             }))
             .into(),
+            ..Event::default()
+        }
+    }
+
+    fn test_event_tx(s: u64, transactional: bool, group: u64) -> Event {
+        Event {
+            id: (0, 0, s).into(),
+            ingest_ns: s + 100,
+            data: Value::from(json!({ "group": group })).into(),
+            transactional,
             ..Event::default()
         }
     }
@@ -1941,6 +1991,7 @@ mod test {
             r#"[{"g":"group"}]"#,
             sorted_serialize(eis.events[0].1.data.parts().0)?
         );
+        assert_eq!(false, eis.events[0].1.transactional);
         Ok(())
     }
 
@@ -1985,6 +2036,7 @@ mod test {
                "cat" : 42,
             }))
             .into(),
+            transactional: true,
             ..Event::default()
         };
         eis = select.on_event(uid, "IN", &mut state, event)?;
@@ -1998,11 +2050,126 @@ mod test {
         assert_eq!(1, eis.events.len());
         let (_port, event) = eis.events.remove(0);
         assert_eq!(r#"[{"cat":42}]"#, sorted_serialize(event.data.parts().0)?);
+        assert_eq!(true, event.transactional);
 
         let mut tick5 = test_tick(499);
         eis = select.on_signal(uid, &state, &mut tick5)?;
         assert!(eis.insights.is_empty());
         assert_eq!(0, eis.events.len());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_transactional_single_window() -> Result<()> {
+        let mut op = select_stmt_from_query(
+            r#"
+            define tumbling window w2
+            with
+              size = 2
+            end;
+            select aggr::stats::count() from in[w2] into out;
+        "#,
+        )?;
+        let mut state = Value::null();
+        let event1 = test_event_tx(0, false, 0);
+        let id1 = event1.id.clone();
+        let res = op.on_event(0, "in", &mut state, event1)?;
+
+        assert!(res.events.is_empty());
+
+        let event2 = test_event_tx(1, true, 0);
+        let id2 = event2.id.clone();
+        let mut res = op.on_event(0, "in", &mut state, event2)?;
+        assert_eq!(1, res.events.len());
+        let (_, event) = res.events.pop().unwrap();
+        assert_eq!(true, event.transactional);
+        assert_eq!(true, event.id.is_tracking(&id1));
+        assert_eq!(true, event.id.is_tracking(&id2));
+
+        let event3 = test_event_tx(2, false, 0);
+        let id3 = event3.id.clone();
+        let res = op.on_event(0, "in", &mut state, event3)?;
+        assert!(res.events.is_empty());
+
+        let event4 = test_event_tx(3, false, 0);
+        let id4 = event4.id.clone();
+        let mut res = op.on_event(0, "in", &mut state, event4)?;
+        assert_eq!(1, res.events.len());
+        let (_, event) = res.events.pop().unwrap();
+        assert_eq!(false, event.transactional);
+        assert_eq!(true, event.id.is_tracking(&id3));
+        assert_eq!(true, event.id.is_tracking(&id4));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_transactional_multiple_windows() -> Result<()> {
+        let mut op = select_stmt_from_query(
+            r#"
+            define tumbling window w2_1
+            with
+              size = 2
+            end;
+            define tumbling window w2_2
+            with
+              size = 2
+            end;
+            select aggr::win::collect_flattened(event) from in[w2_1, w2_2] group by set(event["group"]) into out;
+        "#,
+        )?;
+        let mut state = Value::null();
+        let event1 = test_event_tx(0, true, 0);
+        let id1 = event1.id.clone();
+        let res = op.on_event(0, "in", &mut state, event1)?;
+        assert_eq!(0, res.len());
+
+        let event2 = test_event_tx(1, false, 1);
+        let id2 = event2.id.clone();
+        let res = op.on_event(0, "in", &mut state, event2)?;
+        assert_eq!(0, res.len());
+
+        let event3 = test_event_tx(2, false, 0);
+        let id3 = event3.id.clone();
+        let mut res = op.on_event(0, "in", &mut state, event3)?;
+        assert_eq!(1, res.len());
+        let (_, event) = res.events.pop().unwrap();
+        assert_eq!(true, event.transactional);
+        assert_eq!(true, event.id.is_tracking(&id1));
+        assert_eq!(true, event.id.is_tracking(&id3));
+
+        let event4 = test_event_tx(3, false, 1);
+        let id4 = event4.id.clone();
+        let mut res = op.on_event(0, "in", &mut state, event4)?;
+        assert_eq!(1, res.len());
+        let (_, event) = res.events.remove(0);
+        assert_eq!(false, event.transactional);
+        assert_eq!(true, event.id.is_tracking(&id2));
+        assert_eq!(true, event.id.is_tracking(&id4));
+
+        let event5 = test_event_tx(4, false, 0);
+        let id5 = event5.id.clone();
+        let res = op.on_event(0, "in", &mut state, event5)?;
+        assert_eq!(0, res.len());
+
+        let event6 = test_event_tx(5, false, 0);
+        let id6 = event6.id.clone();
+        let mut res = op.on_event(0, "in", &mut state, event6)?;
+        assert_eq!(2, res.len());
+
+        // first event from event5 and event6 - none of the source events are transactional
+        let (_, event_w1) = res.events.remove(0);
+        assert_eq!(false, event_w1.transactional);
+        assert_eq!(true, event_w1.id.is_tracking(&id5));
+        assert_eq!(true, event_w1.id.is_tracking(&id6));
+
+        let (_, event_w2) = res.events.remove(0);
+        assert_eq!(true, event_w2.transactional);
+        assert_eq!(true, event_w2.id.is_tracking(&id1));
+        assert_eq!(true, event_w2.id.is_tracking(&id3));
+        assert_eq!(true, event_w2.id.is_tracking(&id5));
+        assert_eq!(true, event_w2.id.is_tracking(&id6));
 
         Ok(())
     }
