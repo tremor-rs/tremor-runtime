@@ -81,9 +81,9 @@ impl Sink for Postgres {
         for val in event.value_iter() {
             let obj = val.as_object();
             if let Some(kv) = obj {
-                let mut fields: Vec<String> = Vec::new();
-                let mut params: Vec<String> = Vec::new();
-                let mut records: Vec<Record> = Vec::new();
+                let mut fields: Vec<String> = Vec::with_capacity(kv.len());
+                let mut params: Vec<String> = Vec::with_capacity(kv.len());
+                let mut records: Vec<Record> = Vec::with_capacity(kv.len());
 
                 let mut ct: usize = 1;
                 for (field, value) in kv {
