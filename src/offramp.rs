@@ -266,7 +266,12 @@ impl Manager {
                                     metrics_reporter.increment_out();
                                     false
                                 };
-                                if offramp.auto_ack() && transactional {
+                                // always send a fail, if on_event errored and the event is transactional
+                                // assuming if a sink fails, it didnt already sent a fail insight via reply_channel
+                                // even if it did, double fails or double acks should not lead to trouble
+                                // this will prevent fail insights being swallowed here
+                                // sinks need to take care of sending acks themselves. Deal with it.
+                                if (fail || offramp.auto_ack()) && transactional {
                                     let e = Event::ack_or_fail(!fail, ingest_ns, ids);
                                     send_to_pipelines(&offramp_url, &mut pipelines, e).await;
                                 }
