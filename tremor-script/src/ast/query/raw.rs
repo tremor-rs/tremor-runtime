@@ -15,8 +15,11 @@
 // We want to keep the names here
 #![allow(clippy::module_name_repetitions)]
 
-use super::super::raw::{
-    reduce2, BaseExpr, ExprRaw, IdentRaw, ImutExprRaw, ModuleRaw, ScriptRaw, WithExprsRaw,
+use super::{
+    super::raw::{
+        reduce2, BaseExpr, ExprRaw, IdentRaw, ImutExprRaw, ModuleRaw, ScriptRaw, WithExprsRaw,
+    },
+    AggregateScratch,
 };
 use super::{
     error_generic, error_no_consts, error_no_locals, AggrRegistry, GroupBy, GroupByInt, HashMap,
@@ -150,7 +153,10 @@ impl<'script> Upable<'script> for StmtRaw<'script> {
                 helper.swap(&mut aggregates, &mut locals);
                 // only allocate scratches if they are really needed - when we have multiple windows
                 let aggregate_scratches = if stmt.windows.len() > 1 {
-                    Some((aggregates.clone(), aggregates.clone()))
+                    Some((
+                        AggregateScratch::new(aggregates.clone()),
+                        AggregateScratch::new(aggregates.clone()),
+                    ))
                 } else {
                     None
                 };
