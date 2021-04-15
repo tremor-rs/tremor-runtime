@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use super::prelude::*;
-use chrono::{Datelike, TimeZone, Utc};
+use chrono::{Datelike, Offset, TimeZone, Utc};
 use syslog_loose::{IncompleteDate, ProcId, Protocol, SyslogFacility, SyslogSeverity};
 use tremor_script::{Object, Value};
 
@@ -32,7 +32,11 @@ impl Codec for Syslog {
         _ingest_ns: u64,
     ) -> Result<Option<Value<'input>>> {
         let line: &str = std::str::from_utf8(data)?;
-        let parsed = syslog_loose::parse_message_with_year(line, resolve_year);
+        let parsed = syslog_loose::parse_message_with_year_tz(
+            line,
+            resolve_year,
+            Some(chrono::offset::Utc.fix()),
+        );
 
         let mut es_msg = Object::with_capacity(11);
         es_msg.insert("hostname".into(), Value::from(parsed.hostname));
