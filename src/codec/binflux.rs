@@ -199,16 +199,16 @@ mod test {
             "Invalid BInflux Line Protocol data: measurement missing"
         );
 
-        o.insert("measurement", "m").unwrap();
+        o.try_insert("measurement", "m");
         assert_eq!(
             c.encode(&o).err().unwrap().to_string(),
             "Invalid BInflux Line Protocol data: timestamp missing"
         );
-        o.insert("timestamp", 42).unwrap();
+        o.try_insert("timestamp", 42);
         let mut fields = Value::object();
-        fields.insert("snot", vec![1]).unwrap();
+        fields.try_insert("snot", vec![1]);
 
-        o.insert("fields", fields).unwrap();
+        o.try_insert("fields", fields);
         assert_eq!(
             c.encode(&o).err().unwrap().to_string(),
             "Invalid BInflux Line Protocol data: Unknown type as influx line value: Array"

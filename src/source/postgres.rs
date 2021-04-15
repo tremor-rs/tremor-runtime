@@ -98,9 +98,9 @@ impl Int {
 
         let mut obj = OwnedValue::object();
 
-        obj.insert("consume_from", consume_from)?;
+        obj.try_insert("consume_from", consume_from);
+        obj.try_insert("consume_until", consume_until);
 
-        obj.insert("consume_until", consume_until)?;
         let cache = match ramp::lookup("mmap_file", Some(config.cache.clone()), &obj) {
             Ok(v) => v,
             Err(e) => return Err(e),

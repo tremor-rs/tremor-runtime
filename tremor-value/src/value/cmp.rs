@@ -303,16 +303,16 @@ where
 
 #[cfg(test)]
 mod test {
-    use crate::Value;
-    use simd_json::json;
+    use crate::{literal, Value};
+
     #[test]
     fn diff_types() {
         assert_ne!(Value::from(1), Value::from("snot"));
     }
     #[test]
     fn obj() {
-        let o1: Value = json!({"snot":1}).into();
-        let o2: Value = json!({"snot":1, "badger":2}).into();
+        let o1 = literal!({"snot":1});
+        let o2 = literal!({"snot":1, "badger":2});
         assert_ne!(o1, o2);
     }
 

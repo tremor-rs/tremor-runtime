@@ -304,9 +304,9 @@ mod test {
     fn obj() -> Result<(), Box<dyn std::error::Error>> {
         let mut o = Value::object();
         assert_eq!(o.encode(), "{}");
-        o.insert("snot", "badger")?;
+        o.try_insert("snot", "badger");
         assert_eq!(o.encode(), r#"{"snot":"badger"}"#);
-        o.insert("badger", "snot")?;
+        o.try_insert("badger", "snot");
         assert_eq!(o.encode(), r#"{"snot":"badger","badger":"snot"}"#);
         Ok(())
     }
@@ -314,14 +314,14 @@ mod test {
     fn obj_pp() -> Result<(), Box<dyn std::error::Error>> {
         let mut o = Value::object();
         assert_eq!(o.encode_pp(), "{}");
-        o.insert("snot", "badger")?;
+        o.try_insert("snot", "badger");
         assert_eq!(
             o.encode_pp(),
             r#"{
   "snot": "badger"
 }"#
         );
-        o.insert("badger", "snot")?;
+        o.try_insert("badger", "snot");
         assert_eq!(
             o.encode_pp(),
             r#"{

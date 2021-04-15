@@ -117,10 +117,9 @@ impl Operator for History {
 
 #[cfg(test)]
 mod test {
+    use super::*;
     use crate::EventId;
 
-    use super::*;
-    use simd_json::json;
     #[test]
     fn history_op_test() {
         let mut op = History {
@@ -133,7 +132,7 @@ mod test {
         let event = Event {
             id: EventId::new(0, 0, 1),
             ingest_ns: 1,
-            data: (Value::from("snot"), Value::from(json!({}))).into(),
+            data: (Value::from("snot"), Value::object()).into(),
             ..Event::default()
         };
 
@@ -158,7 +157,7 @@ mod test {
         let mut event = Event {
             id: EventId::new(0, 0, 1),
             ingest_ns: 1,
-            data: (Value::from("snot"), Value::from(json!({}))).into(),
+            data: (Value::from("snot"), Value::object()).into(),
             ..Event::default()
         };
         let state = Value::null();

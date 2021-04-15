@@ -20,3 +20,4 @@ pub use crate::Return;
 pub use crate::{Object, Value};
 pub use crate::{FALSE, NULL, TRUE};
 pub use simd_json::prelude::*;
+pub use tremor_value::prelude::*;

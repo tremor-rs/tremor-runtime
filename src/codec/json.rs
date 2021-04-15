@@ -86,8 +86,7 @@ impl Codec for Json {
 #[cfg(test)]
 mod test {
     use super::*;
-    use simd_json::json;
-    use simd_json::OwnedValue;
+    use tremor_value::literal;
 
     #[test]
     fn decode() -> Result<()> {
@@ -95,7 +94,7 @@ mod test {
             input_buffer: AlignedBuf::with_capacity(0),
             string_buffer: Vec::new(),
         };
-        let expected: OwnedValue = json!({ "snot": "badger" });
+        let expected = literal!({ "snot": "badger" });
 
         let mut data = br#"{ "snot": "badger" }"#.to_vec();
         let output = codec.decode(&mut data, 42)?.unwrap();
@@ -112,8 +111,7 @@ mod test {
 
     #[test]
     fn test_json_codec() -> Result<()> {
-        let seed: OwnedValue = json!({ "snot": "badger" });
-        let seed: Value = seed.into();
+        let seed = literal!({ "snot": "badger" });
 
         let mut codec = Json::default();
 

@@ -199,7 +199,7 @@ fn substr<I: SliceIndex<[u8], Output = [u8]>>(data: &[u8], r: I) -> Result<&str>
 #[cfg(test)]
 mod test {
     use super::*;
-    use simd_json::json;
+    use tremor_value::literal;
     #[test]
     fn test_subslice() {
         let a = b"012345";
@@ -216,13 +216,12 @@ mod test {
     fn gorets() {
         let data = b"gorets:1|c";
         let parsed = decode(data, 0).expect("failed to decode");
-        let expected: Value = json!({
+        let expected = literal!({
             "type": "c",
             "metric": "gorets",
             "value": 1,
 
-        })
-        .into();
+        });
         assert_eq!(parsed, expected);
         let encoded = encode(&parsed).expect("failed to encode");
         assert_eq!(encoded.as_slice(), data);
@@ -232,13 +231,12 @@ mod test {
     fn glork() {
         let data = b"glork:320|ms";
         let parsed = decode(data, 0).expect("failed to decode");
-        let expected: Value = json!({
+        let expected = literal!({
             "type": "ms",
             "metric": "glork",
             "value": 320,
 
-        })
-        .into();
+        });
         assert_eq!(parsed, expected);
         let encoded = encode(&parsed).expect("failed to encode");
         assert_eq!(encoded, data);
@@ -249,13 +247,12 @@ mod test {
     fn gaugor() {
         let data = b"gaugor:333|g";
         let parsed = decode(data, 0).expect("failed to decode");
-        let expected: Value = json!({
+        let expected = literal!({
             "type": "g",
             "metric": "gaugor",
             "value": 333,
 
-        })
-        .into();
+        });
         assert_eq!(parsed, expected);
         let encoded = encode(&parsed).expect("failed to encode");
         assert_eq!(encoded, data);
@@ -266,13 +263,12 @@ mod test {
     fn uniques() {
         let data = b"uniques:765|s";
         let parsed = decode(data, 0).expect("failed to decode");
-        let expected: Value = json!({
+        let expected = literal!({
             "type": "s",
             "metric": "uniques",
             "value": 765,
 
-        })
-        .into();
+        });
         assert_eq!(parsed, expected);
         let encoded = encode(&parsed).expect("failed to encode");
         assert_eq!(encoded, data);
@@ -287,13 +283,12 @@ mod test {
             .decode(data.as_mut_slice(), 0)
             .expect("failed to decode")
             .unwrap();
-        let expected: Value = json!({
+        let expected = literal!({
             "type": "h",
             "metric": "horst",
             "value": 42.23,
 
-        })
-        .into();
+        });
         assert_eq!(parsed, expected);
         let encoded = c.encode(&parsed).expect("failed to encode");
         assert_eq!(encoded, b"horst:42.23|h");
@@ -303,14 +298,13 @@ mod test {
     fn sam() {
         let data = b"sam:7|c|@0.1";
         let parsed = decode(data, 0).expect("failed to decode");
-        let expected: Value = json!({
+        let expected = literal!({
             "type": "c",
             "metric": "sam",
             "value": 7,
             "sample_rate": 0.1
 
-        })
-        .into();
+        });
         assert_eq!(parsed, expected);
         let encoded = encode(&parsed).expect("failed to encode");
         assert_eq!(encoded, data);
@@ -320,14 +314,13 @@ mod test {
     fn addy() {
         let data = b"addy:+123|g";
         let parsed = decode(data, 0).expect("failed to decode");
-        let expected: Value = json!({
+        let expected = literal!({
             "type": "g",
             "metric": "addy",
             "action": "add",
             "value": 123,
 
-        })
-        .into();
+        });
         assert_eq!(parsed, expected);
         let encoded = encode(&parsed).expect("failed to encode");
         assert_eq!(encoded, data);
@@ -337,14 +330,13 @@ mod test {
     fn subastian() {
         let data = b"subastian:-234|g";
         let parsed = decode(data, 0).expect("failed to decode");
-        let expected: Value = json!({
+        let expected = literal!({
             "type": "g",
             "metric": "subastian",
             "action": "sub",
             "value": 234,
 
-        })
-        .into();
+        });
         assert_eq!(parsed, expected);
         let encoded = encode(&parsed).expect("failed to encode");
         assert_eq!(encoded, data);
