@@ -96,7 +96,7 @@ impl Pattern {
             Some(m) => {
                 let mut o = Value::object();
                 for (a, b) in m.iter() {
-                    o.insert(a.to_string(), b.to_string())?;
+                    o.try_insert(a.to_string(), b.to_string());
                 }
                 Ok(o)
             }
