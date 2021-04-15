@@ -67,21 +67,36 @@ fn t() -> bool {
 }
 
 impl ConfigImpl for Config {}
-
+impl Udp {
+    /// Binds and possibly 'connects' the udp socket
+    async fn bind(&mut self) -> Result<()> {
+        if self.socket.is_none() {
+            let socket =
+                UdpSocket::bind((self.config.bind.host.as_str(), self.config.bind.port)).await?;
+            if self.config.bound {
+                socket
+                    .connect((self.config.host.as_str(), self.config.port))
+                    .await?;
+            }
+            self.socket = Some(socket);
+        };
+        Ok(())
+    }
+}
 impl offramp::Impl for Udp {
     fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         if let Some(config) = config {
             let mut config: Config = Config::new(config)?;
             if !config.bound {
-                warn!("The `bound` setting of the UDP offramp is depricated, in futur re-binding will only work over the $udp metadata")
+                warn!("The `bound` setting of the UDP offramp is deprecated, in future re-binding will only work over the $udp metadata")
             }
             if let Some(dst_port) = config.dst_port.take() {
-                warn!("The `dst_port` setting of the UDP offramp is depricated, this will in future be `port` and `port` will be `bind.port`.");
+                warn!("The `dst_port` setting of the UDP offramp is deprecated, this will in future be `port` and current `port` will be `bind.port`.");
                 config.bind.port = config.port;
                 config.port = dst_port;
             }
             if let Some(dst_host) = config.dst_host.take() {
-                warn!("The `dst_host` setting of the UDP offramp is depricated, this will in future be `host` and `host` will be `bind.host`.");
+                warn!("The `dst_host` setting of the UDP offramp is deprecated, this will in future be `host` and current `host` will be `bind.host`.");
                 config.bind.host = config.host;
                 config.host = dst_host;
             }
@@ -119,7 +134,7 @@ impl Sink for Udp {
                     } else if self.config.bound {
                         socket.send(&processed).await?;
                     } else {
-                        warn!("using `bound` in the UDP sink is depricated please use $udp.host and $udp.port instead!");
+                        warn!("using `bound` in the UDP sink config is deprecated please use $udp.host and $udp.port instead!");
                         // reaquire the destination to handle DNS changes or multi IP dns entries
                         socket
                             .send_to(&processed, (self.config.host.as_str(), self.config.port))
@@ -157,24 +172,12 @@ impl Sink for Udp {
         _reply_channel: Sender<sink::Reply>,
     ) -> Result<()> {
         self.postprocessors = make_postprocessors(processors.post)?;
-        let socket =
-            UdpSocket::bind((self.config.bind.host.as_str(), self.config.bind.port)).await?;
-        socket
-            .connect((self.config.host.as_str(), self.config.port))
-            .await?;
-        self.socket = Some(socket);
+        self.bind().await?;
         Ok(())
     }
     async fn on_signal(&mut self, signal: Event) -> ResultVec {
         if self.socket.is_none() {
-            let socket =
-                UdpSocket::bind((self.config.bind.host.as_str(), self.config.bind.port)).await?;
-            if self.config.bound {
-                socket
-                    .connect((self.config.host.as_str(), self.config.port))
-                    .await?;
-            }
-            self.socket = Some(socket);
+            self.bind().await?;
             Ok(Some(vec![sink::Reply::Insight(Event::cb_restore(
                 signal.ingest_ns,
             ))]))
