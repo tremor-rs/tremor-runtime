@@ -50,13 +50,11 @@ impl Codec for Yaml {
 #[cfg(test)]
 mod test {
     use super::*;
-    use simd_json::json;
-    use simd_json::OwnedValue;
+    use tremor_value::literal;
 
     #[test]
     fn test_yaml_codec() -> Result<()> {
-        let seed: OwnedValue = json!({ "snot": "badger" });
-        let seed: Value = seed.into();
+        let seed = literal!({ "snot": "badger" });
 
         let mut codec = Yaml {};
         let mut as_raw = codec.encode(&seed)?;

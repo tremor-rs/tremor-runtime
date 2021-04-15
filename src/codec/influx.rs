@@ -77,8 +77,8 @@ mod tests {
     use super::*;
     use crate::codec::binflux::BInflux;
     use pretty_assertions::assert_eq;
-    use simd_json::json;
     use tremor_influx as influx;
+    use tremor_value::literal;
 
     #[test]
     fn simple_bin_parse() -> Result<()> {
@@ -94,13 +94,12 @@ mod tests {
 
     #[test]
     pub fn encode_mixed_bag() {
-        let s: Value = json!({
+        let s: Value = literal!({
             "measurement": r#"wea,\ ther"#,
             "tags": {},
             "fields": {"temp=erature": 82.0, r#"too\ \\\"hot""#: true},
             "timestamp": 1_465_839_830_100_400_200_i64
-        })
-        .into();
+        });
 
         let codec = Influx {};
 
@@ -129,13 +128,12 @@ mod tests {
             .expect("failed to decode")
             .expect("failed to decode");
 
-        let e: Value = json!({
+        let e: Value = literal!({
             "measurement": "weather",
             "tags": {"location": "us-midwest"},
             "fields": {"temperature": 82.0},
             "timestamp": 1_465_839_830_100_400_200_i64
-        })
-        .into();
+        });
         assert_eq!(decoded, &e)
     }
 
@@ -144,161 +142,146 @@ mod tests {
         [
             (
                 b"weather,location=us\\,midwest temperature=82 1465839830100400200".to_vec(),
-
-                json!({
+                literal!({
                     "measurement": "weather",
                     "tags": {"location": "us,midwest"},
                     "fields": {"temperature": 82.0},
                     "timestamp": 1_465_839_830_100_400_200_i64
-                }).into(),
+                }),
                 "case 0"
             ),
 
             (
                 b"weather,location_place=us-midwest temp\\=erature=82 1465839830100400200".to_vec(),
-
-            json!({
-                "measurement": "weather",
-                "tags": {"location_place": "us-midwest"},
-                "fields": {"temp=erature": 82.0},
-                "timestamp": 1_465_839_830_100_400_200_i64
-            }).into(),
+                literal!({
+                    "measurement": "weather",
+                    "tags": {"location_place": "us-midwest"},
+                    "fields": {"temp=erature": 82.0},
+                    "timestamp": 1_465_839_830_100_400_200_i64
+                }),
                 "case 1"
-
             ),
 
             (
                 b"weather,location\\ place=us-midwest temperature=82 1465839830100400200".to_vec(),
-
-            json!({
-                "measurement": "weather",
-                "tags": {"location place": "us-midwest"},
-                "fields": {"temperature": 82.0},
-                "timestamp": 1_465_839_830_100_400_200_i64
-            }).into(),
+                literal!({
+                    "measurement": "weather",
+                    "tags": {"location place": "us-midwest"},
+                    "fields": {"temperature": 82.0},
+                    "timestamp": 1_465_839_830_100_400_200_i64
+                }),
                 "case 2"
-
             ),
 
             (
                 b"wea\\,ther,location=us-midwest temperature=82 1465839830100400200".to_vec(),
-
-            json!({
-                "measurement": "wea,ther",
-                "tags": {"location": "us-midwest"},
-                "fields": {"temperature": 82.0},
-                "timestamp": 1_465_839_830_100_400_200_i64
-            }).into(),
+                literal!({
+                    "measurement": "wea,ther",
+                    "tags": {"location": "us-midwest"},
+                    "fields": {"temperature": 82.0},
+                    "timestamp": 1_465_839_830_100_400_200_i64
+                }),
                 "case 3"
             ),
 
             (
-
                 b"wea\\ ther,location=us-midwest temperature=82 1465839830100400200".to_vec(),
-
-                json!({
+                literal!({
                     "measurement": "wea ther",
                     "tags": {"location": "us-midwest"},
                     "fields": {"temperature": 82.0},
                     "timestamp": 1_465_839_830_100_400_200_i64
-                }).into(),
+                }),
                 "case 4"
             ),
 
-             (
-
-               br#"weather,location=us-midwest temperature_str="too\ hot\cold" 1465839830100400203"#.to_vec(),
-                 json!({
-                      "measurement": "weather",
-                     "tags": {"location": "us-midwest"} ,
-                     "fields": {"temperature_str": "too\\ hot\\cold"},
-                     "timestamp": 1_465_839_830_100_400_200_i64
-                 }).into(),
-                 "case 5"
-             ),
             (
+                br#"weather,location=us-midwest temperature_str="too\ hot\cold" 1465839830100400203"#.to_vec(),
+                literal!({
+                    "measurement": "weather",
+                    "tags": {"location": "us-midwest"} ,
+                    "fields": {"temperature_str": "too\\ hot\\cold"},
+                    "timestamp": 1_465_839_830_100_400_200_i64
+                 }),
+                 "case 5"
+            ),
 
+            (
                 b"weather,location=us-midwest temperature_str=\"too hot/cold\" 1465839830100400202".to_vec(),
-                json!({
+                literal!({
                     "measurement": "weather",
                     "tags": {"location": "us-midwest"},
                     "fields": {"temperature_str": r#"too hot/cold"#},
                     "timestamp": 1_465_839_830_100_400_200_i64
-                }).into(),
+                }),
                 "case 6"
             ),
 
             (
                 br#"weather,location=us-midwest temperature_str="too hot\\cold" 1465839830100400203"#.to_vec(),
-
-                json!({
+                literal!({
                     "measurement": "weather",
                     "tags": {"location": "us-midwest"},
                     "fields": {"temperature_str": r#"too hot\cold"#},
                     "timestamp": 1_465_839_830_100_400_200_i64
-                }).into(),
+                }),
                 "case 7"
+            ),
 
-                ),
             (
                 br#"weather,location=us-midwest temperature_str="too hot\\\cold" 1465839830100400204"#.to_vec(),
-
-                json!({
+                literal!({
                     "measurement": "weather",
                     "tags": {"location": "us-midwest"},
                     "fields": {"temperature_str": r#"too hot\\cold"#},
                     "timestamp": 1_465_839_830_100_400_204_i64
-                }).into(),
+                }),
                 "case 8"
-
             ),
 
             (
                 b"weather,location=us-midwest temperature_str=\"too hot\\\\\\\\cold\" 1465839830100400205".to_vec(),
-
-                json!({
+                literal!({
                     "measurement": "weather",
                     "tags": {"location": "us-midwest"},
                     "fields": {"temperature_str": "too hot\\\\cold"},
                     "timestamp": 1_465_839_830_100_400_205_i64
-                }).into(),
+                }),
                 "case 9"
-
             ),
 
             (
                 b"weather,location=us-midwest temperature_str=\"too hot\\\\\\\\\\cold\" 1465839830100400206".to_vec(),
-                json!({
+                literal!({
                     "measurement": "weather",
                     "tags": {"location": "us-midwest"},
                     "fields": {"temperature_str": "too hot\\\\\\cold"},
                     "timestamp": 1_465_839_830_100_400_206_i64
-                }).into(),
+                }),
                 "case 10"
             ),
 
             (
                 b"weather,location=us-midwest temperature=82,bug_concentration=98 1465839830100400200".to_vec(),
- json!({
-            "measurement": "weather",
-            "tags" :   { "location": "us-midwest" },
-            "fields": {"temperature": 82.0, "bug_concentration": 98.0},
-            "timestamp": 1_465_839_830_100_400_200_i64
-        }).into(),
-        "case 11"
-        ),
+                literal!({
+                    "measurement": "weather",
+                    "tags" :   { "location": "us-midwest" },
+                    "fields": {"temperature": 82.0, "bug_concentration": 98.0},
+                    "timestamp": 1_465_839_830_100_400_200_i64
+                }),
+                "case 11"
+            ),
 
-        (
-
-           b"weather,location=us-midwest temperature=82i 1465839830100400200".to_vec(),
-    json!({
-            "measurement": "weather",
-            "tags" :   { "location": "us-midwest" },
-            "fields": {"temperature": 82},
-            "timestamp": 1_465_839_830_100_400_200_i64
-        }).into(),
-        "case 12"
-)
+            (
+                b"weather,location=us-midwest temperature=82i 1465839830100400200".to_vec(),
+                literal!({
+                    "measurement": "weather",
+                    "tags" :   { "location": "us-midwest" },
+                    "fields": {"temperature": 82},
+                    "timestamp": 1_465_839_830_100_400_200_i64
+                }),
+                "case 12"
+            )
         ]
     }
 
@@ -340,14 +323,13 @@ mod tests {
             .expect("failed to decode")
             .expect("failed to decode");
 
-        let e: Value = json!({
+        let e: Value = literal!({
             "measurement": "weather",
             "tags" :   { "location": "us-midwest" },
             "fields": {"temperature": 82.0, "bug_concentration": 98.0},
 
             "timestamp": 1_465_839_830_100_400_200_i64
-        })
-        .into();
+        });
         assert_eq!(decoded, &e)
     }
 
@@ -361,13 +343,12 @@ mod tests {
             .expect("failed to decode")
             .expect("failed to decode");
 
-        let e: Value = json!({
+        let e: Value = literal!({
             "measurement": "weather",
             "tags" :   { "location": "us-midwest" },
             "fields": {"temperature": 82},
             "timestamp": 1_465_839_830_100_400_200_i64
-        })
-        .into();
+        });
         assert_eq!(decoded, &e)
     }
 
@@ -378,7 +359,7 @@ mod tests {
 
         let mut codec = Influx {};
 
-        let e: Value = json!({
+        let e: Value = literal!({
                     "measurement" : "kafka_BrokerTopicMetrics",
                     "tags" :  {
                         "agent": "jmxtrans",
@@ -397,8 +378,7 @@ mod tests {
                         "FetchMessageConversionsPerSec": 0
                        },
                     "timestamp" : 1_562_179_275_506_000_000_i64
-        })
-        .into();
+        });
         let decoded = codec
             .decode(s.as_mut_slice(), 0)
             .expect("failed to decode")

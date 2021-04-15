@@ -73,10 +73,10 @@ impl<'key> KnownKey<'key> {
     ///
     /// ```rust
     /// use tremor_value::*;
-    /// let object = json!({
+    /// let object = literal!({
     ///   "answer": 42,
     ///   "key": 7
-    /// }).into();
+    /// });
     /// let known_key = KnownKey::from("answer");
     /// assert_eq!(known_key.lookup(&object).unwrap(), &42);
     /// ```
@@ -101,10 +101,10 @@ impl<'key> KnownKey<'key> {
     ///
     /// ```rust
     /// use tremor_value::*;
-    /// let mut object: Value = json!({
+    /// let mut object = literal!({
     ///   "answer": 23,
     ///   "key": 7
-    /// }).into();
+    /// });
     /// let known_key = KnownKey::from("answer");
     ///
     /// assert_eq!(object["answer"], 23);
@@ -143,10 +143,10 @@ impl<'key> KnownKey<'key> {
     ///
     /// ```rust
     /// use tremor_value::*;
-    /// let mut object: Value = json!({
+    /// let mut object = literal!({
     ///   "answer": 23,
     ///   "key": 7
-    /// }).into();
+    /// });
     /// let known_key = KnownKey::from("answer");
     ///
     /// assert_eq!(object["answer"], 23);
@@ -199,10 +199,10 @@ impl<'key> KnownKey<'key> {
     ///
     /// ```rust
     /// use tremor_value::*;
-    /// let mut object: Value = json!({
+    /// let mut object = literal!({
     ///   "answer": 23,
     ///   "key": 7
-    /// }).into();
+    /// });
     /// let known_key = KnownKey::from("answer");
     ///
     /// assert_eq!(object["answer"], 23);

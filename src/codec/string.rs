@@ -56,13 +56,11 @@ impl Codec for String {
 #[cfg(test)]
 mod test {
     use super::*;
-    use simd_json::json;
-    use simd_json::OwnedValue;
+    use tremor_value::literal;
 
     #[test]
     fn test_string_codec() -> Result<()> {
-        let seed: OwnedValue = json!("snot badger");
-        let seed: Value = seed.into();
+        let seed = literal!("snot badger");
 
         let mut codec = String {};
         let mut as_raw = codec.encode(&seed)?;
