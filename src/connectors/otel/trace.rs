@@ -44,7 +44,7 @@ pub(crate) fn status_to_json<'event>(data: Option<Status>) -> Value<'event> {
 }
 
 pub(crate) fn span_events_to_json<'event>(pb: Vec<Event>) -> Result<Value<'event>> {
-    let mut json = Vec::new();
+    let mut json = Vec::with_capacity(pb.len());
     for data in pb {
         json.push(literal!({
             "time_unix_nano" : data.time_unix_nano,
@@ -57,8 +57,8 @@ pub(crate) fn span_events_to_json<'event>(pb: Vec<Event>) -> Result<Value<'event
 }
 
 pub(crate) fn span_events_to_pb(json: Option<&Value<'_>>) -> Result<Vec<Event>> {
-    let mut pb = Vec::new();
     if let Some(Value::Array(json)) = json {
+        let mut pb = Vec::with_capacity(json.len());
         for json in json {
             let name: String = pb::maybe_string_to_pb(json.get("name"))?;
             let time_unix_nano: u64 = pb::maybe_int_to_pbu64(json.get("time_unix_nano"))?;
@@ -72,12 +72,13 @@ pub(crate) fn span_events_to_pb(json: Option<&Value<'_>>) -> Result<Vec<Event>> 
                 dropped_attributes_count,
             })
         }
+        return Ok(pb);
     }
-    Ok(pb)
+    Ok(vec![])
 }
 
 pub(crate) fn span_links_to_json<'event>(pb: Vec<Link>) -> Result<Value<'event>> {
-    let mut json = Vec::new();
+    let mut json = Vec::with_capacity(pb.len());
     for data in pb {
         json.push(literal!({
             "trace_id": id::hex_trace_id_to_json(&data.trace_id),
@@ -91,8 +92,8 @@ pub(crate) fn span_links_to_json<'event>(pb: Vec<Link>) -> Result<Value<'event>>
 }
 
 pub(crate) fn span_links_to_pb(json: Option<&Value<'_>>) -> Result<Vec<Link>> {
-    let mut pb = Vec::new();
     if let Some(Value::Array(json)) = json {
+        let mut pb = Vec::with_capacity(json.len());
         for json in json {
             let span_id = id::hex_span_id_to_pb(json.get("span_id"))?;
             let trace_id = id::hex_trace_id_to_pb(json.get("trace_id"))?;
@@ -108,8 +109,9 @@ pub(crate) fn span_links_to_pb(json: Option<&Value<'_>>) -> Result<Vec<Link>> {
                 dropped_attributes_count,
             });
         }
+        return Ok(pb);
     }
-    Ok(pb)
+    Ok(vec![])
 }
 
 pub(crate) fn status_to_pb(json: Option<&Value<'_>>) -> Result<Option<Status>> {
@@ -135,9 +137,9 @@ pub(crate) fn status_to_pb(json: Option<&Value<'_>>) -> Result<Option<Status>> {
 pub(crate) fn instrumentation_library_spans_to_json<'event>(
     data: Vec<InstrumentationLibrarySpans>,
 ) -> Result<Value<'event>> {
-    let mut json: Vec<Value> = Vec::new();
+    let mut json: Vec<Value> = Vec::with_capacity(data.len());
     for data in data {
-        let mut spans: Vec<Value> = Vec::new();
+        let mut spans: Vec<Value> = Vec::with_capacity(data.spans.len());
         for span in data.spans {
             spans.push(literal!({
                 "attributes": common::key_value_list_to_json(span.attributes)?,
@@ -171,12 +173,13 @@ pub(crate) fn instrumentation_library_spans_to_json<'event>(
 pub(crate) fn instrumentation_library_spans_to_pb(
     data: Option<&Value<'_>>,
 ) -> Result<Vec<InstrumentationLibrarySpans>> {
-    let mut pb = Vec::new();
     if let Some(Value::Array(data)) = data {
+        let mut pb = Vec::with_capacity(data.len());
         for ill in data {
-            let mut spans = Vec::new();
             if let Value::Object(data) = ill {
-                if let Some(Value::Array(data)) = data.get("spans") {
+                let json_spans = data.get("spans");
+                let mut spans = Vec::new();
+                if let Some(Value::Array(data)) = json_spans {
                     for span in data {
                         let name: String = pb::maybe_string_to_pb(span.get("name"))?;
                         let start_time_unix_nano: u64 =
@@ -236,7 +239,7 @@ pub(crate) fn instrumentation_library_spans_to_pb(
 pub(crate) fn resource_spans_to_json<'event>(
     request: ExportTraceServiceRequest,
 ) -> Result<Value<'event>> {
-    let mut json = Vec::new();
+    let mut json = Vec::with_capacity(request.resource_spans.len());
     for span in request.resource_spans {
         json.push(literal!({
             "instrumentation_library_spans": instrumentation_library_spans_to_json(span.instrumentation_library_spans)?,
@@ -248,8 +251,8 @@ pub(crate) fn resource_spans_to_json<'event>(
 
 pub(crate) fn resource_spans_to_pb(json: Option<&Value<'_>>) -> Result<Vec<ResourceSpans>> {
     if let Some(Value::Object(json)) = json {
-        let mut pb = Vec::new();
         if let Some(Value::Array(json)) = json.get("trace") {
+            let mut pb = Vec::with_capacity(json.len());
             for json in json {
                 if let Value::Object(json) = json {
                     let instrumentation_library_spans = instrumentation_library_spans_to_pb(
@@ -263,8 +266,8 @@ pub(crate) fn resource_spans_to_pb(json: Option<&Value<'_>>) -> Result<Vec<Resou
                     pb.push(item);
                 }
             }
+            return Ok(pb);
         }
-        return Ok(pb);
     }
 
     Err("Invalid json mapping for otel trace message - cannot convert to pb".into())

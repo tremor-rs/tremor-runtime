@@ -145,7 +145,7 @@ fn hex_id_to_pb(
             .into())
         }
     } else if let Some(Value::Array(arr)) = data {
-        let mut data = Vec::new();
+        let mut data = Vec::with_capacity(arr.len());
         for i in arr {
             if let Value::Static(StaticNode::I64(i)) = i {
                 if *i > 255 {
