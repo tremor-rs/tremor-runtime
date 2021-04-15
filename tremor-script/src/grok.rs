@@ -96,7 +96,7 @@ impl Pattern {
             Some(m) => {
                 let mut o = Value::object();
                 for (a, b) in m.iter() {
-                    o.insert(a.to_string(), b.to_string())?;
+                    o.try_insert(a.to_string(), b.to_string());
                 }
                 Ok(o)
             }
@@ -119,7 +119,7 @@ impl std::clone::Clone for Pattern {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use simd_json::json;
+    use tremor_value::literal;
 
     fn assert_grok_ok<I1, I2, V>(pattern: I1, raw: I2, json: V) -> bool
     where
@@ -179,7 +179,7 @@ mod tests {
 
     #[test]
     fn decode_no_alias_does_not_map() {
-        assert_grok_ok("%{USERNAME}", "foobar", json!({}));
+        assert_grok_ok("%{USERNAME}", "foobar", literal!({}));
     }
 
     #[test]
@@ -187,12 +187,12 @@ mod tests {
         assert_grok_ok(
             "%{USERNAME:snot} %{USERNAME:snot}",
             "foobar badger",
-            json!({"snot": "badger", "name0": "foobar"}),
+            literal!({"snot": "badger", "name0": "foobar"}),
         );
         assert_grok_ok(
             "%{USERNAME:snot} %{USERNAME:name0}",
             "foobar badger",
-            json!({"snot": "foobar", "name0": "badger"}),
+            literal!({"snot": "foobar", "name0": "badger"}),
         );
     }
 
@@ -201,14 +201,14 @@ mod tests {
         assert_grok_ok(
             "%{USERNAME:username}",
             "foobar",
-            json!({"username": "foobar"}),
+            literal!({"username": "foobar"}),
         );
     }
 
     #[test]
     fn decode_syslog_esx_hypervisors() {
         let pattern = r#"^<%%{POSINT:syslog_pri}> %{TIMESTAMP_ISO8601:syslog_timestamp} (?<esx_uid>[-0-9a-f]+) %{SYSLOGHOST:syslog_hostname} (?:(?<syslog_program>[\x21-\x39\x3b-\x5a\x5c\x5e-\x7e]+)(?:\[%{POSINT:syslog_pid}\])?:?)? (?:%{TIMESTAMP_ISO8601:syslog_ingest_timestamp} )?(%{WORD:wf_pod} %{WORD:wf_datacenter} )?%{GREEDYDATA:syslog_message}"#;
-        assert_grok_ok(pattern,"<%1> 2019-04-01T09:59:19+0000 deadbeaf01234 example program_name[1234] 2019-04-01T09:59:19+0010 pod dc foo bar baz", json!({
+        assert_grok_ok(pattern,"<%1> 2019-04-01T09:59:19+0000 deadbeaf01234 example program_name[1234] 2019-04-01T09:59:19+0010 pod dc foo bar baz", literal!({
            "syslog_program": "program_name",
            "esx_uid": "deadbeaf01234",
            "wf_datacenter": "dc",
@@ -225,7 +225,7 @@ mod tests {
     #[test]
     fn decode_syslog_artifactory() {
         let pattern = r#"^<%%{POSINT:syslog_pri}>(?:(?<syslog_version>\d{1,3}) )?(?:%{SYSLOGTIMESTAMP:syslog_timestamp1}|%{TIMESTAMP_ISO8601:syslog_timestamp}) %{SYSLOGHOST:syslog_hostname} (?:(?<syslog_program>[\x21-\x39\x3b-\x5a\x5c\x5e-\x7e]+)(?:\[%{POSINT:syslog_pid}\])?:?)? (?:%{TIMESTAMP_ISO8601:syslog_ingest_timestamp} )?(%{WORD:wf_pod} %{WORD:wf_datacenter} )?%{GREEDYDATA:syslog_message}"#;
-        assert_grok_ok(pattern, "<%1>123 Jul   7 10:51:24 hostname program_name[1234] 2019-04-01T09:59:19+0010 pod dc foo bar baz", json!({
+        assert_grok_ok(pattern, "<%1>123 Jul   7 10:51:24 hostname program_name[1234] 2019-04-01T09:59:19+0010 pod dc foo bar baz", literal!({
            "wf_pod": "pod",
            "syslog_timestamp1": "Jul   7 10:51:24",
            "syslog_message": "foo bar baz",
@@ -247,7 +247,7 @@ mod tests {
         assert_grok_ok(
             pattern,
             "<%1>123 Jul   7 10:51:24 hostname 2019-04-01T09:59:19+0010 pod dc foo bar baz",
-            json!({
+            literal!({
                "syslog_timestamp1": "",
                "syslog_ingest_timestamp": "2019-04-01T09:59:19+0010",
                "wf_datacenter": "dc",
@@ -268,7 +268,7 @@ mod tests {
         assert_grok_ok(
             pattern,
             "<%1>123 Jul   7 10:51:24  2019-04-01T09:59:19+0010 pod dc foo bar baz",
-            json!({
+            literal!({
                "syslog_version": "123",
                "syslog_message": "foo bar baz",
                "syslog_ingest_timestamp": "2019-04-01T09:59:19+0010",
@@ -288,7 +288,7 @@ mod tests {
         assert_grok_ok(
             pattern,
             "<%1>123 2019-04-01T09:59:19+0010 pod dc foo bar baz",
-            json!({
+            literal!({
                "wf_pod": "pod",
                "syslog_pri": "1",
                "wf_datacenter": "dc",
@@ -300,7 +300,7 @@ mod tests {
         assert_grok_ok(
             pattern,
             "<%1>12 2019-04-01T09:59:19+0010 pod dc foo bar baz",
-            json!({
+            literal!({
                "wf_pod": "pod",
                "syslog_pri": "1",
                "wf_datacenter": "dc",
@@ -312,7 +312,7 @@ mod tests {
         assert_grok_ok(
             pattern,
             "<%1>1 2019-04-01T09:59:19+0010 pod dc foo bar baz",
-            json!({
+            literal!({
                "wf_pod": "pod",
                "syslog_pri": "1",
                "wf_datacenter": "dc",
@@ -324,7 +324,7 @@ mod tests {
         assert_grok_ok(
             pattern,
             "<%1> 2019-04-01T09:59:19+0010 pod dc foo bar baz",
-            json!({
+            literal!({
                "wf_pod": "pod",
                "syslog_pri": "1",
                "wf_datacenter": "dc",
@@ -341,7 +341,7 @@ mod tests {
         assert_grok_ok(
             pattern,
             "<invld>x>hostname.com bar baz",
-            json!({
+            literal!({
                "pid": "",
                "syslog_program": "",
                "syslog_timestamp": "",
@@ -358,7 +358,7 @@ mod tests {
         assert_grok_ok(
             pattern,
             "<invld>x y z>2019-04-01T09:59:19+0010 2019-04-01T09:59:19+0010 hostname.com bar baz",
-            json!({
+            literal!({
                "syslog_timestamp": "2019-04-01T09:59:19+0010",
                "syslog_ingest_timestamp": "2019-04-01T09:59:19+0010",
                "wf_datacenter": "",
@@ -375,7 +375,7 @@ mod tests {
         assert_grok_ok(
             pattern,
             "<invld>x y z>2019-04-01T09:59:19+0010 hostname.com bar baz",
-            json!({
+            literal!({
                "syslog_timestamp": "2019-04-01T09:59:19+0010",
                "syslog_ingest_timestamp": "",
                "wf_datacenter": "",
@@ -392,7 +392,7 @@ mod tests {
         assert_grok_ok(
             pattern,
             "<invld>x y z>2019-04-01T09:59:19+0010 pod dc hostname.com bar baz",
-            json!({
+            literal!({
                "syslog_timestamp": "2019-04-01T09:59:19+0010",
                "syslog_ingest_timestamp": "",
                "wf_datacenter": "dc",
@@ -409,7 +409,7 @@ mod tests {
         assert_grok_ok(
             pattern,
             "<invld>x y z>pod dc hostname.com bar baz",
-            json!({
+            literal!({
                "syslog_timestamp": "",
                "syslog_ingest_timestamp": "",
                "wf_datacenter": "dc",
@@ -427,7 +427,7 @@ mod tests {
         assert_grok_ok(
             pattern,
             "<invld>x>hostname.com program_name[1234]: bar baz",
-            json!({
+            literal!({
                "pid": "1234",
                "syslog_program": "program_name[1234]",
                "syslog_timestamp": "",
@@ -441,7 +441,7 @@ mod tests {
             }),
         );
 
-        assert_grok_ok(pattern, "<invld>x y z>2019-04-01T09:59:19+0010 2019-04-01T09:59:19+0010 hostname.com program_name: bar baz", json!({
+        assert_grok_ok(pattern, "<invld>x y z>2019-04-01T09:59:19+0010 2019-04-01T09:59:19+0010 hostname.com program_name: bar baz", literal!({
            "syslog_timestamp": "2019-04-01T09:59:19+0010",
            "syslog_ingest_timestamp": "2019-04-01T09:59:19+0010",
            "wf_datacenter": "",
@@ -457,7 +457,7 @@ mod tests {
         assert_grok_ok(
             pattern,
             "<invld>x y z>2019-04-01T09:59:19+0010 hostname.com program_name[1234]: bar baz",
-            json!({
+            literal!({
                "syslog_timestamp": "2019-04-01T09:59:19+0010",
                "syslog_ingest_timestamp": "",
                "wf_datacenter": "",
@@ -474,7 +474,7 @@ mod tests {
         assert_grok_ok(
             pattern,
             "<invld>x y z>2019-04-01T09:59:19+0010 pod dc hostname.com program_name: bar baz",
-            json!({
+            literal!({
                "syslog_timestamp": "2019-04-01T09:59:19+0010",
                "syslog_ingest_timestamp": "",
                "wf_datacenter": "dc",
@@ -491,7 +491,7 @@ mod tests {
         assert_grok_ok(
             pattern,
             "<invld>x y z>pod dc hostname.com program_name[1234]:bar baz",
-            json!({
+            literal!({
                "syslog_timestamp": "",
                "syslog_ingest_timestamp": "",
                "wf_datacenter": "dc",

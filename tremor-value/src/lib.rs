@@ -135,7 +135,7 @@ mod test {
         let s = TestStruct::from_slice(&mut v).unwrap();
         assert_eq!(
             s.value,
-            json!({"array": [1, 1.0,true,null], "string": "badger"})
+            literal!({"array": [1, 1.0,true,null], "string": "badger"})
         );
         assert_eq!(s.json_string().unwrap(), orig);
     }

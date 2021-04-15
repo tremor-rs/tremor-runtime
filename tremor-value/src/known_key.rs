@@ -73,10 +73,10 @@ impl<'key> KnownKey<'key> {
     ///
     /// ```rust
     /// use tremor_value::*;
-    /// let object = json!({
+    /// let object = literal!({
     ///   "answer": 42,
     ///   "key": 7
-    /// }).into();
+    /// });
     /// let known_key = KnownKey::from("answer");
     /// assert_eq!(known_key.lookup(&object).unwrap(), &42);
     /// ```
@@ -101,10 +101,10 @@ impl<'key> KnownKey<'key> {
     ///
     /// ```rust
     /// use tremor_value::*;
-    /// let mut object: Value = json!({
+    /// let mut object = literal!({
     ///   "answer": 23,
     ///   "key": 7
-    /// }).into();
+    /// });
     /// let known_key = KnownKey::from("answer");
     ///
     /// assert_eq!(object["answer"], 23);
@@ -143,10 +143,10 @@ impl<'key> KnownKey<'key> {
     ///
     /// ```rust
     /// use tremor_value::*;
-    /// let mut object: Value = json!({
+    /// let mut object = literal!({
     ///   "answer": 23,
     ///   "key": 7
-    /// }).into();
+    /// });
     /// let known_key = KnownKey::from("answer");
     ///
     /// assert_eq!(object["answer"], 23);
@@ -199,10 +199,10 @@ impl<'key> KnownKey<'key> {
     ///
     /// ```rust
     /// use tremor_value::*;
-    /// let mut object: Value = json!({
+    /// let mut object = literal!({
     ///   "answer": 23,
     ///   "key": 7
-    /// }).into();
+    /// });
     /// let known_key = KnownKey::from("answer");
     ///
     /// assert_eq!(object["answer"], 23);
@@ -256,7 +256,7 @@ mod tests {
     #[test]
     fn known_key() {
         let mut v = Value::object();
-        v.insert("key", 1).unwrap();
+        v.try_insert("key", 1);
         let key1 = KnownKey::from(Cow::from("key"));
         let key2 = KnownKey::from(Cow::from("cake"));
 
@@ -271,7 +271,7 @@ mod tests {
     #[test]
     fn known_key_insert() {
         let mut v = Value::object();
-        v.insert("key", 1).unwrap();
+        v.try_insert("key", 1);
         let key1 = KnownKey::from(Cow::from("key"));
         let key2 = KnownKey::from(Cow::from("cake"));
 
@@ -287,7 +287,7 @@ mod tests {
     #[test]
     fn lookup_or_insert_mut() {
         let mut v = Value::object();
-        v.insert("key", 1).unwrap();
+        v.try_insert("key", 1);
         let key1 = KnownKey::from(Cow::from("key"));
         let key2 = KnownKey::from(Cow::from("cake"));
 
@@ -307,7 +307,7 @@ mod tests {
     #[test]
     fn known_key_map() {
         let mut v = Value::object_with_capacity(128);
-        v.insert("key", 1).unwrap();
+        v.try_insert("key", 1);
         let key1 = KnownKey::from(Cow::from("key"));
         let key2 = KnownKey::from(Cow::from("cake"));
 
@@ -320,7 +320,7 @@ mod tests {
     #[test]
     fn known_key_insert_map() {
         let mut v = Value::object_with_capacity(128);
-        v.insert("key", 1).unwrap();
+        v.try_insert("key", 1);
         let key1 = KnownKey::from(Cow::from("key"));
         let key2 = KnownKey::from(Cow::from("cake"));
 

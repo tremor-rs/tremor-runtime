@@ -620,23 +620,22 @@ impl<'de> ValueDeserializer<'de> {
 mod test {
     #![allow(clippy::cognitive_complexity)]
     use super::*;
+    use crate::literal;
     use proptest::proptest;
-    use simd_json::json;
-    use simd_json::json_typed;
 
     #[test]
     fn obj_eq() {
-        let o1: Value = json_typed!(borrowed, {"k": 1, "v":2}).into();
-        let o2: Value = json_typed!(borrowed, {"k": 1, "v":2}).into();
+        let o1: Value = literal!({"k": 1, "v":2});
+        let o2: Value = literal!({"k": 1, "v":2});
         assert_eq!(o1, o2);
         assert_eq!(o2, o1);
-        let o1: Value = json!({"k": (), "v":()}).into();
-        let o2: Value = json!({"k": (),  "":()}).into();
+        let o1: Value = literal!({"k": (), "v":()});
+        let o2: Value = literal!({"k": (),  "":()});
         assert!(!(o1 == o2));
         assert!(!(o2 == o1));
 
-        let v1: Value = json!({"¢": (), "¡": (), "": (), "\u{0}": ()}).into();
-        let v2: Value = json!({"¦": (), "¥": (), "£": (), "¤": ()}).into();
+        let v1: Value = literal!({"¢": (), "¡": (), "": (), "\u{0}": ()});
+        let v2: Value = literal!({"¦": (), "¥": (), "£": (), "¤": ()});
         assert!(v1 != v2);
         assert!(v2 != v1);
     }
@@ -789,13 +788,13 @@ mod test {
 
     #[test]
     fn char_access() {
-        let v = Value::from(json!({"snot": "🦡"}));
+        let v = literal!({"snot": "🦡"});
 
         assert_eq!(Some('🦡'), v.get_char("snot"));
     }
     #[test]
     fn bytes_access() {
-        let v = Value::from(json!({"snot": "🦡"}));
+        let v = literal!({"snot": "🦡"});
 
         assert_eq!(Some("🦡".as_bytes()), v.get_bytes("snot"));
     }

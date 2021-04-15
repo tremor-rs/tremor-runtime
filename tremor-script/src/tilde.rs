@@ -713,7 +713,6 @@ mod test {
     use crate::Value;
     use halfbrown::hashmap;
     use matches::assert_matches;
-    use simd_json::json;
     #[test]
     fn test_reg_extractor() {
         let ex = Extractor::new("rerg", "(?P<key>[^=]+)=(?P<val>[^&]+)&").expect("bad extractor");
@@ -825,12 +824,9 @@ mod test {
             Extractor::Dissect { .. } => {
                 assert_eq!(
                     ex.extract(true, &Value::from("John"), &EventContext::new(0, None)),
-                    Match(
-                        json!({
-                            "name": "John"
-                        })
-                        .into()
-                    )
+                    Match(literal!({
+                        "name": "John"
+                    }))
                 );
             }
             _ => unreachable!(),
@@ -850,20 +846,17 @@ mod test {
 
                 assert_eq!(
                     output,
-                    Match(
-                        json!({
-                                  "syslog_timestamp1": "",
-                                  "syslog_ingest_timestamp": "2019-04-01T09:59:19+0010",
-                                  "wf_datacenter": "dc",
-                                  "syslog_hostname": "hostname",
-                                  "syslog_pri": "1",
-                                  "wf_pod": "pod",
-                                  "syslog_message": "foo bar baz",
-                                  "syslog_version": "123",
-                                  "syslog_timestamp0": "Jul   7 10:51:24"
-                        })
-                        .into()
-                    )
+                    Match(literal!({
+                              "syslog_timestamp1": "",
+                              "syslog_ingest_timestamp": "2019-04-01T09:59:19+0010",
+                              "wf_datacenter": "dc",
+                              "syslog_hostname": "hostname",
+                              "syslog_pri": "1",
+                              "wf_pod": "pod",
+                              "syslog_message": "foo bar baz",
+                              "syslog_version": "123",
+                              "syslog_timestamp0": "Jul   7 10:51:24"
+                    }))
                 );
             }
 

@@ -489,7 +489,7 @@ mod test {
         let mut e = Event::default();
         assert!(e.correlation_meta().is_none());
         let mut m = Value::object();
-        m.insert("correlation", 1).unwrap();
+        m.try_insert("correlation", 1);
         e.data = (Value::null(), m.clone()).into();
 
         assert_eq!(e.correlation_meta().unwrap(), 1);
@@ -497,7 +497,7 @@ mod test {
         e2.is_batch = true;
         e2.data = (Value::array(), m.clone()).into();
         e2.data.consume(e.data.clone(), merge).unwrap();
-        m.insert("correlation", 2).unwrap();
+        m.try_insert("correlation", 2);
         e.data = (Value::null(), m.clone()).into();
         e2.data.consume(e.clone().data, merge).unwrap();
         assert_eq!(e2.correlation_meta().unwrap(), Value::from(vec![1, 2]));

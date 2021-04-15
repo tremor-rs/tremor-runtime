@@ -909,7 +909,6 @@ mod test {
     use super::*;
     use crate::registry::FResult as Result;
     use float_cmp::approx_eq;
-    use simd_json::json;
     #[test]
     fn count() -> Result<()> {
         let mut a = Count::default();
@@ -1054,7 +1053,7 @@ mod test {
             i += 1;
         }
         let v = a.emit()?;
-        let e: Value = json!({
+        let e = literal!({
             "min": 1,
             "max": 100,
             "count": 100,
@@ -1069,8 +1068,7 @@ mod test {
                 "0.999": 100,
                 "0.9999": 100
             }
-        })
-        .into();
+        });
         assert_eq!(v, e);
         Ok(())
     }
@@ -1094,7 +1092,7 @@ mod test {
             i += 1;
         }
         let v = a.emit()?;
-        let e: Value = json!({
+        let e = literal!({
                     "min": 1.0,
                     "max": 100.0,
                     "count": 100,
@@ -1109,8 +1107,7 @@ mod test {
                         "0.999": 98.6,
                         "0.9999": 98.6,
                     }
-                })
-        .into();
+                });
         assert_eq!(v, e);
         Ok(())
     }

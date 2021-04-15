@@ -49,29 +49,27 @@ pub fn load(registry: &mut Registry) {
 mod test {
     use crate::registry::fun;
     use crate::Value;
-    use simd_json::json;
+    use tremor_value::literal;
 
     #[test]
     fn sorted_serialize() {
         let f = fun("chash", "sorted_serialize");
-        let v1: Value = json!({
+        let v1: Value = literal!({
             "1": [2, 1],
             "0": {
                 "5": 0,
                 "3": 4
             }
-        })
-        .into();
+        });
 
         assert_val!(f(&[&v1]), r#"{"0":{"3":4,"5":0},"1":[2,1]}"#);
-        let v1: Value = json!({
+        let v1: Value = literal!({
             "0": {
                 "3": 4,
                 "5": 0,
             },
             "1": [2, 1],
-        })
-        .into();
+        });
         assert_val!(f(&[&v1]), r#"{"0":{"3":4,"5":0},"1":[2,1]}"#)
     }
 }

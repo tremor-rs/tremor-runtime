@@ -223,7 +223,6 @@ impl Operator for Grouper {
 #[cfg(test)]
 mod test {
     use super::*;
-    use simd_json::json;
     use tremor_script::Value;
 
     #[test]
@@ -255,11 +254,7 @@ mod test {
         let event2 = Event {
             id: (1, 1, 1).into(),
             ingest_ns: 1,
-            data: (
-                Value::from("snot"),
-                Value::from(json!({"class": "test", "rate": 2})),
-            )
-                .into(),
+            data: (Value::from("snot"), literal!({"class": "test", "rate": 2})).into(),
             ..Event::default()
         };
 
@@ -293,11 +288,7 @@ mod test {
         let event3 = Event {
             id: (1, 1, 1).into(),
             ingest_ns: 10_000_000_002,
-            data: (
-                Value::from("snot"),
-                Value::from(json!({"class": "test", "rate": 2})),
-            )
-                .into(),
+            data: (Value::from("snot"), literal!({"class": "test", "rate": 2})).into(),
             ..Event::default()
         };
 
