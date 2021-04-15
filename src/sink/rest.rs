@@ -1266,7 +1266,6 @@ mod test {
     // we can't use async_std::tst here as it causes lifetime issues with codec
     #[async_std::test]
     async fn build_response() -> Result<()> {
-        use simd_json::json;
         let sink_url = TremorUrl::from_offramp_id("rest")?;
         let sink_uid = 0_u64;
         let mut response_id_gen = EventIdGenerator::new(sink_uid);
@@ -1309,7 +1308,7 @@ mod test {
             expected_data.insert("foo", true)?;
             let data_parts = event.data.parts();
             assert_eq!(&mut expected_data, data_parts.0);
-            let mut expected_meta: Value = json!({
+            let mut expected_meta = literal!({
                 "correlation": -1,
                 "response": {
                     "headers": {
@@ -1334,8 +1333,7 @@ mod test {
                         }
                     }
                 }
-            })
-            .into();
+            });
             if let Some(response) = expected_meta.get_mut("response") {
                 response.insert("status", 200_u64)?;
             }

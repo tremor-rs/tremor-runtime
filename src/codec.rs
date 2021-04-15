@@ -74,6 +74,7 @@ pub trait Codec: Send + Sync {
     /// # Errors
     ///  * If the encoding fails
     fn encode(&self, data: &Value) -> Result<Vec<u8>>;
+
     /// Encodes into an existing buffer
     ///
     /// # Errors

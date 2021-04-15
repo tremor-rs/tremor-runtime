@@ -141,7 +141,6 @@ pub(crate) fn int_data_points_to_json<'event>(pb: Vec<IntDataPoint>) -> Value<'e
     for data in pb {
         let labels = common::string_key_value_to_json(data.labels);
         let exemplars = int_exemplars_to_json(data.exemplars);
-        // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
         let v: Value = literal!({
             "value": data.value,
             "start_time_unix_nano": data.start_time_unix_nano,
@@ -497,7 +496,6 @@ pub(crate) fn instrumentation_library_metrics_to_json<'event>(
                 "unit": metric.unit,
             }));
         }
-        // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
         json.push(literal!({
             "instrumentation_library": common::maybe_instrumentation_library_to_json(data.instrumentation_library),
             "metrics": metrics
@@ -552,7 +550,6 @@ pub(crate) fn resource_metrics_to_json<'event>(
     let mut metrics: Vec<Value> = Vec::with_capacity(request.resource_metrics.len());
     for metric in request.resource_metrics {
         let ilm = instrumentation_library_metrics_to_json(metric.instrumentation_library_metrics);
-        // TODO This is going to be pretty slow going from Owned -> Value - consider json! for borrowed
         metrics.push(literal!({
             "instrumentation_library_metrics": ilm,
             "resource": resource::resource_to_json(metric.resource)?,

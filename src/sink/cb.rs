@@ -120,12 +120,9 @@ impl Sink for Cb {
 
 #[cfg(test)]
 mod tests {
-    use std::borrow::BorrowMut;
-
-    use simd_json::json;
-    use tremor_pipeline::{EventId, OpMeta};
-
     use super::*;
+    use std::borrow::BorrowMut;
+    use tremor_pipeline::{EventId, OpMeta};
 
     #[async_std::test]
     async fn cb_meta() -> Result<()> {
@@ -218,7 +215,7 @@ mod tests {
         }
 
         // array data - second ack/fail will be ignored, just one from ack/fail or open/close (trigger/restore) is returned
-        let meta = json!(
+        let meta = literal!(
         {"cb": ["ack", "open", "fail"]}
         );
         let event = Event {
@@ -254,9 +251,9 @@ mod tests {
         }
 
         // array data - second ack/fail will be ignored, just one from ack/fail or open/close (trigger/restore) is returned
-        let data = json!(
-        {"cb": ["trigger", "fail"]}
-        );
+        let data = literal!({
+            "cb": ["trigger", "fail"]
+        });
         let event = Event {
             id: id.clone(),
             data: (data, Value::null()).into(),

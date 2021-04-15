@@ -1540,7 +1540,6 @@ mod test {
 
     use super::*;
     use rental::RentalError;
-    use simd_json::{json, StaticNode};
     use tremor_script::{ast::Consts, Value};
     use tremor_script::{ast::Stmt, Query};
     use tremor_script::{
@@ -1587,9 +1586,9 @@ mod test {
         Event {
             id: (0, 0, s).into(),
             ingest_ns: s * 1_000_000_000,
-            data: Value::from(json!({
+            data: literal!({
                "h2g2" : 42,
-            }))
+            })
             .into(),
             ..Event::default()
         }
@@ -1810,10 +1809,10 @@ mod test {
         let event = Event {
             id: (1, 1, 300).into(),
             ingest_ns: 1_000,
-            data: Value::from(json!({
+            data: literal!({
                "time" : 4,
                "g": "group"
-            }))
+            })
             .into(),
             ..Event::default()
         };
@@ -1831,10 +1830,10 @@ mod test {
         let event = Event {
             id: (1, 1, 300).into(),
             ingest_ns: 3_000,
-            data: Value::from(json!({
+            data: literal!({
                "time" : 11,
                "g": "group"
-            }))
+            })
             .into(),
             ..Event::default()
         };
@@ -1866,9 +1865,9 @@ mod test {
         let event = Event {
             id: (1, 1, 300).into(),
             ingest_ns: 2,
-            data: Value::from(json!({
+            data: literal!({
                "g": "group"
-            }))
+            })
             .into(),
             ..Event::default()
         };
@@ -1931,9 +1930,9 @@ mod test {
         let event = Event {
             id: (1, 1, 300).into(),
             ingest_ns: 300,
-            data: Value::from(json!({
+            data: literal!({
                "cat" : 42,
-            }))
+            })
             .into(),
             ..Event::default()
         };
@@ -2388,7 +2387,7 @@ mod test {
         Ok(())
     }
 
-    fn json_event(ingest_ns: u64, payload: OwnedValue) -> Event {
+    fn json_event(ingest_ns: u64, payload: Value<'static>) -> Event {
         Event {
             id: (0, 0, ingest_ns).into(),
             ingest_ns,
@@ -2424,7 +2423,7 @@ mod test {
             other => return Err(format!("Didnt get a window decl, got: {:?}", other).into()),
         };
         let mut params = halfbrown::HashMap::with_capacity(1);
-        params.insert("size".to_string(), Value::Static(StaticNode::U64(3)));
+        params.insert("size".to_string(), Value::from(3_u64));
         let interval = window_decl
             .params
             .get("interval")
@@ -2438,7 +2437,7 @@ mod test {
             Some(&window_decl),
             &stmt,
         );
-        let json1 = json!({
+        let json1 = literal!({
             "timestamp": 1_000_000_000
         });
         assert_eq!(
@@ -2449,7 +2448,7 @@ mod test {
             },
             window.on_event(&json_event(1, json1))?
         );
-        let json2 = json!({
+        let json2 = literal!({
             "timestamp": 1_999_999_999
         });
         assert_eq!(
@@ -2460,7 +2459,7 @@ mod test {
             },
             window.on_event(&json_event(2, json2))?
         );
-        let json3 = json!({
+        let json3 = literal!({
             "timestamp": 2_000_000_000
         });
         // ignoring on_tick as we have a script
@@ -2524,7 +2523,7 @@ mod test {
                 include: false,
                 emit: false
             },
-            window.on_event(&json_event(101, json!({})))?
+            window.on_event(&json_event(101, Value::object()))?
         );
         assert_eq!(
             WindowEvent {
@@ -2586,7 +2585,7 @@ mod test {
                 include: false,
                 emit: false
             },
-            window.on_event(&json_event(101, json!({})))?
+            window.on_event(&json_event(101, Value::object()))?
         );
         assert_eq!(
             WindowEvent {
