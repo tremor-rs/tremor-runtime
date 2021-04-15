@@ -69,4 +69,15 @@ mod test {
 
         Ok(())
     }
+
+    #[test]
+    fn test_string_codec2() -> Result<()> {
+        let seed = literal!(["snot badger"]);
+
+        let codec = String {};
+        let as_raw = codec.encode(&seed)?;
+        assert_eq!(as_raw, b"[\"snot badger\"]");
+
+        Ok(())
+    }
 }
