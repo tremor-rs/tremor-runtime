@@ -233,11 +233,11 @@ pub fn row_to_json(
             postgres::types::Type::VARCHAR => ("VARCHAR", Value::from(row.get::<_, String>(cid))),
             _ => return Err(format!("type not supported: {}", col.type_()).into()),
         };
-        obj.insert("fieldType", Value::from(t))?;
-        obj.insert("value", v)?;
-        obj.insert("name", Value::from(String::from(col.name())))?;
+        obj.try_insert("fieldType", Value::from(t));
+        obj.try_insert("value", v);
+        obj.try_insert("name", Value::from(String::from(col.name())));
 
-        json.insert(col.name().to_string(), obj)?;
+        json.try_insert(col.name().to_string(), obj);
     }
 
     Ok(json)
