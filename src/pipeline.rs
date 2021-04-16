@@ -287,8 +287,7 @@ async fn pipeline_task(
     let cf = cf_rx.map(M::C);
     let mf = mgmt_rx.map(M::M);
 
-    // priotirize management flow over contra flow over forward event flow
-
+    // prioritize management flow over contra flow over forward event flow
     let mut s = PriorityMerge::new(mf, PriorityMerge::new(cf, ff));
     while let Some(msg) = s.next().await {
         match msg {

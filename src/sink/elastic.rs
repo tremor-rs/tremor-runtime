@@ -415,7 +415,7 @@ impl Elastic {
                 // send response events
                 for response in responses {
                     if let Err(e) = response_tx.send(response).await {
-                        error!("Failed to send bulk item response: {}", e);
+                        error!("[Sink::ES] Failed to send bulk item response: {}", e);
                     }
                 }
 
