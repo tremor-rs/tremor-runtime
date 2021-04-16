@@ -17,7 +17,7 @@ matches = "0.1.8"
 criterion = "0.3"
 float-cmp = "0.8"
 matches = "0.1"
-pretty_assertions = "0.7.1"
+pretty_assertions = "0.7.2"
 
 [dependencies]
 anyhow = "1"
