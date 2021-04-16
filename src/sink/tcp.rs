@@ -115,7 +115,7 @@ impl Sink for Tcp {
             }
             // for TCP we always trigger the CB for IO/socket related errors
             Err(e @ Error(ErrorKind::Io(_), _)) | Err(e @ Error(ErrorKind::NoSocket, _)) => {
-                debug!("[Source::TCP] Error sending event: {}.", e);
+                debug!("[Sink::TCP] Error sending event: {}.", e);
                 if event.transactional {
                     Some(vec![
                         sink::Reply::Insight(event.to_fail()),
@@ -128,7 +128,7 @@ impl Sink for Tcp {
             // all other errors (codec/peprocessor etc.) just result in a fail
             Err(e) => {
                 // regular error, no reason for CB
-                debug!("[Source::TCP] Error sending event: {}", e);
+                debug!("[Sink::TCP] Error sending event: {}", e);
 
                 if event.transactional {
                     Some(vec![sink::Reply::Insight(event.to_fail())])
