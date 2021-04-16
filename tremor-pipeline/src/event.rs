@@ -180,14 +180,27 @@ impl Event {
     }
 
     /// Creates a CB fail insight from the given `event` (the cause of this fail)
-    /// and with the given `data`
     #[must_use]
     pub fn to_fail(&self) -> Self {
         Event {
             id: self.id.clone(),
             ingest_ns: self.ingest_ns,
             op_meta: self.op_meta.clone(),
+            origin_uri: self.origin_uri.clone(),
             cb: CbAction::Fail,
+            ..Event::default()
+        }
+    }
+
+    /// Create a CB ack insight from the given `event` (the cause of this ack)
+    #[must_use]
+    pub fn to_ack(&self) -> Self {
+        Event {
+            id: self.id.clone(),
+            ingest_ns: self.ingest_ns,
+            op_meta: self.op_meta.clone(),
+            origin_uri: self.origin_uri.clone(),
+            cb: CbAction::Ack,
             ..Event::default()
         }
     }

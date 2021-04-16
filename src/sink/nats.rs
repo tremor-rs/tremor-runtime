@@ -166,7 +166,7 @@ impl Sink for Nats {
         _input: &str,
         codec: &mut dyn Codec,
         _codec_map: &HashMap<String, Box<dyn Codec>>,
-        mut event: Event,
+        event: Event,
     ) -> ResultVec {
         self.handle_connection()?;
         let ingest_ns = event.ingest_ns;
@@ -175,14 +175,14 @@ impl Sink for Nats {
         let config_reply = self.config.reply.as_deref();
         let op_meta = &event.op_meta;
         self.merged_meta.merge(op_meta.clone());
-        let insight_event = event.insight_ack();
         if let Some(connection) = &mut self.connection {
             for (value, meta) in event.value_meta_iter() {
                 let encoded = codec.encode(value)?;
                 let processed =
                     postprocess(self.postprocessors.as_mut_slice(), ingest_ns, encoded)?;
-                let headers = meta.get("nats").and_then(|v| v.get_object("headers"));
-                let reply = meta.get("nats").and_then(|v| v.get_str("reply"));
+                let nats_meta = meta.get("nats");
+                let headers = nats_meta.and_then(|v| v.get_object("headers"));
+                let reply = nats_meta.and_then(|v| v.get_str("reply"));
                 for payload in processed {
                     // prepare message reply
                     let message_reply = reply.or(config_reply);
@@ -221,31 +221,40 @@ impl Sink for Nats {
                     match publish_result {
                         Ok(()) => {
                             if event.transactional {
-                                let mut insight = insight_event.clone();
-                                insight.cb = CbAction::Ack;
-                                let time = processing_start.elapsed().as_millis() as u64;
-                                let mut m = Object::with_capacity(1);
-                                m.insert("time".into(), time.into());
-                                insight.data = (Value::null(), m).into();
-                                self.reply_channel
-                                    .send(sink::Reply::Insight(insight.clone()))
-                                    .await?;
+                                let mut insight = Event::cb_ack(ingest_ns, event.id.clone());
+                                insight.op_meta = self.merged_meta.clone();
+                                insight.data = (Value::null(), literal!({ "time": processing_start.elapsed().as_millis() as u64 })).into();
+
+                                if let Err(e) =
+                                    self.reply_channel.send(sink::Reply::Insight(insight)).await
+                                {
+                                    error!(
+                                        "[Sink::{}] Error sending insight via reply channel: {}",
+                                        &self.sink_url, e
+                                    );
+                                }
                             }
                         }
                         Err(e) => {
                             error!("[Sink::{}] failed to send message: {}", &self.sink_url, &e);
                             if self.error_tx.send(()).await.is_err() {
                                 error!(
-                                    "[Sink::{}] Error notifying the system about kafka error: {}",
+                                    "[Sink::{}] Error notifying the system about nats error: {}",
                                     &self.sink_url, &e
-                                )
+                                );
                             }
+
                             if event.transactional {
-                                let mut insight = insight_event.clone();
-                                insight.cb = CbAction::Fail;
-                                self.reply_channel
-                                    .send(sink::Reply::Response(ERR, insight))
-                                    .await?;
+                                if let Err(e) = self
+                                    .reply_channel
+                                    .send(sink::Reply::Insight(event.to_fail()))
+                                    .await
+                                {
+                                    error!(
+                                        "[Sink::{}] Error sending insight via reply_channel: {}",
+                                        self.sink_url, e
+                                    );
+                                }
                             }
                         }
                     }
@@ -257,15 +266,12 @@ impl Sink for Nats {
 
     async fn on_signal(&mut self, signal: Event) -> ResultVec {
         match self.handle_connection() {
-            Ok(connection) => {
-                if connection.is_some() {
-                    let mut insight_event = Event::cb_restore(signal.ingest_ns);
-                    insight_event.op_meta = self.merged_meta.clone();
-                    Ok(Some(vec![sink::Reply::Insight(insight_event)]))
-                } else {
-                    Ok(None)
-                }
+            Ok(Some(_connection)) => {
+                let mut insight_event = Event::cb_restore(signal.ingest_ns);
+                insight_event.op_meta = self.merged_meta.clone();
+                Ok(Some(vec![sink::Reply::Insight(insight_event)]))
             }
+            Ok(None) => Ok(None),
             Err(e) => {
                 error!(
                     "[Sink::{}] failed to establish connection: {}",
