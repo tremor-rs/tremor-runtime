@@ -299,7 +299,7 @@ impl ErrorKind {
         match self {
             UnrecognizedToken(outer, inner, t, _) if t.is_empty() && inner.0.absolute() == outer.1.absolute() => Some("It looks like a `;` is missing at the end of the script".into()),
             UnrecognizedToken(_, _, t, _) if t == "default" || t == "case" => Some("You might have a trailing `,` in the prior statement".into()),
-            UnrecognizedToken(_, _, t, l) if t == "event" && l.contains(&("`<ident>`".to_string())) => Some("It looks like you tried to use the key 'event' as part of a path expression, consider quoting it as `event` to make it an identifier or use array like access such as [\"event\"].".into()),
+            UnrecognizedToken(_, _, t, l) if !matches!(lexer::ident_to_token(t), lexer::Token::Ident(_, _)) && l.contains(&("`<ident>`".to_string())) => Some(format!("It looks like you tried to use the '{}' as a ident, consider quoting it as `{}` to make it an identifier.", t, t)),
             UnrecognizedToken(_, _, t, l) if t == "-" && l.contains(&("`(`".to_string())) => Some("Try wrapping this expression in parentheses `(` ... `)`".into()),
             UnrecognizedToken(_, _, key, options) => {
                 match best_hint(&key, &options, 3) {

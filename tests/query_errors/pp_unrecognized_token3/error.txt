@@ -1,4 +1,5 @@
 Error: 
     1 | use foo :: as;
       |            ^^ Found the token `as` but expected `<ident>`
+      |               NOTE: It looks like you tried to use the 'as' as a ident, consider quoting it as `as` to make it an identifier.
     2 |
