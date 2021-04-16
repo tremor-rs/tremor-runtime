@@ -272,10 +272,6 @@ impl Manager {
                                 // this will prevent fail insights being swallowed here
                                 // sinks need to take care of sending acks themselves. Deal with it.
                                 if (fail || offramp.auto_ack()) && transactional {
-                                    debug!(
-                                        "[Offramp::{}] send auto ack fail: {}",
-                                        offramp_url, fail
-                                    );
                                     let e = Event::ack_or_fail(!fail, ingest_ns, ids);
                                     send_to_pipelines(&offramp_url, &mut pipelines, e).await;
                                 }

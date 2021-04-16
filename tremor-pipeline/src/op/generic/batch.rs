@@ -93,26 +93,17 @@ impl Operator for Batch {
             data,
             move |this: &mut ValueAndMeta<'static>, other: ValueAndMeta<'static>| -> Result<()> {
                 if let Some(ref mut a) = this.value_mut().as_array_mut() {
-                    let mut e = Object::with_capacity(7);
-                    // {"id":1,
-                    // e.insert_nocheck("id".into(), id.into());
-                    //  "data": {
-                    //      "value": "snot", "meta":{}
-                    //  },
-                    let mut data = Object::with_capacity(2);
                     let (value, meta) = other.into_parts();
-                    data.insert_nocheck("value".into(), value);
-                    data.insert_nocheck("meta".into(), meta);
-                    e.insert_nocheck("data".into(), Value::from(data));
-                    //  "ingest_ns":1,
-                    e.insert_nocheck("ingest_ns".into(), ingest_ns.into());
-                    //  "kind":null,
-                    // kind is always null on events
-                    e.insert_nocheck("kind".into(), Value::null());
-                    //  "is_batch":false
-                    e.insert_nocheck("is_batch".into(), is_batch.into());
-                    // }
-                    a.push(Value::from(e))
+                    let e = literal!({
+                        "data": {
+                            "value": value,
+                            "meta": meta,
+                            "ingest_ns": ingest_ns,
+                            "kind": Value::null(),
+                            "is_batch": is_batch
+                        }
+                    });
+                    a.push(e)
                 };
                 Ok(())
             },
