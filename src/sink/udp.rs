@@ -71,12 +71,22 @@ impl Udp {
     /// Binds and possibly 'connects' the udp socket
     async fn bind(&mut self) -> Result<()> {
         if self.socket.is_none() {
+            info!(
+                "[Sink::UDP] binding to {}:{} ...",
+                self.config.bind.host, self.config.bind.port
+            );
             let socket =
                 UdpSocket::bind((self.config.bind.host.as_str(), self.config.bind.port)).await?;
+            info!("[Sink::UDP] bound.");
             if self.config.bound {
+                info!(
+                    "[Sink::UDP] set peer address to {}:{} ...",
+                    self.config.host, self.config.port
+                );
                 socket
                     .connect((self.config.host.as_str(), self.config.port))
                     .await?;
+                info!("[Sink::UDP] peer address set.");
             }
             self.socket = Some(socket);
         };
@@ -151,7 +161,6 @@ impl Sink for Udp {
         mut event: Event,
     ) -> ResultVec {
         let processing_start = Instant::now();
-
         // TODO: how to properly report error metrics if we dont raise an error here?
         let replies = match self.send_event(codec, &event).await {
             Ok(()) => {
@@ -164,10 +173,10 @@ impl Sink for Udp {
                     None
                 }
             }
-            // for UDP we always trigger the CB for IO/socket related errors
-            Err(e @ Error(ErrorKind::Io(_), _)) | Err(e @ Error(ErrorKind::NoSocket, _)) => {
+            // for UDP we only trigger CB if there is no socket available, as we can't recover from anything else
+            Err(e @ Error(ErrorKind::NoSocket, _)) => {
                 // trigger CB
-                debug!("[Source::UDP] Error sending event: {}.", e);
+                error!("[Sink::UDP] Error sending event: {}.", e);
                 if event.transactional {
                     Some(vec![
                         sink::Reply::Insight(event.to_fail()),
@@ -180,7 +189,7 @@ impl Sink for Udp {
             // all other errors (coded/preprocessor etc.) we just result in a fail
             Err(e) => {
                 // regular error, no reason for CB
-                debug!("[Source::UDP] Error sending event: {}", e);
+                error!("[Sink::UDP] Error sending event: {}", e);
                 if event.transactional {
                     Some(vec![sink::Reply::Insight(event.to_fail())])
                 } else {
