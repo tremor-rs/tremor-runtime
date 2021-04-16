@@ -164,9 +164,10 @@ impl Sink for Udp {
                     None
                 }
             }
-            Err(Error(ErrorKind::NoSocket, _)) => {
+            // for UDP we always trigger the CB for IO/socket related errors
+            Err(e @ Error(ErrorKind::Io(_), _)) | Err(e @ Error(ErrorKind::NoSocket, _)) => {
                 // trigger CB
-                debug!("[Source::UDP] Error sending event: socket not available");
+                debug!("[Source::UDP] Error sending event: {}.", e);
                 if event.transactional {
                     Some(vec![
                         sink::Reply::Insight(event.to_fail()),
@@ -176,6 +177,7 @@ impl Sink for Udp {
                     Some(vec![sink::Reply::Insight(event.insight_trigger())]) // we always send a trigger
                 }
             }
+            // all other errors (coded/preprocessor etc.) we just result in a fail
             Err(e) => {
                 // regular error, no reason for CB
                 debug!("[Source::UDP] Error sending event: {}", e);

@@ -70,6 +70,23 @@ impl offramp::Impl for Tcp {
     }
 }
 
+impl Tcp {
+    async fn send_event(&mut self, codec: &mut dyn Codec, event: &Event) -> Result<()> {
+        let stream = self
+            .stream
+            .as_mut()
+            .ok_or_else(|| Error::from(ErrorKind::NoSocket))?;
+        for value in event.value_iter() {
+            let raw = codec.encode(value)?;
+            let packets = postprocess(&mut self.postprocessors, event.ingest_ns, raw.to_vec())?;
+            for packet in packets {
+                stream.write_all(&packet).await?;
+            }
+        }
+        Ok(())
+    }
+}
+
 #[async_trait::async_trait]
 impl Sink for Tcp {
     /// We acknowledge ourself
@@ -85,33 +102,42 @@ impl Sink for Tcp {
         _codec_map: &HashMap<String, Box<dyn Codec>>,
         mut event: Event,
     ) -> ResultVec {
-        let mut success = true;
         let processing_start = Instant::now();
-        if let Some(stream) = &mut self.stream {
-            for value in event.value_iter() {
-                let raw = codec.encode(value)?;
-                let packets = postprocess(&mut self.postprocessors, event.ingest_ns, raw.to_vec())?;
-                for packet in packets {
-                    success &= stream.write_all(&packet).await.is_ok();
+        let replies = match self.send_event(codec, &event).await {
+            Ok(()) => {
+                if event.transactional {
+                    Some(vec![sink::Reply::Insight(event.insight_ack_with_timing(
+                        processing_start.elapsed().as_millis() as u64,
+                    ))])
+                } else {
+                    None
                 }
             }
-        } else {
-            success = false
-        };
-        Ok(match (success, event.transactional) {
-            (true, true) => Some(vec![sink::Reply::Insight(
-                event.insight_ack_with_timing(processing_start.elapsed().as_millis() as u64),
-            )]),
-            (true, false) => None, // no need for contraflow
-            (false, true) => {
-                // full blown error reporting
-                Some(vec![
-                    sink::Reply::Insight(event.to_fail()),
-                    sink::Reply::Insight(event.insight_trigger()),
-                ])
+            // for TCP we always trigger the CB for IO/socket related errors
+            Err(e @ Error(ErrorKind::Io(_), _)) | Err(e @ Error(ErrorKind::NoSocket, _)) => {
+                debug!("[Source::TCP] Error sending event: {}.", e);
+                if event.transactional {
+                    Some(vec![
+                        sink::Reply::Insight(event.to_fail()),
+                        sink::Reply::Insight(event.insight_trigger()),
+                    ])
+                } else {
+                    Some(vec![sink::Reply::Insight(event.insight_trigger())]) // we always send a trigger
+                }
             }
-            (false, false) => Some(vec![sink::Reply::Insight(event.insight_trigger())]), // we always send a trigger
-        })
+            // all other errors (codec/peprocessor etc.) just result in a fail
+            Err(e) => {
+                // regular error, no reason for CB
+                debug!("[Source::TCP] Error sending event: {}", e);
+
+                if event.transactional {
+                    Some(vec![sink::Reply::Insight(event.to_fail())])
+                } else {
+                    None
+                }
+            }
+        };
+        Ok(replies)
     }
     fn default_codec(&self) -> &str {
         "json"
