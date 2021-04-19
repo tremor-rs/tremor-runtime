@@ -128,6 +128,12 @@ mod test {
     use tremor_value::literal;
     use tremor_value::StaticNode;
 
+    #[test]
+    fn error_checks() -> Result<()> {
+        assert!(maybe_double_to_pb(None).is_err());
+        Ok(())
+    }
+
     // NOTE This is incomplete with respect to possible mappings of json values
     // to basic builtin protocol buffer types, but sufficient for the needs of
     // the OpenTelemetry bindings.
