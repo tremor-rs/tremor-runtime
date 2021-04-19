@@ -728,18 +728,14 @@ pub fn influx_value(
     count: u64,
     timestamp: u64,
 ) -> Value<'static> {
-    let mut res = Value::object_with_capacity(4);
-    let mut fields = Value::object_with_capacity(1);
-    if let Some(fields) = fields.as_object_mut() {
-        fields.insert(COUNT, count.into());
-    };
-    if let Some(obj) = res.as_object_mut() {
-        obj.insert(MEASUREMENT, metric_name.into());
-        obj.insert(TAGS, Value::from(tags));
-        obj.insert(FIELDS, fields);
-        obj.insert(TIMESTAMP, timestamp.into());
-    }
-    res
+    literal!({
+        MEASUREMENT: metric_name,
+        TAGS: tags,
+        FIELDS: {
+            COUNT: count
+        },
+        TIMESTAMP: timestamp
+    })
 }
 
 pub(crate) type ConfigGraph = graph::DiGraph<NodeConfig, u8>;
