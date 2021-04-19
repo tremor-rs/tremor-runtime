@@ -39,7 +39,7 @@ pub struct Batch {
     /// the resulting id will be a new distinct id and will be tracking
     /// all event ids (min and max) in the batched event
     batch_event_id: EventId,
-    has_transactional: bool,
+    is_transactional: bool,
     event_id_gen: EventIdGenerator,
 }
 
@@ -60,7 +60,7 @@ if let Some(map) = &node.config {
         first_ns: 0,
         id: node.id.clone(),
         batch_event_id: idgen.next_id(),
-        has_transactional: false,
+        is_transactional: false,
         event_id_gen: idgen,
     }))
 } else {
@@ -88,7 +88,7 @@ impl Operator for Batch {
             ..
         } = event;
         self.batch_event_id.track(&id);
-        self.has_transactional = self.has_transactional || transactional;
+        self.is_transactional = self.is_transactional || transactional;
         self.data.consume(
             data,
             move |this: &mut ValueAndMeta<'static>, other: ValueAndMeta<'static>| -> Result<()> {
@@ -127,10 +127,10 @@ impl Operator for Batch {
                 data,
                 ingest_ns: self.first_ns,
                 is_batch: true,
-                transactional: self.has_transactional,
+                transactional: self.is_transactional,
                 ..Event::default()
             };
-            self.has_transactional = false;
+            self.is_transactional = false;
             swap(&mut self.batch_event_id, &mut event.id);
             Ok(event.into())
         } else {
@@ -165,10 +165,10 @@ impl Operator for Batch {
                             data,
                             ingest_ns: self.first_ns,
                             is_batch: true,
-                            transactional: self.has_transactional,
+                            transactional: self.is_transactional,
                             ..Event::default()
                         };
-                        self.has_transactional = false;
+                        self.is_transactional = false;
                         swap(&mut self.batch_event_id, &mut event.id);
                         EventAndInsights::from(event)
                     } else {
@@ -201,7 +201,7 @@ mod test {
             len: 0,
             id: "badger".into(),
             batch_event_id: idgen.next_id(),
-            has_transactional: false,
+            is_transactional: false,
             event_id_gen: idgen,
         };
         let event1 = Event {
@@ -340,7 +340,7 @@ mod test {
             len: 0,
             id: "badger".into(),
             batch_event_id: idgen.next_id(),
-            has_transactional: false,
+            is_transactional: false,
             event_id_gen: idgen,
         };
         let event1 = Event {
@@ -416,7 +416,7 @@ mod test {
             len: 0,
             id: "badger".into(),
             batch_event_id: idgen.next_id(),
-            has_transactional: false,
+            is_transactional: false,
             event_id_gen: idgen,
         };
 
