@@ -62,6 +62,27 @@ pub enum Stmt<'script> {
 /// array of aggregate functions
 pub type Aggregates<'a> = Vec<InvokeAggrFn<'a>>;
 
+/// Scratch data for efficiently merging window states in a tilt-frame without additional allocations at runtime.
+/// This is basically what needs to be dragged through
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct AggregateScratch<'script> {
+    /// aggregate states
+    pub aggregates: Aggregates<'script>,
+    /// transactional state for the outgoing event from a window
+    pub transactional: bool,
+}
+
+impl<'script> AggregateScratch<'script> {
+    /// constructor
+    #[must_use]
+    pub fn new(aggregates: Aggregates<'script>) -> Self {
+        Self {
+            aggregates,
+            transactional: false,
+        }
+    }
+}
+
 /// A Select statement
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct SelectStmt<'script> {
@@ -71,7 +92,7 @@ pub struct SelectStmt<'script> {
     pub aggregates: Aggregates<'script>,
     /// scratches needed when executing multiple windows
     /// only necessary if we have multiple windows, otherwise empty
-    pub aggregate_scratches: Option<(Aggregates<'script>, Aggregates<'script>)>,
+    pub aggregate_scratches: Option<(AggregateScratch<'script>, AggregateScratch<'script>)>,
     /// Constants
     pub consts: Consts<'script>,
     /// Number of locals

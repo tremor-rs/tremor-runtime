@@ -1,0 +1,22 @@
+onramp:
+  - id: input
+    type: cb
+    config:
+      source: "in.json"
+      timeout: 1000
+      expect_batched: true
+
+offramp:
+  - id: output
+    type: cb
+
+binding:
+  - id: gd
+    links:
+      "/onramp/input/{instance}/out": ["/pipeline/main/{instance}/in"]
+      "/pipeline/main/{instance}/out": ["/offramp/output/{instance}/in"]
+      "/pipeline/main/{instance}/err": ["/offramp/system::stderr/{instance}/in"]
+
+mapping:
+  /binding/gd/01:
+    instance: "01"

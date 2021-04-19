@@ -60,6 +60,18 @@ pub(crate) type ResultVec = Result<Option<Vec<Reply>>>;
 
 #[async_trait::async_trait]
 pub(crate) trait Sink {
+    /// Handles an incoming event.
+    ///
+    /// ## Error handling
+    ///
+    /// The circuit-breaker (CB) and guaranteed deliver (GD) mechanics require this function to exhibit certain behaviour:
+    /// if `auto_ack()` returns `false`:
+    ///   * This function should catch __ALL__ errors and send appropriate insights in the returned `ResultVec` (or via the `reply_channel` it received in `init`).
+    ///   * For returned `Err()`s, no insight will be sent, this violates the GD requirements for some upstream onramps/operators and will lead to sneaky bugs. Do not do that!
+    ///
+    /// if `auto_ack()` returns `true`:
+    ///   * Errors can be bubbled up from this function using `?`, if the event requires GD events (`event.transactional == true`) the `OfframpManager` will take care of this.
+    ///   * CB events like `trigger` or `restore` need to be sent via the `ResultVec` or `reply_channel`.
     async fn on_event(
         &mut self,
         input: &str,

@@ -3,5 +3,6 @@ Error:
     2 | match "dont-care" of
     3 |   case "dont-care" when emit "error" => "ouch"
       |                         ^^^^ Found the token `emit` but expected one of `!`, `\``, `$`, `(`, `+`, `-`, `<<`, `<ident>`, `[`, `absent`, `args`, `bool`, `event`, `float`, `for`, `group`, `heredoc`, `int`, `match`, `merge`, `nil`, `not`, `patch`, `present`, `recur`, `state`, `window`, `{`
+      |                              NOTE: It looks like you tried to use the 'emit' as a ident, consider quoting it as `emit` to make it an identifier.
     4 |   default => "ouch"
     5 | end

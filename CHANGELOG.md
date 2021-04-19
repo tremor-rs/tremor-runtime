@@ -8,7 +8,7 @@
 * Add DNS sink
 * Add syslog codec.
 * Add `$udp.host` and `$udp.port` to allow controling udp packet destinations on a per event basis.
-* Depricate `udp.dst_*` config, introduce `udp.bind.*` config instead.
+* Deprecate `udp.dst_*` config, introduce `udp.bind.*` config instead.
 
 ### Fixes
 
@@ -18,6 +18,10 @@
 * Fix match default clause only executing the last statement in the block.
 * Kafka back to async with a timeout on waiting
 * Fix `qos::wal` operator never cleaning up the last event from its storage
+* Fix `generic::batch` operator swallowing the `transactional` status of an Event
+* Fix windowed select queries not tracking the `transactional` status of an Event
+* Fix windowed select queries not tracking the Events that constitute an outgoing aggregated event
+* Avoid several offramps to swallow fail insights.
 
 ## 0.11.0
 

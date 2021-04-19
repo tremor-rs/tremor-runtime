@@ -39,6 +39,7 @@ pub struct Batch {
     /// the resulting id will be a new distinct id and will be tracking
     /// all event ids (min and max) in the batched event
     batch_event_id: EventId,
+    is_transactional: bool,
     event_id_gen: EventIdGenerator,
 }
 
@@ -59,6 +60,7 @@ if let Some(map) = &node.config {
         first_ns: 0,
         id: node.id.clone(),
         batch_event_id: idgen.next_id(),
+        is_transactional: false,
         event_id_gen: idgen,
     }))
 } else {
@@ -82,33 +84,26 @@ impl Operator for Batch {
             data,
             ingest_ns,
             is_batch,
+            transactional,
             ..
         } = event;
         self.batch_event_id.track(&id);
+        self.is_transactional = self.is_transactional || transactional;
         self.data.consume(
             data,
             move |this: &mut ValueAndMeta<'static>, other: ValueAndMeta<'static>| -> Result<()> {
                 if let Some(ref mut a) = this.value_mut().as_array_mut() {
-                    let mut e = Object::with_capacity(7);
-                    // {"id":1,
-                    // e.insert_nocheck("id".into(), id.into());
-                    //  "data": {
-                    //      "value": "snot", "meta":{}
-                    //  },
-                    let mut data = Object::with_capacity(2);
                     let (value, meta) = other.into_parts();
-                    data.insert_nocheck("value".into(), value);
-                    data.insert_nocheck("meta".into(), meta);
-                    e.insert_nocheck("data".into(), Value::from(data));
-                    //  "ingest_ns":1,
-                    e.insert_nocheck("ingest_ns".into(), ingest_ns.into());
-                    //  "kind":null,
-                    // kind is always null on events
-                    e.insert_nocheck("kind".into(), Value::null());
-                    //  "is_batch":false
-                    e.insert_nocheck("is_batch".into(), is_batch.into());
-                    // }
-                    a.push(Value::from(e))
+                    let e = literal!({
+                        "data": {
+                            "value": value,
+                            "meta": meta,
+                            "ingest_ns": ingest_ns,
+                            "kind": Value::null(),
+                            "is_batch": is_batch
+                        }
+                    });
+                    a.push(e)
                 };
                 Ok(())
             },
@@ -132,8 +127,10 @@ impl Operator for Batch {
                 data,
                 ingest_ns: self.first_ns,
                 is_batch: true,
+                transactional: self.is_transactional,
                 ..Event::default()
             };
+            self.is_transactional = false;
             swap(&mut self.batch_event_id, &mut event.id);
             Ok(event.into())
         } else {
@@ -168,8 +165,10 @@ impl Operator for Batch {
                             data,
                             ingest_ns: self.first_ns,
                             is_batch: true,
+                            transactional: self.is_transactional,
                             ..Event::default()
                         };
+                        self.is_transactional = false;
                         swap(&mut self.batch_event_id, &mut event.id);
                         EventAndInsights::from(event)
                     } else {
@@ -202,6 +201,7 @@ mod test {
             len: 0,
             id: "badger".into(),
             batch_event_id: idgen.next_id(),
+            is_transactional: false,
             event_id_gen: idgen,
         };
         let event1 = Event {
@@ -281,6 +281,7 @@ mod test {
             id: (1, 1, 1).into(),
             ingest_ns: 2_000_000,
             data: Value::from("badger").into(),
+            transactional: true,
             ..Event::default()
         };
 
@@ -291,6 +292,7 @@ mod test {
         assert_eq!(r.len(), 1);
         let (out, event) = r.pop().expect("empty results");
         assert_eq!("out", out);
+        assert_eq!(true, event.transactional);
 
         let events: Vec<&Value> = event.value_iter().collect();
         assert_eq!(
@@ -338,12 +340,14 @@ mod test {
             len: 0,
             id: "badger".into(),
             batch_event_id: idgen.next_id(),
+            is_transactional: false,
             event_id_gen: idgen,
         };
         let event1 = Event {
             id: (1, 1, 1).into(),
             ingest_ns: 1,
             data: Value::from("snot").into(),
+            transactional: true,
             ..Event::default()
         };
 
@@ -368,6 +372,7 @@ mod test {
         assert_eq!(r.len(), 1);
         let (out, event) = r.pop().expect("empty resultset");
         assert_eq!("out", out);
+        assert_eq!(true, event.transactional);
 
         let events: Vec<&Value> = event.value_iter().collect();
         assert_eq!(events, vec![event1.data.suffix().value()]);
@@ -411,6 +416,7 @@ mod test {
             len: 0,
             id: "badger".into(),
             batch_event_id: idgen.next_id(),
+            is_transactional: false,
             event_id_gen: idgen,
         };
 

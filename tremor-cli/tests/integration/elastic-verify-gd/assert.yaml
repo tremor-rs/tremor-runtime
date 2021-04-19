@@ -1,0 +1,11 @@
+status: 0
+name: elastic-verify-gd
+asserts:
+  - source: err.log
+    equals_file: expected_err.json
+  - source: ok.log
+    equals_file: expected_ok.json
+  - source: fg.err.log
+    contains:
+      - |
+        All required CB events received.
