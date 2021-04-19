@@ -98,8 +98,8 @@ pub(crate) fn instrumentation_library_logs_to_json<'event>(
 pub(crate) fn maybe_instrumentation_library_logs_to_pb(
     data: Option<&Value<'_>>,
 ) -> Result<Vec<InstrumentationLibraryLogs>> {
-    let mut pb = Vec::new();
     if let Some(Value::Array(data)) = data {
+        let mut pb = Vec::with_capacity(data.len());
         for ill in data {
             if let Value::Object(data) = ill {
                 let mut logs = Vec::new();
@@ -153,7 +153,7 @@ pub(crate) fn maybe_instrumentation_library_logs_to_pb(
 pub(crate) fn resource_logs_to_json<'event>(
     request: ExportLogsServiceRequest,
 ) -> Result<Value<'event>> {
-    let mut json = Vec::new();
+    let mut json = Vec::with_capacity(request.resource_logs.len());
     for log in request.resource_logs {
         json.push(literal!({
                 "instrumentation_library_logs":
@@ -166,8 +166,8 @@ pub(crate) fn resource_logs_to_json<'event>(
 
 pub(crate) fn resource_logs_to_pb(json: &Value<'_>) -> Result<Vec<ResourceLogs>> {
     if let Value::Object(json) = json {
-        let mut pb = Vec::new();
         if let Some(Value::Array(json)) = json.get("logs") {
+            let mut pb = Vec::with_capacity(json.len());
             for json in json {
                 if let Value::Object(json) = json {
                     let instrumentation_library_logs = maybe_instrumentation_library_logs_to_pb(
@@ -181,8 +181,8 @@ pub(crate) fn resource_logs_to_pb(json: &Value<'_>) -> Result<Vec<ResourceLogs>>
                     pb.push(item);
                 }
             }
+            return Ok(pb);
         }
-        return Ok(pb);
     }
 
     Err("Invalid json mapping for otel logs message - cannot convert to pb".into())
