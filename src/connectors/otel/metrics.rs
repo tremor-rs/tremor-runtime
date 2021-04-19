@@ -617,6 +617,14 @@ mod tests {
         }]);
         assert_eq!(expected, json);
         assert_eq!(pb, back_again);
+
+        // Empty
+        let json = int_exemplars_to_json(vec![]);
+        let back_again = int_exemplars_to_pb(Some(&json))?;
+        let expected: Value = literal!([]);
+        assert_eq!(expected, json);
+        assert_eq!(back_again, vec![]);
+
         Ok(())
     }
 
@@ -646,6 +654,14 @@ mod tests {
         }]);
         assert_eq!(expected, json);
         assert_eq!(pb, back_again);
+
+        // Empty
+        let json = double_exemplars_to_json(vec![]);
+        let back_again = double_exemplars_to_pb(Some(&json))?;
+        let expected: Value = literal!([]);
+        assert_eq!(expected, json);
+        assert_eq!(back_again, vec![]);
+
         Ok(())
     }
 
@@ -663,6 +679,14 @@ mod tests {
         }]);
         assert_eq!(expected, json);
         assert_eq!(pb, back_again);
+
+        // Empty
+        let json = quantile_values_to_json(vec![]);
+        let back_again = quantile_values_to_pb(Some(&json))?;
+        let expected: Value = literal!([]);
+        assert_eq!(expected, json);
+        assert_eq!(back_again, vec![]);
+
         Ok(())
     }
 
@@ -687,6 +711,13 @@ mod tests {
         assert_eq!(expected, json);
         assert_eq!(pb, back_again);
 
+        // Empty
+        let json = int_data_points_to_json(vec![]);
+        let back_again = int_data_points_to_pb(Some(&json))?;
+        let expected: Value = literal!([]);
+        assert_eq!(expected, json);
+        assert_eq!(back_again, vec![]);
+
         Ok(())
     }
 
@@ -710,6 +741,13 @@ mod tests {
         }]);
         assert_eq!(expected, json);
         assert_eq!(pb, back_again);
+
+        // Empty
+        let json = double_data_points_to_json(vec![]);
+        let back_again = double_data_points_to_pb(Some(&json))?;
+        let expected: Value = literal!([]);
+        assert_eq!(expected, json);
+        assert_eq!(back_again, vec![]);
 
         Ok(())
     }
@@ -741,6 +779,13 @@ mod tests {
         assert_eq!(expected, json);
         assert_eq!(pb, back_again);
 
+        // Empty
+        let json = int_histo_data_points_to_json(vec![]);
+        let back_again = int_data_points_to_pb(Some(&json))?;
+        let expected: Value = literal!([]);
+        assert_eq!(expected, json);
+        assert_eq!(back_again, vec![]);
+
         Ok(())
     }
 
@@ -771,6 +816,13 @@ mod tests {
         assert_eq!(expected, json);
         assert_eq!(pb, back_again);
 
+        // Empty
+        let json = double_histo_data_points_to_json(vec![]);
+        let back_again = double_histo_data_points_to_pb(Some(&json))?;
+        let expected: Value = literal!([]);
+        assert_eq!(expected, json);
+        assert_eq!(back_again, vec![]);
+
         Ok(())
     }
 
@@ -799,6 +851,13 @@ mod tests {
         }]);
         assert_eq!(expected, json);
         assert_eq!(pb, back_again);
+
+        // Empty
+        let json = double_summary_data_points_to_json(vec![]);
+        let back_again = double_summary_data_points_to_pb(Some(&json))?;
+        let expected: Value = literal!([]);
+        assert_eq!(expected, json);
+        assert_eq!(back_again, vec![]);
 
         Ok(())
     }

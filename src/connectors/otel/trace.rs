@@ -297,6 +297,23 @@ mod tests {
         assert_eq!(expected, json);
         assert_eq!(Some(pb), back_again);
 
+        // None
+        let json = status_to_json(None);
+        let back_again = status_to_pb(Some(&json))?;
+        let expected: Value =
+            literal!({"deprecated_code": 0, "message": "status code unset", "code": 0});
+        let pb = Status {
+            deprecated_code: 0,
+            message: "status code unset".into(),
+            code: 0,
+        };
+        assert_eq!(expected, json);
+        assert_eq!(Some(pb), back_again);
+
+        // Invalid
+        let invalid = status_to_pb(Some(&literal!("snot")));
+        assert!(invalid.is_err());
+
         Ok(())
     }
 
@@ -319,6 +336,14 @@ mod tests {
             }
         ]);
 
+        assert_eq!(expected, json);
+        assert_eq!(pb, back_again);
+
+        // Empty span events
+        let pb: Vec<Event> = vec![];
+        let json = span_events_to_json(vec![])?;
+        let back_again = span_events_to_pb(Some(&json))?;
+        let expected: Value = literal!([]);
         assert_eq!(expected, json);
         assert_eq!(pb, back_again);
 
@@ -354,6 +379,13 @@ mod tests {
 
         assert_eq!(expected, json);
         assert_eq!(pb, back_again);
+
+        // Empty span events
+        let json = span_links_to_json(vec![])?;
+        let back_again = span_links_to_pb(Some(&json))?;
+        let expected: Value = literal!([]);
+        assert_eq!(expected, json);
+        assert_eq!(back_again, vec![]);
 
         Ok(())
     }
@@ -426,6 +458,9 @@ mod tests {
 
         assert_eq!(expected, json);
         assert_eq!(pb, back_again);
+
+        let invalid = instrumentation_library_spans_to_pb(Some(&literal!("snot")));
+        assert!(invalid.is_err());
 
         Ok(())
     }
@@ -513,6 +548,9 @@ mod tests {
 
         assert_eq!(expected, json);
         assert_eq!(pb.resource_spans, back_again);
+
+        let invalid = resource_spans_to_pb(Some(&literal!("snot")));
+        assert!(invalid.is_err());
 
         Ok(())
     }
