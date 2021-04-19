@@ -41,6 +41,7 @@ pub mod prelude;
 mod serde;
 /// The value modules defines a structural module of tremor supported types
 pub mod value;
+pub use crate::serde::structurize;
 pub use error::*;
 pub use known_key::{Error as KnownKeyError, KnownKey};
 pub use simd_json::{json, json_typed, AlignedBuf, StaticNode};

@@ -393,3 +393,113 @@ impl<'de> Visitor<'de> for ValueVisitor {
         Ok(Value::Array(v))
     }
 }
+
+/// Returns a struct populated against the DOM value via serde deserialization
+///
+/// # Errors
+///
+/// Will return Err if the DOM value cannot be deserialized to the target struct  
+pub fn structurize<'de, T>(value: Value<'de>) -> crate::error::Result<T>
+where
+    T: de::Deserialize<'de>,
+{
+    match T::deserialize(value) {
+        Ok(t) => Ok(t),
+        Err(e) => Err(Error::Serde(e.to_string())),
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::error::Result;
+    use crate::structurize;
+
+    #[derive(serde::Deserialize, Debug)]
+    pub struct SO {}
+
+    #[derive(serde::Deserialize, Debug)]
+    pub struct S {
+        pub o: Option<SO>,
+        pub s: Option<String>,
+        pub b: Option<bool>,
+        pub a: Option<Vec<String>>,
+        pub uw: Option<u8>,
+        pub ux: Option<u16>,
+        pub uy: Option<u32>,
+        pub uz: Option<u64>,
+        pub sw: Option<i8>,
+        pub sx: Option<i16>,
+        pub sy: Option<i32>,
+        pub sz: Option<i64>,
+        pub fx: Option<f32>,
+        pub fy: Option<f64>,
+    }
+
+    #[derive(serde::Deserialize, Debug)]
+    pub struct N {
+        pub o: SO,
+        pub s: String,
+        pub b: bool,
+        pub a: Vec<String>,
+        pub uw: u8,
+        pub ux: u16,
+        pub uy: u32,
+        pub uz: u64,
+        pub sw: i8,
+        pub sx: i16,
+        pub sy: i32,
+        pub sz: i64,
+        pub fx: f32,
+        pub fy: f64,
+    }
+
+    #[test]
+    fn option_field_absent() -> Result<()> {
+        let mut raw_json = r#"{}"#.to_string();
+        let result: Result<S> =
+            structurize(crate::parse_to_value(unsafe { raw_json.as_bytes_mut() })?);
+        assert!(result.is_ok());
+
+        let mut raw_json = r#"{}"#.to_string();
+        let result: Result<N> =
+            structurize(crate::parse_to_value(unsafe { raw_json.as_bytes_mut() })?);
+        assert!(result.is_err());
+
+        Ok(())
+    }
+
+    #[test]
+    fn option_field_present() -> Result<()> {
+        let mut raw_json = r#"{
+            "o": {},
+            "b": true,
+            "s": "snot",
+            "a": [],
+            "uw": 0,
+            "ux": 0,
+            "uy": 0,
+            "uz": 0,
+            "sw": 0,
+            "sx": 0,
+            "sy": 0,
+            "sz": 0,
+            "fx": 0,
+            "fy": 0
+        }"#
+        .to_string();
+        let result: Result<S> =
+            structurize(crate::parse_to_value(unsafe { raw_json.as_bytes_mut() })?);
+        assert!(result.is_ok());
+
+        let result: Result<N> =
+            structurize(crate::parse_to_value(unsafe { raw_json.as_bytes_mut() })?);
+        assert!(result.is_ok());
+
+        let mut raw_json = r#"{}"#.to_string();
+        let result: Result<S> =
+            structurize(crate::parse_to_value(unsafe { raw_json.as_bytes_mut() })?);
+        assert!(result.is_ok());
+
+        Ok(())
+    }
+}
