@@ -93,7 +93,7 @@ pub(crate) fn maybe_bool_to_pb(data: Option<&Value<'_>>) -> Result<bool> {
 
 pub(crate) fn f64_repeated_to_pb(json: Option<&Value<'_>>) -> Result<Vec<f64>> {
     if let Some(Value::Array(json)) = json {
-        let mut arr = Vec::new();
+        let mut arr = Vec::with_capacity(json.len());
         for data in json {
             let value = maybe_double_to_pb(Some(data))?;
             arr.push(value);
@@ -106,7 +106,7 @@ pub(crate) fn f64_repeated_to_pb(json: Option<&Value<'_>>) -> Result<Vec<f64>> {
 
 pub(crate) fn u64_repeated_to_pb(json: Option<&Value<'_>>) -> Result<Vec<u64>> {
     if let Some(Value::Array(json)) = json {
-        let mut arr = Vec::new();
+        let mut arr = Vec::with_capacity(json.len());
         for data in json {
             let value = maybe_int_to_pbu64(Some(data))?;
             arr.push(value);
@@ -127,6 +127,12 @@ mod test {
     use proptest::{bits::u64, prelude::*};
     use tremor_value::literal;
     use tremor_value::StaticNode;
+
+    #[test]
+    fn error_checks() -> Result<()> {
+        assert!(maybe_double_to_pb(None).is_err());
+        Ok(())
+    }
 
     // NOTE This is incomplete with respect to possible mappings of json values
     // to basic builtin protocol buffer types, but sufficient for the needs of

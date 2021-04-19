@@ -89,7 +89,7 @@ pub(crate) fn double_exemplars_to_json<'event>(data: Vec<DoubleExemplar>) -> Val
 
 pub(crate) fn double_exemplars_to_pb(json: Option<&Value<'_>>) -> Result<Vec<DoubleExemplar>> {
     if let Some(Value::Array(json)) = json {
-        let mut pb = Vec::new();
+        let mut pb = Vec::with_capacity(json.len());
         for data in json {
             let filtered_labels = common::string_key_value_to_pb(data.get("filtered_labels"))?;
             let span_id = id::hex_span_id_to_pb(data.get("span_id"))?;
@@ -111,7 +111,7 @@ pub(crate) fn double_exemplars_to_pb(json: Option<&Value<'_>>) -> Result<Vec<Dou
 }
 
 pub(crate) fn quantile_values_to_json<'event>(data: Vec<ValueAtQuantile>) -> Value<'event> {
-    let mut json: Vec<Value> = Vec::new();
+    let mut json: Vec<Value> = Vec::with_capacity(data.len());
 
     for data in data {
         json.push(literal!({
@@ -124,7 +124,7 @@ pub(crate) fn quantile_values_to_json<'event>(data: Vec<ValueAtQuantile>) -> Val
 
 pub(crate) fn quantile_values_to_pb(json: Option<&Value<'_>>) -> Result<Vec<ValueAtQuantile>> {
     if let Some(Value::Array(json)) = json {
-        let mut arr = Vec::new();
+        let mut arr = Vec::with_capacity(json.len());
         for data in json {
             let value = pb::maybe_double_to_pb(data.get("value"))?;
             let quantile = pb::maybe_double_to_pb(data.get("quantile"))?;
@@ -137,7 +137,7 @@ pub(crate) fn quantile_values_to_pb(json: Option<&Value<'_>>) -> Result<Vec<Valu
 }
 
 pub(crate) fn int_data_points_to_json<'event>(pb: Vec<IntDataPoint>) -> Value<'event> {
-    let mut json = Vec::new();
+    let mut json = Vec::with_capacity(pb.len());
     for data in pb {
         let labels = common::string_key_value_to_json(data.labels);
         let exemplars = int_exemplars_to_json(data.exemplars);
@@ -154,8 +154,8 @@ pub(crate) fn int_data_points_to_json<'event>(pb: Vec<IntDataPoint>) -> Value<'e
 }
 
 pub(crate) fn int_data_points_to_pb(json: Option<&Value<'_>>) -> Result<Vec<IntDataPoint>> {
-    let mut pb = Vec::new();
     if let Some(Value::Array(data)) = json {
+        let mut pb = Vec::with_capacity(data.len());
         for item in data {
             let labels = common::string_key_value_to_pb(item.get("labels"))?;
             let exemplars = int_exemplars_to_pb(item.get("exemplars"))?;
@@ -178,7 +178,7 @@ pub(crate) fn int_data_points_to_pb(json: Option<&Value<'_>>) -> Result<Vec<IntD
 }
 
 pub(crate) fn double_data_points_to_json<'event>(pb: Vec<DoubleDataPoint>) -> Value<'event> {
-    let mut json = Vec::new();
+    let mut json = Vec::with_capacity(pb.len());
     for data in pb {
         let labels = common::string_key_value_to_json(data.labels);
         let exemplars = double_exemplars_to_json(data.exemplars);
@@ -196,8 +196,8 @@ pub(crate) fn double_data_points_to_json<'event>(pb: Vec<DoubleDataPoint>) -> Va
 }
 
 pub(crate) fn double_data_points_to_pb(json: Option<&Value<'_>>) -> Result<Vec<DoubleDataPoint>> {
-    let mut pb = Vec::new();
     if let Some(Value::Array(data)) = json {
+        let mut pb = Vec::with_capacity(data.len());
         for item in data {
             let labels = common::string_key_value_to_pb(item.get("labels"))?;
             let exemplars = double_exemplars_to_pb(item.get("exemplars"))?;
@@ -222,7 +222,7 @@ pub(crate) fn double_data_points_to_pb(json: Option<&Value<'_>>) -> Result<Vec<D
 pub(crate) fn double_histo_data_points_to_json<'event>(
     pb: Vec<DoubleHistogramDataPoint>,
 ) -> Value<'event> {
-    let mut json = Vec::new();
+    let mut json = Vec::with_capacity(pb.len());
     for points in pb {
         let labels = common::string_key_value_to_json(points.labels);
         let exemplars = double_exemplars_to_json(points.exemplars);
@@ -245,8 +245,8 @@ pub(crate) fn double_histo_data_points_to_json<'event>(
 pub(crate) fn double_histo_data_points_to_pb(
     json: Option<&Value<'_>>,
 ) -> Result<Vec<DoubleHistogramDataPoint>> {
-    let mut pb = Vec::new();
     if let Some(Value::Array(data)) = json {
+        let mut pb = Vec::with_capacity(data.len());
         for item in data {
             let labels = common::string_key_value_to_pb(item.get("labels"))?;
             let time_unix_nano = pb::maybe_int_to_pbu64(item.get("time_unix_nano"))?;
@@ -277,7 +277,7 @@ pub(crate) fn double_histo_data_points_to_pb(
 pub(crate) fn double_summary_data_points_to_json<'event>(
     pb: Vec<DoubleSummaryDataPoint>,
 ) -> Value<'event> {
-    let mut json = Vec::new();
+    let mut json = Vec::with_capacity(pb.len());
     for points in pb {
         let labels = common::string_key_value_to_json(points.labels);
         let quantile_values = quantile_values_to_json(points.quantile_values);
@@ -297,8 +297,8 @@ pub(crate) fn double_summary_data_points_to_json<'event>(
 pub(crate) fn double_summary_data_points_to_pb(
     json: Option<&Value<'_>>,
 ) -> Result<Vec<DoubleSummaryDataPoint>> {
-    let mut pb = Vec::new();
     if let Some(Value::Array(data)) = json {
+        let mut pb = Vec::with_capacity(data.len());
         for item in data {
             let labels = common::string_key_value_to_pb(item.get("labels"))?;
             let time_unix_nano = pb::maybe_int_to_pbu64(item.get("time_unix_nano"))?;
@@ -325,7 +325,7 @@ pub(crate) fn double_summary_data_points_to_pb(
 pub(crate) fn int_histo_data_points_to_json<'event>(
     pb: Vec<IntHistogramDataPoint>,
 ) -> Value<'event> {
-    let mut json = Vec::new();
+    let mut json = Vec::with_capacity(pb.len());
     for points in pb {
         let labels = common::string_key_value_to_json(points.labels);
         let exemplars = int_exemplars_to_json(points.exemplars);
@@ -348,8 +348,8 @@ pub(crate) fn int_histo_data_points_to_json<'event>(
 pub(crate) fn int_histo_data_points_to_pb(
     json: Option<&Value<'_>>,
 ) -> Result<Vec<IntHistogramDataPoint>> {
-    let mut pb = Vec::new();
     if let Some(Value::Array(data)) = json {
+        let mut pb = Vec::with_capacity(data.len());
         for item in data {
             let labels = common::string_key_value_to_pb(item.get("labels"))?;
             let time_unix_nano = pb::maybe_int_to_pbu64(item.get("time_unix_nano"))?;
@@ -483,7 +483,7 @@ pub(crate) fn metrics_data_to_pb(data: Option<&Value<'_>>) -> Result<metric::Dat
 pub(crate) fn instrumentation_library_metrics_to_json<'event>(
     pb: Vec<tremor_otelapis::opentelemetry::proto::metrics::v1::InstrumentationLibraryMetrics>,
 ) -> Value<'event> {
-    let mut json = Vec::new();
+    let mut json = Vec::with_capacity(pb.len());
     for data in pb {
         let mut metrics = Vec::new();
         for metric in data.metrics {
@@ -508,8 +508,8 @@ pub(crate) fn instrumentation_library_metrics_to_json<'event>(
 pub(crate) fn instrumentation_library_metrics_to_pb(
     data: Option<&Value<'_>>,
 ) -> Result<Vec<InstrumentationLibraryMetrics>> {
-    let mut pb = Vec::new();
     if let Some(Value::Array(data)) = data {
+        let mut pb = Vec::with_capacity(data.len());
         for ilm in data {
             if let Value::Object(data) = ilm {
                 let mut metrics = Vec::new();
@@ -561,8 +561,8 @@ pub(crate) fn resource_metrics_to_json<'event>(
 
 pub(crate) fn resource_metrics_to_pb(json: Option<&Value<'_>>) -> Result<Vec<ResourceMetrics>> {
     if let Some(Value::Object(json)) = json {
-        let mut pb = Vec::new();
         if let Some(Value::Array(json)) = json.get("metrics") {
+            let mut pb = Vec::with_capacity(json.len());
             for json in json {
                 if let Value::Object(json) = json {
                     let instrumentation_library_metrics = instrumentation_library_metrics_to_pb(
@@ -576,8 +576,8 @@ pub(crate) fn resource_metrics_to_pb(json: Option<&Value<'_>>) -> Result<Vec<Res
                     pb.push(item);
                 }
             }
+            return Ok(pb);
         }
-        return Ok(pb);
     }
 
     Err("Invalid json mapping for otel metrics message - cannot convert to pb".into())
@@ -617,6 +617,14 @@ mod tests {
         }]);
         assert_eq!(expected, json);
         assert_eq!(pb, back_again);
+
+        // Empty
+        let json = int_exemplars_to_json(vec![]);
+        let back_again = int_exemplars_to_pb(Some(&json))?;
+        let expected: Value = literal!([]);
+        assert_eq!(expected, json);
+        assert_eq!(back_again, vec![]);
+
         Ok(())
     }
 
@@ -646,6 +654,14 @@ mod tests {
         }]);
         assert_eq!(expected, json);
         assert_eq!(pb, back_again);
+
+        // Empty
+        let json = double_exemplars_to_json(vec![]);
+        let back_again = double_exemplars_to_pb(Some(&json))?;
+        let expected: Value = literal!([]);
+        assert_eq!(expected, json);
+        assert_eq!(back_again, vec![]);
+
         Ok(())
     }
 
@@ -663,6 +679,14 @@ mod tests {
         }]);
         assert_eq!(expected, json);
         assert_eq!(pb, back_again);
+
+        // Empty
+        let json = quantile_values_to_json(vec![]);
+        let back_again = quantile_values_to_pb(Some(&json))?;
+        let expected: Value = literal!([]);
+        assert_eq!(expected, json);
+        assert_eq!(back_again, vec![]);
+
         Ok(())
     }
 
@@ -687,6 +711,13 @@ mod tests {
         assert_eq!(expected, json);
         assert_eq!(pb, back_again);
 
+        // Empty
+        let json = int_data_points_to_json(vec![]);
+        let back_again = int_data_points_to_pb(Some(&json))?;
+        let expected: Value = literal!([]);
+        assert_eq!(expected, json);
+        assert_eq!(back_again, vec![]);
+
         Ok(())
     }
 
@@ -710,6 +741,13 @@ mod tests {
         }]);
         assert_eq!(expected, json);
         assert_eq!(pb, back_again);
+
+        // Empty
+        let json = double_data_points_to_json(vec![]);
+        let back_again = double_data_points_to_pb(Some(&json))?;
+        let expected: Value = literal!([]);
+        assert_eq!(expected, json);
+        assert_eq!(back_again, vec![]);
 
         Ok(())
     }
@@ -741,6 +779,13 @@ mod tests {
         assert_eq!(expected, json);
         assert_eq!(pb, back_again);
 
+        // Empty
+        let json = int_histo_data_points_to_json(vec![]);
+        let back_again = int_data_points_to_pb(Some(&json))?;
+        let expected: Value = literal!([]);
+        assert_eq!(expected, json);
+        assert_eq!(back_again, vec![]);
+
         Ok(())
     }
 
@@ -771,6 +816,13 @@ mod tests {
         assert_eq!(expected, json);
         assert_eq!(pb, back_again);
 
+        // Empty
+        let json = double_histo_data_points_to_json(vec![]);
+        let back_again = double_histo_data_points_to_pb(Some(&json))?;
+        let expected: Value = literal!([]);
+        assert_eq!(expected, json);
+        assert_eq!(back_again, vec![]);
+
         Ok(())
     }
 
@@ -799,6 +851,13 @@ mod tests {
         }]);
         assert_eq!(expected, json);
         assert_eq!(pb, back_again);
+
+        // Empty
+        let json = double_summary_data_points_to_json(vec![]);
+        let back_again = double_summary_data_points_to_pb(Some(&json))?;
+        let expected: Value = literal!([]);
+        assert_eq!(expected, json);
+        assert_eq!(back_again, vec![]);
 
         Ok(())
     }
