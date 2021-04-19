@@ -899,6 +899,7 @@ components:
         - lz4
         - remove-empty
         - snappy
+        - textual-length-prefix
         - xz
         - zlib
 
@@ -913,5 +914,6 @@ components:
         - lines
         - lz4
         - snappy
+        - textual-length-prefix
         - xz
         - zlib

@@ -23,6 +23,7 @@ use tremor_common::time::nanotime;
 pub type Postprocessors = Vec<Box<dyn Postprocessor>>;
 use std::io::Write;
 use std::mem;
+use std::str;
 
 /// Postprocessor trait
 pub trait Postprocessor: Send {
@@ -54,6 +55,7 @@ pub fn lookup(name: &str) -> Result<Box<dyn Postprocessor>> {
         "ingest-ns" => Ok(Box::new(AttachIngresTs {})),
         "length-prefixed" => Ok(Box::new(LengthPrefix::default())),
         "gelf-chunking" => Ok(Box::new(Gelf::default())),
+        "textual-length-prefix" => Ok(Box::new(TextualLength::default())),
         _ => Err(format!("Postprocessor '{}' not found.", name).into()),
     }
 }
@@ -244,6 +246,25 @@ impl Postprocessor for LengthPrefix {
     }
 }
 
+#[derive(Clone, Default)]
+pub(crate) struct TextualLength {}
+impl Postprocessor for TextualLength {
+    #[cfg(not(tarpaulin_include))]
+    fn name(&self) -> &str {
+        "textual-length-prefix"
+    }
+
+    fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+        let size = data.len();
+        let mut digits: Vec<u8> = size.to_string().into_bytes();
+        let mut res = Vec::with_capacity(digits.len() + 1 + size);
+        res.append(&mut digits);
+        res.push(32);
+        res.write_all(&data)?;
+        Ok(vec![res])
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -269,5 +290,13 @@ mod test {
         assert_eq!(Ok(vec![b"Cg==".to_vec()]), post.process(0, 0, b"\n"));
 
         assert_eq!(Ok(vec![b"c25vdA==".to_vec()]), post.process(0, 0, b"snot"));
+    }
+
+    #[test]
+    fn textual_length_prefix_postp() {
+        let mut post = TextualLength {};
+        let data = vec![1_u8, 2, 3];
+        let encoded = post.process(42, 23, &data).unwrap().pop().unwrap();
+        assert_eq!("3 \u{1}\u{2}\u{3}", str::from_utf8(&encoded).unwrap());
     }
 }

@@ -21,6 +21,7 @@ use crate::url::TremorUrl;
 use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
 use bytes::buf::Buf;
 use bytes::BytesMut;
+use std::str;
 
 use std::io::{self, Read};
 
@@ -68,6 +69,7 @@ pub fn lookup(name: &str) -> Result<Box<dyn Preprocessor>> {
         "gelf-chunking-tcp" => Ok(Box::new(Gelf::tcp())),
         "ingest-ns" => Ok(Box::new(ExtractIngresTs {})),
         "length-prefixed" => Ok(Box::new(LengthPrefix::default())),
+        "textual-length-prefix" => Ok(Box::new(TextualLength::default())),
         _ => Err(format!("Preprocessor '{}' not found.", name).into()),
     }
 }
@@ -379,6 +381,54 @@ impl Preprocessor for LengthPrefix {
         Ok(res)
     }
 }
+#[derive(Clone, Default, Debug)]
+pub(crate) struct TextualLength {
+    len: Option<usize>,
+    buffer: BytesMut,
+}
+impl Preprocessor for TextualLength {
+    #[cfg(not(tarpaulin_include))]
+    fn name(&self) -> &str {
+        "textual-length-prefix"
+    }
+
+    fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+        self.buffer.extend(data);
+
+        let mut res = Vec::new();
+        loop {
+            if let Some(l) = self.len {
+                if self.buffer.len() >= l {
+                    let mut part = self.buffer.split_off(l);
+                    std::mem::swap(&mut part, &mut self.buffer);
+                    res.push(part.to_vec());
+                    self.len = None;
+                } else {
+                    break;
+                }
+            }
+
+            // find the whitespace
+            if let Some((i, _c)) = self
+                .buffer
+                .iter()
+                .enumerate()
+                .find(|(_i, c)| c.is_ascii_whitespace())
+            {
+                let mut buf = self.buffer.split_off(i);
+                std::mem::swap(&mut buf, &mut self.buffer);
+                // parse the textual length
+                let l = str::from_utf8(&buf)?;
+                self.len = Some(l.parse::<u32>()? as usize);
+                self.buffer.advance(1); // advance beyond the whitespace delimiter
+            } else {
+                // no whitespace found
+                break;
+            }
+        }
+        Ok(res)
+    }
+}
 #[cfg(test)]
 mod test {
     use super::*;
@@ -400,6 +450,124 @@ mod test {
         assert_eq!(in_ns, 42);
     }
 
+    fn textual_prefix(len: usize) -> String {
+        format!("{} {}", len, String::from_utf8(vec![b'O'; len]).unwrap())
+    }
+
+    use proptest::prelude::*;
+
+    // generate multiple chopped length-prefixed strings
+    fn multiple_textual_lengths(max_elements: usize) -> BoxedStrategy<(Vec<usize>, Vec<String>)> {
+        proptest::collection::vec(".+", 1..max_elements) // generator for Vec<String> of arbitrary strings, maximum length of vector: `max_elements`
+            .prop_map(|ss| {
+                let s: (Vec<usize>, Vec<String>) = ss
+                    .into_iter()
+                    .map(|s| (s.len(), format!("{} {}", s.len(), s))) // for each string, extract the length, and create a textual length prefix
+                    .unzip();
+                s
+            })
+            .prop_map(|tuple| (tuple.0, tuple.1.join(""))) // generator for a tuple of 1. the sizes of the length prefixed strings, 2. the concatenated length prefixed strings as one giant string
+            .prop_map(|tuple| {
+                // here we chop the big string into up to 4 bits
+                let mut chopped = Vec::with_capacity(4);
+                let mut giant_string: String = tuple.1.clone();
+                while giant_string.len() > 0 && chopped.len() < 4 {
+                    // verify we are at a char boundary
+                    let indices = giant_string.char_indices();
+                    let num_chars = giant_string.chars().count();
+                    if let Some((index, _)) = indices.skip(num_chars / 2).next() {
+                        let mut splitted = giant_string.split_off(index);
+                        std::mem::swap(&mut splitted, &mut giant_string);
+                        chopped.push(splitted);
+                    } else {
+                        break;
+                    }
+                }
+                chopped.push(giant_string);
+                (tuple.0, chopped)
+            })
+            .boxed()
+    }
+
+    proptest! {
+        #[test]
+        fn textual_length_prefix_prop((lengths, datas) in multiple_textual_lengths(5)) {
+            let mut pre_p = pre::TextualLength::default();
+            let mut in_ns = 0_u64;
+            let res: Vec<Vec<u8>> = datas.into_iter().map(|data| {
+                pre_p.process(&mut in_ns, data.as_bytes()).unwrap()
+            }).flatten().collect();
+            assert_eq!(lengths.len(), res.len());
+            for (processed, expected_len) in res.iter().zip(lengths) {
+                assert_eq!(expected_len, processed.len());
+            }
+        }
+
+            fn textual_length_pre_post(length in 1..100_usize) {
+            let data = vec![1_u8; length];
+            let mut pre_p = pre::TextualLength::default();
+            let mut post_p = post::TextualLength::default();
+            let encoded = post_p.process(0, 0, &data).unwrap().pop().unwrap();
+            let mut in_ns = 0_u64;
+            let mut res = pre_p.process(&mut in_ns, &encoded).unwrap();
+            assert_eq!(1, res.len());
+            let payload = res.pop().unwrap();
+            assert_eq!(length, payload.len());
+        }
+    }
+
+    #[test]
+    fn textual_prefix_length_loop() {
+        let datas = vec![
+            "24 \'?\u{d617e}ѨR\u{202e}\u{f8f7c}\u{ede29}\u{ac784}36 ?{¥?MȺ\r\u{bac41}9\u{5bbbb}\r\u{1c46c}\u{4ba79}¥\u{7f}*?:\u{0}$i",
+            "60 %\u{a825a}\u{a4269}\u{39e0c}\u{b3e21}<ì\u{f6c20}ѨÛ`HW\u{9523f}V",
+            "\u{3}\u{605fe}%Fq\u{89b5e}\u{93780}Q3",
+            "¥?\u{feff}9",
+            " \'�2\u{4269b}",
+        ];
+        let lengths: Vec<usize> = vec![24, 36, 60, 9];
+        let mut pre_p = pre::TextualLength::default();
+        let mut in_ns = 0_u64;
+        let res: Vec<Vec<u8>> = datas
+            .into_iter()
+            .map(|data| pre_p.process(&mut in_ns, data.as_bytes()).unwrap())
+            .flatten()
+            .collect();
+        assert_eq!(lengths.len(), res.len());
+        for (processed, expected_len) in res.iter().zip(lengths) {
+            assert_eq!(expected_len, processed.len());
+        }
+    }
+
+    #[test]
+    fn textual_length_prefix() {
+        let mut pre_p = pre::TextualLength::default();
+        let data = textual_prefix(42);
+        let mut in_ns = 0_u64;
+        let mut res = pre_p.process(&mut in_ns, data.as_bytes()).unwrap();
+        assert_eq!(1, res.len());
+        let payload = res.pop().unwrap();
+        assert_eq!(42, payload.len());
+    }
+
+    #[test]
+    fn empty_textual_prefix() {
+        let data = ("").as_bytes();
+        let mut pre_p = pre::TextualLength::default();
+        let mut post_p = post::TextualLength::default();
+        let mut in_ns = 0_u64;
+        let res = pre_p.process(&mut in_ns, data).unwrap();
+        assert_eq!(0, res.len());
+
+        let data_empty = vec![];
+        let encoded = post_p.process(42, 23, &data_empty).unwrap().pop().unwrap();
+        assert_eq!("0 ", str::from_utf8(&encoded).unwrap());
+        let mut res2 = pre_p.process(&mut in_ns, &encoded).unwrap();
+        assert_eq!(1, res2.len());
+        let payload = res2.pop().unwrap();
+        assert_eq!(0, payload.len());
+    }
+
     #[test]
     fn length_prefix() -> Result<()> {
         let mut it = 0;
@@ -419,7 +587,7 @@ mod test {
         Ok(())
     }
 
-    const LOOKUP_TABLE: [&str; 15] = [
+    const LOOKUP_TABLE: [&str; 16] = [
         "lines",
         "lines-null",
         "lines-pipe",
@@ -435,6 +603,7 @@ mod test {
         "gelf-chunking-tcp",
         "ingest-ns",
         "length-prefixed",
+        "textual-length-prefix",
     ];
 
     #[test]

@@ -12,6 +12,7 @@
 * Allow insights/contraflow events to traverse through multiple connected pipelines
 
 * Add GCP Cloud Storage linked sink connector.
+* Add textual-length-prefix pre and postprocessor.
 
 ### Fixes
 
