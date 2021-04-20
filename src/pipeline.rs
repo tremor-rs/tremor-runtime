@@ -285,7 +285,7 @@ async fn handle_insight(
                         .await
                         .map_err(Error::from),
                     Input::Pipeline(addr) => addr.send_insight(insight).await,
-                    // linked offramps dont support insights yet, although they definitely should
+                    // TODO: linked offramps dont support insights yet, although they definitely should
                     Input::LinkedOfframp(_addr) => {
                         warn!(
                             "Linked offramps don't support insights/GD yet, we are deeply sorry!"
@@ -437,18 +437,23 @@ async fn pipeline_task(
                 );
                 // notify other pipeline about a new input
                 if let ConnectTarget::Pipeline(pipe) = &target {
-                    if let Err(e) = pipe
-                        .send_mgmt(MgmtMsg::ConnectInput {
-                            input_url: pid.clone(), // ensure we have no port here
-                            target: ConnectTarget::Pipeline(Box::new(addr.clone())),
-                            transactional: true,
-                        })
-                        .await
-                    {
-                        error!(
-                            "[Pipeline::{}] Error connecting input pipeline {}: {}",
-                            pid, &output_url, e
-                        );
+                    // avoid linking the same pipeline as input to itself
+                    // as this will create a nasty circle filling up queues.
+                    // In general this does not avoid cycles via more complex constructs.
+                    if !pid.same_instance_as(&output_url) {
+                        if let Err(e) = pipe
+                            .send_mgmt(MgmtMsg::ConnectInput {
+                                input_url: pid.clone(), // ensure we have no port here
+                                target: ConnectTarget::Pipeline(Box::new(addr.clone())),
+                                transactional: true,
+                            })
+                            .await
+                        {
+                            error!(
+                                "[Pipeline::{}] Error connecting input pipeline {}: {}",
+                                pid, &output_url, e
+                            );
+                        }
                     }
                 }
 
