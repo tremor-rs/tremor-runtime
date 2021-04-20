@@ -578,10 +578,128 @@ impl Manager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::url::ports::OUT;
+    use async_std::future::timeout;
+    use tremor_pipeline::EventId;
     use tremor_pipeline::FN_REGISTRY;
 
     use tremor_script::prelude::*;
     use tremor_script::{path::ModulePath, query::Query};
+
+    #[async_std::test]
+    async fn test_pipeline_connect_disconnect() -> Result<()> {
+        let module_path = ModulePath { mounts: vec![] };
+        let query = r#"
+            select event
+            from in
+            into out;
+        "#;
+        let aggr_reg: tremor_script::registry::Aggr = tremor_script::aggr_registry();
+        let q = Query::parse(
+            &module_path,
+            "test_pipeline_connect.trickle",
+            query,
+            vec![],
+            &*FN_REGISTRY.lock()?,
+            &aggr_reg,
+        )?;
+        let config = tremor_pipeline::query::Query(q);
+        let id = TremorUrl::parse("/pipeline/test_pipeline_connect/instance")?;
+        let manager = Manager::new(12);
+        let (handle, sender) = manager.start();
+
+        let (tx, rx) = async_channel::bounded(1);
+        let create = Create { config, id };
+        let create_msg = ManagerMsg::Create(tx, create);
+        sender.send(create_msg).await?;
+        let addr = rx.recv().await??;
+
+        // connect a fake onramp
+        let (onramp_tx, onramp_rx) = async_channel::unbounded();
+        let onramp_url = TremorUrl::parse("/onramp/fake_onramp/instance/out")?;
+        addr.send_mgmt(MgmtMsg::ConnectInput {
+            input_url: onramp_url.clone(),
+            target: ConnectTarget::Onramp(onramp_tx.clone()), // clone avoids the channel to be closed on disconnect below
+            transactional: true,
+        })
+        .await?;
+
+        // connect another fake onramp, not transactional
+        let (onramp2_tx, onramp2_rx) = async_channel::unbounded();
+        let onramp2_url = TremorUrl::parse("/onramp/fake_onramp2/instance/out")?;
+        addr.send_mgmt(MgmtMsg::ConnectInput {
+            input_url: onramp2_url.clone(),
+            target: ConnectTarget::Onramp(onramp2_tx.clone()),
+            transactional: false,
+        })
+        .await?;
+
+        // send a non-cb insight
+        let event_id = EventId::from((0, 0, 1));
+        addr.send_insight(Event {
+            id: event_id.clone(),
+            cb: CbAction::Ack,
+            ..Event::default()
+        })
+        .await?;
+
+        // transactional onramp received it
+        match onramp_rx.recv().await {
+            Ok(onramp::Msg::Cb(CbAction::Ack, cb_id)) => assert_eq!(cb_id, event_id),
+            m => assert!(false, "received unexpected msg: {:?}", m),
+        }
+
+        // non-transactional did not
+        match timeout(Duration::from_millis(100), onramp2_rx.recv()).await {
+            Ok(m) => assert!(false, "Did not expect to receive anything. Got: {:?}", m),
+            Err(_e) => {}
+        };
+
+        // disconnect our fake offramp
+        addr.send_mgmt(MgmtMsg::DisconnectInput(onramp_url)).await?;
+
+        // probe it with an insight
+        let event_id2 = EventId::from((0, 0, 2));
+        addr.send_insight(Event {
+            id: event_id2.clone(),
+            cb: CbAction::Close,
+            ..Event::default()
+        })
+        .await?;
+        // we expect nothing after disconnect, so we run into a timeout
+        match timeout(Duration::from_millis(100), onramp_rx.recv()).await {
+            Ok(m) => assert!(false, "Didnt expect a message. Got: {:?}", m),
+            Err(_e) => {}
+        };
+
+        // second onramp received it, as it is a CB insight
+        match onramp2_rx.recv().await {
+            Ok(onramp::Msg::Cb(CbAction::Close, cb_id)) => assert_eq!(cb_id, event_id2),
+            m => assert!(false, "received unexpected msg: {:?}", m),
+        };
+
+        addr.send_mgmt(MgmtMsg::DisconnectInput(onramp2_url))
+            .await?;
+        // probe it with an insight
+        let event_id3 = EventId::from((0, 0, 3));
+        addr.send_insight(Event {
+            id: event_id3.clone(),
+            cb: CbAction::Open,
+            ..Event::default()
+        })
+        .await?;
+
+        // we expect nothing after disconnect, so we run into a timeout
+        match timeout(Duration::from_millis(100), onramp2_rx.recv()).await {
+            Ok(m) => assert!(false, "Didnt expect a message. Got: {:?}", m),
+            Err(_e) => {}
+        };
+
+        // stopping the manager
+        sender.send(ManagerMsg::Stop).await?;
+        handle.cancel().await;
+        Ok(())
+    }
 
     #[async_std::test]
     async fn test_pipeline_event_error() -> Result<()> {
@@ -613,9 +731,9 @@ mod tests {
         let offramp_url = TremorUrl::parse("/offramp/fake_offramp/instance/in")?;
         // connect a channel so we can receive events from the back of the pipeline :)
         addr.send_mgmt(MgmtMsg::ConnectOutput {
-            port: "out".into(),
-            output_url: offramp_url,
-            target: ConnectTarget::Offramp(offramp_tx),
+            port: OUT,
+            output_url: offramp_url.clone(),
+            target: ConnectTarget::Offramp(offramp_tx.clone()),
         })
         .await?;
 
@@ -659,6 +777,18 @@ mod tests {
                 _ => return Err("Expected 1 msg at out fake offramp!".into()),
             };
         }
+
+        // disconnect the output
+        addr.send_mgmt(MgmtMsg::DisconnectOutput(OUT, offramp_url))
+            .await?;
+
+        // probe it with a signal
+        addr.send(Msg::Signal(Event::default())).await?;
+        // we expect nothing to arrive, so we run into a timeout
+        match timeout(Duration::from_millis(100), offramp_rx.recv()).await {
+            Ok(m) => assert!(false, "Didnt expect to receive something, got: {:?}", m),
+            Err(_e) => {}
+        };
 
         // stopping the manager
         sender.send(ManagerMsg::Stop).await?;
