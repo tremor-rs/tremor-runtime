@@ -306,6 +306,15 @@ impl TremorUrl {
     pub fn scope(&self) -> Scope {
         self.scope
     }
+
+    /// returns true if `self` and `other` refer to the same instance, ignoring the port
+    #[must_use]
+    pub fn same_instance_as(&self, other: &Self) -> bool {
+        self.host == other.host
+            && self.resource_type == other.resource_type
+            && self.artefact == other.artefact
+            && self.instance == other.instance
+    }
 }
 
 impl<'de> Deserialize<'de> for TremorUrl {
