@@ -106,11 +106,11 @@ impl RampReporter {
         if let Some((metrics_input, metrics_addr)) = &self.metrics_pipeline {
             if let Some(input) = metrics_input.instance_port() {
                 for event in events {
-                    if !metrics_addr.try_send(pipeline::Msg::Event {
+                    if let Err(e) = metrics_addr.try_send(pipeline::Msg::Event {
                         input: input.to_string().into(),
                         event,
                     }) {
-                        error!("Failed to send to system metrics pipeline");
+                        error!("Failed to send to system metrics pipeline: {}", e);
                     }
                 }
             }

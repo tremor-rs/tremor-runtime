@@ -229,8 +229,7 @@ impl Manager {
         let c_rx = cf_rx.map(OfframpMsg::Reply);
         let mut to_and_from_offramp_rx = PriorityMerge::new(c_rx, m_rx);
 
-        let mut offramp_url = id.clone();
-        offramp_url.trim_to_instance();
+        let offramp_url = id.clone();
         let offramp_addr = msg_tx.clone();
 
         task::spawn::<_, Result<()>>(async move {
