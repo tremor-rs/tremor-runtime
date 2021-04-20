@@ -1,0 +1,25 @@
+onramp:
+  - id: input
+    type: cb
+    codec: json
+    config:
+      source: "in.json"
+      timeout: 1000
+offramp:
+  - id: cb_out
+    type: cb
+binding:
+  - id: p2p
+    links:
+      "/onramp/input/{i}/out":
+        - "/pipeline/main1/{i}/in"
+      "/pipeline/main1/{i}/out":
+        - "/pipeline/main2/{i}/in"
+      "/pipeline/main2/{i}/out":
+        - "/offramp/cb_out/{i}/in"
+mapping:
+  /binding/p2p/01:
+    i: "01"
+
+
+

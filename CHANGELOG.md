@@ -9,6 +9,7 @@
 * Add syslog codec.
 * Add `$udp.host` and `$udp.port` to allow controling udp packet destinations on a per event basis.
 * Deprecate `udp.dst_*` config, introduce `udp.bind.*` config instead.
+* Allow insights/contraflow events to traverse through multiple connected pipelines
 
 ### Fixes
 

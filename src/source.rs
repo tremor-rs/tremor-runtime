@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::codec::{self, Codec};
 use crate::errors::Error;
 use crate::metrics::RampReporter;
 use crate::onramp;
@@ -20,6 +19,10 @@ use crate::pipeline;
 use crate::preprocessor::{make_preprocessors, preprocess, Preprocessors};
 use crate::url::ports::{ERR, METRICS, OUT};
 use crate::url::TremorUrl;
+use crate::{
+    codec::{self, Codec},
+    pipeline::ConnectTarget,
+};
 
 use crate::Result;
 use async_channel::{self, unbounded, Receiver, Sender};
@@ -301,10 +304,10 @@ where
                                 )
                                 .into());
                             };
-                            let msg = pipeline::MgmtMsg::ConnectOnramp {
-                                id: self.source_id.clone(),
-                                addr: self.tx.clone(),
-                                reply: self.is_transactional,
+                            let msg = pipeline::MgmtMsg::ConnectInput {
+                                input_url: self.source_id.clone(),
+                                target: ConnectTarget::Onramp(self.tx.clone()),
+                                transactional: self.is_transactional,
                             };
                             p.1.send_mgmt(msg).await?;
                             pipelines.push(p);
@@ -677,9 +680,13 @@ mod tests {
             .await?;
         let answer = rx3.recv().await?;
         match answer {
-            pipeline::MgmtMsg::ConnectOnramp { id, reply, .. } => {
-                assert_eq!(id, onramp_url);
-                assert_eq!(reply, false);
+            pipeline::MgmtMsg::ConnectInput {
+                input_url,
+                transactional,
+                ..
+            } => {
+                assert_eq!(input_url, onramp_url);
+                assert_eq!(transactional, false);
             }
             _ => return Err("Invalid Pipeline connect answer.".into()),
         }

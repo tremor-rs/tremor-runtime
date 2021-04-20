@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::codec;
 use crate::errors::{Error, Result};
 use crate::metrics::RampReporter;
 use crate::offramp;
@@ -21,6 +20,7 @@ use crate::pipeline;
 use crate::registry::ServantId;
 use crate::system::{self, World};
 use crate::url::{ResourceType, TremorUrl};
+use crate::{codec, pipeline::ConnectTarget};
 use beef::Cow;
 use hashbrown::HashMap;
 use std::collections::HashSet;
@@ -93,39 +93,25 @@ impl Artefact for Pipeline {
         if let Some(pipeline) = system.reg.find_pipeline(id).await? {
             let mut msgs = Vec::with_capacity(mappings.len());
             for (from, to) in mappings {
-                match to.resource_type() {
-                    //TODO: Check that we really have the right ramp!
+                let target = match to.resource_type() {
                     Some(ResourceType::Offramp) => {
                         if let Some(offramp) = system.reg.find_offramp(&to).await? {
-                            msgs.push(pipeline::MgmtMsg::ConnectOfframp(
-                                from.clone().into(),
-                                to.clone(),
-                                offramp,
-                            ));
+                            ConnectTarget::Offramp(offramp)
                         } else {
                             return Err(format!("Offramp {} not found", to).into());
                         }
                     }
                     Some(ResourceType::Pipeline) => {
-                        info!("[Pipeline:{}] Linking port {} to {}", id, from, to);
+                        // TODO: connect both ways?
                         if let Some(p) = system.reg.find_pipeline(&to).await? {
-                            msgs.push(pipeline::MgmtMsg::ConnectPipeline(
-                                from.clone().into(),
-                                to.clone(),
-                                Box::new(p),
-                            ));
+                            ConnectTarget::Pipeline(Box::new(p))
                         } else {
                             return Err(format!("Pipeline {:?} not found", to).into());
                         }
                     }
                     Some(ResourceType::Onramp) => {
                         if let Some(onramp) = system.reg.find_onramp(&to).await? {
-                            // TODO validate that this onramp supports linked transport before
-                            msgs.push(pipeline::MgmtMsg::ConnectLinkedOnramp(
-                                from.clone().into(),
-                                to.clone(),
-                                onramp,
-                            ));
+                            ConnectTarget::Onramp(onramp)
                         } else {
                             return Err(format!("Onramp {} not found", to).into());
                         }
@@ -133,7 +119,13 @@ impl Artefact for Pipeline {
                     _ => {
                         return Err(format!("Cannot link Pipeline to: {}.", to).into());
                     }
-                }
+                };
+                // link an output to this pipeline via outgoing port
+                msgs.push(pipeline::MgmtMsg::ConnectOutput {
+                    port: Cow::owned(from),
+                    output_url: to,
+                    target,
+                });
             }
             for msg in msgs {
                 pipeline.send_mgmt(msg).await.map_err(|e| -> Error {
@@ -490,9 +482,9 @@ impl Artefact for Binding {
         id: &TremorUrl,
         mappings: HashMap<Self::LinkLHS, Self::LinkRHS>,
     ) -> Result<Self::LinkResult> {
-        let mut pipelines: Vec<(TremorUrl, TremorUrl)> = Vec::new();
-        let mut onramps: Vec<(TremorUrl, TremorUrl)> = Vec::new();
-        let mut offramps: Vec<(TremorUrl, TremorUrl)> = Vec::new();
+        let mut pipelines: Vec<(TremorUrl, TremorUrl)> = Vec::new(); // pipeline -> {onramp, offramp, pipeline}
+        let mut onramps: Vec<(TremorUrl, TremorUrl)> = Vec::new(); // onramp -> pipeline
+        let mut offramps: Vec<(TremorUrl, TremorUrl)> = Vec::new(); // linked offramps -> pipeline
         let mut res = self.clone();
         res.binding.links.clear();
         for (src, dsts) in self.binding.links.clone() {
@@ -567,14 +559,14 @@ impl Artefact for Binding {
                 .await?;
             match to.resource_type() {
                 Some(ResourceType::Offramp) => {
-                    let to2 = to.clone();
                     system
-                        .link_offramp(&to, vec![(from, to2)].into_iter().collect())
+                        .link_offramp(&to, vec![(from, to.clone())].into_iter().collect())
                         .await?;
                 }
                 Some(ResourceType::Pipeline) => {
-                    //TODO: How to reverse link onramps
-                    warn!("Linking pipelines is currently only supported for system pipelines!")
+                    // notify the pipeline we connect to that a pipeline has been connected to its 'in' port
+                    warn!("Linking pipelines is highly experimental! You are on your own, watch your steps!");
+                    // we do the reverse linking from within the pipeline
                 }
                 _ => (),
             }

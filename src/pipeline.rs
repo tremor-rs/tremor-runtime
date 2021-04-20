@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-use crate::errors::Result;
+use crate::errors::{Error, Result};
 use crate::permge::{PriorityMerge, M};
 use crate::registry::ServantId;
 use crate::repository::PipelineArtefact;
@@ -30,10 +30,10 @@ use tremor_pipeline::{CbAction, Event, ExecutableGraph, SignalKind};
 
 const TICK_MS: u64 = 100;
 pub(crate) type Sender = async_channel::Sender<ManagerMsg>;
-type Onramps = halfbrown::HashMap<TremorUrl, (bool, onramp::Addr)>;
+type Inputs = halfbrown::HashMap<TremorUrl, (bool, Input)>;
 type Dests = halfbrown::HashMap<Cow<'static, str>, Vec<(TremorUrl, Dest)>>;
 type Eventset = Vec<(Cow<'static, str>, Event)>;
-/// Address for a a pipeline
+/// Address for a pipeline
 #[derive(Clone)]
 pub struct Addr {
     addr: async_channel::Sender<Msg>,
@@ -95,14 +95,25 @@ pub(crate) enum CfMsg {
 }
 
 #[derive(Debug)]
+pub(crate) enum ConnectTarget {
+    Onramp(onramp::Addr),
+    Offramp(offramp::Addr),
+    Pipeline(Box<Addr>),
+}
+
+#[derive(Debug)]
 pub(crate) enum MgmtMsg {
-    ConnectOfframp(Cow<'static, str>, TremorUrl, offramp::Addr),
-    ConnectPipeline(Cow<'static, str>, TremorUrl, Box<Addr>),
-    ConnectLinkedOnramp(Cow<'static, str>, TremorUrl, onramp::Addr),
-    ConnectOnramp {
-        id: TremorUrl,
-        addr: onramp::Addr,
-        reply: bool,
+    /// input can only ever be connected to the `in` port, so no need to include it here
+    ConnectInput {
+        input_url: TremorUrl,
+        target: ConnectTarget,
+        /// should we send insights to this input
+        transactional: bool,
+    },
+    ConnectOutput {
+        port: Cow<'static, str>,
+        output_url: TremorUrl,
+        target: ConnectTarget,
     },
     DisconnectOutput(Cow<'static, str>, TremorUrl),
     DisconnectInput(TremorUrl),
@@ -119,9 +130,9 @@ pub(crate) enum Msg {
 
 #[derive(Debug)]
 pub enum Dest {
-    Offramp(async_channel::Sender<offramp::Msg>),
+    Offramp(offramp::Addr),
     Pipeline(Addr),
-    LinkedOnramp(async_channel::Sender<onramp::Msg>),
+    LinkedOnramp(onramp::Addr),
 }
 
 impl Dest {
@@ -149,6 +160,35 @@ impl Dest {
             }
         }
         Ok(())
+    }
+}
+
+impl From<ConnectTarget> for Dest {
+    fn from(ct: ConnectTarget) -> Self {
+        match ct {
+            ConnectTarget::Offramp(off) => Self::Offramp(off),
+            ConnectTarget::Onramp(on) => Self::LinkedOnramp(on),
+            ConnectTarget::Pipeline(pipe) => Self::Pipeline(*pipe),
+        }
+    }
+}
+
+/// possible pipeline event inputs, receiving insights
+/// These are the same as Dest, but kept separately for clarity
+#[derive(Debug)]
+pub enum Input {
+    LinkedOfframp(offramp::Addr),
+    Pipeline(Addr),
+    Onramp(onramp::Addr),
+}
+
+impl From<ConnectTarget> for Input {
+    fn from(ct: ConnectTarget) -> Self {
+        match ct {
+            ConnectTarget::Offramp(off) => Self::LinkedOfframp(off),
+            ConnectTarget::Onramp(on) => Self::Onramp(on),
+            ConnectTarget::Pipeline(pipe) => Self::Pipeline(*pipe),
+        }
     }
 }
 
@@ -207,17 +247,56 @@ async fn handle_insight(
     skip_to: Option<usize>,
     insight: Event,
     pipeline: &mut ExecutableGraph,
-    onramps: &Onramps,
+    inputs: &Inputs,
 ) {
     let insight = pipeline.contraflow(skip_to, insight);
     if insight.cb != CbAction::None {
-        for (_k, (send, o)) in onramps {
+        let mut input_iter = inputs.values();
+        let first = input_iter.next();
+        for (send, input) in input_iter {
+            let is_cb = insight.cb.is_cb();
+            if *send || is_cb {
+                if let Err(e) = match input {
+                    Input::Onramp(addr) => addr
+                        .send(onramp::Msg::Cb(insight.cb, insight.id.clone()))
+                        .await
+                        .map_err(Error::from),
+                    Input::Pipeline(addr) => addr.send_insight(insight.clone()).await,
+                    // linked offramps dont support insights yet, although they definitely should
+                    Input::LinkedOfframp(_addr) => {
+                        warn!(
+                            "Linked offramps don't support insights/GD yet, we are deeply sorry!"
+                        );
+                        Ok(())
+                    }
+                } {
+                    error!(
+                        "[Pipeline] failed to send insight to input: {} {:?}",
+                        e, &input
+                    );
+                }
+            }
+        }
+        if let Some((send, input)) = first {
             if *send || insight.cb.is_cb() {
-                if let Err(e) = o
-                    .send(onramp::Msg::Cb(insight.cb, insight.id.clone()))
-                    .await
-                {
-                    error!("[Pipeline] failed to send to onramp: {} {:?}", e, &o);
+                if let Err(e) = match input {
+                    Input::Onramp(addr) => addr
+                        .send(onramp::Msg::Cb(insight.cb, insight.id))
+                        .await
+                        .map_err(Error::from),
+                    Input::Pipeline(addr) => addr.send_insight(insight).await,
+                    // linked offramps dont support insights yet, although they definitely should
+                    Input::LinkedOfframp(_addr) => {
+                        warn!(
+                            "Linked offramps don't support insights/GD yet, we are deeply sorry!"
+                        );
+                        Ok(())
+                    }
+                } {
+                    error!(
+                        "[Pipeline] failed to send insight to input: {} {:?}",
+                        e, &input
+                    );
                 }
             }
         }
@@ -225,7 +304,7 @@ async fn handle_insight(
 }
 
 #[inline]
-async fn handle_insights(pipeline: &mut ExecutableGraph, onramps: &Onramps) {
+async fn handle_insights(pipeline: &mut ExecutableGraph, onramps: &Inputs) {
     if !pipeline.insights.is_empty() {
         let mut insights = Vec::with_capacity(pipeline.insights.len());
         std::mem::swap(&mut insights, &mut pipeline.insights);
@@ -248,11 +327,7 @@ async fn tick(tick_tx: async_channel::Sender<Msg>) {
     }
 }
 
-async fn handle_cf_msg(
-    msg: CfMsg,
-    pipeline: &mut ExecutableGraph,
-    onramps: &Onramps,
-) -> Result<()> {
+async fn handle_cf_msg(msg: CfMsg, pipeline: &mut ExecutableGraph, onramps: &Inputs) -> Result<()> {
     match msg {
         CfMsg::Insight(insight) => handle_insight(None, insight, pipeline, onramps).await,
     }
@@ -269,6 +344,7 @@ fn maybe_send(r: Result<()>) {
 async fn pipeline_task(
     id: TremorUrl,
     mut pipeline: ExecutableGraph,
+    addr: Addr,
     rx: async_channel::Receiver<Msg>,
     cf_rx: async_channel::Receiver<CfMsg>,
     mgmt_rx: async_channel::Receiver<MgmtMsg>,
@@ -278,7 +354,7 @@ async fn pipeline_task(
     pipeline.id = pid.to_string();
 
     let mut dests: Dests = halfbrown::HashMap::new();
-    let mut onramps: Onramps = halfbrown::HashMap::new();
+    let mut inputs: Inputs = halfbrown::HashMap::new();
     let mut eventset: Eventset = Vec::new();
 
     info!("[Pipeline:{}] starting task.", id);
@@ -292,12 +368,12 @@ async fn pipeline_task(
     while let Some(msg) = s.next().await {
         match msg {
             M::C(msg) => {
-                handle_cf_msg(msg, &mut pipeline, &onramps).await?;
+                handle_cf_msg(msg, &mut pipeline, &inputs).await?;
             }
             M::F(Msg::Event { input, event }) => {
                 match pipeline.enqueue(&input, event, &mut eventset) {
                     Ok(()) => {
-                        handle_insights(&mut pipeline, &onramps).await;
+                        handle_insights(&mut pipeline, &inputs).await;
                         maybe_send(send_events(&mut eventset, &mut dests).await);
                     }
                     Err(e) => {
@@ -335,61 +411,82 @@ async fn pipeline_task(
                     } else {
                         format!(" {:?}", e)
                     };
-                    error!("Error handling signal:{}", err_str);
+                    error!("[Pipeline::{}] Error handling signal:{}", pid, err_str);
                 } else {
                     maybe_send(send_signal(&id, signal, &mut dests).await);
-                    handle_insights(&mut pipeline, &onramps).await;
+                    handle_insights(&mut pipeline, &inputs).await;
                     maybe_send(send_events(&mut eventset, &mut dests).await);
                 }
             }
-            M::M(MgmtMsg::ConnectOfframp(output, offramp_id, offramp)) => {
-                info!(
-                    "[Pipeline:{}] connecting {} to offramp {}",
-                    id, output, offramp_id
-                );
-                if let Some(output_dests) = dests.get_mut(&output) {
-                    output_dests.push((offramp_id, Dest::Offramp(offramp)));
-                } else {
-                    dests.insert(output, vec![(offramp_id, Dest::Offramp(offramp))]);
-                }
+            M::M(MgmtMsg::ConnectInput {
+                input_url,
+                target,
+                transactional,
+            }) => {
+                info!("[Pipeline::{}] Connecting {} to 'in'", pid, input_url);
+                inputs.insert(input_url, (transactional, target.into()));
             }
-            M::M(MgmtMsg::ConnectPipeline(output, pipeline_id, pipeline)) => {
+            M::M(MgmtMsg::ConnectOutput {
+                port,
+                output_url,
+                target,
+            }) => {
                 info!(
-                    "[Pipeline:{}] connecting {} to pipeline {}",
-                    id, output, pipeline_id
+                    "[Pipeline::{}] Connecting '{}' to {}",
+                    pid, &port, &output_url
                 );
-                if let Some(output_dests) = dests.get_mut(&output) {
-                    output_dests.push((pipeline_id, Dest::Pipeline(*pipeline)));
-                } else {
-                    dests.insert(output, vec![(pipeline_id, Dest::Pipeline(*pipeline))]);
+                // notify other pipeline about a new input
+                if let ConnectTarget::Pipeline(pipe) = &target {
+                    if let Err(e) = pipe
+                        .send_mgmt(MgmtMsg::ConnectInput {
+                            input_url: pid.clone(), // ensure we have no port here
+                            target: ConnectTarget::Pipeline(Box::new(addr.clone())),
+                            transactional: true,
+                        })
+                        .await
+                    {
+                        error!(
+                            "[Pipeline::{}] Error connecting input pipeline {}: {}",
+                            pid, &output_url, e
+                        );
+                    }
                 }
-            }
-            M::M(MgmtMsg::ConnectLinkedOnramp(output, onramp_id, onramp)) => {
-                info!(
-                    "[Pipeline:{}] connecting {} to linked onramp {}",
-                    id, output, onramp_id
-                );
-                if let Some(output_dests) = dests.get_mut(&output) {
-                    output_dests.push((onramp_id, Dest::LinkedOnramp(onramp)));
+
+                if let Some(output_dests) = dests.get_mut(&port) {
+                    output_dests.push((output_url, target.into()));
                 } else {
-                    dests.insert(output, vec![(onramp_id, Dest::LinkedOnramp(onramp))]);
+                    dests.insert(port, vec![(output_url, target.into())]);
                 }
-            }
-            M::M(MgmtMsg::ConnectOnramp { id, addr, reply }) => {
-                onramps.insert(id, (reply, addr));
             }
             M::M(MgmtMsg::DisconnectOutput(output, to_delete)) => {
+                info!(
+                    "[Pipeline::{}] Disconnecting {} from '{}'",
+                    pid, &to_delete, &output
+                );
+
                 let mut remove = false;
                 if let Some(output_vec) = dests.get_mut(&output) {
-                    output_vec.retain(|(this_id, _)| this_id != &to_delete);
+                    while let Some(index) = output_vec.iter().position(|(k, _)| k == &to_delete) {
+                        if let (delete_url, Dest::Pipeline(pipe)) = output_vec.swap_remove(index) {
+                            if let Err(e) =
+                                pipe.send_mgmt(MgmtMsg::DisconnectInput(id.clone())).await
+                            {
+                                error!(
+                                    "[Pipeline::{}] Error disconnecting input pipeline {}: {}",
+                                    pid, &delete_url, e
+                                );
+                            }
+                        }
+                    }
                     remove = output_vec.is_empty();
                 }
                 if remove {
                     dests.remove(&output);
                 }
             }
-            M::M(MgmtMsg::DisconnectInput(onramp_id)) => {
-                onramps.remove(&onramp_id);
+            M::M(MgmtMsg::DisconnectInput(input_url)) => {
+                info!("[Pipeline::{}] Disconnecting {} from 'in'", pid, &input_url);
+                inputs.remove(&input_url);
             }
         }
     }
@@ -457,10 +554,19 @@ impl Manager {
         let (mgmt_tx, mgmt_rx) = bounded::<MgmtMsg>(self.qsize);
 
         task::spawn(tick(tx.clone()));
+
+        let addr = Addr::new(tx, cf_tx, mgmt_tx, req.id);
         task::Builder::new()
             .name(format!("pipeline-{}", id))
-            .spawn(pipeline_task(id, pipeline, rx, cf_rx, mgmt_rx))?;
-        Ok(Addr::new(tx, cf_tx, mgmt_tx, req.id))
+            .spawn(pipeline_task(
+                id,
+                pipeline,
+                addr.clone(),
+                rx,
+                cf_rx,
+                mgmt_rx,
+            ))?;
+        Ok(addr)
     }
 }
 
@@ -501,11 +607,11 @@ mod tests {
         let (offramp_tx, offramp_rx) = async_channel::unbounded();
         let offramp_url = TremorUrl::parse("/offramp/fake_offramp/instance/in")?;
         // connect a channel so we can receive events from the back of the pipeline :)
-        addr.send_mgmt(MgmtMsg::ConnectOfframp(
-            "out".into(),
-            offramp_url,
-            offramp_tx,
-        ))
+        addr.send_mgmt(MgmtMsg::ConnectOutput {
+            port: "out".into(),
+            output_url: offramp_url,
+            target: ConnectTarget::Offramp(offramp_tx),
+        })
         .await?;
 
         // sending an event, that triggers an error
@@ -522,9 +628,10 @@ mod tests {
 
         // send a second event, that gets through
         let mut second_event = Event::default();
-        let mut obj = Value::object_with_capacity(1);
-        obj.insert("non_existent", Value::from(true))?;
-        second_event.data = obj.into();
+        second_event.data = literal!({
+            "non_existent": true
+        })
+        .into();
         addr.send(Msg::Event {
             event: second_event,
             input: "in".into(),

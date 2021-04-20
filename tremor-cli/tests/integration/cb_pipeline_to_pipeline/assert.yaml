@@ -1,0 +1,7 @@
+status: 0
+name: cb_pipeline_to_pipeline
+asserts:
+  - source: fg.err.log
+    contains:
+      - |
+        All required CB events received.
