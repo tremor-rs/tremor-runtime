@@ -89,6 +89,12 @@ impl<T> From<async_channel::SendError<T>> for Error {
     }
 }
 
+impl<T> From<async_channel::TrySendError<T>> for Error {
+    fn from(e: async_channel::TrySendError<T>) -> Self {
+        Self::from(format!("{:?}", e))
+    }
+}
+
 impl From<tremor_script::errors::CompilerError> for Error {
     fn from(e: tremor_script::errors::CompilerError) -> Self {
         e.error().into()
