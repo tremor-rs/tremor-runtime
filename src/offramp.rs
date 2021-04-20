@@ -31,6 +31,7 @@ use async_std::stream::StreamExt; // for .next() on PriorityMerge
 use async_std::task::{self, JoinHandle};
 use beef::Cow;
 use halfbrown::HashMap;
+use pipeline::ConnectTarget;
 use std::borrow::{Borrow, BorrowMut};
 use std::fmt;
 use tremor_common::ids::OfframpIdGen;
@@ -228,7 +229,10 @@ impl Manager {
         let c_rx = cf_rx.map(OfframpMsg::Reply);
         let mut to_and_from_offramp_rx = PriorityMerge::new(c_rx, m_rx);
 
-        let offramp_url = id.clone();
+        let mut offramp_url = id.clone();
+        offramp_url.trim_to_instance();
+        let offramp_addr = msg_tx.clone();
+
         task::spawn::<_, Result<()>>(async move {
             let mut pipelines: HashMap<TremorUrl, pipeline::Addr> = HashMap::new();
 
@@ -276,7 +280,8 @@ impl Manager {
                                     send_to_pipelines(&offramp_url, &mut pipelines, e).await;
                                 }
                             }
-                            Msg::Connect { port, id, addr } => {
+                            Msg::Connect { port, mut id, addr } => {
+                                id.trim_to_instance();
                                 if port.eq_ignore_ascii_case(IN.as_ref()) {
                                     // connect incoming pipeline
                                     info!(
@@ -312,10 +317,23 @@ impl Manager {
                                     } else {
                                         dest_pipelines.insert(port.clone(), vec![p]);
                                     }
-                                    offramp.add_dest_pipeline(port, id, *addr);
+                                    offramp.add_dest_pipeline(port, id.clone(), (*addr).clone());
+
+                                    // send connectInput msg to pipeline
+                                    if let Err(e) = addr
+                                        .send_mgmt(pipeline::MgmtMsg::ConnectInput {
+                                            input_url: offramp_url.clone(),
+                                            target: ConnectTarget::Offramp(offramp_addr.clone()),
+                                            transactional: false, // TODO: Linked Offramps do not support insights yet
+                                        })
+                                        .await
+                                    {
+                                        error!("[Offramp::{}] Error connecting this offramp as input to pipeline {}: {}", offramp_url, &id, e);
+                                    }
                                 }
                             }
-                            Msg::Disconnect { port, id, tx } => {
+                            Msg::Disconnect { port, mut id, tx } => {
+                                id.trim_to_instance();
                                 info!(
                                     "[Offramp::{}] Disconnecting pipeline {} on port {}",
                                     offramp_url, id, port
