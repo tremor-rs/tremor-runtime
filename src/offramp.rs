@@ -280,8 +280,7 @@ impl Manager {
                                     send_to_pipelines(&offramp_url, &mut pipelines, e).await;
                                 }
                             }
-                            Msg::Connect { port, mut id, addr } => {
-                                id.trim_to_instance();
+                            Msg::Connect { port, id, addr } => {
                                 if port.eq_ignore_ascii_case(IN.as_ref()) {
                                     // connect incoming pipeline
                                     info!(
@@ -332,8 +331,7 @@ impl Manager {
                                     }
                                 }
                             }
-                            Msg::Disconnect { port, mut id, tx } => {
-                                id.trim_to_instance();
+                            Msg::Disconnect { port, id, tx } => {
                                 info!(
                                     "[Offramp::{}] Disconnecting pipeline {} on port {}",
                                     offramp_url, id, port
