@@ -782,10 +782,12 @@ mod tests {
         addr.send_mgmt(MgmtMsg::DisconnectOutput(OUT, offramp_url))
             .await?;
 
+        // give the disconnect time to execute
+        task::sleep(Duration::from_millis(100)).await;
         // probe it with a signal
         addr.send(Msg::Signal(Event::default())).await?;
         // we expect nothing to arrive, so we run into a timeout
-        match timeout(Duration::from_millis(200), offramp_rx.recv()).await {
+        match timeout(Duration::from_millis(100), offramp_rx.recv()).await {
             Ok(m) => assert!(false, "Didnt expect to receive something, got: {:?}", m),
             Err(_e) => {}
         };
