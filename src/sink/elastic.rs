@@ -460,7 +460,7 @@ impl Elastic {
         });
         let mut meta = literal!({ "error": error_msg });
         if let Some(correlation) = event.correlation_meta() {
-            meta.insert("correlation".into(), correlation);
+            meta.try_insert("correlation", correlation);
         }
 
         if let Err(e) = self.response_sender.send(((data, meta).into(), ERR)).await {
