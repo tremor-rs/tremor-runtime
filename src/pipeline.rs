@@ -650,7 +650,7 @@ mod tests {
         }
 
         // non-transactional did not
-        match timeout(Duration::from_millis(100), onramp2_rx.recv()).await {
+        match timeout(Duration::from_millis(200), onramp2_rx.recv()).await {
             Ok(m) => assert!(false, "Did not expect to receive anything. Got: {:?}", m),
             Err(_e) => {}
         };
@@ -667,7 +667,7 @@ mod tests {
         })
         .await?;
         // we expect nothing after disconnect, so we run into a timeout
-        match timeout(Duration::from_millis(100), onramp_rx.recv()).await {
+        match timeout(Duration::from_millis(200), onramp_rx.recv()).await {
             Ok(m) => assert!(false, "Didnt expect a message. Got: {:?}", m),
             Err(_e) => {}
         };
@@ -690,7 +690,7 @@ mod tests {
         .await?;
 
         // we expect nothing after disconnect, so we run into a timeout
-        match timeout(Duration::from_millis(100), onramp2_rx.recv()).await {
+        match timeout(Duration::from_millis(200), onramp2_rx.recv()).await {
             Ok(m) => assert!(false, "Didnt expect a message. Got: {:?}", m),
             Err(_e) => {}
         };
@@ -785,7 +785,7 @@ mod tests {
         // probe it with a signal
         addr.send(Msg::Signal(Event::default())).await?;
         // we expect nothing to arrive, so we run into a timeout
-        match timeout(Duration::from_millis(100), offramp_rx.recv()).await {
+        match timeout(Duration::from_millis(200), offramp_rx.recv()).await {
             Ok(m) => assert!(false, "Didnt expect to receive something, got: {:?}", m),
             Err(_e) => {}
         };
