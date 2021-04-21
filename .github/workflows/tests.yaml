@@ -39,7 +39,7 @@ jobs:
           PROPTEST_CASES: 2500
           RUSTFLAGS: -C target-feature=+avx,+avx2,+sse4.2
         with:
-          version: "0.17.0"
+          version: "0.18.0-alpha2"
           args: " --exclude-files target* tremor-cli tremor-api deprecated **/errors.rs --out Lcov --all"
       - name: Coveralls
         uses: coverallsapp/github-action@master
