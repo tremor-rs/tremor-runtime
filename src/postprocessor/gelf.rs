@@ -69,6 +69,7 @@ impl Gelf {
 }
 
 impl Postprocessor for Gelf {
+    #[cfg(not(tarpaulin_include))]
     fn name(&self) -> &str {
         "gelf"
     }
