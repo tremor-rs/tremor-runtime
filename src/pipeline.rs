@@ -117,6 +117,8 @@ pub(crate) enum MgmtMsg {
     },
     DisconnectOutput(Cow<'static, str>, TremorUrl),
     DisconnectInput(TremorUrl),
+    // only for testing
+    Echo(async_channel::Sender<()>),
 }
 
 #[derive(Debug)]
@@ -340,6 +342,14 @@ fn maybe_send(r: Result<()>) {
     }
 }
 
+#[allow(dead_code)]
+async fn echo(addr: &Addr) -> Result<()> {
+    let (tx, rx) = async_channel::bounded(1);
+    addr.send_mgmt(MgmtMsg::Echo(tx)).await?;
+    rx.recv().await?;
+    Ok(())
+}
+
 #[allow(clippy::too_many_lines)]
 async fn pipeline_task(
     id: TremorUrl,
@@ -463,14 +473,14 @@ async fn pipeline_task(
                     dests.insert(port, vec![(output_url, target.into())]);
                 }
             }
-            M::M(MgmtMsg::DisconnectOutput(output, to_delete)) => {
+            M::M(MgmtMsg::DisconnectOutput(port, to_delete)) => {
                 info!(
                     "[Pipeline::{}] Disconnecting {} from '{}'",
-                    pid, &to_delete, &output
+                    pid, &to_delete, &port
                 );
 
                 let mut remove = false;
-                if let Some(output_vec) = dests.get_mut(&output) {
+                if let Some(output_vec) = dests.get_mut(&port) {
                     while let Some(index) = output_vec.iter().position(|(k, _)| k == &to_delete) {
                         if let (delete_url, Dest::Pipeline(pipe)) = output_vec.swap_remove(index) {
                             if let Err(e) =
@@ -486,12 +496,20 @@ async fn pipeline_task(
                     remove = output_vec.is_empty();
                 }
                 if remove {
-                    dests.remove(&output);
+                    dests.remove(&port);
                 }
             }
             M::M(MgmtMsg::DisconnectInput(input_url)) => {
                 info!("[Pipeline::{}] Disconnecting {} from 'in'", pid, &input_url);
                 inputs.remove(&input_url);
+            }
+            M::M(MgmtMsg::Echo(sender)) => {
+                if let Err(e) = sender.send(()).await {
+                    error!(
+                        "[Pipeline::{}] Error responding to echo message: {}",
+                        pid, e
+                    );
+                }
             }
         }
     }
@@ -586,6 +604,30 @@ mod tests {
     use tremor_script::prelude::*;
     use tremor_script::{path::ModulePath, query::Query};
 
+    /// ensure the last message has been processed by waiting for the manager to answer
+    /// leveraging the sequential execution at the manager task
+    /// this only works reliably for MgmtMsgs, not for insights or events/signals
+    async fn manager_fence(addr: &Addr) -> Result<()> {
+        echo(&addr).await
+    }
+    async fn wait_for_event(
+        offramp_rx: &async_channel::Receiver<offramp::Msg>,
+        wait_for: Option<Duration>,
+    ) -> Result<Event> {
+        loop {
+            match timeout(
+                wait_for.unwrap_or(Duration::from_secs(36000)),
+                offramp_rx.recv(),
+            )
+            .await
+            {
+                Ok(Ok(offramp::Msg::Event { event, .. })) => return Ok(event),
+                Ok(_) => continue, // ignore anything else, like signals
+                Err(_) => return Err("timeout waiting for event at offramp".into()),
+            }
+        }
+    }
+
     #[async_std::test]
     async fn test_pipeline_connect_disconnect() -> Result<()> {
         let module_path = ModulePath { mounts: vec![] };
@@ -633,6 +675,7 @@ mod tests {
             transactional: false,
         })
         .await?;
+        manager_fence(&addr).await?;
 
         // send a non-cb insight
         let event_id = EventId::from((0, 0, 1));
@@ -644,19 +687,18 @@ mod tests {
         .await?;
 
         // transactional onramp received it
-        match onramp_rx.recv().await {
-            Ok(onramp::Msg::Cb(CbAction::Ack, cb_id)) => assert_eq!(cb_id, event_id),
+        match timeout(Duration::from_millis(200), onramp_rx.recv()).await {
+            Ok(Ok(onramp::Msg::Cb(CbAction::Ack, cb_id))) => assert_eq!(cb_id, event_id),
+            Err(_) => assert!(false, "No msg received."),
             m => assert!(false, "received unexpected msg: {:?}", m),
         }
 
         // non-transactional did not
-        match timeout(Duration::from_millis(200), onramp2_rx.recv()).await {
-            Ok(m) => assert!(false, "Did not expect to receive anything. Got: {:?}", m),
-            Err(_e) => {}
-        };
+        assert!(onramp2_rx.is_empty());
 
         // disconnect our fake offramp
         addr.send_mgmt(MgmtMsg::DisconnectInput(onramp_url)).await?;
+        manager_fence(&addr).await?; // ensure the last message has been processed
 
         // probe it with an insight
         let event_id2 = EventId::from((0, 0, 2));
@@ -680,6 +722,8 @@ mod tests {
 
         addr.send_mgmt(MgmtMsg::DisconnectInput(onramp2_url))
             .await?;
+        manager_fence(&addr).await?; // ensure the last message has been processed
+
         // probe it with an insight
         let event_id3 = EventId::from((0, 0, 3));
         addr.send_insight(Event {
@@ -736,6 +780,7 @@ mod tests {
             target: ConnectTarget::Offramp(offramp_tx.clone()),
         })
         .await?;
+        manager_fence(&addr).await?;
 
         // sending an event, that triggers an error
         addr.send(Msg::Event {
@@ -744,9 +789,13 @@ mod tests {
         })
         .await?;
 
-        match offramp_rx.try_recv() {
-            Err(async_channel::TryRecvError::Empty) => (), // ok
-            _ => return Err("Expected no msg at out fake offramp!".into()),
+        // no event at offramp
+        match timeout(Duration::from_millis(100), offramp_rx.recv()).await {
+            Ok(Ok(m @ offramp::Msg::Event { .. })) => {
+                assert!(false, "Did not expect an event, but got: {:?}", m)
+            }
+            Ok(Err(e)) => return Err(e.into()),
+            _ => {}
         };
 
         // send a second event, that gets through
@@ -761,36 +810,29 @@ mod tests {
         })
         .await?;
 
-        loop {
-            println!("checking fake offramp for event");
-            match offramp_rx.recv().await {
-                Ok(offramp::Msg::Event { event, .. }) => {
-                    let (value, _meta) = event.data.suffix().clone().into_parts();
-                    assert_eq!(Value::from(true), value); // check that we received what we sent in, not the faulty event
-                    break;
-                }
-                Ok(offramp::Msg::Signal(_)) => {
-                    // ignore
-                    continue;
-                }
-                _ => return Err("Expected 1 msg at out fake offramp!".into()),
-            };
-        }
-        assert!(offramp_rx.is_empty());
+        let event = wait_for_event(&offramp_rx, None).await?;
+        let (value, _meta) = event.data.suffix().clone().into_parts();
+        assert_eq!(Value::from(true), value); // check that we received what we sent in, not the faulty event
 
         // disconnect the output
         addr.send_mgmt(MgmtMsg::DisconnectOutput(OUT, offramp_url))
             .await?;
+        manager_fence(&addr).await?;
 
-        // give the disconnect time to execute
-        task::sleep(Duration::from_millis(100)).await;
+        // probe it with an Event
+        addr.send(Msg::Event {
+            event: Event::default(),
+            input: "in".into(),
+        })
+        .await?;
 
-        // probe it with a signal
-        addr.send(Msg::Signal(Event::default())).await?;
         // we expect nothing to arrive, so we run into a timeout
-        match timeout(Duration::from_millis(100), offramp_rx.recv()).await {
-            Ok(m) => assert!(false, "Didnt expect to receive something, got: {:?}", m),
-            Err(_e) => {}
+        match timeout(Duration::from_millis(200), offramp_rx.recv()).await {
+            Ok(Ok(m @ offramp::Msg::Event { .. })) => {
+                assert!(false, "Didnt expect to receive something, got: {:?}", m)
+            }
+            Ok(Err(e)) => return Err(e.into()),
+            _ => {}
         };
 
         // stopping the manager
