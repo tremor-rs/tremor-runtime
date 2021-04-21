@@ -74,6 +74,7 @@ impl Addr {
         Ok(self.addr.send(msg).await?)
     }
 
+    #[cfg(not(tarpaulin_include))]
     pub(crate) fn try_send(&self, msg: Msg) -> Result<()> {
         Ok(self.addr.try_send(msg)?)
     }
@@ -166,6 +167,7 @@ impl Dest {
 }
 
 impl From<ConnectTarget> for Dest {
+    #[cfg(not(tarpaulin_include))]
     fn from(ct: ConnectTarget) -> Self {
         match ct {
             ConnectTarget::Offramp(off) => Self::Offramp(off),
@@ -185,6 +187,7 @@ pub enum Input {
 }
 
 impl From<ConnectTarget> for Input {
+    #[cfg(not(tarpaulin_include))]
     fn from(ct: ConnectTarget) -> Self {
         match ct {
             ConnectTarget::Offramp(off) => Self::LinkedOfframp(off),
@@ -336,6 +339,7 @@ async fn handle_cf_msg(msg: CfMsg, pipeline: &mut ExecutableGraph, onramps: &Inp
     Ok(())
 }
 
+#[cfg(not(tarpaulin_include))]
 fn maybe_send(r: Result<()>) {
     if let Err(e) = r {
         error!("Failed to send : {}", e)
@@ -594,7 +598,6 @@ impl Manager {
 }
 
 #[cfg(test)]
-#[cfg(not(tarpaulin_include))]
 mod tests {
     use super::*;
     use crate::url::ports::OUT;
