@@ -53,6 +53,7 @@ pub(crate) async fn list_objects(client: &Client, bucket_name: &str) -> Result<V
     Ok(body)
 }
 
+
 pub(crate) async fn add_object_with_slice(
     client: &Client,
     bucket_name: &str,
@@ -63,7 +64,6 @@ pub(crate) async fn add_object_with_slice(
         "https://storage.googleapis.com/upload/storage/v1/b/{}/o?uploadType=media&name={}",
         bucket_name, object_name
     );
-    
     let mut body = client
         .post(url)
         .body(content)
