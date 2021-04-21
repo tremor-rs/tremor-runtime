@@ -103,14 +103,17 @@ impl Sink for Cb {
         Ok(())
     }
 
+    #[cfg(not(tarpaulin_include))]
     fn is_active(&self) -> bool {
         true
     }
 
+    #[cfg(not(tarpaulin_include))]
     fn auto_ack(&self) -> bool {
         false
     }
 
+    #[cfg(not(tarpaulin_include))]
     fn default_codec(&self) -> &str {
         "json"
     }

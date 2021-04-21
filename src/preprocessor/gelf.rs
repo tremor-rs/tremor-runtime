@@ -71,18 +71,13 @@ fn decode_gelf(bin: &[u8]) -> Result<GelfSegment> {
     match *bin {
         // WELF magic header - Wayfair uncompressed GELF
         [0x1f, 0x3c, ref rest @ ..] => {
-            // If we are less then 2 byte we can not be a proper Package
-            if bin.len() < 2 {
-                Err(ErrorKind::InvalidGelfHeader(bin.len(), None).into())
-            } else {
-                // we would allow up to 255 chunks
-                Ok(GelfSegment {
-                    id: rand::rngs::OsRng.next_u64(),
-                    seq: 0,
-                    count: 1,
-                    data: rest.to_vec(),
-                })
-            }
+            // we would allow up to 255 chunks
+            Ok(GelfSegment {
+                id: rand::rngs::OsRng.next_u64(),
+                seq: 0,
+                count: 1,
+                data: rest.to_vec(),
+            })
         }
 
         // GELF magic header
