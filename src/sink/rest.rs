@@ -283,6 +283,7 @@ enum SendTaskInMsg {
 
 pub struct Rest {
     uid: u64,
+    sink_url: TremorUrl,
     config: Config,
     num_inflight_requests: Arc<AtomicMaxCounter>,
     is_linked: bool,
@@ -300,6 +301,7 @@ impl offramp::Impl for Rest {
             let client = surf::client();
             Ok(SinkManager::new_box(Self {
                 uid: 0,
+                sink_url: TremorUrl::from_offramp_id("rest")?, // dummy
                 config,
                 num_inflight_requests,
                 is_linked: false,
@@ -324,13 +326,15 @@ impl Sink for Rest {
         event: Event,
     ) -> ResultVec {
         if self.is_linked && event.is_batch {
-            let err_msg = "Batched events are not supported for linked rest offramps.";
-            if event.transactional {
-                if let Some(reply_tx) = self.reply_channel.as_ref() {
-                    reply_tx.send(sink::Reply::Insight(event.to_fail())).await?;
-                }
-            }
-            return Err(err_msg.into());
+            error!(
+                "[Sink::{}] Batched events are not supported for linked rest offramps.",
+                &self.sink_url
+            );
+            return Ok(if event.transactional {
+                Some(vec![sink::Reply::Insight(event.to_fail())])
+            } else {
+                None
+            });
         }
         let sink_uid = self.uid;
         let id = event.id.clone();
@@ -391,7 +395,7 @@ impl Sink for Rest {
                                     .await?
                             }
                             Err(e) => {
-                                error!("Error sending HTTP request: {}", e);
+                                error!("[Sink::Rest] Error sending HTTP request: {}", e);
                                 codec_task_channel
                                     .send(CodecTaskInMsg::ReportFailure {
                                         id,
@@ -411,7 +415,7 @@ impl Sink for Rest {
                 Ok::<(), Error>(())
             });
         } else {
-            error!("Dropped data due to overload");
+            error!("[Sink::{}] Dropped data due to overload", self.sink_url);
             codec_task_channel
                 .send(CodecTaskInMsg::ReportFailure {
                     id,
@@ -452,6 +456,7 @@ impl Sink for Rest {
         let endpoint = self.config.endpoint.clone();
         let config_headers = self.config.headers.clone();
         let cloned_sink_url = sink_url.clone();
+        self.sink_url = sink_url.clone();
 
         // inbound channel towards codec task
         // sending events to be turned into requests
@@ -491,7 +496,7 @@ impl Sink for Rest {
         true
     }
     fn auto_ack(&self) -> bool {
-        true
+        false
     }
 }
 
