@@ -23,6 +23,7 @@
 * Fix windowed select queries not tracking the `transactional` status of an Event
 * Fix windowed select queries not tracking the Events that constitute an outgoing aggregated event
 * Avoid several offramps to swallow fail insights.
+* Send correlation metadata for send error events in elastic sink
 
 ## 0.11.0
 
