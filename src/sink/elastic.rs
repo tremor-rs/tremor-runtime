@@ -327,12 +327,12 @@ impl Elastic {
                 Ok(req.send()?.into_response::<BulkResponse>()?)
             })();
 
+            // The truncation we do is sensible since we're only looking at a short timeframe
             let time = start.elapsed().as_millis() as u64;
-            let mut m = Value::object_with_capacity(1);
+            let mut insight_meta = Value::object_with_capacity(1);
             let cb = match &r {
                 Ok(bulk_response) => {
-                    // The truncation we do is sensible since we're only looking at a short timeframe
-                    m.try_insert("time", Value::from(time));
+                    insight_meta.try_insert("time", Value::from(time));
                     if is_linked {
                         // send out response events for each item
                         // success events via OUT port
@@ -379,34 +379,33 @@ impl Elastic {
                 Err(e) => {
                     // request failed
                     // TODO how to update error metric here?
-                    m.try_insert("error", Value::from(e.to_string()));
+                    insight_meta.try_insert("error", Value::from(e.to_string()));
                     if is_linked {
                         // if we have more than one event (batched), correlation will be an array with `null` or an actual value
                         // for the event at the batch position
+                        let mut meta = Value::object_with_capacity(1);
                         match correlation_values.len() {
                             1 => {
                                 if let Some(cv) = correlation_values.pop().flatten() {
-                                    m.try_insert("correlation", cv);
+                                    meta.try_insert("correlation", cv);
                                 }
                             }
                             l if l > 1 => {
-                                m.try_insert("correlation", Value::from(correlation_values));
+                                meta.try_insert("correlation", Value::from(correlation_values));
                             }
                             _ => {}
                         };
                         // send error event via ERR port
-                        let mut error_data = Object::with_capacity(1);
-                        let mut source = Object::with_capacity(2);
-                        source.insert("event_id".into(), Value::from(id.to_string()));
-                        source.insert(
-                            "origin".into(),
-                            response_origin_uri
-                                .map_or_else(Value::null, |uri| Value::from(uri.to_string())),
-                        );
-                        error_data.insert("success".into(), Value::from(false));
-                        error_data.insert("source".into(), Value::from(source));
-                        error_data.insert("error".into(), Value::from(e.to_string()));
-                        responses.push(((error_data, Value::null()).into(), ERR));
+                        let error_data = literal!({
+                            "source": {
+                                "event_id": id.to_string(),
+                                "origin": response_origin_uri.map(|uri| uri.to_string()),
+                            },
+                            "success": false,
+                            "error": e.to_string()
+
+                        });
+                        responses.push(((error_data, meta).into(), ERR));
                     };
                     CbAction::Fail
                 }
@@ -423,7 +422,7 @@ impl Elastic {
                 if transactional {
                     let insight = Event {
                         id,
-                        data: (Value::null(), m).into(),
+                        data: (Value::null(), insight_meta).into(),
                         ingest_ns,
                         op_meta,
                         cb,
@@ -454,13 +453,12 @@ impl Elastic {
     async fn handle_error(&mut self, event: Event, error_msg: &'static str) {
         self.send_insight(event.to_fail()).await;
 
-        let mut data = Object::with_capacity(2);
-        let mut meta = Object::with_capacity(2);
-        data.insert("success".into(), Value::from(false));
-        data.insert("error".into(), Value::from(error_msg));
-        data.insert("payload".into(), event.data.suffix().value().clone_static());
-        meta.insert("error".into(), Value::from(error_msg));
-
+        let data = literal!({
+            "success": false,
+            "error": error_msg,
+            "payload": event.data.suffix().value().clone_static(),
+        });
+        let mut meta = literal!({ "error": error_msg });
         if let Some(correlation) = event.correlation_meta() {
             meta.insert("correlation".into(), correlation);
         }
