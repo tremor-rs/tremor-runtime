@@ -30,7 +30,7 @@ use halfbrown::HashMap;
 use http::HeaderMap;
 use reqwest::Client;
 use simd_json::json;
-use tremor_pipeline::{EventId, OpMeta};
+use tremor_pipeline::{EventIdGenerator, OpMeta};
 use tremor_value::Value;
 
 pub struct GoogleCloudStorage {
@@ -40,6 +40,11 @@ pub struct GoogleCloudStorage {
     qos_facility: Box<dyn SinkQoS>,
     reply_channel: Option<Sender<sink::Reply>>,
     is_linked: bool,
+    preprocessors: Preprocessors,
+    postprocessors: Postprocessors,
+    codec: Box<dyn Codec>,
+    sink_url: TremorUrl,
+    event_id_gen: EventIdGenerator,
 }
 
 #[derive(Deserialize)]
@@ -49,12 +54,12 @@ pub struct Config {
 
 enum StorageCommand {
     Create(String, String),
-    Add(String, String, String),
-    Remove(String, String),
+    Add(String, String, Value<'static>),
+    RemoveObject(String, String),
     ListBuckets(String),
     Fetch(String, String),
     Download(String, String),
-    Delete(String),
+    RemoveBucket(String),
     ListObjects(String),
     Unknown,
 }
@@ -66,12 +71,12 @@ impl std::fmt::Display for StorageCommand {
             "{}",
             match *self {
                 StorageCommand::Create(_, _) => "create_bucket",
-                StorageCommand::Add(_, _, _) => "add_object",
-                StorageCommand::Remove(_, _) => "remove_object",
+                StorageCommand::Add(_, _, _) => "upload_object",
+                StorageCommand::RemoveObject(_, _) => "remove_object",
                 StorageCommand::ListBuckets(_) => "list_buckets",
                 StorageCommand::Fetch(_, _) => "get_object",
                 StorageCommand::Download(_, _) => "download_object",
-                StorageCommand::Delete(_) => "delete_bucket",
+                StorageCommand::RemoveBucket(_) => "delete_bucket",
                 StorageCommand::ListObjects(_) => "list_objects",
                 StorageCommand::Unknown => "Unknown",
             }
@@ -95,6 +100,11 @@ impl offramp::Impl for GoogleCloudStorage {
                 qos_facility: Box::new(QoSFacilities::recoverable(hostport.to_string())),
                 reply_channel: None,
                 is_linked: false,
+                preprocessors: vec![],
+                postprocessors: vec![],
+                codec: Box::new(crate::codec::null::Null {}),
+                sink_url: TremorUrl::from_offramp_id("gcs")?,
+                event_id_gen: EventIdGenerator::new(0), // Fake ID overwritten in init
             }))
         } else {
             Err("Offramp Google Cloud Storage requires a config".into())
@@ -102,101 +112,44 @@ impl offramp::Impl for GoogleCloudStorage {
     }
 }
 
-fn parse_command(value: &Value<'_>) -> Result<StorageCommand> {
-    if let Value::Object(o) = value {
-        let cmd_name: &str = if let Some(Value::String(cmd_name)) = o.get("command") {
-            cmd_name
+macro_rules! parse_arg {
+    ($field_name: expr, $o: expr) => {
+        if let Some(Value::String(snot)) = $o.get($field_name) {
+            snot.to_string()
         } else {
-            return Err("Invalid Command, expected `command` field".into());
-        };
+            return Err(format!("Invalid Command, expected `{}` field", $field_name).into());
+        }
+    };
+}
+
+fn parse_command(value: &Value) -> Result<StorageCommand> {
+    if let Value::Object(o) = value {
+        let cmd_name: &str = &parse_arg!("command", o);
 
         let command = match cmd_name {
-            "fetch" => StorageCommand::Fetch(
-                if let Some(Value::String(bucket_name)) = o.get("bucket") {
-                    bucket_name.to_string()
+            "fetch" => StorageCommand::Fetch(parse_arg!("bucket", o), parse_arg!("object", o)),
+            "list_buckets" => StorageCommand::ListBuckets(parse_arg!("project_id", o)),
+            "list_objects" => StorageCommand::ListObjects(parse_arg!("bucket", o)),
+            "upload_object" => StorageCommand::Add(
+                parse_arg!("bucket", o),
+                parse_arg!("object", o),
+                if let Some(body) = o.get("body") {
+                    body.clone().into_static()
                 } else {
-                    return Err("Invalid Command, expected `bucket` field".into());
-                },
-                if let Some(Value::String(object_name)) = o.get("object") {
-                    object_name.to_string()
-                } else {
-                    return Err("Invalid Command, expected `object` field".into());
-                },
-            ),
-            "list_buckets" => StorageCommand::ListBuckets(
-                if let Some(Value::String(project_id)) = o.get("project_id") {
-                    project_id.to_string()
-                } else {
-                    return Err("Invalid Command, expected `project_id` field".into());
+                    return Err("Invalid Command, expected `body` field".into());
                 },
             ),
-            "list_objects" => StorageCommand::ListObjects(
-                if let Some(Value::String(bucket_name)) = o.get("bucket") {
-                    bucket_name.to_string()
-                } else {
-                    return Err("Invalid Command, expected `bucket` field".into());
-                },
-            ),
-            "add_object" => StorageCommand::Add(
-                if let Some(Value::String(bucket_name)) = o.get("bucket") {
-                    bucket_name.to_string()
-                } else {
-                    return Err("Invalid Command, expected `bucket` field".into());
-                },
-                if let Some(Value::String(object_name)) = o.get("object") {
-                    object_name.to_string()
-                } else {
-                    return Err("Invalid Command, expected `object` field".into());
-                },
-                if let Some(Value::String(file_path)) = o.get("file_path") {
-                    file_path.to_string()
-                } else {
-                    return Err("Invalid Command, expected `file_path` field".into());
-                },
-            ),
-            "remove_object" => StorageCommand::Remove(
-                if let Some(Value::String(bucket_name)) = o.get("bucket") {
-                    bucket_name.to_string()
-                } else {
-                    return Err("Invalid Command, expected `bucket` field".into());
-                },
-                if let Some(Value::String(object_name)) = o.get("object") {
-                    object_name.to_string()
-                } else {
-                    return Err("Invalid Command, expected `object` field".into());
-                },
-            ),
-            "create_bucket" => StorageCommand::Create(
-                if let Some(Value::String(project_id)) = o.get("project_id") {
-                    project_id.to_string()
-                } else {
-                    return Err("Invalid Command, expected `project_id` field".into());
-                },
-                if let Some(Value::String(bucket_name)) = o.get("bucket") {
-                    bucket_name.to_string()
-                } else {
-                    return Err("Invalid Command, expected `bucket` field".into());
-                },
-            ),
-            "delete_bucket" => {
-                StorageCommand::Delete(if let Some(Value::String(bucket_name)) = o.get("bucket") {
-                    bucket_name.to_string()
-                } else {
-                    return Err("Invalid Command, expected `bucket` field".into());
-                })
+            "remove_object" => {
+                StorageCommand::RemoveObject(parse_arg!("bucket", o), parse_arg!("object", o))
             }
-            "download_object" => StorageCommand::Download(
-                if let Some(Value::String(bucket_name)) = o.get("bucket") {
-                    bucket_name.to_string()
-                } else {
-                    return Err("Invalid Command, expected `bucket` field".into());
-                },
-                if let Some(Value::String(object_name)) = o.get("object") {
-                    object_name.to_string()
-                } else {
-                    return Err("Invalid Command, expected `object` field".into());
-                },
-            ),
+            "create_bucket" => {
+                StorageCommand::Create(parse_arg!("project_id", o), parse_arg!("bucket", o))
+            }
+            "remove_bucket" => StorageCommand::RemoveBucket(parse_arg!("bucket", o)),
+
+            "download_object" => {
+                StorageCommand::Download(parse_arg!("bucket", o), parse_arg!("object", o))
+            }
             _ => StorageCommand::Unknown,
         };
         return Ok(command);
@@ -209,10 +162,11 @@ fn parse_command(value: &Value<'_>) -> Result<StorageCommand> {
 impl Sink for GoogleCloudStorage {
     async fn terminate(&mut self) {}
 
+    #[allow(clippy::too_many_lines)]
     async fn on_event(
         &mut self,
         _input: &str,
-        _codec: &mut dyn Codec,
+        codec: &mut dyn Codec,
         _codec_map: &HashMap<String, Box<dyn Codec>>,
         mut event: Event,
     ) -> ResultVec {
@@ -224,33 +178,77 @@ impl Sink for GoogleCloudStorage {
             remote
             // TODO - Qos checks
         };
+
+        let mut response = Vec::new();
+        let maybe_correlation = event.correlation_meta();
         for value in event.value_iter() {
             let command = parse_command(value)?;
-            let command_str = command.to_string();
-            let response = match command {
+            let _command_str = command.to_string();
+            match command {
                 StorageCommand::Fetch(bucket_name, object_name) => {
-                    storage::get_object(&remote, &bucket_name, &object_name).await?
+                    response.push(make_command_response(
+                        "fetch",
+                        storage::get_object(&remote, &bucket_name, &object_name).await?,
+                    ));
                 }
                 StorageCommand::ListBuckets(project_id) => {
-                    storage::list_buckets(&remote, &project_id).await?
+                    response.push(make_command_response(
+                        "list_buckets",
+                        storage::list_buckets(&remote, &project_id).await?,
+                    ));
                 }
                 StorageCommand::ListObjects(bucket_name) => {
-                    storage::list_objects(&remote, &bucket_name).await?
+                    response.push(make_command_response(
+                        "list_objects",
+                        storage::list_objects(&remote, &bucket_name).await?,
+                    ));
                 }
-                StorageCommand::Add(bucket_name, object, file_path) => {
-                    storage::add_object(&remote, &bucket_name, &object, &file_path).await?
+                StorageCommand::Add(bucket_name, object, body) => {
+                    response.push(make_command_response(
+                        "upload_object",
+                        upload_object(
+                            &remote,
+                            &bucket_name,
+                            &object,
+                            &body,
+                            codec,
+                            event.ingest_ns,
+                            &mut self.postprocessors,
+                        )
+                        .await?,
+                    ));
                 }
-                StorageCommand::Remove(bucket_name, object) => {
-                    storage::delete_object(&remote, &bucket_name, &object).await?
+                StorageCommand::RemoveObject(bucket_name, object) => {
+                    response.push(make_command_response(
+                        "remove_object",
+                        storage::delete_object(&remote, &bucket_name, &object).await?,
+                    ));
                 }
                 StorageCommand::Create(project_id, bucket_name) => {
-                    storage::create_bucket(&remote, &project_id, &bucket_name).await?
+                    response.push(make_command_response(
+                        "create_bucket",
+                        storage::create_bucket(&remote, &project_id, &bucket_name).await?,
+                    ));
                 }
-                StorageCommand::Delete(bucket_name) => {
-                    storage::delete_bucket(&remote, &bucket_name).await?
+                StorageCommand::RemoveBucket(bucket_name) => {
+                    response.push(make_command_response(
+                        "remove_bucket",
+                        storage::delete_bucket(&remote, &bucket_name).await?,
+                    ));
                 }
                 StorageCommand::Download(bucket_name, object_name) => {
-                    storage::download_object(&remote, &bucket_name, &object_name).await?
+                    response.push(make_command_response(
+                        "download_object",
+                        download_object(
+                            &remote,
+                            &bucket_name,
+                            &object_name,
+                            &self.sink_url,
+                            codec,
+                            &mut self.preprocessors,
+                        )
+                        .await?,
+                    ));
                 }
                 StorageCommand::Unknown => {
                     warn!(
@@ -265,36 +263,36 @@ impl Sink for GoogleCloudStorage {
                     .into());
                 }
             };
-            let response: Value = json!({
-                "cmd": command_str,
-                "data": response
-            })
-            .into();
-            if self.is_linked {
-                if let Some(reply_channel) = &self.reply_channel {
-                    reply_channel
-                        .send(sink::Reply::Response(
-                            OUT,
-                            Event {
-                                id: EventId::new(1, 2, 3),
-                                data: LineValue::new(vec![], |_| ValueAndMeta::from(response)),
-                                ingest_ns: nanotime(),
-                                origin_uri: Some(EventOriginUri {
-                                    uid: 0,
-                                    scheme: "gRPC".into(),
-                                    host: "".into(),
-                                    port: None,
-                                    path: vec![],
-                                }),
-                                kind: None,
-                                is_batch: false,
-                                cb: CbAction::None,
-                                op_meta: OpMeta::default(),
-                                transactional: false,
-                            },
-                        ))
-                        .await?;
+        }
+        if self.is_linked {
+            if let Some(reply_channel) = &self.reply_channel {
+                let mut meta = Object::with_capacity(3);
+                if let Some(correlation) = maybe_correlation {
+                    meta.insert_nocheck("correlation".into(), correlation);
                 }
+
+                reply_channel
+                    .send(sink::Reply::Response(
+                        OUT,
+                        Event {
+                            id: self.event_id_gen.next_id(),
+                            data: (response, meta).into(),
+                            ingest_ns: nanotime(),
+                            origin_uri: Some(EventOriginUri {
+                                uid: 0,
+                                scheme: "gRPC".into(),
+                                host: "".into(),
+                                port: None,
+                                path: vec![],
+                            }),
+                            kind: None,
+                            is_batch: false,
+                            cb: CbAction::None,
+                            op_meta: OpMeta::default(),
+                            transactional: false,
+                        },
+                    ))
+                    .await?;
             }
         }
 
@@ -309,18 +307,23 @@ impl Sink for GoogleCloudStorage {
     #[allow(clippy::too_many_arguments)]
     async fn init(
         &mut self,
-        _sink_uid: u64,
+        sink_uid: u64,
         _sink_url: &TremorUrl,
-        _codec: &dyn Codec,
+        codec: &dyn Codec,
         _codec_map: &HashMap<String, Box<dyn Codec>>,
-        _processors: Processors<'_>,
+        processors: Processors<'_>,
         is_linked: bool,
         reply_channel: Sender<sink::Reply>,
     ) -> Result<()> {
+        self.event_id_gen = EventIdGenerator::new(sink_uid);
+        self.postprocessors = make_postprocessors(processors.post)?;
+        self.preprocessors = make_preprocessors(processors.pre)?;
         self.reply_channel = Some(reply_channel);
+        self.codec = codec.boxed_clone();
         self.is_linked = is_linked;
         Ok(())
     }
+
     async fn on_signal(&mut self, signal: Event) -> ResultVec {
         if self.is_down && self.qos_facility.probe(signal.ingest_ns) {
             self.is_down = false;
@@ -342,4 +345,58 @@ impl Sink for GoogleCloudStorage {
     fn auto_ack(&self) -> bool {
         false
     }
+}
+
+async fn upload_object(
+    client: &Client,
+    bucket_name: &str,
+    object_name: &str,
+    data: &Value<'_>,
+    codec: &dyn Codec,
+    ingest_ns: u64,
+    postprocessors: &mut [Box<dyn Postprocessor>],
+) -> Result<Value<'static>> {
+    let mut body: Vec<u8> = vec![];
+    let codec_in_use = None;
+    let codec = codec_in_use.unwrap_or(codec);
+    let encoded = codec.encode(data)?;
+    let mut processed = postprocess(postprocessors, ingest_ns, encoded)?;
+    for processed_elem in &mut processed {
+        body.append(processed_elem);
+    }
+    storage::add_object_with_slice(client, bucket_name, object_name, body).await
+}
+
+async fn download_object(
+    client: &Client,
+    bucket_name: &str,
+    object_name: &str,
+    sink_url: &TremorUrl,
+    codec: &mut dyn Codec,
+    preprocessors: &mut [Box<dyn Preprocessor>],
+) -> Result<Value<'static>> {
+    let response_bytes = storage::download_object(client, bucket_name, object_name).await?;
+    let mut ingest_ns = nanotime();
+    let preprocessed = preprocess(preprocessors, &mut ingest_ns, response_bytes, sink_url)?;
+    let _meta = Value::object_with_capacity(2);
+    let mut res = Vec::with_capacity(preprocessed.len());
+    for pp in preprocessed {
+        let mut pp = pp;
+        let body = codec
+            .decode(&mut pp, ingest_ns)?
+            .unwrap_or_else(Value::object);
+        res.push(body.into_static());
+    }
+    Ok(Value::Array(res))
+}
+
+#[allow(clippy::needless_pass_by_value)] //TODO: Remove before PR update
+fn make_command_response(cmd: &str, value: Value) -> Value<'static> {
+    // TODO: Refactor after meging main into branch, replace json! with literal! and remove into()
+    let val: Value = json!({
+        "cmd": cmd,
+        "data": value
+    })
+    .into();
+    val.into_static()
 }
