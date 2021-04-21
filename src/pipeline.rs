@@ -765,7 +765,6 @@ mod tests {
             println!("checking fake offramp for event");
             match offramp_rx.recv().await {
                 Ok(offramp::Msg::Event { event, .. }) => {
-                    println!("{:?}", event);
                     let (value, _meta) = event.data.suffix().clone().into_parts();
                     assert_eq!(Value::from(true), value); // check that we received what we sent in, not the faulty event
                     break;
@@ -777,6 +776,7 @@ mod tests {
                 _ => return Err("Expected 1 msg at out fake offramp!".into()),
             };
         }
+        assert!(offramp_rx.is_empty());
 
         // disconnect the output
         addr.send_mgmt(MgmtMsg::DisconnectOutput(OUT, offramp_url))
@@ -784,6 +784,7 @@ mod tests {
 
         // give the disconnect time to execute
         task::sleep(Duration::from_millis(100)).await;
+
         // probe it with a signal
         addr.send(Msg::Signal(Event::default())).await?;
         // we expect nothing to arrive, so we run into a timeout
