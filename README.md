@@ -86,6 +86,13 @@ Tremor runs in a docker image. If you wish to build a local image, clone this re
 
 Note that since the image is building tremor in release mode it requires some serious resources. We recommend allowing docker to use at least **12 but better 16 gigabytes of memory** and as many cores as there are to spare. Depending on the system building, the image can take up to an hour.
 
+Providing too little resources to the docker machine can destabalize the docker build process. If you're encountering logs/errors like:
+```
+(signal: 9, SIGKILL: kill)
+# OR 
+ERROR: Service 'tremor' failed to build : The command '/bin/sh -c cargo build --release --all --verbose' returned a non-zero code: 101
+```
+It is likely that your docker resources are starved. Consider increasing your resources ([Windows](https://docs.docker.com/docker-for-windows/#resources)/[Mac](https://docs.docker.com/docker-for-mac/#resources)) before trying again, posting in Discord, or raising an issue.
 
 ### Local builds
 
