@@ -180,7 +180,6 @@ impl Sink for GoogleCloudStorage {
         let maybe_correlation = event.correlation_meta();
         for value in event.value_iter() {
             let command = parse_command(value)?;
-            let _command_str = command.to_string();
             match command {
                 StorageCommand::Fetch(bucket_name, object_name) => {
                     response.push(make_command_response(
@@ -263,7 +262,7 @@ impl Sink for GoogleCloudStorage {
         }
         if self.is_linked {
             if let Some(reply_channel) = &self.reply_channel {
-                let mut meta = Object::with_capacity(3);
+                let mut meta = Object::with_capacity(1);
                 if let Some(correlation) = maybe_correlation {
                     meta.insert_nocheck("correlation".into(), correlation);
                 }
@@ -375,7 +374,6 @@ async fn download_object(
     let response_bytes = storage::download_object(client, bucket_name, object_name).await?;
     let mut ingest_ns = nanotime();
     let preprocessed = preprocess(preprocessors, &mut ingest_ns, response_bytes, sink_url)?;
-    let _meta = Value::object_with_capacity(2);
     let mut res = Vec::with_capacity(preprocessed.len());
     for pp in preprocessed {
         let mut pp = pp;
