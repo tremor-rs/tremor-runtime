@@ -126,11 +126,7 @@ pub fn lookup(name: &str, config: &Option<OpConfig>) -> Result<Box<dyn Offramp>>
         "tcp" => tcp::Tcp::from_config(config),
         "udp" => udp::Udp::from_config(config),
         "ws" => ws::Ws::from_config(config),
-<<<<<<< HEAD
-=======
-        "otel" => otel::OpenTelemetry::from_config(config),
         "gcs" => gcs::GoogleCloudStorage::from_config(config),
->>>>>>> c749f4ff (Initial draft of Google Cloud Storage connector)
         _ => Err(format!("Offramp {} not known", name).into()),
     }
 }
