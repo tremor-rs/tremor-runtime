@@ -12,10 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::HashMap;
-
 use crate::errors::Result;
 use reqwest::Client;
+use std::collections::HashMap;
 use tremor_value::Value;
 
 pub(crate) async fn get_object(
@@ -52,7 +51,6 @@ pub(crate) async fn list_objects(client: &Client, bucket_name: &str) -> Result<V
     let body = tremor_value::parse_to_value(&mut body)?.into_static();
     Ok(body)
 }
-
 
 pub(crate) async fn add_object_with_slice(
     client: &Client,

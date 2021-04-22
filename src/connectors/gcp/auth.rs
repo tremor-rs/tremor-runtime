@@ -20,14 +20,13 @@ use crate::errors::Result;
 use gouth::Token;
 use reqwest::header::HeaderMap;
 use reqwest::Client;
-use std::io::Read;
 
-pub(crate) async fn authenticate_bearer(_pem_path: &str) -> Result<String> {
+pub(crate) async fn authenticate_bearer() -> Result<String> {
     Ok(Token::new()?.header_value()?.to_string())
 }
 
-pub(crate) async fn json_api_client(pem_path: &str, extra_headers: &HeaderMap) -> Result<Client> {
-    let bearer = authenticate_bearer(pem_path).await?;
+pub(crate) async fn json_api_client(extra_headers: &HeaderMap) -> Result<Client> {
+    let bearer = authenticate_bearer().await?;
     let mut headers = reqwest::header::HeaderMap::new();
     headers.insert(
         "authorization",

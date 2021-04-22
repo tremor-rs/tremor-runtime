@@ -29,11 +29,11 @@ use futures::executor::block_on;
 use halfbrown::HashMap;
 use http::HeaderMap;
 use reqwest::Client;
-use simd_json::json;
 use tremor_pipeline::{EventIdGenerator, OpMeta};
 use tremor_value::Value;
 
 pub struct GoogleCloudStorage {
+    #[allow(dead_code)]
     config: Config,
     remote: Option<Client>,
     is_down: bool,
@@ -48,9 +48,7 @@ pub struct GoogleCloudStorage {
 }
 
 #[derive(Deserialize)]
-pub struct Config {
-    pem: String,
-}
+pub struct Config {}
 
 enum StorageCommand {
     Create(String, String),
@@ -91,7 +89,7 @@ impl offramp::Impl for GoogleCloudStorage {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
             let headers = HeaderMap::new();
-            let remote = Some(block_on(auth::json_api_client(&config.pem, &headers))?);
+            let remote = Some(block_on(auth::json_api_client(&headers))?);
             let hostport = "storage.googleapis.com:443";
             Ok(SinkManager::new_box(Self {
                 config,
@@ -146,7 +144,6 @@ fn parse_command(value: &Value) -> Result<StorageCommand> {
                 StorageCommand::Create(parse_arg!("project_id", o), parse_arg!("bucket", o))
             }
             "remove_bucket" => StorageCommand::RemoveBucket(parse_arg!("bucket", o)),
-
             "download_object" => {
                 StorageCommand::Download(parse_arg!("bucket", o), parse_arg!("object", o))
             }
@@ -173,7 +170,7 @@ impl Sink for GoogleCloudStorage {
         let remote = if let Some(remote) = &self.remote {
             remote
         } else {
-            self.remote = Some(auth::json_api_client(&self.config.pem, &HeaderMap::new()).await?);
+            self.remote = Some(auth::json_api_client(&HeaderMap::new()).await?);
             let remote = self.remote.as_ref().ok_or("Client error!")?;
             remote
             // TODO - Qos checks
@@ -390,13 +387,10 @@ async fn download_object(
     Ok(Value::Array(res))
 }
 
-#[allow(clippy::needless_pass_by_value)] //TODO: Remove before PR update
 fn make_command_response(cmd: &str, value: Value) -> Value<'static> {
-    // TODO: Refactor after meging main into branch, replace json! with literal! and remove into()
-    let val: Value = json!({
+    literal!({
         "cmd": cmd,
         "data": value
     })
-    .into();
-    val.into_static()
+    .into_static()
 }
