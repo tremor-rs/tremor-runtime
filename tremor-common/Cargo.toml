@@ -6,8 +6,8 @@ edition = "2018"
 license = "Apache-2.0"
 name = "tremor-common"
 readme = "README.md"
-version = "0.11.0"
+version = "0.11.1"
 
 [dependencies]
 async-std = "1"
-rand = { version = "0.8", features = ["small_rng"] }
+rand = {version = "0.8", features = ["small_rng"]}
