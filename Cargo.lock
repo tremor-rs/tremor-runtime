@@ -4504,9 +4504,9 @@ dependencies = [
 
 [[package]]
 name = "reqwest"
-version = "0.11.2"
+version = "0.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bf12057f289428dbf5c591c74bf10392e4a8003f993405a902f20117019022d4"
+checksum = "2296f2fac53979e8ccbc4a1136b25dcefd37be9ed7e4a1f6b05a6029c84ff124"
 dependencies = [
  "base64 0.13.0",
  "bytes 1.0.1",
@@ -4946,7 +4946,7 @@ dependencies = [
  "flate2",
  "futures 0.3.14",
  "percent-encoding 2.1.0",
- "reqwest 0.11.2",
+ "reqwest 0.11.3",
  "serde",
  "serde_json",
  "tokio 1.4.0",
@@ -6376,7 +6376,7 @@ dependencies = [
  "rdkafka-sys",
  "regex",
  "rental",
- "reqwest 0.11.2",
+ "reqwest 0.11.3",
  "rmp-serde",
  "serde",
  "serde_derive",
