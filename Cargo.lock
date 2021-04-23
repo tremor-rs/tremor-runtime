@@ -513,7 +513,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "93610ce1c035e8a273fe56a19852e42798f3c019ca2726e52d2971197f116525"
 dependencies = [
  "flate2",
- "http 0.2.3",
+ "http 0.2.4",
  "log",
  "rustls 0.17.0",
  "serde",
@@ -530,7 +530,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fe174d1b67f7b2bafed829c09db039301eb5841f66e43be2cf60b326e7f8e2cc"
 dependencies = [
  "flate2",
- "http 0.2.3",
+ "http 0.2.4",
  "log",
  "url 2.2.1",
 ]
@@ -2229,7 +2229,7 @@ dependencies = [
  "futures-core",
  "futures-sink",
  "futures-util",
- "http 0.2.3",
+ "http 0.2.4",
  "indexmap",
  "slab",
  "tokio 0.2.25",
@@ -2249,7 +2249,7 @@ dependencies = [
  "futures-core",
  "futures-sink",
  "futures-util",
- "http 0.2.3",
+ "http 0.2.4",
  "indexmap",
  "slab",
  "tokio 1.4.0",
@@ -2389,9 +2389,9 @@ dependencies = [
 
 [[package]]
 name = "http"
-version = "0.2.3"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7245cd7449cc792608c3c8a9eaf69bd4eabbabf802713748fd739c98b82f0747"
+checksum = "527e8c9ac747e28542699a951517aa9a6945af506cd1f2e1b53a576c17b6cc11"
 dependencies = [
  "bytes 1.0.1",
  "fnv",
@@ -2417,7 +2417,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13d5ff830006f7646652e057693569bfe0d51760c0085a071769d142a205111b"
 dependencies = [
  "bytes 0.5.6",
- "http 0.2.3",
+ "http 0.2.4",
 ]
 
 [[package]]
@@ -2427,7 +2427,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5dfb77c123b4e2f72a2069aeae0b4b4949cc7e966df277813fc16347e7549737"
 dependencies = [
  "bytes 1.0.1",
- "http 0.2.3",
+ "http 0.2.4",
  "pin-project-lite 0.2.6",
 ]
 
@@ -2536,7 +2536,7 @@ dependencies = [
  "futures-core",
  "futures-util",
  "h2 0.2.7",
- "http 0.2.3",
+ "http 0.2.4",
  "http-body 0.3.1",
  "httparse",
  "httpdate",
@@ -2560,7 +2560,7 @@ dependencies = [
  "futures-core",
  "futures-util",
  "h2 0.3.2",
- "http 0.2.3",
+ "http 0.2.4",
  "http-body 0.4.1",
  "httparse",
  "httpdate",
@@ -2749,7 +2749,7 @@ dependencies = [
  "curl-sys",
  "flume",
  "futures-lite",
- "http 0.2.3",
+ "http 0.2.4",
  "log",
  "once_cell",
  "slab",
@@ -4478,7 +4478,7 @@ dependencies = [
  "encoding_rs",
  "futures-core",
  "futures-util",
- "http 0.2.3",
+ "http 0.2.4",
  "http-body 0.3.1",
  "hyper 0.13.10",
  "hyper-tls 0.4.3",
@@ -4513,7 +4513,7 @@ dependencies = [
  "encoding_rs",
  "futures-core",
  "futures-util",
- "http 0.2.3",
+ "http 0.2.4",
  "http-body 0.4.1",
  "hyper 0.14.4",
  "hyper-rustls",
@@ -6078,7 +6078,7 @@ dependencies = [
  "futures-core",
  "futures-util",
  "h2 0.3.2",
- "http 0.2.3",
+ "http 0.2.4",
  "http-body 0.4.1",
  "hyper 0.14.4",
  "percent-encoding 2.1.0",
@@ -6354,7 +6354,7 @@ dependencies = [
  "hashbrown 0.11.2",
  "hdrhistogram",
  "hostname",
- "http 0.2.3",
+ "http 0.2.4",
  "http-types",
  "indexmap",
  "lazy_static",
@@ -6542,7 +6542,7 @@ dependencies = [
  "base64 0.12.3",
  "byteorder",
  "bytes 0.5.6",
- "http 0.2.3",
+ "http 0.2.4",
  "httparse",
  "input_buffer 0.3.1",
  "log",
@@ -6561,7 +6561,7 @@ dependencies = [
  "base64 0.13.0",
  "byteorder",
  "bytes 1.0.1",
- "http 0.2.3",
+ "http 0.2.4",
  "httparse",
  "input_buffer 0.4.0",
  "log",

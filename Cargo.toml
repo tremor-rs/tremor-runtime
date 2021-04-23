@@ -128,7 +128,7 @@ tremor-otelapis = "0.1"
 
 # gcp
 gouth = {version = "0.1"}
-http = "0.2.3"
+http = "0.2.4"
 reqwest = "0.11.2"
 
 [dependencies.tungstenite]
