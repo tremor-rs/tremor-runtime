@@ -691,7 +691,8 @@ mod tests {
         .await?;
 
         // transactional onramp received it
-        match timeout(Duration::from_millis(200), onramp_rx.recv()).await {
+        // chose exceptionally big timeout, which we will only hit in the bad case that stuff isnt working, normally this should return fine
+        match timeout(Duration::from_millis(10000), onramp_rx.recv()).await {
             Ok(Ok(onramp::Msg::Cb(CbAction::Ack, cb_id))) => assert_eq!(cb_id, event_id),
             Err(_) => assert!(false, "No msg received."),
             m => assert!(false, "received unexpected msg: {:?}", m),
