@@ -49,7 +49,8 @@ help:
 ###############################################################################
 
 image:
-	docker-compose build
+	$(eval BRANCH_HASH='$(shell git rev-parse --abbrev-ref HEAD):$(shell git rev-parse HEAD)')
+	docker-compose build --build-arg BRANCH_HASH=$(BRANCH_HASH)
 
 demo: image
 	-docker-compose -f demo/demo.yaml rm -fsv
