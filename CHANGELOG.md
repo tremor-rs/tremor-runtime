@@ -15,6 +15,7 @@
 
 ### Fixes
 
+* Inform docker builders that lack of resources may crash builds
 * Fix CI runners to work with caching
 * Fix dependencies for `tremor-value` and `tremor-common`
 * Fix docker entrypoint not forwarding arguments to tremor binary, unless `--` is used before them
