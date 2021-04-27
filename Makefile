@@ -3,6 +3,8 @@ DOCKER_VSN=$(shell grep 'ARG tag' docker/tremor-runtime.dockerfile | sed 's/.*=/
 CARGO_VSN=$(shell grep '^version' Cargo.toml | sed -e 's/.*=[^"]*"//' -e 's/"$$//')
 VSN=$(DOCKER_VSN)
 YEAR=2018-2021
+VERSION_BRANCH='$(shell git rev-parse --abbrev-ref HEAD)')
+VERSION_HASH='$(shell git rev-parse HEAD)')
 
 RELEASE_TARGETS := \
 	x86_64-unknown-linux-gnu \
@@ -49,8 +51,6 @@ help:
 ###############################################################################
 
 image:
-	$(eval VERSION_BRANCH='$(shell git rev-parse --abbrev-ref HEAD)')
-	$(eval VERSION_HASH='$(shell git rev-parse HEAD)')
 	docker-compose build --build-arg VERSION_BRANCH=$(VERSION_BRANCH) --build-arg VERSION_HASH=$(VERSION_HASH)
 
 demo: image

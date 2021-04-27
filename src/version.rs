@@ -13,16 +13,31 @@
 // limitations under the License.
 
 use rdkafka::util::get_rdkafka_version;
+use env::var_os;
 
 /// Version of the tremor crate;
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-#[cfg(not(debug_assertions))]
 /// Long version include build info
-pub const VERSION_LONG: &str = env!("CARGO_PKG_VERSION");
+let mut long_version_arr: [&str; 4] = [env!("CARGO_PKG_VERSION")];
+
+match env::var_os("VERSION_BRANCH") {
+  Some(branch) => 
+    match branch {
+      "main" => (),
+      _ => {
+        long_version_arr[1] = branch;
+        long_version_arr[2] = if let Some(hash) = env::var_os("VERSION_HASH") {hash} else {""}
+      }
+    },
+  None => ()
+}
+
 #[cfg(debug_assertions)]
-/// Long version include build info
-pub const VERSION_LONG: &str = concat!(env!("CARGO_PKG_VERSION"), " (DEBUG)");
+// Conditionally include " (DEBUG)"
+long_version_arr[3] = " (DEBUG)";
+
+pub const VERSION_LONG: &str = long_version_arr.join();
 
 #[cfg(not(debug_assertions))]
 /// Checks if a we are in a debug build
