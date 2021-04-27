@@ -191,7 +191,7 @@ impl Operator for Grouper {
                 Ok(event.into())
             } else {
                 groups.overflow += 1;
-                Ok(vec![("overflow".into(), event)].into())
+                Ok(vec![(OVERFLOW, event)].into())
             }
         } else {
             Ok(vec![(ERR, event)].into())
