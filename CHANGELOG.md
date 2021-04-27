@@ -1,5 +1,12 @@
 # Changelog
 
+### New features
+
+* Add `op` key to KV offramp responses in order to differentiate responses by the command that triggered them
+
+### Fixes
+
+* KV offramp sends error responses for each failed command
 ## 0.11.1
 
 ### New features

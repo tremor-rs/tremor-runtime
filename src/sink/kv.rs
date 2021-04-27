@@ -20,8 +20,10 @@ use crate::source::prelude::*;
 use async_channel::Sender;
 use halfbrown::HashMap;
 use serde::Deserialize;
+use sink::handle_insight;
 use sled::{CompareAndSwapError, IVec};
 use std::boxed::Box;
+use tremor_pipeline::{EventId, EventIdGenerator};
 use tremor_value::literal;
 
 #[derive(Deserialize, Debug, Clone)]
@@ -31,6 +33,8 @@ pub struct Config {
 pub struct Kv {
     sink_url: TremorUrl,
     event_origin_uri: EventOriginUri,
+    idgen: EventIdGenerator,
+    reply_tx: Sender<Reply>,
     db: sled::Db,
 }
 
@@ -47,14 +51,11 @@ fn decode(mut v: Option<IVec>, codec: &mut dyn Codec, ingest_ns: u64) -> Result<
     }
 }
 
-fn ok(v: Value<'static>) -> Value<'static> {
-    let mut reply = Value::object_with_capacity(1);
-    if reply.insert("ok", v).is_ok() {
-        reply
-    } else {
-        // ALLOW: We know this never can happen since `reply` is created as an object
-        unreachable!()
-    }
+fn ok(op: &'static str, v: Value<'static>) -> Value<'static> {
+    literal!({
+        "op": op,
+        "ok": v
+    })
 }
 
 impl Kv {
@@ -65,37 +66,30 @@ impl Kv {
         ingest_ns: u64,
     ) -> Result<Value<'static>> {
         match cmd {
-            Command::Get { key } => decode(self.db.get(key)?, codec, ingest_ns).map(ok),
-            Command::Put { key, value } => {
-                decode(self.db.insert(key, codec.encode(value)?)?, codec, ingest_ns).map(ok)
+            Command::Get { key } => {
+                decode(self.db.get(key)?, codec, ingest_ns).map(|v| ok("get", v))
             }
-            Command::Delete { key } => decode(self.db.remove(key)?, codec, ingest_ns).map(ok),
+            Command::Put { key, value } => {
+                decode(self.db.insert(key, codec.encode(value)?)?, codec, ingest_ns)
+                    .map(|v| ok("put", v))
+            }
+            Command::Delete { key } => {
+                decode(self.db.remove(key)?, codec, ingest_ns).map(|v| ok("delete", v))
+            }
             Command::Cas { key, old, new } => {
                 if let Err(CompareAndSwapError { current, proposed }) = self.db.compare_and_swap(
                     key,
                     old.map(|v| codec.encode(v)).transpose()?,
                     new.map(|v| codec.encode(v)).transpose()?,
                 )? {
-                    let mut err = Value::object_with_capacity(2);
-                    err.insert(
-                        "current",
-                        current.map(|v| {
-                            let v: &[u8] = &v;
-                            Value::Bytes(Cow::from(Vec::from(v)))
-                        }),
-                    )?;
-                    err.insert(
-                        "proposed",
-                        proposed.map(|v| {
-                            let v: &[u8] = &v;
-                            Value::Bytes(Cow::from(Vec::from(v)))
-                        }),
-                    )?;
-                    let mut reply = Value::object_with_capacity(1);
-                    reply.insert("error", err)?;
-                    Ok(reply)
+                    Ok(literal!({
+                        "op": "cas",
+                        "error": {
+                            "current": decode(current, codec, ingest_ns)?,
+                            "proposed": decode(proposed, codec, ingest_ns)?                        }
+                    }))
                 } else {
-                    Ok(ok(Value::null()))
+                    Ok(ok("cas", Value::null()))
                 }
             }
             Command::Scan { start, end } => {
@@ -107,16 +101,38 @@ impl Kv {
                 };
                 let mut res = Vec::with_capacity(32);
                 for e in i {
-                    let mut kv = Value::object_with_capacity(2);
-
                     let (key, e) = e?;
                     let key: &[u8] = &key;
-                    kv.insert("key", Value::Bytes(key.to_vec().into()))?;
-                    kv.insert("value", decode(Some(e), codec, ingest_ns)?)?;
-                    res.push(kv)
+                    res.push(literal!({
+                        "key": Value::Bytes(key.to_vec().into()),
+                        "value": decode(Some(e), codec, ingest_ns)
+                    }))
                 }
-                Ok(Value::from(res))
+                Ok(ok("scan", Value::from(res)))
             }
+        }
+    }
+
+    fn handle_error(&self, err: &Error, id: &EventId, ingest_ns: u64, correlation: Option<&Value>) {
+        error!("[Sink::{}] {}", self.sink_url, err);
+        let mut id = self.idgen.next_id();
+        id.track(id);
+        let data = literal!({
+            "error": err.to_string(),
+        });
+        let meta = correlation
+            .map(|c| literal!({ "correlation": c.clone_static() }))
+            .unwrap_or_default();
+        let e = Event {
+            id,
+            ingest_ns,
+            data: (data, Value::null()).into(),
+            origin_uri: Some(self.event_origin_uri.clone()),
+            ..Event::default()
+        };
+        let reply = Reply::Response(ERR, e);
+        if let Err(e) = self.reply_tx.send(reply) {
+            error!("[Sink::{}] Error sending error reply: {}", self.sink_url, e);
         }
     }
 }
@@ -134,9 +150,13 @@ impl offramp::Impl for Kv {
                 port: None,
                 path: config.dir.split('/').map(ToString::to_string).collect(),
             };
+            // dummy
+            let (dummy_tx, _) = async_channel::bounded(1);
 
             Ok(SinkManager::new_box(Kv {
                 sink_url: TremorUrl::from_onramp_id("kv")?, // dummy value
+                idgen: EventIdGenerator::new(0),
+                reply_tx: dummy_tx, // dummy, will be replaced in init
                 event_origin_uri,
                 db,
             }))
@@ -173,7 +193,7 @@ enum Command<'v> {
     /// ```json
     /// {"cas": {
     ///    "key": "key"
-    ///    "old": "<value|null|not-se>",
+    ///    "old": "<value|null|not-set>",
     ///    "new": "<value|null|not-set>",
     /// }
     /// ```
@@ -196,65 +216,80 @@ impl Sink for Kv {
         let mut r = Vec::with_capacity(10);
         let ingest_ns = tremor_common::time::nanotime();
 
-        let mut cmds = event.value_meta_iter().filter_map(|(v, m)| {
-            let r = if let Some(g) = v.get("get") {
-                Some(Command::Get {
-                    key: g.get_bytes("key")?.to_vec(),
-                })
+        let mut cmds = event.value_meta_iter().map(|(v, m)| {
+            let command_res = if let Some(g) = v.get("get") {
+                g.get_bytes("key")
+                    .ok_or("Missing or invalid `key` field")
+                    .map(|key| Command::Get { key: key.to_vec() })
             } else if let Some(p) = v.get("put") {
-                Some(Command::Put {
-                    key: p.get_bytes("key")?.to_vec(),
-                    value: p.get("value")?,
-                })
+                p.get_bytes("key")
+                    .ok_or("Missing or invalid `key` field")
+                    .and_then(|key| {
+                        p.get("value")
+                            .map(|value| Command::Put {
+                                key: key.to_vec(),
+                                value,
+                            })
+                            .ok_or("Missing `value` field")
+                    })
             } else if let Some(c) = v.get("cas") {
-                Some(Command::Cas {
-                    key: c.get_bytes("key")?.to_vec(),
-                    old: c.get("old"),
-                    new: c.get("new"),
-                })
+                c.get_bytes("key")
+                    .ok_or("Missing or invalid `key` field")
+                    .map(|key| Command::Cas {
+                        key: key.to_vec(),
+                        old: c.get("old"),
+                        new: c.get("new"),
+                    })
             } else if let Some(d) = v.get("delete") {
-                Some(Command::Delete {
-                    key: d.get_bytes("key")?.to_vec(),
-                })
+                d.get_bytes("key")
+                    .ok_or("Missing or invalid `key` field")
+                    .map(|key| Command::Delete { key: key.to_vec() })
             } else if let Some(s) = v.get("scan") {
-                Some(Command::Scan {
+                Ok(Command::Scan {
                     start: s.get_bytes("start").map(|v| v.to_vec()),
                     end: s.get_bytes("end").map(|v| v.to_vec()),
                 })
             } else {
-                error!("failed to decode command: {}", v);
-                None
+                Err("Invalid KV command")
             };
-            r.map(|r| (r, m.get("correlation")))
+            (
+                command_res.map_err(|e| ErrorKind::KvError(e).into()),
+                m.get("correlation"),
+            )
         });
-        let first = cmds.next();
-        if let Some((cmd, correlation)) = first {
-            for (cmd, correlation) in cmds {
-                let meta = correlation
-                    .map(|c| literal!({ "correlation": c.clone_static() }))
-                    .unwrap_or_default();
-
-                let data = self.execute(cmd, codec, ingest_ns)?;
-                let e = Event {
-                    data: (data, meta).into(),
-                    origin_uri: Some(self.event_origin_uri.clone()),
-                    ..Event::default()
-                };
-                r.push(Reply::Response(OUT, e))
-            }
+        let mut has_errored = false;
+        // note: we always try to execute all commands / handle all errors.
+        //       we might want to exit early in some cases though
+        for (cmd_or_err, correlation) in cmds {
             let meta = correlation
                 .map(|c| literal!({ "correlation": c.clone_static() }))
                 .unwrap_or_default();
-
-            let data = self.execute(cmd, codec, ingest_ns)?;
-            let e = Event {
-                data: (data, meta).into(),
-                origin_uri: Some(self.event_origin_uri.clone()),
-                ..Event::default()
-            };
-            r.push(Reply::Response(OUT, e))
+            match cmd_or_err.and_then(|cmd| self.execute(cmd, codec, ingest_ns)) {
+                Ok(data) => {
+                    let mut id = self.idgen.next_id();
+                    id.track(&event.id);
+                    let e = Event {
+                        id,
+                        ingest_ns,
+                        data: (data, meta).into(),
+                        origin_uri: Some(self.event_origin_uri.clone()),
+                        ..Event::default()
+                    };
+                    r.push(Reply::Response(OUT, e))
+                }
+                Err(e) => {
+                    // send ERR response and log err
+                    self.handle_error(&e, &event.id, ingest_ns, correlation);
+                    has_errored = true;
+                }
+            }
         }
-        Ok(Some(r))
+        if has_errored {
+            // trigger CB fail
+            Err(ErrorKind::KvError("Something went wrong!").into())
+        } else {
+            Ok(Some(r))
+        }
     }
 
     async fn on_signal(&mut self, _signal: Event) -> ResultVec {
@@ -270,10 +305,12 @@ impl Sink for Kv {
         _codec_map: &HashMap<String, Box<dyn Codec>>,
         _processors: Processors<'_>,
         _is_linked: bool,
-        _reply_channel: Sender<sink::Reply>,
+        reply_channel: Sender<sink::Reply>,
     ) -> Result<()> {
         self.event_origin_uri.uid = sink_uid;
         self.sink_url = sink_url.clone();
+        self.idgen.set_source(sink_uid);
+        self.reply_tx = reply_channel.clone();
         Ok(())
     }
 
