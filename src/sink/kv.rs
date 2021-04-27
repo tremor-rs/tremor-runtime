@@ -20,10 +20,9 @@ use crate::source::prelude::*;
 use async_channel::Sender;
 use halfbrown::HashMap;
 use serde::Deserialize;
-use sink::handle_insight;
 use sled::{CompareAndSwapError, IVec};
 use std::boxed::Box;
-use tremor_pipeline::{EventId, EventIdGenerator};
+use tremor_pipeline::EventIdGenerator;
 use tremor_value::literal;
 
 #[derive(Deserialize, Debug, Clone)]
@@ -51,11 +50,8 @@ fn decode(mut v: Option<IVec>, codec: &mut dyn Codec, ingest_ns: u64) -> Result<
     }
 }
 
-fn ok(op: &'static str, v: Value<'static>) -> Value<'static> {
-    literal!({
-        "op": op,
-        "ok": v
-    })
+fn ok(v: Value<'static>) -> Value<'static> {
+    literal!({ "ok": v })
 }
 
 impl Kv {
@@ -66,16 +62,12 @@ impl Kv {
         ingest_ns: u64,
     ) -> Result<Value<'static>> {
         match cmd {
-            Command::Get { key } => {
-                decode(self.db.get(key)?, codec, ingest_ns).map(|v| ok("get", v))
-            }
+            Command::Get { key } => decode(self.db.get(key)?, codec, ingest_ns).map(ok),
             Command::Put { key, value } => {
-                decode(self.db.insert(key, codec.encode(value)?)?, codec, ingest_ns)
-                    .map(|v| ok("put", v))
+                decode(self.db.insert(key, codec.encode(value)?)?, codec, ingest_ns).map(ok)
             }
-            Command::Delete { key } => {
-                decode(self.db.remove(key)?, codec, ingest_ns).map(|v| ok("delete", v))
-            }
+            Command::Delete { key } => decode(self.db.remove(key)?, codec, ingest_ns).map(ok),
+
             Command::Cas { key, old, new } => {
                 if let Err(CompareAndSwapError { current, proposed }) = self.db.compare_and_swap(
                     key,
@@ -83,13 +75,12 @@ impl Kv {
                     new.map(|v| codec.encode(v)).transpose()?,
                 )? {
                     Ok(literal!({
-                        "op": "cas",
                         "error": {
                             "current": decode(current, codec, ingest_ns)?,
                             "proposed": decode(proposed, codec, ingest_ns)?                        }
                     }))
                 } else {
-                    Ok(ok("cas", Value::null()))
+                    Ok(ok(Value::null()))
                 }
             }
             Command::Scan { start, end } => {
@@ -103,36 +94,14 @@ impl Kv {
                 for e in i {
                     let (key, e) = e?;
                     let key: &[u8] = &key;
-                    res.push(literal!({
+                    let value = literal!({
                         "key": Value::Bytes(key.to_vec().into()),
-                        "value": decode(Some(e), codec, ingest_ns)
-                    }))
+                        "value": decode(Some(e), codec, ingest_ns)?
+                    });
+                    res.push(value)
                 }
-                Ok(ok("scan", Value::from(res)))
+                Ok(ok(Value::from(res)))
             }
-        }
-    }
-
-    fn handle_error(&self, err: &Error, id: &EventId, ingest_ns: u64, correlation: Option<&Value>) {
-        error!("[Sink::{}] {}", self.sink_url, err);
-        let mut id = self.idgen.next_id();
-        id.track(id);
-        let data = literal!({
-            "error": err.to_string(),
-        });
-        let meta = correlation
-            .map(|c| literal!({ "correlation": c.clone_static() }))
-            .unwrap_or_default();
-        let e = Event {
-            id,
-            ingest_ns,
-            data: (data, Value::null()).into(),
-            origin_uri: Some(self.event_origin_uri.clone()),
-            ..Event::default()
-        };
-        let reply = Reply::Response(ERR, e);
-        if let Err(e) = self.reply_tx.send(reply) {
-            error!("[Sink::{}] Error sending error reply: {}", self.sink_url, e);
         }
     }
 }
@@ -204,8 +173,21 @@ enum Command<'v> {
     },
 }
 
+impl<'v> Command<'v> {
+    fn op_name(&self) -> &'static str {
+        match self {
+            Command::Get { .. } => "get",
+            Command::Put { .. } => "put",
+            Command::Delete { .. } => "delete",
+            Command::Scan { .. } => "scan",
+            Command::Cas { .. } => "cas",
+        }
+    }
+}
+
 #[async_trait::async_trait]
 impl Sink for Kv {
+    #[allow(clippy::clippy::too_many_lines, clippy::option_if_let_else)]
     async fn on_event(
         &mut self,
         _input: &str,
@@ -216,7 +198,7 @@ impl Sink for Kv {
         let mut r = Vec::with_capacity(10);
         let ingest_ns = tremor_common::time::nanotime();
 
-        let mut cmds = event.value_meta_iter().map(|(v, m)| {
+        let cmds = event.value_meta_iter().map(|(v, m)| {
             let command_res = if let Some(g) = v.get("get") {
                 g.get_bytes("key")
                     .ok_or("Missing or invalid `key` field")
@@ -261,13 +243,25 @@ impl Sink for Kv {
         // note: we always try to execute all commands / handle all errors.
         //       we might want to exit early in some cases though
         for (cmd_or_err, correlation) in cmds {
-            let meta = correlation
-                .map(|c| literal!({ "correlation": c.clone_static() }))
-                .unwrap_or_default();
-            match cmd_or_err.and_then(|cmd| self.execute(cmd, codec, ingest_ns)) {
-                Ok(data) => {
+            let executed = match cmd_or_err {
+                Ok(cmd) => {
+                    let name = cmd.op_name();
+                    self.execute(cmd, codec, ingest_ns)
+                        .map(|res| (name, res))
+                        .map_err(|e| (Some(name), e))
+                }
+                Err(e) => Err((None, e)),
+            };
+            match executed {
+                Ok((op, data)) => {
                     let mut id = self.idgen.next_id();
                     id.track(&event.id);
+
+                    let mut meta = Value::object_with_capacity(2);
+                    meta.try_insert("kv", literal!({ "op": op }));
+                    if let Some(correlation) = correlation {
+                        meta.try_insert("correlation", correlation.clone_static());
+                    }
                     let e = Event {
                         id,
                         ingest_ns,
@@ -277,14 +271,39 @@ impl Sink for Kv {
                     };
                     r.push(Reply::Response(OUT, e))
                 }
-                Err(e) => {
+                Err((op, e)) => {
                     // send ERR response and log err
-                    self.handle_error(&e, &event.id, ingest_ns, correlation);
+                    error!("[Sink::{}] {}", self.sink_url, e);
+                    let mut id = self.idgen.next_id();
+                    id.track(&event.id);
+                    let data = literal!({
+                        "error": e.to_string(),
+                    });
+                    let mut meta = Value::object_with_capacity(3);
+                    meta.try_insert("kv", literal!({ "op": op }));
+                    meta.try_insert("error", e.to_string());
+                    if let Some(correlation) = correlation {
+                        meta.try_insert("correlation", correlation.clone_static());
+                    }
+                    let err_event = Event {
+                        id,
+                        ingest_ns,
+                        data: (data, meta).into(),
+                        origin_uri: Some(self.event_origin_uri.clone()),
+                        ..Event::default()
+                    };
+                    r.push(Reply::Response(ERR, err_event));
                     has_errored = true;
                 }
             }
         }
         if has_errored {
+            // send away all response events asynchronously before
+            for reply in r {
+                if let Err(e) = self.reply_tx.send(reply).await {
+                    error!("[Sink::{}] Error sending error reply: {}", self.sink_url, e);
+                }
+            }
             // trigger CB fail
             Err(ErrorKind::KvError("Something went wrong!").into())
         } else {
@@ -310,7 +329,7 @@ impl Sink for Kv {
         self.event_origin_uri.uid = sink_uid;
         self.sink_url = sink_url.clone();
         self.idgen.set_source(sink_uid);
-        self.reply_tx = reply_channel.clone();
+        self.reply_tx = reply_channel;
         Ok(())
     }
 
