@@ -21,6 +21,12 @@ COPY Cargo.* ./
 # can be build on more moderate system
 RUN mv Cargo.toml Cargo.toml.orig && sed 's/lto = true/lto = "thin"/' Cargo.toml.orig > Cargo.toml
 
+# Insert branch/hash into environment variables
+ARG VERSION_BRANCH
+ENV VERSION_BRANCH=$VERSION_BRANCH
+ARG VERSION_HASH
+ENV VERSION_HASH=$VERSION_HASH
+
 # Main library
 COPY src ./src
 # supporting libraries
