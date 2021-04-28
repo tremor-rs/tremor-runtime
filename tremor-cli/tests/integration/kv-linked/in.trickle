@@ -1,0 +1,32 @@
+define script process
+script
+  use std::json;
+  let $correlation = json::encode(event);
+  event
+end;
+
+create script process;
+
+define script diverge
+script
+
+  # direct some events to batch, some not
+  let port = match event of
+    case %{ batch == true } => emit event => "batch"
+    default => emit event => "out"
+  end;
+end;
+
+create script diverge;
+
+define generic::batch operator batch with
+  count = 2
+end;
+create operator batch;
+
+
+select event from in into process;
+select event from process into diverge;
+select event from diverge/batch into batch;
+select event from batch into out;
+select event from diverge/out into out;

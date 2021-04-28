@@ -1,0 +1,54 @@
+onramp:
+  - id: input
+    type: file
+    codec: json
+    config:
+      source: in.json
+offramp:
+  - id: kv
+    type: kv
+    codec: json
+    linked: true
+    config:
+      dir: data
+  - id: output
+    type: file
+    codec: json
+    config:
+      file: out.log
+  - id: error_output
+    type: file
+    codec: json
+    config:
+      file: err.log
+  - id: exit
+    type: exit
+
+binding:
+  - id: kv
+    links:
+      "/onramp/input/{instance}/out":
+        - "/pipeline/in/{instance}/in"
+      "/pipeline/in/{instance}/out":
+        - "/offramp/kv/{instance}/in"
+      "/pipeline/in/{instance}/exit":
+        - "/offramp/exit/{instance}/in"
+      "/offramp/kv/{instance}/out":
+        - "/pipeline/out/{instance}/in"
+      "/pipeline/out/{instance}/out":
+        - "/offramp/output/{instance}/in"
+
+      # error handling
+      "/pipeline/in/{instance}/err":
+        - "/offramp/error_output/{instance}/in"
+      "/offramp/kv/{instance}/err":
+        - "/pipeline/err/{instance}/in"
+      "/pipeline/err/{instance}/out":
+        - "/offramp/error_output/{instance}/in"
+        - "/offramp/exit/{instance}/in"
+      "/pipeline/out/{instance}/err":
+        - "/offramp/error_output/{instance}/in"
+
+mapping:
+  /binding/kv/01:
+    instance: "01"

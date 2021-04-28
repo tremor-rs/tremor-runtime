@@ -1,0 +1,18 @@
+{"get": {"key": "snot"}}
+{"put": {"key": "snot", "value": "badger"}}
+{"get": {"key": "snot"}, "batch": true}
+{"put": {"key": "heinz", "value": "ketchup"}, "batch": true}
+{"get": {"key": "heinz"}}
+{"scan": {}}
+{"scan": {"start": "snot"}}
+{"scan": {"start": "heinz", "stop": "meins"}}
+{"scan": {"stop": "heinz"}}
+{"cas": {"key": "heinz", "old": "gies", "new": "ketchup"}}
+{"cas": {"key": "heinz", "old": "ketchup", "new": "gies"}}
+{"delete": {"key": "matthias", "reason": "jokes way too bad"}}
+{"get": {"key": "matthias"}}
+{"delete": {"key": "heinz", "reason": "ketchup"}}
+{"get": {"key": "heinz"}}
+{"delete": {"key": "snot"}}
+{"get": {"key": "snot"}}
+{"garbage": true}
