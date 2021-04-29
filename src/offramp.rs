@@ -54,6 +54,7 @@ pub enum Msg {
         id: TremorUrl,
         tx: async_channel::Sender<bool>,
     },
+    Terminate,
 }
 
 pub(crate) type Sender = async_channel::Sender<ManagerMsg>;
@@ -385,15 +386,22 @@ impl Manager {
                                     }
                                     offramp.remove_dest_pipeline(port.clone(), id.clone())
                                 };
-                                if marked_done {
-                                    info!("[Offramp::{}] Marked as done ", offramp_url);
-                                    offramp.terminate().await
-                                }
+
                                 tx.send(marked_done).await?;
                                 info!(
                                     "[Offramp::{}] Pipeline {} disconnected from port {}",
                                     offramp_url, &id, &port
                                 );
+                                if marked_done {
+                                    info!("[Offramp::{}] Marked as done ", offramp_url);
+                                    offramp.terminate().await;
+                                    break;
+                                }
+                            }
+                            Msg::Terminate => {
+                                info!("[Offramp::{}] Terminating...", offramp_url);
+                                offramp.terminate().await;
+                                break;
                             }
                         }
                     }
@@ -438,5 +446,230 @@ impl Manager {
         });
 
         (h, tx)
+    }
+}
+
+#[cfg(not(tarpaulin_include))]
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::QSIZE;
+
+    #[derive(Debug)]
+    enum FakeOfframpMsg {
+        Event(Event),
+        Signal(Event),
+        AddPipeline(TremorUrl, pipeline::Addr),
+        RemovePipeline(TremorUrl),
+        AddDestPipeline(Cow<'static, str>, TremorUrl, pipeline::Addr),
+        RemoveDestPipeline(Cow<'static, str>, TremorUrl),
+        Start(u64),
+        Terminate,
+    }
+    struct FakeOfframp {
+        pipelines: usize,
+        sender: async_channel::Sender<FakeOfframpMsg>,
+    }
+
+    impl FakeOfframp {
+        fn new(sender: async_channel::Sender<FakeOfframpMsg>) -> Self {
+            Self {
+                pipelines: 0,
+                sender,
+            }
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl Offramp for FakeOfframp {
+        async fn start(
+            &mut self,
+            offramp_uid: u64,
+            _offramp_url: &TremorUrl,
+            _codec: &dyn Codec,
+            _codec_map: &HashMap<String, Box<dyn Codec>>,
+            _processors: Processors<'_>,
+            _is_linked: bool,
+            _reply_channel: async_channel::Sender<sink::Reply>,
+        ) -> Result<()> {
+            self.sender.send(FakeOfframpMsg::Start(offramp_uid)).await?;
+            Ok(())
+        }
+
+        async fn on_event(
+            &mut self,
+            _codec: &mut dyn Codec,
+            _codec_map: &HashMap<String, Box<dyn Codec>>,
+            _input: &str,
+            event: Event,
+        ) -> Result<()> {
+            self.sender.send(FakeOfframpMsg::Event(event)).await?;
+            Ok(())
+        }
+
+        async fn on_signal(&mut self, signal: Event) -> Option<Event> {
+            self.sender
+                .send(FakeOfframpMsg::Signal(signal))
+                .await
+                .unwrap();
+            None
+        }
+
+        fn default_codec(&self) -> &str {
+            "json"
+        }
+
+        fn add_pipeline(&mut self, id: TremorUrl, addr: pipeline::Addr) {
+            self.pipelines += 1;
+            let sender = self.sender.clone();
+            task::block_on(async {
+                sender
+                    .send(FakeOfframpMsg::AddPipeline(id, addr))
+                    .await
+                    .unwrap();
+            })
+        }
+
+        fn remove_pipeline(&mut self, id: TremorUrl) -> bool {
+            self.pipelines -= 1;
+            let sender = self.sender.clone();
+            task::block_on(async {
+                sender
+                    .send(FakeOfframpMsg::RemovePipeline(id))
+                    .await
+                    .unwrap();
+            });
+            self.pipelines == 0
+        }
+
+        fn add_dest_pipeline(
+            &mut self,
+            port: Cow<'static, str>,
+            id: TremorUrl,
+            addr: pipeline::Addr,
+        ) {
+            self.pipelines += 1;
+            let sender = self.sender.clone();
+            task::block_on(async {
+                sender
+                    .send(FakeOfframpMsg::AddDestPipeline(port, id, addr))
+                    .await
+                    .unwrap();
+            })
+        }
+
+        fn remove_dest_pipeline(&mut self, port: Cow<'static, str>, id: TremorUrl) -> bool {
+            self.pipelines -= 1;
+            let sender = self.sender.clone();
+            task::block_on(async {
+                sender
+                    .send(FakeOfframpMsg::RemoveDestPipeline(port, id))
+                    .await
+                    .unwrap();
+            });
+            self.pipelines == 0
+        }
+
+        async fn terminate(&mut self) {
+            self.sender.send(FakeOfframpMsg::Terminate).await.unwrap()
+        }
+    }
+
+    #[async_std::test]
+    async fn offramp_lifecycle_test() -> Result<()> {
+        let mngr = Manager::new(QSIZE);
+        let (handle, sender) = mngr.start();
+        let (tx, rx) = async_channel::bounded(1);
+        let codec = crate::codec::lookup("json")?;
+        let id = TremorUrl::parse("/offramp/fake/instance")?;
+        let ramp_reporter = RampReporter::new(id.clone(), Some(1_000_000_000));
+        let (offramp_tx, offramp_rx) = async_channel::unbounded();
+        let offramp = FakeOfframp::new(offramp_tx);
+        let create = ManagerMsg::Create(
+            tx,
+            Box::new(Create {
+                id,
+                codec,
+                codec_map: HashMap::new(),
+                preprocessors: vec!["lines".into()],
+                postprocessors: vec!["lines".into()],
+                metrics_reporter: ramp_reporter,
+                offramp: Box::new(offramp),
+                is_linked: true,
+            }),
+        );
+        sender.send(create).await?;
+        let offramp_sender = rx.recv().await??;
+        match offramp_rx.recv().await? {
+            FakeOfframpMsg::Start(id) => {
+                println!("started with id: {}", id);
+            }
+            e => assert!(false, "Expected start msg, got {:?}", e),
+        }
+
+        let fake_pipeline_id = TremorUrl::parse("/pipeline/fake/instance/out")?;
+        let (tx, _rx) = async_channel::unbounded();
+        let (cf_tx, _cf_rx) = async_channel::unbounded();
+        let (mgmt_tx, _mgmt_rx) = async_channel::unbounded();
+
+        let fake_pipeline = Box::new(pipeline::Addr::new(
+            tx,
+            cf_tx,
+            mgmt_tx,
+            fake_pipeline_id.clone(),
+        ));
+        // connect incoming pipeline
+        offramp_sender
+            .send(Msg::Connect {
+                port: IN,
+                id: fake_pipeline_id.clone(),
+                addr: fake_pipeline.clone(),
+            })
+            .await?;
+        match offramp_rx.recv().await? {
+            FakeOfframpMsg::AddPipeline(id, _addr) => {
+                assert_eq!(fake_pipeline_id, id);
+            }
+            e => {
+                assert!(false, "Expected add pipeline msg, got {:?}", e)
+            }
+        }
+
+        // send event
+        offramp_sender
+            .send(Msg::Event {
+                input: IN,
+                event: Event::default(),
+            })
+            .await?;
+        match offramp_rx.recv().await? {
+            FakeOfframpMsg::Event(_event) => {}
+            e => assert!(false, "Expected event msg, got {:?}", e),
+        }
+
+        let (disc_tx, disc_rx) = async_channel::bounded(1);
+        offramp_sender
+            .send(Msg::Disconnect {
+                port: IN,
+                id: fake_pipeline_id.clone(),
+                tx: disc_tx,
+            })
+            .await?;
+        assert!(
+            disc_rx.recv().await?,
+            "expected true, as nothing is connected anymore"
+        );
+        match offramp_rx.recv().await? {
+            FakeOfframpMsg::RemovePipeline(id) => {
+                assert_eq!(fake_pipeline_id, id);
+            }
+            e => {
+                assert!(false, "Expected terminate msg, got {:?}", e)
+            }
+        }
+        // stop shit
+        sender.send(ManagerMsg::Stop).await?;
+        handle.cancel().await;
+        Ok(())
     }
 }
