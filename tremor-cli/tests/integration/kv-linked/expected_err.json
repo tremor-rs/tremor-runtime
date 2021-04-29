@@ -1,1 +1,1 @@
-{"exit":0,"delay":1000}
+{"event":{"key":null,"error":"Invalid KV command: {\"garbage\": Static(Bool(true))}"},"exit":0,"delay":1000}
