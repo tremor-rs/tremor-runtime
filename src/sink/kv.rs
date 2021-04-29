@@ -201,22 +201,22 @@ impl Sink for Kv {
         let cmds = event.value_meta_iter().map(|(v, m)| {
             let command_res = if let Some(g) = v.get("get") {
                 g.get_bytes("key")
-                    .ok_or("Missing or invalid `key` field".into())
+                    .ok_or_else(|| "Missing or invalid `key` field".into())
                     .map(|key| Command::Get { key: key.to_vec() })
             } else if let Some(p) = v.get("put") {
                 p.get_bytes("key")
-                    .ok_or("Missing or invalid `key` field".into())
+                    .ok_or_else(|| "Missing or invalid `key` field".into())
                     .and_then(|key| {
                         p.get("value")
                             .map(|value| Command::Put {
                                 key: key.to_vec(),
                                 value,
                             })
-                            .ok_or("Missing `value` field".into())
+                            .ok_or_else(|| "Missing `value` field".into())
                     })
             } else if let Some(c) = v.get("cas") {
                 c.get_bytes("key")
-                    .ok_or("Missing or invalid `key` field".into())
+                    .ok_or_else(|| "Missing or invalid `key` field".into())
                     .map(|key| Command::Cas {
                         key: key.to_vec(),
                         old: c.get("old"),
@@ -224,7 +224,7 @@ impl Sink for Kv {
                     })
             } else if let Some(d) = v.get("delete") {
                 d.get_bytes("key")
-                    .ok_or("Missing or invalid `key` field".into())
+                    .ok_or_else(|| "Missing or invalid `key` field".into())
                     .map(|key| Command::Delete { key: key.to_vec() })
             } else if let Some(s) = v.get("scan") {
                 Ok(Command::Scan {
