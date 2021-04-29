@@ -50,8 +50,11 @@ fn decode(mut v: Option<IVec>, codec: &mut dyn Codec, ingest_ns: u64) -> Result<
     }
 }
 
-fn ok(v: Value<'static>) -> Value<'static> {
-    literal!({ "ok": v })
+fn ok(k: Vec<u8>, v: Value<'static>) -> Value<'static> {
+    literal!({
+        "key": Value::Bytes(k.into()),
+        "ok": v
+    })
 }
 
 impl Kv {
@@ -62,25 +65,33 @@ impl Kv {
         ingest_ns: u64,
     ) -> Result<Value<'static>> {
         match cmd {
-            Command::Get { key } => decode(self.db.get(key)?, codec, ingest_ns).map(ok),
-            Command::Put { key, value } => {
-                decode(self.db.insert(key, codec.encode(value)?)?, codec, ingest_ns).map(ok)
+            Command::Get { key } => {
+                decode(self.db.get(&key)?, codec, ingest_ns).map(|v| ok(key, v))
             }
-            Command::Delete { key } => decode(self.db.remove(key)?, codec, ingest_ns).map(ok),
+            Command::Put { key, value } => decode(
+                self.db.insert(&key, codec.encode(value)?)?,
+                codec,
+                ingest_ns,
+            )
+            .map(|v| ok(key, v)),
+            Command::Delete { key } => {
+                decode(self.db.remove(&key)?, codec, ingest_ns).map(|v| ok(key, v))
+            }
 
             Command::Cas { key, old, new } => {
                 if let Err(CompareAndSwapError { current, proposed }) = self.db.compare_and_swap(
-                    key,
+                    &key,
                     old.map(|v| codec.encode(v)).transpose()?,
                     new.map(|v| codec.encode(v)).transpose()?,
                 )? {
                     Ok(literal!({
+                        "key": Value::Bytes(key.into()),
                         "error": {
                             "current": decode(current, codec, ingest_ns)?,
                             "proposed": decode(proposed, codec, ingest_ns)?                        }
                     }))
                 } else {
-                    Ok(ok(Value::null()))
+                    Ok(ok(key, Value::null()))
                 }
             }
             Command::Scan { start, end } => {
@@ -100,7 +111,7 @@ impl Kv {
                     });
                     res.push(value)
                 }
-                Ok(ok(Value::from(res)))
+                Ok(literal!({ "ok": res }))
             }
         }
     }
