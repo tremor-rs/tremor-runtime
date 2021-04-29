@@ -1,5 +1,5 @@
 {
-    "run": "tests/integrations/elastic",
+    "run": "tests/integration/elastic",
     "cmd": "docker",
     "args": [
         "run",
