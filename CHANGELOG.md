@@ -3,7 +3,7 @@
 ### New features
 
 * Add `op` key to KV offramp responses in order to differentiate responses by the command that triggered them
-
+* Add `key` to KV offramp responses.
 ### Fixes
 
 * KV offramp sends error responses for each failed command

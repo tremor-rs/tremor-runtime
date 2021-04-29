@@ -194,6 +194,16 @@ impl<'v> Command<'v> {
             Command::Cas { .. } => "cas",
         }
     }
+
+    fn key(&self) -> Option<Vec<u8>> {
+        match self {
+            Command::Get { key, .. }
+            | Command::Put { key, .. }
+            | Command::Delete { key }
+            | Command::Cas { key, .. } => Some(key.clone()),
+            Command::Scan { .. } => None,
+        }
+    }
 }
 
 #[async_trait::async_trait]
@@ -257,11 +267,12 @@ impl Sink for Kv {
             let executed = match cmd_or_err {
                 Ok(cmd) => {
                     let name = cmd.op_name();
+                    let key = cmd.key();
                     self.execute(cmd, codec, ingest_ns)
                         .map(|res| (name, res))
-                        .map_err(|e| (Some(name), e))
+                        .map_err(|e| (Some(name), key, e))
                 }
-                Err(e) => Err((None, e)),
+                Err(e) => Err((None, None, e)),
             };
             match executed {
                 Ok((op, data)) => {
@@ -282,11 +293,12 @@ impl Sink for Kv {
                     };
                     r.push(Reply::Response(OUT, e))
                 }
-                Err((op, e)) => {
+                Err((op, key, e)) => {
                     // send ERR response and log err
                     let mut id = self.idgen.next_id();
                     id.track(&event.id);
                     let data = literal!({
+                        "key": key.map_or_else(Value::null, |v| Value::Bytes(v.into())),
                         "error": e.to_string(),
                     });
                     let mut meta = Value::object_with_capacity(3);
