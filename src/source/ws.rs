@@ -279,12 +279,14 @@ impl Source for Int {
                         ),
                     },
                     WsSourceReply::StartStream(stream, ref sender) => {
+                        debug!("[Source::WS] start stream {}", stream);
                         if let Some(tx) = sender {
                             streams.insert(stream, tx.clone());
                         }
                         Ok(SourceReply::StartStream(stream))
                     }
                     WsSourceReply::EndStream(stream) => {
+                        debug!("[Source::WS] end stream {}", stream);
                         streams.remove(&stream);
                         Ok(SourceReply::EndStream(stream))
                     }

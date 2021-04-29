@@ -201,22 +201,22 @@ impl Sink for Kv {
         let cmds = event.value_meta_iter().map(|(v, m)| {
             let command_res = if let Some(g) = v.get("get") {
                 g.get_bytes("key")
-                    .ok_or("Missing or invalid `key` field")
+                    .ok_or("Missing or invalid `key` field".into())
                     .map(|key| Command::Get { key: key.to_vec() })
             } else if let Some(p) = v.get("put") {
                 p.get_bytes("key")
-                    .ok_or("Missing or invalid `key` field")
+                    .ok_or("Missing or invalid `key` field".into())
                     .and_then(|key| {
                         p.get("value")
                             .map(|value| Command::Put {
                                 key: key.to_vec(),
                                 value,
                             })
-                            .ok_or("Missing `value` field")
+                            .ok_or("Missing `value` field".into())
                     })
             } else if let Some(c) = v.get("cas") {
                 c.get_bytes("key")
-                    .ok_or("Missing or invalid `key` field")
+                    .ok_or("Missing or invalid `key` field".into())
                     .map(|key| Command::Cas {
                         key: key.to_vec(),
                         old: c.get("old"),
@@ -224,7 +224,7 @@ impl Sink for Kv {
                     })
             } else if let Some(d) = v.get("delete") {
                 d.get_bytes("key")
-                    .ok_or("Missing or invalid `key` field")
+                    .ok_or("Missing or invalid `key` field".into())
                     .map(|key| Command::Delete { key: key.to_vec() })
             } else if let Some(s) = v.get("scan") {
                 Ok(Command::Scan {
@@ -232,14 +232,14 @@ impl Sink for Kv {
                     end: s.get_bytes("end").map(|v| v.to_vec()),
                 })
             } else {
-                Err("Invalid KV command")
+                Err(format!("Invalid KV command: {}", v))
             };
             (
                 command_res.map_err(|e| ErrorKind::KvError(e).into()),
                 m.get("correlation"),
             )
         });
-        let mut has_errored = false;
+        let mut first_error = None;
         // note: we always try to execute all commands / handle all errors.
         //       we might want to exit early in some cases though
         for (cmd_or_err, correlation) in cmds {
@@ -273,7 +273,6 @@ impl Sink for Kv {
                 }
                 Err((op, e)) => {
                     // send ERR response and log err
-                    error!("[Sink::{}] {}", self.sink_url, e);
                     let mut id = self.idgen.next_id();
                     id.track(&event.id);
                     let data = literal!({
@@ -293,11 +292,11 @@ impl Sink for Kv {
                         ..Event::default()
                     };
                     r.push(Reply::Response(ERR, err_event));
-                    has_errored = true;
+                    first_error.get_or_insert(e);
                 }
             }
         }
-        if has_errored {
+        if let Some(e) = first_error {
             // send away all response events asynchronously before
             for reply in r {
                 if let Err(e) = self.reply_tx.send(reply).await {
@@ -305,7 +304,7 @@ impl Sink for Kv {
                 }
             }
             // trigger CB fail
-            Err(ErrorKind::KvError("Something went wrong!").into())
+            Err(e)
         } else {
             Ok(Some(r))
         }
