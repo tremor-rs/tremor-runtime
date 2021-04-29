@@ -287,14 +287,20 @@ impl Manager {
                                         "[Offramp::{}] Connecting pipeline {} to incoming port {}",
                                         offramp_url, id, port
                                     );
-                                    let insight =
-                                        Event::restore_or_break(offramp.is_active(), nanotime());
-                                    if let Err(e) = addr.send_insight(insight).await {
-                                        error!(
-                                            "[Offramp::{}] Could not send initial insight to {}: {}",
-                                            offramp_url, id, e
+                                    // if we are linked we send CB when an output is connected
+                                    // TODO: if we are linked we should only send CB restore/break events if we receive one from the dest_pipelines
+                                    if !is_linked || !dest_pipelines.is_empty() {
+                                        let insight = Event::restore_or_break(
+                                            offramp.is_active(),
+                                            nanotime(),
                                         );
-                                    };
+                                        if let Err(e) = addr.send_insight(insight).await {
+                                            error!(
+                                                "[Offramp::{}] Could not send initial insight to {}: {}",
+                                                offramp_url, id, e
+                                            );
+                                        };
+                                    }
 
                                     pipelines.insert(id.clone(), (*addr).clone());
                                     offramp.add_pipeline(id, *addr);
@@ -328,6 +334,34 @@ impl Manager {
                                         .await
                                     {
                                         error!("[Offramp::{}] Error connecting this offramp as input to pipeline {}: {}", offramp_url, &id, e);
+                                    }
+
+                                    // send a CB restore/break if we have both an input an an output connected
+                                    // to all the connected inputs
+                                    if is_linked && !pipelines.is_empty() {
+                                        let insight = Event::restore_or_break(
+                                            offramp.is_active(),
+                                            nanotime(),
+                                        );
+                                        let mut iter = pipelines.iter();
+                                        if let Some((input_id, input_addr)) = iter.next() {
+                                            for (input_id, input_addr) in iter {
+                                                if let Err(e) =
+                                                    input_addr.send_insight(insight.clone()).await
+                                                {
+                                                    error!(
+                                                        "[Offramp::{}] Could not send initial insight to {}: {}",
+                                                        offramp_url, input_id, e
+                                                    );
+                                                };
+                                            }
+                                            if let Err(e) = input_addr.send_insight(insight).await {
+                                                error!(
+                                                    "[Offramp::{}] Could not send initial insight to {}: {}",
+                                                    offramp_url, input_id, e
+                                                );
+                                            };
+                                        }
                                     }
                                 }
                             }
