@@ -1148,109 +1148,113 @@ where
     'script: 'event,
     'event: 'run,
 {
-    let mut acc = Value::object_with_capacity(if opts.result_needed {
-        rp.fields.len()
+    let res = if target.is_object() {
+        let mut acc = Value::object_with_capacity(if opts.result_needed {
+            rp.fields.len()
+        } else {
+            0
+        });
+
+        for pp in &rp.fields {
+            let known_key = pp.key();
+
+            macro_rules! store {
+                ($value:expr) => {
+                    if opts.result_needed {
+                        known_key.insert(&mut acc, $value)?;
+                    }
+                };
+            }
+
+            match pp {
+                PredicatePattern::FieldPresent { .. } => {
+                    if let Some(v) = known_key.lookup(target) {
+                        store!(v.clone());
+                    } else {
+                        return Ok(None);
+                    }
+                }
+                PredicatePattern::FieldAbsent { .. } => {
+                    if known_key.lookup(target).is_some() {
+                        return Ok(None);
+                    }
+                }
+                PredicatePattern::TildeEq { test, .. } => {
+                    let testee = if let Some(v) = known_key.lookup(target) {
+                        v
+                    } else {
+                        return Ok(None);
+                    };
+                    if let Some(x) = test
+                        .extractor
+                        .extract(opts.result_needed, &testee, &env.context)
+                        .into_match()
+                    {
+                        store!(x);
+                    } else {
+                        return Ok(None);
+                    }
+                }
+                PredicatePattern::Bin { rhs, kind, .. } => {
+                    let testee = if let Some(v) = known_key.lookup(target) {
+                        v
+                    } else {
+                        return Ok(None);
+                    };
+
+                    let rhs = stry!(rhs.run(opts, env, event, state, meta, local));
+                    let vb: &Value = rhs.borrow();
+                    let r = exec_binary(outer, outer, &env.meta, *kind, testee, vb)?;
+
+                    if !r.as_bool().unwrap_or_default() {
+                        return Ok(None);
+                    }
+                }
+                PredicatePattern::RecordPatternEq { pattern, .. } => {
+                    let testee = if let Some(v) = known_key.lookup(target) {
+                        v
+                    } else {
+                        return Ok(None);
+                    };
+
+                    if testee.is_object() {
+                        if let Some(m) = stry!(match_rp_expr(
+                            outer, opts, env, event, state, meta, local, testee, pattern,
+                        )) {
+                            store!(m);
+                        } else {
+                            return Ok(None);
+                        }
+                    } else {
+                        return Ok(None);
+                    }
+                }
+                PredicatePattern::ArrayPatternEq { pattern, .. } => {
+                    let testee = if let Some(v) = known_key.lookup(target) {
+                        v
+                    } else {
+                        return Ok(None);
+                    };
+
+                    if testee.is_array() {
+                        if let Some(r) = stry!(match_ap_expr(
+                            outer, opts, env, event, state, meta, local, testee, pattern,
+                        )) {
+                            store!(r);
+                        } else {
+                            return Ok(None);
+                        }
+                    } else {
+                        return Ok(None);
+                    }
+                }
+            }
+        }
+        Some(acc)
     } else {
-        0
-    });
-
-    for pp in &rp.fields {
-        let known_key = pp.key();
-
-        macro_rules! store {
-            ($value:expr) => {
-                if opts.result_needed {
-                    known_key.insert(&mut acc, $value)?;
-                }
-            };
-        }
-
-        match pp {
-            PredicatePattern::FieldPresent { .. } => {
-                if let Some(v) = known_key.lookup(target) {
-                    store!(v.clone());
-                } else {
-                    return Ok(None);
-                }
-            }
-            PredicatePattern::FieldAbsent { .. } => {
-                if known_key.lookup(target).is_some() {
-                    return Ok(None);
-                }
-            }
-            PredicatePattern::TildeEq { test, .. } => {
-                let testee = if let Some(v) = known_key.lookup(target) {
-                    v
-                } else {
-                    return Ok(None);
-                };
-                if let Some(x) = test
-                    .extractor
-                    .extract(opts.result_needed, &testee, &env.context)
-                    .into_match()
-                {
-                    store!(x);
-                } else {
-                    return Ok(None);
-                }
-            }
-            PredicatePattern::Bin { rhs, kind, .. } => {
-                let testee = if let Some(v) = known_key.lookup(target) {
-                    v
-                } else {
-                    return Ok(None);
-                };
-
-                let rhs = stry!(rhs.run(opts, env, event, state, meta, local));
-                let vb: &Value = rhs.borrow();
-                let r = exec_binary(outer, outer, &env.meta, *kind, testee, vb)?;
-
-                if !r.as_bool().unwrap_or_default() {
-                    return Ok(None);
-                }
-            }
-            PredicatePattern::RecordPatternEq { pattern, .. } => {
-                let testee = if let Some(v) = known_key.lookup(target) {
-                    v
-                } else {
-                    return Ok(None);
-                };
-
-                if testee.is_object() {
-                    if let Some(m) = stry!(match_rp_expr(
-                        outer, opts, env, event, state, meta, local, testee, pattern,
-                    )) {
-                        store!(m);
-                    } else {
-                        return Ok(None);
-                    }
-                } else {
-                    return Ok(None);
-                }
-            }
-            PredicatePattern::ArrayPatternEq { pattern, .. } => {
-                let testee = if let Some(v) = known_key.lookup(target) {
-                    v
-                } else {
-                    return Ok(None);
-                };
-
-                if testee.is_array() {
-                    if let Some(r) = stry!(match_ap_expr(
-                        outer, opts, env, event, state, meta, local, testee, pattern,
-                    )) {
-                        store!(r);
-                    } else {
-                        return Ok(None);
-                    }
-                } else {
-                    return Ok(None);
-                }
-            }
-        }
-    }
-
-    Ok(Some(acc))
+        None
+    };
+    Ok(res)
 }
 
 /// An *array pattern* matches a target value if the *target* is an array and **each** test in the

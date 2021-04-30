@@ -1,1 +1,9 @@
 { }
+1
+0.5
+true
+false
+[]
+[{}, false]
+"string"
+{"key": "value", "another_key": true}
