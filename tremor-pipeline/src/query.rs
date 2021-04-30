@@ -269,23 +269,23 @@ impl Query {
                         .filter_map(|f| f.ok())
                         .collect();
                     let mut h = Dumb::new();
-                    let descr = if h
+                    let label = if h
                         .highlight_region(Some(self.source()), &tokens, e.0, e.1)
                         .is_ok()
                     {
-                        h.to_string()
+                        Some(h.to_string().trim_end().to_string())
                     } else {
-                        String::new()
+                        None
                     };
 
                     let select_in = InputPort {
-                        id: format!("select_{}{}", select_num, descr).into(),
+                        id: format!("select_{}", select_num).into(),
                         port: OUT, // TODO: should this be IN?
                         had_port: false,
                         location: s.extent(&query.node_meta),
                     };
                     let select_out = OutputPort {
-                        id: format!("select_{}{}", select_num, descr).into(),
+                        id: format!("select_{}", select_num,).into(),
                         port: OUT,
                         had_port: false,
                         location: s.extent(&query.node_meta),
@@ -366,6 +366,7 @@ impl Query {
 
                     let node = NodeConfig {
                         id: select_in.id.clone(),
+                        label,
                         kind: NodeKind::Operator,
                         op_type: "trickle::select".to_string(),
                         ..NodeConfig::default()

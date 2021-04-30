@@ -187,7 +187,6 @@ pub trait Highlighter {
         expr_end: Location,
     ) -> std::result::Result<(), std::io::Error> {
         let extracted = extract(tokens, expr_start, expr_end);
-
         self.highlight_errors(true, file, &extracted, None)
     }
 
