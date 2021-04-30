@@ -178,6 +178,19 @@ pub trait Highlighter {
         self.highlight_errors(true, file, &tokens.iter().collect::<Vec<_>>(), None)
     }
 
+    /// highlights a token stream with line numbers in a given region
+    fn highlight_region(
+        &mut self,
+        file: Option<&str>,
+        tokens: &[TokenSpan],
+        expr_start: Location,
+        expr_end: Location,
+    ) -> std::result::Result<(), std::io::Error> {
+        let extracted = extract(tokens, expr_start, expr_end);
+
+        self.highlight_errors(true, file, &extracted, None)
+    }
+
     /// highlights a token stream with line numbers
     fn highlight_indent(
         &mut self,

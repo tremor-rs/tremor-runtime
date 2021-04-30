@@ -3180,7 +3180,7 @@ mod tests {
     fn lexer_long_float() -> Result<()> {
         let f = 48354865651623290000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000.0;
         let mut source = format!("{:.1}", f); // ensure we keep the .0
-        match Tokenizer::new(&mut source).next() {
+        match Tokenizer::new(&source).next() {
             Some(Ok(token)) => match token.value {
                 Token::FloatLiteral(f_token, _) => {
                     assert_eq!(f, f_token);
@@ -3200,7 +3200,7 @@ mod tests {
         fn float_literals_precision(f in 0f64..f64::MAX) {
             if f.round() != f {
                 let mut float = format!("{:.}", f);
-                for token in Tokenizer::new(&mut float) {
+                for token in Tokenizer::new(& float) {
                     let _ = token?;
                 }
             }
