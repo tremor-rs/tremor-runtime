@@ -52,8 +52,10 @@ fn decode(mut v: Option<IVec>, codec: &mut dyn Codec, ingest_ns: u64) -> Result<
 
 fn ok(k: Vec<u8>, v: Value<'static>) -> Value<'static> {
     literal!({
-        "key": Value::Bytes(k.into()),
-        "ok": v
+        "ok": {
+            "key": Value::Bytes(k.into()),
+            "value": v
+        }
     })
 }
 
@@ -77,7 +79,6 @@ impl Kv {
             Command::Delete { key } => {
                 decode(self.db.remove(&key)?, codec, ingest_ns).map(|v| ok(key, v))
             }
-
             Command::Cas { key, old, new } => {
                 if let Err(CompareAndSwapError { current, proposed }) = self.db.compare_and_swap(
                     &key,
