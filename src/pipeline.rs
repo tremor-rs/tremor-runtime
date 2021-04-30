@@ -158,7 +158,7 @@ impl Dest {
                 }
             }
             Self::LinkedOnramp(_addr) => {
-                // TODO implement?
+                // TODO implement!
                 //addr.send(onramp::Msg::Signal(signal)).await?
             }
         }
@@ -267,11 +267,15 @@ async fn handle_insight(
                         .await
                         .map_err(Error::from),
                     Input::Pipeline(addr) => addr.send_insight(insight.clone()).await,
-                    // linked offramps dont support insights yet, although they definitely should
-                    Input::LinkedOfframp(_addr) => {
-                        warn!(
-                            "Linked offramps don't support insights/GD yet, we are deeply sorry!"
-                        );
+                    Input::LinkedOfframp(_addr) =>
+                    /*
+                        =========
+                        IMPORTANT
+                        =========
+                        We do not forward Contraflow events back to linked offramps
+                        as otherwise we might get into cycles if we dont have a cycle detector preventing this kind of setup
+                    */
+                    {
                         Ok(())
                     }
                 } {
@@ -290,11 +294,15 @@ async fn handle_insight(
                         .await
                         .map_err(Error::from),
                     Input::Pipeline(addr) => addr.send_insight(insight).await,
-                    // TODO: linked offramps dont support insights yet, although they definitely should
-                    Input::LinkedOfframp(_addr) => {
-                        warn!(
-                            "Linked offramps don't support insights/GD yet, we are deeply sorry!"
-                        );
+                    Input::LinkedOfframp(_addr) =>
+                    /*
+                        =========
+                        IMPORTANT
+                        =========
+                        We do not forward Contraflow events back to linked offramps
+                        as otherwise we might get into cycles if we dont have a cycle detector preventing this kind of setup
+                    */
+                    {
                         Ok(())
                     }
                 } {
@@ -332,9 +340,9 @@ async fn tick(tick_tx: async_channel::Sender<Msg>) {
     }
 }
 
-async fn handle_cf_msg(msg: CfMsg, pipeline: &mut ExecutableGraph, onramps: &Inputs) -> Result<()> {
+async fn handle_cf_msg(msg: CfMsg, pipeline: &mut ExecutableGraph, inputs: &Inputs) -> Result<()> {
     match msg {
-        CfMsg::Insight(insight) => handle_insight(None, insight, pipeline, onramps).await,
+        CfMsg::Insight(insight) => handle_insight(None, insight, pipeline, inputs).await,
     }
     Ok(())
 }
@@ -457,7 +465,7 @@ async fn pipeline_task(
                     if !pid.same_instance_as(&output_url) {
                         if let Err(e) = pipe
                             .send_mgmt(MgmtMsg::ConnectInput {
-                                input_url: pid.clone(), // ensure we have no port here
+                                input_url: pid.clone(),
                                 target: ConnectTarget::Pipeline(Box::new(addr.clone())),
                                 transactional: true,
                             })

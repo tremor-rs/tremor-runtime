@@ -1,0 +1,9 @@
+{
+    "run": "tests/integration/kv-linked",
+    "cmd": "rm",
+    "args": [
+        "-r",
+        "data"
+    ],
+    "max-await-secs": 1
+}

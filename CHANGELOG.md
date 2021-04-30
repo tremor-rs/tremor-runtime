@@ -1,5 +1,13 @@
 # Changelog
 
+### New features
+
+* Add `op` key to KV offramp responses in order to differentiate responses by the command that triggered them
+* Add `key` to KV offramp responses.
+### Fixes
+
+* KV offramp sends error responses for each failed command
+* Ensure binding to first bind linked offramps to pipelines, then pipelines to offramps/onramps/pipeline, then onramps to pipelines to ensure events only start flowing when all downstreams are connected.
 ## 0.11.1
 
 ### New features

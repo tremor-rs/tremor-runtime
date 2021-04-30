@@ -1,0 +1,7 @@
+name: kv linked
+status: 0
+asserts:
+  - source: out.log
+    equals_file: expected.json
+  - source: err.log
+    equals_file: expected_err.json

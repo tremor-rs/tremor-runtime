@@ -500,6 +500,7 @@ impl Artefact for Binding {
                 from.set_instance(&instance);
                 let mut tos: Vec<TremorUrl> = Vec::new();
                 for dst in dsts {
+                    // TODO: we should be able to replace any part of the tremor url with mapping values, not just the instance
                     // TODO: It should be validated ahead of time that every mapping has an instance!
                     if let Some(inst) = dst.instance() {
                         let mut instance = String::new();
@@ -538,6 +539,16 @@ impl Artefact for Binding {
                 }
                 res.binding.links.insert(from, tos);
             }
+        }
+
+        // first start the linked offramps
+        // so they
+        for (from, to) in offramps {
+            system.ensure_pipeline(&to).await?;
+            system.ensure_offramp(&from).await?;
+            system
+                .link_offramp(&from, vec![(to, from.clone())].into_iter().collect())
+                .await?;
         }
 
         for (from, to) in pipelines {
@@ -582,14 +593,6 @@ impl Artefact for Binding {
                         .into_iter()
                         .collect(),
                 )
-                .await?;
-        }
-
-        for (from, to) in offramps {
-            system.ensure_pipeline(&to).await?;
-            system.ensure_offramp(&from).await?;
-            system
-                .link_offramp(&from, vec![(to, from.clone())].into_iter().collect())
                 .await?;
         }
 

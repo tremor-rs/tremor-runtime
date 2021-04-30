@@ -285,5 +285,10 @@ error_chain! {
             description("No socket available")
                 display("No socket available")
         }
+        KvError(s: String) {
+            description("KV error")
+                display("{}", s)
+
+        }
     }
 }
