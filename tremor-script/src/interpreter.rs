@@ -1148,7 +1148,7 @@ where
     'script: 'event,
     'event: 'run,
 {
-    let res = if target.is_object() {
+    let res = if let Some(record) = target.as_object() {
         let mut acc = Value::object_with_capacity(if opts.result_needed {
             rp.fields.len()
         } else {
@@ -1168,19 +1168,19 @@ where
 
             match pp {
                 PredicatePattern::FieldPresent { .. } => {
-                    if let Some(v) = known_key.lookup(target) {
+                    if let Some(v) = known_key.map_lookup(record) {
                         store!(v.clone());
                     } else {
                         return Ok(None);
                     }
                 }
                 PredicatePattern::FieldAbsent { .. } => {
-                    if known_key.lookup(target).is_some() {
+                    if known_key.map_lookup(record).is_some() {
                         return Ok(None);
                     }
                 }
                 PredicatePattern::TildeEq { test, .. } => {
-                    let testee = if let Some(v) = known_key.lookup(target) {
+                    let testee = if let Some(v) = known_key.map_lookup(record) {
                         v
                     } else {
                         return Ok(None);
@@ -1196,7 +1196,7 @@ where
                     }
                 }
                 PredicatePattern::Bin { rhs, kind, .. } => {
-                    let testee = if let Some(v) = known_key.lookup(target) {
+                    let testee = if let Some(v) = known_key.map_lookup(record) {
                         v
                     } else {
                         return Ok(None);
@@ -1211,7 +1211,7 @@ where
                     }
                 }
                 PredicatePattern::RecordPatternEq { pattern, .. } => {
-                    let testee = if let Some(v) = known_key.lookup(target) {
+                    let testee = if let Some(v) = known_key.map_lookup(record) {
                         v
                     } else {
                         return Ok(None);
@@ -1230,7 +1230,7 @@ where
                     }
                 }
                 PredicatePattern::ArrayPatternEq { pattern, .. } => {
-                    let testee = if let Some(v) = known_key.lookup(target) {
+                    let testee = if let Some(v) = known_key.map_lookup(record) {
                         v
                     } else {
                         return Ok(None);

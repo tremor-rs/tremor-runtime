@@ -4,6 +4,7 @@
 
 * Add `op` key to KV offramp responses in order to differentiate responses by the command that triggered them
 * Add `key` to KV offramp responses.
+* Add `KnownKey::map_*` functions to directly work on the `Value::Object`s inner `HashMap`, if available.
 ### Fixes
 
 * KV offramp sends error responses for each failed command
