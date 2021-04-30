@@ -36,19 +36,25 @@ pub struct NodeConfig {
     pub(crate) config: ConfigMap,
     pub(crate) defn: Option<Arc<StmtRentalWrapper>>,
     pub(crate) node: Option<Arc<StmtRentalWrapper>>,
+    pub(crate) label: Option<String>,
 }
 
 impl Display for NodeConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.kind {
-            NodeKind::Input => write!(f, "--> {}", self.id),
-            NodeKind::Output => write!(f, "{} -->", self.id),
-            NodeKind::Operator => write!(f, "{}", self.id),
+            NodeKind::Input => write!(f, "--> {}", self.label()),
+            NodeKind::Output => write!(f, "{} -->", self.label()),
+            NodeKind::Operator => write!(f, "{}", self.label()),
         }
     }
 }
 
 impl NodeConfig {
+    fn label(&self) -> &str {
+        let dflt: &str = &self.id;
+        self.label.as_deref().unwrap_or(dflt)
+    }
+
     /// Creates a `NodeConfig` from a config struct
     pub fn from_config<C, I>(id: I, config: C) -> Result<Self>
     where
@@ -60,10 +66,8 @@ impl NodeConfig {
         Ok(NodeConfig {
             id: id.into(),
             kind: NodeKind::Operator,
-            op_type: "".into(),
             config: serde_yaml::from_slice(&config)?,
-            defn: None,
-            node: None,
+            ..NodeConfig::default()
         })
     }
 }

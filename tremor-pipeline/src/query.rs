@@ -33,8 +33,6 @@ use petgraph::dot::Config;
 use std::mem;
 use std::sync::Arc;
 use tremor_common::ids::OperatorIdGen;
-use tremor_script::path::ModulePath;
-use tremor_script::prelude::*;
 use tremor_script::query::{StmtRental, StmtRentalWrapper};
 use tremor_script::{ast::Select, errors::CompilerError};
 use tremor_script::{
@@ -43,6 +41,8 @@ use tremor_script::{
         query_node_duplicate_name_err, query_node_reserved_name_err, query_stream_not_defined_err,
     },
 };
+use tremor_script::{highlighter::Dumb, path::ModulePath};
+use tremor_script::{highlighter::Highlighter, prelude::*};
 use tremor_script::{AggrRegistry, Registry, Value};
 
 const BUILTIN_NODES: [(Cow<'static, str>, NodeKind); 4] = [
@@ -264,27 +264,40 @@ impl Query {
                         )
                         .into());
                     }
+                    let e = select.stmt.extent(&select.node_meta);
+                    let tokens: Vec<_> = tremor_script::lexer::Tokenizer::new(self.source())
+                        .filter_map(|f| f.ok())
+                        .collect();
+                    let mut h = Dumb::new();
+                    let descr = if h
+                        .highlight_region(Some(self.source()), &tokens, e.0, e.1)
+                        .is_ok()
+                    {
+                        h.to_string()
+                    } else {
+                        String::new()
+                    };
 
                     let select_in = InputPort {
-                        id: format!("select_{}", select_num).into(),
+                        id: format!("select_{}{}", select_num, descr).into(),
                         port: OUT, // TODO: should this be IN?
                         had_port: false,
                         location: s.extent(&query.node_meta),
                     };
                     let select_out = OutputPort {
-                        id: format!("select_{}", select_num).into(),
+                        id: format!("select_{}{}", select_num, descr).into(),
                         port: OUT,
                         had_port: false,
                         location: s.extent(&query.node_meta),
                     };
                     select_num += 1;
-                    let mut from = resolve_output_port(&s.from, &query.node_meta);
+                    let from = resolve_output_port(&s.from, &query.node_meta);
                     if from.id == "in" && from.port != "out" {
-                        let name: Cow<'static, str> = from.port;
+                        let name: Cow<'static, str> = from.port.clone();
 
                         if !nodes.contains_key(&name) {
                             let id = pipe_graph.add_node(NodeConfig {
-                                id: name.clone(),
+                                id: format!("{}/{}", from.id, name).into(),
                                 kind: NodeKind::Input,
                                 op_type: "passthrough".to_string(),
                                 ..NodeConfig::default()
@@ -309,16 +322,16 @@ impl Query {
                             pipe_ops.insert(id, op);
                             inputs.insert(name.clone(), id);
                         }
-                        from.id = name.clone();
-                        from.had_port = false;
-                        from.port = OUT;
+                        // from.id = name.clone();
+                        // from.had_port = false;
+                        // from.port = OUT;
                     }
-                    let mut into = resolve_input_port(&s.into, &query.node_meta);
+                    let into = resolve_input_port(&s.into, &query.node_meta);
                     if into.id == "out" && into.port != "in" {
-                        let name: Cow<'static, str> = into.port;
+                        let name: Cow<'static, str> = into.port.clone();
                         if !nodes.contains_key(&name) {
                             let id = pipe_graph.add_node(NodeConfig {
-                                id: name.clone(),
+                                id: format!("{}/{}", &from.id, name).into(),
                                 kind: NodeKind::Output,
                                 op_type: "passthrough".to_string(),
                                 ..NodeConfig::default()
@@ -343,9 +356,9 @@ impl Query {
                             pipe_ops.insert(id, op);
                             outputs.push(id);
                         }
-                        into.id = name.clone();
-                        into.had_port = false;
-                        into.port = IN;
+                        // into.id = name.clone();
+                        // into.had_port = false;
+                        // into.port = IN;
                     }
 
                     links.entry(from).or_default().push(select_in.clone());
@@ -494,9 +507,9 @@ impl Query {
                         id: common_cow(&o.id),
                         kind: NodeKind::Operator,
                         op_type: "trickle::script".to_string(),
-                        config: None,
                         defn: Some(std::sync::Arc::new(that_defn.clone())),
                         node: Some(std::sync::Arc::new(that.clone())),
+                        ..NodeConfig::default()
                     };
 
                     let id = pipe_graph.add_node(node.clone());
