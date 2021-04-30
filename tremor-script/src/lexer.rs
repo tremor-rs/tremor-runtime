@@ -3144,9 +3144,9 @@ mod tests {
 
     #[test]
     fn test_test_literal_format_bug_regression() -> Result<()> {
-        let mut snot = "match %{ test ~= base64|| } of default => \"badger\" end ".to_string();
+        let snot = "match %{ test ~= base64|| } of default => \"badger\" end ".to_string();
         let mut snot2 = snot.clone();
-        let badger: Vec<_> = Tokenizer::new(&mut snot).collect();
+        let badger: Vec<_> = Tokenizer::new(&snot).collect();
         let mut include_stack = IncludeStack::default();
         let badger2 = Preprocessor::preprocess(
             &ModulePath { mounts: vec![] },
@@ -3179,7 +3179,7 @@ mod tests {
     #[test]
     fn lexer_long_float() -> Result<()> {
         let f = 48354865651623290000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000.0;
-        let mut source = format!("{:.1}", f); // ensure we keep the .0
+        let source = format!("{:.1}", f); // ensure we keep the .0
         match Tokenizer::new(&source).next() {
             Some(Ok(token)) => match token.value {
                 Token::FloatLiteral(f_token, _) => {
@@ -3199,7 +3199,7 @@ mod tests {
         #[cfg(not(tarpaulin))] // avoid coverage from this
         fn float_literals_precision(f in 0f64..f64::MAX) {
             if f.round() != f {
-                let mut float = format!("{:.}", f);
+                let float = format!("{:.}", f);
                 for token in Tokenizer::new(& float) {
                     let _ = token?;
                 }
@@ -3212,8 +3212,8 @@ mod tests {
         #[test]
         #[cfg(not(tarpaulin))] // avoid coverage from this
         fn float_literals_scientific(f in 0f64..f64::MAX) {
-            let mut float = format!("{:e}", f);
-            for token in Tokenizer::new(&mut float) {
+            let float = format!("{:e}", f);
+            for token in Tokenizer::new(& float) {
                 match token {
                     Ok(spanned) =>
                         match spanned.value {
