@@ -26,22 +26,25 @@ pub const DEBUG: bool = true;
 
 /// Provides formatting for "long" version name of build
 pub fn long_version() -> String {
-  #[cfg(not(debug_assertions))]
-  const VERSION_LONG: &str = env!("CARGO_PKG_VERSION");
-  #[cfg(debug_assertions)]
-  const VERSION_LONG: &str = concat!(env!("CARGO_PKG_VERSION"), " (DEBUG)");
-  return match option_env!("VERSION_BRANCH") {
-    Some(branch) => 
-      match branch {
-        "main" => VERSION_LONG.to_string(), // default on main branch
-        _ => {
-          // additional version info otherwise
-          let commit_hash: &str = if let Some(hash) = option_env!("VERSION_HASH") {hash} else {""};
-          format!("{} {}:{}",VERSION_LONG,branch,commit_hash) 
-        }
-      },
-    None => VERSION_LONG.to_string() // default if option env not set
-  }
+    #[cfg(not(debug_assertions))]
+    const VERSION_LONG: &str = env!("CARGO_PKG_VERSION");
+    #[cfg(debug_assertions)]
+    const VERSION_LONG: &str = concat!(env!("CARGO_PKG_VERSION"), " (DEBUG)");
+    return match option_env!("VERSION_BRANCH") {
+        Some(branch) => match branch {
+            "main" => VERSION_LONG.to_string(), // default on main branch
+            _ => {
+                // additional version info otherwise
+                let commit_hash: &str = if let Some(hash) = option_env!("VERSION_HASH") {
+                    hash
+                } else {
+                    ""
+                };
+                format!("{} {}:{}", VERSION_LONG, branch, commit_hash)
+            }
+        },
+        None => VERSION_LONG.to_string(), // default if option env not set
+    };
 }
 
 /// Prints tremor and librdkafka version.
