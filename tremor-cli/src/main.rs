@@ -91,7 +91,7 @@ where
 #[cfg(not(tarpaulin_include))]
 fn main() -> Result<()> {
     let yaml = load_yaml!("./cli.yaml");
-    let long_version = tremor_runtime::version::long_version();
+    let long_version = tremor_runtime::version::long_ver();
     let app = App::from(yaml);
     let app = app.version(long_version.as_str());
     let app = app.global_setting(AppSettings::ColoredHelp);
