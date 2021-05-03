@@ -6,6 +6,10 @@ YEAR=2018-2021
 VERSION_BRANCH=$(shell git rev-parse --abbrev-ref HEAD)
 VERSION_HASH=$(shell git rev-parse HEAD)
 
+# Export version branch / hash to be compiled on any tremor build
+export VERSION_BRANCH
+export VERSION_HASH
+
 RELEASE_TARGETS := \
 	x86_64-unknown-linux-gnu \
 	# x86_64-unknown-linux-musl \

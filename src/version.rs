@@ -13,31 +13,9 @@
 // limitations under the License.
 
 use rdkafka::util::get_rdkafka_version;
-use env::var_os;
 
 /// Version of the tremor crate;
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
-
-/// Long version include build info
-let mut long_version_arr: [&str; 4] = [env!("CARGO_PKG_VERSION")];
-
-match env::var_os("VERSION_BRANCH") {
-  Some(branch) => 
-    match branch {
-      "main" => (),
-      _ => {
-        long_version_arr[1] = branch;
-        long_version_arr[2] = if let Some(hash) = env::var_os("VERSION_HASH") {hash} else {""}
-      }
-    },
-  None => ()
-}
-
-#[cfg(debug_assertions)]
-// Conditionally include " (DEBUG)"
-long_version_arr[3] = " (DEBUG)";
-
-pub const VERSION_LONG: &str = long_version_arr.join();
 
 #[cfg(not(debug_assertions))]
 /// Checks if a we are in a debug build
@@ -46,9 +24,29 @@ pub const DEBUG: bool = false;
 /// Checks if a we are in a debug build
 pub const DEBUG: bool = true;
 
+/// Provides formatting for "long" version name of build
+pub fn version_long() -> String {
+  #[cfg(not(debug_assertions))]
+  const VERSION_LONG: &str = env!("CARGO_PKG_VERSION");
+  #[cfg(debug_assertions)]
+  const VERSION_LONG: &str = concat!(env!("CARGO_PKG_VERSION"), " (DEBUG)");
+  return match option_env!("VERSION_BRANCH") {
+    Some(branch) => 
+      match branch {
+        "main" => VERSION_LONG.to_string(), // default on main branch
+        _ => {
+          // additional version info otherwise
+          let commit_hash: &str = if let Some(hash) = option_env!("VERSION_HASH") {hash} else {""};
+          format!("{} {}:{}",VERSION_LONG,branch,commit_hash) 
+        }
+      },
+    None => VERSION_LONG.to_string() // default if option env not set
+  }
+}
+
 /// Prints tremor and librdkafka version.
 pub fn print() {
-    eprintln!("tremor version: {}", VERSION_LONG);
+    eprintln!("tremor version: {}", version_long().as_str());
     eprintln!("tremor instance: {}", instance!());
     let (version_n, version_s) = get_rdkafka_version();
     eprintln!("rd_kafka version: 0x{:08x}, {}", version_n, version_s);
@@ -56,7 +54,7 @@ pub fn print() {
 
 /// Logs tremor and librdkafka version.
 pub fn log() {
-    info!("tremor version: {}", VERSION_LONG);
+    info!("tremor version: {}", version_long().as_str());
     let (version_n, version_s) = get_rdkafka_version();
     info!("rd_kafka version: 0x{:08x}, {}", version_n, version_s);
 }
