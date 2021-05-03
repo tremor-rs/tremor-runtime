@@ -25,7 +25,7 @@ pub const DEBUG: bool = false;
 pub const DEBUG: bool = true;
 
 /// Provides formatting for "long" version name of build
-pub fn version_long() -> String {
+pub fn long_version() -> String {
   #[cfg(not(debug_assertions))]
   const VERSION_LONG: &str = env!("CARGO_PKG_VERSION");
   #[cfg(debug_assertions)]
@@ -46,7 +46,7 @@ pub fn version_long() -> String {
 
 /// Prints tremor and librdkafka version.
 pub fn print() {
-    eprintln!("tremor version: {}", version_long().as_str());
+    eprintln!("tremor version: {}", long_version().as_str());
     eprintln!("tremor instance: {}", instance!());
     let (version_n, version_s) = get_rdkafka_version();
     eprintln!("rd_kafka version: 0x{:08x}, {}", version_n, version_s);
@@ -54,7 +54,7 @@ pub fn print() {
 
 /// Logs tremor and librdkafka version.
 pub fn log() {
-    info!("tremor version: {}", version_long().as_str());
+    info!("tremor version: {}", long_version().as_str());
     let (version_n, version_s) = get_rdkafka_version();
     info!("rd_kafka version: 0x{:08x}, {}", version_n, version_s);
 }
