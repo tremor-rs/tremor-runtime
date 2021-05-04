@@ -45,7 +45,8 @@ binding:
       "/pipeline/metrics/{instance}/out": ["/offramp/system::stdout/system/in"]
       "/pipeline/metrics/{instance}/err": ["/offramp/system::stderr/system/in"]
 
-      "/pipeline/main/{instance}/done": ["/offramp/exit/{instance}/in"]
+      # exit when we have all events
+      "/pipeline/metrics/{instance}/done": ["/offramp/exit/{instance}/in"]
 
 mapping:
   /binding/test/1:
