@@ -14,6 +14,41 @@
 
 extern crate lalrpop;
 
+fn get_git_branch() -> String {
+  use std::process::Command;
+
+  let branch = Command::new("git")
+                       .arg("rev-parse")
+                       .arg("--abbrev-ref")
+                       .arg("HEAD")
+                       .output();
+  if let Ok(branch_output) = branch {
+      let branch_string = String::from_utf8_lossy(&branch_output.stdout);
+      branch_string.lines().next().unwrap_or("")
+  } else {
+      panic!("Can not get git branch: {}", branch.unwrap_err());
+  }
+  ""
+}
+
+fn get_git_commit() -> String {
+  use std::process::Command;
+
+  let commit = Command::new("git")
+                           .arg("rev-parse")
+                           .arg("--verify")
+                           .arg("HEAD")
+                           .output();
+  
+  if let Ok(commit_output) = commit {
+      let commit_string = String::from_utf8_lossy(&commit_output.stdout);
+      commit_string.lines().next().unwrap_or("")
+  } else {
+      panic!("Can not get git commit: {}", commit_output.unwrap_err());
+  }
+  ""
+}
+
 fn main() {
     lalrpop::Configuration::new()
         .use_cargo_dir_conventions()
@@ -22,4 +57,7 @@ fn main() {
 
     println!("cargo:rustc-cfg=can_join_spans");
     println!("cargo:rustc-cfg=can_show_location_of_runtime_parse_error");
+
+    println!(format!("cargo:rustc-env=VERSION_BRANCH={}", branch));
+    println!(format!("cargo:rustc-env=VERSION_HASH={}", commit));
 }
