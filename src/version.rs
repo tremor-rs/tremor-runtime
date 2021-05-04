@@ -24,6 +24,7 @@ pub const DEBUG: bool = false;
 /// Checks if a we are in a debug build
 pub const DEBUG: bool = true;
 
+#[must_use]
 /// Provides formatting for "long" version name of build
 pub fn long_ver() -> String {
     #[cfg(not(debug_assertions))]
@@ -31,15 +32,11 @@ pub fn long_ver() -> String {
     #[cfg(debug_assertions)]
     const VERSION_LONG: &str = concat!(env!("CARGO_PKG_VERSION"), " (DEBUG)");
     return match option_env!("VERSION_BRANCH") {
-        Some(branch) => match branch {
-            "main" => VERSION_LONG.to_string(), // default on main branch
-            _ => {
+        Some(branch) => 
+          if branch == "main" { VERSION_LONG.to_string() } // default on main branch
+            else {
                 // additional version info otherwise
-                let commit_hash: &str = if let Some(hash) = option_env!("VERSION_HASH") {
-                    hash
-                } else {
-                    ""
-                };
+                let commit_hash: &str = option_env!("VERSION_HASH").map_or("", |hash| hash)
                 format!("{} {}:{}", VERSION_LONG, branch, commit_hash)
             }
         },
