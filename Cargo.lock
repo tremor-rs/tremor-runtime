@@ -2443,9 +2443,9 @@ dependencies = [
 
 [[package]]
 name = "http-types"
-version = "2.11.0"
+version = "2.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "686f600cccfb9d96c45550bac47b592bc88191a0dd965e9d55848880c2c5a45f"
+checksum = "ad077d89137cd3debdce53c66714dc536525ef43fe075d41ddc0a8ac11f85957"
 dependencies = [
  "anyhow",
  "async-channel",
