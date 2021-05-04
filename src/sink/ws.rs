@@ -18,6 +18,7 @@ use crate::sink::prelude::*;
 use crate::source::prelude::*;
 use async_channel::{bounded, unbounded, Receiver, Sender};
 use async_tungstenite::async_std::connect_async;
+use async_tungstenite::tungstenite::error::Error as WsError;
 use async_tungstenite::tungstenite::Message;
 use futures::SinkExt;
 use halfbrown::HashMap;
@@ -183,13 +184,13 @@ async fn ws_connection_loop(
                                         }
                                     }
                                     Err(e) => {
-                                        let e = format!(
+                                        let err_msg = format!(
                                             "Error sending event to server {}: {}.",
                                             &url, e
                                         );
                                         handle_error(
                                             &sink_url,
-                                            &e,
+                                            &err_msg,
                                             &reply_tx,
                                             &event_id,
                                             &event_origin_url,
@@ -198,8 +199,21 @@ async fn ws_connection_loop(
                                         )
                                         .await?;
 
-                                        // close connection explicitly
-                                        ws_stream.close(None).await?;
+                                        // close connection explicitly - if it is not already closed
+                                        if !matches!(
+                                            e,
+                                            WsError::Io(_)
+                                                | WsError::AlreadyClosed
+                                                | WsError::ConnectionClosed
+                                        ) {
+                                            if let Err(e) = ws_stream.close(None).await {
+                                                error!(
+                                                    "[Sink::{}] Error closing ws stream to {}: {}",
+                                                    &sink_url, &url, e
+                                                );
+                                            }
+                                        }
+
                                         connection_lifecycle_tx
                                             .send(WsConnectionMsg::Disconnected(url.clone()))
                                             .await?;
@@ -432,6 +446,7 @@ impl Ws {
         for _ in 0..len {
             match self.connection_lifecycle_rx.recv().await? {
                 WsConnectionMsg::Connected(url, addr) => {
+                    info!("[Sink::{}] Connected: '{}'", &self.sink_url, &url);
                     // TODO trigger per url/connection (only resuming events with that url)
                     if url == self.config.url {
                         let mut e = Event::cb_restore(ingest_ns);
@@ -444,16 +459,26 @@ impl Ws {
                 }
                 WsConnectionMsg::Disconnected(url) => {
                     // TODO trigger per url/connection (only events with that url should be paused)
+                    info!("[Sink::{}] Disconnected '{}'", &self.sink_url, &url);
                     if url == self.config.url {
                         let mut e = Event::cb_trigger(ingest_ns);
                         e.op_meta = self.merged_meta.clone();
                         self.reply_tx.send(sink::Reply::Insight(e)).await?;
                     }
-                    if let Some((_, handle)) = self.connections.remove(&url) {
-                        handle.cancel().await;
-                    }
+                    // just remove it from the map, so it is not available anymore,
+                    // do not cancel the task, otherwise we do not attempt reconnects
+                    self.connections.remove(&url);
                 }
             }
+            trace!(
+                "[Sink:{}] Active Connections: {}",
+                &self.sink_url,
+                self.connections
+                    .keys()
+                    .cloned()
+                    .collect::<Vec<String>>()
+                    .join(", ")
+            );
         }
         Ok(())
     }
