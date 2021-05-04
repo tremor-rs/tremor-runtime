@@ -10,6 +10,7 @@
 * KV offramp sends error responses for each failed command
 * Ensure binding to first bind linked offramps to pipelines, then pipelines to offramps/onramps/pipeline, then onramps to pipelines to ensure events only start flowing when all downstreams are connected.
 * Fix empty record pattern to only match records.
+* Fix ws offramp not reconnecting after connection loss.
 ## 0.11.1
 
 ### New features
