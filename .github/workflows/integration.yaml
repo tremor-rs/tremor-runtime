@@ -37,27 +37,27 @@ jobs:
       - name: Build test runner
         run: cargo build -p tremor-cli
         env:
-          RUSTFLAGS: "-C target-feature=${{ matrix.target_feature }}"
+          RUSTFLAGS: -D warnings -C target-feature=${{ matrix.target_feature }}
       - name: Run Integration Tests
         run: cargo run -p tremor-cli -- test integration tremor-cli/tests ${{ matrix.exclude_tests }}
         env:
           TREMOR_PATH: "${{ github.workspace }}/tremor-script/lib"
-          RUSTFLAGS: "-C target-feature=${{ matrix.target_feature }}"
+          RUSTFLAGS: -D warnings -C target-feature=${{ matrix.target_feature }}
       - name: Run API Tests
         run: cargo run -p tremor-cli -- test api tremor-cli/tests ${{ matrix.exclude_tests }}
         env:
           TREMOR_PATH: "${{ github.workspace }}/tremor-script/lib"
-          RUSTFLAGS: "-C target-feature=${{ matrix.target_feature }}"
+          RUSTFLAGS: -D warnings -C target-feature=${{ matrix.target_feature }}
       - name: Run Unit Tests
         run: cargo run -p tremor-cli -- test unit tremor-cli/tests ${{ matrix.exclude_tests }}
         env:
           TREMOR_PATH: "${{ github.workspace }}/tremor-script/lib"
-          RUSTFLAGS: "-C target-feature=${{ matrix.target_feature }}"
+          RUSTFLAGS: -D warnings -C target-feature=${{ matrix.target_feature }}
       - name: Run Command Tests
         run: cargo run -p tremor-cli -- test command tremor-cli/tests ${{ matrix.exclude_tests }}
         env:
           TREMOR_PATH: "${{ github.workspace }}/tremor-script/lib"
-          RUSTFLAGS: "-C target-feature=${{ matrix.target_feature }}"
+          RUSTFLAGS: -D warnings -C target-feature=${{ matrix.target_feature }}
       - name: Upload error logs
         uses: actions/upload-artifact@v2
         if: failure()

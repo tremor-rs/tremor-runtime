@@ -1,5 +1,3 @@
-#![deny(warnings)]
-#![deny(warnings)]
 #![warn(unused_extern_crates)]
 #![deny(
     clippy::all,

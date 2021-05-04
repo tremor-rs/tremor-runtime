@@ -21,6 +21,7 @@ jobs:
       - name: Run tests and validate lockfile
         env:
           PROPTEST_CASES: 2500
+          RUSTFLAGS: -D warnings
         run: cargo test --all --locked
   code-coverage:
     runs-on: ubuntu-latest
@@ -37,7 +38,7 @@ jobs:
         uses: actions-rs/tarpaulin@v0.1
         env:
           PROPTEST_CASES: 2500
-          RUSTFLAGS: -C target-feature=+avx,+avx2,+sse4.2
+          RUSTFLAGS: -D warnings -C target-feature=+avx,+avx2,+sse4.2
         with:
           version: "0.16.0"
           args: " --exclude-files target* tremor-cli tremor-api deprecated **/errors.rs --out Lcov --all"
