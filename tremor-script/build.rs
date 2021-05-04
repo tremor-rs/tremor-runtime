@@ -24,11 +24,10 @@ fn get_git_branch() -> String {
                        .output();
   if let Ok(branch_output) = branch {
       let branch_string = String::from_utf8_lossy(&branch_output.stdout);
-      branch_string.lines().next().unwrap_or("")
+      return branch_string.lines().next().unwrap_or("").to_string()
   } else {
       panic!("Can not get git branch: {}", branch.unwrap_err());
   }
-  ""
 }
 
 fn get_git_commit() -> String {
@@ -42,11 +41,10 @@ fn get_git_commit() -> String {
   
   if let Ok(commit_output) = commit {
       let commit_string = String::from_utf8_lossy(&commit_output.stdout);
-      commit_string.lines().next().unwrap_or("")
+      return commit_string.lines().next().unwrap_or("").to_string()
   } else {
-      panic!("Can not get git commit: {}", commit_output.unwrap_err());
+      panic!("Can not get git commit: {}", commit.unwrap_err());
   }
-  ""
 }
 
 fn main() {
@@ -58,6 +56,6 @@ fn main() {
     println!("cargo:rustc-cfg=can_join_spans");
     println!("cargo:rustc-cfg=can_show_location_of_runtime_parse_error");
 
-    println!(format!("cargo:rustc-env=VERSION_BRANCH={}", branch));
-    println!(format!("cargo:rustc-env=VERSION_HASH={}", commit));
+    println!("{}", format!("cargo:rustc-env=VERSION_BRANCH={}", get_git_branch()));
+    println!("{}", format!("cargo:rustc-env=VERSION_HASH={}", get_git_commit()));
 }
