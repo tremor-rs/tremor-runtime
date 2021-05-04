@@ -46,8 +46,6 @@ docker build \
   --network host \
   -t "${IMAGE_NAMESPACE}/${IMAGE_NAME}:${TARGET}" \
   -t "${IMAGE_NAMESPACE}/${IMAGE_NAME}:${TARGET}-${RUST_VERSION}" \
-  --build-arg VERSION_BRANCH=${VERSION_BRANCH} \
-  --build-arg VERSION_HASH=${VERSION_HASH} \
   --build-arg RUST_VERSION=${RUST_VERSION} \
   -f ${DOCKERFILE} \
   .
