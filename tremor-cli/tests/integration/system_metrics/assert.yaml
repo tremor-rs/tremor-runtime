@@ -8,4 +8,16 @@ asserts:
   - source: metrics_offramp.log
     equals_file: "expected_metrics_offramp.json"
   - source: events.log
-    equals_file: "expected_events.json"
+    contains:
+      - |
+        {"onramp":"metronome","ingest_ns":null,"id":0}
+      - |
+        {"onramp":"metronome","ingest_ns":null,"id":1}
+      - |
+        {"onramp":"metronome","ingest_ns":null,"id":2}
+      - |
+        {"onramp":"metronome","ingest_ns":null,"id":3}
+      - |
+        {"onramp":"metronome","ingest_ns":null,"id":4}
+      - |
+        {"onramp":"metronome","ingest_ns":null,"id":5}

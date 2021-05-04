@@ -2,6 +2,20 @@ define script process
 script
   let event.timestamp = null; # for testing
 
+  let state = match state of
+    # exit when we have all metrics events
+    case %{ present onramp, present pipeline, present offramp } when state.onramp >= 9 and state.pipeline >= 4 and state.offramp >= 6 => emit {"exit": 0, "delay": 100} => "done"
+    # state is valid
+    case %{} => state
+    # initialize state
+    default => {
+      "out": 0,
+      "onramp": 0,
+      "pipeline": 0,
+      "offramp": 0
+    }
+  end;
+
   let port = match event.measurement of
     case "events" => "pipeline"
     case "ramp_events" =>
@@ -12,6 +26,8 @@ script
       end
     default => "out"
   end;
+  # count events per port
+  let state[port] = state[port] + 1;
 
   emit event => "#{port}";
 end;
@@ -23,5 +39,6 @@ select event from in into process;
 select event from process/pipeline into out/pipeline;
 select event from process/onramp into out/onramp;
 select event from process/offramp into out/offramp;
+select event from process/done into out/done;
 
 select event from process/err into err;
