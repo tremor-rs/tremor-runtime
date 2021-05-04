@@ -30,7 +30,6 @@
 //! }
 //! ```
 
-#![deny(warnings)]
 #![deny(missing_docs)]
 #![recursion_limit = "1024"]
 #![deny(
