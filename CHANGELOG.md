@@ -14,6 +14,8 @@
 - Fix empty record pattern to only match records.
 - Fix ws offramp not reconnecting after connection loss.
 - Run tests in tremor-cli bin
+- Switch operations of `tremor dbg lex` and `tremor dbg preprocess` as they did the job of the other.
+- Fix heredoc preprocessing, which was messing up error reporting
 
 ## 0.11.1
 
