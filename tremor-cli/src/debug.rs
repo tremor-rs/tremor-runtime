@@ -130,12 +130,15 @@ where
                         " {:<30}    \u{2219}    ",
                         format!("{:?}", value).split('(').collect::<Vec<&str>>()[0]
                     )?;
-                    h.highlight_no_linenos(
+                    h.highlight(
                         None,
                         &[Spanned {
                             span: Span { start, end, pp_start, pp_end },
                             value,
                         }],
+                        "",
+                        false,
+                        None
                     )?;
                 }
             }

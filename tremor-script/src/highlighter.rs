@@ -15,10 +15,13 @@
 // This is terminal related for colorful printing
 #![cfg(not(tarpaulin_include))]
 
-use crate::errors::{CompilerError, Error as ScriptError};
 use crate::lexer::{Token, TokenSpan};
 use crate::pos::Location;
 use crate::{ast::Warning, errors::UnfinishedToken};
+use crate::{
+    errors::{CompilerError, Error as ScriptError},
+    lexer::Range,
+};
 use serde::{Deserialize, Serialize};
 use std::io::Write;
 use termcolor::{Buffer, BufferWriter, Color, ColorChoice, ColorSpec, WriteColor};
@@ -160,74 +163,33 @@ pub trait Highlighter {
     /// get the raw writer
     fn get_writer(&mut self) -> &mut Self::W;
 
-    /// highlights a token stream without line numbers
-    fn highlight_no_linenos(
-        &mut self,
-        file: Option<&str>,
-        tokens: &[TokenSpan],
-    ) -> std::result::Result<(), std::io::Error> {
-        self.highlight_errors(false, file, &tokens.iter().collect::<Vec<_>>(), None)
-    }
-
     /// highlights a token stream with line numbers
     fn highlight(
         &mut self,
         file: Option<&str>,
         tokens: &[TokenSpan],
+        ident: &str,
+        emit_lines: bool,
+        range: Option<Range>,
     ) -> std::result::Result<(), std::io::Error> {
-        self.highlight_errors(true, file, &tokens.iter().collect::<Vec<_>>(), None)
-    }
-
-    /// highlights a token stream with line numbers in a given region
-    fn highlight_region(
-        &mut self,
-        file: Option<&str>,
-        tokens: &[TokenSpan],
-        expr_start: Location,
-        expr_end: Location,
-    ) -> std::result::Result<(), std::io::Error> {
-        let extracted = extract(tokens, expr_start, expr_end);
-        self.highlight_errors(true, file, &extracted, None)
-    }
-
-    /// highlights a token stream with line numbers
-    fn highlight_indent(
-        &mut self,
-        line_prefix: &str,
-        file: Option<&str>,
-        tokens: &[TokenSpan],
-    ) -> std::result::Result<(), std::io::Error> {
-        self.highlight_errors_indent(
-            line_prefix,
-            true,
-            file,
-            &tokens.iter().collect::<Vec<_>>(),
-            None,
-        )
-    }
-
-    /// highlights a runtime error
-    fn highlight_runtime_error(
-        &mut self,
-        file: Option<&str>,
-        tokens: &[TokenSpan],
-        expr_start: Location,
-        expr_end: Location,
-        error: Option<Error>,
-    ) -> std::result::Result<(), std::io::Error> {
-        let extracted = extract(tokens, expr_start, expr_end);
-        self.highlight_errors(true, file, &extracted, error)
+        self.highlight_error(file, tokens, ident, emit_lines, range, None)
     }
 
     /// highlights compile time errors
-    fn highlight_errors(
+    fn highlight_error(
         &mut self,
-        emit_linenos: bool,
         file: Option<&str>,
-        tokens: &[&TokenSpan],
+        tokens: &[TokenSpan],
+        ident: &str,
+        emit_linenos: bool,
+        range: Option<Range>,
         error: Option<Error>,
     ) -> std::result::Result<(), std::io::Error> {
-        self.highlight_errors_indent("", emit_linenos, file, tokens, error)
+        let extracted = range.map_or_else(
+            || tokens.iter().collect::<Vec<_>>(),
+            |Range(start, end)| extract(tokens, start, end),
+        );
+        self.highlight_errors_indent(ident, emit_linenos, file, &extracted, error)
     }
 
     /// ensure we have a newline written as last character
@@ -249,7 +211,7 @@ pub trait Highlighter {
         if emit_linenos {
             write!(self.get_writer(), "{}{:5} | ", line_prefix, line)?;
         } else {
-            write!(self.get_writer(), "{}      | ", line_prefix)?;
+            write!(self.get_writer(), "{}        ", line_prefix)?;
         }
         self.reset()?;
         Ok(())

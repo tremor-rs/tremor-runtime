@@ -41,11 +41,7 @@ pub struct NodeConfig {
 
 impl Display for NodeConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.kind {
-            NodeKind::Input => write!(f, "--> {}", self.label()),
-            NodeKind::Output => write!(f, "{} -->", self.label()),
-            NodeKind::Operator => write!(f, "{}", self.label()),
-        }
+        write!(f, "{}", self.label())
     }
 }
 

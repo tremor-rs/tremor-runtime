@@ -203,6 +203,8 @@ pub enum NodeKind {
     Output,
     /// An operator
     Operator,
+    /// A select statement
+    Select,
 }
 
 impl Default for NodeKind {
@@ -738,7 +740,25 @@ pub fn influx_value(
     })
 }
 
-pub(crate) type ConfigGraph = graph::DiGraph<NodeConfig, u8>;
+#[derive(Debug, Default)]
+struct Connection {
+    from: Cow<'static, str>,
+    to: Cow<'static, str>,
+}
+impl Display for Connection {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+        let from: &str = &self.from;
+        let to: &str = &self.to;
+        match (from, to) {
+            ("out", "in") => write!(f, ""),
+            ("out", to) => write!(f, "{}", to),
+            (from, "in") => write!(f, "{} ", from),
+            (from, to) => write!(f, "{} -> {}", from, to),
+        }
+    }
+}
+
+pub(crate) type ConfigGraph = graph::DiGraph<NodeConfig, Connection>;
 
 #[cfg(test)]
 mod test {

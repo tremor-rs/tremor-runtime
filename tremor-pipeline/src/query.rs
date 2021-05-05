@@ -12,11 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::{Error, ErrorKind, Result};
 use crate::op::prelude::{ERR, IN, METRICS, OUT};
 use crate::op::trickle::select::WindowImpl;
 use crate::{
     common_cow, op, ConfigGraph, NodeConfig, NodeKind, Operator, OperatorNode, PortIndexMap,
+};
+use crate::{
+    errors::{Error, ErrorKind, Result},
+    Connection,
 };
 use beef::Cow;
 use halfbrown::HashMap;
@@ -29,7 +32,7 @@ use op::trickle::{
     simple_select::SimpleSelect,
 };
 use petgraph::algo::is_cyclic_directed;
-use petgraph::dot::Config;
+// use petgraph::dot::Config;
 use std::mem;
 use std::sync::Arc;
 use tremor_common::ids::OperatorIdGen;
@@ -270,7 +273,7 @@ impl Query {
                         .collect();
                     let mut h = Dumb::new();
                     let label = if h
-                        .highlight_region(Some(self.source()), &tokens, e.0, e.1)
+                        .highlight(Some(self.source()), &tokens, "", false, Some(e))
                         .is_ok()
                     {
                         Some(h.to_string().trim_end().to_string())
@@ -280,7 +283,7 @@ impl Query {
 
                     let select_in = InputPort {
                         id: format!("select_{}", select_num).into(),
-                        port: OUT, // TODO: should this be IN?
+                        port: IN,
                         had_port: false,
                         location: s.extent(&query.node_meta),
                     };
@@ -296,8 +299,9 @@ impl Query {
                         let name: Cow<'static, str> = from.port.clone();
 
                         if !nodes.contains_key(&name) {
+                            dbg!(&name);
                             let id = pipe_graph.add_node(NodeConfig {
-                                id: format!("{}/{}", from.id, name).into(),
+                                id: name.clone(),
                                 kind: NodeKind::Input,
                                 op_type: "passthrough".to_string(),
                                 ..NodeConfig::default()
@@ -320,23 +324,21 @@ impl Query {
                                 }
                             };
                             pipe_ops.insert(id, op);
-                            inputs.insert(name.clone(), id);
+                            inputs.insert(name, id);
                         }
-                        // from.id = name.clone();
-                        // from.had_port = false;
-                        // from.port = OUT;
                     }
                     let into = resolve_input_port(&s.into, &query.node_meta);
                     if into.id == "out" && into.port != "in" {
                         let name: Cow<'static, str> = into.port.clone();
                         if !nodes.contains_key(&name) {
+                            dbg!(&name);
                             let id = pipe_graph.add_node(NodeConfig {
-                                id: format!("{}/{}", &from.id, name).into(),
+                                id: name.clone(),
                                 kind: NodeKind::Output,
                                 op_type: "passthrough".to_string(),
                                 ..NodeConfig::default()
                             });
-                            nodes.insert(name.clone(), id);
+                            nodes.insert(name, id);
                             let op = match pipe_graph.raw_nodes().get(id.index()) {
                                 Some(node) => node.weight.to_op(
                                     idgen.next_id(),
@@ -356,9 +358,6 @@ impl Query {
                             pipe_ops.insert(id, op);
                             outputs.push(id);
                         }
-                        // into.id = name.clone();
-                        // into.had_port = false;
-                        // into.port = IN;
                     }
 
                     links.entry(from).or_default().push(select_in.clone());
@@ -367,7 +366,7 @@ impl Query {
                     let node = NodeConfig {
                         id: select_in.id.clone(),
                         label,
-                        kind: NodeKind::Operator,
+                        kind: NodeKind::Select,
                         op_type: "trickle::select".to_string(),
                         ..NodeConfig::default()
                     };
@@ -558,11 +557,37 @@ impl Query {
                         ports.push(to_tpl);
                     }
                 }
-                pipe_graph.add_edge(from_idx, to_idx, 0);
+                pipe_graph.add_edge(
+                    from_idx,
+                    to_idx,
+                    Connection {
+                        from: from.port.clone(),
+                        to: to.port.clone(),
+                    },
+                );
             }
         }
 
-        let dot = petgraph::dot::Dot::with_config(&pipe_graph, &[Config::EdgeNoLabel]);
+        let dot = petgraph::dot::Dot::with_attr_getters(
+            &pipe_graph,
+            &[],
+            &|_g, _r| "".to_string(),
+            &|_g, (_i, c)| match c {
+                NodeConfig {
+                    kind: NodeKind::Input,
+                    ..
+                } => r#"shape = "rarrow""#.to_string(),
+                NodeConfig {
+                    kind: NodeKind::Output,
+                    ..
+                } => r#"shape = "larrow""#.to_string(),
+                NodeConfig {
+                    kind: NodeKind::Select,
+                    ..
+                } => r#"shape = "box""#.to_string(),
+                _ => "".to_string(),
+            },
+        );
 
         // iff cycles, fail and bail
         if is_cyclic_directed(&pipe_graph) {
@@ -835,7 +860,7 @@ mod test {
         let mut idgen = OperatorIdGen::new();
         let first = idgen.next_id();
         let g = q.to_pipe(&mut idgen).unwrap();
-
+        dbg!(&g.inputs);
         assert!(g.inputs.contains_key("test_in"));
         assert_eq!(idgen.next_id(), first + g.graph.len() as u64 + 1);
         let out = g.graph.get(5).unwrap();
