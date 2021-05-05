@@ -17,7 +17,6 @@ use crate::errors::{CompilerError, Error, Result};
 use crate::highlighter::{Dumb as DumbHighlighter, Highlighter};
 use crate::lexer;
 use crate::path::ModulePath;
-use crate::pos::Range;
 use crate::prelude::*;
 use rental::rental;
 use std::io::Write;
@@ -165,7 +164,7 @@ where
         let tokens: Vec<_> = lexer::Tokenizer::new(&script)
             .tokenize_until_err()
             .collect();
-        h.highlight(None, &tokens)
+        h.highlight(None, &tokens, "", true, None)
     }
 
     /// Format an error given a script source.
@@ -181,8 +180,8 @@ where
             .tokenize_until_err()
             .collect();
         match e.context() {
-            (Some(Range(start, end)), _) => {
-                h.highlight_runtime_error(None, &tokens, start, end, Some(e.into()))?;
+            (Some(r), _) => {
+                h.highlight_error(None, &tokens, "", true, Some(r), Some(e.into()))?;
                 h.finalize()
             }
 
@@ -199,7 +198,7 @@ where
             let tokens: Vec<_> = lexer::Tokenizer::new(&self.source)
                 .tokenize_until_err()
                 .collect();
-            h.highlight_runtime_error(None, &tokens, w.outer.0, w.outer.1, Some(w.into()))?;
+            h.highlight_error(None, &tokens, "", true, Some(w.outer), Some(w.into()))?;
         }
         h.finalize()
     }

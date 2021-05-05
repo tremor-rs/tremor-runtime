@@ -20,7 +20,7 @@ pub use crate::interpreter::AggrType;
 use crate::lexer;
 use crate::parser::g as grammar;
 use crate::path::ModulePath;
-use crate::pos::{Range, Spanned};
+use crate::pos::Range;
 use crate::registry::{Aggr as AggrRegistry, Registry};
 use crate::Value;
 use serde::Serialize;
@@ -151,7 +151,7 @@ where
         let tokens: Vec<_> = lexer::Tokenizer::new(&script)
             .tokenize_until_err()
             .collect();
-        h.highlight(None, &tokens)?;
+        h.highlight(None, &tokens, "", true, None)?;
         io::Result::Ok(())
     }
 
@@ -188,20 +188,7 @@ where
         .filter_map(Result::ok)
         .collect();
 
-        let tokens: Vec<_> = tokens
-            .into_iter()
-            .filter(|t| {
-                let s = r.0;
-                let e = r.1;
-                // t.span.start.unit_id == s.unit_id && t.span.start.column >=  s.column && t.span.start.line >= s.line &&
-                t.span.start.unit_id == s.unit_id
-                    && t.span.start.line() >= s.line()
-                    && t.span.end.unit_id == e.unit_id
-                    && t.span.end.line() <= e.line()
-            })
-            .collect::<Vec<Spanned<lexer::Token>>>();
-
-        h.highlight_indent(line_prefix, None, tokens.as_slice())?;
+        h.highlight(None, &tokens, line_prefix, true, Some(r))?;
         io::Result::Ok(())
     }
 
@@ -221,24 +208,25 @@ where
         error: &Error,
         cus: &[lexer::CompilationUnit],
     ) -> io::Result<()> {
-        if let (Some(Range(start, end)), _) = error.context() {
+        if let (Some(r), _) = error.context() {
             let cu = error.cu();
             if cu == 0 {
                 // i wanna use map_while here, but it is still unstable :(
                 let tokens: Vec<_> = lexer::Tokenizer::new(&script)
                     .tokenize_until_err()
                     .collect();
-                h.highlight_runtime_error(None, &tokens, start, end, Some(error.into()))?;
+                h.highlight_error(None, &tokens, "", true, Some(r), Some(error.into()))?;
             } else if let Some(cu) = cus.get(cu) {
                 let script = std::fs::read_to_string(cu.file_path())?;
                 let tokens: Vec<_> = lexer::Tokenizer::new(&script)
                     .tokenize_until_err()
                     .collect();
-                h.highlight_runtime_error(
+                h.highlight_error(
                     cu.file_path().to_str(),
                     &tokens,
-                    start,
-                    end,
+                    "",
+                    true,
+                    Some(r),
                     Some(error.into()),
                 )?;
             } else {
@@ -256,7 +244,7 @@ where
             let tokens: Vec<_> = lexer::Tokenizer::new(&self.source)
                 .tokenize_until_err()
                 .collect();
-            h.highlight_runtime_error(None, &tokens, w.outer.0, w.outer.1, Some(w.into()))?;
+            h.highlight_error(None, &tokens, "", true, Some(w.outer), Some(w.into()))?;
         }
         h.finalize()
     }

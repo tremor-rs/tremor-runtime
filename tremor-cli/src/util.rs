@@ -311,7 +311,7 @@ pub(crate) fn highlight(is_pretty: bool, value: &Value) -> Result<()> {
         .collect();
 
     let mut h = TermHighlighter::default();
-    if let Err(e) = h.highlight(Some(&result), &lexed_tokens) {
+    if let Err(e) = h.highlight(Some(&result), &lexed_tokens, "", true, None) {
         return Err(e.into());
     };
 
