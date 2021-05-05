@@ -23,6 +23,11 @@ jobs:
           PROPTEST_CASES: 2500
           RUSTFLAGS: -D warnings
         run: cargo test --all --locked
+      - name: Run bin tests and validate lockfile
+        env:
+          PROPTEST_CASES: 2500
+          RUSTFLAGS: -D warnings
+        run: cargo test -p tremor-cli --bin tremor --all --locked
   code-coverage:
     runs-on: ubuntu-latest
     steps:
