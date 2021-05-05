@@ -178,8 +178,11 @@ pub enum Token<'input> {
     FloatLiteral(f64, String),
     /// a test literal
     TestLiteral(usize, Vec<String>),
-    /// a heredoc
-    HereDoc, // (usize, Vec<String>),
+    /// a heredoc start token `"""`
+    HereDocStart,
+
+    /// a heredoc end token `"""`
+    HereDocEnd,
 
     /// a double quote `"`
     DQuote,
@@ -494,7 +497,11 @@ impl<'input> Token<'input> {
     pub(crate) fn is_string_like(&self) -> bool {
         matches!(
             *self,
-            Token::StringLiteral(_) | Token::DQuote | Token::TestLiteral(_, _) | Token::HereDoc
+            Token::StringLiteral(_)
+                | Token::DQuote
+                | Token::TestLiteral(_, _)
+                | Token::HereDocStart
+                | Token::HereDocEnd
         )
     }
 
@@ -606,13 +613,13 @@ impl<'input> fmt::Display for Token<'input> {
                     Ok(())
                 }
             }
-            Token::HereDoc => {
-                // (indent, lines) => {
+            Token::HereDocStart => {
+                // here we write the following linebreak
                 writeln!(f, r#"""""#)
-                // for l in lines {
-                //     writeln!(f, "{}{}", " ".repeat(*indent), l)?
-                // }
-                //                write!(f, r#"""""#)
+            }
+            Token::HereDocEnd => {
+                // here we do not
+                write!(f, r#"""""#)
             }
             Token::TestLiteral(indent, values) => {
                 let mut first = true;
@@ -1284,6 +1291,12 @@ impl<'input> Preprocessor {
                         .into());
                     }
                 }
+                Some(Ok(Spanned {
+                    value: Token::StringLiteral(string),
+                    span: _,
+                })) => {
+                    input.push_str(&string);
+                }
                 Some(Ok(other)) => {
                     input.push_str(&format!("{}", other.value));
                 }
@@ -1293,7 +1306,7 @@ impl<'input> Preprocessor {
                 None => break,
             }
         }
-
+        dbg!(&input);
         //input.push_str(" ");
         let tokens = Tokenizer::new(input).collect();
 
@@ -1779,7 +1792,7 @@ impl<'input> Lexer<'input> {
                     // We don't allow anything tailing the initial `"""`
                     match self.bump() {
                         Some((mut newline_loc, '\n')) => {
-                            res = vec![self.spanned2(start, end, Token::HereDoc)]; // (0, vec![]))];
+                            res = vec![self.spanned2(start, end, Token::HereDocStart)]; // (0, vec![]))];
                             string = String::new();
                             newline_loc.shift('\n'); // content starts after newline
                             self.hd(heredoc_start, newline_loc, end, false, &string, res)
@@ -2118,7 +2131,7 @@ impl<'input> Lexer<'input> {
                             self.bump();
                             let mut heredoc_end = e;
                             heredoc_end.shift('"');
-                            res.push(self.spanned2(segment_start, heredoc_end, Token::HereDoc));
+                            res.push(self.spanned2(segment_start, heredoc_end, Token::HereDocEnd));
                             return Ok(res);
                         }
                         e
