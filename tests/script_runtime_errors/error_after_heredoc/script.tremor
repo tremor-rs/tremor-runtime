@@ -1,0 +1,6 @@
+let heredoc = """
+snot
+badger
+""";
+
+event.snot
