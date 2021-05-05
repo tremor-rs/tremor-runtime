@@ -144,7 +144,7 @@ where
     Ok(())
 }
 
-fn dbg_pp<W>(h: &mut W, opts: &Opts) -> Result<()>
+fn dbg_lex<W>(h: &mut W, opts: &Opts) -> Result<()>
 where
     W: Highlighter,
 {
@@ -152,7 +152,7 @@ where
         h,
         opts,
         "Lexemes",
-        "Lexical token stream after preprocessing",
+        "Lexical token stream before preprocessing",
     )?;
 
     let lexemes: Vec<_> = Tokenizer::new(&opts.raw).tokenize_until_err().collect();
@@ -164,7 +164,7 @@ where
     Ok(())
 }
 
-fn dbg_lex<W>(h: &mut W, opts: &Opts) -> Result<()>
+fn dbg_pp<W>(h: &mut W, opts: &Opts) -> Result<()>
 where
     W: Highlighter,
 {
@@ -172,7 +172,7 @@ where
         h,
         opts,
         "Lexemes",
-        "Lexical token stream before preprocessing",
+        "Lexical token stream after preprocessing",
     )?;
 
     let mut include_stack = lexer::IncludeStack::default();
