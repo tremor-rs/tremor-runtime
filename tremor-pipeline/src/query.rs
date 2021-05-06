@@ -268,18 +268,11 @@ impl Query {
                         .into());
                     }
                     let e = select.stmt.extent(&select.node_meta);
-                    let tokens: Vec<_> = tremor_script::lexer::Tokenizer::new(self.source())
-                        .filter_map(|f| f.ok())
-                        .collect();
                     let mut h = Dumb::new();
-                    let label = if h
-                        .highlight(Some(self.source()), &tokens, "", false, Some(e))
-                        .is_ok()
-                    {
-                        Some(h.to_string().trim_end().to_string())
-                    } else {
-                        None
-                    };
+                    let label = h
+                        .highlight_str(self.source(), "", false, Some(e))
+                        .ok()
+                        .map(|_| h.to_string().trim_end().to_string());
 
                     let select_in = InputPort {
                         id: format!("select_{}", select_num).into(),
@@ -299,7 +292,6 @@ impl Query {
                         let name: Cow<'static, str> = from.port.clone();
 
                         if !nodes.contains_key(&name) {
-                            dbg!(&name);
                             let id = pipe_graph.add_node(NodeConfig {
                                 id: name.clone(),
                                 kind: NodeKind::Input,
@@ -331,7 +323,6 @@ impl Query {
                     if into.id == "out" && into.port != "in" {
                         let name: Cow<'static, str> = into.port.clone();
                         if !nodes.contains_key(&name) {
-                            dbg!(&name);
                             let id = pipe_graph.add_node(NodeConfig {
                                 id: name.clone(),
                                 kind: NodeKind::Output,
@@ -492,6 +483,19 @@ impl Query {
                             .ok_or_else(|| Error::from("script not found"))?
                             .clone(),
                     ));
+
+                    let label = if let Stmt::ScriptDecl(s) = &inner_stmt {
+                        let e = s.extent(&query.node_meta);
+                        let mut h = Dumb::new();
+                        // We're trimming the code so no spaces are at the end then adding a newline
+                        // to ensure we're left justified (this is a dot thing, don't question it)
+                        h.highlight_str(self.source(), "", false, Some(e))
+                            .ok()
+                            .map(|_| format!("{}\n", h.to_string().trim_end()))
+                    } else {
+                        None
+                    };
+
                     let stmt_rental = StmtRental::new(Arc::new(self.0.clone()), |_| unsafe {
                         // This is sound since self.0 includes an ARC of the data we
                         // so we hold on to any referenced data by including a clone
@@ -505,7 +509,8 @@ impl Query {
 
                     let node = NodeConfig {
                         id: common_cow(&o.id),
-                        kind: NodeKind::Operator,
+                        kind: NodeKind::Script,
+                        label,
                         op_type: "trickle::script".to_string(),
                         defn: Some(std::sync::Arc::new(that_defn.clone())),
                         node: Some(std::sync::Arc::new(that.clone())),
@@ -585,7 +590,14 @@ impl Query {
                     kind: NodeKind::Select,
                     ..
                 } => r#"shape = "box""#.to_string(),
-                _ => "".to_string(),
+                NodeConfig {
+                    kind: NodeKind::Script,
+                    ..
+                } => r#"shape = "note""#.to_string(),
+                NodeConfig {
+                    kind: NodeKind::Operator,
+                    ..
+                } => "".to_string(),
             },
         );
 
@@ -860,7 +872,6 @@ mod test {
         let mut idgen = OperatorIdGen::new();
         let first = idgen.next_id();
         let g = q.to_pipe(&mut idgen).unwrap();
-        dbg!(&g.inputs);
         assert!(g.inputs.contains_key("test_in"));
         assert_eq!(idgen.next_id(), first + g.graph.len() as u64 + 1);
         let out = g.graph.get(5).unwrap();

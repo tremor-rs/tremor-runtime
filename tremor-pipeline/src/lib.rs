@@ -205,6 +205,8 @@ pub enum NodeKind {
     Operator,
     /// A select statement
     Select,
+    /// A Script statement
+    Script,
 }
 
 impl Default for NodeKind {

@@ -163,6 +163,19 @@ pub trait Highlighter {
     /// get the raw writer
     fn get_writer(&mut self) -> &mut Self::W;
 
+    /// Highlights a source
+    fn highlight_str(
+        &mut self,
+        source: &str,
+        ident: &str,
+        emit_lines: bool,
+        range: Option<Range>,
+    ) -> std::result::Result<(), std::io::Error> {
+        let tokens: Vec<_> = crate::lexer::Tokenizer::new(source)
+            .filter_map(Result::ok)
+            .collect();
+        self.highlight(Some(source), &tokens, ident, emit_lines, range)
+    }
     /// highlights a token stream with line numbers
     fn highlight(
         &mut self,
@@ -211,7 +224,7 @@ pub trait Highlighter {
         if emit_linenos {
             write!(self.get_writer(), "{}{:5} | ", line_prefix, line)?;
         } else {
-            write!(self.get_writer(), "{}        ", line_prefix)?;
+            write!(self.get_writer(), "{}", line_prefix)?;
         }
         self.reset()?;
         Ok(())
