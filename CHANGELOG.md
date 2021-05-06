@@ -5,6 +5,7 @@
 - Add `op` key to KV offramp responses in order to differentiate responses by the command that triggered them
 - Change format of KV offramp responses to a more unified structure.
 - Add `KnownKey::map_*` functions to directly work on the `Value::Object`s inner `HashMap`, if available.
+- Add `HEALTHCHECK` to Dockerfiles
 
 ### Fixes
 

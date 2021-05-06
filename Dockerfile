@@ -42,7 +42,7 @@ FROM debian:buster-slim
 RUN useradd -ms /bin/bash tremor
 
 RUN apt-get update \
-    && apt-get install -y libssl1.1 libcurl4 libatomic1 tini \
+    && apt-get install -y libssl1.1 libcurl4 libatomic1 tini curl \
     #
     # Clean up
     && apt-get autoremove -y \
@@ -66,3 +66,5 @@ COPY docker/logger.yaml /etc/tremor/logger.yaml
 ENV TREMOR_PATH=/opt/local/tremor/lib
 
 ENTRYPOINT ["/entrypoint.sh"]
+
+HEALTHCHECK --interval=30s --timeout=1s --start-period=5s --retries=3 CMD curl -f http://localhost:9898/version || exit 1
