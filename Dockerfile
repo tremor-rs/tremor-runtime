@@ -15,25 +15,29 @@ RUN apt-get update \
 ENV DEBIAN_FRONTEND=dialog
 ENV RUSTFLAGS="-C target-feature=+avx,+avx2,+sse4.2"
 
-COPY Cargo.* ./
+WORKDIR /app
+
+COPY Cargo.* /app/
 
 # We change lto to 'thin' for docker builds so it
 # can be build on more moderate system
 RUN mv Cargo.toml Cargo.toml.orig && sed 's/lto = true/lto = "thin"/' Cargo.toml.orig > Cargo.toml
 
 # Main library
-COPY src ./src
+COPY src /app/src
+COPY build.rs /app/build.rs
+COPY .cargo /app/.cargo
 # supporting libraries
-COPY tremor-pipeline ./tremor-pipeline
-COPY tremor-script ./tremor-script
-COPY tremor-api ./tremor-api
-COPY tremor-influx ./tremor-influx
-COPY tremor-value ./tremor-value
+COPY tremor-pipeline /app/tremor-pipeline
+COPY tremor-script /app/tremor-script
+COPY tremor-api /app/tremor-api
+COPY tremor-influx /app/tremor-influx
+COPY tremor-value /app/tremor-value
 # Binaries
-COPY tremor-cli ./tremor-cli
-COPY tremor-common ./tremor-common
+COPY tremor-cli /app/tremor-cli
+COPY tremor-common /app/tremor-common
 # Git info to track version
-COPY .git ./.git
+COPY .git /app/.git
 
 RUN cat /proc/cpuinfo
 RUN cargo build --release --all --verbose
@@ -51,7 +55,7 @@ RUN apt-get update \
     && apt-get clean -y \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder target/release/tremor /tremor
+COPY --from=builder /app/target/release/tremor /tremor
 
 # stdlib
 RUN mkdir -p /usr/share/tremor/lib
