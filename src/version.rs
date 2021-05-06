@@ -15,7 +15,7 @@
 use rdkafka::util::get_rdkafka_version;
 
 /// Version of the tremor crate;
-pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+pub const VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), " ", env!("VERSION_BRANCH"),"!!:!!", env!("VERSION_HASH"));
 
 #[cfg(not(debug_assertions))]
 /// Checks if a we are in a debug build

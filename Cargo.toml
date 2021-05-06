@@ -1,5 +1,6 @@
 [package]
 authors = ["The Tremor Team"]
+build = "build.rs"
 description = "Tremor Runtime"
 documentation = "https://docs.tremor.rs"
 edition = "2018"
