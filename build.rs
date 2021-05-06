@@ -48,6 +48,9 @@ fn get_git_commit() -> String {
 
 fn main() {
   println!(
+    "cargo:rerun-if-changed=.git"
+  );
+  println!(
     "cargo:rustc-env=VERSION_BRANCH={}", 
     get_git_branch()
   );
