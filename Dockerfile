@@ -4,7 +4,7 @@ FROM rust:1.51.0 as builder
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update \
-    && apt-get install -y libclang-dev cmake  \
+    && apt-get install -y libclang-dev cmake git \
     #
     # Clean up
     && apt-get autoremove -y \
@@ -21,12 +21,6 @@ COPY Cargo.* ./
 # can be build on more moderate system
 RUN mv Cargo.toml Cargo.toml.orig && sed 's/lto = true/lto = "thin"/' Cargo.toml.orig > Cargo.toml
 
-# Insert branch/hash into environment variables
-ARG VERSION_BRANCH
-ENV VERSION_BRANCH=$VERSION_BRANCH
-ARG VERSION_HASH
-ENV VERSION_HASH=$VERSION_HASH
-
 # Main library
 COPY src ./src
 # supporting libraries
@@ -38,6 +32,8 @@ COPY tremor-value ./tremor-value
 # Binaries
 COPY tremor-cli ./tremor-cli
 COPY tremor-common ./tremor-common
+# Git info to track version
+COPY .git ./.git
 
 RUN cat /proc/cpuinfo
 RUN cargo build --release --all --verbose
