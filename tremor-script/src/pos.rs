@@ -48,10 +48,9 @@ impl std::ops::Sub for Location {
 
 impl std::ops::Add<char> for Location {
     type Output = Location;
-    fn add(self, c: char) -> Self::Output {
-        let mut l = self; // copy
-        l.shift(c);
-        l
+    fn add(mut self, c: char) -> Self::Output {
+        self.shift(c);
+        self
     }
 }
 
