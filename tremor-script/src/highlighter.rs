@@ -409,7 +409,7 @@ pub trait Highlighter {
                 Token::DocComment(_) => {
                     c.set_intense(true).set_fg(Some(Color::Cyan));
                 }
-                Token::TestLiteral(_, _) | Token::StringLiteral(_) => {
+                Token::TestLiteral(_, _) | Token::StringLiteral(_) | Token::HereDocLiteral(_) => {
                     c.set_intense(true).set_fg(Some(Color::Magenta));
                 }
                 Token::Bad(_) => {

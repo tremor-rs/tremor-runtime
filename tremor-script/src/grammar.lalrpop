@@ -691,7 +691,8 @@ StrLitElements: StrLitElementsRaw<'input> = {
 }
 
 StringPart: Cow<'input, str> = {
-    "string" => <>
+    "string" => <>,
+    "heredoc" => <>
 }
 
 /// array semi literals
@@ -1361,6 +1362,7 @@ extern {
         "string" => Token::StringLiteral(<Cow<'input, str>>),
         "heredoc_start" => Token::HereDocStart,
         "heredoc_end" => Token::HereDocEnd,
+        "heredoc" => Token::HereDocLiteral(<Cow<'input, str>>),
         "<extractor>" => Token::TestLiteral(_, <Vec<String>>),
         "<ident>" => Token::Ident(<Cow<'input, str>>, <bool>),
         "<error>" => Token::Bad(<String>),
