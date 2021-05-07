@@ -32,18 +32,12 @@ pub fn long_ver() -> String {
     #[cfg(debug_assertions)]
     const VERSION_LONG: &str = concat!(env!("CARGO_PKG_VERSION"), " (DEBUG)");
     return match option_env!("VERSION_BRANCH") {
+        Some("main") | None => VERSION_LONG.to_string(),
         Some(branch) => {
-            if branch == "main" {
-                VERSION_LONG.to_string()
-            }
-            // default on main branch
-            else {
-                // additional version info otherwise
-                let commit_hash: &str = option_env!("VERSION_HASH").map_or("", |hash| hash);
-                format!("{} {}:{}", VERSION_LONG, branch, commit_hash)
-            }
+            // provide additional version info
+            let commit_hash: &str = option_env!("VERSION_HASH").map_or("", |hash| hash);
+            format!("{} {}:{}", VERSION_LONG, branch, commit_hash)
         }
-        None => VERSION_LONG.to_string(), // default if option env not set
     };
 }
 
