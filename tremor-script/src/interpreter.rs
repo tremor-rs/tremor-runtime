@@ -105,6 +105,9 @@ where
     'event: 'run,
 {
     /// Fetches the value for a constant
+    ///
+    /// # Errors
+    /// if the constant wasn't defined
     pub fn get_const<O>(&self, idx: usize, outer: &O, meta: &NodeMetas) -> Result<&Value<'event>>
     where
         O: BaseExpr,
@@ -131,6 +134,9 @@ impl<'stack> LocalStack<'stack> {
     }
 
     /// Fetches a local variable
+    ///
+    /// # Errors
+    /// if the variable isn't known
     pub fn get<O>(
         &self,
         idx: usize,
@@ -141,12 +147,10 @@ impl<'stack> LocalStack<'stack> {
     where
         O: BaseExpr,
     {
-        if let Some(v) = self.values.get(idx) {
-            Ok(v)
-        } else {
+        self.values.get(idx).ok_or_else(|| {
             let e = format!("Unknown local variable: `{}`", meta.name_dflt(mid));
-            error_oops(outer, 0xdead_000f, &e, meta)
-        }
+            error_oops_err(outer, 0xdead_000f, &e, meta)
+        })
     }
 }
 
@@ -1471,6 +1475,9 @@ where
 
 impl<'script> GroupBy<'script> {
     /// Creates groups based on an event.
+    ///
+    /// # Errors
+    /// if the group can not be generated from the provided event, state and meta
     pub fn generate_groups<'run, 'event>(
         &'script self,
         ctx: &'run EventContext,

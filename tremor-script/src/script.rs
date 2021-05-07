@@ -91,6 +91,9 @@ where
     'event: 'run,
 {
     /// Parses a string and turns it into a script
+    ///
+    /// # Errors
+    /// if the script can not be parsed
     pub fn parse(
         module_path: &ModulePath,
         file_name: &str,
@@ -146,6 +149,8 @@ where
     }
 
     /// Highlights a script with a given highlighter.
+    /// # Errors
+    /// on io errors
     #[cfg(not(tarpaulin_include))]
     pub fn highlight_script_with<H: Highlighter>(script: &str, h: &mut H) -> io::Result<()> {
         let tokens: Vec<_> = lexer::Tokenizer::new(&script)
@@ -156,6 +161,8 @@ where
     }
 
     /// Highlights a script range with a given highlighter and line indents.
+    /// # Errors
+    /// on io errors
     #[cfg(not(tarpaulin_include))]
     pub fn highlight_script_with_range<H: Highlighter>(
         script: &str,
@@ -166,6 +173,8 @@ where
     }
 
     /// Highlights a script range with a given highlighter.
+    /// # Errors
+    /// on io errors
     #[cfg(not(tarpaulin_include))]
     pub fn highlight_script_with_range_indent<H: Highlighter>(
         line_prefix: &str,
@@ -193,6 +202,8 @@ where
     }
 
     /// Format an error given a script source.
+    /// # Errors
+    /// on io errors
     pub fn format_error_from_script<H: Highlighter>(
         script: &str,
         h: &mut H,
@@ -239,6 +250,8 @@ where
     }
 
     /// Format warnings with the given `Highligher`.
+    /// # Errors
+    /// on io errors
     pub fn format_warnings_with<H: Highlighter>(&self, h: &mut H) -> io::Result<()> {
         for w in self.warnings() {
             let tokens: Vec<_> = lexer::Tokenizer::new(&self.source)
@@ -261,12 +274,18 @@ where
     }
 
     /// Formats an error within this script using a given highlighter
+    ///
+    /// # Errors
+    /// on io errors
     pub fn format_error_with<H: Highlighter>(&self, h: &mut H, e: &Error) -> io::Result<()> {
         let cus = &self.script.suffix().node_meta.cus;
         Self::format_error_from_script_and_cus(&self.source, h, e, cus)
     }
 
     /// Runs an event through this script
+    ///
+    /// # Errors
+    /// if the script fails to run for the given context, event state and metadata
     pub fn run(
         &'script self,
         context: &'run EventContext,

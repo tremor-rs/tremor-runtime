@@ -404,11 +404,9 @@ impl<'input> Token<'input> {
         }
     }
 
-    // tarpaulin falsely only marks the first and last as covered
-    // https://github.com/xd009642/tarpaulin/issues/607
-    #[cfg(not(tarpaulin_include))]
     /// Is the token ignorable except when syntax or error highlighting.
     /// Is the token insignificant when parsing ( a correct ... ) source.
+    #[cfg(not(tarpaulin_include))] // matches is not supported
     pub(crate) fn is_ignorable(&self) -> bool {
         matches!(
             *self,
@@ -419,10 +417,8 @@ impl<'input> Token<'input> {
         )
     }
 
-    // tarpaulin falsely only marks the first and last as covered
-    // https://github.com/xd009642/tarpaulin/issues/607
-    #[cfg(not(tarpaulin_include))]
     /// Is the token a keyword, excluding keyword literals ( eg: true, nil )
+    #[cfg(not(tarpaulin_include))] // matches is not supported
     pub(crate) fn is_keyword(&self) -> bool {
         matches!(
             *self,
@@ -477,10 +473,8 @@ impl<'input> Token<'input> {
         )
     }
 
-    // tarpaulin falsely only marks the first and last as covered
-    // https://github.com/xd009642/tarpaulin/issues/607
-    #[cfg(not(tarpaulin_include))]
     /// Is the token a literal, excluding list and record literals
+    #[cfg(not(tarpaulin_include))] // matches is not supported
     pub(crate) fn is_literal(&self) -> bool {
         matches!(
             *self,
@@ -492,10 +486,8 @@ impl<'input> Token<'input> {
         )
     }
 
-    // tarpaulin falsely only marks the first and last as covered
-    // https://github.com/xd009642/tarpaulin/issues/607
-    #[cfg(not(tarpaulin_include))]
     // It's text-like or string-like notation such as String, char, regex ...
+    #[cfg(not(tarpaulin_include))] // matches is not supported
     pub(crate) fn is_string_like(&self) -> bool {
         matches!(
             *self,
@@ -508,10 +500,8 @@ impl<'input> Token<'input> {
         )
     }
 
-    // tarpaulin falsely only marks the first and last as covered
-    // https://github.com/xd009642/tarpaulin/issues/607
-    #[cfg(not(tarpaulin_include))]
     /// Is the token a builtin delimiter symbol
+    #[cfg(not(tarpaulin_include))] // matches is not supported
     pub(crate) fn is_symbol(&self) -> bool {
         matches!(
             *self,
@@ -536,10 +526,8 @@ impl<'input> Token<'input> {
         )
     }
 
-    // tarpaulin falsely only marks the first and last as covered
-    // https://github.com/xd009642/tarpaulin/issues/607
-    #[cfg(not(tarpaulin_include))]
     /// Is the token a builtin expression operator ( excludes forms such as 'match', 'let'
+    #[cfg(not(tarpaulin_include))] // matches is not supported
     pub(crate) fn is_operator(&self) -> bool {
         matches!(
             *self,
@@ -945,6 +933,9 @@ impl IncludeStack {
     }
 
     /// Pushes a a compilation unit onto the include stack
+    ///
+    /// # Errors
+    /// if a cyclic dependency is detected
     pub fn push<S: AsRef<OsStr> + ?Sized>(&mut self, file: &S) -> Result<usize> {
         let e = CompilationUnit::from_file(Path::new(file));
         if self.contains(&e) {
@@ -1007,6 +998,9 @@ impl<'input> Preprocessor {
 
     #[allow(clippy::too_many_lines)]
     /// Preprocess a possibly nested set of related sources into a single compilation unit
+    ///
+    /// # Errors
+    /// on preprocessor failreus
     pub fn preprocess<S: AsRef<OsStr> + ?Sized>(
         module_path: &ModulePath,
         file_name: &S,
@@ -2333,7 +2327,7 @@ impl<'input> Lexer<'input> {
                         .iter()
                         .map(|s| {
                             if s.is_empty() {
-                                s.to_owned()
+                                s.clone()
                             } else {
                                 s.split_at(indent).1.to_string()
                             }
@@ -3196,7 +3190,6 @@ mod tests {
     proptest! {
         // negative floats are constructed in the AST later
         #[test]
-        #[cfg(not(tarpaulin))] // avoid coverage from this
         fn float_literals_precision(f in 0f64..f64::MAX) {
             if f.round() != f {
                 let float = format!("{:.}", f);
@@ -3210,7 +3203,6 @@ mod tests {
     proptest! {
         // negative floats are constructed in the AST later
         #[test]
-        #[cfg(not(tarpaulin))] // avoid coverage from this
         fn float_literals_scientific(f in 0f64..f64::MAX) {
             let float = format!("{:e}", f);
             for token in Tokenizer::new(& float) {

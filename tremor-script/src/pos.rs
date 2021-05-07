@@ -132,10 +132,10 @@ impl Location {
     #[must_use]
     pub fn new(line: usize, column: usize, absolute: usize, unit_id: usize) -> Self {
         Self {
+            unit_id,
             line,
             column,
             absolute,
-            unit_id,
         }
     }
 

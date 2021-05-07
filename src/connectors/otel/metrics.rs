@@ -59,11 +59,11 @@ pub(crate) fn int_exemplars_to_pb(json: Option<&Value<'_>>) -> Result<Vec<IntExe
             let time_unix_nano = pb::maybe_int_to_pbu64(data.get("time_unix_nano"))?;
             let value = pb::maybe_int_to_pbi64(data.get("value"))?;
             pb.push(IntExemplar {
+                filtered_labels,
+                time_unix_nano,
+                value,
                 span_id,
                 trace_id,
-                time_unix_nano,
-                filtered_labels,
-                value,
             });
         }
         return Ok(pb);
@@ -97,11 +97,11 @@ pub(crate) fn double_exemplars_to_pb(json: Option<&Value<'_>>) -> Result<Vec<Dou
             let time_unix_nano = pb::maybe_int_to_pbu64(data.get("time_unix_nano"))?;
             let value = pb::maybe_double_to_pb(data.get("value"))?;
             pb.push(DoubleExemplar {
+                filtered_labels,
+                time_unix_nano,
+                value,
                 span_id,
                 trace_id,
-                time_unix_nano,
-                filtered_labels,
-                value,
             });
         }
         return Ok(pb);
@@ -128,7 +128,7 @@ pub(crate) fn quantile_values_to_pb(json: Option<&Value<'_>>) -> Result<Vec<Valu
         for data in json {
             let value = pb::maybe_double_to_pb(data.get("value"))?;
             let quantile = pb::maybe_double_to_pb(data.get("quantile"))?;
-            arr.push(ValueAtQuantile { value, quantile });
+            arr.push(ValueAtQuantile { quantile, value });
         }
         return Ok(arr);
     }
@@ -164,10 +164,10 @@ pub(crate) fn int_data_points_to_pb(json: Option<&Value<'_>>) -> Result<Vec<IntD
             let value = pb::maybe_int_to_pbi64(item.get("value"))?;
             pb.push(IntDataPoint {
                 labels,
-                exemplars,
-                time_unix_nano,
                 start_time_unix_nano,
+                time_unix_nano,
                 value,
+                exemplars,
             })
         }
 
@@ -206,10 +206,10 @@ pub(crate) fn double_data_points_to_pb(json: Option<&Value<'_>>) -> Result<Vec<D
             let value = pb::maybe_double_to_pb(item.get("value"))?;
             pb.push(DoubleDataPoint {
                 labels,
-                exemplars,
-                time_unix_nano,
                 start_time_unix_nano,
+                time_unix_nano,
                 value,
+                exemplars,
             })
         }
 
@@ -258,10 +258,10 @@ pub(crate) fn double_histo_data_points_to_pb(
             let bucket_counts = pb::u64_repeated_to_pb(item.get("explicit_bounds"))?;
             pb.push(DoubleHistogramDataPoint {
                 labels,
-                time_unix_nano,
                 start_time_unix_nano,
-                sum,
+                time_unix_nano,
                 count,
+                sum,
                 bucket_counts,
                 explicit_bounds,
                 exemplars,
@@ -308,10 +308,10 @@ pub(crate) fn double_summary_data_points_to_pb(
             let quantile_values = quantile_values_to_pb(item.get("quantile_values"))?;
             pb.push(DoubleSummaryDataPoint {
                 labels,
-                time_unix_nano,
                 start_time_unix_nano,
-                sum,
+                time_unix_nano,
                 count,
+                sum,
                 quantile_values,
             })
         }
@@ -361,10 +361,10 @@ pub(crate) fn int_histo_data_points_to_pb(
             let bucket_counts = pb::u64_repeated_to_pb(item.get("explicit_bounds"))?;
             pb.push(IntHistogramDataPoint {
                 labels,
-                time_unix_nano,
                 start_time_unix_nano,
-                sum,
+                time_unix_nano,
                 count,
+                sum,
                 bucket_counts,
                 explicit_bounds,
                 exemplars,
@@ -442,9 +442,9 @@ pub(crate) fn metrics_data_to_pb(data: Option<&Value<'_>>) -> Result<metric::Dat
             let aggregation_temporality =
                 pb::maybe_int_to_pbi32(json.get("aggregation_temporality"))?;
             return Ok(metric::Data::IntSum(IntSum {
-                is_monotonic,
                 data_points,
                 aggregation_temporality,
+                is_monotonic,
             }));
         } else if let Some(Value::Object(json)) = json.get("double-sum") {
             let data_points = double_data_points_to_pb(json.get("data_points"))?;
@@ -452,9 +452,9 @@ pub(crate) fn metrics_data_to_pb(data: Option<&Value<'_>>) -> Result<metric::Dat
             let aggregation_temporality =
                 pb::maybe_int_to_pbi32(json.get("aggregation_temporality"))?;
             return Ok(metric::Data::DoubleSum(DoubleSum {
-                is_monotonic,
                 data_points,
                 aggregation_temporality,
+                is_monotonic,
             }));
         } else if let Some(Value::Object(json)) = json.get("int-histogram") {
             let data_points = int_histo_data_points_to_pb(json.get("data_points"))?;

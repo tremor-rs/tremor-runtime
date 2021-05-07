@@ -423,7 +423,7 @@ impl Artefact for OnrampArtefact {
             let (tx, rx) = bounded(mappings.len());
 
             for to in mappings.values() {
-                links.push(to.to_owned())
+                links.push(to.clone())
             }
             let mut expect_answers = mappings.len();
             for (_port, pipeline_id) in mappings {

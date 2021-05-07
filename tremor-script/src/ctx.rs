@@ -11,7 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-#![allow(clippy::forget_copy)] // TODO: we need this fir the derive
 
 use crate::errors::{Error, Result};
 use std::default;
@@ -45,6 +44,10 @@ impl EventOriginUri {
         }
     }
     /// parses a string into a URI
+    ///
+    /// # Errors
+    /// * if the rul can not be parsed
+    /// * the url does not include a host
     pub fn parse(uid: u64, url: &str) -> Result<Self> {
         match Url::parse(url) {
             Ok(r) => {

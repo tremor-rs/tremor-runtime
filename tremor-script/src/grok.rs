@@ -33,6 +33,12 @@ pub struct Pattern {
 
 impl Pattern {
     /// Reads a pattern from a file
+    ///
+    /// # Errors
+    /// * if the file can't be opned
+    /// * a pattern can not be compiled
+    /// * an io error happens
+    /// * a non existing pattern is referenced
     pub fn from_file<S>(file_path: &S, definition: &str) -> Result<Self>
     where
         S: AsRef<Path> + ?Sized,
@@ -73,6 +79,9 @@ impl Pattern {
     }
 
     /// Creates a pattern from a string
+    ///
+    /// # Errors
+    /// if the pattern can not be compiled
     pub fn new<D>(definition: &D) -> Result<Self>
     where
         D: ToString,
@@ -90,6 +99,11 @@ impl Pattern {
     }
 
     /// Tests if a pattern matches
+    ///
+    /// TODO: make this return an Option<Value> so we can distinguish between failure
+    ///       and non match
+    /// # Errors
+    /// if the data isn't valid utf8 or doesn't match
     pub fn matches(&self, data: &[u8]) -> Result<Value<'static>> {
         let text: String = str::from_utf8(&data)?.to_string();
         match self.pattern.match_against(&text) {
@@ -109,7 +123,7 @@ impl std::clone::Clone for Pattern {
     fn clone(&self) -> Self {
         #[allow(clippy::unwrap_used)]
         Self {
-            definition: self.definition.to_owned(),
+            definition: self.definition.clone(),
             //ALLOW: since we clone we know this exists
             pattern: grok::Pattern::new(&self.definition, &HashMap::new()).unwrap(),
         }

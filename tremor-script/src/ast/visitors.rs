@@ -39,10 +39,16 @@ use VisitRes::Walk;
 /// The walk_* methods implement walking the expression tree, those do not need to be changed.
 pub trait ImutExprIntVisitor<'script> {
     /// visit a record
+    ///
+    /// # Errors
+    /// if the walker function fails
     fn visit_record(&mut self, _record: &mut Record<'script>) -> Result<VisitRes> {
         Ok(Walk)
     }
     /// walk a record
+    ///
+    /// # Errors
+    /// if the walker function fails
     fn walk_record(&mut self, record: &mut Record<'script>) -> Result<()> {
         for field in &mut record.fields {
             self.walk_expr(&mut field.name)?;
@@ -51,10 +57,16 @@ pub trait ImutExprIntVisitor<'script> {
         Ok(())
     }
     /// visit a list
+    ///
+    /// # Errors
+    /// if the walker function fails
     fn visit_list(&mut self, _list: &mut List<'script>) -> Result<VisitRes> {
         Ok(Walk)
     }
     /// walk a list
+    ///
+    /// # Errors
+    /// if the walker function fails
     fn walk_list(&mut self, list: &mut List<'script>) -> Result<()> {
         for element in &mut list.exprs {
             self.walk_expr(&mut element.0)?;
@@ -62,34 +74,55 @@ pub trait ImutExprIntVisitor<'script> {
         Ok(())
     }
     /// visit a binary
+    ///
+    /// # Errors
+    /// if the walker function fails
     fn visit_binary(&mut self, _binary: &mut BinExpr<'script>) -> Result<VisitRes> {
         Ok(Walk)
     }
     /// walk a binary
+    ///
+    /// # Errors
+    /// if the walker function fails
     fn walk_binary(&mut self, binary: &mut BinExpr<'script>) -> Result<()> {
         self.walk_expr(&mut binary.lhs)?;
         self.walk_expr(&mut binary.rhs)
     }
 
     /// visit a unary expr
+    ///
+    /// # Errors
+    /// if the walker function fails
     fn visit_unary(&mut self, _unary: &mut UnaryExpr<'script>) -> Result<VisitRes> {
         Ok(Walk)
     }
     /// walk a unary
+    ///
+    /// # Errors
+    /// if the walker function fails
     fn walk_unary(&mut self, unary: &mut UnaryExpr<'script>) -> Result<()> {
         self.walk_expr(&mut unary.expr)
     }
 
     /// visit a patch expr
+    ///
+    /// # Errors
+    /// if the walker function fails
     fn visit_patch(&mut self, _patch: &mut Patch<'script>) -> Result<VisitRes> {
         Ok(Walk)
     }
 
     /// visit a match expr
+    ///
+    /// # Errors
+    /// if the walker function fails
     fn visit_match(&mut self, _mmatch: &mut Match<'script, ImutExprInt>) -> Result<VisitRes> {
         Ok(Walk)
     }
     /// walk a patch expr
+    ///
+    /// # Errors
+    /// if the walker function fails
     fn walk_patch(&mut self, patch: &mut Patch<'script>) -> Result<()> {
         self.walk_expr(&mut patch.target)?;
         for op in &mut patch.operations {
@@ -117,6 +150,9 @@ pub trait ImutExprIntVisitor<'script> {
     }
 
     /// Walks a precondition
+    ///
+    /// # Errors
+    /// if the walker function fails
     fn walk_precondition(
         &mut self,
         precondition: &mut super::ClausePreCondition<'script>,
@@ -128,6 +164,9 @@ pub trait ImutExprIntVisitor<'script> {
     }
 
     /// walk a match expr
+    ///
+    /// # Errors
+    /// if the walker function fails
     fn walk_match(&mut self, mmatch: &mut Match<'script, ImutExprInt<'script>>) -> Result<()> {
         self.walk_expr(&mut mmatch.target)?;
         for group in &mut mmatch.patterns {
@@ -137,6 +176,9 @@ pub trait ImutExprIntVisitor<'script> {
     }
 
     /// Walks a predicate clause
+    ///
+    /// # Errors
+    /// if the walker function fails
     fn walk_predicate_clause(
         &mut self,
         predicate: &mut PredicateClause<'script, ImutExprInt<'script>>,
@@ -153,6 +195,9 @@ pub trait ImutExprIntVisitor<'script> {
     }
 
     /// Walks a clause group
+    ///
+    /// # Errors
+    /// if the walker function fails
     fn walk_clause_group(
         &mut self,
         group: &mut ClauseGroup<'script, ImutExprInt<'script>>,
@@ -213,6 +258,9 @@ pub trait ImutExprIntVisitor<'script> {
         }
     }
     /// walk match patterns
+    ///
+    /// # Errors
+    /// if the walker function fails
     fn walk_match_patterns(&mut self, pattern: &mut Pattern<'script>) -> Result<()> {
         match pattern {
             Pattern::Record(record_pat) => {
@@ -245,6 +293,9 @@ pub trait ImutExprIntVisitor<'script> {
         Ok(())
     }
     /// walk a record pattern
+    ///
+    /// # Errors
+    /// if the walker function fails
     fn walk_record_pattern(&mut self, record_pattern: &mut RecordPattern<'script>) -> Result<()> {
         for field in &mut record_pattern.fields {
             match field {
@@ -263,6 +314,9 @@ pub trait ImutExprIntVisitor<'script> {
         Ok(())
     }
     /// walk an array pattern
+    ///
+    /// # Errors
+    /// if the walker function fails
     fn walk_array_pattern(&mut self, array_pattern: &mut ArrayPattern<'script>) -> Result<()> {
         for elem in &mut array_pattern.exprs {
             match elem {
@@ -279,6 +333,9 @@ pub trait ImutExprIntVisitor<'script> {
     }
 
     /// visit a comprehension
+    ///
+    /// # Errors
+    /// if the walker function fails
     fn visit_comprehension(
         &mut self,
         _comp: &mut Comprehension<'script, ImutExprInt<'script>>,
@@ -286,6 +343,9 @@ pub trait ImutExprIntVisitor<'script> {
         Ok(Walk)
     }
     /// walk a comprehension
+    ///
+    /// # Errors
+    /// if the walker function fails
     fn walk_comprehension(
         &mut self,
         comp: &mut Comprehension<'script, ImutExprInt<'script>>,
@@ -304,16 +364,25 @@ pub trait ImutExprIntVisitor<'script> {
     }
 
     /// visit a merge expr
+    ///
+    /// # Errors
+    /// if the walker function fails
     fn visit_merge(&mut self, _merge: &mut Merge<'script>) -> Result<VisitRes> {
         Ok(Walk)
     }
     /// walk a merge expr
+    ///
+    /// # Errors
+    /// if the walker function fails
     fn walk_merge(&mut self, merge: &mut Merge<'script>) -> Result<()> {
         self.walk_expr(&mut merge.target)?;
         self.walk_expr(&mut merge.expr)
     }
 
     /// walk a path segment
+    ///
+    /// # Errors
+    /// if the walker function fails
     fn walk_segment(&mut self, segment: &mut Segment<'script>) -> Result<()> {
         match segment {
             Segment::Element { expr, .. } => self.walk_expr(expr),
@@ -330,11 +399,17 @@ pub trait ImutExprIntVisitor<'script> {
     }
 
     /// visit a path
+    ///
+    /// # Errors
+    /// if the walker function fails
     fn visit_path(&mut self, _path: &mut Path<'script>) -> Result<VisitRes> {
         Ok(Walk)
     }
 
     /// walk a path
+    ///
+    /// # Errors
+    /// if the walker function fails
     fn walk_path(&mut self, path: &mut Path<'script>) -> Result<()> {
         let segments = match path {
             Path::Const(LocalPath { segments, .. })
@@ -353,10 +428,16 @@ pub trait ImutExprIntVisitor<'script> {
     }
 
     /// visit a string
+    ///
+    /// # Errors
+    /// if the walker function fails
     fn visit_string(&mut self, _string: &mut StringLit<'script>) -> Result<VisitRes> {
         Ok(Walk)
     }
     /// walk a string
+    ///
+    /// # Errors
+    /// if the walker function fails
     fn walk_string(&mut self, string: &mut StringLit<'script>) -> Result<()> {
         for element in &mut string.elements {
             if let StrLitElement::Expr(expr) = element {
@@ -367,20 +448,32 @@ pub trait ImutExprIntVisitor<'script> {
     }
 
     /// visit a local
+    ///
+    /// # Errors
+    /// if the walker function fails
     fn visit_local(&mut self, _local_idx: &mut usize) -> Result<VisitRes> {
         Ok(Walk)
     }
 
     /// visit a present expr
+    ///
+    /// # Errors
+    /// if the walker function fails
     fn visit_present(&mut self, _path: &mut Path<'script>) -> Result<VisitRes> {
         Ok(Walk)
     }
 
     /// visit an invoke expr
+    ///
+    /// # Errors
+    /// if the walker function fails
     fn visit_invoke(&mut self, _invoke: &mut Invoke<'script>) -> Result<VisitRes> {
         Ok(Walk)
     }
     /// walk an invoke expr
+    ///
+    /// # Errors
+    /// if the walker function fails
     fn walk_invoke(&mut self, invoke: &mut Invoke<'script>) -> Result<()> {
         for arg in &mut invoke.args {
             self.walk_expr(&mut arg.0)?;
@@ -389,28 +482,46 @@ pub trait ImutExprIntVisitor<'script> {
     }
 
     /// visit an invoke1 expr
+    ///
+    /// # Errors
+    /// if the walker function fails
     fn visit_invoke1(&mut self, _invoke: &mut Invoke<'script>) -> Result<VisitRes> {
         Ok(Walk)
     }
     /// visit an invoke2 expr
+    ///
+    /// # Errors
+    /// if the walker function fails
     fn visit_invoke2(&mut self, _invoke: &mut Invoke<'script>) -> Result<VisitRes> {
         Ok(Walk)
     }
     /// visit an invoke3 expr
+    ///
+    /// # Errors
+    /// if the walker function fails
     fn visit_invoke3(&mut self, _invoke: &mut Invoke<'script>) -> Result<VisitRes> {
         Ok(Walk)
     }
 
     /// visit an `invoke_aggr` expr
+    ///
+    /// # Errors
+    /// if the walker function fails
     fn visit_invoke_aggr(&mut self, _invoke_aggr: &mut InvokeAggr) -> Result<VisitRes> {
         Ok(Walk)
     }
 
     /// visit a recur expr
+    ///
+    /// # Errors
+    /// if the walker function fails
     fn visit_recur(&mut self, _recur: &mut Recur<'script>) -> Result<VisitRes> {
         Ok(Walk)
     }
     /// walk a recur expr
+    ///
+    /// # Errors
+    /// if the walker function fails
     fn walk_recur(&mut self, recur: &mut Recur<'script>) -> Result<()> {
         for expr in &mut recur.exprs {
             self.walk_expr(&mut expr.0)?;
@@ -419,10 +530,15 @@ pub trait ImutExprIntVisitor<'script> {
     }
 
     /// visit bytes
+    ///
+    /// # Errors
+    /// if the walker function fails
     fn visit_bytes(&mut self, _bytes: &mut Bytes<'script>) -> Result<VisitRes> {
         Ok(Walk)
     }
     /// walk bytes
+    /// # Errors
+    /// if the walker function fails
     fn walk_bytes(&mut self, bytes: &mut Bytes<'script>) -> Result<()> {
         for part in &mut bytes.value {
             self.walk_expr(&mut part.data.0)?;
@@ -431,16 +547,25 @@ pub trait ImutExprIntVisitor<'script> {
     }
 
     /// visit a literal
+    ///
+    /// # Errors
+    /// if the walker function fails
     fn visit_literal(&mut self, _literal: &mut Literal<'script>) -> Result<VisitRes> {
         Ok(Walk)
     }
 
     /// visit a generic `ImutExprInt` (this is called before the concrete `visit_*` method)
+    ///
+    /// # Errors
+    /// if the walker function fails
     fn visit_expr(&mut self, _e: &mut ImutExprInt<'script>) -> Result<VisitRes> {
         Ok(Walk)
     }
 
     /// entry point into this visitor - call this to start visiting the given expression `e`
+    ///
+    /// # Errors
+    /// if the walker function fails
     fn walk_expr(&mut self, e: &mut ImutExprInt<'script>) -> Result<()> {
         if let Walk = self.visit_expr(e)? {
             match e {

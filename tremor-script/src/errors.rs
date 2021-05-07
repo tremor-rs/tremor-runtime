@@ -850,6 +850,9 @@ pub fn query_node_duplicate_name_err<S: BaseExpr>(
 }
 
 /// Creates a guard not bool error
+///
+/// # Errors
+/// always, this is a function to create errors
 #[allow(clippy::borrowed_box)]
 pub fn query_guard_not_bool<T, O: BaseExpr, I: BaseExpr>(
     stmt: &O,

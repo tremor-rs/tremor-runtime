@@ -67,17 +67,17 @@ impl CanaryProbe for HostPortScanCanaryProbe {
     }
 }
 
-struct BadCanary {}
+// struct BadCanary {}
 
-impl CanaryProbe for BadCanary {
-    fn chirp(&self) -> bool {
-        false
-    }
+// impl CanaryProbe for BadCanary {
+//     fn chirp(&self) -> bool {
+//         false
+//     }
 
-    fn about(&self) -> String {
-        "<unknown> [bad canary]".into()
-    }
-}
+//     fn about(&self) -> String {
+//         "<unknown> [bad canary]".into()
+//     }
+// }
 
 /// Failure detector
 pub(crate) trait FailureDetector: Send + Sync {
@@ -100,35 +100,35 @@ impl dyn FailureDetector {
     #[allow(dead_code)]
     pub(crate) fn for_grpc_endpoint(hostport: String) -> GrpcEndpointSupervisor {
         GrpcEndpointSupervisor {
-            canary: CanaryProbe::with_host_port(hostport),
+            canary: <dyn CanaryProbe>::with_host_port(hostport),
             is_down: false,
         }
     }
 }
 
-struct BadSupervisor {}
+// struct BadSupervisor {}
 
-impl FailureDetector for BadSupervisor {
-    fn chirp(&self) -> bool {
-        false
-    }
+// impl FailureDetector for BadSupervisor {
+//     fn chirp(&self) -> bool {
+//         false
+//     }
 
-    fn trigger(&mut self) {
-        // Do nothing - we're bad
-    }
+//     fn trigger(&mut self) {
+//         // Do nothing - we're bad
+//     }
 
-    fn probe(&mut self) {
-        // Do nothing - we're lazy
-    }
+//     fn probe(&mut self) {
+//         // Do nothing - we're lazy
+//     }
 
-    fn restore(&mut self) {
-        // Do nothing - supervisor says no!
-    }
+//     fn restore(&mut self) {
+//         // Do nothing - supervisor says no!
+//     }
 
-    fn is_down(&self) -> bool {
-        false // We are always open for business
-    }
-}
+//     fn is_down(&self) -> bool {
+//         false // We are always open for business
+//     }
+// }
 
 pub(crate) struct GrpcEndpointSupervisor {
     canary: Box<dyn CanaryProbe>,
@@ -266,6 +266,7 @@ mod tests {
         }
     }
 
+    #[cfg(not(tarpaulin_include))] // this is a test tool
     impl CanaryProbe for FakeCanary {
         fn chirp(&self) -> bool {
             self.is_reachable
@@ -280,6 +281,7 @@ mod tests {
         fake: FakeCanary,
     }
 
+    #[cfg(not(tarpaulin_include))] // this is a test tool
     impl FailureDetector for FakeDetector {
         fn chirp(&self) -> bool {
             self.fake.is_reachable

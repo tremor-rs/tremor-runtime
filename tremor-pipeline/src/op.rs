@@ -75,6 +75,9 @@ impl EventAndInsights {
 pub trait Operator: std::fmt::Debug + Send {
     /// Called on every Event. The event and input port are passed in,
     /// a vector of events is passed out.
+    ///
+    /// # Errors
+    /// if the event can not be processed
     fn on_event(
         &mut self,
         uid: u64,
@@ -91,6 +94,9 @@ pub trait Operator: std::fmt::Debug + Send {
     }
     /// Handle singal events, defaults to returning an empty vector.
     /// Gets an immutable reference to the pipeline state
+    ///
+    /// # Errors
+    /// if the singal can not be processed
     fn on_signal(
         &mut self,
         _uid: u64,
@@ -109,11 +115,17 @@ pub trait Operator: std::fmt::Debug + Send {
     }
 
     /// Handles contraflow events - defaults to a noop
+    ///
+    /// # Errors
+    /// if the insight can not be processed
     fn on_contraflow(&mut self, _uid: u64, _insight: &mut Event) {
         // Make the trait signature nicer
     }
 
     /// Returns metrics for this operator, defaults to no extra metrics.
+    ///
+    /// # Errors
+    /// if metrics can not be generated
     fn metrics(
         &self,
         _tags: &HashMap<Cow<'static, str>, Value<'static>>,
@@ -133,6 +145,9 @@ pub trait Operator: std::fmt::Debug + Send {
 /// Initialisable trait that can be turned from a `NodeConfig`
 pub trait InitializableOperator {
     /// Takes a `NodeConfig` and intialises the operator.
+    ///
+    /// # Errors
+    //// if no operator con be instanciated from the provided NodeConfig
     fn from_node(&self, uid: u64, node: &NodeConfig) -> Result<Box<dyn Operator>>;
 }
 
@@ -140,6 +155,9 @@ pub trait InitializableOperator {
 pub trait ConfigImpl {
     /// deserialises the yaml into a struct and returns nice errors
     /// this doesn't need to be overwritten in most cases.
+    ///
+    /// # Errors
+    /// if the Configuration is invalid
     fn new(config: &serde_yaml::Value) -> Result<Self>
     where
         for<'de> Self: serde::de::Deserialize<'de>,
