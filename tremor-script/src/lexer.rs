@@ -626,11 +626,9 @@ impl<'input> fmt::Display for Token<'input> {
             }
             Token::HereDocLiteral(value) => {
                 // do not escape linebreaks
-                let (value, add_linebreak) = if let Some(stripped) = value.strip_suffix('\n') {
-                    (stripped, true)
-                } else {
-                    (&value as &str, false)
-                };
+                let (value, add_linebreak) = value
+                    .strip_suffix('\n')
+                    .map_or_else(|| (&value as &str, false), |stripped| (stripped, true));
                 let s = Value::from(value).encode();
                 // Strip the quotes
                 if let Some(s) = s.get(1..s.len() - 1) {
