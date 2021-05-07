@@ -2697,7 +2697,7 @@ mod tests {
         }};
     }
 
-    #[cfg_attr(rustfmt, rustfmt_skip)]
+    #[rustfmt::skip]
     #[test]
     fn interpolate() -> Result<()> {
         lex_ok! {
@@ -2749,7 +2749,7 @@ mod tests {
         Ok(())
     }
 
-    #[cfg_attr(rustfmt, rustfmt_skip)]
+    #[rustfmt::skip]
     #[test]
     fn number_parsing() -> Result<()> {
         lex_ok! {
@@ -2775,7 +2775,7 @@ mod tests {
         Ok(())
     }
 
-    #[cfg_attr(rustfmt, rustfmt_skip)]
+    #[rustfmt::skip]
     #[test]
     fn paths() -> Result<()> {
         lex_ok! {
@@ -2800,7 +2800,7 @@ mod tests {
         Ok(())
     }
 
-    #[cfg_attr(rustfmt, rustfmt_skip)]
+    #[rustfmt::skip]
     #[test]
     fn keywords() -> Result<()> {
         lex_ok! {
@@ -2842,7 +2842,7 @@ mod tests {
         Ok(())
     }
 
-    #[cfg_attr(rustfmt, rustfmt_skip)]
+    #[rustfmt::skip]
     #[test]
     fn operators() -> Result<()> {
         lex_ok! {
@@ -3115,7 +3115,7 @@ mod tests {
         Ok(())
     }
 
-    #[cfg_attr(rustfmt, rustfmt_skip)]
+    #[rustfmt::skip]
     #[test]
     fn heredoc() -> Result<()> {
         lex_ok! {
