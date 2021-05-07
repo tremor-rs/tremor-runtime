@@ -178,11 +178,13 @@ pub enum Token<'input> {
     FloatLiteral(f64, String),
     /// a test literal
     TestLiteral(usize, Vec<String>),
+
     /// a heredoc start token `"""`
     HereDocStart,
-
     /// a heredoc end token `"""`
     HereDocEnd,
+    /// a heredoc literal, within triple quotes with special newline handling
+    HereDocLiteral(Cow<'input, str>),
 
     /// a double quote `"`
     DQuote,
@@ -502,6 +504,7 @@ impl<'input> Token<'input> {
                 | Token::TestLiteral(_, _)
                 | Token::HereDocStart
                 | Token::HereDocEnd
+                | Token::HereDocLiteral(_)
         )
     }
 
@@ -620,6 +623,23 @@ impl<'input> fmt::Display for Token<'input> {
             Token::HereDocEnd => {
                 // here we do not
                 write!(f, r#"""""#)
+            }
+            Token::HereDocLiteral(value) => {
+                // do not escape linebreaks
+                let (value, add_linebreak) = if let Some(stripped) = value.strip_suffix('\n') {
+                    (stripped, true)
+                } else {
+                    (&value as &str, false)
+                };
+                let s = Value::from(value).encode();
+                // Strip the quotes
+                if let Some(s) = s.get(1..s.len() - 1) {
+                    write!(f, "{}", s)?;
+                }
+                if add_linebreak {
+                    writeln!(f)?;
+                }
+                Ok(())
             }
             Token::TestLiteral(indent, values) => {
                 let mut first = true;
@@ -1291,12 +1311,6 @@ impl<'input> Preprocessor {
                         .into());
                     }
                 }
-                Some(Ok(Spanned {
-                    value: Token::StringLiteral(string),
-                    span: _,
-                })) => {
-                    input.push_str(&string);
-                }
                 Some(Ok(other)) => {
                     input.push_str(&format!("{}", other.value));
                 }
@@ -1846,7 +1860,7 @@ impl<'input> Lexer<'input> {
     }
 
     #[allow(clippy::too_many_lines, clippy::clippy::too_many_arguments)]
-    fn handle_interpol(
+    fn handle_interpol<F>(
         &mut self,
         is_hd: bool,
         error_prefix: &str,
@@ -1857,7 +1871,11 @@ impl<'input> Lexer<'input> {
         end: &mut Location,
         res: &mut Vec<TokenSpan<'input>>,
         content: &mut String,
-    ) -> Result<()> {
+        token_constructor: F,
+    ) -> Result<()>
+    where
+        F: Fn(Cow<'input, str>) -> Token,
+    {
         end.shift('{');
         self.bump();
         if !content.is_empty() {
@@ -1865,9 +1883,9 @@ impl<'input> Lexer<'input> {
             mem::swap(&mut c, content);
             let token = if *has_escapes {
                 // The string was modified so we can't use the slice
-                Token::StringLiteral(c.into())
+                token_constructor(c.into())
             } else {
-                Token::StringLiteral(
+                token_constructor(
                     self.slice(*segment_start, end_inner)
                         .map_or_else(|| Cow::from(c), Cow::from),
                 )
@@ -2034,7 +2052,7 @@ impl<'input> Lexer<'input> {
     }
 
     #[allow(clippy::clippy::too_many_arguments)]
-    fn handle_qs_hd_generic(
+    fn handle_qs_hd_generic<F>(
         &mut self,
         is_hd: bool,
         error_prefix: &str,
@@ -2045,7 +2063,11 @@ impl<'input> Lexer<'input> {
         res: &mut Vec<TokenSpan<'input>>,
         content: &mut String,
         lc: (Location, char),
-    ) -> Result<()> {
+        token_constructor: F,
+    ) -> Result<()>
+    where
+        F: Fn(Cow<'input, str>) -> Token,
+    {
         match lc {
             (end_inner, '\\') => {
                 let (mut e, c) = self.escape_code(&total_start, end_inner)?;
@@ -2055,11 +2077,11 @@ impl<'input> Lexer<'input> {
                         mem::swap(&mut c, content);
                         let token = if *has_escapes {
                             // The string was modified so we can't use the slice
-                            Token::StringLiteral(c.into())
+                            token_constructor(c.into())
                         } else {
                             self.slice(*segment_start, end_inner).map_or_else(
-                                || Token::StringLiteral(c.into()),
-                                |slice| Token::StringLiteral(slice.into()),
+                                || token_constructor(c.into()),
+                                |slice| token_constructor(slice.into()),
                             )
                         };
                         res.push(self.spanned2(*segment_start, end_inner, token));
@@ -2088,6 +2110,7 @@ impl<'input> Lexer<'input> {
                         end,
                         res,
                         content,
+                        token_constructor,
                     )?;
                 } else {
                     content.push('#');
@@ -2119,7 +2142,11 @@ impl<'input> Lexer<'input> {
             match self.bump() {
                 Some((e, '"')) => {
                     // If the current line is just a `"""` then we are at the end of the heredoc
-                    res.push(self.spanned2(segment_start, e, Token::StringLiteral(content.into())));
+                    res.push(self.spanned2(
+                        segment_start,
+                        e,
+                        Token::HereDocLiteral(content.into()),
+                    ));
                     segment_start = e;
                     content = String::new();
                     content.push('"');
@@ -2145,7 +2172,7 @@ impl<'input> Lexer<'input> {
                     res.push(self.spanned2(
                         segment_start,
                         end,
-                        Token::StringLiteral(content.into()),
+                        Token::HereDocLiteral(content.into()),
                     ));
                     end.shift('\n');
                     segment_start = end;
@@ -2162,6 +2189,7 @@ impl<'input> Lexer<'input> {
                         &mut res,
                         &mut content,
                         lc,
+                        Token::HereDocLiteral,
                     )?;
                 }
                 None => {
@@ -2239,6 +2267,7 @@ impl<'input> Lexer<'input> {
                         &mut res,
                         &mut string,
                         lc,
+                        Token::StringLiteral,
                     )?;
                 }
                 None => {
