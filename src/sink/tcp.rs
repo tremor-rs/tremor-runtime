@@ -78,7 +78,7 @@ impl Tcp {
             .ok_or_else(|| Error::from(ErrorKind::NoSocket))?;
         for value in event.value_iter() {
             let raw = codec.encode(value)?;
-            let packets = postprocess(&mut self.postprocessors, event.ingest_ns, raw.to_vec())?;
+            let packets = postprocess(&mut self.postprocessors, event.ingest_ns, raw)?;
             for packet in packets {
                 stream.write_all(&packet).await?;
             }

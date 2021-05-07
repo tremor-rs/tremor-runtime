@@ -29,15 +29,27 @@ use std::ops::RangeInclusive;
 /// An aggregate function
 pub trait TremorAggrFn: DowncastSync + Sync + Send {
     /// Accumulate a value
+    ///
+    /// # Errors
+    /// if the data can not be acumulated
     fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()>;
     /// Compensate for a value being removed
+    ///
+    /// # Errors
+    /// if the function can not compensate the data
     fn compensate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()>;
     /// Emits the function
+    ///
+    /// # Errors
+    /// if the function can not emit
     fn emit<'event>(&mut self) -> FResult<Value<'event>>;
     /// Initialises an aggregate function
     fn init(&mut self);
     /// Emits the value and reinitialises the function
     /// this can be used to optimise this process
+    ///
+    /// # Errors
+    /// if the function can not emit
     fn emit_and_init<'event>(&mut self) -> FResult<Value<'event>> {
         let r = self.emit()?;
         self.init();
@@ -45,6 +57,9 @@ pub trait TremorAggrFn: DowncastSync + Sync + Send {
     }
     /// Merges the state of a differently windowed function into this
     /// this requires `&self` and `&src` to be of the same type.
+    ///
+    /// # Errors
+    /// if the two functions can not be merged
     fn merge(&mut self, src: &dyn TremorAggrFn) -> FResult<()>;
     /// allows cloning the functions without implementing
     /// `Clone` to avoid rust complaining
@@ -65,6 +80,8 @@ impl_downcast!(sync TremorAggrFn);
 /// A tremor function
 pub trait TremorFn: Sync + Send {
     /// Invoce the function and calculate the result
+    /// # Errors
+    /// if the function invocation fails
     fn invoke<'event>(&self, ctx: &EventContext, args: &[&Value<'event>])
         -> FResult<Value<'event>>;
     /// allows cloning the functions without implementing
@@ -264,6 +281,9 @@ impl TremorFnWrapper {
         Self { module, name, fun }
     }
     /// Invokes the function
+    ///
+    /// # Errors
+    /// if the function invocation fails
     pub fn invoke<'event>(
         &self,
         context: &EventContext,
@@ -611,6 +631,9 @@ impl Default for Registry {
 
 impl Registry {
     /// finds a function in the registry
+    ///
+    /// # Errors
+    /// if the function or module can not be found
     pub fn find(&self, module: &str, function: &str) -> FResult<&TremorFnWrapper> {
         self.functions
             .get(module)
@@ -674,16 +697,25 @@ impl TremorAggrFnWrapper {
     }
 
     /// Accumulate a value
+    ///
+    /// # Errors
+    /// if accumulating the function fails
     pub fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
         self.fun.accumulate(args)
     }
 
     /// Compensate for a value being removed
+    ///
+    /// # Errors
+    /// if compensating the function fails
     pub fn compensate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
         self.fun.compensate(args)
     }
 
     /// Emits the function
+    ///
+    /// # Errors
+    /// if the emit function fails
     pub fn emit<'event>(&mut self) -> FResult<Value<'event>> {
         self.fun.emit()
     }
@@ -713,6 +745,9 @@ impl TremorAggrFnWrapper {
 
     /// Merges the state of a differently windowed function into this
     /// this requires `&self` and `&src` to be of the same type.
+    ///
+    /// # Errors
+    /// if the merge function fails
     pub fn merge(&mut self, src: &Self) -> FResult<()> {
         use std::borrow::Borrow;
         self.fun.merge(src.fun.borrow())
@@ -750,6 +785,9 @@ impl Default for Aggr {
 
 impl Aggr {
     /// finds a function in the registry
+    ///
+    /// # Errors
+    /// if the function or module can not be found
     pub fn find(&self, module: &str, function: &str) -> FResult<&TremorAggrFnWrapper> {
         self.functions
             .get(module)

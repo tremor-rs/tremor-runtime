@@ -127,12 +127,12 @@ pub(crate) fn maybe_instrumentation_library_logs_to_pb(
                             severity_number,
                             severity_text,
                             name,
+                            body,
                             attributes,
                             dropped_attributes_count,
                             flags,
                             trace_id,
                             span_id,
-                            body,
                         });
                     }
                 }

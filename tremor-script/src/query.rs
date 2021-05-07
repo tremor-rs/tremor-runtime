@@ -101,6 +101,9 @@ where
         self.query.suffix()
     }
     /// Parses a string into a query
+    ///
+    /// # Errors
+    /// if the query can not be parsed
     pub fn parse(
         module_path: &ModulePath,
         file_name: &str,
@@ -157,6 +160,8 @@ where
     }
 
     /// Highlights a script with a given highlighter.
+    /// # Errors
+    /// on io errors
     #[cfg(not(tarpaulin_include))]
     pub fn highlight_script_with<H: Highlighter>(script: &str, h: &mut H) -> std::io::Result<()> {
         let mut script = script.to_string();
@@ -168,6 +173,8 @@ where
     }
 
     /// Format an error given a script source.
+    /// # Errors
+    /// on io errors
     pub fn format_error_from_script<H: Highlighter>(
         script: &str,
         h: &mut H,
@@ -193,6 +200,8 @@ where
     }
 
     /// Format an error given a script source.
+    /// # Errors
+    /// on io errors
     pub fn format_warnings_with<H: Highlighter>(&self, h: &mut H) -> std::io::Result<()> {
         for w in &self.warnings {
             let tokens: Vec<_> = lexer::Tokenizer::new(&self.source)
@@ -215,6 +224,9 @@ where
     }
 
     /// Formats an error within this script using a given highlighter
+    ///
+    /// # Errors
+    /// on io errors
     pub fn format_error_with<H: Highlighter>(&self, h: &mut H, e: &Error) -> std::io::Result<()> {
         Self::format_error_from_script(&self.source, h, e)
     }

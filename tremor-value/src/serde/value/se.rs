@@ -663,10 +663,10 @@ impl serde::ser::SerializeStructVariant for SerializeStructVariant {
 }
 
 #[cfg(test)]
-#[cfg(not(tarpaulin_include))] // this is test code, duh
 mod tests {
 
     use super::*;
+    use crate::prelude::*;
 
     use beef::Cow;
     use serde_ext::Serialize;
@@ -684,20 +684,15 @@ mod tests {
             snot: Some(0),
         };
         let value = to_value(x)?;
-        if let Value::Object(map) = value {
-            if let Some(&Value::Object(inner)) = map.get("Struct".into()).as_ref() {
-                let snot = inner.get("snot".into());
-                assert_eq!(Some(&Value::Static(StaticNode::U64(0))), snot);
-                assert_eq!(
-                    Some(&Value::String("snot".into())),
-                    inner.get("badger".into())
-                );
-            } else {
-                assert!(false, "Struct not serialized with its name at teh toplevel");
-            }
-        } else {
-            assert!(false, "Struct not serialized to an object");
-        }
+        let inner = value
+            .get("Struct".into())
+            .ok_or("Struct not serialized with its name at teh toplevel")?;
+        let snot = inner.get("snot".into());
+        assert_eq!(Some(&Value::Static(StaticNode::U64(0))), snot);
+        assert_eq!(
+            Some(&Value::String("snot".into())),
+            inner.get("badger".into())
+        );
 
         let not_a_struct = Snot::NotAStruct;
         let nas_value = to_value(not_a_struct)?;
@@ -707,16 +702,16 @@ mod tests {
         let t_value = to_value(tuple)?;
         if let Value::Object(map) = t_value {
             if let Some(&Value::Array(values)) = map.get("TupleStruct".into()).as_ref() {
-                if let Some(&Value::Array(first_field)) = values.first().as_ref() {
-                    assert_eq!(
-                        Some(&Value::Static(StaticNode::I64(1))),
-                        first_field.first()
-                    );
-                    assert_eq!(Some(&Value::Static(StaticNode::I64(2))), first_field.get(1));
-                    assert_eq!(Some(&Value::Static(StaticNode::I64(3))), first_field.get(2));
-                } else {
-                    assert!(false, "Vec<u8> not serialized as array");
-                }
+                let first_field = values
+                    .first()
+                    .and_then(ValueAccessTrait::as_array)
+                    .ok_or("Vec<u8> not serialized as array")?;
+                assert_eq!(
+                    Some(&Value::Static(StaticNode::I64(1))),
+                    first_field.first()
+                );
+                assert_eq!(Some(&Value::Static(StaticNode::I64(2))), first_field.get(1));
+                assert_eq!(Some(&Value::Static(StaticNode::I64(3))), first_field.get(2));
                 assert_eq!(Some(&Value::Static(StaticNode::U64(3))), values.get(1));
             }
         }
@@ -821,85 +816,57 @@ mod tests {
             3,
         ));
         let res = to_value(x.clone())?;
-        if let Value::Array(elems) = &res {
-            if let Value::Object(values) = elems.first().unwrap() {
-                let key = values.get("key").ok_or(Error::Serde(
-                    "struct fields not serialized correctly".to_string(),
-                ))?;
+        let elems = res
+            .as_array()
+            .ok_or("tuple in option not serialized correctly to array")?;
+        let values = elems
+            .first()
+            .ok_or("struct in tuple in option not serialized correctly")?;
+        let key = values.get("key").ok_or(Error::Serde(
+            "struct fields not serialized correctly".to_string(),
+        ))?;
 
-                if let Value::String(s) = key {
-                    assert_eq!("key".to_string(), s.to_string());
-                } else {
-                    fail!("string field serialized into: {}", key)
-                }
-                match values.get("number") {
-                    Some(Value::Static(StaticNode::Null)) => {}
-                    _ => fail!("None did not correctly serialize."),
-                }
-                match values.get("tuple") {
-                    Some(Value::Array(array)) => {
-                        assert_eq!(Value::String("".into()), array.first().unwrap());
-                        assert_eq!(
-                            Value::Static(StaticNode::Bool(false)),
-                            array.get(1).unwrap()
-                        );
-                    }
-                    _ => fail!("Tuple in struct not correctly serialized"),
-                }
-            } else {
-                fail!(
-                    "struct in tuple in option not serialized correctly, got {:?}",
-                    res
-                );
-            }
-            assert_eq!(Value::Static(StaticNode::U64(3)), elems.get(1).unwrap())
-        } else {
-            fail!(
-                "tuple in option not serialized correctly to array, git {:?}",
-                res
-            );
-        }
+        assert_eq!(Some("key"), key.as_str());
+        assert!(values
+            .get("number")
+            .map(ValueTrait::is_null)
+            .unwrap_or_default());
+        let array = values
+            .get_array("tuple")
+            .ok_or("Tuple in struct not correctly serialized")?;
+        assert_eq!(Value::String("".into()), array.first().unwrap());
+        assert_eq!(
+            Value::Static(StaticNode::Bool(false)),
+            array.get(1).unwrap()
+        );
+        assert_eq!(Value::Static(StaticNode::U64(3)), elems.get(1).unwrap());
 
         // assert it is the same without the option wrapped around it
         let res = to_value(x.unwrap())?;
-        if let Value::Array(elems) = &res {
-            if let Value::Object(values) = elems.first().unwrap() {
-                let key = values.get("key").ok_or(Error::Serde(
-                    "struct fields not serialized correctly".to_string(),
-                ))?;
+        let elems = res
+            .as_array()
+            .ok_or("tuple in option not serialized correctly to array")?;
+        let values = elems
+            .first()
+            .ok_or("struct in tuple in option not serialized correctly")?;
+        let key = values.get("key").ok_or(Error::Serde(
+            "struct fields not serialized correctly".to_string(),
+        ))?;
 
-                if let Value::String(s) = key {
-                    assert_eq!("key".to_string(), s.to_string());
-                } else {
-                    fail!("string field serialized into: {}", key)
-                }
-                match values.get("number") {
-                    Some(Value::Static(StaticNode::Null)) => {}
-                    _ => fail!("None did not correctly serialize."),
-                }
-                match values.get("tuple") {
-                    Some(Value::Array(array)) => {
-                        assert_eq!(Value::String("".into()), array.first().unwrap());
-                        assert_eq!(
-                            Value::Static(StaticNode::Bool(false)),
-                            array.get(1).unwrap()
-                        );
-                    }
-                    _ => fail!("Tuple in struct not correctly serialized"),
-                }
-            } else {
-                fail!(
-                    "struct in tuple in option not serialized correctly, got {:?}",
-                    res
-                );
-            }
-            assert_eq!(Value::Static(StaticNode::U64(3)), elems.get(1).unwrap())
-        } else {
-            fail!(
-                "tuple in option not serialized correctly to array, git {:?}",
-                res
-            );
-        }
+        assert_eq!(Some("key"), key.as_str());
+        assert!(values
+            .get("number")
+            .map(ValueTrait::is_null)
+            .unwrap_or_default());
+
+        let array = values
+            .get_array("tuple")
+            .ok_or("Tuple in struct not correctly serialized")?;
+        assert_eq!(Value::String("".into()), array.first().unwrap());
+        assert_eq!(
+            Value::Static(StaticNode::Bool(false)),
+            array.get(1).unwrap()
+        );
 
         Ok(())
     }
@@ -926,24 +893,16 @@ mod tests {
         struct TupleStruct(UnitStruct, String);
 
         let t = (UnitStruct, TupleStruct(UnitStruct, "ABC".to_string()));
-        match to_value(t)? {
-            Value::Array(values) => {
-                assert_eq!(2, values.len());
-                assert_eq!(Value::Static(StaticNode::Null), values.first().unwrap());
-                if let Value::Array(vec) = values.get(1).unwrap() {
-                    assert_eq!(Value::Static(StaticNode::Null), vec.first().unwrap());
-                    if let Value::String(s) = vec.get(1).unwrap() {
-                        assert_eq!("ABC".to_string(), s.to_string());
-                    }
-                } else {
-                    fail!(
-                        "TupleStruct not serialized correctly, but as {:?}",
-                        values.get(1).unwrap()
-                    )
-                }
-            }
-            x => fail!("tuple not serialized as array, but as {:?}", x),
-        }
+        let values = to_value(t)?;
+        assert_eq!(2, values.as_array().unwrap().len());
+        assert!(values.get_idx(0).unwrap().is_null());
+        let vec = values.get_idx(1).unwrap();
+        assert!(vec.get_idx(0).unwrap().is_null());
+        assert_eq!(
+            Some("ABC"),
+            vec.get_idx(1).and_then(ValueAccessTrait::as_str)
+        );
+
         Ok(())
     }
 

@@ -191,12 +191,9 @@ impl World {
         info!("Binding pipeline {}", id);
         match (&self.repo.find_pipeline(id).await?, &id.instance()) {
             (Some(artefact), Some(_instance_id)) => {
-                let servant = ActivatorLifecycleFsm::new(
-                    self.clone(),
-                    artefact.artefact.to_owned(),
-                    id.clone(),
-                )
-                .await?;
+                let servant =
+                    ActivatorLifecycleFsm::new(self.clone(), artefact.artefact.clone(), id.clone())
+                        .await?;
                 self.repo.bind_pipeline(id).await?;
                 // We link to the metrics pipeline
                 let res = self.reg.publish_pipeline(id, servant).await?;
@@ -317,12 +314,9 @@ impl World {
         info!("Binding onramp {}", id);
         match (&self.repo.find_onramp(id).await?, &id.instance()) {
             (Some(artefact), Some(_instance_id)) => {
-                let servant = ActivatorLifecycleFsm::new(
-                    self.clone(),
-                    artefact.artefact.to_owned(),
-                    id.clone(),
-                )
-                .await?;
+                let servant =
+                    ActivatorLifecycleFsm::new(self.clone(), artefact.artefact.clone(), id.clone())
+                        .await?;
                 self.repo.bind_onramp(id).await?;
                 // We link to the metrics pipeline
                 let res = self.reg.publish_onramp(id, servant).await?;
@@ -423,12 +417,9 @@ impl World {
         info!("Binding offramp {}", id);
         match (&self.repo.find_offramp(id).await?, &id.instance()) {
             (Some(artefact), Some(_instance_id)) => {
-                let servant = ActivatorLifecycleFsm::new(
-                    self.clone(),
-                    artefact.artefact.to_owned(),
-                    id.clone(),
-                )
-                .await?;
+                let servant =
+                    ActivatorLifecycleFsm::new(self.clone(), artefact.artefact.clone(), id.clone())
+                        .await?;
                 self.repo.bind_offramp(id).await?;
                 // We link to the metrics pipeline
                 let res = self.reg.publish_offramp(id, servant).await?;
@@ -531,8 +522,7 @@ impl World {
         match &id.instance() {
             Some(_instance_id) => {
                 let servant =
-                    ActivatorLifecycleFsm::new(self.clone(), artefact.to_owned(), id.clone())
-                        .await?;
+                    ActivatorLifecycleFsm::new(self.clone(), artefact.clone(), id.clone()).await?;
                 self.repo.bind_binding(id).await?;
                 self.reg.publish_binding(id, servant).await
             }
@@ -766,7 +756,7 @@ type: stderr
         self.system
             .send(ManagerMsg::CreatePipeline(
                 tx,
-                pipeline::Create { id, config },
+                pipeline::Create { config, id },
             ))
             .await?;
         rx.recv().await?

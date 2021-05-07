@@ -2168,8 +2168,8 @@ impl<'script> Upable<'script> for LocalPathRaw<'script> {
                 .copied()
                 .map_or_else(|| (helper.var_id(&id), false), |idx| (idx, true));
             Ok(LocalPath {
-                is_const,
                 idx,
+                is_const,
                 mid,
                 segments,
             })

@@ -31,6 +31,9 @@ pub fn hostname() -> String {
 }
 
 /// Serialize a Value in a sorted fashion to allow equality comparing the result
+///
+/// # Errors
+/// on IO errors
 pub fn sorted_serialize(j: &Value) -> Result<String> {
     // ballpark size of a 'sensible' message
     let mut w = Vec::with_capacity(512);
@@ -94,6 +97,9 @@ fn is_xz_file(filename: &str) -> bool {
 
 /// Loads an event file required for tests
 /// tries to load file and without .xz suffix
+///
+/// # Errors
+/// if the file can not be loaded or parsed as JSON into events
 pub fn load_event_file(base_name: &str) -> crate::errors::Result<Vec<Value<'static>>> {
     use tremor_common::file as cfile;
     use xz2::read::XzDecoder;

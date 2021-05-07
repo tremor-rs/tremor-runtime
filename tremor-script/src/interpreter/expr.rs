@@ -565,6 +565,9 @@ where
 
     #[inline]
     /// Invokes expression
+    ///
+    /// # Errors
+    /// if evaluation fails
     pub fn run(
         &'script self,
         opts: ExecOpts,

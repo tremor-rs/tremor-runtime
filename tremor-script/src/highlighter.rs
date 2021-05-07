@@ -23,7 +23,7 @@ use crate::{
     lexer::Range,
 };
 use serde::{Deserialize, Serialize};
-use std::io::Write;
+use std::io::{self, Write};
 use termcolor::{Buffer, BufferWriter, Color, ColorChoice, ColorSpec, WriteColor};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -135,7 +135,7 @@ impl From<&Warning> for Error {
         Self {
             start: warning.inner.0,
             end: warning.inner.1,
-            callout: warning.msg.to_owned(),
+            callout: warning.msg.clone(),
             hint: None,
             level: ErrorLevel::Warning,
             token: None,
@@ -149,34 +149,49 @@ pub trait Highlighter {
     type W: Write;
 
     /// sets the color
-    fn set_color(&mut self, _spec: &mut ColorSpec) -> std::result::Result<(), std::io::Error> {
+    ///
+    /// # Errors
+    /// on io errors
+    fn set_color(&mut self, _spec: &mut ColorSpec) -> io::Result<()> {
         Ok(())
     }
     /// resets all formatting
-    fn reset(&mut self) -> std::result::Result<(), std::io::Error> {
+    ///
+    /// # Errors
+    /// on io errors
+    fn reset(&mut self) -> io::Result<()> {
         Ok(())
     }
     /// finalises highlighting
-    fn finalize(&mut self) -> std::result::Result<(), std::io::Error> {
+    ///
+    /// # Errors
+    /// on io errors
+    fn finalize(&mut self) -> io::Result<()> {
         Ok(())
     }
     /// get the raw writer
     fn get_writer(&mut self) -> &mut Self::W;
 
     /// Highlights a source
+    ///
+    /// # Errors
+    /// on io errors
     fn highlight_str(
         &mut self,
         source: &str,
         ident: &str,
         emit_lines: bool,
         range: Option<Range>,
-    ) -> std::result::Result<(), std::io::Error> {
+    ) -> io::Result<()> {
         let tokens: Vec<_> = crate::lexer::Tokenizer::new(source)
             .filter_map(Result::ok)
             .collect();
         self.highlight(Some(source), &tokens, ident, emit_lines, range)
     }
     /// highlights a token stream with line numbers
+    ///
+    /// # Errors
+    /// on io errors
     fn highlight(
         &mut self,
         file: Option<&str>,
@@ -184,11 +199,14 @@ pub trait Highlighter {
         ident: &str,
         emit_lines: bool,
         range: Option<Range>,
-    ) -> std::result::Result<(), std::io::Error> {
+    ) -> io::Result<()> {
         self.highlight_error(file, tokens, ident, emit_lines, range, None)
     }
 
     /// highlights compile time errors
+    ///
+    /// # Errors
+    /// on io errors
     fn highlight_error(
         &mut self,
         file: Option<&str>,
@@ -197,7 +215,7 @@ pub trait Highlighter {
         emit_linenos: bool,
         range: Option<Range>,
         error: Option<Error>,
-    ) -> std::result::Result<(), std::io::Error> {
+    ) -> io::Result<()> {
         let extracted = range.map_or_else(
             || tokens.iter().collect::<Vec<_>>(),
             |Range(start, end)| extract(tokens, start, end),
@@ -210,16 +228,19 @@ pub trait Highlighter {
     /// # Errors
     /// if unable to write a newline
     ///
-    fn ensure_newline(&mut self) -> std::result::Result<(), std::io::Error>;
+    fn ensure_newline(&mut self) -> std::result::Result<(), io::Error>;
 
     /// write line prefix and optionally line number
+    ///
+    /// # Errors
+    /// on io errors
     #[inline]
     fn write_line_prefix(
         &mut self,
         line_prefix: &str,
         line: usize,
         emit_linenos: bool,
-    ) -> Result<(), std::io::Error> {
+    ) -> io::Result<()> {
         self.set_color(ColorSpec::new().set_bold(true))?;
         if emit_linenos {
             write!(self.get_writer(), "{}{:5} | ", line_prefix, line)?;
@@ -231,6 +252,9 @@ pub trait Highlighter {
     }
 
     /// write the actual error message below the error location
+    ///
+    /// # Errors
+    /// on io errors
     #[inline]
     fn write_callout(
         &mut self,
@@ -238,7 +262,7 @@ pub trait Highlighter {
         error_level: &ErrorLevel,
         start_column: usize,
         error_len: usize,
-    ) -> Result<(), std::io::Error> {
+    ) -> io::Result<()> {
         let prefix = " ".repeat(start_column.saturating_sub(1));
         let underline = "^".repeat(error_len);
         self.set_color(ColorSpec::new().set_bold(true))?;
@@ -254,12 +278,10 @@ pub trait Highlighter {
     }
 
     /// write a helpful hint for users below the error message
-    fn write_hint(
-        &mut self,
-        hint: &str,
-        start_column: usize,
-        error_len: usize,
-    ) -> Result<(), std::io::Error> {
+    ///
+    /// # Errors
+    /// on io errors
+    fn write_hint(&mut self, hint: &str, start_column: usize, error_len: usize) -> io::Result<()> {
         let prefix = " ".repeat(start_column + error_len);
         self.set_color(ColorSpec::new().set_bold(true))?;
         write!(self.get_writer(), "      | {}", prefix)?;
@@ -271,6 +293,9 @@ pub trait Highlighter {
     }
 
     /// highlights compile time errors with indentation
+    ///
+    /// # Errors
+    /// on io errors
     #[allow(clippy::cast_possible_truncation, clippy::too_many_lines)]
     fn highlight_errors_indent(
         &mut self,
@@ -279,7 +304,7 @@ pub trait Highlighter {
         file: Option<&str>,
         tokens: &[&TokenSpan],
         error: Option<Error>,
-    ) -> std::result::Result<(), std::io::Error> {
+    ) -> io::Result<()> {
         let mut printed_error = false;
         let mut line = 0;
         match error {
@@ -547,7 +572,7 @@ impl Highlighter for Dumb {
         &mut self.buff
     }
 
-    fn ensure_newline(&mut self) -> std::result::Result<(), std::io::Error> {
+    fn ensure_newline(&mut self) -> std::result::Result<(), io::Error> {
         match self.buff.last() {
             Some(0xa) => (), // ok
             _ => self.buff.push(0xa),
@@ -612,19 +637,19 @@ impl Default for Term {
 
 impl Highlighter for Term {
     type W = Buffer;
-    fn set_color(&mut self, spec: &mut ColorSpec) -> std::result::Result<(), std::io::Error> {
+    fn set_color(&mut self, spec: &mut ColorSpec) -> std::result::Result<(), io::Error> {
         self.buff.set_color(spec)
     }
-    fn reset(&mut self) -> std::result::Result<(), std::io::Error> {
+    fn reset(&mut self) -> std::result::Result<(), io::Error> {
         self.buff.reset()
     }
-    fn finalize(&mut self) -> std::result::Result<(), std::io::Error> {
+    fn finalize(&mut self) -> std::result::Result<(), io::Error> {
         self.bufwtr.print(&self.buff)
     }
     fn get_writer(&mut self) -> &mut Self::W {
         &mut self.buff
     }
-    fn ensure_newline(&mut self) -> std::result::Result<(), std::io::Error> {
+    fn ensure_newline(&mut self) -> std::result::Result<(), io::Error> {
         match strip_ansi_escapes::strip(self.buff.as_slice())?.last() {
             Some(0xa) => Ok(()),
             _ => writeln!(self.buff),

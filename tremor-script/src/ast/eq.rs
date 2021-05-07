@@ -642,7 +642,6 @@ impl AstEq for TremorFnWrapper {
     }
 }
 
-#[cfg(not(tarpaulin_include))]
 #[cfg(test)]
 mod tests {
     use crate::ast::Expr;

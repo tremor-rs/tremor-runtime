@@ -254,7 +254,7 @@ impl SnotCombiner {
                 });
             }
         }
-        Ok(Self { combiner, rules })
+        Ok(Self { rules, combiner })
     }
 }
 

@@ -425,6 +425,9 @@ impl ExecutableGraph {
         Some(did_chage)
     }
     /// This is a performance critial function!
+    ///
+    /// # Errors
+    /// Errors if the event can not be processed, or an operator fails
     pub fn enqueue(
         &mut self,
         stream_name: &str,
@@ -559,6 +562,10 @@ impl ExecutableGraph {
         insight
     }
     /// Enqueue a signal
+    ///
+    /// # Errors
+    /// if the singal fails to be processed in the singal flow or if any forward going
+    /// events spawned by this signal fail to be processed
     pub fn enqueue_signal(&mut self, signal: Event, returns: &mut Returns) -> Result<()> {
         if self.signalflow(signal)? {
             self.run(returns)?;

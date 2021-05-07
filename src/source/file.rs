@@ -87,10 +87,10 @@ impl Int {
             path: vec![config.source.clone()],
         };
         Ok(Self {
-            onramp_id,
             config,
             lines,
             origin_uri,
+            onramp_id,
         })
     }
 }

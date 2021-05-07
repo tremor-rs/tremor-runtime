@@ -6,6 +6,7 @@
 - Change format of KV offramp responses to a more unified structure.
 - Add `KnownKey::map_*` functions to directly work on the `Value::Object`s inner `HashMap`, if available.
 - Add `HEALTHCHECK` to Dockerfiles
+- Improve printing for dot files
 
 ### Fixes
 
@@ -16,6 +17,7 @@
 - Run tests in tremor-cli bin
 - Switch operations of `tremor dbg lex` and `tremor dbg preprocess` as they did the job of the other.
 - Fix heredoc preprocessing, which was messing up error reporting
+- Fix false positives in cycle detection
 
 ## 0.11.1
 

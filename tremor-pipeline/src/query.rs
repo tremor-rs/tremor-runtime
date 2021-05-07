@@ -159,6 +159,9 @@ impl Query {
         &self.0.source
     }
     /// Parse a query
+    ///
+    /// # Errors
+    /// if the trickle script can not be parsed
     pub fn parse(
         module_path: &ModulePath,
         script: &str,
@@ -178,6 +181,9 @@ impl Query {
     }
 
     /// Turn a query into a executable pipeline graph
+    ///
+    /// # Errors
+    /// if the graph can not be turned into a pipeline
     #[allow(clippy::too_many_lines)]
     pub fn to_pipe(&self, idgen: &mut OperatorIdGen) -> Result<crate::ExecutableGraph> {
         use crate::{ExecutableGraph, NodeMetrics, State};

@@ -212,8 +212,8 @@ impl TremorUrl {
 
             let host = r.host_str().unwrap_or("localhost").to_owned();
             Ok(Self {
-                host,
                 scope,
+                host,
                 resource_type,
                 artefact,
                 instance,
