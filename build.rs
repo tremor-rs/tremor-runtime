@@ -28,7 +28,7 @@ fn get_git_branch() -> String {
             .unwrap_or("unknown_branch")
             .to_string();
     } else {
-        panic!("Can not get git branch: {}", branch.unwrap_err());
+        String::from("empty")
     }
 }
 
@@ -49,7 +49,7 @@ fn get_git_commit() -> String {
             .unwrap_or("unknown_hash")
             .to_string();
     } else {
-        panic!("Can not get git commit: {}", commit.unwrap_err());
+        String::from("000")
     }
 }
 
