@@ -7,7 +7,7 @@ onramp:
     codec: binflux
     config:
       base64: true
-      source: ./demo/data/data.binflux.xz
+      source:  ../../../../demo/data/data.binflux.xz
 
 offramp:
   - id: blackhole

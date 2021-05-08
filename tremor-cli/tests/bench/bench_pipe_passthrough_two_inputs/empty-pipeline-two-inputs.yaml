@@ -3,12 +3,12 @@ onramp:
     type: blaster
     codec: json
     config:
-      source: ./demo/data/data.json.xz
+      source: ../../../../demo/data/data.json.xz
   - id: blaster2
     type: blaster
     codec: json
     config:
-      source: ./demo/data/data.json.xz
+      source:  ../../../../demo/data/data.json.xz
 
 offramp:
   - id: blackhole

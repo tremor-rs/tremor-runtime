@@ -68,8 +68,14 @@ fn suite_bench(
             let (matched, is_match) = tags.matches(&by_tag.0, &by_tag.1, &by_tag.1);
             if is_match {
                 status::h1("Benchmark", &format!("Running {}", &basename(&bench_root)))?;
+                let cwd = std::env::current_dir()?;
+                std::env::set_current_dir(Path::new(&root))?;
                 status::tags(&tags, Some(&matched), Some(&by_tag.1))?;
                 let test_report = process::run_process("bench", base, root, &tags)?;
+
+                // Restore cwd
+                file::set_current_dir(&cwd)?;
+
                 status::duration(test_report.duration, "  ")?;
                 if test_report.stats.is_pass() {
                     stats.pass();

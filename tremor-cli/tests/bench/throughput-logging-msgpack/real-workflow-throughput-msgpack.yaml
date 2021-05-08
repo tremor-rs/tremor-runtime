@@ -7,7 +7,7 @@ onramp:
     type: blaster
     codec: msgpack
     config:
-      source: ./demo/data/data.msgpack.xz
+      source:  ../../../../demo/data/data.msgpack.xz
     preprocessors:
       - base64
 
