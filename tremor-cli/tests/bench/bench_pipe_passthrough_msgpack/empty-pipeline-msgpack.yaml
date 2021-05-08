@@ -8,7 +8,7 @@ onramp:
     preprocessors:
       - base64
     config:
-      source: ./demo/data/data.msgpack.xz
+      source:  ../../../../demo/data/data.msgpack.xz
 
 offramp:
   - id: blackhole
