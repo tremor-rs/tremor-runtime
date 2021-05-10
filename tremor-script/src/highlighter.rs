@@ -409,7 +409,7 @@ pub trait Highlighter {
                 Token::DocComment(_) => {
                     c.set_intense(true).set_fg(Some(Color::Cyan));
                 }
-                Token::TestLiteral(_, _) | Token::StringLiteral(_) => {
+                Token::TestLiteral(_, _) | Token::StringLiteral(_) | Token::HereDocLiteral(_) => {
                     c.set_intense(true).set_fg(Some(Color::Magenta));
                 }
                 Token::Bad(_) => {
@@ -425,7 +425,7 @@ pub trait Highlighter {
             }
             self.set_color(&mut c)?;
             match &x.value {
-                Token::HereDoc => {
+                Token::HereDocStart => {
                     // (indent, lines) => {
                     writeln!(self.get_writer(), r#"""""#)?;
                     // TODO indentation sensing in heredoc's
@@ -444,6 +444,11 @@ pub trait Highlighter {
                     // write!(self.get_writer(), "{:5} | ", line)?;
                     // self.reset()?;
                     // write!(self.get_writer(), r#"""""#)?;
+                }
+                Token::HereDocEnd => {
+                    write!(self.get_writer(), r#"""""#)?;
+                    // no line increment
+                    self.reset()?
                 }
                 Token::TestLiteral(indent, lines) => {
                     write!(self.get_writer(), "|")?;

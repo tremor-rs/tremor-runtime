@@ -46,6 +46,14 @@ impl std::ops::Sub for Location {
     }
 }
 
+impl std::ops::Add<char> for Location {
+    type Output = Location;
+    fn add(mut self, c: char) -> Self::Output {
+        self.shift(c);
+        self
+    }
+}
+
 /// A Span with start and end location
 #[derive(Copy, Clone, Default, Eq, PartialEq, Debug, Hash, Ord, PartialOrd)]
 pub struct Span {

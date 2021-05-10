@@ -515,7 +515,7 @@ dependencies = [
  "flate2",
  "http 0.2.4",
  "log",
- "url 2.2.1",
+ "url 2.2.2",
 ]
 
 [[package]]
@@ -530,7 +530,7 @@ dependencies = [
  "rustls 0.18.1",
  "serde",
  "serde_urlencoded 0.6.1",
- "url 2.2.1",
+ "url 2.2.2",
  "webpki",
  "webpki-roots 0.19.0",
  "wildmatch",
@@ -2182,7 +2182,7 @@ dependencies = [
  "jsonwebtoken",
  "serde",
  "serde_json",
- "url 2.2.1",
+ "url 2.2.2",
 ]
 
 [[package]]
@@ -2460,7 +2460,7 @@ dependencies = [
  "serde_json",
  "serde_qs",
  "serde_urlencoded 0.7.0",
- "url 2.2.1",
+ "url 2.2.2",
 ]
 
 [[package]]
@@ -2751,7 +2751,7 @@ dependencies = [
  "sluice",
  "tracing",
  "tracing-futures",
- "url 2.2.1",
+ "url 2.2.2",
  "waker-fn",
 ]
 
@@ -4025,7 +4025,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "95b4ce31ff0a27d93c8de1849cf58162283752f065a90d508f1105fa6c9a213f"
 dependencies = [
  "idna 0.2.2",
- "url 2.2.1",
+ "url 2.2.2",
 ]
 
 [[package]]
@@ -4490,7 +4490,7 @@ dependencies = [
  "serde_urlencoded 0.7.0",
  "tokio 0.2.25",
  "tokio-tls",
- "url 2.2.1",
+ "url 2.2.2",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
@@ -4529,7 +4529,7 @@ dependencies = [
  "tokio 1.4.0",
  "tokio-native-tls",
  "tokio-rustls",
- "url 2.2.1",
+ "url 2.2.2",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
@@ -4899,7 +4899,7 @@ dependencies = [
  "dtoa",
  "itoa",
  "serde",
- "url 2.2.1",
+ "url 2.2.2",
 ]
 
 [[package]]
@@ -4947,7 +4947,7 @@ dependencies = [
  "tokio 1.4.0",
  "tracing",
  "typemap_rev",
- "url 2.2.1",
+ "url 2.2.2",
 ]
 
 [[package]]
@@ -6240,7 +6240,7 @@ dependencies = [
  "tremor-pipeline",
  "tremor-runtime",
  "tremor-script",
- "url 2.2.1",
+ "url 2.2.2",
 ]
 
 [[package]]
@@ -6312,7 +6312,7 @@ dependencies = [
  "tremor-common",
  "tremor-influx",
  "tremor-script",
- "url 2.2.1",
+ "url 2.2.2",
  "value-trait",
  "window",
  "xz2",
@@ -6395,7 +6395,7 @@ dependencies = [
  "tremor-script",
  "tremor-value",
  "tungstenite 0.13.0",
- "url 2.2.1",
+ "url 2.2.2",
  "value-trait",
  "xz2",
 ]
@@ -6447,7 +6447,7 @@ dependencies = [
  "tremor-kv",
  "tremor-value",
  "unicode-xid 0.2.2",
- "url 2.2.1",
+ "url 2.2.2",
  "value-trait",
  "xz2",
 ]
@@ -6490,7 +6490,7 @@ dependencies = [
  "smallvec 1.6.1",
  "thiserror",
  "tinyvec",
- "url 2.2.1",
+ "url 2.2.2",
 ]
 
 [[package]]
@@ -6542,7 +6542,7 @@ dependencies = [
  "log",
  "rand 0.7.3",
  "sha-1",
- "url 2.2.1",
+ "url 2.2.2",
  "utf-8",
 ]
 
@@ -6562,7 +6562,7 @@ dependencies = [
  "rand 0.8.3",
  "sha-1",
  "thiserror",
- "url 2.2.1",
+ "url 2.2.2",
  "utf-8",
 ]
 
@@ -6685,9 +6685,9 @@ dependencies = [
 
 [[package]]
 name = "url"
-version = "2.2.1"
+version = "2.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9ccd964113622c8e9322cfac19eb1004a07e636c545f325da085d5cdde6f1f8b"
+checksum = "a507c383b2d33b5fc35d1861e77e6b383d158b2da5e14fe51b83dfedf6fd578c"
 dependencies = [
  "form_urlencoded",
  "idna 0.2.2",
