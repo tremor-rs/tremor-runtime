@@ -128,6 +128,10 @@ fi
 
 %{_bindir}/*
 
+# user directories for tremor-script modules and libraries
+%dir %{_usr}/share/tremor
+%dir %{_usr}/local/share/tremor
+
 %doc %{_datadir}/doc/%{name}/README.md
 %license %{_datadir}/licenses/%{name}/LICENSE
 

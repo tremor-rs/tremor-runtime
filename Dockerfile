@@ -63,7 +63,10 @@ COPY docker/config /etc/tremor/config
 # logger configuration
 COPY docker/logger.yaml /etc/tremor/logger.yaml
 
-ENV TREMOR_PATH=/opt/local/tremor/lib
+# setting TREMOR_PATH
+# first item for compatibility with rpm and deb packages,
+# last item for compat with old versions of this docker image
+ENV TREMOR_PATH=/usr/lib/tremor/tremor-script:/usr/share/tremor:/usr/local/share/tremor:/opt/local/tremor/lib
 
 ENTRYPOINT ["/entrypoint.sh"]
 
