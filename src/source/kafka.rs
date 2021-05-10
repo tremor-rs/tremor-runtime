@@ -282,14 +282,38 @@ pub struct LoggingConsumerContext {
 impl ClientContext for LoggingConsumerContext {}
 
 impl ConsumerContext for LoggingConsumerContext {
-    fn pre_rebalance(&self, rebalance: &Rebalance) {
-        println!("Pre rebalance {:?}", rebalance);
+    fn post_rebalance(&self, rebalance: &Rebalance) {
+        if log_enabled!(Debug) {
+            match rebalance {
+                Rebalance::Assign(tpl) => {
+                    let offset_strings: Vec<String> = tpl
+                            .elements()
+                            .iter()
+                            .map(|elem| {
+                                format!(
+                                    "[Topic: {}, Partition: {}, Offset: {:?}]",
+                                    elem.topic(),
+                                    elem.partition(),
+                                    elem.offset()
+                                )
+                            })
+                            .collect();
+                        debug!(
+                            "[Source::{}] Offsets: {}",
+                            self.onramp_id,
+                            offset_strings.join(" ")
+                        );
+                }
+                Rebalance::Revoke => {
+                    println!("ALL partitions are REVOKED")
+                }
+                Rebalance::Error(err_info) => {
+                    println!("Post Rebalance error {}", err_info)
+                }
+            }
+        }
     }
 
-    fn post_rebalance(&self, rebalance: &Rebalance) {
-        println!("Post rebalance {:?}", rebalance);
-    }
-        
     fn commit_callback(&self, result: KafkaResult<()>, offsets: &rdkafka::TopicPartitionList) {
         match result {
             Ok(_) => {
