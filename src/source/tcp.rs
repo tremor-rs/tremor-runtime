@@ -13,9 +13,17 @@
 // limitations under the License.
 #![cfg(not(tarpaulin_include))]
 
+use crate::errors::{Error, ErrorKind, Result};
 use crate::source::prelude::*;
+use async_channel::Sender;
 use async_channel::TryRecvError;
 use async_std::net::TcpListener;
+use async_tls::TlsAcceptor;
+use rustls::internal::pemfile::{certs, pkcs8_private_keys, rsa_private_keys};
+use rustls::{Certificate, NoClientAuth, PrivateKey, ServerConfig};
+use std::io::BufReader;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 // TODO expose this as config (would have to change buffer to be vector?)
 const BUFFER_SIZE_BYTES: usize = 8192;
@@ -24,6 +32,13 @@ const BUFFER_SIZE_BYTES: usize = 8192;
 pub struct Config {
     pub port: u16,
     pub host: String,
+    pub tls: Option<TLSConfig>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct TLSConfig {
+    cert: PathBuf,
+    key: PathBuf,
 }
 
 impl ConfigImpl for Config {}
@@ -95,9 +110,16 @@ impl Source for Int {
         let (tx, rx) = bounded(crate::QSIZE);
         let uid = self.uid;
         let path = vec![self.config.port.to_string()];
+
+        let server_config: Option<ServerConfig> = if let Some(tls_config) = self.config.tls.as_ref()
+        {
+            Some(load_server_config(tls_config)?)
+        } else {
+            None
+        };
         task::spawn(async move {
             let mut stream_id = 0;
-            while let Ok((mut stream, peer)) = listener.accept().await {
+            while let Ok((stream, peer)) = listener.accept().await {
                 let tx = tx.clone();
                 stream_id += 1;
                 let origin_uri = EventOriginUri {
@@ -108,36 +130,31 @@ impl Source for Int {
                     // TODO also add token_num here?
                     path: path.clone(), // captures server port
                 };
+                let tls_acceptor: Option<TlsAcceptor> = server_config
+                    .clone()
+                    .map(|s| TlsAcceptor::from(Arc::new(s)));
                 task::spawn(async move {
                     //let (reader, writer) = &mut (&stream, &stream);
-                    let mut buffer = [0; BUFFER_SIZE_BYTES];
                     if let Err(e) = tx.send(SourceReply::StartStream(stream_id)).await {
                         error!("TCP Error: {}", e);
                         return;
                     }
 
-                    while let Ok(n) = stream.read(&mut buffer).await {
-                        if n == 0 {
-                            if let Err(e) = tx.send(SourceReply::EndStream(stream_id)).await {
-                                error!("TCP Error: {}", e);
-                            };
-                            break;
-                        };
-                        if let Err(e) = tx
-                            .send(SourceReply::Data {
-                                origin_uri: origin_uri.clone(),
-                                // ALLOW: we define n as part of the read
-                                data: buffer[0..n].to_vec(),
-                                meta: None, // TODO: add peer address etc. to meta
-                                codec_override: None,
-                                stream: stream_id,
-                            })
-                            .await
-                        {
-                            error!("TCP Error: {}", e);
-                            break;
-                        };
-                    }
+                    if let Some(acceptor) = tls_acceptor {
+                        match acceptor.accept(stream).await {
+                            Ok(tls_stream) => {
+                                read_loop(tls_stream, tx, stream_id, origin_uri).await
+                            }
+                            Err(_e) => {
+                                if let Err(e) = tx.send(SourceReply::EndStream(stream_id)).await {
+                                    error!("TCP Error: {}", e);
+                                    return;
+                                }
+                            }
+                        }
+                    } else {
+                        read_loop(stream, tx, stream_id, origin_uri).await
+                    };
                 });
             }
         });
@@ -157,4 +174,97 @@ impl Onramp for Tcp {
     fn default_codec(&self) -> &str {
         "json"
     }
+}
+
+async fn read_loop(
+    mut stream: impl futures::io::AsyncRead + std::marker::Unpin,
+    tx: Sender<SourceReply>,
+    stream_id: usize,
+    origin_uri: EventOriginUri,
+) {
+    let mut buffer = [0; BUFFER_SIZE_BYTES];
+    while let Ok(n) = stream.read(&mut buffer).await {
+        if n == 0 {
+            if let Err(e) = tx.send(SourceReply::EndStream(stream_id)).await {
+                error!("TCP Error: {}", e);
+            };
+            break;
+        };
+        if let Err(e) = tx
+            .send(SourceReply::Data {
+                origin_uri: origin_uri.clone(),
+                // ALLOW: we define n as part of the read
+                data: buffer[0..n].to_vec(),
+                meta: None, // TODO: add peer address etc. to meta
+                codec_override: None,
+                stream: stream_id,
+            })
+            .await
+        {
+            error!("TCP Error: {}", e);
+            break;
+        };
+    }
+}
+
+// Load the passed certificates file
+fn load_certs(path: &Path) -> Result<Vec<Certificate>> {
+    let certfile = tremor_common::file::open(path)?;
+    let mut reader = BufReader::new(certfile);
+    certs(&mut reader).map_err(|_| {
+        Error::from(ErrorKind::TLSError(format!(
+            "Invalid certificate in {}",
+            path.display()
+        )))
+    })
+}
+
+// Load the passed keys file
+fn load_keys(path: &Path) -> Result<PrivateKey> {
+    // prefer to load pkcs8 keys
+    // this will only error if we have invalid pkcs8 key base64 or we couldnt read the file.
+    let mut keys: Vec<PrivateKey> = {
+        let keyfile = tremor_common::file::open(path)?;
+        let mut reader = BufReader::new(keyfile);
+        pkcs8_private_keys(&mut reader).map_err(|_e| {
+            Error::from(ErrorKind::TLSError(format!(
+                "Invalid PKCS8 Private key in {}",
+                path.display()
+            )))
+        })
+    }?;
+
+    // only attempt to load as RSA keys if file has no pkcs8 keys
+    if keys.is_empty() {
+        let keyfile = tremor_common::file::open(path)?;
+        let mut reader = BufReader::new(keyfile);
+        keys = rsa_private_keys(&mut reader).map_err(|_e| {
+            Error::from(ErrorKind::TLSError(format!(
+                "Invalid RSA Private key in {}",
+                path.display()
+            )))
+        })?;
+    }
+
+    if keys.is_empty() {
+        Err(Error::from(ErrorKind::TLSError(format!(
+            "No valid private keys (RSA or PKCS8) found in {}",
+            path.display()
+        ))))
+    } else {
+        // ALLOW: we know keys is not empty
+        Ok(keys.remove(0))
+    }
+}
+
+fn load_server_config(config: &TLSConfig) -> Result<ServerConfig> {
+    let certs = load_certs(&config.cert)?;
+    let keys = load_keys(&config.key)?;
+
+    let mut server_config = ServerConfig::new(NoClientAuth::new());
+    server_config
+        // set this server to use one cert together with the loaded private key
+        .set_single_cert(certs, keys)?;
+
+    Ok(server_config)
 }

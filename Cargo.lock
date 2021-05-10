@@ -507,6 +507,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e91831deabf0d6d7ec49552e489aed63b7456a7a3c46cff62adad428110b0af0"
 
 [[package]]
+name = "async-tls"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2f23d769dbf1838d5df5156e7b1ad404f4c463d1ac2c6aeb6cd943630f8a8400"
+dependencies = [
+ "futures-core",
+ "futures-io",
+ "rustls 0.19.1",
+ "webpki",
+ "webpki-roots 0.21.1",
+]
+
+[[package]]
 name = "async-trait"
 version = "0.1.50"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6496,6 +6509,7 @@ dependencies = [
  "async-nats",
  "async-std",
  "async-std-resolver",
+ "async-tls",
  "async-trait",
  "async-tungstenite 0.13.1",
  "base64 0.13.0",
@@ -6541,6 +6555,7 @@ dependencies = [
  "rental",
  "reqwest 0.11.3",
  "rmp-serde",
+ "rustls 0.19.1",
  "serde",
  "serde_derive",
  "serde_yaml",
