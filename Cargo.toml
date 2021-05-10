@@ -176,13 +176,7 @@ assets = [
     "/usr/lib/tremor/",
     "755",
   ],
-  ["tremor-script/lib/*", "/usr/lib/tremor/tremor-script/", "644"],
-  ["tremor-script/lib/std/*", "/usr/lib/tremor/tremor-script/std/", "644"],
-  [
-    "tremor-script/lib/tremor/*",
-    "/usr/lib/tremor/tremor-script/tremor/",
-    "644",
-  ],
+  ["tremor-script/lib", "/usr/lib/tremor/tremor-script", "644"],
   [
     "packaging/distribution/etc/systemd/system/*",
     "/lib/systemd/system/",
