@@ -44,42 +44,28 @@ impl Codec for StatsD {
 
 fn encode(value: &Value) -> Result<Vec<u8>> {
     let mut r = String::new();
-    if let Some(m) = value.get_str("metric") {
-        r.push_str(&m);
-    } else {
+    r.push_str(value.get_str("metric").ok_or(ErrorKind::InvalidStatsD)?);
+    let t = value.get_str("type").ok_or(ErrorKind::InvalidStatsD)?;
+    let val = value.get("value").ok_or(ErrorKind::InvalidStatsD)?;
+    if !val.is_number() {
         return Err(ErrorKind::InvalidStatsD.into());
     };
-    let t = if let Some(s) = value.get_str("type") {
-        s
-    } else {
-        return Err(ErrorKind::InvalidStatsD.into());
-    };
-    if let Some(val) = value.get("value") {
-        r.push(':');
-        if t == "g" {
-            if let Some(s) = value.get_str("action") {
-                match s {
-                    "add" => r.push('+'),
-                    "sub" => r.push('-'),
-                    _ => (),
-                }
-            }
-        };
-        if val.is_i64() || val.is_f64() {
-            r.push_str(&val.encode());
-        } else {
-            return Err(ErrorKind::InvalidStatsD.into());
+    r.push(':');
+    if t == "g" {
+        match value.get_str("action") {
+            Some("add") => r.push('+'),
+            Some("sub") => r.push('-'),
+            _ => (),
         }
-    } else {
-        return Err(ErrorKind::InvalidStatsD.into());
     };
 
+    r.push_str(&val.encode());
     r.push('|');
     r.push_str(&t);
 
     if let Some(val) = value.get("sample_rate") {
-        r.push_str("|@");
-        if val.is_i64() || val.is_f64() {
+        if val.is_number() {
+            r.push_str("|@");
             r.push_str(&val.encode());
         } else {
             return Err(ErrorKind::InvalidStatsD.into());
@@ -340,5 +326,20 @@ mod test {
         assert_eq!(parsed, expected);
         let encoded = encode(&parsed).expect("failed to encode");
         assert_eq!(encoded, data);
+    }
+
+    #[test]
+    fn bench() {
+        let data = b"foo:1620649445.3351967|h";
+        let m = decode(data, 0).expect("failed to decode");
+        assert_eq!(&data[..], encode(&m).expect("failed to encode"));
+
+        let data = b"foo1:12345|c";
+        let m = decode(data, 0).expect("failed to decode");
+        assert_eq!(&data[..], encode(&m).expect("failed to encode"));
+
+        let data = b"foo2:1234567890|c";
+        let m = decode(data, 0).expect("failed to decode");
+        assert_eq!(&data[..], encode(&m).expect("failed to encode"));
     }
 }
