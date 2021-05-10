@@ -26,7 +26,7 @@ use rdkafka::{
     config::ClientConfig,
     consumer::{
         stream_consumer::{self, StreamConsumer},
-        CommitMode, Consumer, ConsumerContext,
+        CommitMode, Consumer, ConsumerContext, Rebalance,
     },
     error::{KafkaError, KafkaResult},
     message::{BorrowedMessage, Headers},
@@ -282,6 +282,14 @@ pub struct LoggingConsumerContext {
 impl ClientContext for LoggingConsumerContext {}
 
 impl ConsumerContext for LoggingConsumerContext {
+    fn pre_rebalance(&self, rebalance: &Rebalance) {
+        println!("Pre rebalance {:?}", rebalance);
+    }
+
+    fn post_rebalance(&self, rebalance: &Rebalance) {
+        println!("Post rebalance {:?}", rebalance);
+    }
+        
     fn commit_callback(&self, result: KafkaResult<()>, offsets: &rdkafka::TopicPartitionList) {
         match result {
             Ok(_) => {
