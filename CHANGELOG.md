@@ -18,6 +18,8 @@
 - Switch operations of `tremor dbg lex` and `tremor dbg preprocess` as they did the job of the other.
 - Fix heredoc preprocessing, which was messing up error reporting
 - Fix false positives in cycle detection
+- Include `cncf::otel` stdlib sources in deb package
+- Add `/etc/tremor/config` to `TREMOR_PATH` in systemd unit
 
 ## 0.11.1
 
