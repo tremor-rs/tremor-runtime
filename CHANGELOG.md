@@ -17,9 +17,13 @@
 - Run tests in tremor-cli bin
 - Switch operations of `tremor dbg lex` and `tremor dbg preprocess` as they did the job of the other.
 - Fix heredoc preprocessing, which was messing up error reporting
+<<<<<<< HEAD
 - Fix false positives in cycle detection
 - Include `cncf::otel` stdlib sources in deb package
 - Add `/usr/local/share/tremor` to default `TREMOR_PATH` also for all packages as a well-known directory for custom tremor-script libraries and modules.
+=======
+- Fix to record the partition number assigned during rebalancing when running Kafka.
+>>>>>>> 49c9121a (add an entry to changelog)
 
 ## 0.11.1
 
@@ -50,6 +54,7 @@
 - Fix windowed select queries not tracking the Events that constitute an outgoing aggregated event
 - Avoid several offramps to swallow fail insights.
 - Send correlation metadata for send error events in elastic sink
+- Record the partition number assigned during rebalancing when running Kafka.
 
 ## 0.11.0
 
