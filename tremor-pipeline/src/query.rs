@@ -50,9 +50,9 @@ use tremor_script::{AggrRegistry, Registry, Value};
 
 const BUILTIN_NODES: [(Cow<'static, str>, NodeKind); 4] = [
     (IN, NodeKind::Input),
-    (OUT, NodeKind::Output),
-    (ERR, NodeKind::Output),
-    (METRICS, NodeKind::Output),
+    (OUT, NodeKind::Output(OUT)),
+    (ERR, NodeKind::Output(ERR)),
+    (METRICS, NodeKind::Output(METRICS)),
 ];
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -213,7 +213,7 @@ impl Query {
         for (name, node_kind) in &BUILTIN_NODES {
             let id = pipe_graph.add_node(NodeConfig {
                 id: name.clone(),
-                kind: *node_kind,
+                kind: node_kind.clone(),
                 op_type: "passthrough".to_string(),
                 ..NodeConfig::default()
             });
@@ -232,7 +232,7 @@ impl Query {
                 NodeKind::Input => {
                     inputs.insert(name.clone(), id);
                 }
-                NodeKind::Output => outputs.push(id),
+                NodeKind::Output(_) => outputs.push(id),
                 _ => {
                     return Err(format!(
                         "Builtin node {} has unsupported node kind: {:?}",
@@ -293,10 +293,10 @@ impl Query {
                         location: s.extent(&query.node_meta),
                     };
                     select_num += 1;
-                    let from = resolve_output_port(&s.from, &query.node_meta);
+                    let mut from = resolve_output_port(&s.from, &query.node_meta);
                     if from.id == "in" && from.port != "out" {
-                        let name: Cow<'static, str> = from.port.clone();
-
+                        let name: Cow<'static, str> = format!("in/{}", from.port).into();
+                        from.id = name.clone();
                         if !nodes.contains_key(&name) {
                             let id = pipe_graph.add_node(NodeConfig {
                                 id: name.clone(),
@@ -325,13 +325,15 @@ impl Query {
                             inputs.insert(name, id);
                         }
                     }
-                    let into = resolve_input_port(&s.into, &query.node_meta);
+                    let mut into = resolve_input_port(&s.into, &query.node_meta);
                     if into.id == "out" && into.port != "in" {
-                        let name: Cow<'static, str> = into.port.clone();
+                        let name: Cow<'static, str> = format!("out/{}", into.port).into();
+                        into.id = name.clone();
                         if !nodes.contains_key(&name) {
                             let id = pipe_graph.add_node(NodeConfig {
                                 id: name.clone(),
-                                kind: NodeKind::Output,
+                                label: Some(name.to_string()),
+                                kind: NodeKind::Output(into.port.clone()),
                                 op_type: "passthrough".to_string(),
                                 ..NodeConfig::default()
                             });
@@ -589,7 +591,7 @@ impl Query {
                     ..
                 } => r#"shape = "rarrow""#.to_string(),
                 NodeConfig {
-                    kind: NodeKind::Output,
+                    kind: NodeKind::Output(_),
                     ..
                 } => r#"shape = "larrow""#.to_string(),
                 NodeConfig {
@@ -810,7 +812,7 @@ pub(crate) fn supported_operators(
     Ok(OperatorNode {
         uid,
         id: config.id.clone(),
-        kind: config.kind,
+        kind: config.kind.clone(),
         op_type: config.op_type.clone(),
         op,
     })
@@ -878,11 +880,11 @@ mod test {
         let mut idgen = OperatorIdGen::new();
         let first = idgen.next_id();
         let g = q.to_pipe(&mut idgen).unwrap();
-        assert!(g.inputs.contains_key("test_in"));
+        assert!(g.inputs.contains_key("in/test_in"));
         assert_eq!(idgen.next_id(), first + g.graph.len() as u64 + 1);
         let out = g.graph.get(5).unwrap();
-        assert_eq!(out.id, "test_out");
-        assert_eq!(out.kind, NodeKind::Output);
+        assert_eq!(out.id, "out/test_out");
+        assert_eq!(out.kind, NodeKind::Output("test_out".into()));
     }
 
     #[test]
