@@ -23,10 +23,10 @@
     clippy::unnecessary_unwrap,
     clippy::pedantic
 )]
-// TODOthis is needed due to a false positive in clippy
+// TODO this is needed due to a false positive in clippy
 // https://github.com/rust-lang/rust/issues/83125
 // we will need this in 1.52.0
-// #![allow(proc_macro_back_compat)]
+#![allow(proc_macro_back_compat)]
 
 #[macro_use]
 extern crate serde_derive;
