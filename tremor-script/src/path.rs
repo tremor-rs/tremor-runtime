@@ -15,11 +15,11 @@
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
-/// default TREMOR_PATH
+/// default `TREMOR_PATH`
 ///
 /// * `/usr/share/tremor/tremor-script` - in packages this directory contains the stdlib
 /// * `/usr/local/share/tremor`         - place for custom user libraries and modules, takes precedence over stdlib
-const DEFAULT: &'static str = "/usr/local/share/tremor:/usr/share/tremor/lib";
+const DEFAULT: &str = "/usr/local/share/tremor:/usr/share/tremor/lib";
 /// Structure representing module library paths
 #[allow(clippy::module_name_repetitions)]
 #[derive(Clone, Debug, Deserialize)]
