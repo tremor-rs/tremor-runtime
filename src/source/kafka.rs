@@ -286,28 +286,31 @@ impl ConsumerContext for LoggingConsumerContext {
         match rebalance {
             Rebalance::Assign(tpl) => {
                 let offset_strings: Vec<String> = tpl
-                        .elements()
-                        .iter()
-                        .map(|elem| {
-                            format!(
-                                "[Topic: {}, Partition: {}, Offset: {:?}]",
-                                elem.topic(),
-                                elem.partition(),
-                                elem.offset()
-                            )
-                        })
-                        .collect();
-                    info!(
-                        "[Source::{}] Offsets: {}",
-                        self.onramp_id,
-                        offset_strings.join(" ")
-                    );
+                    .elements()
+                    .iter()
+                    .map(|elem| {
+                        format!(
+                            "[Topic: {}, Partition: {}, Offset: {:?}]",
+                            elem.topic(),
+                            elem.partition(),
+                            elem.offset()
+                        )
+                    })
+                    .collect();
+                info!(
+                    "[Source::{}] Offsets: {}",
+                    self.onramp_id,
+                    offset_strings.join(" ")
+                );
             }
             Rebalance::Revoke => {
                 info!("[Source::{}] ALL partitions are REVOKED", self.onramp_id)
             }
             Rebalance::Error(err_info) => {
-                warn!("[Source::{}] Post Rebalance error {}", self.onramp_id, err_info)
+                warn!(
+                    "[Source::{}] Post Rebalance error {}",
+                    self.onramp_id, err_info
+                )
             }
         }
     }
