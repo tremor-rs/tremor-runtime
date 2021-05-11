@@ -7,8 +7,7 @@ Requires=network-online.target
 [Service]
 User=tremor
 Group=tremor
-Environment="TREMOR_PATH=/usr/lib/tremor/tremor-script:/usr/share/tremor:/usr/local/share/tremor"
-ExecStart=/usr/lib/tremor/tremor.sh
+ExecStart=/usr/share/tremor/tremor.sh
 Restart=always
 SyslogIdentifier=tremor
 

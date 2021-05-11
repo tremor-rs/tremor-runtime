@@ -14,6 +14,12 @@
 
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
+
+/// default TREMOR_PATH
+///
+/// * `/usr/share/tremor/tremor-script` - in packages this directory contains the stdlib
+/// * `/usr/local/share/tremor`         - place for custom user libraries and modules, takes precedence over stdlib
+const DEFAULT: &'static str = "/usr/local/share/tremor:/usr/share/tremor/lib";
 /// Structure representing module library paths
 #[allow(clippy::module_name_repetitions)]
 #[derive(Clone, Debug, Deserialize)]
@@ -54,10 +60,7 @@ impl ModulePath {
     /// Load module path
     #[must_use]
     pub fn load() -> Self {
-        load_(
-            &std::env::var("TREMOR_PATH")
-                .unwrap_or_else(|_| String::from("/usr/lib/tremor/tremor-script")),
-        )
+        load_(&std::env::var("TREMOR_PATH").unwrap_or_else(|_| String::from(DEFAULT)))
     }
 }
 
