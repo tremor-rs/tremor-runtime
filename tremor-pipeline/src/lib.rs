@@ -211,6 +211,12 @@ pub enum NodeKind {
     Script,
 }
 
+impl NodeKind {
+    fn skippable(&self) -> bool {
+        matches!(self, Self::Operator | Self::Select | Self::Script)
+    }
+}
+
 impl Default for NodeKind {
     fn default() -> Self {
         Self::Operator

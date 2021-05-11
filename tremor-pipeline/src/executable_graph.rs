@@ -348,7 +348,7 @@ impl ExecutableGraph {
             .iter()
             .enumerate()
             .filter_map(|(id, e)| {
-                if e.skippable() && e.kind == NodeKind::Operator {
+                if e.skippable() && e.kind.skippable() {
                     Some(id)
                 } else {
                     None
