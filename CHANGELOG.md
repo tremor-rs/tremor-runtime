@@ -19,7 +19,7 @@
 - Fix heredoc preprocessing, which was messing up error reporting
 - Fix false positives in cycle detection
 - Include `cncf::otel` stdlib sources in deb package
-- Add `/etc/tremor/config` to `TREMOR_PATH` in systemd unit
+- Add `/usr/local/share/tremor` to default `TREMOR_PATH` also for all packages as a well-known directory for custom tremor-script libraries and modules.
 
 ## 0.11.1
 
