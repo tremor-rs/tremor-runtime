@@ -52,10 +52,7 @@ impl ModulePath {
     /// Convert a relative file path to a module reference
     #[must_use]
     pub fn file_to_module(rel_file: &str) -> String {
-        rel_file
-            .to_string()
-            .replace(".tremor$", "")
-            .replace("/", "::")
+        rel_file.trim_end_matches(".tremor").replace("/", "::")
     }
     /// Load module path
     #[must_use]
@@ -105,12 +102,56 @@ fn load_(tremor_path: &str) -> ModulePath {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
 
+    use super::*;
+    use crate::errors::{Error, Result};
     #[test]
     fn test_default_module_path() {
         let empty: Vec<String> = vec![];
         assert_eq!(empty, load_("").mounts)
+    }
+
+    #[test]
+    fn test_add() {
+        let mounts = vec![];
+        let mut paths = ModulePath { mounts };
+        paths.add(String::from("/foo/bar/baz"));
+        paths.add(String::from("snot/badger"));
+        assert_eq!(
+            vec![String::from("/foo/bar/baz"), String::from("snot/badger")],
+            paths.mounts
+        );
+    }
+
+    #[test]
+    fn test_file_to_module() {
+        assert_eq!(
+            String::from("foo::snot::badger"),
+            ModulePath::file_to_module("foo/snot/badger.tremor")
+        );
+    }
+
+    #[test]
+    fn test_load_relative() -> Result<()> {
+        let d = std::env::current_dir()?;
+        let dir = std::fs::read_dir(&d)?;
+        let mut path = None;
+        for entry in dir {
+            let entry = entry?;
+            if entry.path().is_dir() {
+                path = Some(entry.path());
+                break;
+            }
+        }
+        let tremor_path = match path.unwrap().strip_prefix(d.clone()) {
+            Ok(p) => format!("{}", p.display()),
+            Err(e) => return Err(Error::from(format!("{}", e))),
+        };
+
+        let mp = load_(&tremor_path);
+        let expected = format!("{}", d.join(tremor_path).display());
+        assert_eq!(vec![expected], mp.mounts);
+        Ok(())
     }
 
     #[test]
