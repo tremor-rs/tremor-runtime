@@ -172,11 +172,11 @@ assets = [
     "644",
   ],
   [
-    "packaging/distribution/usr/lib/tremor/tremor.sh",
-    "/usr/lib/tremor/",
+    "packaging/distribution/usr/share/tremor/tremor.sh",
+    "/usr/share/tremor/",
     "755",
   ],
-  ["tremor-script/lib", "/usr/lib/tremor/tremor-script", "644"],
+  ["tremor-script/lib", "/usr/share/tremor/lib", "644"],
   [
     "packaging/distribution/etc/systemd/system/*",
     "/lib/systemd/system/",
@@ -214,7 +214,7 @@ tremor = {path = "/usr/bin/tremor"}
 "../packaging/distribution/etc/tremor/" = {path = "/etc/tremor/"}
 # TODO enable this after some example cleanup
 #"../demo/examples/" = { path = "/etc/tremor/config/examples/" }
-"../packaging/distribution/usr/lib/tremor/tremor.sh" = {path = "/usr/lib/tremor/tremor.sh", mode = "755"}
-"../tremor-script/lib/" = {path = "/usr/lib/tremor/tremor-script/"}
+"../packaging/distribution/usr/share/tremor/tremor.sh" = {path = "/usr/share/tremor/tremor.sh", mode = "755"}
+"../tremor-script/lib/" = {path = "/usr/share/tremor/lib/"}
 # copying systemd service to standard location for rpm packages
 "../packaging/distribution/etc/systemd/system/tremor.service" = {path = "/usr/lib/systemd/system/tremor.service"}
