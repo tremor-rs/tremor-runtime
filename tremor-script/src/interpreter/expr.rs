@@ -16,16 +16,19 @@ use super::{
     merge_values, patch_value, resolve, resolve_value, set_local_shadow, test_guard,
     test_predicate_expr, Env, ExecOpts, LocalStack, NULL,
 };
-use crate::ast::{
-    BaseExpr, ClauseGroup, ClausePreCondition, Comprehension, DefaultCase, EmitExpr, EventPath,
-    Expr, IfElse, ImutExprInt, Match, Merge, Patch, Path, Segment,
-};
 use crate::errors::{
-    error_assign_array, error_assign_to_const, error_bad_key, error_invalid_assign_target,
-    error_need_obj, error_no_clause_hit, error_oops, Result,
+    error_assign_array, error_assign_to_const, error_bad_key_err, error_invalid_assign_target,
+    error_need_obj, error_need_obj_err, error_no_clause_hit, Result,
 };
 use crate::prelude::*;
 use crate::registry::RECUR_PTR;
+use crate::{
+    ast::{
+        BaseExpr, ClauseGroup, ClausePreCondition, Comprehension, DefaultCase, EmitExpr, EventPath,
+        Expr, IfElse, ImutExprInt, Match, Merge, Patch, Path, Segment,
+    },
+    errors::error_oops_err,
+};
 use crate::{stry, Value};
 use matches::matches;
 use std::mem;
@@ -448,13 +451,16 @@ where
             }
 
             Path::Local(lpath) => {
-                if let Some(l) = stry!(local.get(lpath.idx, self, lpath.mid(), &env.meta)) {
-                    let l: &mut Value<'event> = unsafe { mem::transmute(l) };
-                    l
-                } else {
-                    let key = env.meta.name_dflt(lpath.mid).to_string();
-                    return error_bad_key(self, lpath, &path, key, vec![], &env.meta);
-                }
+                stry!(local
+                    .get(lpath.idx, self, lpath.mid(), &env.meta)
+                    .and_then(|o| {
+                        o.as_ref()
+                            .map(|l| -> &mut Value<'event> { unsafe { mem::transmute(l) } })
+                            .ok_or_else(|| {
+                                let key = env.meta.name_dflt(lpath.mid).to_string();
+                                error_bad_key_err(self, lpath, &path, key, vec![], &env.meta)
+                            })
+                    }))
             }
             Path::Meta(_path) => meta,
             Path::Event(_path) => event,
@@ -470,28 +476,34 @@ where
         for segment in segments {
             match segment {
                 Segment::Id { key, .. } => {
-                    current = if let Ok(next) = key.lookup_or_insert_mut(
-                        unsafe { mem::transmute::<&Value, &mut Value>(current) },
-                        || Value::object_with_capacity(halfbrown::VEC_LIMIT_UPPER),
-                    ) {
-                        next
-                    } else {
-                        return error_need_obj(self, segment, current.value_type(), &env.meta);
-                    };
+                    current = stry!(key
+                        .lookup_or_insert_mut(
+                            unsafe { mem::transmute::<&Value, &mut Value>(current) },
+                            || Value::object_with_capacity(halfbrown::VEC_LIMIT_UPPER),
+                        )
+                        .map_err(|_| error_need_obj_err(
+                            self,
+                            segment,
+                            current.value_type(),
+                            &env.meta
+                        )));
                 }
                 Segment::Element { expr, .. } => {
                     let id = stry!(expr.eval_to_string(opts, env, event, state, meta, local));
                     let v: &mut Value<'event> = unsafe { mem::transmute(current) };
-                    if let Some(map) = v.as_object_mut() {
-                        current = match map.get_mut(&id) {
-                            Some(v) => v,
-                            None => map
-                                .entry(id)
-                                .or_insert_with(|| Value::object_with_capacity(32)),
-                        }
-                    } else {
-                        return error_need_obj(self, segment, current.value_type(), &env.meta);
-                    }
+                    let map = stry!(v.as_object_mut().ok_or_else(|| error_need_obj_err(
+                        self,
+                        segment,
+                        current.value_type(),
+                        &env.meta
+                    )));
+
+                    current = match map.get_mut(&id) {
+                        Some(v) => v,
+                        None => map
+                            .entry(id)
+                            .or_insert_with(|| Value::object_with_capacity(32)),
+                    };
                 }
                 Segment::Idx { .. } | Segment::Range { .. } => {
                     return error_assign_array(self, segment, &env.meta)
@@ -583,31 +595,27 @@ where
                     expr: ImutExprInt::Path(Path::Event(EventPath { segments, .. })),
                     port,
                     ..
-                } if segments.is_empty() => {
-                    let port = if let Some(port) = port {
-                        Some(
-                            stry!(port.eval_to_string(opts, env, event, state, meta, local))
-                                .to_string(),
-                        )
-                    } else {
-                        None
-                    };
-                    Ok(Cont::EmitEvent(port))
-                }
-                expr => {
-                    let port = if let Some(port) = &expr.port {
-                        Some(
-                            stry!(port.eval_to_string(opts, env, event, state, meta, local))
-                                .to_string(),
-                        )
-                    } else {
-                        None
-                    };
-                    Ok(Cont::Emit(
-                        stry!(expr.expr.run(opts, env, event, state, meta, local)).into_owned(),
-                        port,
-                    ))
-                }
+                } if segments.is_empty() => port
+                    .as_ref()
+                    .map(|port| {
+                        port.eval_to_string(opts, env, event, state, meta, local)
+                            .map(|s| s.to_string())
+                    })
+                    .transpose()
+                    .map(Cont::EmitEvent),
+                expr => expr
+                    .port
+                    .as_ref()
+                    .map(|port| {
+                        port.eval_to_string(opts, env, event, state, meta, local)
+                            .map(|p| p.to_string())
+                    })
+                    .transpose()
+                    .and_then(|port| {
+                        expr.expr
+                            .run(opts, env, event, state, meta, local)
+                            .map(|v| Cont::Emit(v.into_owned(), port))
+                    }),
             },
             Expr::Drop { .. } => Ok(Cont::Drop),
             Expr::AssignMoveLocal { idx, path, .. } => {
@@ -615,27 +623,27 @@ where
                 // this local variable again, it allows os to
                 // move the variable instead of cloning it
 
-                let value = if let Some(v) = local.values.get_mut(*idx) {
-                    let mut opt: Option<Value> = None;
-                    std::mem::swap(v, &mut opt);
-                    if let Some(v) = opt {
-                        v
-                    } else {
-                        return error_oops(
-                            self,
-                            0xdead_000c,
-                            "Unknown local variable in Expr::AssignMoveLocal",
-                            &env.meta,
-                        );
-                    }
-                } else {
-                    return error_oops(
+                let value = stry!(local
+                    .values
+                    .get_mut(*idx)
+                    .ok_or_else(|| error_oops_err(
                         self,
                         0xdead_000b,
                         "Unknown local variable in Expr::AssignMoveLocal",
                         &env.meta,
-                    );
-                };
+                    ))
+                    .and_then(|v| {
+                        let mut opt: Option<Value> = None;
+                        std::mem::swap(v, &mut opt);
+                        opt.ok_or_else(|| {
+                            error_oops_err(
+                                self,
+                                0xdead_000c,
+                                "Unknown local variable in Expr::AssignMoveLocal",
+                                &env.meta,
+                            )
+                        })
+                    }));
                 self.assign(opts, env, event, state, meta, local, &path, value)
                     .map(Cont::Cont)
             }

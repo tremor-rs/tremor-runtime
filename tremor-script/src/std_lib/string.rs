@@ -146,11 +146,7 @@ pub fn load(registry: &mut Registry) {
             })
         }))
         .insert(tremor_const_fn!(string|substr(_context, _input, _start, _end) {
-                let (input, start, end) = if let (Some(input), Some(start), Some(end)) =  (_input.as_str(), _start.as_usize(), _end.as_usize()) {
-                    (input, start, end)
-                } else {
-                    return Err(FunctionError::BadType{mfa: this_mfa()})
-                };
+                let ((input, start), end) = _input.as_str().zip(_start.as_usize()).zip(_end.as_usize()).ok_or_else(||FunctionError::BadType{mfa: this_mfa()})?;
                 // Since rust doesn't handle UTF8 indexes we have to translate this
                 // _input.char_indices() - get an iterator over codepoint indexes
                 //   .nth(*_start as usize) - try to get the nth character as a byte index - returns an option of a two tuple

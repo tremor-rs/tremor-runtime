@@ -218,15 +218,14 @@ impl Query {
                 ..NodeConfig::default()
             });
             nodes.insert(name.clone(), id);
-            let op = match pipe_graph.raw_nodes().get(id.index()) {
-                Some(node) => {
+            let op = pipe_graph
+                .raw_nodes()
+                .get(id.index())
+                .ok_or_else(|| Error::from("Error finding freshly added node."))
+                .and_then(|node| {
                     node.weight
-                        .to_op(idgen.next_id(), supported_operators, None, None, None)?
-                }
-                None => {
-                    return Err(format!("Error finding node {:?} in constructed graph", id).into())
-                }
-            };
+                        .to_op(idgen.next_id(), supported_operators, None, None, None)
+                })?;
             pipe_ops.insert(id, op);
             match node_kind {
                 NodeKind::Input => {
@@ -305,22 +304,19 @@ impl Query {
                                 ..NodeConfig::default()
                             });
                             nodes.insert(name.clone(), id);
-                            let op = match pipe_graph.raw_nodes().get(id.index()) {
-                                Some(node) => node.weight.to_op(
-                                    idgen.next_id(),
-                                    supported_operators,
-                                    None,
-                                    None,
-                                    None,
-                                )?,
-                                None => {
-                                    return Err(format!(
-                                        "Error finding freshly added node {:?} in pipeline graph.",
-                                        id
+                            let op = pipe_graph
+                                .raw_nodes()
+                                .get(id.index())
+                                .ok_or_else(|| Error::from("Error finding freshly added node."))
+                                .and_then(|node| {
+                                    node.weight.to_op(
+                                        idgen.next_id(),
+                                        supported_operators,
+                                        None,
+                                        None,
+                                        None,
                                     )
-                                    .into())
-                                }
-                            };
+                                })?;
                             pipe_ops.insert(id, op);
                             inputs.insert(name, id);
                         }
@@ -338,22 +334,20 @@ impl Query {
                                 ..NodeConfig::default()
                             });
                             nodes.insert(name, id);
-                            let op = match pipe_graph.raw_nodes().get(id.index()) {
-                                Some(node) => node.weight.to_op(
-                                    idgen.next_id(),
-                                    supported_operators,
-                                    None,
-                                    None,
-                                    None,
-                                )?,
-                                None => {
-                                    return Err(format!(
-                                        "Error finding freshly added node {:?} in pipeline graph.",
-                                        id
+                            let op = pipe_graph
+                                .raw_nodes()
+                                .get(id.index())
+                                .ok_or_else(|| Error::from("Error finding freshly added node."))
+                                .and_then(|node| {
+                                    node.weight.to_op(
+                                        idgen.next_id(),
+                                        supported_operators,
+                                        None,
+                                        None,
+                                        None,
                                     )
-                                    .into())
-                                }
-                            };
+                                })?;
+
                             pipe_ops.insert(id, op);
                             outputs.push(id);
                         }
@@ -619,21 +613,18 @@ impl Query {
             let mut contraflow = Vec::new();
             // Nodes that handle signals
             let mut signalflow = Vec::new();
-            let mut i = 0;
-            for nx in pipe_graph.node_indices() {
-                if let Some(op) = pipe_ops.remove(&nx) {
-                    i2pos.insert(nx, i);
-                    if op.handles_contraflow() {
-                        contraflow.push(i);
-                    }
-                    if op.handles_signal() {
-                        signalflow.push(i);
-                    }
-                    graph.push(op);
-                    i += 1;
-                } else {
-                    return Err(format!("Invalid pipeline can't find node {:?}", &nx).into());
+            for (i, nx) in pipe_graph.node_indices().enumerate() {
+                let op = pipe_ops
+                    .remove(&nx)
+                    .ok_or_else(|| format!("Invalid pipeline can't find node {:?}", &nx))?;
+                i2pos.insert(nx, i);
+                if op.handles_contraflow() {
+                    contraflow.push(i);
                 }
+                if op.handles_signal() {
+                    signalflow.push(i);
+                }
+                graph.push(op);
             }
             // since contraflow is the reverse we need to reverse it.
             contraflow.reverse();
@@ -692,13 +683,9 @@ fn select(
     node: Option<tremor_script::query::StmtRentalWrapper>,
     windows: Option<HashMap<String, WindowImpl>>,
 ) -> Result<Box<dyn Operator>> {
-    let node = if let Some(node) = node {
-        node
-    } else {
-        return Err(
-            ErrorKind::MissingOpConfig("trickle operators require a statement".into()).into(),
-        );
-    };
+    let node = node.ok_or_else(|| {
+        ErrorKind::MissingOpConfig("trickle operators require a statement".into())
+    })?;
     let select_type = match node.stmt.suffix() {
         tremor_script::ast::Stmt::Select(ref select) => select.complexity(),
         _ => {
@@ -719,14 +706,9 @@ fn select(
         )?)),
         SelectType::Normal => {
             let groups = Dims::new(node.stmt.clone());
-            let windows = if let Some(windows) = windows {
-                windows
-            } else {
-                return Err(ErrorKind::MissingOpConfig(
-                    "select operators require a window mapping".into(),
-                )
-                .into());
-            };
+            let windows = windows.ok_or_else(|| {
+                ErrorKind::MissingOpConfig("select operators require a window mapping".into())
+            })?;
             let windows: Result<Vec<(String, WindowImpl)>> =
                 if let tremor_script::ast::Stmt::Select(s) = node.stmt.suffix() {
                     s.stmt
@@ -762,13 +744,9 @@ fn operator(
     config: &NodeConfig,
     node: Option<tremor_script::query::StmtRentalWrapper>,
 ) -> Result<Box<dyn Operator>> {
-    let node = if let Some(node) = node {
-        node
-    } else {
-        return Err(
-            ErrorKind::MissingOpConfig("trickle operators require a statement".into()).into(),
-        );
-    };
+    let node = node.ok_or_else(|| {
+        ErrorKind::MissingOpConfig("trickle operators require a statement".into())
+    })?;
     Ok(Box::new(TrickleOperator::with_stmt(
         operator_uid,
         config.id.clone().to_string(),
@@ -781,13 +759,9 @@ fn script(
     defn: Option<tremor_script::query::StmtRentalWrapper>,
     node: Option<tremor_script::query::StmtRentalWrapper>,
 ) -> Result<Box<dyn Operator>> {
-    let node = if let Some(node) = node {
-        node
-    } else {
-        return Err(
-            ErrorKind::MissingOpConfig("trickle operators require a statement".into()).into(),
-        );
-    };
+    let node = node.ok_or_else(|| {
+        ErrorKind::MissingOpConfig("trickle operators require a statement".into())
+    })?;
     Ok(Box::new(Trickle::with_stmt(
         config.id.clone().to_string(),
         defn.ok_or_else(|| Error::from("Script definition missing"))?,
