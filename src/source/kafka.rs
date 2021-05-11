@@ -304,10 +304,10 @@ impl ConsumerContext for LoggingConsumerContext {
                     );
             }
             Rebalance::Revoke => {
-                info!("ALL partitions are REVOKED")
+                info!("[Source::{}] ALL partitions are REVOKED", self.onramp_id)
             }
             Rebalance::Error(err_info) => {
-                warn!("Post Rebalance error {}", err_info)
+                warn!("[Source::{}] Post Rebalance error {}", self.onramp_id, err_info)
             }
         }
     }
