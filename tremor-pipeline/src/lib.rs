@@ -197,12 +197,12 @@ pub(crate) fn common_cow(s: &str) -> beef::Cow<'static, str> {
 }
 
 /// Type of nodes
-#[derive(Debug, Copy, Clone, Ord, PartialOrd, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Ord, PartialOrd, PartialEq, Eq, Hash)]
 pub enum NodeKind {
     /// An input, this is the one end of the graph
     Input,
     /// An output, this is the other end of the graph
-    Output,
+    Output(Cow<'static, str>),
     /// An operator
     Operator,
     /// A select statement
