@@ -54,7 +54,6 @@
 - Fix windowed select queries not tracking the Events that constitute an outgoing aggregated event
 - Avoid several offramps to swallow fail insights.
 - Send correlation metadata for send error events in elastic sink
-- Record the partition number assigned during rebalancing when running Kafka.
 
 ## 0.11.0
 
