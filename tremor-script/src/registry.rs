@@ -294,11 +294,13 @@ impl TremorFnWrapper {
 
     /// Check if a given arity is valit for the function
     #[must_use]
+    #[cfg(not(tarpaulin_include))] // just a passthrough
     pub fn valid_arity(&self, n: usize) -> bool {
         self.fun.valid_arity(n)
     }
     /// Returns the functions arity
     #[must_use]
+    #[cfg(not(tarpaulin_include))] // just a passthrough
     pub fn arity(&self) -> RangeInclusive<usize> {
         self.fun.arity()
     }
@@ -708,6 +710,7 @@ impl TremorAggrFnWrapper {
     ///
     /// # Errors
     /// if compensating the function fails
+    #[cfg(not(tarpaulin_include))] // just a passthrough
     pub fn compensate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
         self.fun.compensate(args)
     }

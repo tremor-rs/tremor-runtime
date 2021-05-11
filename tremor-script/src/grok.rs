@@ -149,17 +149,12 @@ mod tests {
         let codec = Pattern::new(&pat).expect("bad pattern");
         let decoded = codec.matches(raw.as_bytes());
         dbg!(&decoded);
-        match decoded {
-            Ok(j) => {
+        decoded
+            .map(|j| {
                 assert_eq!(j, json);
                 true
-            }
-
-            Err(x) => {
-                eprintln!("{}", x);
-                false
-            }
-        }
+            })
+            .unwrap_or_default()
     }
 
     #[test]
@@ -181,14 +176,11 @@ mod tests {
     fn no_match() {
         let codec = Pattern::new(&"{}").expect("bad pattern");
         let decoded = codec.matches(b"cookie monster");
-        if let Err(decoded) = decoded {
-            assert_eq!(
-                "No match for log text: cookie monster",
-                decoded.description()
-            )
-        } else {
-            eprintln!("Expected no match")
-        };
+        let decoded = decoded.err().expect("Expected no match");
+        assert_eq!(
+            "No match for log text: cookie monster",
+            decoded.description()
+        )
     }
 
     #[test]

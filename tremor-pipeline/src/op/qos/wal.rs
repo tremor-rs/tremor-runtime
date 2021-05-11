@@ -47,33 +47,19 @@ impl AddAssign<u64> for Idx {
 impl Add<u64> for Idx {
     type Output = Idx;
     fn add(self, rhs: u64) -> Self::Output {
-        Idx::from(u64::from(self) + rhs)
+        Idx::from(u64::from(&self) + rhs)
     }
 }
 
 impl Add<usize> for Idx {
     type Output = Idx;
     fn add(self, rhs: usize) -> Self::Output {
-        Idx::from(u64::from(self) + rhs as u64)
+        Idx::from(u64::from(&self) + rhs as u64)
     }
 }
 
 impl From<&Idx> for u64 {
     fn from(i: &Idx) -> u64 {
-        let mut rdr = Cursor::new(&i.0);
-        rdr.read_u64::<BigEndian>().unwrap_or(0)
-    }
-}
-
-impl From<&mut Idx> for u64 {
-    fn from(i: &mut Idx) -> u64 {
-        let mut rdr = Cursor::new(&i.0);
-        rdr.read_u64::<BigEndian>().unwrap_or(0)
-    }
-}
-
-impl From<Idx> for u64 {
-    fn from(i: Idx) -> u64 {
         let mut rdr = Cursor::new(&i.0);
         rdr.read_u64::<BigEndian>().unwrap_or(0)
     }
@@ -98,7 +84,7 @@ impl Idx {
         self.0 = unsafe { mem::transmute(v.to_be()) };
     }
     fn set_min(&mut self, v: u64) {
-        if v < u64::from(*self) {
+        if v < u64::from(&*self) {
             self.0 = unsafe { mem::transmute(v.to_be()) };
         }
     }
@@ -109,20 +95,8 @@ impl AsRef<[u8]> for Idx {
     }
 }
 
-impl From<Idx> for IVec {
-    fn from(i: Idx) -> Self {
-        IVec::from(&i.0)
-    }
-}
-
 impl From<&Idx> for IVec {
     fn from(i: &Idx) -> Self {
-        IVec::from(&i.0)
-    }
-}
-
-impl From<&mut Idx> for IVec {
-    fn from(i: &mut Idx) -> Self {
         IVec::from(&i.0)
     }
 }
@@ -193,17 +167,13 @@ pub struct Wal {
 }
 
 op!(WalFactory(_uid, node) {
-    if let Some(map) = &node.config {
-        let config: Config = Config::new(map)?;
+    let map = node.config.as_ref().ok_or_else(|| ErrorKind::MissingOpConfig(node.id.to_string()))?;
+    let config: Config = Config::new(&map)?;
 
-        if let (None, None) = (config.max_elements, config.max_bytes) {
-            Err(ErrorKind::BadOpConfig("WAL operator needs at least one of `max_elements` or `max_bytes` config entries.".to_owned()).into())
-        } else {
-            Ok(Box::new(Wal::new(node.id.to_string(), config)?))
-        }
-
+    if config.max_elements.or(config.max_bytes).is_none() {
+        Err(ErrorKind::BadOpConfig("WAL operator needs at least one of `max_elements` or `max_bytes` config entries.".to_string()).into())
     } else {
-        Err(ErrorKind::MissingOpConfig(node.id.to_string()).into())
+        Ok(Box::new(Wal::new(node.id.to_string(), config)?))
     }
 });
 
@@ -372,7 +342,7 @@ impl Operator for Wal {
                     insight.id.track(&e.id);
                 }
 
-                let current_confirmed = self.confirmed.map(u64::from).unwrap_or_default();
+                let current_confirmed = self.confirmed.map(|v| u64::from(&v)).unwrap_or_default();
                 if event_id < current_confirmed {
                     warn!(
                         "trying to fail a message({}) that was already confirmed({})",
@@ -748,6 +718,22 @@ mod test {
                 s.as_str()
             );
         }
+        Ok(())
+    }
+
+    #[test]
+    fn from() -> Result<()> {
+        assert_eq!(42, u64::from(&(Idx::from(40u64) + 2u64)));
+        assert_eq!(42, u64::from(&(Idx::from(40u64) + 2usize)));
+
+        Ok(())
+    }
+
+    #[test]
+    fn as_ref() -> Result<()> {
+        let i = Idx::from(42u64);
+        let s: &[u8] = i.as_ref();
+        assert_eq!(&[0, 0, 0, 0, 0, 0, 0, 42u8][..], s);
         Ok(())
     }
 }
