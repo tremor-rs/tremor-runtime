@@ -163,6 +163,8 @@ error_chain! {
         GoogleAuthError(gouth::Error);
         ReqwestError(reqwest::Error);
         HttpHeaderError(http::header::InvalidHeaderValue);
+        TonicTransportError(tonic::transport::Error);
+        TonicStatusError(tonic::Status);
     }
 
     errors {

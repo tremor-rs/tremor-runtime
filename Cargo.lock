@@ -2174,6 +2174,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "googapis"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9512782490ab8a5c752851ba49214f9e4d46c78f14a708098d8352cece35b235"
+dependencies = [
+ "prost",
+ "prost-types",
+ "tonic",
+]
+
+[[package]]
 name = "gouth"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4012,6 +4023,16 @@ dependencies = [
  "proc-macro2",
  "quote 1.0.9",
  "syn 1.0.64",
+]
+
+[[package]]
+name = "prost-types"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b518d7cdd93dab1d1122cf07fa9a60771836c668dde9d9e2a139f957f0d9f1bb"
+dependencies = [
+ "bytes 1.0.1",
+ "prost",
 ]
 
 [[package]]
@@ -6351,6 +6372,7 @@ dependencies = [
  "error-chain 0.12.4",
  "futures 0.3.15",
  "glob",
+ "googapis",
  "gouth",
  "grok",
  "halfbrown",

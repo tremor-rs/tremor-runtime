@@ -42,6 +42,7 @@ pub(crate) mod cb;
 pub(crate) mod crononome;
 pub(crate) mod discord;
 pub(crate) mod file;
+pub(crate) mod gsub;
 pub(crate) mod kafka;
 pub(crate) mod metronome;
 pub(crate) mod nats;
@@ -85,6 +86,15 @@ pub(crate) enum SourceState {
 
 #[derive(Debug)]
 pub(crate) enum SourceReply {
+    /// A normal batch_data event with a `Vec<Vec<u8>>` for data
+    BatchData {
+        origin_uri: EventOriginUri,
+        batch_data: Vec<(Vec<u8>, Option<Value<'static>>)>,
+        /// allow source to override codec when pulling event
+        /// the given string must be configured in the `config-map` as part of the source config
+        codec_override: Option<String>,
+        stream: usize,
+    },
     /// A normal data event with a `Vec<u8>` for data
     Data {
         origin_uri: EventOriginUri,
@@ -515,7 +525,7 @@ where
         task::Builder::new().name(name).spawn(manager.run())?;
         Ok(tx)
     }
-
+    #[allow(clippy::too_many_lines)]
     async fn run(mut self) -> Result<()> {
         loop {
             if self.handle_pipelines().await? {
@@ -537,6 +547,70 @@ where
                         let ingest_ns = nanotime();
 
                         self.transmit_event(data, ingest_ns, origin_uri, OUT).await;
+                    }
+                    Ok(SourceReply::BatchData {
+                        mut origin_uri,
+                        batch_data,
+                        codec_override,
+                        stream,
+                    }) => {
+                        for (data, meta_data) in batch_data {
+                            origin_uri.maybe_set_uid(self.uid);
+                            let mut ingest_ns = nanotime();
+                            let mut error = false;
+                            let original_id = self.id;
+                            let results = self
+                                .make_event_data(
+                                    stream,
+                                    &mut ingest_ns,
+                                    codec_override.clone(),
+                                    data,
+                                    meta_data.map(StaticValue),
+                                )
+                                .await;
+                            if results.is_empty() {
+                                self.source.on_empty_event(original_id, stream).await?;
+                            }
+
+                            for result in results {
+                                let (port, data) = match result {
+                                    Ok(d) => (OUT, d),
+                                    Err(e) => {
+                                        error!(
+                                            "[Source::{}] Error decoding event data: {}",
+                                            self.source_id, e
+                                        );
+                                        let mut error_meta = Object::with_capacity(1);
+                                        error_meta
+                                            .insert_nocheck("error".into(), e.to_string().into());
+
+                                        let mut error_data = Object::with_capacity(3);
+                                        error_data
+                                            .insert_nocheck("error".into(), e.to_string().into());
+                                        error_data
+                                            .insert_nocheck("event_id".into(), original_id.into());
+                                        error_data.insert_nocheck(
+                                            "source_id".into(),
+                                            self.source_id.to_string().into(),
+                                        );
+                                        (
+                                            ERR,
+                                            (Value::from(error_data), Value::from(error_meta))
+                                                .into(),
+                                        )
+                                    }
+                                };
+                                error |= self
+                                    .transmit_event(data, ingest_ns, origin_uri.clone(), port)
+                                    .await;
+                            }
+
+                            // We ONLY fail on transmit errors as preprocessor errors might be
+                            // problematic
+                            if error {
+                                self.source.fail(original_id);
+                            }
+                        }
                     }
                     Ok(SourceReply::Data {
                         mut origin_uri,

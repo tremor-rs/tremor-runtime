@@ -19,8 +19,8 @@ use crate::permge::PriorityMerge;
 use crate::pipeline;
 use crate::registry::ServantId;
 use crate::sink::{
-    self, blackhole, cb, debug, dns, elastic, exit, file, gcs, handle_response, kafka, kv, nats,
-    newrelic, otel, postgres, rest, stderr, stdout, tcp, udp, ws,
+    self, blackhole, cb, debug, dns, elastic, exit, file, gcs, gpub, handle_response, kafka, kv,
+    nats, newrelic, otel, postgres, rest, stderr, stdout, tcp, udp, ws,
 };
 use crate::source::Processors;
 use crate::url::ports::{IN, METRICS};
@@ -128,6 +128,7 @@ pub fn lookup(name: &str, config: &Option<OpConfig>) -> Result<Box<dyn Offramp>>
         "udp" => udp::Udp::from_config(config),
         "ws" => ws::Ws::from_config(config),
         "gcs" => gcs::GoogleCloudStorage::from_config(config),
+        "gpub" => gpub::GoogleCloudPubSub::from_config(config),
         _ => Err(format!("Offramp {} not known", name).into()),
     }
 }

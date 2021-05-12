@@ -13,4 +13,6 @@
 // limitations under the License.
 
 pub(crate) mod auth;
+pub(crate) mod pubsub;
+pub(crate) mod pubsub_auth;
 pub(crate) mod storage;
