@@ -117,7 +117,7 @@ pub(crate) fn ident_to_token(ident: &str) -> Token {
         "from" => Token::From,
         "where" => Token::Where,
         "with" => Token::With,
-        "order" => Token::Order,
+        // "order" => Token::Order,
         "group" => Token::Group,
         "by" => Token::By,
         "having" => Token::Having,
@@ -269,7 +269,7 @@ pub enum Token<'input> {
     /// bitwise and `&`
     BitAnd,
     /// bitwise or `|`
-    BitOr,
+    // BitOr,
     /// bitwise xor `^`
     BitXor,
     /// equal `=`
@@ -352,7 +352,7 @@ pub enum Token<'input> {
     /// The `with` keyword
     With,
     /// The `order` keyword
-    Order,
+    // Order,
     /// the `group` keyword
     Group,
     /// The `by` keyword
@@ -394,16 +394,6 @@ pub enum Token<'input> {
 }
 
 impl<'input> Token<'input> {
-    /// a prettified version of the token
-    #[must_use]
-    pub fn prettify(&self) -> String {
-        if self.is_keyword() || self.is_symbol() || self.is_ignorable() {
-            format!("{}", self)
-        } else {
-            std::any::type_name::<Self>().to_string()
-        }
-    }
-
     /// Is the token ignorable except when syntax or error highlighting.
     /// Is the token insignificant when parsing ( a correct ... ) source.
     #[cfg(not(tarpaulin_include))] // matches is not supported
@@ -452,7 +442,7 @@ impl<'input> Token<'input> {
                 | Token::Move
                 | Token::Of
                 | Token::Operator
-                | Token::Order
+                // | Token::Order
                 | Token::Patch
                 | Token::Present
                 | Token::Script
@@ -536,7 +526,7 @@ impl<'input> Token<'input> {
                 | Token::Or
                 | Token::Xor
                 | Token::And
-                | Token::BitOr
+                // | Token::BitOr
                 | Token::BitXor
                 | Token::BitAnd
                 | Token::Eq
@@ -598,11 +588,7 @@ impl<'input> fmt::Display for Token<'input> {
                 let value: &str = &value;
                 let s = Value::from(value).encode();
                 // Strip the quotes
-                if let Some(s) = s.get(1..s.len() - 1) {
-                    write!(f, "{}", s)
-                } else {
-                    Ok(())
-                }
+                write!(f, "{}", s.get(1..s.len() - 1).unwrap_or_default())
             }
             Token::HereDocStart => {
                 // here we write the following linebreak
@@ -705,7 +691,7 @@ impl<'input> fmt::Display for Token<'input> {
             Token::Or => write!(f, "or"),
             Token::Xor => write!(f, "xor"),
             Token::BitAnd => write!(f, "&"),
-            Token::BitOr => write!(f, "|"),
+            // Token::BitOr => write!(f, "|"),
             Token::BitXor => write!(f, "^"),
             Token::Eq => write!(f, "="),
             Token::EqEq => write!(f, "=="),
@@ -730,7 +716,7 @@ impl<'input> fmt::Display for Token<'input> {
             Token::From => write!(f, "from"),
             Token::Where => write!(f, "where"),
             Token::With => write!(f, "with"),
-            Token::Order => write!(f, "order"),
+            // Token::Order => write!(f, "order"),
             Token::Group => write!(f, "group"),
             Token::By => write!(f, "by"),
             Token::Having => write!(f, "having"),
@@ -859,10 +845,10 @@ pub struct Preprocessor {}
 
 macro_rules! take_while {
     ($let:ident, $token:pat, $iter:expr) => {
-        $let = $iter.next();
+        $let = $iter.next().ok_or(ErrorKind::UnexpectedEndOfStream)??;
         loop {
-            if let Some(Ok(Spanned { value: $token, .. })) = $let {
-                $let = $iter.next();
+            if let Spanned { value: $token, .. } = $let {
+                $let = $iter.next().ok_or(ErrorKind::UnexpectedEndOfStream)??;
                 continue;
             }
             break;
@@ -884,11 +870,7 @@ impl CompilationUnit {
             file_path: p.into_boxed_path(),
         }
     }
-    /// String representation of the computational unit
-    #[must_use]
-    pub fn to_str(&self) -> Option<&str> {
-        self.file_path.to_str()
-    }
+
     /// Returns the path of the file for this
     #[must_use]
     pub fn file_path(&self) -> &Path {
@@ -939,16 +921,13 @@ impl IncludeStack {
     pub fn push<S: AsRef<OsStr> + ?Sized>(&mut self, file: &S) -> Result<usize> {
         let e = CompilationUnit::from_file(Path::new(file));
         if self.contains(&e) {
-            Err(format!(
-                "Cyclic dependency detected: {} -> {}",
-                self.elements
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect::<Vec<String>>()
-                    .join(" -> "),
-                e.to_string()
-            )
-            .into())
+            let es = self
+                .elements
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(" -> ");
+            Err(format!("Cyclic dependency detected: {} -> {}", es, e.to_string()).into())
         } else {
             let cu = self.cus.len();
             self.cus.push(e.clone());
@@ -961,6 +940,23 @@ impl IncludeStack {
     }
 }
 
+fn urt(next: Spanned<Token<'_>>, alt: &[&'static str]) -> Error {
+    ErrorKind::UnrecognizedToken(
+        Range::from(next.span).expand_lines(2),
+        Range::from(next.span),
+        next.value.to_string(),
+        alt.iter().map(ToString::to_string).collect(),
+    )
+    .into()
+}
+
+fn as_ident(next: Spanned<Token<'_>>) -> Result<Cow<'_, str>> {
+    if let Token::Ident(id, _) = next.value {
+        Ok(id)
+    } else {
+        Err(urt(next, &["`<ident>`"]))
+    }
+}
 impl<'input> Preprocessor {
     pub(crate) fn resolve(
         module_path: &ModulePath,
@@ -987,13 +983,10 @@ impl<'input> Preprocessor {
             }
         }
 
-        Err(ErrorKind::ModuleNotFound(
-            Range::from((use_span.start, use_span.end)).expand_lines(2),
-            Range::from((span2.start, span2.end)),
-            rel_module_path.to_string_lossy().to_string(),
-            module_path.mounts.clone(),
-        )
-        .into())
+        let outer = Range::from((use_span.start, use_span.end)).expand_lines(2);
+        let inner = Range::from((span2.start, span2.end));
+        let path = rel_module_path.to_string_lossy().to_string();
+        Err(ErrorKind::ModuleNotFound(outer, inner, path, module_path.mounts.clone()).into())
     }
 
     #[allow(clippy::too_many_lines)]
@@ -1018,298 +1011,134 @@ impl<'input> Preprocessor {
 
         let mut next;
         loop {
-            next = iter.next();
+            next = iter.next().ok_or(ErrorKind::UnexpectedEndOfStream)??;
             match next {
                 //
                 // use <module_path> [as <alias>] ;
                 //
-                Some(Ok(Spanned {
+                Spanned {
                     value: Token::Use,
                     span: use_span,
                     ..
-                })) => {
+                } => {
                     let mut rel_module_path = PathBuf::new();
-                    let mut alias = String::from("<NOMODULE>");
+                    let mut alias;
                     take_while!(next, Token::Whitespace(_), iter);
 
-                    if let Some(Ok(Spanned {
-                        value: Token::Ident(ref id, _),
-                        ..
-                    })) = &next
-                    {
-                        let id_str: &str = &id;
-                        rel_module_path.push(id_str);
-                        alias = id.to_string();
+                    let id = as_ident(next)?;
+                    alias = id.to_string();
+                    rel_module_path.push(&alias);
 
-                        take_while!(next, Token::Whitespace(_), iter);
+                    take_while!(next, Token::Whitespace(_), iter);
 
-                        loop {
-                            if let Some(Ok(Spanned {
-                                value: Token::ColonColon,
-                                ..
-                            })) = next
-                            {
-                                // module path of the form:
-                                // <ident> [ :: <ident> ]*;
-                                //
-                                take_while!(next, Token::Whitespace(_), iter);
+                    loop {
+                        if next.value == Token::ColonColon {
+                            // module path of the form:
+                            // <ident> [ :: <ident> ]*;
+                            //
+                            take_while!(next, Token::Whitespace(_), iter);
 
-                                if let Some(Ok(Spanned { ref value, .. })) = next {
-                                    if let Token::Ident(id, ..) = &value {
-                                        rel_module_path.push(&format!("{}", &id));
-                                        alias = id.to_string();
-                                        take_while!(next, Token::Whitespace(_), iter);
-
-                                        if let Some(Ok(Spanned {
-                                            ref value, span, ..
-                                        })) = next
-                                        {
-                                            match value {
-                                                Token::As => (),
-                                                Token::ColonColon => continue,
-                                                Token::Semi => break,
-                                                bad_token => {
-                                                    return Err(ErrorKind::UnrecognizedToken(
-                                                        Range::from((span.start, span.end))
-                                                            .expand_lines(2),
-                                                        Range::from((span.start, span.end)),
-                                                        bad_token.to_string(),
-                                                        vec![
-                                                            "`as`".to_string(),
-                                                            "`::`".to_string(),
-                                                            "`;`".to_string(),
-                                                        ],
-                                                    )
-                                                    .into());
-                                                }
-                                            }
-                                        }
-                                    } else if let Some(Ok(Spanned {
-                                        value: Token::As, ..
-                                    })) = next
-                                    {
-                                        if let Some(Ok(Spanned {
-                                            value: bad_token,
-                                            span,
-                                            ..
-                                        })) = next
-                                        {
-                                            return Err(ErrorKind::UnrecognizedToken(
-                                                Range::from((span.start, span.end)).expand_lines(2),
-                                                Range::from((span.start, span.end)),
-                                                bad_token.to_string(),
-                                                vec!["`<ident>`".to_string()],
-                                            )
-                                            .into());
-                                        }
-                                    } else if let Some(Ok(Spanned {
-                                        value: Token::Semi, ..
-                                    })) = next
-                                    {
-                                        break;
-                                    } else {
-                                        // We expect either ';' or 'as'
-                                        // At this point we have a parse error / bad token
-                                        //
-                                        match next {
-                                            Some(Ok(Spanned { value, span, .. })) => {
-                                                let bad_token = value;
-                                                return Err(ErrorKind::UnrecognizedToken(
-                                                    Range::from((span.start, span.end))
-                                                        .expand_lines(2),
-                                                    Range::from((span.start, span.end)),
-                                                    bad_token.to_string(),
-                                                    vec!["`<ident>`".to_string()],
-                                                )
-                                                .into());
-                                            }
-                                            Some(Err(e)) => {
-                                                return Err(e);
-                                            }
-                                            None => {
-                                                return Err(ErrorKind::UnexpectedEndOfStream.into());
-                                            }
-                                        }
-                                    }
-                                } else if let Some(Ok(Spanned { span, value })) = next {
-                                    let bad_token = value;
-                                    return Err(ErrorKind::UnrecognizedToken(
-                                        Range::from((span.start, span.end)).expand_lines(2),
-                                        Range::from((span.start, span.end)),
-                                        bad_token.to_string(),
-                                        vec!["<ident>".to_string()],
-                                    )
-                                    .into());
-                                } else if let Some(Err(e)) = next {
-                                    // Capture lexical errors from the initial lexing phase and bubble back directly
-                                    //
-                                    return Err(e);
+                            let id = as_ident(next)?;
+                            alias = id.to_string();
+                            rel_module_path.push(&alias);
+                            take_while!(next, Token::Whitespace(_), iter);
+                            match next.value {
+                                Token::As => (),
+                                Token::ColonColon => continue,
+                                Token::Semi => break,
+                                _ => {
+                                    return Err(urt(next, &["`as`", "`::`", "`;`"]));
                                 }
-                            } else if let Some(Ok(Spanned {
-                                value: Token::As, ..
-                            })) = next
-                            {
-                                break;
-                            } else if let Some(Ok(Spanned {
-                                value: Token::Semi, ..
-                            })) = next
-                            {
-                                break;
-                            } else if let Some(Ok(Spanned {
-                                value: bad_token,
-                                span,
-                                ..
-                            })) = next
-                            {
-                                return Err(ErrorKind::UnrecognizedToken(
-                                    Range::from((span.start, span.end)).expand_lines(2),
-                                    Range::from((span.start, span.end)),
-                                    bad_token.to_string(),
-                                    vec!["::".to_string(), "as".to_string(), ";".to_string()],
-                                )
-                                .into());
                             }
+                        } else if next.value == Token::As || next.value == Token::Semi {
+                            break;
+                        } else {
+                            return Err(urt(next, &["`as`", "`::`", "`;`"]));
                         }
-
-                        //
-                        // As <alias:ident>
-                        //
-
-                        if let Some(Ok(Spanned {
-                            value: Token::As, ..
-                        })) = next
-                        {
-                            take_while!(next, Token::Whitespace(_), iter);
-                            if let Some(Ok(Spanned {
-                                value: Token::Ident(alias_id, ..),
-                                ..
-                            })) = &next
-                            {
-                                alias = alias_id.to_string();
-                            } else if let Some(Ok(Spanned {
-                                value: bad_token,
-                                span,
-                                ..
-                            })) = next
-                            {
-                                return Err(ErrorKind::UnrecognizedToken(
-                                    Range::from((span.start, span.end)).expand_lines(2),
-                                    Range::from((span.start, span.end)),
-                                    bad_token.to_string(),
-                                    vec!["`<ident>`".to_string()],
-                                )
-                                .into());
-                            }
-
-                            // ';'
-                            take_while!(next, Token::Whitespace(_), iter);
-
-                            // Semi
-                            take_while!(next, Token::Whitespace(_), iter);
-                        }
-                    } else if let Some(Ok(Spanned {
-                        ref value, span, ..
-                    })) = next
-                    {
-                        return Err(ErrorKind::UnrecognizedToken(
-                            Range::from((span.start, span.end)).expand_lines(2),
-                            Range::from((span.start, span.end)),
-                            value.to_string(),
-                            vec!["`<ident>`".to_string()],
-                        )
-                        .into());
                     }
 
-                    if let Some(Ok(Spanned {
-                        value: Token::Semi, ..
-                    })) = next
-                    {
+                    //
+                    // As <alias:ident>
+                    //
+
+                    if next.value == Token::As {
+                        take_while!(next, Token::Whitespace(_), iter);
+
+                        alias = as_ident(next)?.to_string();
+
+                        // ';'
+                        take_while!(next, Token::Whitespace(_), iter);
+
+                        // Semi
                         take_while!(next, Token::Whitespace(_), iter);
                     }
 
-                    if let Some(Ok(Spanned {
-                        value: Token::NewLine,
-                        span: span2,
-                        ..
-                    })) = next
-                    {
+                    if next.value == Token::Semi {
+                        take_while!(next, Token::Whitespace(_), iter);
+                    }
+
+                    if next.value == Token::NewLine {
                         //let file_path = rel_module_path.clone();
                         let (inner_cu, file_path) = Preprocessor::resolve(
                             module_path,
                             use_span,
-                            span2,
+                            next.span,
                             &rel_module_path,
                             include_stack,
                         )?;
                         let file_path2 = file_path.clone();
 
-                        match file::open(&file_path) {
-                            Ok(mut file) => {
-                                let mut s = String::new();
-                                file.read_to_string(&mut s)?;
+                        let mut file = file::open(&file_path)?;
+                        let mut s = String::new();
+                        file.read_to_string(&mut s)?;
 
-                                s.push(' ');
-                                let s = Preprocessor::preprocess(
-                                    &module_path,
-                                    file_path.as_os_str(),
-                                    &mut s,
-                                    inner_cu,
-                                    include_stack,
-                                )?;
-                                let y = s
-                                    .into_iter()
-                                    .filter_map(|x| x.map(|x| format!("{}", x.value)).ok())
-                                    .collect::<Vec<String>>()
-                                    .join("");
-                                input.push_str(&format!(
-                                    "#!line 0 0 0 {} {}\n",
-                                    inner_cu,
-                                    &file_path2.to_string_lossy()
-                                ));
-                                input.push_str(&format!("mod {} with\n", &alias));
-                                input.push_str(&format!(
-                                    "#!line 0 0 0 {} {}\n",
-                                    inner_cu,
-                                    &file_path2.to_string_lossy()
-                                ));
-                                input.push_str(&format!("{}\n", y.trim()));
-                                input.push_str("end;\n");
-                                input.push_str(&format!(
-                                    "#!line {} {} {} {} {}\n",
-                                    span2.end.absolute(),
-                                    span2.end.line() + 1,
-                                    0,
-                                    cu,
-                                    file_name.to_string_lossy(),
-                                ));
-                            }
-                            Err(e) => {
-                                return Err(e.into());
-                            }
-                        }
+                        s.push(' ');
+                        let s = Preprocessor::preprocess(
+                            &module_path,
+                            file_path.as_os_str(),
+                            &mut s,
+                            inner_cu,
+                            include_stack,
+                        )?;
+                        let y = s
+                            .into_iter()
+                            .filter_map(|x| x.map(|x| format!("{}", x.value)).ok())
+                            .collect::<Vec<String>>()
+                            .join("");
+                        input.push_str(&format!(
+                            "#!line 0 0 0 {} {}\n",
+                            inner_cu,
+                            &file_path2.to_string_lossy()
+                        ));
+                        input.push_str(&format!("mod {} with\n", &alias));
+                        input.push_str(&format!(
+                            "#!line 0 0 0 {} {}\n",
+                            inner_cu,
+                            &file_path2.to_string_lossy()
+                        ));
+                        input.push_str(&format!("{}\n", y.trim()));
+                        input.push_str("end;\n");
+                        input.push_str(&format!(
+                            "#!line {} {} {} {} {}\n",
+                            next.span.end.absolute(),
+                            next.span.end.line() + 1,
+                            0,
+                            cu,
+                            file_name.to_string_lossy(),
+                        ));
+
                         include_stack.pop();
-                    } else if let Some(Ok(Spanned {
-                        value: bad_token,
-                        span,
-                        ..
-                    })) = next
-                    {
-                        return Err(ErrorKind::UnrecognizedToken(
-                            Range::from((span.start, span.end)).expand_lines(2),
-                            Range::from((span.start, span.end)),
-                            bad_token.to_string(),
-                            vec!["<ident>".to_string()],
-                        )
-                        .into());
+                    } else {
+                        return Err(urt(next, &["`<newline>`"]));
                     }
                 }
-                Some(Ok(other)) => {
+                Spanned {
+                    value: Token::EndOfStream,
+                    ..
+                } => break,
+                other => {
                     input.push_str(&format!("{}", other.value));
                 }
-                Some(Err(e)) => {
-                    return Err(e);
-                }
-                None => break,
             }
         }
         //input.push_str(" ");

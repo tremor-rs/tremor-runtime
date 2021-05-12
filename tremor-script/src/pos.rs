@@ -120,6 +120,11 @@ impl Range {
         self.0.unit_id
     }
 }
+impl From<Span> for Range {
+    fn from(s: Span) -> Self {
+        Range::from((s.start, s.end))
+    }
+}
 
 impl From<(Location, Location)> for Range {
     fn from(locs: (Location, Location)) -> Self {
