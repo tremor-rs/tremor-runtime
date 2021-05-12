@@ -20,6 +20,7 @@
 - Fix false positives in cycle detection
 - Include `cncf::otel` stdlib sources in deb package
 - Add `/usr/local/share/tremor` to default `TREMOR_PATH` also for all packages as a well-known directory for custom tremor-script libraries and modules.
+- Record the partition number assigned during rebalancing when running Kafka.
 
 ## 0.11.1
 
@@ -50,6 +51,7 @@
 - Fix windowed select queries not tracking the Events that constitute an outgoing aggregated event
 - Avoid several offramps to swallow fail insights.
 - Send correlation metadata for send error events in elastic sink
+- Record the partition number assigned during rebalancing when running Kafka.
 
 ## 0.11.0
 
