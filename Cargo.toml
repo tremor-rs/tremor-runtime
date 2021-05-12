@@ -131,6 +131,8 @@ tremor-otelapis = "0.1"
 gouth = {version = "0.2"}
 http = "0.2.4"
 reqwest = "0.11.3"
+googapis = { version = "0.4.2", default-features = false, features = ["google-pubsub-v1"] }
+
 
 [dependencies.tungstenite]
 default-features = false
