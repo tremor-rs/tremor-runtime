@@ -69,7 +69,7 @@ where
     Ok(())
 }
 
-fn dbg_tokens<W>(h: &mut W, lexemes: Vec<Spanned<Token>>) -> Result<()>
+fn dbg_tokens<W>(h: &mut W, lexemes: Vec<Spanned>) -> Result<()>
 where
     W: Highlighter,
 {
