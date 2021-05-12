@@ -1417,45 +1417,42 @@ impl<'input> Lexer<'input> {
 
     /// handle pattern begin
     fn pb(&mut self, start: Location) -> Result<TokenSpan<'input>> {
-        match self.lookahead() {
-            Some((end, '[')) => {
+        match self.lookahead().ok_or(ErrorKind::UnexpectedEndOfStream)? {
+            (end, '[') => {
                 self.bump();
                 Ok(self.spanned2(start, end + '[', Token::LPatBracket))
             }
-            Some((end, '(')) => {
+            (end, '(') => {
                 self.bump();
                 Ok(self.spanned2(start, end + '(', Token::LPatParen))
             }
-            Some((end, '{')) => {
+            (end, '{') => {
                 self.bump();
                 Ok(self.spanned2(start, end + '{', Token::LPatBrace))
             }
-            Some((end, _)) => Ok(self.spanned2(start, end, Token::Mod)),
-            None => Err(ErrorKind::UnexpectedEndOfStream.into()),
+            (end, _) => Ok(self.spanned2(start, end, Token::Mod)),
         }
     }
 
     /// handle pattern end
     fn pe(&mut self, start: Location) -> Result<TokenSpan<'input>> {
-        match self.lookahead() {
-            Some((end, '=')) => {
+        match self.lookahead().ok_or(ErrorKind::UnexpectedEndOfStream)? {
+            (end, '=') => {
                 self.bump();
                 Ok(self.spanned2(start, end + '=', Token::NotEq))
             }
-            Some((end, _ch)) => Ok(self.spanned2(start, end, Token::BitNot)),
-            None => Err(ErrorKind::UnexpectedEndOfStream.into()),
+            (end, _ch) => Ok(self.spanned2(start, end, Token::BitNot)),
         }
     }
 
     /// handle tilde
     fn tl(&mut self, start: Location) -> Result<TokenSpan<'input>> {
-        match self.lookahead() {
-            Some((end, '=')) => {
+        match self.lookahead().ok_or(ErrorKind::UnexpectedEndOfStream)? {
+            (end, '=') => {
                 self.bump();
                 Ok(self.spanned2(start, end + '=', Token::TildeEq))
             }
-            Some((end, _)) => Ok(self.spanned2(start, end, Token::Tilde)),
-            None => Err(ErrorKind::UnexpectedEndOfStream.into()),
+            (end, _) => Ok(self.spanned2(start, end, Token::Tilde)),
         }
     }
 
@@ -1468,10 +1465,8 @@ impl<'input> Lexer<'input> {
     }
 
     fn next_index(&mut self) -> Result<Location> {
-        match self.chars.next() {
-            Some((loc, _)) => Ok(loc),
-            None => Err(ErrorKind::UnexpectedEndOfStream.into()),
-        }
+        let (loc, _) = self.chars.next().ok_or(ErrorKind::UnexpectedEndOfStream)?;
+        Ok(loc)
     }
 
     fn escape_code(
@@ -1479,21 +1474,21 @@ impl<'input> Lexer<'input> {
         string_start: &Location,
         start: Location,
     ) -> Result<(Location, char)> {
-        match self.bump() {
-            Some((e, '\'')) => Ok((e, '\'')),
-            Some((e, '"')) => Ok((e, '"')),
-            Some((e, '\\')) => Ok((e, '\\')),
+        match self.bump().ok_or(ErrorKind::UnexpectedEndOfStream)? {
+            (e, '\'') => Ok((e, '\'')),
+            (e, '"') => Ok((e, '"')),
+            (e, '\\') => Ok((e, '\\')),
             // Some((e, '{')) => Ok((e, '{')),
             // Some((e, '}')) => Ok((e, '}')),
-            Some((e, '#')) => Ok((e, '#')),
-            Some((e, '/')) => Ok((e, '/')),
-            Some((e, 'b')) => Ok((e, '\u{8}')), // Backspace
-            Some((e, 'f')) => Ok((e, '\u{c}')), // Form Feed
-            Some((e, 'n')) => Ok((e, '\n')),
-            Some((e, 'r')) => Ok((e, '\r')),
-            Some((e, 't')) => Ok((e, '\t')),
+            (e, '#') => Ok((e, '#')),
+            (e, '/') => Ok((e, '/')),
+            (e, 'b') => Ok((e, '\u{8}')), // Backspace
+            (e, 'f') => Ok((e, '\u{c}')), // Form Feed
+            (e, 'n') => Ok((e, '\n')),
+            (e, 'r') => Ok((e, '\r')),
+            (e, 't') => Ok((e, '\t')),
             // TODO: Unicode escape codes
-            Some((mut end, 'u')) => {
+            (mut end, 'u') => {
                 let mut escape_start = end;
                 escape_start.extend_left('u');
                 let mut digits = String::with_capacity(4);
@@ -1546,7 +1541,7 @@ impl<'input> Lexer<'input> {
                     .into())
                 }
             }
-            Some((mut end, ch)) => {
+            (mut end, ch) => {
                 let token_str = self
                     .slice_full_lines(string_start, &end)
                     .unwrap_or_default();
@@ -1560,7 +1555,6 @@ impl<'input> Lexer<'input> {
                 )
                 .into())
             }
-            None => Err(ErrorKind::UnexpectedEndOfStream.into()),
         }
     }
 
@@ -1570,8 +1564,15 @@ impl<'input> Lexer<'input> {
         let mut end = start;
 
         loop {
-            match self.bump() {
-                Some((mut end, '`')) => {
+            match self.bump().ok_or_else(|| {
+                let range = Range::from((start, end));
+                ErrorKind::UnterminatedIdentLiteral(
+                    range.expand_lines(2),
+                    range,
+                    UnfinishedToken::new(range, format!("`{}", string)),
+                )
+            })? {
+                (mut end, '`') => {
                     // we got to bump end by one so we claim the tailing `"`
                     let e = end;
                     let mut s = start;
@@ -1585,7 +1586,7 @@ impl<'input> Lexer<'input> {
                     let token = Token::Ident(string.into(), true);
                     return Ok(self.spanned2(start, end, token));
                 }
-                Some((end, '\n')) => {
+                (end, '\n') => {
                     let range = Range::from((start, end));
                     return Err(ErrorKind::UnterminatedIdentLiteral(
                         range.expand_lines(2),
@@ -1595,19 +1596,10 @@ impl<'input> Lexer<'input> {
                     .into());
                 }
 
-                Some((e, other)) => {
+                (e, other) => {
                     string.push(other as char);
                     end = e;
                     continue;
-                }
-                None => {
-                    let range = Range::from((start, end));
-                    return Err(ErrorKind::UnterminatedIdentLiteral(
-                        range.expand_lines(2),
-                        range,
-                        UnfinishedToken::new(range, format!("`{}", string)),
-                    )
-                    .into());
                 }
             }
         }
@@ -1623,70 +1615,158 @@ impl<'input> Lexer<'input> {
         let mut res = vec![q1];
         let mut string = String::new();
 
-        match self.lookahead() {
+        if let (mut end, '"') = self.lookahead().ok_or_else(|| {
+            let range = Range::from((start, start));
+            ErrorKind::UnterminatedStringLiteral(
+                range.expand_lines(2),
+                range,
+                UnfinishedToken::new(range, format!("\"{}", string)),
+            )
+        })? {
             // This would be the second quote
-            Some((mut end, '"')) => {
+            self.bump();
+            if let Some((end, '"')) = self.lookahead() {
                 self.bump();
-                if let Some((end, '"')) = self.lookahead() {
-                    self.bump();
-                    // We don't allow anything tailing the initial `"""`
-                    match self.bump() {
-                        Some((mut newline_loc, '\n')) => {
-                            res = vec![self.spanned2(start, end + '"', Token::HereDocStart)]; // (0, vec![]))];
-                            string = String::new();
-                            newline_loc.shift('\n'); // content starts after newline
-                            self.hd(heredoc_start, newline_loc, end, false, &string, res)
-                        }
-                        Some((end, ch)) => {
-                            let token_str = self
-                                .slice_until_eol(&start)
-                                .map_or_else(|| format!(r#""""{}"#, ch), ToString::to_string);
-                            let range = Range::from((start, end));
-                            Err(ErrorKind::TailingHereDoc(
-                                range.expand_lines(2),
-                                range,
-                                UnfinishedToken::new(range, token_str),
-                                ch,
-                            )
-                            .into())
-                        }
-                        None => {
-                            let token_str = self
-                                .slice_until_eol(&start)
-                                .map_or_else(|| r#"""""#.to_string(), ToString::to_string);
-                            let range = Range::from((start, end));
-                            Err(ErrorKind::UnterminatedHereDoc(
-                                range.expand_lines(2),
-                                range,
-                                UnfinishedToken::new(range, token_str),
-                            )
-                            .into())
-                        }
+                // We don't allow anything tailing the initial `"""`
+                match self.bump().ok_or_else(|| {
+                    let token_str = self
+                        .slice_until_eol(&start)
+                        .map_or_else(|| r#"""""#.to_string(), ToString::to_string);
+                    let range = Range::from((start, end));
+                    ErrorKind::UnterminatedHereDoc(
+                        range.expand_lines(2),
+                        range,
+                        UnfinishedToken::new(range, token_str),
+                    )
+                })? {
+                    (mut newline_loc, '\n') => {
+                        res = vec![self.spanned2(start, end + '"', Token::HereDocStart)]; // (0, vec![]))];
+                        string = String::new();
+                        newline_loc.shift('\n'); // content starts after newline
+                        self.hd(heredoc_start, newline_loc, end, false, &string, res)
                     }
-                } else {
-                    // We had two quotes followed by something not a quote so
-                    // it is an empty string.
-                    //TODO :make slice
-                    let start = end;
-                    end.shift('"');
-                    res.push(self.spanned2(start, end, Token::DQuote));
-                    Ok(res)
+                    (end, ch) => {
+                        let token_str = self
+                            .slice_until_eol(&start)
+                            .map_or_else(|| format!(r#""""{}"#, ch), ToString::to_string);
+                        let range = Range::from((start, end));
+                        Err(ErrorKind::TailingHereDoc(
+                            range.expand_lines(2),
+                            range,
+                            UnfinishedToken::new(range, token_str),
+                            ch,
+                        )
+                        .into())
+                    }
                 }
+            } else {
+                // We had two quotes followed by something not a quote so
+                // it is an empty string.
+                //TODO :make slice
+                let start = end;
+                end.shift('"');
+                res.push(self.spanned2(start, end, Token::DQuote));
+                Ok(res)
             }
-            Some(_) => self.qs(heredoc_start, end, end, false, string, res),
-            None => {
-                let range = Range::from((start, start));
-                Err(ErrorKind::UnterminatedStringLiteral(
-                    range.expand_lines(2),
-                    range,
-                    UnfinishedToken::new(range, format!("\"{}", string)),
-                )
-                .into())
-            }
+        } else {
+            self.qs(heredoc_start, end, end, false, string, res)
         }
     }
 
-    #[allow(clippy::too_many_lines, clippy::clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments)]
+    fn intercept_heredoc_error(
+        &self,
+        is_hd: bool,
+        error_prefix: &str,
+        total_start: Location,
+        segment_start: &mut Location,
+        end: &mut Location,
+        res: &mut Vec<TokenSpan<'input>>,
+        content: &mut String,
+        error: Error,
+    ) -> ErrorKind {
+        // intercept error and extend the token to match this outer heredoc
+        // with interpolation
+        // otherwise we will not get the whole heredoc in error messages
+
+        let end_location = error.context().1.map_or_else(
+            || res.last().map_or(*end, |last| last.span.end),
+            |inner_error_range| inner_error_range.1,
+        );
+
+        let Error(kind, ..) = error;
+
+        let token_str = self
+            .slice_full_lines(&total_start, &end_location)
+            .unwrap_or_else(|| format!("{}{}", error_prefix, content));
+        let mut end = total_start;
+        end.shift_str(&token_str);
+        let unfinished_token =
+            UnfinishedToken::new(Range::from((total_start, end_location)), token_str);
+        match kind {
+            ErrorKind::UnterminatedExtractor(outer, location, _) => {
+                // expand to start line of heredoc, so we get a proper context
+                let outer = outer.expand_lines(outer.0.line().saturating_sub(total_start.line()));
+                ErrorKind::UnterminatedExtractor(outer, location, unfinished_token)
+            }
+            ErrorKind::UnterminatedIdentLiteral(outer, location, _) => {
+                // expand to start line of heredoc, so we get a proper context
+                let outer = outer.expand_lines(outer.0.line().saturating_sub(total_start.line()));
+                ErrorKind::UnterminatedIdentLiteral(outer, location, unfinished_token)
+            }
+            ErrorKind::UnterminatedHereDoc(outer, location, _)
+            | ErrorKind::TailingHereDoc(outer, location, _, _) => {
+                if is_hd {
+                    // unterminated heredocs within interpolation are better reported
+                    // as unterminated interpolation
+                    ErrorKind::UnterminatedInterpolation(
+                        Range::from((total_start, end.move_down_lines(2))),
+                        Range::from((total_start, end)),
+                        unfinished_token,
+                    )
+                } else {
+                    let outer =
+                        outer.expand_lines(outer.0.line().saturating_sub(total_start.line()));
+
+                    ErrorKind::UnterminatedHereDoc(outer, location, unfinished_token)
+                }
+            }
+            ErrorKind::UnterminatedInterpolation(outer, location, _) => {
+                // expand to start line of heredoc, so we get a proper context
+                let outer = outer.expand_lines(outer.0.line().saturating_sub(total_start.line()));
+                ErrorKind::UnterminatedInterpolation(outer, location, unfinished_token)
+            }
+            ErrorKind::UnexpectedEscapeCode(outer, location, _, found) => {
+                // expand to start line of heredoc, so we get a proper context
+                let outer = outer.expand_lines(outer.0.line().saturating_sub(total_start.line()));
+                ErrorKind::UnexpectedEscapeCode(outer, location, unfinished_token, found)
+            }
+            ErrorKind::UnterminatedStringLiteral(outer, location, _) => {
+                // expand to start line of heredoc, so we get a proper context
+                let outer = outer.expand_lines(outer.0.line().saturating_sub(total_start.line()));
+                if is_hd {
+                    ErrorKind::UnterminatedStringLiteral(outer, location, unfinished_token)
+                } else {
+                    let mut toekn_end = *segment_start;
+                    toekn_end.shift('#');
+                    toekn_end.shift('{');
+                    ErrorKind::UnterminatedInterpolation(
+                        outer,
+                        Range::from((*segment_start, toekn_end)),
+                        unfinished_token,
+                    )
+                }
+            }
+            ErrorKind::InvalidUtf8Sequence(outer, location, _) => {
+                // expand to start line of heredoc, so we get a proper context
+                let outer = outer.expand_lines(outer.0.line().saturating_sub(total_start.line()));
+                ErrorKind::InvalidUtf8Sequence(outer, location, unfinished_token)
+            }
+            e => e,
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
     fn handle_interpol<F>(
         &mut self,
         is_hd: bool,
@@ -1725,160 +1805,69 @@ impl<'input> Lexer<'input> {
         let mut pcount = 0;
         let mut first = true;
         loop {
-            match self.next() {
-                Some(Ok(s)) => {
-                    match &s.value {
-                        Token::RBrace if pcount == 0 => {
-                            let start = *segment_start;
-                            *segment_start = s.span.pp_end;
+            let next = self.next().ok_or_else(|| {
+                let end_location = self.chars.current();
+                let token_str = self
+                    .slice_full_lines(&total_start, end_location)
+                    .unwrap_or_else(|| format!("{}{}", error_prefix, content));
+                ErrorKind::UnterminatedInterpolation(
+                    Range::from((total_start, end.move_down_lines(2))),
+                    Range::from((*segment_start, *end)),
+                    UnfinishedToken::new(Range::from((total_start, *end_location)), token_str),
+                )
+            })?;
 
-                            res.push(s);
-                            if first {
-                                let end_location = *segment_start;
-                                let token_str = self
-                                    .slice_full_lines(&total_start, &end_location)
-                                    .unwrap_or_else(|| format!("{}{}", error_prefix, content));
+            let s = next.map_err(|error| {
+                self.intercept_heredoc_error(
+                    is_hd,
+                    error_prefix,
+                    total_start,
+                    segment_start,
+                    end,
+                    res,
+                    content,
+                    error,
+                )
+            })?;
+            match &s.value {
+                Token::RBrace if pcount == 0 => {
+                    let start = *segment_start;
+                    *segment_start = s.span.pp_end;
 
-                                let unfinished_token = UnfinishedToken::new(
-                                    Range::from((start, end_location)),
-                                    token_str,
-                                );
-
-                                return Err(ErrorKind::EmptyInterpolation(
-                                    Range::from((total_start, end_location)),
-                                    Range::from((start, end_location)),
-                                    unfinished_token,
-                                )
-                                .into());
-                            }
-                            break;
-                        }
-                        Token::RBrace => {
-                            pcount -= 1;
-                        }
-                        Token::LBrace | Token::Interpol => {
-                            pcount += 1;
-                        }
-                        _ => {}
-                    };
                     res.push(s);
-                    first = false;
-                }
-                // intercept error and extend the token to match this outer heredoc
-                // with interpolation
-                // otherwise we will not get the whole heredoc in error messages
-                Some(Err(error)) => {
-                    let end_location = error.context().1.map_or_else(
-                        || res.last().map_or(*end, |last| last.span.end),
-                        |inner_error_range| inner_error_range.1,
-                    );
+                    if first {
+                        let end_location = *segment_start;
+                        let token_str = self
+                            .slice_full_lines(&total_start, &end_location)
+                            .unwrap_or_else(|| format!("{}{}", error_prefix, content));
 
-                    let Error(kind, ..) = error;
+                        let unfinished_token =
+                            UnfinishedToken::new(Range::from((start, end_location)), token_str);
 
-                    let token_str = self
-                        .slice_full_lines(&total_start, &end_location)
-                        .unwrap_or_else(|| format!("{}{}", error_prefix, content));
-                    let mut end = total_start;
-                    end.shift_str(&token_str);
-                    let unfinished_token =
-                        UnfinishedToken::new(Range::from((total_start, end_location)), token_str);
-                    let error = match kind {
-                        ErrorKind::UnterminatedExtractor(outer, location, _) => {
-                            // expand to start line of heredoc, so we get a proper context
-                            let outer = outer
-                                .expand_lines(outer.0.line().saturating_sub(total_start.line()));
-                            ErrorKind::UnterminatedExtractor(outer, location, unfinished_token)
-                        }
-                        ErrorKind::UnterminatedIdentLiteral(outer, location, _) => {
-                            // expand to start line of heredoc, so we get a proper context
-                            let outer = outer
-                                .expand_lines(outer.0.line().saturating_sub(total_start.line()));
-                            ErrorKind::UnterminatedIdentLiteral(outer, location, unfinished_token)
-                        }
-                        ErrorKind::UnterminatedHereDoc(outer, location, _)
-                        | ErrorKind::TailingHereDoc(outer, location, _, _) => {
-                            if is_hd {
-                                // unterminated heredocs within interpolation are better reported
-                                // as unterminated interpolation
-                                ErrorKind::UnterminatedInterpolation(
-                                    Range::from((total_start, end.move_down_lines(2))),
-                                    Range::from((total_start, end)),
-                                    unfinished_token,
-                                )
-                            } else {
-                                let outer = outer.expand_lines(
-                                    outer.0.line().saturating_sub(total_start.line()),
-                                );
-
-                                ErrorKind::UnterminatedHereDoc(outer, location, unfinished_token)
-                            }
-                        }
-                        ErrorKind::UnterminatedInterpolation(outer, location, _) => {
-                            // expand to start line of heredoc, so we get a proper context
-                            let outer = outer
-                                .expand_lines(outer.0.line().saturating_sub(total_start.line()));
-                            ErrorKind::UnterminatedInterpolation(outer, location, unfinished_token)
-                        }
-                        ErrorKind::UnexpectedEscapeCode(outer, location, _, found) => {
-                            // expand to start line of heredoc, so we get a proper context
-                            let outer = outer
-                                .expand_lines(outer.0.line().saturating_sub(total_start.line()));
-                            ErrorKind::UnexpectedEscapeCode(
-                                outer,
-                                location,
-                                unfinished_token,
-                                found,
-                            )
-                        }
-                        ErrorKind::UnterminatedStringLiteral(outer, location, _) => {
-                            // expand to start line of heredoc, so we get a proper context
-                            let outer = outer
-                                .expand_lines(outer.0.line().saturating_sub(total_start.line()));
-                            if is_hd {
-                                ErrorKind::UnterminatedStringLiteral(
-                                    outer,
-                                    location,
-                                    unfinished_token,
-                                )
-                            } else {
-                                let mut toekn_end = *segment_start;
-                                toekn_end.shift('#');
-                                toekn_end.shift('{');
-                                ErrorKind::UnterminatedInterpolation(
-                                    outer,
-                                    Range::from((*segment_start, toekn_end)),
-                                    unfinished_token,
-                                )
-                            }
-                        }
-                        ErrorKind::InvalidUtf8Sequence(outer, location, _) => {
-                            // expand to start line of heredoc, so we get a proper context
-                            let outer = outer
-                                .expand_lines(outer.0.line().saturating_sub(total_start.line()));
-                            ErrorKind::InvalidUtf8Sequence(outer, location, unfinished_token)
-                        }
-                        e => e,
-                    };
-                    return Err(error.into());
+                        return Err(ErrorKind::EmptyInterpolation(
+                            Range::from((total_start, end_location)),
+                            Range::from((start, end_location)),
+                            unfinished_token,
+                        )
+                        .into());
+                    }
+                    break;
                 }
-                None => {
-                    let end_location = self.chars.current();
-                    let token_str = self
-                        .slice_full_lines(&total_start, end_location)
-                        .unwrap_or_else(|| format!("{}{}", error_prefix, content));
-                    return Err(ErrorKind::UnterminatedInterpolation(
-                        Range::from((total_start, end.move_down_lines(2))),
-                        Range::from((*segment_start, *end)),
-                        UnfinishedToken::new(Range::from((total_start, *end_location)), token_str),
-                    )
-                    .into());
+                Token::RBrace => {
+                    pcount -= 1;
                 }
-            }
+                Token::LBrace | Token::Interpol => {
+                    pcount += 1;
+                }
+                _ => {}
+            };
+            res.push(s);
+            first = false;
         }
         Ok(())
     }
 
-    #[allow(clippy::clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments)]
     fn handle_qs_hd_generic<F>(
         &mut self,
         is_hd: bool,
@@ -1966,8 +1955,20 @@ impl<'input> Lexer<'input> {
         // TODO: deduplicate by encapsulating all state in a struct and have some common operations on it
         let mut content = String::new();
         loop {
-            match self.bump() {
-                Some((e, '"')) => {
+            let next = self.bump().ok_or_else(|| {
+                // We reached EOF
+                let token_str = self
+                    .slice_until_eof(&heredoc_start)
+                    .map_or_else(|| format!(r#""""\n{}"#, content), ToString::to_string);
+                let range = Range::from((heredoc_start, end));
+                ErrorKind::UnterminatedHereDoc(
+                    range.expand_lines(2),
+                    range,
+                    UnfinishedToken::new(range, token_str),
+                )
+            })?;
+            match next {
+                (e, '"') => {
                     // If the current line is just a `"""` then we are at the end of the heredoc
                     res.push(self.spanned2(
                         segment_start,
@@ -1993,7 +1994,7 @@ impl<'input> Lexer<'input> {
                     };
                     end.shift('"');
                 }
-                Some((e, '\n')) => {
+                (e, '\n') => {
                     end = e;
                     content.push('\n');
                     res.push(self.spanned2(
@@ -2005,7 +2006,7 @@ impl<'input> Lexer<'input> {
                     segment_start = end;
                     content = String::new();
                 }
-                Some(lc) => {
+                lc => {
                     self.handle_qs_hd_generic(
                         true,
                         "\"\"\"\n",
@@ -2019,24 +2020,10 @@ impl<'input> Lexer<'input> {
                         Token::HereDocLiteral,
                     )?;
                 }
-                None => {
-                    // We reached EOF
-                    let token_str = self
-                        .slice_until_eof(&heredoc_start)
-                        .map_or_else(|| format!(r#""""\n{}"#, content), ToString::to_string);
-                    let range = Range::from((heredoc_start, end));
-                    return Err(ErrorKind::UnterminatedHereDoc(
-                        range.expand_lines(2),
-                        range,
-                        UnfinishedToken::new(range, token_str),
-                    )
-                    .into());
-                }
             }
         }
     }
 
-    #[allow(clippy::too_many_lines)]
     /// Handle quote strings `"`  ...
     fn qs(
         &mut self,
@@ -2048,8 +2035,12 @@ impl<'input> Lexer<'input> {
         mut res: Vec<TokenSpan<'input>>,
     ) -> Result<Vec<TokenSpan<'input>>> {
         loop {
-            match self.bump() {
-                Some((mut end, '"')) => {
+            let next = self
+                .bump()
+                .ok_or_else(|| self.unfinished_token("\"", &string, total_start))?;
+
+            match next {
+                (mut end, '"') => {
                     // If the string is empty we kind of don't need it.
                     if !string.is_empty() {
                         let token = if has_escapes {
@@ -2068,7 +2059,7 @@ impl<'input> Lexer<'input> {
                     res.push(self.spanned2(start, end, Token::DQuote));
                     return Ok(res);
                 }
-                Some((end, '\n')) => {
+                (end, '\n') => {
                     let token_str = self
                         .slice_until_eol(&total_start)
                         .map_or_else(|| format!("\"{}", string), ToString::to_string);
@@ -2083,7 +2074,7 @@ impl<'input> Lexer<'input> {
                     )
                     .into());
                 }
-                Some(lc) => {
+                lc => {
                     self.handle_qs_hd_generic(
                         false,
                         "\"",
@@ -2097,30 +2088,16 @@ impl<'input> Lexer<'input> {
                         Token::StringLiteral,
                     )?;
                 }
-                None => {
-                    let token_str = self
-                        .slice_until_eol(&total_start)
-                        .map_or_else(|| format!("\"{}", string), ToString::to_string);
-                    let mut token_end = total_start;
-                    token_end.shift_str(&token_str);
-                    let range = Range::from((total_start, end));
-                    return Err(ErrorKind::UnterminatedStringLiteral(
-                        range.expand_lines(2),
-                        range,
-                        UnfinishedToken::new(Range::from((total_start, token_end)), token_str),
-                    )
-                    .into());
-                }
             }
         }
     }
 
     fn test_escape_code(&mut self, start: &Location, s: &str) -> Result<Option<char>> {
-        match self.bump() {
-            Some((_, '\\')) => Ok(Some('\\')),
-            Some((_, '|')) => Ok(Some('|')),
-            Some((_end, '\n')) => Ok(None),
-            Some((end, ch)) => {
+        match self.bump().ok_or(ErrorKind::UnexpectedEndOfStream)? {
+            (_, '\\') => Ok(Some('\\')),
+            (_, '|') => Ok(Some('|')),
+            (_end, '\n') => Ok(None),
+            (end, ch) => {
                 let token_str = format!("|{}\\{}", s, ch);
                 let mut token_end = end;
                 token_end.shift(ch);
@@ -2133,28 +2110,42 @@ impl<'input> Lexer<'input> {
                 )
                 .into())
             }
-            None => Err(ErrorKind::UnexpectedEndOfStream.into()),
         }
     }
 
+    fn unfinished_token(&self, pfx: &str, string: &str, start: Location) -> ErrorKind {
+        let token_str = self
+            .slice_until_eol(&start)
+            .map_or_else(|| format!("{}{}", pfx, string), ToString::to_string);
+        let mut token_end = start;
+        token_end.shift_str(&token_str);
+        let range = Range::from((start, token_end));
+        ErrorKind::UnterminatedExtractor(
+            range.expand_lines(2),
+            range,
+            UnfinishedToken::new(Range::from((start, token_end)), token_str),
+        )
+    }
+
     /// handle test/extractor '|...'
-    fn pl(&mut self, start: Location) -> Result<TokenSpan<'input>> {
+    fn pl(&mut self, total_start: Location) -> Result<TokenSpan<'input>> {
         let mut string = String::new();
         let mut strings = Vec::new();
 
-        let mut end = start;
         loop {
-            match self.bump() {
-                Some((e, '\\')) => {
-                    if let Some(ch) = self.test_escape_code(&start, &string)? {
+            let next = self
+                .bump()
+                .ok_or_else(|| self.unfinished_token("|", &string, total_start))?;
+            match next {
+                (_e, '\\') => {
+                    if let Some(ch) = self.test_escape_code(&total_start, &string)? {
                         string.push(ch);
                     } else {
                         strings.push(string);
                         string = String::new();
                     }
-                    end = e;
                 }
-                Some((mut end, '|')) => {
+                (mut end, '|') => {
                     strings.push(string);
                     end.shift('|');
                     let indent = indentation(&strings);
@@ -2169,13 +2160,13 @@ impl<'input> Lexer<'input> {
                         })
                         .collect();
                     let token = Token::TestLiteral(indent, strings);
-                    return Ok(self.spanned2(start, end, token));
+                    return Ok(self.spanned2(total_start, end, token));
                 }
-                Some((end, '\n')) => {
+                (end, '\n') => {
                     let token_str = self
-                        .slice_until_eol(&start)
+                        .slice_until_eol(&total_start)
                         .map_or_else(|| format!("|{}", string), ToString::to_string);
-                    let range = Range::from((start, end));
+                    let range = Range::from((total_start, end));
                     return Err(ErrorKind::UnterminatedExtractor(
                         range.expand_lines(2),
                         range,
@@ -2183,100 +2174,33 @@ impl<'input> Lexer<'input> {
                     )
                     .into());
                 }
-                Some((e, other)) => {
+                (_e, other) => {
                     string.push(other as char);
-                    end = e;
                     continue;
-                }
-                None => {
-                    let token_str = self
-                        .slice_until_eol(&start)
-                        .map_or_else(|| format!("|{}", string), ToString::to_string);
-                    let mut token_end = start;
-                    token_end.shift_str(&token_str);
-                    end.shift(' ');
-                    let range = Range::from((start, end));
-                    return Err(ErrorKind::UnterminatedExtractor(
-                        range.expand_lines(2),
-                        range,
-                        UnfinishedToken::new(Range::from((start, token_end)), token_str),
-                    )
-                    .into());
                 }
             }
         }
     }
 
-    /// handle numbers (with or without leading '-')
-    #[allow(clippy::too_many_lines)]
-    fn nm(&mut self, start: Location) -> Result<TokenSpan<'input>> {
-        let (end, int) = self.extract_number(start, is_dec_digit);
-        let (start, end, token) = match self.lookahead() {
-            Some((_, '.')) => {
-                self.bump(); // Skip '.'
-                let (end, float) = self.extract_number(start, is_dec_digit);
-                match self.lookahead() {
-                    Some((_, 'e')) => {
-                        self.bump();
-                        if let Some((exp_location, _)) = self.bump() {
-                            // handle sign
-                            let (exp_location, sign) = match self.lookahead() {
-                                Some((loc, '+')) | Some((loc, '-')) => {
-                                    self.bump();
-                                    self.slice(exp_location, loc).map(|s| (loc, s))
-                                }
-                                _ => Some((exp_location, "")),
-                            }
-                            .unwrap_or((exp_location, ""));
-                            let (end, exp) = self.extract_number(exp_location, is_dec_digit);
-                            let float = &format!("{}e{}{}", float, sign, exp);
-                            (
-                                start,
-                                end,
-                                Token::FloatLiteral(
-                                    float.parse().chain_err(|| {
-                                        ErrorKind::InvalidFloatLiteral(
-                                            Range::from((start, end)).expand_lines(2),
-                                            Range::from((start, end)),
-                                            UnfinishedToken::new(
-                                                Range::from((start, end)),
-                                                self.slice_until_eol(&start).map_or_else(
-                                                    || float.to_string(),
-                                                    ToString::to_string,
-                                                ),
-                                            ),
-                                        )
-                                    })?,
-                                    float.to_string(),
-                                ),
-                            )
-                        } else {
-                            return Err(ErrorKind::InvalidFloatLiteral(
-                                Range::from((start, end)).expand_lines(2),
-                                Range::from((start, end)),
-                                UnfinishedToken::new(
-                                    Range::from((start, end)),
-                                    self.slice_until_eol(&start)
-                                        .map_or_else(|| float.to_string(), ToString::to_string),
-                                ),
-                            )
-                            .into());
+    fn nm_float(&mut self, start: Location, int: &str) -> Result<TokenSpan<'input>> {
+        self.bump(); // Skip '.'
+        let (end, float) = self.extract_number(start, is_dec_digit);
+        match self.lookahead() {
+            Some((_, 'e')) => {
+                self.bump();
+                if let Some((exp_location, _)) = self.bump() {
+                    // handle sign
+                    let (exp_location, sign) = match self.lookahead() {
+                        Some((loc, '+')) | Some((loc, '-')) => {
+                            self.bump();
+                            self.slice(exp_location, loc).map(|s| (loc, s))
                         }
+                        _ => Some((exp_location, "")),
                     }
-                    Some((end, ch)) if is_ident_start(ch) => {
-                        return Err(ErrorKind::UnexpectedCharacter(
-                            Range::from((start, end)).expand_lines(2),
-                            Range::from((end, end)),
-                            UnfinishedToken::new(
-                                Range::from((start, end)),
-                                self.slice_until_eol(&start)
-                                    .map_or_else(|| int.to_string(), ToString::to_string),
-                            ),
-                            ch,
-                        )
-                        .into());
-                    }
-                    _ => (
+                    .unwrap_or((exp_location, ""));
+                    let (end, exp) = self.extract_number(exp_location, is_dec_digit);
+                    let float = &format!("{}e{}{}", float, sign, exp);
+                    Ok(self.spanned2(
                         start,
                         end,
                         Token::FloatLiteral(
@@ -2293,18 +2217,88 @@ impl<'input> Lexer<'input> {
                             })?,
                             float.to_string(),
                         ),
-                    ),
+                    ))
+                } else {
+                    Err(ErrorKind::InvalidFloatLiteral(
+                        Range::from((start, end)).expand_lines(2),
+                        Range::from((start, end)),
+                        UnfinishedToken::new(
+                            Range::from((start, end)),
+                            self.slice_until_eol(&start)
+                                .map_or_else(|| float.to_string(), ToString::to_string),
+                        ),
+                    )
+                    .into())
                 }
             }
-            Some((_, 'x')) => {
-                self.bump(); // Skip 'x'
-                let int_start = self.next_index()?;
-                let (end, hex) = self.extract_number(int_start, is_hex);
-                // ALLOW: this takes the whole string and can not panic
-                match &int[..] {
-                    "0" | "-0" => match self.lookahead() {
-                        Some((_, ch)) if is_ident_start(ch) => {
-                            return Err(ErrorKind::UnexpectedCharacter(
+            Some((end, ch)) if is_ident_start(ch) => Err(ErrorKind::UnexpectedCharacter(
+                Range::from((start, end)).expand_lines(2),
+                Range::from((end, end)),
+                UnfinishedToken::new(
+                    Range::from((start, end)),
+                    self.slice_until_eol(&start)
+                        .map_or_else(|| int.to_string(), ToString::to_string),
+                ),
+                ch,
+            )
+            .into()),
+            _ => Ok(self.spanned2(
+                start,
+                end,
+                Token::FloatLiteral(
+                    float.parse().chain_err(|| {
+                        ErrorKind::InvalidFloatLiteral(
+                            Range::from((start, end)).expand_lines(2),
+                            Range::from((start, end)),
+                            UnfinishedToken::new(
+                                Range::from((start, end)),
+                                self.slice_until_eol(&start)
+                                    .map_or_else(|| float.to_string(), ToString::to_string),
+                            ),
+                        )
+                    })?,
+                    float.to_string(),
+                ),
+            )),
+        }
+    }
+
+    fn nm_hex(&mut self, start: Location, int: &str) -> Result<TokenSpan<'input>> {
+        self.bump(); // Skip 'x'
+        let int_start = self.next_index()?;
+        let (end, hex) = self.extract_number(int_start, is_hex);
+        // ALLOW: this takes the whole string and can not panic
+        match int {
+            "0" | "-0" => match self.lookahead() {
+                Some((_, ch)) if is_ident_start(ch) => Err(ErrorKind::UnexpectedCharacter(
+                    Range::from((start, end)).expand_lines(2),
+                    Range::from((start, end)),
+                    UnfinishedToken::new(
+                        Range::from((start, end)),
+                        self.slice_until_eol(&start)
+                            .map_or_else(|| hex.to_string(), ToString::to_string),
+                    ),
+                    ch,
+                )
+                .into()),
+                _ => {
+                    if hex.is_empty() {
+                        Err(ErrorKind::InvalidHexLiteral(
+                            Range::from((start, end)).expand_lines(2),
+                            Range::from((start, end)),
+                            UnfinishedToken::new(
+                                Range::from((start, end)),
+                                self.slice_until_eol(&start)
+                                    .map_or_else(|| hex.to_string(), ToString::to_string),
+                            ),
+                        )
+                        .into())
+                    } else {
+                        let is_positive = int == "0";
+                        // ALLOW: this takes the whole string and can not panic
+                        match i64_from_hex(&hex[..], is_positive) {
+                            Ok(val) => Ok(self.spanned2(start, end, Token::IntLiteral(val))),
+                            Err(_err) => Err(ErrorKind::InvalidHexLiteral(
                                 Range::from((start, end)).expand_lines(2),
                                 Range::from((start, end)),
                                 UnfinishedToken::new(
@@ -2312,76 +2306,48 @@ impl<'input> Lexer<'input> {
                                     self.slice_until_eol(&start)
                                         .map_or_else(|| hex.to_string(), ToString::to_string),
                                 ),
-                                ch,
                             )
-                            .into());
+                            .into()),
                         }
-                        _ => {
-                            if hex.is_empty() {
-                                return Err(ErrorKind::InvalidHexLiteral(
-                                    Range::from((start, end)).expand_lines(2),
-                                    Range::from((start, end)),
-                                    UnfinishedToken::new(
-                                        Range::from((start, end)),
-                                        self.slice_until_eol(&start)
-                                            .map_or_else(|| hex.to_string(), ToString::to_string),
-                                    ),
-                                )
-                                .into());
-                            }
-                            let is_positive = int == "0";
-                            // ALLOW: this takes the whole string and can not panic
-                            match i64_from_hex(&hex[..], is_positive) {
-                                Ok(val) => (start, end, Token::IntLiteral(val)),
-                                Err(_err) => {
-                                    return Err(ErrorKind::InvalidHexLiteral(
-                                        Range::from((start, end)).expand_lines(2),
-                                        Range::from((start, end)),
-                                        UnfinishedToken::new(
-                                            Range::from((start, end)),
-                                            self.slice_until_eol(&start).map_or_else(
-                                                || hex.to_string(),
-                                                ToString::to_string,
-                                            ),
-                                        ),
-                                    )
-                                    .into());
-                                }
-                            }
-                        }
-                    },
-                    _ => {
-                        return Err(ErrorKind::InvalidHexLiteral(
-                            Range::from((start, end)).expand_lines(2),
-                            Range::from((start, end)),
-                            UnfinishedToken::new(
-                                Range::from((start, end)),
-                                self.slice_until_eol(&start)
-                                    .map_or_else(|| int.to_string(), ToString::to_string),
-                            ),
-                        )
-                        .into());
                     }
                 }
-            }
-            Some((char_loc, ch)) if is_ident_start(ch) => {
-                return Err(ErrorKind::UnexpectedCharacter(
-                    Range::from((start, end)).expand_lines(2),
-                    Range::from((char_loc, char_loc)),
-                    UnfinishedToken::new(
-                        Range::from((start, end)),
-                        self.slice_until_eol(&start)
-                            .map_or_else(|| int.to_string(), ToString::to_string),
-                    ),
-                    ch,
-                )
-                .into());
-            }
-            None | Some(_) => {
-                if let Ok(val) = int.parse() {
-                    (start, end, Token::IntLiteral(val))
-                } else {
-                    return Err(ErrorKind::InvalidIntLiteral(
+            },
+            _ => Err(ErrorKind::InvalidHexLiteral(
+                Range::from((start, end)).expand_lines(2),
+                Range::from((start, end)),
+                UnfinishedToken::new(
+                    Range::from((start, end)),
+                    self.slice_until_eol(&start)
+                        .map_or_else(|| int.to_string(), ToString::to_string),
+                ),
+            )
+            .into()),
+        }
+    }
+
+    /// handle numbers (with or without leading '-')
+    #[allow(clippy::too_many_lines)]
+    fn nm(&mut self, start: Location) -> Result<TokenSpan<'input>> {
+        let (end, int) = self.extract_number(start, is_dec_digit);
+        match self.lookahead() {
+            Some((_, '.')) => self.nm_float(start, &int),
+            Some((_, 'x')) => self.nm_hex(start, &int),
+            Some((char_loc, ch)) if is_ident_start(ch) => Err(ErrorKind::UnexpectedCharacter(
+                Range::from((start, end)).expand_lines(2),
+                Range::from((char_loc, char_loc)),
+                UnfinishedToken::new(
+                    Range::from((start, end)),
+                    self.slice_until_eol(&start)
+                        .map_or_else(|| int.to_string(), ToString::to_string),
+                ),
+                ch,
+            )
+            .into()),
+            None | Some(_) => int
+                .parse()
+                .map(|val| self.spanned2(start, end, Token::IntLiteral(val)))
+                .map_err(|_| {
+                    Error::from(ErrorKind::InvalidIntLiteral(
                         Range::from((start, end)).expand_lines(2),
                         Range::from((start, end)),
                         UnfinishedToken::new(
@@ -2389,13 +2355,9 @@ impl<'input> Lexer<'input> {
                             self.slice_until_eol(&start)
                                 .map_or_else(|| int.to_string(), ToString::to_string),
                         ),
-                    )
-                    .into());
-                }
-            }
-        };
-
-        Ok(self.spanned2(start, end, token))
+                    ))
+                }),
+        }
     }
 
     /// Consume whitespace
@@ -2421,66 +2383,61 @@ impl<'input> Iterator for Lexer<'input> {
         if let Some(next) = self.stored_tokens.pop_front() {
             return Some(Ok(next));
         }
-        let lexeme = self.bump();
-        match lexeme {
-            None => None,
-            Some((start, ch)) => {
-                match ch as char {
-                    // '...' =>  Some(Ok(self.spanned2(start, self.next_index(), Token::DotDotDot))),
-                    // ".." =>  Some(Ok(self.spanned2(start, self.next_index(), Token::DotDot))),
-                    ',' => Some(Ok(self.spanned2(start, start + ch, Token::Comma))),
-                    '$' => Some(Ok(self.spanned2(start, start + ch, Token::Dollar))),
-                    '.' => Some(Ok(self.spanned2(start, start + ch, Token::Dot))),
-                    //                        '?' => Some(Ok(self.spanned2(start, start, Token::Question))),
-                    '_' => Some(Ok(self.spanned2(start, start + ch, Token::DontCare))),
-                    ';' => Some(Ok(self.spanned2(start, start + ch, Token::Semi))),
-                    '+' => Some(Ok(self.spanned2(start, start + ch, Token::Add))),
-                    '*' => Some(Ok(self.spanned2(start, start + ch, Token::Mul))),
-                    '\\' => Some(Ok(self.spanned2(start, start + ch, Token::BSlash))),
-                    '(' => Some(Ok(self.spanned2(start, start + ch, Token::LParen))),
-                    ')' => Some(Ok(self.spanned2(start, start + ch, Token::RParen))),
-                    '{' => Some(Ok(self.spanned2(start, start + ch, Token::LBrace))),
-                    '}' => Some(Ok(self.spanned2(start, start + ch, Token::RBrace))),
-                    '[' => Some(Ok(self.spanned2(start, start + ch, Token::LBracket))),
-                    ']' => Some(Ok(self.spanned2(start, start + ch, Token::RBracket))),
-                    '/' => Some(Ok(self.spanned2(start, start + ch, Token::Div))),
-                    // TODO account for extractors which use | to mark format boundaries
-                    //'|' => Some(Ok(self.spanned2(start, start, Token::BitOr))),
-                    '^' => Some(Ok(self.spanned2(start, start + ch, Token::BitXor))),
-                    '&' => Some(Ok(self.spanned2(start, start + ch, Token::BitAnd))),
-                    ':' => Some(Ok(self.cn(start))),
-                    '-' => match self.lookahead() {
-                        Some((_loc, c)) if is_dec_digit(c) => Some(self.nm(start)),
-                        _ => Some(Ok(self.spanned2(start, start + ch, Token::Sub))),
-                    },
-                    '#' => Some(self.cx(start)),
-                    '=' => Some(Ok(self.eq(start))),
-                    '<' => Some(Ok(self.lt(start))),
-                    '>' => Some(Ok(self.gt(start))),
-                    '%' => Some(self.pb(start)),
-                    '~' => Some(self.tl(start)),
-                    '`' => Some(self.id2(start)),
-                    // TODO account for bitwise not operator
-                    '!' => Some(self.pe(start)),
-                    '\n' => Some(Ok(self.spanned2(start, start, Token::NewLine))),
-                    ch if is_ident_start(ch) => Some(Ok(self.id(start))),
-                    '"' => match self.qs_or_hd(start) {
-                        Ok(mut tokens) => {
-                            for t in tokens.drain(..) {
-                                self.stored_tokens.push_back(t)
-                            }
-                            self.next()
-                        }
-                        Err(e) => Some(Err(e)),
-                    },
-                    ch if is_test_start(ch) => Some(self.pl(start)),
-                    ch if is_dec_digit(ch) => Some(self.nm(start)),
-                    ch if ch.is_whitespace() => Some(Ok(self.ws(start))),
-                    _ => {
-                        let str = format!("{}", ch);
-                        Some(Ok(self.spanned2(start, start, Token::Bad(str))))
+        let (start, ch) = self.bump()?;
+        match ch as char {
+            // '...' =>  Some(Ok(self.spanned2(start, self.next_index(), Token::DotDotDot))),
+            // ".." =>  Some(Ok(self.spanned2(start, self.next_index(), Token::DotDot))),
+            ',' => Some(Ok(self.spanned2(start, start + ch, Token::Comma))),
+            '$' => Some(Ok(self.spanned2(start, start + ch, Token::Dollar))),
+            '.' => Some(Ok(self.spanned2(start, start + ch, Token::Dot))),
+            //                        '?' => Some(Ok(self.spanned2(start, start, Token::Question))),
+            '_' => Some(Ok(self.spanned2(start, start + ch, Token::DontCare))),
+            ';' => Some(Ok(self.spanned2(start, start + ch, Token::Semi))),
+            '+' => Some(Ok(self.spanned2(start, start + ch, Token::Add))),
+            '*' => Some(Ok(self.spanned2(start, start + ch, Token::Mul))),
+            '\\' => Some(Ok(self.spanned2(start, start + ch, Token::BSlash))),
+            '(' => Some(Ok(self.spanned2(start, start + ch, Token::LParen))),
+            ')' => Some(Ok(self.spanned2(start, start + ch, Token::RParen))),
+            '{' => Some(Ok(self.spanned2(start, start + ch, Token::LBrace))),
+            '}' => Some(Ok(self.spanned2(start, start + ch, Token::RBrace))),
+            '[' => Some(Ok(self.spanned2(start, start + ch, Token::LBracket))),
+            ']' => Some(Ok(self.spanned2(start, start + ch, Token::RBracket))),
+            '/' => Some(Ok(self.spanned2(start, start + ch, Token::Div))),
+            // TODO account for extractors which use | to mark format boundaries
+            //'|' => Some(Ok(self.spanned2(start, start, Token::BitOr))),
+            '^' => Some(Ok(self.spanned2(start, start + ch, Token::BitXor))),
+            '&' => Some(Ok(self.spanned2(start, start + ch, Token::BitAnd))),
+            ':' => Some(Ok(self.cn(start))),
+            '-' => match self.lookahead() {
+                Some((_loc, c)) if is_dec_digit(c) => Some(self.nm(start)),
+                _ => Some(Ok(self.spanned2(start, start + ch, Token::Sub))),
+            },
+            '#' => Some(self.cx(start)),
+            '=' => Some(Ok(self.eq(start))),
+            '<' => Some(Ok(self.lt(start))),
+            '>' => Some(Ok(self.gt(start))),
+            '%' => Some(self.pb(start)),
+            '~' => Some(self.tl(start)),
+            '`' => Some(self.id2(start)),
+            // TODO account for bitwise not operator
+            '!' => Some(self.pe(start)),
+            '\n' => Some(Ok(self.spanned2(start, start, Token::NewLine))),
+            ch if is_ident_start(ch) => Some(Ok(self.id(start))),
+            '"' => match self.qs_or_hd(start) {
+                Ok(mut tokens) => {
+                    for t in tokens.drain(..) {
+                        self.stored_tokens.push_back(t)
                     }
+                    self.next()
                 }
+                Err(e) => Some(Err(e)),
+            },
+            ch if is_test_start(ch) => Some(self.pl(start)),
+            ch if is_dec_digit(ch) => Some(self.nm(start)),
+            ch if ch.is_whitespace() => Some(Ok(self.ws(start))),
+            _ => {
+                let str = format!("{}", ch);
+                Some(Ok(self.spanned2(start, start, Token::Bad(str))))
             }
         }
     }
