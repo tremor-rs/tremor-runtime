@@ -51,7 +51,7 @@ impl ParserSource for str {
 }
 
 /// A token with a span to indicate its location
-pub type TokenSpan<'input> = Spanned<Token<'input>>;
+pub type TokenSpan<'input> = Spanned<'input>;
 
 fn is_ws(ch: char) -> bool {
     ch.is_whitespace() && ch != '\n'
@@ -393,6 +393,12 @@ pub enum Token<'input> {
     ConfigDirective,
 }
 
+impl<'input> Default for Token<'input> {
+    fn default() -> Self {
+        Self::EndOfStream
+    }
+}
+
 impl<'input> Token<'input> {
     /// Is the token ignorable except when syntax or error highlighting.
     /// Is the token insignificant when parsing ( a correct ... ) source.
@@ -553,7 +559,7 @@ impl<'input> Token<'input> {
 }
 
 // LALRPOP requires a means to convert spanned tokens to triple form
-impl<'input> __ToTriple<'input> for Spanned<Token<'input>> {
+impl<'input> __ToTriple<'input> for Spanned<'input> {
     fn to_triple(
         value: Self,
     ) -> std::result::Result<
@@ -810,7 +816,7 @@ impl<'input> Tokenizer<'input> {
     /// The purpose of this method is to not accidentally consume tokens after an error,
     /// which might be completely incorrect, but would still show up in the resulting iterator if
     /// used with `filter_map(Result::ok)` for example.
-    pub fn tokenize_until_err(self) -> impl Iterator<Item = Spanned<Token<'input>>> {
+    pub fn tokenize_until_err(self) -> impl Iterator<Item = Spanned<'input>> {
         // i wanna use map_while here, but it is still unstable :(
         self.scan((), |_, item| item.ok()).fuse()
     }
@@ -940,7 +946,7 @@ impl IncludeStack {
     }
 }
 
-fn urt(next: Spanned<Token<'_>>, alt: &[&'static str]) -> Error {
+fn urt(next: &Spanned<'_>, alt: &[&'static str]) -> Error {
     ErrorKind::UnrecognizedToken(
         Range::from(next.span).expand_lines(2),
         Range::from(next.span),
@@ -950,11 +956,11 @@ fn urt(next: Spanned<Token<'_>>, alt: &[&'static str]) -> Error {
     .into()
 }
 
-fn as_ident(next: Spanned<Token<'_>>) -> Result<Cow<'_, str>> {
+fn as_ident(next: Spanned<'_>) -> Result<Cow<'_, str>> {
     if let Token::Ident(id, _) = next.value {
         Ok(id)
     } else {
-        Err(urt(next, &["`<ident>`"]))
+        Err(urt(&next, &["`<ident>`"]))
     }
 }
 impl<'input> Preprocessor {
@@ -1047,13 +1053,13 @@ impl<'input> Preprocessor {
                                 Token::ColonColon => continue,
                                 Token::Semi => break,
                                 _ => {
-                                    return Err(urt(next, &["`as`", "`::`", "`;`"]));
+                                    return Err(urt(&next, &["`as`", "`::`", "`;`"]));
                                 }
                             }
                         } else if next.value == Token::As || next.value == Token::Semi {
                             break;
                         } else {
-                            return Err(urt(next, &["`as`", "`::`", "`;`"]));
+                            return Err(urt(&next, &["`as`", "`::`", "`;`"]));
                         }
                     }
 
@@ -1129,7 +1135,7 @@ impl<'input> Preprocessor {
 
                         include_stack.pop();
                     } else {
-                        return Err(urt(next, &["`<newline>`"]));
+                        return Err(urt(&next, &["`<newline>`"]));
                     }
                 }
                 Spanned {
@@ -1162,12 +1168,12 @@ pub struct Lexer<'input> {
 type Lexeme = Option<(Location, char)>;
 
 impl<'input> Lexer<'input> {
-    pub(crate) fn spanned2<T>(
+    pub(crate) fn spanned2(
         &self,
         mut start: Location,
         mut end: Location,
-        value: T,
-    ) -> Spanned<T> {
+        value: Token<'input>,
+    ) -> Spanned<'input> {
         start.unit_id = self.cu;
         end.unit_id = self.cu;
         Spanned {
