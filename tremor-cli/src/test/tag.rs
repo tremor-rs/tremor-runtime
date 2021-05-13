@@ -164,3 +164,25 @@ where
         .into())
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use pretty_assertions::assert_eq;
+
+    #[test]
+    fn test_resolve() {
+        let tag_filter = TagFilter::new(
+            vec!["b".to_string(), "c".to_string(), "d".to_string()],
+            vec![],
+        );
+        assert_eq!(
+            resolve(
+                "tests/fixtures/resolve_tags/a/b",
+                "tests/fixtures/resolve_tags/a/b/c/d"
+            )
+            .unwrap(),
+            tag_filter
+        );
+    }
+}
