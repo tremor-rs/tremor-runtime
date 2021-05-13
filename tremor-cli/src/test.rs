@@ -132,7 +132,7 @@ fn suite_integration(
                 )?;
                 // Set cwd to test root
                 let cwd = std::env::current_dir()?;
-                std::env::set_current_dir(Path::new(&root))?;
+                std::env::set_current_dir(&root)?;
                 status::tags(&tags, Some(&matched), Some(exclude))?;
 
                 // Run integration tests
@@ -258,13 +258,12 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
     let mut elapsed = 0;
 
     let cwd = std::env::current_dir()?;
-    let base = format!("{}/{}", &cwd.to_string_lossy(), path);
-    let base = Path::new(&base);
+    let base = cwd.join(path);
     let found = found.filter_map(std::result::Result::ok);
     let start = nanotime();
     for meta in found {
         if let Some(root) = meta.path().parent() {
-            let mut meta_str = slurp_string(&meta.path().to_string_lossy())?;
+            let mut meta_str = slurp_string(&meta.path())?;
             let meta: Meta = simd_json::from_str(meta_str.as_mut_str())?;
 
             if meta.kind == TestKind::All {
@@ -273,7 +272,7 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
 
             if meta.kind == TestKind::Bench && (kind == TestKind::All || kind == TestKind::Bench) {
                 let tag_filter = (&["bench"][..], includes.as_slice(), excludes.as_slice());
-                let (stats, test_reports) = suite_bench(base, root, &meta, tag_filter)?;
+                let (stats, test_reports) = suite_bench(&base, root, &meta, tag_filter)?;
                 reports.insert("bench".to_string(), test_reports);
                 bench_stats.merge(&stats);
                 status::hr();
@@ -283,7 +282,7 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
                 && (kind == TestKind::All || kind == TestKind::Integration)
             {
                 let (stats, test_reports) =
-                    suite_integration(base, root, &meta, &["integration"], &includes, &excludes)?;
+                    suite_integration(&base, root, &meta, &["integration"], &includes, &excludes)?;
                 reports.insert("integration".to_string(), test_reports);
                 integration_stats.merge(&stats);
                 status::hr();
@@ -293,7 +292,7 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
                 && (kind == TestKind::All || kind == TestKind::Command)
             {
                 let (stats, test_reports) = command::suite_command(
-                    base,
+                    &base,
                     root,
                     &meta,
                     quiet,
@@ -308,7 +307,7 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
 
             if meta.kind == TestKind::Unit && (kind == TestKind::All || kind == TestKind::Unit) {
                 let (stats, test_reports) =
-                    suite_unit(base, root, &meta, &["unit"], &includes, &excludes)?;
+                    suite_unit(&base, root, &meta, &["unit"], &includes, &excludes)?;
                 reports.insert("unit".to_string(), test_reports);
                 unit_stats.merge(&stats);
                 status::hr();
