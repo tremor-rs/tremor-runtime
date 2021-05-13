@@ -19,7 +19,7 @@ use tremor_common::file;
 use std::collections::HashMap;
 
 use std::path::Path;
-use std::process::{Command, Stdio};
+use std::process::{Command, ExitStatus, Stdio};
 use std::sync::mpsc::TryRecvError;
 
 use std::sync::mpsc;
@@ -140,11 +140,11 @@ impl TargetProcess {
         }
     }
 
-    pub fn wait_with_output(&mut self) -> Result<std::process::ExitStatus> {
+    pub fn wait_with_output(&mut self) -> Result<ExitStatus> {
         Ok(self.process.wait()?)
     }
 
-    pub(crate) fn tail(&mut self, stdout_path: &str, stderr_path: &str) -> Result<()> {
+    pub(crate) fn tail(&mut self, stdout_path: &Path, stderr_path: &Path) -> Result<()> {
         let mut tailout = file::create(stdout_path)?;
         let mut tailerr = file::create(stderr_path)?;
 

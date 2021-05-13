@@ -14,7 +14,9 @@
 
 use crate::errors::{Error, Result};
 use crate::job;
-use crate::{job::TargetProcess, util::slurp_string};
+use crate::job::TargetProcess;
+use crate::util::slurp_string;
+use std::path::PathBuf;
 use std::{collections::HashMap, fs, path::Path};
 
 #[derive(Deserialize, Debug)]
@@ -27,7 +29,7 @@ pub(crate) struct After {
 }
 
 impl After {
-    pub(crate) fn spawn(&self, _base: &str) -> Result<Option<TargetProcess>> {
+    pub(crate) fn spawn(&self, _base: &Path) -> Result<Option<TargetProcess>> {
         let cmd = job::which(&self.cmd)?;
 
         let mut process = job::TargetProcess::new_with_stderr(&cmd, &self.args, &self.env)?;
@@ -36,38 +38,38 @@ impl After {
     }
 }
 
-pub(crate) fn load_after(path_str: &str) -> Result<After> {
-    let tags_data = slurp_string(path_str)?;
+pub(crate) fn load_after(path: &Path) -> Result<After> {
+    let tags_data = slurp_string(path)?;
     match serde_json::from_str(&tags_data) {
         Ok(s) => Ok(s),
         Err(_not_well_formed) => Err(Error::from(format!(
             "Unable to load `after.json` from path: {}",
-            path_str
+            path.display()
         ))),
     }
 }
 
 pub(crate) struct AfterController {
-    base: String,
+    base: PathBuf,
 }
 
 impl AfterController {
-    pub(crate) fn new(base: &str) -> Self {
+    pub(crate) fn new(base: &Path) -> Self {
         Self {
-            base: base.to_string(),
+            base: base.to_path_buf(),
         }
     }
 
     pub(crate) fn spawn(&mut self) -> Result<()> {
         let root = &self.base;
-        let after_str = &format!("{}/after.json", root);
+        let after_path = root.join("after.json");
         // This is optional
-        if Path::new(after_str).is_file() {
-            let after_json = load_after(after_str)?;
+        if (&after_path).is_file() {
+            let after_json = load_after(&after_path)?;
             let after_process = after_json.spawn(root)?;
             if let Some(mut process) = after_process {
-                let after_out_file = format!("{}/after.out.log", root);
-                let after_err_file = format!("{}/after.err.log", root);
+                let after_out_file = root.join("after.out.log");
+                let after_err_file = root.join("after.err.log");
                 let after_process = std::thread::spawn(move || {
                     if let Err(e) = process.tail(&after_out_file, &after_err_file) {
                         eprintln!("failed to tail tremor process: {}", e);
@@ -83,9 +85,9 @@ impl AfterController {
     }
 }
 
-pub(crate) fn update_evidence(root: &str, evidence: &mut HashMap<String, String>) -> Result<()> {
-    let after_out_file = format!("{}/after.out.log", &root);
-    let after_err_file = format!("{}/after.err.log", &root);
+pub(crate) fn update_evidence(root: &Path, evidence: &mut HashMap<String, String>) -> Result<()> {
+    let after_out_file = root.join("after.out.log");
+    let after_err_file = root.join("after.err.log");
 
     if let Ok(x) = fs::metadata(&after_out_file) {
         if x.is_file() {
