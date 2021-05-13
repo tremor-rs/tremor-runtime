@@ -7,6 +7,7 @@
 - Add `KnownKey::map_*` functions to directly work on the `Value::Object`s inner `HashMap`, if available.
 - Add `HEALTHCHECK` to Dockerfiles
 - Improve printing for dot files
+- Scan sub directories of ${CFG_DIR} for config files.
 
 ### Fixes
 
