@@ -70,24 +70,24 @@ impl ConfigImpl for Config {}
 
 impl offramp::Impl for GoogleCloudPubSub {
     fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
-        if let Some(config) = config {
-            let config: Config = Config::new(config)?;
-            let remote = Some(block_on(pubsub_auth::setup_publisher_client())?);
-            let hostport = "pubsub.googleapis.com:443";
-            Ok(SinkManager::new_box(Self {
-                config,
-                remote,
-                is_down: false,
-                qos_facility: Box::new(QoSFacilities::recoverable(hostport.to_string())),
-                reply_channel: None,
-                is_linked: false,
-                postprocessors: vec![],
-                codec: Box::new(crate::codec::null::Null {}),
-                event_id_gen: EventIdGenerator::new(0), // Fake ID overwritten in init
-            }))
-        } else {
-            Err("Offramp Google Cloud Pubsub (pub) requires a config".into())
-        }
+        let config = Config::new(
+            config
+                .as_ref()
+                .ok_or("Offramp Google Cloud Pubsub (pub) requires a config")?,
+        )?;
+        let remote = Some(block_on(pubsub_auth::setup_publisher_client())?);
+        let hostport = "pubsub.googleapis.com:443";
+        Ok(SinkManager::new_box(Self {
+            config,
+            remote,
+            is_down: false,
+            qos_facility: Box::new(QoSFacilities::recoverable(hostport.to_string())),
+            reply_channel: None,
+            is_linked: false,
+            postprocessors: vec![],
+            codec: Box::new(crate::codec::null::Null {}),
+            event_id_gen: EventIdGenerator::new(0), // Fake ID overwritten in init
+        }))
     }
 }
 
@@ -102,24 +102,21 @@ macro_rules! parse_arg {
 }
 
 fn parse_command(value: &Value) -> Result<PubSubCommand> {
-    if let Value::Object(o) = value {
-        let cmd_name: &str = &parse_arg!("command", o);
-        let command = match cmd_name {
-            "send_message" => PubSubCommand::SendMessage(
-                parse_arg!("project", o),
-                parse_arg!("topic", o),
-                if let Some(data) = o.get("data") {
-                    data.clone().into_static()
-                } else {
-                    return Err("Invalid Command, expected `data` field".into());
-                },
-            ),
-            _ => PubSubCommand::Unknown,
-        };
-        return Ok(command);
-    }
-
-    Err("Invalid Command".into())
+    let o = value.as_object().ok_or("Invalid Command")?;
+    let cmd_name: &str = &parse_arg!("command", o);
+    let command = match cmd_name {
+        "send_message" => PubSubCommand::SendMessage(
+            parse_arg!("project", o),
+            parse_arg!("topic", o),
+            if let Some(data) = o.get("data") {
+                data.clone_static()
+            } else {
+                return Err("Invalid Command, expected `data` field".into());
+            },
+        ),
+        _ => PubSubCommand::Unknown,
+    };
+    Ok(command)
 }
 
 #[async_trait::async_trait]
@@ -206,7 +203,7 @@ impl Sink for GoogleCloudPubSub {
         }
 
         self.is_down = false;
-        return Ok(Some(vec![qos::ack(&mut event)]));
+        Ok(Some(vec![qos::ack(&mut event)]))
     }
 
     fn default_codec(&self) -> &str {
