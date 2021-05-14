@@ -12,7 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::Result;
+#![cfg(not(tarpaulin_include))]
+
+use crate::errors::{Error, Result};
 use googapis::google::pubsub::v1::{
     publisher_client::PublisherClient, subscriber_client::SubscriberClient,
 };
@@ -42,7 +44,11 @@ pub(crate) async fn send_message(
             messages: vec![message],
         })
         .await?;
-    let res = &response.into_inner().message_ids[0];
+    let p = response.into_inner();
+    let res = p
+        .message_ids
+        .get(0)
+        .ok_or_else(|| Error::from("Failed to get message id"))?;
     Ok(res.to_string())
 }
 
@@ -53,6 +59,7 @@ pub(crate) async fn receive_message(
 ) -> Result<PullResponse> {
     // TODO: Use streaming pull
     #[allow(warnings)]
+    // to allow use of deprecated field googapis::google::pubsub::v1::PullRequest::return_immediately
     let response = client
         .pull(PullRequest {
             subscription: format!(
@@ -72,7 +79,7 @@ pub(crate) async fn acknowledge(
     subscription_name: &str,
     ack_ids: Vec<String>,
 ) -> Result<()> {
-    let _response = client
+    client
         .acknowledge(AcknowledgeRequest {
             subscription: format!(
                 "projects/{}/subscriptions/{}",

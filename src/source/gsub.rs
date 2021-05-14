@@ -51,7 +51,6 @@ impl Int {
         let config: Config = config.clone();
         let remote = None;
         let project_id = "".to_string();
-        let _hostport = "pubsub.googleapis.com:443";
         let origin = EventOriginUri {
             uid: 0,
             scheme: "google-sub".to_string(),

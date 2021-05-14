@@ -165,6 +165,7 @@ error_chain! {
         HttpHeaderError(http::header::InvalidHeaderValue);
         TonicTransportError(tonic::transport::Error);
         TonicStatusError(tonic::Status);
+
     }
 
     errors {

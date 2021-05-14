@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![cfg(not(tarpaulin_include))]
+
 use crate::errors::Result;
 /// Using `GOOGLE_APPLICATION_CREDENTIALS="<path to service token json file>"` this function
 /// will authenticate against the google cloud platform using the authentication flow defined
@@ -22,10 +24,11 @@ use googapis::google::pubsub::v1::{
 };
 use googapis::CERTIFICATES;
 use gouth::Token;
+// use http_types::headers;
 use tonic::{
     metadata::MetadataValue,
     transport::{Certificate, Channel, ClientTlsConfig},
-    Request,
+    Request, Status,
 };
 
 pub(crate) async fn setup_publisher_client() -> Result<PublisherClient<Channel>> {
@@ -42,9 +45,9 @@ pub(crate) async fn setup_publisher_client() -> Result<PublisherClient<Channel>>
     let service = PublisherClient::with_interceptor(channel, move |mut req: Request<()>| {
         let token = &*token
             .header_value()
-            .expect("Error with token header value in `pubsub_auth`");
+            .map_err(|_| Status::unauthenticated("Error getting token header value"))?;
         let meta = MetadataValue::from_str(token)
-            .expect("Error extracting metadata value from token in `pubsub_auth`");
+            .map_err(|_| Status::not_found("Error getting token header value"))?;
         req.metadata_mut().insert("authorization", meta);
         Ok(req)
     });
@@ -65,9 +68,9 @@ pub(crate) async fn setup_subscriber_client() -> Result<SubscriberClient<Channel
     let service = SubscriberClient::with_interceptor(channel, move |mut req: Request<()>| {
         let token = &*token
             .header_value()
-            .expect("Error with token header value in `pubsub_auth`");
+            .map_err(|_| Status::unauthenticated("Error getting token header value"))?;
         let meta = MetadataValue::from_str(token)
-            .expect("Error extracting metadata value from token in `pubsub_auth`");
+            .map_err(|_| Status::not_found("Error getting token header value"))?;
         req.metadata_mut().insert("authorization", meta);
         Ok(req)
     });
