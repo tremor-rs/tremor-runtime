@@ -168,8 +168,8 @@ impl Egress {
             is_interactive,
             is_pretty,
             buffer,
-            postprocessor,
             codec,
+            postprocessor,
         })
     }
 

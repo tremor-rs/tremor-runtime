@@ -942,8 +942,18 @@ pub(crate) fn error_need_obj<T, O: BaseExpr, I: BaseExpr>(
     got: ValueType,
     meta: &NodeMetas,
 ) -> Result<T> {
-    error_type_conflict_mult(outer, inner, got, vec![ValueType::Object], meta)
+    Err(error_need_obj_err(outer, inner, got, meta))
 }
+
+pub(crate) fn error_need_obj_err<O: BaseExpr, I: BaseExpr>(
+    outer: &O,
+    inner: &I,
+    got: ValueType,
+    meta: &NodeMetas,
+) -> Error {
+    error_type_conflict_mult_err(outer, inner, got, vec![ValueType::Object], meta)
+}
+
 pub(crate) fn error_need_arr<T, O: BaseExpr, I: BaseExpr>(
     outer: &O,
     inner: &I,
@@ -1190,8 +1200,19 @@ pub(crate) fn error_bad_key<'script, T, O: BaseExpr, I: BaseExpr>(
     options: Vec<String>,
     meta: &NodeMetas,
 ) -> Result<T> {
+    Err(error_bad_key_err(outer, inner, path, key, options, meta))
+}
+
+pub(crate) fn error_bad_key_err<'script, O: BaseExpr, I: BaseExpr>(
+    outer: &O,
+    inner: &I,
+    path: &ast::Path<'script>,
+    key: String,
+    options: Vec<String>,
+    meta: &NodeMetas,
+) -> Error {
     let expr: Range = outer.extent(meta);
-    Err(match path {
+    match path {
         ast::Path::Reserved(_) | ast::Path::Local(_) | ast::Path::Const(_) => {
             ErrorKind::BadAccessInLocal(expr, inner.extent(meta), key, options).into()
         }
@@ -1204,5 +1225,5 @@ pub(crate) fn error_bad_key<'script, T, O: BaseExpr, I: BaseExpr>(
         ast::Path::State(_p) => {
             ErrorKind::BadAccessInState(expr, inner.extent(meta), key, options).into()
         }
-    })
+    }
 }

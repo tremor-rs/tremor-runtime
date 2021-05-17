@@ -644,7 +644,10 @@ impl AstEq for TremorFnWrapper {
 
 #[cfg(test)]
 mod tests {
-    use crate::ast::Expr;
+
+    use std::collections::BTreeMap;
+
+    use crate::ast::{ClauseGroup, Expr, ImutExpr};
     use crate::errors::Result;
     use crate::path::ModulePath;
     use crate::registry::registry;
@@ -882,6 +885,14 @@ mod tests {
             case %[] => "empty_array"
             case %[ %{ present x } ] => "complex"
             case %{ absent y, snot == "badger", superhero ~= %{absent name}} when event.superhero.is_snotty => "snotty_badger"
+            case %{ absent y } => "blarg"
+            case %{ absent x } => "blarg"
+            case %{ snot == "badger" } => "argh"
+            case %{ snot == "meh" } => "argh"
+            case %{ snot == "muh" } => "argh"
+            case %{ snot == 1 } => "argh"
+            case %{ snot == 2 } => "argh"
+            case %{ snot == 3 } => "argh"
             default => null
         end);
         (match x of
@@ -891,6 +902,12 @@ mod tests {
             case %[] => "empty_array"
             case %[ %{ present x } ] => "complex"
             case %{ absent y, snot == "badger", superhero ~= %{absent name}} when event.superhero.is_snotty => "snotty_badger"
+            case %{ snot == "badger" } => "argh"
+            case %{ snot == "meh" } => "argh"
+            case %{ snot == "muh" } => "argh"
+            case %{ snot == 1 } => "argh"
+            case %{ snot == 2 } => "argh"
+            case %{ snot == 3 } => "argh"            
             default => "not_null"
         end)
         "#
@@ -997,13 +1014,79 @@ mod tests {
         "#
     );
 
-    #[test]
-    fn recur_eq_test() -> Result<()> {
-        let imut_expr = crate::ast::ImutExpr(ImutExprInt::Path(Path::Event(EventPath {
+    fn imut_expr() -> ImutExpr<'static> {
+        ImutExpr(ImutExprInt::Path(Path::Event(EventPath {
             mid: 1,
             segments: vec![],
-        })));
-        let e: crate::ast::ImutExprs = vec![imut_expr];
+        })))
+    }
+    #[test]
+    fn clause_group() {
+        let pc = PredicateClause {
+            mid: 0,
+            pattern: Pattern::Default,
+            guard: None,
+            exprs: vec![],
+            last_expr: imut_expr(),
+        };
+        assert!(ClauseGroup::Single {
+            precondition: None,
+            pattern: pc.clone(),
+        }
+        .ast_eq(&ClauseGroup::Single {
+            precondition: None,
+            pattern: pc.clone(),
+        }));
+        assert!(ClauseGroup::Simple {
+            precondition: None,
+            patterns: vec![pc.clone()],
+        }
+        .ast_eq(&ClauseGroup::Simple {
+            precondition: None,
+            patterns: vec![pc.clone()],
+        }));
+        assert!(ClauseGroup::SearchTree {
+            precondition: None,
+            tree: BTreeMap::new(),
+            rest: vec![pc.clone()],
+        }
+        .ast_eq(&ClauseGroup::SearchTree {
+            precondition: None,
+            tree: BTreeMap::new(),
+            rest: vec![pc.clone()],
+        }));
+        assert!(ClauseGroup::Combined {
+            precondition: None,
+            groups: vec![ClauseGroup::Single {
+                precondition: None,
+                pattern: pc.clone(),
+            }],
+        }
+        .ast_eq(&ClauseGroup::Combined {
+            precondition: None,
+            groups: vec![ClauseGroup::Single {
+                precondition: None,
+                pattern: pc.clone(),
+            }],
+        }));
+    }
+
+    #[test]
+    fn default_case() {
+        assert!(DefaultCase::<ImutExpr>::None.ast_eq(&DefaultCase::None));
+        assert!(DefaultCase::One(imut_expr()).ast_eq(&DefaultCase::One(imut_expr())));
+        assert!(DefaultCase::Many {
+            exprs: vec![],
+            last_expr: Box::new(imut_expr())
+        }
+        .ast_eq(&DefaultCase::Many {
+            exprs: vec![],
+            last_expr: Box::new(imut_expr())
+        }));
+    }
+    #[test]
+    fn recur_eq_test() {
+        let e: crate::ast::ImutExprs = vec![imut_expr()];
         let recur1 = Recur {
             mid: 1,
             argc: 2,
@@ -1019,7 +1102,6 @@ mod tests {
         assert!(recur1.ast_eq(&recur2));
         recur2.open = false;
         assert!(!recur1.ast_eq(&recur2));
-        Ok(())
     }
 
     #[test]

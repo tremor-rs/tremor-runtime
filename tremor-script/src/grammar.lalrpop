@@ -380,7 +380,7 @@ AndExprImut: ImutExprRaw<'input> = {
 
 /// Bitwise or
 BitOrExprImut: ImutExprRaw<'input> = {
-    <o:BinOp<BinBitOr, BitOrExprImut, BitXorExprImut>> => <>,
+//    <o:BinOp<BinBitOr, BitOrExprImut, BitXorExprImut>> => <>,
     BitXorExprImut => <>,
 }
 
@@ -1243,9 +1243,9 @@ BinXor: BinOpKind = {
 BinAnd: BinOpKind = {
     "and" => BinOpKind::And,
 }
-BinBitOr: BinOpKind = {
-    "|" => BinOpKind::BitOr,
-}
+// BinBitOr: BinOpKind = {
+//    "|" => BinOpKind::BitOr,
+// }
 BinBitXor: BinOpKind = {
     "^" => BinOpKind::BitXor,
 }
@@ -1343,7 +1343,7 @@ extern {
         ">>>" => Token::RBitShiftUnsigned,
         "<<" => Token::LBitShift,
         "!" => Token::BitNot,
-        "|" => Token::BitOr,
+//        "|" => Token::BitOr,
         "^" => Token::BitXor,
         "&" => Token::BitAnd,
         "+" => Token::Add,

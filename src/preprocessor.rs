@@ -502,7 +502,8 @@ mod test {
             }
         }
 
-            fn textual_length_pre_post(length in 1..100_usize) {
+        #[test]
+        fn textual_length_pre_post(length in 1..100_usize) {
             let data = vec![1_u8; length];
             let mut pre_p = pre::TextualLength::default();
             let mut post_p = post::TextualLength::default();
@@ -821,7 +822,7 @@ mod test {
     fn test_gzip() -> Result<()> {
         let int = "snot".as_bytes();
         assert_simple_symmetric!(int, Gzip, "gzip");
-        assert_decompress!(int, Lz4, "lz4");
+        assert_decompress!(int, Gzip, "gzip");
         Ok(())
     }
 
@@ -829,7 +830,7 @@ mod test {
     fn test_zlib() -> Result<()> {
         let int = "snot".as_bytes();
         assert_simple_symmetric!(int, Zlib, "zlib");
-        assert_decompress!(int, Lz4, "lz4");
+        assert_decompress!(int, Zlib, "zlib");
         Ok(())
     }
 
@@ -837,7 +838,7 @@ mod test {
     fn test_snappy() -> Result<()> {
         let int = "snot".as_bytes();
         assert_simple_symmetric!(int, Snappy, "snap");
-        assert_decompress!(int, Lz4, "lz4");
+        assert_decompress!(int, Snappy, "snap");
         Ok(())
     }
 
@@ -845,7 +846,7 @@ mod test {
     fn test_xz2() -> Result<()> {
         let int = "snot".as_bytes();
         assert_simple_symmetric!(int, Xz2, "xz2");
-        assert_decompress!(int, Lz4, "lz4");
+        assert_decompress!(int, Xz2, "xz2");
         Ok(())
     }
 

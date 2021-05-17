@@ -15,6 +15,7 @@
 // Copyright of original code is with original authors. Source cited below:
 // [libsyntax_pos]: https://github.com/rust-lang/rust/blob/master/src/libsyntax_pos/lib.rs
 
+use super::lexer::Token;
 pub use codespan::{
     ByteIndex as BytePos, ByteOffset, ColumnIndex as Column, ColumnOffset, LineIndex as Line,
     LineOffset,
@@ -94,12 +95,12 @@ pub(crate) fn span(start: Location, end: Location, pp_start: Location, pp_end: L
 }
 
 /// A Spanned element, position plus element
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Default)]
-pub struct Spanned<T> {
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct Spanned<'tkn> {
     /// The span
     pub span: Span,
     /// The token
-    pub value: T,
+    pub value: Token<'tkn>,
 }
 
 /// A range in a file between two locations
@@ -118,6 +119,11 @@ impl Range {
     #[must_use]
     pub fn cu(self) -> usize {
         self.0.unit_id
+    }
+}
+impl From<Span> for Range {
+    fn from(s: Span) -> Self {
+        Range::from((s.start, s.end))
     }
 }
 
