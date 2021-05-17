@@ -525,6 +525,42 @@ where
         task::Builder::new().name(name).spawn(manager.run())?;
         Ok(tx)
     }
+
+    fn make_error(&self, e: &Error, original_id: u64) -> tremor_script::LineValue {
+        error!(
+            "[Source::{}] Error decoding event data: {}",
+            self.source_id, e
+        );
+        let mut meta = Object::with_capacity(1);
+        meta.insert_nocheck("error".into(), e.to_string().into());
+
+        let mut data = Object::with_capacity(3);
+        data.insert_nocheck("error".into(), e.to_string().into());
+        data.insert_nocheck("event_id".into(), original_id.into());
+        data.insert_nocheck("source_id".into(), self.source_id.to_string().into());
+        (Value::from(data), Value::from(meta)).into()
+    }
+
+    async fn route_result(
+        &mut self,
+        results: Vec<Result<tremor_script::LineValue>>,
+        original_id: u64,
+        ingest_ns: u64,
+        origin_uri: EventOriginUri,
+    ) -> bool {
+        let mut error = false;
+        for result in results {
+            let (port, data) = result.map_or_else(
+                |e| (ERR, self.make_error(&e, original_id)),
+                |data| (OUT, data),
+            );
+            error |= self
+                .transmit_event(data, ingest_ns, origin_uri.clone(), port)
+                .await;
+        }
+        error
+    }
+
     #[allow(clippy::too_many_lines)]
     async fn run(mut self) -> Result<()> {
         loop {
@@ -557,7 +593,7 @@ where
                         for (data, meta_data) in batch_data {
                             origin_uri.maybe_set_uid(self.uid);
                             let mut ingest_ns = nanotime();
-                            let mut error = false;
+
                             let original_id = self.id;
                             let results = self
                                 .make_event_data(
@@ -572,39 +608,9 @@ where
                                 self.source.on_empty_event(original_id, stream).await?;
                             }
 
-                            for result in results {
-                                let (port, data) = match result {
-                                    Ok(d) => (OUT, d),
-                                    Err(e) => {
-                                        error!(
-                                            "[Source::{}] Error decoding event data: {}",
-                                            self.source_id, e
-                                        );
-                                        let mut error_meta = Object::with_capacity(1);
-                                        error_meta
-                                            .insert_nocheck("error".into(), e.to_string().into());
-
-                                        let mut error_data = Object::with_capacity(3);
-                                        error_data
-                                            .insert_nocheck("error".into(), e.to_string().into());
-                                        error_data
-                                            .insert_nocheck("event_id".into(), original_id.into());
-                                        error_data.insert_nocheck(
-                                            "source_id".into(),
-                                            self.source_id.to_string().into(),
-                                        );
-                                        (
-                                            ERR,
-                                            (Value::from(error_data), Value::from(error_meta))
-                                                .into(),
-                                        )
-                                    }
-                                };
-                                error |= self
-                                    .transmit_event(data, ingest_ns, origin_uri.clone(), port)
-                                    .await;
-                            }
-
+                            let error = self
+                                .route_result(results, original_id, ingest_ns, origin_uri.clone())
+                                .await;
                             // We ONLY fail on transmit errors as preprocessor errors might be
                             // problematic
                             if error {
@@ -621,7 +627,7 @@ where
                     }) => {
                         origin_uri.maybe_set_uid(self.uid);
                         let mut ingest_ns = nanotime();
-                        let mut error = false;
+
                         let original_id = self.id;
                         let results = self
                             .make_event_data(
@@ -636,35 +642,10 @@ where
                             self.source.on_empty_event(original_id, stream).await?;
                         }
 
-                        for result in results {
-                            let (port, data) = match result {
-                                Ok(d) => (OUT, d),
-                                Err(e) => {
-                                    error!(
-                                        "[Source::{}] Error decoding event data: {}",
-                                        self.source_id, e
-                                    );
-                                    let mut error_meta = Object::with_capacity(1);
-                                    error_meta.insert_nocheck("error".into(), e.to_string().into());
+                        let error = self
+                            .route_result(results, original_id, ingest_ns, origin_uri)
+                            .await;
 
-                                    let mut error_data = Object::with_capacity(3);
-                                    error_data.insert_nocheck("error".into(), e.to_string().into());
-                                    error_data
-                                        .insert_nocheck("event_id".into(), original_id.into());
-                                    error_data.insert_nocheck(
-                                        "source_id".into(),
-                                        self.source_id.to_string().into(),
-                                    );
-                                    (
-                                        ERR,
-                                        (Value::from(error_data), Value::from(error_meta)).into(),
-                                    )
-                                }
-                            };
-                            error |= self
-                                .transmit_event(data, ingest_ns, origin_uri.clone(), port)
-                                .await;
-                        }
                         // We ONLY fail on transmit errors as preprocessor errors might be
                         // problematic
                         if error {
