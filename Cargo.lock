@@ -5035,13 +5035,14 @@ checksum = "0f0242b8e50dd9accdd56170e94ca1ebd223b098eb9c83539a6e367d0f36ae68"
 
 [[package]]
 name = "simd-json"
-version = "0.4.4"
+version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8a67f0d979df8d7f959397936199e21826cfe5b935b5c06c5763139fbe7e673d"
+checksum = "3fb185479883bd6c0d8a8c196bbe5d87bcfe26d9a2177c6946a80ebd94ae1ffd"
 dependencies = [
  "halfbrown",
  "serde",
  "serde_json",
+ "simdutf8",
  "value-trait",
 ]
 
@@ -5070,6 +5071,12 @@ dependencies = [
  "simd-json",
  "syn 1.0.64",
 ]
+
+[[package]]
+name = "simdutf8"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c970da16e7c682fa90a261cf0724dee241c9f7831635ecc4e988ae8f3b505559"
 
 [[package]]
 name = "simple-mutex"
