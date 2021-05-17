@@ -16,8 +16,8 @@ use std::{fmt, fmt::Display, sync::Arc};
 
 use crate::{
     common_cow,
-    errors::ErrorKind,
     errors::Result,
+    errors::{Error, ErrorKind},
     influx_value,
     op::{prelude::IN, trickle::select::WindowImpl},
     ConfigMap, ExecPortIndexMap, NodeLookupFn,
@@ -25,6 +25,7 @@ use crate::{
 use crate::{op::EventAndInsights, Event, NodeKind, Operator};
 use beef::Cow;
 use halfbrown::HashMap;
+use tremor_common::stry;
 use tremor_script::{query::StmtRentalWrapper, Value};
 
 /// Configuration for a node
@@ -36,19 +37,21 @@ pub struct NodeConfig {
     pub(crate) config: ConfigMap,
     pub(crate) defn: Option<Arc<StmtRentalWrapper>>,
     pub(crate) node: Option<Arc<StmtRentalWrapper>>,
+    pub(crate) label: Option<String>,
 }
 
 impl Display for NodeConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.kind {
-            NodeKind::Input => write!(f, "--> {}", self.id),
-            NodeKind::Output => write!(f, "{} -->", self.id),
-            NodeKind::Operator => write!(f, "{}", self.id),
-        }
+        write!(f, "{}", self.label())
     }
 }
 
 impl NodeConfig {
+    fn label(&self) -> &str {
+        let dflt: &str = &self.id;
+        self.label.as_deref().unwrap_or(dflt)
+    }
+
     /// Creates a `NodeConfig` from a config struct
     pub fn from_config<C, I>(id: I, config: C) -> Result<Self>
     where
@@ -60,10 +63,8 @@ impl NodeConfig {
         Ok(NodeConfig {
             id: id.into(),
             kind: NodeKind::Operator,
-            op_type: "".into(),
             config: serde_yaml::from_slice(&config)?,
-            defn: None,
-            node: None,
+            ..NodeConfig::default()
         })
     }
 }
@@ -347,7 +348,7 @@ impl ExecutableGraph {
             .iter()
             .enumerate()
             .filter_map(|(id, e)| {
-                if e.skippable() && e.kind == NodeKind::Operator {
+                if e.skippable() && e.kind.skippable() {
                     Some(id)
                 } else {
                     None
@@ -425,6 +426,9 @@ impl ExecutableGraph {
         Some(did_chage)
     }
     /// This is a performance critial function!
+    ///
+    /// # Errors
+    /// Errors if the event can not be processed, or an operator fails
     pub fn enqueue(
         &mut self,
         stream_name: &str,
@@ -432,24 +436,29 @@ impl ExecutableGraph {
         returns: &mut Returns,
     ) -> Result<()> {
         // Resolve the input stream or entrypoint for this enqueue operation
-        if let Some(ival) = self.metric_interval {
-            if event.ingest_ns - self.last_metrics > ival {
-                let mut tags = HashMap::new();
-                tags.insert("pipeline".into(), common_cow(&self.id).into());
-                self.enqueue_metrics("events", tags, event.ingest_ns);
-                self.last_metrics = event.ingest_ns;
-            }
+        if self
+            .metric_interval
+            .map(|ival| event.ingest_ns - self.last_metrics > ival)
+            .unwrap_or_default()
+        {
+            let mut tags = HashMap::with_capacity(8);
+            tags.insert("pipeline".into(), common_cow(&self.id).into());
+            self.enqueue_metrics("events", tags, event.ingest_ns);
+            self.last_metrics = event.ingest_ns;
         }
-        let input = *self.inputs.get(stream_name).ok_or_else(|| {
-            ErrorKind::InvalidInputStreamName(stream_name.to_owned(), self.id.clone())
-        })?;
+        let input = *stry!(self.inputs.get(stream_name).ok_or_else(|| {
+            Error::from(ErrorKind::InvalidInputStreamName(
+                stream_name.to_owned(),
+                self.id.clone(),
+            ))
+        }));
         self.stack.push((input, IN, event));
         self.run(returns)
     }
 
     #[inline]
     fn run(&mut self, returns: &mut Returns) -> Result<()> {
-        while self.next(returns)? {}
+        while stry!(self.next(returns)) {}
         returns.reverse();
         Ok(())
     }
@@ -460,28 +469,27 @@ impl ExecutableGraph {
             // If we have emitted a signal event we got to handle it as a signal flow
             // the signal flow will
             if event.kind.is_some() {
-                self.signalflow(event)?;
-                return Ok(!self.stack.is_empty());
-            }
-
-            // count ingres
-            let node = unsafe { self.graph.get_unchecked_mut(idx) };
-            if node.kind == NodeKind::Output {
-                returns.push((node.id.clone(), event));
+                stry!(self.signalflow(event));
             } else {
-                // ALLOW: We know the state was initiated
-                let state = unsafe { self.state.ops.get_unchecked_mut(idx) };
-                let EventAndInsights { events, insights } =
-                    node.on_event(0, &port, state, event)?;
+                // count ingres
+                let node = unsafe { self.graph.get_unchecked_mut(idx) };
+                if let NodeKind::Output(port) = &node.kind {
+                    returns.push((port.clone(), event));
+                } else {
+                    // ALLOW: We know the state was initiated
+                    let state = unsafe { self.state.ops.get_unchecked_mut(idx) };
+                    let EventAndInsights { events, insights } =
+                        stry!(node.on_event(0, &port, state, event));
 
-                for (out_port, _) in &events {
-                    unsafe { self.metrics.get_unchecked_mut(idx) }.inc_output(out_port);
-                }
-                for insight in insights {
-                    self.insights.push((idx, insight))
-                }
-                self.enqueue_events(idx, events);
-            };
+                    for (out_port, _) in &events {
+                        unsafe { self.metrics.get_unchecked_mut(idx) }.inc_output(out_port);
+                    }
+                    for insight in insights {
+                        self.insights.push((idx, insight))
+                    }
+                    self.enqueue_events(idx, events);
+                };
+            }
             Ok(!self.stack.is_empty())
         } else {
             error!("next was called on an empty graph stack, this should never happen");
@@ -533,16 +541,18 @@ impl ExecutableGraph {
     #[inline]
     fn enqueue_events(&mut self, idx: usize, events: Vec<(Cow<'static, str>, Event)>) {
         for (out_port, event) in events {
-            if let Some(outgoing) = self.port_indexes.get(&(idx, out_port)) {
-                if let Some((last, rest)) = outgoing.split_last() {
-                    for (idx, in_port) in rest {
-                        unsafe { self.metrics.get_unchecked_mut(*idx) }.inc_input(in_port);
-                        self.stack.push((*idx, in_port.clone(), event.clone()));
-                    }
-                    let (idx, in_port) = last;
+            if let Some((last, rest)) = self
+                .port_indexes
+                .get(&(idx, out_port))
+                .and_then(|o| o.split_last())
+            {
+                for (idx, in_port) in rest {
                     unsafe { self.metrics.get_unchecked_mut(*idx) }.inc_input(in_port);
-                    self.stack.push((*idx, in_port.clone(), event))
+                    self.stack.push((*idx, in_port.clone(), event.clone()));
                 }
+                let (idx, in_port) = last;
+                unsafe { self.metrics.get_unchecked_mut(*idx) }.inc_input(in_port);
+                self.stack.push((*idx, in_port.clone(), event))
             }
         }
     }
@@ -559,9 +569,13 @@ impl ExecutableGraph {
         insight
     }
     /// Enqueue a signal
+    ///
+    /// # Errors
+    /// if the singal fails to be processed in the singal flow or if any forward going
+    /// events spawned by this signal fail to be processed
     pub fn enqueue_signal(&mut self, signal: Event, returns: &mut Returns) -> Result<()> {
-        if self.signalflow(signal)? {
-            self.run(returns)?;
+        if stry!(self.signalflow(signal)) {
+            stry!(self.run(returns));
         }
         Ok(())
     }
@@ -576,11 +590,9 @@ impl ExecutableGraph {
             let EventAndInsights { events, insights } = {
                 let op = unsafe { self.graph.get_unchecked_mut(i) }; // We know this exists
                 let state = unsafe { self.state.ops.get_unchecked(i) }; // we know this has been initialized
-                op.on_signal(op.uid, state, &mut signal)?
+                stry!(op.on_signal(op.uid, state, &mut signal))
             };
-            for cf in insights {
-                self.insights.push((i, cf));
-            }
+            self.insights.extend(insights.into_iter().map(|cf| (i, cf)));
             has_events = has_events || !events.is_empty();
             self.enqueue_events(i, events);
         }
@@ -591,7 +603,10 @@ impl ExecutableGraph {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::op::{identity::PassthroughFactory, prelude::OUT};
+    use crate::op::{
+        identity::PassthroughFactory,
+        prelude::{METRICS, OUT},
+    };
     use std::{
         collections::hash_map::DefaultHasher,
         hash::{Hash, Hasher},
@@ -775,9 +790,9 @@ mod test {
         let mut in_n = pass(1, "in");
         in_n.kind = NodeKind::Input;
         let mut out_n = pass(2, "out");
-        out_n.kind = NodeKind::Output;
+        out_n.kind = NodeKind::Output(OUT);
         let mut metrics_n = pass(3, "metrics");
-        metrics_n.kind = NodeKind::Output;
+        metrics_n.kind = NodeKind::Output(METRICS);
 
         // The graph is in -> 1 -> 2 -> out, we pre-stack the edges since we do not
         // need to have order in here.
@@ -867,9 +882,9 @@ mod test {
         let mut in_n = pass(1, "in");
         in_n.kind = NodeKind::Input;
         let mut out_n = pass(2, "out");
-        out_n.kind = NodeKind::Output;
+        out_n.kind = NodeKind::Output(OUT);
         let mut metrics_n = pass(3, "metrics");
-        metrics_n.kind = NodeKind::Output;
+        metrics_n.kind = NodeKind::Output(METRICS);
 
         // The graph is in -> 1 -> 2 -> out, we pre-stack the edges since we do not
         // need to have order in here.

@@ -1,0 +1,3 @@
+Error: 
+    6 | event.snot
+      |       ^^^^ Conflicting types, got array but expected record

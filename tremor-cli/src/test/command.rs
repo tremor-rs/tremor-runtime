@@ -87,14 +87,13 @@ pub(crate) fn suite_command(
     let api_suites = api_suites.filter_map(std::result::Result::ok);
     for suite in api_suites {
         if let Some(suite_root) = suite.path().parent() {
-            let base_str = suite_root.to_str().unwrap_or_default();
             let base_tags = tag::resolve(base, suite_root)?;
 
             // Set cwd to test root
             let cwd = std::env::current_dir()?;
             file::set_current_dir(&suite_root)?;
 
-            let mut before = before::BeforeController::new(base_str);
+            let mut before = before::BeforeController::new(suite_root);
             let before_process = before.spawn()?;
             thread::spawn(move || {
                 if let Err(e) = before.capture(before_process) {
@@ -103,7 +102,7 @@ pub(crate) fn suite_command(
             });
 
             let suite_start = nanotime();
-            let command_str = slurp_string(&suite.path().to_string_lossy())?;
+            let command_str = slurp_string(&suite.path())?;
             let suite = serde_yaml::from_str::<CommandRun>(&command_str)?;
             let mut header_printed = false;
             for suite in suite.suites {
@@ -136,8 +135,8 @@ pub(crate) fn suite_command(
                             job::TargetProcess::new_with_stderr(&resolved_cmd, &args, &case.env)?;
                         let exit_status = fg_process.wait_with_output();
 
-                        let fg_out_file = format!("{}/fg.{}.out.log", base_str, counter);
-                        let fg_err_file = format!("{}/fg.{}.err.log", base_str, counter);
+                        let fg_out_file = suite_root.join(&format!("fg.{}.out.log", counter));
+                        let fg_err_file = suite_root.join(&format!("fg.{}.err.log", counter));
                         let start = nanotime();
                         fg_process.tail(&fg_out_file, &fg_err_file)?;
                         let elapsed = nanotime() - start;
@@ -178,11 +177,11 @@ pub(crate) fn suite_command(
                 status::hr();
             }
 
-            before::update_evidence(base_str, &mut evidence)?;
+            before::update_evidence(suite_root, &mut evidence)?;
 
-            let mut after = after::AfterController::new(base_str);
+            let mut after = after::AfterController::new(suite_root);
             after.spawn()?;
-            after::update_evidence(base_str, &mut evidence)?;
+            after::update_evidence(suite_root, &mut evidence)?;
 
             // Reset cwd
             file::set_current_dir(&cwd)?;
@@ -209,8 +208,8 @@ pub(crate) fn suite_command(
 }
 
 fn process_testcase(
-    stdout_path: &str,
-    stderr_path: &str,
+    stdout_path: &Path,
+    stderr_path: &Path,
     process_status: Option<i32>,
     duration: u64,
     spec: &CommandTest,

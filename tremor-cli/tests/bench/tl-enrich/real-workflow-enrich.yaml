@@ -7,7 +7,7 @@ onramp:
     type: blaster
     codec: string
     config:
-      source: ./demo/data/logs.txt.xz
+      source:  ../../../../demo/data/logs.txt.xz
 
 offramp:
   - id: blackhole

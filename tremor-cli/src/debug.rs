@@ -130,36 +130,19 @@ where
                         " {:<30}    \u{2219}    ",
                         format!("{:?}", value).split('(').collect::<Vec<&str>>()[0]
                     )?;
-                    h.highlight_no_linenos(
+                    h.highlight(
                         None,
                         &[Spanned {
                             span: Span { start, end, pp_start, pp_end },
                             value,
                         }],
+                        "",
+                        false,
+                        None
                     )?;
                 }
             }
     }
-
-    Ok(())
-}
-
-fn dbg_pp<W>(h: &mut W, opts: &Opts) -> Result<()>
-where
-    W: Highlighter,
-{
-    banner(
-        h,
-        opts,
-        "Lexemes",
-        "Lexical token stream after preprocessing",
-    )?;
-
-    let lexemes: Vec<_> = Tokenizer::new(&opts.raw).tokenize_until_err().collect();
-
-    dbg_tokens(h, lexemes)?;
-
-    h.reset()?;
 
     Ok(())
 }
@@ -173,6 +156,26 @@ where
         opts,
         "Lexemes",
         "Lexical token stream before preprocessing",
+    )?;
+
+    let lexemes: Vec<_> = Tokenizer::new(&opts.raw).tokenize_until_err().collect();
+
+    dbg_tokens(h, lexemes)?;
+
+    h.reset()?;
+
+    Ok(())
+}
+
+fn dbg_pp<W>(h: &mut W, opts: &Opts) -> Result<()>
+where
+    W: Highlighter,
+{
+    banner(
+        h,
+        opts,
+        "Lexemes",
+        "Lexical token stream after preprocessing",
     )?;
 
     let mut include_stack = lexer::IncludeStack::default();

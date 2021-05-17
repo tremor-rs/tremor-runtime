@@ -26,7 +26,7 @@ use rdkafka::{
     config::ClientConfig,
     consumer::{
         stream_consumer::{self, StreamConsumer},
-        CommitMode, Consumer, ConsumerContext,
+        CommitMode, Consumer, ConsumerContext, Rebalance,
     },
     error::{KafkaError, KafkaResult},
     message::{BorrowedMessage, Headers},
@@ -282,6 +282,39 @@ pub struct LoggingConsumerContext {
 impl ClientContext for LoggingConsumerContext {}
 
 impl ConsumerContext for LoggingConsumerContext {
+    fn post_rebalance(&self, rebalance: &Rebalance) {
+        match rebalance {
+            Rebalance::Assign(tpl) => {
+                let offset_strings: Vec<String> = tpl
+                    .elements()
+                    .iter()
+                    .map(|elem| {
+                        format!(
+                            "[Topic: {}, Partition: {}, Offset: {:?}]",
+                            elem.topic(),
+                            elem.partition(),
+                            elem.offset()
+                        )
+                    })
+                    .collect();
+                info!(
+                    "[Source::{}] Offsets: {}",
+                    self.onramp_id,
+                    offset_strings.join(" ")
+                );
+            }
+            Rebalance::Revoke => {
+                info!("[Source::{}] ALL partitions are REVOKED", self.onramp_id)
+            }
+            Rebalance::Error(err_info) => {
+                warn!(
+                    "[Source::{}] Post Rebalance error {}",
+                    self.onramp_id, err_info
+                )
+            }
+        }
+    }
+
     fn commit_callback(&self, result: KafkaResult<()>, offsets: &rdkafka::TopicPartitionList) {
         match result {
             Ok(_) => {

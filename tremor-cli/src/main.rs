@@ -39,7 +39,8 @@ use crate::util::{load_config, FormatKind, TremorApp};
 use async_std::task;
 use clap::App;
 use clap::{load_yaml, AppSettings, ArgMatches};
-use std::{ffi::OsStr, path::Path};
+use std::fs::File;
+use std::path::{Path, PathBuf};
 use tremor_common::file;
 // use tremor_runtime::errors;
 
@@ -58,25 +59,23 @@ mod server;
 pub(crate) mod status;
 mod test;
 mod util;
-use std::fs::File;
 
 pub(crate) fn open_file<S>(path: &S, base: Option<&String>) -> Result<File>
 where
-    S: AsRef<OsStr> + ?Sized,
+    S: AsRef<Path> + ?Sized,
 {
-    let path = Path::new(path);
-    match file::open(path) {
+    match file::open(&path) {
         Ok(f) => Ok(f),
         Err(tremor_common::Error::FileOpen(io_error, msg)) => {
             let msg = if let Some(base) = base {
-                let mut p = Path::new(base).to_path_buf();
+                let mut p = PathBuf::from(base);
                 p.push(path);
                 if let Ok(f) = file::open(&p) {
                     return Ok(f);
                 }
                 format!(
                     "Failed to open `{}` (or  `{}`)",
-                    path.to_str().unwrap_or("<unknown>"),
+                    path.as_ref().display(),
                     p.to_str().unwrap_or("<unknown>")
                 )
             } else {

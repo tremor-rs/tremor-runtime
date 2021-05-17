@@ -639,6 +639,9 @@ where
     'event: 'run,
 {
     /// Runs the script and evaluates to a resulting event
+    ///
+    /// # Errors
+    /// on runtime errors
     pub fn run(
         &'script self,
         context: &'run crate::EventContext,
@@ -1181,6 +1184,9 @@ impl<'script> Invocable<'script> {
         }
     }
     /// Invokes this invocable
+    ///
+    /// # Errors
+    /// if the funciton fails to be invoked
     pub fn invoke<'event, 'run>(
         &'script self,
         env: &'run Env<'run, 'event, 'script>,

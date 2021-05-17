@@ -128,13 +128,17 @@ fi
 
 %{_bindir}/*
 
+# user directory for tremor-script modules and libraries
+%dir %{_usr}/local/share/tremor
+
 %doc %{_datadir}/doc/%{name}/README.md
 %license %{_datadir}/licenses/%{name}/LICENSE
 
 %config(noreplace) %{_sysconfdir}/%{name}/logger.yaml
 %config %{_sysconfdir}/%{name}/config/*
 
-%dir %{_usr}/lib/tremor
-%{_usr}/lib/tremor/*
+# tremor-script stdlib folder
+%dir %{_usr}/share/tremor
+%{_usr}/share/tremor/*
 
 %{_unitdir}/tremor.service

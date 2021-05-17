@@ -25,6 +25,7 @@ use crate::util::slurp_string;
 use globwalk::GlobWalkerBuilder;
 use std::collections::HashMap;
 use std::path::Path;
+use std::process::ExitStatus;
 use tremor_common::{file::canonicalize, time::nanotime};
 
 #[allow(clippy::too_many_lines)]
@@ -60,21 +61,23 @@ pub(crate) fn run_process(
         .map(|x| (*x).to_string())
         .chain(artefacts)
         .collect();
+
     let process_start = nanotime();
-    let bench_root = bench_root.to_string_lossy();
+
     let mut before = before::BeforeController::new(&bench_root);
     let before_process = before.spawn()?;
-    let bench_rootx = bench_root.to_string();
+
+    let bench_rootx = bench_root.to_path_buf();
 
     let mut process =
         job::TargetProcess::new_with_stderr(&job::which("tremor")?, &args, &HashMap::default())?;
     let process_status = process.wait_with_output()?;
 
-    let fg_out_file = format!("{}/fg.out.log", bench_root);
-    let fg_err_file = format!("{}/fg.err.log", bench_root);
-    let fg = std::thread::spawn(move || -> Result<std::process::ExitStatus> {
-        let fg_out_file = format!("{}/fg.out.log", bench_rootx);
-        let fg_err_file = format!("{}/fg.err.log", bench_rootx);
+    let fg_out_file = bench_rootx.join("fg.out.log");
+    let fg_err_file = bench_rootx.join("fg.err.log");
+    let fg = std::thread::spawn(move || -> Result<ExitStatus> {
+        let fg_out_file = bench_rootx.join("fg.out.log");
+        let fg_err_file = bench_rootx.join("fg.err.log");
         process.tail(&fg_out_file, &fg_err_file)?;
         process.wait_with_output()
     });
@@ -97,9 +100,9 @@ pub(crate) fn run_process(
     after.spawn()?;
     after::update_evidence(&bench_root, &mut evidence)?;
     // Assertions
-    let assert_str = &format!("{}/assert.yaml", bench_root);
-    let report = if Path::new(assert_str).is_file() {
-        let assert_yaml = assert::load_assert(assert_str)?;
+    let assert_path = bench_root.join("assert.yaml");
+    let report = if (&assert_path).is_file() {
+        let assert_yaml = assert::load_assert(&assert_path)?;
         Some(assert::process(
             &fg_out_file,
             &fg_err_file,

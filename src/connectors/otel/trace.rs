@@ -66,8 +66,8 @@ pub(crate) fn span_events_to_pb(json: Option<&Value<'_>>) -> Result<Vec<Event>> 
             let dropped_attributes_count: u32 =
                 pb::maybe_int_to_pbu32(json.get("dropped_attributes_count"))?;
             pb.push(Event {
-                name,
                 time_unix_nano,
+                name,
                 attributes,
                 dropped_attributes_count,
             })
@@ -102,8 +102,8 @@ pub(crate) fn span_links_to_pb(json: Option<&Value<'_>>) -> Result<Vec<Link>> {
             let dropped_attributes_count: u32 =
                 pb::maybe_int_to_pbu32(json.get("dropped_attributes_count"))?;
             pb.push(Link {
-                span_id,
                 trace_id,
+                span_id,
                 trace_state,
                 attributes,
                 dropped_attributes_count,
@@ -204,21 +204,21 @@ pub(crate) fn instrumentation_library_spans_to_pb(
                         let events = span_events_to_pb(span.get("events"))?;
                         let links = span_links_to_pb(span.get("links"))?;
                         spans.push(Span {
-                            status,
+                            trace_id,
+                            span_id,
+                            trace_state,
+                            parent_span_id,
+                            name,
                             kind,
                             start_time_unix_nano,
                             end_time_unix_nano,
-                            name,
-                            trace_id,
-                            parent_span_id,
-                            span_id,
-                            trace_state,
                             attributes,
                             dropped_attributes_count,
                             events,
                             dropped_events_count,
                             links,
                             dropped_links_count,
+                            status,
                         });
                     }
                 }

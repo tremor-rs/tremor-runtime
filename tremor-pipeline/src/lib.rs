@@ -23,8 +23,10 @@
     clippy::unnecessary_unwrap,
     clippy::pedantic
 )]
-#![allow(clippy::forget_copy)] // TODO needed for simd json derive
-#![allow(clippy::missing_errors_doc)]
+// TODOthis is needed due to a false positive in clippy
+// https://github.com/rust-lang/rust/issues/83125
+// we will need this in 1.52.0
+// #![allow(proc_macro_back_compat)]
 
 #[macro_use]
 extern crate serde_derive;
@@ -195,14 +197,24 @@ pub(crate) fn common_cow(s: &str) -> beef::Cow<'static, str> {
 }
 
 /// Type of nodes
-#[derive(Debug, Copy, Clone, Ord, PartialOrd, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Ord, PartialOrd, PartialEq, Eq, Hash)]
 pub enum NodeKind {
     /// An input, this is the one end of the graph
     Input,
     /// An output, this is the other end of the graph
-    Output,
+    Output(Cow<'static, str>),
     /// An operator
     Operator,
+    /// A select statement
+    Select,
+    /// A Script statement
+    Script,
+}
+
+impl NodeKind {
+    fn skippable(&self) -> bool {
+        matches!(self, Self::Operator | Self::Select | Self::Script)
+    }
 }
 
 impl Default for NodeKind {
@@ -738,7 +750,25 @@ pub fn influx_value(
     })
 }
 
-pub(crate) type ConfigGraph = graph::DiGraph<NodeConfig, u8>;
+#[derive(Debug, Default)]
+struct Connection {
+    from: Cow<'static, str>,
+    to: Cow<'static, str>,
+}
+impl Display for Connection {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+        let from: &str = &self.from;
+        let to: &str = &self.to;
+        match (from, to) {
+            ("out", "in") => write!(f, ""),
+            ("out", to) => write!(f, "{}", to),
+            (from, "in") => write!(f, "{} ", from),
+            (from, to) => write!(f, "{} -> {}", from, to),
+        }
+    }
+}
+
+pub(crate) type ConfigGraph = graph::DiGraph<NodeConfig, Connection>;
 
 #[cfg(test)]
 mod test {

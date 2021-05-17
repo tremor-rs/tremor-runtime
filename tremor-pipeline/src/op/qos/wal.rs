@@ -424,7 +424,7 @@ impl Operator for Wal {
         } else {
             self.read_events(now)?
         };
-        Ok(EventAndInsights { insights, events })
+        Ok(EventAndInsights { events, insights })
     }
 
     fn on_event(
@@ -456,7 +456,7 @@ impl Operator for Wal {
         } else {
             self.read_events(ingest_ns)?
         };
-        Ok(EventAndInsights { insights, events })
+        Ok(EventAndInsights { events, insights })
     }
 }
 

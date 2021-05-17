@@ -22,8 +22,10 @@
     clippy::unnecessary_unwrap,
     clippy::pedantic
 )]
-// TODO We need this for simd-json-derive
-#![allow(clippy::missing_errors_doc)]
+// TODO this is needed due to a false positive in clippy
+// https://github.com/rust-lang/rust/issues/83125
+// we will need this in 1.52.0
+// #![allow(proc_macro_back_compat)]
 
 /// The Tremor Script AST
 pub mod ast;
@@ -238,6 +240,9 @@ impl rentals::Value {
     /// to modify its content by adding the owned parts of
     /// `other` into the owned part `self` and the running
     /// a merge function on the borrowed parts
+    ///
+    /// # Errors
+    /// if `join_f` errors
     pub fn consume<'run, E, F>(&'run mut self, other: Self, join_f: F) -> Result<(), E>
     where
         E: std::error::Error,

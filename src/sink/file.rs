@@ -79,7 +79,7 @@ impl Sink for File {
         if let Some(file) = &mut self.file {
             for value in event.value_iter() {
                 let raw = codec.encode(value)?;
-                let packets = postprocess(&mut self.postprocessors, event.ingest_ns, raw.to_vec())?;
+                let packets = postprocess(&mut self.postprocessors, event.ingest_ns, raw)?;
                 for packet in packets {
                     file.write_all(&packet).await?;
                     file.write_all(b"\n").await?;

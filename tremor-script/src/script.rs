@@ -20,7 +20,7 @@ pub use crate::interpreter::AggrType;
 use crate::lexer;
 use crate::parser::g as grammar;
 use crate::path::ModulePath;
-use crate::pos::{Range, Spanned};
+use crate::pos::Range;
 use crate::registry::{Aggr as AggrRegistry, Registry};
 use crate::Value;
 use serde::Serialize;
@@ -91,6 +91,9 @@ where
     'event: 'run,
 {
     /// Parses a string and turns it into a script
+    ///
+    /// # Errors
+    /// if the script can not be parsed
     pub fn parse(
         module_path: &ModulePath,
         file_name: &str,
@@ -146,16 +149,20 @@ where
     }
 
     /// Highlights a script with a given highlighter.
+    /// # Errors
+    /// on io errors
     #[cfg(not(tarpaulin_include))]
     pub fn highlight_script_with<H: Highlighter>(script: &str, h: &mut H) -> io::Result<()> {
         let tokens: Vec<_> = lexer::Tokenizer::new(&script)
             .tokenize_until_err()
             .collect();
-        h.highlight(None, &tokens)?;
+        h.highlight(None, &tokens, "", true, None)?;
         io::Result::Ok(())
     }
 
     /// Highlights a script range with a given highlighter and line indents.
+    /// # Errors
+    /// on io errors
     #[cfg(not(tarpaulin_include))]
     pub fn highlight_script_with_range<H: Highlighter>(
         script: &str,
@@ -166,6 +173,8 @@ where
     }
 
     /// Highlights a script range with a given highlighter.
+    /// # Errors
+    /// on io errors
     #[cfg(not(tarpaulin_include))]
     pub fn highlight_script_with_range_indent<H: Highlighter>(
         line_prefix: &str,
@@ -188,24 +197,13 @@ where
         .filter_map(Result::ok)
         .collect();
 
-        let tokens: Vec<_> = tokens
-            .into_iter()
-            .filter(|t| {
-                let s = r.0;
-                let e = r.1;
-                // t.span.start.unit_id == s.unit_id && t.span.start.column >=  s.column && t.span.start.line >= s.line &&
-                t.span.start.unit_id == s.unit_id
-                    && t.span.start.line() >= s.line()
-                    && t.span.end.unit_id == e.unit_id
-                    && t.span.end.line() <= e.line()
-            })
-            .collect::<Vec<Spanned<lexer::Token>>>();
-
-        h.highlight_indent(line_prefix, None, tokens.as_slice())?;
+        h.highlight(None, &tokens, line_prefix, true, Some(r))?;
         io::Result::Ok(())
     }
 
     /// Format an error given a script source.
+    /// # Errors
+    /// on io errors
     pub fn format_error_from_script<H: Highlighter>(
         script: &str,
         h: &mut H,
@@ -221,24 +219,25 @@ where
         error: &Error,
         cus: &[lexer::CompilationUnit],
     ) -> io::Result<()> {
-        if let (Some(Range(start, end)), _) = error.context() {
+        if let (Some(r), _) = error.context() {
             let cu = error.cu();
             if cu == 0 {
                 // i wanna use map_while here, but it is still unstable :(
                 let tokens: Vec<_> = lexer::Tokenizer::new(&script)
                     .tokenize_until_err()
                     .collect();
-                h.highlight_runtime_error(None, &tokens, start, end, Some(error.into()))?;
+                h.highlight_error(None, &tokens, "", true, Some(r), Some(error.into()))?;
             } else if let Some(cu) = cus.get(cu) {
                 let script = std::fs::read_to_string(cu.file_path())?;
                 let tokens: Vec<_> = lexer::Tokenizer::new(&script)
                     .tokenize_until_err()
                     .collect();
-                h.highlight_runtime_error(
+                h.highlight_error(
                     cu.file_path().to_str(),
                     &tokens,
-                    start,
-                    end,
+                    "",
+                    true,
+                    Some(r),
                     Some(error.into()),
                 )?;
             } else {
@@ -251,12 +250,14 @@ where
     }
 
     /// Format warnings with the given `Highligher`.
+    /// # Errors
+    /// on io errors
     pub fn format_warnings_with<H: Highlighter>(&self, h: &mut H) -> io::Result<()> {
         for w in self.warnings() {
             let tokens: Vec<_> = lexer::Tokenizer::new(&self.source)
                 .tokenize_until_err()
                 .collect();
-            h.highlight_runtime_error(None, &tokens, w.outer.0, w.outer.1, Some(w.into()))?;
+            h.highlight_error(None, &tokens, "", true, Some(w.outer), Some(w.into()))?;
         }
         h.finalize()
     }
@@ -273,12 +274,18 @@ where
     }
 
     /// Formats an error within this script using a given highlighter
+    ///
+    /// # Errors
+    /// on io errors
     pub fn format_error_with<H: Highlighter>(&self, h: &mut H, e: &Error) -> io::Result<()> {
         let cus = &self.script.suffix().node_meta.cus;
         Self::format_error_from_script_and_cus(&self.source, h, e, cus)
     }
 
     /// Runs an event through this script
+    ///
+    /// # Errors
+    /// if the script fails to run for the given context, event state and metadata
     pub fn run(
         &'script self,
         context: &'run EventContext,

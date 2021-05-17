@@ -49,6 +49,9 @@ where
     'event: 'run,
 {
     /// Evaluates the expression
+    ///
+    /// # Errors
+    /// if evaluation fails
     #[inline]
     pub fn run(
         &'script self,
@@ -75,6 +78,9 @@ where
     }
 
     /// Evaluates the expression to a string.
+    /// # Errors
+    /// if the resulting value can not be represented as a str or the evaluation fails
+
     #[inline]
     pub fn eval_to_string(
         &'script self,
@@ -97,6 +103,9 @@ where
     ///
     /// # Note
     /// This method explicitly *does not* check whether the resulting index is in range of the array.
+    ///
+    /// # Errors
+    /// if the resulting value can not be represented as a usize or the evaluation fails
     #[inline]
     pub fn eval_to_index<Expr>(
         &'script self,
@@ -120,6 +129,9 @@ where
     #[allow(clippy::clippy::too_many_lines)]
     #[inline]
     /// Invokes expression
+    ///
+    /// # Errors
+    /// on any runtime error
     pub fn run(
         &'script self,
         opts: ExecOpts,

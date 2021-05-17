@@ -6,6 +6,8 @@
 - Change format of KV offramp responses to a more unified structure.
 - Add `KnownKey::map_*` functions to directly work on the `Value::Object`s inner `HashMap`, if available.
 - Add `HEALTHCHECK` to Dockerfiles
+- Improve printing for dot files
+- Scan sub directories of ${CFG_DIR} for config files.
 
 ### Fixes
 
@@ -14,6 +16,12 @@
 - Fix empty record pattern to only match records.
 - Fix ws offramp not reconnecting after connection loss.
 - Run tests in tremor-cli bin
+- Switch operations of `tremor dbg lex` and `tremor dbg preprocess` as they did the job of the other.
+- Fix heredoc preprocessing, which was messing up error reporting
+- Fix false positives in cycle detection
+- Include `cncf::otel` stdlib sources in deb package
+- Add `/usr/local/share/tremor` to default `TREMOR_PATH` also for all packages as a well-known directory for custom tremor-script libraries and modules.
+- Record the partition number assigned during rebalancing when running Kafka.
 
 ## 0.11.1
 
@@ -41,6 +49,7 @@
 - Fix windowed select queries not tracking the Events that constitute an outgoing aggregated event
 - Avoid several offramps to swallow fail insights.
 - Send correlation metadata for send error events in elastic sink
+- Record the partition number assigned during rebalancing when running Kafka.
 
 ## 0.11.0
 

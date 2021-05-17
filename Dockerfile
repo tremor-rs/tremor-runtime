@@ -1,4 +1,4 @@
-FROM rust:1.50.0 as builder
+FROM rust:1.51.0 as builder
 
 # Avoid warnings by switching to noninteractive
 ENV DEBIAN_FRONTEND=noninteractive
@@ -58,8 +58,8 @@ RUN apt-get update \
 COPY --from=builder /app/target/release/tremor /tremor
 
 # stdlib
-RUN mkdir -p /opt/local/tremor/lib
-COPY tremor-script/lib /opt/local/tremor/lib
+RUN mkdir -p /usr/share/tremor/lib
+COPY tremor-script/lib /usr/share/tremor/lib
 
 # Entrypoint
 COPY docker/entrypoint.sh /entrypoint.sh
@@ -69,7 +69,10 @@ COPY docker/config /etc/tremor/config
 # logger configuration
 COPY docker/logger.yaml /etc/tremor/logger.yaml
 
-ENV TREMOR_PATH=/opt/local/tremor/lib
+# setting TREMOR_PATH
+# /usr/local/share/tremor - for host-specific local tremor-script modules and libraries, takes precedence
+# /usr/share/tremor/lib - place for the tremor-script stdlib
+ENV TREMOR_PATH="/usr/local/share/tremor:/usr/share/tremor/lib"
 
 ENTRYPOINT ["/entrypoint.sh"]
 

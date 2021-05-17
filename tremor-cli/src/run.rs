@@ -25,16 +25,13 @@ use tremor_runtime::codec::Codec;
 use tremor_runtime::postprocessor::Postprocessor;
 use tremor_runtime::preprocessor::Preprocessor;
 use tremor_script::highlighter::Error as HighlighterError;
+use tremor_script::highlighter::{Highlighter, Term as TermHighlighter};
 use tremor_script::prelude::*;
 use tremor_script::query::Query;
 use tremor_script::script::{AggrType, Return, Script};
 use tremor_script::{
     ctx::{EventContext, EventOriginUri},
     lexer::Tokenizer,
-};
-use tremor_script::{
-    highlighter::{Highlighter, Term as TermHighlighter},
-    lexer::Range,
 };
 use tremor_script::{LineValue, Value, ValueAndMeta};
 struct Ingress {
@@ -264,18 +261,19 @@ fn run_tremor_source(matches: &ArgMatches, src: String) -> Result<()> {
                     ) {
                         Ok(r) => egress.process(&src, &event, r),
                         Err(e) => {
-                            if let (Some(Range(start, end)), _) = e.context() {
+                            if let (Some(r), _) = e.context() {
                                 let mut inner = TermHighlighter::stderr();
                                 let mut input = raw.clone();
                                 input.push('\n'); // for nicer highlighting
                                 let tokens: Vec<_> =
                                     Tokenizer::new(&input).tokenize_until_err().collect();
 
-                                if let Err(highlight_error) = inner.highlight_runtime_error(
+                                if let Err(highlight_error) = inner.highlight_error(
                                     Some(&src),
                                     &tokens,
-                                    start,
-                                    end,
+                                    "",
+                                    true,
+                                    Some(r),
                                     Some(HighlighterError::from(&e)),
                                 ) {
                                     eprintln!(
@@ -365,18 +363,19 @@ fn run_trickle_source(matches: &ArgMatches, src: String) -> Result<()> {
                 match e.0 {
                     tremor_pipeline::errors::ErrorKind::Script(script_kind) => {
                         let script_error: tremor_script::errors::Error = script_kind.into();
-                        if let (Some(Range(start, end)), _) = script_error.context() {
+                        if let (Some(r), _) = script_error.context() {
                             let mut inner = TermHighlighter::stderr();
                             let mut input = raw.clone();
                             input.push('\n'); // for nicer highlighting
                             let tokens: Vec<_> =
                                 Tokenizer::new(&input).tokenize_until_err().collect();
 
-                            if let Err(highlight_error) = inner.highlight_runtime_error(
+                            if let Err(highlight_error) = inner.highlight_error(
                                 Some(&src),
                                 &tokens,
-                                start,
-                                end,
+                                "",
+                                true,
+                                Some(r),
                                 Some(HighlighterError::from(&script_error)),
                             ) {
                                 eprintln!("Error during error highlighting: {}", highlight_error);

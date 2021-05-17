@@ -44,8 +44,7 @@ fn mk_node_config(
                     .collect::<serde_yaml::Mapping>(),
             )
         }),
-        defn: None,
-        node: None,
+        ..NodeConfig::default()
     }
 }
 

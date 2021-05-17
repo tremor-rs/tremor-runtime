@@ -12,11 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::{Error, ErrorKind, Result};
 use crate::op::prelude::{ERR, IN, METRICS, OUT};
 use crate::op::trickle::select::WindowImpl;
 use crate::{
     common_cow, op, ConfigGraph, NodeConfig, NodeKind, Operator, OperatorNode, PortIndexMap,
+};
+use crate::{
+    errors::{Error, ErrorKind, Result},
+    Connection,
 };
 use beef::Cow;
 use halfbrown::HashMap;
@@ -29,12 +32,10 @@ use op::trickle::{
     simple_select::SimpleSelect,
 };
 use petgraph::algo::is_cyclic_directed;
-use petgraph::dot::Config;
+// use petgraph::dot::Config;
 use std::mem;
 use std::sync::Arc;
 use tremor_common::ids::OperatorIdGen;
-use tremor_script::path::ModulePath;
-use tremor_script::prelude::*;
 use tremor_script::query::{StmtRental, StmtRentalWrapper};
 use tremor_script::{ast::Select, errors::CompilerError};
 use tremor_script::{
@@ -43,13 +44,15 @@ use tremor_script::{
         query_node_duplicate_name_err, query_node_reserved_name_err, query_stream_not_defined_err,
     },
 };
+use tremor_script::{highlighter::Dumb, path::ModulePath};
+use tremor_script::{highlighter::Highlighter, prelude::*};
 use tremor_script::{AggrRegistry, Registry, Value};
 
 const BUILTIN_NODES: [(Cow<'static, str>, NodeKind); 4] = [
     (IN, NodeKind::Input),
-    (OUT, NodeKind::Output),
-    (ERR, NodeKind::Output),
-    (METRICS, NodeKind::Output),
+    (OUT, NodeKind::Output(OUT)),
+    (ERR, NodeKind::Output(ERR)),
+    (METRICS, NodeKind::Output(METRICS)),
 ];
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -156,6 +159,9 @@ impl Query {
         &self.0.source
     }
     /// Parse a query
+    ///
+    /// # Errors
+    /// if the trickle script can not be parsed
     pub fn parse(
         module_path: &ModulePath,
         script: &str,
@@ -175,6 +181,9 @@ impl Query {
     }
 
     /// Turn a query into a executable pipeline graph
+    ///
+    /// # Errors
+    /// if the graph can not be turned into a pipeline
     #[allow(clippy::too_many_lines)]
     pub fn to_pipe(&self, idgen: &mut OperatorIdGen) -> Result<crate::ExecutableGraph> {
         use crate::{ExecutableGraph, NodeMetrics, State};
@@ -204,7 +213,7 @@ impl Query {
         for (name, node_kind) in &BUILTIN_NODES {
             let id = pipe_graph.add_node(NodeConfig {
                 id: name.clone(),
-                kind: *node_kind,
+                kind: node_kind.clone(),
                 op_type: "passthrough".to_string(),
                 ..NodeConfig::default()
             });
@@ -223,7 +232,7 @@ impl Query {
                 NodeKind::Input => {
                     inputs.insert(name.clone(), id);
                 }
-                NodeKind::Output => outputs.push(id),
+                NodeKind::Output(_) => outputs.push(id),
                 _ => {
                     return Err(format!(
                         "Builtin node {} has unsupported node kind: {:?}",
@@ -264,15 +273,21 @@ impl Query {
                         )
                         .into());
                     }
+                    let e = select.stmt.extent(&select.node_meta);
+                    let mut h = Dumb::new();
+                    let label = h
+                        .highlight_str(self.source(), "", false, Some(e))
+                        .ok()
+                        .map(|_| h.to_string().trim_end().to_string());
 
                     let select_in = InputPort {
                         id: format!("select_{}", select_num).into(),
-                        port: OUT, // TODO: should this be IN?
+                        port: IN,
                         had_port: false,
                         location: s.extent(&query.node_meta),
                     };
                     let select_out = OutputPort {
-                        id: format!("select_{}", select_num).into(),
+                        id: format!("select_{}", select_num,).into(),
                         port: OUT,
                         had_port: false,
                         location: s.extent(&query.node_meta),
@@ -280,8 +295,8 @@ impl Query {
                     select_num += 1;
                     let mut from = resolve_output_port(&s.from, &query.node_meta);
                     if from.id == "in" && from.port != "out" {
-                        let name: Cow<'static, str> = from.port;
-
+                        let name: Cow<'static, str> = format!("in/{}", from.port).into();
+                        from.id = name.clone();
                         if !nodes.contains_key(&name) {
                             let id = pipe_graph.add_node(NodeConfig {
                                 id: name.clone(),
@@ -307,23 +322,22 @@ impl Query {
                                 }
                             };
                             pipe_ops.insert(id, op);
-                            inputs.insert(name.clone(), id);
+                            inputs.insert(name, id);
                         }
-                        from.id = name.clone();
-                        from.had_port = false;
-                        from.port = OUT;
                     }
                     let mut into = resolve_input_port(&s.into, &query.node_meta);
                     if into.id == "out" && into.port != "in" {
-                        let name: Cow<'static, str> = into.port;
+                        let name: Cow<'static, str> = format!("out/{}", into.port).into();
+                        into.id = name.clone();
                         if !nodes.contains_key(&name) {
                             let id = pipe_graph.add_node(NodeConfig {
                                 id: name.clone(),
-                                kind: NodeKind::Output,
+                                label: Some(name.to_string()),
+                                kind: NodeKind::Output(into.port.clone()),
                                 op_type: "passthrough".to_string(),
                                 ..NodeConfig::default()
                             });
-                            nodes.insert(name.clone(), id);
+                            nodes.insert(name, id);
                             let op = match pipe_graph.raw_nodes().get(id.index()) {
                                 Some(node) => node.weight.to_op(
                                     idgen.next_id(),
@@ -343,9 +357,6 @@ impl Query {
                             pipe_ops.insert(id, op);
                             outputs.push(id);
                         }
-                        into.id = name.clone();
-                        into.had_port = false;
-                        into.port = IN;
                     }
 
                     links.entry(from).or_default().push(select_in.clone());
@@ -353,7 +364,8 @@ impl Query {
 
                     let node = NodeConfig {
                         id: select_in.id.clone(),
-                        kind: NodeKind::Operator,
+                        label,
+                        kind: NodeKind::Select,
                         op_type: "trickle::select".to_string(),
                         ..NodeConfig::default()
                     };
@@ -479,6 +491,19 @@ impl Query {
                             .ok_or_else(|| Error::from("script not found"))?
                             .clone(),
                     ));
+
+                    let label = if let Stmt::ScriptDecl(s) = &inner_stmt {
+                        let e = s.extent(&query.node_meta);
+                        let mut h = Dumb::new();
+                        // We're trimming the code so no spaces are at the end then adding a newline
+                        // to ensure we're left justified (this is a dot thing, don't question it)
+                        h.highlight_str(self.source(), "", false, Some(e))
+                            .ok()
+                            .map(|_| format!("{}\n", h.to_string().trim_end()))
+                    } else {
+                        None
+                    };
+
                     let stmt_rental = StmtRental::new(Arc::new(self.0.clone()), |_| unsafe {
                         // This is sound since self.0 includes an ARC of the data we
                         // so we hold on to any referenced data by including a clone
@@ -492,11 +517,12 @@ impl Query {
 
                     let node = NodeConfig {
                         id: common_cow(&o.id),
-                        kind: NodeKind::Operator,
+                        kind: NodeKind::Script,
+                        label,
                         op_type: "trickle::script".to_string(),
-                        config: None,
                         defn: Some(std::sync::Arc::new(that_defn.clone())),
                         node: Some(std::sync::Arc::new(that.clone())),
+                        ..NodeConfig::default()
                     };
 
                     let id = pipe_graph.add_node(node.clone());
@@ -544,11 +570,44 @@ impl Query {
                         ports.push(to_tpl);
                     }
                 }
-                pipe_graph.add_edge(from_idx, to_idx, 0);
+                pipe_graph.add_edge(
+                    from_idx,
+                    to_idx,
+                    Connection {
+                        from: from.port.clone(),
+                        to: to.port.clone(),
+                    },
+                );
             }
         }
 
-        let dot = petgraph::dot::Dot::with_config(&pipe_graph, &[Config::EdgeNoLabel]);
+        let dot = petgraph::dot::Dot::with_attr_getters(
+            &pipe_graph,
+            &[],
+            &|_g, _r| "".to_string(),
+            &|_g, (_i, c)| match c {
+                NodeConfig {
+                    kind: NodeKind::Input,
+                    ..
+                } => r#"shape = "rarrow""#.to_string(),
+                NodeConfig {
+                    kind: NodeKind::Output(_),
+                    ..
+                } => r#"shape = "larrow""#.to_string(),
+                NodeConfig {
+                    kind: NodeKind::Select,
+                    ..
+                } => r#"shape = "box""#.to_string(),
+                NodeConfig {
+                    kind: NodeKind::Script,
+                    ..
+                } => r#"shape = "note""#.to_string(),
+                NodeConfig {
+                    kind: NodeKind::Operator,
+                    ..
+                } => "".to_string(),
+            },
+        );
 
         // iff cycles, fail and bail
         if is_cyclic_directed(&pipe_graph) {
@@ -753,7 +812,7 @@ pub(crate) fn supported_operators(
     Ok(OperatorNode {
         uid,
         id: config.id.clone(),
-        kind: config.kind,
+        kind: config.kind.clone(),
         op_type: config.op_type.clone(),
         op,
     })
@@ -821,12 +880,11 @@ mod test {
         let mut idgen = OperatorIdGen::new();
         let first = idgen.next_id();
         let g = q.to_pipe(&mut idgen).unwrap();
-
-        assert!(g.inputs.contains_key("test_in"));
+        assert!(g.inputs.contains_key("in/test_in"));
         assert_eq!(idgen.next_id(), first + g.graph.len() as u64 + 1);
         let out = g.graph.get(5).unwrap();
-        assert_eq!(out.id, "test_out");
-        assert_eq!(out.kind, NodeKind::Output);
+        assert_eq!(out.id, "out/test_out");
+        assert_eq!(out.kind, NodeKind::Output("test_out".into()));
     }
 
     #[test]

@@ -5,5 +5,8 @@ set -o errexit
 
 adduser --system --group --no-create-home --quiet tremor
 
+# create user tremor-script module and library directories - if not already present
+mkdir -p /usr/local/share/tremor
+
 mkdir -p /var/log/tremor
 chown -R tremor:tremor /var/log/tremor

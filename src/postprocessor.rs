@@ -28,7 +28,6 @@ use std::str;
 /// Postprocessor trait
 pub trait Postprocessor: Send {
     /// Canonical name of the postprocessor
-    #[cfg(not(tarpaulin_include))]
     fn name(&self) -> &str;
     /// process data
     ///

@@ -33,16 +33,14 @@ impl<'value> Writable for Value<'value> {
     #[inline]
     fn encode(&self) -> String {
         let mut g = DumpGenerator::new();
-        // ALLOW: lets ignore this for now
-        let _ = g.write_json(&self);
+        std::mem::drop(g.write_json(&self));
         g.consume()
     }
 
     #[inline]
     fn encode_pp(&self) -> String {
         let mut g = PrettyGenerator::new(2);
-        // ALLOW: lets ignore this for now
-        let _ = g.write_json(&self);
+        std::mem::drop(g.write_json(&self));
         g.consume()
     }
 

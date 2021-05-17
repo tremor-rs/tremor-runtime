@@ -17,7 +17,6 @@ use crate::errors::{CompilerError, Error, Result};
 use crate::highlighter::{Dumb as DumbHighlighter, Highlighter};
 use crate::lexer;
 use crate::path::ModulePath;
-use crate::pos::Range;
 use crate::prelude::*;
 use rental::rental;
 use std::io::Write;
@@ -102,6 +101,9 @@ where
         self.query.suffix()
     }
     /// Parses a string into a query
+    ///
+    /// # Errors
+    /// if the query can not be parsed
     pub fn parse(
         module_path: &ModulePath,
         file_name: &str,
@@ -158,6 +160,8 @@ where
     }
 
     /// Highlights a script with a given highlighter.
+    /// # Errors
+    /// on io errors
     #[cfg(not(tarpaulin_include))]
     pub fn highlight_script_with<H: Highlighter>(script: &str, h: &mut H) -> std::io::Result<()> {
         let mut script = script.to_string();
@@ -165,10 +169,12 @@ where
         let tokens: Vec<_> = lexer::Tokenizer::new(&script)
             .tokenize_until_err()
             .collect();
-        h.highlight(None, &tokens)
+        h.highlight(None, &tokens, "", true, None)
     }
 
     /// Format an error given a script source.
+    /// # Errors
+    /// on io errors
     pub fn format_error_from_script<H: Highlighter>(
         script: &str,
         h: &mut H,
@@ -181,8 +187,8 @@ where
             .tokenize_until_err()
             .collect();
         match e.context() {
-            (Some(Range(start, end)), _) => {
-                h.highlight_runtime_error(None, &tokens, start, end, Some(e.into()))?;
+            (Some(r), _) => {
+                h.highlight_error(None, &tokens, "", true, Some(r), Some(e.into()))?;
                 h.finalize()
             }
 
@@ -194,12 +200,14 @@ where
     }
 
     /// Format an error given a script source.
+    /// # Errors
+    /// on io errors
     pub fn format_warnings_with<H: Highlighter>(&self, h: &mut H) -> std::io::Result<()> {
         for w in &self.warnings {
             let tokens: Vec<_> = lexer::Tokenizer::new(&self.source)
                 .tokenize_until_err()
                 .collect();
-            h.highlight_runtime_error(None, &tokens, w.outer.0, w.outer.1, Some(w.into()))?;
+            h.highlight_error(None, &tokens, "", true, Some(w.outer), Some(w.into()))?;
         }
         h.finalize()
     }
@@ -216,6 +224,9 @@ where
     }
 
     /// Formats an error within this script using a given highlighter
+    ///
+    /// # Errors
+    /// on io errors
     pub fn format_error_with<H: Highlighter>(&self, h: &mut H, e: &Error) -> std::io::Result<()> {
         Self::format_error_from_script(&self.source, h, e)
     }

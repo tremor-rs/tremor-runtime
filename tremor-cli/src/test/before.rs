@@ -15,13 +15,17 @@
 use time::Instant;
 
 use crate::errors::{Error, ErrorKind, Result};
-use crate::{job, job::TargetProcess, util::slurp_string};
+use crate::util::slurp_string;
+use crate::{job, job::TargetProcess};
 use async_std::{future, task};
 use std::{
     collections::HashMap,
     fs,
     time::{self, Duration},
 };
+
+use std::path::Path;
+use std::path::PathBuf;
 
 #[derive(Deserialize, Debug)]
 pub(crate) struct Before {
@@ -103,46 +107,52 @@ fn default_min_await_secs() -> u64 {
     0 // Wait for at least 1 seconds before starting tests that depend on background process
 }
 
-pub(crate) fn load_before(path_str: &str) -> Result<Before> {
-    let tags_data = slurp_string(path_str)?;
+pub(crate) fn load_before(path: &Path) -> Result<Before> {
+    let tags_data = slurp_string(path)?;
     match serde_json::from_str(&tags_data) {
         Ok(s) => Ok(s),
         Err(e) => Err(Error::from(format!(
             "Invalid `before.json` in path `{}`: {}",
-            path_str, e
+            path.to_string_lossy(),
+            e
         ))),
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct BeforeController {
-    base: String,
+    base: PathBuf,
 }
 
 impl BeforeController {
-    pub(crate) fn new(base: &str) -> Self {
+    pub(crate) fn new(base: &Path) -> Self {
         Self {
-            base: base.to_string(),
+            base: base.to_path_buf(),
         }
     }
 
     pub(crate) fn spawn(&mut self) -> Result<Option<TargetProcess>> {
         let root = &self.base;
-        let before_str = &format!("{}/before.json", root);
-        let before_json = load_before(before_str);
-        match before_json {
-            Ok(before_json) => before_json.spawn(),
-            Err(Error(ErrorKind::Common(tremor_common::Error::FileOpen(_, _)), _)) => {
-                // no before json found, all good
-                Ok(None)
+        let before_path = root.join("before.json");
+        if before_path.exists() {
+            let before_json = load_before(&before_path);
+            match before_json {
+                Ok(before_json) => before_json.spawn(),
+                Err(Error(ErrorKind::Common(tremor_common::Error::FileOpen(_, _)), _)) => {
+                    // no before json found, all good
+                    Ok(None)
+                }
+                Err(e) => Err(e),
             }
-            Err(e) => Err(e),
+        } else {
+            Ok(None)
         }
     }
 
     pub(crate) fn capture(&mut self, process: Option<TargetProcess>) -> Result<()> {
         let root = self.base.clone();
-        let bg_out_file = format!("{}/bg.out.log", &root);
-        let bg_err_file = format!("{}/bg.err.log", &root);
+        let bg_out_file = root.join("bg.out.log");
+        let bg_err_file = root.join("bg.err.log");
         if let Some(mut process) = process {
             process.tail(&bg_out_file, &bg_err_file)?;
         };
@@ -150,9 +160,9 @@ impl BeforeController {
     }
 }
 
-pub(crate) fn update_evidence(root: &str, evidence: &mut HashMap<String, String>) -> Result<()> {
-    let bg_out_file = format!("{}/bg.out.log", &root);
-    let bg_err_file = format!("{}/bg.err.log", &root);
+pub(crate) fn update_evidence(root: &Path, evidence: &mut HashMap<String, String>) -> Result<()> {
+    let bg_out_file = root.join("bg.out.log");
+    let bg_err_file = root.join("bg.err.log");
 
     if let Ok(x) = fs::metadata(&bg_out_file) {
         if x.is_file() {

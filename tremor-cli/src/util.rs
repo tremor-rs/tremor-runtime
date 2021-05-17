@@ -17,8 +17,7 @@ use halfbrown::HashMap;
 use serde::Deserialize;
 use std::fs;
 use std::io::prelude::*;
-use std::io::BufReader;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::{ffi::OsStr, fmt};
 use tremor_common::file as cfile;
 use tremor_script::highlighter::{Highlighter, Term as TermHighlighter};
@@ -29,11 +28,10 @@ pub(crate) enum FormatKind {
     Yaml,
 }
 
-pub(crate) fn slurp_string(file: &str) -> Result<String> {
-    let data = crate::open_file(file, None)?;
-    let mut buffered_reader = BufReader::new(data);
-    let mut data = String::new();
-    buffered_reader.read_to_string(&mut data)?;
+// Wrapper around fs::read_to_string to provide better erros
+// TODO create a tremor_common variant of fs::read_to_string
+pub(crate) fn slurp_string<P: AsRef<Path>>(file: P) -> Result<String> {
+    let data = fs::read_to_string(file)?;
     Ok(data)
 }
 
@@ -96,16 +94,15 @@ impl TremorApp {
     }
 }
 
-pub(crate) fn tremor_home_dir() -> Result<String> {
+pub(crate) fn tremor_home_dir() -> Result<PathBuf> {
     dirs_next::home_dir()
-        .and_then(|s| s.to_str().map(ToString::to_string))
         .ok_or_else(|| Error::from("Expected home_dir"))
-        .map(|tremor_root| format!("{}/{}", tremor_root, ".tremor"))
+        .map(|tremor_root| tremor_root.join(".tremor"))
 }
 
 pub(crate) fn save_config(config: &TargetConfig) -> Result<()> {
     let tremor_root = tremor_home_dir()?;
-    let dot_config = format!("{}/config.yaml", tremor_root);
+    let dot_config = tremor_root.join("config.yaml");
     let raw = serde_yaml::to_vec(&config)?;
     let mut file = cfile::create(&dot_config)?;
     Ok(file.write_all(&raw)?)
@@ -113,7 +110,7 @@ pub(crate) fn save_config(config: &TargetConfig) -> Result<()> {
 
 pub(crate) fn load_config() -> Result<TargetConfig> {
     let tremor_root = tremor_home_dir()?;
-    let dot_config = format!("{}/config.yaml", tremor_root);
+    let dot_config = tremor_root.join("config.yaml");
     let mut default = TargetConfig {
         instances: HashMap::new(),
     };
@@ -147,7 +144,7 @@ pub(crate) fn load_config() -> Result<TargetConfig> {
             }
         }
         Err(_dir) => {
-            fs::create_dir(&tremor_root)?;
+            fs::create_dir(tremor_root)?;
             load_config()
         }
     }
@@ -211,16 +208,6 @@ pub(crate) fn visit_path_str(path: &str, visitor: &PathVisitor) -> Result<()> {
     visit_path(&path, &path, visitor)
 }
 
-pub(crate) fn relative_path(
-    base: &Path,
-    path: &Path,
-) -> std::result::Result<String, std::path::StripPrefixError> {
-    match path.strip_prefix(base) {
-        Ok(path) => Ok(path.to_string_lossy().to_string()),
-        Err(e) => Err(e),
-    }
-}
-
 pub(crate) fn visit_path<'a>(base: &Path, path: &Path, visitor: &'a PathVisitor) -> Result<()> {
     if path.is_file() {
         visitor(None, &path)?
@@ -234,11 +221,11 @@ pub(crate) fn visit_path<'a>(base: &Path, path: &Path, visitor: &'a PathVisitor)
         for entry in std::fs::read_dir(&path)? {
             let entry = entry?;
             let path = entry.path();
-            let rel_path = relative_path(base, &path);
+            let rel_path = path.strip_prefix(base);
             match rel_path {
                 Ok(rel_path) => {
                     if path.is_file() {
-                        visitor(Some(Path::new(&rel_path)), path.as_path())?;
+                        visitor(Some(&rel_path), path.as_path())?;
                     }
                 }
                 Err(e) => error!(
@@ -311,7 +298,7 @@ pub(crate) fn highlight(is_pretty: bool, value: &Value) -> Result<()> {
         .collect();
 
     let mut h = TermHighlighter::default();
-    if let Err(e) = h.highlight(Some(&result), &lexed_tokens) {
+    if let Err(e) = h.highlight(Some(&result), &lexed_tokens, "", true, None) {
         return Err(e.into());
     };
 

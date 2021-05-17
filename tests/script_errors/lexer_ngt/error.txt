@@ -1,4 +1,4 @@
 Error: 
     1 | !>=
-      |  ^ Found the token `>=` but expected one of `!`, `\``, `$`, `(`, `<<`, `<ident>`, `[`, `absent`, `args`, `bool`, `event`, `float`, `group`, `heredoc`, `int`, `merge`, `nil`, `not`, `patch`, `present`, `recur`, `state`, `window`, `{`
-      |    NOTE: Did you mean to use `!`?
+      |  ^^ Found the token `>=` but expected one of `!`, `\``, `$`, `(`, `<<`, `<ident>`, `[`, `absent`, `args`, `bool`, `event`, `float`, `group`, `heredoc_start`, `int`, `merge`, `nil`, `not`, `patch`, `present`, `recur`, `state`, `window`, `{`
+      |     NOTE: Did you mean to use `!`?

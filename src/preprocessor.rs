@@ -33,7 +33,6 @@ pub type Preprocessors = Vec<Box<dyn Preprocessor>>;
 /// Preprocessor trait
 pub trait Preprocessor: Sync + Send {
     /// Canonical name for this preprocessor
-    #[cfg(not(tarpaulin_include))]
     fn name(&self) -> &str;
     /// process data
     ///
