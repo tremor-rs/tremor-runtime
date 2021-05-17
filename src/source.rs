@@ -305,7 +305,7 @@ where
                 onramp::Msg::Connect(port, ps) => {
                     if port.eq_ignore_ascii_case(METRICS.as_ref()) {
                         if ps.len() > 1 {
-                            warn!("Connecting more than 1 metrics pipelines will only connect the latest.");
+                            warn!("[Source::{}] Connecting more than 1 metrics pipelines will only connect the latest.", self.source_id);
                         }
                         for p in ps {
                             info!(

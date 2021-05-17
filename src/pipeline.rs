@@ -256,9 +256,9 @@ async fn handle_insight(
 ) {
     let insight = pipeline.contraflow(skip_to, insight);
     if insight.cb != CbAction::None {
-        let mut input_iter = inputs.values();
+        let mut input_iter = inputs.iter();
         let first = input_iter.next();
-        for (send, input) in input_iter {
+        for (url, (send, input)) in input_iter {
             let is_cb = insight.cb.is_cb();
             if *send || is_cb {
                 if let Err(e) = match input {
@@ -280,13 +280,13 @@ async fn handle_insight(
                     }
                 } {
                     error!(
-                        "[Pipeline] failed to send insight to input: {} {:?}",
-                        e, &input
+                        "[Pipeline::{}] failed to send insight to input: {} {}",
+                        &pipeline.id, e, url
                     );
                 }
             }
         }
-        if let Some((send, input)) = first {
+        if let Some((url, (send, input))) = first {
             if *send || insight.cb.is_cb() {
                 if let Err(e) = match input {
                     Input::Onramp(addr) => addr
@@ -307,8 +307,8 @@ async fn handle_insight(
                     }
                 } {
                     error!(
-                        "[Pipeline] failed to send insight to input: {} {:?}",
-                        e, &input
+                        "[Pipeline::{}] failed to send insight to input: {} {}",
+                        &pipeline.id, e, &url
                     );
                 }
             }
@@ -462,7 +462,11 @@ async fn pipeline_task(
                     // avoid linking the same pipeline as input to itself
                     // as this will create a nasty circle filling up queues.
                     // In general this does not avoid cycles via more complex constructs.
-                    if !pid.same_instance_as(&output_url) {
+                    //
+                    // Also don't connect anything as input to the metrics pipeline, as we dont want any contraflow to flow via the METRICS_PIPELINE
+                    if !pid.same_instance_as(&output_url)
+                        && !crate::system::METRICS_PIPELINE.same_instance_as(&output_url)
+                    {
                         if let Err(e) = pipe
                             .send_mgmt(MgmtMsg::ConnectInput {
                                 input_url: pid.clone(),

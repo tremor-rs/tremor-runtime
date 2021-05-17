@@ -25,6 +25,7 @@
 - Record the partition number assigned during rebalancing when running Kafka.
 - Fix bug in HDR histogram implementation when using emit without reset.
 - Fix bug in mean that invalid values would be counted as part of the total number of values.
+- Avoid possible contraflow cycles via `system::metrics` pipeline, if a pipeline is connected to an output port of `system::metrics` pipeline.
 
 ## 0.11.1
 

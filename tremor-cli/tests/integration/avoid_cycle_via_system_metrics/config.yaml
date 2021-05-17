@@ -1,0 +1,33 @@
+onramp:
+  - id: cb_in
+    type: cb
+    config:
+      source: input.json
+      #source: tremor-cli/tests/integration/avoid_cycle_via_system_metrics/input.json
+  - id: file_in
+    type: file
+    config:
+      source: input.json
+      #source: tremor-cli/tests/integration/avoid_cycle_via_system_metrics/input.json
+offramp:
+  - id: cb_out
+    type: cb
+
+binding:
+  - id: metrics
+    links:
+      # loose input at this pipeline
+      "/pipeline/system::metrics/system/out":
+        - "/pipeline/metrics/{instance}/in"
+      "/pipeline/metrics/{instance}/out":
+        - "/offramp/system::stderr/system/in"
+      "/onramp/cb_in/{instance}/out":
+        - "/pipeline/cb_pipe/{instance}/in"
+      "/onramp/file_in/{instance}/out":
+        - "/pipeline/cb_pipe/{instance}/in"
+      "/pipeline/cb_pipe/{instance}/out":
+        - "/offramp/cb_out/{instance}/in"
+
+mapping:
+  /binding/metrics/01:
+    instance: "01"
