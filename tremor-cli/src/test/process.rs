@@ -157,7 +157,11 @@ pub(crate) fn run_process(
         report.insert(
             "bench".to_string(),
             report::TestSuite {
-                name: "name".into(),
+                name: bench_root
+                    .file_name()
+                    .ok_or("unable to find the benchmark name")?
+                    .to_string_lossy()
+                    .into(),
                 description: format!("{} test suite", kind),
                 elements: vec![],
                 evidence: Some(evidence),
