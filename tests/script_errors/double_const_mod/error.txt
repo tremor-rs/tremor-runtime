@@ -1,0 +1,6 @@
+Error: 
+    1 | mod test with
+    2 | const a = 1;
+    3 | const a = 2;
+      | ^^^^^^^^^^^ Can't declare the constant `a` twice
+    4 | end;
