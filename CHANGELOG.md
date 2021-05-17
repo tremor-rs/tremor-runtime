@@ -28,17 +28,14 @@
 ## 0.11.1
 
 ### New features
-
-- Add `tremor_value::structurize` convenience fn
-- Change `qos::wal` operator to only require one of `max_elements` or `max_bytes` (using both is still possible).
-- Add DNS sink
-- Add syslog codec.
-- Add `$udp.host` and `$udp.port` to allow controling udp packet destinations on a per event basis.
-- Deprecate `udp.dst_*` config, introduce `udp.bind.*` config instead.
-- Allow insights/contraflow events to traverse through multiple connected pipelines
-
-- Add GCP Cloud Storage linked sink connector.
-- Add textual-length-prefix pre and postprocessor.
+* Add `tremor_value::structurize` convenience fn
+* Change `qos::wal` operator to only require one of `max_elements` or `max_bytes` (using both is still possible).
+* Add DNS sink
+* Add syslog codec.
+* Add `$udp.host` and `$udp.port` to allow controling udp packet destinations on a per event basis.
+* Deprecate `udp.dst_*` config, introduce `udp.bind.*` config instead.
+* Allow insights/contraflow events to traverse through multiple connected pipelines
+* Add branch/hash version output to versions of tremor not built on `main` branch
 
 ### Fixes
 

@@ -107,11 +107,11 @@ pub(crate) struct FileBasedAssert {
 
 pub(crate) type Asserts = Vec<FileBasedAssert>;
 
-pub(crate) fn load_assert(path_str: &str) -> Result<AssertSpec> {
-    let data = slurp_string(path_str)?;
+pub(crate) fn load_assert(path: &Path) -> Result<AssertSpec> {
+    let data = slurp_string(path)?;
     match serde_yaml::from_str::<AssertSpec>(&data) {
         Ok(mut s) => {
-            let base = Path::new(path_str);
+            let base = path;
             s.base = base.parent().and_then(Path::to_str).map(String::from);
             for a in &s.asserts {
                 if let Some(f) = &a.equals_file {
@@ -139,14 +139,15 @@ pub(crate) fn load_assert(path_str: &str) -> Result<AssertSpec> {
 
         Err(e) => Err(Error::from(format!(
             "Unable to load `assert.yaml` from path `{}`: {}",
-            path_str, e
+            path.to_string_lossy(),
+            e
         ))),
     }
 }
 
 pub(crate) fn process(
-    stdout_path: &str,
-    stderr_path: &str,
+    stdout_path: &Path,
+    stderr_path: &Path,
     status: Option<i32>,
     spec: &AssertSpec,
 ) -> Result<(stats::Stats, Vec<report::TestElement>)> {
@@ -210,8 +211,8 @@ pub(crate) fn process(
 
 pub(crate) fn process_filebased_asserts(
     prefix: &str,
-    stdout_path: &str,
-    stderr_path: &str,
+    stdout_path: &Path,
+    stderr_path: &Path,
     asserts: &[FileBasedAssert],
     base: &Option<String>,
 ) -> Result<(stats::Stats, Vec<report::TestElement>)> {
@@ -236,8 +237,8 @@ pub(crate) fn process_filebased_asserts(
             } => {
                 let file = match source {
                     Source::File(file) => file.to_string(),
-                    Source::Stdout => stdout_path.into(),
-                    Source::Stderr => stderr_path.into(),
+                    Source::Stdout => stdout_path.to_string_lossy().to_string(),
+                    Source::Stderr => stderr_path.to_string_lossy().to_string(),
                 };
                 // Overall pass/fail
                 if let Some(contains) = contains {

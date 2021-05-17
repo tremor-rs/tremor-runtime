@@ -13,11 +13,10 @@
 // limitations under the License.
 
 use crate::errors::Result;
-use crate::util;
 use crate::util::slurp_string;
 use std::{collections::HashSet, path::Path};
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, PartialEq)]
 pub(crate) struct TagFilter {
     pub(crate) includes: HashSet<String>,
     pub(crate) excludes: HashSet<String>,
@@ -25,7 +24,7 @@ pub(crate) struct TagFilter {
 
 pub(crate) type Tags = Vec<String>;
 
-pub(crate) fn maybe_slurp_tags(path: &str) -> Tags {
+pub(crate) fn maybe_slurp_tags(path: &Path) -> Tags {
     let tags_data = slurp_string(path);
     match tags_data {
         Ok(tags_data) => serde_json::from_str(&tags_data).unwrap_or_default(),
@@ -34,21 +33,21 @@ pub(crate) fn maybe_slurp_tags(path: &str) -> Tags {
 }
 
 impl TagFilter {
-    pub(crate) fn new(excludes: Vec<String>, includes: Vec<String>) -> Self {
+    pub(crate) fn new(includes: Tags, excludes: Tags) -> Self {
         Self {
             includes: includes.into_iter().collect(),
             excludes: excludes.into_iter().collect(),
         }
     }
 
-    pub(crate) fn includes(&self) -> Vec<String> {
+    pub(crate) fn includes(&self) -> Tags {
         self.includes
             .iter()
             .map(std::string::ToString::to_string)
             .collect()
     }
 
-    pub(crate) fn excludes(&self) -> Vec<String> {
+    pub(crate) fn excludes(&self) -> Tags {
         self.excludes
             .iter()
             .map(std::string::ToString::to_string)
@@ -125,32 +124,65 @@ impl TagFilter {
     }
 
     pub(crate) fn join(&self, tags: Option<Vec<String>>) -> TagFilter {
-        let mut includes: Vec<String> = self.includes.iter().cloned().collect();
-        let excludes: Vec<String> = self.excludes.iter().cloned().collect();
+        let mut includes: Tags = self.includes.iter().cloned().collect();
+        let excludes: Tags = self.excludes.iter().cloned().collect();
         if let Some(mut tags) = tags {
             includes.append(&mut tags);
         }
-        TagFilter::new(excludes, includes)
+        TagFilter::new(includes, excludes)
     }
 }
 
-pub(crate) fn resolve(base: &Path, other: &Path) -> Result<TagFilter> {
-    if let Ok(rel) = util::relative_path(base, other) {
-        let mut base = base.to_string_lossy().to_string();
-        let tags_file = format!("{}/tags.json", &base);
+// The intention is to find all tag files in the directories between base and other
+// basically if base is /a/b/c and other is /a/b/c/d/e/f we want to look for:
+// - /a/b/c/tags.json
+// - /a/b/c/d/tags.json
+// - /a/b/c/d/e/tags.json
+// - /a/b/c/d/e/f/tags.json
+pub(crate) fn resolve<P>(base: P, other: P) -> Result<TagFilter>
+where
+    P: AsRef<Path>,
+{
+    let mut base = base.as_ref().canonicalize()?;
+    let other = other.as_ref().canonicalize()?;
+    if let Ok(rel) = other.strip_prefix(&base) {
+        let tags_file = base.join("tags.json");
         let mut tags = TagFilter::new(vec![], vec![]);
         tags = tags.join(Some(maybe_slurp_tags(&tags_file)));
-        for dirname in rel.split('/') {
-            base = format!("{}/{}", base, dirname);
-            let tags_file = format!("{}/tags.json", &base);
+        for dirname in rel.components() {
+            base = base.join(dirname.as_os_str());
+            let tags_file = base.join("tags.json");
             tags = tags.join(Some(maybe_slurp_tags(&tags_file)));
         }
+
         Ok(tags)
     } else {
         Err(format!(
             "Unexpected error resolving tags for test: {}",
-            other.to_string_lossy()
+            other.display()
         )
         .into())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use pretty_assertions::assert_eq;
+
+    #[test]
+    fn test_resolve() {
+        let tag_filter = TagFilter::new(
+            vec!["b".to_string(), "c".to_string(), "d".to_string()],
+            vec![],
+        );
+        assert_eq!(
+            resolve(
+                "tests/fixtures/resolve_tags/a/b",
+                "tests/fixtures/resolve_tags/a/b/c/d"
+            )
+            .unwrap(),
+            tag_filter
+        );
     }
 }
