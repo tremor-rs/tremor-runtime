@@ -27,10 +27,10 @@ impl TremorAggrFn for First {
         }
         Ok(())
     }
-    fn compensate<'event>(&mut self, _args: &[&Value<'event>]) -> FResult<()> {
-        // TODO: how?
-        Ok(())
-    }
+    // fn compensate<'event>(&mut self, _args: &[&Value<'event>]) -> FResult<()> {
+    //     // TODO: how?
+    //     Ok(())
+    // }
     fn emit<'event>(&mut self) -> FResult<Value<'event>> {
         Ok(self.0.as_ref().map_or_else(Value::null, Clone::clone))
     }
@@ -52,6 +52,7 @@ impl TremorAggrFn for First {
         }
         Ok(())
     }
+    #[cfg(not(tarpaulin_include))]
     fn boxed_clone(&self) -> Box<dyn TremorAggrFn> {
         Box::new(self.clone())
     }
@@ -67,10 +68,10 @@ impl TremorAggrFn for Last {
         self.0 = args.first().map(|v| (*v).clone_static());
         Ok(())
     }
-    fn compensate<'event>(&mut self, _args: &[&Value<'event>]) -> FResult<()> {
-        // TODO: how?
-        Ok(())
-    }
+    // fn compensate<'event>(&mut self, _args: &[&Value<'event>]) -> FResult<()> {
+    //     // TODO: how?
+    //     Ok(())
+    // }
     fn emit<'event>(&mut self) -> FResult<Value<'event>> {
         Ok(self.0.as_ref().map_or_else(Value::null, Clone::clone))
     }
@@ -92,6 +93,7 @@ impl TremorAggrFn for Last {
         }
         Ok(())
     }
+    #[cfg(not(tarpaulin_include))]
     fn boxed_clone(&self) -> Box<dyn TremorAggrFn> {
         Box::new(self.clone())
     }
@@ -109,10 +111,10 @@ impl TremorAggrFn for CollectFlattened {
         }
         Ok(())
     }
-    fn compensate<'event>(&mut self, _args: &[&Value<'event>]) -> FResult<()> {
-        // TODO: how?
-        Ok(())
-    }
+    // fn compensate<'event>(&mut self, _args: &[&Value<'event>]) -> FResult<()> {
+    //     // TODO: how?
+    //     Ok(())
+    // }
     fn emit<'event>(&mut self) -> FResult<Value<'event>> {
         Ok(Value::from(self.0.clone()))
     }
@@ -133,6 +135,7 @@ impl TremorAggrFn for CollectFlattened {
         }
         Ok(())
     }
+    #[cfg(not(tarpaulin_include))]
     fn boxed_clone(&self) -> Box<dyn TremorAggrFn> {
         Box::new(self.clone())
     }
@@ -155,10 +158,10 @@ impl TremorAggrFn for CollectNested {
         }
         Ok(())
     }
-    fn compensate<'event>(&mut self, _args: &[&Value<'event>]) -> FResult<()> {
-        // TODO: how?
-        Ok(())
-    }
+    // fn compensate<'event>(&mut self, _args: &[&Value<'event>]) -> FResult<()> {
+    //     // TODO: how?
+    //     Ok(())
+    // }
     fn emit<'event>(&mut self) -> FResult<Value<'event>> {
         Ok(Value::Array(self.0.clone()))
     }
@@ -179,6 +182,7 @@ impl TremorAggrFn for CollectNested {
         }
         Ok(())
     }
+    #[cfg(not(tarpaulin_include))]
     fn boxed_clone(&self) -> Box<dyn TremorAggrFn> {
         Box::new(self.clone())
     }
