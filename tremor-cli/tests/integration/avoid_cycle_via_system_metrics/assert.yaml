@@ -1,0 +1,10 @@
+status: 0
+name: avoid CB cycle via tremor's system::metrics pipeline
+asserts:
+  - source: fg.err.log
+    contains:
+      - |
+        All required CB events received.
+    doesnt_contain:
+      - |
+        [Pipeline::tremor://localhost/pipeline/cb_pipe/01] failed to send insight to input: SendError(..) tremor://localhost/onramp/file_in/01/out

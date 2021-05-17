@@ -19,8 +19,8 @@ use crate::{open_file, report, status};
 use difference::Changeset;
 use errors::Error;
 use serde::{Deserialize, Deserializer};
-use std::io::prelude::*;
 use std::io::BufReader;
+use std::io::{prelude::*, SeekFrom};
 use std::{collections::HashMap, path::Path};
 
 fn file_contains(path_str: &str, what: &[String], base: Option<&String>) -> Result<bool> {
@@ -102,6 +102,7 @@ pub(crate) struct AssertSpec {
 pub(crate) struct FileBasedAssert {
     pub(crate) source: Source,
     pub(crate) contains: Option<Vec<String>>,
+    pub(crate) doesnt_contain: Option<Vec<String>>,
     pub(crate) equals_file: Option<String>,
 }
 
@@ -209,6 +210,7 @@ pub(crate) fn process(
     Ok((s, elements))
 }
 
+#[allow(clippy::clippy::too_many_lines)]
 pub(crate) fn process_filebased_asserts(
     prefix: &str,
     stdout_path: &Path,
@@ -223,6 +225,7 @@ pub(crate) fn process_filebased_asserts(
         match assert {
             FileBasedAssert {
                 contains: None,
+                doesnt_contain: None,
                 equals_file: None,
                 ..
             } => {
@@ -232,6 +235,7 @@ pub(crate) fn process_filebased_asserts(
             FileBasedAssert {
                 source,
                 contains,
+                doesnt_contain,
                 equals_file,
                 ..
             } => {
@@ -261,6 +265,47 @@ pub(crate) fn process_filebased_asserts(
                     elements.push(report::TestElement {
                         description: format!("File `{}` contains", file),
                         info: Some(contains.clone().join("\n")),
+                        hidden: false,
+                        keyword: report::KeywordKind::Predicate,
+                        result: report::ResultKind {
+                            status: if total_condition {
+                                report::StatusKind::Passed
+                            } else {
+                                report::StatusKind::Failed
+                            },
+                            duration: 0,
+                        },
+                    });
+                }
+                if let Some(doesnt_contain) = doesnt_contain {
+                    let mut total_condition = true;
+                    let mut fd = open_file(&file, base.as_ref())?;
+
+                    for c in doesnt_contain {
+                        stats.assert();
+                        counter += 1;
+                        fd.seek(SeekFrom::Start(0))?;
+                        let condition = BufReader::new(&fd)
+                            .lines()
+                            .find(|l| {
+                                l.as_ref()
+                                    .map(|line| line.contains(c.trim()))
+                                    .unwrap_or_default()
+                            })
+                            .is_none();
+                        stats.report(condition);
+                        total_condition &= condition;
+                        status::assert_has(
+                            prefix,
+                            &format!("Assert {}", counter),
+                            &format!("  Does not contain `{}` in `{}`", &c.trim(), &file),
+                            None,
+                            condition,
+                        )?;
+                    }
+                    elements.push(report::TestElement {
+                        description: format!("file `{}` does not contain", file),
+                        info: Some(doesnt_contain.clone().join("\n")),
                         hidden: false,
                         keyword: report::KeywordKind::Predicate,
                         result: report::ResultKind {
