@@ -51,10 +51,10 @@ impl TremorAggrFn for Count {
         self.0 += 1;
         Ok(())
     }
-    fn compensate<'event>(&mut self, _args: &[&Value<'event>]) -> FResult<()> {
-        self.0 -= 1;
-        Ok(())
-    }
+    // fn compensate<'event>(&mut self, _args: &[&Value<'event>]) -> FResult<()> {
+    //     self.0 -= 1;
+    //     Ok(())
+    // }
     fn emit<'event>(&mut self) -> FResult<Value<'event>> {
         Ok(Value::from(self.0))
     }
@@ -69,6 +69,7 @@ impl TremorAggrFn for Count {
         }
         Ok(())
     }
+    #[cfg(not(tarpaulin_include))]
     fn boxed_clone(&self) -> Box<dyn TremorAggrFn> {
         Box::new(self.clone())
     }
@@ -93,19 +94,19 @@ impl TremorAggrFn for Sum {
             },
         )
     }
-    fn compensate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
-        args.first().cast_f64().map_or_else(
-            || {
-                Err(FunctionError::BadType {
-                    mfa: mfa("stats", "sum", 1),
-                })
-            },
-            |v| {
-                self.0 -= v;
-                Ok(())
-            },
-        )
-    }
+    // fn compensate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
+    //     args.first().cast_f64().map_or_else(
+    //         || {
+    //             Err(FunctionError::BadType {
+    //                 mfa: mfa("stats", "sum", 1),
+    //             })
+    //         },
+    //         |v| {
+    //             self.0 -= v;
+    //             Ok(())
+    //         },
+    //     )
+    // }
     fn emit<'event>(&mut self) -> FResult<Value<'event>> {
         Ok(Value::from(self.0))
     }
@@ -120,6 +121,7 @@ impl TremorAggrFn for Sum {
         }
         Ok(())
     }
+    #[cfg(not(tarpaulin_include))]
     fn boxed_clone(&self) -> Box<dyn TremorAggrFn> {
         Box::new(self.clone())
     }
@@ -132,7 +134,6 @@ impl TremorAggrFn for Sum {
 struct Mean(i64, f64);
 impl TremorAggrFn for Mean {
     fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
-        self.0 += 1;
         args.first().cast_f64().map_or_else(
             || {
                 Err(FunctionError::BadType {
@@ -141,24 +142,25 @@ impl TremorAggrFn for Mean {
             },
             |v| {
                 self.1 += v;
+                self.0 += 1;
                 Ok(())
             },
         )
     }
-    fn compensate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
-        self.0 -= 1;
-        args.first().cast_f64().map_or_else(
-            || {
-                Err(FunctionError::BadType {
-                    mfa: mfa("stats", "mean", 1),
-                })
-            },
-            |v| {
-                self.1 -= v;
-                Ok(())
-            },
-        )
-    }
+    // fn compensate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
+    //     self.0 -= 1;
+    //     args.first().cast_f64().map_or_else(
+    //         || {
+    //             Err(FunctionError::BadType {
+    //                 mfa: mfa("stats", "mean", 1),
+    //             })
+    //         },
+    //         |v| {
+    //             self.1 -= v;
+    //             Ok(())
+    //         },
+    //     )
+    // }
     fn emit<'event>(&mut self) -> FResult<Value<'event>> {
         if self.0 == 0 {
             Ok(Value::null())
@@ -179,6 +181,7 @@ impl TremorAggrFn for Mean {
         }
         Ok(())
     }
+    #[cfg(not(tarpaulin_include))]
     fn boxed_clone(&self) -> Box<dyn TremorAggrFn> {
         Box::new(self.clone())
     }
@@ -205,24 +208,24 @@ impl TremorAggrFn for Min {
             },
         )
     }
-    fn compensate<'event>(&mut self, _args: &[&Value<'event>]) -> FResult<()> {
-        // TODO: how?
-        // [a, b, c, d, e, f, g, h, i, j];
-        // a -> [(0, a)]
-        // b -> [(0, a), (1, b)]
-        // c -> [(0, a), (1, b), (2, c)]  ...
+    // fn compensate<'event>(&mut self, _args: &[&Value<'event>]) -> FResult<()> {
+    //     // TODO: how?
+    //     // [a, b, c, d, e, f, g, h, i, j];
+    //     // a -> [(0, a)]
+    //     // b -> [(0, a), (1, b)]
+    //     // c -> [(0, a), (1, b), (2, c)]  ...
 
-        // [d, t, u, a, t, u, b, c, 6];
-        // d -> [(0, d)]
-        // t -> [(0, d), (1, t)]
-        // u -> [(0, d), (1, t), (2, u)]  ...
-        // a -> [(3, a)]  ...
-        // t -> [(3, a), (4, t)]  ...
-        // u -> [(3, a), (4, t), (5, u)]  ...
-        // b -> [(3, a), (5, b)]  ...
+    //     // [d, t, u, a, t, u, b, c, 6];
+    //     // d -> [(0, d)]
+    //     // t -> [(0, d), (1, t)]
+    //     // u -> [(0, d), (1, t), (2, u)]  ...
+    //     // a -> [(3, a)]  ...
+    //     // t -> [(3, a), (4, t)]  ...
+    //     // u -> [(3, a), (4, t), (5, u)]  ...
+    //     // b -> [(3, a), (5, b)]  ...
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
     fn emit<'event>(&mut self) -> FResult<Value<'event>> {
         Ok(Value::from(self.0.unwrap_or_default()))
     }
@@ -239,6 +242,7 @@ impl TremorAggrFn for Min {
         }
         Ok(())
     }
+    #[cfg(not(tarpaulin_include))]
     fn boxed_clone(&self) -> Box<dyn TremorAggrFn> {
         Box::new(self.clone())
     }
@@ -265,10 +269,10 @@ impl TremorAggrFn for Max {
             },
         )
     }
-    fn compensate<'event>(&mut self, _args: &[&Value<'event>]) -> FResult<()> {
-        // TODO: how?
-        Ok(())
-    }
+    // fn compensate<'event>(&mut self, _args: &[&Value<'event>]) -> FResult<()> {
+    //     // TODO: how?
+    //     Ok(())
+    // }
     fn emit<'event>(&mut self) -> FResult<Value<'event>> {
         Ok(Value::from(self.0.unwrap_or_default()))
     }
@@ -285,6 +289,7 @@ impl TremorAggrFn for Max {
         }
         Ok(())
     }
+    #[cfg(not(tarpaulin_include))]
     fn boxed_clone(&self) -> Box<dyn TremorAggrFn> {
         Box::new(self.clone())
     }
@@ -320,21 +325,21 @@ impl TremorAggrFn for Var {
             },
         )
     }
-    fn compensate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
-        args.first().cast_f64().map_or_else(
-            || {
-                Err(FunctionError::BadType {
-                    mfa: mfa("stats", "var", 1),
-                })
-            },
-            |v| {
-                self.n -= 1;
-                self.ex -= v - self.k;
-                self.ex2 -= (v - self.k) * (v - self.k);
-                Ok(())
-            },
-        )
-    }
+    // fn compensate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
+    //     args.first().cast_f64().map_or_else(
+    //         || {
+    //             Err(FunctionError::BadType {
+    //                 mfa: mfa("stats", "var", 1),
+    //             })
+    //         },
+    //         |v| {
+    //             self.n -= 1;
+    //             self.ex -= v - self.k;
+    //             self.ex2 -= (v - self.k) * (v - self.k);
+    //             Ok(())
+    //         },
+    //     )
+    // }
     fn emit<'event>(&mut self) -> FResult<Value<'event>> {
         if self.n == 0 {
             Ok(Value::from(0.0))
@@ -360,6 +365,7 @@ impl TremorAggrFn for Var {
         }
         Ok(())
     }
+    #[cfg(not(tarpaulin_include))]
     fn boxed_clone(&self) -> Box<dyn TremorAggrFn> {
         Box::new(self.clone())
     }
@@ -375,9 +381,9 @@ impl TremorAggrFn for Stdev {
     fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
         self.0.accumulate(args)
     }
-    fn compensate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
-        self.0.compensate(args)
-    }
+    // fn compensate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
+    //     self.0.compensate(args)
+    // }
     fn emit<'event>(&mut self) -> FResult<Value<'event>> {
         self.0
             .emit()
@@ -394,6 +400,7 @@ impl TremorAggrFn for Stdev {
         }
         Ok(())
     }
+    #[cfg(not(tarpaulin_include))]
     fn boxed_clone(&self) -> Box<dyn TremorAggrFn> {
         Box::new(self.clone())
     }
@@ -453,8 +460,8 @@ impl std::default::Default for Dds {
 
 impl TremorAggrFn for Dds {
     fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
-        if let Some(vals) = args.get(1).as_array() {
-            if !self.percentiles_set {
+        if !self.percentiles_set {
+            if let Some(vals) = args.get(1).as_array() {
                 let percentiles: FResult<Vec<(String, f64)>> = vals
                     .iter()
                     .flat_map(|v| v.as_str().map(String::from))
@@ -498,7 +505,7 @@ impl TremorAggrFn for Dds {
                 error: e.to_string(),
             }
         }
-        let mut p = hashmap! {};
+        let mut p = Value::object_with_capacity(self.percentiles.len() + 3);
         let histo = if let Some(histo) = self.histo.as_ref() {
             histo
         } else {
@@ -518,20 +525,16 @@ impl TremorAggrFn for Dds {
         let count = histo.count();
         let (min, max, sum) = if count == 0 {
             for (pcn, _percentile) in &self.percentiles {
-                p.insert(pcn.clone().into(), Value::from(0.0));
+                p.try_insert(pcn.clone(), 0.0);
             }
-            (0_f64, f64::MAX, 0_f64)
+            (0_f64, 0_f64, 0_f64)
         } else {
             for (pcn, percentile) in &self.percentiles {
-                if let Ok(Some(quantile)) = histo.quantile(*percentile) {
-                    let quantile_dsp = ceil(quantile, 1); // Round for equiv with HDR ( 2 digits )
-                    p.insert(pcn.clone().into(), Value::from(quantile_dsp));
-                } else {
-                    return Err(err(&format!(
-                        "Unable to calculate percentile '{}'",
-                        *percentile
-                    )));
-                }
+                let quantile = histo.quantile(*percentile).ok().flatten().ok_or_else(|| {
+                    err(&format!("Unable to calculate percentile '{}'", *percentile))
+                })?;
+                let quantile_dsp = ceil(quantile, 1); // Round for equiv with HDR ( 2 digits )
+                p.try_insert(pcn.clone(), quantile_dsp);
             }
             (
                 histo.min().ok_or_else(|| err(&"Unable to calculate min"))?,
@@ -539,19 +542,19 @@ impl TremorAggrFn for Dds {
                 histo.sum().ok_or_else(|| err(&"Unable to calculate sum"))?,
             )
         };
-        Ok(Value::from(hashmap! {
-            "count".into() => Value::from(count),
-            "min".into() => Value::from(min),
-            "max".into() => Value::from(max),
-            "mean".into() => Value::from(sum / count as f64),
-            "percentiles".into() => Value::from(p),
-        }))
+        let mut res = Value::object_with_capacity(5);
+        res.try_insert("count", count);
+        res.try_insert("min", min);
+        res.try_insert("max", max);
+        res.try_insert("mean", sum / count as f64);
+        res.try_insert("percentiles", p);
+        Ok(res)
     }
 
-    fn compensate<'event>(&mut self, _args: &[&Value<'event>]) -> FResult<()> {
-        // TODO there's no facility for this with dds histogram, punt for now
-        Ok(())
-    }
+    // fn compensate<'event>(&mut self, _args: &[&Value<'event>]) -> FResult<()> {
+    //     // TODO there's no facility for this with dds histogram, punt for now
+    //     Ok(())
+    // }
 
     fn merge(&mut self, src: &dyn TremorAggrFn) -> FResult<()> {
         let other: Option<&Self> = src.downcast_ref::<Self>();
@@ -611,6 +614,7 @@ impl TremorAggrFn for Dds {
         self.histo = None;
         self.cache.clear();
     }
+    #[cfg(not(tarpaulin_include))]
     fn boxed_clone(&self) -> Box<dyn TremorAggrFn> {
         Box::new(self.clone())
     }
@@ -625,7 +629,7 @@ struct Hdr {
     cache: Vec<u64>,
     percentiles: Vec<(String, f64)>,
     percentiles_set: bool,
-    max: u64,
+    high_bound: u64,
 }
 
 const HIST_MAX_CACHE_SIZE: usize = 8192;
@@ -646,14 +650,14 @@ impl std::default::Default for Hdr {
                 ("0.99999".to_string(), 0.99999),
             ],
             percentiles_set: false,
-            max: 0,
+            high_bound: 0,
         }
     }
 }
 
 impl Hdr {
-    fn max(&self) -> u64 {
-        max(self.max, 4)
+    fn high_bound(&self) -> u64 {
+        max(self.high_bound, 4)
     }
 }
 impl TremorAggrFn for Hdr {
@@ -688,15 +692,17 @@ impl TremorAggrFn for Hdr {
                     error: format!("failed to record value: {:?}", e),
                 })?;
             } else {
-                if v > self.max {
-                    self.max = v;
+                if v > self.high_bound {
+                    self.high_bound = v;
                 }
                 self.cache.push(v);
                 if self.cache.len() == HIST_MAX_CACHE_SIZE {
-                    let mut histo: Histogram<u64> = Histogram::new_with_bounds(1, self.max(), 2)
-                        .map_err(|e| FunctionError::RuntimeError {
-                            mfa: mfa("stats", "hdr", 2),
-                            error: format!("failed to allocate hdr storage: {:?}", e),
+                    let mut histo: Histogram<u64> =
+                        Histogram::new_with_bounds(1, self.high_bound(), 2).map_err(|e| {
+                            FunctionError::RuntimeError {
+                                mfa: mfa("stats", "hdr", 2),
+                                error: format!("failed to allocate hdr storage: {:?}", e),
+                            }
                         })?;
                     histo.auto(true);
                     for v in self.cache.drain(..) {
@@ -719,6 +725,7 @@ impl TremorAggrFn for Hdr {
                 self.percentiles = other.percentiles.clone();
                 self.percentiles_set = true;
             };
+            self.high_bound = max(self.high_bound, other.high_bound);
 
             if let Some(ref mut histo) = self.histo {
                 //  If this is a histogram and we merge
@@ -753,9 +760,9 @@ impl TremorAggrFn for Hdr {
                     // If both are caches
                     if self.cache.len() + other.cache.len() > HIST_MAX_CACHE_SIZE {
                         // If the cache size exceeds our maximal cache size drain them into a histogram
-                        self.max = max(self.max, other.max);
+                        self.high_bound = max(self.high_bound, other.high_bound);
                         let mut histo: Histogram<u64> =
-                            Histogram::new_with_bounds(1, self.max(), 2).map_err(|e| {
+                            Histogram::new_with_bounds(1, self.high_bound(), 2).map_err(|e| {
                                 FunctionError::RuntimeError {
                                     mfa: mfa("stats", "hdr", 2),
                                     error: format!("failed to init historgrams: {:?}", e),
@@ -778,7 +785,6 @@ impl TremorAggrFn for Hdr {
                     } else {
                         // If not append it's cache
                         self.cache.extend(&other.cache);
-                        self.max = max(self.max, other.max);
                     }
                 }
             }
@@ -786,10 +792,10 @@ impl TremorAggrFn for Hdr {
         Ok(())
     }
 
-    fn compensate<'event>(&mut self, _args: &[&Value<'event>]) -> FResult<()> {
-        // TODO there's no facility for this with hdr histogram, punt for now
-        Ok(())
-    }
+    // fn compensate<'event>(&mut self, _args: &[&Value<'event>]) -> FResult<()> {
+    //     // TODO there's no facility for this with hdr histogram, punt for now
+    //     Ok(())
+    // }
     fn emit<'event>(&mut self) -> FResult<Value<'event>> {
         let mut p = hashmap! {};
         if let Some(histo) = &self.histo {
@@ -809,12 +815,10 @@ impl TremorAggrFn for Hdr {
                 "percentiles".into() => Value::from(p),
             }))
         } else {
-            let mut histo: Histogram<u64> =
-                Histogram::new_with_bounds(1, self.max(), 2).map_err(|e| {
-                    FunctionError::RuntimeError {
-                        mfa: mfa("stats", "hdr", 2),
-                        error: format!("failed to init historgrams: {:?}", e),
-                    }
+            let mut histo: Histogram<u64> = Histogram::new_with_bounds(1, self.high_bound(), 2)
+                .map_err(|e| FunctionError::RuntimeError {
+                    mfa: mfa("stats", "hdr", 2),
+                    error: format!("failed to init historgrams: {:?}", e),
                 })?;
             histo.auto(true);
             for v in self.cache.drain(..) {
@@ -829,7 +833,7 @@ impl TremorAggrFn for Hdr {
                     Value::from(histo.value_at_percentile(percentile * 100.0)),
                 );
             }
-            Ok(Value::from(hashmap! {
+            let res = Value::from(hashmap! {
                 "count".into() => Value::from(histo.len()),
                 "min".into() => Value::from(histo.min()),
                 "max".into() => Value::from(histo.max()),
@@ -837,14 +841,17 @@ impl TremorAggrFn for Hdr {
                 "stdev".into() => Value::from(histo.stdev()),
                 "var".into() => Value::from(histo.stdev().powf(2.0)),
                 "percentiles".into() => Value::from(p),
-            }))
+            });
+            self.histo = Some(histo);
+            Ok(res)
         }
     }
     fn init(&mut self) {
         self.histo = None;
-        self.max = 0;
+        self.high_bound = 0;
         self.cache.clear();
     }
+    #[cfg(not(tarpaulin_include))]
     fn boxed_clone(&self) -> Box<dyn TremorAggrFn> {
         Box::new(self.clone())
     }
@@ -928,32 +935,54 @@ mod test {
 
     #[test]
     fn min() -> Result<()> {
+        let mut a = Min::default();
+        a.init();
+
         let one = Value::from(1);
         let two = Value::from(2);
         let three = Value::from(3);
-        let mut a = Min::default();
-        a.init();
+
+        let err = Value::null();
+        assert!(a.accumulate(&[&err]).is_err());
+
         a.accumulate(&[&one])?;
         a.accumulate(&[&two])?;
         a.accumulate(&[&three])?;
+
         assert_eq!(a.emit()?, 1.0);
         let mut b = Min::default();
         b.init();
         b.merge(&a)?;
         assert_eq!(a.emit()?, 1.0);
+
+        assert_eq!(a.arity(), 1..=1);
+
         Ok(())
     }
     #[test]
     fn max() -> Result<()> {
         let mut a = Max::default();
         a.init();
+
         let one = Value::from(1);
         let two = Value::from(2);
         let three = Value::from(3);
+
+        let err = Value::null();
+        assert!(a.accumulate(&[&err]).is_err());
+
         a.accumulate(&[&one])?;
         a.accumulate(&[&two])?;
         a.accumulate(&[&three])?;
+
         assert_eq!(a.emit()?, 3.0);
+        let mut b = Max::default();
+        b.init();
+        b.merge(&a)?;
+        assert_eq!(a.emit()?, 3.0);
+
+        assert_eq!(a.arity(), 1..=1);
+
         Ok(())
     }
 
@@ -964,10 +993,22 @@ mod test {
         let one = Value::from(1);
         let two = Value::from(2);
         let three = Value::from(3);
+        let four = Value::from(4);
+        let err = Value::null();
+        assert!(a.accumulate(&[&err]).is_err());
+
         a.accumulate(&[&one])?;
         a.accumulate(&[&two])?;
         a.accumulate(&[&three])?;
         assert_eq!(a.emit()?, 6.0);
+
+        let mut b = Mean::default();
+        b.init();
+        a.accumulate(&[&four])?;
+        a.merge(&b)?;
+        assert_eq!(a.emit()?, 10.0);
+
+        assert_eq!(a.arity(), 1..=1);
         Ok(())
     }
 
@@ -975,13 +1016,25 @@ mod test {
     fn mean() -> Result<()> {
         let mut a = Mean::default();
         a.init();
+        assert_eq!(a.emit()?, ());
         let one = Value::from(1);
         let two = Value::from(2);
         let three = Value::from(3);
+        let four = Value::from(4);
+        let err = Value::null();
+        assert!(a.accumulate(&[&err]).is_err());
         a.accumulate(&[&one])?;
         a.accumulate(&[&two])?;
         a.accumulate(&[&three])?;
         assert_eq!(a.emit()?, 2.0);
+
+        let mut b = Mean::default();
+        b.init();
+        a.accumulate(&[&four])?;
+        a.merge(&b)?;
+        assert_eq!(a.emit()?, 2.5);
+
+        assert_eq!(a.arity(), 1..=1);
         Ok(())
     }
 
@@ -989,10 +1042,15 @@ mod test {
     fn variance() -> Result<()> {
         let mut a = Var::default();
         a.init();
+
+        assert_eq!(a.emit()?, 0.0);
+
         let two = Value::from(2);
         let four = Value::from(4);
         let nineteen = Value::from(19);
         let nine = Value::from(9);
+        let err = Value::null();
+        assert!(a.accumulate(&[&err]).is_err());
         a.accumulate(&[&two])?;
         a.accumulate(&[&four])?;
         a.accumulate(&[&nineteen])?;
@@ -1019,6 +1077,8 @@ mod test {
         let r = b.emit()?.cast_f64().expect("screw it");
         assert!(approx_eq!(f64, dbg!(r), 33.928_571_428_571_43));
 
+        assert_eq!(a.arity(), 1..=1);
+
         Ok(())
     }
 
@@ -1029,10 +1089,21 @@ mod test {
         let two = Value::from(2);
         let four = Value::from(4);
         let nineteen = Value::from(19);
+
+        let err = Value::null();
+        assert!(a.accumulate(&[&err]).is_err());
+
         a.accumulate(&[&two])?;
         a.accumulate(&[&four])?;
         a.accumulate(&[&nineteen])?;
         assert!((a.emit()?.cast_f64().expect("screw it") - (259.0 as f64 / 3.0).sqrt()) < 0.001);
+
+        let mut b = Stdev::default();
+        b.merge(&a)?;
+        assert!((b.emit()?.cast_f64().expect("screw it") - (259.0 as f64 / 3.0).sqrt()) < 0.001);
+
+        assert_eq!(a.arity(), 1..=1);
+
         Ok(())
     }
 
@@ -1040,19 +1111,21 @@ mod test {
     fn hdr() -> Result<()> {
         let mut a = Hdr::default();
         a.init();
-        let mut i = 1;
 
-        loop {
-            if i > 100 {
-                break;
-            }
+        assert!(a
+            .accumulate(&[
+                &Value::from(0),
+                &literal!(["snot", "0.9", "0.95", "0.99", "0.999", "0.9999"]),
+            ])
+            .is_err());
+
+        for i in 1..=100 {
             a.accumulate(&[
                 &Value::from(i),
-                &Value::from(vec!["0.5", "0.9", "0.95", "0.99", "0.999", "0.9999"]),
+                &literal!(["0.5", "0.9", "0.95", "0.99", "0.999", "0.9999"]),
             ])?;
-            i += 1;
         }
-        let v = a.emit()?;
+
         let e = literal!({
             "min": 1,
             "max": 100,
@@ -1069,7 +1142,15 @@ mod test {
                 "0.9999": 100
             }
         });
-        assert_eq!(v, e);
+        assert_eq!(a.emit()?, e);
+
+        let mut b = Hdr::default();
+        b.init();
+        b.merge(&a)?;
+        assert_eq!(b.emit()?, e);
+
+        assert_eq!(a.arity(), 1..=2);
+
         Ok(())
     }
 
@@ -1079,36 +1160,44 @@ mod test {
 
         let mut a = Dds::default();
         a.init();
-        let mut i = 1;
 
-        loop {
-            if i > 100 {
-                break;
-            }
+        assert!(a
+            .accumulate(&[
+                &Value::from(0),
+                &literal!(["snot", "0.9", "0.95", "0.99", "0.999", "0.9999"]),
+            ])
+            .is_err());
+
+        for i in 1..=100 {
             a.accumulate(&[
                 &Value::from(i),
-                &Value::from(vec!["0.5", "0.9", "0.95", "0.99", "0.999", "0.9999"]),
+                &literal!(["0.5", "0.9", "0.95", "0.99", "0.999", "0.9999"]),
             ])?;
-            i += 1;
         }
-        let v = a.emit()?;
+
         let e = literal!({
-                    "min": 1.0,
-                    "max": 100.0,
-                    "count": 100,
-                    "mean": 50.5,
-        //            "stdev": 28.866_070_047_722_12,
-        //            "var": 833.25,
-                    "percentiles": {
-                        "0.5": 50.0,
-                        "0.9": 89.2,
-                        "0.95": 94.7,
-                        "0.99": 98.6,
-                        "0.999": 98.6,
-                        "0.9999": 98.6,
-                    }
-                });
-        assert_eq!(v, e);
+            "min": 1.0,
+            "max": 100.0,
+            "count": 100,
+            "mean": 50.5,
+            "percentiles": {
+                "0.5": 50.0,
+                "0.9": 89.2,
+                "0.95": 94.7,
+                "0.99": 98.6,
+                "0.999": 98.6,
+                "0.9999": 98.6,
+            }
+        });
+        assert_eq!(a.emit()?, e);
+
+        let mut b = Dds::default();
+        b.init();
+        b.merge(&a)?;
+        assert_eq!(b.emit()?, e);
+
+        assert_eq!(a.arity(), 1..=2);
+
         Ok(())
     }
 }
