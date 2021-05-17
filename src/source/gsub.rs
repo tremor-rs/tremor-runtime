@@ -60,9 +60,9 @@ impl Int {
         };
         Self {
             config,
-            origin,
             onramp_id,
             remote,
+            origin,
             project_id,
         }
     }
