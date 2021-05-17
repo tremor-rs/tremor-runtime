@@ -172,6 +172,18 @@ pub(crate) trait Source {
     }
 }
 
+fn make_error(source_id: String, e: &Error, original_id: u64) -> tremor_script::LineValue {
+    error!("[Source::{}] Error decoding event data: {}", source_id, e);
+    let mut meta = Object::with_capacity(1);
+    meta.insert_nocheck("error".into(), e.to_string().into());
+
+    let mut data = Object::with_capacity(3);
+    data.insert_nocheck("error".into(), e.to_string().into());
+    data.insert_nocheck("event_id".into(), original_id.into());
+    data.insert_nocheck("source_id".into(), source_id.into());
+    (Value::from(data), Value::from(meta)).into()
+}
+
 pub(crate) struct SourceManager<T>
 where
     T: Source,
@@ -526,21 +538,6 @@ where
         Ok(tx)
     }
 
-    fn make_error(&self, e: &Error, original_id: u64) -> tremor_script::LineValue {
-        error!(
-            "[Source::{}] Error decoding event data: {}",
-            self.source_id, e
-        );
-        let mut meta = Object::with_capacity(1);
-        meta.insert_nocheck("error".into(), e.to_string().into());
-
-        let mut data = Object::with_capacity(3);
-        data.insert_nocheck("error".into(), e.to_string().into());
-        data.insert_nocheck("event_id".into(), original_id.into());
-        data.insert_nocheck("source_id".into(), self.source_id.to_string().into());
-        (Value::from(data), Value::from(meta)).into()
-    }
-
     async fn route_result(
         &mut self,
         results: Vec<Result<tremor_script::LineValue>>,
@@ -551,7 +548,7 @@ where
         let mut error = false;
         for result in results {
             let (port, data) = result.map_or_else(
-                |e| (ERR, self.make_error(&e, original_id)),
+                |e| (ERR, make_error(self.source_id.to_string(), &e, original_id)),
                 |data| (OUT, data),
             );
             error |= self
@@ -769,5 +766,23 @@ mod tests {
         assert_eq!(rx4.recv().await?, true);
         handle.cancel().await;
         Ok(())
+    }
+
+    #[test]
+    fn make_error() {
+        let source_id = "snot".to_string();
+        let e = Error::from("oh no!");
+        let original_id = 5;
+        let error_result = super::make_error(source_id.clone(), &e, original_id);
+        let mut expec_meta = Object::with_capacity(1);
+        expec_meta.insert_nocheck("error".into(), e.to_string().into());
+
+        let mut expec_data = Object::with_capacity(3);
+        expec_data.insert_nocheck("error".into(), e.to_string().into());
+        expec_data.insert_nocheck("event_id".into(), original_id.into());
+        expec_data.insert_nocheck("source_id".into(), source_id.into());
+
+        assert_eq!(error_result.suffix().value(), &Value::from(expec_data));
+        assert_eq!(error_result.suffix().meta(), &Value::from(expec_meta));
     }
 }
