@@ -225,7 +225,7 @@ impl<'script> Upable<'script> for BytesPartRaw<'script> {
                 return Err(err_generic(
                     &self,
                     &self,
-                    &format!("Not a valid data type: '{}' ({:?})", other.join("-"), other),
+                    &format!("Not a valid data type: '{}'", other.join("-")),
                     &helper.meta,
                 ))
             }
@@ -311,11 +311,8 @@ impl<'script> ModuleRaw<'script> {
                     let expr = expr.up(helper)?;
                     let v = reduce2(expr, &helper)?;
                     helper.consts.insert(name_v, v).map_err(|_old| {
-                        Error::from(ErrorKind::DoubleConst(
-                            Range::from((start, end)).expand_lines(2),
-                            Range::from((start, end)),
-                            name.to_string(),
-                        ))
+                        let r = Range::from((start, end));
+                        ErrorKind::DoubleConst(r.expand_lines(2), r, name.to_string())
                     })?;
                 }
                 ExprRaw::FnDecl(f) => {
@@ -332,14 +329,8 @@ impl<'script> ModuleRaw<'script> {
 
                     helper.register_fun(f)?;
                 }
-                e => {
-                    return error_generic(
-                        &e,
-                        &e,
-                        &"Can't have expressions inside of modules",
-                        &helper.meta,
-                    )
-                }
+                // ALLOW: the gramer doesn't allow this
+                _ => unreachable!("Can't have expressions inside of modules"),
             }
         }
         helper.module.pop();
@@ -560,27 +551,9 @@ impl<'script> Upable<'script> for ExprRaw<'script> {
     #[allow(clippy::clippy::too_many_lines)]
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(match self {
-            ExprRaw::Module(ModuleRaw { start, end, .. }) => {
-                // There is no code path that leads here,
-                // we still rather have an error in case we made
-                // an error then unreachable
-
-                return Err(ErrorKind::InvalidMod(
-                    Range::from((start, end)).expand_lines(2),
-                    Range::from((start, end)),
-                )
-                .into());
-            }
-            ExprRaw::Const { start, end, .. } => {
-                // There is no code path that leads here,
-                // we still rather have an error in case we made
-                // an error then unreachable
-
-                return Err(ErrorKind::InvalidConst(
-                    Range::from((start, end)).expand_lines(2),
-                    Range::from((start, end)),
-                )
-                .into());
+            ExprRaw::FnDecl(_) | ExprRaw::Const { .. } | ExprRaw::Module(ModuleRaw { .. }) => {
+                // ALLOW: There is no code path that leads here,
+                unreachable!()
             }
             ExprRaw::MatchExpr(m) => match m.up(helper)? {
                 Match {
@@ -674,25 +647,16 @@ impl<'script> Upable<'script> for ExprRaw<'script> {
             }
             ExprRaw::Emit(e) => Expr::Emit(Box::new(e.up(helper)?)),
             ExprRaw::Imut(i) => i.up(helper)?.into(),
-            ExprRaw::FnDecl(f) => {
-                // There is no code path that leads here,
-                // we still rather have an error in case we made
-                // an error then unreachable
-
-                return Err(ErrorKind::InvalidFn(
-                    f.extent(&helper.meta).expand_lines(2),
-                    f.extent(&helper.meta),
-                )
-                .into());
-            }
         })
     }
 }
 
+#[cfg(not(tarpaulin_include))] // just dispatch
 impl<'script> BaseExpr for ExprRaw<'script> {
     fn mid(&self) -> usize {
         0
     }
+
     fn s(&self, meta: &NodeMetas) -> Location {
         match self {
             ExprRaw::Const { start, .. } | ExprRaw::Drop { start, .. } => *start,
@@ -705,6 +669,7 @@ impl<'script> BaseExpr for ExprRaw<'script> {
             ExprRaw::Imut(e) => e.s(meta),
         }
     }
+
     fn e(&self, meta: &NodeMetas) -> Location {
         match self {
             ExprRaw::Const { end, .. } | ExprRaw::Drop { end, .. } => *end,
@@ -809,18 +774,17 @@ impl<'script> Upable<'script> for AnyFnRaw<'script> {
     }
 }
 
+#[cfg(not(tarpaulin_include))] // just dispatch
 impl<'script> BaseExpr for AnyFnRaw<'script> {
     fn mid(&self) -> usize {
         0
     }
-
     fn s(&self, _meta: &NodeMetas) -> Location {
         match self {
             AnyFnRaw::Match(m) => m.start,
             AnyFnRaw::Normal(m) => m.start,
         }
     }
-
     fn e(&self, _meta: &NodeMetas) -> Location {
         match self {
             AnyFnRaw::Match(m) => m.end,
@@ -2646,3 +2610,13 @@ pub type ComprehensionCasesRaw<'script, Ex> = Vec<ComprehensionCaseRaw<'script, 
 pub type ImutComprehensionCasesRaw<'script> = Vec<ImutComprehensionCaseRaw<'script>>;
 pub type ArrayPredicatePatternsRaw<'script> = Vec<ArrayPredicatePatternRaw<'script>>;
 pub type WithExprsRaw<'script> = Vec<(IdentRaw<'script>, ImutExprRaw<'script>)>;
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    #[test]
+    fn default() {
+        assert_eq!(Endian::default(), Endian::Big);
+        assert_eq!(BytesDataType::default(), BytesDataType::UnsignedInteger);
+    }
+}

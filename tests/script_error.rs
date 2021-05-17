@@ -134,6 +134,9 @@ test_cases!(
     pp_cyclic,
     pp_nest_cyclic,
     // INSERT
+    double_const_mod,
+    bin_invalid_bits,
+    bin_invalid_type,
     merge_ident,
     select_ident,
     function_already_defined,
