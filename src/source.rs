@@ -784,5 +784,21 @@ mod tests {
 
         assert_eq!(error_result.suffix().value(), &Value::from(expec_data));
         assert_eq!(error_result.suffix().meta(), &Value::from(expec_meta));
+
+        // testing with a second set of inputs
+        let source_id = "tremor-source-testing".to_string();
+        let e = Error::from("error oh no!!!");
+        let original_id = 7;
+        let error_result = super::make_error(source_id.clone(), &e, original_id);
+        let mut expec_meta = Object::with_capacity(1);
+        expec_meta.insert_nocheck("error".into(), e.to_string().into());
+
+        let mut expec_data = Object::with_capacity(3);
+        expec_data.insert_nocheck("error".into(), e.to_string().into());
+        expec_data.insert_nocheck("event_id".into(), original_id.into());
+        expec_data.insert_nocheck("source_id".into(), source_id.into());
+
+        assert_eq!(error_result.suffix().value(), &Value::from(expec_data));
+        assert_eq!(error_result.suffix().meta(), &Value::from(expec_meta));
     }
 }
