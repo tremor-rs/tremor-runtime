@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::{op::prelude::*, EventId, DEFAULT_STREAM_ID};
-use byteorder::{BigEndian, ReadBytesExt};
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use simd_json_derive::{Deserialize, Serialize};
 use sled::IVec;
 use std::io::Cursor;
@@ -40,7 +40,9 @@ impl std::fmt::Display for Idx {
 impl AddAssign<u64> for Idx {
     fn add_assign(&mut self, other: u64) {
         let this: u64 = u64::from(&*self);
-        self.0 = unsafe { mem::transmute((this + other).to_be()) };
+        let res = this + other;
+        // ALLOW: We know that self.0 has exactly 8 elements
+        (&mut self.0[..]).write_u64::<BigEndian>(res).unwrap();
     }
 }
 
@@ -69,23 +71,26 @@ impl From<IVec> for Idx {
     fn from(v: IVec) -> Self {
         let mut rdr = Cursor::new(v);
         let res: u64 = rdr.read_u64::<BigEndian>().unwrap_or(0);
-        Self(unsafe { mem::transmute(res.to_be()) })
+        Self::from(res)
     }
 }
 
 impl From<u64> for Idx {
     fn from(v: u64) -> Self {
-        Self(unsafe { mem::transmute(v.to_be()) })
+        debug_assert_eq!(mem::size_of::<Self>(), mem::size_of::<u64>());
+        unsafe { mem::transmute(v.to_be()) }
     }
 }
 
 impl Idx {
     fn set(&mut self, v: u64) {
-        self.0 = unsafe { mem::transmute(v.to_be()) };
+        // ALLOW: We know that self.0 has exactly 8 elements
+        (&mut self.0[..]).write_u64::<BigEndian>(v).unwrap();
     }
     fn set_min(&mut self, v: u64) {
         if v < u64::from(&*self) {
-            self.0 = unsafe { mem::transmute(v.to_be()) };
+            // ALLOW: We know that self.0 has exactly 8 elements
+            (&mut self.0[..]).write_u64::<BigEndian>(v).unwrap();
         }
     }
 }
