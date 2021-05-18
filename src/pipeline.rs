@@ -620,6 +620,11 @@ mod tests {
     use tremor_script::prelude::*;
     use tremor_script::{path::ModulePath, query::Query};
 
+    // used when we expect something
+    const POSITIVE_RECV_TIMEOUT: Duration = Duration::from_millis(10000);
+    // used when we expect nothing, to not spend too much time in this test
+    const NEGATIVE_RECV_TIMEOUT: Duration = Duration::from_millis(200);
+
     /// ensure the last message has been processed by waiting for the manager to answer
     /// leveraging the sequential execution at the manager task
     /// this only works reliably for MgmtMsgs, not for insights or events/signals
@@ -631,12 +636,7 @@ mod tests {
         wait_for: Option<Duration>,
     ) -> Result<Event> {
         loop {
-            match timeout(
-                wait_for.unwrap_or(Duration::from_secs(36000)),
-                offramp_rx.recv(),
-            )
-            .await
-            {
+            match timeout(wait_for.unwrap_or(POSITIVE_RECV_TIMEOUT), offramp_rx.recv()).await {
                 Ok(Ok(offramp::Msg::Event { event, .. })) => return Ok(event),
                 Ok(_) => continue, // ignore anything else, like signals
                 Err(_) => return Err("timeout waiting for event at offramp".into()),
@@ -704,7 +704,7 @@ mod tests {
 
         // transactional onramp received it
         // chose exceptionally big timeout, which we will only hit in the bad case that stuff isnt working, normally this should return fine
-        match timeout(Duration::from_millis(10000), onramp_rx.recv()).await {
+        match timeout(POSITIVE_RECV_TIMEOUT, onramp_rx.recv()).await {
             Ok(Ok(onramp::Msg::Cb(CbAction::Ack, cb_id))) => assert_eq!(cb_id, event_id),
             Err(_) => assert!(false, "No msg received."),
             m => assert!(false, "received unexpected msg: {:?}", m),
@@ -724,14 +724,14 @@ mod tests {
 
         // transactional onramp received it
         // chose exceptionally big timeout, which we will only hit in the bad case that stuff isnt working, normally this should return fine
-        match timeout(Duration::from_millis(10000), onramp_rx.recv()).await {
+        match timeout(POSITIVE_RECV_TIMEOUT, onramp_rx.recv()).await {
             Ok(Ok(onramp::Msg::Cb(CbAction::Close, cb_id))) => assert_eq!(cb_id, event_id),
             Err(_) => assert!(false, "No msg received."),
             m => assert!(false, "received unexpected msg: {:?}", m),
         }
 
         // non-transactional did also receive it
-        match timeout(Duration::from_millis(10000), onramp2_rx.recv()).await {
+        match timeout(POSITIVE_RECV_TIMEOUT, onramp2_rx.recv()).await {
             Ok(Ok(onramp::Msg::Cb(CbAction::Close, cb_id))) => assert_eq!(cb_id, event_id),
             Err(_) => assert!(false, "No msg received."),
 
@@ -751,7 +751,7 @@ mod tests {
         })
         .await?;
         // we expect nothing after disconnect, so we run into a timeout
-        match timeout(Duration::from_millis(200), onramp_rx.recv()).await {
+        match timeout(NEGATIVE_RECV_TIMEOUT, onramp_rx.recv()).await {
             Ok(m) => assert!(false, "Didnt expect a message. Got: {:?}", m),
             Err(_e) => {}
         };
@@ -776,7 +776,7 @@ mod tests {
         .await?;
 
         // we expect nothing after disconnect, so we run into a timeout
-        match timeout(Duration::from_millis(200), onramp2_rx.recv()).await {
+        match timeout(NEGATIVE_RECV_TIMEOUT, onramp2_rx.recv()).await {
             Ok(m) => assert!(false, "Didnt expect a message. Got: {:?}", m),
             Err(_e) => {}
         };
@@ -832,7 +832,7 @@ mod tests {
         .await?;
 
         // no event at offramp
-        match timeout(Duration::from_millis(100), offramp_rx.recv()).await {
+        match timeout(NEGATIVE_RECV_TIMEOUT, offramp_rx.recv()).await {
             Ok(Ok(m @ offramp::Msg::Event { .. })) => {
                 assert!(false, "Did not expect an event, but got: {:?}", m)
             }
@@ -869,7 +869,7 @@ mod tests {
         .await?;
 
         // we expect nothing to arrive, so we run into a timeout
-        match timeout(Duration::from_millis(200), offramp_rx.recv()).await {
+        match timeout(NEGATIVE_RECV_TIMEOUT, offramp_rx.recv()).await {
             Ok(Ok(m @ offramp::Msg::Event { .. })) => {
                 assert!(false, "Didnt expect to receive something, got: {:?}", m)
             }
