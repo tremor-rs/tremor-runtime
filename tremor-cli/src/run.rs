@@ -344,9 +344,7 @@ fn run_trickle_source(matches: &ArgMatches, src: String) -> Result<()> {
         id,
         &mut egress,
         &move |runnable, id, egress, at, event| {
-            let value = LineValue::new(vec![], |_| unsafe {
-                ValueAndMeta::from(event.clone_static())
-            });
+            let value = LineValue::new(vec![], |_| ValueAndMeta::from(event.clone_static()));
 
             let mut continuation = vec![];
 
