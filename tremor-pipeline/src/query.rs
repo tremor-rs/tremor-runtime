@@ -33,7 +33,6 @@ use op::trickle::{
 };
 use petgraph::algo::is_cyclic_directed;
 // use petgraph::dot::Config;
-use std::mem;
 use std::sync::Arc;
 use tremor_common::ids::OperatorIdGen;
 use tremor_script::query::{StmtRental, StmtRentalWrapper};
@@ -247,16 +246,13 @@ impl Query {
 
         let has_builtin_node_name = make_builtin_node_name_checker();
 
-        for stmt in &query.stmts {
-            let stmt_rental = StmtRental::new(Arc::new(self.0.clone()), |_| unsafe {
-                // This is sound since self.0 includes an ARC of the data we
-                // so we hold on to any referenced data by including a clone
-                // of that arc inthe rental source.
-                mem::transmute::<Stmt<'_>, Stmt<'static>>(stmt.clone())
-            });
+        for (i, stmt) in query.stmts.iter().enumerate() {
+            let stmt_rental =
+            // ALLOW: we do this based on the index above so we know i exists
+                StmtRental::new(Arc::new(self.0.clone()), |q| q.suffix().stmts[i].clone());
 
-            let that = tremor_script::query::StmtRentalWrapper {
-                stmt: std::sync::Arc::new(stmt_rental),
+            let that = StmtRentalWrapper {
+                stmt: Arc::new(stmt_rental),
             };
 
             match stmt {
@@ -429,29 +425,32 @@ impl Query {
                         ..NodeConfig::default()
                     };
                     let id = pipe_graph.add_node(node.clone());
-                    let mut decl = query
-                        .operators
-                        .get(&fqon)
-                        .ok_or_else(|| Error::from("operator not found"))?
-                        .clone();
 
-                    if let Some(params) = &o.params {
-                        if let Some(decl_params) = decl.params.as_mut() {
-                            for (k, v) in params {
-                                decl_params.insert(k.clone(), v.clone());
+                    let stmt_rental = StmtRental::try_new(Arc::new(self.0.clone()), |query| {
+                        let q = query.suffix();
+                        let mut decl = q
+                            .operators
+                            .get(&fqon)
+                            .ok_or_else(|| Error::from("operator not found"))?
+                            .clone();
+                        if let Some(Stmt::Operator(o)) = q.stmts.get(i) {
+                            if let Some(params) = &o.params {
+                                if let Some(decl_params) = decl.params.as_mut() {
+                                    for (k, v) in params {
+                                        decl_params.insert(k.clone(), v.clone());
+                                    }
+                                } else {
+                                    decl.params = Some(params.clone());
+                                }
                             }
-                        } else {
-                            decl.params = Some(params.clone());
-                        }
-                    }
-
-                    let inner_stmt: tremor_script::ast::Stmt = Stmt::OperatorDecl(decl);
-                    let stmt_rental = StmtRental::new(Arc::new(self.0.clone()), |_| unsafe {
+                        };
+                        let inner_stmt = Stmt::OperatorDecl(decl);
                         // This is sound since self.0 includes an ARC of the data we
                         // so we hold on to any referenced data by including a clone
                         // of that arc inthe rental source.
-                        mem::transmute::<Stmt<'_>, Stmt<'static>>(inner_stmt)
-                    });
+                        Ok(inner_stmt)
+                    })
+                    .map_err(|e: rental::RentalError<Error, _>| e.0)?;
 
                     let that = StmtRentalWrapper {
                         stmt: std::sync::Arc::new(stmt_rental),
@@ -478,15 +477,23 @@ impl Query {
                     } else {
                         format!("{}::{}", o.module.join("::"), target)
                     };
-                    let inner_stmt: tremor_script::ast::Stmt = Stmt::ScriptDecl(Box::new(
-                        query
+
+                    let stmt_rental = StmtRental::try_new(Arc::new(self.0.clone()), |query| {
+                        let decl = query
+                            .suffix()
                             .scripts
                             .get(&fqsn)
                             .ok_or_else(|| Error::from("script not found"))?
-                            .clone(),
-                    ));
+                            .clone();
+                        let inner_stmt = Stmt::ScriptDecl(Box::new(decl));
+                        // This is sound since self.0 includes an ARC of the data we
+                        // so we hold on to any referenced data by including a clone
+                        // of that arc inthe rental source.
+                        Ok(inner_stmt)
+                    })
+                    .map_err(|e: rental::RentalError<Error, _>| e.0)?;
 
-                    let label = if let Stmt::ScriptDecl(s) = &inner_stmt {
+                    let label = if let Stmt::ScriptDecl(s) = stmt_rental.suffix() {
                         let e = s.extent(&query.node_meta);
                         let mut h = Dumb::new();
                         // We're trimming the code so no spaces are at the end then adding a newline
@@ -498,14 +505,7 @@ impl Query {
                         None
                     };
 
-                    let stmt_rental = StmtRental::new(Arc::new(self.0.clone()), |_| unsafe {
-                        // This is sound since self.0 includes an ARC of the data we
-                        // so we hold on to any referenced data by including a clone
-                        // of that arc inthe rental source.
-                        mem::transmute::<Stmt<'_>, Stmt<'static>>(inner_stmt)
-                    });
-
-                    let that_defn = tremor_script::query::StmtRentalWrapper {
+                    let that_defn = StmtRentalWrapper {
                         stmt: std::sync::Arc::new(stmt_rental),
                     };
 
@@ -680,7 +680,7 @@ impl Query {
 fn select(
     operator_uid: u64,
     config: &NodeConfig,
-    node: Option<tremor_script::query::StmtRentalWrapper>,
+    node: Option<StmtRentalWrapper>,
     windows: Option<HashMap<String, WindowImpl>>,
 ) -> Result<Box<dyn Operator>> {
     let node = node.ok_or_else(|| {
@@ -742,7 +742,7 @@ fn select(
 fn operator(
     operator_uid: u64,
     config: &NodeConfig,
-    node: Option<tremor_script::query::StmtRentalWrapper>,
+    node: Option<StmtRentalWrapper>,
 ) -> Result<Box<dyn Operator>> {
     let node = node.ok_or_else(|| {
         ErrorKind::MissingOpConfig("trickle operators require a statement".into())
@@ -756,8 +756,8 @@ fn operator(
 
 fn script(
     config: &NodeConfig,
-    defn: Option<tremor_script::query::StmtRentalWrapper>,
-    node: Option<tremor_script::query::StmtRentalWrapper>,
+    defn: Option<StmtRentalWrapper>,
+    node: Option<StmtRentalWrapper>,
 ) -> Result<Box<dyn Operator>> {
     let node = node.ok_or_else(|| {
         ErrorKind::MissingOpConfig("trickle operators require a statement".into())
@@ -771,8 +771,8 @@ fn script(
 pub(crate) fn supported_operators(
     config: &NodeConfig,
     uid: u64,
-    defn: Option<tremor_script::query::StmtRentalWrapper>,
-    node: Option<tremor_script::query::StmtRentalWrapper>,
+    defn: Option<StmtRentalWrapper>,
+    node: Option<StmtRentalWrapper>,
     windows: Option<HashMap<String, WindowImpl>>,
 ) -> Result<OperatorNode> {
     let name_parts: Vec<&str> = config.op_type.split("::").collect();
