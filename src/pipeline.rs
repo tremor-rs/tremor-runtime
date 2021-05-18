@@ -713,6 +713,31 @@ mod tests {
         // non-transactional did not
         assert!(onramp2_rx.is_empty());
 
+        // send a cb insight
+        let event_id = EventId::from((0, 0, 1));
+        addr.send_insight(Event {
+            id: event_id.clone(),
+            cb: CbAction::Close,
+            ..Event::default()
+        })
+        .await?;
+
+        // transactional onramp received it
+        // chose exceptionally big timeout, which we will only hit in the bad case that stuff isnt working, normally this should return fine
+        match timeout(Duration::from_millis(10000), onramp_rx.recv()).await {
+            Ok(Ok(onramp::Msg::Cb(CbAction::Close, cb_id))) => assert_eq!(cb_id, event_id),
+            Err(_) => assert!(false, "No msg received."),
+            m => assert!(false, "received unexpected msg: {:?}", m),
+        }
+
+        // non-transactional did also receive it
+        match timeout(Duration::from_millis(10000), onramp2_rx.recv()).await {
+            Ok(Ok(onramp::Msg::Cb(CbAction::Close, cb_id))) => assert_eq!(cb_id, event_id),
+            Err(_) => assert!(false, "No msg received."),
+
+            m => assert!(false, "received unexpected msh: {:?}", m),
+        }
+
         // disconnect our fake offramp
         addr.send_mgmt(MgmtMsg::DisconnectInput(onramp_url)).await?;
         manager_fence(&addr).await?; // ensure the last message has been processed
