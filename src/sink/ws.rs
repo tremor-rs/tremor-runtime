@@ -17,10 +17,11 @@
 use crate::sink::prelude::*;
 use crate::source::prelude::*;
 use async_channel::{bounded, unbounded, Receiver, Sender};
-use async_tungstenite::async_std::connect_async;
+use async_std::net::TcpStream;
 use async_tungstenite::tungstenite::error::Error as WsError;
 use async_tungstenite::tungstenite::error::ProtocolError as WsProtocolError;
 use async_tungstenite::tungstenite::Message;
+use async_tungstenite::{async_std::connect_async, WebSocketStream};
 use futures::SinkExt;
 use halfbrown::HashMap;
 use std::boxed::Box;
@@ -115,6 +116,29 @@ async fn handle_error(
     Ok(())
 }
 
+/// close the given stream if it is not already closed.
+async fn close_stream_on_error(
+    e: WsError,
+    stream: &mut WebSocketStream<TcpStream>,
+    sink_url: &TremorUrl,
+    url: &str,
+) {
+    if !matches!(
+        e,
+        WsError::Io(_)
+            | WsError::AlreadyClosed
+            | WsError::ConnectionClosed
+            | WsError::Protocol(WsProtocolError::ResetWithoutClosingHandshake)
+    ) {
+        if let Err(e) = stream.close(None).await {
+            error!(
+                "[Sink::{}] Error closing ws stream to {}: {}",
+                sink_url, url, e
+            );
+        }
+    }
+}
+
 #[allow(clippy::too_many_arguments, clippy::too_many_lines)]
 async fn ws_connection_loop(
     sink_url: TremorUrl,
@@ -201,22 +225,8 @@ async fn ws_connection_loop(
                                         .await?;
 
                                         // close connection explicitly - if it is not already closed
-                                        if !matches!(
-                                            e,
-                                            WsError::Io(_)
-                                                | WsError::AlreadyClosed
-                                                | WsError::ConnectionClosed
-                                                | WsError::Protocol(
-                                                    WsProtocolError::ResetWithoutClosingHandshake
-                                                )
-                                        ) {
-                                            if let Err(e) = ws_stream.close(None).await {
-                                                error!(
-                                                    "[Sink::{}] Error closing ws stream to {}: {}",
-                                                    &sink_url, &url, e
-                                                );
-                                            }
-                                        }
+                                        close_stream_on_error(e, &mut ws_stream, &sink_url, &url)
+                                            .await;
 
                                         connection_lifecycle_tx
                                             .send(WsConnectionMsg::Disconnected(url.clone()))
@@ -324,23 +334,7 @@ async fn ws_connection_loop(
                                 correlation.as_ref(),
                             )
                             .await?;
-                            if !matches!(
-                                e,
-                                WsError::Io(_)
-                                    | WsError::AlreadyClosed
-                                    | WsError::ConnectionClosed
-                                    | WsError::Protocol(
-                                        WsProtocolError::ResetWithoutClosingHandshake
-                                    )
-                            ) {
-                                // close connection explicitly
-                                if let Err(e) = ws_stream.close(None).await {
-                                    error!(
-                                        "[Sink::{}] Error closing ws stream to {}: {}",
-                                        &sink_url, &url, e
-                                    );
-                                }
-                            }
+                            close_stream_on_error(e, &mut ws_stream, &sink_url, &url).await;
                             connection_lifecycle_tx
                                 .send(WsConnectionMsg::Disconnected(url.clone()))
                                 .await?;
