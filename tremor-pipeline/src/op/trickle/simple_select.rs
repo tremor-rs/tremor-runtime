@@ -55,24 +55,17 @@ impl SimpleSelect {
         id: String,
         stmt_rentwrapped: &tremor_script::query::StmtRentalWrapper,
     ) -> Result<Self> {
-        let select = match stmt_rentwrapped.suffix() {
-            tremor_script::ast::Stmt::Select(ref select) => select.clone(),
-            _ => {
-                return Err(ErrorKind::PipelineError(
+        let select = rentals::Select::try_new(stmt_rentwrapped.stmt.clone(), |stmt_rentwrapped| {
+            match stmt_rentwrapped.suffix() {
+                tremor_script::ast::Stmt::Select(ref select) => Ok(select.clone()),
+                _ => Err(ErrorKind::PipelineError(
                     "Trying to turn a non select into a select operator".into(),
                 )
-                .into())
+                .into()),
             }
-        };
+        })?;
 
-        Ok(Self {
-            id,
-            select: rentals::Select::new(stmt_rentwrapped.stmt.clone(), move |_| unsafe {
-                // This is sound since we keep an arc of the borrowed data in
-                // stmt
-                std::mem::transmute::<SelectStmt<'_>, SelectStmt<'static>>(select)
-            }),
-        })
+        Ok(Self { id, select })
     }
     fn opts() -> ExecOpts {
         ExecOpts {

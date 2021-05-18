@@ -163,6 +163,12 @@ impl<'event> ValueAndMeta<'event> {
     pub fn into_parts(self) -> (Value<'event>, Value<'event>) {
         (self.v, self.m)
     }
+    /// borrows both parts as mutalbe
+    #[must_use]
+
+    pub fn parts_mut(&mut self) -> (&mut Value<'event>, &mut Value<'event>) {
+        (&mut self.v, &mut self.m)
+    }
 }
 
 impl<'event> Default for ValueAndMeta<'event> {

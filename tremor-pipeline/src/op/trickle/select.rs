@@ -25,16 +25,18 @@ use std::borrow::Cow as SCow;
 use std::mem;
 use std::sync::Arc;
 use tremor_common::stry;
-use tremor_script::interpreter::Env;
+
 use tremor_script::{
     self,
-    ast::{Aggregates, InvokeAggrFn, Select, SelectStmt, WindowDecl},
+    ast::{Aggregates, InvokeAggrFn, NodeMetas, Select, SelectStmt, WindowDecl},
+    interpreter::Env,
+    interpreter::LocalStack,
     prelude::*,
     query::StmtRental,
+    query::StmtRentalWrapper,
+    utils::sorted_serialize,
     Value,
 };
-use tremor_script::{ast::NodeMetas, utils::sorted_serialize};
-use tremor_script::{interpreter::LocalStack, query::StmtRentalWrapper};
 
 #[derive(Debug, Clone)]
 pub struct GroupData<'groups> {
@@ -471,18 +473,8 @@ impl TrickleSelect {
         id: String,
         dims: &Dims,
         windows: Vec<(String, WindowImpl)>,
-        stmt_rentwrapped: &tremor_script::query::StmtRentalWrapper,
+        stmt_rentwrapped: &StmtRentalWrapper,
     ) -> Result<Self> {
-        let select = match stmt_rentwrapped.suffix() {
-            tremor_script::ast::Stmt::Select(ref select) => select.clone(),
-            _ => {
-                return Err(ErrorKind::PipelineError(
-                    "Trying to turn a non select into a select operator".into(),
-                )
-                .into())
-            }
-        };
-
         let windows = windows
             .into_iter()
             .map(|(fqwn, window_impl)| Window {
@@ -494,16 +486,20 @@ impl TrickleSelect {
                 next_swap: 0,
             })
             .collect();
+        let select = rentals::Select::try_new(stmt_rentwrapped.stmt.clone(), move |stmt| {
+            if let tremor_script::ast::Stmt::Select(select) = stmt.suffix() {
+                Ok(select.clone())
+            } else {
+                Err(ErrorKind::PipelineError(
+                    "Trying to turn a non select into a select operator".into(),
+                )
+                .into())
+            }
+        })?;
         Ok(Self {
             id,
             windows,
-            select: rentals::Select::new(stmt_rentwrapped.stmt.clone(), move |_| unsafe {
-                // This is safe since `stmt_rentwrapped.stmt` is an Arc that
-                // hods the referenced data and we clone it into the rental.
-                // This ensures referenced data isn't dropped until the rental
-                // is dropped.
-                mem::transmute::<SelectStmt<'_>, SelectStmt<'static>>(select)
-            }),
+            select,
             event_id_gen: EventIdGenerator::new(operator_uid),
         })
     }
@@ -1628,7 +1624,7 @@ mod test {
     use rental::RentalError;
 
     use simd_json::{json, StaticNode};
-    use tremor_script::{ast::Stmt, Query};
+    use tremor_script::{ast::Stmt, query::StmtRental, Query};
     use tremor_script::{
         ast::{self, Ident, ImutExpr, Literal},
         path::ModulePath,
@@ -1782,14 +1778,13 @@ mod test {
             &aggr_reg,
         )
         .map_err(tremor_script::errors::CompilerError::error)?;
-        let stmt_rental = tremor_script::query::StmtRental::try_new(Arc::new(query.clone()), |q| {
+        let stmt_rental = StmtRental::try_new(Arc::new(query.clone()), |q| {
             q.suffix()
                 .stmts
                 .first()
                 .cloned()
                 .ok_or_else(|| Error::from("Invalid query"))
-        })
-        .map_err(|e| e.0)?;
+        })?;
         let stmt = tremor_script::query::StmtRentalWrapper {
             stmt: Arc::new(stmt_rental),
         };
@@ -1850,15 +1845,14 @@ mod test {
                 _ => None,
             })
             .collect();
-        let stmt_rental = tremor_script::query::StmtRental::try_new(Arc::new(query.clone()), |q| {
+        let stmt_rental = StmtRental::try_new(Arc::new(query.clone()), |q| {
             q.suffix()
                 .stmts
                 .iter()
                 .find(|stmt| matches!(*stmt, Stmt::Select(_)))
                 .cloned()
                 .ok_or_else(|| Error::from("Invalid query, expected only 1 select statement"))
-        })
-        .map_err(|e: RentalError<Error, Arc<Query>>| e.0)?;
+        })?;
         let stmt = tremor_script::query::StmtRentalWrapper {
             stmt: Arc::new(stmt_rental),
         };
@@ -2247,8 +2241,7 @@ mod test {
             warnings: BTreeSet::new(),
         };
 
-        let stmt_rental =
-            tremor_script::query::StmtRental::new(Arc::new(query.clone()), |_| stmt_ast);
+        let stmt_rental = StmtRental::new(Arc::new(query.clone()), |_| stmt_ast);
 
         let stmt = tremor_script::query::StmtRentalWrapper {
             stmt: Arc::new(stmt_rental),
@@ -2288,8 +2281,7 @@ mod test {
             warnings: BTreeSet::new(),
         };
 
-        let stmt_rental =
-            tremor_script::query::StmtRental::new(Arc::new(query.clone()), |_| stmt_ast);
+        let stmt_rental = StmtRental::new(Arc::new(query.clone()), |_| stmt_ast);
 
         let stmt = tremor_script::query::StmtRentalWrapper {
             stmt: Arc::new(stmt_rental),
@@ -2330,8 +2322,7 @@ mod test {
             warnings: BTreeSet::new(),
         };
 
-        let stmt_rental =
-            tremor_script::query::StmtRental::new(Arc::new(query.clone()), |_| stmt_ast);
+        let stmt_rental = StmtRental::new(Arc::new(query.clone()), |_| stmt_ast);
 
         let stmt = tremor_script::query::StmtRentalWrapper {
             stmt: Arc::new(stmt_rental),
@@ -2366,8 +2357,7 @@ mod test {
             warnings: BTreeSet::new(),
         };
 
-        let stmt_rental =
-            tremor_script::query::StmtRental::new(Arc::new(query.clone()), |_| stmt_ast);
+        let stmt_rental = StmtRental::new(Arc::new(query.clone()), |_| stmt_ast);
 
         let stmt = tremor_script::query::StmtRentalWrapper {
             stmt: Arc::new(stmt_rental),
@@ -2407,8 +2397,7 @@ mod test {
             warnings: BTreeSet::new(),
         };
 
-        let stmt_rental =
-            tremor_script::query::StmtRental::new(Arc::new(query.clone()), |_| stmt_ast);
+        let stmt_rental = StmtRental::new(Arc::new(query.clone()), |_| stmt_ast);
 
         let stmt = tremor_script::query::StmtRentalWrapper {
             stmt: Arc::new(stmt_rental),
@@ -2453,8 +2442,7 @@ mod test {
             warnings: BTreeSet::new(),
         };
 
-        let stmt_rental =
-            tremor_script::query::StmtRental::new(Arc::new(query.clone()), |_| stmt_ast);
+        let stmt_rental = StmtRental::new(Arc::new(query.clone()), |_| stmt_ast);
 
         let stmt = tremor_script::query::StmtRentalWrapper {
             stmt: Arc::new(stmt_rental),
@@ -2514,8 +2502,7 @@ mod test {
             warnings: BTreeSet::new(),
         };
 
-        let stmt_rental =
-            tremor_script::query::StmtRental::new(Arc::new(query.clone()), |_| stmt_ast);
+        let stmt_rental = StmtRental::new(Arc::new(query.clone()), |_| stmt_ast);
 
         let stmt = tremor_script::query::StmtRentalWrapper {
             stmt: Arc::new(stmt_rental),
@@ -2547,14 +2534,13 @@ mod test {
         )
         .map_err(tremor_script::errors::CompilerError::error)?;
 
-        let stmt_rental = tremor_script::query::StmtRental::try_new(Arc::new(query.clone()), |q| {
+        let stmt_rental = StmtRental::try_new(Arc::new(query.clone()), |q| {
             q.suffix()
                 .stmts
                 .first()
                 .cloned()
                 .ok_or_else(|| Error::from("Invalid query"))
-        })
-        .map_err(|e| e.0)?;
+        })?;
         let stmt = tremor_script::query::StmtRentalWrapper {
             stmt: Arc::new(stmt_rental),
         };
