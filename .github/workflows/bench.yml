@@ -30,7 +30,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: build
-          args: --release
+          args: --release -p tremor-cli 
 
       - name: run benchmarks
         run: |
