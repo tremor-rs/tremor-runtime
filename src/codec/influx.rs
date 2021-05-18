@@ -37,7 +37,7 @@
 //! This operator takes no configuration
 
 use super::prelude::*;
-use std::{mem, str};
+use std::str;
 use tremor_influx as influx;
 
 #[derive(Clone)]
@@ -54,11 +54,8 @@ impl Codec for Influx {
         data: &'input mut [u8],
         ingest_ns: u64,
     ) -> Result<Option<Value<'input>>> {
-        // This is safe as from_utf8 does not change the memory location
-        // of the bytes, simply validates that it is UTF8 and if so
-        // change the type.
-        let s: &str = unsafe { mem::transmute(str::from_utf8(data)?) };
-        influx::decode::<'static, Value<'static>>(s, ingest_ns).map_err(|e| {
+        let s: &'input str = str::from_utf8(data)?;
+        influx::decode::<'input, Value<'input>>(s, ingest_ns).map_err(|e| {
             ErrorKind::InvalidInfluxData(String::from_utf8_lossy(data).to_string(), e).into()
         })
     }
