@@ -449,8 +449,7 @@ impl Query {
                         // so we hold on to any referenced data by including a clone
                         // of that arc inthe rental source.
                         Ok(inner_stmt)
-                    })
-                    .map_err(|e: rental::RentalError<Error, _>| e.0)?;
+                    })?;
 
                     let that = StmtRentalWrapper {
                         stmt: std::sync::Arc::new(stmt_rental),
@@ -490,8 +489,7 @@ impl Query {
                         // so we hold on to any referenced data by including a clone
                         // of that arc inthe rental source.
                         Ok(inner_stmt)
-                    })
-                    .map_err(|e: rental::RentalError<Error, _>| e.0)?;
+                    })?;
 
                     let label = if let Stmt::ScriptDecl(s) = stmt_rental.suffix() {
                         let e = s.extent(&query.node_meta);

@@ -143,8 +143,7 @@ where
                 std::mem::swap(&mut warnings, &mut helper.warnings);
                 locals = helper.locals.len();
                 Ok(script)
-            })
-            .map_err(|e: rental::RentalError<Error, Box<String>>| e.0)?;
+            })?;
 
             Ok(Self {
                 query: Arc::new(query),

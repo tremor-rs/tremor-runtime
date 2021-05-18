@@ -127,8 +127,7 @@ where
                     let screw_rust = script_raw.up_script(&mut helper)?;
                     std::mem::swap(&mut warnings, &mut helper.warnings);
                     Ok(screw_rust)
-                })
-                .map_err(|e: rental::RentalError<Error, Box<String>>| e.0)?;
+                })?;
 
             Ok(Self {
                 script: rented_script,

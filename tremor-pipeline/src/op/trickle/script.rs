@@ -15,7 +15,10 @@
 use crate::op::prelude::*;
 use std::mem;
 use std::sync::Arc;
-use tremor_script::prelude::*;
+use tremor_script::{
+    ast::{self, query},
+    prelude::*,
+};
 
 rental! {
     pub mod rentals {
@@ -61,63 +64,59 @@ impl Trickle {
         // the definition ( from which all instances are incarnated ) not the 'create' instances.
         // The binding association chooses the definition simply as it hosts the parsed script.
         //
-        let args: Value;
 
-        let mut params = HashMap::new();
-        if let tremor_script::ast::query::Stmt::ScriptDecl(ref defn) = defn_rentwrapped.suffix() {
-            if let Some(p) = &defn.params {
-                // Set params from decl as meta vars
-                for (name, value) in p {
-                    // We could clone here since we bind Script to defn_rentwrapped.stmt's lifetime
-                    params.insert(Cow::from(name.clone()), value.clone());
-                }
-                // Set params from instance as meta vars ( eg: upsert ~= override + add )
-                if let tremor_script::ast::query::Stmt::Script(instance) = node_rentwrapped.suffix()
-                {
-                    if let Some(map) = &instance.params {
-                        for (name, value) in map {
-                            // We can not clone here since we do not bind Script to node_rentwrapped's lifetime
-                            params.insert(Cow::from(name.clone()), value.clone_static());
-                        }
+        let script = rentals::Script::try_new(defn_rentwrapped.stmt.clone(), |defn_rentwrapped| {
+            let args: Value;
+
+            let mut params = HashMap::new();
+            if let ast::Stmt::ScriptDecl(ref defn) = defn_rentwrapped.suffix() {
+                if let Some(p) = &defn.params {
+                    // Set params from decl as meta vars
+                    for (name, value) in p {
+                        // We could clone here since we bind Script to defn_rentwrapped.stmt's lifetime
+                        params.insert(Cow::from(name.clone()), value.clone());
                     }
-                } else {
-                    return Err(ErrorKind::PipelineError(
+                    // Set params from instance as meta vars ( eg: upsert ~= override + add )
+                    if let query::Stmt::Script(instance) = node_rentwrapped.suffix() {
+                        if let Some(map) = &instance.params {
+                            for (name, value) in map {
+                                // We can not clone here since we do not bind Script to node_rentwrapped's lifetime
+                                params.insert(Cow::from(name.clone()), value.clone_static());
+                            }
+                        }
+                    } else {
+                        return Err(ErrorKind::PipelineError(
                         "Trying to turn something into script create that isn't a script create"
                             .into(),
                     )
                     .into());
+                    }
                 }
-            }
-            args = tremor_script::Value::from(params);
-        } else {
-            return Err(ErrorKind::PipelineError(
-                "Trying to turn something into script define that isn't a script define".into(),
-            )
-            .into());
-        };
-        let script = match defn_rentwrapped.suffix() {
-            tremor_script::ast::Stmt::ScriptDecl(ref script) => script.clone(),
-            _other => {
+                args = tremor_script::Value::from(params);
+            } else {
                 return Err(ErrorKind::PipelineError(
-                    "Trying to turn a non script into a script operator".into(),
+                    "Trying to turn something into script define that isn't a script define".into(),
                 )
-                .into())
-            }
-        };
-
-        let script = rentals::Script::try_new(defn_rentwrapped.stmt.clone(), move |_| unsafe {
-            use tremor_script::ast::ScriptDecl;
+                .into());
+            };
+            let script = match defn_rentwrapped.suffix() {
+                query::Stmt::ScriptDecl(ref script) => script.clone(),
+                _other => {
+                    return Err(ErrorKind::PipelineError(
+                        "Trying to turn a non script into a script operator".into(),
+                    )
+                    .into())
+                }
+            };
             // This is sound since defn_rentwrapped.stmt is an arc by cloning
             // it we ensure that the referenced data remains available until
             // the rental is dropped.
-            let mut decl = mem::transmute::<ScriptDecl<'_>, ScriptDecl<'static>>(*script);
-            let args: Value<'static> = mem::transmute(args);
+            let mut decl = *script;
 
             // decl.script.consts = vec![Value::null(), Value::null(), Value::null()];
             decl.script.consts.args = args;
             Ok(decl)
-        })
-        .map_err(|e: rental::RentalError<Error, _>| e.0)?;
+        })?;
 
         Ok(Self {
             id,
