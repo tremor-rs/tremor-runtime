@@ -142,7 +142,6 @@ where
                     }
                 }
                 ClauseGroup::SearchTree { tree, rest, .. } => {
-                    let target: &Value<'script> = unsafe { mem::transmute(target) };
                     if let Some((e, l)) = tree.get(&target) {
                         return Expr::execute_effectors(opts, env, event, state, meta, local, e, l);
                     }
@@ -163,7 +162,6 @@ where
                                 }
                             }
                             ClauseGroup::SearchTree { tree, rest, .. } => {
-                                let target: &Value<'script> = unsafe { mem::transmute(target) };
                                 if let Some((e, l)) = tree.get(&target) {
                                     return Expr::execute_effectors(
                                         opts, env, event, state, meta, local, e, l,
@@ -454,12 +452,10 @@ where
                 stry!(local
                     .get(lpath.idx, self, lpath.mid(), &env.meta)
                     .and_then(|o| {
-                        o.as_ref()
-                            .map(|l| -> &mut Value<'event> { unsafe { mem::transmute(l) } })
-                            .ok_or_else(|| {
-                                let key = env.meta.name_dflt(lpath.mid).to_string();
-                                error_bad_key_err(self, lpath, &path, key, vec![], &env.meta)
-                            })
+                        o.as_ref().ok_or_else(|| {
+                            let key = env.meta.name_dflt(lpath.mid).to_string();
+                            error_bad_key_err(self, lpath, &path, key, vec![], &env.meta)
+                        })
                     }))
             }
             Path::Meta(_path) => meta,
@@ -520,7 +516,6 @@ where
         }
     }
 
-    #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
     fn assign_direct(
         &'script self,
         _opts: ExecOpts,
@@ -530,7 +525,7 @@ where
         _meta: &'run mut Value<'event>,
         local: &'run mut LocalStack<'event>,
         path: &'script Path,
-        mut value: Value<'event>,
+        value: Value<'event>,
     ) -> Result<Cow<'run, Value<'event>>> {
         match path {
             Path::Const(p) => {
@@ -539,23 +534,23 @@ where
             Path::Reserved(p) => {
                 error_assign_to_const(self, env.meta.name_dflt(p.mid()).into(), &env.meta)
             }
-            Path::Local(lpath) => match stry!(local.get(lpath.idx, self, lpath.mid(), &env.meta)) {
-                Some(l) => {
-                    let l: &mut Value<'event> = unsafe { mem::transmute(l) };
-                    *l = value;
-                    Ok(Cow::Borrowed(l))
-                }
-                d => {
-                    let d: &mut Option<Value<'event>> = unsafe { mem::transmute(d) };
-                    *d = Some(value);
-                    if let Some(l) = d {
+            Path::Local(lpath) => {
+                match stry!(local.get_mut(lpath.idx, self, lpath.mid(), &env.meta)) {
+                    Some(l) => {
+                        *l = value;
                         Ok(Cow::Borrowed(l))
-                    } else {
-                        // ALLOW: we assign d in the line above the access, we know it is Some
-                        unreachable!()
+                    }
+                    d => {
+                        *d = Some(value);
+                        if let Some(l) = d {
+                            Ok(Cow::Borrowed(l))
+                        } else {
+                            // ALLOW: we assign d in the line above the access, we know it is Some
+                            unreachable!()
+                        }
                     }
                 }
-            },
+            }
             Path::Meta(_path) => error_invalid_assign_target(self, &env.meta),
             Path::Event(_path) => {
                 *event = value;
@@ -566,10 +561,7 @@ where
                 // object keys in value to be owned COW's). This ensures that the current
                 // value is kept as part of state across subsequent state assignments (if
                 // users choose to do so).
-                value = value.into_static();
-                // for the compiler, the type of value still has 'event as the lifetime
-                // so we transmute it to conform with the lifetime of state ('static).
-                *state = unsafe { mem::transmute(value) };
+                *state = value.into_static();
                 Ok(Cow::Borrowed(state))
             }
         }

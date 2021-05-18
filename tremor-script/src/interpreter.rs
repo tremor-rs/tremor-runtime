@@ -152,6 +152,26 @@ impl<'stack> LocalStack<'stack> {
             error_oops_err(outer, 0xdead_000f, &e, meta)
         })
     }
+
+    /// Fetches a local variable
+    ///
+    /// # Errors
+    /// if the variable isn't known
+    pub fn get_mut<O>(
+        &mut self,
+        idx: usize,
+        outer: &O,
+        mid: usize,
+        meta: &NodeMetas,
+    ) -> Result<&mut Option<Value<'stack>>>
+    where
+        O: BaseExpr,
+    {
+        self.values.get_mut(idx).ok_or_else(|| {
+            let e = format!("Unknown local variable: `{}`", meta.name_dflt(mid));
+            error_oops_err(outer, 0xdead_000f, &e, meta)
+        })
+    }
 }
 
 /// The type of an aggregation

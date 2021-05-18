@@ -277,7 +277,6 @@ impl<'value> Value<'value> {
     #[must_use]
     pub fn clone_static(&self) -> Value<'static> {
         unsafe {
-            use std::mem::transmute;
             let r = match self {
                 Self::String(s) => Self::String(Cow::from(s.to_string())),
                 Self::Array(arr) => arr.iter().map(Value::clone_static).collect(),
@@ -288,7 +287,7 @@ impl<'value> Value<'value> {
                 Self::Static(s) => Self::Static(*s),
                 Self::Bytes(b) => Self::Bytes(b.clone()),
             };
-            transmute(r)
+            std::mem::transmute(r)
         }
     }
 
