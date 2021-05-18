@@ -42,7 +42,9 @@ impl AddAssign<u64> for Idx {
         let this: u64 = u64::from(&*self);
         let res = this + other;
         // ALLOW: We know that self.0 has exactly 8 elements
-        (&mut self.0[..]).write_u64::<BigEndian>(res).unwrap();
+        (&mut self.0[..])
+            .write_u64::<BigEndian>(res)
+            .unwrap_or_default();
     }
 }
 
@@ -85,12 +87,13 @@ impl From<u64> for Idx {
 impl Idx {
     fn set(&mut self, v: u64) {
         // ALLOW: We know that self.0 has exactly 8 elements
-        (&mut self.0[..]).write_u64::<BigEndian>(v).unwrap();
+        (&mut self.0[..])
+            .write_u64::<BigEndian>(v)
+            .unwrap_or_default();
     }
     fn set_min(&mut self, v: u64) {
         if v < u64::from(&*self) {
-            // ALLOW: We know that self.0 has exactly 8 elements
-            (&mut self.0[..]).write_u64::<BigEndian>(v).unwrap();
+            self.set(v)
         }
     }
 }
