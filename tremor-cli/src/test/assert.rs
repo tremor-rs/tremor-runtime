@@ -210,7 +210,132 @@ pub(crate) fn process(
     Ok((s, elements))
 }
 
-#[allow(clippy::clippy::too_many_lines)]
+/// check if a file contains the given lines
+fn process_contains(
+    contains: &[String],
+    file: &str,
+    base: Option<&String>,
+    prefix: &str,
+    stats: &mut stats::Stats,
+    counter: &mut i32,
+) -> Result<report::TestElement> {
+    let mut total_condition = true;
+    // By line reporting
+    for c in contains {
+        stats.assert();
+        *counter += 1;
+        let condition = file_contains(file, &[c.to_string()], base)?;
+        stats.report(condition);
+        total_condition &= condition;
+        status::assert_has(
+            prefix,
+            &format!("Assert {}", counter),
+            &format!("  Contains `{}` in `{}`", &c.trim(), &file),
+            None,
+            condition,
+        )?;
+    }
+    Ok(report::TestElement {
+        description: format!("File `{}` contains", file),
+        info: Some(contains.to_vec().join("\n")),
+        hidden: false,
+        keyword: report::KeywordKind::Predicate,
+        result: report::ResultKind {
+            status: if total_condition {
+                report::StatusKind::Passed
+            } else {
+                report::StatusKind::Failed
+            },
+            duration: 0,
+        },
+    })
+}
+
+/// check that a file doesnt contain the given lines
+fn process_doesnt_contain(
+    doesnt_contain: &[String],
+    file: &str,
+    base: Option<&String>,
+    prefix: &str,
+    stats: &mut stats::Stats,
+    counter: &mut i32,
+) -> Result<report::TestElement> {
+    let mut total_condition = true;
+    let mut fd = open_file(file, base)?;
+
+    for c in doesnt_contain {
+        stats.assert();
+        *counter += 1;
+        fd.seek(SeekFrom::Start(0))?;
+        let condition = BufReader::new(&fd)
+            .lines()
+            .find(|l| {
+                l.as_ref()
+                    .map(|line| line.contains(c.trim()))
+                    .unwrap_or_default()
+            })
+            .is_none();
+        stats.report(condition);
+        total_condition &= condition;
+        status::assert_has(
+            prefix,
+            &format!("Assert {}", counter),
+            &format!("  Does not contain `{}` in `{}`", &c.trim(), &file),
+            None,
+            condition,
+        )?;
+    }
+    Ok(report::TestElement {
+        description: format!("file `{}` does not contain", file),
+        info: Some(doesnt_contain.to_vec().join("\n")),
+        hidden: false,
+        keyword: report::KeywordKind::Predicate,
+        result: report::ResultKind {
+            status: if total_condition {
+                report::StatusKind::Passed
+            } else {
+                report::StatusKind::Failed
+            },
+            duration: 0,
+        },
+    })
+}
+
+fn process_equals_file(
+    equals_file: &str,
+    file: &str,
+    base: Option<&String>,
+    prefix: &str,
+    stats: &mut stats::Stats,
+    counter: &mut i32,
+) -> Result<report::TestElement> {
+    // By line reporting
+    *counter += 1;
+    stats.assert();
+    let changeset = file_equals(file, equals_file, base)?;
+    let info = Some(changeset.to_string());
+    let condition = changeset.distance == 0;
+
+    status::assert_has(
+        prefix,
+        &format!("Assert {}", counter),
+        &format!("File `{}` equals `{}`", &file, equals_file),
+        info.as_ref(),
+        condition,
+    )?;
+
+    Ok(report::TestElement {
+        description: format!("File `{}` equals", file),
+        info,
+        hidden: false,
+        keyword: report::KeywordKind::Predicate,
+        result: report::ResultKind {
+            status: stats.report(condition),
+            duration: 0,
+        },
+    })
+}
+
 pub(crate) fn process_filebased_asserts(
     prefix: &str,
     stdout_path: &Path,
@@ -244,106 +369,37 @@ pub(crate) fn process_filebased_asserts(
                     Source::Stdout => stdout_path.to_string_lossy().to_string(),
                     Source::Stderr => stderr_path.to_string_lossy().to_string(),
                 };
-                // Overall pass/fail
+                // handle contains
                 if let Some(contains) = contains {
-                    let mut total_condition = true;
-                    // By line reporting
-                    for c in contains {
-                        stats.assert();
-                        counter += 1;
-                        let condition = file_contains(&file, &[c.to_string()], base.as_ref())?;
-                        stats.report(condition);
-                        total_condition &= condition;
-                        status::assert_has(
-                            prefix,
-                            &format!("Assert {}", counter),
-                            &format!("  Contains `{}` in `{}`", &c.trim(), &file),
-                            None,
-                            condition,
-                        )?;
-                    }
-                    elements.push(report::TestElement {
-                        description: format!("File `{}` contains", file),
-                        info: Some(contains.clone().join("\n")),
-                        hidden: false,
-                        keyword: report::KeywordKind::Predicate,
-                        result: report::ResultKind {
-                            status: if total_condition {
-                                report::StatusKind::Passed
-                            } else {
-                                report::StatusKind::Failed
-                            },
-                            duration: 0,
-                        },
-                    });
+                    elements.push(process_contains(
+                        contains,
+                        &file,
+                        base.as_ref(),
+                        prefix,
+                        &mut stats,
+                        &mut counter,
+                    )?);
                 }
+                // handle doesnt contain
                 if let Some(doesnt_contain) = doesnt_contain {
-                    let mut total_condition = true;
-                    let mut fd = open_file(&file, base.as_ref())?;
-
-                    for c in doesnt_contain {
-                        stats.assert();
-                        counter += 1;
-                        fd.seek(SeekFrom::Start(0))?;
-                        let condition = BufReader::new(&fd)
-                            .lines()
-                            .find(|l| {
-                                l.as_ref()
-                                    .map(|line| line.contains(c.trim()))
-                                    .unwrap_or_default()
-                            })
-                            .is_none();
-                        stats.report(condition);
-                        total_condition &= condition;
-                        status::assert_has(
-                            prefix,
-                            &format!("Assert {}", counter),
-                            &format!("  Does not contain `{}` in `{}`", &c.trim(), &file),
-                            None,
-                            condition,
-                        )?;
-                    }
-                    elements.push(report::TestElement {
-                        description: format!("file `{}` does not contain", file),
-                        info: Some(doesnt_contain.clone().join("\n")),
-                        hidden: false,
-                        keyword: report::KeywordKind::Predicate,
-                        result: report::ResultKind {
-                            status: if total_condition {
-                                report::StatusKind::Passed
-                            } else {
-                                report::StatusKind::Failed
-                            },
-                            duration: 0,
-                        },
-                    });
+                    elements.push(process_doesnt_contain(
+                        doesnt_contain,
+                        &file,
+                        base.as_ref(),
+                        prefix,
+                        &mut stats,
+                        &mut counter,
+                    )?);
                 }
                 if let Some(equals_file) = equals_file {
-                    // By line reporting
-                    counter += 1;
-                    stats.assert();
-                    let changeset = file_equals(&file, &equals_file, base.as_ref())?;
-                    let info = Some(changeset.to_string());
-                    let condition = changeset.distance == 0;
-
-                    status::assert_has(
+                    elements.push(process_equals_file(
+                        equals_file,
+                        &file,
+                        base.as_ref(),
                         prefix,
-                        &format!("Assert {}", counter),
-                        &format!("File `{}` equals `{}`", &file, equals_file),
-                        info.as_ref(),
-                        condition,
-                    )?;
-
-                    elements.push(report::TestElement {
-                        description: format!("File `{}` equals", file),
-                        info,
-                        hidden: false,
-                        keyword: report::KeywordKind::Predicate,
-                        result: report::ResultKind {
-                            status: stats.report(condition),
-                            duration: 0,
-                        },
-                    });
+                        &mut stats,
+                        &mut counter,
+                    )?);
                 }
             }
         }
