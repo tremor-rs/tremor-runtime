@@ -19,6 +19,7 @@ use crate::source::prelude::*;
 use async_channel::{bounded, unbounded, Receiver, Sender};
 use async_tungstenite::async_std::connect_async;
 use async_tungstenite::tungstenite::error::Error as WsError;
+use async_tungstenite::tungstenite::error::ProtocolError as WsProtocolError;
 use async_tungstenite::tungstenite::Message;
 use futures::SinkExt;
 use halfbrown::HashMap;
@@ -205,6 +206,9 @@ async fn ws_connection_loop(
                                             WsError::Io(_)
                                                 | WsError::AlreadyClosed
                                                 | WsError::ConnectionClosed
+                                                | WsError::Protocol(
+                                                    WsProtocolError::ResetWithoutClosingHandshake
+                                                )
                                         ) {
                                             if let Err(e) = ws_stream.close(None).await {
                                                 error!(
@@ -320,8 +324,23 @@ async fn ws_connection_loop(
                                 correlation.as_ref(),
                             )
                             .await?;
-                            // close connection explicitly
-                            ws_stream.close(None).await?;
+                            if !matches!(
+                                e,
+                                WsError::Io(_)
+                                    | WsError::AlreadyClosed
+                                    | WsError::ConnectionClosed
+                                    | WsError::Protocol(
+                                        WsProtocolError::ResetWithoutClosingHandshake
+                                    )
+                            ) {
+                                // close connection explicitly
+                                if let Err(e) = ws_stream.close(None).await {
+                                    error!(
+                                        "[Sink::{}] Error closing ws stream to {}: {}",
+                                        &sink_url, &url, e
+                                    );
+                                }
+                            }
                             connection_lifecycle_tx
                                 .send(WsConnectionMsg::Disconnected(url.clone()))
                                 .await?;
