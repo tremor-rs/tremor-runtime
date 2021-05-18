@@ -42,7 +42,7 @@ jobs:
         run: |
           git clone --depth 1 -b data https://${TREMORBOT_TOKEN}@github.com/humancalico/tremor-benchmark.git data
           cd data
-          curl -o tremor-bench.zip -L https://github.com/humancalico/tremor-benchmark/releases/download/v0.1.0/tremor-benchmark-x86_64-unknown-linux-musl.zip
+          curl -o tremor-bench.zip -L https://github.com/humancalico/tremor-benchmark/releases/download/v0.1.1/tremor-benchmark-x86_64-unknown-linux-musl.zip
           unzip tremor-bench.zip
           ./tremor-benchmark data.json recent.json ../report.json $GITHUB_SHA
           git config user.email "humancalico+tremorbot@disroot.org" # need a different email pls
