@@ -77,9 +77,9 @@ impl Operator for Summerization {
         _uid: u64,
         _port: &str,
         _state: &mut Value<'static>,
-        event: Event,
+        mut event: Event,
     ) -> Result<EventAndInsights> {
-        let (data, meta) = event.data.parts();
+        let (data, meta) = event.data.parts_mut();
         if let Some(s) = data.as_str() {
             let mut summary = self.model.summarize(&[s]);
             if let Some(s) = summary.pop() {

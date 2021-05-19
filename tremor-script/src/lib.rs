@@ -212,6 +212,7 @@ impl rentals::Value {
     /// to be mutable.
     #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
     #[must_use]
+    // #[deprecated]
     pub fn parts<'value, 'borrow>(
         &'borrow self,
     ) -> (&'borrow mut Value<'value>, &'borrow mut Value<'value>)
@@ -225,6 +226,41 @@ impl rentals::Value {
             (unwind_event, event_meta)
         }
     }
+
+    /// Borrow the parts (event and metadata) from a rental.
+    /// This borrows the data as immutable and then transmutes it
+    /// to be mutable.
+    #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
+    #[must_use]
+    pub fn parts_mut<'value, 'borrow>(
+        &'borrow mut self,
+    ) -> (&'borrow mut Value<'value>, &'borrow mut Value<'value>)
+    where
+        'borrow: 'value,
+    {
+        unsafe {
+            let data = self.suffix();
+            let unwind_event: &'borrow mut Value<'value> = std::mem::transmute(data.value());
+            let event_meta: &'borrow mut Value<'value> = std::mem::transmute(data.meta());
+            (unwind_event, event_meta)
+        }
+    }
+
+    /// Borrow the parts (event and metadata) from a rental.
+    /// This borrows the data as immutable and then transmutes it
+    /// to be mutable.
+    #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
+    #[must_use]
+    pub fn parts_imut<'value, 'borrow>(
+        &'borrow self,
+    ) -> (&'borrow Value<'value>, &'borrow Value<'value>)
+    where
+        'borrow: 'value,
+    {
+        let ValueAndMeta { v, m } = self.suffix();
+        (v, m)
+    }
+
     /// Consumes an event into another
     /// This function works around a rental limitation that is meant
     /// to protect its users: Rental does not allow you to get both
