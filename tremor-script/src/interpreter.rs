@@ -1460,6 +1460,7 @@ where
 }
 
 #[inline]
+// ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1029
 #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
 fn set_local_shadow<'run, 'event, 'script, Expr>(
     outer: &'script Expr,
@@ -1474,8 +1475,7 @@ where
     'event: 'run,
 {
     use std::mem;
-    // This is icky do we want it?
-    // it is only used
+    // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1029
     let local: &'run mut LocalStack<'event> = unsafe { mem::transmute(local) };
     local.values.get_mut(idx).map_or_else(
         || {
