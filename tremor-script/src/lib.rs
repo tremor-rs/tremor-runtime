@@ -201,7 +201,6 @@ impl rentals::Value {
     /// Borrow the parts (event and metadata) from a rental.
     /// This borrows the data as immutable and then transmutes it
     /// to be mutable.
-    #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
     #[must_use]
     pub fn parts<'value, 'borrow>(&'borrow self) -> (&'borrow Value<'value>, &'borrow Value<'value>)
     where

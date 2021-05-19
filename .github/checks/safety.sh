@@ -118,7 +118,7 @@ while getopts hamuiprebldxcft opt; do
             do
                 if sed -e '/ALLOW: /{N;d;}' "$file" | grep 'transmute' > /dev/null
                 then
-                    echo "##[error] transmute found in \"$file\". Don't do it!."
+                    echo "##[error] transmute found in \"$file\". Don't do it! If you got to add a tracking ticket and link it in ALLOW"
                     grep -nH 'transmute' "$file"
                     count=$((count + 1))
                 fi
