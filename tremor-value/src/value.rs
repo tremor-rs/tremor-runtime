@@ -276,18 +276,15 @@ impl<'value> Value<'value> {
     #[inline]
     #[must_use]
     pub fn clone_static(&self) -> Value<'static> {
-        unsafe {
-            let r = match self {
-                Self::String(s) => Self::String(Cow::from(s.to_string())),
-                Self::Array(arr) => arr.iter().map(Value::clone_static).collect(),
-                Self::Object(obj) => obj
-                    .iter()
-                    .map(|(k, v)| (Cow::from(k.to_string()), v.clone_static()))
-                    .collect(),
-                Self::Static(s) => Self::Static(*s),
-                Self::Bytes(b) => Self::Bytes(b.clone()),
-            };
-            std::mem::transmute(r)
+        match self {
+            Self::String(s) => Value::String(Cow::owned(s.to_string())),
+            Self::Array(arr) => arr.iter().map(Value::clone_static).collect(),
+            Self::Object(obj) => obj
+                .iter()
+                .map(|(k, v)| (Cow::owned(k.to_string()), v.clone_static()))
+                .collect(),
+            Self::Static(s) => Value::Static(*s),
+            Self::Bytes(b) => Value::Bytes(Cow::owned(b.to_vec())),
         }
     }
 
