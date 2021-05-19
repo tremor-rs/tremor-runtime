@@ -80,11 +80,11 @@ pub use crate::registry::{
     TremorAggrFnWrapper, TremorFn, TremorFnWrapper,
 };
 pub use crate::script::{Return, Script};
-use lazy_static::lazy_static;
-use std::sync::atomic::{AtomicU32, Ordering};
-
 use ast::{Consts, InvokeAggrFn};
 pub use interpreter::{AggrType, FALSE, NULL, TRUE};
+use lazy_static::lazy_static;
+use std::mem;
+use std::sync::atomic::{AtomicU32, Ordering};
 pub use tremor_common::stry;
 pub use tremor_value::{KnownKey, Object, Value};
 
@@ -199,8 +199,6 @@ rental! {
 
 impl rentals::Value {
     /// Borrow the parts (event and metadata) from a rental.
-    /// This borrows the data as immutable and then transmutes it
-    /// to be mutable.
     #[must_use]
     pub fn parts<'value, 'borrow>(&'borrow self) -> (&'borrow Value<'value>, &'borrow Value<'value>)
     where
@@ -243,11 +241,13 @@ impl rentals::Value {
             pub parsed: ValueAndMeta<'static>,
             pub raw: Vec<Vec<u8>>,
         }
+        // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1031
         #[allow(clippy::transmute_ptr_to_ptr)]
         unsafe {
-            use std::mem::transmute;
-            let self_unrent: &'run mut ScrewRental = transmute(self);
-            let mut other_unrent: ScrewRental = transmute(other);
+            // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1031
+            let self_unrent: &'run mut ScrewRental = mem::transmute(self);
+            // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1031
+            let mut other_unrent: ScrewRental = mem::transmute(other);
             self_unrent.raw.append(&mut other_unrent.raw);
             join_f(&mut self_unrent.parsed, other_unrent.parsed)?;
         }
