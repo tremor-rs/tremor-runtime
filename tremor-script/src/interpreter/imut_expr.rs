@@ -177,8 +177,6 @@ where
                 Ok(Cow::Owned(out.into()))
             }
             ImutExprInt::Recur(Recur { exprs, argc, .. }) => {
-                #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
-                let local: &'run mut LocalStack<'event> = unsafe { mem::transmute(local) };
                 // We need to pre calculate that to ensure that we don't overwrite
                 // local variables that are not used
                 let mut next = Vec::with_capacity(*argc);
@@ -188,6 +186,10 @@ where
                         next.push((i, r.into_owned()));
                     }
                 }
+                // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1030
+                #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
+                // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1030
+                let local: &'run mut LocalStack<'event> = unsafe { mem::transmute(local) };
                 for (i, v) in next.drain(..) {
                     if let Some(loc) = local.values.get_mut(i) {
                         *loc = Some(v);

@@ -226,7 +226,6 @@ where
         }
     }
 
-    #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
     fn patch_in_place(
         &'script self,
         opts: ExecOpts,
@@ -279,6 +278,9 @@ where
             "We should never see a owned value here as patch_in_place is only ever called on existing data in event, state, meta or local"
         );
         let v: &Value<'event> = value.borrow();
+        // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1032
+        #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
+        // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1032
         let v: &mut Value<'event> = unsafe { mem::transmute(v) };
         stry!(patch_value(
             self, opts, env, event, state, meta, local, v, expr
@@ -286,7 +288,6 @@ where
         Ok(value)
     }
 
-    #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
     fn merge_in_place(
         &'script self,
         opts: ExecOpts,
@@ -309,6 +310,9 @@ where
 
         if value_cow.is_object() {
             let value: &Value<'event> = value_cow.borrow();
+            // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1032
+            #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
+            // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1032
             let value: &mut Value<'event> = unsafe { mem::transmute(value) };
             let replacement = stry!(expr.expr.run(opts, env, event, state, meta, local,));
 
@@ -406,6 +410,7 @@ where
         }
     }
 
+    // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1033
     #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
     fn assign_nested(
         &'script self,
@@ -422,7 +427,7 @@ where
          * This function is icky we got to do some trickery here.
          * Since it's dangerous and icky it deserves some explanation
          * What we do here is we borrow the target we want to set
-         * as immutable and mem::transmute it to mutable where needed.
+         * as immutable and turn it to mutable where needed.
          *
          * We do this since there is no way to tell rust that it's safe
          * to borrow immutable out of something that's mutable even if
@@ -474,6 +479,7 @@ where
                 Segment::Id { key, .. } => {
                     current = stry!(key
                         .lookup_or_insert_mut(
+                            // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1033
                             unsafe { mem::transmute::<&Value, &mut Value>(current) },
                             || Value::object_with_capacity(halfbrown::VEC_LIMIT_UPPER),
                         )
@@ -486,6 +492,7 @@ where
                 }
                 Segment::Element { expr, .. } => {
                     let id = stry!(expr.eval_to_string(opts, env, event, state, meta, local));
+                    // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1033
                     let v: &mut Value<'event> = unsafe { mem::transmute(current) };
                     let map = stry!(v.as_object_mut().ok_or_else(|| error_need_obj_err(
                         self,
@@ -507,6 +514,7 @@ where
             }
         }
         unsafe {
+            // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1033
             *mem::transmute::<&Value<'event>, &mut Value<'event>>(current) = value;
         }
         if opts.result_needed {
