@@ -1311,7 +1311,7 @@ mod test {
         if let Some(event) = res.first() {
             let mut expected_data = Value::object_with_capacity(1);
             expected_data.insert("foo", true)?;
-            let data_parts = event.data.parts_imut();
+            let data_parts = event.data.parts();
             assert_eq!(&mut expected_data, data_parts.0);
             let mut expected_meta = literal!({
                 "correlation": -1,

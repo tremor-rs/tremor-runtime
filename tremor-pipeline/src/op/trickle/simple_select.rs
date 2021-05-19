@@ -105,7 +105,7 @@ impl Operator for SimpleSelect {
                 // Before any select processing, we filter by where clause
                 //
                 if let Some(guard) = &stmt.maybe_where {
-                    let (unwind_event, event_meta) = event.data.parts_imut();
+                    let (unwind_event, event_meta) = event.data.parts();
                     let env = Env {
                         context: &ctx,
                         consts: &consts,
@@ -128,7 +128,7 @@ impl Operator for SimpleSelect {
                 }
 
                 if let Some(guard) = &stmt.maybe_having {
-                    let (unwind_event, event_meta) = event.data.parts_imut();
+                    let (unwind_event, event_meta) = event.data.parts();
                     let env = Env {
                         context: &ctx,
                         consts: &consts,

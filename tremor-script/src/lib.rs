@@ -102,9 +102,7 @@ pub fn recursion_limit() -> u32 {
     Clone, Debug, PartialEq, Serialize, simd_json_derive::Serialize, simd_json_derive::Deserialize,
 )]
 pub struct ValueAndMeta<'event> {
-    /// The Value
     v: Value<'event>,
-    /// The metadata
     m: Value<'event>,
 }
 
@@ -203,29 +201,9 @@ impl rentals::Value {
     /// Borrow the parts (event and metadata) from a rental.
     /// This borrows the data as immutable and then transmutes it
     /// to be mutable.
-    ///
-    /// # Safety
-    /// This function is to be used with care and planned to be phased out
     #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
     #[must_use]
-    pub unsafe fn parts<'value, 'borrow>(
-        &'borrow self,
-    ) -> (&'borrow mut Value<'value>, &'borrow mut Value<'value>)
-    where
-        'borrow: 'value,
-    {
-        let ValueAndMeta { v, m }: &mut ValueAndMeta = std::mem::transmute(self.suffix());
-        (v, m)
-    }
-
-    /// Borrow the parts (event and metadata) from a rental.
-    /// This borrows the data as immutable and then transmutes it
-    /// to be mutable.
-    #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
-    #[must_use]
-    pub fn parts_imut<'value, 'borrow>(
-        &'borrow self,
-    ) -> (&'borrow Value<'value>, &'borrow Value<'value>)
+    pub fn parts<'value, 'borrow>(&'borrow self) -> (&'borrow Value<'value>, &'borrow Value<'value>)
     where
         'borrow: 'value,
     {
