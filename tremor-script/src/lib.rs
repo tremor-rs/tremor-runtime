@@ -102,7 +102,9 @@ pub fn recursion_limit() -> u32 {
     Clone, Debug, PartialEq, Serialize, simd_json_derive::Serialize, simd_json_derive::Deserialize,
 )]
 pub struct ValueAndMeta<'event> {
+    /// The Value
     v: Value<'event>,
+    /// The metadata
     m: Value<'event>,
 }
 
@@ -157,7 +159,6 @@ impl<'event> ValueAndMeta<'event> {
     }
     /// borrows both parts as mutalbe
     #[must_use]
-
     pub fn parts_mut(&mut self) -> (&mut Value<'event>, &mut Value<'event>) {
         (&mut self.v, &mut self.m)
     }
@@ -202,40 +203,19 @@ impl rentals::Value {
     /// Borrow the parts (event and metadata) from a rental.
     /// This borrows the data as immutable and then transmutes it
     /// to be mutable.
+    ///
+    /// # Safety
+    /// This function is to be used with care and planned to be phased out
     #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
     #[must_use]
-    // #[deprecated]
-    pub fn parts<'value, 'borrow>(
+    pub unsafe fn parts<'value, 'borrow>(
         &'borrow self,
     ) -> (&'borrow mut Value<'value>, &'borrow mut Value<'value>)
     where
         'borrow: 'value,
     {
-        unsafe {
-            let data = self.suffix();
-            let unwind_event: &'borrow mut Value<'value> = std::mem::transmute(data.value());
-            let event_meta: &'borrow mut Value<'value> = std::mem::transmute(data.meta());
-            (unwind_event, event_meta)
-        }
-    }
-
-    /// Borrow the parts (event and metadata) from a rental.
-    /// This borrows the data as immutable and then transmutes it
-    /// to be mutable.
-    #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
-    #[must_use]
-    pub fn parts_mut<'value, 'borrow>(
-        &'borrow mut self,
-    ) -> (&'borrow mut Value<'value>, &'borrow mut Value<'value>)
-    where
-        'borrow: 'value,
-    {
-        unsafe {
-            let data = self.suffix();
-            let unwind_event: &'borrow mut Value<'value> = std::mem::transmute(data.value());
-            let event_meta: &'borrow mut Value<'value> = std::mem::transmute(data.meta());
-            (unwind_event, event_meta)
-        }
+        let ValueAndMeta { v, m }: &mut ValueAndMeta = std::mem::transmute(self.suffix());
+        (v, m)
     }
 
     /// Borrow the parts (event and metadata) from a rental.

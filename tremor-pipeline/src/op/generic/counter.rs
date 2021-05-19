@@ -42,14 +42,13 @@ impl Operator for Counter {
             );
         }
 
-        let (value, _) = event.data.parts_mut();
-
-        *value = Value::from(hashmap! {
-            "count".into() => state.clone(),
-            // TODO build data.map() functionality with rentals to avoid the clone here
-            "event".into() => value.clone_static(),
+        event.data.rent_mut(|data| {
+            let (v, _) = data.parts_mut();
+            let mut h = Value::object_with_capacity(2);
+            std::mem::swap(&mut h, v);
+            v.try_insert("count", state.clone());
+            v.try_insert("event", h);
         });
-
         Ok(event.into())
     }
 }
