@@ -134,7 +134,7 @@ mod test {
 
         let e = r.make_event(123, "test", 42);
 
-        let (v, _) = e.data.parts_imut();
+        let (v, _) = e.data.parts();
 
         assert_eq!(v["measurement"], "ramp_events");
         assert_eq!(v["tags"]["ramp"], "tremor://localhost/onramp/example/00");
