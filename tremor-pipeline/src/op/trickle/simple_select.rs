@@ -81,7 +81,7 @@ impl Operator for SimpleSelect {
         _uid: u64,
         _port: &str,
         state: &mut Value<'static>,
-        event: Event,
+        mut event: Event,
     ) -> Result<EventAndInsights> {
         let opts = Self::opts();
         // We guarantee at compile time that select in itself can't have locals, so this is safe
@@ -105,7 +105,7 @@ impl Operator for SimpleSelect {
                 // Before any select processing, we filter by where clause
                 //
                 if let Some(guard) = &stmt.maybe_where {
-                    let (unwind_event, event_meta) = event.data.parts();
+                    let (unwind_event, event_meta) = event.data.parts_mut();
                     let env = Env {
                         context: &ctx,
                         consts: &consts,
@@ -128,7 +128,7 @@ impl Operator for SimpleSelect {
                 }
 
                 if let Some(guard) = &stmt.maybe_having {
-                    let (unwind_event, event_meta) = event.data.parts();
+                    let (unwind_event, event_meta) = event.data.parts_mut();
                     let env = Env {
                         context: &ctx,
                         consts: &consts,

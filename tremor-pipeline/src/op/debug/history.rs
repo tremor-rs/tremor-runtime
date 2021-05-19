@@ -50,9 +50,9 @@ impl Operator for History {
         _uid: u64,
         _port: &str,
         _state: &mut Value<'static>,
-        event: Event,
+        mut event: Event,
     ) -> Result<EventAndInsights> {
-        let (_, meta) = event.data.parts();
+        let (_, meta) = event.data.parts_mut();
         match meta
             .get_mut(self.config.name.as_str())
             .and_then(Value::as_array_mut)
@@ -87,7 +87,7 @@ impl Operator for History {
         _state: &Value<'static>,
         signal: &mut Event,
     ) -> Result<EventAndInsights> {
-        let (_, meta) = signal.data.parts();
+        let (_, meta) = signal.data.parts_mut();
 
         match meta
             .get_mut(self.config.name.as_str())

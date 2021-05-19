@@ -424,7 +424,7 @@ mod test {
         let ack_with_timing = clone.insight_ack_with_timing(100);
         assert_eq!(ack_with_timing.cb, CbAction::Ack);
         assert!(ack_with_timing.op_meta.contains_key(1));
-        let (_, m) = ack_with_timing.data.parts();
+        let (_, m) = ack_with_timing.data.parts_imut();
         assert_eq!(Some(100), m.get_u64("time"));
 
         let mut clone2 = e.clone();

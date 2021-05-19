@@ -525,7 +525,7 @@ fn execute_select_and_having(
     origin_uri: Option<EventOriginUri>,
     transactional: bool,
 ) -> Result<Option<(Cow<'static, str>, Event)>> {
-    let (event_payload, event_meta) = event.data.parts();
+    let (event_payload, event_meta) = event.data.parts_imut();
 
     let value = stmt
         .target
@@ -579,7 +579,7 @@ fn accumulate(
     // track transactional state for the given event
     group.transactional = group.transactional || event.transactional;
 
-    let (event_data, event_meta) = event.data.parts();
+    let (event_data, event_meta) = event.data.parts_imut();
     for aggr in &mut group.aggrs {
         let invocable = &mut aggr.invocable;
         let mut argv: Vec<SCow<Value>> = Vec::with_capacity(aggr.args.len());
@@ -678,7 +678,7 @@ impl Operator for TrickleSelect {
         // Before any select processing, we filter by where clause
         //
         if let Some(guard) = &stmt.maybe_where {
-            let (unwind_event, event_meta) = event.data.parts();
+            let (unwind_event, event_meta) = event.data.parts_imut();
             let env = Env {
                 context: &ctx,
                 consts: &consts,
@@ -1621,10 +1621,9 @@ mod test {
     use crate::query::window_decl_to_impl;
 
     use super::*;
-    use rental::RentalError;
 
     use simd_json::{json, StaticNode};
-    use tremor_script::{ast::Stmt, query::StmtRental, Query};
+    use tremor_script::{ast::Stmt, query::StmtRental};
     use tremor_script::{
         ast::{self, Ident, ImutExpr, Literal},
         path::ModulePath,
@@ -1935,7 +1934,7 @@ mod test {
         eis = select.on_event(uid, "IN", &mut state, event)?;
         assert!(eis.insights.is_empty());
         assert_eq!(1, eis.events.len());
-        assert_eq!("1", sorted_serialize(eis.events[0].1.data.parts().0)?);
+        assert_eq!("1", sorted_serialize(eis.events[0].1.data.parts_imut().0)?);
         Ok(())
     }
 
@@ -1983,7 +1982,7 @@ mod test {
         assert_eq!(1, eis.events.len());
         assert_eq!(
             r#"[{"g":"group"}]"#,
-            sorted_serialize(eis.events[0].1.data.parts().0)?
+            sorted_serialize(eis.events[0].1.data.parts_imut().0)?
         );
         assert_eq!(false, eis.events[0].1.transactional);
         Ok(())
@@ -2043,7 +2042,10 @@ mod test {
         assert!(eis.insights.is_empty());
         assert_eq!(1, eis.events.len());
         let (_port, event) = eis.events.remove(0);
-        assert_eq!(r#"[{"cat":42}]"#, sorted_serialize(event.data.parts().0)?);
+        assert_eq!(
+            r#"[{"cat":42}]"#,
+            sorted_serialize(event.data.parts_imut().0)?
+        );
         assert_eq!(true, event.transactional);
 
         let mut tick5 = test_tick(499);

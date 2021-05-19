@@ -29,7 +29,7 @@ impl Operator for Counter {
         _uid: u64,
         _port: &str,
         state: &mut Value<'static>,
-        event: Event,
+        mut event: Event,
     ) -> Result<EventAndInsights> {
         if state.is_null() {
             *state = Value::from(1_u64);
@@ -42,7 +42,7 @@ impl Operator for Counter {
             );
         }
 
-        let (value, _) = event.data.parts();
+        let (value, _) = event.data.parts_mut();
 
         *value = Value::from(hashmap! {
             "count".into() => state.clone(),

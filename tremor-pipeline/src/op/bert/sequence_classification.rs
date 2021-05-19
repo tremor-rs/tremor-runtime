@@ -118,9 +118,9 @@ impl Operator for SequenceClassification {
         _uid: u64,
         _port: &str,
         _state: &mut Value<'static>,
-        event: Event,
+        mut event: Event,
     ) -> Result<EventAndInsights> {
-        let (data, meta) = event.data.parts();
+        let (data, meta) = event.data.parts_mut();
         if let Some(s) = data.as_str() {
             let labels = self.model.predict(&[s]);
             let mut label_meta = Value::object_with_capacity(labels.len());

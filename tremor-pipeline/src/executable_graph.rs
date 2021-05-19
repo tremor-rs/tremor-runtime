@@ -743,42 +743,42 @@ mod test {
     fn test_metrics(mut metrics: Vec<Event>, n: u64) {
         // out/in
         let this = metrics.pop().unwrap();
-        let (data, _) = this.data.parts();
+        let (data, _) = this.data.parts_imut();
         test_metric(data, "test-metric", n);
         assert_eq!(data.get("tags").unwrap().get("node").unwrap(), "out");
         assert_eq!(data.get("tags").unwrap().get("port").unwrap(), "in");
 
         // all-2/out
         let this = metrics.pop().unwrap();
-        let (data, _) = this.data.parts();
+        let (data, _) = this.data.parts_imut();
         test_metric(data, "test-metric", n);
         assert_eq!(data.get("tags").unwrap().get("node").unwrap(), "all-2");
         assert_eq!(data.get("tags").unwrap().get("port").unwrap(), "out");
 
         // all-2/in
         let this = metrics.pop().unwrap();
-        let (data, _) = this.data.parts();
+        let (data, _) = this.data.parts_imut();
         test_metric(data, "test-metric", n);
         assert_eq!(data.get("tags").unwrap().get("node").unwrap(), "all-2");
         assert_eq!(data.get("tags").unwrap().get("port").unwrap(), "in");
 
         // all-1/out
         let this = metrics.pop().unwrap();
-        let (data, _) = this.data.parts();
+        let (data, _) = this.data.parts_imut();
         test_metric(data, "test-metric", n);
         assert_eq!(data.get("tags").unwrap().get("node").unwrap(), "all-1");
         assert_eq!(data.get("tags").unwrap().get("port").unwrap(), "out");
 
         // all-1/in
         let this = metrics.pop().unwrap();
-        let (data, _) = this.data.parts();
+        let (data, _) = this.data.parts_imut();
         test_metric(data, "test-metric", n);
         assert_eq!(data.get("tags").unwrap().get("node").unwrap(), "all-1");
         assert_eq!(data.get("tags").unwrap().get("port").unwrap(), "in");
 
         // out/in
         let this = metrics.pop().unwrap();
-        let (data, _) = this.data.parts();
+        let (data, _) = this.data.parts_imut();
         test_metric(data, "test-metric", n);
         assert_eq!(data.get("tags").unwrap().get("node").unwrap(), "in");
         assert_eq!(data.get("tags").unwrap().get("port").unwrap(), "out");
