@@ -62,7 +62,7 @@ Kafka optimizes its connection lifetime for long-lived, persistent connections. 
 
 ### When not to use Tremor
 
-Note: Some of those restrictions are subject to change as tremor is a growing project. 
+Note: Some of those restrictions are subject to change as tremor is a growing project.
 
 We currently do not recommend tremor where:
 
@@ -89,7 +89,7 @@ Note that since the image is building tremor in release mode it requires some se
 Providing too little resources to the docker machine can destabalize the docker build process. If you're encountering logs/errors like:
 ```
 (signal: 9, SIGKILL: kill)
-# OR 
+# OR
 ERROR: Service 'tremor' failed to build : The command '/bin/sh -c cargo build --release --all --verbose' returned a non-zero code: 101
 ```
 It is likely that your docker resources are starved. Consider increasing your resources ([Windows](https://docs.docker.com/docker-for-windows/#resources)/[Mac](https://docs.docker.com/docker-for-mac/#resources)) before trying again, posting in Discord, or raising an issue.
@@ -98,8 +98,8 @@ It is likely that your docker resources are starved. Consider increasing your re
 
 If you are not comfortable with managing library packages on your system or don't have experience with, please use the Docker image provided above. Local builds are not supported and purely at your own risk.
 
-For local builds, tremor requires rust 2018 (version `1.31` or later), along with all the tools needed to build rust programs. Eg: for CentOS, the packages `gcc`, `make`, `cmake`, `clang`, `openssl`, and `libstdc++` are required. For different distributions or operating systems, please install the packages accordingly.  
-**NOTE** AVX2, SSE4.2 or NEON are needed to build [simd-json](https://github.com/simd-lite/simd-json#cpu-target) used by tremor. So if you are building in vm, check which processor instruction are passed to it. Like `lscpu | grep Flags`  
+For local builds, tremor requires rust 2018 (version `1.31` or later), along with all the tools needed to build rust programs. Eg: for CentOS, the packages `gcc`, `make`, `cmake`, `clang`, `openssl`, and `libstdc++` are required. For different distributions or operating systems, please install the packages accordingly.
+**NOTE** AVX2, SSE4.2 or NEON are needed to build [simd-json](https://github.com/simd-lite/simd-json#cpu-target) used by tremor. So if you are building in vm, check which processor instruction are passed to it. Like `lscpu | grep Flags`
 For a more detailed guide on local builds, please refer to the [tremor development docs](https://docs.tremor.rs/development/quick-start/).
 
 ## Running locally
@@ -134,11 +134,13 @@ docker exec -it 838f22d9cb98 sh
 
 Tremor uses YAML, or [tremor-query](https://docs.tremor.rs/tremor-query/) to configure pipelines. For use in docker those should be mounted to `/etc/tremor/config`.
 
+Custom [tremor-script](https://docs.tremor.rs/tremor-script) and [tremor-query](https://docs.tremor.rs/tremor-query/) modules and libraries should be mounted to `/usr/local/share/tremor`.
+
 ### Operations
 
 Tremor works by chaining operations that have inputs, outputs, and additional configuration. OnRamps - the operations that ingest data - take a unique role in this.
 
-The documentation for different operations can found in the [docs](https://docs.tremor.rs/tremor-script/). The `onramps` and `op` modules hold the relevant information.
+The documentation for different operations can found in the [docs](https://docs.tremor.rs/operations/). The `onramps` and `op` modules hold the relevant information.
 
 For each operation, the `Config` struct defines the parameters that can be passed to configure it, and the description holds additional details and examples.
 
