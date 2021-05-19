@@ -345,7 +345,7 @@ impl WindowTrait for TumblingWindowOnTime {
             .map(|script| {
                 // TODO avoid origin_uri clone here
                 let context = EventContext::new(event.ingest_ns, event.origin_uri.clone());
-                let (mut unwind_event, mut event_meta) = event.data.parts();
+                let (mut unwind_event, mut event_meta) = unsafe { event.data.parts() };
                 let value = script.run(
                     &context,
                     AggrType::Emit,
@@ -428,7 +428,7 @@ impl WindowTrait for TumblingWindowOnNumber {
             .map_or(Ok(1), |script| {
                 // TODO avoid origin_uri clone here
                 let context = EventContext::new(event.ingest_ns, event.origin_uri.clone());
-                let (mut unwind_event, mut event_meta) = event.data.parts();
+                let (mut unwind_event, mut event_meta) = unsafe { event.data.parts() };
                 let value = script.run(
                     &context,
                     AggrType::Emit,

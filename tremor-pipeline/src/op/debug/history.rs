@@ -52,29 +52,35 @@ impl Operator for History {
         _state: &mut Value<'static>,
         mut event: Event,
     ) -> Result<EventAndInsights> {
-        let (_, meta) = event.data.parts_mut();
-        match meta
-            .get_mut(self.config.name.as_str())
-            .and_then(Value::as_array_mut)
-        {
-            Some(ref mut history) => {
-                history.push(Value::from(format!(
-                    "evt: {}({})",
-                    self.config.op, event.id
-                )));
-            }
-            None => {
-                if let Some(ref mut obj) = meta.as_object_mut() {
-                    obj.insert(
-                        self.config.name.clone().into(),
-                        Value::from(vec![Value::from(format!(
-                            "evt: {}({})",
-                            self.config.op, event.id
-                        ))]),
-                    );
+        let Event {
+            ref mut data,
+            ref id,
+            ..
+        } = event;
+        data.rent_mut(|data| {
+            let (_, meta) = data.parts_mut();
+
+            match meta
+                .get_mut(self.config.name.as_str())
+                .and_then(Value::as_array_mut)
+            {
+                Some(ref mut history) => {
+                    history.push(Value::from(format!("evt: {}({})", self.config.op, id)));
                 }
-            }
-        };
+                None => {
+                    if let Some(ref mut obj) = meta.as_object_mut() {
+                        obj.insert(
+                            self.config.name.clone().into(),
+                            Value::from(vec![Value::from(format!(
+                                "evt: {}({})",
+                                self.config.op, id
+                            ))]),
+                        );
+                    }
+                }
+            };
+        });
+
         Ok(event.into())
     }
 
@@ -87,30 +93,34 @@ impl Operator for History {
         _state: &Value<'static>,
         signal: &mut Event,
     ) -> Result<EventAndInsights> {
-        let (_, meta) = signal.data.parts_mut();
+        let Event {
+            ref id,
+            ref mut data,
+            ..
+        } = signal;
+        data.rent_mut(|data| {
+            let (_, m) = data.parts_mut();
 
-        match meta
-            .get_mut(self.config.name.as_str())
-            .and_then(Value::as_array_mut)
-        {
-            Some(ref mut history) => {
-                history.push(Value::from(format!(
-                    "sig: {}({})",
-                    self.config.op, signal.id
-                )));
-            }
-            None => {
-                if let Some(ref mut obj) = meta.as_object_mut() {
-                    obj.insert(
-                        self.config.name.clone().into(),
-                        Value::from(vec![Value::from(format!(
-                            "sig: {}({})",
-                            self.config.op, signal.id
-                        ))]),
-                    );
+            match m
+                .get_mut(self.config.name.as_str())
+                .and_then(Value::as_array_mut)
+            {
+                Some(ref mut history) => {
+                    history.push(Value::from(format!("sig: {}({})", self.config.op, id)));
                 }
-            }
-        };
+                None => {
+                    if let Some(ref mut obj) = m.as_object_mut() {
+                        obj.insert(
+                            self.config.name.clone().into(),
+                            Value::from(vec![Value::from(format!(
+                                "sig: {}({})",
+                                self.config.op, id
+                            ))]),
+                        );
+                    }
+                }
+            };
+        });
         Ok(EventAndInsights::default())
     }
 }

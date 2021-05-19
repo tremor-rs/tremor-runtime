@@ -120,16 +120,17 @@ impl Operator for SequenceClassification {
         _state: &mut Value<'static>,
         mut event: Event,
     ) -> Result<EventAndInsights> {
-        let (data, meta) = event.data.parts_mut();
-        if let Some(s) = data.as_str() {
-            let labels = self.model.predict(&[s]);
-            let mut label_meta = Value::object_with_capacity(labels.len());
-            for label in labels {
-                label_meta.insert(label.text, label.score)?;
+        event.data.rent_mut(|ValueAndMeta { v, m }| {
+            if let Some(s) = v.as_str() {
+                let labels = self.model.predict(&[s]);
+                let mut label_meta = Value::object_with_capacity(labels.len());
+                for label in labels {
+                    label_meta.insert(label.text, label.score)?;
+                }
+                // mutating the event
+                m.insert("classification", label_meta)?;
             }
-            // mutating the event
-            meta.insert("classification", label_meta)?;
-        }
+        });
         Ok(EventAndInsights::from(event))
     }
 }
