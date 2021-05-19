@@ -724,7 +724,7 @@ impl Operator for TrickleSelect {
             // This is sound since we're transmuting immutable to mutable
             // We can't specify the 'lifetime' of the event or it would be
             // `&'run mut Value<'event>`
-            let unwind_event = unsafe { data.force_value_mut() };
+            let unwind_event: &mut Value = unsafe { std::mem::transmute(data.value()) };
             let event_meta = data.meta();
 
             consts.group = group_value.clone_static();
