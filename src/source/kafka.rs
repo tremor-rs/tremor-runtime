@@ -35,7 +35,7 @@ use rdkafka::{
 };
 use std::collections::{BTreeMap, HashMap as StdMap};
 use std::future::Future;
-use std::mem::{self, transmute};
+use std::mem;
 use std::time::{Duration, Instant};
 
 pub struct SmolRuntime;
@@ -147,13 +147,16 @@ rental! {
     }
 }
 
+// ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1023
 #[allow(clippy::transmute_ptr_to_ptr)]
 impl rentals::MessageStream {
+    // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1023
     #[allow(mutable_transmutes, clippy::mut_from_ref)]
     unsafe fn mut_suffix(
         &self,
     ) -> &mut stream_consumer::MessageStream<'static, LoggingConsumerContext, SmolRuntime> {
-        transmute(&self.suffix().stream)
+        // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1023
+        mem::transmute(&self.suffix().stream)
     }
 
     unsafe fn consumer(&mut self) -> &mut LoggingConsumer {
@@ -161,7 +164,8 @@ impl rentals::MessageStream {
             consumer: Box<LoggingConsumer>,
             _stream: StreamAndMsgs<'static>,
         }
-        let s: &mut MessageStream = transmute(self);
+        // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1023
+        let s: &mut MessageStream = mem::transmute(self);
         &mut s.consumer
     }
     fn commit(&mut self, map: &StdMap<(String, i32), Offset>, mode: CommitMode) -> Result<()> {
