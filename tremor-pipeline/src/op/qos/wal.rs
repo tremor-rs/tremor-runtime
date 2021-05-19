@@ -80,6 +80,7 @@ impl From<IVec> for Idx {
 impl From<u64> for Idx {
     fn from(v: u64) -> Self {
         debug_assert_eq!(mem::size_of::<Self>(), mem::size_of::<u64>());
+        // ALLOW: we transmute this into the respectiove newtime
         unsafe { mem::transmute(v.to_be()) }
     }
 }
@@ -252,7 +253,12 @@ impl Wal {
 
     fn store_event(&mut self, source_id: u64, mut event: Event) -> Result<()> {
         let wal_id = self.wal.generate_id()?;
-        let write: [u8; 8] = unsafe { mem::transmute(wal_id.to_be()) };
+
+        let mut write: [u8; 8] = [0_u8; 8];
+        debug_assert_eq!(write.len(), mem::size_of::<u64>());
+        // ALLOW we know write as exactly 8 elements
+        (&mut write[..]).write_u64::<BigEndian>(wal_id)?;
+
         // TODO: figure out if handling of separate streams makes sense here
         let mut new_event_id = EventId::new(source_id, DEFAULT_STREAM_ID, wal_id);
         new_event_id.track(&event.id);

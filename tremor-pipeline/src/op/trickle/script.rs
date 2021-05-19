@@ -128,7 +128,6 @@ impl Trickle {
 }
 
 impl Operator for Trickle {
-    #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
     fn on_event(
         &mut self,
         _uid: u64,
@@ -138,44 +137,51 @@ impl Operator for Trickle {
     ) -> Result<EventAndInsights> {
         let context = EventContext::new(event.ingest_ns, event.origin_uri);
 
-        let data = event.data.suffix();
-        // This lifetimes will be `&'run mut Value<'event>` as that is the
-        // requirement of the `self.runtime.run` we can not declare them
-        // as the trait function for the operator doesn't allow that
+        let script = &self.script.suffix().script;
 
-        let unwind_event: &'_ mut tremor_script::Value<'_> =
-            unsafe { mem::transmute(data.value()) };
-        let event_meta: &'_ mut tremor_script::Value<'_> = unsafe { mem::transmute(data.meta()) };
+        let port = event.data.rent_mut(|data| {
+            let (v, m) = data.parts_mut();
 
-        let value = self.script.suffix().script.run(
-            &context,
-            AggrType::Emit,
-            unwind_event, // event
-            state,        // state
-            event_meta,   // $
-        );
+            // This lifetimes will be `&'run mut Value<'event>` as that is the
+            // requirement of the `self.runtime.run` we can not declare them
+            // as the trait function for the operator doesn't allow that
+            // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1024
+            let unwind_event: &'_ mut Value<'_> = unsafe { mem::transmute(v) };
+            // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1024
+            let event_meta: &'_ mut Value<'_> = unsafe { mem::transmute(m) };
+
+            let value = script.run(
+                &context,
+                AggrType::Emit,
+                unwind_event, // event
+                state,        // state
+                event_meta,   // $
+            );
+
+            match value {
+                Ok(Return::EmitEvent { port }) => Some(port.map_or(OUT, Cow::from)),
+
+                Ok(Return::Emit { value, port }) => {
+                    *unwind_event = value;
+                    Some(port.map_or(OUT, Cow::from))
+                }
+                Ok(Return::Drop) => None,
+                Err(e) => {
+                    let mut o = Value::from(hashmap! {
+                        "error".into() => Value::from(self.node.head().format_error(&e)),
+                    });
+                    mem::swap(&mut o, unwind_event);
+                    if let Some(error) = unwind_event.as_object_mut() {
+                        error.insert("event".into(), o);
+                    };
+                    Some(ERR)
+                }
+            }
+        });
 
         // move origin_uri back to event again
         event.origin_uri = context.origin_uri;
 
-        match value {
-            Ok(Return::EmitEvent { port }) => Ok(vec![(port.map_or(OUT, Cow::from), event)].into()),
-
-            Ok(Return::Emit { value, port }) => {
-                *unwind_event = value;
-                Ok(vec![(port.map_or(OUT, Cow::from), event)].into())
-            }
-            Ok(Return::Drop) => Ok(EventAndInsights::default()),
-            Err(e) => {
-                let mut o = Value::from(hashmap! {
-                    "error".into() => Value::from(self.node.head().format_error(&e)),
-                });
-                mem::swap(&mut o, unwind_event);
-                if let Some(error) = unwind_event.as_object_mut() {
-                    error.insert("event".into(), o);
-                };
-                Ok(vec![(ERR, event)].into())
-            }
-        }
+        Ok(port.map_or_else(EventAndInsights::default, |port| vec![(port, event)].into()))
     }
 }
