@@ -4,7 +4,7 @@ count=0
 help() {
     cat <<EOF
 Usage: ${0##*/} [-hd] [TEST]...
-code sanity checker
+code safety checker
   -h         show this help
   -a         run all checks
   -u         check for unwrap
