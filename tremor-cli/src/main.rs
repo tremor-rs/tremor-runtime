@@ -105,6 +105,7 @@ fn main() -> Result<()> {
         let s = matches
             .value_of("instance")
             .ok_or_else(|| Error::from("instance argument missing"))?;
+        // ALLOW: We do this on startup and forget the memory once we drop it, that's on purpose
         let forget_s = std::mem::transmute(&s as &str);
         // This means we're going to LEAK this memory, however
         // it is fine since as we do actually need it for the
