@@ -15,23 +15,21 @@
 // NOTE: We need this because of error_chain
 #![allow(clippy::large_enum_variant)]
 #![allow(deprecated)]
-#![allow(unused_imports)]
 #![allow(missing_docs)]
 
 pub use crate::prelude::ValueType;
 use crate::prelude::*;
 use crate::{
-    ast::{self, BaseExpr, Expr, Ident, NodeMetas},
+    ast::{self, BaseExpr, NodeMetas},
     errors, lexer,
-    path::ModulePath,
-    pos::{self, Location, Range, Spanned},
+    pos::{self, Range},
     Value,
 };
 use error_chain::error_chain;
 use lalrpop_util::ParseError as LalrpopError;
-use serde::{Deserialize, Serialize};
+
+use std::num;
 use std::ops::{Range as RangeExclusive, RangeInclusive};
-use std::{num, ops::Deref};
 
 /// A compile-time error capturing the preprocessors cus at the time of the error
 #[derive(Debug)]

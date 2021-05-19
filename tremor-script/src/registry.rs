@@ -441,7 +441,6 @@ macro_rules! tremor_fn_ {
             use $crate::Value;
             use $crate::EventContext;
             use $crate::registry::{TremorFnWrapper, TremorFn};
-            #[allow(unused_imports)] // We might not use all of this imports
             use $crate::registry::{FResult, FunctionError, mfa, Mfa, to_runtime_error as to_runtime_error_ext};
             const ARGC: usize = {0_usize $(+ replace_expr!($arg 1_usize))*};
             // const MOD: &'static str = $module;
@@ -505,7 +504,6 @@ macro_rules! tremor_fn_ {
             use $crate::Value;
             use $crate::EventContext;
             use $crate::registry::{TremorFnWrapper, TremorFn};
-            #[allow(unused_imports)] // We might not use all of this imports
             use $crate::registry::{FResult, FunctionError, mfa, Mfa, to_runtime_error as to_runtime_error_ext};
             const ARGC: usize = {0_usize $(+ replace_expr!($arg 1_usize))*};
             // const MOD: &'static str = $module;
@@ -568,7 +566,6 @@ macro_rules! tremor_fn_ {
             use $crate::Value;
             use $crate::EventContext;
             use $crate::registry::{TremorFnWrapper, TremorFn};
-            #[allow(unused_imports)] // We might not use all of this imports
             use $crate::registry::{FResult, FunctionError, mfa, Mfa, to_runtime_error as to_runtime_error_ext};
             const ARGC: usize = 0;
             // const MOD: &'static str = $module;

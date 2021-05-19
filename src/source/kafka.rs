@@ -135,7 +135,6 @@ impl<'consumer> StreamAndMsgs<'consumer> {
 }
 
 rental! {
-    #[allow(unused_imports)]
     pub mod rentals {
         use super::{StreamAndMsgs, LoggingConsumer};
 
