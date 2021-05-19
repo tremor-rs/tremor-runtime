@@ -256,7 +256,7 @@ impl Wal {
 
         let mut write: [u8; 8] = [0_u8; 8];
         debug_assert_eq!(write.len(), mem::size_of::<u64>());
-        // ALLOW we know write as exactly 8 elements
+        // ALLOW: we know write as exactly 8 elements
         (&mut write[..]).write_u64::<BigEndian>(wal_id)?;
 
         // TODO: figure out if handling of separate streams makes sense here

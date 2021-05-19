@@ -772,7 +772,6 @@ impl Operator for TrickleSelect {
                     return ret.map_or_else(|| Ok(event.into()), |ret| ret);
                 }
                 vec![]
-                
             };
 
             if group_values.is_empty() {
@@ -1638,7 +1637,8 @@ impl Operator for TrickleSelect {
                 }
             }
             Ok(res)
-        })} else {
+        })
+        } else {
             Ok(EventAndInsights::default())
         }
     }

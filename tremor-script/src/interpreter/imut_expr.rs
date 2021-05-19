@@ -425,6 +425,7 @@ where
                     }
                 }
                 ClauseGroup::SearchTree { tree, rest, .. } => {
+                    // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1034
                     let target: &Value<'script> = unsafe { mem::transmute(target) };
                     if let Some((_, l)) = tree.get(&target) {
                         return Self::execute_effectors(opts, env, event, state, meta, local, l);
@@ -443,6 +444,7 @@ where
                                 }
                             }
                             ClauseGroup::SearchTree { tree, rest, .. } => {
+                                // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1034
                                 let target: &Value<'script> = unsafe { mem::transmute(target) };
                                 if let Some((_, l)) = tree.get(&target) {
                                     return Self::execute_effectors(
@@ -739,7 +741,6 @@ where
             })
     }
 
-    #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
     fn emit_aggr(
         &'script self,
         opts: ExecOpts,
@@ -762,6 +763,9 @@ where
             .ok_or_else(|| {
                 error_oops_err(self, 0xdead_0012, "Unknown aggregate function", &env.meta)
             })?;
+        // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1035
+        #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
+        // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1035
         let invocable: &mut TremorAggrFnWrapper = unsafe { mem::transmute(inv) };
         let r = invocable.emit().map(Cow::Owned).map_err(|e| {
             let r: Option<&Registry> = None;
