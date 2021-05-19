@@ -1,6 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### New features
+
+### Fixes
+
+- Remove a number of transmutes
+- Catalog remaining transmutes with related tickets
+
 ## 0.11.2
+
 ### New features
 
 - Add `op` key to KV offramp responses in order to differentiate responses by the command that triggered them
