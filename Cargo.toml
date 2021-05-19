@@ -9,7 +9,7 @@ license = "Apache-2.0"
 name = "tremor-runtime"
 readme = "README.md"
 repository = "https://github.com/tremor-rs/tremor-runtime"
-version = "0.11.1"
+version = "0.11.2"
 
 [workspace]
 
@@ -129,11 +129,10 @@ tonic = {version = "0.4", default-features = false, features = ["transport", "tl
 tremor-otelapis = "0.1"
 
 # gcp
+googapis = {version = "0.4.2", default-features = false, features = ["google-pubsub-v1"]}
 gouth = {version = "0.2"}
 http = "0.2.4"
 reqwest = "0.11.3"
-googapis = { version = "0.4.2", default-features = false, features = ["google-pubsub-v1"] }
-
 
 [dependencies.tungstenite]
 default-features = false
