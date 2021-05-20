@@ -83,8 +83,8 @@ pub use crate::script::{Return, Script};
 use ast::{Consts, InvokeAggrFn};
 pub use interpreter::{AggrType, FALSE, NULL, TRUE};
 use lazy_static::lazy_static;
-use std::mem;
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::{mem, pin::Pin};
 pub use tremor_common::stry;
 pub use tremor_value::{KnownKey, Object, Value};
 
@@ -240,7 +240,7 @@ impl rentals::Value {
     {
         struct ScrewRental {
             pub parsed: ValueAndMeta<'static>,
-            pub raw: Vec<Vec<u8>>,
+            pub raw: Vec<Pin<Vec<u8>>>,
         }
         // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1031
         #[allow(clippy::transmute_ptr_to_ptr)]
