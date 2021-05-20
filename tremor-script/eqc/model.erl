@@ -25,6 +25,22 @@ resolve(#state{locals = L}, {local, _} = K) ->
 -spec ast_eval(#vars{}, {}) -> {#vars{},
 				integer() | float() | boolean() | binary()}.
 
+combine_values(Key, null, Acc) -> maps:remove(Key, Acc);
+combine_values(Key, SpecVal = #{}, Acc) ->
+    case maps:get(Key, Acc) of
+      TargetVal = #{} ->
+	  maps:fold(fun combine_values/3, TargetVal, SpecVal);
+      _ -> maps:put(Key, SpecVal, Acc)
+    end;
+combine_values(Key, SpecVal, Acc) ->
+    maps:put(Key, SpecVal, Acc).
+
+ast_eval(#vars{} = S, {merge, Expr1, Expr2}) ->
+    {_, Expr1Update} = ast_eval(S, Expr1),
+    {_, Expr2Update} = ast_eval(S, Expr2),
+    {S,
+     maps:fold(fun combine_values/3, Expr1Update,
+	       Expr2Update)};
 ast_eval(#vars{} = S, {record, Expr}) ->
     Expr1 = [{ast_eval(S, Key), ast_eval(S, Value)}
 	     || {Key, Value} <- maps:to_list(Expr)],
