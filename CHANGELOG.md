@@ -8,6 +8,7 @@
 
 - Remove a number of transmutes
 - Catalog remaining transmutes with related tickets
+- Bump snmalloc-rs to 0.2.26 to ensure builds succeed on systems with libc < 2.25
 
 ## 0.11.2
 
