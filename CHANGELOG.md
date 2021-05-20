@@ -4,10 +4,13 @@
 
 ### New features
 
+- Add tests for merge feature in tremor-script [#721](https://github.com/tremor-rs/tremor-runtime/issues/721)
+
 ### Fixes
 
 - Remove a number of transmutes
 - Catalog remaining transmutes with related tickets
+- Bump snmalloc-rs to 0.2.26 to ensure builds succeed on systems with libc < 2.25
 
 ## 0.11.2
 

@@ -36,7 +36,13 @@ serde = "1"
 serde_derive = "1"
 serde_yaml = "0.8"
 simd-json = {version = "0.4", features = ["known-key"]}
-snmalloc-rs = {version = "0.2", optional = false}
+# we need to stick with 0.2.26 as it includes its own libc
+# which allows us to build on older systems like centos 7
+# issues to track until we can loosen those restrictions:
+#   - https://github.com/microsoft/snmalloc/issues/328
+#   - https://github.com/SchrodingerZhu/snmalloc-rs/issues/145
+snmalloc-rs = {version = "=0.2.26", optional = false}
+snmalloc-sys = {version = "=0.2.26", optional = false}
 surf = "=2.2.0"
 tide = "0.16"
 tremor-api = {path = "../tremor-api"}
