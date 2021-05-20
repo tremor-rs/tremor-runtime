@@ -1,5 +1,5 @@
 # https://hub.docker.com/_/centos
-FROM centos:7.8.2003
+FROM centos:7.9.2009
 
 # install extra software repos
 RUN yum install --assumeyes \
