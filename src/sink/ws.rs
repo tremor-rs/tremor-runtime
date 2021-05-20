@@ -24,8 +24,8 @@ use async_tungstenite::tungstenite::Message;
 use async_tungstenite::{async_std::connect_async, WebSocketStream};
 use futures::SinkExt;
 use halfbrown::HashMap;
-use std::boxed::Box;
 use std::time::Duration;
+use std::{boxed::Box, pin::Pin};
 use tremor_pipeline::{EventId, OpMeta};
 use tremor_script::LineValue;
 use url::Url;
@@ -402,9 +402,9 @@ fn message_to_event(
     // tried using an iter, but failed, so here we go
     let mut res = Vec::with_capacity(preprocessed.len());
     for pp in preprocessed {
-        let data = LineValue::try_new(vec![pp], |mutd| {
+        let data = LineValue::try_new(vec![Pin::new(pp)], |mutd| {
             // ALLOW: we know this is save, as we just put pp into mutd
-            let mut_data = mutd[0].as_mut_slice();
+            let mut_data = unsafe { mutd.get_unchecked_mut(0).as_mut().get_mut() };
             let body = codec
                 .decode(mut_data, nanotime())?
                 .unwrap_or_else(Value::object);
