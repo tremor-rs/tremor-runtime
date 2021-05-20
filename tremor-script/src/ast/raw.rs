@@ -1017,7 +1017,11 @@ impl<'script> Upable<'script> for ImutExprRaw<'script> {
                                         if let Some(_f) = l.value.as_f64() {
                                             StrLitElement::Lit("42".into())
                                         } else {
-                                            StrLitElement::Lit(l.value.encode().into())
+                                            StrLitElement::Lit(
+                                                crate::utils::sorted_serialize(&l.value)
+                                                    .unwrap_or_default()
+                                                    .into(),
+                                            )
                                         }
                                     },
                                     |s| StrLitElement::Lit(s.to_string().into()),

@@ -101,10 +101,15 @@ spec_inner_array(S, N) when N =< 1 ->
 spec_inner_array(S, N) ->
     {array, list(N - 1, spec_inner_no_float(S, N - 1))}.
 
-spec_inner_record(S, N) when N =< 1 ->
+literal_record(S, N) when N =< 1 ->
     record_or_record_local(S);
-spec_inner_record(S, N) ->
+literal_record(S, N) ->
     {record, map(string(), spec_inner_no_float(S, N - 1))}.
+
+spec_inner_record(#state{} = S, N) when N =< 1 ->
+    literal_record(S, N);
+spec_inner_record(#state{} = S, N) ->
+    ?LAZY((frequency([{1, spec_bop_record(S, N - 1)}]))).
 
 string() ->
     base64:encode(crypto:strong_rand_bytes(rand:uniform(10))).
@@ -142,10 +147,15 @@ array_or_array_local(#state{locals = Ls}) ->
 	   || {K, array} <- maps:to_list(Ls)],
     frequency([{max(length(IVs), 1), {array, []}} | IVs]).
 
-record_or_record_local(#state{locals = Ls}) ->
+record_or_record_local(#state{locals = Ls} = S) ->
     IVs = [{1, {local, K}}
 	   || {K, record} <- maps:to_list(Ls)],
-    frequency([{max(length(IVs), 1), {record, #{}}} | IVs]).
+    frequency([{max(length(IVs), 1),
+		{record,
+		 map(string(),
+		     oneof([bool_or_bool_local(S), int_or_int_local(S),
+			    string_or_string_local(S)]))}}
+	       | IVs]).
 
 spec_uop_int(S, N) when N =< 1 ->
     ?SHRINK({oneof(['+', '-']), int_or_int_local(S)},
@@ -242,6 +252,17 @@ spec_bop_int(S, N) when N =< 1 ->
 spec_bop_int(S, N) ->
     N1 = N div 2,
     N2 = N - N1,
+    % FIX ME!! LHS should be spec_inner_int
     ?SHRINK({oneof(['+', '-', '*', 'band', 'bxor']),
 	     spec_bop_int(S, N1), spec_bop_int(S, N2)},
 	    [spec_bop_int(S, N1), spec_bop_int(S, N2)]).
+
+spec_bop_record(S, N) when N =< 1 ->
+    ?SHRINK({oneof([merge]), literal_record(S, N - 1),
+	     literal_record(S, N - 1)},
+	    [literal_record(S, N - 1), literal_record(S, N - 1)]);
+spec_bop_record(S, N) ->
+    ?SHRINK({oneof([merge]), spec_inner_record(S, N - 1),
+	     spec_inner_record(S, N - 1)},
+	    [spec_inner_record(S, N - 1),
+	     spec_inner_record(S, N - 1)]).

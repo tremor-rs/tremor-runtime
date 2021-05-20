@@ -14,3 +14,6 @@ clean:
 
 open-shell:
 	rebar3 as eqc shell
+
+check-ts:
+	TREMOR_PATH=$PWD/tremor-script/lib cargo run -p tremor-cli -- run scratch.tremor

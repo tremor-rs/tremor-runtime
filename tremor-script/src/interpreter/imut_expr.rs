@@ -169,7 +169,7 @@ where
                             } else if let Some(_f) = r.as_f64() {
                                 out.push_str("42");
                             } else {
-                                out.push_str(r.encode().as_str());
+                                out.push_str(crate::utils::sorted_serialize(&r)?.as_str());
                             };
                         }
                     }
