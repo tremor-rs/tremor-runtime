@@ -268,7 +268,7 @@ prop_simple_expr() ->
                 RustResult = remote_eval(tremor_script_eval, [Params]),
                 { _, ModelResult } = model:eval(Params),
                 ?WHENFAIL(
-                   io:format("SIMPLE EXPR MODEL FAILED!\n~p\n~s\n~p ~p",
+                   io:format("SIMPLE EXPR MODEL FAILED!\n AST: ~p\n Script: ~s\n Expected Result: ~p\n Actual Result: ~p\n",
                              [Params, gen_script:gen(Params), ModelResult, RustResult]),
                              %% The real ( rust ) and model simulation ( erlang ) results should be equivalent
                              ModelResult =:= RustResult

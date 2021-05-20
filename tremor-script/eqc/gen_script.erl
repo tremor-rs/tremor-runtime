@@ -63,6 +63,8 @@ gen_({record, Exprs}) ->
      [[gen_(Key), ":", gen_(Value), ","]
       || {Key, Value} <- maps:to_list(Exprs)],
      "}"];
+gen_({'merge', Expr1, Expr2}) ->
+    ["(", "merge ", gen_(Expr1), " of ", gen_(Expr2), " end", ")"];
 gen_({'let', Path, Expr}) ->
     ["let ", gen_(Path), " = ", gen_(Expr)];
 gen_({local, Path}) -> Path;
