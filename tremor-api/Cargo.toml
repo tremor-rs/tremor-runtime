@@ -4,7 +4,7 @@ description = "Tremor Api Callbacks"
 edition = "2018"
 license = "Apache-2.0"
 name = "tremor-api"
-version = "0.11.2"
+version = "0.11.3"
 
 [dependencies]
 hashbrown = {version = "0.11", features = ["serde"]}
