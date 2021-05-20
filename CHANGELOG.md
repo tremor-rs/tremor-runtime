@@ -4,6 +4,8 @@
 
 ### New features
 
+- Add tests for merge feature in tremor-script [#721](https://github.com/tremor-rs/tremor-runtime/issues/721)
+
 ### Fixes
 
 - Remove a number of transmutes
