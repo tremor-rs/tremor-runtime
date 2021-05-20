@@ -185,12 +185,13 @@ rental! {
     /// issues
     pub(crate) mod rentals {
         use super::*;
+        use std::pin::Pin;
 
         /// Rental wrapped value with the data it was parsed
         /// from from
         #[rental_mut(covariant, debug)]
         pub struct Value {
-            raw: Vec<Vec<u8>>,
+            raw: Vec<Pin<Vec<u8>>>,
             parsed: ValueAndMeta<'raw>
         }
 
