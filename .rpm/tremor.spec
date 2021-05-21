@@ -92,6 +92,10 @@ if [ $1 -eq 1 ] ; then
 fi
 %endif
 
+# ensure presence of directory for custom tremor modules and libraries
+mkdir -p %{_usr}/local/share/tremor
+
+
 ###############################################################################
 
 %preun
@@ -128,8 +132,6 @@ fi
 
 %{_bindir}/*
 
-# user directory for tremor-script modules and libraries
-%dir %{_usr}/local/share/tremor
 
 %doc %{_datadir}/doc/%{name}/README.md
 %license %{_datadir}/licenses/%{name}/LICENSE
