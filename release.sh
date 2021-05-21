@@ -125,7 +125,7 @@ echo "Publishing packages"
 for pkg in ${PACKAGES}
 do
     cd "$pkg"
-    cargo publish
+    cargo test && cargo publish
     cd ..
 done
 
@@ -189,7 +189,7 @@ echo Updationg submodule
 
 cd tremor-www-docs
 
-git checkout "${new}"
+git checkout "v${new}"
 
 cd ..
 
