@@ -1,5 +1,7 @@
 #/usr/bin/env bash
 
+set -e
+
 TOML_FILES="\
 Cargo.toml \
 tremor-api/Cargo.toml \
@@ -79,8 +81,42 @@ read answer
 
 case "${answer}" in
     C*|c*)
+        git checkout -b "release-v${new}"
+        git commit -sa -m "Rlease v${new}"
+        git push --set-upstream origin "release-v${new}"
         ;;
     *)
         git checkout .
         ;;
 esac;
+
+echo "Preparing docs"
+
+mkdir -p temp
+cd temp
+git clone git@github.com:tremor-rs/tremor-www-docs.git
+
+cd tremor-www-docs
+
+echo "Updating Makefile"
+sed -e "s/^TREMOR_VSN=v${old}$/TREMOR_VSN=v${new}/" -i.release "Makefile"
+
+echo "Please review the following changes. (return to continue)"
+read answer
+
+git diff
+
+echo "Do you want to Continue or Rollback? [c/R]"
+read answer
+
+case "${answer}" in
+    C*|c*)
+        git checkout -b "release-v${new}"
+        git commit -sa -m "Rlease v${new}"
+        git push --set-upstream origin "release-v${new}"
+        ;;
+    *)
+        git checkout .
+        ;;
+esac;
+cd ../..
