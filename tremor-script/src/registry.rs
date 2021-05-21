@@ -26,6 +26,8 @@ use std::default::Default;
 use std::fmt;
 use std::ops::RangeInclusive;
 
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 /// An aggregate function
 pub trait TremorAggrFn: DowncastSync + Sync + Send {
     /// Accumulate a value
@@ -118,6 +120,9 @@ pub fn registry() -> Registry {
         }))
         .insert(tremor_fn!(system|instance(_context) {
             Ok(Value::from("tremor-script"))
+        }))
+        .insert(tremor_fn!(system|version(_context) {
+            Ok(Value::String(VERSION.into()).into_static())
         }));
 
     crate::std_lib::load(&mut registry);
