@@ -42,7 +42,7 @@ simd-json = {version = "0.4", features = ["known-key"]}
 #   - https://github.com/microsoft/snmalloc/issues/328
 #   - https://github.com/SchrodingerZhu/snmalloc-rs/issues/145
 snmalloc-rs = {version = "=0.2.26", optional = false}
-snmalloc-sys = {version = "=0.2.26", optional = false}
+snmalloc-sys = {version = "=0.2.27", optional = false}
 surf = "=2.2.0"
 tide = "0.16"
 tremor-api = {path = "../tremor-api"}
