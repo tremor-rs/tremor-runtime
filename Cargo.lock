@@ -6924,9 +6924,9 @@ dependencies = [
 
 [[package]]
 name = "value-trait"
-version = "0.2.4"
+version = "0.2.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6034fb7710bdb0f90669eb6b1ba37a15186872d61926dcf447f92c440a034f9b"
+checksum = "4b637f98040dfa411b01a85b238a8cadbd797b303c23007157dee4bbbd3a72af"
 dependencies = [
  "float-cmp",
  "halfbrown",
