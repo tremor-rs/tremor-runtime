@@ -7,8 +7,10 @@ Cargo.toml \
 tremor-api/Cargo.toml \
 tremor-cli/Cargo.toml \
 tremor-common/Cargo.toml \
+tremor-influx/Cargo.toml \
 tremor-pipeline/Cargo.toml \
 tremor-script/Cargo.toml\
+tremor-value/Cargo.toml
 "
 VERSION_TESTS="\
 tremor-cli/tests/api-cli/command.yml \
@@ -16,6 +18,11 @@ tremor-cli/tests/api/command.yml\
 "
 DOCKER_FILES="\
 Dockerfile.learn\
+"
+PACKAGES="\
+tremor-common \
+tremor-value \
+tremor-script\
 "
 old=$1
 new=$2
@@ -64,7 +71,6 @@ do
 done
 echo "."
 
-
 echo -n "Updating Docker files:"
 for f in ${DOCKER_FILES}
 do
@@ -76,6 +82,9 @@ echo "."
 echo "Updating CHANGELOG.md"
 sed -e "s/^## Unreleased$/## ${new}/" -i.release "CHANGELOG.md"
 
+
+echo "Testing the code ..."
+cargo test --all
 
 echo "Please review the following changes. (return to continue)"
 read answer
@@ -97,6 +106,29 @@ case "${answer}" in
         ;;
 esac;
 
+echo "Please open the following pull request we'll wait here continue when it is merged."
+echo
+echo "  >> https://github.com/tremor-rs/tremor-runtime/pull/new/release-v${new} <<"
+echo
+echo "Once you continue we'll generate and push the release tag with the latest 'main'"
+read answer
+
+echo "Generating release tag v${new}"
+
+git checkout main
+git pull
+git tag -a -m"Release v${new}" v${new}
+git push --tags
+
+echo "Publishing packages"
+
+for pkg in ${PACKAGES}
+do
+    cd $pkg
+    cargo publish
+    cd ..
+done
+
 echo "Preparing docs"
 
 mkdir -p temp
@@ -104,6 +136,52 @@ cd temp
 git clone git@github.com:tremor-rs/tremor-www-docs.git
 
 cd tremor-www-docs
+
+echo "Updating Makefile"
+sed -e "s/^TREMOR_VSN=v${old}$/TREMOR_VSN=v${new}/" -i.release "Makefile"
+
+echo "Please review the following changes. (return to continue)"
+read answer
+
+echo "Do you want to Continue or Rollback? [c/R]"
+read answer
+
+case "${answer}" in
+    C*|c*)
+        git checkout -b "release-v${new}"
+        git commit -sa -m "Rlease v${new}"
+        git push --set-upstream origin "release-v${new}"
+        ;;
+    *)
+        git checkout .
+        cd ../..
+        exit
+        ;;
+esac;
+
+echo "Please open the following pull request we'll wait here continue when it is merged."
+echo
+echo "  >> https://github.com/tremor-rs/tremor-www-docs/pull/new/release-v${new} <<"
+echo
+echo "Once you continue we'll generate and push the release tag with the latest 'main'"
+read answer
+
+echo "Generating release tag v${new}"
+
+git checkout main
+git pull
+git tag -a -m"Release v${new}" v${new}
+git push --tags
+
+cd ../..
+
+echo "Preparing TLS"
+
+mkdir -p temp
+cd temp
+git clone git@github.com:tremor-rs/tremor-language-server.git
+
+cd tremor-language-server
 
 echo "Updating Makefile"
 sed -e "s/^TREMOR_VSN=v${old}$/TREMOR_VSN=v${new}/" -i.release "Makefile"
