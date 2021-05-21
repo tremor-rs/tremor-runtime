@@ -47,3 +47,4 @@ report.json
 /tags
 lcov.info
 tremor-value/proptest-regressions/
+*.release
