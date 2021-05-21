@@ -20,6 +20,12 @@ Dockerfile.learn\
 old=$1
 new=$2
 
+if [ -z "${old}" -o -z "${new}" ]
+then
+    echo "please run: $0 <old version> <new version>"
+    exit 1
+fi
+
 if [ "$(git status --porcelain=v1 2>/dev/null | wc -l)" -ne 0 ]
 then
     git status
@@ -27,7 +33,7 @@ then
     read answer
 fi
 
-echo -n "Release process from starting from ${old} -> ${new}, do you want to continue? [y/N] " 
+echo -n "Release process from starting from '${old}' -> '${new}', do you want to continue? [y/N] " 
 read  answer
 
 
@@ -87,6 +93,7 @@ case "${answer}" in
         ;;
     *)
         git checkout .
+        exit
         ;;
 esac;
 
@@ -117,6 +124,15 @@ case "${answer}" in
         ;;
     *)
         git checkout .
+        cd ../..
+        exit
         ;;
 esac;
+
 cd ../..
+
+echo
+echo
+echo "Please open the following pull requests:"
+echo "  1) https://github.com/tremor-rs/tremor-runtime/pull/new/release-v${new}"
+echo "  2) https://github.com/tremor-rs/tremor-www-docs/pull/new/release-v${new}"
