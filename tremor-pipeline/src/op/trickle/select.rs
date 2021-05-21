@@ -109,11 +109,7 @@ pub trait WindowTrait: std::fmt::Debug {
     fn on_event(&mut self, event: &Event) -> Result<WindowEvent>;
     /// handle a tick with the current time in nanoseconds as `ns` argument
     fn on_tick(&mut self, _ns: u64) -> Result<WindowEvent> {
-        Ok(WindowEvent {
-            opened: false,
-            include: false,
-            emit: false,
-        })
+        Ok(WindowEvent::all_false())
     }
     fn eviction_ns(&self) -> Option<u64>;
     /// maximum number of groups to keep around simultaneously
@@ -135,12 +131,9 @@ pub struct Window {
 
 impl Window {
     pub(crate) fn module_path(fqwn: &str) -> Vec<String> {
-        let segments: Vec<_> = fqwn.split("::").collect();
-        if let Some((_, rest)) = segments.split_last() {
-            rest.iter().map(|v| (*v).to_string()).collect()
-        } else {
-            vec![]
-        }
+        let mut segments: Vec<_> = fqwn.split("::").map(String::from).collect();
+        segments.pop(); // Remove the last element
+        segments
     }
 
     pub(crate) fn ident_name(fqwn: &str) -> &str {
@@ -153,7 +146,6 @@ impl Window {
 pub enum WindowImpl {
     TumblingCountBased(TumblingWindowOnNumber),
     TumblingTimeBased(TumblingWindowOnTime),
-    No(NoWindow),
 }
 
 impl WindowImpl {
@@ -166,27 +158,11 @@ impl WindowImpl {
     pub const DEFAULT_EMIT_EMPTY_WINDOWS: bool = false;
 }
 
-impl std::default::Default for WindowImpl {
-    fn default() -> Self {
-        TumblingWindowOnTime {
-            interval: 15_000_000_000,
-            emit_empty_windows: Self::DEFAULT_EMIT_EMPTY_WINDOWS,
-            max_groups: Self::DEFAULT_MAX_GROUPS,
-            next_window: None,
-            events: 0,
-            script: None,
-            ttl: None,
-        }
-        .into()
-    }
-}
-
 impl WindowTrait for WindowImpl {
     fn on_event(&mut self, event: &Event) -> Result<WindowEvent> {
         match self {
             Self::TumblingTimeBased(w) => w.on_event(event),
             Self::TumblingCountBased(w) => w.on_event(event),
-            Self::No(w) => w.on_event(event),
         }
     }
 
@@ -194,7 +170,6 @@ impl WindowTrait for WindowImpl {
         match self {
             Self::TumblingTimeBased(w) => w.on_tick(ns),
             Self::TumblingCountBased(w) => w.on_tick(ns),
-            Self::No(w) => w.on_tick(ns),
         }
     }
 
@@ -202,21 +177,13 @@ impl WindowTrait for WindowImpl {
         match self {
             Self::TumblingTimeBased(w) => w.eviction_ns(),
             Self::TumblingCountBased(w) => w.eviction_ns(),
-            Self::No(w) => w.eviction_ns(),
         }
     }
     fn max_groups(&self) -> u64 {
         match self {
             Self::TumblingTimeBased(w) => w.max_groups(),
             Self::TumblingCountBased(w) => w.max_groups(),
-            Self::No(w) => w.max_groups(),
         }
-    }
-}
-
-impl From<NoWindow> for WindowImpl {
-    fn from(w: NoWindow) -> Self {
-        Self::No(w)
     }
 }
 
@@ -231,7 +198,7 @@ impl From<TumblingWindowOnTime> for WindowImpl {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Default)]
 pub struct WindowEvent {
     // New window has opened
     opened: bool,
@@ -239,6 +206,19 @@ pub struct WindowEvent {
     include: bool,
     /// Emit a window event
     emit: bool,
+}
+
+impl WindowEvent {
+    fn all_true() -> Self {
+        Self {
+            opened: true,
+            include: true,
+            emit: true,
+        }
+    }
+    fn all_false() -> Self {
+        Self::default()
+    }
 }
 
 #[derive(Default, Debug, Clone)]
@@ -252,11 +232,7 @@ impl WindowTrait for NoWindow {
     }
     fn on_event(&mut self, _event: &Event) -> Result<WindowEvent> {
         self.open = true;
-        Ok(WindowEvent {
-            opened: true,
-            include: true,
-            emit: true,
-        })
+        Ok(WindowEvent::all_true())
     }
     fn max_groups(&self) -> u64 {
         u64::MAX
@@ -285,12 +261,10 @@ impl TumblingWindowOnTime {
         let script = script
             .map(|s| {
                 rentals::Window::try_new(qry.clone(), |stmt| -> Result<_> {
-                    Ok(stmt
-                        .suffix()
-                        .windows
-                        .get(&s.id)
-                        .cloned()
-                        .ok_or_else(|| format!("unknown window: {}", &s.id))?)
+                    let id = &s.id;
+                    let windows = &stmt.suffix().windows;
+                    let window = windows.get(id).cloned();
+                    window.ok_or_else(|| format!("unknown window: {}", &s.id).into())
                 })
             })
             .transpose()?;
@@ -325,11 +299,7 @@ impl TumblingWindowOnTime {
                     emit,           // only emit if we had any events in this interval
                 }
             }
-            Some(_) => WindowEvent {
-                opened: false,
-                include: false,
-                emit: false,
-            },
+            Some(_) => WindowEvent::all_false(),
         }
     }
 }
@@ -374,11 +344,7 @@ impl WindowTrait for TumblingWindowOnTime {
             Ok(self.get_window_event(ns))
         } else {
             // we basically ignore ticks when we have a script with a custom timestamp
-            Ok(WindowEvent {
-                opened: false,
-                include: false,
-                emit: false,
-            })
+            Ok(WindowEvent::all_false())
         }
     }
 }
@@ -403,12 +369,10 @@ impl TumblingWindowOnNumber {
         let script = script
             .map(|s| {
                 rentals::Window::try_new(qry.clone(), |stmt| -> Result<_> {
-                    Ok(stmt
-                        .suffix()
-                        .windows
-                        .get(&s.id)
-                        .cloned()
-                        .ok_or_else(|| format!("unknown window: {}", &s.id))?)
+                    let id = &s.id;
+                    let windows = &stmt.suffix().windows;
+                    let window = windows.get(id).cloned();
+                    window.ok_or_else(|| format!("unknown window: {}", &s.id).into())
                 })
             })
             .transpose()?;
@@ -457,18 +421,11 @@ impl WindowTrait for TumblingWindowOnNumber {
         let new_count = self.count + count;
         if new_count >= self.size {
             self.count = new_count - self.size;
-            Ok(WindowEvent {
-                opened: true,
-                include: true, // we can emit now, including this event
-                emit: true,
-            })
+            // we can emit now, including this event
+            Ok(WindowEvent::all_true())
         } else {
             self.count = new_count;
-            Ok(WindowEvent {
-                opened: false,
-                include: false,
-                emit: false,
-            })
+            Ok(WindowEvent::all_false())
         }
     }
 }
@@ -2593,14 +2550,7 @@ mod test {
             },
             window.on_event(&test_event(5))?
         );
-        assert_eq!(
-            WindowEvent {
-                include: false,
-                opened: false,
-                emit: false
-            },
-            window.on_event(&test_event(10))?
-        );
+        assert_eq!(WindowEvent::all_false(), window.on_event(&test_event(10))?);
         assert_eq!(
             WindowEvent {
                 include: false,
@@ -2684,25 +2634,14 @@ mod test {
             "timestamp": 1_999_999_999
         });
         assert_eq!(
-            WindowEvent {
-                opened: false,
-                include: false,
-                emit: false
-            },
+            WindowEvent::all_false(),
             window.on_event(&json_event(2, json2))?
         );
         let json3 = json!({
             "timestamp": 2_000_000_000
         });
         // ignoring on_tick as we have a script
-        assert_eq!(
-            WindowEvent {
-                opened: false,
-                include: false,
-                emit: false
-            },
-            window.on_tick(2_000_000_000)?
-        );
+        assert_eq!(WindowEvent::all_false(), window.on_tick(2_000_000_000)?);
         assert_eq!(
             WindowEvent {
                 opened: true,
@@ -2733,14 +2672,7 @@ mod test {
             },
             window.on_tick(0)?
         );
-        assert_eq!(
-            WindowEvent {
-                opened: false,
-                include: false,
-                emit: false
-            },
-            window.on_tick(99)?
-        );
+        assert_eq!(WindowEvent::all_false(), window.on_tick(99)?);
         assert_eq!(
             WindowEvent {
                 opened: true,
@@ -2750,21 +2682,10 @@ mod test {
             window.on_tick(100)?
         );
         assert_eq!(
-            WindowEvent {
-                opened: false,
-                include: false,
-                emit: false
-            },
+            WindowEvent::all_false(),
             window.on_event(&json_event(101, json!({})))?
         );
-        assert_eq!(
-            WindowEvent {
-                opened: false,
-                include: false,
-                emit: false
-            },
-            window.on_tick(102)?
-        );
+        assert_eq!(WindowEvent::all_false(), window.on_tick(102)?);
         assert_eq!(
             WindowEvent {
                 opened: true,
@@ -2795,14 +2716,7 @@ mod test {
             },
             window.on_tick(0)?
         );
-        assert_eq!(
-            WindowEvent {
-                opened: false,
-                include: false,
-                emit: false
-            },
-            window.on_tick(99)?
-        );
+        assert_eq!(WindowEvent::all_false(), window.on_tick(99)?);
         assert_eq!(
             WindowEvent {
                 opened: true,
@@ -2812,21 +2726,10 @@ mod test {
             window.on_tick(100)?
         );
         assert_eq!(
-            WindowEvent {
-                opened: false,
-                include: false,
-                emit: false
-            },
+            WindowEvent::all_false(),
             window.on_event(&json_event(101, json!({})))?
         );
-        assert_eq!(
-            WindowEvent {
-                opened: false,
-                include: false,
-                emit: false
-            },
-            window.on_tick(102)?
-        );
+        assert_eq!(WindowEvent::all_false(), window.on_tick(102)?);
         assert_eq!(
             WindowEvent {
                 opened: true,
@@ -2842,38 +2745,10 @@ mod test {
     #[test]
     fn no_window_emit() -> Result<()> {
         let mut window = NoWindow::default();
-        assert_eq!(
-            WindowEvent {
-                include: true,
-                opened: true,
-                emit: true
-            },
-            window.on_event(&test_event(0))?
-        );
-        assert_eq!(
-            WindowEvent {
-                include: false,
-                opened: false,
-                emit: false
-            },
-            window.on_tick(0)?
-        );
-        assert_eq!(
-            WindowEvent {
-                include: true,
-                opened: true,
-                emit: true
-            },
-            window.on_event(&test_event(1))?
-        );
-        assert_eq!(
-            WindowEvent {
-                include: false,
-                opened: false,
-                emit: false
-            },
-            window.on_tick(1)?
-        );
+        assert_eq!(WindowEvent::all_true(), window.on_event(&test_event(0))?);
+        assert_eq!(WindowEvent::all_false(), window.on_tick(0)?);
+        assert_eq!(WindowEvent::all_true(), window.on_event(&test_event(1))?);
+        assert_eq!(WindowEvent::all_false(), window.on_tick(1)?);
         Ok(())
     }
 
@@ -2888,57 +2763,15 @@ mod test {
             &q.query,
         )?;
         // do not emit yet
-        assert_eq!(
-            WindowEvent {
-                include: false,
-                opened: false,
-                emit: false
-            },
-            window.on_event(&test_event(0))?
-        );
-        assert_eq!(
-            WindowEvent {
-                include: false,
-                opened: false,
-                emit: false
-            },
-            window.on_tick(1_000_000_000)?
-        );
+        assert_eq!(WindowEvent::all_false(), window.on_event(&test_event(0))?);
+        assert_eq!(WindowEvent::all_false(), window.on_tick(1_000_000_000)?);
         // do not emit yet
-        assert_eq!(
-            WindowEvent {
-                include: false,
-                opened: false,
-                emit: false
-            },
-            window.on_event(&test_event(1))?
-        );
-        assert_eq!(
-            WindowEvent {
-                include: false,
-                opened: false,
-                emit: false
-            },
-            window.on_tick(2_000_000_000)?
-        );
+        assert_eq!(WindowEvent::all_false(), window.on_event(&test_event(1))?);
+        assert_eq!(WindowEvent::all_false(), window.on_tick(2_000_000_000)?);
         // emit and open on the third event
-        assert_eq!(
-            WindowEvent {
-                include: true,
-                opened: true,
-                emit: true
-            },
-            window.on_event(&test_event(2))?
-        );
+        assert_eq!(WindowEvent::all_true(), window.on_event(&test_event(2))?);
         // no emit here, next window
-        assert_eq!(
-            WindowEvent {
-                include: false,
-                opened: false,
-                emit: false
-            },
-            window.on_event(&test_event(3))?
-        );
+        assert_eq!(WindowEvent::all_false(), window.on_event(&test_event(3))?);
 
         Ok(())
     }
