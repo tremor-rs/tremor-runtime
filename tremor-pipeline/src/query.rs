@@ -89,7 +89,7 @@ fn resolve_output_port(port: &(Ident, Ident), meta: &NodeMetas) -> OutputPort {
 
 pub(crate) fn window_decl_to_impl<'script>(
     d: &WindowDecl<'script>,
-    stmt: &StmtRentalWrapper,
+    qry: &Arc<tremor_script::QueryRental>,
 ) -> Result<WindowImpl> {
     use op::trickle::select::{TumblingWindowOnNumber, TumblingWindowOnTime};
     match &d.kind {
@@ -115,19 +115,19 @@ pub(crate) fn window_decl_to_impl<'script>(
                 d.params.get(WindowDecl::INTERVAL).and_then(Value::as_u64),
                 d.params.get(WindowDecl::SIZE).and_then(Value::as_u64),
             ) {
-                (Some(interval), None) => Ok(TumblingWindowOnTime::from_stmt(
+                (Some(interval), None) => TumblingWindowOnTime::from_stmt(
                     interval,
                     emit_empty_windows,
                     max_groups,
                     ttl,
                     script,
-                    stmt,
+                    qry,
                 )
-                .into()),
-                (None, Some(size)) => Ok(TumblingWindowOnNumber::from_stmt(
-                    size, max_groups, ttl, script, stmt,
-                )
-                .into()),
+                .map(WindowImpl::from),
+                (None, Some(size)) => {
+                    TumblingWindowOnNumber::from_stmt(size, max_groups, ttl, script, qry)
+                        .map(WindowImpl::from)
+                }
                 (Some(_), Some(_)) => Err(Error::from(
                     "Bad window configuration, only one of `size` or `interval` is allowed.",
                 )),
@@ -363,7 +363,7 @@ impl Query {
 
                     let mut ww = HashMap::with_capacity(query.windows.len());
                     for (name, decl) in &query.windows {
-                        ww.insert(name.clone(), window_decl_to_impl(&decl, &that)?);
+                        ww.insert(name.clone(), window_decl_to_impl(&decl, &self.0.query)?);
                     }
                     let op = node.to_op(
                         idgen.next_id(),
