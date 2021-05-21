@@ -35,7 +35,7 @@ use tremor_script::{
     query::StmtRental,
     query::StmtRentalWrapper,
     utils::sorted_serialize,
-    Value,
+    QueryRental, Value,
 };
 
 #[derive(Debug, Clone)]
@@ -74,7 +74,7 @@ rental! {
         }
         #[rental(covariant, debug, clone)]
         pub struct Window {
-            stmt: Arc<StmtRental>,
+            stmt: Arc<tremor_script::QueryRental>,
             window: WindowDecl<'stmt>,
         }
     }
@@ -280,17 +280,21 @@ impl TumblingWindowOnTime {
         max_groups: u64,
         ttl: Option<u64>,
         script: Option<&WindowDecl>,
-        stmt: &StmtRentalWrapper,
-    ) -> Self {
-        let script = script.map(|s| {
-            rentals::Window::new(stmt.stmt.clone(), |_| unsafe {
-                // This is sound since stmt.stmt is an arc that holds
-                // the borrowed data
-                // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1025
-                mem::transmute::<WindowDecl<'_>, WindowDecl<'static>>(s.clone())
+        qry: &Arc<QueryRental>,
+    ) -> Result<Self> {
+        let script = script
+            .map(|s| {
+                rentals::Window::try_new(qry.clone(), |stmt| -> Result<_> {
+                    Ok(stmt
+                        .suffix()
+                        .windows
+                        .get(&s.id)
+                        .cloned()
+                        .ok_or_else(|| format!("unknown window: {}", &s.id))?)
+                })
             })
-        });
-        Self {
+            .transpose()?;
+        Ok(Self {
             next_window: None,
             emit_empty_windows,
             max_groups,
@@ -298,7 +302,7 @@ impl TumblingWindowOnTime {
             interval,
             ttl,
             script,
-        }
+        })
     }
 
     fn get_window_event(&mut self, time: u64) -> WindowEvent {
@@ -394,25 +398,27 @@ impl TumblingWindowOnNumber {
         max_groups: u64,
         ttl: Option<u64>,
         script: Option<&WindowDecl>,
-        stmt: &StmtRentalWrapper,
-    ) -> Self {
-        let script = script.map(|s| {
-            rentals::Window::new(stmt.stmt.clone(), |_| unsafe {
-                // This is safe since `stmt.stmt` is an Arc that
-                // hods the referenced data and we clone it into the rental.
-                // This ensures referenced data isn't dropped until the rental
-                // is dropped.
-                // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1025
-                mem::transmute::<WindowDecl<'_>, WindowDecl<'static>>(s.clone())
+        qry: &Arc<QueryRental>,
+    ) -> Result<Self> {
+        let script = script
+            .map(|s| {
+                rentals::Window::try_new(qry.clone(), |stmt| -> Result<_> {
+                    Ok(stmt
+                        .suffix()
+                        .windows
+                        .get(&s.id)
+                        .cloned()
+                        .ok_or_else(|| format!("unknown window: {}", &s.id))?)
+                })
             })
-        });
-        Self {
+            .transpose()?;
+        Ok(Self {
             count: 0,
             max_groups,
             size,
             script,
             ttl,
-        }
+        })
     }
 }
 impl WindowTrait for TumblingWindowOnNumber {
@@ -1894,7 +1900,7 @@ mod test {
             .map(|(i, window_decl)| {
                 (
                     i.to_string(),
-                    window_decl_to_impl(window_decl, &stmt).unwrap(), // yes, indeed!
+                    window_decl_to_impl(window_decl, &query.query).unwrap(), // yes, indeed!
                 )
             })
             .collect();
@@ -2550,13 +2556,13 @@ mod test {
     }
 
     // get a stmt rental for a stupid script
-    fn stmt_rental() -> Result<StmtRentalWrapper> {
+    fn stmt_rental() -> Result<tremor_script::query::Query> {
         let file_name = "foo";
         let reg = tremor_script::registry();
         let aggr_reg = tremor_script::aggr_registry();
         let module_path = tremor_script::path::load();
         let cus = vec![];
-        let query = tremor_script::query::Query::parse(
+        Ok(tremor_script::query::Query::parse(
             &module_path,
             &file_name,
             "select event from in into out;",
@@ -2564,24 +2570,12 @@ mod test {
             &reg,
             &aggr_reg,
         )
-        .map_err(tremor_script::errors::CompilerError::error)?;
-
-        let stmt_rental = StmtRental::try_new(Arc::new(query.clone()), |q| {
-            q.suffix()
-                .stmts
-                .first()
-                .cloned()
-                .ok_or_else(|| Error::from("Invalid query"))
-        })?;
-        let stmt = tremor_script::query::StmtRentalWrapper {
-            stmt: Arc::new(stmt_rental),
-        };
-        Ok(stmt)
+        .map_err(tremor_script::errors::CompilerError::error)?)
     }
 
     #[test]
     fn tumbling_window_on_time_emit() -> Result<()> {
-        let stmt = stmt_rental()?;
+        let q = stmt_rental()?;
         // interval = 10 seconds
         let mut window = TumblingWindowOnTime::from_stmt(
             10 * 1_000_000_000,
@@ -2589,8 +2583,8 @@ mod test {
             WindowImpl::DEFAULT_MAX_GROUPS,
             None,
             None,
-            &stmt,
-        );
+            &q.query,
+        )?;
         assert_eq!(
             WindowEvent {
                 include: false,
@@ -2637,7 +2631,6 @@ mod test {
 
     #[test]
     fn tumbling_window_on_time_from_script_emit() -> Result<()> {
-        let stmt = stmt_rental()?;
         // create a WindowDecl with a custom script
         let reg = Registry::default();
         let aggr_reg = AggrRegistry::default();
@@ -2674,8 +2667,8 @@ mod test {
             WindowImpl::DEFAULT_MAX_GROUPS,
             None,
             Some(&window_decl),
-            &stmt,
-        );
+            &q.query,
+        )?;
         let json1 = json!({
             "timestamp": 1_000_000_000
         });
@@ -2723,15 +2716,15 @@ mod test {
 
     #[test]
     fn tumbling_window_on_time_on_tick() -> Result<()> {
-        let stmt = stmt_rental()?;
+        let q = stmt_rental()?;
         let mut window = TumblingWindowOnTime::from_stmt(
             100,
             WindowImpl::DEFAULT_EMIT_EMPTY_WINDOWS,
             WindowImpl::DEFAULT_MAX_GROUPS,
             None,
             None,
-            &stmt,
-        );
+            &q.query,
+        )?;
         assert_eq!(
             WindowEvent {
                 opened: true,
@@ -2785,15 +2778,15 @@ mod test {
 
     #[test]
     fn tumbling_window_on_time_emit_empty_windows() -> Result<()> {
-        let stmt = stmt_rental()?;
+        let q = stmt_rental()?;
         let mut window = TumblingWindowOnTime::from_stmt(
             100,
             true,
             WindowImpl::DEFAULT_MAX_GROUPS,
             None,
             None,
-            &stmt,
-        );
+            &q.query,
+        )?;
         assert_eq!(
             WindowEvent {
                 opened: true,
@@ -2886,9 +2879,14 @@ mod test {
 
     #[test]
     fn tumbling_window_on_number_emit() -> Result<()> {
-        let stmt = stmt_rental()?;
-        let mut window =
-            TumblingWindowOnNumber::from_stmt(3, WindowImpl::DEFAULT_MAX_GROUPS, None, None, &stmt);
+        let q = stmt_rental()?;
+        let mut window = TumblingWindowOnNumber::from_stmt(
+            3,
+            WindowImpl::DEFAULT_MAX_GROUPS,
+            None,
+            None,
+            &q.query,
+        )?;
         // do not emit yet
         assert_eq!(
             WindowEvent {
