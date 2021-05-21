@@ -35,7 +35,7 @@ function package_archive {
 
   # tremor-script lib
   # TREMOR_PATH needs to be set to wherever this folder gets extracted to
-  mkdir -p "${temp_archive_dir}/lib/tremor"
+  mkdir -p "${temp_archive_dir}/share/tremor"
   cp -vR "${ROOT_DIR}/tremor-script/lib/" "${temp_archive_dir}/share/tremor/lib/"
   cp -vR "${ROOT_DIR}/packaging/distribution/usr/share/tremor/tremor.sh" "${temp_archive_dir}/share/tremor/tremor.sh"
 
