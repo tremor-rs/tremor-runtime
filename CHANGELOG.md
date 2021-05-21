@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.11.4
+
+### Fixes
+
+- Fix the Release archive and package build process
 ## 0.11.3
 
 ### New features

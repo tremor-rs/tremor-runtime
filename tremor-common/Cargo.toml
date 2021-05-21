@@ -6,7 +6,7 @@ edition = "2018"
 license = "Apache-2.0"
 name = "tremor-common"
 readme = "README.md"
-version = "0.11.3"
+version = "0.11.4"
 
 [dependencies]
 async-std = "1"

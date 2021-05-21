@@ -44,13 +44,6 @@
     - ./tremor-common
     - ./tremor-value
     - ./tremor-script
-* Release https://github.com/tremor-rs/tremor-language-server
-  - Bump version and update dependency `tremor-script` to the new version.
-  - Create a github tag and draft a release from it:
-    - `git tag -a -m"Release v<MAJOR>.<MINOR>.<BUGFIX>" v<MAJOR>.<MINOR>.<BUGFIX> <COMMIT>`
-    - `git push origin --tag`
-  - Execute `cargo publish` from the language server repository root.
-  - Verify new language server installation via `cargo install tremor-language-server`
 * Wait for the docker image to build and publish
   - Verify docker image with some usage examples
   - Tag the published dockerhub image as latest:
@@ -63,8 +56,16 @@
     docker push tremorproject/tremor:latest
   ```
 
-* on tremor-www-docs and update the tremor version in `Makefile`
-* create a corresponding release on tremor-www-docs
+* Create a corresponding release on tremor-www-docs. See [tremor-www-docs Release Process](https://github.com/tremor-rs/tremor-www-docs/blob/main/RELEASE_PROCESS.md)
+* Release https://github.com/tremor-rs/tremor-language-server
+  - Bump version and update dependency `tremor-script` to the new version.
+  - Checkout the new tremor-www-docs release tag in the `tremor-www-docs` submodule.
+  - Create a github tag and draft a release from it:
+    - `git tag -a -m"Release v<MAJOR>.<MINOR>.<BUGFIX>" v<MAJOR>.<MINOR>.<BUGFIX> <COMMIT>`
+    - `git push origin --tag`
+  - Execute `cargo publish` from the language server repository root.
+  - Verify new language server installation via `cargo install tremor-language-server`
+
 
 * If syntax changed: Update the highlighters:
   - https://github.com/tremor-rs/tremor-vim
