@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::env;
+use crate::env::{self, TremorCliEnv};
 use crate::errors::{Error, Result};
 use crate::util::visit_path_str;
 use clap::ArgMatches;
@@ -24,9 +24,11 @@ fn gen_doc(
     is_interactive: bool,
     rel_path: Option<&Path>,
     dest_path: Option<&str>,
+    env: &TremorCliEnv,
     path: &Path,
 ) -> Result<()> {
-    let rel_path = rel_path.ok_or_else(|| Error::from("Bad relative path"))?;
+    let rel_path = rel_path
+        .ok_or_else(|| Error::from(format!("Bad relative path: {}", path.to_string_lossy())))?;
     let dest_path = dest_path
         .as_ref()
         .ok_or_else(|| Error::from("Bad destination path"))?;
@@ -35,7 +37,6 @@ fn gen_doc(
     let mut input = crate::open_file(path, None)?;
     input.read_to_string(&mut raw)?;
 
-    let env = env::setup()?;
     let name = rel_path
         .to_string_lossy()
         .to_string()
@@ -98,6 +99,9 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
 
     let dest_path = matches.value_of("OUTDIR").ok_or("docs")?.to_string();
     let is_interactive: bool = matches.is_present("interactive");
+    let mut env = env::setup()?;
+
+    env.module_path.add(src_path.to_string());
 
     visit_path_str(src_path, &move |rel_path, src_path| {
         // The closure exposes a 1-arity capture conforming to the PathVisitor 1-arity alias'd fn
@@ -106,6 +110,6 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
         //
         // This would be so much more elegant in erlang! Surely there's a more convivial syntax in rust?
         //
-        gen_doc(is_interactive, rel_path, Some(&dest_path), src_path)
+        gen_doc(is_interactive, rel_path, Some(&dest_path), &env, src_path)
     })
 }
