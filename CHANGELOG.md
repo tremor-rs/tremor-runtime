@@ -10,6 +10,7 @@
 ### New features
 
 - Add tests for merge feature in tremor-script [#721](https://github.com/tremor-rs/tremor-runtime/issues/721)
+- Add support for receiving TLS encrypted data via TCP onramp.
 
 ### Fixes
 
