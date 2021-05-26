@@ -28,6 +28,13 @@ use crate::sink::prelude::*;
 use async_std::net::TcpStream;
 use halfbrown::HashMap;
 
+use async_tls::TlsConnector;
+use rustls::ClientConfig;
+
+use std::io::Cursor;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
 /// An offramp streams over TCP/IP
 pub struct Tcp {
     stream: Option<TcpStream>,
@@ -43,6 +50,7 @@ pub struct Config {
     pub ttl: u32,
     #[serde(default = "t")]
     pub is_no_delay: bool,
+    pub cafile: Option<PathBuf>,
 }
 
 fn t() -> bool {
@@ -184,4 +192,19 @@ impl Sink for Tcp {
     fn is_active(&self) -> bool {
         self.stream.is_some()
     }
+}
+
+async fn connector(cafile: &Path) -> Result<TlsConnector> {
+    let mut config = ClientConfig::new();
+    let file = async_std::fs::read(cafile).await?;
+    let mut pem = Cursor::new(file);
+    config
+        .root_store
+        .add_pem_file(&mut pem).map_err(|_e| {
+            Error::from(ErrorKind::TLSError(format!(
+                "Invalid certificate in {}",
+                cafile.display()
+            )))
+        })?;
+    Ok(TlsConnector::from(Arc::new(config)))
 }
