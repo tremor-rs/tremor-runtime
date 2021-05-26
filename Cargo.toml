@@ -42,6 +42,7 @@ beef = {version = "0.5", features = ["impl_serde"]}
 byteorder = "1"
 bytes = "1.0"
 chrono = "0.4"
+either = { version = "1.6", features = ["serde"]}
 elastic = "0.21.0-pre.5"
 error-chain = "0.12"
 futures = "0.3.15"
@@ -78,7 +79,9 @@ tremor-value = {path = "tremor-value"}
 url = "2.2"
 value-trait = "0.2"
 rustls = "0.19"
-async-tls = "0.11.0"
+# needs to be compatible with what rusttls is using
+webpki-roots = "0.21"
+async-tls = { version = "0.11", features = ["client", "server"]}
 
 mapr = "0.8"
 tempfile = {version = "3.2"}

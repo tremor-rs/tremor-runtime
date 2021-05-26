@@ -1659,6 +1659,9 @@ name = "either"
 version = "1.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e78d4f1cc4ae33bbfc157ed5d5a5ef3bc29227303d595861deb238fcec4e9457"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "elastic"
@@ -6518,6 +6521,7 @@ dependencies = [
  "bytes 1.0.1",
  "chrono",
  "cron",
+ "either",
  "elastic",
  "env_logger 0.8.3",
  "error-chain 0.12.4",
@@ -6581,6 +6585,7 @@ dependencies = [
  "tungstenite 0.13.0",
  "url 2.2.2",
  "value-trait",
+ "webpki-roots 0.21.1",
  "xz2",
 ]
 
