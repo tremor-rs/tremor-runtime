@@ -32,12 +32,18 @@ use async_tls::TlsConnector;
 use rustls::ClientConfig;
 
 use std::io::Cursor;
-use std::path::{Path, PathBuf};
+use std::path::{PathBuf};
 use std::sync::Arc;
+use either::Either;
+use async_std::io::Write;
+
+type Stream = Box<dyn Write + std::marker::Unpin + Send>;
+
 
 /// An offramp streams over TCP/IP
 pub struct Tcp {
-    stream: Option<TcpStream>,
+    // TODO: check if we can/should use an enum here where we implement async_std::io::Write manually?
+    stream: Option<Stream>,
     postprocessors: Postprocessors,
     config: Config,
 }
@@ -46,18 +52,25 @@ pub struct Tcp {
 pub struct Config {
     pub host: String,
     pub port: u16,
-    #[serde(default = "ttl")]
+    #[serde(default = "default_ttl")]
     pub ttl: u32,
-    #[serde(default = "t")]
+    #[serde(default = "default_no_delay")]
     pub is_no_delay: bool,
-    pub cafile: Option<PathBuf>,
+    #[serde(with = "either::serde_untagged_optional")]
+    pub tls: Option<Either<TLSConfig, bool>>,
 }
 
-fn t() -> bool {
+#[derive(Deserialize, Debug, Default)]
+pub struct TLSConfig {
+    cafile: Option<PathBuf>,
+    domain: Option<String>
+}
+
+fn default_no_delay() -> bool {
     true
 }
 
-fn ttl() -> u32 {
+fn default_ttl() -> u32 {
     64
 }
 
@@ -93,7 +106,30 @@ impl Tcp {
         }
         Ok(())
     }
+
+    async fn connect(config: &Config) -> Result<Stream> {
+        let stream = TcpStream::connect((config.host.as_str(), config.port)).await?;
+        stream.set_ttl(config.ttl)?;
+        stream.set_nodelay(config.is_no_delay)?;
+        let s: Stream = match config.tls.as_ref() {
+            Some(Either::Right(true)) => {
+                let tls_config = TLSConfig::default();
+                let c = connector(&tls_config).await?;
+                Box::new(c.connect(config.host.as_str(), stream).await?)
+            }
+            Some(Either::Left(tls)) => {
+                let c = connector(&tls).await?;
+                Box::new(c.connect(tls.domain.as_ref().map_or_else(|| config.host.as_str(), String::as_str), stream).await?)
+            }
+            Some(Either::Right(false)) | None => {
+                Box::new(stream)
+            }
+        };
+        Ok(s)
+    }
 }
+
+
 
 #[async_trait::async_trait]
 impl Sink for Tcp {
@@ -162,25 +198,22 @@ impl Sink for Tcp {
         _reply_channel: Sender<sink::Reply>,
     ) -> Result<()> {
         self.postprocessors = make_postprocessors(processors.post)?;
-        let stream = TcpStream::connect((self.config.host.as_str(), self.config.port)).await?;
-        stream.set_ttl(self.config.ttl)?;
-        stream.set_nodelay(self.config.is_no_delay)?;
-        self.stream = Some(stream);
+        let stream = Self::connect(&self.config).await?;
+        //let stream = TcpStream::connect((self.config.host.as_str(), self.config.port)).await?;
+        //stream.set_ttl(self.config.ttl)?;
+        //stream.set_nodelay(self.config.is_no_delay)?;
+        self.stream = Some(Box::new(stream));
         Ok(())
     }
     async fn on_signal(&mut self, signal: Event) -> ResultVec {
         if self.stream.is_none() {
-            let stream = if let Ok(stream) =
-                TcpStream::connect((self.config.host.as_str(), self.config.port)).await
-            {
+            let stream = if let Ok(stream) = Self::connect(&self.config).await {
                 stream
             } else {
                 return Ok(Some(vec![sink::Reply::Insight(Event::cb_trigger(
                     signal.ingest_ns,
                 ))]));
             };
-            stream.set_ttl(self.config.ttl)?;
-            stream.set_nodelay(self.config.is_no_delay)?;
             self.stream = Some(stream);
             Ok(Some(vec![sink::Reply::Insight(Event::cb_restore(
                 signal.ingest_ns,
@@ -194,17 +227,28 @@ impl Sink for Tcp {
     }
 }
 
-async fn connector(cafile: &Path) -> Result<TlsConnector> {
-    let mut config = ClientConfig::new();
-    let file = async_std::fs::read(cafile).await?;
-    let mut pem = Cursor::new(file);
-    config
-        .root_store
-        .add_pem_file(&mut pem).map_err(|_e| {
-            Error::from(ErrorKind::TLSError(format!(
-                "Invalid certificate in {}",
-                cafile.display()
-            )))
-        })?;
-    Ok(TlsConnector::from(Arc::new(config)))
+/// if we have a cafile configured, we only load it, and no other ca certificates
+/// if there is no cafile configured, we load the default webpki-roots from Mozilla
+async fn connector(config: &TLSConfig) -> Result<TlsConnector> {
+    Ok(match config {
+        TLSConfig {
+            cafile: Some(cafile),
+            ..
+        } => {
+            let mut config = ClientConfig::new();
+            let file = async_std::fs::read(cafile).await?;
+            let mut pem = Cursor::new(file);
+            config.root_store
+                .add_pem_file(&mut pem).map_err(|_e| {
+                    Error::from(ErrorKind::TLSError(format!(
+                        "Invalid certificate in {}",
+                        cafile.display()
+                    )))
+                })?;
+            TlsConnector::from(Arc::new(config))
+        }
+        TLSConfig { cafile: None, .. } => {
+            TlsConnector::default()
+        }
+    }) 
 }
