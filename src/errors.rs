@@ -165,7 +165,7 @@ error_chain! {
         HttpHeaderError(http::header::InvalidHeaderValue);
         TonicTransportError(tonic::transport::Error);
         TonicStatusError(tonic::Status);
-
+        RustlsError(rustls::TLSError);
     }
 
     errors {
@@ -291,7 +291,10 @@ error_chain! {
         KvError(s: String) {
             description("KV error")
                 display("{}", s)
-
+        }
+        TLSError(s: String) {
+            description("TLS error")
+                display("{}", s)
         }
     }
 }
