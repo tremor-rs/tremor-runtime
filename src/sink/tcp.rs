@@ -31,14 +31,13 @@ use halfbrown::HashMap;
 use async_tls::TlsConnector;
 use rustls::ClientConfig;
 
-use std::io::Cursor;
-use std::path::{PathBuf};
-use std::sync::Arc;
-use either::Either;
 use async_std::io::Write;
+use either::Either;
+use std::io::Cursor;
+use std::path::PathBuf;
+use std::sync::Arc;
 
 type Stream = Box<dyn Write + std::marker::Unpin + Send>;
-
 
 /// An offramp streams over TCP/IP
 pub struct Tcp {
@@ -56,14 +55,14 @@ pub struct Config {
     pub ttl: u32,
     #[serde(default = "default_no_delay")]
     pub is_no_delay: bool,
-    #[serde(with = "either::serde_untagged_optional")]
+    #[serde(with = "either::serde_untagged_optional", default = "Default::default")]
     pub tls: Option<Either<TLSConfig, bool>>,
 }
 
 #[derive(Deserialize, Debug, Default)]
 pub struct TLSConfig {
     cafile: Option<PathBuf>,
-    domain: Option<String>
+    domain: Option<String>,
 }
 
 fn default_no_delay() -> bool {
@@ -113,23 +112,32 @@ impl Tcp {
         stream.set_nodelay(config.is_no_delay)?;
         let s: Stream = match config.tls.as_ref() {
             Some(Either::Right(true)) => {
+                debug!("Returns a TLS stream via default TLS connector");
                 let tls_config = TLSConfig::default();
                 let c = connector(&tls_config).await?;
                 Box::new(c.connect(config.host.as_str(), stream).await?)
             }
             Some(Either::Left(tls)) => {
+                debug!("Returns a TLS stream by a TLS connector started wiht cafile provided in the config");
                 let c = connector(&tls).await?;
-                Box::new(c.connect(tls.domain.as_ref().map_or_else(|| config.host.as_str(), String::as_str), stream).await?)
+                Box::new(
+                    c.connect(
+                        tls.domain
+                            .as_ref()
+                            .map_or_else(|| config.host.as_str(), String::as_str),
+                        stream,
+                    )
+                    .await?,
+                )
             }
             Some(Either::Right(false)) | None => {
+                debug!("Returns the usual TCP stream");
                 Box::new(stream)
             }
         };
         Ok(s)
     }
 }
-
-
 
 #[async_trait::async_trait]
 impl Sink for Tcp {
@@ -238,17 +246,14 @@ async fn connector(config: &TLSConfig) -> Result<TlsConnector> {
             let mut config = ClientConfig::new();
             let file = async_std::fs::read(cafile).await?;
             let mut pem = Cursor::new(file);
-            config.root_store
-                .add_pem_file(&mut pem).map_err(|_e| {
-                    Error::from(ErrorKind::TLSError(format!(
-                        "Invalid certificate in {}",
-                        cafile.display()
-                    )))
-                })?;
+            config.root_store.add_pem_file(&mut pem).map_err(|_e| {
+                Error::from(ErrorKind::TLSError(format!(
+                    "Invalid certificate in {}",
+                    cafile.display()
+                )))
+            })?;
             TlsConnector::from(Arc::new(config))
         }
-        TLSConfig { cafile: None, .. } => {
-            TlsConnector::default()
-        }
-    }) 
+        TLSConfig { cafile: None, .. } => TlsConnector::default(),
+    })
 }

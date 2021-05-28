@@ -6585,7 +6585,6 @@ dependencies = [
  "tungstenite 0.13.0",
  "url 2.2.2",
  "value-trait",
- "webpki-roots 0.21.1",
  "xz2",
 ]
 
