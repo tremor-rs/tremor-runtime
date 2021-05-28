@@ -79,9 +79,7 @@ tremor-value = {path = "tremor-value"}
 url = "2.2"
 value-trait = "0.2"
 rustls = "0.19"
-# needs to be compatible with what rusttls is using
-webpki-roots = "0.21"
-async-tls = { version = "0.11", features = ["client", "server"]}
+async-tls = "0.11"
 
 mapr = "0.8"
 tempfile = {version = "3.2"}
