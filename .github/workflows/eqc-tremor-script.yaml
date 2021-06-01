@@ -4,12 +4,10 @@ on: [push]
 
 jobs:
   eqc-tests:
-    if: ${{ secrets.EQC_LICENSE != '' }}
+    if: github.repository_owner == 'tremor-rs'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v1.0.0
-      - name: Validate secret access
-        run: '[ ! -z "${{secrets.EQC_LICENSE}}" ]'
       - uses: actions-rs/toolchain@v1
         with:
           override: true
