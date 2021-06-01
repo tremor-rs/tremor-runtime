@@ -32,6 +32,14 @@ combine_values(Key, SpecVal = #{}, Acc) ->
 combine_values(Key, SpecVal, Acc) ->
     maps:put(Key, SpecVal, Acc).
 
+% Operations covered by the folowing patch_operation are
+% {merge, Value}
+% {merge, Key, Value}
+% {insert, Key, Value}
+% {upsert, Key, Value}
+% {update, Key, Value}
+% {erase, Key}
+
 patch_operation({insert, Key, Value}, Acc) ->
     maps:put(Key, Value, Acc);
 patch_operation({merge, Key, Value}, Acc) ->
@@ -44,14 +52,6 @@ patch_operation({erase, Key}, Acc) ->
 
 -spec ast_eval(#vars{}, {}) -> {#vars{},
 				integer() | float() | boolean() | binary()}.
-
-% Test cases the patch eval function generates
-% {merge, Value}
-% {merge, Key, Value}
-% {insert, Key, Value}
-% {upsert, Key, Value}
-% {update, Key, Value}
-% {erase, Key}
 
 ast_eval(#vars{} = S, {patch, Expr, PatchOperation}) ->
     {_, ExprUpdate} = ast_eval(S, Expr),
@@ -71,6 +71,11 @@ ast_eval(#vars{} = S, {patch, Expr, PatchOperation}) ->
 					     {_, UpdatedValue} = ast_eval(S,
 									  Value),
 					     {upsert, UpdatedKey, UpdatedValue};
+                     ({update, Key, Value}) ->
+					     {_, UpdatedKey} = ast_eval(S, Key),
+					     {_, UpdatedValue} = ast_eval(S,
+									  Value),
+					     {update, UpdatedKey, UpdatedValue};
 					 ({merge, Key, Value}) ->
 					     {_, UpdatedKey} = ast_eval(S, Key),
 					     {_, UpdatedValue} = ast_eval(S,
