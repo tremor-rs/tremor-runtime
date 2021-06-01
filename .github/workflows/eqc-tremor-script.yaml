@@ -4,6 +4,7 @@ on: [push]
 
 jobs:
   eqc-tests:
+    if: ${{ secrets.EQC_LICENSE != '' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v1.0.0
