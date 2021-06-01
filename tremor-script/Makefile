@@ -1,7 +1,7 @@
 run-eqc: compile 
 	LD_LIBRARY_PATH="../target/debug:$LD_LIBRARY_PATH" rebar3 as eqc eqc -n 1000
 
-simple:	compile
+simple: compile
 	LD_LIBRARY_PATH="../target/debug:$LD_LIBRARY_PATH" rebar3 as eqc eqc --properties prop_simple_expr -n 1000
 
 compile:
