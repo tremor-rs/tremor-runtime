@@ -63,8 +63,15 @@ gen_({record, Exprs}) ->
      [[gen_(Key), ":", gen_(Value), ","]
       || {Key, Value} <- maps:to_list(Exprs)],
      "}"];
-gen_({'merge', Expr1, Expr2}) ->
-    ["(", "merge ", gen_(Expr1), " of ", gen_(Expr2), " end", ")"];
+gen_({merge, Expr1, Expr2}) ->
+    ["(", "merge ", gen_(Expr1), " of ", gen_(Expr2),
+     " end", ")"];
+gen_({patch, Expr, PatchOperation}) ->
+    ["(", "patch ", gen_(Expr), " of ",
+     lists:join(",",
+		[[patch_operation(Operation)]
+		 || Operation <- PatchOperation]),
+     " end", ")"];
 gen_({'let', Path, Expr}) ->
     ["let ", gen_(Path), " = ", gen_(Expr)];
 gen_({local, Path}) -> Path;
@@ -77,3 +84,15 @@ gen_(X) when is_number(X) -> io_lib:format("~p", [X]);
 gen_(X) when is_binary(X) -> jsx:encode(X).
 
 gen(Expr) -> iolist_to_binary(gen_(Expr)).
+
+patch_operation({merge, Value}) ->
+    ["merge ", " => ", gen_(Value)];
+patch_operation({merge, Key, Value}) ->
+    ["merge ", gen_(Key), " => ", gen_(Value)];
+patch_operation({insert, Key, Value}) ->
+    ["insert ", gen_(Key), " => ", gen_(Value)];
+patch_operation({upsert, Key, Value}) ->
+    ["upsert ", gen_(Key), " => ", gen_(Value)];
+patch_operation({update, Key, Value}) ->
+    ["update ", gen_(Key), " => ", gen_(Value)];
+patch_operation({erase, Key}) -> ["erase ", gen_(Key)].

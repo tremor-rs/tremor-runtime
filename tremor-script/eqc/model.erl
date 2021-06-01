@@ -22,9 +22,6 @@
 resolve(#state{locals = L}, {local, _} = K) ->
     maps:get(K, L).
 
--spec ast_eval(#vars{}, {}) -> {#vars{},
-				integer() | float() | boolean() | binary()}.
-
 combine_values(Key, null, Acc) -> maps:remove(Key, Acc);
 combine_values(Key, SpecVal = #{}, Acc) ->
     case maps:get(Key, Acc) of
@@ -35,6 +32,56 @@ combine_values(Key, SpecVal = #{}, Acc) ->
 combine_values(Key, SpecVal, Acc) ->
     maps:put(Key, SpecVal, Acc).
 
+patch_operation({insert, Key, Value}, Acc) ->
+    maps:put(Key, Value, Acc);
+patch_operation({merge, Key, Value}, Acc) ->
+    maps:fold(fun combine_values/3, #{Key => Value}, Acc);
+patch_operation({upsert, Key, Value}, Acc) ->
+    % does what we expect from upsert
+    maps:put(Key, Value, Acc);
+patch_operation({erase, Key}, Acc) ->
+    maps:remove(Key, Acc).
+
+-spec ast_eval(#vars{}, {}) -> {#vars{},
+				integer() | float() | boolean() | binary()}.
+
+% Test cases the patch eval function generates
+% {merge, Value}
+% {merge, Key, Value}
+% {insert, Key, Value}
+% {upsert, Key, Value}
+% {update, Key, Value}
+% {erase, Key}
+
+ast_eval(#vars{} = S, {patch, Expr, PatchOperation}) ->
+    {_, ExprUpdate} = ast_eval(S, Expr),
+    UpdatdPatchOperation = lists:map(fun ({erase, Key}) ->
+					     {_, UpdatedKey} = ast_eval(S, Key),
+					     {erase, UpdatedKey};
+					 ({merge, Key}) ->
+					     {_, UpdatedKey} = ast_eval(S, Key),
+					     {merge, UpdatedKey};
+					 ({insert, Key, Value}) ->
+					     {_, UpdatedKey} = ast_eval(S, Key),
+					     {_, UpdatedValue} = ast_eval(S,
+									  Value),
+					     {insert, UpdatedKey, UpdatedValue};
+					 ({upsert, Key, Value}) ->
+					     {_, UpdatedKey} = ast_eval(S, Key),
+					     {_, UpdatedValue} = ast_eval(S,
+									  Value),
+					     {upsert, UpdatedKey, UpdatedValue};
+					 ({merge, Key, Value}) ->
+					     {_, UpdatedKey} = ast_eval(S, Key),
+					     {_, UpdatedValue} = ast_eval(S,
+									  Value),
+					     {merge, UpdatedKey, UpdatedValue};
+					 (X) -> X
+				     end,
+				     PatchOperation),
+    {S,
+     lists:foldl(fun patch_operation/2, ExprUpdate,
+		 UpdatdPatchOperation)};
 ast_eval(#vars{} = S, {merge, Expr1, Expr2}) ->
     {_, Expr1Update} = ast_eval(S, Expr1),
     {_, Expr2Update} = ast_eval(S, Expr2),
