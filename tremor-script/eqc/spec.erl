@@ -27,6 +27,10 @@ valid(Script) ->
 		    {#vars{}, null}, Script),
 	true
     catch
+      %  for testing, A, B are errors and C is stack trace
+      %   A:B:C ->
+      %   io:format("Invalid: ~p\n~p:~p\n~p", [Script, A, B, C]),
+      %   false
       _:_ -> false
     end.
 
@@ -109,19 +113,13 @@ literal_record(S, N) ->
 spec_inner_record(#state{} = S, N) when N =< 1 ->
     literal_record(S, N);
 spec_inner_record(#state{} = S, N) ->
-    ?LAZY((frequency([{1, spec_bop_record(S, N - 1)}]))).
+    ?LAZY((frequency([{5, spec_bop_record(S, N - 1)},
+		      {10, spec_uop_record(S, N - 1)}]))).
 
 string() ->
     base64:encode(crypto:strong_rand_bytes(rand:uniform(10))).
 
 small_int() -> choose(1, 100).
-
-spec_uop_float(S, N) when N =< 1 ->
-    ?SHRINK({oneof(['+', '-']), float_or_float_local(S)},
-	    [float_or_float_local(S)]);
-spec_uop_float(S, N) ->
-    ?SHRINK({oneof(['+', '-']), spec_inner_float(S, N - 1)},
-	    [spec_inner_float(S, N - 1)]).
 
 int_or_int_local(#state{locals = Ls}) ->
     IVs = [{1, {local, K}} || {K, int} <- maps:to_list(Ls)],
@@ -163,6 +161,44 @@ spec_uop_int(S, N) when N =< 1 ->
 spec_uop_int(S, N) ->
     ?SHRINK({oneof(['+', '-']), spec_inner_int(S, N - 1)},
 	    [spec_inner_int(S, N - 1)]).
+
+spec_uop_float(S, N) when N =< 1 ->
+    ?SHRINK({oneof(['+', '-']), float_or_float_local(S)},
+	    [float_or_float_local(S)]);
+spec_uop_float(S, N) ->
+    ?SHRINK({oneof(['+', '-']), spec_inner_float(S, N - 1)},
+	    [spec_inner_float(S, N - 1)]).
+
+patch_operation(S, N) ->
+    frequency([{1,
+		{insert, spec_inner_string(S, N - 1),
+		 spec_inner_no_float(S, N - 1)}},
+	       {1,
+		{upsert, spec_inner_string(S, N - 1),
+		 spec_inner_no_float(S, N - 1)}},
+	       {1,
+		{merge, spec_inner_string(S, N - 1),
+		 spec_inner_record(S, N - 1)}},
+	       {1, {erase, spec_inner_string(S, N - 1)}}]).
+
+% Test cases the function spec_uop_record generates
+% {merge, Value}
+% {merge, Key, Value}
+% {insert, Key, Value}
+% {upsert, Key, Value}
+% {update, Key, Value}
+% {erase, Key}
+% spec_uop_record function returns {patch, generated_record, patch_operations}
+spec_uop_record(S, N) when N =< 1 ->
+    ?SHRINK({patch, literal_record(S, N - 1),
+	     ?SUCHTHAT(X, (list(1, patch_operation(S, N - 1))),
+		       (length(X) >= 1))},
+	    [literal_record(S, N - 1)]);
+spec_uop_record(S, N) ->
+    ?SHRINK({patch, spec_inner_record(S, N - 1),
+	     ?SUCHTHAT(X, (list(1, patch_operation(S, N - 1))),
+		       (length(X) >= 1))},
+	    [spec_inner_record(S, N - 1)]).
 
 spec_uop_bool(S, N) when N =< 1 ->
     ?SHRINK({'not', bool_or_bool_local(S)},
