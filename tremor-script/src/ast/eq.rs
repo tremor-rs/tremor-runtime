@@ -819,8 +819,10 @@ mod tests {
             case event.foo => "event.foo"
             case %( _, 12, ... ) => "has 12 at index 1"
             case %[] => "empty_array"
-            case %[ %{ present x } ] => "complex"
+            case %[ %{ present x }, ~ json|| ] => "complex"
+            case %{ absent y, snot == "badger", superhero ~= %{absent name}} => "snot"
             case object = %{ absent y, snot == "badger", superhero ~= %{absent name}} when object.superhero.is_snotty => "snotty_badger"
+            case ~ json|| => "json"
             default => null
         end);
         (match x of
@@ -828,8 +830,10 @@ mod tests {
             case event.foo => "event.foo"
             case %( _, 12, ... ) => "has 12 at index 1"
             case %[] => "empty_array"
-            case %[ %{ present x } ] => "complex"
+            case %[ %{ present x }, ~ json|| ] => "complex"
+            case %{ absent y, snot == "badger", superhero ~= %{absent name}} => "snot"
             case object = %{ absent y, snot == "badger", superhero ~= %{absent name}} when object.superhero.is_snotty => "snotty_badger"
+            case ~ json|| => "json"
             default => null
         end)
         "#
@@ -916,11 +920,11 @@ mod tests {
     eq_test!(
         test_comprehension_eq,
         r#"
-        (for event[1] of
+        (for event[1][1:3] of
             case (i, e) =>
                 {" #{i}": e}
         end);
-        (for event[1] of
+        (for event[1][1:3] of
             case (i, e) =>
                 {" #{i}": e}
         end)
