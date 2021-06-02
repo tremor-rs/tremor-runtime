@@ -458,7 +458,7 @@ impl Sink for Rest {
         // and responses to be turned into events
         let (in_tx, in_rx) = bounded::<CodecTaskInMsg>(self.config.concurrency);
         // channel for sending shit back to the connected pipelines
-        let reply_tx = reply_channel.clone();
+        let reply_tx = reply_channel;
         // start the codec task
         task::spawn(async move {
             codec_task(
