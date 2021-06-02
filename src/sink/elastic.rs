@@ -32,7 +32,6 @@
 
 #![cfg(not(tarpaulin_include))]
 
-use crate::postprocessor::Postprocessors;
 use crate::sink::prelude::*;
 use async_channel::{bounded, Receiver, Sender};
 use async_std::task::JoinHandle;
@@ -66,7 +65,6 @@ pub struct Elastic {
     sink_url: TremorUrl,
     client: SyncClient,
     queue: AsyncSink<u64>,
-    postprocessors: Postprocessors,
     insight_tx: Sender<sink::Reply>,
     is_linked: bool,
     response_sender: Sender<(LineValue, Cow<'static, str>)>,
@@ -88,7 +86,6 @@ impl offramp::Impl for Elastic {
 
             Ok(SinkManager::new_box(Self {
                 sink_url: TremorUrl::from_offramp_id("elastic")?, // just a dummy value, gonna be overwritten on init
-                postprocessors: vec![],
                 client,
                 queue,
                 insight_tx: tx,
@@ -561,7 +558,7 @@ impl Sink for Elastic {
         sink_url: &TremorUrl,
         _codec: &dyn Codec,
         _codec_map: &HashMap<String, Box<dyn Codec>>,
-        processors: Processors<'_>,
+        _processors: Processors<'_>,
         is_linked: bool,
         reply_channel: Sender<sink::Reply>,
     ) -> Result<()> {
@@ -573,7 +570,6 @@ impl Sink for Elastic {
         );
 
         self.sink_url = sink_url.clone();
-        self.postprocessors = make_postprocessors(processors.post)?;
         self.insight_tx = reply_channel;
         self.is_linked = is_linked;
         if is_linked {

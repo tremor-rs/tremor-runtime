@@ -41,7 +41,6 @@ pub struct GoogleCloudPubSub {
     reply_channel: Option<Sender<sink::Reply>>,
     is_linked: bool,
     postprocessors: Postprocessors,
-    codec: Box<dyn Codec>,
     event_id_gen: EventIdGenerator,
 }
 
@@ -85,7 +84,6 @@ impl offramp::Impl for GoogleCloudPubSub {
             reply_channel: None,
             is_linked: false,
             postprocessors: vec![],
-            codec: Box::new(crate::codec::null::Null {}),
             event_id_gen: EventIdGenerator::new(0), // Fake ID overwritten in init
         }))
     }
@@ -215,7 +213,7 @@ impl Sink for GoogleCloudPubSub {
         &mut self,
         sink_uid: u64,
         _sink_url: &TremorUrl,
-        codec: &dyn Codec,
+        _codec: &dyn Codec,
         _codec_map: &HashMap<String, Box<dyn Codec>>,
         processors: Processors<'_>,
         is_linked: bool,
@@ -224,7 +222,6 @@ impl Sink for GoogleCloudPubSub {
         self.event_id_gen = EventIdGenerator::new(sink_uid);
         self.postprocessors = make_postprocessors(processors.post)?;
         self.reply_channel = Some(reply_channel);
-        self.codec = codec.boxed_clone();
         self.is_linked = is_linked;
         Ok(())
     }

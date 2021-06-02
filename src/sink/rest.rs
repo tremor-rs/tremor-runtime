@@ -18,7 +18,6 @@ use crate::codec::Codec;
 use crate::errors::ErrorKind;
 use crate::sink::prelude::*;
 use async_channel::{bounded, Receiver, Sender};
-use async_std::task::JoinHandle;
 use halfbrown::HashMap;
 use http_types::mime::Mime;
 use http_types::{headers::HeaderValue, Method};
@@ -287,8 +286,6 @@ pub struct Rest {
     config: Config,
     num_inflight_requests: Arc<AtomicMaxCounter>,
     is_linked: bool,
-    reply_channel: Option<Sender<sink::Reply>>,
-    codec_task_handle: Option<JoinHandle<Result<()>>>,
     codec_task_tx: Option<Sender<CodecTaskInMsg>>,
     client: Client,
 }
@@ -305,8 +302,6 @@ impl offramp::Impl for Rest {
                 config,
                 num_inflight_requests,
                 is_linked: false,
-                reply_channel: None,
-                codec_task_handle: None,
                 codec_task_tx: None,
                 client,
             }))
@@ -465,7 +460,7 @@ impl Sink for Rest {
         // channel for sending shit back to the connected pipelines
         let reply_tx = reply_channel.clone();
         // start the codec task
-        self.codec_task_handle = Some(task::spawn(async move {
+        task::spawn(async move {
             codec_task(
                 sink_uid,
                 cloned_sink_url,
@@ -481,9 +476,8 @@ impl Sink for Rest {
                 is_linked,
             )
             .await
-        }));
+        });
         self.is_linked = is_linked;
-        self.reply_channel = Some(reply_channel);
         self.codec_task_tx = Some(in_tx);
         self.uid = sink_uid;
         Ok(())
