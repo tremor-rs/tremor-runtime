@@ -56,7 +56,6 @@ pub struct Blackhole {
     delivered: Histogram<u64>,
     run_secs: f64,
     bytes: usize,
-    postprocessors: Postprocessors,
     buf: Vec<u8>,
 }
 
@@ -76,7 +75,6 @@ impl offramp::Impl for Blackhole {
                     100_000_000_000,
                     config.significant_figures as u8,
                 )?,
-                postprocessors: vec![],
                 bytes: 0,
                 buf: Vec::with_capacity(1024),
             }))
@@ -95,11 +93,10 @@ impl Sink for Blackhole {
         _sink_url: &TremorUrl,
         _codec: &dyn Codec,
         _codec_map: &HashMap<String, Box<dyn Codec>>,
-        processors: Processors<'_>,
+        _processors: Processors<'_>,
         _is_linked: bool,
         _reply_channel: Sender<sink::Reply>,
     ) -> Result<()> {
-        self.postprocessors = make_postprocessors(processors.post)?;
         Ok(())
     }
 

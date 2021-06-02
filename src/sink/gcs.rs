@@ -42,7 +42,6 @@ pub struct GoogleCloudStorage {
     is_linked: bool,
     preprocessors: Preprocessors,
     postprocessors: Postprocessors,
-    codec: Box<dyn Codec>,
     sink_url: TremorUrl,
     event_id_gen: EventIdGenerator,
 }
@@ -100,7 +99,6 @@ impl offramp::Impl for GoogleCloudStorage {
                 is_linked: false,
                 preprocessors: vec![],
                 postprocessors: vec![],
-                codec: Box::new(crate::codec::null::Null {}),
                 sink_url: TremorUrl::from_offramp_id("gcs")?,
                 event_id_gen: EventIdGenerator::new(0), // Fake ID overwritten in init
             }))
@@ -305,7 +303,7 @@ impl Sink for GoogleCloudStorage {
         &mut self,
         sink_uid: u64,
         _sink_url: &TremorUrl,
-        codec: &dyn Codec,
+        _codec: &dyn Codec,
         _codec_map: &HashMap<String, Box<dyn Codec>>,
         processors: Processors<'_>,
         is_linked: bool,
@@ -315,7 +313,6 @@ impl Sink for GoogleCloudStorage {
         self.postprocessors = make_postprocessors(processors.post)?;
         self.preprocessors = make_preprocessors(processors.pre)?;
         self.reply_channel = Some(reply_channel);
-        self.codec = codec.boxed_clone();
         self.is_linked = is_linked;
         Ok(())
     }
