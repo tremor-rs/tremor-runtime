@@ -2,12 +2,15 @@
 
 ## Unreleased
 
-## Fixes
+### New featues
+
+- Experimental ARM support
+
+### Fixes
 
 - Skip instead of fail EQC on out of repo PRs
 
 ## 0.11.4
-
 
 ### New features
 

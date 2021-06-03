@@ -1,37 +1,39 @@
-
 <p align=center><img src="https://raw.githubusercontent.com/cncf/artwork/master/projects/tremor/horizontal/color/tremor-horizontal-color.png" width='35%'></p>
 <p align=center><a href="https://landscape.cncf.io/selected=tremor">CNCF Early Stage Sandbox Project</p>
 <p align=center><a href="https://landscape.cncf.io/category=streaming-messaging&format=card-mode&grouping=category">CNCF Streaming &amp; Messaging</p>
 
 <hr>
 
-[![Build Status]][actions-Tests]
-[![Quality Checks]][actions-Checks]
-[![License Checks]][actions-License-audit]
-[![Security Checks]][actions-Security-audit]
+[![Build Status]][actions-tests]
+[![ARM Builds]][drone.io]
+[![Quality Checks]][actions-checks]
+[![License Checks]][actions-license-audit]
+[![Security Checks]][actions-security-audit]
 [![Coverage]][coveralls.io]
 [![Dependabot Status]][dependabot.com]
 [![CII Best Practices]][bestpractices]
 [![GitHub]](LICENSE)
 [![Discord]][discord-invite]
 
-[Build Status]: https://github.com/tremor-rs/tremor-runtime/workflows/Tests/badge.svg
-[actions-Tests]: https://github.com/tremor-rs/tremor-runtime/actions?query=workflow%3ATests
-[Quality Checks]: https://github.com/tremor-rs/tremor-runtime/workflows/Checks/badge.svg
-[actions-Checks]: https://github.com/tremor-rs/tremor-runtime/actions?query=workflow%3AChecks
-[License Checks]: https://github.com/tremor-rs/tremor-runtime/workflows/License%20audit/badge.svg
-[actions-License-audit]: https://github.com/tremor-rs/tremor-runtime/actions?query=workflow%3A%22License+audit%22
-[Security Checks]: https://github.com/tremor-rs/tremor-runtime/workflows/Security%20audit/badge.svg
-[actions-Security-audit]: https://github.com/tremor-rs/tremor-runtime/actions?query=workflow%3A%22Security+audit%22
-[Coverage]: https://coveralls.io/repos/github/tremor-rs/tremor-runtime/badge.svg?branch=main
+[build status]: https://github.com/tremor-rs/tremor-runtime/workflows/Tests/badge.svg
+[actions-tests]: https://github.com/tremor-rs/tremor-runtime/actions?query=workflow%3ATests
+[quality checks]: https://github.com/tremor-rs/tremor-runtime/workflows/Checks/badge.svg
+[actions-checks]: https://github.com/tremor-rs/tremor-runtime/actions?query=workflow%3AChecks
+[license checks]: https://github.com/tremor-rs/tremor-runtime/workflows/License%20audit/badge.svg
+[actions-license-audit]: https://github.com/tremor-rs/tremor-runtime/actions?query=workflow%3A%22License+audit%22
+[security checks]: https://github.com/tremor-rs/tremor-runtime/workflows/Security%20audit/badge.svg
+[actions-security-audit]: https://github.com/tremor-rs/tremor-runtime/actions?query=workflow%3A%22Security+audit%22
+[coverage]: https://coveralls.io/repos/github/tremor-rs/tremor-runtime/badge.svg?branch=main
 [coveralls.io]: https://coveralls.io/github/tremor-rs/tremor-runtime?branch=main
-[Dependabot Status]: https://api.dependabot.com/badges/status?host=github&repo=tremor-rs/tremor-runtime
+[dependabot status]: https://api.dependabot.com/badges/status?host=github&repo=tremor-rs/tremor-runtime
 [dependabot.com]: https://dependabot.com
-[CII Best Practices]: https://bestpractices.coreinfrastructure.org/projects/4356/badge
+[cii best practices]: https://bestpractices.coreinfrastructure.org/projects/4356/badge
 [bestpractices]: https://bestpractices.coreinfrastructure.org/projects/4356
-[GitHub]: https://img.shields.io/github/license/tremor-rs/tremor-runtime
-[Discord]: https://img.shields.io/discord/752801695066488843.svg?label=&logo=discord&logoColor=ffffff&color=7389D8&labelColor=6A7EC2
+[github]: https://img.shields.io/github/license/tremor-rs/tremor-runtime
+[discord]: https://img.shields.io/discord/752801695066488843.svg?label=&logo=discord&logoColor=ffffff&color=7389D8&labelColor=6A7EC2
 [discord-invite]: https://bit.ly/tremor-discord
+[arm builds]: https://cloud.drone.io/api/badges/tremor-rs/tremor-runtime/status.svg
+[drone.io]: https://cloud.drone.io/tremor-rs/tremor-runtime
 
 ---
 
@@ -55,10 +57,10 @@ Kafka optimizes its connection lifetime for long-lived, persistent connections. 
 
 ### When to use Tremor
 
-* You are currently using software such as Logstash or Telegraf
-* You have a high volume of events to handle
-* You want to protect a downstream system from overload
-* You wish to perform ETL like tasks on data.
+- You are currently using software such as Logstash or Telegraf
+- You have a high volume of events to handle
+- You want to protect a downstream system from overload
+- You wish to perform ETL like tasks on data.
 
 ### When not to use Tremor
 
@@ -66,11 +68,11 @@ Note: Some of those restrictions are subject to change as tremor is a growing pr
 
 We currently do not recommend tremor where:
 
-* Your event structure is not mappable to a JSON-like data structures.
-  * If in doubt, please reach out and create a ticket so we can assist and advice
-  * In many cases ( textual formats ) a [preprocessor](https://docs.tremor.rs/artefacts/preprocessors/), [postprocessor](https://docs.tremor.rs/artefacts/postprocessors/) or [codec](https://docs.tremor.rs/artefacts/codecs/) is sufficient and these are relatively easy to contribute.
-* You need connectivity to a system, protocol or technology that is not currently supported directly or indirectly by the set existing set of [onramps](https://docs.tremor.rs/artefacts/onramps) and [offramps](https://docs.tremor.rs/artefacts/offramps/).
-  * If in doubt, please reach out and create a ticket so we can assist and advise.
+- Your event structure is not mappable to a JSON-like data structures.
+  - If in doubt, please reach out and create a ticket so we can assist and advice
+  - In many cases ( textual formats ) a [preprocessor](https://docs.tremor.rs/artefacts/preprocessors/), [postprocessor](https://docs.tremor.rs/artefacts/postprocessors/) or [codec](https://docs.tremor.rs/artefacts/codecs/) is sufficient and these are relatively easy to contribute.
+- You need connectivity to a system, protocol or technology that is not currently supported directly or indirectly by the set existing set of [onramps](https://docs.tremor.rs/artefacts/onramps) and [offramps](https://docs.tremor.rs/artefacts/offramps/).
+  - If in doubt, please reach out and create a ticket so we can assist and advise.
 
 We accept and encourage contributions no matter how small so if tremor is compelling for your use case or project, then please get in touch, reach out, raise a ticket and we're happy to collaborate and guide contributions and contributors.
 
@@ -87,11 +89,13 @@ Tremor runs in a docker image. If you wish to build a local image, clone this re
 Note that since the image is building tremor in release mode it requires some serious resources. We recommend allowing docker to use at least **12 but better 16 gigabytes of memory** and as many cores as there are to spare. Depending on the system building, the image can take up to an hour.
 
 Providing too little resources to the docker machine can destabalize the docker build process. If you're encountering logs/errors like:
+
 ```
 (signal: 9, SIGKILL: kill)
 # OR
 ERROR: Service 'tremor' failed to build : The command '/bin/sh -c cargo build --release --all --verbose' returned a non-zero code: 101
 ```
+
 It is likely that your docker resources are starved. Consider increasing your resources ([Windows](https://docs.docker.com/docker-for-windows/#resources)/[Mac](https://docs.docker.com/docker-for-mac/#resources)) before trying again, posting in Discord, or raising an issue.
 
 ### Local builds
