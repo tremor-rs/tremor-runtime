@@ -18,7 +18,7 @@ use crate::repository::ServantId;
 use crate::source::prelude::*;
 use crate::source::{
     amqp, blaster, cb, crononome, discord, file, gsub, kafka, metronome, nats, otel, postgres,
-    rest, stdin, tcp, udp, ws,
+    rest, sse, stdin, tcp, udp, ws,
 };
 use crate::url::TremorUrl;
 use async_std::task::{self, JoinHandle};
@@ -82,6 +82,7 @@ pub(crate) fn lookup(
         "udp" => udp::Udp::from_config(id, config),
         "tcp" => tcp::Tcp::from_config(id, config),
         "rest" => rest::Rest::from_config(id, config),
+        "sse" => sse::Sse::from_config(id,config),
         "ws" => ws::Ws::from_config(id, config),
         "discord" => discord::Discord::from_config(id, config),
         "otel" => otel::OpenTelemetry::from_config(id, config),
