@@ -111,6 +111,10 @@ openssl = { version = "0.10", features = ["vendored"] }
 # rest onramp
 tide = "0.16"
 
+# sse-onramp
+# sse onramp
+surf-sse = {git = "https://github.com/dak-x/surf-sse", branch = "default"}
+
 # nats
 async-nats = "0.9.18"
 
