@@ -4438,9 +4438,9 @@ dependencies = [
 
 [[package]]
 name = "rdkafka"
-version = "0.24.0"
+version = "0.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "db594dc221933be6f2ad804b997b48a57a63436c26ab924222c28e9a36ad210a"
+checksum = "af78bc431a82ef178c4ad6db537eb9cc25715a8591d27acc30455ee7227a76f4"
 dependencies = [
  "futures 0.3.15",
  "libc",
@@ -4449,13 +4449,14 @@ dependencies = [
  "serde",
  "serde_derive",
  "serde_json",
+ "slab",
 ]
 
 [[package]]
 name = "rdkafka-sys"
-version = "2.1.0+1.5.0"
+version = "4.0.0+1.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6d3f17044cba41c7309facedc72ca9bf25f177bf1e06756318e010f043713017"
+checksum = "54f24572851adfeb525fdc4a1d51185898e54fed4e8d8dba4fadb90c6b4f0422"
 dependencies = [
  "cmake",
  "libc",
