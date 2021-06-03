@@ -152,8 +152,8 @@ impl rentals::MessageStream {
     // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1023
     #[allow(mutable_transmutes, clippy::mut_from_ref)]
     unsafe fn mut_suffix(
-        &self,
-    ) -> &mut stream_consumer::MessageStream<'static, LoggingConsumerContext, SmolRuntime> {
+        &mut self,
+    ) -> &mut stream_consumer::MessageStream<'_, LoggingConsumerContext, SmolRuntime> {
         // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1023
         mem::transmute(&self.suffix().stream)
     }
@@ -168,7 +168,7 @@ impl rentals::MessageStream {
         &mut s.consumer
     }
     fn commit(&mut self, map: &StdMap<(String, i32), Offset>, mode: CommitMode) -> Result<()> {
-        let offsets = TopicPartitionList::from_topic_map(map);
+        let offsets = TopicPartitionList::from_topic_map(map)?;
 
         unsafe { self.consumer().commit(&offsets, mode)? };
 
@@ -348,7 +348,7 @@ impl ConsumerContext for LoggingConsumerContext {
                 }
             }
             // this is actually not an error - we just didnt have any offset to commit
-            Err(KafkaError::ConsumerCommit(rdkafka_sys::RDKafkaError::NoOffset)) => {}
+            Err(KafkaError::ConsumerCommit(rdkafka_sys::RDKafkaErrorCode::NoOffset)) => {}
             Err(e) => warn!(
                 "[Source::{}] Error while committing offsets: {}",
                 self.onramp_id, e
@@ -356,7 +356,7 @@ impl ConsumerContext for LoggingConsumerContext {
         };
     }
 }
-pub type LoggingConsumer = StreamConsumer<LoggingConsumerContext>;
+pub type LoggingConsumer = StreamConsumer<LoggingConsumerContext, SmolRuntime>;
 
 /// ensure a zero poll timeout to have a non-blocking call
 
@@ -369,21 +369,32 @@ impl Source for Int {
         &self.onramp_id
     }
     async fn pull_event(&mut self, id: u64) -> Result<SourceReply> {
-        if let Some(stream) = self.stream.as_mut() {
-            let s = unsafe { stream.mut_suffix() };
-            let r = match timeout(Duration::from_millis(100), s.next()).await {
+        if let Self {
+            stream: Some(stream),
+            onramp_id,
+            origin_uri,
+            auto_commit,
+            messages,
+            ..
+        } = &mut self
+        {
+            let r = {
+                let s = unsafe { stream.mut_suffix() };
+                timeout(Duration::from_millis(100), s.next()).await
+            };
+            let r = match r {
                 Ok(r) => r,
                 Err(_) => return Ok(SourceReply::Empty(0)),
             };
             if let Some(Ok(m)) = r {
                 debug!(
                     "[Source::{}] EventId: {} Offset: {}",
-                    self.onramp_id,
+                    onramp_id,
                     id,
                     m.offset()
                 );
                 if let Some(Ok(data)) = m.payload_view::<[u8]>() {
-                    let mut origin_uri = self.origin_uri.clone();
+                    let mut origin_uri = origin_uri.clone();
                     origin_uri.path = vec![
                         m.topic().to_string(),
                         m.partition().to_string(),
@@ -422,8 +433,8 @@ impl Source for Int {
                     }
                     kafka_meta_data.insert("kafka", meta_data)?;
 
-                    if !self.auto_commit {
-                        self.messages.insert(id, MsgOffset::from(m));
+                    if !*auto_commit {
+                        messages.insert(id, MsgOffset::from(m));
                     }
                     Ok(SourceReply::Data {
                         origin_uri,
@@ -590,11 +601,8 @@ impl Source for Int {
                 return Err(e.into());
             }
         };
-        let stream = rentals::MessageStream::new(Box::new(consumer), |c| {
-            StreamAndMsgs::new(
-                c.start_with_runtime::<SmolRuntime>(Duration::from_millis(100), false),
-            )
-        });
+        let stream =
+            rentals::MessageStream::new(Box::new(consumer), |c| StreamAndMsgs::new(c.stream()));
         self.stream = Some(stream);
 
         Ok(SourceState::Connected)
