@@ -131,14 +131,13 @@ impl<'script> CustomFn<'script> {
 
     // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1028
     #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
-    pub(crate) fn invoke<'event, 'run>(
-        &'script self,
-        env: &'run Env<'run, 'event, 'script>,
-        args: &'run [&'run Value<'event>],
+    pub(crate) fn invoke<'event>(
+        &self,
+        env: &Env<'_, 'event, '_>,
+        args: &[&Value<'event>],
     ) -> FResult<Value<'event>>
     where
         'script: 'event,
-        'event: 'run,
     {
         use std::mem;
         const NO_AGGRS: [InvokeAggrFn<'static>; 0] = [];
@@ -152,7 +151,7 @@ impl<'script> CustomFn<'script> {
 
         // We are swapping out the var args for constants
         // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1028
-        let consts: &'run mut Consts<'event> = unsafe { mem::transmute(env.consts) };
+        let consts: &mut Consts<'event> = unsafe { mem::transmute(env.consts) };
 
         mem::swap(&mut consts.args, &mut args_const);
 

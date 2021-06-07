@@ -209,7 +209,7 @@ impl AstEq for TestExpr {
 
 impl<'script> AstEq for ClausePreCondition<'script> {
     fn ast_eq(&self, other: &Self) -> bool {
-        self.segments.ast_eq(&other.segments)
+        self.path.ast_eq(&other.path)
     }
 }
 

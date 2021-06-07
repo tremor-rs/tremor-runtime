@@ -157,7 +157,7 @@ pub trait ImutExprIntVisitor<'script> {
         &mut self,
         precondition: &mut super::ClausePreCondition<'script>,
     ) -> Result<()> {
-        for segment in &mut precondition.segments {
+        for segment in precondition.path.segments_mut() {
             self.walk_segment(segment)?;
         }
         Ok(())

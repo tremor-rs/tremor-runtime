@@ -54,7 +54,7 @@ where
     /// if evaluation fails
     #[inline]
     pub fn run(
-        &'script self,
+        &'run self,
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
         event: &'run Value<'event>,
@@ -83,7 +83,7 @@ where
 
     #[inline]
     pub fn eval_to_string(
-        &'script self,
+        &'run self,
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
         event: &'run Value<'event>,
@@ -108,7 +108,7 @@ where
     /// if the resulting value can not be represented as a usize or the evaluation fails
     #[inline]
     pub fn eval_to_index<Expr>(
-        &'script self,
+        &'run self,
         outer: &'run Expr,
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
@@ -116,7 +116,7 @@ where
         state: &'run Value<'static>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
-        path: &'script Path,
+        path: &'run Path<'script>,
         array: &[Value],
     ) -> Result<usize>
     where
@@ -133,7 +133,7 @@ where
     /// # Errors
     /// on any runtime error
     pub fn run(
-        &'script self,
+        &'run self,
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
         event: &'run Value<'event>,
@@ -297,14 +297,14 @@ where
     }
 
     fn comprehension(
-        &'script self,
+        &'run self,
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
         event: &'run Value<'event>,
         state: &'run Value<'static>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
-        expr: &'script Comprehension<ImutExprInt>,
+        expr: &'run Comprehension<'script, ImutExprInt<'script>>,
     ) -> Result<Cow<'run, Value<'event>>> {
         type Bi<'v, 'r> = (usize, Box<dyn Iterator<Item = (Value<'v>, Value<'v>)> + 'r>);
         fn kv<'v, K>((k, v): (K, &Value<'v>)) -> (Value<'v>, Value<'v>)
@@ -317,7 +317,6 @@ where
 
         let mut value_vec = vec![];
         let target = &expr.target;
-        let cases = &expr.cases;
         let t = stry!(target.run(opts, env, event, state, meta, local));
 
         let (l, items): Bi = t.as_object().map_or_else(
@@ -340,6 +339,8 @@ where
         }
 
         // } else if let Some(target_array) = target_value.as_array() {
+
+        let cases = &expr.cases;
 
         'outer: for (k, v) in items {
             stry!(set_local_shadow(self, local, &env.meta, expr.key_id, k));
@@ -370,41 +371,38 @@ where
         state: &'run Value<'static>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
-        effector: &'script ImutExprInt<'script>,
+        effector: &'run ImutExprInt<'script>,
     ) -> Result<Cow<'run, Value<'event>>> {
         effector.run(opts, env, event, state, meta, local)
     }
 
     #[allow(clippy::too_many_lines)]
     fn match_expr(
-        &'script self,
+        &'run self,
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
         event: &'run Value<'event>,
         state: &'run Value<'static>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
-        expr: &'script Match<ImutExprInt>,
+        expr: &'run Match<'script, ImutExprInt<'script>>,
     ) -> Result<Cow<'run, Value<'event>>> {
-        use super::{resolve_value, DUMMY_PATH as D};
+        use super::resolve_value;
         use crate::ast::{ClauseGroup, ClausePreCondition, DefaultCase};
         let target = stry!(expr.target.run(opts, env, event, state, meta, local));
 
         for cg in &expr.patterns {
-            let maybe_target =
-                if let Some(ClausePreCondition { segments: seg, .. }) = cg.precondition() {
-                    let v = resolve_value(
-                        self, opts, env, event, state, meta, local, &D, &target, &seg,
-                    );
-                    if let Ok(target) = v {
-                        Some(target)
-                    } else {
-                        // We couldn't look up the value, it doesn't exist so we look at the next group
-                        continue;
-                    }
+            let maybe_target = if let Some(ClausePreCondition { path, .. }) = cg.precondition() {
+                let v = resolve_value(self, opts, env, event, state, meta, local, &path, &target);
+                if let Ok(target) = v {
+                    Some(target)
                 } else {
-                    None
-                };
+                    // We couldn't look up the value, it doesn't exist so we look at the next group
+                    continue;
+                }
+            } else {
+                None
+            };
             let target: &Value = maybe_target.as_ref().map_or(&target, |target| target);
             macro_rules! execute {
                 ($predicate:ident) => {{
@@ -485,14 +483,14 @@ where
     }
 
     fn binary(
-        &'script self,
+        &'run self,
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
         event: &'run Value<'event>,
         state: &'run Value<'static>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
-        expr: &'script BinExpr<'script>,
+        expr: &'run BinExpr<'script>,
     ) -> Result<Cow<'run, Value<'event>>> {
         let lhs = stry!(expr.lhs.run(opts, env, event, state, meta, local));
         let rhs = stry!(expr.rhs.run(opts, env, event, state, meta, local));
@@ -500,14 +498,14 @@ where
     }
 
     fn unary(
-        &'script self,
+        &'run self,
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
         event: &'run Value<'event>,
         state: &'run Value<'static>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
-        expr: &'script UnaryExpr<'script>,
+        expr: &'run UnaryExpr<'script>,
     ) -> Result<Cow<'run, Value<'event>>> {
         let rhs = stry!(expr.expr.run(opts, env, event, state, meta, local));
         // TODO align this implemenation to be similar to exec_binary?
@@ -519,14 +517,14 @@ where
 
     // TODO: Quite some overlap with `interpreter::resolve` (and some with `expr::assign`)
     fn present(
-        &'script self,
+        &'run self,
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
         event: &'run Value<'event>,
         state: &'run Value<'static>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
-        path: &'script Path,
+        path: &'run Path<'script>,
     ) -> Result<Cow<'run, Value<'event>>> {
         // Fetch the base of the path
         // TODO: Extract this into a method on `Path`?
@@ -637,14 +635,14 @@ where
 
     // TODO: Can we convince Rust to generate the 3 or 4 versions of this method from one template?
     fn invoke1(
-        &'script self,
+        &'run self,
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
         event: &'run Value<'event>,
         state: &'run Value<'static>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
-        expr: &'script Invoke,
+        expr: &'run Invoke<'script>,
     ) -> Result<Cow<'run, Value<'event>>> {
         let arg = unsafe { expr.args.get_unchecked(0) };
         let v = stry!(eval_for_fn_arg(opts, env, event, state, meta, local, arg));
@@ -659,14 +657,14 @@ where
     }
 
     fn invoke2(
-        &'script self,
+        &'run self,
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
         event: &'run Value<'event>,
         state: &'run Value<'static>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
-        expr: &'script Invoke,
+        expr: &'run Invoke<'script>,
     ) -> Result<Cow<'run, Value<'event>>> {
         let arg = unsafe { (expr.args.get_unchecked(0), expr.args.get_unchecked(1)) };
         let v1 = stry!(eval_for_fn_arg(opts, env, event, state, meta, local, arg.0));
@@ -682,14 +680,14 @@ where
     }
 
     fn invoke3(
-        &'script self,
+        &'run self,
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
         event: &'run Value<'event>,
         state: &'run Value<'static>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
-        expr: &'script Invoke,
+        expr: &'run Invoke<'script>,
     ) -> Result<Cow<'run, Value<'event>>> {
         let arg = unsafe {
             (
@@ -713,14 +711,14 @@ where
     }
 
     fn invoke(
-        &'script self,
+        &'run self,
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
         event: &'run Value<'event>,
         state: &'run Value<'static>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
-        expr: &'script Invoke,
+        expr: &'run Invoke<'script>,
     ) -> Result<Cow<'run, Value<'event>>> {
         let argv: Vec<Cow<'run, _>> = stry!(expr
             .args
@@ -742,10 +740,10 @@ where
     }
 
     fn emit_aggr(
-        &'script self,
+        &'run self,
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
-        expr: &'script InvokeAggr,
+        expr: &'run InvokeAggr,
     ) -> Result<Cow<'run, Value<'event>>> {
         if opts.aggr != AggrType::Emit {
             return error_oops(
@@ -775,33 +773,33 @@ where
     }
 
     fn patch(
-        &'script self,
+        &'run self,
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
         event: &'run Value<'event>,
         state: &'run Value<'static>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
-        expr: &'script Patch,
+        expr: &'run Patch<'script>,
     ) -> Result<Cow<'run, Value<'event>>> {
         // NOTE: We clone this since we patch it - this should be not mutated but cloned
 
         let mut value = stry!(expr.target.run(opts, env, event, state, meta, local)).into_owned();
         stry!(patch_value(
-            self, opts, env, event, state, meta, local, &mut value, expr,
+            opts, env, event, state, meta, local, &mut value, expr,
         ));
         Ok(Cow::Owned(value))
     }
 
     fn merge(
-        &'script self,
+        &'run self,
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
         event: &'run Value<'event>,
         state: &'run Value<'static>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
-        expr: &'script Merge,
+        expr: &'run Merge<'script>,
     ) -> Result<Cow<'run, Value<'event>>> {
         // NOTE: We got to clone here since we're going to change the value
         let value = stry!(expr.target.run(opts, env, event, state, meta, local));
@@ -833,7 +831,7 @@ fn eval_for_fn_arg<'run, 'event, 'script>(
     state: &'run Value<'static>,
     meta: &'run Value<'event>,
     local: &'run LocalStack<'event>,
-    arg: &'script ImutExpr<'script>,
+    arg: &'run ImutExpr<'script>,
 ) -> Result<Cow<'run, Value<'event>>>
 where
     'script: 'event,

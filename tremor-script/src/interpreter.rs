@@ -36,15 +36,15 @@ mod imut_expr;
 pub use self::expr::Cont;
 use crate::ast::{
     ArrayPattern, ArrayPredicatePattern, BaseExpr, BinOpKind, Consts, GroupBy, GroupByInt,
-    ImutExprInt, InvokeAggrFn, LocalPath, NodeMetas, Patch, PatchOperation, Path, Pattern,
-    PredicatePattern, RecordPattern, ReservedPath, Segment, TuplePattern, UnaryOpKind,
+    ImutExprInt, InvokeAggrFn, NodeMetas, Patch, PatchOperation, Path, Pattern, PredicatePattern,
+    RecordPattern, ReservedPath, Segment, TuplePattern, UnaryOpKind,
 };
 use crate::errors::{
-    error_array_out_of_bound, error_bad_array_index, error_bad_key, error_decreasing_range,
-    error_guard_not_bool, error_invalid_binary, error_invalid_bitshift, error_need_arr,
-    error_need_int, error_need_obj, error_need_str, error_oops, error_oops_err,
-    error_patch_key_exists, error_patch_merge_type_conflict, error_patch_update_key_missing,
-    Result,
+    error_array_out_of_bound, error_bad_array_index, error_bad_key, error_bad_key_err,
+    error_decreasing_range, error_guard_not_bool, error_invalid_binary, error_invalid_bitshift,
+    error_need_arr, error_need_int, error_need_obj, error_need_obj_err, error_need_str, error_oops,
+    error_oops_err, error_patch_key_exists, error_patch_merge_type_conflict,
+    error_patch_update_key_missing, Result,
 };
 use crate::prelude::*;
 use crate::{stry, EventContext, Value, NO_AGGRS, NO_CONSTS};
@@ -53,13 +53,6 @@ use std::borrow::Borrow;
 use std::borrow::Cow;
 use std::convert::TryInto;
 use std::iter::Iterator;
-
-static DUMMY_PATH: Path<'static> = Path::Local(LocalPath {
-    idx: 0,
-    mid: 0,
-    is_const: false,
-    segments: Vec::new(),
-});
 
 /// constant `true` value
 pub const TRUE: Value<'static> = Value::Static(StaticNode::Bool(true));
@@ -253,19 +246,17 @@ fn val_eq<'event>(lhs: &Value<'event>, rhs: &Value<'event>) -> bool {
 /// # Note
 /// This method explicitly *does not* check whether the resulting index is in range of the array.
 #[inline]
-fn value_to_index<'run, 'event, 'script, OuterExpr, InnerExpr>(
-    outer: &'run OuterExpr,
-    inner: &'run InnerExpr,
+fn value_to_index<OuterExpr, InnerExpr>(
+    outer: &OuterExpr,
+    inner: &InnerExpr,
     val: &Value,
-    env: &'run Env<'run, 'event, 'script>,
-    path: &'script Path,
+    env: &Env,
+    path: &Path,
     array: &[Value],
 ) -> Result<usize>
 where
     OuterExpr: BaseExpr,
     InnerExpr: BaseExpr,
-    'script: 'event,
-    'event: 'run,
 {
     // TODO: As soon as value-trait v0.1.8 is used, switch this `is_i64` to `is_integer`.
     match val.as_usize() {
@@ -280,9 +271,9 @@ where
 #[inline]
 #[allow(clippy::cast_precision_loss)]
 fn exec_binary_numeric<'run, 'event, OuterExpr, InnerExpr>(
-    outer: &'run OuterExpr,
-    inner: &'run InnerExpr,
-    node_meta: &'run NodeMetas,
+    outer: &OuterExpr,
+    inner: &InnerExpr,
+    node_meta: &NodeMetas,
     op: BinOpKind,
     lhs: &Value<'event>,
     rhs: &Value<'event>,
@@ -389,9 +380,9 @@ where
 }
 #[inline]
 pub(crate) fn exec_binary<'run, 'event, OuterExpr, InnerExpr>(
-    outer: &'run OuterExpr,
-    inner: &'run InnerExpr,
-    node_meta: &'run NodeMetas,
+    outer: &OuterExpr,
+    inner: &InnerExpr,
+    node_meta: &NodeMetas,
     op: BinOpKind,
     lhs: &Value<'event>,
     rhs: &Value<'event>,
@@ -534,7 +525,7 @@ pub(crate) fn resolve<'run, 'event, 'script, Expr>(
     state: &'run Value<'static>,
     meta: &'run Value<'event>,
     local: &'run LocalStack<'event>,
-    path: &'script Path,
+    path: &'run Path<'script>,
 ) -> Result<Cow<'run, Value<'event>>>
 where
     Expr: BaseExpr,
@@ -560,18 +551,8 @@ where
         Path::Reserved(ReservedPath::Group { .. }) => &env.consts.group,
         Path::Reserved(ReservedPath::Window { .. }) => &env.consts.window,
     };
-
     resolve_value(
-        outer,
-        opts,
-        env,
-        event,
-        state,
-        meta,
-        local,
-        path,
-        base_value,
-        path.segments(),
+        outer, opts, env, event, state, meta, local, path, base_value,
     )
 }
 
@@ -585,9 +566,8 @@ pub(crate) fn resolve_value<'run, 'event, 'script, Expr>(
     state: &'run Value<'static>,
     meta: &'run Value<'event>,
     local: &'run LocalStack<'event>,
-    path: &'run Path,
+    path: &'run Path<'script>,
     base_value: &'run Value<'event>,
-    segments: &'run [Segment<'script>],
 ) -> Result<Cow<'run, Value<'event>>>
 where
     Expr: BaseExpr,
@@ -595,25 +575,28 @@ where
     'event: 'run,
 {
     // Resolve the targeted value by applying all path segments
-    let mut subrange: Option<&[Value]> = None;
-    let mut current = base_value;
-    for segment in segments {
+    let mut subrange: Option<&[Value<'event>]> = None;
+    // The current value
+    let mut current: &'run Value<'event> = base_value;
+    for segment in path.segments() {
         match segment {
             // Next segment is an identifier: lookup the identifier on `current`, if it's an object
             Segment::Id { mid, key, .. } => {
-                if let Some(c) = key.lookup(current) {
-                    current = c;
-                    subrange = None;
-                    continue;
-                } else if let Some(o) = current.as_object() {
-                    let key = env.meta.name_dflt(*mid).to_string();
-                    let options = o.keys().map(ToString::to_string).collect();
-                    return error_bad_key(
-                        outer, segment, //&Expr::dummy(*start, *end),
-                        &path, key, options, &env.meta,
-                    );
-                }
-                return error_need_obj(outer, segment, current.value_type(), &env.meta);
+                subrange = None;
+
+                current = key.lookup(current).ok_or_else(|| {
+                    if let Some(o) = current.as_object() {
+                        let key = env.meta.name_dflt(*mid).to_string();
+                        let options = o.keys().map(ToString::to_string).collect();
+                        error_bad_key_err(
+                            outer, segment, //&Expr::dummy(*start, *end),
+                            &path, key, options, &env.meta,
+                        )
+                    } else {
+                        error_need_obj_err(outer, segment, current.value_type(), &env.meta)
+                    }
+                })?;
+                continue;
             }
             // Next segment is an index: index into `current`, if it's an array
             Segment::Idx { idx, .. } => {
@@ -714,17 +697,15 @@ where
     ))
 }
 
-fn merge_values<'run, 'event, 'script, Outer, Inner>(
-    outer: &'script Outer,
+fn merge_values<'event, Outer, Inner>(
+    outer: &Outer,
     inner: &Inner,
-    value: &'run mut Value<'event>,
-    replacement: &'run Value<'event>,
+    value: &mut Value<'event>,
+    replacement: &Value<'event>,
 ) -> Result<()>
 where
     Outer: BaseExpr,
     Inner: BaseExpr,
-    'script: 'event,
-    'event: 'run,
 {
     if let (Some(rep), Some(map)) = (replacement.as_object(), value.as_object_mut()) {
         for (k, v) in rep {
@@ -758,15 +739,15 @@ where
 ///   insert "c" => event
 /// end
 ///
-enum PreEvaluatedPatchOperation<'event, 'script> {
+enum PreEvaluatedPatchOperation<'event, 'run> {
     Insert {
         ident: beef::Cow<'event, str>,
-        ident_expr: &'script ImutExprInt<'event>,
+        ident_expr: &'run ImutExprInt<'event>,
         value: Value<'event>,
     },
     Update {
         ident: beef::Cow<'event, str>,
-        ident_expr: &'script ImutExprInt<'event>,
+        ident_expr: &'run ImutExprInt<'event>,
         value: Value<'event>,
     },
     Upsert {
@@ -786,7 +767,7 @@ enum PreEvaluatedPatchOperation<'event, 'script> {
     },
     Merge {
         ident: beef::Cow<'event, str>,
-        ident_expr: &'script ImutExprInt<'event>,
+        ident_expr: &'run ImutExprInt<'event>,
         merge_value: Value<'event>,
     },
     TupleMerge {
@@ -794,19 +775,18 @@ enum PreEvaluatedPatchOperation<'event, 'script> {
     },
 }
 
-impl<'event, 'script> PreEvaluatedPatchOperation<'event, 'script> {
+impl<'event, 'run> PreEvaluatedPatchOperation<'event, 'run> {
     /// evaulate the `PatchOperation` into constant parts
-    fn from<'run>(
-        patch_op: &'script PatchOperation,
+    fn from(
+        patch_op: &'run PatchOperation<'event>,
         opts: ExecOpts,
-        env: &'run Env<'run, 'event, 'script>,
+        env: &'run Env<'run, 'event, 'event>,
         event: &'run Value<'event>,
         state: &'run Value<'static>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
     ) -> Result<Self>
     where
-        'script: 'event,
         'event: 'run,
     {
         Ok(match patch_op {
@@ -848,20 +828,17 @@ impl<'event, 'script> PreEvaluatedPatchOperation<'event, 'script> {
 }
 
 #[inline]
-fn patch_value<'run, 'event, 'script, Expr>(
-    _outer: &'script Expr,
+fn patch_value<'run, 'event, 'script>(
     opts: ExecOpts,
-    env: &'run Env<'run, 'event, 'script>,
-    event: &'run Value<'event>,
-    state: &'run Value<'static>,
-    meta: &'run Value<'event>,
-    local: &'run LocalStack<'event>,
-    value: &'run mut Value<'event>,
-    expr: &'script Patch,
+    env: &Env<'run, 'event, 'script>,
+    event: &Value<'event>,
+    state: &Value<'static>,
+    meta: &Value<'event>,
+    local: &LocalStack<'event>,
+    target: &mut Value<'event>,
+    expr: &Patch<'script>,
 ) -> Result<()>
 where
-    Expr: BaseExpr,
-
     'script: 'event,
     'event: 'run,
 {
@@ -880,7 +857,7 @@ where
     // executing them against the actual target value
     for const_op in evaluated {
         // moved inside the loop as we need to borrow it mutably in the tuple-merge case
-        if let Some(ref mut obj) = value.as_object_mut() {
+        if let Some(obj) = target.as_object_mut() {
             match const_op {
                 PreEvaluatedPatchOperation::Insert {
                     ident,
@@ -951,32 +928,29 @@ where
                     }
                 },
                 PreEvaluatedPatchOperation::TupleMerge { merge_value } => {
-                    stry!(merge_values(patch_expr, expr, value, &merge_value));
+                    stry!(merge_values(patch_expr, expr, target, &merge_value));
                 }
             }
         } else {
-            return error_need_obj(patch_expr, &expr.target, value.value_type(), &env.meta);
+            return error_need_obj(patch_expr, &expr.target, target.value_type(), &env.meta);
         }
     }
     Ok(())
 }
 
 #[inline]
-fn test_guard<'run, 'event, 'script, Expr>(
-    outer: &'script Expr,
+fn test_guard<Expr>(
+    outer: &Expr,
     opts: ExecOpts,
-    env: &'run Env<'run, 'event, 'script>,
-    event: &'run Value<'event>,
-    state: &'run Value<'static>,
-    meta: &'run Value<'event>,
-    local: &'run LocalStack<'event>,
-    guard: &'script Option<ImutExprInt<'script>>,
+    env: &Env,
+    event: &Value,
+    state: &Value<'static>,
+    meta: &Value,
+    local: &LocalStack,
+    guard: &Option<ImutExprInt>,
 ) -> Result<bool>
 where
     Expr: BaseExpr,
-
-    'script: 'event,
-    'event: 'run,
 {
     guard.as_ref().map_or_else(
         || Ok(true),
@@ -992,23 +966,20 @@ where
 
 #[inline]
 #[allow(clippy::too_many_lines)]
-pub(crate) fn test_predicate_expr<'run, 'event, 'script, Expr>(
-    outer: &'script Expr,
+pub(crate) fn test_predicate_expr<Expr>(
+    outer: &Expr,
     opts: ExecOpts,
-    env: &'run Env<'run, 'event, 'script>,
-    event: &'run Value<'event>,
-    state: &'run Value<'static>,
-    meta: &'run Value<'event>,
-    local: &'run LocalStack<'event>,
-    target: &'run Value<'event>,
-    pattern: &'script Pattern<'script>,
-    guard: &'run Option<ImutExprInt<'script>>,
+    env: &Env,
+    event: &Value,
+    state: &Value<'static>,
+    meta: &Value,
+    local: &LocalStack,
+    target: &Value,
+    pattern: &Pattern,
+    guard: &Option<ImutExprInt>,
 ) -> Result<bool>
 where
     Expr: BaseExpr,
-
-    'script: 'event,
-    'event: 'run,
 {
     match pattern {
         Pattern::Extract(test) => {
@@ -1154,7 +1125,7 @@ where
 /// declared keys** and the tests for **each of the declared key** match.
 #[inline]
 fn match_rp_expr<'run, 'event, 'script, Expr>(
-    outer: &'script Expr,
+    outer: &Expr,
     opts: ExecOpts,
     env: &'run Env<'run, 'event, 'script>,
     event: &'run Value<'event>,
@@ -1162,7 +1133,7 @@ fn match_rp_expr<'run, 'event, 'script, Expr>(
     meta: &'run Value<'event>,
     local: &'run LocalStack<'event>,
     target: &'run Value<'event>,
-    rp: &'script RecordPattern,
+    rp: &'run RecordPattern<'script>,
 ) -> Result<Option<Value<'event>>>
 where
     Expr: BaseExpr,
@@ -1171,7 +1142,7 @@ where
     'event: 'run,
 {
     let res = if let Some(record) = target.as_object() {
-        let mut acc = Value::object_with_capacity(if opts.result_needed {
+        let mut acc: Value<'event> = Value::object_with_capacity(if opts.result_needed {
             rp.fields.len()
         } else {
             0
@@ -1180,18 +1151,12 @@ where
         for pp in &rp.fields {
             let known_key = pp.key();
 
-            macro_rules! store {
-                ($value:expr) => {
-                    if opts.result_needed {
-                        known_key.insert(&mut acc, $value)?;
-                    }
-                };
-            }
-
             match pp {
                 PredicatePattern::FieldPresent { .. } => {
                     if let Some(v) = known_key.map_lookup(record) {
-                        store!(v.clone());
+                        if opts.result_needed {
+                            known_key.insert(&mut acc, v.clone())?;
+                        };
                     } else {
                         return Ok(None);
                     }
@@ -1212,7 +1177,9 @@ where
                         .extract(opts.result_needed, &testee, &env.context)
                         .into_match()
                     {
-                        store!(x);
+                        if opts.result_needed {
+                            known_key.insert(&mut acc, x)?;
+                        };
                     } else {
                         return Ok(None);
                     }
@@ -1243,7 +1210,9 @@ where
                         if let Some(m) = stry!(match_rp_expr(
                             outer, opts, env, event, state, meta, local, testee, pattern,
                         )) {
-                            store!(m);
+                            if opts.result_needed {
+                                known_key.insert(&mut acc, m)?;
+                            };
                         } else {
                             return Ok(None);
                         }
@@ -1262,7 +1231,9 @@ where
                         if let Some(r) = stry!(match_ap_expr(
                             outer, opts, env, event, state, meta, local, testee, pattern,
                         )) {
-                            store!(r);
+                            if opts.result_needed {
+                                known_key.insert(&mut acc, r)?;
+                            };
                         } else {
                             return Ok(None);
                         }
@@ -1287,7 +1258,7 @@ where
 /// %[ _ ] ~= [x, y, z] = true
 #[inline]
 fn match_ap_expr<'run, 'event, 'script, Expr>(
-    outer: &'script Expr,
+    outer: &Expr,
     opts: ExecOpts,
     env: &'run Env<'run, 'event, 'script>,
     event: &'run Value<'event>,
@@ -1295,7 +1266,7 @@ fn match_ap_expr<'run, 'event, 'script, Expr>(
     meta: &'run Value<'event>,
     local: &'run LocalStack<'event>,
     target: &'run Value<'event>,
-    ap: &'script ArrayPattern,
+    ap: &'run ArrayPattern<'script>,
 ) -> Result<Option<Value<'event>>>
 where
     Expr: BaseExpr,
@@ -1383,7 +1354,7 @@ where
 
 #[inline]
 fn match_tp_expr<'run, 'event, 'script, Expr>(
-    outer: &'script Expr,
+    outer: &'run Expr,
     opts: ExecOpts,
     env: &'run Env<'run, 'event, 'script>,
     event: &'run Value<'event>,
@@ -1391,7 +1362,7 @@ fn match_tp_expr<'run, 'event, 'script, Expr>(
     meta: &'run Value<'event>,
     local: &'run LocalStack<'event>,
     target: &'run Value<'event>,
-    tp: &'script TuplePattern,
+    tp: &'run TuplePattern<'script>,
 ) -> Result<Option<Value<'event>>>
 where
     Expr: BaseExpr,
@@ -1460,8 +1431,8 @@ where
 #[inline]
 // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1029
 #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
-fn set_local_shadow<'run, 'event, 'script, Expr>(
-    outer: &'script Expr,
+fn set_local_shadow<'run, 'event, Expr>(
+    outer: &'run Expr,
     local: &'run LocalStack<'event>,
     node_meta: &'run NodeMetas,
     idx: usize,
@@ -1469,7 +1440,6 @@ fn set_local_shadow<'run, 'event, 'script, Expr>(
 ) -> Result<()>
 where
     Expr: BaseExpr,
-    'script: 'event,
     'event: 'run,
 {
     use std::mem;
@@ -1497,7 +1467,7 @@ impl<'script> GroupBy<'script> {
     /// # Errors
     /// if the group can not be generated from the provided event, state and meta
     pub fn generate_groups<'run, 'event>(
-        &'script self,
+        &'event self,
         ctx: &'run EventContext,
         event: &'run Value<'event>,
         state: &'run Value<'static>,
@@ -1517,7 +1487,7 @@ impl<'script> GroupBy<'script> {
 
 impl<'script> GroupByInt<'script> {
     pub(crate) fn generate_groups<'run, 'event>(
-        &'script self,
+        &'event self,
         ctx: &'run EventContext,
         event: &'run Value<'event>,
         state: &'run Value<'static>,

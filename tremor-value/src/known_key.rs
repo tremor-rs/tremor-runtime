@@ -64,7 +64,7 @@ impl<'key> KnownKey<'key> {
     /// The known key
     #[inline]
     #[must_use]
-    pub fn key(&self) -> &Cow<'key, str> {
+    pub fn key(&self) -> &str {
         &self.key
     }
 
@@ -87,7 +87,6 @@ impl<'key> KnownKey<'key> {
         target: &'target Value<'value>,
     ) -> Option<&'target Value<'value>>
     where
-        'key: 'value,
         'value: 'target,
     {
         target.as_object().and_then(|m| self.map_lookup(m))
@@ -114,11 +113,10 @@ impl<'key> KnownKey<'key> {
         map: &'target halfbrown::HashMap<Cow<'value, str>, Value<'value>>,
     ) -> Option<&'target Value<'value>>
     where
-        'key: 'value,
         'value: 'target,
     {
         map.raw_entry()
-            .from_key_hashed_nocheck(self.hash, &self.key)
+            .from_key_hashed_nocheck(self.hash, self.key())
             .map(|kv| kv.1)
     }
 
