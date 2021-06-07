@@ -644,7 +644,7 @@ where
     /// # Errors
     /// on runtime errors or if it isn't an imutable script
     pub fn run_imut(
-        &'script self,
+        &'run self,
         context: &'run crate::EventContext,
         aggr: AggrType,
         event: &'run Value<'event>,
@@ -689,7 +689,7 @@ where
     /// # Errors
     /// on runtime errors
     pub fn run(
-        &'script self,
+        &'run self,
         context: &'run crate::EventContext,
         aggr: AggrType,
         event: &'run mut Value<'event>,
@@ -1234,7 +1234,7 @@ impl<'script> Invocable<'script> {
     /// # Errors
     /// if the funciton fails to be invoked
     pub fn invoke<'event, 'run>(
-        &'script self,
+        &'run self,
         env: &'run Env<'run, 'event, 'script>,
         args: &'run [&'run Value<'event>],
     ) -> FResult<Value<'event>>
@@ -1352,9 +1352,10 @@ impl_expr_ex_mid!(IfElse);
 /// Precondition for a case group
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ClausePreCondition<'script> {
-    /// Segments to look up
-    pub segments: Segments<'script>,
+    /// Segments to look up (encoded as path for easier lookup)
+    pub path: Path<'script>,
 }
+
 /// A group of case statements
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum ClauseGroup<'script, Ex: Expression + 'script> {
@@ -1548,10 +1549,15 @@ impl<'script, Ex: Expression + 'script> ClauseGroup<'script, Ex> {
                 if let Some((key, mid)) = &first_key {
                     // We want to make sure that our key exists
                     *precondition = Some(ClausePreCondition {
-                        segments: vec![Segment::Id {
-                            mid: *mid,
-                            key: key.clone(),
-                        }],
+                        path: Path::Local(LocalPath {
+                            segments: vec![Segment::Id {
+                                mid: *mid,
+                                key: key.clone(),
+                            }],
+                            idx: 0,
+                            is_const: true,
+                            mid: 0,
+                        }),
                     });
 
                     // we now have:
@@ -2131,13 +2137,25 @@ pub enum Path<'script> {
 impl<'script> Path<'script> {
     /// Get segments as slice
     #[must_use]
-    pub fn segments(&self) -> &[Segment] {
+    pub fn segments(&self) -> &Segments<'script> {
         match self {
             Path::Const(path) | Path::Local(path) => &path.segments,
             Path::Meta(path) => &path.segments,
             Path::Event(path) => &path.segments,
             Path::State(path) => &path.segments,
             Path::Reserved(path) => path.segments(),
+        }
+    }
+
+    /// Get segments as slice
+    #[must_use]
+    pub fn segments_mut(&mut self) -> &mut Segments<'script> {
+        match self {
+            Path::Const(path) | Path::Local(path) => &mut path.segments,
+            Path::Meta(path) => &mut path.segments,
+            Path::Event(path) => &mut path.segments,
+            Path::State(path) => &mut path.segments,
+            Path::Reserved(path) => path.segments_mut(),
         }
     }
     fn try_reduce(self, helper: &Helper<'script, '_>) -> ImutExprInt<'script> {
@@ -2256,6 +2274,13 @@ pub enum ReservedPath<'script> {
 
 impl<'script> ReservedPath<'script> {
     fn segments(&self) -> &Segments<'script> {
+        match self {
+            ReservedPath::Args { segments, .. }
+            | ReservedPath::Window { segments, .. }
+            | ReservedPath::Group { segments, .. } => segments,
+        }
+    }
+    fn segments_mut(&mut self) -> &mut Segments<'script> {
         match self {
             ReservedPath::Args { segments, .. }
             | ReservedPath::Window { segments, .. }

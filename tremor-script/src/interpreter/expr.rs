@@ -76,8 +76,8 @@ where
         state: &'run mut Value<'static>,
         meta: &'run mut Value<'event>,
         local: &'run mut LocalStack<'event>,
-        effectors: &'script [Expr<'script>],
-        last_effector: &'script Expr<'script>,
+        effectors: &'run [Expr<'script>],
+        last_effector: &'run Expr<'script>,
     ) -> Result<Cont<'run, 'event>> {
         for effector in effectors {
             demit!(effector.run(opts.without_result(), env, event, state, meta, local));
@@ -90,32 +90,29 @@ where
     #[inline]
     #[allow(clippy::too_many_lines)]
     fn match_expr(
-        &'script self,
+        &'run self,
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
         event: &'run mut Value<'event>,
         state: &'run mut Value<'static>,
         meta: &'run mut Value<'event>,
         local: &'run mut LocalStack<'event>,
-        expr: &'script Match<Expr<'script>>,
+        expr: &'run Match<Expr<'script>>,
     ) -> Result<Cont<'run, 'event>> {
-        use super::DUMMY_PATH as D;
+        // use super::DUMMY_PATH as D;
         let target = stry!(expr.target.run(opts, env, event, state, meta, local));
         for cg in &expr.patterns {
-            let maybe_target =
-                if let Some(ClausePreCondition { segments: seg, .. }) = cg.precondition() {
-                    let v = resolve_value(
-                        self, opts, env, event, state, meta, local, &D, &target, &seg,
-                    );
-                    if let Ok(target) = v {
-                        Some(target)
-                    } else {
-                        // We couldn't look up the value, it doesn't exist so we look at the next group
-                        continue;
-                    }
+            let maybe_target = if let Some(ClausePreCondition { path, .. }) = cg.precondition() {
+                let v = resolve_value(self, opts, env, event, state, meta, local, &path, &target);
+                if let Ok(target) = v {
+                    Some(target)
                 } else {
-                    None
-                };
+                    // We couldn't look up the value, it doesn't exist so we look at the next group
+                    continue;
+                }
+            } else {
+                None
+            };
             let target: &Value = maybe_target.as_ref().map_or(&target, |target| target);
             macro_rules! execute {
                 ($predicate:ident) => {{
@@ -195,14 +192,14 @@ where
 
     #[inline]
     fn if_expr(
-        &'script self,
+        &'run self,
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
         event: &'run mut Value<'event>,
         state: &'run mut Value<'static>,
         meta: &'run mut Value<'event>,
         local: &'run mut LocalStack<'event>,
-        expr: &'script IfElse<'script, Expr<'script>>,
+        expr: &'run IfElse<'script, Expr<'script>>,
     ) -> Result<Cont<'run, 'event>> {
         let target = stry!(expr.target.run(opts, env, event, state, meta, local));
         let p = &expr.if_clause.pattern;
@@ -227,14 +224,14 @@ where
     }
 
     fn patch_in_place(
-        &'script self,
+        &'run self,
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
         event: &'run Value<'event>,
         state: &'run Value<'static>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
-        expr: &'script Patch,
+        expr: &'run Patch<'script>,
     ) -> Result<Cow<'run, Value<'event>>> {
         // This function is called when we encounter code that consumes a value
         // to patch it. So the following code:
@@ -282,21 +279,19 @@ where
         #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
         // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1032
         let v: &mut Value<'event> = unsafe { mem::transmute(v) };
-        stry!(patch_value(
-            self, opts, env, event, state, meta, local, v, expr
-        ));
+        stry!(patch_value(opts, env, event, state, meta, local, v, expr));
         Ok(value)
     }
 
     fn merge_in_place(
-        &'script self,
+        &'run self,
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
         event: &'run mut Value<'event>,
         state: &'run mut Value<'static>,
         meta: &'run mut Value<'event>,
         local: &'run mut LocalStack<'event>,
-        expr: &'script Merge,
+        expr: &'run Merge<'script>,
     ) -> Result<Cow<'run, Value<'event>>> {
         // Please see the soundness reasoning in `patch_in_place` for details
         // those functions perform the same function just with slighty different
@@ -329,14 +324,14 @@ where
 
     // TODO: Quite some overlap with `ImutExprInt::comprehension`
     fn comprehension(
-        &'script self,
+        &'run self,
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
         event: &'run mut Value<'event>,
         state: &'run mut Value<'static>,
         meta: &'run mut Value<'event>,
         local: &'run mut LocalStack<'event>,
-        expr: &'script Comprehension<Expr>,
+        expr: &'run Comprehension<'script, Expr>,
     ) -> Result<Cont<'run, 'event>> {
         type Bi<'v, 'r> = (usize, Box<dyn Iterator<Item = (Value<'v>, Value<'v>)> + 'r>);
         fn kv<'k, K>((k, v): (K, Value)) -> (Value<'k>, Value)
@@ -393,14 +388,14 @@ where
 
     #[inline]
     fn assign(
-        &'script self,
+        &'run self,
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
         event: &'run mut Value<'event>,
         state: &'run mut Value<'static>,
         meta: &'run mut Value<'event>,
         local: &'run mut LocalStack<'event>,
-        path: &'script Path,
+        path: &'run Path<'script>,
         value: Value<'event>,
     ) -> Result<Cow<'run, Value<'event>>> {
         if path.segments().is_empty() {
@@ -413,14 +408,14 @@ where
     // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1033
     #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
     fn assign_nested(
-        &'script self,
+        &'run self,
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
         event: &'run mut Value<'event>,
         state: &'run mut Value<'static>,
         meta: &'run mut Value<'event>,
         local: &'run mut LocalStack<'event>,
-        path: &'script Path,
+        path: &'run Path<'script>,
         mut value: Value<'event>,
     ) -> Result<Cow<'run, Value<'event>>> {
         /* NOTE
@@ -441,7 +436,7 @@ where
          * So even if the map the Cow originally came from we won't
          * lose the referenced data. (Famous last words)
          */
-        let segments = path.segments();
+        let segments: &'run [Segment<'script>] = path.segments();
 
         let mut current: &Value = match path {
             Path::Const(p) => {
@@ -525,14 +520,14 @@ where
     }
 
     fn assign_direct(
-        &'script self,
+        &'run self,
         _opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
         event: &'run mut Value<'event>,
         state: &'run mut Value<'static>,
         _meta: &'run mut Value<'event>,
         local: &'run mut LocalStack<'event>,
-        path: &'script Path,
+        path: &'run Path<'script>,
         value: Value<'event>,
     ) -> Result<Cow<'run, Value<'event>>> {
         match path {
@@ -581,7 +576,7 @@ where
     /// # Errors
     /// if evaluation fails
     pub fn run(
-        &'script self,
+        &'run self,
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
         event: &'run mut Value<'event>,

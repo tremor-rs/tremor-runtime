@@ -430,7 +430,7 @@ impl Extractor {
 
     #[allow(clippy::too_many_lines)]
     pub fn extract<'script, 'event, 'run, 'influx>(
-        &'script self,
+        &'run self,
         result_needed: bool,
         v: &'run Value<'event>,
         ctx: &'run EventContext,
@@ -456,56 +456,6 @@ impl Extractor {
                     } else {
                         NoMatch
                     }
-                }
-                Self::Re { compiled: re, .. } => re.captures(s).map_or(NoMatch, |caps| {
-                    if result_needed {
-                        let matches: HashMap<beef::Cow<str>, Value> = re
-                            .capture_names()
-                            .flatten()
-                            .filter_map(|n| {
-                                Some((n.into(), Value::from(caps.name(n)?.as_str().to_string())))
-                            })
-                            .collect();
-                        Match(Value::from(matches))
-                    } else {
-                        MatchNull
-                    }
-                }),
-                Self::Rerg { compiled: re, .. } => {
-                    if !result_needed {
-                        return if re.captures(s).is_some() {
-                            MatchNull
-                        } else {
-                            NoMatch
-                        };
-                    }
-
-                    let names: Vec<&str> = re.capture_names().flatten().collect();
-                    let mut results = Value::object_with_capacity(names.len());
-                    let captures = re.captures_iter(s);
-
-                    for c in captures {
-                        for name in &names {
-                            if let Some(cap) = c.name(name) {
-                                match results.get_mut(*name) {
-                                    Some(Value::Array(a)) => {
-                                        a.push(cap.as_str().into());
-                                    }
-                                    Some(_other) => {
-                                        // error by construction - we always expect Value::array here
-                                        // make compiler happy - silently ignore and continue
-                                    }
-                                    None => {
-                                        if results.insert(*name, vec![cap.as_str()]).is_err() {
-                                            // ALLOW: we know results is an object
-                                            unreachable!()
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    Match(results.into_static())
                 }
                 Self::Glob { compiled: glob, .. } => {
                     if glob.matches(s) {
@@ -614,6 +564,60 @@ impl Extractor {
                 } => datetime::_parse(s, format, *has_timezone).map_or(NoMatch, |d| {
                     if result_needed {
                         Match(Value::from(d))
+                    } else {
+                        MatchNull
+                    }
+                }),
+                Self::Rerg { compiled: re, .. } => {
+                    if !result_needed {
+                        return if re.captures(s).is_some() {
+                            MatchNull
+                        } else {
+                            NoMatch
+                        };
+                    }
+
+                    let names: Vec<&str> = re.capture_names().flatten().collect();
+                    let mut results = Value::object_with_capacity(names.len());
+                    let captures = re.captures_iter(s);
+
+                    for c in captures {
+                        for name in &names {
+                            if let Some(cap) = c.name(name) {
+                                match results.get_mut(*name) {
+                                    Some(Value::Array(a)) => {
+                                        a.push(cap.as_str().into());
+                                    }
+                                    Some(_other) => {
+                                        // error by construction - we always expect Value::array here
+                                        // make compiler happy - silently ignore and continue
+                                    }
+                                    None => {
+                                        if results.insert(*name, vec![cap.as_str()]).is_err() {
+                                            // ALLOW: we know results is an object
+                                            unreachable!()
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Match(results.into_static())
+                }
+
+                Self::Re { compiled, .. } => compiled.captures(s).map_or(NoMatch, |caps| {
+                    if result_needed {
+                        let matches: HashMap<beef::Cow<str>, Value> = compiled
+                            .capture_names()
+                            .flatten()
+                            .filter_map(|n| {
+                                Some((
+                                    n.to_string().into(),
+                                    Value::from(caps.name(n)?.as_str().to_string()),
+                                ))
+                            })
+                            .collect();
+                        Match(Value::from(matches))
                     } else {
                         MatchNull
                     }
