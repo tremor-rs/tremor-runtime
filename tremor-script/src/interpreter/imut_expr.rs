@@ -250,7 +250,7 @@ impl<'script> ImutExprInt<'script> {
                 self.invoke(opts, env, event, state, meta, local, call)
             }
             ImutExprInt::InvokeAggr(ref call) => self.emit_aggr(opts, env, call),
-            ImutExprInt::Patch(ref expr) => self.patch(opts, env, event, state, meta, local, expr),
+            ImutExprInt::Patch(ref expr) => Self::patch(opts, env, event, state, meta, local, expr),
             ImutExprInt::Merge(ref expr) => self.merge(opts, env, event, state, meta, local, expr),
             ImutExprInt::Local {
                 idx,
@@ -766,7 +766,6 @@ impl<'script> ImutExprInt<'script> {
     }
 
     fn patch<'run, 'event>(
-        &'run self,
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
         event: &'run Value<'event>,
@@ -785,7 +784,7 @@ impl<'script> ImutExprInt<'script> {
     }
 
     fn merge<'run, 'event>(
-        &'run self,
+        &self,
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
         event: &'run Value<'event>,
