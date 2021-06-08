@@ -660,7 +660,7 @@ impl<'script> Expr<'script> {
                 // If we don't need the result of a immutable value then we
                 // don't need to evaluate it.
                 let r = if opts.result_needed {
-                    expr.run(opts, env, event, state, meta, local)?
+                    stry!(expr.run(opts, env, event, state, meta, local))
                 } else {
                     Cow::Borrowed(&NULL)
                 };

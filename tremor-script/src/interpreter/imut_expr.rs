@@ -142,7 +142,7 @@ impl<'script> ImutExprInt<'script> {
                         crate::ast::StrLitElement::Lit(l) => out.push_str(l),
                         #[cfg(not(feature = "erlang-float-testing"))]
                         crate::ast::StrLitElement::Expr(e) => {
-                            let r = e.run(opts, env, event, state, meta, local)?;
+                            let r = stry!(e.run(opts, env, event, state, meta, local));
                             if let Some(s) = r.as_str() {
                                 out.push_str(&s);
                             } else {
@@ -174,7 +174,7 @@ impl<'script> ImutExprInt<'script> {
                 // local variables that are not used
                 let mut next = Vec::with_capacity(*argc);
                 for (i, e) in exprs.iter().enumerate() {
-                    let r = e.run(opts, env, event, state, meta, local)?;
+                    let r = stry!(e.run(opts, env, event, state, meta, local));
                     if i < *argc {
                         next.push((i, r.into_owned()));
                     }
@@ -747,21 +747,21 @@ impl<'script> ImutExprInt<'script> {
             );
         }
 
-        let inv = env
+        let inv = stry!(env
             .aggrs
             .get(expr.aggr_id)
             .map(|a| &a.invocable)
             .ok_or_else(|| {
                 error_oops_err(self, 0xdead_0012, "Unknown aggregate function", &env.meta)
-            })?;
+            }));
         // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1035
         #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
         // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1035
         let invocable: &mut TremorAggrFnWrapper = unsafe { mem::transmute(inv) };
-        let r = invocable.emit().map(Cow::Owned).map_err(|e| {
+        let r = stry!(invocable.emit().map(Cow::Owned).map_err(|e| {
             let r: Option<&Registry> = None;
             e.into_err(self, self, r, &env.meta)
-        })?;
+        }));
         Ok(r)
     }
 
