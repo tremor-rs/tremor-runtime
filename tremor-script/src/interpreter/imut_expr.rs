@@ -52,12 +52,15 @@ impl<'script> ImutExpr<'script> {
     pub fn run<'run, 'event>(
         &'run self,
         opts: ExecOpts,
-        env: &'run Env<'run, 'event, 'script>,
+        env: &'run Env<'run, 'event>,
         event: &'run Value<'event>,
         state: &'run Value<'static>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
-    ) -> Result<Cow<'run, Value<'event>>> {
+    ) -> Result<Cow<'run, Value<'event>>>
+    where
+        'script: 'event,
+    {
         self.0.run(opts, env, event, state, meta, local)
     }
 }
@@ -78,7 +81,7 @@ impl<'script> ImutExprInt<'script> {
     pub fn eval_to_string<'event>(
         &self,
         opts: ExecOpts,
-        env: &Env<'_, 'event, '_>,
+        env: &Env<'_, 'event>,
         event: &Value<'event>,
         state: &Value<'static>,
         meta: &Value<'event>,
@@ -104,7 +107,7 @@ impl<'script> ImutExprInt<'script> {
         &self,
         outer: &Expr,
         opts: ExecOpts,
-        env: &Env<'_, 'event, '_>,
+        env: &Env<'_, 'event>,
         event: &Value<'event>,
         state: &Value<'static>,
         meta: &Value<'event>,
@@ -128,12 +131,15 @@ impl<'script> ImutExprInt<'script> {
     pub fn run<'run, 'event>(
         &'run self,
         opts: ExecOpts,
-        env: &'run Env<'run, 'event, 'script>,
+        env: &'run Env<'run, 'event>,
         event: &'run Value<'event>,
         state: &'run Value<'static>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
-    ) -> Result<Cow<'run, Value<'event>>> {
+    ) -> Result<Cow<'run, Value<'event>>>
+    where
+        'script: 'event,
+    {
         match self {
             ImutExprInt::String(StringLit { elements, .. }) => {
                 let mut out = String::with_capacity(128);
@@ -292,13 +298,16 @@ impl<'script> ImutExprInt<'script> {
     fn comprehension<'run, 'event>(
         &'run self,
         opts: ExecOpts,
-        env: &'run Env<'run, 'event, 'script>,
+        env: &'run Env<'run, 'event>,
         event: &'run Value<'event>,
         state: &'run Value<'static>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
-        expr: &'run Comprehension<'script, ImutExprInt<'script>>,
-    ) -> Result<Cow<'run, Value<'event>>> {
+        expr: &'run Comprehension<'event, ImutExprInt<'event>>,
+    ) -> Result<Cow<'run, Value<'event>>>
+    where
+        'script: 'event,
+    {
         type Bi<'v, 'r> = (usize, Box<dyn Iterator<Item = (Value<'v>, Value<'v>)> + 'r>);
         fn kv<'v, K>((k, v): (K, &Value<'v>)) -> (Value<'v>, Value<'v>)
         where
@@ -359,13 +368,16 @@ impl<'script> ImutExprInt<'script> {
     #[inline]
     fn execute_effectors<'run, 'event>(
         opts: ExecOpts,
-        env: &'run Env<'run, 'event, 'script>,
+        env: &'run Env<'run, 'event>,
         event: &'run Value<'event>,
         state: &'run Value<'static>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
-        effector: &'run ImutExprInt<'script>,
-    ) -> Result<Cow<'run, Value<'event>>> {
+        effector: &'run ImutExprInt<'event>,
+    ) -> Result<Cow<'run, Value<'event>>>
+    where
+        'script: 'event,
+    {
         effector.run(opts, env, event, state, meta, local)
     }
 
@@ -373,13 +385,16 @@ impl<'script> ImutExprInt<'script> {
     fn match_expr<'run, 'event>(
         &'run self,
         opts: ExecOpts,
-        env: &'run Env<'run, 'event, 'script>,
+        env: &'run Env<'run, 'event>,
         event: &'run Value<'event>,
         state: &'run Value<'static>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
-        expr: &'run Match<'script, ImutExprInt<'script>>,
-    ) -> Result<Cow<'run, Value<'event>>> {
+        expr: &'run Match<'event, ImutExprInt<'event>>,
+    ) -> Result<Cow<'run, Value<'event>>>
+    where
+        'script: 'event,
+    {
         use super::resolve_value;
         use crate::ast::{ClauseGroup, ClausePreCondition, DefaultCase};
         let target = stry!(expr.target.run(opts, env, event, state, meta, local));
@@ -416,8 +431,6 @@ impl<'script> ImutExprInt<'script> {
                     }
                 }
                 ClauseGroup::SearchTree { tree, rest, .. } => {
-                    // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1034
-                    let target: &Value<'script> = unsafe { mem::transmute(target) };
                     if let Some((_, l)) = tree.get(&target) {
                         return Self::execute_effectors(opts, env, event, state, meta, local, l);
                     }
@@ -435,8 +448,6 @@ impl<'script> ImutExprInt<'script> {
                                 }
                             }
                             ClauseGroup::SearchTree { tree, rest, .. } => {
-                                // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1034
-                                let target: &Value<'script> = unsafe { mem::transmute(target) };
                                 if let Some((_, l)) = tree.get(&target) {
                                     return Self::execute_effectors(
                                         opts, env, event, state, meta, local, l,
@@ -478,13 +489,16 @@ impl<'script> ImutExprInt<'script> {
     fn binary<'run, 'event>(
         &'run self,
         opts: ExecOpts,
-        env: &'run Env<'run, 'event, 'script>,
+        env: &'run Env<'run, 'event>,
         event: &'run Value<'event>,
         state: &'run Value<'static>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
-        expr: &'run BinExpr<'script>,
-    ) -> Result<Cow<'run, Value<'event>>> {
+        expr: &'run BinExpr<'event>,
+    ) -> Result<Cow<'run, Value<'event>>>
+    where
+        'script: 'event,
+    {
         let lhs = stry!(expr.lhs.run(opts, env, event, state, meta, local));
         let rhs = stry!(expr.rhs.run(opts, env, event, state, meta, local));
         exec_binary(self, expr, &env.meta, expr.kind, &lhs, &rhs)
@@ -493,13 +507,16 @@ impl<'script> ImutExprInt<'script> {
     fn unary<'run, 'event>(
         &'run self,
         opts: ExecOpts,
-        env: &'run Env<'run, 'event, 'script>,
+        env: &'run Env<'run, 'event>,
         event: &'run Value<'event>,
         state: &'run Value<'static>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
-        expr: &'run UnaryExpr<'script>,
-    ) -> Result<Cow<'run, Value<'event>>> {
+        expr: &'run UnaryExpr<'event>,
+    ) -> Result<Cow<'run, Value<'event>>>
+    where
+        'script: 'event,
+    {
         let rhs = stry!(expr.expr.run(opts, env, event, state, meta, local));
         // TODO align this implemenation to be similar to exec_binary?
         match exec_unary(expr.kind, &rhs) {
@@ -512,13 +529,16 @@ impl<'script> ImutExprInt<'script> {
     fn present<'run, 'event>(
         &'run self,
         opts: ExecOpts,
-        env: &'run Env<'run, 'event, 'script>,
+        env: &'run Env<'run, 'event>,
         event: &'run Value<'event>,
         state: &'run Value<'static>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
-        path: &'run Path<'script>,
-    ) -> Result<Cow<'run, Value<'event>>> {
+        path: &'run Path<'event>,
+    ) -> Result<Cow<'run, Value<'event>>>
+    where
+        'script: 'event,
+    {
         // Fetch the base of the path
         // TODO: Extract this into a method on `Path`?
         let base_value: &Value = match path {
@@ -630,13 +650,16 @@ impl<'script> ImutExprInt<'script> {
     fn invoke1<'run, 'event>(
         &'run self,
         opts: ExecOpts,
-        env: &'run Env<'run, 'event, 'script>,
+        env: &'run Env<'run, 'event>,
         event: &'run Value<'event>,
         state: &'run Value<'static>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
-        expr: &'run Invoke<'script>,
-    ) -> Result<Cow<'run, Value<'event>>> {
+        expr: &'run Invoke<'event>,
+    ) -> Result<Cow<'run, Value<'event>>>
+    where
+        'script: 'event,
+    {
         let arg = unsafe { expr.args.get_unchecked(0) };
         let v = stry!(eval_for_fn_arg(opts, env, event, state, meta, local, arg));
         expr.invocable
@@ -652,13 +675,16 @@ impl<'script> ImutExprInt<'script> {
     fn invoke2<'run, 'event>(
         &'run self,
         opts: ExecOpts,
-        env: &'run Env<'run, 'event, 'script>,
+        env: &'run Env<'run, 'event>,
         event: &'run Value<'event>,
         state: &'run Value<'static>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
-        expr: &'run Invoke<'script>,
-    ) -> Result<Cow<'run, Value<'event>>> {
+        expr: &'run Invoke<'event>,
+    ) -> Result<Cow<'run, Value<'event>>>
+    where
+        'script: 'event,
+    {
         let arg = unsafe { (expr.args.get_unchecked(0), expr.args.get_unchecked(1)) };
         let v1 = stry!(eval_for_fn_arg(opts, env, event, state, meta, local, arg.0));
         let v2 = stry!(eval_for_fn_arg(opts, env, event, state, meta, local, arg.1));
@@ -675,13 +701,16 @@ impl<'script> ImutExprInt<'script> {
     fn invoke3<'run, 'event>(
         &'run self,
         opts: ExecOpts,
-        env: &'run Env<'run, 'event, 'script>,
+        env: &'run Env<'run, 'event>,
         event: &'run Value<'event>,
         state: &'run Value<'static>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
-        expr: &'run Invoke<'script>,
-    ) -> Result<Cow<'run, Value<'event>>> {
+        expr: &'run Invoke<'event>,
+    ) -> Result<Cow<'run, Value<'event>>>
+    where
+        'script: 'event,
+    {
         let arg = unsafe {
             (
                 expr.args.get_unchecked(0),
@@ -706,13 +735,16 @@ impl<'script> ImutExprInt<'script> {
     fn invoke<'run, 'event>(
         &'run self,
         opts: ExecOpts,
-        env: &'run Env<'run, 'event, 'script>,
+        env: &'run Env<'run, 'event>,
         event: &'run Value<'event>,
         state: &'run Value<'static>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
-        expr: &'run Invoke<'script>,
-    ) -> Result<Cow<'run, Value<'event>>> {
+        expr: &'run Invoke<'event>,
+    ) -> Result<Cow<'run, Value<'event>>>
+    where
+        'script: 'event,
+    {
         let argv: Vec<Cow<'run, _>> = stry!(expr
             .args
             .iter()
@@ -735,7 +767,7 @@ impl<'script> ImutExprInt<'script> {
     fn emit_aggr<'run, 'event>(
         &'run self,
         opts: ExecOpts,
-        env: &'run Env<'run, 'event, 'script>,
+        env: &'run Env<'run, 'event>,
         expr: &'run InvokeAggr,
     ) -> Result<Cow<'run, Value<'event>>> {
         if opts.aggr != AggrType::Emit {
@@ -767,13 +799,16 @@ impl<'script> ImutExprInt<'script> {
 
     fn patch<'run, 'event>(
         opts: ExecOpts,
-        env: &'run Env<'run, 'event, 'script>,
+        env: &'run Env<'run, 'event>,
         event: &'run Value<'event>,
         state: &'run Value<'static>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
-        expr: &'run Patch<'script>,
-    ) -> Result<Cow<'run, Value<'event>>> {
+        expr: &'run Patch<'event>,
+    ) -> Result<Cow<'run, Value<'event>>>
+    where
+        'script: 'event,
+    {
         // NOTE: We clone this since we patch it - this should be not mutated but cloned
 
         let mut value = stry!(expr.target.run(opts, env, event, state, meta, local)).into_owned();
@@ -786,13 +821,16 @@ impl<'script> ImutExprInt<'script> {
     fn merge<'run, 'event>(
         &self,
         opts: ExecOpts,
-        env: &'run Env<'run, 'event, 'script>,
+        env: &'run Env<'run, 'event>,
         event: &'run Value<'event>,
         state: &'run Value<'static>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
-        expr: &'run Merge<'script>,
-    ) -> Result<Cow<'run, Value<'event>>> {
+        expr: &'run Merge<'event>,
+    ) -> Result<Cow<'run, Value<'event>>>
+    where
+        'script: 'event,
+    {
         // NOTE: We got to clone here since we're going to change the value
         let value = stry!(expr.target.run(opts, env, event, state, meta, local));
 
@@ -816,17 +854,16 @@ impl<'script> ImutExprInt<'script> {
 /// We need to handles arguments that are directly derived from `args` in a
 /// special form since args gets cleared and overwritten inside of functions.
 #[inline]
-fn eval_for_fn_arg<'run, 'event, 'script>(
+fn eval_for_fn_arg<'run, 'event>(
     opts: ExecOpts,
-    env: &'run Env<'run, 'event, 'script>,
+    env: &'run Env<'run, 'event>,
     event: &'run Value<'event>,
     state: &'run Value<'static>,
     meta: &'run Value<'event>,
     local: &'run LocalStack<'event>,
-    arg: &'run ImutExpr<'script>,
+    arg: &'run ImutExpr<'event>,
 ) -> Result<Cow<'run, Value<'event>>>
 where
-    'script: 'event,
     'event: 'run,
 {
     match arg.0 {

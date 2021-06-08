@@ -75,9 +75,8 @@ macro_rules! static_bool {
 }
 
 /// Interpreter environment
-pub struct Env<'run, 'event, 'script>
+pub struct Env<'run, 'event>
 where
-    'script: 'event,
     'event: 'run,
 {
     /// Context of the event
@@ -85,16 +84,15 @@ where
     /// Constants
     pub consts: &'run Consts<'event>,
     /// Aggregates
-    pub aggrs: &'run [InvokeAggrFn<'script>],
+    pub aggrs: &'run [InvokeAggrFn<'event>],
     /// Node metadata
     pub meta: &'run NodeMetas,
     /// Maximal recursion depth in custom functions
     pub recursion_limit: u32,
 }
 
-impl<'run, 'event, 'script> Env<'run, 'event, 'script>
+impl<'run, 'event> Env<'run, 'event>
 where
-    'script: 'event,
     'event: 'run,
 {
     /// Fetches the value for a constant
@@ -517,19 +515,18 @@ pub(crate) fn exec_unary<'run, 'event: 'run>(
 
 #[inline]
 #[allow(clippy::too_many_lines)]
-pub(crate) fn resolve<'run, 'event, 'script, Expr>(
+pub(crate) fn resolve<'run, 'event, Expr>(
     outer: &'run Expr,
     opts: ExecOpts,
-    env: &'run Env<'run, 'event, 'script>,
+    env: &'run Env<'run, 'event>,
     event: &'run Value<'event>,
     state: &'run Value<'static>,
     meta: &'run Value<'event>,
     local: &'run LocalStack<'event>,
-    path: &'run Path<'script>,
+    path: &'run Path<'event>,
 ) -> Result<Cow<'run, Value<'event>>>
 where
     Expr: BaseExpr,
-    'script: 'event,
     'event: 'run,
 {
     // Fetch the base of the path
@@ -558,20 +555,19 @@ where
 
 #[inline]
 #[allow(clippy::too_many_lines)]
-pub(crate) fn resolve_value<'run, 'event, 'script, Expr>(
+pub(crate) fn resolve_value<'run, 'event, Expr>(
     outer: &'run Expr,
     opts: ExecOpts,
-    env: &'run Env<'run, 'event, 'script>,
+    env: &'run Env<'run, 'event>,
     event: &'run Value<'event>,
     state: &'run Value<'static>,
     meta: &'run Value<'event>,
     local: &'run LocalStack<'event>,
-    path: &'run Path<'script>,
+    path: &'run Path<'event>,
     base_value: &'run Value<'event>,
 ) -> Result<Cow<'run, Value<'event>>>
 where
     Expr: BaseExpr,
-    'script: 'event,
     'event: 'run,
 {
     // Resolve the targeted value by applying all path segments
@@ -781,7 +777,7 @@ impl<'event, 'run> PreEvaluatedPatchOperation<'event, 'run> {
     fn from(
         patch_op: &'run PatchOperation<'event>,
         opts: ExecOpts,
-        env: &'run Env<'run, 'event, 'event>,
+        env: &'run Env<'run, 'event>,
         event: &'run Value<'event>,
         state: &'run Value<'static>,
         meta: &'run Value<'event>,
@@ -829,18 +825,17 @@ impl<'event, 'run> PreEvaluatedPatchOperation<'event, 'run> {
 }
 
 #[inline]
-fn patch_value<'run, 'event, 'script>(
+fn patch_value<'run, 'event>(
     opts: ExecOpts,
-    env: &Env<'run, 'event, 'script>,
+    env: &Env<'run, 'event>,
     event: &Value<'event>,
     state: &Value<'static>,
     meta: &Value<'event>,
     local: &LocalStack<'event>,
     target: &mut Value<'event>,
-    expr: &Patch<'script>,
+    expr: &Patch<'event>,
 ) -> Result<()>
 where
-    'script: 'event,
     'event: 'run,
 {
     let patch_expr = expr;
@@ -1126,21 +1121,19 @@ where
 /// declared keys** and the tests for **each of the declared key** match.
 #[inline]
 #[allow(clippy::clippy::too_many_lines)]
-fn match_rp_expr<'event, 'script, Expr>(
+fn match_rp_expr<'event, Expr>(
     outer: &Expr,
     opts: ExecOpts,
-    env: &Env<'_, 'event, 'script>,
+    env: &Env<'_, 'event>,
     event: &Value<'event>,
     state: &Value<'static>,
     meta: &Value<'event>,
     local: &LocalStack<'event>,
     target: &Value<'event>,
-    rp: &RecordPattern<'script>,
+    rp: &RecordPattern<'event>,
 ) -> Result<Option<Value<'event>>>
 where
     Expr: BaseExpr,
-
-    'script: 'event,
 {
     let res = if let Some(record) = target.as_object() {
         let mut acc: Value<'event> = Value::object_with_capacity(if opts.result_needed {
@@ -1258,21 +1251,19 @@ where
 /// %[ _ ] ~= [1] = true
 /// %[ _ ] ~= [x, y, z] = true
 #[inline]
-fn match_ap_expr<'event, 'script, Expr>(
+fn match_ap_expr<'event, Expr>(
     outer: &Expr,
     opts: ExecOpts,
-    env: &Env<'_, 'event, 'script>,
+    env: &Env<'_, 'event>,
     event: &Value<'event>,
     state: &Value<'static>,
     meta: &Value<'event>,
     local: &LocalStack<'event>,
     target: &Value<'event>,
-    ap: &ArrayPattern<'script>,
+    ap: &ArrayPattern<'event>,
 ) -> Result<Option<Value<'event>>>
 where
     Expr: BaseExpr,
-
-    'script: 'event,
 {
     let res = if let Some(a) = target.as_array() {
         // %[] - matches if target is an array
@@ -1353,21 +1344,19 @@ where
 }
 
 #[inline]
-fn match_tp_expr<'event, 'script, Expr>(
+fn match_tp_expr<'event, Expr>(
     outer: &Expr,
     opts: ExecOpts,
-    env: &Env<'_, 'event, 'script>,
+    env: &Env<'_, 'event>,
     event: &Value<'event>,
     state: &Value<'static>,
     meta: &Value<'event>,
     local: &LocalStack<'event>,
     target: &Value<'event>,
-    tp: &TuplePattern<'script>,
+    tp: &TuplePattern<'event>,
 ) -> Result<Option<Value<'event>>>
 where
     Expr: BaseExpr,
-
-    'script: 'event,
 {
     if let Some(a) = target.as_array() {
         if (tp.open && a.len() < tp.exprs.len()) || (!tp.open && a.len() != tp.exprs.len()) {
