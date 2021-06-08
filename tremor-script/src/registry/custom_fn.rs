@@ -133,7 +133,7 @@ impl<'script> CustomFn<'script> {
     #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
     pub(crate) fn invoke<'event>(
         &self,
-        env: &Env<'_, 'event, '_>,
+        env: &Env<'_, 'event>,
         args: &[&Value<'event>],
     ) -> FResult<Value<'event>>
     where

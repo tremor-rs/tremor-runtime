@@ -1236,7 +1236,7 @@ impl<'script> Invocable<'script> {
     /// if the funciton fails to be invoked
     pub fn invoke<'event, 'run>(
         &'run self,
-        env: &'run Env<'run, 'event, 'script>,
+        env: &'run Env<'run, 'event>,
         args: &'run [&'run Value<'event>],
     ) -> FResult<Value<'event>>
     where

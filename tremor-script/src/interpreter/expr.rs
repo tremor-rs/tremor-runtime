@@ -67,13 +67,13 @@ impl<'script> Expr<'script> {
     #[inline]
     pub(crate) fn execute_effectors<'run, 'event>(
         opts: ExecOpts,
-        env: &'run Env<'run, 'event, 'script>,
+        env: &'run Env<'run, 'event>,
         event: &'run mut Value<'event>,
         state: &'run mut Value<'static>,
         meta: &'run mut Value<'event>,
         local: &'run mut LocalStack<'event>,
-        effectors: &'run [Expr<'script>],
-        last_effector: &'run Expr<'script>,
+        effectors: &'run [Expr<'event>],
+        last_effector: &'run Expr<'event>,
     ) -> Result<Cont<'run, 'event>> {
         for effector in effectors {
             demit!(effector.run(opts.without_result(), env, event, state, meta, local));
@@ -88,12 +88,12 @@ impl<'script> Expr<'script> {
     fn match_expr(
         &'run self,
         opts: ExecOpts,
-        env: &'run Env<'run, 'event, 'script>,
+        env: &'run Env<'run, 'event>,
         event: &'run mut Value<'event>,
         state: &'run mut Value<'static>,
         meta: &'run mut Value<'event>,
         local: &'run mut LocalStack<'event>,
-        expr: &'run Match<Expr<'script>>,
+        expr: &'run Match<Expr<'event>>,
     ) -> Result<Cont<'run, 'event>> {
         // use super::DUMMY_PATH as D;
         let target = stry!(expr.target.run(opts, env, event, state, meta, local));
@@ -190,12 +190,12 @@ impl<'script> Expr<'script> {
     fn if_expr<'run, 'event>(
         &'run self,
         opts: ExecOpts,
-        env: &'run Env<'run, 'event, 'script>,
+        env: &'run Env<'run, 'event>,
         event: &'run mut Value<'event>,
         state: &'run mut Value<'static>,
         meta: &'run mut Value<'event>,
         local: &'run mut LocalStack<'event>,
-        expr: &'run IfElse<'script, Expr<'script>>,
+        expr: &'run IfElse<'event, Expr<'event>>,
     ) -> Result<Cont<'run, 'event>> {
         let target = stry!(expr.target.run(opts, env, event, state, meta, local));
         let p = &expr.if_clause.pattern;
@@ -221,12 +221,12 @@ impl<'script> Expr<'script> {
 
     fn patch_in_place<'run, 'event>(
         opts: ExecOpts,
-        env: &'run Env<'run, 'event, 'script>,
+        env: &'run Env<'run, 'event>,
         event: &'run Value<'event>,
         state: &'run Value<'static>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
-        expr: &'run Patch<'script>,
+        expr: &'run Patch<'event>,
     ) -> Result<Cow<'run, Value<'event>>> {
         // This function is called when we encounter code that consumes a value
         // to patch it. So the following code:
@@ -281,12 +281,12 @@ impl<'script> Expr<'script> {
     fn merge_in_place<'run, 'event>(
         &'run self,
         opts: ExecOpts,
-        env: &'run Env<'run, 'event, 'script>,
+        env: &'run Env<'run, 'event>,
         event: &'run mut Value<'event>,
         state: &'run mut Value<'static>,
         meta: &'run mut Value<'event>,
         local: &'run mut LocalStack<'event>,
-        expr: &'run Merge<'script>,
+        expr: &'run Merge<'event>,
     ) -> Result<Cow<'run, Value<'event>>> {
         // Please see the soundness reasoning in `patch_in_place` for details
         // those functions perform the same function just with slighty different
@@ -321,12 +321,12 @@ impl<'script> Expr<'script> {
     fn comprehension<'run, 'event>(
         &'run self,
         opts: ExecOpts,
-        env: &'run Env<'run, 'event, 'script>,
+        env: &'run Env<'run, 'event>,
         event: &'run mut Value<'event>,
         state: &'run mut Value<'static>,
         meta: &'run mut Value<'event>,
         local: &'run mut LocalStack<'event>,
-        expr: &'run Comprehension<'script, Expr>,
+        expr: &'run Comprehension<'event, Expr>,
     ) -> Result<Cont<'run, 'event>> {
         type Bi<'v, 'r> = (usize, Box<dyn Iterator<Item = (Value<'v>, Value<'v>)> + 'r>);
         fn kv<'k, K>((k, v): (K, Value)) -> (Value<'k>, Value)
@@ -385,12 +385,12 @@ impl<'script> Expr<'script> {
     fn assign<'run, 'event>(
         &'run self,
         opts: ExecOpts,
-        env: &'run Env<'run, 'event, 'script>,
+        env: &'run Env<'run, 'event>,
         event: &'run mut Value<'event>,
         state: &'run mut Value<'static>,
         meta: &'run mut Value<'event>,
         local: &'run mut LocalStack<'event>,
-        path: &'run Path<'script>,
+        path: &'run Path<'event>,
         value: Value<'event>,
     ) -> Result<Cow<'run, Value<'event>>> {
         if path.segments().is_empty() {
@@ -405,12 +405,12 @@ impl<'script> Expr<'script> {
     fn assign_nested<'run, 'event>(
         &'run self,
         opts: ExecOpts,
-        env: &'run Env<'run, 'event, 'script>,
+        env: &'run Env<'run, 'event>,
         event: &'run mut Value<'event>,
         state: &'run mut Value<'static>,
         meta: &'run mut Value<'event>,
         local: &'run mut LocalStack<'event>,
-        path: &'run Path<'script>,
+        path: &'run Path<'event>,
         mut value: Value<'event>,
     ) -> Result<Cow<'run, Value<'event>>> {
         /* NOTE
@@ -431,7 +431,7 @@ impl<'script> Expr<'script> {
          * So even if the map the Cow originally came from we won't
          * lose the referenced data. (Famous last words)
          */
-        let segments: &'run [Segment<'script>] = path.segments();
+        let segments: &'run [Segment<'event>] = path.segments();
 
         let mut current: &Value = match path {
             Path::Const(p) => {
@@ -517,12 +517,12 @@ impl<'script> Expr<'script> {
     fn assign_direct<'run, 'event>(
         &'run self,
         _opts: ExecOpts,
-        env: &'run Env<'run, 'event, 'script>,
+        env: &'run Env<'run, 'event>,
         event: &'run mut Value<'event>,
         state: &'run mut Value<'static>,
         _meta: &'run mut Value<'event>,
         local: &'run mut LocalStack<'event>,
-        path: &'run Path<'script>,
+        path: &'run Path<'event>,
         value: Value<'event>,
     ) -> Result<Cow<'run, Value<'event>>> {
         match path {
@@ -573,12 +573,15 @@ impl<'script> Expr<'script> {
     pub fn run<'run, 'event>(
         &'run self,
         opts: ExecOpts,
-        env: &'run Env<'run, 'event, 'script>,
+        env: &'run Env<'run, 'event>,
         event: &'run mut Value<'event>,
         state: &'run mut Value<'static>,
         meta: &'run mut Value<'event>,
         local: &'run mut LocalStack<'event>,
-    ) -> Result<Cont<'run, 'event>> {
+    ) -> Result<Cont<'run, 'event>>
+    where
+        'script: 'event,
+    {
         match self {
             Expr::Emit(expr) => match expr.borrow() {
                 EmitExpr {
