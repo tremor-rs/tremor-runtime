@@ -27,6 +27,7 @@ use crate::connectors::qos::{self, QoSFacilities, SinkQoS};
 use crate::sink::prelude::*;
 use futures::executor::block_on;
 use googapis::google::pubsub::v1::publisher_client::PublisherClient;
+use googapis::google::pubsub::v1::subscriber_client::SubscriberClient;
 use halfbrown::HashMap;
 use tonic::transport::Channel;
 use tremor_pipeline::{EventIdGenerator, OpMeta};
@@ -35,7 +36,8 @@ use tremor_value::Value;
 pub struct GoogleCloudPubSub {
     #[allow(dead_code)]
     config: Config,
-    remote: Option<PublisherClient<Channel>>,
+    remote_publisher: Option<PublisherClient<Channel>>,
+    remote_subscriber: Option<SubscriberClient<Channel>>,
     is_down: bool,
     qos_facility: Box<dyn SinkQoS>,
     reply_channel: Option<Sender<sink::Reply>>,
@@ -49,6 +51,7 @@ pub struct Config {}
 
 enum PubSubCommand {
     SendMessage(String, String, Value<'static>),
+    CreateSubscription(String, String, String, String),
     Unknown,
 }
 
@@ -59,6 +62,7 @@ impl std::fmt::Display for PubSubCommand {
             "{}",
             match *self {
                 PubSubCommand::SendMessage(_, _, _) => "send_message",
+                PubSubCommand::CreateSubscription(_, _, _, _) => "create_subscription",
                 PubSubCommand::Unknown => "Unknown",
             }
         )
@@ -74,11 +78,13 @@ impl offramp::Impl for GoogleCloudPubSub {
                 .as_ref()
                 .ok_or("Offramp Google Cloud Pubsub (pub) requires a config")?,
         )?;
-        let remote = Some(block_on(pubsub_auth::setup_publisher_client())?);
+        let remote_publisher = Some(block_on(pubsub_auth::setup_publisher_client())?);
+        let remote_subscriber = Some(block_on(pubsub_auth::setup_subscriber_client())?);
         let hostport = "pubsub.googleapis.com:443";
         Ok(SinkManager::new_box(Self {
             config,
-            remote,
+            remote_publisher,
+            remote_subscriber,
             is_down: false,
             qos_facility: Box::new(QoSFacilities::recoverable(hostport.to_string())),
             reply_channel: None,
@@ -112,6 +118,12 @@ fn parse_command(value: &Value) -> Result<PubSubCommand> {
                 return Err("Invalid Command, expected `data` field".into());
             },
         ),
+        "create_subscription" => PubSubCommand::CreateSubscription(
+            parse_arg!("project", o),
+            parse_arg!("topic", o),
+            parse_arg!("subscription", o),
+            parse_arg!("message_ordering", o),
+        ),
         _ => PubSubCommand::Unknown,
     };
     Ok(command)
@@ -129,74 +141,117 @@ impl Sink for GoogleCloudPubSub {
         _codec_map: &HashMap<String, Box<dyn Codec>>,
         mut event: Event,
     ) -> ResultVec {
-        if self.remote.is_none() {
-            self.remote = Some(pubsub_auth::setup_publisher_client().await?);
+        let remote_publisher = if let Some(remote_publisher) = &mut self.remote_publisher {
+            remote_publisher
+        } else {
+            self.remote_publisher = Some(pubsub_auth::setup_publisher_client().await?);
+            let remote_publisher = self
+                .remote_publisher
+                .as_mut()
+                .ok_or("Publisher client error!")?;
+            remote_publisher
             // TODO - Qos checks
         };
-        if let Some(remote) = &mut self.remote {
-            let maybe_correlation = event.correlation_meta();
-            let mut response = Vec::new();
-            for value in event.value_iter() {
-                let command = parse_command(value)?;
-                match command {
-                    PubSubCommand::SendMessage(project_id, topic_name, data) => {
-                        let mut msg: Vec<u8> = vec![];
-                        let encoded = codec.encode(&data)?;
-                        let mut processed =
-                            postprocess(&mut self.postprocessors, event.ingest_ns, encoded)?;
-                        for processed_elem in &mut processed {
-                            msg.append(processed_elem);
-                        }
-                        response.push(make_command_response(
-                            "send_message",
-                            &pubsub::send_message(remote, &project_id, &topic_name, &msg).await?,
-                        ));
-                    }
 
-                    PubSubCommand::Unknown => {
-                        warn!(
-                            "Unknown Google Cloud PubSub command: `{}` attempted",
-                            command.to_string()
-                        );
-                        return Err(format!(
-                            "Unknown Google Cloud PubSub command: `{}` attempted",
-                            command.to_string()
-                        )
-                        .into());
-                    }
-                };
-            }
+        let remote_subscriber = if let Some(remote_subscriber) = &mut self.remote_subscriber {
+            remote_subscriber
+        } else {
+            self.remote_subscriber = Some(pubsub_auth::setup_subscriber_client().await?);
+            let remote_subscriber = self
+                .remote_subscriber
+                .as_mut()
+                .ok_or("Subscriber client error!")?; //.ok_or("Subscriber client error!")?;
+            remote_subscriber
+            // TODO - Qos checks
+        };
 
-            if self.is_linked {
-                if let Some(reply_channel) = &self.reply_channel {
-                    let mut meta = Object::with_capacity(1);
-                    if let Some(correlation) = maybe_correlation {
-                        meta.insert_nocheck("correlation".into(), correlation);
+        let maybe_correlation = event.correlation_meta();
+        let mut response = Vec::new();
+        for value in event.value_iter() {
+            let command = parse_command(value)?;
+            match command {
+                PubSubCommand::SendMessage(project_id, topic_name, data) => {
+                    let mut msg: Vec<u8> = vec![];
+                    let encoded = codec.encode(&data)?;
+                    let mut processed =
+                        postprocess(&mut self.postprocessors, event.ingest_ns, encoded)?;
+                    for processed_elem in &mut processed {
+                        msg.append(processed_elem);
                     }
-
-                    reply_channel
-                        .send(sink::Reply::Response(
-                            OUT,
-                            Event {
-                                id: self.event_id_gen.next_id(),
-                                data: (response, meta).into(),
-                                ingest_ns: nanotime(),
-                                origin_uri: Some(EventOriginUri {
-                                    uid: 0,
-                                    scheme: "gRPC".into(),
-                                    host: "".into(),
-                                    port: None,
-                                    path: vec![],
-                                }),
-                                kind: None,
-                                is_batch: false,
-                                cb: CbAction::None,
-                                op_meta: OpMeta::default(),
-                                transactional: false,
-                            },
-                        ))
-                        .await?;
+                    response.push(make_command_response(
+                        "send_message",
+                        &pubsub::send_message(remote_publisher, &project_id, &topic_name, &msg)
+                            .await?,
+                    ));
                 }
+
+                PubSubCommand::CreateSubscription(
+                    project_id,
+                    topic_name,
+                    subscription_name,
+                    enable_message_ordering,
+                ) => {
+                    let ordering = match enable_message_ordering.as_str() {
+                        "enable_ordering" => true,
+                        "disable_ordering" => false,
+                        _ => {
+                            return Err("`message_ordering` not set correctly".into());
+                        }
+                    };
+                    // TODO: Display its response
+                    pubsub::create_subscription(
+                        remote_subscriber,
+                        &project_id,
+                        &topic_name,
+                        &subscription_name,
+                        ordering,
+                    )
+                    .await?;
+                }
+
+                PubSubCommand::Unknown => {
+                    warn!(
+                        "Unknown Google Cloud PubSub command: `{}` attempted",
+                        command.to_string()
+                    );
+                    return Err(format!(
+                        "Unknown Google Cloud PubSub command: `{}` attempted",
+                        command.to_string()
+                    )
+                    .into());
+                }
+            };
+        }
+
+        if self.is_linked {
+            if let Some(reply_channel) = &self.reply_channel {
+                let mut meta = Object::with_capacity(1);
+                if let Some(correlation) = maybe_correlation {
+                    meta.insert_nocheck("correlation".into(), correlation);
+                }
+
+                reply_channel
+                    .send(sink::Reply::Response(
+                        OUT,
+                        Event {
+                            id: self.event_id_gen.next_id(),
+                            data: (response, meta).into(),
+                            ingest_ns: nanotime(),
+                            origin_uri: Some(EventOriginUri {
+                                uid: 0,
+                                scheme: "gRPC".into(),
+                                host: "".into(),
+                                port: None,
+                                path: vec![],
+                            }),
+                            kind: None,
+                            is_batch: false,
+                            cb: CbAction::None,
+                            op_meta: OpMeta::default(),
+                            transactional: false,
+                        },
+                    ))
+                    .await?;
             }
         }
 
