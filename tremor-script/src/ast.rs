@@ -632,25 +632,23 @@ pub struct Script<'script> {
     pub docs: Docs<'script>,
 }
 
-impl<'input, 'run, 'script, 'event> Script<'script>
-where
-    'input: 'script,
-    'script: 'event,
-    'event: 'run,
-{
+impl<'script> Script<'script> {
     /// Runs the script and evaluates to a resulting event.
     /// This expects the script to be imutable!
     ///
     /// # Errors
     /// on runtime errors or if it isn't an imutable script
-    pub fn run_imut(
-        &'run self,
-        context: &'run crate::EventContext,
+    pub fn run_imut<'event>(
+        &self,
+        context: &crate::EventContext,
         aggr: AggrType,
-        event: &'run Value<'event>,
-        state: &'run Value<'static>,
-        meta: &'run Value<'event>,
-    ) -> Result<Return<'event>> {
+        event: &Value<'event>,
+        state: &Value<'static>,
+        meta: &Value<'event>,
+    ) -> Result<Return<'event>>
+    where
+        'script: 'event,
+    {
         let local = LocalStack::with_size(self.locals);
 
         let opts = ExecOpts {
@@ -688,14 +686,17 @@ where
     ///
     /// # Errors
     /// on runtime errors
-    pub fn run(
-        &'run self,
-        context: &'run crate::EventContext,
+    pub fn run<'event>(
+        &self,
+        context: &crate::EventContext,
         aggr: AggrType,
-        event: &'run mut Value<'event>,
-        state: &'run mut Value<'static>,
-        meta: &'run mut Value<'event>,
-    ) -> Result<Return<'event>> {
+        event: &mut Value<'event>,
+        state: &mut Value<'static>,
+        meta: &mut Value<'event>,
+    ) -> Result<Return<'event>>
+    where
+        'script: 'event,
+    {
         let mut local = LocalStack::with_size(self.locals);
 
         let mut exprs = self.exprs.iter().peekable();
