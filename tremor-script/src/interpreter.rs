@@ -1124,22 +1124,21 @@ where
 /// A record pattern matches a target if the target is a record that contains **at least all
 /// declared keys** and the tests for **each of the declared key** match.
 #[inline]
-fn match_rp_expr<'run, 'event, 'script, Expr>(
+fn match_rp_expr<'event, 'script, Expr>(
     outer: &Expr,
     opts: ExecOpts,
-    env: &'run Env<'run, 'event, 'script>,
-    event: &'run Value<'event>,
-    state: &'run Value<'static>,
-    meta: &'run Value<'event>,
-    local: &'run LocalStack<'event>,
-    target: &'run Value<'event>,
-    rp: &'run RecordPattern<'script>,
+    env: &Env<'_, 'event, 'script>,
+    event: &Value<'event>,
+    state: &Value<'static>,
+    meta: &Value<'event>,
+    local: &LocalStack<'event>,
+    target: &Value<'event>,
+    rp: &RecordPattern<'script>,
 ) -> Result<Option<Value<'event>>>
 where
     Expr: BaseExpr,
 
     'script: 'event,
-    'event: 'run,
 {
     let res = if let Some(record) = target.as_object() {
         let mut acc: Value<'event> = Value::object_with_capacity(if opts.result_needed {
@@ -1257,22 +1256,21 @@ where
 /// %[ _ ] ~= [1] = true
 /// %[ _ ] ~= [x, y, z] = true
 #[inline]
-fn match_ap_expr<'run, 'event, 'script, Expr>(
+fn match_ap_expr<'event, 'script, Expr>(
     outer: &Expr,
     opts: ExecOpts,
-    env: &'run Env<'run, 'event, 'script>,
-    event: &'run Value<'event>,
-    state: &'run Value<'static>,
-    meta: &'run Value<'event>,
-    local: &'run LocalStack<'event>,
-    target: &'run Value<'event>,
-    ap: &'run ArrayPattern<'script>,
+    env: &Env<'_, 'event, 'script>,
+    event: &Value<'event>,
+    state: &Value<'static>,
+    meta: &Value<'event>,
+    local: &LocalStack<'event>,
+    target: &Value<'event>,
+    ap: &ArrayPattern<'script>,
 ) -> Result<Option<Value<'event>>>
 where
     Expr: BaseExpr,
 
     'script: 'event,
-    'event: 'run,
 {
     let res = if let Some(a) = target.as_array() {
         // %[] - matches if target is an array
@@ -1353,22 +1351,21 @@ where
 }
 
 #[inline]
-fn match_tp_expr<'run, 'event, 'script, Expr>(
-    outer: &'run Expr,
+fn match_tp_expr<'event, 'script, Expr>(
+    outer: &Expr,
     opts: ExecOpts,
-    env: &'run Env<'run, 'event, 'script>,
-    event: &'run Value<'event>,
-    state: &'run Value<'static>,
-    meta: &'run Value<'event>,
-    local: &'run LocalStack<'event>,
-    target: &'run Value<'event>,
-    tp: &'run TuplePattern<'script>,
+    env: &Env<'_, 'event, 'script>,
+    event: &Value<'event>,
+    state: &Value<'static>,
+    meta: &Value<'event>,
+    local: &LocalStack<'event>,
+    target: &Value<'event>,
+    tp: &TuplePattern<'script>,
 ) -> Result<Option<Value<'event>>>
 where
     Expr: BaseExpr,
 
     'script: 'event,
-    'event: 'run,
 {
     if let Some(a) = target.as_array() {
         if (tp.open && a.len() < tp.exprs.len()) || (!tp.open && a.len() != tp.exprs.len()) {
@@ -1431,20 +1428,19 @@ where
 #[inline]
 // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1029
 #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
-fn set_local_shadow<'run, 'event, Expr>(
-    outer: &'run Expr,
-    local: &'run LocalStack<'event>,
-    node_meta: &'run NodeMetas,
+fn set_local_shadow<'event, Expr>(
+    outer: &Expr,
+    local: &LocalStack<'event>,
+    node_meta: &NodeMetas,
     idx: usize,
     v: Value<'event>,
 ) -> Result<()>
 where
     Expr: BaseExpr,
-    'event: 'run,
 {
     use std::mem;
     // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1029
-    let local: &'run mut LocalStack<'event> = unsafe { mem::transmute(local) };
+    let local: &mut LocalStack<'event> = unsafe { mem::transmute(local) };
     local.values.get_mut(idx).map_or_else(
         || {
             error_oops(
@@ -1466,17 +1462,16 @@ impl<'script> GroupBy<'script> {
     ///
     /// # Errors
     /// if the group can not be generated from the provided event, state and meta
-    pub fn generate_groups<'run, 'event>(
-        &'event self,
-        ctx: &'run EventContext,
-        event: &'run Value<'event>,
-        state: &'run Value<'static>,
-        node_meta: &'run NodeMetas,
-        meta: &'run Value<'event>,
+    pub fn generate_groups<'event>(
+        &self,
+        ctx: &EventContext,
+        event: &Value<'event>,
+        state: &Value<'static>,
+        node_meta: &NodeMetas,
+        meta: &Value<'event>,
     ) -> Result<Vec<Vec<Value<'event>>>>
     where
         'script: 'event,
-        'event: 'run,
     {
         let mut groups = Vec::with_capacity(16);
         self.0
@@ -1486,18 +1481,17 @@ impl<'script> GroupBy<'script> {
 }
 
 impl<'script> GroupByInt<'script> {
-    pub(crate) fn generate_groups<'run, 'event>(
-        &'event self,
-        ctx: &'run EventContext,
-        event: &'run Value<'event>,
-        state: &'run Value<'static>,
-        node_meta: &'run NodeMetas,
-        meta: &'run Value<'event>,
-        groups: &'run mut Vec<Vec<Value<'event>>>,
+    pub(crate) fn generate_groups<'event>(
+        &self,
+        ctx: &EventContext,
+        event: &Value<'event>,
+        state: &Value<'static>,
+        node_meta: &NodeMetas,
+        meta: &Value<'event>,
+        groups: &mut Vec<Vec<Value<'event>>>,
     ) -> Result<()>
     where
         'script: 'event,
-        'event: 'run,
     {
         let opts = ExecOpts {
             result_needed: true,
