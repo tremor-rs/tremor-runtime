@@ -280,8 +280,9 @@ impl<'key> KnownKey<'key> {
         'value: 'target,
         F: FnOnce() -> Value<'value>,
     {
+        let key: &str = &self.key;
         map.raw_entry_mut()
-            .from_key_hashed_nocheck(self.hash, &self.key)
+            .from_key_hashed_nocheck(self.hash, key)
             .or_insert_with(|| (self.key.clone(), with()))
             .1
     }
@@ -368,7 +369,7 @@ impl<'key> KnownKey<'key> {
     {
         match map
             .raw_entry_mut()
-            .from_key_hashed_nocheck(self.hash, &self.key)
+            .from_key_hashed_nocheck(self.hash, self.key())
         {
             RawEntryMut::Occupied(mut e) => Some(e.insert(value)),
             RawEntryMut::Vacant(e) => {

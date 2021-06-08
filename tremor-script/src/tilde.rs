@@ -55,6 +55,16 @@ pub enum ExtractorResult<'result> {
     Err(ExtractorError),
 }
 
+impl<'result> From<bool> for ExtractorResult<'result> {
+    fn from(b: bool) -> Self {
+        if b {
+            ExtractorResult::MatchNull
+        } else {
+            ExtractorResult::NoMatch
+        }
+    }
+}
+
 impl<'result> ExtractorResult<'result> {
     pub fn is_match(&self) -> bool {
         match self {
@@ -429,41 +439,18 @@ impl Extractor {
     }
 
     #[allow(clippy::too_many_lines)]
-    pub fn extract<'script, 'event, 'run, 'influx>(
-        &'run self,
+    pub fn extract<'event>(
+        &self,
         result_needed: bool,
-        v: &'run Value<'event>,
-        ctx: &'run EventContext,
-    ) -> ExtractorResult<'event>
-    where
-        'script: 'event,
-        'event: 'run,
-        'run: 'influx,
-    {
+        v: &Value<'event>,
+        ctx: &EventContext,
+    ) -> ExtractorResult<'event> {
         use ExtractorResult::{Err, Match, MatchNull, NoMatch};
         if let Some(s) = v.as_str() {
             match self {
-                Self::Prefix(pfx) => {
-                    if s.starts_with(pfx) {
-                        MatchNull
-                    } else {
-                        NoMatch
-                    }
-                }
-                Self::Suffix(sfx) => {
-                    if s.ends_with(sfx) {
-                        MatchNull
-                    } else {
-                        NoMatch
-                    }
-                }
-                Self::Glob { compiled: glob, .. } => {
-                    if glob.matches(s) {
-                        MatchNull
-                    } else {
-                        NoMatch
-                    }
-                }
+                Self::Prefix(pfx) => s.starts_with(pfx).into(),
+                Self::Suffix(sfx) => s.ends_with(sfx).into(),
+                Self::Glob { compiled: glob, .. } => glob.matches(s).into(),
                 Self::Kv(kv) => kv.run::<Value>(s).map_or(NoMatch, |r| {
                     if result_needed {
                         Match(r.into_static())
@@ -548,7 +535,7 @@ impl Extractor {
                         MatchNull
                     }
                 }),
-                Self::Influx => influx::decode::<'influx, Value<'influx>>(s, ctx.ingest_ns())
+                Self::Influx => influx::decode::<Value>(s, ctx.ingest_ns())
                     .ok()
                     .flatten()
                     .map_or(NoMatch, |r| {
