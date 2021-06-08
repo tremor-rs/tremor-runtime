@@ -584,7 +584,7 @@ where
             Segment::Id { mid, key, .. } => {
                 subrange = None;
 
-                current = key.lookup(current).ok_or_else(|| {
+                current = stry!(key.lookup(current).ok_or_else(|| {
                     current.as_object().map_or_else(
                         || error_need_obj_err(outer, segment, current.value_type(), &env.meta),
                         |o| {
@@ -596,7 +596,7 @@ where
                             )
                         },
                     )
-                })?;
+                }));
                 continue;
             }
             // Next segment is an index: index into `current`, if it's an array
@@ -666,7 +666,7 @@ where
                     // If `current` is an array, the segment has to be an index
                     (Value::Array(a), idx) => {
                         let array = subrange.unwrap_or_else(|| a.as_slice());
-                        let idx = value_to_index(outer, segment, idx, env, path, array)?;
+                        let idx = stry!(value_to_index(outer, segment, idx, env, path, array));
 
                         if let Some(v) = array.get(idx) {
                             current = v;
@@ -1194,7 +1194,7 @@ where
 
                     let rhs = stry!(rhs.run(opts, env, event, state, meta, local));
                     let vb: &Value = rhs.borrow();
-                    let r = exec_binary(outer, outer, &env.meta, *kind, testee, vb)?;
+                    let r = stry!(exec_binary(outer, outer, &env.meta, *kind, testee, vb));
 
                     if !r.as_bool().unwrap_or_default() {
                         return Ok(None);
@@ -1476,8 +1476,9 @@ impl<'script> GroupBy<'script> {
         'script: 'event,
     {
         let mut groups = Vec::with_capacity(16);
-        self.0
-            .generate_groups(ctx, event, state, node_meta, meta, &mut groups)?;
+        stry!(self
+            .0
+            .generate_groups(ctx, event, state, node_meta, meta, &mut groups));
         Ok(groups)
     }
 }
@@ -1509,9 +1510,7 @@ impl<'script> GroupByInt<'script> {
         };
         match self {
             GroupByInt::Expr { expr, .. } => {
-                let v = expr
-                    .run(opts, &env, event, state, meta, &local_stack)?
-                    .into_owned();
+                let v = stry!(expr.run(opts, &env, event, state, meta, &local_stack)).into_owned();
                 if let Some((last_group, other_groups)) = groups.split_last_mut() {
                     other_groups.iter_mut().for_each(|g| g.push(v.clone()));
                     last_group.push(v)
@@ -1524,8 +1523,9 @@ impl<'script> GroupByInt<'script> {
 
             GroupByInt::Set { items, .. } => {
                 for item in items {
-                    item.0
-                        .generate_groups(ctx, event, state, node_meta, meta, groups)?
+                    stry!(item
+                        .0
+                        .generate_groups(ctx, event, state, node_meta, meta, groups))
                 }
 
                 // set(event.measurement, each(record::keys(event.fields)))
@@ -1543,9 +1543,7 @@ impl<'script> GroupByInt<'script> {
                 Ok(())
             }
             GroupByInt::Each { expr, .. } => {
-                let v = expr
-                    .run(opts, &env, event, state, meta, &local_stack)?
-                    .into_owned();
+                let v = stry!(expr.run(opts, &env, event, state, meta, &local_stack)).into_owned();
                 if let Some(each) = v.as_array() {
                     if groups.is_empty() {
                         for e in each {
