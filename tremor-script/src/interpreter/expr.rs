@@ -63,13 +63,9 @@ macro_rules! demit {
     };
 }
 
-impl<'script, 'event, 'run> Expr<'script>
-where
-    'script: 'event,
-    'event: 'run,
-{
+impl<'script> Expr<'script> {
     #[inline]
-    pub(crate) fn execute_effectors(
+    pub(crate) fn execute_effectors<'run, 'event>(
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
         event: &'run mut Value<'event>,
@@ -191,7 +187,7 @@ where
     }
 
     #[inline]
-    fn if_expr(
+    fn if_expr<'run, 'event>(
         &'run self,
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
@@ -223,8 +219,7 @@ where
         }
     }
 
-    fn patch_in_place(
-        &'run self,
+    fn patch_in_place<'run, 'event>(
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
         event: &'run Value<'event>,
@@ -283,7 +278,7 @@ where
         Ok(value)
     }
 
-    fn merge_in_place(
+    fn merge_in_place<'run, 'event>(
         &'run self,
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
@@ -323,7 +318,7 @@ where
     }
 
     // TODO: Quite some overlap with `ImutExprInt::comprehension`
-    fn comprehension(
+    fn comprehension<'run, 'event>(
         &'run self,
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
@@ -387,7 +382,7 @@ where
     }
 
     #[inline]
-    fn assign(
+    fn assign<'run, 'event>(
         &'run self,
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
@@ -407,7 +402,7 @@ where
 
     // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1033
     #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
-    fn assign_nested(
+    fn assign_nested<'run, 'event>(
         &'run self,
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
@@ -519,7 +514,7 @@ where
         }
     }
 
-    fn assign_direct(
+    fn assign_direct<'run, 'event>(
         &'run self,
         _opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
@@ -575,7 +570,7 @@ where
     ///
     /// # Errors
     /// if evaluation fails
-    pub fn run(
+    pub fn run<'run, 'event>(
         &'run self,
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
@@ -655,9 +650,9 @@ where
             Expr::MergeInPlace(ref expr) => self
                 .merge_in_place(opts, env, event, state, meta, local, expr)
                 .map(Cont::Cont),
-            Expr::PatchInPlace(ref expr) => self
-                .patch_in_place(opts, env, event, state, meta, local, expr)
-                .map(Cont::Cont),
+            Expr::PatchInPlace(ref expr) => {
+                Self::patch_in_place(opts, env, event, state, meta, local, expr).map(Cont::Cont)
+            }
             Expr::Comprehension(ref expr) => {
                 self.comprehension(opts, env, event, state, meta, local, expr)
             }

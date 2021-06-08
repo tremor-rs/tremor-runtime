@@ -585,16 +585,17 @@ where
                 subrange = None;
 
                 current = key.lookup(current).ok_or_else(|| {
-                    if let Some(o) = current.as_object() {
-                        let key = env.meta.name_dflt(*mid).to_string();
-                        let options = o.keys().map(ToString::to_string).collect();
-                        error_bad_key_err(
-                            outer, segment, //&Expr::dummy(*start, *end),
-                            &path, key, options, &env.meta,
-                        )
-                    } else {
-                        error_need_obj_err(outer, segment, current.value_type(), &env.meta)
-                    }
+                    current.as_object().map_or_else(
+                        || error_need_obj_err(outer, segment, current.value_type(), &env.meta),
+                        |o| {
+                            let key = env.meta.name_dflt(*mid).to_string();
+                            let options = o.keys().map(ToString::to_string).collect();
+                            error_bad_key_err(
+                                outer, segment, //&Expr::dummy(*start, *end),
+                                &path, key, options, &env.meta,
+                            )
+                        },
+                    )
                 })?;
                 continue;
             }
@@ -1124,6 +1125,7 @@ where
 /// A record pattern matches a target if the target is a record that contains **at least all
 /// declared keys** and the tests for **each of the declared key** match.
 #[inline]
+#[allow(clippy::clippy::too_many_lines)]
 fn match_rp_expr<'event, 'script, Expr>(
     outer: &Expr,
     opts: ExecOpts,
