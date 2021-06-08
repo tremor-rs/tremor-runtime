@@ -43,17 +43,13 @@ use std::borrow::Cow;
 use std::mem;
 use std::{borrow::Borrow, iter};
 
-impl<'run, 'event, 'script> ImutExpr<'script>
-where
-    'script: 'event,
-    'event: 'run,
-{
+impl<'script> ImutExpr<'script> {
     /// Evaluates the expression
     ///
     /// # Errors
     /// if evaluation fails
     #[inline]
-    pub fn run(
+    pub fn run<'run, 'event>(
         &'run self,
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
@@ -65,11 +61,8 @@ where
         self.0.run(opts, env, event, state, meta, local)
     }
 }
-impl<'run, 'event, 'script> ImutExprInt<'script>
-where
-    'script: 'event,
-    'event: 'run,
-{
+
+impl<'script> ImutExprInt<'script> {
     /// Checks if the expression is a literal expression
     #[inline]
     #[must_use]
@@ -82,14 +75,14 @@ where
     /// if the resulting value can not be represented as a str or the evaluation fails
 
     #[inline]
-    pub fn eval_to_string(
-        &'run self,
+    pub fn eval_to_string<'event>(
+        &self,
         opts: ExecOpts,
-        env: &'run Env<'run, 'event, 'script>,
-        event: &'run Value<'event>,
-        state: &'run Value<'static>,
-        meta: &'run Value<'event>,
-        local: &'run LocalStack<'event>,
+        env: &Env<'_, 'event, '_>,
+        event: &Value<'event>,
+        state: &Value<'static>,
+        meta: &Value<'event>,
+        local: &LocalStack<'event>,
     ) -> Result<beef::Cow<'event, str>> {
         let value = stry!(self.run(opts, env, event, state, meta, local));
         value.as_str().map_or_else(
@@ -107,16 +100,16 @@ where
     /// # Errors
     /// if the resulting value can not be represented as a usize or the evaluation fails
     #[inline]
-    pub fn eval_to_index<Expr>(
-        &'run self,
-        outer: &'run Expr,
+    pub fn eval_to_index<'event, Expr>(
+        &self,
+        outer: &Expr,
         opts: ExecOpts,
-        env: &'run Env<'run, 'event, 'script>,
-        event: &'run Value<'event>,
-        state: &'run Value<'static>,
-        meta: &'run Value<'event>,
-        local: &'run LocalStack<'event>,
-        path: &'run Path<'script>,
+        env: &Env<'_, 'event, '_>,
+        event: &Value<'event>,
+        state: &Value<'static>,
+        meta: &Value<'event>,
+        local: &LocalStack<'event>,
+        path: &Path<'script>,
         array: &[Value],
     ) -> Result<usize>
     where
@@ -132,7 +125,7 @@ where
     ///
     /// # Errors
     /// on any runtime error
-    pub fn run(
+    pub fn run<'run, 'event>(
         &'run self,
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
@@ -296,7 +289,7 @@ where
         }
     }
 
-    fn comprehension(
+    fn comprehension<'run, 'event>(
         &'run self,
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
@@ -364,7 +357,7 @@ where
     }
 
     #[inline]
-    fn execute_effectors(
+    fn execute_effectors<'run, 'event>(
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
         event: &'run Value<'event>,
@@ -377,7 +370,7 @@ where
     }
 
     #[allow(clippy::too_many_lines)]
-    fn match_expr(
+    fn match_expr<'run, 'event>(
         &'run self,
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
@@ -482,7 +475,7 @@ where
         }
     }
 
-    fn binary(
+    fn binary<'run, 'event>(
         &'run self,
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
@@ -497,7 +490,7 @@ where
         exec_binary(self, expr, &env.meta, expr.kind, &lhs, &rhs)
     }
 
-    fn unary(
+    fn unary<'run, 'event>(
         &'run self,
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
@@ -516,7 +509,7 @@ where
     }
 
     // TODO: Quite some overlap with `interpreter::resolve` (and some with `expr::assign`)
-    fn present(
+    fn present<'run, 'event>(
         &'run self,
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
@@ -634,7 +627,7 @@ where
     }
 
     // TODO: Can we convince Rust to generate the 3 or 4 versions of this method from one template?
-    fn invoke1(
+    fn invoke1<'run, 'event>(
         &'run self,
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
@@ -656,7 +649,7 @@ where
             })
     }
 
-    fn invoke2(
+    fn invoke2<'run, 'event>(
         &'run self,
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
@@ -679,7 +672,7 @@ where
             })
     }
 
-    fn invoke3(
+    fn invoke3<'run, 'event>(
         &'run self,
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
@@ -710,7 +703,7 @@ where
             })
     }
 
-    fn invoke(
+    fn invoke<'run, 'event>(
         &'run self,
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
@@ -739,7 +732,7 @@ where
             })
     }
 
-    fn emit_aggr(
+    fn emit_aggr<'run, 'event>(
         &'run self,
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
@@ -772,7 +765,7 @@ where
         Ok(r)
     }
 
-    fn patch(
+    fn patch<'run, 'event>(
         &'run self,
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
@@ -791,7 +784,7 @@ where
         Ok(Cow::Owned(value))
     }
 
-    fn merge(
+    fn merge<'run, 'event>(
         &'run self,
         opts: ExecOpts,
         env: &'run Env<'run, 'event, 'script>,
