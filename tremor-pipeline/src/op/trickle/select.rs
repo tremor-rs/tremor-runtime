@@ -28,7 +28,7 @@ use tremor_common::stry;
 
 use tremor_script::{
     self,
-    ast::{Aggregates, InvokeAggrFn, NodeMetas, Select, SelectStmt, WindowDecl},
+    ast::{AggregateScratch, Aggregates, InvokeAggrFn, NodeMetas, Select, SelectStmt, WindowDecl},
     interpreter::Env,
     interpreter::LocalStack,
     prelude::*,
@@ -628,16 +628,19 @@ impl Operator for TrickleSelect {
 
             // TODO: reason about soundness
             let SelectStmt {
-                stmt,
-                aggregates,
-                aggregate_scratches,
-                consts,
-                locals,
-                node_meta,
-            }: &mut SelectStmt = unsafe {
-                // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1024
-                mem::transmute(stmt)
-            };
+                ref stmt,
+                ref mut aggregates,
+                ref mut aggregate_scratches,
+                ref mut consts,
+                ref locals,
+                ref node_meta,
+            } = stmt;
+
+            // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1024
+            let aggregates: &mut Aggregates = unsafe { mem::transmute(aggregates)};
+            // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1024
+            let aggregate_scratches: &mut Option<(AggregateScratch, AggregateScratch)> = unsafe { mem::transmute(aggregate_scratches)};
+
             let local_stack = tremor_script::interpreter::LocalStack::with_size(*locals);
             consts.window = Value::null();
             consts.group = Value::null();

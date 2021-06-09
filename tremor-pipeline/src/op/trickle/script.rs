@@ -138,17 +138,14 @@ impl Operator for Trickle {
         let context = EventContext::new(event.ingest_ns, event.origin_uri);
 
         let script = &self.script.suffix().script;
+        // The issue we're facing here is that we can't explain to rust that the suffix
+        // of script outlives the event, this is part of the contract on entity lifetimes and rusts
+        // borrow model does not give a way to express this at the moment.
+        // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1024
+        let script: &tremor_script::ast::Script = unsafe { mem::transmute(script) };
 
         let port = event.data.rent_mut(|data| {
-            let (v, m) = data.parts_mut();
-
-            // This lifetimes will be `&'run mut Value<'event>` as that is the
-            // requirement of the `self.runtime.run` we can not declare them
-            // as the trait function for the operator doesn't allow that
-            // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1024
-            let unwind_event: &'_ mut Value<'_> = unsafe { mem::transmute(v) };
-            // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1024
-            let event_meta: &'_ mut Value<'_> = unsafe { mem::transmute(m) };
+            let (unwind_event, event_meta) = data.parts_mut();
 
             let value = script.run(
                 &context,
