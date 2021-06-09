@@ -29,13 +29,14 @@ pub(crate) async fn send_message(
     project_id: &str,
     topic_name: &str,
     data_val: &[u8],
+    ordering_key: &str,
 ) -> Result<String> {
     let message = PubsubMessage {
         data: data_val.to_vec(),
         attributes: HashMap::new(),
-        message_id: "".into(),
+        message_id: "".into(), // ID of this message, assigned by the server when the message is published.
         publish_time: None,
-        ordering_key: "order".to_string(),
+        ordering_key: ordering_key.to_string(),
     };
 
     let response = client

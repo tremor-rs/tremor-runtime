@@ -25,7 +25,6 @@
 use crate::connectors::gcp::{pubsub, pubsub_auth};
 use crate::connectors::qos::{self, QoSFacilities, SinkQoS};
 use crate::sink::prelude::*;
-use futures::executor::block_on;
 use googapis::google::pubsub::v1::publisher_client::PublisherClient;
 use googapis::google::pubsub::v1::subscriber_client::SubscriberClient;
 use halfbrown::HashMap;
@@ -50,8 +49,18 @@ pub struct GoogleCloudPubSub {
 pub struct Config {}
 
 enum PubSubCommand {
-    SendMessage(String, String, Value<'static>),
-    CreateSubscription(String, String, String, String),
+    SendMessage {
+        project_id: String,
+        topic_name: String,
+        data: Value<'static>,
+        ordering_key: String,
+    },
+    CreateSubscription {
+        project_id: String,
+        topic_name: String,
+        subscription_name: String,
+        enable_message_ordering: bool,
+    },
     Unknown,
 }
 
@@ -61,8 +70,18 @@ impl std::fmt::Display for PubSubCommand {
             f,
             "{}",
             match *self {
-                PubSubCommand::SendMessage(_, _, _) => "send_message",
-                PubSubCommand::CreateSubscription(_, _, _, _) => "create_subscription",
+                PubSubCommand::SendMessage {
+                    project_id: _,
+                    topic_name: _,
+                    data: _,
+                    ordering_key: _,
+                } => "send_message",
+                PubSubCommand::CreateSubscription {
+                    project_id: _,
+                    topic_name: _,
+                    subscription_name: _,
+                    enable_message_ordering: _,
+                } => "create_subscription",
                 PubSubCommand::Unknown => "Unknown",
             }
         )
@@ -78,13 +97,11 @@ impl offramp::Impl for GoogleCloudPubSub {
                 .as_ref()
                 .ok_or("Offramp Google Cloud Pubsub (pub) requires a config")?,
         )?;
-        let remote_publisher = Some(block_on(pubsub_auth::setup_publisher_client())?);
-        let remote_subscriber = Some(block_on(pubsub_auth::setup_subscriber_client())?);
         let hostport = "pubsub.googleapis.com:443";
         Ok(SinkManager::new_box(Self {
             config,
-            remote_publisher,
-            remote_subscriber,
+            remote_publisher: None,  // overwritten in init
+            remote_subscriber: None, // overwritten in init
             is_down: false,
             qos_facility: Box::new(QoSFacilities::recoverable(hostport.to_string())),
             reply_channel: None,
@@ -109,21 +126,22 @@ fn parse_command(value: &Value) -> Result<PubSubCommand> {
     let o = value.as_object().ok_or("Invalid Command")?;
     let cmd_name: &str = &parse_arg!("command", o);
     let command = match cmd_name {
-        "send_message" => PubSubCommand::SendMessage(
-            parse_arg!("project", o),
-            parse_arg!("topic", o),
-            if let Some(data) = o.get("data") {
+        "send_message" => PubSubCommand::SendMessage {
+            project_id: parse_arg!("project", o),
+            topic_name: parse_arg!("topic", o),
+            data: if let Some(data) = o.get("data") {
                 data.clone_static()
             } else {
                 return Err("Invalid Command, expected `data` field".into());
             },
-        ),
-        "create_subscription" => PubSubCommand::CreateSubscription(
-            parse_arg!("project", o),
-            parse_arg!("topic", o),
-            parse_arg!("subscription", o),
-            parse_arg!("message_ordering", o),
-        ),
+            ordering_key: parse_arg!("ordering_key", o),
+        },
+        "create_subscription" => PubSubCommand::CreateSubscription {
+            project_id: parse_arg!("project", o),
+            topic_name: parse_arg!("topic", o),
+            subscription_name: parse_arg!("subscription", o),
+            enable_message_ordering: o.get("message_ordering").as_bool().unwrap_or_default(),
+        },
         _ => PubSubCommand::Unknown,
     };
     Ok(command)
@@ -160,7 +178,7 @@ impl Sink for GoogleCloudPubSub {
             let remote_subscriber = self
                 .remote_subscriber
                 .as_mut()
-                .ok_or("Subscriber client error!")?; //.ok_or("Subscriber client error!")?;
+                .ok_or("Subscriber client error!")?;
             remote_subscriber
             // TODO - Qos checks
         };
@@ -170,7 +188,12 @@ impl Sink for GoogleCloudPubSub {
         for value in event.value_iter() {
             let command = parse_command(value)?;
             match command {
-                PubSubCommand::SendMessage(project_id, topic_name, data) => {
+                PubSubCommand::SendMessage {
+                    project_id,
+                    topic_name,
+                    data,
+                    ordering_key,
+                } => {
                     let mut msg: Vec<u8> = vec![];
                     let encoded = codec.encode(&data)?;
                     let mut processed =
@@ -180,31 +203,30 @@ impl Sink for GoogleCloudPubSub {
                     }
                     response.push(make_command_response(
                         "send_message",
-                        &pubsub::send_message(remote_publisher, &project_id, &topic_name, &msg)
-                            .await?,
+                        &pubsub::send_message(
+                            remote_publisher,
+                            &project_id,
+                            &topic_name,
+                            &msg,
+                            &ordering_key,
+                        )
+                        .await?,
                     ));
                 }
 
-                PubSubCommand::CreateSubscription(
+                PubSubCommand::CreateSubscription {
                     project_id,
                     topic_name,
                     subscription_name,
                     enable_message_ordering,
-                ) => {
-                    let ordering = match enable_message_ordering.as_str() {
-                        "enable_ordering" => true,
-                        "disable_ordering" => false,
-                        _ => {
-                            return Err("`message_ordering` not set correctly".into());
-                        }
-                    };
+                } => {
                     // TODO: Display its response
                     pubsub::create_subscription(
                         remote_subscriber,
                         &project_id,
                         &topic_name,
                         &subscription_name,
-                        ordering,
+                        enable_message_ordering,
                     )
                     .await?;
                 }
@@ -274,6 +296,8 @@ impl Sink for GoogleCloudPubSub {
         is_linked: bool,
         reply_channel: Sender<sink::Reply>,
     ) -> Result<()> {
+        self.remote_publisher = Some(pubsub_auth::setup_publisher_client().await?);
+        self.remote_subscriber = Some(pubsub_auth::setup_subscriber_client().await?);
         self.event_id_gen = EventIdGenerator::new(sink_uid);
         self.postprocessors = make_postprocessors(processors.post)?;
         self.reply_channel = Some(reply_channel);
