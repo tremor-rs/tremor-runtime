@@ -85,11 +85,7 @@ rental! {
     }
 }
 
-impl<'run, 'event, 'script> Script
-where
-    'script: 'event,
-    'event: 'run,
-{
+impl Script {
     /// Parses a string and turns it into a script
     ///
     /// # Errors
@@ -289,14 +285,17 @@ where
     ///
     /// # Errors
     /// if the script fails to run for the given context, event state and metadata
-    pub fn run(
-        &'script self,
+    pub fn run<'run, 'event>(
+        &'event self,
         context: &'run EventContext,
         aggr: AggrType,
         event: &'run mut Value<'event>,
         state: &'run mut Value<'static>,
         meta: &'run mut Value<'event>,
-    ) -> Result<Return<'event>> {
+    ) -> Result<Return<'event>>
+    where
+        'event: 'run,
+    {
         self.script.suffix().run(context, aggr, event, state, meta)
     }
 }
