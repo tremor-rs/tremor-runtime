@@ -380,6 +380,17 @@ impl<'key> KnownKey<'key> {
     }
 }
 
+impl<'script> KnownKey<'script> {
+    /// turns the key into one with static lifetime
+    pub fn into_static(self) -> KnownKey<'static> {
+        let KnownKey { key, hash } = self;
+        KnownKey {
+            key: Cow::owned(key.to_string()),
+            hash,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unnecessary_operation, clippy::non_ascii_literal)]
@@ -470,8 +481,7 @@ mod tests {
 
     #[test]
     fn known_key_get_key() {
-        let key1 = KnownKey::from("snot");
-
+        let key1 = KnownKey::from("snot").into_static();
         assert_eq!(key1.key(), "snot");
     }
 }

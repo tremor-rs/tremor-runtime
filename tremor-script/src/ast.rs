@@ -23,9 +23,11 @@ pub mod eq;
 pub mod query;
 pub(crate) mod raw;
 mod support;
+mod to_static;
 mod upable;
 /// collection of AST visitors
 pub mod visitors;
+
 use self::eq::AstEq;
 use crate::interpreter::{exec_binary, exec_unary, AggrType, Cont, Env, ExecOpts, LocalStack};
 pub use crate::lexer::CompilationUnit;
