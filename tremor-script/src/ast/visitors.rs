@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-mod impl
 use super::{base_expr::BaseExpr, ClauseGroup, Comprehension};
 use super::{eq::AstEq, PredicateClause};
 use super::{
@@ -812,7 +811,8 @@ mod tests {
             })
             .cloned()
             .last()
-            .unwrap().into_static();
+            .unwrap()
+            .into_static();
         let mut visitor = Find42Visitor::default();
         visitor.walk_expr(&mut imut_expr)?;
         assert_eq!(

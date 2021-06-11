@@ -144,7 +144,7 @@ impl<'script> CustomFn<'script> {
 }
 
 impl<'script> Expr<'script> {
-    fn into_static(self) -> Expr<'static> {
+    pub(crate) fn into_static(self) -> Expr<'static> {
         match self {
             Expr::Match(e) => Expr::Match(Box::new(e.into_static())),
             Expr::IfElse(e) => Expr::IfElse(Box::new(e.into_static())),
@@ -283,22 +283,23 @@ impl<'script> Match<'script, Expr<'script>> {
         }
     }
 }
-impl<'script> IfElse<'script, ImutExprInt<'script>> {
-    pub(crate) fn into_static(self) -> IfElse<'static, ImutExprInt<'static>> {
-        let IfElse {
-            mid,
-            target,
-            if_clause,
-            else_clause,
-        } = self;
-        IfElse {
-            mid,
-            target: target.into_static(),
-            if_clause: if_clause.into_static(),
-            else_clause: else_clause.into_static(),
-        }
-    }
-}
+
+// impl<'script> IfElse<'script, ImutExprInt<'script>> {
+//     pub(crate) fn into_static(self) -> IfElse<'static, ImutExprInt<'static>> {
+//         let IfElse {
+//             mid,
+//             target,
+//             if_clause,
+//             else_clause,
+//         } = self;
+//         IfElse {
+//             mid,
+//             target: target.into_static(),
+//             if_clause: if_clause.into_static(),
+//             else_clause: else_clause.into_static(),
+//         }
+//     }
+// }
 
 impl<'script> IfElse<'script, Expr<'script>> {
     pub(crate) fn into_static(self) -> IfElse<'static, Expr<'static>> {
@@ -465,7 +466,7 @@ impl<'script> PredicateClause<'script, Expr<'script>> {
 
         PredicateClause {
             mid,
-            pattern,
+            pattern: pattern.into_static(),
             guard: guard.map(ImutExprInt::into_static),
             exprs: exprs.into_iter().map(Expr::into_static).collect(),
             last_expr: last_expr.into_static(),
@@ -922,6 +923,25 @@ impl<'script> ArrayPredicatePattern<'script> {
             ArrayPredicatePattern::Tilde(e) => ArrayPredicatePattern::Tilde(e),
             ArrayPredicatePattern::Record(e) => ArrayPredicatePattern::Record(e.into_static()),
             ArrayPredicatePattern::Ignore => ArrayPredicatePattern::Ignore,
+        }
+    }
+}
+
+impl<'script> InvokeAggrFn<'script> {
+    pub(crate) fn into_static(self) -> InvokeAggrFn<'static> {
+        let InvokeAggrFn {
+            mid,
+            invocable,
+            module,
+            fun,
+            args,
+        } = self;
+        InvokeAggrFn {
+            mid,
+            invocable,
+            module,
+            fun,
+            args: args.into_iter().map(ImutExpr::into_static).collect(),
         }
     }
 }
