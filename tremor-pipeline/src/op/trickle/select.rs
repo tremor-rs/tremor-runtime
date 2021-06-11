@@ -26,17 +26,7 @@ use std::mem;
 use std::sync::Arc;
 use tremor_common::stry;
 
-use tremor_script::{
-    self,
-    ast::{AggregateScratch, Aggregates, InvokeAggrFn, NodeMetas, Select, SelectStmt, WindowDecl},
-    interpreter::Env,
-    interpreter::LocalStack,
-    prelude::*,
-    query::StmtRental,
-    query::StmtRentalWrapper,
-    utils::sorted_serialize,
-    QueryRental, Value,
-};
+use tremor_script::{self, QueryRental, Value, ast::{Aggregates, Consts, InvokeAggrFn, NodeMetas, Select, SelectStmt, WindowDecl}, interpreter::Env, interpreter::LocalStack, prelude::*, query::StmtRental, query::StmtRentalWrapper, utils::sorted_serialize};
 
 #[derive(Debug, Clone)]
 pub struct GroupData<'groups> {
@@ -626,9 +616,8 @@ impl Operator for TrickleSelect {
 
             // NOTE We are unwrapping our rental wrapped stmt
 
-            // TODO: reason about soundness
             let SelectStmt {
-                ref stmt,
+                stmt: ref select,
                 ref mut aggregates,
                 ref mut aggregate_scratches,
                 ref mut consts,
@@ -636,10 +625,16 @@ impl Operator for TrickleSelect {
                 ref node_meta,
             } = stmt;
 
+            // We have the situation where by contract the statement outlives the event
+            // this is encoded in the program logic by the shutdown pattern of
+            // sink -> pipeline -> source
+            // There is no way to explain this to rust's borrow checker so we circumvent it here
+                      
             // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1024
-            let aggregates: &mut Aggregates = unsafe { mem::transmute(aggregates)};
+            let select: & Box<Select> = unsafe{ mem::transmute(select)};
             // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1024
-            let aggregate_scratches: &mut Option<(AggregateScratch, AggregateScratch)> = unsafe { mem::transmute(aggregate_scratches)};
+            let consts: & mut Consts  = unsafe{ mem::transmute(consts)};
+            let Select {  target, maybe_where, maybe_having, maybe_group_by, .. } = select.as_ref(); 
 
             let local_stack = tremor_script::interpreter::LocalStack::with_size(*locals);
             consts.window = Value::null();
@@ -651,7 +646,7 @@ impl Operator for TrickleSelect {
             //
             // Before any select processing, we filter by where clause
             //
-            if let Some(guard) = &stmt.maybe_where {
+            if let Some(guard) = maybe_where {
                 let (unwind_event, event_meta) = event.data.parts();
                 let env = Env {
                     context: &ctx,
@@ -666,7 +661,7 @@ impl Operator for TrickleSelect {
                         return Ok(EventAndInsights::default());
                     };
                 } else {
-                    let s: &Select = &stmt;
+                    let s: &Select = &select;
                     return Err(tremor_script::errors::query_guard_not_bool_err(
                         s, guard, &test, &node_meta,
                     )
@@ -676,7 +671,7 @@ impl Operator for TrickleSelect {
 
             let mut events = vec![];
 
-            let mut group_values =  if let Some(group_by) = &stmt.maybe_group_by {
+            let mut group_values =  if let Some(group_by) = &maybe_group_by {
                 let data = event.data.suffix();
                 group_by.generate_groups(&ctx, data.value(), state, &node_meta, data.meta())?
             } else {
@@ -693,11 +688,7 @@ impl Operator for TrickleSelect {
                     consts.group.push(group_str)?;
 
                     let ret  = event.data.rent_mut(|data| -> Result<_> {
-                        // This is sound since we're transmuting immutable to mutable
-                        // We can't specify the 'lifetime' of the event or it would be
-                        // `&'run mut Value<'event>`
-                        // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1024
-                        let (unwind_event, event_meta): (&mut Value, &mut Value) = unsafe{ mem::transmute(data.parts_mut())};
+                        let (unwind_event, event_meta): (&mut Value, &mut Value) = data.parts_mut();
 
                         let env = Env {
                             context: &ctx,
@@ -707,14 +698,14 @@ impl Operator for TrickleSelect {
                             recursion_limit: tremor_script::recursion_limit(),
                         };
                         let value =
-                            stmt.target
+                            target
                                 .run(opts, &env, unwind_event, state, event_meta, &local_stack)?;
 
                         let result = value.into_owned();
 
                         // evaluate having clause, if one exists
                         #[allow(clippy::option_if_let_else)] // The borrow checker prevents map_or
-                        Ok(if let Some(guard) = &stmt.maybe_having {
+                        Ok(if let Some(guard) = maybe_having {
                             let test = guard.run(opts, &env, &result, state, &NULL, &local_stack)?;
                             #[allow(clippy::option_if_let_else)] // The borrow checker prevents map_or
                             if let Some(test) = test.as_bool() {
@@ -725,7 +716,7 @@ impl Operator for TrickleSelect {
                                     Some(Ok(EventAndInsights::default()))
                                 }
                             } else {
-                                let s: &Select = &stmt;
+                                let s: &Select = &select;
                                 Some(Err(tremor_script::errors::query_guard_not_bool_err(
                                     s, guard, &test, &node_meta,
                                 ).into()))
@@ -782,7 +773,7 @@ impl Operator for TrickleSelect {
                         };
                         // here we have a 1:1 between input and output event and thus can keep the origin uri
                         if let Some(port_and_event) = stry!(execute_select_and_having(
-                            &stmt,
+                            &select,
                             &node_meta,
                             opts,
                             &local_stack,
@@ -832,7 +823,7 @@ impl Operator for TrickleSelect {
                             let mut outgoing_event_id = event_id_gen.next_id();
                             mem::swap(&mut outgoing_event_id, &mut this_group.id);
                             if let Some(port_and_event) = stry!(execute_select_and_having(
-                                &stmt,
+                                &select,
                                 &node_meta,
                                 opts,
                                 &local_stack,
@@ -883,7 +874,7 @@ impl Operator for TrickleSelect {
                             let mut outgoing_event_id = event_id_gen.next_id();
                             mem::swap(&mut outgoing_event_id, &mut this_group.id);
                             if let Some(port_and_event) = stry!(execute_select_and_having(
-                                &stmt,
+                                &select,
                                 &node_meta,
                                 opts,
                                 &local_stack,
@@ -1079,7 +1070,7 @@ impl Operator for TrickleSelect {
                                     event_id_scratch1 = this_group.id.clone(); // store the id for to be tracked by the next window
                                     mem::swap(&mut outgoing_event_id, &mut this_group.id);
                                     if let Some(port_and_event) = stry!(execute_select_and_having(
-                                        &stmt,
+                                        &select,
                                         &node_meta,
                                         opts,
                                         &local_stack,
@@ -1123,7 +1114,7 @@ impl Operator for TrickleSelect {
                                     event_id_scratch1 = this_group.id.clone(); // store the id for to be tracked by the next window
                                     mem::swap(&mut outgoing_event_id, &mut this_group.id);
                                     if let Some(port_and_event) = stry!(execute_select_and_having(
-                                        &stmt,
+                                        &select,
                                         &node_meta,
                                         opts,
                                         &local_stack,
@@ -1282,7 +1273,6 @@ impl Operator for TrickleSelect {
             let ingest_ns = signal.ingest_ns;
             let opts = Self::opts();
             select.rent_mut(|stmt| {
-            // TODO: reason about soundness
             let SelectStmt {
                 stmt,
                 aggregates,
@@ -1290,10 +1280,7 @@ impl Operator for TrickleSelect {
                 consts,
                 locals,
                 node_meta,
-            }: &mut SelectStmt = unsafe {
-                // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1024
-                mem::transmute(stmt)
-            };
+            }  = stmt;
             let mut res = EventAndInsights::default();
             // artificial event
             let artificial_event = Event {

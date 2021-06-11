@@ -27,11 +27,11 @@ use super::{
     Registry, Result, ScriptDecl, ScriptStmt, Select, SelectStmt, Serialize, Stmt, StreamStmt,
     Upable, Value, Warning, WindowDecl, WindowKind,
 };
-use crate::impl_expr;
 use crate::{
     ast::visitors::{GroupByExprExtractor, TargetEventRefVisitor},
     lexer::Range,
 };
+use crate::{ast::InvokeAggrFn, impl_expr};
 use beef::Cow;
 use value_trait::prelude::*;
 
@@ -151,6 +151,10 @@ impl<'script> Upable<'script> for StmtRaw<'script> {
                 helper.swap(&mut aggregates, &mut locals);
                 let stmt: Select<'script> = stmt.up(helper)?;
                 helper.swap(&mut aggregates, &mut locals);
+                let aggregates: Vec<_> = aggregates
+                    .into_iter()
+                    .map(InvokeAggrFn::into_static)
+                    .collect();
                 // only allocate scratches if they are really needed - when we have multiple windows
                 let aggregate_scratches = if stmt.windows.len() > 1 {
                     Some((
