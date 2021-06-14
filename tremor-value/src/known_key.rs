@@ -382,6 +382,7 @@ impl<'key> KnownKey<'key> {
 
 impl<'script> KnownKey<'script> {
     /// turns the key into one with static lifetime
+    #[must_use]
     pub fn into_static(self) -> KnownKey<'static> {
         let KnownKey { key, hash } = self;
         KnownKey {
