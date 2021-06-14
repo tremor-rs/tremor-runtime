@@ -5052,9 +5052,9 @@ dependencies = [
 
 [[package]]
 name = "serenity"
-version = "0.10.7"
+version = "0.10.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e7775b6c4a554e495372cfa5d0e70349c84c62415666cf80c1ea79bc447c78d9"
+checksum = "b68c1f5dbe25b32516f3f104726a9e8e3a96cf5960a106213241738ffe108f81"
 dependencies = [
  "async-trait",
  "async-tungstenite 0.11.0",
