@@ -19,7 +19,7 @@ use googapis::google::pubsub::v1::{
     publisher_client::PublisherClient, subscriber_client::SubscriberClient,
 };
 use googapis::google::pubsub::v1::{
-    AcknowledgeRequest, PublishRequest, PubsubMessage, PullRequest, PullResponse,
+    AcknowledgeRequest, PublishRequest, PubsubMessage, PullRequest, PullResponse, Subscription,
 };
 use std::collections::HashMap;
 use tonic::transport::Channel;
@@ -29,13 +29,14 @@ pub(crate) async fn send_message(
     project_id: &str,
     topic_name: &str,
     data_val: &[u8],
+    ordering_key: &str,
 ) -> Result<String> {
     let message = PubsubMessage {
         data: data_val.to_vec(),
         attributes: HashMap::new(),
-        message_id: "".into(),
+        message_id: "".into(), // ID of this message, assigned by the server when the message is published.
         publish_time: None,
-        ordering_key: "".to_string(),
+        ordering_key: ordering_key.to_string(),
     };
 
     let response = client
@@ -89,4 +90,34 @@ pub(crate) async fn acknowledge(
         })
         .await?;
     Ok(())
+}
+
+pub(crate) async fn create_subscription(
+    client: &mut SubscriberClient<Channel>,
+    project_id: &str,
+    topic_name: &str,
+    subscription_name: &str,
+    enable_message_ordering: bool,
+) -> Result<Subscription> {
+    let response = client
+        .create_subscription(Subscription {
+            name: format!(
+                "projects/{}/subscriptions/{}",
+                project_id, subscription_name
+            ),
+            topic: format!("projects/{}/topics/{}", project_id, topic_name),
+            push_config: None,
+            ack_deadline_seconds: 0,
+            retain_acked_messages: true,
+            message_retention_duration: None,
+            labels: HashMap::new(),
+            enable_message_ordering,
+            expiration_policy: None,
+            filter: "".into(),
+            dead_letter_policy: None,
+            retry_policy: None,
+            detached: false,
+        })
+        .await?;
+    Ok(response.into_inner())
 }
