@@ -26,7 +26,17 @@ use std::mem;
 use std::sync::Arc;
 use tremor_common::stry;
 
-use tremor_script::{self, QueryRental, Value, ast::{Aggregates, Consts, InvokeAggrFn, NodeMetas, Select, SelectStmt, WindowDecl}, interpreter::Env, interpreter::LocalStack, prelude::*, query::StmtRental, query::StmtRentalWrapper, utils::sorted_serialize};
+use tremor_script::{
+    self,
+    ast::{Aggregates, Consts, InvokeAggrFn, NodeMetas, Select, SelectStmt, WindowDecl},
+    interpreter::Env,
+    interpreter::LocalStack,
+    prelude::*,
+    query::StmtRental,
+    query::StmtRentalWrapper,
+    utils::sorted_serialize,
+    QueryRental, Value,
+};
 
 #[derive(Debug, Clone)]
 pub struct GroupData<'groups> {
@@ -629,12 +639,19 @@ impl Operator for TrickleSelect {
             // this is encoded in the program logic by the shutdown pattern of
             // sink -> pipeline -> source
             // There is no way to explain this to rust's borrow checker so we circumvent it here
-                      
+            // We need this for clippy
+            let select: &Select = select;
             // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1024
-            let select: & Box<Select> = unsafe{ mem::transmute(select)};
+            let select: &Select = unsafe{ mem::transmute(select)};
             // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1024
-            let consts: & mut Consts  = unsafe{ mem::transmute(consts)};
-            let Select {  target, maybe_where, maybe_having, maybe_group_by, .. } = select.as_ref(); 
+            let consts: &mut Consts  = unsafe{ mem::transmute(consts)};
+            let Select {
+                target,
+                maybe_where,
+                maybe_having,
+                maybe_group_by,
+                ..
+             } = select;
 
             let local_stack = tremor_script::interpreter::LocalStack::with_size(*locals);
             consts.window = Value::null();

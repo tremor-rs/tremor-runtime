@@ -16,7 +16,14 @@ use beef::Cow;
 
 use crate::CustomFn;
 
-use super::*;
+use super::{
+    ArrayPattern, ArrayPredicatePattern, AssignPattern, BinExpr, Bytes, BytesPart, ClauseGroup,
+    ClausePreCondition, Comprehension, ComprehensionCase, DefaultCase, EmitExpr, EventPath, Expr,
+    Field, IfElse, ImutExpr, ImutExprInt, Invocable, Invoke, InvokeAggrFn, List, Literal,
+    LocalPath, Match, Merge, MetadataPath, Patch, PatchOperation, Path, Pattern, PredicateClause,
+    PredicatePattern, Record, RecordPattern, Recur, ReservedPath, Segment, StatePath,
+    StrLitElement, StringLit, TuplePattern, UnaryExpr,
+};
 
 impl<'script> ImutExpr<'script> {
     pub(crate) fn into_static(self) -> ImutExpr<'static> {
