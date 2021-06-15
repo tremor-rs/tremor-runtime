@@ -7,6 +7,13 @@ name = "tremor-api"
 version = "0.11.4"
 
 [dependencies]
+async-channel = "1"
+async-std = { version = "1.10.0", features = [
+	"unstable",
+	"attributes",
+	"tokio03",
+	"tokio1",
+] }
 hashbrown = { version = "0.11", features = ["serde"] }
 http-types = "2.12"
 serde = "1"

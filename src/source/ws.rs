@@ -40,11 +40,12 @@ pub struct Ws {
     onramp_id: TremorUrl,
 }
 
-impl onramp::Impl for Ws {
-    fn from_config(id: &TremorUrl, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
+pub(crate) struct Builder {}
+impl onramp::Builder for Builder {
+    fn from_config(&self, id: &TremorUrl, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
-            Ok(Box::new(Self {
+            Ok(Box::new(Ws {
                 config,
                 onramp_id: id.clone(),
             }))
@@ -343,7 +344,6 @@ impl Source for Int {
         let listen_port = self.config.port;
         let listener = TcpListener::bind((self.config.host.as_str(), listen_port)).await?;
         let (tx, rx) = bounded(crate::QSIZE);
-        let uid = self.uid;
         let source_url = self.onramp_id.clone();
 
         let link = self.is_linked;
@@ -354,7 +354,6 @@ impl Source for Int {
             let mut stream_id = 0;
             while let Ok((stream, socket)) = listener.accept().await {
                 let uri = EventOriginUri {
-                    uid,
                     scheme: "tremor-ws".to_string(),
                     host: socket.ip().to_string(),
                     port: Some(socket.port()),

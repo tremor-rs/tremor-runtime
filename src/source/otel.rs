@@ -61,11 +61,10 @@ impl std::fmt::Debug for Int {
 }
 
 impl Int {
-    fn from_config(uid: u64, onramp_id: TremorUrl, config: &Config) -> Self {
+    fn from_config(onramp_id: TremorUrl, config: &Config) -> Self {
         let (tx, rx) = bounded(128);
         let config = config.clone();
         let origin = EventOriginUri {
-            uid,
             scheme: "tremor-otel".to_string(),
             host: hostname(),
             port: None,
@@ -82,11 +81,12 @@ impl Int {
     }
 }
 
-impl onramp::Impl for OpenTelemetry {
-    fn from_config(id: &TremorUrl, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
+pub(crate) struct Builder {}
+impl onramp::Builder for Builder {
+    fn from_config(&self, id: &TremorUrl, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
-            Ok(Box::new(Self {
+            Ok(Box::new(OpenTelemetry {
                 config,
                 onramp_id: id.clone(),
             }))
@@ -192,7 +192,7 @@ impl Source for Int {
 #[async_trait::async_trait]
 impl Onramp for OpenTelemetry {
     async fn start(&mut self, config: OnrampConfig<'_>) -> Result<onramp::Addr> {
-        let source = Int::from_config(config.onramp_uid, self.onramp_id.clone(), &self.config);
+        let source = Int::from_config(self.onramp_id.clone(), &self.config);
         SourceManager::start(source, config).await
     }
 

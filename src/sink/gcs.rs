@@ -77,12 +77,13 @@ impl std::fmt::Display for StorageCommand {
     }
 }
 
-impl offramp::Impl for GoogleCloudStorage {
-    fn from_config(_config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
+pub(crate) struct Builder {}
+impl offramp::Builder for Builder {
+    fn from_config(&self, _config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         let headers = HeaderMap::new();
         let remote = Some(auth::json_api_client(&headers)?);
         let hostport = "storage.googleapis.com:443";
-        Ok(SinkManager::new_box(Self {
+        Ok(SinkManager::new_box(GoogleCloudStorage {
             remote,
             is_down: false,
             qos_facility: Box::new(QoSFacilities::recoverable(hostport.to_string())),
@@ -254,7 +255,6 @@ impl Sink for GoogleCloudStorage {
                             data: (response, meta).into(),
                             ingest_ns: nanotime(),
                             origin_uri: Some(EventOriginUri {
-                                uid: 0,
                                 scheme: "gRPC".into(),
                                 host: "".into(),
                                 port: None,

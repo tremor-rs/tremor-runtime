@@ -32,9 +32,18 @@ impl Error {
         Self { code, error }
     }
 
-    /// Convenience function for creating aretefact not found errors
-    pub fn not_found() -> Self {
+    /// Convenience function for creating artefact not found errors
+    pub fn artefact_not_found() -> Self {
         Self::new(StatusCode::NotFound, "Artefact not found".into())
+    }
+
+    /// Convenience function for creating instance not found errors
+    pub fn instance_not_found() -> Self {
+        Self::new(StatusCode::NotFound, "Instance not found".into())
+    }
+    /// Convenience function for denoting bad requests
+    pub fn bad_request(msg: String) -> Self {
+        Self::new(StatusCode::BadRequest, msg)
     }
 }
 
@@ -63,6 +72,21 @@ impl From<Error> for Response {
 impl From<std::io::Error> for Error {
     fn from(e: std::io::Error) -> Self {
         Self::new(StatusCode::InternalServerError, format!("IO error: {}", e))
+    }
+}
+
+impl From<async_channel::RecvError> for Error {
+    fn from(e: async_channel::RecvError) -> Self {
+        Self::new(
+            StatusCode::InternalServerError,
+            format!("Error receiving from channel: {}", e),
+        )
+    }
+}
+
+impl From<async_std::future::TimeoutError> for Error {
+    fn from(_e: async_std::future::TimeoutError) -> Self {
+        Self::new(StatusCode::InternalServerError, "Request timed out".into())
     }
 }
 
@@ -117,9 +141,20 @@ impl From<TremorError> for Error {
                 StatusCode::Conflict,
                 "Resource still has active instances".into(),
             ),
-            ErrorKind::ArtefactNotFound(_) => {
-                Error::new(StatusCode::NotFound, "Artefact not found".into())
+            ErrorKind::ArtefactNotFound(url) => {
+                Error::new(StatusCode::NotFound, format!("Artefact not found {}", url))
             }
+            ErrorKind::InstanceNotFound(url) => {
+                Error::new(StatusCode::NotFound, format!("Instance not found {}", url))
+            }
+            ErrorKind::InvalidTremorUrl(msg, url) => Error::new(
+                StatusCode::BadRequest,
+                format!("Invalid Tremor Url: {} : {}", url, msg),
+            ),
+            ErrorKind::InvalidInstanceUrl(url) => Error::new(
+                StatusCode::BadRequest,
+                format!("Invalid instance Url: {}", url),
+            ),
             ErrorKind::PublishFailedAlreadyExists(_) => Error::new(
                 StatusCode::Conflict,
                 "A resource with the requested ID already exists".into(),

@@ -217,7 +217,6 @@ impl Wal {
             broken: true,
             full: false,
             origin_uri: Some(EventOriginUri {
-                uid: 0,
                 scheme: Self::URI_SCHEME.to_string(),
                 host: "pipeline".to_string(),
                 port: None,
@@ -260,7 +259,7 @@ impl Wal {
         (&mut write[..]).write_u64::<BigEndian>(wal_id)?;
 
         // TODO: figure out if handling of separate streams makes sense here
-        let mut new_event_id = EventId::new(source_id, DEFAULT_STREAM_ID, wal_id);
+        let mut new_event_id = EventId::from_id(source_id, DEFAULT_STREAM_ID, wal_id);
         new_event_id.track(&event.id);
         event.id = new_event_id;
 
@@ -429,9 +428,7 @@ impl Operator for Wal {
         self.store_event(uid, event)?;
 
         let insights = if let Some(op_meta) = op_meta {
-            let mut insight = Event::cb_ack(ingest_ns, id);
-            insight.op_meta = op_meta;
-            vec![insight]
+            vec![Event::cb_ack(ingest_ns, id, op_meta)]
         } else {
             vec![]
         };
@@ -522,7 +519,7 @@ mod test {
         assert_eq!(None, o.confirmed);
 
         // acknowledge the first event
-        i = Event::cb_ack(e.ingest_ns, r.events[0].1.id.clone());
+        i = Event::cb_ack(e.ingest_ns, r.events[0].1.id.clone(), OpMeta::default());
         o.on_contraflow(wal_uid, &mut i);
 
         // we still have two events stored
@@ -545,7 +542,7 @@ mod test {
         assert_eq!(Some(Idx::from(id.event_id())), o.confirmed);
 
         // acknowledge the second event
-        i = Event::cb_ack(e.ingest_ns, r.events[1].1.id.clone());
+        i = Event::cb_ack(e.ingest_ns, r.events[1].1.id.clone(), OpMeta::default());
         o.on_contraflow(wal_uid, &mut i);
 
         // still 1 left

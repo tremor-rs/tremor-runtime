@@ -30,6 +30,7 @@ use std::fmt;
 pub use crate::registry::ServantId;
 /// A binding artefact
 pub use artefact::Binding as BindingArtefact;
+pub(crate) use artefact::ConnectorArtefact;
 pub(crate) use artefact::OfframpArtefact;
 pub(crate) use artefact::OnrampArtefact;
 /// A pipeline artefact
@@ -213,6 +214,7 @@ pub struct Repositories {
     pipeline: async_channel::Sender<Msg<PipelineArtefact>>,
     onramp: async_channel::Sender<Msg<OnrampArtefact>>,
     offramp: async_channel::Sender<Msg<OfframpArtefact>>,
+    connector: async_channel::Sender<Msg<ConnectorArtefact>>,
     binding: async_channel::Sender<Msg<BindingArtefact>>,
 }
 
@@ -238,6 +240,7 @@ impl Repositories {
             pipeline: Repository::new().start(),
             onramp: Repository::new().start(),
             offramp: Repository::new().start(),
+            connector: Repository::new().start(),
             binding: Repository::new().start(),
         }
     }
@@ -494,6 +497,94 @@ impl Repositories {
     pub async fn unbind_offramp(&self, id: &TremorUrl) -> Result<OfframpArtefact> {
         let (tx, rx) = bounded(1);
         self.offramp
+            .send(Msg::UnregisterInstance(tx, id.clone(), id.clone()))
+            .await?;
+        rx.recv().await?
+    }
+
+    /// List connectors
+    ///
+    /// # Errors
+    ///  * if we can't list connectors
+    pub async fn list_connectors(&self) -> Result<Vec<ArtefactId>> {
+        let (tx, rx) = bounded(1);
+        self.connector.send(Msg::ListArtefacts(tx)).await?;
+        Ok(rx.recv().await?)
+    }
+
+    /// Serialises connectors
+    ///
+    /// # Errors
+    ///  * if we cna't serialize a connector
+    pub async fn serialize_connectors(&self) -> Result<Vec<ConnectorArtefact>> {
+        let (tx, rx) = bounded(1);
+        self.connector.send(Msg::SerializeArtefacts(tx)).await?;
+        Ok(rx.recv().await?)
+    }
+
+    /// Find a connector
+    ///
+    /// # Errors
+    ///  * if we can't find a connector
+    pub async fn find_connector(
+        &self,
+        id: &TremorUrl,
+    ) -> Result<Option<RepoWrapper<ConnectorArtefact>>> {
+        let (tx, rx) = bounded(1);
+        self.connector
+            .send(Msg::FindArtefact(tx, id.clone()))
+            .await?;
+        rx.recv().await?
+    }
+
+    /// Publishes a connector
+    ///
+    /// # Errors
+    ///  * if we can't publish a connector
+    pub async fn publish_connector(
+        &self,
+        id: &TremorUrl,
+        system: bool,
+        artefact: ConnectorArtefact,
+    ) -> Result<ConnectorArtefact> {
+        let (tx, rx) = bounded(1);
+        self.connector
+            .send(Msg::PublishArtefact(tx, id.clone(), system, artefact))
+            .await?;
+        rx.recv().await?
+    }
+
+    /// Unpublishes a connector
+    ///
+    /// # Errors
+    ///  * if we can't unpublish a connector
+    pub async fn unpublish_connector(&self, id: &TremorUrl) -> Result<ConnectorArtefact> {
+        let (tx, rx) = bounded(1);
+        self.connector
+            .send(Msg::UnpublishArtefact(tx, id.clone()))
+            .await?;
+        rx.recv().await?
+    }
+
+    /// Binds a connector
+    ///
+    /// # Errors
+    ///  * if we can't bind the connector
+    pub async fn bind_connector(&self, id: &TremorUrl) -> Result<ConnectorArtefact> {
+        let (tx, rx) = bounded(1);
+        self.connector
+            .send(Msg::RegisterInstance(tx, id.clone(), id.clone()))
+            .await?;
+        rx.recv().await?
+    }
+
+    /// Unbinds a connector
+    ///
+    /// # Errors
+    ///  * if we can't unbind the connector
+    pub async fn unbind_connector(&self, id: &TremorUrl) -> Result<ConnectorArtefact> {
+        let (tx, rx) = bounded(1);
+        self.connector
             .send(Msg::UnregisterInstance(tx, id.clone(), id.clone()))
             .await?;
         rx.recv().await?

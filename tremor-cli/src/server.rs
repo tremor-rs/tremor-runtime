@@ -185,6 +185,17 @@ fn api_server(world: &World) -> tide::Server<api::State> {
     app.at("/offramp/:aid")
         .get(|r| handle_api_request(r, api::offramp::get_artefact))
         .delete(|r| handle_api_request(r, api::offramp::unpublish_artefact));
+    // connectors api
+    app.at("/connector")
+        .get(|r| handle_api_request(r, api::connector::list_artefacts))
+        .post(|r| handle_api_request(r, api::connector::publish_artefact));
+    app.at("/connector/:aid")
+        .get(|r| handle_api_request(r, api::connector::get_artefact))
+        .delete(|r| handle_api_request(r, api::connector::unpublish_artefact));
+    app.at("/connector/:aid/:sid")
+        .get(|r| handle_api_request(r, api::connector::get_instance))
+        // pause, resume
+        .patch(|r| handle_api_request(r, api::connector::patch_instance));
 
     app
 }

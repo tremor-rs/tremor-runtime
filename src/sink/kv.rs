@@ -29,6 +29,8 @@ use tremor_value::literal;
 pub struct Config {
     dir: String,
 }
+
+impl ConfigImpl for Config {}
 pub struct Kv {
     sink_url: TremorUrl,
     event_origin_uri: EventOriginUri,
@@ -118,14 +120,14 @@ impl Kv {
     }
 }
 
-impl offramp::Impl for Kv {
-    fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
+pub(crate) struct Builder {}
+impl offramp::Builder for Builder {
+    fn from_config(&self, config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         if let Some(config) = config {
-            let config: Config = serde_yaml::from_value(config.clone())?;
+            let config: Config = Config::new(config)?;
 
             let db = sled::open(&config.dir)?;
             let event_origin_uri = EventOriginUri {
-                uid: 0,
                 scheme: "tremor-kv".to_string(),
                 host: "localhost".to_string(),
                 port: None,
@@ -349,7 +351,6 @@ impl Sink for Kv {
         _is_linked: bool,
         reply_channel: Sender<sink::Reply>,
     ) -> Result<()> {
-        self.event_origin_uri.uid = sink_uid;
         self.sink_url = sink_url.clone();
         self.idgen.set_source(sink_uid);
         self.reply_tx = reply_channel;
