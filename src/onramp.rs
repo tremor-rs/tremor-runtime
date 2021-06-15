@@ -82,7 +82,7 @@ pub(crate) fn lookup(
         "udp" => udp::Udp::from_config(id, config),
         "tcp" => tcp::Tcp::from_config(id, config),
         "rest" => rest::Rest::from_config(id, config),
-        "sse" => sse::Sse::from_config(id,config),
+        "sse" => sse::Sse::from_config(id, config),
         "ws" => ws::Ws::from_config(id, config),
         "discord" => discord::Discord::from_config(id, config),
         "otel" => otel::OpenTelemetry::from_config(id, config),
