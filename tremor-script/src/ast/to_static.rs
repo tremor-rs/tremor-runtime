@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// This is just one big identify function with a few Cow::owned in it
+#![cfg(not(tarpaulin_include))]
+
 use beef::Cow;
 
 use crate::CustomFn;
