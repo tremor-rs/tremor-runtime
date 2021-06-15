@@ -300,13 +300,14 @@ pub struct Rest {
     client: Client,
 }
 
-impl offramp::Impl for Rest {
-    fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
+pub(crate) struct Builder {}
+impl offramp::Builder for Builder {
+    fn from_config(&self, config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
             let num_inflight_requests = Arc::new(AtomicMaxCounter::new(config.concurrency));
             let client = surf::client();
-            Ok(SinkManager::new_box(Self {
+            Ok(SinkManager::new_box(Rest {
                 uid: 0,
                 sink_url: TremorUrl::from_offramp_id("rest")?, // dummy
                 config,
@@ -341,7 +342,6 @@ impl Sink for Rest {
                 None
             });
         }
-        let sink_uid = self.uid;
         let id = event.id.clone();
         let op_meta = if event.transactional {
             Some(event.op_meta.clone())
@@ -372,7 +372,6 @@ impl Sink for Rest {
                     SendTaskInMsg::Request(request) => {
                         let url = request.url();
                         let event_origin_uri = EventOriginUri {
-                            uid: sink_uid,
                             scheme: "tremor-rest".to_string(),
                             host: url.host_str().map_or(String::new(), ToString::to_string),
                             port: url.port(),
@@ -526,7 +525,6 @@ async fn codec_task(
     debug!("[Sink::{}] Codec task started.", &sink_url);
     let mut response_ids = EventIdGenerator::new(sink_uid);
     let response_origin_uri = EventOriginUri {
-        uid: sink_uid,
         scheme: "tremor-rest".to_string(),
         host: hostname(),
         ..EventOriginUri::default()
@@ -718,8 +716,7 @@ async fn codec_task(
                 // report send error as CB fail
                 // sending a CB close would mean we need to take measures to reopen - introduce a healthcheck
                 if let Some(op_meta) = op_meta {
-                    let mut insight = Event::cb_fail(nanotime(), id.clone());
-                    insight.op_meta = op_meta;
+                    let insight = Event::cb_fail(nanotime(), id.clone(), op_meta);
                     if let Err(send_err) = reply_tx.send(sink::Reply::Insight(insight)).await {
                         error!(
                             "[Sink::{}] Error sending CB trigger event for event {}: {}",

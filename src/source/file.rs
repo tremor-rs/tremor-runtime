@@ -68,7 +68,7 @@ impl std::fmt::Debug for Int {
 impl Int {
     const SLEEP_ON_DONE_MS: u64 = 10;
 
-    async fn from_config(uid: u64, onramp_id: TremorUrl, config: Config) -> Result<Self> {
+    async fn from_config(onramp_id: TremorUrl, config: Config) -> Result<Self> {
         let source_data_file = BufReader::new(file::open(&config.source).await?);
         let ext = file::extension(&config.source);
         let lines = if ext == Some("xz") {
@@ -80,7 +80,6 @@ impl Int {
         };
 
         let origin_uri = EventOriginUri {
-            uid,
             scheme: "tremor-file".to_string(),
             host: hostname(),
             port: None,
@@ -95,11 +94,12 @@ impl Int {
     }
 }
 
-impl onramp::Impl for File {
-    fn from_config(id: &TremorUrl, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
+pub(crate) struct Builder {}
+impl onramp::Builder for Builder {
+    fn from_config(&self, id: &TremorUrl, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
-            Ok(Box::new(Self {
+            Ok(Box::new(File {
                 config,
                 onramp_id: id.clone(),
             }))
@@ -147,12 +147,7 @@ impl Source for Int {
 #[async_trait::async_trait]
 impl Onramp for File {
     async fn start(&mut self, config: OnrampConfig<'_>) -> Result<onramp::Addr> {
-        let source = Int::from_config(
-            config.onramp_uid,
-            self.onramp_id.clone(),
-            self.config.clone(),
-        )
-        .await?;
+        let source = Int::from_config(self.onramp_id.clone(), self.config.clone()).await?;
         SourceManager::start(source, config).await
     }
     fn default_codec(&self) -> &str {

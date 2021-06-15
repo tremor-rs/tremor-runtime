@@ -13,7 +13,6 @@
 // limitations under the License.
 #![cfg(not(tarpaulin_include))]
 
-use crate::errors::Result;
 use crate::source::prelude::*;
 
 use async_std::channel::{bounded, Receiver, Sender};
@@ -197,7 +196,6 @@ impl rentals::MessageStream {
 }
 
 pub struct Int {
-    uid: u64,
     config: Config,
     onramp_id: TremorUrl,
     stream: Option<rentals::MessageStream>,
@@ -248,9 +246,8 @@ impl Int {
         }
         tm
     }
-    fn from_config(uid: u64, onramp_id: TremorUrl, config: &Config) -> Self {
+    fn from_config(onramp_id: TremorUrl, config: &Config) -> Self {
         let origin_uri = EventOriginUri {
-            uid,
             scheme: "tremor-kafka".to_string(),
             host: "not-connected".to_string(),
             port: None,
@@ -264,7 +261,6 @@ impl Int {
             .map_or(true, |v| v == "true");
 
         Self {
-            uid,
             config: config.clone(),
             onramp_id,
             stream: None,
@@ -276,11 +272,12 @@ impl Int {
     }
 }
 
-impl onramp::Impl for Kafka {
-    fn from_config(id: &TremorUrl, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
+pub(crate) struct Builder {}
+impl onramp::Builder for Builder {
+    fn from_config(&self, id: &TremorUrl, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
-            Ok(Box::new(Self {
+            Ok(Box::new(Kafka {
                 config,
                 onramp_id: id.clone(),
             }))
@@ -556,14 +553,17 @@ impl Source for Int {
             }
         };
         self.origin_uri = EventOriginUri {
-            uid: self.uid,
             scheme: "tremor-kafka".to_string(),
             host,
             port,
             path: vec![],
         };
 
-        info!("[Source::{}] Starting kafka onramp", self.onramp_id);
+        let (version_n, version_s) = rdkafka::util::get_rdkafka_version();
+        info!(
+            "[Source::{}] Starting kafka onramp with rdkafka 0x{:08x}, {}",
+            self.onramp_id, version_n, version_s
+        );
         // Setting up the configuration with default and then overwriting
         // them with custom settings.
         //
@@ -666,7 +666,7 @@ impl Source for Int {
 #[async_trait::async_trait]
 impl Onramp for Kafka {
     async fn start(&mut self, config: OnrampConfig<'_>) -> Result<onramp::Addr> {
-        let source = Int::from_config(config.onramp_uid, self.onramp_id.clone(), &self.config);
+        let source = Int::from_config(self.onramp_id.clone(), &self.config);
         SourceManager::start(source, config).await
     }
     fn default_codec(&self) -> &str {

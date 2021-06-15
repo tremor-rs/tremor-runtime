@@ -72,8 +72,9 @@ pub struct Elastic {
     origin_uri: EventOriginUri,
 }
 
-impl offramp::Impl for Elastic {
-    fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
+pub(crate) struct Builder {}
+impl offramp::Builder for Builder {
+    fn from_config(&self, config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
             let client = SyncClientBuilder::new()
@@ -84,7 +85,7 @@ impl offramp::Impl for Elastic {
             let (tx, _rx) = bounded(1); // dummy value
             let (res_tx, _res_rx) = bounded(1); // dummy value
 
-            Ok(SinkManager::new_box(Self {
+            Ok(SinkManager::new_box(Elastic {
                 sink_url: TremorUrl::from_offramp_id("elastic")?, // just a dummy value, gonna be overwritten on init
                 client,
                 queue,
@@ -531,7 +532,7 @@ impl Sink for Elastic {
         _input: &str,
         _codec: &mut dyn Codec,
         _codec_map: &HashMap<String, Box<dyn Codec>>,
-        mut event: Event,
+        event: Event,
     ) -> ResultVec {
         if event.is_empty() {
             // nothing to send to ES, an empty event would result in
@@ -575,7 +576,6 @@ impl Sink for Elastic {
         if is_linked {
             let event_id_gen = EventIdGenerator::new(sink_uid);
             self.origin_uri = EventOriginUri {
-                uid: sink_uid, // placeholder,
                 scheme: "elastic".to_string(),
                 host: cluster_name,
                 port: None,

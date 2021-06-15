@@ -123,13 +123,14 @@ pub struct Nats {
     merged_meta: OpMeta,
 }
 
-impl offramp::Impl for Nats {
-    fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
+pub(crate) struct Builder {}
+impl offramp::Builder for Builder {
+    fn from_config(&self, config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
             let (dummy_tx, _) = bounded(1);
             let (error_tx, error_rx) = bounded(crate::QSIZE);
-            Ok(SinkManager::new_box(Self {
+            Ok(SinkManager::new_box(Nats {
                 sink_url: TremorUrl::from_offramp_id("nats")?,
                 config,
                 postprocessors: vec![],
@@ -221,8 +222,11 @@ impl Sink for Nats {
                     match publish_result {
                         Ok(()) => {
                             if event.transactional {
-                                let mut insight = Event::cb_ack(ingest_ns, event.id.clone());
-                                insight.op_meta = self.merged_meta.clone();
+                                let mut insight = Event::cb_ack(
+                                    ingest_ns,
+                                    event.id.clone(),
+                                    self.merged_meta.clone(),
+                                );
                                 insight.data = (Value::null(), literal!({ "time": processing_start.elapsed().as_millis() as u64 })).into();
 
                                 if let Err(e) =

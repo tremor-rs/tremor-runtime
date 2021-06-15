@@ -258,6 +258,8 @@ pub(crate) struct Api {
       args:
         - FORMAT:
             short: f
+            multiple_values: false
+            multiple_occurrences: false
             about: Sets the output format
             possible_values: [json, yaml]
             takes_value: true

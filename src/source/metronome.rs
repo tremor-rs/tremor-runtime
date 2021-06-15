@@ -34,19 +34,19 @@ pub struct Metronome {
     onramp_id: TremorUrl,
 }
 
-impl onramp::Impl for Metronome {
-    fn from_config(id: &TremorUrl, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
+pub(crate) struct Builder {}
+impl onramp::Builder for Builder {
+    fn from_config(&self, id: &TremorUrl, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
             let origin_uri = EventOriginUri {
-                uid: 0,
                 scheme: "tremor-metronome".to_string(),
                 host: hostname(),
                 port: None,
                 path: vec![config.interval.to_string()],
             };
             let duration = Duration::from_millis(config.interval);
-            Ok(Box::new(Self {
+            Ok(Box::new(Metronome {
                 config,
                 origin_uri,
                 duration,

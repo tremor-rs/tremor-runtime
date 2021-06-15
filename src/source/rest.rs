@@ -52,11 +52,12 @@ pub struct Rest {
     onramp_id: TremorUrl,
 }
 
-impl onramp::Impl for Rest {
-    fn from_config(id: &TremorUrl, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
+pub(crate) struct Builder {}
+impl onramp::Builder for Builder {
+    fn from_config(&self, id: &TremorUrl, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
-            Ok(Box::new(Self {
+            Ok(Box::new(Rest {
                 config,
                 onramp_id: id.clone(),
             }))
@@ -144,7 +145,6 @@ struct ServerState {
 async fn handle_request(mut req: Request<ServerState>) -> tide::Result<Response> {
     // TODO cache parts of this and update host only on new request
     let origin_uri = EventOriginUri {
-        uid: req.state().uid,
         scheme: "tremor-rest".to_string(),
         host: req
             .host()
