@@ -11,18 +11,45 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
 #![cfg(not(tarpaulin_include))]
+
 use crate::source::prelude::*;
 use async_channel::{Sender, TryRecvError};
-use surf_sse;
+use halfbrown::HashMap;
+use surf::middleware::{Middleware, Next};
+use surf::{Client, Request, Response};
 
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct Config {
-    // url
+    /// URL for the sse endpoint
     pub url: String,
+    /// Header modifications to the request.
+    #[serde(default)]
+    pub headers: HashMap<String, String>,
 }
 impl ConfigImpl for Config {}
+
+struct MiddlewareHeader {
+    header: HashMap<String, String>,
+}
+
+#[surf::utils::async_trait]
+impl Middleware for MiddlewareHeader {
+    async fn handle(
+        &self,
+        req: Request,
+        client: Client,
+        next: Next<'_>,
+    ) -> std::result::Result<Response, http_types::Error> {
+        let mut req = req;
+        // set the headers in the request.
+        for (name, value) in self.header.iter() {
+            req.append_header(name.as_str(), value.as_str());
+        }
+        let resp = next.run(req, client).await?;
+        Ok(resp)
+    }
+}
 
 pub struct Sse {
     pub config: Config,
@@ -46,7 +73,7 @@ impl onramp::Impl for Sse {
 #[async_trait::async_trait()]
 impl Onramp for Sse {
     async fn start(&mut self, config: OnrampConfig<'_>) -> Result<onramp::Addr> {
-        let source = Int::from_config(config.onramp_uid, self.onramp_id.clone(), &self.config)?;
+        let source = Int::from_config(config.onramp_uid, self.onramp_id.clone(), &self.config);
         SourceManager::start(source, config).await
     }
 
@@ -69,31 +96,33 @@ impl std::fmt::Debug for Int {
 }
 
 impl Int {
-    fn from_config(uid: u64, onramp_id: TremorUrl, config: &Config) -> Result<Self> {
-        Ok(Int {
+    fn from_config(uid: u64, onramp_id: TremorUrl, config: &Config) -> Self {
+        Int {
             uid,
             config: config.clone(),
             onramp_id,
             event_source: None,
-        })
+        }
     }
 }
 
 async fn handle_init(
     url: surf_sse::Url,
+    headers: HashMap<String, String>,
     tx: Sender<surf_sse::Event>,
-) -> Result<()>{
-    // Run the event source here.
-    let mut event_source = surf_sse::EventSource::new(url);
+) -> Result<()> {
+    // Create the specific client.
+    let client = surf::client().with(MiddlewareHeader { header: headers });
+    // Ok to block here. This is an indirection from the main thread.
+    let mut event_source = surf_sse::EventSource::with_client(client, url);
 
-    // Potential Problem on calling next. There is try_next available we need future_util crate for that.
     while let Some(event) = event_source.next().await {
         match event {
             Ok(event) => {
                 tx.send(event).await?;
             }
             Err(e) => {
-                error!("SSE error while processing response :{}", e);
+                error!("SSE Source Error: {}", e);
             }
         };
     }
@@ -108,6 +137,15 @@ impl Source for Int {
     }
 
     async fn init(&mut self) -> Result<SourceState> {
+        // Neccessary check as Isahc(Curl) client panics if the url isn't complete. Seems like an edge case.
+        // Maybe use the H1-client as the backend. Though Heinz might have a better solution which is impl in rest sink.
+        // How shall I output this error.
+        let url = self.config.url.as_str().parse();
+        let _url: http::Uri = match url {
+            Ok(url) => url,
+            Err(err) => return Err(err.to_string().into()),
+        };
+
         info!(
             "[Source::{}] subscribing to {}",
             self.onramp_id.to_string(),
@@ -116,8 +154,9 @@ impl Source for Int {
 
         let (tx, rx) = bounded(crate::QSIZE);
         let url: surf_sse::Url = self.config.url.parse()?;
+        let headers = self.config.headers.clone();
         // The client runs with default configuration from crate
-        task::spawn(handle_init(url,tx));
+        task::spawn(handle_init(url, headers, tx));
         self.event_source = Some(rx);
 
         Ok(SourceState::Connected)
@@ -136,22 +175,20 @@ impl Source for Int {
         self.event_source.as_ref().map_or_else(
             // There is not recv.
             || Ok(SourceReply::StateChange(SourceState::Disconnected)),
-            |event_source| {
-                match event_source.try_recv() {
-                    Ok(event) => {
-                        let src_rply = SourceReply::Data {
-                            origin_uri: origin_uri.clone(),
-                            data: event.data.into_bytes(),
-                            meta: None,
-                            codec_override: None,
-                            stream: 0,
-                        };
-                        Ok(src_rply)
-                    }
-                    Err(TryRecvError::Empty) => Ok(SourceReply::Empty(10)),
-                    Err(TryRecvError::Closed) => {
-                        Ok(SourceReply::StateChange(SourceState::Disconnected))
-                    }
+            |event_source| match event_source.try_recv() {
+                Ok(event) => {
+                    let src_rply = SourceReply::Data {
+                        origin_uri: origin_uri.clone(),
+                        data: event.data.into_bytes(),
+                        meta: None,
+                        codec_override: None,
+                        stream: 0,
+                    };
+                    Ok(src_rply)
+                }
+                Err(TryRecvError::Empty) => Ok(SourceReply::Empty(10)),
+                Err(TryRecvError::Closed) => {
+                    Ok(SourceReply::StateChange(SourceState::Disconnected))
                 }
             },
         )
