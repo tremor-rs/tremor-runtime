@@ -359,7 +359,7 @@ impl Run {
                 if let Err(e) = runnable.enqueue(
                     "in",
                     Event {
-                        id: EventId::new(0, 0, *id),
+                        id: EventId::new(0, 0, *id, 0),
                         data: value.clone(),
                         ingest_ns: at,
                         ..Event::default()

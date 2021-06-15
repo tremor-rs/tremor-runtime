@@ -18,6 +18,7 @@
 #![allow(clippy::large_enum_variant)]
 
 use crate::async_sink;
+use beef::Cow;
 use error_chain::error_chain;
 use hdrhistogram::{self, serialization as hdr_s};
 
@@ -25,11 +26,11 @@ use tremor_influx as influx;
 
 pub type Kind = ErrorKind;
 
-impl Clone for Error {
-    fn clone(&self) -> Self {
-        ErrorKind::ClonedError(format!("{}", self)).into()
-    }
-}
+// impl Clone for Error {
+//     fn clone(&self) -> Self {
+//         ErrorKind::ClonedError(format!("{}", self)).into()
+//     }
+// }
 
 impl From<sled::transaction::TransactionError<()>> for Error {
     fn from(e: sled::transaction::TransactionError<()>) -> Self {
@@ -156,6 +157,7 @@ error_chain! {
         WsError(async_tungstenite::tungstenite::Error);
         InfluxEncoderError(influx::EncoderError);
         AsyncChannelRecvError(async_channel::RecvError);
+        AsyncChannelTryRecvError(async_channel::TryRecvError);
         JsonAccessError(value_trait::AccessError);
         CronError(cron::error::Error);
         Postgres(postgres::Error);
@@ -165,6 +167,7 @@ error_chain! {
         GoogleAuthError(gouth::Error);
         ReqwestError(reqwest::Error);
         HttpHeaderError(http::header::InvalidHeaderValue);
+        Timeout(async_std::future::TimeoutError);
         TonicTransportError(tonic::transport::Error);
         TonicStatusError(tonic::Status);
         RustlsError(rustls::TLSError);
@@ -178,9 +181,33 @@ error_chain! {
             description("Unknown operator")
                 display("Unknown operator: {}::{}", n, o)
         }
+        UnknownOnrampType(t: String) {
+            description("Unknown onramp type")
+                display("Unknown onramp type {}", t)
+        }
+        UnknownOfframpType(t: String) {
+            description("Unknown offramp type")
+                display("Unknown offramp type {}", t)
+        }
+        UnknownConnector(n: String) {
+            description("Unknown connector")
+                display("Unknown connector {}", n)
+        }
+        UnknownConnectorType(t: String) {
+            description("Unknown connector type")
+                display("Unknown connector type {}", t)
+        }
         ArtefactNotFound(id: String) {
-            description("The artifact was not found")
-                display("The artifact was not found: {}", id)
+            description("The artefact was not found")
+                display("The artefact was not found: {}", id)
+        }
+        InstanceNotFound(id: String) {
+            description("The artefact instance not found")
+                display("The artefact instance {} not found", id)
+        }
+        CodecNotFound(name: String) {
+            description("Codec not found")
+                display("The codec was not found: {}", name)
         }
         PublishFailedAlreadyExists(key: String) {
             description("The published artefact already exists")
@@ -216,11 +243,6 @@ error_chain! {
         }
 
         // TODO: Old errors, verify if needed
-        ClonedError(t: String) {
-            description("This is a cloned error we need to get rod of this")
-                display("Cloned error: {}", t)
-        }
-
         BadOpConfig(e: String) {
             description("Operator config has a bad syntax")
                 display("Operator config has a bad syntax: {}", e)
@@ -271,6 +293,35 @@ error_chain! {
         TLSError(s: String) {
             description("TLS error")
                 display("{}", s)
+        }
+        InvalidTremorUrl(msg: String, invalid_url: String) {
+            description("Invalid Tremor URL")
+                display("Invalid Tremor URL {}: {}", invalid_url, msg)
+        }
+        InvalidInstanceUrl(url: String) {
+            description("Invalid artefact instance URL")
+                 display("Invalid artefact instance URL: {}", url)
+        }
+        MissingConfiguration(s: String) {
+            description("Missing Configuration")
+                display("Missing Configuration for {}", s)
+        }
+        InvalidConnect(target: String, port: Cow<'static, str>) {
+            description("Invalid Connect attempt")
+                display("Invalid Connect to {} via port {}", target, port)
+        }
+        InvalidDisconnect(target: String, entity: String, port: Cow<'static, str>) {
+            description("Invalid Disonnect attempt")
+                display("Invalid Disconnect of {} from {} via port {}", entity, target, port)
+        }
+        MaxRetriesExceeded(max_retries: u64) {
+            description("Max reconnect retries exceeded")
+                display("Max reconnect retries ({}) exceeded", max_retries)
+        }
+
+        InvalidMetricsData {
+            description("Invalid Metrics data")
+                display("Invalid Metrics data")
         }
     }
 }

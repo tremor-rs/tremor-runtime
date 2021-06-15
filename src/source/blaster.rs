@@ -48,8 +48,9 @@ impl std::fmt::Debug for Blaster {
     }
 }
 
-impl onramp::Impl for Blaster {
-    fn from_config(id: &TremorUrl, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
+pub(crate) struct Builder {}
+impl onramp::Builder for Builder {
+    fn from_config(&self, id: &TremorUrl, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
             let mut source_data_file = file::open(&config.source)?;
@@ -61,14 +62,13 @@ impl onramp::Impl for Blaster {
                 source_data_file.read_to_end(&mut data)?;
             };
             let origin_uri = EventOriginUri {
-                uid: 0,
                 scheme: "tremor-blaster".to_string(),
                 host: hostname(),
                 port: None,
                 path: vec![config.source.clone()],
             };
 
-            Ok(Box::new(Self {
+            Ok(Box::new(Blaster {
                 config,
                 data,
                 acc: Acc::default(),
@@ -141,7 +141,6 @@ impl Source for Blaster {
 #[async_trait::async_trait]
 impl Onramp for Blaster {
     async fn start(&mut self, config: OnrampConfig<'_>) -> Result<onramp::Addr> {
-        self.origin_uri.uid = config.onramp_uid;
         SourceManager::start(self.clone(), config).await
     }
     fn default_codec(&self) -> &str {

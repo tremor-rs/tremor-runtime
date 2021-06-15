@@ -35,10 +35,9 @@ impl std::fmt::Debug for Int {
 }
 
 impl Int {
-    async fn new(uid: u64, onramp_id: TremorUrl) -> Result<Self> {
+    fn new(onramp_id: TremorUrl) -> Result<Self> {
         let stdin = io::stdin();
         let origin_uri = EventOriginUri {
-            uid,
             scheme: "tremor-stdin".to_string(),
             host: hostname(),
             port: None,
@@ -52,9 +51,10 @@ impl Int {
     }
 }
 
-impl onramp::Impl for Stdin {
-    fn from_config(id: &TremorUrl, _config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
-        Ok(Box::new(Self {
+pub(crate) struct Builder {}
+impl onramp::Builder for Builder {
+    fn from_config(&self, id: &TremorUrl, _config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
+        Ok(Box::new(Stdin {
             onramp_id: id.clone(),
         }))
     }
@@ -63,7 +63,7 @@ impl onramp::Impl for Stdin {
 #[async_trait::async_trait]
 impl Onramp for Stdin {
     async fn start(&mut self, config: OnrampConfig<'_>) -> Result<onramp::Addr> {
-        let source = Int::new(config.onramp_uid, self.onramp_id.clone()).await?;
+        let source = Int::new(self.onramp_id.clone())?;
         SourceManager::start(source, config).await
     }
 

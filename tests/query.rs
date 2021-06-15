@@ -68,7 +68,7 @@ macro_rules! test_cases {
                 let mut results = Vec::new();
                 for (id, json) in in_json.into_iter().enumerate() {
                     let event = Event {
-                        id: EventId::new(0, 0, (id as u64)),
+                        id: EventId::new(0, 0, (id as u64), (id as u64)),
                         data: json.clone_static().into(),
                         ingest_ns: id as u64,
                         ..Event::default()

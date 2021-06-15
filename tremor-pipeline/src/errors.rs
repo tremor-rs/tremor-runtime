@@ -77,18 +77,14 @@ error_chain! {
             description("Operator config has a bad syntax")
                 display("Operator config has a bad syntax: {}", e)
         }
-
-
         UnknownOp(n: String, o: String) {
             description("Unknown operator")
                 display("Unknown operator: {}::{}", n, o)
         }
-
         UnknownNamespace(n: String) {
             description("Unknown namespace")
                 display("Unknown namespace: {}", n)
         }
-
         InvalidInputStreamName(stream_name: String, pipeline: String) {
             description("Invalid input stream name.")
             display("Invalid input stream name '{}' for pipeline '{}'.", stream_name, pipeline)

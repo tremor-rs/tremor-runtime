@@ -84,12 +84,6 @@ where
 #[cfg(not(tarpaulin_include))]
 fn main() -> Result<()> {
     let cli = cli::Cli::parse();
-    // let yaml = load_yaml!("./cli.yaml");
-    // let long_version = tremor_runtime::version::long_ver();
-    // let app = App::from(yaml);
-    // let app = app.color(clap::ColorChoice::Always);
-    // let app = app.version(long_version.as_str());
-    // let matches = app.clone().get_matches();
 
     tremor_runtime::functions::load()?;
     unsafe {

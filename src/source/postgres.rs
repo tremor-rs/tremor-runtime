@@ -17,10 +17,10 @@
 //!
 //! See [Config](struct.Config.html) for details.
 
+use crate::common::mmap;
+use crate::common::mmap::{Config as CacheConfig, Kv};
+use crate::common::postgres::row_to_json;
 use crate::errors::Result;
-use crate::ramp;
-use crate::ramp::postgres::row_to_json;
-use crate::ramp::{Config as CacheConfig, Kv};
 use crate::source::prelude::*;
 use async_compat::Compat;
 use chrono::prelude::*;
@@ -66,12 +66,13 @@ impl fmt::Debug for Int {
     }
 }
 
-impl onramp::Impl for Postgres {
-    fn from_config(id: &TremorUrl, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
+pub(crate) struct Builder {}
+impl onramp::Builder for Builder {
+    fn from_config(&self, id: &TremorUrl, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
 
-            Ok(Box::new(Self {
+            Ok(Box::new(Postgres {
                 config,
                 onramp_id: id.clone(),
             }))
@@ -82,9 +83,8 @@ impl onramp::Impl for Postgres {
 }
 
 impl Int {
-    async fn from_config(uid: u64, onramp_id: TremorUrl, config: &Config) -> Result<Self> {
+    fn from_config(onramp_id: TremorUrl, config: &Config) -> Result<Self> {
         let origin_uri = EventOriginUri {
-            uid,
             scheme: "tremor-file".to_string(),
             host: hostname(),
             port: None,
@@ -101,7 +101,7 @@ impl Int {
         obj.try_insert("consume_from", consume_from);
         obj.try_insert("consume_until", consume_until);
 
-        let cache = match ramp::lookup("mmap_file", Some(config.cache.clone()), &obj) {
+        let cache = match mmap::lookup("mmap_file", Some(config.cache.clone()), &obj) {
             Ok(v) => v,
             Err(e) => return Err(e),
         };
@@ -225,8 +225,7 @@ impl Source for Int {
 #[async_trait::async_trait]
 impl Onramp for Postgres {
     async fn start(&mut self, config: OnrampConfig<'_>) -> Result<onramp::Addr> {
-        let source =
-            Int::from_config(config.onramp_uid, self.onramp_id.clone(), &self.config).await?;
+        let source = Int::from_config(self.onramp_id.clone(), &self.config)?;
         SourceManager::start(source, config).await
     }
 
