@@ -32,7 +32,7 @@ pub async fn list_artefact(req: Request) -> Result<Response> {
 
 pub async fn publish_artefact(req: Request) -> Result<Response> {
     let (req, data): (_, tremor_runtime::config::OffRamp) = decode(req).await?;
-    let url = build_url(&["offramp", &data.id])?;
+    let url = TremorUrl::from_offramp_id(&data.id)?;
     let repo = &req.state().world.repo;
     let result = repo.publish_offramp(&url, false, data).await?;
     reply(&req, result, StatusCode::Created)
@@ -40,7 +40,7 @@ pub async fn publish_artefact(req: Request) -> Result<Response> {
 
 pub async fn unpublish_artefact(req: Request) -> Result<Response> {
     let id = req.param("aid").unwrap_or_default();
-    let url = build_url(&["offramp", id])?;
+    let url = TremorUrl::from_offramp_id(id)?;
     let repo = &req.state().world.repo;
     let result = repo.unpublish_offramp(&url).await?;
     reply(&req, result, StatusCode::Ok)
@@ -48,12 +48,12 @@ pub async fn unpublish_artefact(req: Request) -> Result<Response> {
 
 pub async fn get_artefact(req: Request) -> Result<Response> {
     let id = req.param("aid").unwrap_or_default();
-    let url = build_url(&["offramp", id])?;
+    let url = TremorUrl::from_offramp_id(id)?;
     let repo = &req.state().world.repo;
     let result = repo
         .find_offramp(&url)
         .await?
-        .ok_or_else(Error::not_found)?;
+        .ok_or_else(Error::artefact_not_found)?;
     let result = OffRampWrap {
         artefact: result.artefact,
         instances: result

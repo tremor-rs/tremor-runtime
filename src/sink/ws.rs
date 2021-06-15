@@ -15,7 +15,6 @@
 #![cfg(not(tarpaulin_include))]
 
 use crate::sink::prelude::*;
-use crate::source::prelude::*;
 use async_channel::{bounded, unbounded, Receiver, Sender};
 use async_std::net::TcpStream;
 use async_tungstenite::tungstenite::error::Error as WsError;
@@ -50,6 +49,8 @@ pub struct Config {
     #[serde(default)]
     pub binary: bool,
 }
+
+impl ConfigImpl for Config {}
 
 enum WsConnectionMsg {
     Connected(WsUrl, Sender<SendEventConnectionMsg>),
@@ -101,8 +102,7 @@ async fn handle_error(
     error!("[Sink::{}] {}", sink_url, e);
     // send fail
     if let Some(op_meta) = maybe_op_meta {
-        let mut fail_event = Event::cb_fail(nanotime(), ids.clone());
-        fail_event.op_meta = op_meta;
+        let fail_event = Event::cb_fail(nanotime(), ids.clone(), op_meta);
         reply_tx.send(sink::Reply::Insight(fail_event)).await?;
     }
 
@@ -203,8 +203,11 @@ async fn ws_connection_loop(
                                 match ws_stream.send(msg).await {
                                     Ok(_) => {
                                         if let Some(op_meta) = maybe_op_meta.as_ref() {
-                                            let mut e = Event::cb_ack(nanotime(), event_id.clone());
-                                            e.op_meta = op_meta.clone();
+                                            let e = Event::cb_ack(
+                                                nanotime(),
+                                                event_id.clone(),
+                                                op_meta.clone(),
+                                            );
                                             reply_tx.send(sink::Reply::Insight(e)).await?;
                                         }
                                     }
@@ -418,10 +421,12 @@ fn message_to_event(
     }
     Ok(res)
 }
-impl offramp::Impl for Ws {
-    fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
+
+pub(crate) struct Builder {}
+impl offramp::Builder for Builder {
+    fn from_config(&self, config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         if let Some(config) = config {
-            let config: Config = serde_yaml::from_value(config.clone())?;
+            let config = Config::new(config)?;
             // ensure we have valid url
             Url::parse(&config.url)?;
 
@@ -430,7 +435,7 @@ impl offramp::Impl for Ws {
             // This is a dummy so we can set it later
             let (reply_tx, _) = bounded(1);
 
-            Ok(SinkManager::new_box(Self {
+            Ok(SinkManager::new_box(Ws {
                 sink_url: TremorUrl::from_onramp_id("ws")?,  // dummy value
                 event_origin_uri: EventOriginUri::default(), // dummy
                 config,
@@ -442,7 +447,7 @@ impl offramp::Impl for Ws {
                 reply_tx,
                 preprocessors: vec![],  // dummy, overwritten in init
                 postprocessors: vec![], // dummy, overwritten in init
-                shared_codec: Box::new(crate::codec::null::Null {}), //dummy, overwritten in init
+                shared_codec: crate::codec::lookup("null")?, //dummy, overwritten in init
             }))
         } else {
             Err("[WS Offramp] Offramp requires a config".into())
@@ -649,7 +654,7 @@ impl Sink for Ws {
     #[allow(clippy::too_many_arguments)]
     async fn init(
         &mut self,
-        sink_uid: u64,
+        _sink_uid: u64,
         sink_url: &TremorUrl,
         codec: &dyn Codec,
         _codec_map: &HashMap<String, Box<dyn Codec>>,
@@ -665,7 +670,6 @@ impl Sink for Ws {
         self.sink_url = sink_url.clone();
         let parsed = Url::parse(&self.config.url)?; // should not fail as it has already been verified
         let origin_url = EventOriginUri {
-            uid: sink_uid,
             scheme: "tremor-ws".to_string(),
             host: parsed.host_str().unwrap_or("UNKNOWN").to_string(),
             port: parsed.port(),
@@ -720,7 +724,7 @@ mod test {
         let mut preprocessors = make_preprocessors(&["lines".to_string()])?;
         let mut ingest_ns = 42_u64;
         let ids = EventId::default();
-        let mut codec: Box<dyn Codec> = Box::new(codec::string::String {});
+        let mut codec: Box<dyn Codec> = codec::lookup("string")?;
         let message = Message::Text("hello\nworld\n".to_string());
         let events = message_to_event(
             &sink_url,
@@ -745,8 +749,7 @@ mod test {
 
     #[test]
     fn event_to_message_ok() -> Result<()> {
-        let mut codec: Box<dyn Codec> =
-            Box::new(codec::json::Json::<codec::json::Unsorted>::default());
+        let mut codec: Box<dyn Codec> = codec::lookup("json")?;
         let mut postprocessors = make_postprocessors(&["lines".to_string()])?;
         let mut data = Value::object_with_capacity(2);
         data.insert("snot", "badger")?;
@@ -770,8 +773,7 @@ mod test {
         let (reply_tx, reply_rx) = bounded(1000);
 
         let url = TremorUrl::parse("/offramp/ws/instance")?;
-        let mut codec: Box<dyn Codec> =
-            Box::new(codec::json::Json::<codec::json::Unsorted>::default());
+        let mut codec: Box<dyn Codec> = codec::lookup("json")?;
         let config = Config {
             url: "http://idonotexist:65535/path".to_string(),
             binary: true,
@@ -808,7 +810,7 @@ mod test {
 
         // lets try to send an event
         let mut event = Event::default();
-        event.id = EventId::new(1, 1, 1);
+        event.id = EventId::from_id(1, 1, 1);
         sink.on_event("in", codec.as_mut(), &HashMap::new(), event)
             .await?;
 

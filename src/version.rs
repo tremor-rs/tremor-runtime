@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use rdkafka::util::get_rdkafka_version;
-
 /// Version of the tremor crate;
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 

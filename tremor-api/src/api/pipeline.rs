@@ -56,7 +56,7 @@ pub async fn publish_artefact(mut req: Request) -> Result<Response> {
                 )
             })?;
 
-            let url = build_url(&["pipeline", id])?;
+            let url = TremorUrl::from_pipeline_id(id)?;
             let repo = &req.state().world.repo;
             let result = repo
                 .publish_pipeline(&url, false, query)
@@ -109,7 +109,7 @@ pub fn reply_trickle_instanced(
 
 pub async fn unpublish_artefact(req: Request) -> Result<Response> {
     let id = req.param("aid").unwrap_or_default();
-    let url = build_url(&["pipeline", id])?;
+    let url = TremorUrl::from_pipeline_id(id)?;
     let repo = &req.state().world.repo;
     let result = repo
         .unpublish_pipeline(&url)
@@ -120,12 +120,12 @@ pub async fn unpublish_artefact(req: Request) -> Result<Response> {
 
 pub async fn get_artefact(req: Request) -> Result<Response> {
     let id = req.param("aid").unwrap_or_default();
-    let url = build_url(&["pipeline", id])?;
+    let url = TremorUrl::from_pipeline_id(id)?;
     let repo = &req.state().world.repo;
     let result = repo
         .find_pipeline(&url)
         .await?
-        .ok_or_else(Error::not_found)?;
+        .ok_or_else(Error::artefact_not_found)?;
 
     reply_trickle_instanced(
         &req,

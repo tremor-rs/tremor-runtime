@@ -83,10 +83,11 @@ impl std::fmt::Display for PubSubCommand {
     }
 }
 
-impl offramp::Impl for GoogleCloudPubSub {
-    fn from_config(_config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
+pub(crate) struct Builder {}
+impl offramp::Builder for Builder {
+    fn from_config(&self, _config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         let hostport = "pubsub.googleapis.com:443";
-        Ok(SinkManager::new_box(Self {
+        Ok(SinkManager::new_box(GoogleCloudPubSub {
             remote_publisher: None,  // overwritten in init
             remote_subscriber: None, // overwritten in init
             is_down: false,
@@ -268,7 +269,6 @@ impl Sink for GoogleCloudPubSub {
                             data: (val, meta).into(),
                             ingest_ns: nanotime(),
                             origin_uri: Some(EventOriginUri {
-                                uid: 0,
                                 scheme: "gRPC".into(),
                                 host: "".into(),
                                 port: None,

@@ -12,20 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::{Error, Result};
+use crate::errors::{Error, ErrorKind, Result};
 use crate::metrics::RampReporter;
-use crate::offramp;
 use crate::onramp;
 use crate::pipeline;
 use crate::registry::ServantId;
 use crate::system::{self, World};
+use crate::url::ports::IN;
 use crate::url::{ResourceType, TremorUrl};
 use crate::{codec, pipeline::ConnectTarget};
+use crate::{connectors, offramp, url};
 use beef::Cow;
 use hashbrown::HashMap;
 use std::collections::HashSet;
+use std::time::Duration;
 use tremor_pipeline::query;
 pub(crate) type Id = TremorUrl;
+pub(crate) use crate::Connector as ConnectorArtefact;
 pub(crate) use crate::OffRamp as OfframpArtefact;
 pub(crate) use crate::OnRamp as OnrampArtefact;
 use async_channel::bounded;
@@ -50,10 +53,11 @@ pub trait Artefact: Clone {
     type LinkResult: Clone;
     type LinkLHS: Clone;
     type LinkRHS: Clone;
+
     /// Move from Repository to Registry
     async fn spawn(&self, system: &World, servant_id: ServantId) -> Result<Self::SpawnResult>;
     /// Move from Registry(instantiated) to Registry(Active) or from one form of active to another
-    /// This acts differently on bindings and the rest. Where the binding takers a mapping of string
+    /// This acts differently on bindings and the rest. Where the binding takes a mapping of string
     /// replacements, the others take a from and to id
     async fn link(
         &self,
@@ -68,8 +72,35 @@ pub trait Artefact: Clone {
         id: &TremorUrl,
         mappings: HashMap<Self::LinkLHS, Self::LinkRHS>,
     ) -> Result<bool>;
-    fn artefact_id(u: &TremorUrl) -> Result<Id>;
-    fn servant_id(u: &TremorUrl) -> Result<ServantId>;
+
+    fn resource_type() -> url::ResourceType;
+
+    fn artefact_id(id: &TremorUrl) -> Result<Id> {
+        let mut id = id.clone();
+        id.trim_to_artefact();
+        let rt = Self::resource_type();
+        match (id.resource_type(), id.artefact()) {
+            (Some(id_rt), Some(_id)) if id_rt == rt => Ok(id),
+            _ => Err(ErrorKind::InvalidTremorUrl(
+                format!("Url does not contain a {} artefact id", rt),
+                id.to_string(),
+            )
+            .into()),
+        }
+    }
+    fn servant_id(id: &TremorUrl) -> Result<ServantId> {
+        let mut id = id.clone();
+        id.trim_to_instance();
+        let rt = Self::resource_type();
+        match (id.resource_type(), id.instance()) {
+            (Some(id_rt), Some(_id)) if id_rt == rt => Ok(id),
+            _ => Err(ErrorKind::InvalidTremorUrl(
+                format!("Url does not contain a {} servant id", rt),
+                id.to_string(),
+            )
+            .into()),
+        }
+    }
 }
 
 #[async_trait]
@@ -79,7 +110,10 @@ impl Artefact for Pipeline {
     type LinkLHS = String;
     type LinkRHS = TremorUrl;
 
-    //    type Configuration = tremor_pipeline::Pipeline;
+    fn resource_type() -> url::ResourceType {
+        url::ResourceType::Pipeline
+    }
+
     async fn spawn(&self, world: &World, servant_id: ServantId) -> Result<Self::SpawnResult> {
         world.start_pipeline(self.clone(), servant_id).await
     }
@@ -98,7 +132,7 @@ impl Artefact for Pipeline {
                         if let Some(offramp) = system.reg.find_offramp(&to).await? {
                             ConnectTarget::Offramp(offramp)
                         } else {
-                            return Err(format!("Offramp {} not found", to).into());
+                            return Err(ErrorKind::InstanceNotFound(to.to_string()).into());
                         }
                     }
                     Some(ResourceType::Pipeline) => {
@@ -106,14 +140,21 @@ impl Artefact for Pipeline {
                         if let Some(p) = system.reg.find_pipeline(&to).await? {
                             ConnectTarget::Pipeline(Box::new(p))
                         } else {
-                            return Err(format!("Pipeline {:?} not found", to).into());
+                            return Err(ErrorKind::InstanceNotFound(to.to_string()).into());
                         }
                     }
                     Some(ResourceType::Onramp) => {
                         if let Some(onramp) = system.reg.find_onramp(&to).await? {
                             ConnectTarget::Onramp(onramp)
                         } else {
-                            return Err(format!("Onramp {} not found", to).into());
+                            return Err(ErrorKind::InstanceNotFound(to.to_string()).into());
+                        }
+                    }
+                    Some(ResourceType::Connector) => {
+                        if let Some(connector) = system.reg.find_connector(&to).await? {
+                            ConnectTarget::Connector(connector)
+                        } else {
+                            return Err(ErrorKind::InstanceNotFound(to.to_string()).into());
                         }
                     }
                     _ => {
@@ -165,23 +206,6 @@ impl Artefact for Pipeline {
             Err(format!("Pipeline {:?} not found", id).into())
         }
     }
-
-    fn artefact_id(id: &TremorUrl) -> Result<Id> {
-        let mut id = id.clone();
-        id.trim_to_artefact();
-        match (id.resource_type(), id.artefact()) {
-            (Some(ResourceType::Pipeline), Some(_id)) => Ok(id),
-            _ => Err("URL does not contain a pipeline artifact id".into()),
-        }
-    }
-    fn servant_id(id: &TremorUrl) -> Result<ServantId> {
-        let mut id = id.clone();
-        id.trim_to_instance();
-        match (id.resource_type(), id.instance()) {
-            (Some(ResourceType::Pipeline), Some(_id)) => Ok(id),
-            _ => Err(format!("URL does not contain a pipeline servant id: {}", id).into()),
-        }
-    }
 }
 
 #[async_trait]
@@ -190,9 +214,17 @@ impl Artefact for OfframpArtefact {
     type LinkResult = bool;
     type LinkLHS = TremorUrl;
     type LinkRHS = TremorUrl;
+
+    fn resource_type() -> url::ResourceType {
+        url::ResourceType::Offramp
+    }
+
     async fn spawn(&self, world: &World, servant_id: ServantId) -> Result<Self::SpawnResult> {
-        //TODO: define offramp by config!
-        let offramp = offramp::lookup(&self.binding_type, &self.config)?;
+        // TODO: make duration configurable
+        let timeout = Duration::from_secs(2);
+        let offramp = world
+            .instantiate_offramp(self.binding_type.clone(), self.config.clone(), timeout)
+            .await?;
         // lookup codecs already here
         // this will bail out early if something is mistyped or so
         let codec = if let Some(codec) = &self.codec {
@@ -223,9 +255,11 @@ impl Artefact for OfframpArtefact {
 
         let (tx, rx) = bounded(1);
 
+        // start the offramp
+        // TODO: postpone to later
         world
             .system
-            .send(system::ManagerMsg::CreateOfframp(
+            .send(system::ManagerMsg::Offramp(offramp::ManagerMsg::Create(
                 tx,
                 Box::new(offramp::Create {
                     id: servant_id,
@@ -237,7 +271,7 @@ impl Artefact for OfframpArtefact {
                     metrics_reporter,
                     is_linked: self.is_linked,
                 }),
-            ))
+            )))
             .await?;
         rx.recv().await?
     }
@@ -299,23 +333,6 @@ impl Artefact for OfframpArtefact {
             Err(format!("Offramp {} not found for unlinking,", id).into())
         }
     }
-
-    fn artefact_id(id: &TremorUrl) -> Result<Id> {
-        let mut id = id.clone();
-        id.trim_to_artefact();
-        match (id.resource_type(), id.artefact()) {
-            (Some(ResourceType::Offramp), Some(_)) => Ok(id),
-            _ => Err(format!("URL does not contain an offramp artifact id: {}", id).into()),
-        }
-    }
-    fn servant_id(id: &TremorUrl) -> Result<ServantId> {
-        let mut id = id.clone();
-        id.trim_to_instance();
-        match (id.resource_type(), id.instance()) {
-            (Some(ResourceType::Offramp), Some(_)) => Ok(id),
-            _ => Err(format!("URL does not contain a offramp servant id: {}", id).into()),
-        }
-    }
 }
 #[async_trait]
 impl Artefact for OnrampArtefact {
@@ -323,8 +340,21 @@ impl Artefact for OnrampArtefact {
     type LinkResult = bool;
     type LinkLHS = String;
     type LinkRHS = TremorUrl;
+
+    fn resource_type() -> url::ResourceType {
+        url::ResourceType::Onramp
+    }
+
     async fn spawn(&self, world: &World, servant_id: ServantId) -> Result<Self::SpawnResult> {
-        let stream = onramp::lookup(&self.binding_type, &servant_id, &self.config)?;
+        let timeout = Duration::from_secs(2); // TODO: make configurable
+        let stream = world
+            .instantiate_onramp(
+                self.binding_type.clone(),
+                servant_id.clone(),
+                self.config.clone(),
+                timeout,
+            )
+            .await?;
         let codec = self.codec.as_ref().map_or_else(
             || stream.default_codec().to_string(),
             std::clone::Clone::clone,
@@ -349,7 +379,7 @@ impl Artefact for OnrampArtefact {
 
         world
             .system
-            .send(system::ManagerMsg::CreateOnramp(
+            .send(system::ManagerMsg::Onramp(onramp::ManagerMsg::Create(
                 tx,
                 Box::new(onramp::Create {
                     id: servant_id,
@@ -362,7 +392,7 @@ impl Artefact for OnrampArtefact {
                     is_linked: self.is_linked,
                     err_required: self.err_required,
                 }),
-            ))
+            )))
             .await?;
         rx.recv().await?
     }
@@ -417,12 +447,7 @@ impl Artefact for OnrampArtefact {
     ) -> Result<bool> {
         info!("Unlinking onramp {} ..", id);
         if let Some(onramp) = system.reg.find_onramp(id).await? {
-            let mut links = Vec::new();
             let (tx, rx) = bounded(mappings.len());
-
-            for to in mappings.values() {
-                links.push(to.clone());
-            }
             let mut expect_answers = mappings.len();
             for (_port, pipeline_id) in mappings {
                 onramp
@@ -444,21 +469,125 @@ impl Artefact for OnrampArtefact {
             Err(format!("Unlinking failed Onramp {} not found ", id).into())
         }
     }
+}
 
-    fn artefact_id(id: &TremorUrl) -> Result<Id> {
-        let mut id = id.clone();
-        id.trim_to_artefact();
-        match (id.resource_type(), id.artefact()) {
-            (Some(ResourceType::Onramp), Some(_)) => Ok(id),
-            _ => Err(format!("URL {} does not contain a onramp artifact id", id).into()),
+#[async_trait]
+impl Artefact for ConnectorArtefact {
+    type SpawnResult = connectors::Addr;
+
+    type LinkResult = bool;
+
+    type LinkLHS = String;
+
+    type LinkRHS = TremorUrl;
+
+    fn resource_type() -> url::ResourceType {
+        url::ResourceType::Connector
+    }
+
+    /// Here we only create an instance of the connector,
+    /// we don't actually start it here, so it doesnt handle any events yet
+    async fn spawn(&self, world: &World, servant_id: ServantId) -> Result<Self::SpawnResult> {
+        let create = connectors::Create::new(servant_id.clone(), self.clone());
+        let (tx, rx) = bounded(1);
+        world
+            .system
+            .send(system::ManagerMsg::Connector(
+                connectors::ManagerMsg::Create { tx, create },
+            ))
+            .await?;
+        rx.recv().await?
+    }
+
+    /// wire up pipelines to this connector
+    /// pipelines to connect need to be findable in the registry for this to work
+    async fn link(
+        &self,
+        system: &World,
+        id: &TremorUrl,
+        mappings: HashMap<Self::LinkLHS, Self::LinkRHS>,
+    ) -> Result<Self::LinkResult> {
+        info!("Linking connector {}...", id);
+        let timeout = Duration::from_secs(2);
+        if let Some(connector) = system.reg.find_connector(id).await? {
+            let (tx, rx) = bounded(mappings.len());
+            let mut msgs = Vec::with_capacity(mappings.len());
+            for (port, pipeline) in mappings {
+                if let Some(ResourceType::Pipeline) = pipeline.resource_type() {
+                    match system.reg.find_pipeline(&pipeline).await {
+                        Ok(Some(pipeline_addr)) => {
+                            msgs.push(connectors::Msg::Connect {
+                                port: port.into(),
+                                pipelines: vec![(pipeline.clone(), pipeline_addr)],
+                                result_tx: tx.clone(),
+                            });
+                        }
+                        Ok(None) => {
+                            return Err(ErrorKind::InstanceNotFound(pipeline.to_string()).into());
+                        }
+                        Err(e) => {
+                            return Err(e);
+                        }
+                    }
+                } else {
+                    return Err(format!(
+                        "Can only link pipelines to connector {}. Not a pipeline: {}",
+                        id, &pipeline
+                    )
+                    .into());
+                }
+            }
+            // send connect messages
+            let mut expect = msgs.len();
+            for msg in msgs {
+                connector.send(msg).await?;
+            }
+            // wait for answers with timeout
+            while expect > 0 {
+                // throw any error
+                // TODO: roll back previous linkings from this call in case of error
+                async_std::future::timeout(timeout, rx.recv()).await???;
+                expect -= 1;
+            }
+            Ok(true)
+        } else {
+            Err(ErrorKind::InstanceNotFound(id.to_string()).into())
         }
     }
-    fn servant_id(id: &TremorUrl) -> Result<ServantId> {
-        let mut id = id.clone();
-        id.trim_to_instance();
-        match (id.resource_type(), id.instance()) {
-            (Some(ResourceType::Onramp), Some(_id)) => Ok(id),
-            _ => Err(format!("URL does not contain a onramp servant id: {}", id).into()),
+
+    /// disconnect pipelines from this connector
+    async fn unlink(
+        &self,
+        system: &World,
+        id: &TremorUrl,
+        mappings: HashMap<Self::LinkLHS, Self::LinkRHS>,
+    ) -> Result<bool> {
+        let timeout = Duration::from_secs(2);
+        if let Some(connector) = system.reg.find_connector(id).await? {
+            let mut msgs = Vec::with_capacity(mappings.len());
+            let (tx, rx) = bounded(mappings.len());
+            for (port, pipeline_id) in mappings {
+                let msg = connectors::Msg::Disconnect {
+                    port: port.into(),
+                    id: pipeline_id,
+                    tx: tx.clone(),
+                };
+                msgs.push(msg);
+            }
+            let mut expect = msgs.len();
+            for msg in msgs {
+                connector.send(msg).await?;
+            }
+            // wait for answers with timeout
+            let mut now_empty = false;
+            while expect > 0 {
+                // throw any error
+                now_empty |= async_std::future::timeout(timeout, rx.recv()).await???;
+                expect -= 1;
+            }
+            Ok(now_empty)
+        } else {
+            Err(ErrorKind::InstanceNotFound(id.to_string()).into())
         }
     }
 }
@@ -473,8 +602,35 @@ impl Artefact for Binding {
     type LinkResult = Self;
     type LinkLHS = String;
     type LinkRHS = String;
+
+    fn resource_type() -> url::ResourceType {
+        url::ResourceType::Binding
+    }
+
     async fn spawn(&self, _: &World, _: ServantId) -> Result<Self::SpawnResult> {
-        //TODO: Validate
+        // do some basic verification:
+        // - left side: IN port doesnt make sende
+        // - right side: should have IN port
+        for (from, tos) in &self.binding.links {
+            let port = from.instance_port_required()?;
+            if port.eq_ignore_ascii_case(IN.as_ref()) {
+                return Err(format!(
+                    "Invalid Binding {}. Cannot link from port {} in {}.",
+                    &self.binding.id, port, &from
+                )
+                .into());
+            }
+            for to in tos {
+                let port = to.instance_port_required()?;
+                if !port.eq_ignore_ascii_case(IN.as_ref()) {
+                    return Err(format!(
+                        "Invalid Binding {}. Cannot link to port {} in {}.",
+                        &self.binding.id, port, &to
+                    )
+                    .into());
+                }
+            }
+        }
         Ok(self.clone())
     }
 
@@ -484,10 +640,12 @@ impl Artefact for Binding {
         id: &TremorUrl,
         mappings: HashMap<Self::LinkLHS, Self::LinkRHS>,
     ) -> Result<Self::LinkResult> {
-        use ResourceType::{Offramp, Onramp, Pipeline};
-        let mut pipelines: Vec<(TremorUrl, TremorUrl)> = Vec::new(); // pipeline -> {onramp, offramp, pipeline}
+        use ResourceType::{Connector, Offramp, Onramp, Pipeline};
+        let mut pipelines: Vec<(TremorUrl, TremorUrl)> = Vec::new(); // pipeline -> {onramp, offramp, pipeline, connector}
         let mut onramps: Vec<(TremorUrl, TremorUrl)> = Vec::new(); // onramp -> pipeline
-        let mut offramps: Vec<(TremorUrl, TremorUrl)> = Vec::new(); // linked offramps -> pipeline
+        let mut linked_offramps: Vec<(TremorUrl, TremorUrl)> = Vec::new(); // linked offramps -> pipeline
+        let mut connectors: Vec<(TremorUrl, TremorUrl)> = Vec::new(); // connector -> pipeline
+
         let mut res = self.clone();
         res.binding.links.clear();
         for (src, dsts) in self.binding.links.clone() {
@@ -519,13 +677,19 @@ impl Artefact for Binding {
                             (Some(Onramp), Some(Pipeline)) => {
                                 onramps.push((from.clone(), to));
                             }
-                            (Some(Pipeline), Some(Offramp | Pipeline | Onramp)) => {
+                            (Some(Pipeline), Some(Offramp | Pipeline | Onramp | Connector)) => {
                                 pipelines.push((from.clone(), to));
                             }
                             // for linked offramps
                             // TODO improve this process: this should really be treated as onramps,
                             // or as a separate resource
-                            (Some(Offramp), Some(Pipeline)) => offramps.push((from.clone(), to)),
+                            (Some(Offramp), Some(Pipeline)) => {
+                                linked_offramps.push((from.clone(), to))
+                            }
+                            // handling connectors as source
+                            (Some(Connector), Some(Pipeline)) => {
+                                connectors.push((from.clone(), to))
+                            }
                             (_, _) => return Err(Self::LINKING_ERROR.into()),
                         };
                     }
@@ -535,8 +699,7 @@ impl Artefact for Binding {
         }
 
         // first start the linked offramps
-        // so they
-        for (from, to) in offramps {
+        for (from, to) in linked_offramps {
             system.ensure_pipeline(&to).await?;
             system.ensure_offramp(&from).await?;
             system
@@ -544,33 +707,55 @@ impl Artefact for Binding {
                 .await?;
         }
 
-        for (from, to) in pipelines {
-            info!("Binding {} to {}", from, to);
+        for (from_pipeline, to) in &pipelines {
+            info!("Binding {} to {}", from_pipeline, to);
             match to.resource_type() {
-                Some(Offramp) => system.ensure_offramp(&to).await?,
-                Some(Pipeline) => system.ensure_pipeline(&to).await?,
-                Some(Onramp) => system.ensure_onramp(&to).await?,
+                Some(Offramp) => system.ensure_offramp(to).await?,
+                Some(Pipeline) => system.ensure_pipeline(to).await?,
+                Some(Onramp) => system.ensure_onramp(to).await?,
+                Some(Connector) => system.ensure_connector(to).await?,
                 _ => (),
             };
-            system.ensure_pipeline(&from).await?;
+            system.ensure_pipeline(from_pipeline).await?;
             system
                 .link_pipeline(
-                    &from,
-                    vec![(from.instance_port_required()?.to_string(), to.clone())]
-                        .into_iter()
-                        .collect(),
+                    from_pipeline,
+                    vec![(
+                        from_pipeline.instance_port_required()?.to_string(),
+                        to.clone(),
+                    )]
+                    .into_iter()
+                    .collect(),
                 )
                 .await?;
             match to.resource_type() {
                 Some(Offramp) => {
                     system
-                        .link_offramp(&to, vec![(from, to.clone())].into_iter().collect())
+                        .link_offramp(
+                            to,
+                            vec![(from_pipeline.clone(), to.clone())]
+                                .into_iter()
+                                .collect(),
+                        )
                         .await?;
                 }
                 Some(Pipeline) => {
                     // notify the pipeline we connect to that a pipeline has been connected to its 'in' port
                     warn!("Linking pipelines is highly experimental! You are on your own, watch your steps!");
                     // we do the reverse linking from within the pipeline
+                }
+                Some(Connector) => {
+                    system
+                        .link_connector(
+                            to,
+                            vec![(
+                                to.instance_port_required()?.to_string(),
+                                from_pipeline.clone(),
+                            )]
+                            .into_iter()
+                            .collect(),
+                        )
+                        .await?;
                 }
                 _ => (),
             }
@@ -587,6 +772,47 @@ impl Artefact for Binding {
                         .collect(),
                 )
                 .await?;
+        }
+
+        // link source connectors
+        for (from_connector, to_pipeline) in &connectors {
+            system.ensure_pipeline(to_pipeline).await?;
+            system.ensure_connector(from_connector).await?;
+
+            system
+                .link_connector(
+                    from_connector,
+                    vec![(
+                        from_connector.instance_port_required()?.to_string(),
+                        to_pipeline.clone(),
+                    )]
+                    .into_iter()
+                    .collect(),
+                )
+                .await?;
+        }
+
+        // start connectors
+        let sink_connectors: HashSet<TremorUrl> = pipelines
+            .iter()
+            .map(|(_, url)| url)
+            .filter(|url| url.resource_type() == Some(ResourceType::Connector))
+            .cloned()
+            .collect();
+        let source_connectors: HashSet<TremorUrl> =
+            connectors.iter().map(|(conn, _)| conn).cloned().collect();
+
+        // starting connectors without source first, so they are ready when stuff arrives
+        for conn in sink_connectors.difference(&source_connectors) {
+            system.start_connector(conn).await?;
+        }
+        // start source/sink connectors in random order
+        for conn in sink_connectors.intersection(&source_connectors) {
+            system.start_connector(conn).await?;
+        }
+        // start source only connectors
+        for conn in source_connectors.difference(&sink_connectors) {
+            system.start_connector(conn).await?
         }
 
         res.mapping = Some(vec![(id.clone(), mappings)].into_iter().collect());
@@ -659,22 +885,5 @@ impl Artefact for Binding {
 
         info!("Binding {} unlinked.", self.binding.id);
         Ok(true)
-    }
-
-    fn artefact_id(id: &TremorUrl) -> Result<Id> {
-        let mut id = id.clone();
-        id.trim_to_artefact();
-        match (id.resource_type(), id.artefact()) {
-            (Some(ResourceType::Binding), Some(_)) => Ok(id),
-            _ => Err(format!("URL {} does not contain a binding artifact id", id).into()),
-        }
-    }
-    fn servant_id(id: &TremorUrl) -> Result<ServantId> {
-        let mut id = id.clone();
-        id.trim_to_instance();
-        match (id.resource_type(), id.instance()) {
-            (Some(ResourceType::Binding), Some(_id)) => Ok(id),
-            _ => Err(format!("URL does not contain a binding servant id: {}", id).into()),
-        }
     }
 }
