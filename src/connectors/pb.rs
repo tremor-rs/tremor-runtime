@@ -119,7 +119,7 @@ pub(crate) fn u64_repeated_to_pb(json: Option<&Value<'_>>) -> Result<Vec<u64>> {
 
 #[cfg(test)]
 mod test {
-    use std::{f64, i32};
+    use std::f64;
 
     use super::*;
 
@@ -158,7 +158,7 @@ mod test {
     }
 
     prop_compose! {
-        fn fveci()(vec in prop::collection::vec(f64::MIN..f64::MAX, 1..3))
+        fn fveci()(vec in prop::collection::vec(prop::num::f64::POSITIVE | prop::num::f64::NEGATIVE, 1..3))
                         (index in 0..vec.len(), vec in Just(vec))
                         -> (Vec<f64>, usize) {
            (vec, index)
@@ -166,7 +166,7 @@ mod test {
     }
 
     prop_compose! {
-        fn uveci()(vec in prop::collection::vec(u64::MIN..u64::MAX, 1..3))
+        fn uveci()(vec in prop::collection::vec(prop::num::u64::ANY, 1..3))
                         (index in 0..vec.len(), vec in Just(vec))
                         -> (Vec<u64>, usize) {
            (vec, index)
@@ -188,7 +188,7 @@ mod test {
 
         #[test]
         fn prop_pb_u64(
-            arb_ints in prop::collection::vec(u64::MIN..u64::MAX, 0..100),
+            arb_ints in prop::collection::vec(prop::num::u64::ANY, 0..100),
         ) {
             for expected in arb_ints {
                 let json = Value::Static(StaticNode::U64(expected));
@@ -200,7 +200,7 @@ mod test {
 
         #[test]
         fn prop_pb_i64(
-            arb_ints in prop::collection::vec(i64::MIN..i64::MAX, 0..100),
+            arb_ints in prop::collection::vec(prop::num::i64::ANY, 0..100),
         ) {
             for expected in arb_ints {
                 let json = Value::Static(StaticNode::I64(expected));
@@ -212,7 +212,7 @@ mod test {
 
         #[test]
         fn prop_pb_u32(
-            arb_ints in prop::collection::vec(u32::MIN..u32::MAX, 0..100),
+            arb_ints in prop::collection::vec(prop::num::u32::ANY, 0..100),
         ) {
             for expected in arb_ints {
                 let json = Value::Static(StaticNode::U64(expected as u64));
@@ -223,7 +223,7 @@ mod test {
 
         #[test]
         fn prop_pb_i32(
-            arb_ints in prop::collection::vec(i32::MIN..i32::MAX, 0..100),
+            arb_ints in prop::collection::vec(prop::num::i32::ANY, 0..100),
         ) {
             for expected in arb_ints {
                 let json = Value::Static(StaticNode::I64(expected as i64));
@@ -234,7 +234,7 @@ mod test {
 
         #[test]
         fn prop_pb_f64(
-            arb_ints in prop::collection::vec(f64::MIN..f64::MAX, 0..100),
+            arb_ints in prop::collection::vec(prop::num::f64::POSITIVE | prop::num::f64::NEGATIVE, 0..100),
         ) {
             for expected in arb_ints {
                 let json = Value::Static(StaticNode::F64(expected as f64));
