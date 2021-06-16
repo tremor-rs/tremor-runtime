@@ -35,25 +35,17 @@ else
     ARTEFACTS=""
 
     # Load *.yaml files
-    YAMLS=$(find ${CFG_DIR} -name '*.yaml' -print 2>/dev/null | wc -l)
-    if [ "$YAMLS" != 0 ]
-    then
-        ARTEFACTS="$ARTEFACTS ${CFG_DIR}/*.yaml"
-    fi
+    YAMLS=$(find ${CFG_DIR} -name '*.yaml' -print 2>/dev/null)
+    [ ! -z "$YAMLS" ] && ARTEFACTS="$ARTEFACTS $YAMLS"
 
     # Load *.yml files
-    YMLS=$(find ${CFG_DIR} -name '*.yml' -print 2>/dev/null | wc -l)
-    if [ "$YMLS" != 0 ]
-    then
-        ARTEFACTS="$ARTEFACTS ${CFG_DIR}/*.yml"
-    fi
+    YMLS=$(find ${CFG_DIR} -name '*.yml' -print 2>/dev/null)
+    [ ! -z "$YMLS" ] && ARTEFACTS="$ARTEFACTS $YMLS"
 
     # Load *.trickle files
-    QUERIES=$(find ${CFG_DIR}/ -name '*.trickle' -print 2>/dev/null | wc -l)
-    if [ "$QUERIES" != 0 ]
-    then
-        ARTEFACTS="$ARTEFACTS ${CFG_DIR}/*.trickle"
-    fi
+    QUERIES=$(find ${CFG_DIR}/ -name '*.trickle' -print 2>/dev/null)
+    [ ! -z "$QUERIES" ] && ARTEFACTS="$ARTEFACTS $QUERIES"
+
     ARGS="server run --logger-config ${LOGGER_FILE}"
 
     if [ ! -z "${ARTEFACTS}" ]
