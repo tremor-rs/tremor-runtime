@@ -214,12 +214,15 @@ error_chain! {
                 display("Failed to bind non existand {}.", key)
         }
 
+<<<<<<< HEAD
         NotCSVSerializableValue(value: String) {
             description("The value cannot be serialized to CSV. Expected an array.")
             display("The value {} cannot be serialized to CSV. Expected an array.", value)
         }
 
         // TODO: Old errors, verify if needed
+=======
+>>>>>>> fa8d3647 (Update src/errors.rs)
         BadOpConfig(e: String) {
             description("Operator config has a bad syntax")
                 display("Operator config has a bad syntax: {}", e)
