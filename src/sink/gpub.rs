@@ -220,8 +220,7 @@ impl Sink for GoogleCloudPubSub {
                     subscription_name,
                     enable_message_ordering,
                 } => {
-                    // TODO: Display its response
-                    pubsub::create_subscription(
+                    let res = pubsub::create_subscription(
                         remote_subscriber,
                         &project_id,
                         &topic_name,
@@ -229,6 +228,30 @@ impl Sink for GoogleCloudPubSub {
                         enable_message_ordering,
                     )
                     .await?;
+                    // The commented fields can be None and throw error, hence not included in response
+                    let subscription = res.name;
+                    let topic = res.topic;
+                    // let push_config = res.push_config.ok_or("Error getting `push_config` for the created subscription")?;
+                    let ack_deadline_seconds = res.ack_deadline_seconds;
+                    let retain_acked_messages = res.retain_acked_messages;
+                    let enable_message_ordering = res.enable_message_ordering;
+                    // let labels = res.labels;
+                    let message_retention_duration = res.message_retention_duration.ok_or("Error getting `message retention duration` for the created subscription")?.seconds;
+                    // let expiration_policy = res.expiration_policy.ok_or("Error getting `expiration policy` for the created subscription")?;
+                    let filter = res.filter;
+                    // let dead_letter_policy = res.dead_letter_policy.ok_or("Error getting `dead letter policy` for the created subscription")?;
+                    // let retry_policy = res.retry_policy.ok_or("Error getting `retry policy` for the created subscription")?;
+                    let detached = res.detached;
+                    response.push(literal!({
+                        "subscription": subscription,
+                        "topic": topic,
+                        "ack_deadline_seconds": ack_deadline_seconds,
+                        "retain_acked_messages": retain_acked_messages,
+                        "enable_message_ordering": enable_message_ordering,
+                        "message_retention_duration": message_retention_duration,
+                        "filter": filter,
+                        "detached": detached
+                    }));
                 }
 
                 PubSubCommand::Unknown => {
