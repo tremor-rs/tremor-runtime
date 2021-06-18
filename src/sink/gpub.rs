@@ -274,13 +274,13 @@ impl Sink for GoogleCloudPubSub {
                 if let Some(correlation) = maybe_correlation {
                     meta.insert_nocheck("correlation".into(), correlation);
                 }
-
+                let val = response.pop().ok_or("No response received from GCP")?;
                 reply_channel
                     .send(sink::Reply::Response(
                         OUT,
                         Event {
                             id: self.event_id_gen.next_id(),
-                            data: (response, meta).into(),
+                            data: (val, meta).into(),
                             ingest_ns: nanotime(),
                             origin_uri: Some(EventOriginUri {
                                 uid: 0,
