@@ -44,10 +44,12 @@ async-std = { version = "1.10.0", features = [
   "tokio1",
 ] }
 async-std-resolver = "0.20"
+async-tls = "0.11"
 async-trait = "0.1"
 async-tungstenite = { version = "0.16.1", features = ["async-std-runtime"] }
 base64 = "0.13"
 beef = { version = "0.5", features = ["impl_serde"] }
+bimap = "0.6"
 byteorder = "1"
 bytes = "1.1"
 chrono = "0.4"
@@ -75,6 +77,7 @@ rand = "0.8"
 regex = "1.4"
 rental = "0.5"
 rmp-serde = "0.15"
+rustls = "0.19"
 serde = "1"
 serde_derive = "1"
 serde_yaml = "0.8"
@@ -91,9 +94,6 @@ tremor-value = { path = "tremor-value" }
 url = "2.2"
 value-trait = "0.2"
 zstd = "0.9"
-
-async-tls = "0.11"
-rustls = "0.19"
 
 mapr = "0.8"
 tempfile = { version = "3.2" }
