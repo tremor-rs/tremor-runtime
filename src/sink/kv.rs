@@ -209,7 +209,7 @@ impl<'v> Command<'v> {
 
 #[async_trait::async_trait]
 impl Sink for Kv {
-    #[allow(clippy::clippy::too_many_lines, clippy::option_if_let_else)]
+    #[allow(clippy::too_many_lines, clippy::option_if_let_else)]
     async fn on_event(
         &mut self,
         _input: &str,

@@ -69,10 +69,12 @@ impl<'script> CustomFn<'script> {
             return true;
         }
         let i = match self.body.first() {
-            Some(Expr::Imut(ImutExprInt::Invoke1(i)))
-            | Some(Expr::Imut(ImutExprInt::Invoke2(i)))
-            | Some(Expr::Imut(ImutExprInt::Invoke3(i)))
-            | Some(Expr::Imut(ImutExprInt::Invoke(i))) => i,
+            Some(Expr::Imut(
+                ImutExprInt::Invoke1(i)
+                | ImutExprInt::Invoke2(i)
+                | ImutExprInt::Invoke3(i)
+                | ImutExprInt::Invoke(i),
+            )) => i,
             _ => return false,
         };
         let mut a_idx = 0;
@@ -99,10 +101,12 @@ impl<'script> CustomFn<'script> {
         }
 
         let i = match self.body.first() {
-            Some(Expr::Imut(ImutExprInt::Invoke1(i)))
-            | Some(Expr::Imut(ImutExprInt::Invoke2(i)))
-            | Some(Expr::Imut(ImutExprInt::Invoke3(i)))
-            | Some(Expr::Imut(ImutExprInt::Invoke(i))) => i,
+            Some(Expr::Imut(
+                ImutExprInt::Invoke1(i)
+                | ImutExprInt::Invoke2(i)
+                | ImutExprInt::Invoke3(i)
+                | ImutExprInt::Invoke(i),
+            )) => i,
             Some(e) => {
                 return Err(format!("can't inline {}: bad expression: {:?}", self.name, e).into())
             }

@@ -92,8 +92,7 @@ impl<'script> Costly for ArrayPredicatePattern<'script> {
     fn cost(&self) -> u64 {
         match self {
             ArrayPredicatePattern::Ignore => 1,
-            ArrayPredicatePattern::Expr(ImutExprInt::Literal(_))
-            | ArrayPredicatePattern::Expr(_) => Cost::CONST,
+            ArrayPredicatePattern::Expr(_) => Cost::CONST,
             ArrayPredicatePattern::Tilde(t) => t.cost(),
             ArrayPredicatePattern::Record(r) => r.cost(),
         }

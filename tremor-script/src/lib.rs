@@ -24,7 +24,7 @@
 )]
 // TODO this is needed due to a false positive in clippy
 // https://github.com/rust-lang/rust/issues/83125
-// we will need this in 1.52.0
+// we will need this in 1.53.1
 #![allow(proc_macro_back_compat)]
 
 /// The Tremor Script AST

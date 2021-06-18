@@ -166,7 +166,7 @@ impl Sink for Tcp {
                 }
             }
             // for TCP we always trigger the CB for IO/socket related errors
-            Err(e @ Error(ErrorKind::Io(_), _)) | Err(e @ Error(ErrorKind::NoSocket, _)) => {
+            Err(e @ Error(ErrorKind::Io(_) | ErrorKind::NoSocket, _)) => {
                 debug!("[Sink::TCP] Error sending event: {}.", e);
                 if event.transactional {
                     Some(vec![

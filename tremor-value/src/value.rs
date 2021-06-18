@@ -111,7 +111,7 @@ impl Ord for Static {
     #[allow(
         clippy::cast_possible_truncation,
         clippy::cast_precision_loss,
-        clippy::clippy::cast_sign_loss
+        clippy::cast_sign_loss
     )]
     fn cmp(&self, other: &Self) -> Ordering {
         match (self.0, other.0) {
@@ -225,7 +225,7 @@ fn cmp_map(left: &Object, right: &Object) -> Ordering {
 
     match left.len().cmp(&right.len()) {
         Ordering::Equal => (),
-        o @ Ordering::Greater | o @ Ordering::Less => return o,
+        o @ (Ordering::Greater | Ordering::Less) => return o,
     };
 
     // compare keyspace (sorted keys cmp)
@@ -236,7 +236,7 @@ fn cmp_map(left: &Object, right: &Object) -> Ordering {
 
     match keys_left.cmp(&keys_right) {
         Ordering::Equal => (),
-        o @ Ordering::Greater | o @ Ordering::Less => return o,
+        o @ (Ordering::Greater | Ordering::Less) => return o,
     };
     // Compare values (the first sorted value being non equal determines order)
     for k in keys_left {

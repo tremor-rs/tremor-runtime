@@ -189,7 +189,7 @@ fn write_bits(
 #[allow(
     clippy::cast_lossless,
     clippy::cast_possible_truncation,
-    clippy::clippy::cast_sign_loss,
+    clippy::cast_sign_loss,
     clippy::too_many_arguments
 )]
 pub(crate) fn extend_bytes_from_value<'value, O: BaseExpr, I: BaseExpr>(

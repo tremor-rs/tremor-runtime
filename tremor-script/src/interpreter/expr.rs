@@ -88,7 +88,7 @@ where
     }
 
     #[inline]
-    #[allow(clippy::clippy::too_many_lines)]
+    #[allow(clippy::too_many_lines)]
     fn match_expr(
         &'script self,
         opts: ExecOpts,

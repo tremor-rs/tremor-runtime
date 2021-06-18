@@ -464,7 +464,7 @@ impl TremorAggrFn for Dds {
             if let Some(vals) = args.get(1).as_array() {
                 let percentiles: FResult<Vec<(String, f64)>> = vals
                     .iter()
-                    .flat_map(|v| v.as_str().map(String::from))
+                    .filter_map(|v| v.as_str().map(String::from))
                     .map(|s| {
                         let p = s.parse().map_err(|e| FunctionError::RuntimeError {
                             mfa: mfa("stats", "dds", 2),
@@ -666,7 +666,7 @@ impl TremorAggrFn for Hdr {
             if !self.percentiles_set {
                 let percentiles: FResult<Vec<(String, f64)>> = vals
                     .iter()
-                    .flat_map(|v| v.as_str().map(String::from))
+                    .filter_map(|v| v.as_str().map(String::from))
                     .map(|s| {
                         let p = s.parse().map_err(|e| FunctionError::RuntimeError {
                             mfa: mfa("stats", "hdr", 2),

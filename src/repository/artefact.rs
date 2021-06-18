@@ -148,9 +148,7 @@ impl Artefact for Pipeline {
         if let Some(pipeline) = system.reg.find_pipeline(id).await? {
             for (from, to) in mappings {
                 match to.resource_type() {
-                    Some(ResourceType::Offramp)
-                    | Some(ResourceType::Pipeline)
-                    | Some(ResourceType::Onramp) => {
+                    Some(ResourceType::Offramp | ResourceType::Pipeline | ResourceType::Onramp) => {
                         pipeline
                             .send_mgmt(pipeline::MgmtMsg::DisconnectOutput(from.clone().into(), to))
                             .await
@@ -465,6 +463,10 @@ impl Artefact for OnrampArtefact {
     }
 }
 
+impl Binding {
+    const LINKING_ERROR: &'static str = "links require the form of onramp -> pipeline or pipeline -> offramp or pipeline -> pipeline or pipeline -> onramp or offramp -> pipeline";
+}
+
 #[async_trait]
 impl Artefact for Binding {
     type SpawnResult = Self;
@@ -482,6 +484,7 @@ impl Artefact for Binding {
         id: &TremorUrl,
         mappings: HashMap<Self::LinkLHS, Self::LinkRHS>,
     ) -> Result<Self::LinkResult> {
+        use ResourceType::{Offramp, Onramp, Pipeline};
         let mut pipelines: Vec<(TremorUrl, TremorUrl)> = Vec::new(); // pipeline -> {onramp, offramp, pipeline}
         let mut onramps: Vec<(TremorUrl, TremorUrl)> = Vec::new(); // onramp -> pipeline
         let mut offramps: Vec<(TremorUrl, TremorUrl)> = Vec::new(); // linked offramps -> pipeline
@@ -494,7 +497,7 @@ impl Artefact for Binding {
             if let Some(inst) = src.instance() {
                 let mut instance = String::new();
                 for (map_name, map_replace) in &mappings {
-                    instance = inst.replace(&format!("%7B{}%7D", map_name), map_replace.as_str());
+                    instance = inst.replace(&format!("%7B{}%7D", map_name), &map_replace);
                 }
                 let mut from = src.clone();
                 from.set_instance(&instance);
@@ -507,33 +510,23 @@ impl Artefact for Binding {
 
                         // This is because it is an URL and we have to use escape codes
                         for (map_name, map_replace) in &mappings {
-                            instance =
-                                inst.replace(&format!("%7B{}%7D", map_name), map_replace.as_str());
+                            instance = inst.replace(&format!("%7B{}%7D", map_name), &map_replace);
                         }
                         let mut to = dst.clone();
                         to.set_instance(&instance);
                         tos.push(to.clone());
                         match (from.resource_type(), to.resource_type()) {
-                            (Some(ResourceType::Onramp), Some(ResourceType::Pipeline)) => {
+                            (Some(Onramp), Some(Pipeline)) => {
                                 onramps.push((from.clone(), to));
                             }
-                            (Some(ResourceType::Pipeline), Some(ResourceType::Offramp))
-                            | (Some(ResourceType::Pipeline), Some(ResourceType::Pipeline))
-                            | (Some(ResourceType::Pipeline), Some(ResourceType::Onramp)) => {
+                            (Some(Pipeline), Some(Offramp | Pipeline | Onramp)) => {
                                 pipelines.push((from.clone(), to))
                             }
                             // for linked offramps
                             // TODO improve this process: this should really be treated as onramps,
                             // or as a separate resource
-                            (Some(ResourceType::Offramp), Some(ResourceType::Pipeline)) => {
-                                offramps.push((from.clone(), to))
-                            }
-                            (_, _) => {
-                                return Err(
-                                    "links require the form of onramp -> pipeline or pipeline -> offramp or pipeline -> pipeline or pipeline -> onramp or offramp -> pipeline"
-                                        .into(),
-                                );
-                            }
+                            (Some(Offramp), Some(Pipeline)) => offramps.push((from.clone(), to)),
+                            (_, _) => return Err(Self::LINKING_ERROR.into()),
                         };
                     }
                 }
@@ -554,9 +547,9 @@ impl Artefact for Binding {
         for (from, to) in pipelines {
             info!("Binding {} to {}", from, to);
             match to.resource_type() {
-                Some(ResourceType::Offramp) => system.ensure_offramp(&to).await?,
-                Some(ResourceType::Pipeline) => system.ensure_pipeline(&to).await?,
-                Some(ResourceType::Onramp) => system.ensure_onramp(&to).await?,
+                Some(Offramp) => system.ensure_offramp(&to).await?,
+                Some(Pipeline) => system.ensure_pipeline(&to).await?,
+                Some(Onramp) => system.ensure_onramp(&to).await?,
                 _ => (),
             };
             system.ensure_pipeline(&from).await?;
@@ -569,12 +562,12 @@ impl Artefact for Binding {
                 )
                 .await?;
             match to.resource_type() {
-                Some(ResourceType::Offramp) => {
+                Some(Offramp) => {
                     system
                         .link_offramp(&to, vec![(from, to.clone())].into_iter().collect())
                         .await?;
                 }
-                Some(ResourceType::Pipeline) => {
+                Some(Pipeline) => {
                     // notify the pipeline we connect to that a pipeline has been connected to its 'in' port
                     warn!("Linking pipelines is highly experimental! You are on your own, watch your steps!");
                     // we do the reverse linking from within the pipeline

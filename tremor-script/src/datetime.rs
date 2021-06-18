@@ -34,8 +34,8 @@ pub fn has_tz(fmt: &str) -> bool {
     while let Some(c) = chrs.next() {
         if c == '%' {
             match chrs.next() {
-                Some('+') | Some('z') | Some('Z') => return true,
-                Some(':') | Some('#') => {
+                Some('+' | 'z' | 'Z') => return true,
+                Some(':' | '#') => {
                     if chrs.next() == Some('z') {
                         return true;
                     }

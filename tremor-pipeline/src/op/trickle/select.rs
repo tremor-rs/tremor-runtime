@@ -477,7 +477,7 @@ impl TrickleSelect {
 }
 
 /// execute the select clause of the statement and filter results by having clause, if provided
-#[allow(clippy::clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments)]
 fn execute_select_and_having(
     stmt: &Select,
     node_meta: &NodeMetas,
@@ -1247,7 +1247,7 @@ impl Operator for TrickleSelect {
         })
     }
 
-    #[allow(clippy::clippy::too_many_lines)]
+    #[allow(clippy::too_many_lines)]
     fn on_signal(
         &mut self,
         _uid: u64,

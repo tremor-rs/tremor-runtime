@@ -299,7 +299,7 @@ impl Operator for Wal {
         true
     }
 
-    #[allow(clippy::clippy::option_if_let_else)] // borrow checker
+    #[allow(clippy::option_if_let_else)] // borrow checker
     fn on_contraflow(&mut self, u_id: u64, insight: &mut Event) {
         match insight.cb {
             CbAction::None => {}

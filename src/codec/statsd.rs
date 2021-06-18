@@ -123,9 +123,7 @@ fn decode(data: &[u8], _ingest_ns: u64) -> Result<Value> {
         }
     }
     match d.next() {
-        Some((i, b'c')) | Some((i, b'h')) | Some((i, b's')) => {
-            m.insert("type".into(), substr(&data, i..=i)?.into())
-        }
+        Some((i, b'c' | b'h' | b's')) => m.insert("type".into(), substr(&data, i..=i)?.into()),
         Some((i, b'm')) => {
             if let Some((j, b's')) = d.next() {
                 m.insert("type".into(), substr(data, i..=j)?.into())

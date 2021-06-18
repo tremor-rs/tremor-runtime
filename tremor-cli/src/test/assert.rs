@@ -267,14 +267,11 @@ fn process_doesnt_contain(
         stats.assert();
         *counter += 1;
         fd.seek(SeekFrom::Start(0))?;
-        let condition = BufReader::new(&fd)
-            .lines()
-            .find(|l| {
-                l.as_ref()
-                    .map(|line| line.contains(c.trim()))
-                    .unwrap_or_default()
-            })
-            .is_none();
+        let condition = !BufReader::new(&fd).lines().any(|l| {
+            l.as_ref()
+                .map(|line| line.contains(c.trim()))
+                .unwrap_or_default()
+        });
         stats.report(condition);
         total_condition &= condition;
         status::assert_has(

@@ -254,7 +254,7 @@ fn dflt_method() -> SerdeMethod {
 
 impl ConfigImpl for Config {}
 
-#[allow(clippy::clippy::large_enum_variant)]
+#[allow(clippy::large_enum_variant)]
 enum CodecTaskInMsg {
     ToRequest(Event, Sender<SendTaskInMsg>),
     ToEvent {
