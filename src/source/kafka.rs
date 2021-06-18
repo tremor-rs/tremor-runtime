@@ -458,7 +458,7 @@ impl Source for Int {
         }
     }
 
-    #[allow(clippy::clippy::too_many_lines)]
+    #[allow(clippy::too_many_lines)]
     async fn init(&mut self) -> Result<SourceState> {
         let context = LoggingConsumerContext {
             onramp_id: self.onramp_id.clone(),

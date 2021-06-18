@@ -302,7 +302,7 @@ impl ExecutableGraph {
                     .map(|n| n.skippable())
                     .unwrap_or_default()
             })
-            .cloned()
+            .copied()
             .collect();
         self.signalflow = (*self.signalflow)
             .iter()
@@ -313,7 +313,7 @@ impl ExecutableGraph {
                     .map(|n| n.skippable())
                     .unwrap_or_default()
             })
-            .cloned()
+            .copied()
             .collect();
 
         let mut input_ids: Vec<usize> = Vec::new();

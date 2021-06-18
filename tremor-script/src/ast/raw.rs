@@ -207,12 +207,8 @@ impl<'script> Upable<'script> for BytesPartRaw<'script> {
         let (data_type, endianess) = match data_type.as_slice() {
             ["binary"] => (BytesDataType::Binary, Endian::Big),
             []
-            | [""]
-            | ["integer"]
-            | ["big"]
-            | ["unsigned"]
-            | ["unsigned", "integer"]
-            | ["big", "integer"]
+            | ["" | "integer" | "big" | "unsigned"]
+            | ["unsigned" | "big", "integer"]
             | ["big", "unsigned", "integer"] => (BytesDataType::UnsignedInteger, Endian::Big),
             ["signed", "integer"] | ["big", "signed", "integer"] => {
                 (BytesDataType::SignedInteger, Endian::Big)
@@ -548,7 +544,7 @@ impl<'script> ExpressionRaw<'script> for ExprRaw<'script> {}
 
 impl<'script> Upable<'script> for ExprRaw<'script> {
     type Target = Expr<'script>;
-    #[allow(clippy::clippy::too_many_lines)]
+    #[allow(clippy::too_many_lines)]
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(match self {
             ExprRaw::FnDecl(_) | ExprRaw::Const { .. } | ExprRaw::Module(ModuleRaw { .. }) => {
@@ -858,9 +854,7 @@ impl<'script> Upable<'script> for MatchFnDeclRaw<'script> {
         let patterns = patterns
             .into_iter()
             .map(|mut c: PredicateClauseRaw<_>| {
-                if c.pattern == PatternRaw::Default {
-                    c
-                } else {
+                if c.pattern != PatternRaw::Default {
                     let mut exprs: Vec<_> = self
                         .args
                         .iter()
@@ -889,8 +883,8 @@ impl<'script> Upable<'script> for MatchFnDeclRaw<'script> {
                         .collect();
                     exprs.append(&mut c.exprs);
                     c.exprs = exprs;
-                    c
                 }
+                c
             })
             .collect();
 

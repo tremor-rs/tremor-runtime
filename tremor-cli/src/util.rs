@@ -279,7 +279,7 @@ pub(crate) fn get_source_kind(path: &str) -> SourceKind {
         Some("json") => SourceKind::Json,
         Some("tremor") => SourceKind::Tremor,
         Some("trickle") => SourceKind::Trickle,
-        Some("yml") | Some("yaml") => SourceKind::Yaml,
+        Some("yml" | "yaml") => SourceKind::Yaml,
         otherwise => SourceKind::Unsupported(otherwise.map(ToString::to_string)),
     }
 }

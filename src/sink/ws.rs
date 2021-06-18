@@ -274,7 +274,7 @@ async fn ws_connection_loop(
             if has_link {
                 if let Some(msg) = ws_stream.next().await {
                     match msg {
-                        Ok(message @ Message::Text(_)) | Ok(message @ Message::Binary(_)) => {
+                        Ok(message @ (Message::Text(_) | Message::Binary(_))) => {
                             let mut ingest_ns = nanotime();
                             match message_to_event(
                                 &sink_url,
@@ -310,7 +310,7 @@ async fn ws_connection_loop(
                                 }
                             }
                         }
-                        Ok(Message::Ping(_)) | Ok(Message::Pong(_)) => {}
+                        Ok(Message::Ping(_) | Message::Pong(_)) => {}
                         Ok(Message::Close(_)) => {
                             warn!(
                                 "[Sink::{}] Server {} closed websocket connection.",
@@ -368,7 +368,7 @@ fn event_to_message(
     }))
 }
 
-#[allow(clippy::clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments)]
 fn message_to_event(
     sink_url: &TremorUrl,
     event_origin_uri: &EventOriginUri,

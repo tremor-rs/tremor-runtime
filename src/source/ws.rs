@@ -219,7 +219,7 @@ async fn handle_connection(
                 }))
                 .await?;
             }
-            Ok(Message::Ping(_)) | Ok(Message::Pong(_)) => (),
+            Ok(Message::Ping(_) | Message::Pong(_)) => (),
             Ok(Message::Close(_)) => {
                 tx.send(WsSourceReply::EndStream(stream)).await?;
                 break;

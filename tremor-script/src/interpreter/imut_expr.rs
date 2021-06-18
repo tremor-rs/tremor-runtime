@@ -126,7 +126,7 @@ where
         value_to_index(outer, self, val.borrow(), env, path, array)
     }
 
-    #[allow(clippy::clippy::too_many_lines)]
+    #[allow(clippy::too_many_lines)]
     #[inline]
     /// Invokes expression
     ///

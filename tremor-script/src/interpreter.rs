@@ -421,9 +421,7 @@ where
         (BitAnd, Static(Bool(l)), Static(Bool(r))) => Ok(static_bool!(*l & *r)),
         (BitOr, Static(Bool(l)), Static(Bool(r))) => Ok(static_bool!(*l | *r)),
         (BitXor, Static(Bool(l)), Static(Bool(r))) => Ok(static_bool!(*l ^ *r)),
-        (op, Static(Bool(_)), Static(Bool(_))) => {
-            error_invalid_binary(outer, inner, op, lhs, rhs, node_meta)
-        }
+
         // Binary
         (Gt, Bytes(l), Bytes(r)) => Ok(static_bool!(l > r)),
         (Gte, Bytes(l), Bytes(r)) => Ok(static_bool!(l >= r)),
@@ -474,10 +472,10 @@ where
         (Lte, String(l), String(r)) => Ok(static_bool!(l <= r)),
         (Add, String(l), String(r)) => Ok(Cow::Owned(format!("{}{}", *l, *r).into())),
         // Errors
-        (op, Bytes(_), Bytes(_))
-        | (op, Bytes(_), String(_))
-        | (op, String(_), Bytes(_))
-        | (op, String(_), String(_)) => error_invalid_binary(outer, inner, op, lhs, rhs, node_meta),
+        (op, Bytes(_) | String(_), Bytes(_) | String(_))
+        | (op, Static(Bool(_)), Static(Bool(_))) => {
+            error_invalid_binary(outer, inner, op, lhs, rhs, node_meta)
+        }
         // numeric
         (op, l, r) => exec_binary_numeric(outer, inner, node_meta, op, l, r),
     }
@@ -507,14 +505,14 @@ pub(crate) fn exec_unary<'run, 'event: 'run>(
                 .map(Cow::Owned),
             Plus => Some(Cow::Owned(Value::from(x))),
             BitNot => Some(Cow::Owned(Value::from(!x))),
-            _ => None,
+            Not => None,
         }
     } else if let Some(x) = val.as_i64() {
         match &op {
             Minus => x.checked_neg().map(Value::from).map(Cow::Owned),
             Plus => Some(Cow::Owned(Value::from(x))),
             BitNot => Some(Cow::Owned(Value::from(!x))),
-            _ => None,
+            Not => None,
         }
     } else if let Some(x) = val.as_bool() {
         match &op {

@@ -253,7 +253,7 @@ fn build_event_payload(event: &Event) -> Result<Vec<u8>> {
 
 impl Elastic {
     #[allow(clippy::cast_possible_truncation)]
-    #[allow(clippy::clippy::too_many_lines)]
+    #[allow(clippy::too_many_lines)]
     async fn enqueue_send_future(&mut self, event: Event) {
         let (tx, rx) = bounded(1);
         let insight_tx = self.insight_tx.clone();

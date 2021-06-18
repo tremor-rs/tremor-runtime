@@ -305,10 +305,7 @@ impl Preprocessor for Decompress {
                 decompressed
             }
             // ZLib magic headers
-            Some(&[0x78, 0x01, _, _, _, _])
-            | Some(&[0x78, 0x5e, _, _, _, _])
-            | Some(&[0x78, 0x9c, _, _, _, _])
-            | Some(&[0x78, 0xda, _, _, _, _]) => {
+            Some(&[0x78, 0x01 | 0x5e | 0x9c | 0xda, _, _, _, _]) => {
                 use libflate::zlib::Decoder;
                 let mut decoder = Decoder::new(data)?;
                 let mut decompressed = Vec::new();

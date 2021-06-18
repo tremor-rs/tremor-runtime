@@ -559,6 +559,7 @@ impl<'input> Token<'input> {
 }
 
 // LALRPOP requires a means to convert spanned tokens to triple form
+#[allow(clippy::wrong_self_convention)]
 impl<'input> __ToTriple<'input> for Spanned<'input> {
     fn to_triple(
         value: Self,
@@ -1906,12 +1907,11 @@ impl<'input> Lexer<'input> {
                     res.push(self.spanned2(end_inner, e, Token::EscapedHash));
                     e.shift(c);
                     *segment_start = e;
-                    *end = e;
                 } else {
                     *has_escapes = true;
                     content.push(c);
-                    *end = e;
                 }
+                *end = e;
             }
             (end_inner, '#') => {
                 if let Some((e, '{')) = self.lookahead() {
@@ -2191,7 +2191,7 @@ impl<'input> Lexer<'input> {
                 if let Some((exp_location, _)) = self.bump() {
                     // handle sign
                     let (exp_location, sign) = match self.lookahead() {
-                        Some((loc, '+')) | Some((loc, '-')) => {
+                        Some((loc, '+' | '-')) => {
                             self.bump();
                             self.slice(exp_location, loc).map(|s| (loc, s))
                         }

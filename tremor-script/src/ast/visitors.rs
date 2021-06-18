@@ -417,9 +417,11 @@ pub trait ImutExprIntVisitor<'script> {
             | Path::Event(EventPath { segments, .. })
             | Path::State(StatePath { segments, .. })
             | Path::Meta(MetadataPath { segments, .. })
-            | Path::Reserved(ReservedPath::Args { segments, .. })
-            | Path::Reserved(ReservedPath::Group { segments, .. })
-            | Path::Reserved(ReservedPath::Window { segments, .. }) => segments,
+            | Path::Reserved(
+                ReservedPath::Args { segments, .. }
+                | ReservedPath::Group { segments, .. }
+                | ReservedPath::Window { segments, .. },
+            ) => segments,
         };
         for segment in segments {
             self.walk_segment(segment)?

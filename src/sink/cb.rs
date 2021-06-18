@@ -89,7 +89,7 @@ impl Sink for Cb {
         Ok(None)
     }
 
-    #[allow(clippy::clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments)]
     async fn init(
         &mut self,
         _sink_uid: u64,
