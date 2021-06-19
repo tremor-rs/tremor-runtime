@@ -276,7 +276,7 @@ impl Sink for GoogleCloudPubSub {
                 }
                 // The response vector will have only one value currently since this version of `gpub` doesn't support batches
                 // So we pop that value out send it as response
-                let val = response.pop().ok_or("No response received from GCP")?; 
+                let val = response.pop().ok_or("No response received from GCP")?;
                 reply_channel
                     .send(sink::Reply::Response(
                         OUT,
