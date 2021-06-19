@@ -228,7 +228,7 @@ impl Sink for GoogleCloudPubSub {
                         enable_message_ordering,
                     )
                     .await?;
-                    // The commented fields can be None and throw error, hence not included in response
+                    // The commented fields can be None and throw error, and the data type was also not compatible - hence not included in response
                     let subscription = res.name;
                     let topic = res.topic;
                     // let push_config = res.push_config.ok_or("Error getting `push_config` for the created subscription")?;
@@ -274,7 +274,9 @@ impl Sink for GoogleCloudPubSub {
                 if let Some(correlation) = maybe_correlation {
                     meta.insert_nocheck("correlation".into(), correlation);
                 }
-                let val = response.pop().ok_or("No response received from GCP")?;
+                // The response vector will have only one value currently since this version of `gpub` doesn't support batches
+                // So we pop that value out send it as response
+                let val = response.pop().ok_or("No response received from GCP")?; 
                 reply_channel
                     .send(sink::Reply::Response(
                         OUT,
