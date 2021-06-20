@@ -15,6 +15,7 @@
 ### New features
 
 - Add tests for patch feature in tremor-script [#721](https://github.com/tremor-rs/tremor-runtime/issues/721)
+- Add onramp for SSE (Server Sent Events)
 
 ### Fixes
 
