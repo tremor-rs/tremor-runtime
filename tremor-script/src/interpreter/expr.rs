@@ -85,7 +85,7 @@ impl<'script> Expr<'script> {
 
     #[inline]
     #[allow(clippy::too_many_lines)]
-    fn match_expr(
+    fn match_expr<'run, 'event>(
         &'run self,
         opts: ExecOpts,
         env: &'run Env<'run, 'event>,
