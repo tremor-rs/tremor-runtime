@@ -167,7 +167,7 @@ impl Source for Int {
             uid: self.uid,
             scheme: "tremor-sse".to_string(),
             // What even is the host here?
-            host: "localhost".to_string(),
+            host: hostname(),
             port: None,
             path: vec![String::default()],
         };
