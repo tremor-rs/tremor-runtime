@@ -137,24 +137,24 @@ impl Source for Int {
     }
 
     async fn init(&mut self) -> Result<SourceState> {
-        // Neccessary check as Isahc(Curl) client panics if the url isn't complete. Seems like an edge case.
-        // Maybe use the H1-client as the backend. Though Heinz might have a better solution which is impl in rest sink.
-        // How shall I output this error.
-        let url = self.config.url.as_str().parse();
-        let _url: http::Uri = match url {
-            Ok(url) => url,
-            Err(err) => return Err(err.to_string().into()),
-        };
-
         info!(
             "[Source::{}] subscribing to {}",
             self.onramp_id.to_string(),
             &self.config.url
         );
 
+        // Neccessary check as Isahc(Curl) client panics if the url isn't complete. Seems like an edge case.
+        // Though Heinz might have a better solution which is Endpoint struct in rest sink.
+        let url_check = self.config.url.parse::<http::Uri>();
+        if let Err(err) = url_check {
+            return Err(err.to_string().into());
+        }
+
         let (tx, rx) = bounded(crate::QSIZE);
+
         let url: surf_sse::Url = self.config.url.parse()?;
         let headers = self.config.headers.clone();
+
         // The client runs with default configuration from crate
         task::spawn(handle_init(url, headers, tx));
         self.event_source = Some(rx);
