@@ -5573,7 +5573,7 @@ dependencies = [
 [[package]]
 name = "surf-sse"
 version = "1.0.0"
-source = "git+https://github.com/dak-x/surf-sse?branch=default#c7a7d5d989c3cbde1922f52cee4824f771caf9b0"
+source = "git+https://github.com/dak-x/surf-sse?tag=2.0#c7a7d5d989c3cbde1922f52cee4824f771caf9b0"
 dependencies = [
  "futures-core",
  "futures-timer",
