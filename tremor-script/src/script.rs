@@ -151,7 +151,11 @@ where
     /// # Errors
     /// on io errors
     #[cfg(not(tarpaulin_include))]
-    pub fn highlight_script_with<H: Highlighter>(script: &str, h: &mut H, emit_lines: bool) -> io::Result<()> {
+    pub fn highlight_script_with<H: Highlighter>(
+        script: &str,
+        h: &mut H,
+        emit_lines: bool,
+    ) -> io::Result<()> {
         let tokens: Vec<_> = lexer::Tokenizer::new(&script)
             .tokenize_until_err()
             .collect();
