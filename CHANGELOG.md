@@ -16,7 +16,7 @@
 
 - Add tests for patch feature in tremor-script [#721](https://github.com/tremor-rs/tremor-runtime/issues/721)
 - Add onramp for SSE (Server Sent Events) [#885](https://github.com/tremor-rs/tremor-runtime/issues/885)
-
+- Add raw flag in tremor-cli dbg [#854](https://github.com/tremor-rs/tremor-runtime/issues/854)
 ### Fixes
 
 - Fix the Release archive and package build process
