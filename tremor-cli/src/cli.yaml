@@ -137,6 +137,10 @@ subcommands:
             help: do not highlight output
             short: n
             long: no-highlight
+        - raw:
+            help: do not output any formatting. Disables highlight, banner, line numbers.
+            short: r
+            long: raw
       subcommands:
         - dot:
             about: prints the .dot representation for a trickle file (you can use `| dot -Tpng -oout.png` to generate a picture)
