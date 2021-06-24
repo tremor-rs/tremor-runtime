@@ -141,6 +141,10 @@ subcommands:
             help: do not output any formatting. Disables highlight, banner, line numbers.
             short: r
             long: raw
+        - preprocess:
+            help: output the pre-processed source. 
+            short: pp
+            long: preprocess
       subcommands:
         - dot:
             about: prints the .dot representation for a trickle file (you can use `| dot -Tpng -oout.png` to generate a picture)
@@ -155,12 +159,6 @@ subcommands:
                   help: only prints the expressions
                   short: x
                   long: exprs-only
-              - SCRIPT:
-                  help: tremor/json/trickle script filename
-                  required: true
-        - preprocess:
-            about: prints the preprocessed source
-            args:
               - SCRIPT:
                   help: tremor/json/trickle script filename
                   required: true
