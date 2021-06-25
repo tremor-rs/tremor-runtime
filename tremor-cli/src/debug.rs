@@ -31,7 +31,6 @@ use tremor_script::script::Script;
 struct Opts<'src> {
     banner: bool,
     raw_output: bool,
-    preprocess: bool,
     kind: SourceKind,
     src: &'src str,
     raw: String,
@@ -75,14 +74,14 @@ fn preprocessed_tokens<'input>(
     Ok(lexemes)
 }
 
-fn dbg_src<W>(h: &mut W, opts: &Opts) -> Result<()>
+fn dbg_src<W>(h: &mut W, opts: &Opts, preprocess: bool) -> Result<()>
 where
     W: Highlighter,
 {
     banner(h, opts, "Source", "Source code listing")?;
     match &opts.kind {
         SourceKind::Tremor | SourceKind::Json => {
-            if opts.preprocess {
+            if preprocess {
                 let mut raw_src = opts.raw.clone();
                 let lexemes = preprocessed_tokens(opts, &mut raw_src)?;
                 h.highlight(None, &lexemes, "", !opts.raw_output, None)?;
@@ -91,7 +90,7 @@ where
             }
         }
         SourceKind::Trickle => {
-            if opts.preprocess {
+            if preprocess {
                 let mut raw_src = opts.raw.clone();
                 let lexemes = preprocessed_tokens(opts, &mut raw_src)?;
                 h.highlight(None, &lexemes, "", !opts.raw_output, None)?;
@@ -185,11 +184,11 @@ where
     Ok(())
 }
 
-fn dbg_lex<W>(h: &mut W, opts: &Opts) -> Result<()>
+fn dbg_lex<W>(h: &mut W, opts: &Opts, preprocess: bool) -> Result<()>
 where
     W: Highlighter,
 {
-    if opts.preprocess {
+    if preprocess {
         banner(
             h,
             opts,
@@ -270,12 +269,7 @@ where
     Ok(())
 }
 
-fn script_opts(
-    matches: &ArgMatches,
-    no_banner: bool,
-    raw_output: bool,
-    preprocess: bool,
-) -> Result<Opts> {
+fn script_opts(matches: &ArgMatches, no_banner: bool, raw_output: bool) -> Result<Opts> {
     let src = matches.value_of("SCRIPT");
     let mut raw = String::new();
 
@@ -298,7 +292,6 @@ fn script_opts(
     let opts = Opts {
         banner: !no_banner,
         raw_output,
-        preprocess,
         src,
         kind,
         raw,
@@ -343,21 +336,23 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
     // Do not highlist or put banner when raw provided raw flag.
     let no_highlight = matches.is_present("no-highlight") || raw;
     let no_banner = matches.is_present("no-banner") || raw;
-    let preprocess = matches.is_present("preprocess");
+
     if no_highlight {
         let mut h = TermNoHighlighter::new();
         let r = if let Some(args) = matches.subcommand_matches("ast") {
-            let opts = script_opts(args, no_banner, raw, preprocess)?;
+            let opts = script_opts(args, no_banner, raw)?;
             let exprs_only = args.is_present("exprs-only");
             dbg_ast(&mut h, &opts, exprs_only)
         } else if let Some(args) = matches.subcommand_matches("lex") {
-            let opts = script_opts(args, no_banner, raw, preprocess)?;
-            dbg_lex(&mut h, &opts)
+            let opts = script_opts(args, no_banner, raw)?;
+            let preprocess = args.is_present("preprocess");
+            dbg_lex(&mut h, &opts, preprocess)
         } else if let Some(args) = matches.subcommand_matches("src") {
-            let opts = script_opts(args, no_banner, raw, preprocess)?;
-            dbg_src(&mut h, &opts)
+            let opts = script_opts(args, no_banner, raw)?;
+            let preprocess = args.is_present("preprocess");
+            dbg_src(&mut h, &opts, preprocess)
         } else if let Some(args) = matches.subcommand_matches("dot") {
-            let opts = script_opts(args, no_banner, raw, preprocess)?;
+            let opts = script_opts(args, no_banner, raw)?;
             dbg_dot(&mut h, &opts)
         } else {
             Err("Missing subcommand".into())
@@ -369,17 +364,19 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
     } else {
         let mut h = TermHighlighter::default();
         let r = if let Some(args) = matches.subcommand_matches("ast") {
-            let opts = script_opts(args, no_banner, raw, preprocess)?;
+            let opts = script_opts(args, no_banner, raw)?;
             let exprs_only = args.is_present("exprs-only");
             dbg_ast(&mut h, &opts, exprs_only)
         } else if let Some(args) = matches.subcommand_matches("lex") {
-            let opts = script_opts(args, no_banner, raw, preprocess)?;
-            dbg_lex(&mut h, &opts)
+            let opts = script_opts(args, no_banner, raw)?;
+            let preprocess = args.is_present("preprocess");
+            dbg_lex(&mut h, &opts, preprocess)
         } else if let Some(args) = matches.subcommand_matches("src") {
-            let opts = script_opts(args, no_banner, raw, preprocess)?;
-            dbg_src(&mut h, &opts)
+            let opts = script_opts(args, no_banner, raw)?;
+            let preprocess = args.is_present("preprocess");
+            dbg_src(&mut h, &opts, preprocess)
         } else if let Some(args) = matches.subcommand_matches("dot") {
-            let opts = script_opts(args, no_banner, raw, preprocess)?;
+            let opts = script_opts(args, no_banner, raw)?;
             dbg_dot(&mut h, &opts)
         } else {
             Err("Missing subcommand".into())
