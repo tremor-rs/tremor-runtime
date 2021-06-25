@@ -37,7 +37,7 @@ pub use self::expr::Cont;
 use crate::ast::{
     ArrayPattern, ArrayPredicatePattern, BaseExpr, BinOpKind, Consts, GroupBy, GroupByInt,
     ImutExprInt, InvokeAggrFn, NodeMetas, Patch, PatchOperation, Path, Pattern, PredicatePattern,
-    RecordPattern, ReservedPath, Segment, TuplePattern, UnaryOpKind,
+    RecordPattern, ReservedPath, Segment, StringLit, TuplePattern, UnaryOpKind,
 };
 use crate::errors::{
     error_array_out_of_bound, error_bad_array_index, error_bad_key, error_bad_key_err,
@@ -739,12 +739,12 @@ where
 enum PreEvaluatedPatchOperation<'event, 'run> {
     Insert {
         ident: beef::Cow<'event, str>,
-        ident_expr: &'run ImutExprInt<'event>,
+        ident_expr: &'run StringLit<'event>,
         value: Value<'event>,
     },
     Update {
         ident: beef::Cow<'event, str>,
-        ident_expr: &'run ImutExprInt<'event>,
+        ident_expr: &'run StringLit<'event>,
         value: Value<'event>,
     },
     Upsert {
@@ -764,11 +764,19 @@ enum PreEvaluatedPatchOperation<'event, 'run> {
     },
     Merge {
         ident: beef::Cow<'event, str>,
-        ident_expr: &'run ImutExprInt<'event>,
+        ident_expr: &'run StringLit<'event>,
         merge_value: Value<'event>,
     },
-    TupleMerge {
+    MergeRecord {
         merge_value: Value<'event>,
+    },
+    Default {
+        ident: beef::Cow<'event, str>,
+        default_value: Value<'event>,
+    },
+    DefaultRecord {
+        default_value: Value<'event>,
+        expr: &'run ImutExprInt<'event>,
     },
 }
 
@@ -788,43 +796,53 @@ impl<'event, 'run> PreEvaluatedPatchOperation<'event, 'run> {
     {
         Ok(match patch_op {
             PatchOperation::Insert { ident, expr } => PreEvaluatedPatchOperation::Insert {
-                ident: stry!(ident.eval_to_string(opts, env, event, state, meta, local)),
+                ident: stry!(ident.run(opts, env, event, state, meta, local)).into(),
                 ident_expr: ident,
                 value: stry!(expr.run(opts, env, event, state, meta, local)).into_owned(),
             },
             PatchOperation::Update { ident, expr } => PreEvaluatedPatchOperation::Update {
-                ident: stry!(ident.eval_to_string(opts, env, event, state, meta, local)),
+                ident: stry!(ident.run(opts, env, event, state, meta, local)).into(),
                 ident_expr: ident,
                 value: stry!(expr.run(opts, env, event, state, meta, local)).into_owned(),
             },
             PatchOperation::Upsert { ident, expr } => PreEvaluatedPatchOperation::Upsert {
-                ident: stry!(ident.eval_to_string(opts, env, event, state, meta, local)),
+                ident: stry!(ident.run(opts, env, event, state, meta, local)).into(),
                 value: stry!(expr.run(opts, env, event, state, meta, local)).into_owned(),
             },
             PatchOperation::Erase { ident } => PreEvaluatedPatchOperation::Erase {
-                ident: stry!(ident.eval_to_string(opts, env, event, state, meta, local)),
+                ident: stry!(ident.run(opts, env, event, state, meta, local)).into(),
             },
             PatchOperation::Copy { from, to } => PreEvaluatedPatchOperation::Copy {
-                from: stry!(from.eval_to_string(opts, env, event, state, meta, local)),
-                to: stry!(to.eval_to_string(opts, env, event, state, meta, local)),
+                from: stry!(from.run(opts, env, event, state, meta, local)).into(),
+                to: stry!(to.run(opts, env, event, state, meta, local)).into(),
             },
             PatchOperation::Move { from, to } => PreEvaluatedPatchOperation::Move {
-                from: stry!(from.eval_to_string(opts, env, event, state, meta, local)),
-                to: stry!(to.eval_to_string(opts, env, event, state, meta, local)),
+                from: stry!(from.run(opts, env, event, state, meta, local)).into(),
+                to: stry!(to.run(opts, env, event, state, meta, local)).into(),
             },
             PatchOperation::Merge { ident, expr } => PreEvaluatedPatchOperation::Merge {
-                ident: stry!(ident.eval_to_string(opts, env, event, state, meta, local)),
+                ident: stry!(ident.run(opts, env, event, state, meta, local)).into(),
                 ident_expr: ident,
                 merge_value: stry!(expr.run(opts, env, event, state, meta, local)).into_owned(),
             },
-            PatchOperation::TupleMerge { expr } => PreEvaluatedPatchOperation::TupleMerge {
+            PatchOperation::MergeRecord { expr } => PreEvaluatedPatchOperation::MergeRecord {
                 merge_value: stry!(expr.run(opts, env, event, state, meta, local)).into_owned(),
+            },
+            PatchOperation::Default { ident, expr } => PreEvaluatedPatchOperation::Default {
+                ident: stry!(ident.run(opts, env, event, state, meta, local)).into(),
+                // PERF: this is slow, we might not need to evaluate it
+                default_value: stry!(expr.run(opts, env, event, state, meta, local)).into_owned(),
+            },
+            PatchOperation::DefaultRecord { expr } => PreEvaluatedPatchOperation::DefaultRecord {
+                default_value: stry!(expr.run(opts, env, event, state, meta, local)).into_owned(),
+                expr,
             },
         })
     }
 }
 
 #[inline]
+#[allow(clippy::too_many_lines)]
 fn patch_value<'run, 'event>(
     opts: ExecOpts,
     env: &Env<'run, 'event>,
@@ -923,8 +941,28 @@ where
                         obj.insert(ident, new_value);
                     }
                 },
-                PreEvaluatedPatchOperation::TupleMerge { merge_value } => {
+                PreEvaluatedPatchOperation::MergeRecord { merge_value } => {
                     stry!(merge_values(patch_expr, expr, target, &merge_value));
+                }
+                PreEvaluatedPatchOperation::Default {
+                    ident,
+                    default_value,
+                    ..
+                } => {
+                    if !obj.contains_key(&ident) {
+                        obj.insert(ident, default_value);
+                    };
+                }
+                PreEvaluatedPatchOperation::DefaultRecord {
+                    default_value,
+                    expr: inner,
+                } => {
+                    // We clone the default value and swap it with the target. Effectively what we
+                    // do here is: merge <default> of <target> end;
+                    // PERF: this could be faster
+                    let mut dflt = default_value.clone();
+                    stry!(merge_values(expr, inner, &mut dflt, target));
+                    std::mem::swap(target, &mut dflt);
                 }
             }
         } else {

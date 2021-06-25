@@ -793,7 +793,14 @@ impl<'script> PatchOperation<'script> {
                 ident: ident.into_static(),
                 expr: expr.into_static(),
             },
-            PatchOperation::TupleMerge { expr } => PatchOperation::TupleMerge {
+            PatchOperation::MergeRecord { expr } => PatchOperation::MergeRecord {
+                expr: expr.into_static(),
+            },
+            PatchOperation::Default { ident, expr } => PatchOperation::Default {
+                ident: ident.into_static(),
+                expr: expr.into_static(),
+            },
+            PatchOperation::DefaultRecord { expr } => PatchOperation::DefaultRecord {
                 expr: expr.into_static(),
             },
         }

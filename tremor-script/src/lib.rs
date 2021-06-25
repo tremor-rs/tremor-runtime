@@ -27,6 +27,10 @@
 // we will need this in 1.53.1
 #![allow(proc_macro_back_compat)]
 
+#[cfg(test)]
+#[macro_use]
+extern crate pretty_assertions;
+
 /// The Tremor Script AST
 pub mod ast;
 mod compat;

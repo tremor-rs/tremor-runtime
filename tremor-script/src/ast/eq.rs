@@ -362,6 +362,16 @@ impl<'script> AstEq for PatchOperation<'script> {
                 },
             )
             | (
+                Self::Default {
+                    ident: i1,
+                    expr: e1,
+                },
+                Self::Default {
+                    ident: i2,
+                    expr: e2,
+                },
+            )
+            | (
                 Self::Merge {
                     ident: i1,
                     expr: e1,
@@ -376,7 +386,8 @@ impl<'script> AstEq for PatchOperation<'script> {
             | (Self::Move { from: f1, to: t1 }, Self::Move { from: f2, to: t2 }) => {
                 f1.ast_eq(f2) && t1.ast_eq(t2)
             }
-            (Self::TupleMerge { expr: e1 }, Self::TupleMerge { expr: e2 }) => e1.ast_eq(e2),
+            (Self::DefaultRecord { expr: e1 }, Self::DefaultRecord { expr: e2 })
+            | (Self::MergeRecord { expr: e1 }, Self::MergeRecord { expr: e2 }) => e1.ast_eq(e2),
             _ => false,
         }
     }
@@ -766,20 +777,24 @@ mod tests {
         r#"
         let x = {"snot": $meta};
         patch x of
+          default => {"bla": "blubb"},
+          default "gna" => "gnubb",
           insert "i" => event.foo,
           upsert "snotty" => state.badger[1],
           update "snot" => null,
           erase "snot",
-          copy "snot" => ["badger"],
+          copy "snot" => "badger",
           merge "beep" => {"fun": not false},
           merge => {"tuple": 4 * 12}
         end;
         patch x of
+          default => {"bla": "blubb"},
+          default "gna" => "gnubb",
           insert "i" => event.foo,
           upsert "snotty" => state.badger[1],
           update "snot" => null,
           erase "snot",
-          copy "snot" => ["badger"],
+          copy "snot" => "badger",
           merge "beep" => {"fun": not false},
           merge => {"tuple": 4 * 12}
         end
@@ -790,20 +805,24 @@ mod tests {
         r#"
         let x = {"snot": $meta};
         patch x of
+          default => {"bla": "blubb"},
+          default "gna" => "gnubb",
           insert "i" => event.foo,
           upsert "snotty" => state.badger[1],
           update "snot" => null,
           erase "snot",
-          copy "snot" => ["badger"],
+          copy "snot" => "badger",
           merge "beep" => {"fun": not false},
           merge => {"tuple": 4 * 12}
         end;
         patch x of
+          default => {"bla": "blubb"},
+          default "gna" => "gnubb",
           insert "i" => event.foo,
           upsert "snotty" => state.badger[1],
           erase "snot",
           update "snot" => null, # order swapped
-          copy "snot" => ["badger"],
+          copy "snot" => "badger",
           merge "beep" => {"fun": not false},
           merge => {"tuple": 4 * 12}
         end
