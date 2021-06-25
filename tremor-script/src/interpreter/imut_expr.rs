@@ -17,6 +17,7 @@ use super::{
     test_predicate_expr, AggrType, Env, ExecOpts, LocalStack, FALSE, TRUE,
 };
 
+use crate::interpreter::value_to_index;
 use crate::{
     ast::binary::extend_bytes_from_value,
     errors::{
@@ -29,7 +30,6 @@ use crate::{
     ast::Match,
     registry::{Registry, TremorAggrFnWrapper, RECUR_REF},
 };
-use crate::{ast::StringLit, interpreter::value_to_index};
 use crate::{
     ast::{
         BaseExpr, BinExpr, ImutExpr, ImutExprInt, Invoke, InvokeAggr, LocalPath, Merge, Patch,
@@ -141,40 +141,10 @@ impl<'script> ImutExprInt<'script> {
         'script: 'event,
     {
         match self {
-            ImutExprInt::String(StringLit { elements, .. }) => {
-                let mut out = String::with_capacity(128);
-                for e in elements {
-                    match e {
-                        crate::ast::StrLitElement::Lit(l) => out.push_str(l),
-                        #[cfg(not(feature = "erlang-float-testing"))]
-                        crate::ast::StrLitElement::Expr(e) => {
-                            let r = stry!(e.run(opts, env, event, state, meta, local));
-                            if let Some(s) = r.as_str() {
-                                out.push_str(&s);
-                            } else {
-                                out.push_str(r.encode().as_str());
-                            };
-                        }
-                        // TODO: The float scenario is different in erlang and rust
-                        // We knowingly excluded float correctness in string interpolation
-                        // as we don't want to over engineer and write own format functions.
-                        // any suggestions are welcome
-                        #[cfg(feature = "erlang-float-testing")]
-                        #[cfg(not(tarpaulin_include))]
-                        crate::ast::StrLitElement::Expr(e) => {
-                            let r = e.run(opts, env, event, state, meta, local)?;
-                            if let Some(s) = r.as_str() {
-                                out.push_str(&s);
-                            } else if let Some(_f) = r.as_f64() {
-                                out.push_str("42");
-                            } else {
-                                out.push_str(crate::utils::sorted_serialize(&r)?.as_str());
-                            };
-                        }
-                    }
-                }
-                Ok(Cow::Owned(out.into()))
-            }
+            ImutExprInt::String(s) => s
+                .run(opts, env, event, state, meta, local)
+                .map(Value::from)
+                .map(Cow::Owned),
             ImutExprInt::Recur(Recur { exprs, argc, .. }) => {
                 // We need to pre calculate that to ensure that we don't overwrite
                 // local variables that are not used

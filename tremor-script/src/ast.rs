@@ -1087,6 +1087,25 @@ pub enum ImutExprInt<'script> {
     Bytes(Bytes<'script>),
 }
 
+impl<'script> ImutExprInt<'script> {
+    pub(crate) fn try_reduce(self, helper: &Helper<'script, '_>) -> Result<Self> {
+        match self {
+            ImutExprInt::Unary(u) => u.try_reduce(helper),
+            ImutExprInt::Bytes(b) => b.try_reduce(helper),
+            ImutExprInt::Binary(b) => b.try_reduce(helper),
+            ImutExprInt::List(l) => l.try_reduce(helper),
+            ImutExprInt::Record(r) => r.try_reduce(helper),
+            ImutExprInt::Path(p) => Ok(p.try_reduce(helper)),
+            ImutExprInt::String(s) => Ok(s.try_reduce(helper)),
+            ImutExprInt::Invoke1(i)
+            | ImutExprInt::Invoke2(i)
+            | ImutExprInt::Invoke3(i)
+            | ImutExprInt::Invoke(i) => i.try_reduce(helper),
+            other => Ok(other),
+        }
+    }
+}
+
 impl<'script> Expression for ImutExprInt<'script> {
     #[cfg(not(tarpaulin_include))] // this has no function
     fn replace_last_shadow_use(&mut self, replace_idx: usize) {
@@ -1112,6 +1131,70 @@ pub struct StringLit<'script> {
     pub mid: usize,
     /// Elements
     pub elements: StrLitElements<'script>,
+}
+
+impl<'script> StringLit<'script> {
+    pub(crate) fn run<'run, 'event>(
+        &'run self,
+        opts: ExecOpts,
+        env: &'run Env<'run, 'event>,
+        event: &'run Value<'event>,
+        state: &'run Value<'static>,
+        meta: &'run Value<'event>,
+        local: &'run LocalStack<'event>,
+    ) -> Result<String> {
+        let mut out = String::with_capacity(128);
+        for e in &self.elements {
+            match e {
+                crate::ast::StrLitElement::Lit(l) => out.push_str(l),
+                #[cfg(not(feature = "erlang-float-testing"))]
+                crate::ast::StrLitElement::Expr(e) => {
+                    let r = stry!(e.run(opts, env, event, state, meta, local));
+                    if let Some(s) = r.as_str() {
+                        out.push_str(s);
+                    } else {
+                        out.push_str(r.encode().as_str());
+                    };
+                }
+                // TODO: The float scenario is different in erlang and rust
+                // We knowingly excluded float correctness in string interpolation
+                // as we don't want to over engineer and write own format functions.
+                // any suggestions are welcome
+                #[cfg(feature = "erlang-float-testing")]
+                #[cfg(not(tarpaulin_include))]
+                crate::ast::StrLitElement::Expr(e) => {
+                    let r = e.run(opts, env, event, state, meta, local)?;
+                    if let Some(s) = r.as_str() {
+                        out.push_str(&s);
+                    } else if let Some(_f) = r.as_f64() {
+                        out.push_str("42");
+                    } else {
+                        out.push_str(crate::utils::sorted_serialize(&r)?.as_str());
+                    };
+                }
+            }
+        }
+        Ok(out)
+    }
+    fn try_reduce(self, _helper: &Helper<'script, '_>) -> ImutExprInt<'script> {
+        let StringLit { mid, mut elements } = self;
+        if elements.len() == 1 {
+            match elements.pop() {
+                Some(StrLitElement::Lit(l)) => {
+                    let value = Value::from(l);
+                    return ImutExprInt::Literal(Literal { mid, value });
+                }
+                Some(other) => elements.push(other),
+                None => (),
+            }
+        } else if elements.is_empty() {
+            return ImutExprInt::Literal(Literal {
+                mid,
+                value: Value::from(""),
+            });
+        }
+        ImutExprInt::String(StringLit { mid, elements })
+    }
 }
 impl_expr_mid!(StringLit);
 
@@ -1698,52 +1781,64 @@ pub enum PatchOperation<'script> {
     /// Insert only operation
     Insert {
         /// Field
-        ident: ImutExprInt<'script>,
+        ident: StringLit<'script>,
         /// Value expression
         expr: ImutExprInt<'script>,
     },
     /// Insert or update operation
     Upsert {
         /// Field
-        ident: ImutExprInt<'script>,
+        ident: StringLit<'script>,
         /// Value expression
         expr: ImutExprInt<'script>,
     },
     /// Update only operation
     Update {
         /// Field
-        ident: ImutExprInt<'script>,
+        ident: StringLit<'script>,
         /// Value expression
         expr: ImutExprInt<'script>,
     },
     /// Erase operation
     Erase {
         /// Field
-        ident: ImutExprInt<'script>,
+        ident: StringLit<'script>,
     },
     /// Copy operation
     Copy {
         /// From field
-        from: ImutExprInt<'script>,
+        from: StringLit<'script>,
         /// To field
-        to: ImutExprInt<'script>,
+        to: StringLit<'script>,
     },
     /// Move operation
     Move {
         /// Field from
-        from: ImutExprInt<'script>,
+        from: StringLit<'script>,
         /// Field to
-        to: ImutExprInt<'script>,
+        to: StringLit<'script>,
     },
     /// Merge convenience operation
     Merge {
         /// Field
-        ident: ImutExprInt<'script>,
+        ident: StringLit<'script>,
         /// Value
         expr: ImutExprInt<'script>,
     },
     /// Tuple based merge operation
-    TupleMerge {
+    MergeRecord {
+        /// Value
+        expr: ImutExprInt<'script>,
+    },
+    /// Merge convenience operation
+    Default {
+        /// Field
+        ident: StringLit<'script>,
+        /// Value
+        expr: ImutExprInt<'script>,
+    },
+    /// Tuple based merge operation
+    DefaultRecord {
         /// Value
         expr: ImutExprInt<'script>,
     },

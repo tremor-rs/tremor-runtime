@@ -128,20 +128,21 @@ pub trait ImutExprIntVisitor<'script> {
         for op in &mut patch.operations {
             match op {
                 PatchOperation::Insert { ident, expr }
+                | PatchOperation::Default { ident, expr }
                 | PatchOperation::Merge { ident, expr }
                 | PatchOperation::Update { ident, expr }
                 | PatchOperation::Upsert { ident, expr } => {
-                    self.walk_expr(ident)?;
+                    self.walk_string(ident)?;
                     self.walk_expr(expr)?;
                 }
                 PatchOperation::Copy { from, to } | PatchOperation::Move { from, to } => {
-                    self.walk_expr(from)?;
-                    self.walk_expr(to)?;
+                    self.walk_string(from)?;
+                    self.walk_string(to)?;
                 }
                 PatchOperation::Erase { ident } => {
-                    self.walk_expr(ident)?;
+                    self.walk_string(ident)?;
                 }
-                PatchOperation::TupleMerge { expr } => {
+                PatchOperation::DefaultRecord { expr } | PatchOperation::MergeRecord { expr } => {
                     self.walk_expr(expr)?;
                 }
             }

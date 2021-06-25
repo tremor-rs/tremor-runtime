@@ -925,8 +925,8 @@ PatchOperations: PatchOperationsRaw<'input> = {
   }
 }
 
-PatchField: ImutExprRaw<'input> = {
-    ComplexExprImut => <>
+PatchField: StringLitRaw<'input> = {
+    StringLiteral => <>
 }
 
 PatchOperationClause: PatchOperationRaw<'input> = {
@@ -937,7 +937,9 @@ PatchOperationClause: PatchOperationRaw<'input> = {
     "move" <from:PatchField> "=>" <to:PatchField>  => PatchOperationRaw::Move{ from, to },
     "copy" <from:PatchField> "=>" <to:PatchField>  => PatchOperationRaw::Copy{ from, to },
     "merge" <ident:PatchField> "=>" <expr:ComplexExprImut> => PatchOperationRaw::Merge { ident, expr },
-    "merge" "=>" <expr:ComplexExprImut> => PatchOperationRaw::TupleMerge { expr },
+    "merge" "=>" <expr:ComplexExprImut> => PatchOperationRaw::MergeRecord { expr },
+    "default" <ident:PatchField> "=>" <expr:ComplexExprImut> => PatchOperationRaw::Default { ident, expr },
+    "default" "=>" <expr:ComplexExprImut> => PatchOperationRaw::DefaultRecord { expr },
 }
 
 ////////////////////////////// merge expression  //////////////////////////////

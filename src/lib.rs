@@ -37,6 +37,10 @@ extern crate lazy_static;
 #[macro_use]
 extern crate rental;
 
+#[cfg(test)]
+#[macro_use]
+extern crate pretty_assertions;
+
 #[macro_use]
 pub(crate) mod macros;
 pub(crate) mod async_sink;
