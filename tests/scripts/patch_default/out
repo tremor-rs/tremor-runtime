@@ -1,0 +1,3 @@
+{"snot": {"badger": 42}}
+{"snot": {"otter": 42, "badger": "goose"}}
+{"snot": {"badger": "goose"}}

@@ -1,0 +1,3 @@
+patch event of
+  default => {"snot": {"badger": "goose"}}
+end
