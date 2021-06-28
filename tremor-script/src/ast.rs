@@ -1142,13 +1142,20 @@ impl<'script> StringLit<'script> {
         state: &Value<'static>,
         meta: &Value<'event>,
         local: &LocalStack<'event>,
-    ) -> Result<String> {
+    ) -> Result<Cow<'event, str>>
+    where
+        'script: 'event,
+    {
+        // Shortcircut when we have a 1 literal string
+        if let [StrLitElement::Lit(l)] = self.elements.as_slice() {
+            return Ok(l.clone());
+        }
         let mut out = String::with_capacity(128);
         for e in &self.elements {
             match e {
-                crate::ast::StrLitElement::Lit(l) => out.push_str(l),
+                StrLitElement::Lit(l) => out.push_str(l),
                 #[cfg(not(feature = "erlang-float-testing"))]
-                crate::ast::StrLitElement::Expr(e) => {
+                StrLitElement::Expr(e) => {
                     let r = stry!(e.run(opts, env, event, state, meta, local));
                     if let Some(s) = r.as_str() {
                         out.push_str(s);
@@ -1174,7 +1181,7 @@ impl<'script> StringLit<'script> {
                 }
             }
         }
-        Ok(out)
+        Ok(Cow::owned(out))
     }
     fn try_reduce(self, _helper: &Helper<'script, '_>) -> ImutExprInt<'script> {
         let StringLit { mid, mut elements } = self;
