@@ -7,6 +7,8 @@ jobs:
     if: github.repository_owner == 'tremor-rs'
     runs-on: ubuntu-latest
     steps:
+      - name: Verify valid EQC_LICENSE
+        run: test -n "${{secrets.EQC_LICENSE}}"
       - uses: actions/checkout@v1.0.0
       - uses: actions-rs/toolchain@v1
         with:
