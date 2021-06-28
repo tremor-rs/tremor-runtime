@@ -44,6 +44,15 @@ patch_operation({insert, Key, Value}, Acc) ->
     maps:put(Key, Value, Acc);
 patch_operation({merge, Key, Value}, Acc) ->
     maps:fold(fun combine_values/3, #{Key => Value}, Acc);
+patch_operation({merge, Value}, Acc) ->
+    maps:fold(fun combine_values/3, Value, Acc);
+patch_operation({default, Key, Value}, Acc) ->
+    case maps:is_key(Key, Acc) of
+      true -> Acc;
+      false -> maps:put(Key, Value, Acc)
+    end;
+patch_operation({default, Value}, Acc) ->
+    maps:fold(fun combine_values/3, Acc, Value);
 patch_operation({upsert, Key, Value}, Acc) ->
     % does what we expect from upsert
     maps:put(Key, Value, Acc);
@@ -61,6 +70,20 @@ ast_eval(#vars{} = S, {patch, Expr, PatchOperation}) ->
 					 ({merge, Key}) ->
 					     {_, UpdatedKey} = ast_eval(S, Key),
 					     {merge, UpdatedKey};
+					 ({merge, Key, Value}) ->
+					     {_, UpdatedKey} = ast_eval(S, Key),
+					     {_, UpdatedValue} = ast_eval(S,
+									  Value),
+					     {merge, UpdatedKey, UpdatedValue};
+					 ({default, Key}) ->
+					     {_, UpdatedKey} = ast_eval(S, Key),
+					     {default, UpdatedKey};
+					 ({default, Key, Value}) ->
+					     {_, UpdatedKey} = ast_eval(S, Key),
+					     {_, UpdatedValue} = ast_eval(S,
+									  Value),
+					     {default, UpdatedKey,
+					      UpdatedValue};
 					 ({insert, Key, Value}) ->
 					     {_, UpdatedKey} = ast_eval(S, Key),
 					     {_, UpdatedValue} = ast_eval(S,
@@ -71,17 +94,11 @@ ast_eval(#vars{} = S, {patch, Expr, PatchOperation}) ->
 					     {_, UpdatedValue} = ast_eval(S,
 									  Value),
 					     {upsert, UpdatedKey, UpdatedValue};
-                     ({update, Key, Value}) ->
+					 ({update, Key, Value}) ->
 					     {_, UpdatedKey} = ast_eval(S, Key),
 					     {_, UpdatedValue} = ast_eval(S,
 									  Value),
-					     {update, UpdatedKey, UpdatedValue};
-					 ({merge, Key, Value}) ->
-					     {_, UpdatedKey} = ast_eval(S, Key),
-					     {_, UpdatedValue} = ast_eval(S,
-									  Value),
-					     {merge, UpdatedKey, UpdatedValue};
-					 (X) -> X
+					     {update, UpdatedKey, UpdatedValue}
 				     end,
 				     PatchOperation),
     {S,
