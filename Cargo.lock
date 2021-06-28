@@ -237,7 +237,7 @@ dependencies = [
  "futures-core",
  "futures-io",
  "once_cell",
- "pin-project-lite 0.2.6",
+ "pin-project-lite 0.2.7",
  "tokio 1.6.0",
 ]
 
@@ -251,7 +251,7 @@ dependencies = [
  "futures-core",
  "futures-io",
  "memchr",
- "pin-project-lite 0.2.6",
+ "pin-project-lite 0.2.7",
  "xz2",
 ]
 
@@ -461,7 +461,7 @@ dependencies = [
  "memchr",
  "num_cpus",
  "once_cell",
- "pin-project-lite 0.2.6",
+ "pin-project-lite 0.2.7",
  "pin-utils",
  "slab",
  "wasm-bindgen-futures",
@@ -558,7 +558,7 @@ dependencies = [
  "futures-io",
  "futures-util",
  "log",
- "pin-project-lite 0.2.6",
+ "pin-project-lite 0.2.7",
  "tungstenite 0.13.0",
 ]
 
@@ -2028,7 +2028,7 @@ dependencies = [
  "futures-io",
  "memchr",
  "parking",
- "pin-project-lite 0.2.6",
+ "pin-project-lite 0.2.7",
  "waker-fn",
 ]
 
@@ -2077,7 +2077,7 @@ dependencies = [
  "futures-sink",
  "futures-task",
  "memchr",
- "pin-project-lite 0.2.6",
+ "pin-project-lite 0.2.7",
  "pin-utils",
  "proc-macro-hack",
  "proc-macro-nested",
@@ -2522,7 +2522,7 @@ checksum = "60daa14be0e0786db0f03a9e57cb404c9d756eed2b6c62b9ea98ec5743ec75a9"
 dependencies = [
  "bytes 1.0.1",
  "http 0.2.4",
- "pin-project-lite 0.2.6",
+ "pin-project-lite 0.2.7",
 ]
 
 [[package]]
@@ -2553,7 +2553,7 @@ dependencies = [
  "cookie 0.14.4",
  "futures-lite",
  "infer",
- "pin-project-lite 0.2.6",
+ "pin-project-lite 0.2.7",
  "rand 0.7.3",
  "serde",
  "serde_json",
@@ -3903,9 +3903,9 @@ checksum = "257b64915a082f7811703966789728173279bdebb956b143dbcd23f6f970a777"
 
 [[package]]
 name = "pin-project-lite"
-version = "0.2.6"
+version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc0e1f259c92177c30a4c9d177246edd0a3568b25756a977d0632cf8fa37e905"
+checksum = "8d31d11c69a6b52a174b42bdc0c30e5e11670f90788b2c471c31c1d17d449443"
 
 [[package]]
 name = "pin-utils"
@@ -4628,7 +4628,7 @@ dependencies = [
  "mime_guess",
  "native-tls",
  "percent-encoding 2.1.0",
- "pin-project-lite 0.2.6",
+ "pin-project-lite 0.2.7",
  "serde",
  "serde_urlencoded 0.7.0",
  "tokio 0.2.25",
@@ -4664,7 +4664,7 @@ dependencies = [
  "mime_guess",
  "native-tls",
  "percent-encoding 2.1.0",
- "pin-project-lite 0.2.6",
+ "pin-project-lite 0.2.7",
  "rustls 0.19.1",
  "serde",
  "serde_json",
@@ -5564,7 +5564,7 @@ dependencies = [
  "log",
  "mime_guess",
  "once_cell",
- "pin-project-lite 0.2.6",
+ "pin-project-lite 0.2.7",
  "serde",
  "serde_json",
  "web-sys",
@@ -5827,7 +5827,7 @@ dependencies = [
  "http-types",
  "kv-log-macro",
  "log",
- "pin-project-lite 0.2.6",
+ "pin-project-lite 0.2.7",
  "route-recognizer",
  "serde",
  "serde_json",
@@ -5965,7 +5965,7 @@ checksum = "46409491c9375a693ce7032101970a54f8a2010efb77e13f70788f0d84489e39"
 dependencies = [
  "autocfg 1.0.1",
  "num_cpus",
- "pin-project-lite 0.2.6",
+ "pin-project-lite 0.2.7",
  "slab",
 ]
 
@@ -5981,7 +5981,7 @@ dependencies = [
  "memchr",
  "mio 0.7.11",
  "num_cpus",
- "pin-project-lite 0.2.6",
+ "pin-project-lite 0.2.7",
  "tokio-macros",
 ]
 
@@ -6085,7 +6085,7 @@ dependencies = [
  "parking_lot 0.11.1",
  "percent-encoding 2.1.0",
  "phf",
- "pin-project-lite 0.2.6",
+ "pin-project-lite 0.2.7",
  "postgres-protocol",
  "postgres-types",
  "socket2 0.4.0",
@@ -6130,7 +6130,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8864d706fdb3cc0843a49647ac892720dac98a6eeb818b77190592cf4994066"
 dependencies = [
  "futures-core",
- "pin-project-lite 0.2.6",
+ "pin-project-lite 0.2.7",
  "tokio 1.6.0",
 ]
 
@@ -6254,7 +6254,7 @@ dependencies = [
  "futures-core",
  "futures-sink",
  "log",
- "pin-project-lite 0.2.6",
+ "pin-project-lite 0.2.7",
  "tokio 1.6.0",
 ]
 
@@ -6351,7 +6351,7 @@ checksum = "09adeb8c97449311ccd28a427f96fb563e7fd31aabf994189879d9da2394b89d"
 dependencies = [
  "cfg-if 1.0.0",
  "log",
- "pin-project-lite 0.2.6",
+ "pin-project-lite 0.2.7",
  "tracing-attributes",
  "tracing-core",
 ]
@@ -6572,7 +6572,7 @@ dependencies = [
  "mapr",
  "matches",
  "openssl",
- "pin-project-lite 0.2.6",
+ "pin-project-lite 0.2.7",
  "port_scanner",
  "postgres",
  "postgres-protocol",
