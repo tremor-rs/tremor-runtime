@@ -89,6 +89,10 @@ patch_operation({merge, Value}) ->
     ["merge ", " => ", gen_(Value)];
 patch_operation({merge, Key, Value}) ->
     ["merge ", gen_(Key), " => ", gen_(Value)];
+patch_operation({default, Value}) ->
+    ["default ", " => ", gen_(Value)];
+patch_operation({default, Key, Value}) ->
+    ["default ", gen_(Key), " => ", gen_(Value)];
 patch_operation({insert, Key, Value}) ->
     ["insert ", gen_(Key), " => ", gen_(Value)];
 patch_operation({upsert, Key, Value}) ->
