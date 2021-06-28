@@ -1,0 +1,7 @@
+Error: 
+    1 | patch event of
+    2 |   insert "snot" => "badger",
+    3 |   insert 7 => "snot"
+      |          ^ Found the token `7` but expected one of `"`, `"""`
+      |            NOTE: Did you mean to use a string?
+    4 | end
