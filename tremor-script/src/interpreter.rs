@@ -785,15 +785,12 @@ impl<'event, 'run> PreEvaluatedPatchOperation<'event, 'run> {
     fn from(
         patch_op: &'run PatchOperation<'event>,
         opts: ExecOpts,
-        env: &'run Env<'run, 'event>,
-        event: &'run Value<'event>,
-        state: &'run Value<'static>,
-        meta: &'run Value<'event>,
-        local: &'run LocalStack<'event>,
-    ) -> Result<Self>
-    where
-        'event: 'run,
-    {
+        env: &Env<'run, 'event>,
+        event: &Value<'event>,
+        state: &Value<'static>,
+        meta: &Value<'event>,
+        local: &LocalStack<'event>,
+    ) -> Result<Self> {
         Ok(match patch_op {
             PatchOperation::Insert { ident, expr } => PreEvaluatedPatchOperation::Insert {
                 ident: stry!(ident.run(opts, env, event, state, meta, local)).into(),
