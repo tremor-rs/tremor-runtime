@@ -1135,13 +1135,13 @@ pub struct StringLit<'script> {
 
 impl<'script> StringLit<'script> {
     pub(crate) fn run<'run, 'event>(
-        &'run self,
+        &self,
         opts: ExecOpts,
-        env: &'run Env<'run, 'event>,
-        event: &'run Value<'event>,
-        state: &'run Value<'static>,
-        meta: &'run Value<'event>,
-        local: &'run LocalStack<'event>,
+        env: &Env<'run, 'event>,
+        event: &Value<'event>,
+        state: &Value<'static>,
+        meta: &Value<'event>,
+        local: &LocalStack<'event>,
     ) -> Result<String> {
         let mut out = String::with_capacity(128);
         for e in &self.elements {

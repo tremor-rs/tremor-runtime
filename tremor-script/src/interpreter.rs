@@ -852,10 +852,7 @@ fn patch_value<'run, 'event>(
     local: &LocalStack<'event>,
     target: &mut Value<'event>,
     expr: &Patch<'event>,
-) -> Result<()>
-where
-    'event: 'run,
-{
+) -> Result<()> {
     let patch_expr = expr;
     let mut evaluated: Vec<PreEvaluatedPatchOperation> = Vec::with_capacity(expr.operations.len());
     // first pass over the operations, evaluating them
