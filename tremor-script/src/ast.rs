@@ -799,36 +799,45 @@ impl_expr_mid!(Field);
 pub struct Record<'script> {
     /// Id
     pub mid: usize,
+    /// base (or static part of the cecord)
+    pub base: crate::Object<'script>,
     /// Fields of this record
     pub fields: Fields<'script>,
 }
 impl_expr_mid!(Record);
 impl<'script> Record<'script> {
     fn try_reduce(self, helper: &Helper<'script, '_>) -> Result<ImutExprInt<'script>> {
-        if self
+        let (base, fields): (Vec<_>, Vec<_>) = self
             .fields
-            .iter()
-            .all(|f| f.name.is_lit() && f.value.is_lit())
-        {
-            let obj: Result<crate::Object> = self
-                .fields
-                .into_iter()
-                .map(|f| {
-                    let n = f.name.try_into_cow()?;
-                    reduce2(f.value, &helper).map(|v| (n, v))
-                })
-                .collect();
+            .into_iter()
+            .partition(|f| f.name.is_lit() && f.value.is_lit());
+
+        let base: Result<crate::Object> = base
+            .into_iter()
+            .map(|f| {
+                let n = f.name.try_into_cow()?;
+                reduce2(f.value, &helper).map(|v| (n, v))
+            })
+            .collect();
+        let base = base?;
+
+        if fields.is_empty() {
             Ok(ImutExprInt::Literal(Literal {
                 mid: self.mid,
-                value: Value::from(obj?),
+                value: Value::from(base),
             }))
         } else {
-            Ok(ImutExprInt::Record(self))
+            Ok(ImutExprInt::Record(Record {
+                mid: self.mid,
+                base,
+                fields,
+            }))
         }
     }
-    /// Tries to fetch a field from a record
+
+    /// Gets the expression for a given name
     #[must_use]
-    pub fn get(&self, name: &str) -> Option<&ImutExprInt> {
+    pub fn get_field_expr(&self, name: &str) -> Option<&ImutExprInt> {
         self.fields.iter().find_map(|f| {
             f.name
                 .as_str()
@@ -838,7 +847,7 @@ impl<'script> Record<'script> {
     /// Tries to fetch a literal from a record
     #[must_use]
     pub fn get_literal(&self, name: &str) -> Option<&Value> {
-        if let ImutExprInt::Literal(Literal { value, .. }) = self.get(name)? {
+        if let ImutExprInt::Literal(Literal { value, .. }) = self.get_field_expr(name)? {
             Some(value)
         } else {
             None
@@ -1137,6 +1146,7 @@ impl<'script> StringLit<'script> {
     pub(crate) fn is_lit(&self) -> bool {
         matches!(self.elements.as_slice(), [StrLitElement::Lit(_)])
     }
+
     pub(crate) fn as_str(&self) -> Option<&str> {
         if let [StrLitElement::Lit(l)] = self.elements.as_slice() {
             Some(&l)
@@ -2655,17 +2665,18 @@ hello
         };
 
         let r = super::Record {
+            base: crate::Object::new(),
             mid: 0,
             fields: vec![f1, f2],
         };
 
-        assert_eq!(r.get("snot"), Some(&v("badger")));
-        assert_eq!(r.get("nots"), None);
+        assert_eq!(r.get_field_expr("snot"), Some(&v("badger")));
+        assert_eq!(r.get_field_expr("nots"), None);
 
         assert_eq!(
             r.get_literal("badger").and_then(ValueAccess::as_str),
             Some("snot")
         );
-        assert_eq!(r.get("adgerb"), None);
+        assert_eq!(r.get_field_expr("adgerb"), None);
     }
 }
