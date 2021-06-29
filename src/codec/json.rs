@@ -12,35 +12,60 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::cmp::max;
+use std::{cmp::max, marker::PhantomData};
 
 use super::prelude::*;
+use tremor_script::utils::sorted_serialize;
 use tremor_value::AlignedBuf;
 
-pub struct Json {
+/// Sorting for JSON
+pub trait Sorting: Sync + Send + Copy + Clone + 'static {
+    const SORTED: bool;
+}
+
+/// Unsorted
+#[derive(Clone, Copy, Debug)]
+pub struct Unsorted {}
+impl Sorting for Unsorted {
+    const SORTED: bool = false;
+}
+/// Sorted
+#[derive(Clone, Copy, Debug)]
+pub struct Sorted {}
+impl Sorting for Sorted {
+    const SORTED: bool = true;
+}
+
+pub struct Json<S: Sorting> {
+    _phantom: PhantomData<S>,
     input_buffer: AlignedBuf,
     string_buffer: Vec<u8>,
 }
 
-impl Clone for Json {
+impl<S: Sorting> Clone for Json<S> {
     fn clone(&self) -> Self {
         Self::default()
     }
 }
 
-impl Default for Json {
+impl<S: Sorting> Default for Json<S> {
     fn default() -> Self {
         Self {
+            _phantom: PhantomData::default(),
             input_buffer: AlignedBuf::with_capacity(1024),
             string_buffer: Vec::with_capacity(1024),
         }
     }
 }
 
-impl Codec for Json {
+impl<S: Sorting> Codec for Json<S> {
     #[cfg(not(tarpaulin_include))]
     fn name(&self) -> &str {
-        "json"
+        if S::SORTED {
+            "sorted-json"
+        } else {
+            "json"
+        }
     }
 
     #[cfg(not(tarpaulin_include))]
@@ -68,9 +93,13 @@ impl Codec for Json {
         .map_err(|e| e.into())
     }
     fn encode(&self, data: &Value) -> Result<Vec<u8>> {
-        let mut v = Vec::with_capacity(1024);
-        self.encode_into(data, &mut v)?;
-        Ok(v)
+        if S::SORTED {
+            Ok(sorted_serialize(data)?.into_bytes())
+        } else {
+            let mut v = Vec::with_capacity(1024);
+            self.encode_into(data, &mut v)?;
+            Ok(v)
+        }
     }
     fn encode_into(&self, data: &Value, dst: &mut Vec<u8>) -> Result<()> {
         data.write(dst)?;
@@ -90,9 +119,10 @@ mod test {
 
     #[test]
     fn decode() -> Result<()> {
-        let mut codec = Json {
+        let mut codec: Json<Unsorted> = Json {
             input_buffer: AlignedBuf::with_capacity(0),
             string_buffer: Vec::new(),
+            ..Default::default()
         };
         let expected = literal!({ "snot": "badger" });
 
@@ -113,7 +143,20 @@ mod test {
     fn test_json_codec() -> Result<()> {
         let seed = literal!({ "snot": "badger" });
 
-        let mut codec = Json::default();
+        let mut codec = Json::<Unsorted>::default();
+
+        let mut as_raw = codec.encode(&seed)?;
+        let as_json = codec.decode(as_raw.as_mut_slice(), 0);
+
+        let _ = dbg!(as_json);
+
+        Ok(())
+    }
+    #[test]
+    fn test_json_codec_sorted() -> Result<()> {
+        let seed = literal!({ "snot": "badger" });
+
+        let mut codec = Json::<Sorted>::default();
 
         let mut as_raw = codec.encode(&seed)?;
         let as_json = codec.decode(as_raw.as_mut_slice(), 0);

@@ -99,7 +99,8 @@ pub trait Codec: Send + Sync {
 ///  * if the codec doesn't exist
 pub fn lookup(name: &str) -> Result<Box<dyn Codec>> {
     match name {
-        "json" => Ok(Box::new(json::Json::default())),
+        "json" => Ok(Box::new(json::Json::<json::Unsorted>::default())),
+        "json-sorted" => Ok(Box::new(json::Json::<json::Sorted>::default())),
         "msgpack" => Ok(Box::new(msgpack::MsgPack {})),
         "influx" => Ok(Box::new(influx::Influx {})),
         "binflux" => Ok(Box::new(binflux::BInflux {})),
@@ -132,7 +133,7 @@ pub fn builtin_codec_map() -> halfbrown::HashMap<String, Box<dyn Codec>> {
 /// if no codec could be found for the given mime type
 pub fn by_mime_type(mime: &str) -> Result<Box<dyn Codec>> {
     match mime {
-        "application/json" => Ok(Box::new(json::Json::default())),
+        "application/json" => Ok(Box::new(json::Json::<json::Unsorted>::default())),
         "application/yaml" => Ok(Box::new(yaml::Yaml {})),
         "text/plain" | "text/html" => Ok(Box::new(string::String {})),
         "application/msgpack" | "application/x-msgpack" | "application/vnd.msgpack" => {
@@ -149,6 +150,7 @@ mod test {
     #[test]
     fn lookup() {
         assert!(super::lookup("json").is_ok());
+        assert!(super::lookup("json-sorted").is_ok());
         assert!(super::lookup("msgpack").is_ok());
         assert!(super::lookup("influx").is_ok());
         assert!(super::lookup("binflux").is_ok());
