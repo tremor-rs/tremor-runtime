@@ -173,7 +173,8 @@ impl<'script> ImutExprInt<'script> {
                 self.present(opts, env, event, state, meta, local, path)
             }
             ImutExprInt::Record(ref record) => {
-                let mut object: Object = Object::with_capacity(record.fields.len());
+                let mut object: Object = record.base.clone();
+                object.reserve(record.fields.len());
 
                 for field in &record.fields {
                     let result = stry!(field.value.run(opts, env, event, state, meta, local));

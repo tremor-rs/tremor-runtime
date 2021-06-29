@@ -387,6 +387,7 @@ impl<'script> Upable<'script> for RecordRaw<'script> {
     type Target = Record<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(Record {
+            base: crate::Object::new(),
             mid: helper.add_meta(self.start, self.end),
             fields: self.fields.up(helper)?,
         })
