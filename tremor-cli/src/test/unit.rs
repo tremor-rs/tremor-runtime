@@ -18,7 +18,6 @@ use crate::report;
 use crate::test;
 use crate::test::stats;
 use crate::test::status;
-use halfbrown::hashmap;
 use report::TestSuite;
 use std::io::Read;
 use std::{collections::HashMap, path::Path};
@@ -82,9 +81,9 @@ fn eval_suite_entrypoint(
 }
 
 fn eval(expr: &ImutExprInt, env: &Env, local: &LocalStack) -> Result<Value<'static>> {
-    let state = Value::Object(Box::new(hashmap! {}));
-    let meta = Value::Object(Box::new(hashmap! {}));
-    let event = Value::Object(Box::new(hashmap! {}));
+    let state = Value::object();
+    let meta = Value::object();
+    let event = Value::object();
     Ok(expr
         .run(EXEC_OPTS, &env, &event, &state, &meta, local)?
         .into_owned()
@@ -107,7 +106,7 @@ fn eval_suite_tests(
 ) -> Result<(stats::Stats, Vec<report::TestElement>)> {
     let mut elements = Vec::new();
     let mut stats = stats::Stats::new();
-    if let Value::Array(a) = suite_result {
+    if let Some(a) = suite_result.as_array() {
         let al = a.len();
         let ll = suite_spec.exprs.len();
         for (idx, item) in suite_spec.exprs.iter().enumerate() {
@@ -125,10 +124,15 @@ fn eval_suite_tests(
 
                         if let Some(tags) = spec.get_field_expr("tags") {
                             let tag_value = eval(tags, env, local)?;
-                            if let Value::Array(tags) = tag_value {
+                            if let Some(tags) = tag_value.as_array() {
                                 let inner_tags = tags.iter().map(|x| (*x).to_string());
                                 found_tags.extend(inner_tags);
                             }
+                        } else if let Some(tags) =
+                            spec.get_literal("tags").and_then(Value::as_array)
+                        {
+                            let inner_tags = tags.iter().map(|x| (*x).to_string());
+                            found_tags.extend(inner_tags);
                         }
 
                         let case_tags = suite_tags.join(Some(found_tags));
@@ -323,10 +327,15 @@ pub(crate) fn run_suite(
                             let mut found_tags = Vec::new();
                             if let Some(tags) = spec.get_field_expr("tags") {
                                 let tag_value = eval(tags, &env, &local)?;
-                                if let Value::Array(tags) = tag_value {
+                                if let Some(tags) = tag_value.as_array() {
                                     let inner_tags = tags.iter().map(|x| (*x).to_string());
                                     found_tags.extend(inner_tags);
                                 }
+                            } else if let Some(tags) =
+                                spec.get_literal("tags").and_then(Value::as_array)
+                            {
+                                let inner_tags = tags.iter().map(|x| (*x).to_string());
+                                found_tags.extend(inner_tags);
                             }
 
                             let suite_tags = scenario_tags.join(Some(found_tags));
