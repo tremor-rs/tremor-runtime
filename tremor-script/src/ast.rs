@@ -788,7 +788,7 @@ pub struct Field<'script> {
     /// Id
     pub mid: usize,
     /// Name of the field
-    pub name: ImutExprInt<'script>,
+    pub name: StringLit<'script>,
     /// Value expression for the field
     pub value: ImutExprInt<'script>,
 }
@@ -814,11 +814,8 @@ impl<'script> Record<'script> {
                 .fields
                 .into_iter()
                 .map(|f| {
-                    reduce2(f.name.clone(), &helper).and_then(|n| {
-                        // ALLOW: The grammar guarantees the key of a record is always a string
-                        let n = n.as_str().unwrap_or_else(|| unreachable!());
-                        reduce2(f.value, &helper).map(|v| (n.to_owned().into(), v))
-                    })
+                    let n = f.name.try_into_cow()?;
+                    reduce2(f.value, &helper).map(|v| (n, v))
                 })
                 .collect();
             Ok(ImutExprInt::Literal(Literal {
@@ -833,15 +830,9 @@ impl<'script> Record<'script> {
     #[must_use]
     pub fn get(&self, name: &str) -> Option<&ImutExprInt> {
         self.fields.iter().find_map(|f| {
-            if let ImutExprInt::Literal(Literal { value, .. }) = &f.name {
-                if value == name {
-                    Some(&f.value)
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
+            f.name
+                .as_str()
+                .and_then(|n| if n == name { Some(&f.value) } else { None })
         })
     }
     /// Tries to fetch a literal from a record
@@ -1133,7 +1124,37 @@ pub struct StringLit<'script> {
     pub elements: StrLitElements<'script>,
 }
 
+impl<'s> From<&'s str> for StringLit<'s> {
+    fn from(s: &'s str) -> Self {
+        Self {
+            mid: 0,
+            elements: vec![StrLitElement::Lit(s.into())],
+        }
+    }
+}
+
 impl<'script> StringLit<'script> {
+    pub(crate) fn is_lit(&self) -> bool {
+        matches!(self.elements.as_slice(), [StrLitElement::Lit(_)])
+    }
+    pub(crate) fn as_str(&self) -> Option<&str> {
+        if let [StrLitElement::Lit(l)] = self.elements.as_slice() {
+            Some(&l)
+        } else {
+            None
+        }
+    }
+
+    pub(crate) fn try_into_cow(mut self) -> Result<Cow<'script, str>> {
+        if self.elements.len() != 1 {
+            Err("Not a static string".into())
+        } else if let Some(StrLitElement::Lit(l)) = self.elements.pop() {
+            Ok(l)
+        } else {
+            Err("Not a static string".into())
+        }
+    }
+
     pub(crate) fn run<'run, 'event>(
         &self,
         opts: ExecOpts,
@@ -2624,12 +2645,12 @@ hello
     fn record() {
         let f1 = super::Field {
             mid: 0,
-            name: v("snot"),
+            name: "snot".into(),
             value: v("badger"),
         };
         let f2 = super::Field {
             mid: 0,
-            name: v("badger"),
+            name: "badger".into(),
             value: v("snot"),
         };
 

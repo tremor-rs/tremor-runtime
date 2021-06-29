@@ -51,7 +51,7 @@ pub trait ImutExprIntVisitor<'script> {
     /// if the walker function fails
     fn walk_record(&mut self, record: &mut Record<'script>) -> Result<()> {
         for field in &mut record.fields {
-            self.walk_expr(&mut field.name)?;
+            self.walk_string(&mut field.name)?;
             self.walk_expr(&mut field.value)?;
         }
         Ok(())
