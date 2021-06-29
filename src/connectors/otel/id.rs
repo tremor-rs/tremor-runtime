@@ -14,8 +14,8 @@
 
 use crate::errors::Result;
 use rand::Rng;
+use simd_json::ValueAccess;
 use tremor_script::Value;
-use tremor_value::StaticNode;
 
 pub(crate) fn random_span_id_bytes(ingest_ns_seed: u64) -> Vec<u8> {
     let mut rng = tremor_common::rand::make_prng(ingest_ns_seed);
@@ -32,17 +32,15 @@ pub(crate) fn random_span_id_string(ingest_ns_seed: u64) -> String {
     span_id
 }
 
-pub(crate) fn random_span_id_array<'event>(ingest_ns_seed: u64) -> Value<'event> {
-    Value::Array(
-        random_span_id_bytes(ingest_ns_seed)
-            .iter()
-            .map(|b| Value::Static(StaticNode::U64(u64::from(*b))))
-            .collect(),
-    )
+pub(crate) fn random_span_id_array(ingest_ns_seed: u64) -> Value<'static> {
+    random_span_id_bytes(ingest_ns_seed)
+        .into_iter()
+        .map(Value::from)
+        .collect()
 }
 
-pub(crate) fn random_span_id_value<'event>(ingest_ns_seed: u64) -> Value<'event> {
-    Value::String(random_span_id_string(ingest_ns_seed).into())
+pub(crate) fn random_span_id_value(ingest_ns_seed: u64) -> Value<'static> {
+    Value::from(random_span_id_string(ingest_ns_seed))
 }
 
 pub(crate) fn random_trace_id_bytes(ingest_ns_seed: u64) -> Vec<u8> {
@@ -60,8 +58,8 @@ pub(crate) fn random_trace_id_string(ingest_ns_seed: u64) -> String {
     span_id
 }
 
-pub(crate) fn random_trace_id_value<'event>(ingest_ns_seed: u64) -> Value<'event> {
-    Value::String(random_trace_id_string(ingest_ns_seed).into())
+pub(crate) fn random_trace_id_value(ingest_ns_seed: u64) -> Value<'static> {
+    Value::from(random_trace_id_string(ingest_ns_seed))
 }
 
 fn hex_to_bytes(str_bytes: &str) -> Option<Vec<u8>> {
@@ -79,13 +77,11 @@ fn hex_to_bytes(str_bytes: &str) -> Option<Vec<u8>> {
     }
 }
 
-pub(crate) fn random_trace_id_array<'event>(ingest_ns_seed: u64) -> Value<'event> {
-    Value::Array(
-        random_trace_id_bytes(ingest_ns_seed)
-            .iter()
-            .map(|b| Value::Static(StaticNode::U64(u64::from(*b))))
-            .collect(),
-    )
+pub(crate) fn random_trace_id_array(ingest_ns_seed: u64) -> Value<'static> {
+    random_trace_id_bytes(ingest_ns_seed)
+        .into_iter()
+        .map(Value::from)
+        .collect()
 }
 
 pub(crate) fn hex_parent_span_id_to_pb(data: Option<&Value<'_>>) -> Result<Vec<u8>> {
@@ -96,18 +92,18 @@ pub(crate) fn hex_span_id_to_pb(data: Option<&Value<'_>>) -> Result<Vec<u8>> {
     hex_id_to_pb("span", data, 8, false)
 }
 
-pub(crate) fn hex_span_id_to_json<'event>(data: &[u8]) -> Value<'event> {
+pub(crate) fn hex_span_id_to_json(data: &[u8]) -> Value<'static> {
     let hex: String = data.iter().map(|b| format!("{:02x}", b)).collect();
-    Value::String(hex.into())
+    Value::from(hex)
 }
 
 pub(crate) fn hex_trace_id_to_pb(data: Option<&Value<'_>>) -> Result<Vec<u8>> {
     hex_id_to_pb("trace", data, 16, false)
 }
 
-pub(crate) fn hex_trace_id_to_json<'event>(data: &[u8]) -> Value<'event> {
+pub(crate) fn hex_trace_id_to_json(data: &[u8]) -> Value<'static> {
     let hex: String = data.iter().map(|b| format!("{:02x}", b)).collect();
-    Value::String(hex.into())
+    Value::from(hex)
 }
 
 fn hex_id_to_pb(
@@ -116,7 +112,7 @@ fn hex_id_to_pb(
     len_bytes: usize,
     allow_empty: bool,
 ) -> Result<Vec<u8>> {
-    if let Some(Value::String(json)) = data {
+    if let Some(json) = data.as_str() {
         let pb = json.to_string();
         let pb = hex_to_bytes(&pb);
 
@@ -133,7 +129,7 @@ fn hex_id_to_pb(
         } else {
             Err(format!("Invalid hex encoded string - cannot convert {} to pb", kind).into())
         }
-    } else if let Some(Value::Bytes(json)) = data {
+    } else if let Some(json) = data.and_then(Value::as_bytes) {
         let data = json.to_vec();
         if (allow_empty && data.is_empty()) || data.len() == len_bytes {
             Ok(data)
@@ -144,34 +140,15 @@ fn hex_id_to_pb(
             )
             .into())
         }
-    } else if let Some(Value::Array(arr)) = data {
+    } else if let Some(arr) = data.as_array() {
         let mut data = Vec::with_capacity(arr.len());
         for i in arr {
-            if let Value::Static(StaticNode::I64(i)) = i {
-                if *i > 255 {
-                    return Err(format!(
-                        "Invalid {} id ( wrong array element ) - values must be 0 <= [..., v={} , ...] <= 255 - cannot convert to pb",
-                        kind,
-                        *i
-                    )
-                    .into());
-                }
-                #[allow(clippy::cast_possible_truncation)]
-                #[allow(clippy::cast_sign_loss)]
-                data.push(*i as u8)
-            } else if let Value::Static(StaticNode::U64(i)) = i {
-                if *i > 255 {
-                    return Err(format!(
-                        "Invalid {} id ( wrong array element ) - values must be 0 <= [..., v={} , ...] <= 255 - cannot convert to pb",
-                        kind,
-                        *i
-                    )
-                    .into());
-                }
-                #[allow(clippy::cast_possible_truncation)]
-                #[allow(clippy::cast_sign_loss)]
-                data.push(*i as u8)
-            }
+            let i = i.as_u8().ok_or_else(|| format!(
+                "Invalid {} id ( wrong array element ) - values must be 0 <= [..., v={} , ...] <= 255 - cannot convert to pb",
+                kind,
+                i
+            ))?;
+            data.push(i)
         }
 
         if (allow_empty && data.is_empty()) || data.len() == len_bytes {
