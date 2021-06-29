@@ -21,33 +21,43 @@ offramp:
       file: debug.log
   - id: errfile
     type: file
-    codec: json
+    codec: json-sorted
     config:
       file: "err.log"
   - id: okfile
     type: file
-    codec: json
+    codec: json-sorted
     config:
       file: "ok.log"
   - id: exit
     type: exit
 
-
 binding:
   - id: elastic_integration
     links:
-      "/onramp/input/{instance}/out": ["/pipeline/main/{instance}/in", "/pipeline/exit/{instance}/in"]
+      "/onramp/input/{instance}/out":
+        ["/pipeline/main/{instance}/in", "/pipeline/exit/{instance}/in"]
       "/pipeline/main/{instance}/out": ["/offramp/elastic/{instance}/in"]
       "/pipeline/exit/{instance}/out": ["/offramp/exit/{instance}/in"]
 
-      "/offramp/elastic/{instance}/out": ["/pipeline/response_handling/{instance}/in", "/pipeline/system::passthrough/{instance}/in"]
-      "/pipeline/response_handling/{instance}/out": ["/offramp/okfile/{instance}/in"]
+      "/offramp/elastic/{instance}/out":
+        [
+          "/pipeline/response_handling/{instance}/in",
+          "/pipeline/system::passthrough/{instance}/in",
+        ]
+      "/pipeline/response_handling/{instance}/out":
+        ["/offramp/okfile/{instance}/in"]
 
-      "/offramp/elastic/{instance}/err": ["/pipeline/response_handling/{instance}/in", "/pipeline/system::passthrough/{instance}/in"]
-      "/pipeline/response_handling/{instance}/err": ["/offramp/errfile/{instance}/in"]
+      "/offramp/elastic/{instance}/err":
+        [
+          "/pipeline/response_handling/{instance}/in",
+          "/pipeline/system::passthrough/{instance}/in",
+        ]
+      "/pipeline/response_handling/{instance}/err":
+        ["/offramp/errfile/{instance}/in"]
 
-      "/pipeline/system::passthrough/{instance}/out": ["/offramp/debug_out/{instance}/in"]
-
+      "/pipeline/system::passthrough/{instance}/out":
+        ["/offramp/debug_out/{instance}/in"]
 
 mapping:
   "/binding/elastic_integration/01":
