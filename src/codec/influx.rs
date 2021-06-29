@@ -73,7 +73,6 @@ impl Codec for Influx {
 mod tests {
     use super::*;
     use crate::codec::binflux::BInflux;
-    use pretty_assertions::assert_eq;
     use tremor_influx as influx;
     use tremor_value::literal;
 
