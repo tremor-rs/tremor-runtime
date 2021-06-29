@@ -11,7 +11,9 @@ let event = patch event of
   merge => { "fleek": "flork" },
   merge "cc" => {"flip": "flop"},
   insert "aa" => "bar",
-  merge "xx" => {"cake": "cookie"}
+  merge "zz" => {"cake": "cookie"},
+  copy "zz" => "yy",
+  move "zz" => "xx"
 end;
 
 emit patch merge event of { "foo": "bar" } end of update "foo" => "badger" end;
