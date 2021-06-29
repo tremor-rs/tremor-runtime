@@ -772,10 +772,9 @@ enum PreEvaluatedPatchOperation<'event, 'run> {
     },
     Default {
         ident: beef::Cow<'event, str>,
-        default_value: Value<'event>,
+        expr: &'run ImutExprInt<'event>,
     },
     DefaultRecord {
-        default_value: Value<'event>,
         expr: &'run ImutExprInt<'event>,
     },
 }
@@ -793,32 +792,32 @@ impl<'event, 'run> PreEvaluatedPatchOperation<'event, 'run> {
     ) -> Result<Self> {
         Ok(match patch_op {
             PatchOperation::Insert { ident, expr } => PreEvaluatedPatchOperation::Insert {
-                ident: stry!(ident.run(opts, env, event, state, meta, local)).into(),
+                ident: stry!(ident.run(opts, env, event, state, meta, local)),
                 ident_expr: ident,
                 value: stry!(expr.run(opts, env, event, state, meta, local)).into_owned(),
             },
             PatchOperation::Update { ident, expr } => PreEvaluatedPatchOperation::Update {
-                ident: stry!(ident.run(opts, env, event, state, meta, local)).into(),
+                ident: stry!(ident.run(opts, env, event, state, meta, local)),
                 ident_expr: ident,
                 value: stry!(expr.run(opts, env, event, state, meta, local)).into_owned(),
             },
             PatchOperation::Upsert { ident, expr } => PreEvaluatedPatchOperation::Upsert {
-                ident: stry!(ident.run(opts, env, event, state, meta, local)).into(),
+                ident: stry!(ident.run(opts, env, event, state, meta, local)),
                 value: stry!(expr.run(opts, env, event, state, meta, local)).into_owned(),
             },
             PatchOperation::Erase { ident } => PreEvaluatedPatchOperation::Erase {
-                ident: stry!(ident.run(opts, env, event, state, meta, local)).into(),
+                ident: stry!(ident.run(opts, env, event, state, meta, local)),
             },
             PatchOperation::Copy { from, to } => PreEvaluatedPatchOperation::Copy {
-                from: stry!(from.run(opts, env, event, state, meta, local)).into(),
-                to: stry!(to.run(opts, env, event, state, meta, local)).into(),
+                from: stry!(from.run(opts, env, event, state, meta, local)),
+                to: stry!(to.run(opts, env, event, state, meta, local)),
             },
             PatchOperation::Move { from, to } => PreEvaluatedPatchOperation::Move {
-                from: stry!(from.run(opts, env, event, state, meta, local)).into(),
-                to: stry!(to.run(opts, env, event, state, meta, local)).into(),
+                from: stry!(from.run(opts, env, event, state, meta, local)),
+                to: stry!(to.run(opts, env, event, state, meta, local)),
             },
             PatchOperation::Merge { ident, expr } => PreEvaluatedPatchOperation::Merge {
-                ident: stry!(ident.run(opts, env, event, state, meta, local)).into(),
+                ident: stry!(ident.run(opts, env, event, state, meta, local)),
                 ident_expr: ident,
                 merge_value: stry!(expr.run(opts, env, event, state, meta, local)).into_owned(),
             },
@@ -826,14 +825,13 @@ impl<'event, 'run> PreEvaluatedPatchOperation<'event, 'run> {
                 merge_value: stry!(expr.run(opts, env, event, state, meta, local)).into_owned(),
             },
             PatchOperation::Default { ident, expr } => PreEvaluatedPatchOperation::Default {
-                ident: stry!(ident.run(opts, env, event, state, meta, local)).into(),
+                ident: stry!(ident.run(opts, env, event, state, meta, local)),
                 // PERF: this is slow, we might not need to evaluate it
-                default_value: stry!(expr.run(opts, env, event, state, meta, local)).into_owned(),
-            },
-            PatchOperation::DefaultRecord { expr } => PreEvaluatedPatchOperation::DefaultRecord {
-                default_value: stry!(expr.run(opts, env, event, state, meta, local)).into_owned(),
                 expr,
             },
+            PatchOperation::DefaultRecord { expr } => {
+                PreEvaluatedPatchOperation::DefaultRecord { expr }
+            }
         })
     }
 }
@@ -939,24 +937,20 @@ fn patch_value<'run, 'event>(
                     stry!(merge_values(patch_expr, expr, target, &merge_value));
                 }
                 PreEvaluatedPatchOperation::Default {
-                    ident,
-                    default_value,
-                    ..
+                    ident, expr: inner, ..
                 } => {
                     if !obj.contains_key(&ident) {
-                        obj.insert(ident, default_value);
+                        let default_value = stry!(inner.run(opts, env, event, state, meta, local));
+                        obj.insert(ident, default_value.into_owned());
                     };
                 }
-                PreEvaluatedPatchOperation::DefaultRecord {
-                    default_value,
-                    expr: inner,
-                } => {
-                    // We clone the default value and swap it with the target. Effectively what we
-                    // do here is: merge <default> of <target> end;
-                    // PERF: this could be faster
-                    let mut dflt = default_value.clone();
-                    stry!(merge_values(expr, inner, &mut dflt, target));
-                    std::mem::swap(target, &mut dflt);
+                PreEvaluatedPatchOperation::DefaultRecord { expr: inner } => {
+                    let default_value = stry!(inner.run(opts, env, event, state, meta, local));
+                    if let Some(dflt) = default_value.as_object() {
+                        apply_default(obj, dflt)
+                    } else {
+                        return error_need_obj(expr, inner, default_value.value_type(), &env.meta);
+                    }
                 }
             }
         } else {
@@ -964,6 +958,23 @@ fn patch_value<'run, 'event>(
         }
     }
     Ok(())
+}
+
+fn apply_default<'event>(
+    target: &mut <Value<'event> as ValueAccess>::Object,
+    dflt: &<Value<'event> as ValueAccess>::Object,
+) {
+    for (k, v) in dflt {
+        if !target.contains_key(k) {
+            target.insert(k.clone(), v.clone());
+        } else if let Some((target, dflt)) = target
+            .get_mut(k)
+            .and_then(Value::as_object_mut)
+            .zip(v.as_object())
+        {
+            apply_default(target, dflt)
+        }
+    }
 }
 
 #[inline]

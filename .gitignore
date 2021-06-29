@@ -48,3 +48,4 @@ report.json
 lcov.info
 tremor-value/proptest-regressions/
 *.release
+tremor-script/current_counterexample.eqc
