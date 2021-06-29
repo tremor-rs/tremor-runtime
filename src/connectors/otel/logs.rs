@@ -13,18 +13,13 @@
 // limitations under the License.
 
 use super::super::pb;
-use super::common;
-use super::id;
-use super::resource;
+use super::{common, id, resource};
 use crate::errors::Result;
 use tremor_otelapis::opentelemetry::proto::{
     collector::logs::v1::ExportLogsServiceRequest,
     logs::v1::{InstrumentationLibraryLogs, LogRecord, ResourceLogs},
 };
-use tremor_value::literal;
-
-use tremor_value::Value;
-use value_trait::ValueAccess;
+use tremor_value::{literal, prelude::*, Value};
 
 fn affirm_traceflags_valid(traceflags: u32) -> Result<u32> {
     if (traceflags == 128) || (traceflags == 0) {
@@ -66,9 +61,9 @@ where
     Ok(text)
 }
 
-pub(crate) fn instrumentation_library_logs_to_json<'event>(
+pub(crate) fn instrumentation_library_logs_to_json(
     pb: Vec<tremor_otelapis::opentelemetry::proto::logs::v1::InstrumentationLibraryLogs>,
-) -> Result<Value<'event>> {
+) -> Result<Value<'static>> {
     let mut json = Vec::new();
     for data in pb {
         let mut logs = Vec::new();
@@ -98,12 +93,12 @@ pub(crate) fn instrumentation_library_logs_to_json<'event>(
 pub(crate) fn maybe_instrumentation_library_logs_to_pb(
     data: Option<&Value<'_>>,
 ) -> Result<Vec<InstrumentationLibraryLogs>> {
-    if let Some(Value::Array(data)) = data {
+    if let Some(data) = data.as_array() {
         let mut pb = Vec::with_capacity(data.len());
         for ill in data {
-            if let Value::Object(data) = ill {
+            if ill.is_object() {
                 let mut logs = Vec::new();
-                if let Some(Value::Array(data)) = data.get("logs") {
+                if let Some(data) = ill.get_array("logs") {
                     for log in data {
                         let name: String = pb::maybe_string_to_pb(log.get("name"))?;
                         let time_unix_nano: u64 =
@@ -136,7 +131,7 @@ pub(crate) fn maybe_instrumentation_library_logs_to_pb(
                         });
                     }
                 }
-                let il = data.get("instrumentation_library");
+                let il = ill.get("instrumentation_library");
                 let e = InstrumentationLibraryLogs {
                     instrumentation_library: common::maybe_instrumentation_library_to_pb(il)?,
                     logs,
@@ -150,9 +145,7 @@ pub(crate) fn maybe_instrumentation_library_logs_to_pb(
     Err("Invalid json mapping for InstrumentationLibraryLogs".into())
 }
 
-pub(crate) fn resource_logs_to_json<'event>(
-    request: ExportLogsServiceRequest,
-) -> Result<Value<'event>> {
+pub(crate) fn resource_logs_to_json(request: ExportLogsServiceRequest) -> Result<Value<'static>> {
     let mut json = Vec::with_capacity(request.resource_logs.len());
     for log in request.resource_logs {
         json.push(literal!({
@@ -165,24 +158,22 @@ pub(crate) fn resource_logs_to_json<'event>(
 }
 
 pub(crate) fn resource_logs_to_pb(json: &Value<'_>) -> Result<Vec<ResourceLogs>> {
-    if let Value::Object(json) = json {
-        if let Some(Value::Array(json)) = json.get("logs") {
-            let mut pb = Vec::with_capacity(json.len());
-            for json in json {
-                if let Value::Object(json) = json {
-                    let instrumentation_library_logs = maybe_instrumentation_library_logs_to_pb(
-                        json.get("instrumentation_library_logs"),
-                    )?;
-                    let resource = Some(resource::maybe_resource_to_pb(json.get("resource"))?);
-                    let item = ResourceLogs {
-                        resource,
-                        instrumentation_library_logs,
-                    };
-                    pb.push(item);
-                }
+    if let Some(json) = json.get_array("logs") {
+        let mut pb = Vec::with_capacity(json.len());
+        for json in json {
+            if let Some(json) = json.as_object() {
+                let instrumentation_library_logs = maybe_instrumentation_library_logs_to_pb(
+                    json.get("instrumentation_library_logs"),
+                )?;
+                let resource = Some(resource::maybe_resource_to_pb(json.get("resource"))?);
+                let item = ResourceLogs {
+                    resource,
+                    instrumentation_library_logs,
+                };
+                pb.push(item);
             }
-            return Ok(pb);
         }
+        return Ok(pb);
     }
 
     Err("Invalid json mapping for otel logs message - cannot convert to pb".into())

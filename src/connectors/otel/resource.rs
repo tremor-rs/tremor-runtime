@@ -15,9 +15,9 @@
 use super::common;
 use crate::connectors::pb;
 use crate::errors::Result;
+use simd_json::ValueAccess;
 use tremor_otelapis::opentelemetry::proto::resource::v1::Resource;
-use tremor_value::literal;
-use tremor_value::Value;
+use tremor_value::{literal, Value};
 
 pub(crate) fn resource_to_json<'event>(pb: Option<Resource>) -> Result<Value<'event>> {
     if let Some(data) = pb {
@@ -31,7 +31,7 @@ pub(crate) fn resource_to_json<'event>(pb: Option<Resource>) -> Result<Value<'ev
 }
 
 pub(crate) fn maybe_resource_to_pb(json: Option<&Value<'_>>) -> Result<Resource> {
-    if let Some(Value::Object(json)) = json {
+    if let Some(json) = json.as_object() {
         let dropped_attributes_count: u32 =
             pb::maybe_int_to_pbu32(json.get("dropped_attributes_count"))?;
         let attributes = common::maybe_key_value_list_to_pb(json.get("attributes"))?;
