@@ -365,7 +365,7 @@ pub struct FieldRaw<'script> {
 impl<'script> Upable<'script> for FieldRaw<'script> {
     type Target = Field<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        let name = ImutExprRaw::String(self.name).up(helper)?;
+        let name = self.name.up(helper)?;
         Ok(Field {
             mid: helper.add_meta(self.start, self.end),
             name,

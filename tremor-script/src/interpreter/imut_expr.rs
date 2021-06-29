@@ -177,9 +177,7 @@ impl<'script> ImutExprInt<'script> {
 
                 for field in &record.fields {
                     let result = stry!(field.value.run(opts, env, event, state, meta, local));
-                    let name = stry!(field
-                        .name
-                        .eval_to_string(opts, env, event, state, meta, local));
+                    let name = stry!(field.name.run(opts, env, event, state, meta, local));
                     object.insert(name, result.into_owned());
                 }
 
