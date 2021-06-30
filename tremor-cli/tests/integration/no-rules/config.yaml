@@ -9,6 +9,7 @@ onramp:
 offramp:
   - id: out
     type: file
+    codec: json-sorted
     config:
       file: "gen.json"
 

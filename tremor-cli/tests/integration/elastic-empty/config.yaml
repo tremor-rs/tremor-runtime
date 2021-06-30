@@ -17,6 +17,7 @@ offramp:
       concurrency: 10
   - id: debug_out
     type: file
+    codec: json-sorted
     config:
       file: debug.log
   - id: errfile

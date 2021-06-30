@@ -9,9 +9,7 @@ onramp:
 offramp:
   - id: stderr
     type: stderr
-    codec: json
-    postprocessors:
-      - base64
+    codec: json-sorted
     config:
       prefix: '\o/ '
       raw: true
@@ -21,7 +19,7 @@ offramp:
     postprocessors:
       - snappy
     config:
-      prefix: '🎄 '
+      prefix: "🎄 "
       raw: false
 
 binding:

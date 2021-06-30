@@ -4,5 +4,4 @@ asserts:
   - source: events.log
     equals_file: expected.json
     contains:
-      - |
-        {"about":"Excepteur consectetur veniam pariatur elit
+      - You are trying to assign to a value that isn't valid

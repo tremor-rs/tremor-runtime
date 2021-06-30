@@ -25,7 +25,7 @@ offramp:
         "Content-Type": "application/json"
   - id: file-out
     type: file
-    codec: json
+    codec: json-sorted
     config:
       file: out.log
   - id: stdout-err
@@ -34,4 +34,3 @@ offramp:
       prefix: "[ERR] "
   - id: exit
     type: exit
-
