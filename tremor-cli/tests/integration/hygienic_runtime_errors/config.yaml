@@ -9,6 +9,7 @@ onramp:
 offramp:
   - id: out
     type: file
+    codec: json-sorted
     config:
       file: "events.log"
 
@@ -18,7 +19,6 @@ binding:
       "/onramp/in/{instance}/out": ["/pipeline/main/{instance}/in"]
       "/pipeline/main/{instance}/out": ["/offramp/out/{instance}/in"]
       "/pipeline/main/{instance}/err": ["/offramp/out/{instance}/in"]
-      
 
 mapping:
   /binding/test/1:

@@ -13,12 +13,12 @@ offramp:
       dir: data
   - id: output
     type: file
-    codec: json
+    codec: json-sorted
     config:
       file: out.log
   - id: error_output
     type: file
-    codec: json
+    codec: json-sorted
     config:
       file: err.log
   - id: exit

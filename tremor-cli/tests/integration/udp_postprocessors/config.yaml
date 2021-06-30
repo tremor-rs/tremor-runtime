@@ -21,8 +21,10 @@ offramp:
 binding:
   - id: main
     links:
-      "/onramp/in/{instance}/out": ["/pipeline/system::passthrough/{instance}/in"]
-      "/pipeline/system::passthrough/{instance}/out": ["/offramp/udp-out/{instance}/in"]
+      "/onramp/in/{instance}/out":
+        ["/pipeline/system::passthrough/{instance}/in"]
+      "/pipeline/system::passthrough/{instance}/out":
+        ["/offramp/udp-out/{instance}/in"]
 
 mapping:
   /binding/main/1:

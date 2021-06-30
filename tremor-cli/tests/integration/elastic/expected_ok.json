@@ -1,5 +1,5 @@
-{"success":true,"payload":{"snot":"badger","action":null},"index":"my_little_index","doc":"my_little_doc","correlation":"badger"}
-{"success":true,"payload":{"snot":"racoon","tremor":[true,true,true,false],"action":null},"index":"my_little_index","doc":"my_little_doc","correlation":"racoon"}
-{"success":true,"payload":{"doc_id":"badger","snot":"badger","action":"delete"},"index":"my_little_index","doc":"my_little_doc","correlation":"badger"}
-{"success":true,"payload":{"doc_id":"badger","snot":"badger","action":"index"},"index":"my_little_index","doc":"my_little_doc","correlation":"badger"}
-{"success":true,"payload":{"doc_id":"badger","snot":"badger","action":"update"},"index":"my_little_index","doc":"my_little_doc","correlation":"badger"}
+{"correlation":"badger","doc":"my_little_doc","index":"my_little_index","payload":{"action":null,"snot":"badger"},"success":true}
+{"correlation":"racoon","doc":"my_little_doc","index":"my_little_index","payload":{"action":null,"snot":"racoon","tremor":[true,true,true,false]},"success":true}
+{"correlation":"badger","doc":"my_little_doc","index":"my_little_index","payload":{"action":"delete","doc_id":"badger","snot":"badger"},"success":true}
+{"correlation":"badger","doc":"my_little_doc","index":"my_little_index","payload":{"action":"index","doc_id":"badger","snot":"badger"},"success":true}
+{"correlation":"badger","doc":"my_little_doc","index":"my_little_index","payload":{"action":"update","doc_id":"badger","snot":"badger"},"success":true}

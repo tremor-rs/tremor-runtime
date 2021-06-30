@@ -1,17 +1,17 @@
-{"event":{"ok":{"key":"c25vdA==","value":null}},"meta":{"kv":{"op":"get"},"correlation":"{\"get\":{\"key\":\"snot\"}}"}}
-{"event":{"ok":{"key":"c25vdA==","value":null}},"meta":{"kv":{"op":"put"},"correlation":"{\"put\":{\"key\":\"snot\",\"value\":\"badger\"}}"}}
-{"event":{"ok":{"key":"c25vdA==","value":"badger"}},"meta":{"kv":{"op":"get"},"correlation":"{\"get\":{\"key\":\"snot\"},\"batch\":true}"}}
-{"event":{"ok":{"key":"aGVpbno=","value":null}},"meta":{"kv":{"op":"put"},"correlation":"{\"put\":{\"key\":\"heinz\",\"value\":\"ketchup\"},\"batch\":true}"}}
-{"event":{"ok":{"key":"aGVpbno=","value":"ketchup"}},"meta":{"kv":{"op":"get"},"correlation":"{\"get\":{\"key\":\"heinz\"}}"}}
-{"event":{"ok":[{"key":"aGVpbno=","value":"ketchup"},{"key":"c25vdA==","value":"badger"}]},"meta":{"kv":{"op":"scan"},"correlation":"{\"scan\":{}}"}}
-{"event":{"ok":[{"key":"c25vdA==","value":"badger"}]},"meta":{"kv":{"op":"scan"},"correlation":"{\"scan\":{\"start\":\"snot\"}}"}}
-{"event":{"ok":[{"key":"aGVpbno=","value":"ketchup"},{"key":"c25vdA==","value":"badger"}]},"meta":{"kv":{"op":"scan"},"correlation":"{\"scan\":{\"start\":\"heinz\",\"stop\":\"meins\"}}"}}
-{"event":{"ok":[{"key":"aGVpbno=","value":"ketchup"},{"key":"c25vdA==","value":"badger"}]},"meta":{"kv":{"op":"scan"},"correlation":"{\"scan\":{\"stop\":\"heinz\"}}"}}
-{"event":{"key":"aGVpbno=","error":{"current":"ketchup","proposed":"ketchup"}},"meta":{"kv":{"op":"cas"},"correlation":"{\"cas\":{\"key\":\"heinz\",\"old\":\"gies\",\"new\":\"ketchup\"}}"}}
-{"event":{"ok":{"key":"aGVpbno=","value":null}},"meta":{"kv":{"op":"cas"},"correlation":"{\"cas\":{\"key\":\"heinz\",\"old\":\"ketchup\",\"new\":\"gies\"}}"}}
-{"event":{"ok":{"key":"bWF0dGhpYXM=","value":null}},"meta":{"kv":{"op":"delete"},"correlation":"{\"delete\":{\"key\":\"matthias\",\"reason\":\"jokes way too bad\"}}"}}
-{"event":{"ok":{"key":"bWF0dGhpYXM=","value":null}},"meta":{"kv":{"op":"get"},"correlation":"{\"get\":{\"key\":\"matthias\"}}"}}
-{"event":{"ok":{"key":"aGVpbno=","value":"gies"}},"meta":{"kv":{"op":"delete"},"correlation":"{\"delete\":{\"key\":\"heinz\",\"reason\":\"ketchup\"}}"}}
-{"event":{"ok":{"key":"aGVpbno=","value":null}},"meta":{"kv":{"op":"get"},"correlation":"{\"get\":{\"key\":\"heinz\"}}"}}
-{"event":{"ok":{"key":"c25vdA==","value":"badger"}},"meta":{"kv":{"op":"delete"},"correlation":"{\"delete\":{\"key\":\"snot\"}}"}}
-{"event":{"ok":{"key":"c25vdA==","value":null}},"meta":{"kv":{"op":"get"},"correlation":"{\"get\":{\"key\":\"snot\"}}"}}
+{"event":{"ok":{"key":"c25vdA==","value":null}},"meta":{"correlation":"{\"get\":{\"key\":\"snot\"}}","kv":{"op":"get"}}}
+{"event":{"ok":{"key":"c25vdA==","value":null}},"meta":{"correlation":"{\"put\":{\"key\":\"snot\",\"value\":\"badger\"}}","kv":{"op":"put"}}}
+{"event":{"ok":{"key":"c25vdA==","value":"badger"}},"meta":{"correlation":"{\"get\":{\"key\":\"snot\"},\"batch\":true}","kv":{"op":"get"}}}
+{"event":{"ok":{"key":"aGVpbno=","value":null}},"meta":{"correlation":"{\"put\":{\"key\":\"heinz\",\"value\":\"ketchup\"},\"batch\":true}","kv":{"op":"put"}}}
+{"event":{"ok":{"key":"aGVpbno=","value":"ketchup"}},"meta":{"correlation":"{\"get\":{\"key\":\"heinz\"}}","kv":{"op":"get"}}}
+{"event":{"ok":[{"key":"aGVpbno=","value":"ketchup"},{"key":"c25vdA==","value":"badger"}]},"meta":{"correlation":"{\"scan\":{}}","kv":{"op":"scan"}}}
+{"event":{"ok":[{"key":"c25vdA==","value":"badger"}]},"meta":{"correlation":"{\"scan\":{\"start\":\"snot\"}}","kv":{"op":"scan"}}}
+{"event":{"ok":[{"key":"aGVpbno=","value":"ketchup"},{"key":"c25vdA==","value":"badger"}]},"meta":{"correlation":"{\"scan\":{\"start\":\"heinz\",\"stop\":\"meins\"}}","kv":{"op":"scan"}}}
+{"event":{"ok":[{"key":"aGVpbno=","value":"ketchup"},{"key":"c25vdA==","value":"badger"}]},"meta":{"correlation":"{\"scan\":{\"stop\":\"heinz\"}}","kv":{"op":"scan"}}}
+{"event":{"error":{"current":"ketchup","proposed":"ketchup"},"key":"aGVpbno="},"meta":{"correlation":"{\"cas\":{\"key\":\"heinz\",\"old\":\"gies\",\"new\":\"ketchup\"}}","kv":{"op":"cas"}}}
+{"event":{"ok":{"key":"aGVpbno=","value":null}},"meta":{"correlation":"{\"cas\":{\"key\":\"heinz\",\"old\":\"ketchup\",\"new\":\"gies\"}}","kv":{"op":"cas"}}}
+{"event":{"ok":{"key":"bWF0dGhpYXM=","value":null}},"meta":{"correlation":"{\"delete\":{\"key\":\"matthias\",\"reason\":\"jokes way too bad\"}}","kv":{"op":"delete"}}}
+{"event":{"ok":{"key":"bWF0dGhpYXM=","value":null}},"meta":{"correlation":"{\"get\":{\"key\":\"matthias\"}}","kv":{"op":"get"}}}
+{"event":{"ok":{"key":"aGVpbno=","value":"gies"}},"meta":{"correlation":"{\"delete\":{\"key\":\"heinz\",\"reason\":\"ketchup\"}}","kv":{"op":"delete"}}}
+{"event":{"ok":{"key":"aGVpbno=","value":null}},"meta":{"correlation":"{\"get\":{\"key\":\"heinz\"}}","kv":{"op":"get"}}}
+{"event":{"ok":{"key":"c25vdA==","value":"badger"}},"meta":{"correlation":"{\"delete\":{\"key\":\"snot\"}}","kv":{"op":"delete"}}}
+{"event":{"ok":{"key":"c25vdA==","value":null}},"meta":{"correlation":"{\"get\":{\"key\":\"snot\"}}","kv":{"op":"get"}}}

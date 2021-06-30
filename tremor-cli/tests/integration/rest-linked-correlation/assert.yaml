@@ -3,11 +3,7 @@ name: Rest Linked Transport Correlation
 asserts:
   - source: out.log
     contains:
-      - |
-        {"event":{"foo":"bar"},"correlation":["1","2","3"]}
-      - |
-        {"event":{"foo":"baz"},"correlation":"snot"}
-      - |
-        {"event":{"foo":"snooze"},"correlation":null}
-      - |
-        {"event":{"foo":"booze"},"correlation":["badger"]
+      - '{"correlation":["badger"],"event":{"foo":"booze"}}'
+      - '{"correlation":null,"event":{"foo":"snooze"}}'
+      - '{"correlation":["1","2","3"],"event":{"foo":"bar"}}'
+      - '{"correlation":"snot","event":{"foo":"baz"}}'

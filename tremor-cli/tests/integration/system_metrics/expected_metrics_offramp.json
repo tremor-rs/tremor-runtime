@@ -1,6 +1,6 @@
-{"measurement":"ramp_events","tags":{"ramp":"tremor://localhost/offramp/out/1/in","port":"in"},"fields":{"count":0},"timestamp":null}
-{"measurement":"ramp_events","tags":{"ramp":"tremor://localhost/offramp/out/1/in","port":"out"},"fields":{"count":0},"timestamp":null}
-{"measurement":"ramp_events","tags":{"ramp":"tremor://localhost/offramp/out/1/in","port":"error"},"fields":{"count":0},"timestamp":null}
-{"measurement":"ramp_events","tags":{"ramp":"tremor://localhost/offramp/out/1/in","port":"in"},"fields":{"count":3},"timestamp":null}
-{"measurement":"ramp_events","tags":{"ramp":"tremor://localhost/offramp/out/1/in","port":"out"},"fields":{"count":3},"timestamp":null}
-{"measurement":"ramp_events","tags":{"ramp":"tremor://localhost/offramp/out/1/in","port":"error"},"fields":{"count":0},"timestamp":null}
+{"fields":{"count":0},"measurement":"ramp_events","tags":{"port":"in","ramp":"tremor://localhost/offramp/out/1/in"},"timestamp":null}
+{"fields":{"count":0},"measurement":"ramp_events","tags":{"port":"out","ramp":"tremor://localhost/offramp/out/1/in"},"timestamp":null}
+{"fields":{"count":0},"measurement":"ramp_events","tags":{"port":"error","ramp":"tremor://localhost/offramp/out/1/in"},"timestamp":null}
+{"fields":{"count":3},"measurement":"ramp_events","tags":{"port":"in","ramp":"tremor://localhost/offramp/out/1/in"},"timestamp":null}
+{"fields":{"count":3},"measurement":"ramp_events","tags":{"port":"out","ramp":"tremor://localhost/offramp/out/1/in"},"timestamp":null}
+{"fields":{"count":0},"measurement":"ramp_events","tags":{"port":"error","ramp":"tremor://localhost/offramp/out/1/in"},"timestamp":null}
