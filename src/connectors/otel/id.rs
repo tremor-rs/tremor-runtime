@@ -62,21 +62,6 @@ pub(crate) fn random_trace_id_value(ingest_ns_seed: u64) -> Value<'static> {
     Value::from(random_trace_id_string(ingest_ns_seed))
 }
 
-fn hex_to_bytes(str_bytes: &str) -> Option<Vec<u8>> {
-    if str_bytes.len() % 2 == 0 {
-        (0..str_bytes.len())
-            .step_by(2)
-            .map(|i| {
-                str_bytes
-                    .get(i..i + 2)
-                    .and_then(|sub| u8::from_str_radix(sub, 16).ok())
-            })
-            .collect()
-    } else {
-        None
-    }
-}
-
 pub(crate) fn random_trace_id_array(ingest_ns_seed: u64) -> Value<'static> {
     random_trace_id_bytes(ingest_ns_seed)
         .into_iter()
@@ -112,56 +97,26 @@ fn hex_id_to_pb(
     len_bytes: usize,
     allow_empty: bool,
 ) -> Result<Vec<u8>> {
-    if let Some(json) = data.as_str() {
-        let pb = json.to_string();
-        let pb = hex_to_bytes(&pb);
-
-        if let Some(pb) = pb {
-            if (allow_empty && pb.is_empty()) || pb.len() == len_bytes {
-                Ok(pb)
-            } else {
-                Err(format!(
-                    "Invalid {} id ( wrong string length 1) - cannot convert to pb",
-                    kind
-                )
-                .into())
-            }
-        } else {
-            Err(format!("Invalid hex encoded string - cannot convert {} to pb", kind).into())
-        }
+    let data = if let Some(s) = data.as_str() {
+        hex::decode(s)?
     } else if let Some(json) = data.and_then(Value::as_bytes) {
-        let data = json.to_vec();
-        if (allow_empty && data.is_empty()) || data.len() == len_bytes {
-            Ok(data)
-        } else {
-            Err(format!(
-                "Invalid {} id ( wrong byte length ) - cannot convert to pb",
-                kind
-            )
-            .into())
-        }
+        json.to_vec()
     } else if let Some(arr) = data.as_array() {
-        let mut data = Vec::with_capacity(arr.len());
-        for i in arr {
-            let i = i.as_u8().ok_or_else(|| format!(
-                "Invalid {} id ( wrong array element ) - values must be 0 <= [..., v={} , ...] <= 255 - cannot convert to pb",
-                kind,
-                i
-            ))?;
-            data.push(i)
-        }
-
-        if (allow_empty && data.is_empty()) || data.len() == len_bytes {
-            Ok(data)
-        } else {
-            Err(format!(
-                "Invalid {} id ( wrong array length ) - cannot convert to pb",
-                kind
-            )
-            .into())
-        }
+        arr.iter().map(Value::as_u8).collect::<Option<Vec<u8>>>().ok_or_else(|| format!(
+            "Invalid {} id ( wrong array element ) - values must be between 0 and 255 - cannot convert to pb",
+            kind
+        ))?
     } else {
-        Err(format!("Cannot convert json value to otel pb {} id", kind).into())
+        return Err(format!("Cannot convert json value to otel pb {} id", kind).into());
+    };
+    if (allow_empty && data.is_empty()) || data.len() == len_bytes {
+        Ok(data)
+    } else {
+        Err(format!(
+            "Invalid {} id ( wrong array length ) - cannot convert to pb",
+            kind
+        )
+        .into())
     }
 }
 
@@ -223,11 +178,6 @@ pub mod test {
         Ok(())
     }
 
-    #[test]
-    fn bad_hex() {
-        assert!(hex_to_bytes("snot").is_none());
-    }
-
     proptest! {
 
         #[test]
@@ -235,7 +185,7 @@ pub mod test {
             arb_hexen in prop::collection::vec("[a-f0-9]{16}", 16..=16)
         ) {
             for expected in arb_hexen {
-                let bytes = hex_to_bytes(&expected).unwrap();
+                let bytes = hex::decode(&expected).unwrap();
 
                 let json = Value::Bytes(bytes.clone().into());
                 let pb = hex_span_id_to_pb(Some(&json))?;
@@ -248,7 +198,7 @@ pub mod test {
             arb_hexen in prop::collection::vec("[a-f0-9]{32}", 32..=32)
         ) {
             for expected in arb_hexen {
-                let bytes = hex_to_bytes(&expected).unwrap();
+                let bytes = hex::decode(&expected).unwrap();
 
                 let json = Value::Bytes(bytes.clone().into());
                 let pb = hex_trace_id_to_pb(Some(&json))?;
