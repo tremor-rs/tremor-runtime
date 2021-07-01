@@ -13,6 +13,7 @@
 - Ensure patch keys are strings to move runtime errors into the compiletime
 - Fix issue with the token `"` being presented as a tick in errors
 - Fix `heredoc_start` and `heredoc_end` showing up in error messages instead of `"""`
+- Fix some errors in otel pb <-> json translation
 
 ## 0.11.4
 

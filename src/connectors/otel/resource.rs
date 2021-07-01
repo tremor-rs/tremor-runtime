@@ -19,16 +19,11 @@ use simd_json::ValueAccess;
 use tremor_otelapis::opentelemetry::proto::resource::v1::Resource;
 use tremor_value::{literal, Value};
 
-pub(crate) fn resource_to_json<'event>(pb: Option<Resource>) -> Value<'event> {
-    pb.map_or_else(
-        || literal!({ "attributes": {}, "dropped_attributes_count": 0 }),
-        |data| {
-            literal!({
-                "attributes": common::key_value_list_to_json(data.attributes),
-                "dropped_attributes_count": data.dropped_attributes_count,
-            })
-        },
-    )
+pub(crate) fn resource_to_json(pb: Resource) -> Value<'static> {
+    literal!({
+        "attributes": common::key_value_list_to_json(pb.attributes),
+        "dropped_attributes_count": pb.dropped_attributes_count,
+    })
 }
 
 pub(crate) fn resource_to_pb(json: &Value<'_>) -> Result<Resource> {
@@ -58,7 +53,7 @@ mod tests {
             }],
             dropped_attributes_count: 9,
         };
-        let json = resource_to_json(Some(pb.clone()));
+        let json = resource_to_json(pb.clone());
         let back_again = resource_to_pb(&json)?;
         let expected: Value = literal!({
             "attributes": { "snot": "badger" },

@@ -138,15 +138,20 @@ pub(crate) fn maybe_instrumentation_library_logs_to_pb(
 }
 
 pub(crate) fn resource_logs_to_json(request: ExportLogsServiceRequest) -> Result<Value<'static>> {
-    let mut json = Vec::with_capacity(request.resource_logs.len());
-    for log in request.resource_logs {
-        json.push(literal!({
-                "instrumentation_library_logs":
-                    instrumentation_library_logs_to_json(log.instrumentation_library_logs)?,
-                "resource": resource::resource_to_json(log.resource)
-        }));
-    }
-    Ok(literal!({ "logs": json }))
+    let logs = request
+        .resource_logs
+        .into_iter()
+        .map(|log| {
+            let ill = instrumentation_library_logs_to_json(log.instrumentation_library_logs)?;
+            let mut base = literal!({ "instrumentation_library_logs": ill });
+            if let Some(r) = log.resource {
+                base.try_insert("resource", resource::resource_to_json(r));
+            };
+            Ok(base)
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    Ok(literal!({ "logs": logs }))
 }
 
 pub(crate) fn resource_logs_to_pb(json: &Value<'_>) -> Result<Vec<ResourceLogs>> {

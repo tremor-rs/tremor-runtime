@@ -21,6 +21,7 @@ use super::{
     resource::{self, resource_to_pb},
 };
 use crate::errors::Result;
+use simd_json::Mutable;
 use tremor_value::literal;
 
 use tremor_otelapis::opentelemetry::proto::{
@@ -207,11 +208,18 @@ pub(crate) fn instrumentation_library_spans_to_pb(
 }
 
 pub(crate) fn resource_spans_to_json(request: ExportTraceServiceRequest) -> Value<'static> {
-    let json: Value = request.resource_spans.into_iter().map(|span|
-        literal!({
-            "instrumentation_library_spans": instrumentation_library_spans_to_json(span.instrumentation_library_spans),
-            "resource": resource::resource_to_json(span.resource),
-        })).collect();
+    let json: Value = request
+        .resource_spans
+        .into_iter()
+        .map(|span| {
+            let ill = instrumentation_library_spans_to_json(span.instrumentation_library_spans);
+            let mut base = literal!({ "instrumentation_library_spans": ill });
+            if let Some(r) = span.resource {
+                base.try_insert("resource", resource::resource_to_json(r));
+            };
+            base
+        })
+        .collect();
 
     literal!({ "trace": json })
 }

@@ -443,12 +443,13 @@ pub(crate) fn resource_metrics_to_json(request: ExportMetricsServiceRequest) -> 
         .resource_metrics
         .into_iter()
         .map(|metric| {
-            let ilm =
+            let ill =
                 instrumentation_library_metrics_to_json(metric.instrumentation_library_metrics);
-            literal!({
-                "instrumentation_library_metrics": ilm,
-                "resource": resource::resource_to_json(metric.resource),
-            })
+            let mut base = literal!({ "instrumentation_library_metrics": ill });
+            if let Some(r) = metric.resource {
+                base.try_insert("resource", resource::resource_to_json(r));
+            };
+            base
         })
         .collect();
 
