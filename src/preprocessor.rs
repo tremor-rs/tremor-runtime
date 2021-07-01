@@ -336,6 +336,8 @@ impl Preprocessor for Decompress {
                 decoder.read_to_end(&mut decompressed)?;
                 decompressed
             }
+            // Zstd Magic : 0xFD2FB528 (but little endian)
+            Some(&[0x28, 0xb5, 0x2f, 0xfd, _, _]) => zstd::decode_all(data)?,
             _ => data.to_vec(),
         };
         Ok(vec![r])
@@ -599,7 +601,7 @@ mod test {
         Ok(())
     }
 
-    const LOOKUP_TABLE: [&str; 16] = [
+    const LOOKUP_TABLE: [&str; 17] = [
         "lines",
         "lines-null",
         "lines-pipe",
@@ -616,6 +618,7 @@ mod test {
         "ingest-ns",
         "length-prefixed",
         "textual-length-prefix",
+        "zstd",
     ];
 
     #[test]
@@ -747,6 +750,7 @@ mod test {
             Some(b"sNaPpY") => "snap",
             Some(&[0xff, 0x6, 0x0, 0x0, _, _]) => "snap",
             Some(&[0x04, 0x22, 0x4d, 0x18, _, _]) => "lz4",
+            Some(&[0x28, 0xb5, 0x2f, 0xfd, _, _]) => "zstd",
             _ => "fail/unknown",
         }
     }
@@ -867,6 +871,13 @@ mod test {
         let int = "snot".as_bytes();
         assert_simple_symmetric!(int, Lz4, "lz4");
         assert_decompress!(int, Lz4, "lz4");
+        Ok(())
+    }
+    #[test]
+    fn test_zstd() -> Result<()> {
+        let int = "snot".as_bytes();
+        assert_simple_symmetric!(int, Zstd, "zstd");
+        assert_decompress!(int, Zstd, "zstd");
         Ok(())
     }
 }
