@@ -5,10 +5,14 @@
 ### New featues
 
 - Experimental ARM support
+- Add `default => {...}` and `default "key" => "value` to patch
 
 ### Fixes
 
 - Skip instead of fail EQC on out of repo PRs
+- Ensure patch keys are strings to move runtime errors into the compiletime
+- Fix issue with the token `"` being presented as a tick in errors
+- Fix `heredoc_start` and `heredoc_end` showing up in error messages instead of `"""`
 
 ## 0.11.4
 

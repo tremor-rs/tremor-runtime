@@ -788,7 +788,7 @@ pub struct Field<'script> {
     /// Id
     pub mid: usize,
     /// Name of the field
-    pub name: ImutExprInt<'script>,
+    pub name: StringLit<'script>,
     /// Value expression for the field
     pub value: ImutExprInt<'script>,
 }
@@ -799,55 +799,55 @@ impl_expr_mid!(Field);
 pub struct Record<'script> {
     /// Id
     pub mid: usize,
+    /// base (or static part of the cecord)
+    pub base: crate::Object<'script>,
     /// Fields of this record
     pub fields: Fields<'script>,
 }
 impl_expr_mid!(Record);
 impl<'script> Record<'script> {
     fn try_reduce(self, helper: &Helper<'script, '_>) -> Result<ImutExprInt<'script>> {
-        if self
+        let (base, fields): (Vec<_>, Vec<_>) = self
             .fields
-            .iter()
-            .all(|f| f.name.is_lit() && f.value.is_lit())
-        {
-            let obj: Result<crate::Object> = self
-                .fields
-                .into_iter()
-                .map(|f| {
-                    reduce2(f.name.clone(), &helper).and_then(|n| {
-                        // ALLOW: The grammar guarantees the key of a record is always a string
-                        let n = n.as_str().unwrap_or_else(|| unreachable!());
-                        reduce2(f.value, &helper).map(|v| (n.to_owned().into(), v))
-                    })
-                })
-                .collect();
+            .into_iter()
+            .partition(|f| f.name.is_lit() && f.value.is_lit());
+
+        let base: Result<crate::Object> = base
+            .into_iter()
+            .map(|f| {
+                let n = f.name.try_into_cow()?;
+                reduce2(f.value, &helper).map(|v| (n, v))
+            })
+            .collect();
+        let base = base?;
+
+        if fields.is_empty() {
             Ok(ImutExprInt::Literal(Literal {
                 mid: self.mid,
-                value: Value::from(obj?),
+                value: Value::from(base),
             }))
         } else {
-            Ok(ImutExprInt::Record(self))
+            Ok(ImutExprInt::Record(Record {
+                mid: self.mid,
+                base,
+                fields,
+            }))
         }
     }
-    /// Tries to fetch a field from a record
+
+    /// Gets the expression for a given name
     #[must_use]
-    pub fn get(&self, name: &str) -> Option<&ImutExprInt> {
+    pub fn get_field_expr(&self, name: &str) -> Option<&ImutExprInt> {
         self.fields.iter().find_map(|f| {
-            if let ImutExprInt::Literal(Literal { value, .. }) = &f.name {
-                if value == name {
-                    Some(&f.value)
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
+            f.name
+                .as_str()
+                .and_then(|n| if n == name { Some(&f.value) } else { None })
         })
     }
     /// Tries to fetch a literal from a record
     #[must_use]
     pub fn get_literal(&self, name: &str) -> Option<&Value> {
-        if let ImutExprInt::Literal(Literal { value, .. }) = self.get(name)? {
+        if let ImutExprInt::Literal(Literal { value, .. }) = self.get_field_expr(name)? {
             Some(value)
         } else {
             None
@@ -1087,6 +1087,25 @@ pub enum ImutExprInt<'script> {
     Bytes(Bytes<'script>),
 }
 
+impl<'script> ImutExprInt<'script> {
+    pub(crate) fn try_reduce(self, helper: &Helper<'script, '_>) -> Result<Self> {
+        match self {
+            ImutExprInt::Unary(u) => u.try_reduce(helper),
+            ImutExprInt::Bytes(b) => b.try_reduce(helper),
+            ImutExprInt::Binary(b) => b.try_reduce(helper),
+            ImutExprInt::List(l) => l.try_reduce(helper),
+            ImutExprInt::Record(r) => r.try_reduce(helper),
+            ImutExprInt::Path(p) => Ok(p.try_reduce(helper)),
+            ImutExprInt::String(s) => Ok(s.try_reduce(helper)),
+            ImutExprInt::Invoke1(i)
+            | ImutExprInt::Invoke2(i)
+            | ImutExprInt::Invoke3(i)
+            | ImutExprInt::Invoke(i) => i.try_reduce(helper),
+            other => Ok(other),
+        }
+    }
+}
+
 impl<'script> Expression for ImutExprInt<'script> {
     #[cfg(not(tarpaulin_include))] // this has no function
     fn replace_last_shadow_use(&mut self, replace_idx: usize) {
@@ -1112,6 +1131,108 @@ pub struct StringLit<'script> {
     pub mid: usize,
     /// Elements
     pub elements: StrLitElements<'script>,
+}
+
+impl<'s> From<&'s str> for StringLit<'s> {
+    fn from(s: &'s str) -> Self {
+        Self {
+            mid: 0,
+            elements: vec![StrLitElement::Lit(s.into())],
+        }
+    }
+}
+
+impl<'script> StringLit<'script> {
+    pub(crate) fn is_lit(&self) -> bool {
+        matches!(self.elements.as_slice(), [StrLitElement::Lit(_)])
+    }
+
+    pub(crate) fn as_str(&self) -> Option<&str> {
+        if let [StrLitElement::Lit(l)] = self.elements.as_slice() {
+            Some(&l)
+        } else {
+            None
+        }
+    }
+
+    pub(crate) fn try_into_cow(mut self) -> Result<Cow<'script, str>> {
+        if self.elements.len() != 1 {
+            Err("Not a static string".into())
+        } else if let Some(StrLitElement::Lit(l)) = self.elements.pop() {
+            Ok(l)
+        } else {
+            Err("Not a static string".into())
+        }
+    }
+
+    pub(crate) fn run<'run, 'event>(
+        &self,
+        opts: ExecOpts,
+        env: &Env<'run, 'event>,
+        event: &Value<'event>,
+        state: &Value<'static>,
+        meta: &Value<'event>,
+        local: &LocalStack<'event>,
+    ) -> Result<Cow<'event, str>>
+    where
+        'script: 'event,
+    {
+        // Shortcircut when we have a 1 literal string
+        if let [StrLitElement::Lit(l)] = self.elements.as_slice() {
+            return Ok(l.clone());
+        }
+        let mut out = String::with_capacity(128);
+        for e in &self.elements {
+            match e {
+                StrLitElement::Lit(l) => out.push_str(l),
+                #[cfg(not(feature = "erlang-float-testing"))]
+                StrLitElement::Expr(e) => {
+                    let r = stry!(e.run(opts, env, event, state, meta, local));
+                    if let Some(s) = r.as_str() {
+                        out.push_str(s);
+                    } else {
+                        out.push_str(r.encode().as_str());
+                    };
+                }
+                // TODO: The float scenario is different in erlang and rust
+                // We knowingly excluded float correctness in string interpolation
+                // as we don't want to over engineer and write own format functions.
+                // any suggestions are welcome
+                #[cfg(feature = "erlang-float-testing")]
+                #[cfg(not(tarpaulin_include))]
+                crate::ast::StrLitElement::Expr(e) => {
+                    let r = e.run(opts, env, event, state, meta, local)?;
+                    if let Some(s) = r.as_str() {
+                        out.push_str(&s);
+                    } else if let Some(_f) = r.as_f64() {
+                        out.push_str("42");
+                    } else {
+                        out.push_str(crate::utils::sorted_serialize(&r)?.as_str());
+                    };
+                }
+            }
+        }
+        Ok(Cow::owned(out))
+    }
+    fn try_reduce(self, _helper: &Helper<'script, '_>) -> ImutExprInt<'script> {
+        let StringLit { mid, mut elements } = self;
+        if elements.len() == 1 {
+            match elements.pop() {
+                Some(StrLitElement::Lit(l)) => {
+                    let value = Value::from(l);
+                    return ImutExprInt::Literal(Literal { mid, value });
+                }
+                Some(other) => elements.push(other),
+                None => (),
+            }
+        } else if elements.is_empty() {
+            return ImutExprInt::Literal(Literal {
+                mid,
+                value: Value::from(""),
+            });
+        }
+        ImutExprInt::String(StringLit { mid, elements })
+    }
 }
 impl_expr_mid!(StringLit);
 
@@ -1698,52 +1819,64 @@ pub enum PatchOperation<'script> {
     /// Insert only operation
     Insert {
         /// Field
-        ident: ImutExprInt<'script>,
+        ident: StringLit<'script>,
         /// Value expression
         expr: ImutExprInt<'script>,
     },
     /// Insert or update operation
     Upsert {
         /// Field
-        ident: ImutExprInt<'script>,
+        ident: StringLit<'script>,
         /// Value expression
         expr: ImutExprInt<'script>,
     },
     /// Update only operation
     Update {
         /// Field
-        ident: ImutExprInt<'script>,
+        ident: StringLit<'script>,
         /// Value expression
         expr: ImutExprInt<'script>,
     },
     /// Erase operation
     Erase {
         /// Field
-        ident: ImutExprInt<'script>,
+        ident: StringLit<'script>,
     },
     /// Copy operation
     Copy {
         /// From field
-        from: ImutExprInt<'script>,
+        from: StringLit<'script>,
         /// To field
-        to: ImutExprInt<'script>,
+        to: StringLit<'script>,
     },
     /// Move operation
     Move {
         /// Field from
-        from: ImutExprInt<'script>,
+        from: StringLit<'script>,
         /// Field to
-        to: ImutExprInt<'script>,
+        to: StringLit<'script>,
     },
     /// Merge convenience operation
     Merge {
         /// Field
-        ident: ImutExprInt<'script>,
+        ident: StringLit<'script>,
         /// Value
         expr: ImutExprInt<'script>,
     },
     /// Tuple based merge operation
-    TupleMerge {
+    MergeRecord {
+        /// Value
+        expr: ImutExprInt<'script>,
+    },
+    /// Merge convenience operation
+    Default {
+        /// Field
+        ident: StringLit<'script>,
+        /// Value
+        expr: ImutExprInt<'script>,
+    },
+    /// Tuple based merge operation
+    DefaultRecord {
         /// Value
         expr: ImutExprInt<'script>,
     },
@@ -2522,27 +2655,28 @@ hello
     fn record() {
         let f1 = super::Field {
             mid: 0,
-            name: v("snot"),
+            name: "snot".into(),
             value: v("badger"),
         };
         let f2 = super::Field {
             mid: 0,
-            name: v("badger"),
+            name: "badger".into(),
             value: v("snot"),
         };
 
         let r = super::Record {
+            base: crate::Object::new(),
             mid: 0,
             fields: vec![f1, f2],
         };
 
-        assert_eq!(r.get("snot"), Some(&v("badger")));
-        assert_eq!(r.get("nots"), None);
+        assert_eq!(r.get_field_expr("snot"), Some(&v("badger")));
+        assert_eq!(r.get_field_expr("nots"), None);
 
         assert_eq!(
             r.get_literal("badger").and_then(ValueAccess::as_str),
             Some("snot")
         );
-        assert_eq!(r.get("adgerb"), None);
+        assert_eq!(r.get_field_expr("adgerb"), None);
     }
 }

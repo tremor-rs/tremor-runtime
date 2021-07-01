@@ -178,19 +178,14 @@ spec_uop_float(S, N) ->
 % {erase, Key}
 patch_operation(S, N) ->
     frequency([{1,
-		{insert, spec_inner_string(S, N - 1),
-		 spec_inner_no_float(S, N - 1)}},
-	       {1,
-		{upsert, spec_inner_string(S, N - 1),
-		 spec_inner_no_float(S, N - 1)}},
-		 {1,
-		{update, spec_inner_string(S, N - 1),
-		 spec_inner_no_float(S, N - 1)}},
-	       {1,
-		{merge, spec_inner_string(S, N - 1),
-		 spec_inner_record(S, N - 1)}},
-	       {1, {erase, spec_inner_string(S, N - 1)}},
-		   {1, {merge, spec_inner_string(S, N - 1)}}]).
+		{insert, string(), spec_inner_no_float(S, N - 1)}},
+	       {1, {upsert, string(), spec_inner_no_float(S, N - 1)}},
+	       {1, {update, string(), spec_inner_no_float(S, N - 1)}},
+	       {1, {merge, string(), spec_inner_record(S, N - 1)}},
+	       {1, {merge, spec_inner_record(S, N - 1)}},
+	       {1, {default, string(), spec_inner_record(S, N - 1)}},
+	       {1, {default, spec_inner_record(S, N - 1)}},
+	       {1, {erase, string()}}]).
 
 % spec_uop_record function returns {patch, generated_record, patch_operations}
 spec_uop_record(S, N) when N =< 1 ->

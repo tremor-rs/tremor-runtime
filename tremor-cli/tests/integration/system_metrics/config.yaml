@@ -9,21 +9,25 @@ offramp:
   - id: out
     metrics_interval_s: 3
     type: file
+    codec: json-sorted
     config:
       file: "events.log"
 
   - id: metrics_pipeline
     type: file
+    codec: json-sorted
     config:
       file: "metrics_pipeline.log"
 
   - id: metrics_onramp
     type: file
+    codec: json-sorted
     config:
       file: "metrics_onramp.log"
 
   - id: metrics_offramp
     type: file
+    codec: json-sorted
     config:
       file: "metrics_offramp.log"
 
@@ -37,10 +41,14 @@ binding:
       "/pipeline/main/{instance}/out": ["/offramp/out/{instance}/in"]
       "/pipeline/main/{instance}/err": ["/offramp/out/{instance}/in"]
 
-      "/pipeline/system::metrics/system/out": ["/pipeline/metrics/{instance}/in"]
-      "/pipeline/metrics/{instance}/pipeline": ["/offramp/metrics_pipeline/{instance}/in"]
-      "/pipeline/metrics/{instance}/onramp": ["/offramp/metrics_onramp/{instance}/in"]
-      "/pipeline/metrics/{instance}/offramp": ["/offramp/metrics_offramp/{instance}/in"]
+      "/pipeline/system::metrics/system/out":
+        ["/pipeline/metrics/{instance}/in"]
+      "/pipeline/metrics/{instance}/pipeline":
+        ["/offramp/metrics_pipeline/{instance}/in"]
+      "/pipeline/metrics/{instance}/onramp":
+        ["/offramp/metrics_onramp/{instance}/in"]
+      "/pipeline/metrics/{instance}/offramp":
+        ["/offramp/metrics_offramp/{instance}/in"]
       # catching other outputs, just in case
       "/pipeline/metrics/{instance}/out": ["/offramp/system::stdout/system/in"]
       "/pipeline/metrics/{instance}/err": ["/offramp/system::stderr/system/in"]

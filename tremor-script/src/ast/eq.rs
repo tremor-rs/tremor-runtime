@@ -332,51 +332,47 @@ impl<'script> AstEq for PatchOperation<'script> {
     fn ast_eq(&self, other: &Self) -> bool {
         match (self, other) {
             (
-                Self::Insert {
-                    ident: i1,
-                    expr: e1,
-                },
+                Self::Insert { ident, expr },
                 Self::Insert {
                     ident: i2,
                     expr: e2,
                 },
             )
             | (
-                Self::Upsert {
-                    ident: i1,
-                    expr: e1,
-                },
+                Self::Upsert { ident, expr },
                 Self::Upsert {
                     ident: i2,
                     expr: e2,
                 },
             )
             | (
-                Self::Update {
-                    ident: i1,
-                    expr: e1,
-                },
+                Self::Update { ident, expr },
                 Self::Update {
                     ident: i2,
                     expr: e2,
                 },
             )
             | (
-                Self::Merge {
-                    ident: i1,
-                    expr: e1,
+                Self::Default { ident, expr },
+                Self::Default {
+                    ident: i2,
+                    expr: e2,
                 },
+            )
+            | (
+                Self::Merge { ident, expr },
                 Self::Merge {
                     ident: i2,
                     expr: e2,
                 },
-            ) => i1.ast_eq(i2) && e1.ast_eq(e2),
+            ) => ident.ast_eq(i2) && expr.ast_eq(e2),
             (Self::Erase { ident: i1 }, Self::Erase { ident: i2 }) => i1.ast_eq(i2),
             (Self::Copy { from: f1, to: t1 }, Self::Copy { from: f2, to: t2 })
             | (Self::Move { from: f1, to: t1 }, Self::Move { from: f2, to: t2 }) => {
                 f1.ast_eq(f2) && t1.ast_eq(t2)
             }
-            (Self::TupleMerge { expr: e1 }, Self::TupleMerge { expr: e2 }) => e1.ast_eq(e2),
+            (Self::DefaultRecord { expr: e1 }, Self::DefaultRecord { expr: e2 })
+            | (Self::MergeRecord { expr: e1 }, Self::MergeRecord { expr: e2 }) => e1.ast_eq(e2),
             _ => false,
         }
     }
@@ -457,29 +453,21 @@ impl<'script> AstEq for PredicatePattern<'script> {
                 },
             ) => l1 == l2 && k1 == k2 && kind1 == kind2 && r1.ast_eq(r2),
             (
-                Self::RecordPatternEq {
-                    lhs: l1,
-                    key: k1,
-                    pattern: p1,
-                },
+                Self::RecordPatternEq { lhs, key, pattern },
                 Self::RecordPatternEq {
                     lhs: l2,
                     key: k2,
                     pattern: p2,
                 },
-            ) => l1 == l2 && k1 == k2 && p1.ast_eq(p2),
+            ) => lhs == l2 && key == k2 && pattern.ast_eq(p2),
             (
-                Self::ArrayPatternEq {
-                    lhs: l1,
-                    key: k1,
-                    pattern: p1,
-                },
+                Self::ArrayPatternEq { lhs, key, pattern },
                 Self::ArrayPatternEq {
                     lhs: l2,
                     key: k2,
                     pattern: p2,
                 },
-            ) => l1 == l2 && k1 == k2 && p1.ast_eq(p2),
+            ) => lhs == l2 && key == k2 && pattern.ast_eq(p2),
             _ => self == other,
         }
     }
@@ -685,28 +673,15 @@ mod tests {
         Ok(())
     }
 
-    macro_rules! eq_test {
-        ($name:ident, $script:expr) => {
-            #[test]
-            fn $name() -> Result<()> {
-                test_ast_eq($script, true)
-            }
-        };
+    #[test]
+    fn test_event_path_eq() -> Result<()> {
+        test_ast_eq(r#"event.foo ; event["foo"]"#, true)
     }
 
-    macro_rules! not_eq_test {
-        ($name:ident, $script:expr) => {
-            #[test]
-            fn $name() -> Result<()> {
-                test_ast_eq($script, false)
-            }
-        };
-    }
-
-    eq_test!(test_event_path_eq, r#"event.foo ; event["foo"]"#);
-    eq_test!(
-        test_record_eq,
-        r#"
+    #[test]
+    fn test_record_eq() -> Result<()> {
+        test_ast_eq(
+            r#"
     # setting the stage
     let local = 1 + 2;
 
@@ -717,102 +692,134 @@ mod tests {
     {
         "foo": local
     }
-    "#
-    );
-    eq_test!(
-        test_string_eq,
-        r#"
+    "#,
+            true,
+        )
+    }
+    #[test]
+    fn test_string_eq() -> Result<()> {
+        test_ast_eq(
+            r#"
         const answer = 42;
         "hello { answer + 1 } interpolated { answer }";
         "hello { answer + 1 } interpolated { answer }"
-        "#
-    );
-    not_eq_test!(
-        test_string_not_eq,
-        r#"
+        "#,
+            true,
+        )
+    }
+    #[test]
+    fn test_string_not_eq() -> Result<()> {
+        test_ast_eq(
+            r#"
         const answer = 42;
         "hello { answer + 1 } interpolated { answer + 2 }";
         "hello { answer + 1 } interpolated { answer }"
-        "#
-    );
-    eq_test!(
-        test_invocation_eq,
-        r#"
+        "#,
+            false,
+        )
+    }
+    #[test]
+    fn test_invocation_eq() -> Result<()> {
+        test_ast_eq(
+            r#"
         fn add(x, y) with
           x + y
         end;
         add(add(4, state[1]), 4.2);
         add(add(4, state[1]), 4.2);
-        "#
-    );
-    eq_test!(
-        test_list_eq,
-        r#"
+        "#,
+            true,
+        )
+    }
+    #[test]
+    fn test_list_eq() -> Result<()> {
+        test_ast_eq(
+            r#"
         let x = event.len;
         [1, -x, <<x:7/unsigned-integer>>, "foo"];
         [1, -x, <<x:7/unsigned-integer>>, "foo"]
-        "#
-    );
-    not_eq_test!(
-        test_list_not_eq,
-        r#"
+        "#,
+            true,
+        )
+    }
+    #[test]
+    fn test_list_not_eq() -> Result<()> {
+        test_ast_eq(
+            r#"
         let x = event.len;
         [1, -x, <<x:7/unsigned-integer>>, "foo"];
         [1, -x, <<x:7/signed-integer>>, "foo"]
-        "#
-    );
-    eq_test!(
-        test_patch_eq,
-        r#"
+        "#,
+            false,
+        )
+    }
+    #[test]
+    fn test_patch_eq() -> Result<()> {
+        test_ast_eq(
+            r#"
         let x = {"snot": $meta};
         patch x of
+          default => {"bla": "blubb"},
+          default "gna" => "gnubb",
           insert "i" => event.foo,
           upsert "snotty" => state.badger[1],
           update "snot" => null,
           erase "snot",
-          copy "snot" => ["badger"],
+          copy "snot" => "badger",
           merge "beep" => {"fun": not false},
           merge => {"tuple": 4 * 12}
         end;
         patch x of
+          default => {"bla": "blubb"},
+          default "gna" => "gnubb",
           insert "i" => event.foo,
           upsert "snotty" => state.badger[1],
           update "snot" => null,
           erase "snot",
-          copy "snot" => ["badger"],
+          copy "snot" => "badger",
           merge "beep" => {"fun": not false},
           merge => {"tuple": 4 * 12}
         end
-        "#
-    );
-    not_eq_test!(
-        test_path_not_eq,
-        r#"
+        "#,
+            true,
+        )
+    }
+    #[test]
+    fn test_path_not_eq() -> Result<()> {
+        test_ast_eq(
+            r#"
         let x = {"snot": $meta};
         patch x of
+          default => {"bla": "blubb"},
+          default "gna" => "gnubb",
           insert "i" => event.foo,
           upsert "snotty" => state.badger[1],
           update "snot" => null,
           erase "snot",
-          copy "snot" => ["badger"],
+          copy "snot" => "badger",
           merge "beep" => {"fun": not false},
           merge => {"tuple": 4 * 12}
         end;
         patch x of
+          default => {"bla": "blubb"},
+          default "gna" => "gnubb",
           insert "i" => event.foo,
           upsert "snotty" => state.badger[1],
           erase "snot",
           update "snot" => null, # order swapped
-          copy "snot" => ["badger"],
+          copy "snot" => "badger",
           merge "beep" => {"fun": not false},
           merge => {"tuple": 4 * 12}
         end
-        "#
-    );
+        "#,
+            false,
+        )
+    }
 
-    eq_test!(
-        test_match_eq,
-        r#"
+    #[test]
+    fn test_match_eq() -> Result<()> {
+        test_ast_eq(
+            r#"
         let x = {"foo": "foo"};
         (match x of
             case "literal string" => "string"
@@ -836,11 +843,14 @@ mod tests {
             case ~ json|| => "json"
             default => null
         end)
-        "#
-    );
-    eq_test!(
-        test_match_eq_2,
-        r#"
+        "#,
+            true,
+        )
+    }
+    #[test]
+    fn test_match_eq_2() -> Result<()> {
+        test_ast_eq(
+            r#"
         let x = {"foo": "foo"};
         (match x of
             case "literal string" => "string"
@@ -876,11 +886,14 @@ mod tests {
             case object = %{ absent y, snot == "badger", superhero ~= %{absent name}} when object.superhero.is_snotty => "snotty_badger"
             default => null
         end)
-        "#
-    );
-    not_eq_test!(
-        test_match_not_eq,
-        r#"
+        "#,
+            true,
+        )
+    }
+    #[test]
+    fn test_match_not_eq() -> Result<()> {
+        test_ast_eq(
+            r#"
         let x = {"foo": "foo"};
         (match x of
             case "literal string" => "string"
@@ -914,12 +927,15 @@ mod tests {
             case %{ snot == 3 } => "argh"            
             default => "not_null"
         end)
-        "#
-    );
+        "#,
+            false,
+        )
+    }
 
-    eq_test!(
-        test_comprehension_eq,
-        r#"
+    #[test]
+    fn test_comprehension_eq() -> Result<()> {
+        test_ast_eq(
+            r#"
         (for event[1][1:3] of
             case (i, e) =>
                 {" #{i}": e}
@@ -928,11 +944,14 @@ mod tests {
             case (i, e) =>
                 {" #{i}": e}
         end)
-        "#
-    );
-    not_eq_test!(
-        test_comprehension_not_eq,
-        r#"
+        "#,
+            true,
+        )
+    }
+    #[test]
+    fn test_comprehension_not_eq() -> Result<()> {
+        test_ast_eq(
+            r#"
         (for event[1] of
             case (i, e) =>
                 {" #{i}": e}
@@ -941,82 +960,114 @@ mod tests {
             case (i, x) =>
                 {" #{i}": x}
         end)
-        "#
-    );
+        "#,
+            false,
+        )
+    }
 
-    eq_test!(
-        merge_eq_test,
-        r#"
+    #[test]
+    fn merge_eq_test() -> Result<()> {
+        test_ast_eq(
+            r#"
         (merge event["foo"] of event["bar"] end);
         (merge event.foo of event.bar end);
-        "#
-    );
+        "#,
+            true,
+        )
+    }
 
-    eq_test!(
-        present_eq_test,
-        r#"
+    #[test]
+    fn present_eq_test() -> Result<()> {
+        test_ast_eq(
+            r#"
         (present event.foo);
         (present event["foo"])
-        "#
-    );
-    eq_test!(
-        group_path_eq_test,
-        r#"
+        "#,
+            true,
+        )
+    }
+    #[test]
+    fn group_path_eq_test() -> Result<()> {
+        test_ast_eq(
+            r#"
         group[1];
         group[1]
-        "#
-    );
-    not_eq_test!(
-        group_path_not_eq_test,
-        r#"
+        "#,
+            true,
+        )
+    }
+    #[test]
+    fn group_path_not_eq_test() -> Result<()> {
+        test_ast_eq(
+            r#"
         group[1];
         group[0]
-        "#
-    );
-    eq_test!(
-        window_path_eq_test,
-        r#"
+        "#,
+            false,
+        )
+    }
+    #[test]
+    fn window_path_eq_test() -> Result<()> {
+        test_ast_eq(
+            r#"
         window;
         window
-        "#
-    );
-    eq_test!(
-        args_path_eq_test,
-        r#"
+        "#,
+            true,
+        )
+    }
+    #[test]
+    fn args_path_eq_test() -> Result<()> {
+        test_ast_eq(
+            r#"
         args[0];
         args[0]
-        "#
-    );
-    eq_test!(
-        meta_path_eq_test,
-        r#"
+        "#,
+            true,
+        )
+    }
+    #[test]
+    fn meta_path_eq_test() -> Result<()> {
+        test_ast_eq(
+            r#"
         $meta[1];
         $meta[1]
-        "#
-    );
-    eq_test!(
-        complex_path_eq_test,
-        r#"
+        "#,
+            true,
+        )
+    }
+    #[test]
+    fn complex_path_eq_test() -> Result<()> {
+        test_ast_eq(
+            r#"
         let local = {};
         local[event.path][event.start:event["end"]];
         local[event.path][event.start:event["end"]]
-        "#
-    );
-    eq_test!(
-        string_eq_test,
-        r#"
+        "#,
+            true,
+        )
+    }
+    #[test]
+    fn string_eq_test() -> Result<()> {
+        test_ast_eq(
+            r#"
         " #{ event.foo } bar #{ $ }";
         " #{event.foo} bar #{$}";
-        "#
-    );
+        "#,
+            true,
+        )
+    }
 
-    eq_test!(
-        mul_eq_test,
-        r#"
+    #[test]
+    fn mul_eq_test() -> Result<()> {
+        test_ast_eq(
+            r#"
         event.m1 * event.m2;
         event.m1 * event.m2;
-        "#
-    );
+        "#,
+            true,
+        )
+    }
 
     fn imut_expr() -> ImutExpr<'static> {
         ImutExpr(ImutExprInt::Path(Path::Event(EventPath {

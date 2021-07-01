@@ -92,7 +92,19 @@ impl<'screw_lalrpop> From<ParserError<'screw_lalrpop>> for Error {
                 (start.move_up_lines(2), end.move_down_lines(2)).into(),
                 (start, end).into(),
                 token.to_string(),
-                expected.iter().map(|s| s.replace('"', "`")).collect(),
+                expected
+                    .into_iter()
+                    .map(|s| match s.as_str() {
+                        r#""heredoc_start""# | r#""heredoc_end""# => r#"`"""`"#.to_string(),
+                        s => format!(
+                            "`{}`",
+                            s.strip_prefix('"')
+                                .and_then(|s| s.strip_suffix('"'))
+                                .unwrap_or(&s)
+                                .replace(r#"\""#, r#"""#)
+                        ),
+                    })
+                    .collect(),
             )
             .into(),
             LalrpopError::ExtraToken {
@@ -307,7 +319,8 @@ impl ErrorKind {
             UnrecognizedToken(_, _, t, l) if t == "-" && l.contains(&("`(`".to_string())) => Some("Try wrapping this expression in parentheses `(` ... `)`".into()),
             UnrecognizedToken(_, _, key, options) => {
                 match best_hint(&key, &options, 3) {
-                    Some((_d, o)) => Some(format!("Did you mean to use {}?", o)),
+                    Some((_d, o)) if o == r#"`"`"# || o == r#"`"""`"#  => Some("Did you mean to use a string?".to_string()),
+                    Some((_d, o)) if o != r#"`"`"# && o != r#"`"""`"# => Some(format!("Did you mean to use {}?", o)),
                     _ => None
                 }
             }

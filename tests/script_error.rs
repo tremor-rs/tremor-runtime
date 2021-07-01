@@ -134,6 +134,7 @@ test_cases!(
     pp_cyclic,
     pp_nest_cyclic,
     // INSERT
+    patch_non_str_key,
     double_const_mod,
     bin_invalid_bits,
     bin_invalid_type,

@@ -712,6 +712,8 @@ impl Sink for Ws {
 
 #[cfg(test)]
 mod test {
+    use crate::codec;
+
     use super::*;
 
     #[test]
@@ -721,7 +723,7 @@ mod test {
         let mut preprocessors = make_preprocessors(&["lines".to_string()])?;
         let mut ingest_ns = 42_u64;
         let ids = EventId::default();
-        let mut codec: Box<dyn Codec> = Box::new(crate::codec::string::String {});
+        let mut codec: Box<dyn Codec> = Box::new(codec::string::String {});
         let message = Message::Text("hello\nworld\n".to_string());
         let events = message_to_event(
             &sink_url,
@@ -746,7 +748,8 @@ mod test {
 
     #[test]
     fn event_to_message_ok() -> Result<()> {
-        let mut codec: Box<dyn Codec> = Box::new(crate::codec::json::Json::default());
+        let mut codec: Box<dyn Codec> =
+            Box::new(codec::json::Json::<codec::json::Unsorted>::default());
         let mut postprocessors = make_postprocessors(&["lines".to_string()])?;
         let mut data = Value::object_with_capacity(2);
         data.insert("snot", "badger")?;
@@ -770,7 +773,8 @@ mod test {
         let (reply_tx, reply_rx) = bounded(1000);
 
         let url = TremorUrl::parse("/offramp/ws/instance")?;
-        let mut codec: Box<dyn Codec> = Box::new(crate::codec::json::Json::default());
+        let mut codec: Box<dyn Codec> =
+            Box::new(codec::json::Json::<codec::json::Unsorted>::default());
         let config = Config {
             url: "http://idonotexist:65535/path".to_string(),
             binary: true,

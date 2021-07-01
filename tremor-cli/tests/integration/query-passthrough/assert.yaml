@@ -1,8 +1,5 @@
 status: 0
-name: Query passthrough 
+name: Query passthrough
 asserts:
   - source: events.log
     equals_file: expected.json
-    contains:
-      - |
-        {"about":"Excepteur consectetur veniam pariatur

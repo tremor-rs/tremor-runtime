@@ -1,0 +1,4 @@
+patch event of
+  insert "snot" => "badger",
+  insert 7 => "snot"
+end

@@ -9,15 +9,9 @@ asserts:
     equals_file: "expected_metrics_offramp.json"
   - source: events.log
     contains:
-      - |
-        {"onramp":"metronome","ingest_ns":null,"id":0}
-      - |
-        {"onramp":"metronome","ingest_ns":null,"id":1}
-      - |
-        {"onramp":"metronome","ingest_ns":null,"id":2}
-      - |
-        {"onramp":"metronome","ingest_ns":null,"id":3}
-      - |
-        {"onramp":"metronome","ingest_ns":null,"id":4}
-      - |
-        {"onramp":"metronome","ingest_ns":null,"id":5}
+      - '{"id":0,"ingest_ns":null,"onramp":"metronome"}'
+      - '{"id":1,"ingest_ns":null,"onramp":"metronome"}'
+      - '{"id":2,"ingest_ns":null,"onramp":"metronome"}'
+      - '{"id":3,"ingest_ns":null,"onramp":"metronome"}'
+      - '{"id":4,"ingest_ns":null,"onramp":"metronome"}'
+      - '{"id":5,"ingest_ns":null,"onramp":"metronome"}'

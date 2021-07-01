@@ -1,4 +1,4 @@
-{"measurement":"events","tags":{"pipeline":"tremor://localhost/pipeline/main/1","node":"out","direction":"input","port":"in"},"fields":{"count":3},"timestamp":null}
-{"measurement":"events","tags":{"pipeline":"tremor://localhost/pipeline/main/1","node":"process","direction":"output","port":"out"},"fields":{"count":3},"timestamp":null}
-{"measurement":"events","tags":{"pipeline":"tremor://localhost/pipeline/main/1","node":"out","direction":"input","port":"in"},"fields":{"count":6},"timestamp":null}
-{"measurement":"events","tags":{"pipeline":"tremor://localhost/pipeline/main/1","node":"process","direction":"output","port":"out"},"fields":{"count":6},"timestamp":null}
+{"fields":{"count":3},"measurement":"events","tags":{"direction":"input","node":"out","pipeline":"tremor://localhost/pipeline/main/1","port":"in"},"timestamp":null}
+{"fields":{"count":3},"measurement":"events","tags":{"direction":"output","node":"process","pipeline":"tremor://localhost/pipeline/main/1","port":"out"},"timestamp":null}
+{"fields":{"count":6},"measurement":"events","tags":{"direction":"input","node":"out","pipeline":"tremor://localhost/pipeline/main/1","port":"in"},"timestamp":null}
+{"fields":{"count":6},"measurement":"events","tags":{"direction":"output","node":"process","pipeline":"tremor://localhost/pipeline/main/1","port":"out"},"timestamp":null}

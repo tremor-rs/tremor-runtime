@@ -365,7 +365,7 @@ pub struct FieldRaw<'script> {
 impl<'script> Upable<'script> for FieldRaw<'script> {
     type Target = Field<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        let name = ImutExprRaw::String(self.name).up(helper)?;
+        let name = self.name.up(helper)?;
         Ok(Field {
             mid: helper.add_meta(self.start, self.end),
             name,
@@ -387,6 +387,7 @@ impl<'script> Upable<'script> for RecordRaw<'script> {
     type Target = Record<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(Record {
+            base: crate::Object::new(),
             mid: helper.add_meta(self.start, self.end),
             fields: self.fields.up(helper)?,
         })
@@ -439,6 +440,76 @@ pub struct StringLitRaw<'script> {
     pub(crate) elements: StrLitElementsRaw<'script>,
 }
 
+impl<'script> Upable<'script> for StringLitRaw<'script> {
+    type Target = StringLit<'script>;
+
+    fn up<'registry>(mut self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+        let mid = helper.add_meta(self.start, self.end);
+
+        self.elements.reverse();
+        let mut new = Vec::with_capacity(self.elements.len());
+        for e in self.elements {
+            let next = match e {
+                StrLitElementRaw::Expr(e) => {
+                    let i = e.up(helper)?;
+                    let i = i.try_reduce(helper)?;
+                    match i {
+                        #[cfg(not(feature = "erlang-float-testing"))]
+                        ImutExprInt::Literal(l) => l.value.as_str().map_or_else(
+                            || StrLitElement::Lit(l.value.encode().into()),
+                            |s| StrLitElement::Lit(s.to_string().into()),
+                        ),
+                        // TODO: The float scenario is different in erlang and rust
+                        // We knowingly excluded float correctness in string interpolation
+                        // as we don't want to over engineer and write own format functions.
+                        // any suggestions are welcome
+                        #[cfg(feature = "erlang-float-testing")]
+                        #[cfg(not(tarpaulin_include))]
+                        ImutExprInt::Literal(l) => l.value.as_str().map_or_else(
+                            || {
+                                if let Some(_f) = l.value.as_f64() {
+                                    StrLitElement::Lit("42".into())
+                                } else {
+                                    StrLitElement::Lit(
+                                        crate::utils::sorted_serialize(&l.value)
+                                            .unwrap_or_default()
+                                            .into(),
+                                    )
+                                }
+                            },
+                            |s| StrLitElement::Lit(s.to_string().into()),
+                        ),
+                        _ => StrLitElement::Expr(i),
+                    }
+                }
+                StrLitElementRaw::Lit(l) => StrLitElement::Lit(l),
+            };
+            if let StrLitElement::Lit(next_lit) = next {
+                // We need this because otherwise we run into lifetime issues
+                #[allow(clippy::option_if_let_else)]
+                if let Some(prev) = new.pop() {
+                    match prev {
+                        StrLitElement::Lit(l) => {
+                            let mut o = l.into_owned();
+                            o.push_str(&next_lit);
+                            new.push(StrLitElement::Lit(o.into()))
+                        }
+                        prev @ StrLitElement::Expr(..) => {
+                            new.push(prev);
+                            new.push(StrLitElement::Lit(next_lit))
+                        }
+                    }
+                } else {
+                    new.push(StrLitElement::Lit(next_lit))
+                }
+            } else {
+                new.push(next)
+            }
+        }
+        Ok(StringLit { mid, elements: new })
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum StrLitElementRaw<'script> {
     Lit(Cow<'script, str>),
@@ -482,24 +553,6 @@ pub(crate) fn reduce2<'script>(
             other.extent(&helper.meta).expand_lines(2),
         )
         .into()),
-    }
-}
-
-impl<'script> ImutExprInt<'script> {
-    pub(crate) fn try_reduce(self, helper: &Helper<'script, '_>) -> Result<Self> {
-        match self {
-            ImutExprInt::Unary(u) => u.try_reduce(helper),
-            ImutExprInt::Bytes(b) => b.try_reduce(helper),
-            ImutExprInt::Binary(b) => b.try_reduce(helper),
-            ImutExprInt::List(l) => l.try_reduce(helper),
-            ImutExprInt::Record(r) => r.try_reduce(helper),
-            ImutExprInt::Path(p) => Ok(p.try_reduce(helper)),
-            ImutExprInt::Invoke1(i)
-            | ImutExprInt::Invoke2(i)
-            | ImutExprInt::Invoke3(i)
-            | ImutExprInt::Invoke(i) => i.try_reduce(helper),
-            other => Ok(other),
-        }
     }
 }
 
@@ -986,85 +1039,7 @@ impl<'script> Upable<'script> for ImutExprRaw<'script> {
             ImutExprRaw::Unary(u) => {
                 ImutExprInt::Unary(Box::new(u.up(helper)?)).try_reduce(helper)?
             }
-            ImutExprRaw::String(mut s) => {
-                s.elements.reverse();
-                let mut new = Vec::with_capacity(s.elements.len());
-                for e in s.elements {
-                    let next = match e {
-                        StrLitElementRaw::Expr(e) => {
-                            let i = e.up(helper)?;
-                            let i = i.try_reduce(helper)?;
-                            match i {
-                                #[cfg(not(feature = "erlang-float-testing"))]
-                                ImutExprInt::Literal(l) => l.value.as_str().map_or_else(
-                                    || StrLitElement::Lit(l.value.encode().into()),
-                                    |s| StrLitElement::Lit(s.to_string().into()),
-                                ),
-                                // TODO: The float scenario is different in erlang and rust
-                                // We knowingly excluded float correctness in string interpolation
-                                // as we don't want to over engineer and write own format functions.
-                                // any suggestions are welcome
-                                #[cfg(feature = "erlang-float-testing")]
-                                #[cfg(not(tarpaulin_include))]
-                                ImutExprInt::Literal(l) => l.value.as_str().map_or_else(
-                                    || {
-                                        if let Some(_f) = l.value.as_f64() {
-                                            StrLitElement::Lit("42".into())
-                                        } else {
-                                            StrLitElement::Lit(
-                                                crate::utils::sorted_serialize(&l.value)
-                                                    .unwrap_or_default()
-                                                    .into(),
-                                            )
-                                        }
-                                    },
-                                    |s| StrLitElement::Lit(s.to_string().into()),
-                                ),
-                                _ => StrLitElement::Expr(i),
-                            }
-                        }
-                        StrLitElementRaw::Lit(l) => StrLitElement::Lit(l),
-                    };
-                    if let StrLitElement::Lit(next_lit) = next {
-                        // We need this because otherwise we run into lifetime issues
-                        #[allow(clippy::option_if_let_else)]
-                        if let Some(prev) = new.pop() {
-                            match prev {
-                                StrLitElement::Lit(l) => {
-                                    let mut o = l.into_owned();
-                                    o.push_str(&next_lit);
-                                    new.push(StrLitElement::Lit(o.into()))
-                                }
-                                prev @ StrLitElement::Expr(..) => {
-                                    new.push(prev);
-                                    new.push(StrLitElement::Lit(next_lit))
-                                }
-                            }
-                        } else {
-                            new.push(StrLitElement::Lit(next_lit))
-                        }
-                    } else {
-                        new.push(next)
-                    }
-                }
-                let mid = helper.add_meta(s.start, s.end);
-                if new.len() == 1 {
-                    match new.pop() {
-                        Some(StrLitElement::Lit(l)) => {
-                            let value = Value::from(l);
-                            return Ok(ImutExprInt::Literal(Literal { mid, value }));
-                        }
-                        Some(other) => new.push(other),
-                        None => (),
-                    }
-                } else if new.is_empty() {
-                    return Ok(ImutExprInt::Literal(Literal {
-                        mid,
-                        value: Value::from(""),
-                    }));
-                }
-                ImutExprInt::String(StringLit { mid, elements: new })
-            }
+            ImutExprRaw::String(s) => ImutExprInt::String(s.up(helper)?).try_reduce(helper)?,
             ImutExprRaw::Record(r) => ImutExprInt::Record(r.up(helper)?).try_reduce(helper)?,
             ImutExprRaw::List(l) => ImutExprInt::List(l.up(helper)?).try_reduce(helper)?,
             ImutExprRaw::Patch(p) => {
@@ -1286,52 +1261,64 @@ pub enum PatchOperationRaw<'script> {
     /// we're forced to make this pub because of lalrpop
     Insert {
         /// we're forced to make this pub because of lalrpop
-        ident: ImutExprRaw<'script>,
+        ident: StringLitRaw<'script>,
         /// we're forced to make this pub because of lalrpop
         expr: ImutExprRaw<'script>,
     },
     /// we're forced to make this pub because of lalrpop
     Upsert {
         /// we're forced to make this pub because of lalrpop
-        ident: ImutExprRaw<'script>,
+        ident: StringLitRaw<'script>,
         /// we're forced to make this pub because of lalrpop
         expr: ImutExprRaw<'script>,
     },
     /// we're forced to make this pub because of lalrpop
     Update {
         /// we're forced to make this pub because of lalrpop
-        ident: ImutExprRaw<'script>,
+        ident: StringLitRaw<'script>,
         /// we're forced to make this pub because of lalrpop
         expr: ImutExprRaw<'script>,
     },
     /// we're forced to make this pub because of lalrpop
     Erase {
         /// we're forced to make this pub because of lalrpop
-        ident: ImutExprRaw<'script>,
+        ident: StringLitRaw<'script>,
     },
     /// we're forced to make this pub because of lalrpop
     Copy {
         /// we're forced to make this pub because of lalrpop
-        from: ImutExprRaw<'script>,
+        from: StringLitRaw<'script>,
         /// we're forced to make this pub because of lalrpop
-        to: ImutExprRaw<'script>,
+        to: StringLitRaw<'script>,
     },
     /// we're forced to make this pub because of lalrpop
     Move {
         /// we're forced to make this pub because of lalrpop
-        from: ImutExprRaw<'script>,
+        from: StringLitRaw<'script>,
         /// we're forced to make this pub because of lalrpop
-        to: ImutExprRaw<'script>,
+        to: StringLitRaw<'script>,
     },
     /// we're forced to make this pub because of lalrpop
     Merge {
         /// we're forced to make this pub because of lalrpop
-        ident: ImutExprRaw<'script>,
+        ident: StringLitRaw<'script>,
         /// we're forced to make this pub because of lalrpop
         expr: ImutExprRaw<'script>,
     },
     /// we're forced to make this pub because of lalrpop
-    TupleMerge {
+    MergeRecord {
+        /// we're forced to make this pub because of lalrpop
+        expr: ImutExprRaw<'script>,
+    },
+    /// we're forced to make this pub because of lalrpop
+    Default {
+        /// we're forced to make this pub because of lalrpop
+        ident: StringLitRaw<'script>,
+        /// we're forced to make this pub because of lalrpop
+        expr: ImutExprRaw<'script>,
+    },
+    /// we're forced to make this pub because of lalrpop
+    DefaultRecord {
         /// we're forced to make this pub because of lalrpop
         expr: ImutExprRaw<'script>,
     },
@@ -1340,7 +1327,7 @@ pub enum PatchOperationRaw<'script> {
 impl<'script> Upable<'script> for PatchOperationRaw<'script> {
     type Target = PatchOperation<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        use PatchOperationRaw::{Copy, Erase, Insert, Merge, Move, TupleMerge, Update, Upsert};
+        use PatchOperationRaw::{Copy, Erase, Insert, Merge, MergeRecord, Move, Update, Upsert};
         Ok(match self {
             Insert { ident, expr } => PatchOperation::Insert {
                 ident: ident.up(helper)?,
@@ -1369,7 +1356,14 @@ impl<'script> Upable<'script> for PatchOperationRaw<'script> {
                 ident: ident.up(helper)?,
                 expr: expr.up(helper)?,
             },
-            TupleMerge { expr } => PatchOperation::TupleMerge {
+            MergeRecord { expr } => PatchOperation::MergeRecord {
+                expr: expr.up(helper)?,
+            },
+            PatchOperationRaw::Default { ident, expr } => PatchOperation::Default {
+                ident: ident.up(helper)?,
+                expr: expr.up(helper)?,
+            },
+            PatchOperationRaw::DefaultRecord { expr } => PatchOperation::DefaultRecord {
                 expr: expr.up(helper)?,
             },
         })

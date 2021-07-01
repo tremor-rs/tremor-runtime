@@ -5,12 +5,12 @@ asserts:
     equals_file: expected_err.json
   - source: ok.log
     contains:
-      - '{"success":true,"payload":{"num":1},"index":"my_little_index","doc":"my_little_doc"}'
-      - '{"success":true,"payload":{"num":2},"index":"my_little_index","doc":"my_little_doc"}'
-      - '{"success":true,"payload":{"num":3},"index":"my_little_index","doc":"my_little_doc"}'
-      - '{"success":true,"payload":{"num":4},"index":"my_little_index","doc":"my_little_doc"}'
-      - '{"success":true,"payload":{"num":5},"index":"my_little_index","doc":"my_little_doc"}'
-      - '{"success":true,"payload":{"num":6},"index":"my_little_index","doc":"my_little_doc"}'
-      - '{"success":true,"payload":{"num":7},"index":"my_little_index","doc":"my_little_doc"}'
-      - '{"success":true,"payload":{"num":8},"index":"my_little_index","doc":"my_little_doc"}'
-      - '{"success":true,"payload":{"num":9},"index":"my_little_index","doc":"my_little_doc"}'
+      - '{"doc":"my_little_doc","index":"my_little_index","payload":{"num":1},"success":true}'
+      - '{"doc":"my_little_doc","index":"my_little_index","payload":{"num":2},"success":true}'
+      - '{"doc":"my_little_doc","index":"my_little_index","payload":{"num":3},"success":true}'
+      - '{"doc":"my_little_doc","index":"my_little_index","payload":{"num":4},"success":true}'
+      - '{"doc":"my_little_doc","index":"my_little_index","payload":{"num":5},"success":true}'
+      - '{"doc":"my_little_doc","index":"my_little_index","payload":{"num":6},"success":true}'
+      - '{"doc":"my_little_doc","index":"my_little_index","payload":{"num":7},"success":true}'
+      - '{"doc":"my_little_doc","index":"my_little_index","payload":{"num":8},"success":true}'
+      - '{"doc":"my_little_doc","index":"my_little_index","payload":{"num":9},"success":true}'

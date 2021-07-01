@@ -16,6 +16,7 @@
 #![cfg(not(tarpaulin_include))]
 
 use beef::Cow;
+use tremor_value::Value;
 
 use crate::CustomFn;
 
@@ -180,8 +181,17 @@ impl<'script> Expr<'script> {
 
 impl<'script> Record<'script> {
     pub(crate) fn into_static(self) -> Record<'static> {
-        let Record { mid, fields } = self;
+        let Record { mid, fields, base } = self;
+        let v: Value<'static> = Value::from(base).into_static();
+        let base = if let Value::Object(v) = v {
+            *v
+        } else {
+            // ALLOW: we know this isn't reachable as we create v above
+            unreachable!()
+        };
+
         Record {
+            base,
             mid,
             fields: fields.into_iter().map(Field::into_static).collect(),
         }
@@ -793,7 +803,14 @@ impl<'script> PatchOperation<'script> {
                 ident: ident.into_static(),
                 expr: expr.into_static(),
             },
-            PatchOperation::TupleMerge { expr } => PatchOperation::TupleMerge {
+            PatchOperation::MergeRecord { expr } => PatchOperation::MergeRecord {
+                expr: expr.into_static(),
+            },
+            PatchOperation::Default { ident, expr } => PatchOperation::Default {
+                ident: ident.into_static(),
+                expr: expr.into_static(),
+            },
+            PatchOperation::DefaultRecord { expr } => PatchOperation::DefaultRecord {
                 expr: expr.into_static(),
             },
         }
