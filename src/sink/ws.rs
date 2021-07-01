@@ -27,7 +27,7 @@ use halfbrown::HashMap;
 use std::time::Duration;
 use std::{boxed::Box, pin::Pin};
 use tremor_pipeline::{EventId, OpMeta};
-use tremor_script::LineValue;
+use tremor_script::EventPayload;
 use url::Url;
 
 type WsUrl = String;
@@ -61,7 +61,7 @@ struct SendEventConnectionMsg {
     msg_meta: WsMessageMeta,
     maybe_op_meta: Option<OpMeta>,
     ingest_ns: u64,
-    data: LineValue,
+    data: EventPayload,
     correlation: Option<Value<'static>>,
 }
 
@@ -351,7 +351,7 @@ fn event_to_message(
     codec: &dyn Codec,
     postprocessors: &mut Postprocessors,
     ingest_ns: u64,
-    data: &LineValue,
+    data: &EventPayload,
     binary: bool,
 ) -> Result<impl Iterator<Item = Result<Message>>> {
     let raw = codec.encode(data.suffix().value())?;
@@ -402,7 +402,7 @@ fn message_to_event(
     // tried using an iter, but failed, so here we go
     let mut res = Vec::with_capacity(preprocessed.len());
     for pp in preprocessed {
-        let data = LineValue::try_new(vec![Pin::new(pp)], |mutd| {
+        let data = EventPayload::try_new(vec![Pin::new(pp)], |mutd| {
             // ALLOW: we know this is save, as we just put pp into mutd
             let mut_data = unsafe { mutd.get_unchecked_mut(0).as_mut().get_mut() };
             let body = codec

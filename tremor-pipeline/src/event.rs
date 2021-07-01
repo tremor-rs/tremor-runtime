@@ -15,7 +15,7 @@
 use crate::{CbAction, EventId, OpMeta, SignalKind};
 use std::mem::swap;
 use tremor_script::prelude::*;
-use tremor_script::{EventOriginUri, LineValue, Value};
+use tremor_script::{EventOriginUri, EventPayload, Value};
 
 /// A tremor event
 #[derive(
@@ -25,7 +25,7 @@ pub struct Event {
     /// The event ID
     pub id: EventId,
     /// The event Data
-    pub data: LineValue,
+    pub data: EventPayload,
     /// Nanoseconds at when the event was ingested
     pub ingest_ns: u64,
     /// URI to identify the origin of the event

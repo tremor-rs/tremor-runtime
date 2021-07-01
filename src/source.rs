@@ -110,7 +110,7 @@ pub(crate) enum SourceReply {
     /// Allow for passthrough of already structured events
     Structured {
         origin_uri: EventOriginUri,
-        data: LineValue,
+        data: EventPayload,
     },
     /// A stream is opened
     StartStream(usize),
@@ -174,7 +174,7 @@ pub(crate) trait Source {
     }
 }
 
-fn make_error(source_id: String, e: &Error, original_id: u64) -> tremor_script::LineValue {
+fn make_error(source_id: String, e: &Error, original_id: u64) -> tremor_script::EventPayload {
     error!("[Source::{}] Error decoding event data: {}", source_id, e);
     let mut meta = Object::with_capacity(1);
     meta.insert_nocheck("error".into(), e.to_string().into());
@@ -242,13 +242,13 @@ where
         codec_override: Option<String>,
         data: Vec<u8>,
         meta: Option<StaticValue>, // See: https://github.com/rust-lang/rust/issues/63033
-    ) -> Vec<Result<LineValue>> {
+    ) -> Vec<Result<EventPayload>> {
         let mut results = vec![];
         match self.handle_pp(stream, ingest_ns, data) {
             Ok(data) => {
                 let meta_value = meta.map_or_else(Value::object, |m| m.0);
                 for d in data {
-                    let line_value = LineValue::try_new(vec![Pin::new(d)], |mutd| {
+                    let line_value = EventPayload::try_new(vec![Pin::new(d)], |mutd| {
                         // this is safe, because we get the vec we created in the previous argument and we now it has 1 element
                         // so it will never panic.
                         // take this, rustc!
@@ -406,7 +406,7 @@ where
 
     pub(crate) async fn transmit_event(
         &mut self,
-        data: LineValue,
+        data: EventPayload,
         ingest_ns: u64,
         origin_uri: EventOriginUri,
         port: Cow<'static, str>,
@@ -542,7 +542,7 @@ where
 
     async fn route_result(
         &mut self,
-        results: Vec<Result<tremor_script::LineValue>>,
+        results: Vec<Result<tremor_script::EventPayload>>,
         original_id: u64,
         ingest_ns: u64,
         origin_uri: EventOriginUri,
