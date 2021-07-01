@@ -69,6 +69,7 @@ pub fn lookup(name: &str) -> Result<Box<dyn Preprocessor>> {
         "ingest-ns" => Ok(Box::new(ExtractIngresTs {})),
         "length-prefixed" => Ok(Box::new(LengthPrefix::default())),
         "textual-length-prefix" => Ok(Box::new(TextualLength::default())),
+        "zstd" => Ok(Box::new(Zstd::default())),
         _ => Err(format!("Preprocessor '{}' not found.", name).into()),
     }
 }
@@ -425,6 +426,20 @@ impl Preprocessor for TextualLength {
         Ok(res)
     }
 }
+
+#[derive(Clone, Debug, Default)]
+pub(crate) struct Zstd {}
+impl Preprocessor for Zstd {
+    #[cfg(not(tarpaulin_include))]
+    fn name(&self) -> &str {
+        "ztd"
+    }
+    fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+        let decoded: Vec<u8> = zstd::decode_all(data)?;
+        Ok(vec![decoded])
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;

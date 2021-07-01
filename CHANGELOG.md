@@ -6,6 +6,7 @@
 
 - Experimental ARM support
 - Add `default => {...}` and `default "key" => "value` to patch
+- Add `zstd` pre- and post-processors [#1100](https://github.com/tremor-rs/tremor-runtime/issues/1100)
 
 ### Fixes
 
