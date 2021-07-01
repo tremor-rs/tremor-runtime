@@ -962,7 +962,7 @@ async fn build_response_events<'response>(
     let mut events = Vec::with_capacity(preprocessed.len());
     for pp in preprocessed {
         events.push(
-            LineValue::try_new(vec![Pin::new(pp)], |mutd| {
+            EventPayload::try_new(vec![Pin::new(pp)], |mutd| {
                 // ALLOW: we define mutd as a vector of one element above
                 let mut_data = mutd[0].as_mut().get_mut();
                 let body = the_chosen_one
