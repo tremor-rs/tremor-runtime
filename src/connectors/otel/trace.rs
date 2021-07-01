@@ -124,37 +124,39 @@ pub(crate) fn status_to_pb(json: Option<&Value<'_>>) -> Result<Option<Status>> {
     }))
 }
 
+fn span_to_json(span: Span) -> Value<'static> {
+    literal!({
+        "attributes": common::key_value_list_to_json(span.attributes),
+        "events": span_events_to_json(span.events),
+        "links": span_links_to_json(span.links),
+        "span_id": id::hex_span_id_to_json(&span.span_id),
+        "parent_span_id": id::hex_span_id_to_json(&span.parent_span_id),
+        "trace_id": id::hex_trace_id_to_json(&span.trace_id),
+        "start_time_unix_nano": span.start_time_unix_nano,
+        "end_time_unix_nano": span.end_time_unix_nano,
+        "trace_state": span.trace_state,
+        "dropped_attributes_count": span.dropped_attributes_count,
+        "dropped_events_count": span.dropped_events_count,
+        "dropped_links_count": span.dropped_links_count,
+        "status": status_to_json(span.status),
+        "kind": span.kind,
+        "name": span.name
+    })
+}
+
 pub(crate) fn instrumentation_library_spans_to_json(
     data: Vec<InstrumentationLibrarySpans>,
 ) -> Value<'static> {
     let mut json: Vec<Value> = Vec::with_capacity(data.len());
     for data in data {
-        let mut spans: Vec<Value> = Vec::with_capacity(data.spans.len());
-        for span in data.spans {
-            spans.push(literal!({
-                "attributes": common::key_value_list_to_json(span.attributes),
-                "events": span_events_to_json(span.events),
-                "links": span_links_to_json(span.links),
-                "span_id": id::hex_span_id_to_json(&span.span_id),
-                "parent_span_id": id::hex_span_id_to_json(&span.parent_span_id),
-                "trace_id": id::hex_trace_id_to_json(&span.trace_id),
-                "start_time_unix_nano": span.start_time_unix_nano,
-                "end_time_unix_nano": span.end_time_unix_nano,
-                "trace_state": span.trace_state,
-                "dropped_attributes_count": span.dropped_attributes_count,
-                "dropped_events_count": span.dropped_events_count,
-                "dropped_links_count": span.dropped_links_count,
-                "status": status_to_json(span.status),
-                "kind": span.kind,
-                "name": span.name
-            }));
+        let spans: Value = data.spans.into_iter().map(span_to_json).collect();
+
+        let mut e = literal!({ "spans": spans });
+        if let Some(il) = data.instrumentation_library {
+            let il = common::maybe_instrumentation_library_to_json(il);
+            e.try_insert("instrumentation_library", il);
         }
-
-        json.push(literal!({
-            "instrumentation_library": common::maybe_instrumentation_library_to_json(data.instrumentation_library),
-            "spans": spans,
-
-        }));
+        json.push(e);
     }
 
     Value::from(json)

@@ -24,9 +24,7 @@ use tremor_value::{literal, Value};
 use value_trait::ValueAccess;
 pub(crate) const EMPTY: Vec<Value> = Vec::new();
 
-pub(crate) fn any_value_to_json<'event>(
-    pb: tremor_otelapis::opentelemetry::proto::common::v1::AnyValue,
-) -> Value<'event> {
+pub(crate) fn any_value_to_json(pb: AnyValue) -> Value<'static> {
     use any_value::Value as Inner;
     let v: Value = match pb.value {
         Some(Inner::StringValue(v)) => v.into(),
@@ -109,11 +107,11 @@ pub(crate) fn any_value_to_pb(data: &Value<'_>) -> AnyValue {
     }
 }
 
-pub(crate) fn maybe_any_value_to_json<'event>(pb: Option<AnyValue>) -> Option<Value<'event>> {
+pub(crate) fn maybe_any_value_to_json(pb: Option<AnyValue>) -> Option<Value<'static>> {
     pb.map(any_value_to_json)
 }
 
-pub(crate) fn string_key_value_to_json<'event>(pb: Vec<StringKeyValue>) -> Value<'event> {
+pub(crate) fn string_key_value_to_json(pb: Vec<StringKeyValue>) -> Value<'static> {
     pb.into_iter()
         .map(|StringKeyValue { key, value }| (key, value))
         .collect()
@@ -131,7 +129,7 @@ pub(crate) fn string_key_value_to_pb(data: Option<&Value<'_>>) -> Result<Vec<Str
         .collect()
 }
 
-pub(crate) fn key_value_list_to_json<'event>(pb: Vec<KeyValue>) -> Value<'event> {
+pub(crate) fn key_value_list_to_json(pb: Vec<KeyValue>) -> Value<'static> {
     pb.into_iter()
         .map(|KeyValue { key, value }| (key, maybe_any_value_to_json(value)))
         .collect()
@@ -149,16 +147,11 @@ pub(crate) fn maybe_key_value_list_to_pb(data: Option<&Value<'_>>) -> Result<Vec
         .collect()
 }
 
-pub(crate) fn maybe_instrumentation_library_to_json<'event>(
-    pb: Option<InstrumentationLibrary>,
-) -> Value<'event> {
-    pb.map(|il| {
-        literal!({
-            "name": il.name,
-            "version": il.version,
-        })
+pub(crate) fn maybe_instrumentation_library_to_json(il: InstrumentationLibrary) -> Value<'static> {
+    literal!({
+        "name": il.name,
+        "version": il.version,
     })
-    .into()
 }
 
 pub(crate) fn instrumentation_library_to_pb(data: &Value<'_>) -> Result<InstrumentationLibrary> {
@@ -383,7 +376,7 @@ mod tests {
             name: "name".into(),
             version: "v0.1.2".into(),
         };
-        let json = maybe_instrumentation_library_to_json(Some(pb.clone()));
+        let json = maybe_instrumentation_library_to_json(pb.clone());
         let back_again = instrumentation_library_to_pb(&json)?;
         let expected: Value = literal!({"name": "name", "version": "v0.1.2"});
         assert_eq!(expected, json);
