@@ -70,7 +70,7 @@ mod tilde;
 /// Utility functions
 pub mod utils;
 
-pub use event_payload::{EventPayload, EventPayloadDeserError, ValueAndMeta};
+pub use event_payload::{DeserError, EventPayload, ValueAndMeta};
 
 extern crate serde;
 #[macro_use]

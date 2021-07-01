@@ -29,8 +29,8 @@ use async_channel::{self, unbounded, Receiver, Sender};
 use async_std::task;
 use beef::Cow;
 use halfbrown::HashMap;
+use std::collections::BTreeMap;
 use std::time::Duration;
-use std::{collections::BTreeMap, pin::Pin};
 use tremor_common::time::nanotime;
 use tremor_pipeline::{CbAction, Event, EventId, EventOriginUri, DEFAULT_STREAM_ID};
 use tremor_script::prelude::*;
@@ -248,11 +248,7 @@ where
             Ok(data) => {
                 let meta_value = meta.map_or_else(Value::object, |m| m.0);
                 for d in data {
-                    let line_value = EventPayload::try_new(vec![Pin::new(d)], |mutd| {
-                        // this is safe, because we get the vec we created in the previous argument and we now it has 1 element
-                        // so it will never panic.
-                        // take this, rustc!
-                        let mut_data = unsafe { mutd.get_unchecked_mut(0).as_mut().get_mut() };
+                    let line_value = EventPayload::try_new::<RentalSnot, _>(d, |mut_data| {
                         let codec_map = &mut self.codec_map;
                         let codec = codec_override
                             .as_ref()
@@ -266,9 +262,7 @@ where
                                 Ok(ValueAndMeta::from_parts(decoded, meta_value.clone()))
                             }
                         }
-                    })
-                    .map_err(|e| e.0);
-
+                    });
                     match line_value {
                         Ok(decoded) => results.push(Ok(decoded)),
                         Err(RentalSnot::Skip) => (),
