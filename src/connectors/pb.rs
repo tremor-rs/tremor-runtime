@@ -37,84 +37,46 @@ pub(crate) fn maybe_int_to_pbu64(data: Option<&Value<'_>>) -> Result<u64> {
 }
 
 pub(crate) fn maybe_int_to_pbi32(data: Option<&Value<'_>>) -> Result<i32> {
-    data.map_or_else(
-        || Err("Expected an json i64 to convert to pb i32".into()),
-        |data| {
-            data.as_i32()
-                .ok_or_else(|| Error::from("not coercable to i32"))
-        },
-    )
+    data.as_i32()
+        .ok_or_else(|| Error::from("not coercable to i32"))
 }
 
 pub(crate) fn maybe_int_to_pbi64(data: Option<&Value<'_>>) -> Result<i64> {
-    data.map_or_else(
-        || Err("Expected an json i64 to convert to pb i64".into()),
-        |data| {
-            data.as_i64()
-                .ok_or_else(|| Error::from("not coercable to i64"))
-        },
-    )
+    data.as_i64()
+        .ok_or_else(|| Error::from("not coercable to i64"))
 }
 
 pub(crate) fn maybe_int_to_pbu32(data: Option<&Value<'_>>) -> Result<u32> {
-    data.map_or_else(
-        || {
-            Err(
-                "Expected a json value convertible to pb u32 without truncation or sign loss"
-                    .into(),
-            )
-        },
-        |data| {
-            data.as_u32()
-                .ok_or_else(|| Error::from("not coercable to u32"))
-        },
-    )
+    data.as_u32()
+        .ok_or_else(|| Error::from("not coercable to u32"))
 }
 
 pub(crate) fn maybe_double_to_pb(data: Option<&Value<'_>>) -> Result<f64> {
-    data.map_or_else(
-        || Err("Expected a json f64 to convert to pb f64".into()),
-        |data| {
-            data.as_f64()
-                .ok_or_else(|| Error::from("not coercable to f64"))
-        },
-    )
+    data.as_f64()
+        .ok_or_else(|| Error::from("not coercable to f64"))
 }
 
 pub(crate) fn maybe_bool_to_pb(data: Option<&Value<'_>>) -> Result<bool> {
-    data.map_or_else(
-        || Err("Expected a json bool to convert to pb bool".into()),
-        |data| {
-            data.as_bool()
-                .ok_or_else(|| Error::from("not coercable to bool"))
-        },
-    )
+    data.as_bool()
+        .ok_or_else(|| Error::from("not coercable to bool"))
 }
 
 pub(crate) fn f64_repeated_to_pb(json: Option<&Value<'_>>) -> Result<Vec<f64>> {
-    if let Some(json) = json.as_array() {
-        let mut arr = Vec::with_capacity(json.len());
-        for data in json {
-            let value = maybe_double_to_pb(Some(data))?;
-            arr.push(value);
-        }
-        return Ok(arr);
-    }
-
-    Err("Unable to map json value to repeated f64 pb".into())
+    json.as_array()
+        .ok_or("Unable to map json value to repeated f64 pb")?
+        .iter()
+        .map(Some)
+        .map(maybe_double_to_pb)
+        .collect()
 }
 
 pub(crate) fn u64_repeated_to_pb(json: Option<&Value<'_>>) -> Result<Vec<u64>> {
-    if let Some(json) = json.as_array() {
-        let mut arr = Vec::with_capacity(json.len());
-        for data in json {
-            let value = maybe_int_to_pbu64(Some(data))?;
-            arr.push(value);
-        }
-        return Ok(arr);
-    }
-
-    Err("Unable to map json value to repeated u64 pb".into())
+    json.as_array()
+        .ok_or("Unable to map json value to repeated u64 pb")?
+        .iter()
+        .map(Some)
+        .map(maybe_int_to_pbu64)
+        .collect()
 }
 
 #[cfg(test)]
