@@ -23,13 +23,13 @@ use http_types::mime::Mime;
 use http_types::{headers::HeaderValue, Method};
 use serde::de::{self, MapAccess, Visitor};
 use serde::{Deserialize, Deserializer};
+use std::borrow::Borrow;
 use std::fmt;
 use std::marker::PhantomData;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
-use std::{borrow::Borrow, pin::Pin};
 use surf::{Body, Client, Request, Response};
 use tremor_pipeline::{EventId, EventIdGenerator, OpMeta};
 use tremor_script::Object;
@@ -962,16 +962,13 @@ async fn build_response_events<'response>(
     let mut events = Vec::with_capacity(preprocessed.len());
     for pp in preprocessed {
         events.push(
-            EventPayload::try_new(vec![Pin::new(pp)], |mutd| {
-                // ALLOW: we define mutd as a vector of one element above
-                let mut_data = mutd[0].as_mut().get_mut();
+            EventPayload::try_new::<crate::Error, _>(pp, |mut_data| {
                 let body = the_chosen_one
                     .decode(mut_data, nanotime())?
                     .unwrap_or_else(Value::object);
 
                 Ok(ValueAndMeta::from_parts(body, meta.clone())) // TODO: no need to clone the last element?
             })
-            .map_err(|e: rental::RentalError<Error, _>| e.0)
             .map(|data| {
                 let mut id = response_ids.next_id();
                 id.track(event_id);

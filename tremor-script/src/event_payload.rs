@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::prelude::*;
-use std::{mem, pin::Pin};
+use std::{fmt::Debug, mem, pin::Pin, sync::Arc};
 pub use tremor_common::stry;
 
 /// Combined struct for an event value and metadata
@@ -99,33 +99,96 @@ impl<'v> From<Value<'v>> for ValueAndMeta<'v> {
     }
 }
 
-rental! {
-    /// Tremor script rentals to work around lifetime
-    /// issues
-    pub(crate) mod rentals {
-        use super::*;
-        use std::pin::Pin;
-
-        /// Rental wrapped value with the data it was parsed
-        /// from from
-        #[rental_mut(covariant, debug)]
-        pub struct Value {
-            raw: Vec<Pin<Vec<u8>>>,
-            parsed: ValueAndMeta<'raw>
+impl<'v, T1, T2> From<(T1, T2)> for ValueAndMeta<'v>
+where
+    Value<'v>: From<T1> + From<T2>,
+{
+    fn from((v, m): (T1, T2)) -> Self {
+        ValueAndMeta {
+            v: Value::from(v),
+            m: Value::from(m),
         }
-
     }
 }
-pub use rentals::Value as EventPayload;
+
+/// FIXME
+#[derive(Clone, Default)]
+pub struct EventPayload {
+    /// - We have a vector to hold multiple raw input values
+    /// - Each input value is a Vec<u8>
+    /// - Each Vec is pinned to ensure the underlying data isn't moved
+    /// - Each Pin is in a Arc so we can clone the data without with both clones
+    ///   still pointing to the underlying pin.
+    raw: Vec<Arc<Pin<Vec<u8>>>>,
+    structured: ValueAndMeta<'static>,
+}
+
+impl std::fmt::Debug for EventPayload {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.structured.fmt(f)
+    }
+}
 
 impl EventPayload {
+    /// FIXME
+    #[must_use]
+    pub fn suffix(&self) -> &ValueAndMeta {
+        &self.structured
+    }
+
+    /// FIXME
+    #[must_use]
+    pub fn new<F>(raw: Vec<u8>, f: F) -> Self
+    where
+        F: for<'head> FnOnce(&'head mut [u8]) -> ValueAndMeta<'head>,
+    {
+        let mut raw = Pin::new(raw);
+        let structured = f(raw.as_mut().get_mut());
+        // This is where the magic happens
+        let structured: ValueAndMeta<'static> = unsafe { mem::transmute(structured) };
+        let raw = vec![Arc::new(raw)];
+        Self { raw, structured }
+    }
+
+    /// FIXME
+    ///
+    /// # Errors
+    /// errors if the conversion function fails
+    pub fn try_new<E, F>(raw: Vec<u8>, f: F) -> std::result::Result<Self, E>
+    where
+        F: for<'head> FnOnce(&'head mut [u8]) -> std::result::Result<ValueAndMeta<'head>, E>,
+    {
+        let mut raw = Pin::new(raw);
+        let structured = f(raw.as_mut().get_mut())?;
+        // This is where the magic happens
+        let structured: ValueAndMeta<'static> = unsafe { mem::transmute(structured) };
+        let raw = vec![Arc::new(raw)];
+        Ok(Self { raw, structured })
+    }
+
+    /// FIXME
+    pub fn rent<F, R>(&self, f: F) -> R
+    where
+        F: for<'iref, 'head> FnOnce(&'iref ValueAndMeta<'head>) -> R,
+    {
+        f(&self.structured)
+    }
+
+    /// FIXME
+    pub fn rent_mut<F, R>(&mut self, f: F) -> R
+    where
+        F: for<'iref, 'head> FnOnce(&'iref mut ValueAndMeta<'head>) -> R,
+    {
+        f(&mut self.structured)
+    }
+
     /// Borrow the parts (event and metadata) from a rental.
     #[must_use]
     pub fn parts<'value, 'borrow>(&'borrow self) -> (&'borrow Value<'value>, &'borrow Value<'value>)
     where
         'borrow: 'value,
     {
-        let ValueAndMeta { v, m } = self.suffix();
+        let ValueAndMeta { ref v, ref m } = self.structured;
         (v, m)
     }
 
@@ -153,71 +216,33 @@ impl EventPayload {
     ///
     /// # Errors
     /// if `join_f` errors
-    pub fn consume<'run, E, F>(&'run mut self, other: Self, join_f: F) -> Result<(), E>
+    pub fn consume<E, F>(&mut self, mut other: Self, join_f: F) -> Result<(), E>
     where
         E: std::error::Error,
         F: Fn(&mut ValueAndMeta<'static>, ValueAndMeta<'static>) -> Result<(), E>,
     {
-        struct ScrewRental {
-            pub parsed: ValueAndMeta<'static>,
-            pub raw: Vec<Pin<Vec<u8>>>,
-        }
-        // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1031
-        #[allow(clippy::transmute_ptr_to_ptr)]
-        unsafe {
-            // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1031
-            let self_unrent: &'run mut ScrewRental = mem::transmute(self);
-            // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1031
-            let mut other_unrent: ScrewRental = mem::transmute(other);
-            self_unrent.raw.append(&mut other_unrent.raw);
-            join_f(&mut self_unrent.parsed, other_unrent.parsed)?;
-        }
+        self.raw.append(&mut other.raw);
+        join_f(&mut self.structured, other.structured)?;
+
         Ok(())
     }
 }
 
-impl From<Value<'static>> for EventPayload {
-    fn from(v: Value<'static>) -> Self {
-        Self::new(vec![], |_| ValueAndMeta::from(v))
-    }
-}
-
-impl<T1, T2> From<(T1, T2)> for EventPayload
+impl<T> From<T> for EventPayload
 where
-    Value<'static>: From<T1> + From<T2>,
+    ValueAndMeta<'static>: From<T>,
 {
-    fn from((v, m): (T1, T2)) -> Self {
-        Self::new(vec![], |_| ValueAndMeta {
-            v: Value::from(v),
-            m: Value::from(m),
-        })
-    }
-}
-
-impl Clone for EventPayload {
-    fn clone(&self) -> Self {
-        // The only safe way to clone a line value is to clone
-        // the data and then turn it into a owned value
-        // then turn this owned value back into a borrowed value
-        // we need to do this dance to 'free' value from the
-        // linked lifetime.
-        // An alternative would be keeping the raw data in an ARC
-        // instead of a Box.
-        Self::new(vec![], |_| {
-            let v = self.suffix();
-            ValueAndMeta::from_parts(v.value().clone_static(), v.meta().clone_static())
-        })
-    }
-}
-impl Default for EventPayload {
-    fn default() -> Self {
-        Self::new(vec![], |_| ValueAndMeta::default())
+    fn from(vm: T) -> Self {
+        Self {
+            raw: Vec::new(),
+            structured: vm.into(),
+        }
     }
 }
 
 /// An error occurred while deserializing
 /// a value into an Event.
-pub enum EventPayloadDeserError {
+pub enum DeserError {
     /// The value was missing the `value` key
     ValueMissing,
     /// The value was missing the `metadata` key
@@ -226,6 +251,6 @@ pub enum EventPayloadDeserError {
 
 impl PartialEq for EventPayload {
     fn eq(&self, other: &Self) -> bool {
-        self.rent(|s| other.rent(|o| s == o))
+        self.structured.eq(&other.structured)
     }
 }
