@@ -382,24 +382,27 @@ pub(crate) fn metrics_data_to_pb(data: &Value<'_>) -> Result<metric::Data> {
     }
 }
 
+fn metric_to_json(metric: Metric) -> Value<'static> {
+    literal!({
+        "name": metric.name,
+        "description": metric.description,
+        "data": metrics_data_to_json(metric.data),
+        "unit": metric.unit,
+    })
+}
+
 pub(crate) fn instrumentation_library_metrics_to_json<'event>(
     pb: Vec<tremor_otelapis::opentelemetry::proto::metrics::v1::InstrumentationLibraryMetrics>,
 ) -> Value<'event> {
     let mut json = Vec::with_capacity(pb.len());
     for data in pb {
-        let mut metrics = Vec::new();
-        for metric in data.metrics {
-            metrics.push(literal!({
-                "name": metric.name,
-                "description": metric.description,
-                "data": metrics_data_to_json(metric.data),
-                "unit": metric.unit,
-            }));
+        let metrics: Value = data.metrics.into_iter().map(metric_to_json).collect();
+        let mut e = literal!({ "metrics": metrics });
+        if let Some(il) = data.instrumentation_library {
+            let il = common::maybe_instrumentation_library_to_json(il);
+            e.try_insert("instrumentation_library", il);
         }
-        json.push(literal!({
-            "instrumentation_library": common::maybe_instrumentation_library_to_json(data.instrumentation_library),
-            "metrics": metrics
-        }));
+        json.push(e);
     }
 
     literal!(json)
@@ -987,7 +990,7 @@ mod tests {
             instrumentation_library: Some(InstrumentationLibrary {
                 name: "name".into(),
                 version: "v0.1.2".into(),
-            }), // TODO For now its an error for this to be None - may need to revisit
+            }),
             metrics: vec![Metric {
                 name: "test".into(),
                 description: "blah blah blah blah".into(),
@@ -1007,6 +1010,52 @@ mod tests {
         let back_again = instrumentation_library_metrics_to_pb(Some(&json))?;
         let expected: Value = literal!([{
             "instrumentation_library": { "name": "name", "version": "v0.1.2" },
+            "metrics": [{
+                "name": "test",
+                "description": "blah blah blah blah",
+                "unit": "badgerfeet",
+                "data": {
+                    "int-gauge": {
+                        "data_points": [{
+                            "start_time_unix_nano": 0,
+                            "time_unix_nano": 0,
+                            "labels": {},
+                            "exemplars": [],
+                            "value": 42
+                        }]
+                    }
+                },
+            }]
+        }]);
+
+        assert_eq!(expected, json);
+        assert_eq!(pb, back_again);
+
+        Ok(())
+    }
+
+    #[test]
+    fn instrumentation_library_metrics_nolib() -> Result<()> {
+        let pb = vec![InstrumentationLibraryMetrics {
+            instrumentation_library: None,
+            metrics: vec![Metric {
+                name: "test".into(),
+                description: "blah blah blah blah".into(),
+                unit: "badgerfeet".into(),
+                data: Some(metric::Data::IntGauge(IntGauge {
+                    data_points: vec![IntDataPoint {
+                        value: 42,
+                        start_time_unix_nano: 0,
+                        time_unix_nano: 0,
+                        labels: vec![],
+                        exemplars: vec![],
+                    }],
+                })),
+            }],
+        }];
+        let json = instrumentation_library_metrics_to_json(pb.clone());
+        let back_again = instrumentation_library_metrics_to_pb(Some(&json))?;
+        let expected: Value = literal!([{
             "metrics": [{
                 "name": "test",
                 "description": "blah blah blah blah",

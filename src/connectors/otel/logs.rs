@@ -14,7 +14,7 @@
 
 use super::super::pb;
 use super::{
-    common::{self, instrumentation_library_to_pb, EMPTY},
+    common::{self, instrumentation_library_to_pb, maybe_instrumentation_library_to_json, EMPTY},
     id,
     resource::{self, resource_to_pb},
 };
@@ -66,29 +66,38 @@ where
     Ok(text)
 }
 
+fn log_record_to_json(log: LogRecord) -> Result<Value<'static>> {
+    Ok(literal!({
+        "name": log.name,
+        "time_unix_nano": log.time_unix_nano,
+        "severity_number": affirm_severity_number_valid(log.severity_number)?,
+        "severity_text": affirm_severity_text_valid(&log.severity_text)?,
+        "flags": affirm_traceflags_valid(log.flags)?,
+        "span_id": id::hex_span_id_to_json(&log.span_id),
+        "trace_id": id::hex_trace_id_to_json(&log.trace_id),
+        "attributes": common::key_value_list_to_json(log.attributes),
+        "dropped_attributes_count": log.dropped_attributes_count,
+        "body": common::maybe_any_value_to_json(log.body),
+    }))
+}
 pub(crate) fn instrumentation_library_logs_to_json(
     pb: Vec<InstrumentationLibraryLogs>,
 ) -> Result<Value<'static>> {
-    pb.into_iter().map(|data| {
-        let  logs = data.logs.into_iter().map(|log| {
-            Ok(literal!({
-                "name": log.name,
-                "time_unix_nano": log.time_unix_nano,
-                "severity_number": affirm_severity_number_valid(log.severity_number)?,
-                "severity_text": affirm_severity_text_valid(&log.severity_text)?,
-                "flags": affirm_traceflags_valid(log.flags)?,
-                "span_id": id::hex_span_id_to_json(&log.span_id),
-                "trace_id": id::hex_trace_id_to_json(&log.trace_id),
-                "attributes": common::key_value_list_to_json(log.attributes),
-                "dropped_attributes_count": log.dropped_attributes_count,
-                "body": common::maybe_any_value_to_json(log.body),
-            }))
-        }).collect::<Result<Value>>()?;
-        Ok(literal!({
-            "instrumentation_library": common::maybe_instrumentation_library_to_json(data.instrumentation_library),
-            "logs": logs
-        }))
-    }).collect()
+    pb.into_iter()
+        .map(|data| {
+            let logs = data
+                .logs
+                .into_iter()
+                .map(log_record_to_json)
+                .collect::<Result<Value>>()?;
+            let mut e = literal!({ "logs": logs });
+            if let Some(il) = data.instrumentation_library {
+                let il = maybe_instrumentation_library_to_json(il);
+                e.try_insert("instrumentation_library", il);
+            }
+            Ok(e)
+        })
+        .collect()
 }
 
 pub(crate) fn maybe_instrumentation_library_logs_to_pb(
