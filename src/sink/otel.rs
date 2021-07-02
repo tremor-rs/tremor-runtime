@@ -71,13 +71,14 @@ fn d_true() -> bool {
 
 impl ConfigImpl for Config {}
 
-impl offramp::Impl for OpenTelemetry {
-    fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
+pub(crate) struct Builder {}
+impl offramp::Builder for Builder {
+    fn from_config(&self, config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         let config = config.as_ref().ok_or("Offramp otel requires a config")?;
         let config: Config = Config::new(config)?;
         let hostport = format!("{}:{}", config.host.clone(), config.port);
         let endpoint = format!("https://{}:{}", config.host.clone().as_str(), config.port);
-        Ok(SinkManager::new_box(Self {
+        Ok(SinkManager::new_box(OpenTelemetry {
             config,
             endpoint,
             remote: None,
