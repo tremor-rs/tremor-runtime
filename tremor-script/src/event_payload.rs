@@ -160,6 +160,7 @@ impl EventPayload {
         let mut raw = Pin::new(raw);
         let structured = f(raw.as_mut().get_mut());
         // This is where the magic happens
+        // ALLOW: this is sound since we implement a self referential struct
         let structured: ValueAndMeta<'static> = unsafe { mem::transmute(structured) };
         let raw = vec![Arc::new(raw)];
         Self { raw, structured }
@@ -183,6 +184,7 @@ impl EventPayload {
         let mut raw = Pin::new(raw);
         let structured = f(raw.as_mut().get_mut())?;
         // This is where the magic happens
+        // ALLOW: this is sound since we implement a self referential struct
         let structured: ValueAndMeta<'static> = unsafe { mem::transmute(structured) };
         let raw = vec![Arc::new(raw)];
         Ok(Self { raw, structured })
