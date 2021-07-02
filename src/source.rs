@@ -68,18 +68,6 @@ pub struct Processors<'processor> {
     pub post: &'processor [String],
 }
 
-// This is ugly but we need to handle comments, thanks rental!
-pub(crate) enum RentalSnot {
-    Error(Error),
-    Skip,
-}
-
-impl From<std::str::Utf8Error> for RentalSnot {
-    fn from(e: std::str::Utf8Error) -> Self {
-        Self::Error(e.into())
-    }
-}
-
 #[derive(Debug)]
 pub(crate) enum SourceState {
     Connected,
@@ -248,7 +236,7 @@ where
             Ok(data) => {
                 let meta_value = meta.map_or_else(Value::object, |m| m.0);
                 for d in data {
-                    let line_value = EventPayload::try_new::<RentalSnot, _>(d, |mut_data| {
+                    let line_value = EventPayload::try_new::<Option<Error>, _>(d, |mut_data| {
                         let codec_map = &mut self.codec_map;
                         let codec = codec_override
                             .as_ref()
@@ -256,8 +244,8 @@ where
                             .unwrap_or(&mut self.codec);
                         let decoded = codec.decode(mut_data, *ingest_ns);
                         match decoded {
-                            Ok(None) => Err(RentalSnot::Skip),
-                            Err(e) => Err(RentalSnot::Error(e)),
+                            Ok(None) => Err(None),
+                            Err(e) => Err(Some(e)),
                             Ok(Some(decoded)) => {
                                 Ok(ValueAndMeta::from_parts(decoded, meta_value.clone()))
                             }
@@ -265,8 +253,8 @@ where
                     });
                     match line_value {
                         Ok(decoded) => results.push(Ok(decoded)),
-                        Err(RentalSnot::Skip) => (),
-                        Err(RentalSnot::Error(e)) => {
+                        Err(None) => (),
+                        Err(Some(e)) => {
                             // TODO: add error context (with error handling update)
                             results.push(Err(e));
                         }
