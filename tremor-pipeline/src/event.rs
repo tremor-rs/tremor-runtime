@@ -210,8 +210,7 @@ impl Event {
     /// normally 1, but for batched events possibly > 1
     pub fn len(&self) -> usize {
         if self.is_batch {
-            self.data
-                .rent(|vm| vm.value().as_array().map_or(0, Vec::len))
+            self.data.suffix().value().as_array().map_or(0, Vec::len)
         } else {
             1
         }

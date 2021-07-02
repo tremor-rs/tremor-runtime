@@ -111,14 +111,23 @@ where
     }
 }
 
-/// FIXME
+/// A event payload in form of two borrowed Value's with a vector of source binaries.
+///
+/// We have a vector to hold multiple raw input values
+///   - Each input value is a Vec<u8>
+///   - Each Vec is pinned to ensure the underlying data isn't moved
+///   - Each Pin is in a Arc so we can clone the data without with both clones
+///     still pointing to the underlying pin.
+///
+/// It is essential to never access the parts of the struct outside of it's
+/// implementation! This will void all warenties and likely lead to errors.
+///
+/// They **must** remain private. All interactions with them have to be guarded
+/// by the implementation logic to ensure they remain sane.
+///
 #[derive(Clone, Default)]
 pub struct EventPayload {
-    /// - We have a vector to hold multiple raw input values
-    /// - Each input value is a Vec<u8>
-    /// - Each Vec is pinned to ensure the underlying data isn't moved
-    /// - Each Pin is in a Arc so we can clone the data without with both clones
-    ///   still pointing to the underlying pin.
+    /// The vector of raw input values
     raw: Vec<Arc<Pin<Vec<u8>>>>,
     structured: ValueAndMeta<'static>,
 }
@@ -130,13 +139,19 @@ impl std::fmt::Debug for EventPayload {
 }
 
 impl EventPayload {
-    /// FIXME
+    /// Borrows the structured part of the struct.
     #[must_use]
     pub fn suffix(&self) -> &ValueAndMeta {
         &self.structured
     }
 
-    /// FIXME
+    /// a function to turn it into a value and metadata set.
+    ///
+    /// The return can reference the the data it gets passed
+    /// in the function.
+    ///
+    /// Internally the lifetime will be bound to the raw part
+    /// of the struct.
     #[must_use]
     pub fn new<F>(raw: Vec<u8>, f: F) -> Self
     where
@@ -150,7 +165,14 @@ impl EventPayload {
         Self { raw, structured }
     }
 
-    /// FIXME
+    /// Creates a new Payload with a given byte vector and
+    /// a function to turn it into a value and metadata set.
+    ///
+    /// The return can reference the the data it gets passed
+    /// in the function.
+    ///
+    /// Internally the lifetime will be bound to the raw part
+    /// of the struct.
     ///
     /// # Errors
     /// errors if the conversion function fails
@@ -166,18 +188,26 @@ impl EventPayload {
         Ok(Self { raw, structured })
     }
 
-    /// FIXME
+    /// Named after the original rental struct for easy rewriting.
+    ///
+    /// Borrows the borrowed (liftimed) part of the self referential struct
+    /// and calls the provided function with a reference to it
     pub fn rent<F, R>(&self, f: F) -> R
     where
         F: for<'iref, 'head> FnOnce(&'iref ValueAndMeta<'head>) -> R,
+        R: ,
     {
         f(&self.structured)
     }
 
-    /// FIXME
+    /// Named after the original rental struct for easy rewriting.
+    ///
+    /// Borrows the borrowed (liftimed) part of the self referential struct
+    /// mutably and calls the provided function with a mutatable reference to it
     pub fn rent_mut<F, R>(&mut self, f: F) -> R
     where
         F: for<'iref, 'head> FnOnce(&'iref mut ValueAndMeta<'head>) -> R,
+        R: ,
     {
         f(&mut self.structured)
     }
@@ -192,27 +222,7 @@ impl EventPayload {
         (v, m)
     }
 
-    /// Consumes an event into another
-    /// This function works around a rental limitation that is meant
-    /// to protect its users: Rental does not allow you to get both
-    /// the owned and borrowed part at the same time.
-    ///
-    /// The reason for that is that once those are taken out of the
-    /// rental the link of lifetimes between them would be broken
-    /// and you'd risk invalid pointers or memory leaks.
-    /// We however do not really want to take them out, all we want
-    /// is combine two rentals. We can do this since:
-    /// 1) the owned values are inside a vector, while the vector
-    ///    itself may be relocated by adding to it, the values
-    ///    in it will stay in the same location.
-    /// 2) we are only ever adding / extending never deleting
-    ///    or modifying.
-    ///
-    /// So what this function does it is crowbars the content
-    /// from a rental into an accessible struct then uses this
-    /// to modify its content by adding the owned parts of
-    /// `other` into the owned part `self` and the running
-    /// a merge function on the borrowed parts
+    /// Consumes one payload into another
     ///
     /// # Errors
     /// if `join_f` errors
@@ -221,8 +231,8 @@ impl EventPayload {
         E: std::error::Error,
         F: Fn(&mut ValueAndMeta<'static>, ValueAndMeta<'static>) -> Result<(), E>,
     {
-        self.raw.append(&mut other.raw);
         join_f(&mut self.structured, other.structured)?;
+        self.raw.append(&mut other.raw);
 
         Ok(())
     }
@@ -253,4 +263,23 @@ impl PartialEq for EventPayload {
     fn eq(&self, other: &Self) -> bool {
         self.structured.eq(&other.structured)
     }
+}
+
+#[cfg(test)]
+mod test {
+    /*
+       /// this is commented out since it should fail
+       use super::*;
+       #[test]
+       fn test() {
+           let v = br#"{"key": "value"}"#.to_vec();
+           let e = EventPayload::new(v, |d| tremor_value::parse_to_value(d).unwrap().into());
+           let v: Value = {
+               let s = e.suffix();
+               s.value()["key"].clone()
+           };
+           drop(e);
+           println!("v: {}", v)
+       }
+    */
 }
