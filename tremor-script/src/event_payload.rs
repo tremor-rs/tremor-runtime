@@ -252,15 +252,6 @@ where
     }
 }
 
-/// An error occurred while deserializing
-/// a value into an Event.
-pub enum DeserError {
-    /// The value was missing the `value` key
-    ValueMissing,
-    /// The value was missing the `metadata` key
-    MetaMissing,
-}
-
 impl PartialEq for EventPayload {
     fn eq(&self, other: &Self) -> bool {
         self.structured.eq(&other.structured)
