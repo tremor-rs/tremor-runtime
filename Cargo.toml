@@ -29,7 +29,6 @@ lto = "thin"
 opt-level = 3
 
 [dependencies]
-anyhow = "1"
 async-channel = "1"
 async-compat = "0.2"
 async-compression = { version = "0.3", features = [
@@ -43,10 +42,7 @@ async-std = { version = "1.10.0", features = [
   "tokio03",
   "tokio1",
 ] }
-async-std-resolver = "0.20"
-async-tls = "0.11"
 async-trait = "0.1"
-async-tungstenite = { version = "0.14.0", features = ["async-std-runtime"] }
 base64 = "0.13"
 beef = { version = "0.5", features = ["impl_serde"] }
 bimap = "0.6"
@@ -54,7 +50,6 @@ byteorder = "1"
 bytes = "1.1"
 chrono = "0.4"
 either = { version = "1.6", features = ["serde"] }
-elastic = "0.21.0-pre.5"
 error-chain = "0.12"
 futures = "0.3.17"
 glob = "0.3"
@@ -64,7 +59,6 @@ hex = "0.4"
 hostname = "0.3"
 http-types = "2.12"
 indexmap = { version = "1", features = ["serde-1"] }
-lapin = "1.8.0"
 lazy_static = "1"
 libflate = "1.1"
 log = "0.4"
@@ -73,9 +67,7 @@ lz4 = "1.23.2"
 pin-project-lite = "0.2"
 rand = "0.8"
 regex = "1.4"
-rental = "0.5"
 rmp-serde = "0.15"
-rustls = "0.19"
 serde = "1"
 serde_derive = "1"
 serde_yaml = "0.8"
@@ -94,7 +86,6 @@ value-trait = "0.2"
 zstd = "0.9"
 
 mapr = "0.8"
-tempfile = { version = "3.2" }
 
 # blaster / blackhole
 hdrhistogram = "7"
@@ -106,7 +97,25 @@ postgres = { version = "0.19", features = [
   "with-chrono-0_4",
 ] }
 postgres-protocol = "0.6"
+tempfile = { version = "3.2" }
 tokio-postgres = "0.7"
+
+# amqp
+lapin = "1.8"
+
+# elasticsearch
+elastic = "0.21.0-pre.5"
+
+# ws
+async-tungstenite = { version = "0.13.1", features = ["async-std-runtime"] }
+tungstenite = { version = "0.13", default-features = false }
+
+# for tcp
+async-tls = "0.11"
+rustls = "0.19"
+
+# dns
+async-std-resolver = "0.20"
 
 # kafka. cmake is the encouraged way to build this and also the one that works on windows/with musl.
 rdkafka = { version = "0.26", features = [
@@ -129,8 +138,6 @@ grok = "1"
 # on features for these (see static-ssl feature here)
 openssl = { version = "0.10", features = ["vendored"] }
 
-# rest onramp
-tide = "0.16"
 
 # sse-onramp
 surf-sse = { git = "https://github.com/dak-x/surf-sse", tag = "2.0" }
@@ -164,11 +171,7 @@ googapis = { version = "0.5", default-features = false, features = [
 ] }
 gouth = { version = "0.2" }
 http = "0.2.4"
-reqwest = "0.11.4"
-
-[dependencies.tungstenite]
-default-features = false
-version = "0.15"
+reqwest = "0.11.3"
 
 [dev-dependencies]
 matches = "0.1"
