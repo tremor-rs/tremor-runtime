@@ -15,6 +15,7 @@
 - Fix issue with the token `"` being presented as a tick in errors
 - Fix `heredoc_start` and `heredoc_end` showing up in error messages instead of `"""`
 - Fix some errors in otel pb <-> json translation
+- Fix windowed queries emitting events with `null` metadata on tick
 
 ## 0.11.4
 
