@@ -174,7 +174,8 @@ impl<'script> CustomFn<'script> {
         'recur: loop {
             let mut exprs = self.body.iter().peekable();
             let mut no_event = Value::null();
-            let mut no_meta = Value::object();
+            // we cannot access metadata from within custom functions, so we dont need an object here
+            let mut no_meta = Value::null();
             let mut state = Value::null().into_static();
             while let Some(expr) = exprs.next() {
                 if exprs.peek().is_none() {
