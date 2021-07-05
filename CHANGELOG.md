@@ -8,7 +8,7 @@
 - Add `default => {...}` and `default "key" => "value` to patch
 - Add `zstd` pre- and post-processors [#1100](https://github.com/tremor-rs/tremor-runtime/issues/1100)
 - Remove `rental` from `Event` [#1031](https://github.com/tremor-rs/tremor-runtime/issues/1031) [#1037](https://github.com/tremor-rs/tremor-runtime/issues/1037)
-- Put event raw payload into `Arc` to improve cloing perf
+- Put event raw payload into `Arc` to improve cloning perf
 
 ### Fixes
 
