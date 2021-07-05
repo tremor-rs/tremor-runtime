@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.11.10
+
+### Fixes
+
+- Fix windowed queries emitting events with `null` metadata on tick
+
 ## 0.11.9
 
 ### Fixes
