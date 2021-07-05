@@ -590,8 +590,7 @@ async fn codec_task(
                 // send CB insight -> handle status >= 400
                 let status = response.status();
 
-                let mut meta = Object::with_capacity(1);
-                meta.insert("time".into(), Value::from(duration));
+                let meta = literal!({ "time": duration });
                 let mut cb = if status.is_client_error() || status.is_server_error() {
                     // when the offramp is linked to pipeline, we want to send
                     // the response back and not consume it yet (or log about it)
@@ -673,7 +672,7 @@ async fn codec_task(
                         .send(sink::Reply::Insight(Event {
                             id: id.clone(),
                             op_meta,
-                            data: (Value::null(), Value::from(meta)).into(),
+                            data: (Value::null(), meta).into(),
                             cb,
                             ingest_ns: nanotime(),
                             ..Event::default()

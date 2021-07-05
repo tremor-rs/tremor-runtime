@@ -293,7 +293,7 @@ impl Elastic {
                 // if we have more than one event (batched), correlation will be an array with `null` or an actual value
                 // for the event at the batch position
                 let correlation_value = event.correlation_meta();
-                let meta = correlation_value.map_or_else(Value::null, |correlation| {
+                let meta = correlation_value.map_or_else(Value::object, |correlation| {
                     literal!({ "correlation": correlation })
                 });
 
