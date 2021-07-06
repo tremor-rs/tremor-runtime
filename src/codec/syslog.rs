@@ -267,7 +267,9 @@ where
             };
             decoded.try_insert("procid", value);
         }
-        decoded.try_insert("msg", Value::from(parsed.msg));
+        if !parsed.msg.is_empty() {
+            decoded.try_insert("msg", Value::from(parsed.msg));
+        }
 
         Ok(Some(decoded))
     }
@@ -542,6 +544,31 @@ mod test {
     #[test_case(r#"<165>Aug 24 05:34:00 CST 1987 mymachine myproc[10]: %% It's time to make the do-nuts.  %%  Ingredients: Mix=OK, Jelly=OK # Devices: Mixer=OK, Jelly_Injector=OK, Frier=OK # Transport:Conveyer1=OK, Conveyer2=OK # %%"#, Some(r#"<165>Aug 24 05:34:00 CST 1987: mymachine myproc[10]: %% It's time to make the do-nuts.  %%  Ingredients: Mix=OK, Jelly=OK # Devices: Mixer=OK, Jelly_Injector=OK, Frier=OK # Transport:Conveyer1=OK, Conveyer2=OK # %%"#) => Ok(()); "Example 3")]
     #[test_case(r#"<0>1990 Oct 22 10:52:01 TZ-6 scapegoat.dmz.example.org 10.1.2.3 sched[0]: That's All Folks!"#, Some(r#"<13>Jan  1 00:00:00 - : <0>1990 Oct 22 10:52:01 TZ-6 scapegoat.dmz.example.org 10.1.2.3 sched[0]: That's All Folks!"#) => Ok(()); "Example 4")]
     fn rfc3164_examples(sample: &'static str, expected: Option<&'static str>) -> Result<()> {
+        let mut codec = test_codec();
+        let mut vec = sample.as_bytes().to_vec();
+        let decoded = codec.decode(&mut vec, 0)?.unwrap();
+        let a = codec.encode(&decoded)?;
+        if let Some(expected) = expected {
+            // compare against expected output
+            assert_eq!(expected, std::str::from_utf8(&a)?);
+        } else {
+            // compare against sample
+            assert_eq!(sample, std::str::from_utf8(&a)?);
+        }
+        Ok(())
+    }
+
+    // date formatting is a bit different
+    #[test_case("<34>1 2003-10-11T22:14:15.003Z mymachine.example.com su - ID47 - \u{FEFF}'su root' failed for lonvick on /dev/pts/8",
+           Some("<34>1 2003-10-11T22:14:15.003+00:00 mymachine.example.com su - ID47 - \u{feff}'su root' failed for lonvick on /dev/pts/8") => Ok(()); "Example 1")]
+    // we always parse to UTC date - so encoding a decoded msg will always give UTC
+    #[test_case(r#"<165>1 2003-08-24T05:14:15.000003-07:00 192.0.2.1 myproc 8710 - - %% It's time to make the do-nuts."#,
+           Some(r#"<165>1 2003-08-24T12:14:15.000003+00:00 192.0.2.1 myproc 8710 - - %% It's time to make the do-nuts."#) => Ok(()); "Example 2")]
+    #[test_case("<165>1 2003-10-11T22:14:15.003Z mymachine.example.com evntslog - ID47 [exampleSDID@32473 iut=\"3\" eventSource=\"Application\" eventID=\"1011\"] \u{FEFF}An application event log entry...",
+           Some("<165>1 2003-10-11T22:14:15.003+00:00 mymachine.example.com evntslog - ID47 [exampleSDID@32473 iut=\"3\" eventSource=\"Application\" eventID=\"1011\"] \u{feff}An application event log entry...") => Ok(()); "Example 3")]
+    #[test_case(r#"<165>1 2003-10-11T22:14:15.003Z mymachine.example.com evntslog - ID47 [exampleSDID@32473 iut="3" eventSource="Application" eventID="1011"][examplePriority@32473 class="high"]"#,
+           Some(r#"<165>1 2003-10-11T22:14:15.003+00:00 mymachine.example.com evntslog - ID47 [exampleSDID@32473 iut="3" eventSource="Application" eventID="1011"][examplePriority@32473 class="high"]"#) => Ok(()); "Example 4")]
+    fn rfc5424_examples(sample: &'static str, expected: Option<&'static str>) -> Result<()> {
         let mut codec = test_codec();
         let mut vec = sample.as_bytes().to_vec();
         let decoded = codec.decode(&mut vec, 0)?.unwrap();
