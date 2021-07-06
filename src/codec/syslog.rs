@@ -52,7 +52,7 @@ where
     N: Now,
 {
     /// encode structured data `sd` into `result`
-    fn encode_sd(&self, sd: &Value, result: &mut Vec<String>) -> Result<()> {
+    fn encode_sd(sd: &Value, result: &mut Vec<String>) -> Result<()> {
         if let Some(sd) = sd.as_object() {
             let mut elem = String::with_capacity(16);
             for (id, params) in sd.iter() {
@@ -132,7 +132,7 @@ where
 
         // structured data shouldnt pop up in this format, but syslog_loose parses it anyways
         if let Some(sd) = data.get("structured_data") {
-            self.encode_sd(sd, &mut result)?;
+            Self::encode_sd(sd, &mut result)?;
         }
         if let Some(msg) = data.get_str("msg") {
             result.push(msg.to_owned());
@@ -140,7 +140,11 @@ where
         Ok(result)
     }
 
-    fn encode_rfc5424(&self, data: &Value, version: u32) -> Result<Vec<String>> {
+    fn nil() -> String {
+        String::from("-")
+    }
+
+    fn encode_rfc5424(data: &Value, version: u32) -> Result<Vec<String>> {
         let mut result = Vec::with_capacity(10); // reserving 3 slots for structured data
         let f = data
             .get_str("facility")
@@ -154,38 +158,31 @@ where
             version
         ));
 
-        result.push(if let Some(t) = data.get_i64("timestamp") {
+        result.push(data.get_i64("timestamp").map_or_else(Self::nil, |t| {
             let datetime = Utc.timestamp_nanos(t);
             datetime.to_rfc3339()
-        } else {
-            String::from("-")
-        });
+        }));
 
-        result.push(if let Some(h) = data.get_str("hostname") {
-            h.to_owned()
-        } else {
-            String::from("-")
-        });
-        result.push(if let Some(appname) = data.get_str("appname") {
-            appname.to_owned()
-        } else {
-            String::from("-")
-        });
-        result.push(if let Some(procid) = data.get_str("procid") {
-            procid.to_owned()
-        } else {
-            String::from("-")
-        });
-        result.push(if let Some(msgid) = data.get_str("msgid") {
-            msgid.to_owned()
-        } else {
-            String::from("-")
-        });
-
+        result.push(
+            data.get_str("hostname")
+                .map_or_else(Self::nil, ToOwned::to_owned),
+        );
+        result.push(
+            data.get_str("appname")
+                .map_or_else(Self::nil, ToOwned::to_owned),
+        );
+        result.push(
+            data.get_str("procid")
+                .map_or_else(Self::nil, ToOwned::to_owned),
+        );
+        result.push(
+            data.get_str("msgid")
+                .map_or_else(Self::nil, ToOwned::to_owned),
+        );
         if let Some(sd) = data.get("structured_data") {
-            self.encode_sd(sd, &mut result)?;
+            Self::encode_sd(sd, &mut result)?;
         } else {
-            result.push(String::from("-"));
+            result.push(Self::nil());
         }
 
         if let Some(msg) = data.get_str("msg") {
@@ -292,7 +289,7 @@ where
         };
         let result = match protocol {
             Protocol::RFC3164 => self.encode_rfc3164(data)?,
-            Protocol::RFC5424(version) => self.encode_rfc5424(data, version)?,
+            Protocol::RFC5424(version) => Self::encode_rfc5424(data, version)?,
         };
 
         Ok(result.join(" ").as_bytes().to_vec())
