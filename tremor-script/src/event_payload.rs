@@ -132,6 +132,52 @@ pub struct EventPayload {
     structured: ValueAndMeta<'static>,
 }
 
+/// Some comon functions for tremors Self Referential Structs and how they can interact with
+/// each other.
+///
+/// # Safety
+///
+/// This trait is implemented as **unsafe** as it has some requirements to the implementation which
+/// only can be asserted by the human writing it not the compiler.
+///
+/// The assumptions are around this are about dealing with the raw vectoor
+pub unsafe trait SRS {
+    ///
+    type Structured;
+
+    /// Deconstruct into it's parts
+    ///
+    /// # Safety
+    ///
+    /// DO NOT USE OUTSIDE OF THIS TRAIT, IT IS FOR INTERNAL USE ONLY
+    #[must_use]
+    unsafe fn into_parts(self) -> (Vec<Arc<Pin<Vec<u8>>>>, Self::Structured);
+
+    /// Borrows the par part of the SRS
+    #[must_use]
+    fn raw(&self) -> &[Arc<Pin<Vec<u8>>>];
+
+    /// Borrows the structured part of the struct.
+    #[must_use]
+    fn suffix(&self) -> &Self::Structured;
+}
+
+unsafe impl SRS for EventPayload {
+    type Structured = ValueAndMeta<'static>;
+
+    unsafe fn into_parts(self) -> (Vec<Arc<Pin<Vec<u8>>>>, Self::Structured) {
+        (self.raw, self.structured)
+    }
+
+    fn raw(&self) -> &[Arc<Pin<Vec<u8>>>] {
+        &self.raw
+    }
+
+    fn suffix(&self) -> &Self::Structured {
+        &self.structured
+    }
+}
+
 impl std::fmt::Debug for EventPayload {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.structured.fmt(f)
@@ -139,12 +185,6 @@ impl std::fmt::Debug for EventPayload {
 }
 
 impl EventPayload {
-    /// Borrows the structured part of the struct.
-    #[must_use]
-    pub fn suffix(&self) -> &ValueAndMeta {
-        &self.structured
-    }
-
     /// a function to turn it into a value and metadata set.
     ///
     /// The return can reference the the data it gets passed
@@ -228,14 +268,32 @@ impl EventPayload {
     ///
     /// # Errors
     /// if `join_f` errors
-    pub fn consume<E, F>(&mut self, mut other: Self, join_f: F) -> Result<(), E>
+    pub fn consume<E, F, Other: SRS>(&mut self, other: Other, join_f: F) -> Result<(), E>
     where
         E: std::error::Error,
-        F: Fn(&mut ValueAndMeta<'static>, ValueAndMeta<'static>) -> Result<(), E>,
+        F: Fn(&mut ValueAndMeta<'static>, Other::Structured) -> Result<(), E>,
     {
-        join_f(&mut self.structured, other.structured)?;
-        self.raw.append(&mut other.raw);
+        let (mut other_raw, other_structured) = unsafe { other.into_parts() };
+        // We append first in the case that some data already moved into self.structured by the time
+        // that the join_f fails
+        self.raw.append(&mut other_raw);
+        join_f(&mut self.structured, other_structured)?;
+        Ok(())
+    }
 
+    /// Applies another SRS into this, this functions **needs** to
+    ///
+    /// # Errors
+    /// if `join_f` errors
+    pub fn apply<E, F, Other: SRS>(&mut self, other: &Other, join_f: F) -> Result<(), E>
+    where
+        E: std::error::Error,
+        F: Fn(&mut ValueAndMeta<'static>, &Other::Structured) -> Result<(), E>,
+    {
+        // We append first in the case that some data already moved into self.structured by the time
+        // that the join_f fails
+        self.raw.extend_from_slice(other.raw());
+        join_f(&mut self.structured, other.suffix())?;
         Ok(())
     }
 }

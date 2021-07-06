@@ -70,7 +70,7 @@ mod tilde;
 /// Utility functions
 pub mod utils;
 
-pub use event_payload::{EventPayload, ValueAndMeta};
+pub use event_payload::{EventPayload, ValueAndMeta, SRS};
 
 extern crate serde;
 #[macro_use]
