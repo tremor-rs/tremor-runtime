@@ -22,11 +22,11 @@ use std::io::{self, Read};
 use termcolor::{Color, ColorSpec};
 use tremor_common::ids::OperatorIdGen;
 use tremor_script::highlighter::{Dumb as TermNoHighlighter, Highlighter, Term as TermHighlighter};
-use tremor_script::lexer;
 use tremor_script::lexer::Token;
 use tremor_script::pos::{Span, Spanned};
 use tremor_script::query::Query;
 use tremor_script::script::Script;
+use tremor_script::{lexer, SRS};
 
 struct Opts<'src> {
     banner: bool,

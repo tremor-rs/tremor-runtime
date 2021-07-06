@@ -776,6 +776,7 @@ mod tests {
     use crate::errors::Result;
     use crate::path::ModulePath;
     use crate::registry::registry;
+    use crate::SRS;
     use simd_json::prelude::*;
 
     #[derive(Default)]
