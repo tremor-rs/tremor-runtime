@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::prelude::*;
+use crate::{ast, prelude::*, srs};
 use std::{fmt::Debug, mem, pin::Pin, sync::Arc};
 pub use tremor_common::stry;
 
@@ -111,226 +111,20 @@ where
     }
 }
 
-/// A event payload in form of two borrowed Value's with a vector of source binaries.
-///
-/// We have a vector to hold multiple raw input values
-///   - Each input value is a Vec<u8>
-///   - Each Vec is pinned to ensure the underlying data isn't moved
-///   - Each Pin is in a Arc so we can clone the data without with both clones
-///     still pointing to the underlying pin.
-///
-/// It is essential to never access the parts of the struct outside of it's
-/// implementation! This will void all warenties and likely lead to errors.
-///
-/// They **must** remain private. All interactions with them have to be guarded
-/// by the implementation logic to ensure they remain sane.
-///
-#[derive(Clone, Default)]
-pub struct EventPayload {
-    /// The vector of raw input values
-    raw: Vec<Arc<Pin<Vec<u8>>>>,
-    structured: ValueAndMeta<'static>,
-}
-
-/// Some comon functions for tremors Self Referential Structs and how they can interact with
-/// each other.
-///
-/// # Safety
-///
-/// This trait is implemented as **unsafe** as it has some requirements to the implementation which
-/// only can be asserted by the human writing it not the compiler.
-///
-/// The assumptions are around this are about dealing with the raw vectoor
-pub unsafe trait SRS {
-    ///
-    type Structured;
-
-    /// Deconstruct into it's parts
-    ///
-    /// # Safety
-    ///
-    /// DO NOT USE OUTSIDE OF THIS TRAIT, IT IS FOR INTERNAL USE ONLY
-    #[must_use]
-    unsafe fn into_parts(self) -> (Vec<Arc<Pin<Vec<u8>>>>, Self::Structured);
-
-    /// Borrows the par part of the SRS
-    #[must_use]
-    fn raw(&self) -> &[Arc<Pin<Vec<u8>>>];
-
-    /// Borrows the structured part of the struct.
-    #[must_use]
-    fn suffix(&self) -> &Self::Structured;
-}
-
-unsafe impl SRS for EventPayload {
-    type Structured = ValueAndMeta<'static>;
-
-    unsafe fn into_parts(self) -> (Vec<Arc<Pin<Vec<u8>>>>, Self::Structured) {
-        (self.raw, self.structured)
-    }
-
-    fn raw(&self) -> &[Arc<Pin<Vec<u8>>>] {
-        &self.raw
-    }
-
-    fn suffix(&self) -> &Self::Structured {
-        &self.structured
-    }
-}
-
-impl std::fmt::Debug for EventPayload {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.structured.fmt(f)
-    }
-}
-
-impl EventPayload {
-    /// a function to turn it into a value and metadata set.
-    ///
-    /// The return can reference the the data it gets passed
-    /// in the function.
-    ///
-    /// Internally the lifetime will be bound to the raw part
-    /// of the struct.
-    #[must_use]
-    pub fn new<F>(raw: Vec<u8>, f: F) -> Self
-    where
-        F: for<'head> FnOnce(&'head mut [u8]) -> ValueAndMeta<'head>,
-    {
-        let mut raw = Pin::new(raw);
-        let structured = f(raw.as_mut().get_mut());
-        // This is where the magic happens
-        // ALLOW: this is sound since we implement a self referential struct
-        let structured: ValueAndMeta<'static> = unsafe { mem::transmute(structured) };
-        let raw = vec![Arc::new(raw)];
-        Self { raw, structured }
-    }
-
-    /// Creates a new Payload with a given byte vector and
-    /// a function to turn it into a value and metadata set.
-    ///
-    /// The return can reference the the data it gets passed
-    /// in the function.
-    ///
-    /// Internally the lifetime will be bound to the raw part
-    /// of the struct.
-    ///
-    /// # Errors
-    /// errors if the conversion function fails
-    pub fn try_new<E, F>(raw: Vec<u8>, f: F) -> std::result::Result<Self, E>
-    where
-        F: for<'head> FnOnce(&'head mut [u8]) -> std::result::Result<ValueAndMeta<'head>, E>,
-    {
-        let mut raw = Pin::new(raw);
-        let structured = f(raw.as_mut().get_mut())?;
-        // This is where the magic happens
-        // ALLOW: this is sound since we implement a self referential struct
-        let structured: ValueAndMeta<'static> = unsafe { mem::transmute(structured) };
-        let raw = vec![Arc::new(raw)];
-        Ok(Self { raw, structured })
-    }
-
-    /// Named after the original rental struct for easy rewriting.
-    ///
-    /// Borrows the borrowed (liftimed) part of the self referential struct
-    /// and calls the provided function with a reference to it
-    pub fn rent<F, R>(&self, f: F) -> R
-    where
-        F: for<'iref, 'head> FnOnce(&'iref ValueAndMeta<'head>) -> R,
-        R: ,
-    {
-        f(&self.structured)
-    }
-
-    /// Named after the original rental struct for easy rewriting.
-    ///
-    /// Borrows the borrowed (liftimed) part of the self referential struct
-    /// mutably and calls the provided function with a mutatable reference to it
-    pub fn rent_mut<F, R>(&mut self, f: F) -> R
-    where
-        F: for<'iref, 'head> FnOnce(&'iref mut ValueAndMeta<'head>) -> R,
-        R: ,
-    {
-        f(&mut self.structured)
-    }
-
-    /// Borrow the parts (event and metadata) from a rental.
-    #[must_use]
-    pub fn parts<'value, 'borrow>(&'borrow self) -> (&'borrow Value<'value>, &'borrow Value<'value>)
-    where
-        'borrow: 'value,
-    {
-        let ValueAndMeta { ref v, ref m } = self.structured;
-        (v, m)
-    }
-
-    /// Consumes one payload into another
-    ///
-    /// # Errors
-    /// if `join_f` errors
-    pub fn consume<E, F, Other: SRS>(&mut self, other: Other, join_f: F) -> Result<(), E>
-    where
-        E: std::error::Error,
-        F: FnOnce(&mut ValueAndMeta<'static>, Other::Structured) -> Result<(), E>,
-    {
-        let (mut other_raw, other_structured) = unsafe { other.into_parts() };
-        // We append first in the case that some data already moved into self.structured by the time
-        // that the join_f fails
-        // READ: ORDER MATTERS!
-        self.raw.append(&mut other_raw);
-        join_f(&mut self.structured, other_structured)
-    }
-
-    /// Applies another SRS into this, this functions **needs** to
-    ///
-    /// # Errors
-    /// if `join_f` errors
-    pub fn apply<R, F, Other: SRS>(&mut self, other: &Other, apply_f: F) -> R
-    where
-        F: FnOnce(&mut ValueAndMeta<'static>, &Other::Structured) -> R,
-        R: ,
-    {
-        // We append first in the case that some data already moved into self.structured by the time
-        // that the join_f fails
-        // READ: ORDER MATTERS!
-        self.raw.extend_from_slice(other.raw());
-        apply_f(&mut self.structured, other.suffix())
-    }
-}
-
-impl<T> From<T> for EventPayload
-where
-    ValueAndMeta<'static>: From<T>,
-{
-    fn from(vm: T) -> Self {
-        Self {
-            raw: Vec::new(),
-            structured: vm.into(),
-        }
-    }
-}
-
-impl PartialEq for EventPayload {
-    fn eq(&self, other: &Self) -> bool {
-        self.structured.eq(&other.structured)
-    }
-}
-
 #[cfg(test)]
 mod test {
-    /*
-       /// this is commented out since it should fail
-       use super::*;
-       #[test]
-       fn test() {
-           let v = br#"{"key": "value"}"#.to_vec();
-           let e = EventPayload::new(v, |d| tremor_value::parse_to_value(d).unwrap().into());
-           let v: Value = {
-               let s = e.suffix();
-               s.value()["key"].clone()
-           };
-           drop(e);
-           println!("v: {}", v)
-       }
-    */
+
+    // /// this is commented out since it should fail
+    // use super::*;
+    // #[test]
+    // fn test() {
+    //     let vec = br#"{"key": "value"}"#.to_vec();
+    //     let e = EventPayload::new(vec, |d| tremor_value::parse_to_value(d).unwrap().into());
+    //     let v: Value = {
+    //         let s = e.suffix();
+    //         s.value()["key"].clone()
+    //     };
+    //     drop(e);
+    //     println!("v: {}", v)
+    // }
 }

@@ -94,7 +94,7 @@ where
             })?;
 
             Ok(Self {
-                query: query,
+                query,
                 source,
                 locals,
                 warnings,

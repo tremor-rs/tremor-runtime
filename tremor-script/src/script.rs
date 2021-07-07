@@ -23,7 +23,7 @@ use crate::{
     path::ModulePath,
     pos::Range,
     registry::{Aggr as AggrRegistry, Registry},
-    srs, Value, SRS,
+    srs, Value,
 };
 use serde::Serialize;
 use std::io::{self, Write};

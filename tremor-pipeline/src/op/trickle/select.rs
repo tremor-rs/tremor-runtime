@@ -16,7 +16,7 @@
 
 use crate::{
     errors::{Error, Result},
-    srs, EventId, SignalKind,
+    EventId, SignalKind,
 };
 use crate::{op::prelude::*, EventIdGenerator};
 use crate::{Event, Operator};
@@ -30,7 +30,7 @@ use tremor_script::{
     interpreter::Env,
     interpreter::LocalStack,
     prelude::*,
-    srs as ts_srs,
+    srs,
     utils::sorted_serialize,
     Value,
 };
@@ -397,7 +397,7 @@ impl TrickleSelect {
         id: String,
         dims: &Dims,
         windows: Vec<(String, WindowImpl)>,
-        stmt: &ts_srs::Stmt,
+        stmt: &srs::Stmt,
     ) -> Result<Self> {
         let windows = windows
             .into_iter()
@@ -410,13 +410,7 @@ impl TrickleSelect {
                 next_swap: 0,
             })
             .collect();
-        let select = srs::Select::try_new_from_srs(stmt, move |stmt| {
-            if let tremor_script::ast::Stmt::Select(select) = stmt {
-                Ok(select.clone())
-            } else {
-                Err("Trying to turn a non select into a select operator")
-            }
-        })?;
+        let select = srs::Select::try_new_from_stmt(stmt)?;
         Ok(Self {
             id,
             windows,
