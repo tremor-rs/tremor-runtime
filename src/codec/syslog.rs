@@ -53,51 +53,44 @@ where
 {
     /// encode structured data `sd` into `result`
     fn encode_sd(sd: &Value, result: &mut Vec<String>) -> Result<()> {
-        if let Some(sd) = sd.as_object() {
-            let mut elem = String::with_capacity(16);
-            for (id, params) in sd.iter() {
-                elem.push('[');
-                elem.push_str(&id.to_string());
-                if let Some(v) = params.as_array() {
-                    for key_value in v.iter() {
-                        if let Some(o) = key_value.as_object() {
-                            for (k, v) in o {
-                                if let Some(v) = v.as_str() {
-                                    elem.push(' ');
-                                    elem.push_str(&k.to_string());
-                                    elem.push('=');
-                                    elem.push('"');
-                                    elem.push_str(v);
-                                    elem.push('"');
-                                } else {
-                                    return Err(ErrorKind::InvalidSyslogData(
-                                        "Invalid structured data: param value not a string",
-                                    )
-                                    .into());
-                                }
-                            }
-                        } else {
-                            return Err(ErrorKind::InvalidSyslogData(
-                                "Invalid structured data: param's key value pair not an object",
-                            )
-                            .into());
-                        }
-                    }
-                } else {
-                    return Err(ErrorKind::InvalidSyslogData(
-                        "Invalid structured data: params not an array of objects",
-                    )
-                    .into());
-                }
-                elem.push(']');
-            }
-            result.push(elem);
-        } else {
-            return Err(ErrorKind::InvalidSyslogData(
+        let sd = sd.as_object().ok_or_else(|| {
+            Error::from(ErrorKind::InvalidSyslogData(
                 "Invalid structured data: structured data not an object",
-            )
-            .into());
+            ))
+        })?;
+        let mut elem = String::with_capacity(16);
+        for (id, params) in sd.iter() {
+            elem.push('[');
+            elem.push_str(&id.to_string());
+            let params = params.as_array().ok_or_else(|| {
+                Error::from(ErrorKind::InvalidSyslogData(
+                    "Invalid structured data: params not an array of objects",
+                ))
+            })?;
+            for key_value in params.iter() {
+                let kv_map = key_value.as_object().ok_or_else(|| {
+                    Error::from(ErrorKind::InvalidSyslogData(
+                        "Invalid structured data: param's key value pair not an object",
+                    ))
+                })?;
+                for (k, v) in kv_map {
+                    let value = v.as_str().ok_or_else(|| {
+                        Error::from(ErrorKind::InvalidSyslogData(
+                            "Invalid structured data: param's key value pair not an object",
+                        ))
+                    })?;
+                    elem.push(' ');
+                    elem.push_str(&k.to_string());
+                    elem.push('=');
+                    elem.push('"');
+                    elem.push_str(value);
+                    elem.push('"');
+                }
+            }
+            elem.push(']');
         }
+        result.push(elem);
+
         Ok(())
     }
 
@@ -115,20 +108,19 @@ where
             .map_or_else(|| self.now.now(), |t| Utc.timestamp_nanos(t));
         result.push(format!("<{}>{}", pri, datetime.format("%b %e %H:%M:%S")));
 
-        if let Some(h) = data.get_str("hostname") {
-            result.push(h.to_owned());
-        } else {
-            result.push(String::from("-"));
-        }
-        if let Some(appname) = data.get_str("appname") {
-            if let Some(procid) = data.get_str("procid") {
-                result.push(format!("{}[{}]:", appname, procid));
-            } else {
-                result.push(format!("{}:", appname));
-            }
-        } else {
-            result.push(String::from(":"));
-        }
+        result.push(
+            data.get_str("hostname")
+                .map_or_else(Self::nil, ToOwned::to_owned),
+        );
+        result.push(data.get_str("appname").map_or_else(
+            || String::from(":"),
+            |appname| {
+                data.get_str("procid").map_or_else(
+                    || format!("{}:", appname),
+                    |procid| format!("{}[{}]:", appname, procid),
+                )
+            },
+        ));
 
         // structured data shouldnt pop up in this format, but syslog_loose parses it anyways
         if let Some(sd) = data.get("structured_data") {
