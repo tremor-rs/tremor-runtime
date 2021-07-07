@@ -65,7 +65,7 @@ impl Operator for SimpleSelect {
         // NOTE We are unwrapping our rental wrapped stmt
         // TODO: add soundness reasoning
 
-        self.select.rent_mut(
+        self.select.rent(
             |SelectStmt {
                  stmt,
                  locals,
@@ -74,6 +74,7 @@ impl Operator for SimpleSelect {
                  ..
              }| {
                 let local_stack = tremor_script::interpreter::LocalStack::with_size(*locals);
+
                 // TODO avoid origin_uri clone here
                 let ctx = EventContext::new(event.ingest_ns, event.origin_uri.clone());
 
