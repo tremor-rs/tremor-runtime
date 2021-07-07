@@ -13,18 +13,17 @@
 // limitations under the License.
 
 use crate::op::prelude::*;
-use crate::srs;
 use std::mem;
-use tremor_script::{ast::query, highlighter, prelude::*, srs as ts_srs, Query};
+use tremor_script::{ast::query, highlighter, prelude::*, srs, Query};
 
 #[derive(Debug)]
 pub struct Script {
     pub id: String,
-    script: srs::Script,
+    script: srs::ScriptDecl,
 }
 
 impl Script {
-    pub fn with_stmt(id: String, decl: &ts_srs::Stmt, instance: &ts_srs::Stmt) -> Result<Self> {
+    pub fn with_stmt(id: String, decl: &srs::Stmt, instance: &srs::Stmt) -> Result<Self> {
         // We require Value to be static here to enforce the constraint that
         // arguments name/value pairs live at least as long as the operator nodes that have
         // dependencies on them.
@@ -40,42 +39,9 @@ impl Script {
         // The binding association chooses the definition simply as it hosts the parsed script.
         //
 
-        let mut script = srs::Script::try_new_from_srs(decl, |decl| {
-            let mut args = Value::object();
+        let mut script = srs::ScriptDecl::try_new_from_stmt(decl)?;
 
-            let mut script = match decl {
-                query::Stmt::ScriptDecl(ref script) => *script.clone(),
-                _other => return Err("Trying to turn a non script into a script operator"),
-            };
-
-            if let Some(p) = &script.params {
-                // Set params from decl as meta vars
-                for (name, value) in p {
-                    // We could clone here since we bind Script to defn_rentwrapped.stmt's lifetime
-                    args.try_insert(name.clone(), value.clone());
-                }
-            }
-
-            script.script.consts.args = args;
-            Ok(script)
-        })?;
-
-        script.apply(instance, |this, other| {
-            if let query::Stmt::Script(instance) = other {
-                if let Some(map) = &instance.params {
-                    for (name, value) in map {
-                        // We can not clone here since we do not bind Script to node_rentwrapped's lifetime
-                        this.script
-                            .consts
-                            .args
-                            .try_insert(Cow::from(name.clone()), value.clone_static());
-                    }
-                }
-                Ok(())
-            } else {
-                Err("Trying to turn something into script create that isn't a script create")
-            }
-        })?;
+        script.apply_stmt(instance)?;
 
         Ok(Self { id, script })
     }
@@ -91,7 +57,7 @@ impl Operator for Script {
     ) -> Result<EventAndInsights> {
         let context = EventContext::new(event.ingest_ns, event.origin_uri);
 
-        let port = event.data.apply(&self.script, |data, decl| {
+        let port = event.data.apply_decl(&self.script, |data, decl| {
             let (unwind_event, event_meta) = data.parts_mut();
 
             let value = decl.script.run(

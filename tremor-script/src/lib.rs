@@ -49,8 +49,6 @@ pub mod highlighter;
 pub mod interpreter;
 /// The Tremor Script Lexer
 pub mod lexer;
-// We need this because of lalrpop
-mod event_payload;
 #[allow(unused)]
 pub(crate) mod parser;
 /// Support for module paths
@@ -72,7 +70,7 @@ mod tilde;
 /// Utility functions
 pub mod utils;
 
-pub use event_payload::{EventPayload, ValueAndMeta, SRS};
+pub use srs::{EventPayload, ValueAndMeta};
 
 extern crate serde;
 #[macro_use]

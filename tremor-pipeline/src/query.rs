@@ -45,7 +45,7 @@ use tremor_script::{
     highlighter::{Dumb, Highlighter},
     path::ModulePath,
     prelude::*,
-    srs as ts_srs, AggrRegistry, Registry, Value,
+    srs, AggrRegistry, Registry, Value,
 };
 
 const BUILTIN_NODES: [(Cow<'static, str>, NodeKind); 4] = [
@@ -414,9 +414,8 @@ impl Query {
                     };
                     let id = pipe_graph.add_node(node.clone());
 
-                    let stmt_srs = ts_srs::Stmt::try_new_from_srs::<&'static str, _, _>(
-                        &self.0.query,
-                        |query| {
+                    let stmt_srs =
+                        srs::Stmt::try_new_from_query::<&'static str, _>(&self.0.query, |query| {
                             let mut decl = query
                                 .operators
                                 .get(&fqon)
@@ -436,8 +435,7 @@ impl Query {
                             let inner_stmt = Stmt::OperatorDecl(decl);
 
                             Ok(inner_stmt)
-                        },
-                    )?;
+                        })?;
 
                     let that = stmt_srs;
                     let op = node.to_op(
@@ -468,14 +466,12 @@ impl Query {
                         format!("{}::{}", o.module.join("::"), target)
                     };
 
-                    let stmt_srs = ts_srs::Stmt::try_new_from_srs::<&'static str, _, _>(
-                        &self.0.query,
-                        |query| {
+                    let stmt_srs =
+                        srs::Stmt::try_new_from_query::<&'static str, _>(&self.0.query, |query| {
                             let decl = query.scripts.get(&fqsn).ok_or("script not found")?.clone();
                             let inner_stmt = Stmt::ScriptDecl(Box::new(decl));
                             Ok(inner_stmt)
-                        },
-                    )?;
+                        })?;
 
                     let label = if let Stmt::ScriptDecl(s) = stmt_srs.suffix() {
                         let e = s.extent(&query.node_meta);
@@ -662,7 +658,7 @@ impl Query {
 fn select(
     operator_uid: u64,
     config: &NodeConfig,
-    node: Option<&ts_srs::Stmt>,
+    node: Option<&srs::Stmt>,
     windows: Option<HashMap<String, WindowImpl>>,
 ) -> Result<Box<dyn Operator>> {
     let node = node.ok_or_else(|| {
@@ -724,7 +720,7 @@ fn select(
 fn operator(
     operator_uid: u64,
     config: &NodeConfig,
-    node: Option<&ts_srs::Stmt>,
+    node: Option<&srs::Stmt>,
 ) -> Result<Box<dyn Operator>> {
     let node = node.ok_or_else(|| {
         ErrorKind::MissingOpConfig("trickle operators require a statement".into())
@@ -738,8 +734,8 @@ fn operator(
 
 fn script(
     config: &NodeConfig,
-    defn: Option<&ts_srs::Stmt>,
-    node: Option<&ts_srs::Stmt>,
+    defn: Option<&srs::Stmt>,
+    node: Option<&srs::Stmt>,
 ) -> Result<Box<dyn Operator>> {
     let node = node.ok_or_else(|| {
         ErrorKind::MissingOpConfig("trickle operators require a statement".into())
@@ -753,8 +749,8 @@ fn script(
 pub(crate) fn supported_operators(
     config: &NodeConfig,
     uid: u64,
-    defn: Option<&ts_srs::Stmt>,
-    node: Option<&ts_srs::Stmt>,
+    defn: Option<&srs::Stmt>,
+    node: Option<&srs::Stmt>,
     windows: Option<HashMap<String, WindowImpl>>,
 ) -> Result<OperatorNode> {
     let name_parts: Vec<&str> = config.op_type.split("::").collect();

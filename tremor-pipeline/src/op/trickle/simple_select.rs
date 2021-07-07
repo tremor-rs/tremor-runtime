@@ -14,13 +14,13 @@
 
 // [x] PERF0001: handle select without grouping or windows easier.
 
-use crate::{errors::Result, op::prelude::*, srs, Event, Operator};
+use crate::{errors::Result, op::prelude::*, Event, Operator};
 use tremor_script::{
     self,
     ast::{InvokeAggrFn, Select, SelectStmt},
     interpreter::Env,
     prelude::*,
-    srs as ts_srs,
+    srs,
 };
 
 /// optimized variant for a simple select of the form:
@@ -35,11 +35,8 @@ pub struct SimpleSelect {
 const NO_AGGRS: [InvokeAggrFn<'static>; 0] = [];
 
 impl SimpleSelect {
-    pub fn with_stmt(id: String, stmt: &ts_srs::Stmt) -> Result<Self> {
-        let select = srs::Select::try_new_from_srs(stmt, |stmt| match stmt {
-            tremor_script::ast::Stmt::Select(ref select) => Ok(select.clone()),
-            _ => Err("Trying to turn a non select into a select operator"),
-        })?;
+    pub fn with_stmt(id: String, stmt: &srs::Stmt) -> Result<Self> {
+        let select = srs::Select::try_new_from_stmt(stmt)?;
 
         Ok(Self { id, select })
     }

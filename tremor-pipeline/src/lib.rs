@@ -58,7 +58,6 @@ mod executable_graph;
 #[macro_use]
 mod macros;
 pub(crate) mod op;
-pub(crate) mod srs;
 
 const COUNT: Cow<'static, str> = Cow::const_str("count");
 const MEASUREMENT: Cow<'static, str> = Cow::const_str("measurement");
