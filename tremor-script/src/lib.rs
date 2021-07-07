@@ -75,12 +75,10 @@ pub use event_payload::{EventPayload, ValueAndMeta, SRS};
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
-#[macro_use]
-extern crate rental;
 
 pub use crate::ast::query::SelectType;
 pub use crate::ctx::{EventContext, EventOriginUri};
-pub use crate::query::{Query, QueryRental};
+pub use crate::query::{Query, SRSQuery};
 pub use crate::registry::{
     aggr as aggr_registry, registry, Aggr as AggrRegistry, CustomFn, Registry, TremorAggrFn,
     TremorAggrFnWrapper, TremorFn, TremorFnWrapper,

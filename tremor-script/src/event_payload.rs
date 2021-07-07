@@ -271,7 +271,7 @@ impl EventPayload {
     pub fn consume<E, F, Other: SRS>(&mut self, other: Other, join_f: F) -> Result<(), E>
     where
         E: std::error::Error,
-        F: Fn(&mut ValueAndMeta<'static>, Other::Structured) -> Result<(), E>,
+        F: FnOnce(&mut ValueAndMeta<'static>, Other::Structured) -> Result<(), E>,
     {
         let (mut other_raw, other_structured) = unsafe { other.into_parts() };
         // We append first in the case that some data already moved into self.structured by the time
@@ -285,16 +285,15 @@ impl EventPayload {
     ///
     /// # Errors
     /// if `join_f` errors
-    pub fn apply<E, F, Other: SRS>(&mut self, other: &Other, join_f: F) -> Result<(), E>
+    pub fn apply<R, F, Other: SRS>(&mut self, other: &Other, join_f: F) -> R
     where
-        E: std::error::Error,
-        F: Fn(&mut ValueAndMeta<'static>, &Other::Structured) -> Result<(), E>,
+        F: FnOnce(&mut ValueAndMeta<'static>, &Other::Structured) -> R,
+        R: ,
     {
         // We append first in the case that some data already moved into self.structured by the time
         // that the join_f fails
         self.raw.extend_from_slice(other.raw());
-        join_f(&mut self.structured, other.suffix())?;
-        Ok(())
+        join_f(&mut self.structured, other.suffix())
     }
 }
 

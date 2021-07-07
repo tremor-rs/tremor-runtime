@@ -14,30 +14,14 @@
 
 // [x] PERF0001: handle select without grouping or windows easier.
 
-use crate::errors::{ErrorKind, Result};
-use crate::op::prelude::*;
-use crate::{Event, Operator};
-use tremor_script::interpreter::Env;
+use crate::{errors::Result, op::prelude::*, srs, Event, Operator};
 use tremor_script::{
     self,
     ast::{InvokeAggrFn, Select, SelectStmt},
+    interpreter::Env,
     prelude::*,
-    query::StmtRental,
+    query::SRSStmt,
 };
-
-rental! {
-    pub mod rentals {
-        use std::sync::Arc;
-        use halfbrown::HashMap;
-        use super::*;
-
-        #[rental(covariant,debug)]
-        pub struct Select {
-            stmt: Arc<StmtRental>,
-            select: tremor_script::ast::SelectStmt<'stmt>,
-        }
-    }
-}
 
 /// optimized variant for a simple select of the form:
 ///
@@ -45,24 +29,16 @@ rental! {
 #[derive(Debug)]
 pub struct SimpleSelect {
     pub id: String,
-    pub select: rentals::Select,
+    pub(crate) select: srs::Select,
 }
 
 const NO_AGGRS: [InvokeAggrFn<'static>; 0] = [];
 
 impl SimpleSelect {
-    pub fn with_stmt(
-        id: String,
-        stmt_rentwrapped: &tremor_script::query::StmtRentalWrapper,
-    ) -> Result<Self> {
-        let select = rentals::Select::try_new(stmt_rentwrapped.stmt.clone(), |stmt_rentwrapped| {
-            match stmt_rentwrapped.suffix() {
-                tremor_script::ast::Stmt::Select(ref select) => Ok(select.clone()),
-                _ => Err(ErrorKind::PipelineError(
-                    "Trying to turn a non select into a select operator".into(),
-                )
-                .into()),
-            }
+    pub fn with_stmt(id: String, stmt: &SRSStmt) -> Result<Self> {
+        let select = srs::Select::try_new_from_srs(stmt, |stmt| match stmt {
+            tremor_script::ast::Stmt::Select(ref select) => Ok(select.clone()),
+            _ => Err("Trying to turn a non select into a select operator"),
         })?;
 
         Ok(Self { id, select })

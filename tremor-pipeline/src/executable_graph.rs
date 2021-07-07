@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::{fmt, fmt::Display, sync::Arc};
+use std::{fmt, fmt::Display};
 
 use crate::{
     common_cow,
@@ -26,17 +26,17 @@ use crate::{op::EventAndInsights, Event, NodeKind, Operator};
 use beef::Cow;
 use halfbrown::HashMap;
 use tremor_common::stry;
-use tremor_script::{query::StmtRentalWrapper, Value};
+use tremor_script::{query::SRSStmt, Value};
 
 /// Configuration for a node
 #[derive(Debug, Clone, PartialOrd, Eq, Default)]
 pub struct NodeConfig {
-    pub(crate) id: Cow<'static, str>,
+    pub(crate) id: String,
     pub(crate) kind: NodeKind,
     pub(crate) op_type: String,
     pub(crate) config: ConfigMap,
-    pub(crate) defn: Option<Arc<StmtRentalWrapper>>,
-    pub(crate) node: Option<Arc<StmtRentalWrapper>>,
+    pub(crate) defn: Option<SRSStmt>,
+    pub(crate) node: Option<SRSStmt>,
     pub(crate) label: Option<String>,
 }
 
@@ -56,12 +56,12 @@ impl NodeConfig {
     pub fn from_config<C, I>(id: I, config: C) -> Result<Self>
     where
         C: serde::Serialize,
-        Cow<'static, str>: From<I>,
+        I: ToString,
     {
         let config = serde_yaml::to_vec(&config)?;
 
         Ok(NodeConfig {
-            id: id.into(),
+            id: id.to_string(),
             kind: NodeKind::Operator,
             config: serde_yaml::from_slice(&config)?,
             ..NodeConfig::default()
@@ -96,8 +96,8 @@ impl NodeConfig {
         &self,
         uid: u64,
         resolver: NodeLookupFn,
-        defn: Option<StmtRentalWrapper>,
-        node: Option<StmtRentalWrapper>,
+        defn: Option<&SRSStmt>,
+        node: Option<&SRSStmt>,
         window: Option<HashMap<String, WindowImpl>>,
     ) -> Result<OperatorNode> {
         resolver(&self, uid, defn, node, window)
@@ -121,7 +121,7 @@ impl State {
 #[derive(Debug)]
 pub struct OperatorNode {
     /// ID of the operator
-    pub id: Cow<'static, str>,
+    pub id: String,
     /// Typoe of the operator
     pub kind: NodeKind,
     /// operator namepsace

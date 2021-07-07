@@ -184,7 +184,7 @@ impl Script {
 
     /// Returns the documentation for the script
     #[must_use]
-    pub fn docs(&self) -> &Docs<'_> {
+    pub fn docs(&self) -> &Docs {
         &self.script.suffix().docs
     }
 
