@@ -15,39 +15,36 @@
 // [x] PERF0001: handle select without grouping or windows easier.
 
 use crate::{
-    errors::{Error, ErrorKind, Result},
-    EventId, SignalKind,
+    errors::{Error, Result},
+    srs, EventId, SignalKind,
 };
 use crate::{op::prelude::*, EventIdGenerator};
 use crate::{Event, Operator};
 use halfbrown::{HashMap, RawEntryMut};
 use std::borrow::Cow as SCow;
 use std::mem;
-use std::sync::Arc;
 use tremor_common::stry;
-
 use tremor_script::{
     self,
     ast::{Aggregates, Consts, InvokeAggrFn, NodeMetas, Select, SelectStmt, WindowDecl},
     interpreter::Env,
     interpreter::LocalStack,
     prelude::*,
-    query::StmtRental,
-    query::StmtRentalWrapper,
+    query::SRSStmt,
     utils::sorted_serialize,
-    QueryRental, Value,
+    Value,
 };
 
 #[derive(Debug, Clone)]
-pub struct GroupData<'groups> {
+pub struct GroupData {
     group: Value<'static>,
     window: WindowImpl,
-    aggrs: Aggregates<'groups>,
+    aggrs: Aggregates<'static>,
     id: EventId,
     transactional: bool,
 }
 
-impl<'groups> GroupData<'groups> {
+impl GroupData {
     fn track_transactional(&mut self, transactional: bool) {
         self.transactional = self.transactional || transactional;
     }
@@ -60,37 +57,18 @@ impl<'groups> GroupData<'groups> {
     }
 }
 
-type Groups<'groups> = HashMap<String, GroupData<'groups>>;
-rental! {
-    pub mod rentals {
-        use std::sync::Arc;
-        use halfbrown::HashMap;
-        use super::*;
-
-        #[rental(covariant, debug)]
-        pub struct Select {
-            stmt: Arc<StmtRental>,
-            select: tremor_script::ast::SelectStmt<'stmt>,
-        }
-        #[rental(covariant, debug, clone)]
-        pub struct Window {
-            stmt: Arc<tremor_script::QueryRental>,
-            window: WindowDecl<'stmt>,
-        }
-    }
-}
+type Groups = HashMap<String, GroupData>;
 
 /// Select dimensions
+/// FIXME: this can go
 #[derive(Debug, Clone)]
 pub struct Dims {
-    query: Arc<StmtRental>,
-    groups: Groups<'static>,
+    groups: Groups,
 }
 
-impl Dims {
-    pub fn new(query: Arc<StmtRental>) -> Self {
+impl Default for Dims {
+    fn default() -> Self {
         Self {
-            query,
             groups: HashMap::new(),
         }
     }
@@ -100,7 +78,7 @@ impl Dims {
 #[derive(Debug)]
 pub struct TrickleSelect {
     pub id: String,
-    pub select: rentals::Select,
+    pub(crate) select: srs::Select,
     pub windows: Vec<Window>,
     pub event_id_gen: EventIdGenerator,
 }
@@ -247,7 +225,7 @@ pub struct TumblingWindowOnTime {
     events: u64,
     interval: u64,
     ttl: Option<u64>,
-    script: Option<rentals::Window>,
+    script: Option<WindowDecl<'static>>,
 }
 impl TumblingWindowOnTime {
     pub fn from_stmt(
@@ -256,19 +234,9 @@ impl TumblingWindowOnTime {
         max_groups: u64,
         ttl: Option<u64>,
         script: Option<&WindowDecl>,
-        qry: &Arc<QueryRental>,
-    ) -> Result<Self> {
-        let script = script
-            .map(|s| {
-                rentals::Window::try_new(qry.clone(), |stmt| -> Result<_> {
-                    let id = &s.id;
-                    let windows = &stmt.suffix().windows;
-                    let window = windows.get(id).cloned();
-                    window.ok_or_else(|| format!("unknown window: {}", &s.id).into())
-                })
-            })
-            .transpose()?;
-        Ok(Self {
+    ) -> Self {
+        let script = script.cloned().map(WindowDecl::into_static);
+        Self {
             next_window: None,
             emit_empty_windows,
             max_groups,
@@ -276,7 +244,7 @@ impl TumblingWindowOnTime {
             interval,
             ttl,
             script,
-        })
+        }
     }
 
     fn get_window_event(&mut self, time: u64) -> WindowEvent {
@@ -316,7 +284,7 @@ impl WindowTrait for TumblingWindowOnTime {
         let time = self
             .script
             .as_ref()
-            .and_then(|script| script.suffix().script.as_ref())
+            .and_then(|script| script.script.as_ref())
             .map(|script| {
                 // TODO avoid origin_uri clone here
                 let context = EventContext::new(event.ingest_ns, event.origin_uri.clone());
@@ -355,7 +323,7 @@ pub struct TumblingWindowOnNumber {
     max_groups: u64,
     size: u64,
     ttl: Option<u64>,
-    script: Option<rentals::Window>,
+    script: Option<WindowDecl<'static>>,
 }
 
 impl TumblingWindowOnNumber {
@@ -364,25 +332,16 @@ impl TumblingWindowOnNumber {
         max_groups: u64,
         ttl: Option<u64>,
         script: Option<&WindowDecl>,
-        qry: &Arc<QueryRental>,
-    ) -> Result<Self> {
-        let script = script
-            .map(|s| {
-                rentals::Window::try_new(qry.clone(), |stmt| -> Result<_> {
-                    let id = &s.id;
-                    let windows = &stmt.suffix().windows;
-                    let window = windows.get(id).cloned();
-                    window.ok_or_else(|| format!("unknown window: {}", &s.id).into())
-                })
-            })
-            .transpose()?;
-        Ok(Self {
+    ) -> Self {
+        let script = script.cloned().map(WindowDecl::into_static);
+
+        Self {
             count: 0,
             max_groups,
             size,
             script,
             ttl,
-        })
+        }
     }
 }
 impl WindowTrait for TumblingWindowOnNumber {
@@ -396,7 +355,7 @@ impl WindowTrait for TumblingWindowOnNumber {
         let count = self
             .script
             .as_ref()
-            .and_then(|script| script.suffix().script.as_ref())
+            .and_then(|script| script.script.as_ref())
             .map_or(Ok(1), |script| {
                 // TODO avoid origin_uri clone here
                 let context = EventContext::new(event.ingest_ns, event.origin_uri.clone());
@@ -438,7 +397,7 @@ impl TrickleSelect {
         id: String,
         dims: &Dims,
         windows: Vec<(String, WindowImpl)>,
-        stmt_rentwrapped: &StmtRentalWrapper,
+        stmt: &SRSStmt,
     ) -> Result<Self> {
         let windows = windows
             .into_iter()
@@ -451,14 +410,11 @@ impl TrickleSelect {
                 next_swap: 0,
             })
             .collect();
-        let select = rentals::Select::try_new(stmt_rentwrapped.stmt.clone(), move |stmt| {
-            if let tremor_script::ast::Stmt::Select(select) = stmt.suffix() {
+        let select = srs::Select::try_new_from_srs(stmt, move |stmt| {
+            if let tremor_script::ast::Stmt::Select(select) = stmt {
                 Ok(select.clone())
             } else {
-                Err(ErrorKind::PipelineError(
-                    "Trying to turn a non select into a select operator".into(),
-                )
-                .into())
+                Err("Trying to turn a non select into a select operator")
             }
         })?;
         Ok(Self {
@@ -573,7 +529,7 @@ fn get_or_create_group<'window>(
     aggregates: &[InvokeAggrFn<'static>],
     group_str: &str,
     group_value: &Value,
-) -> Result<&'window mut GroupData<'static>> {
+) -> Result<&'window mut GroupData> {
     let this_groups = &mut window.dims.groups;
     let groups_len = this_groups.len() as u64;
     let last_groups = &mut window.last_dims.groups;
@@ -1620,13 +1576,14 @@ impl Operator for TrickleSelect {
 
 #[cfg(test)]
 mod test {
+    /*
     #![allow(clippy::float_cmp)]
     use crate::query::window_decl_to_impl;
 
     use super::*;
 
     use simd_json::{json, StaticNode};
-    use tremor_script::{ast::Stmt, query::StmtRental};
+    use tremor_script::ast::Stmt;
     use tremor_script::{
         ast::{self, Ident, ImutExpr, Literal},
         path::ModulePath,
@@ -1695,11 +1652,8 @@ mod test {
 
     use std::{collections::BTreeSet, sync::Arc};
 
-    fn test_select(
-        uid: u64,
-        stmt: tremor_script::query::StmtRentalWrapper,
-    ) -> Result<TrickleSelect> {
-        let groups = Dims::new(stmt.stmt.clone());
+    fn test_select(uid: u64, stmt: tremor_script::query::SRSStmt) -> Result<TrickleSelect> {
+        let groups = Dims::default();
         let windows = vec![
             (
                 "w15s".into(),
@@ -2782,4 +2736,5 @@ mod test {
 
         Ok(())
     }
+    */
 }

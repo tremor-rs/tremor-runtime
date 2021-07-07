@@ -67,7 +67,7 @@ use self::{
 
 pub(crate) type Exprs<'script> = Vec<Expr<'script>>;
 /// A list of lexical compilation units
-pub type Imports<'script> = Vec<LexicalUnit<'script>>;
+pub type Imports = Vec<LexicalUnit>;
 /// A list of immutable expressions
 pub type ImutExprs<'script> = Vec<ImutExpr<'script>>;
 pub(crate) type Fields<'script> = Vec<Field<'script>>;
@@ -283,16 +283,16 @@ impl<'script> Bytes<'script> {
 
 /// Documentation from constant
 #[derive(Debug, Clone, PartialEq)]
-pub struct ConstDoc<'script> {
+pub struct ConstDoc {
     /// Constant name
-    pub name: Cow<'script, str>,
+    pub name: String,
     /// Constant documentation
     pub doc: Option<String>,
     /// Constant value type
     pub value_type: ValueType,
 }
 
-impl<'script> ToString for ConstDoc<'script> {
+impl ToString for ConstDoc {
     fn to_string(&self) -> String {
         format!(
             r#"
@@ -311,11 +311,11 @@ impl<'script> ToString for ConstDoc<'script> {
 
 /// Documentation from function
 #[derive(Debug, Clone, PartialEq)]
-pub struct FnDoc<'script> {
+pub struct FnDoc {
     /// Function name
-    pub name: Cow<'script, str>,
+    pub name: String,
     /// Function arguments
-    pub args: Vec<Cow<'script, str>>,
+    pub args: Vec<String>,
     /// Function documentation
     pub doc: Option<String>,
     /// Whether the function is open or not
@@ -323,32 +323,7 @@ pub struct FnDoc<'script> {
     pub open: bool,
 }
 
-/// Documentation from a module
-#[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct ModDoc<'script> {
-    /// Module name
-    pub name: Cow<'script, str>,
-    /// Module documentation
-    pub doc: Option<String>,
-}
-
-impl<'script> ModDoc<'script> {
-    /// Prints the module documentation
-    #[must_use]
-    pub fn print_with_name(&self, name: &str) -> String {
-        format!(
-            r#"
-# {}
-
-{}
-"#,
-            name,
-            &self.doc.clone().unwrap_or_default()
-        )
-    }
-}
-
-impl<'script> ToString for FnDoc<'script> {
+impl ToString for FnDoc {
     fn to_string(&self) -> String {
         format!(
             r#"
@@ -364,17 +339,42 @@ impl<'script> ToString for FnDoc<'script> {
 }
 
 /// Documentation from a module
-#[derive(Debug, Clone, PartialEq)]
-pub struct Docs<'script> {
-    /// Constants
-    pub consts: Vec<ConstDoc<'script>>,
-    /// Functions
-    pub fns: Vec<FnDoc<'script>>,
-    /// Module level documentation
-    pub module: Option<ModDoc<'script>>,
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ModDoc {
+    /// Module name
+    pub name: String,
+    /// Module documentation
+    pub doc: Option<String>,
 }
 
-impl<'script> Default for Docs<'script> {
+impl ModDoc {
+    /// Prints the module documentation
+    #[must_use]
+    pub fn print_with_name(&self, name: &str) -> String {
+        format!(
+            r#"
+# {}
+
+{}
+"#,
+            name,
+            &self.doc.clone().unwrap_or_default()
+        )
+    }
+}
+
+/// Documentation from a module
+#[derive(Debug, Clone, PartialEq)]
+pub struct Docs {
+    /// Constants
+    pub consts: Vec<ConstDoc>,
+    /// Functions
+    pub fns: Vec<FnDoc>,
+    /// Module level documentation
+    pub module: Option<ModDoc>,
+}
+
+impl Default for Docs {
     fn default() -> Self {
         Self {
             consts: Vec::new(),
@@ -462,7 +462,7 @@ where
     pub(crate) functions: HashMap<Vec<String>, usize>,
     pub(crate) consts: Consts<'script>,
     pub(crate) meta: NodeMetas,
-    docs: Docs<'script>,
+    docs: Docs,
     module: Vec<String>,
     possible_leaf: bool,
     fn_argc: usize,
@@ -487,7 +487,7 @@ where
     ) {
         let doc = doc.map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n"));
         self.docs.consts.push(ConstDoc {
-            name,
+            name: name.to_string(),
             doc,
             value_type,
         })
@@ -616,7 +616,7 @@ where
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Script<'script> {
     /// Import definitions
-    pub imports: Imports<'script>,
+    pub imports: Imports,
     /// Expressions of the script
     pub exprs: Exprs<'script>,
     /// Constants defined in this script
@@ -631,7 +631,7 @@ pub struct Script<'script> {
     pub node_meta: NodeMetas,
     #[serde(skip)]
     /// Documentation from the script
-    pub docs: Docs<'script>,
+    pub docs: Docs,
 }
 
 impl<'script> Script<'script> {
@@ -748,13 +748,13 @@ impl<'script> Script<'script> {
 
 /// A lexical compilation unit
 #[derive(Debug, PartialEq, Serialize, Clone)]
-pub enum LexicalUnit<'script> {
+pub enum LexicalUnit {
     /// Import declaration with no alias
-    NakedImportDecl(Vec<raw::IdentRaw<'script>>),
+    NakedImportDecl(Vec<raw::IdentRaw<'static>>),
     /// Import declaration with an alias
-    AliasedImportDecl(Vec<raw::IdentRaw<'script>>, raw::IdentRaw<'script>),
+    AliasedImportDecl(Vec<raw::IdentRaw<'static>>, raw::IdentRaw<'static>),
     /// Line directive with embedded "<string> <num> ;"
-    LineDirective(Cow<'script, str>),
+    LineDirective(String),
 }
 // impl_expr_mid!(Ident);
 
