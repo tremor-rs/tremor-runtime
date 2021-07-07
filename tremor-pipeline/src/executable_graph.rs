@@ -26,7 +26,7 @@ use crate::{op::EventAndInsights, Event, NodeKind, Operator};
 use beef::Cow;
 use halfbrown::HashMap;
 use tremor_common::stry;
-use tremor_script::{query::SRSStmt, Value};
+use tremor_script::{srs, Value};
 
 /// Configuration for a node
 #[derive(Debug, Clone, PartialOrd, Eq, Default)]
@@ -35,8 +35,8 @@ pub struct NodeConfig {
     pub(crate) kind: NodeKind,
     pub(crate) op_type: String,
     pub(crate) config: ConfigMap,
-    pub(crate) defn: Option<SRSStmt>,
-    pub(crate) node: Option<SRSStmt>,
+    pub(crate) defn: Option<srs::Stmt>,
+    pub(crate) node: Option<srs::Stmt>,
     pub(crate) label: Option<String>,
 }
 
@@ -96,8 +96,8 @@ impl NodeConfig {
         &self,
         uid: u64,
         resolver: NodeLookupFn,
-        defn: Option<&SRSStmt>,
-        node: Option<&SRSStmt>,
+        defn: Option<&srs::Stmt>,
+        node: Option<&srs::Stmt>,
         window: Option<HashMap<String, WindowImpl>>,
     ) -> Result<OperatorNode> {
         resolver(&self, uid, defn, node, window)

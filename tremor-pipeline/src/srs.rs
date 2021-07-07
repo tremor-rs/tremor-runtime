@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-///! Thisn file includes our self referential st
+///! Thisn file includes our self referential structs
 use std::sync::Arc;
 use std::{mem, pin::Pin};
 use tremor_script::ast::{ScriptDecl, SelectStmt};
@@ -144,15 +144,4 @@ impl Select {
             select: script,
         })
     }
-
-    // pub(crate) fn apply<R, F, Other: SRS>(&mut self, other: &Other, join_f: F) -> R
-    // where
-    //     R: ,
-    //     F: FnOnce(&mut SelectStmt<'static>, &Other::Structured) -> R,
-    // {
-    //     // We append first in the case that some data already moved into self.structured by the time
-    //     // that the join_f fails
-    //     self.raw.extend_from_slice(other.raw());
-    //     join_f(&mut self.select, other.suffix())
-    // }
 }

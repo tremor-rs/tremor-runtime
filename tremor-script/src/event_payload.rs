@@ -276,24 +276,25 @@ impl EventPayload {
         let (mut other_raw, other_structured) = unsafe { other.into_parts() };
         // We append first in the case that some data already moved into self.structured by the time
         // that the join_f fails
+        // READ: ORDER MATTERS!
         self.raw.append(&mut other_raw);
-        join_f(&mut self.structured, other_structured)?;
-        Ok(())
+        join_f(&mut self.structured, other_structured)
     }
 
     /// Applies another SRS into this, this functions **needs** to
     ///
     /// # Errors
     /// if `join_f` errors
-    pub fn apply<R, F, Other: SRS>(&mut self, other: &Other, join_f: F) -> R
+    pub fn apply<R, F, Other: SRS>(&mut self, other: &Other, apply_f: F) -> R
     where
         F: FnOnce(&mut ValueAndMeta<'static>, &Other::Structured) -> R,
         R: ,
     {
         // We append first in the case that some data already moved into self.structured by the time
         // that the join_f fails
+        // READ: ORDER MATTERS!
         self.raw.extend_from_slice(other.raw());
-        join_f(&mut self.structured, other.suffix())
+        apply_f(&mut self.structured, other.suffix())
     }
 }
 

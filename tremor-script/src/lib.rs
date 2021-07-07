@@ -65,6 +65,8 @@ pub mod query;
 pub mod registry;
 /// Tremor Script
 pub mod script;
+/// Self referential structs
+pub mod srs;
 mod std_lib;
 mod tilde;
 /// Utility functions
@@ -78,7 +80,7 @@ extern crate serde_derive;
 
 pub use crate::ast::query::SelectType;
 pub use crate::ctx::{EventContext, EventOriginUri};
-pub use crate::query::{Query, SRSQuery};
+pub use crate::query::Query;
 pub use crate::registry::{
     aggr as aggr_registry, registry, Aggr as AggrRegistry, CustomFn, Registry, TremorAggrFn,
     TremorAggrFnWrapper, TremorFn, TremorFnWrapper,

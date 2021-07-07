@@ -49,7 +49,6 @@ use std::iter::Iterator;
 use std::str::FromStr;
 use std::{fmt, sync::Mutex};
 use tremor_script::prelude::*;
-use tremor_script::query::SRSStmt;
 
 /// Pipeline Errors
 pub mod errors;
@@ -86,8 +85,8 @@ pub type ConfigMap = Option<serde_yaml::Value>;
 pub type NodeLookupFn = fn(
     config: &NodeConfig,
     uid: u64,
-    defn: Option<&SRSStmt>,
-    node: Option<&SRSStmt>,
+    defn: Option<&tremor_script::srs::Stmt>,
+    node: Option<&tremor_script::srs::Stmt>,
     windows: Option<HashMap<String, WindowImpl>>,
 ) -> Result<OperatorNode>;
 
