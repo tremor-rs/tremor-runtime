@@ -30,7 +30,7 @@ use tremor_script::{
     interpreter::Env,
     interpreter::LocalStack,
     prelude::*,
-    query::SRSStmt,
+    srs as ts_srs,
     utils::sorted_serialize,
     Value,
 };
@@ -397,7 +397,7 @@ impl TrickleSelect {
         id: String,
         dims: &Dims,
         windows: Vec<(String, WindowImpl)>,
-        stmt: &SRSStmt,
+        stmt: &ts_srs::Stmt,
     ) -> Result<Self> {
         let windows = windows
             .into_iter()
@@ -1652,7 +1652,7 @@ mod test {
 
     use std::{collections::BTreeSet, sync::Arc};
 
-    fn test_select(uid: u64, stmt: tremor_script::query::SRSStmt) -> Result<TrickleSelect> {
+    fn test_select(uid: u64, stmt: tremor_script::query::srs::Stmt) -> Result<TrickleSelect> {
         let groups = Dims::default();
         let windows = vec![
             (

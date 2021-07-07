@@ -15,7 +15,7 @@
 use crate::op::prelude::*;
 use crate::srs;
 use std::mem;
-use tremor_script::{ast::query, highlighter, prelude::*, query::SRSStmt, Query};
+use tremor_script::{ast::query, highlighter, prelude::*, srs as ts_srs, Query};
 
 #[derive(Debug)]
 pub struct Script {
@@ -24,7 +24,7 @@ pub struct Script {
 }
 
 impl Script {
-    pub fn with_stmt(id: String, decl: &SRSStmt, node_rentwrapped: &SRSStmt) -> Result<Self> {
+    pub fn with_stmt(id: String, decl: &ts_srs::Stmt, instance: &ts_srs::Stmt) -> Result<Self> {
         // We require Value to be static here to enforce the constraint that
         // arguments name/value pairs live at least as long as the operator nodes that have
         // dependencies on them.
@@ -41,28 +41,26 @@ impl Script {
         //
 
         let mut script = srs::Script::try_new_from_srs(decl, |decl| {
-            let args: Value;
-
-            let mut params = HashMap::new();
+            let mut args = Value::object();
 
             let mut script = match decl {
                 query::Stmt::ScriptDecl(ref script) => *script.clone(),
                 _other => return Err("Trying to turn a non script into a script operator"),
             };
+
             if let Some(p) = &script.params {
                 // Set params from decl as meta vars
                 for (name, value) in p {
                     // We could clone here since we bind Script to defn_rentwrapped.stmt's lifetime
-                    params.insert(Cow::from(name.clone()), value.clone());
+                    args.try_insert(name.clone(), value.clone());
                 }
             }
-            args = tremor_script::Value::from(params);
 
             script.script.consts.args = args;
             Ok(script)
         })?;
 
-        script.apply(node_rentwrapped, |this, other| {
+        script.apply(instance, |this, other| {
             if let query::Stmt::Script(instance) = other {
                 if let Some(map) = &instance.params {
                     for (name, value) in map {
@@ -73,12 +71,10 @@ impl Script {
                             .try_insert(Cow::from(name.clone()), value.clone_static());
                     }
                 }
+                Ok(())
             } else {
-                return Err(
-                    "Trying to turn something into script create that isn't a script create",
-                );
+                Err("Trying to turn something into script create that isn't a script create")
             }
-            Ok(())
         })?;
 
         Ok(Self { id, script })

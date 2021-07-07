@@ -20,7 +20,7 @@ use tremor_script::{
     ast::{InvokeAggrFn, Select, SelectStmt},
     interpreter::Env,
     prelude::*,
-    query::SRSStmt,
+    srs as ts_srs,
 };
 
 /// optimized variant for a simple select of the form:
@@ -35,7 +35,7 @@ pub struct SimpleSelect {
 const NO_AGGRS: [InvokeAggrFn<'static>; 0] = [];
 
 impl SimpleSelect {
-    pub fn with_stmt(id: String, stmt: &SRSStmt) -> Result<Self> {
+    pub fn with_stmt(id: String, stmt: &ts_srs::Stmt) -> Result<Self> {
         let select = srs::Select::try_new_from_srs(stmt, |stmt| match stmt {
             tremor_script::ast::Stmt::Select(ref select) => Ok(select.clone()),
             _ => Err("Trying to turn a non select into a select operator"),

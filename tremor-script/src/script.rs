@@ -12,22 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::ast::{self, Docs, Helper, Warning, Warnings};
-use crate::ctx::EventContext;
-use crate::errors::{CompilerError, Error, Result};
-use crate::highlighter::{Dumb as DumbHighlighter, Highlighter};
 pub use crate::interpreter::AggrType;
-use crate::parser::g as grammar;
-use crate::path::ModulePath;
-use crate::pos::Range;
-use crate::registry::{Aggr as AggrRegistry, Registry};
-use crate::Value;
-use crate::{lexer, SRS};
+use crate::{
+    ast::{Docs, Helper, Warning, Warnings},
+    ctx::EventContext,
+    errors::{CompilerError, Error, Result},
+    highlighter::{Dumb as DumbHighlighter, Highlighter},
+    lexer,
+    parser::g as grammar,
+    path::ModulePath,
+    pos::Range,
+    registry::{Aggr as AggrRegistry, Registry},
+    srs, Value, SRS,
+};
 use serde::Serialize;
 use std::io::{self, Write};
-use std::mem;
-use std::pin::Pin;
-use std::sync::Arc;
 
 /// Return of a script execution
 #[derive(Debug, Serialize, PartialEq)]
@@ -50,77 +49,12 @@ pub enum Return<'event> {
     },
 }
 
-/// A script and it's attached source.
-///
-/// Implemention alalougous to `EventPayload`
-///
-/// It is essential to never access the parts of the struct outside of it's
-/// implementation! This will void all warenties and likely lead to errors.
-///
-/// They **must** remain private. All interactions with them have to be guarded
-/// by the implementation logic to ensure they remain sane.
-///
-pub struct SRSScript {
-    /// The vector of raw input values
-    raw: Vec<Arc<Pin<Vec<u8>>>>,
-    structured: ast::Script<'static>,
-}
-
-impl std::fmt::Debug for SRSScript {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.structured.fmt(f)
-    }
-}
-
-unsafe impl SRS for SRSScript {
-    type Structured = ast::Script<'static>;
-
-    unsafe fn into_parts(self) -> (Vec<Arc<Pin<Vec<u8>>>>, Self::Structured) {
-        (self.raw, self.structured)
-    }
-
-    fn raw(&self) -> &[Arc<Pin<Vec<u8>>>] {
-        &self.raw
-    }
-
-    fn suffix(&self) -> &Self::Structured {
-        &self.structured
-    }
-}
-
-impl SRSScript {
-    /// Creates a new Payload with a given byte vector and
-    /// a function to turn it into a value and metadata set.
-    ///
-    /// The return can reference the the data it gets passed
-    /// in the function.
-    ///
-    /// Internally the lifetime will be bound to the raw part
-    /// of the struct.
-    ///
-    /// # Errors
-    /// errors if the conversion function fails
-    pub fn try_new<E, F>(mut raw: String, f: F) -> std::result::Result<Self, E>
-    where
-        F: for<'head> FnOnce(&'head mut String) -> std::result::Result<ast::Script<'head>, E>,
-    {
-        let structured = f(&mut raw)?;
-        // This is where the magic happens
-        // ALLOW: this is sound since we implement a self referential struct
-        let structured: ast::Script<'static> = unsafe { mem::transmute(structured) };
-        // This is possibl as String::into_bytes just returns the `vec` of the string
-        let raw = Pin::new(raw.into_bytes());
-        let raw = vec![Arc::new(raw)];
-        Ok(Self { raw, structured })
-    }
-}
-
 /// A tremor script
 #[derive(Debug)]
 pub struct Script {
     // TODO: This should probably be pulled out to allow people wrapping it themselves
     /// Rental for the runnable script
-    pub script: SRSScript,
+    pub script: srs::Script,
     /// Source code for this script
     pub source: String,
     /// A set of warnings if any
@@ -148,7 +82,7 @@ impl Script {
         let r = |include_stack: &mut lexer::IncludeStack| -> Result<Self> {
             let mut warnings = Warnings::new();
 
-            let rented_script = SRSScript::try_new::<Error, _>(script.clone(), |script| {
+            let rented_script = srs::Script::try_new::<Error, _>(script.clone(), |script| {
                 let cu = include_stack.push(file_name)?;
                 let lexemes: Vec<_> = lexer::Preprocessor::preprocess(
                     module_path,
