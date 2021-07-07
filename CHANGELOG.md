@@ -18,6 +18,7 @@
 - Fix `heredoc_start` and `heredoc_end` showing up in error messages instead of `"""`
 - Fix some errors in otel pb <-> json translation
 - Fix windowed queries emitting events with `null` metadata on tick
+- Fix sorting for artefacts
 
 ## 0.11.4
 
