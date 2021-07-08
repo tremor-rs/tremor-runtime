@@ -22,7 +22,7 @@ use crate::{
         trickle::{
             operator::TrickleOperator,
             script::Script,
-            select::{Dims, TrickleSelect, WindowImpl},
+            select::{Groups, TrickleSelect, WindowImpl},
             simple_select::SimpleSelect,
         },
     },
@@ -680,7 +680,7 @@ fn select(
         }
         SelectType::Simple => Ok(Box::new(SimpleSelect::with_stmt(config.id.clone(), &node)?)),
         SelectType::Normal => {
-            let groups = Dims::default();
+            let groups = Groups::new();
             let windows = windows.ok_or_else(|| {
                 ErrorKind::MissingOpConfig("select operators require a window mapping".into())
             })?;

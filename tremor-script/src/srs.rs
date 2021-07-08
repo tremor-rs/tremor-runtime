@@ -399,7 +399,7 @@ impl Debug for EventPayload {
 }
 
 impl EventPayload {
-    /// FIXME: delete this perhaps
+    /// Gets the suffix
     #[must_use]
     pub fn suffix(&self) -> &ValueAndMeta {
         &self.structured
