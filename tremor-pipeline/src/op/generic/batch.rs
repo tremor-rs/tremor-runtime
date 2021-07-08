@@ -253,7 +253,7 @@ mod test {
     #[test]
     fn time() -> Result<()> {
         let node_config = NodeConfig::from_config(
-            "badger",
+            &"badger",
             Config {
                 count: 100,
                 timeout: Some(1),

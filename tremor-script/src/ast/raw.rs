@@ -94,7 +94,7 @@ impl<'script> ScriptRaw<'script> {
                             mid: helper.add_meta_w_name(start, end, &name),
                         }))
                     }
-                    helper.add_const_doc(name, comment, value_type);
+                    helper.add_const_doc(&name, comment, value_type);
                 }
                 ExprRaw::FnDecl(f) => {
                     helper.docs.fns.push(f.doc());

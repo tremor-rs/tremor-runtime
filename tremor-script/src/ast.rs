@@ -479,9 +479,9 @@ where
         self.consts.is_const(id)
     }
 
-    fn add_const_doc(
+    fn add_const_doc<N: ToString>(
         &mut self,
-        name: Cow<'script, str>,
+        name: &N,
         doc: Option<Vec<Cow<'script, str>>>,
         value_type: ValueType,
     ) {

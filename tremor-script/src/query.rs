@@ -40,6 +40,7 @@ where
     'event: 'run,
 {
     /// Extracts SRS  statements
+    #[must_use]
     pub fn extract_stmts(&self) -> Vec<srs::Stmt> {
         self.query.extract_stmts()
     }
@@ -96,8 +97,8 @@ where
             Ok(Self {
                 query,
                 source,
-                locals,
                 warnings,
+                locals,
             })
         }(&mut include_stack);
         r.map_err(|error| CompilerError {

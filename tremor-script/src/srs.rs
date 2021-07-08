@@ -46,6 +46,7 @@ impl Debug for Script {
 
 impl Script {
     /// borrows the script
+    #[must_use]
     pub fn suffix(&self) -> &ast::Script {
         &self.script
     }
@@ -108,6 +109,7 @@ impl Debug for Query {
 
 impl Query {
     /// borrows the query
+    #[must_use]
     pub fn suffix(&self) -> &ast::Query {
         &self.query
     }
@@ -143,6 +145,7 @@ impl Query {
     /// Extracts SRS statements
     ///
     /// This clones all statements
+    #[must_use]
     pub fn extract_stmts(&self) -> Vec<Stmt> {
         // This is valid since we clone `raw` into each
         // self referential struct, so we keep the data each
@@ -203,10 +206,14 @@ impl Eq for Stmt {}
 
 impl Stmt {
     /// borrow the suffix
+    #[must_use]
     pub fn suffix(&self) -> &ast::Stmt {
         &self.structured
     }
     /// Creates a new statement from another SRS
+    ///
+    /// # Errors
+    /// if query `f` errors
     pub fn try_new_from_query<E, F>(other: &Query, f: F) -> std::result::Result<Self, E>
     where
         F: for<'head> FnOnce(&'head ast::Query) -> std::result::Result<ast::Stmt<'head>, E>,
@@ -240,6 +247,7 @@ impl Debug for ScriptDecl {
 
 impl ScriptDecl {
     /// Access to the raw part of the script
+    #[must_use]
     pub fn raw(&self) -> &[Arc<Pin<Vec<u8>>>] {
         &self.raw
     }
@@ -272,12 +280,15 @@ impl ScriptDecl {
     }
 
     /// Applies a statment to the decl
-    pub fn apply_stmt(&mut self, other: &Stmt) -> Result<()> {
+    ///
+    /// # Errors
+    /// if stmt is ot a Script
+    pub fn apply_stmt(&mut self, stmt: &Stmt) -> Result<()> {
         // We append first in the case that some data already moved into self.structured by the time
         // that the join_f fails
-        self.raw.extend_from_slice(&other.raw);
+        self.raw.extend_from_slice(&stmt.raw);
 
-        if let query::Stmt::Script(instance) = &other.structured {
+        if let query::Stmt::Script(instance) = &stmt.structured {
             if let Some(map) = &instance.params {
                 for (name, value) in map {
                     // We can not clone here since we do not bind Script to node_rentwrapped's lifetime
