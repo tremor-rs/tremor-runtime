@@ -1553,7 +1553,7 @@ impl Operator for TrickleSelect {
 
 #[cfg(test)]
 mod test {
-    /*
+
     #![allow(clippy::float_cmp)]
     use crate::query::window_decl_to_impl;
 
@@ -1627,10 +1627,8 @@ mod test {
         }
     }
 
-    use std::{collections::BTreeSet, sync::Arc};
-
-    fn test_select(uid: u64, stmt: tremor_script::query::srs::Stmt) -> Result<TrickleSelect> {
-        let groups = Dims::default();
+    fn test_select(uid: u64, stmt: srs::Stmt) -> Result<TrickleSelect> {
+        let groups = Groups::new();
         let windows = vec![
             (
                 "w15s".into(),
@@ -1711,16 +1709,12 @@ mod test {
             &aggr_reg,
         )
         .map_err(tremor_script::errors::CompilerError::error)?;
-        let stmt_rental = StmtRental::try_new(Arc::new(query.clone()), |q| {
-            q.suffix()
-                .stmts
+        let stmt = srs::Stmt::try_new_from_query(&query.query, |q| {
+            q.stmts
                 .first()
                 .cloned()
                 .ok_or_else(|| Error::from("Invalid query"))
         })?;
-        let stmt = tremor_script::query::StmtRentalWrapper {
-            stmt: Arc::new(stmt_rental),
-        };
         Ok(test_select(1, stmt)?)
     }
 
@@ -1778,28 +1772,24 @@ mod test {
                 _ => None,
             })
             .collect();
-        let stmt_rental = StmtRental::try_new(Arc::new(query.clone()), |q| {
-            q.suffix()
-                .stmts
+        let stmt = srs::Stmt::try_new_from_query(&query.query, |q| {
+            q.stmts
                 .iter()
                 .find(|stmt| matches!(*stmt, Stmt::Select(_)))
                 .cloned()
                 .ok_or_else(|| Error::from("Invalid query, expected only 1 select statement"))
         })?;
-        let stmt = tremor_script::query::StmtRentalWrapper {
-            stmt: Arc::new(stmt_rental),
-        };
         let windows: Vec<(String, WindowImpl)> = window_decls
             .iter()
             .enumerate()
             .map(|(i, window_decl)| {
                 (
                     i.to_string(),
-                    window_decl_to_impl(window_decl, &query.query).unwrap(), // yes, indeed!
+                    window_decl_to_impl(window_decl).unwrap(), // yes, indeed!
                 )
             })
             .collect();
-        let groups = Dims::new(stmt.stmt.clone());
+        let groups = Groups::new();
 
         let id = "select".to_string();
         Ok(TrickleSelect::with_stmt(42, id, &groups, windows, &stmt)?)
@@ -2162,23 +2152,9 @@ mod test {
 
         let stmt_ast = test_select_stmt(stmt_ast);
         let script = "fake".to_string();
-        let script_box = Box::new(script.clone());
-        let query_rental = Arc::new(tremor_script::query::QueryRental::new(script_box, |_| {
-            test_query(stmt_ast.clone())
-        }));
+        let query = srs::Query::try_new::<Error, _>(script, |_| Ok(test_query(stmt_ast.clone())))?;
 
-        let query = tremor_script::query::Query {
-            query: query_rental,
-            locals: 0,
-            source: script,
-            warnings: BTreeSet::new(),
-        };
-
-        let stmt_rental = StmtRental::new(Arc::new(query.clone()), |_| stmt_ast);
-
-        let stmt = tremor_script::query::StmtRentalWrapper {
-            stmt: Arc::new(stmt_rental),
-        };
+        let stmt = srs::Stmt::try_new_from_query::<Error, _>(&query, |_| Ok(stmt_ast))?;
 
         let mut op = test_select(1, stmt)?;
         assert!(try_enqueue(&mut op, test_event(0))?.is_none());
@@ -2202,23 +2178,9 @@ mod test {
 
         let stmt_ast = test_select_stmt(stmt_ast);
         let script = "fake".to_string();
-        let script_box = Box::new(script.clone());
-        let query_rental = Arc::new(tremor_script::query::QueryRental::new(script_box, |_| {
-            test_query(stmt_ast.clone())
-        }));
+        let query = srs::Query::try_new::<Error, _>(script, |_| Ok(test_query(stmt_ast.clone())))?;
 
-        let query = tremor_script::query::Query {
-            query: query_rental,
-            locals: 0,
-            source: script,
-            warnings: BTreeSet::new(),
-        };
-
-        let stmt_rental = StmtRental::new(Arc::new(query.clone()), |_| stmt_ast);
-
-        let stmt = tremor_script::query::StmtRentalWrapper {
-            stmt: Arc::new(stmt_rental),
-        };
+        let stmt = srs::Stmt::try_new_from_query::<Error, _>(&query, |_| Ok(stmt_ast))?;
 
         let mut op = test_select(2, stmt)?;
 
@@ -2237,29 +2199,14 @@ mod test {
         let mut stmt_ast = test_stmt(target);
 
         let script = "fake".to_string();
-        let script_box = Box::new(script.clone());
         stmt_ast.maybe_where = Some(ImutExpr::from(ast::Literal {
             mid: 0,
             value: Value::from(false),
         }));
         let stmt_ast = test_select_stmt(stmt_ast);
+        let query = srs::Query::try_new::<Error, _>(script, |_| Ok(test_query(stmt_ast.clone())))?;
 
-        let query_rental = Arc::new(tremor_script::query::QueryRental::new(script_box, |_| {
-            test_query(stmt_ast.clone())
-        }));
-
-        let query = tremor_script::query::Query {
-            query: query_rental,
-            locals: 0,
-            source: script,
-            warnings: BTreeSet::new(),
-        };
-
-        let stmt_rental = StmtRental::new(Arc::new(query.clone()), |_| stmt_ast);
-
-        let stmt = tremor_script::query::StmtRentalWrapper {
-            stmt: Arc::new(stmt_rental),
-        };
+        let stmt = srs::Stmt::try_new_from_query::<Error, _>(&query, |_| Ok(stmt_ast))?;
 
         let mut op = test_select(3, stmt)?;
         let next = try_enqueue(&mut op, test_event(0))?;
@@ -2278,23 +2225,9 @@ mod test {
 
         let stmt_ast = test_select_stmt(stmt_ast);
         let script = "fake".to_string();
-        let script_box = Box::new(script.clone());
-        let query_rental = Arc::new(tremor_script::query::QueryRental::new(script_box, |_| {
-            test_query(stmt_ast.clone())
-        }));
+        let query = srs::Query::try_new::<Error, _>(script, |_| Ok(test_query(stmt_ast.clone())))?;
 
-        let query = tremor_script::query::Query {
-            query: query_rental,
-            locals: 0,
-            source: script,
-            warnings: BTreeSet::new(),
-        };
-
-        let stmt_rental = StmtRental::new(Arc::new(query.clone()), |_| stmt_ast);
-
-        let stmt = tremor_script::query::StmtRentalWrapper {
-            stmt: Arc::new(stmt_rental),
-        };
+        let stmt = srs::Stmt::try_new_from_query::<Error, _>(&query, |_| Ok(stmt_ast))?;
 
         let mut op = test_select(4, stmt)?;
 
@@ -2318,23 +2251,9 @@ mod test {
 
         let stmt_ast = test_select_stmt(stmt_ast);
         let script = "fake".to_string();
-        let script_box = Box::new(script.clone());
-        let query_rental = Arc::new(tremor_script::query::QueryRental::new(script_box, |_| {
-            test_query(stmt_ast.clone())
-        }));
+        let query = srs::Query::try_new::<Error, _>(script, |_| Ok(test_query(stmt_ast.clone())))?;
 
-        let query = tremor_script::query::Query {
-            query: query_rental,
-            locals: 0,
-            source: script,
-            warnings: BTreeSet::new(),
-        };
-
-        let stmt_rental = StmtRental::new(Arc::new(query.clone()), |_| stmt_ast);
-
-        let stmt = tremor_script::query::StmtRentalWrapper {
-            stmt: Arc::new(stmt_rental),
-        };
+        let stmt = srs::Stmt::try_new_from_query::<Error, _>(&query, |_| Ok(stmt_ast))?;
 
         let mut op = test_select(5, stmt)?;
 
@@ -2363,23 +2282,9 @@ mod test {
 
         let stmt_ast = test_select_stmt(stmt_ast);
         let script = "fake".to_string();
-        let script_box = Box::new(script.clone());
-        let query_rental = Arc::new(tremor_script::query::QueryRental::new(script_box, |_| {
-            test_query(stmt_ast.clone())
-        }));
+        let query = srs::Query::try_new::<Error, _>(script, |_| Ok(test_query(stmt_ast.clone())))?;
 
-        let query = tremor_script::query::Query {
-            query: query_rental,
-            locals: 0,
-            source: script,
-            warnings: BTreeSet::new(),
-        };
-
-        let stmt_rental = StmtRental::new(Arc::new(query.clone()), |_| stmt_ast);
-
-        let stmt = tremor_script::query::StmtRentalWrapper {
-            stmt: Arc::new(stmt_rental),
-        };
+        let stmt = srs::Stmt::try_new_from_query::<Error, _>(&query, |_| Ok(stmt_ast))?;
 
         let mut op = test_select(6, stmt)?;
         let event = test_event(0);
@@ -2423,23 +2328,9 @@ mod test {
 
         let stmt_ast = test_select_stmt(stmt_ast);
         let script = "fake".to_string();
-        let script_box = Box::new(script.clone());
-        let query_rental = Arc::new(tremor_script::query::QueryRental::new(script_box, |_| {
-            test_query(stmt_ast.clone())
-        }));
+        let query = srs::Query::try_new::<Error, _>(script, |_| Ok(test_query(stmt_ast.clone())))?;
 
-        let query = tremor_script::query::Query {
-            query: query_rental,
-            locals: 0,
-            source: script,
-            warnings: BTreeSet::new(),
-        };
-
-        let stmt_rental = StmtRental::new(Arc::new(query.clone()), |_| stmt_ast);
-
-        let stmt = tremor_script::query::StmtRentalWrapper {
-            stmt: Arc::new(stmt_rental),
-        };
+        let stmt = srs::Stmt::try_new_from_query::<Error, _>(&query, |_| Ok(stmt_ast))?;
 
         let mut op = test_select(7, stmt)?;
         let event = test_event(0);
@@ -2450,27 +2341,8 @@ mod test {
         Ok(())
     }
 
-    // get a stmt rental for a stupid script
-    fn stmt_rental() -> Result<tremor_script::query::Query> {
-        let file_name = "foo";
-        let reg = tremor_script::registry();
-        let aggr_reg = tremor_script::aggr_registry();
-        let module_path = tremor_script::path::load();
-        let cus = vec![];
-        Ok(tremor_script::query::Query::parse(
-            &module_path,
-            &file_name,
-            "select event from in into out;",
-            cus,
-            &reg,
-            &aggr_reg,
-        )
-        .map_err(tremor_script::errors::CompilerError::error)?)
-    }
-
     #[test]
     fn tumbling_window_on_time_emit() -> Result<()> {
-        let q = stmt_rental()?;
         // interval = 10 seconds
         let mut window = TumblingWindowOnTime::from_stmt(
             10 * 1_000_000_000,
@@ -2478,8 +2350,7 @@ mod test {
             WindowImpl::DEFAULT_MAX_GROUPS,
             None,
             None,
-            &q.query,
-        )?;
+        );
         assert_eq!(
             WindowEvent {
                 include: false,
@@ -2555,8 +2426,7 @@ mod test {
             WindowImpl::DEFAULT_MAX_GROUPS,
             None,
             Some(&window_decl),
-            &q.query,
-        )?;
+        );
         let json1 = json!({
             "timestamp": 1_000_000_000
         });
@@ -2593,15 +2463,13 @@ mod test {
 
     #[test]
     fn tumbling_window_on_time_on_tick() -> Result<()> {
-        let q = stmt_rental()?;
         let mut window = TumblingWindowOnTime::from_stmt(
             100,
             WindowImpl::DEFAULT_EMIT_EMPTY_WINDOWS,
             WindowImpl::DEFAULT_MAX_GROUPS,
             None,
             None,
-            &q.query,
-        )?;
+        );
         assert_eq!(
             WindowEvent {
                 opened: true,
@@ -2637,15 +2505,8 @@ mod test {
 
     #[test]
     fn tumbling_window_on_time_emit_empty_windows() -> Result<()> {
-        let q = stmt_rental()?;
-        let mut window = TumblingWindowOnTime::from_stmt(
-            100,
-            true,
-            WindowImpl::DEFAULT_MAX_GROUPS,
-            None,
-            None,
-            &q.query,
-        )?;
+        let mut window =
+            TumblingWindowOnTime::from_stmt(100, true, WindowImpl::DEFAULT_MAX_GROUPS, None, None);
         assert_eq!(
             WindowEvent {
                 opened: true,
@@ -2692,14 +2553,8 @@ mod test {
 
     #[test]
     fn tumbling_window_on_number_emit() -> Result<()> {
-        let q = stmt_rental()?;
-        let mut window = TumblingWindowOnNumber::from_stmt(
-            3,
-            WindowImpl::DEFAULT_MAX_GROUPS,
-            None,
-            None,
-            &q.query,
-        )?;
+        let mut window =
+            TumblingWindowOnNumber::from_stmt(3, WindowImpl::DEFAULT_MAX_GROUPS, None, None);
         // do not emit yet
         assert_eq!(WindowEvent::all_false(), window.on_event(&test_event(0))?);
         assert_eq!(WindowEvent::all_false(), window.on_tick(1_000_000_000)?);
@@ -2713,5 +2568,4 @@ mod test {
 
         Ok(())
     }
-    */
 }
