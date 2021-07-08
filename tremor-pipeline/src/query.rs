@@ -88,7 +88,7 @@ fn resolve_output_port(port: &(Ident, Ident), meta: &NodeMetas) -> OutputPort {
     }
 }
 
-pub(crate) fn window_decl_to_impl<'script>(d: &WindowDecl<'script>) -> Result<WindowImpl> {
+pub(crate) fn window_decl_to_impl(d: &WindowDecl) -> Result<WindowImpl> {
     use op::trickle::select::{TumblingWindowOnNumber, TumblingWindowOnTime};
     match &d.kind {
         WindowKind::Sliding => Err("Sliding windows are not yet implemented".into()),
@@ -678,10 +678,7 @@ fn select(
             let op = PassthroughFactory::new_boxed();
             op.from_node(operator_uid, config)
         }
-        SelectType::Simple => Ok(Box::new(SimpleSelect::with_stmt(
-            config.id.clone().to_string(),
-            &node,
-        )?)),
+        SelectType::Simple => Ok(Box::new(SimpleSelect::with_stmt(config.id.clone(), &node)?)),
         SelectType::Normal => {
             let groups = Dims::default();
             let windows = windows.ok_or_else(|| {
@@ -708,7 +705,7 @@ fn select(
 
             Ok(Box::new(TrickleSelect::with_stmt(
                 operator_uid,
-                config.id.clone().to_string(),
+                config.id.clone(),
                 &groups,
                 windows?,
                 &node,
@@ -727,7 +724,7 @@ fn operator(
     })?;
     Ok(Box::new(TrickleOperator::with_stmt(
         operator_uid,
-        config.id.clone().to_string(),
+        config.id.clone(),
         node,
     )?))
 }
@@ -741,7 +738,7 @@ fn script(
         ErrorKind::MissingOpConfig("trickle operators require a statement".into())
     })?;
     Ok(Box::new(Script::with_stmt(
-        config.id.clone().to_string(),
+        config.id.clone(),
         defn.ok_or_else(|| Error::from("Script definition missing"))?,
         node,
     )?))

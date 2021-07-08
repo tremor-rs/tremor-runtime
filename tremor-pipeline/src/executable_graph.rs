@@ -53,7 +53,7 @@ impl NodeConfig {
     }
 
     /// Creates a `NodeConfig` from a config struct
-    pub fn from_config<C, I>(id: I, config: C) -> Result<Self>
+    pub fn from_config<C, I>(id: &I, config: C) -> Result<Self>
     where
         C: serde::Serialize,
         I: ToString,
@@ -614,8 +614,8 @@ mod test {
     use tremor_script::prelude::*;
     #[test]
     fn node_conjfig_eq() {
-        let n0 = NodeConfig::from_config("node", ()).unwrap();
-        let n1 = NodeConfig::from_config("other", ()).unwrap();
+        let n0 = NodeConfig::from_config(&"node", ()).unwrap();
+        let n1 = NodeConfig::from_config(&"other", ()).unwrap();
         assert_eq!(n0, n0);
         assert_ne!(n0, n1);
         let mut h1 = DefaultHasher::new();
@@ -630,7 +630,7 @@ mod test {
     }
 
     fn pass(uid: u64, id: &'static str) -> OperatorNode {
-        let c = NodeConfig::from_config("passthrough", ()).unwrap();
+        let c = NodeConfig::from_config(&"passthrough", ()).unwrap();
         OperatorNode {
             id: id.into(),
             kind: NodeKind::Operator,

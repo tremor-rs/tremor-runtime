@@ -1028,7 +1028,8 @@ impl<'script> Consts<'script> {
 }
 
 impl<'script> WindowDecl<'script> {
-    /// Removes lifetime dependencies from a WindowDecl
+    /// Removes lifetime dependencies from a `WindowDecl`
+    #[must_use]
     pub fn into_static(self) -> WindowDecl<'static> {
         let WindowDecl {
             mid,
@@ -1054,7 +1055,8 @@ impl<'script> WindowDecl<'script> {
 }
 
 impl<'script> OperatorDecl<'script> {
-    /// Removes lifetime dependencies from a WindowDecl
+    /// Removes lifetime dependencies from a `WindowDecl`
+    #[must_use]
     pub fn into_static(self) -> OperatorDecl<'static> {
         let OperatorDecl {
             mid,

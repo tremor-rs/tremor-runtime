@@ -14,7 +14,7 @@
 
 use crate::op::prelude::*;
 use std::mem;
-use tremor_script::{ast::query, highlighter, prelude::*, srs, Query};
+use tremor_script::{highlighter, prelude::*, srs, Query};
 
 #[derive(Debug)]
 pub struct Script {
