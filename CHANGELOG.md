@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.11.5
+
+### Fixes
+
+- Fix artefact sorting in tremor startup script
+
 ## 0.11.4
 
 ### Fixes
