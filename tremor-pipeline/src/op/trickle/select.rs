@@ -57,22 +57,7 @@ impl GroupData {
     }
 }
 
-type Groups = HashMap<String, GroupData>;
-
-/// Select dimensions
-/// FIXME: this can go
-#[derive(Debug, Clone)]
-pub struct Dims {
-    groups: Groups,
-}
-
-impl Default for Dims {
-    fn default() -> Self {
-        Self {
-            groups: HashMap::new(),
-        }
-    }
-}
+pub(crate) type Groups = HashMap<String, GroupData>;
 
 #[allow(clippy::module_name_repetitions)]
 #[derive(Debug)]
@@ -102,8 +87,8 @@ pub struct Window {
     window_impl: WindowImpl,
     module: Vec<String>,
     name: String,
-    dims: Dims,
-    last_dims: Dims,
+    dims: Groups,
+    last_dims: Groups,
     next_swap: u64,
 }
 
@@ -395,7 +380,7 @@ impl TrickleSelect {
     pub fn with_stmt(
         operator_uid: u64,
         id: String,
-        dims: &Dims,
+        dims: &Groups,
         windows: Vec<(String, WindowImpl)>,
         stmt: &srs::Stmt,
     ) -> Result<Self> {
@@ -524,9 +509,9 @@ fn get_or_create_group<'window>(
     group_str: &str,
     group_value: &Value,
 ) -> Result<&'window mut GroupData> {
-    let this_groups = &mut window.dims.groups;
+    let this_groups = &mut window.dims;
     let groups_len = this_groups.len() as u64;
-    let last_groups = &mut window.last_dims.groups;
+    let last_groups = &mut window.last_dims;
     let window_impl = &window.window_impl;
     let (_, this_group) = match this_groups.raw_entry_mut().from_key(group_str) {
         // avoid double-clojure
@@ -709,7 +694,7 @@ impl Operator for TrickleSelect {
                 if let Some(eviction_ns) = window.window_impl.eviction_ns() {
                     if window.next_swap < event.ingest_ns {
                         window.next_swap = event.ingest_ns + eviction_ns;
-                        window.last_dims.groups.clear();
+                        window.last_dims.clear();
                         std::mem::swap(&mut window.dims, &mut window.last_dims);
                     }
                 }
@@ -1231,7 +1216,7 @@ impl Operator for TrickleSelect {
                 if let Some(eviction_ns) = window.window_impl.eviction_ns() {
                     if window.next_swap < signal.ingest_ns {
                         window.next_swap = signal.ingest_ns + eviction_ns;
-                        window.last_dims.groups.clear();
+                        window.last_dims.clear();
                         std::mem::swap(&mut window.dims, &mut window.last_dims);
                     }
                 }
@@ -1271,9 +1256,8 @@ impl Operator for TrickleSelect {
                         // iterate all groups, including the ones from last_dims
                         for (group_str, group_data) in window
                             .dims
-                            .groups
                             .iter_mut()
-                            .chain(window.last_dims.groups.iter_mut())
+                            .chain(window.last_dims.iter_mut())
                         {
                             consts.group = group_data.group.clone_static();
                             consts.group.push(group_str.clone())?;
@@ -1330,9 +1314,8 @@ impl Operator for TrickleSelect {
                         .flat_map(|window| {
                             (*window)
                                 .dims
-                                .groups
                                 .iter()
-                                .chain(window.last_dims.groups.iter())
+                                .chain(window.last_dims.iter())
                         })
                         .map(|(group_str, group_data)| {
                             // trick the borrow checker, so we can reference self.windows mutably below
