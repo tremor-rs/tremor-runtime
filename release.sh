@@ -9,7 +9,7 @@ tremor-cli/Cargo.toml \
 tremor-common/Cargo.toml \
 tremor-influx/Cargo.toml \
 tremor-pipeline/Cargo.toml \
-tremor-script/Cargo.toml\
+tremor-script/Cargo.toml \
 tremor-value/Cargo.toml
 "
 VERSION_TESTS="\
@@ -40,7 +40,7 @@ then
     read -r answer
 fi
 
-echo -n "Release process from starting from '${old}' -> '${new}', do you want to continue? [y/N] " 
+echo -n "Release process from starting from '${old}' -> '${new}', do you want to continue? [y/N] "
 read -r answer
 
 
