@@ -416,6 +416,19 @@ impl Debug for EventPayload {
 
 impl EventPayload {
     /// Gets the suffix
+    ///
+    /// ```compile_fail
+    ///   use tremor_script::prelude::*;
+    ///   let vec = br#"{"key": "value"}"#.to_vec();
+    ///   let e = EventPayload::new(vec, |d| tremor_value::parse_to_value(d).unwrap().into());
+    ///   let v: Value = {
+    ///       let s = e.suffix();
+    ///       s.value()["key"].clone()
+    ///   };
+    ///   drop(e);
+    ///   println!("v: {}", v)
+    /// ```
+
     #[must_use]
     pub fn suffix(&self) -> &ValueAndMeta {
         &self.structured
@@ -470,10 +483,19 @@ impl EventPayload {
     ///
     /// Borrows the borrowed (liftimed) part of the self referential struct
     /// and calls the provided function with a reference to it
+    ///
+    /// ```compile_fail
+    ///   use tremor_script::prelude::*;
+    ///   let vec = br#"{"key": "value"}"#.to_vec();
+    ///   let e = EventPayload::new(vec, |d| tremor_value::parse_to_value(d).unwrap().into());
+    ///   let v: Value = e.rent(|s| {
+    ///       s.value()["key"].clone()
+    ///   });
+    ///   println!("v: {}", v)
+    /// ```
     pub fn rent<F, R>(&self, f: F) -> R
     where
         F: for<'iref, 'head> FnOnce(&'iref ValueAndMeta<'head>) -> R,
-        R: ,
     {
         f(&self.structured)
     }
@@ -482,15 +504,34 @@ impl EventPayload {
     ///
     /// Borrows the borrowed (liftimed) part of the self referential struct
     /// mutably and calls the provided function with a mutatable reference to it
+    /// ```compile_fail
+    ///   use tremor_script::prelude::*;
+    ///   let vec = br#"{"key": "value"}"#.to_vec();
+    ///   let mut e = EventPayload::new(vec, |d| tremor_value::parse_to_value(d).unwrap().into());
+    ///   let v: Value = e.rent_mut(|s| {
+    ///       s.value()["key"].clone()
+    ///   });
+    ///   println!("v: {}", v)
+    /// ```
     pub fn rent_mut<F, R>(&mut self, f: F) -> R
     where
         F: for<'iref, 'head> FnOnce(&'iref mut ValueAndMeta<'head>) -> R,
-        R: ,
     {
         f(&mut self.structured)
     }
 
     /// Borrow the parts (event and metadata) from a rental.
+    /// ```compile_fail
+    ///   use tremor_script::prelude::*;
+    ///   let vec = br#"{"key": "value"}"#.to_vec();
+    ///   let e = EventPayload::new(vec, |d| tremor_value::parse_to_value(d).unwrap().into());
+    ///   let v: Value = {
+    ///       let (s, _) = e.parts();
+    ///       s["key"].clone()
+    ///   };
+    ///   drop(e);
+    ///   println!("v: {}", v)
+    /// ```
     #[must_use]
     pub fn parts<'value, 'borrow>(&'borrow self) -> (&'borrow Value<'value>, &'borrow Value<'value>)
     where
@@ -705,22 +746,4 @@ where
             m: Value::from(m),
         }
     }
-}
-
-#[cfg(test)]
-mod test {
-
-    // /// this is commented out since it should fail
-    // use super::*;
-    // #[test]
-    // fn test() {
-    //     let vec = br#"{"key": "value"}"#.to_vec();
-    //     let e = EventPayload::new(vec, |d| tremor_value::parse_to_value(d).unwrap().into());
-    //     let v: Value = {
-    //         let s = e.suffix();
-    //         s.value()["key"].clone()
-    //     };
-    //     drop(e);
-    //     println!("v: {}", v)
-    // }
 }
