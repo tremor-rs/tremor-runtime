@@ -37,7 +37,6 @@ const NO_AGGRS: [InvokeAggrFn<'static>; 0] = [];
 impl SimpleSelect {
     pub fn with_stmt(id: String, stmt: &srs::Stmt) -> Result<Self> {
         let select = srs::Select::try_new_from_stmt(stmt)?;
-
         Ok(Self { id, select })
     }
     fn opts() -> ExecOpts {
