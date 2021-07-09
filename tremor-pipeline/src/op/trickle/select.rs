@@ -26,7 +26,7 @@ use std::mem;
 use tremor_common::stry;
 use tremor_script::{
     self,
-    ast::{Aggregates, Consts, InvokeAggrFn, NodeMetas, Select, SelectStmt, WindowDecl},
+    ast::{Aggregates, InvokeAggrFn, NodeMetas, Select, SelectStmt, WindowDecl},
     interpreter::Env,
     interpreter::LocalStack,
     prelude::*,
@@ -69,7 +69,12 @@ pub struct TrickleSelect {
 }
 
 pub trait WindowTrait: std::fmt::Debug {
-    fn on_event(&mut self, event: &Event) -> Result<WindowEvent>;
+    fn on_event(
+        &mut self,
+        data: &ValueAndMeta,
+        ingest_ns: u64,
+        origin_uri: &Option<EventOriginUri>,
+    ) -> Result<WindowEvent>;
     /// handle a tick with the current time in nanoseconds as `ns` argument
     fn on_tick(&mut self, _ns: u64) -> Result<WindowEvent> {
         Ok(WindowEvent::all_false())
@@ -122,10 +127,15 @@ impl WindowImpl {
 }
 
 impl WindowTrait for WindowImpl {
-    fn on_event(&mut self, event: &Event) -> Result<WindowEvent> {
+    fn on_event(
+        &mut self,
+        data: &ValueAndMeta,
+        ingest_ns: u64,
+        origin_uri: &Option<EventOriginUri>,
+    ) -> Result<WindowEvent> {
         match self {
-            Self::TumblingTimeBased(w) => w.on_event(event),
-            Self::TumblingCountBased(w) => w.on_event(event),
+            Self::TumblingTimeBased(w) => w.on_event(data, ingest_ns, origin_uri),
+            Self::TumblingCountBased(w) => w.on_event(data, ingest_ns, origin_uri),
         }
     }
 
@@ -193,7 +203,12 @@ impl WindowTrait for NoWindow {
     fn eviction_ns(&self) -> Option<u64> {
         None
     }
-    fn on_event(&mut self, _event: &Event) -> Result<WindowEvent> {
+    fn on_event(
+        &mut self,
+        _data: &ValueAndMeta,
+        _ingest_ns: u64,
+        _origin_uri: &Option<EventOriginUri>,
+    ) -> Result<WindowEvent> {
         self.open = true;
         Ok(WindowEvent::all_true())
     }
@@ -264,7 +279,12 @@ impl WindowTrait for TumblingWindowOnTime {
     fn max_groups(&self) -> u64 {
         self.max_groups
     }
-    fn on_event(&mut self, event: &Event) -> Result<WindowEvent> {
+    fn on_event(
+        &mut self,
+        data: &ValueAndMeta,
+        ingest_ns: u64,
+        origin_uri: &Option<EventOriginUri>,
+    ) -> Result<WindowEvent> {
         self.events += 1; // count events to check if we should emit, as we avoid to emit if we have no events
         let time = self
             .script
@@ -272,8 +292,8 @@ impl WindowTrait for TumblingWindowOnTime {
             .and_then(|script| script.script.as_ref())
             .map(|script| {
                 // TODO avoid origin_uri clone here
-                let context = EventContext::new(event.ingest_ns, event.origin_uri.clone());
-                let (unwind_event, event_meta) = event.data.parts();
+                let context = EventContext::new(ingest_ns, origin_uri.clone());
+                let (unwind_event, event_meta) = data.parts();
                 let value = script.run_imut(
                     &context,
                     AggrType::Emit,
@@ -288,7 +308,7 @@ impl WindowTrait for TumblingWindowOnTime {
                 };
                 data.ok_or_else(|| Error::from("Data based window didn't provide a valid value"))
             })
-            .unwrap_or(Ok(event.ingest_ns))?;
+            .unwrap_or(Ok(ingest_ns))?;
         Ok(self.get_window_event(time))
     }
 
@@ -336,15 +356,20 @@ impl WindowTrait for TumblingWindowOnNumber {
     fn max_groups(&self) -> u64 {
         self.max_groups
     }
-    fn on_event(&mut self, event: &Event) -> Result<WindowEvent> {
+    fn on_event(
+        &mut self,
+        data: &ValueAndMeta,
+        ingest_ns: u64,
+        origin_uri: &Option<EventOriginUri>,
+    ) -> Result<WindowEvent> {
         let count = self
             .script
             .as_ref()
             .and_then(|script| script.script.as_ref())
             .map_or(Ok(1), |script| {
                 // TODO avoid origin_uri clone here
-                let context = EventContext::new(event.ingest_ns, event.origin_uri.clone());
-                let (unwind_event, event_meta) = event.data.parts();
+                let context = EventContext::new(ingest_ns, origin_uri.clone());
+                let (unwind_event, event_meta) = data.parts();
                 let value = script.run_imut(
                     &context,
                     AggrType::Emit,
@@ -421,11 +446,13 @@ fn execute_select_and_having(
     state: &Value<'static>,
     env: &Env,
     event_id: EventId,
-    event: &Event,
+    data: &ValueAndMeta,
+    ingest_ns: u64,
+    op_meta: &OpMeta,
     origin_uri: Option<EventOriginUri>,
     transactional: bool,
 ) -> Result<Option<(Cow<'static, str>, Event)>> {
-    let (event_payload, event_meta) = event.data.parts();
+    let (event_payload, event_meta) = data.parts();
 
     let value = stmt
         .target
@@ -451,10 +478,10 @@ fn execute_select_and_having(
         OUT,
         Event {
             id: event_id,
-            ingest_ns: event.ingest_ns,
+            ingest_ns,
             origin_uri,
             // TODO: this will ignore op_metas from all other events this one is based upon and might break operators requiring this
-            op_meta: event.op_meta.clone(),
+            op_meta: op_meta.clone(),
             is_batch: false,
             data: (result.into_static(), event_meta.clone_static()).into(),
             transactional,
@@ -464,6 +491,7 @@ fn execute_select_and_having(
 }
 
 /// accumulate the given `event` into the current `group`s aggregates
+#[allow(clippy::too_many_arguments)] // this is the price for no transmutation
 fn accumulate(
     opts: ExecOpts,
     node_meta: &NodeMetas,
@@ -471,15 +499,17 @@ fn accumulate(
     local_stack: &LocalStack,
     state: &mut Value<'static>,
     group: &mut GroupData,
-    event: &Event,
+    data: &ValueAndMeta,
+    id: &EventId,
+    transactional: bool,
 ) -> Result<()> {
     // we incorporate the event into this group below, so track it here
-    group.id.track(&event.id);
+    group.id.track(&id);
 
     // track transactional state for the given event
-    group.transactional = group.transactional || event.transactional;
+    group.transactional = group.transactional || transactional;
 
-    let (event_data, event_meta) = event.data.parts();
+    let (event_data, event_meta) = data.parts();
     for aggr in &mut group.aggrs {
         let invocable = &mut aggr.invocable;
         let mut argv: Vec<SCow<Value>> = Vec::with_capacity(aggr.args.len());
@@ -549,6 +579,13 @@ impl Operator for TrickleSelect {
         state: &mut Value<'static>,
         mut event: Event,
     ) -> Result<EventAndInsights> {
+        /// Simple enum to decide what we return
+        enum Res {
+            Event,
+            None,
+            Data(EventAndInsights),
+        }
+
         let Self {
             select,
             windows,
@@ -556,21 +593,22 @@ impl Operator for TrickleSelect {
             ..
         } = self;
 
-        // Reset the groups
-        select.rent_mut(|stmt| {
-            // We guarantee at compile time that select in itself can't have locals, so this is safe
-
-            stmt.consts.window = Value::null();
-            stmt.consts.group = Value::null();
-            stmt.consts.args = Value::null();
-        });
+        let Event {
+            ingest_ns,
+            ref mut data,
+            ref id,
+            ref origin_uri,
+            ref op_meta,
+            transactional,
+            ..
+        } = event;
 
         // TODO avoid origin_uri clone here
-        let ctx = EventContext::new(event.ingest_ns, event.origin_uri.clone());
+        let ctx = EventContext::new(ingest_ns, origin_uri.clone());
 
         let opts = Self::opts();
 
-        select.rent_mut(|stmt| {
+        let res = data.apply_select(select, |data, stmt| -> Result<Res> {
 
             let SelectStmt {
                 stmt: ref select,
@@ -581,15 +619,9 @@ impl Operator for TrickleSelect {
                 ref node_meta,
             } = stmt;
 
-            // We have the situation where by contract the statement outlives the event
-            // this is encoded in the program logic by the shutdown pattern of
-            // sink -> pipeline -> source
-            // There is no way to explain this to rust's borrow checker so we circumvent it here
-            // We need this for clippy
-            // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1024
-            let select: &Select = unsafe { mem::transmute(select) };
-            // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1024
-            let consts: &mut Consts = unsafe { mem::transmute(consts) };
+            consts.window = Value::null();
+            consts.group = Value::null();
+            consts.args = Value::null();
 
             let select: &Select = select;
 
@@ -607,7 +639,7 @@ impl Operator for TrickleSelect {
             // Before any select processing, we filter by where clause
             //
             if let Some(guard) = maybe_where {
-                let (unwind_event, event_meta) = event.data.parts();
+                let (unwind_event, event_meta) = data.parts();
                 let env = Env {
                     context: &ctx,
                     consts: &consts,
@@ -618,7 +650,7 @@ impl Operator for TrickleSelect {
                 let test = guard.run(opts, &env, unwind_event, state, event_meta, &local_stack)?;
                 if let Some(test) = test.as_bool() {
                     if !test {
-                        return Ok(EventAndInsights::default());
+                        return Ok(Res::None);
                     };
                 } else {
                     let s: &Select = &select;
@@ -632,7 +664,6 @@ impl Operator for TrickleSelect {
             let mut events = vec![];
 
             let mut group_values =  if let Some(group_by) = &maybe_group_by {
-                let data = event.data.suffix();
                 group_by.generate_groups(&ctx, data.value(), state, &node_meta, data.meta())?
             } else {
                 //
@@ -647,47 +678,43 @@ impl Operator for TrickleSelect {
                     consts.group = group_value.clone_static();
                     consts.group.push(group_str)?;
 
-                    let ret  = event.data.rent_mut(|data| -> Result<_> {
-                        let (unwind_event, event_meta): (&mut Value, &mut Value) = data.parts_mut();
+                    let (unwind_event, event_meta): (&mut Value, &mut Value) = data.parts_mut();
 
-                        let env = Env {
-                            context: &ctx,
-                            consts: &consts,
-                            aggrs: &NO_AGGRS,
-                            meta: &node_meta,
-                            recursion_limit: tremor_script::recursion_limit(),
-                        };
-                        let value =
-                            target
-                                .run(opts, &env, unwind_event, state, event_meta, &local_stack)?;
+                    let env = Env {
+                        context: &ctx,
+                        consts: &consts,
+                        aggrs: &NO_AGGRS,
+                        meta: &node_meta,
+                        recursion_limit: tremor_script::recursion_limit(),
+                    };
+                    let value =
+                        target
+                            .run(opts, &env, unwind_event, state, event_meta, &local_stack)?;
 
-                        let result = value.into_owned();
+                    let result = value.into_owned();
 
-                        // evaluate having clause, if one exists
+                    // evaluate having clause, if one exists
+                    #[allow(clippy::option_if_let_else)] // The borrow checker prevents map_or
+                    return if let Some(guard) = maybe_having {
+                        let test = guard.run(opts, &env, &result, state, &NULL, &local_stack)?;
                         #[allow(clippy::option_if_let_else)] // The borrow checker prevents map_or
-                        Ok(if let Some(guard) = maybe_having {
-                            let test = guard.run(opts, &env, &result, state, &NULL, &local_stack)?;
-                            #[allow(clippy::option_if_let_else)] // The borrow checker prevents map_or
-                            if let Some(test) = test.as_bool() {
-                                if test {
-                                    *unwind_event = result;
-                                    None
-                                } else {
-                                    Some(Ok(EventAndInsights::default()))
-                                }
+                        if let Some(test) = test.as_bool() {
+                            if test {
+                                *unwind_event = result;
+                                Ok(Res::Event)
                             } else {
-                                let s: &Select = &select;
-                                Some(Err(tremor_script::errors::query_guard_not_bool_err(
-                                    s, guard, &test, &node_meta,
-                                ).into()))
+                                Ok(Res::None)
                             }
                         } else {
-                            *unwind_event = result;
-                            None
-                        })
-                    })?;
-                    return ret.map_or_else(|| Ok(event.into()), |ret| ret);
-                }
+                            Err(tremor_script::errors::query_guard_not_bool_err(
+                                select, guard, &test, &node_meta,
+                            ).into())
+                        }
+                    } else {
+                        *unwind_event = result;
+                        Ok(Res::Event)
+                    }
+                };
                 vec![]
             };
 
@@ -700,8 +727,8 @@ impl Operator for TrickleSelect {
             // if no event came after `2 * eviction_ns()` this group is finally cleared out
             for window in windows.iter_mut() {
                 if let Some(eviction_ns) = window.window_impl.eviction_ns() {
-                    if window.next_swap < event.ingest_ns {
-                        window.next_swap = event.ingest_ns + eviction_ns;
+                    if window.next_swap < ingest_ns {
+                        window.next_swap = ingest_ns + eviction_ns;
                         window.last_dims.clear();
                         std::mem::swap(&mut window.dims, &mut window.last_dims);
                     }
@@ -739,10 +766,12 @@ impl Operator for TrickleSelect {
                             &local_stack,
                             state,
                             &env,
-                            event.id.clone(),
-                            &event,
-                            event.origin_uri.clone(),
-                            event.transactional // no windows, we can safely pass through the events field
+                            id.clone(),
+                            &data,
+                            ingest_ns,
+                            op_meta,
+                            origin_uri.clone(),
+                            transactional // no windows, we can safely pass through the events field
                         )) {
                             events.push(port_and_event);
                         };
@@ -770,7 +799,7 @@ impl Operator for TrickleSelect {
                             &group_str,
                             &group_value,
                         ));
-                        let window_event = stry!(this_group.window.on_event(&event));
+                        let window_event = stry!(this_group.window.on_event(&data, ingest_ns, origin_uri));
                         if window_event.emit && !window_event.include {
                             // push
                             let env = Env {
@@ -790,8 +819,10 @@ impl Operator for TrickleSelect {
                                 state,
                                 &env,
                                 outgoing_event_id,
-                                &event,
-                                None,
+                                &data,
+                                ingest_ns,
+                                op_meta,
+                                    None,
                                 this_group.transactional
                             )) {
                                 events.push(port_and_event);
@@ -818,7 +849,9 @@ impl Operator for TrickleSelect {
                             &local_stack,
                             state,
                             this_group,
-                            &event,
+                            data,
+                            id,
+                            transactional
                         ));
 
                         if window_event.emit && window_event.include {
@@ -841,8 +874,10 @@ impl Operator for TrickleSelect {
                                 state,
                                 &env,
                                 outgoing_event_id,
-                                &event,
-                                None,
+                                &data,
+                                ingest_ns,
+                                op_meta,
+                                    None,
                                 this_group.transactional
                             )) {
                                 events.push(port_and_event);
@@ -932,7 +967,7 @@ impl Operator for TrickleSelect {
                                     &group_str,
                                     &group_value,
                                 ));
-                                let window_event = stry!(this_group.window.on_event(&event));
+                                let window_event = stry!(this_group.window.on_event(&data, ingest_ns, origin_uri));
                                 if window_event.emit {
                                     emit_window_events.push(window_event);
                                 } else {
@@ -976,8 +1011,10 @@ impl Operator for TrickleSelect {
                                     &local_stack,
                                     state,
                                     this_group,
-                                    &event,
-                                ));
+                                    data,
+                                    id,
+                                    transactional
+                                        ));
                                 false
                             } else {
                                 // should not happen
@@ -1037,8 +1074,10 @@ impl Operator for TrickleSelect {
                                         state,
                                         &env,
                                         outgoing_event_id,
-                                        &event,
-                                        None,
+                                        &data,
+                                        ingest_ns,
+                                        op_meta,
+                                                    None,
                                         this_group.transactional
                                     )) {
                                         events.push(port_and_event);
@@ -1081,8 +1120,10 @@ impl Operator for TrickleSelect {
                                         state,
                                         &env,
                                         outgoing_event_id,
-                                        &event,
-                                        None,
+                                        &data,
+                                        ingest_ns,
+                                        op_meta,
+                                                    None,
                                         this_group.transactional
                                     )) {
                                         events.push(port_and_event);
@@ -1158,8 +1199,10 @@ impl Operator for TrickleSelect {
                                         &local_stack,
                                         state,
                                         this_group,
-                                        &event,
-                                    ));
+                                        data,
+                                        id,
+                                        transactional
+                                                ));
                                 }
                             }
 
@@ -1197,8 +1240,14 @@ impl Operator for TrickleSelect {
                     }
                 }
             }
-            Ok(events.into())
-        })
+            Ok(Res::Data(events.into()))
+        })?;
+
+        match res {
+            Res::Event => Ok(event.into()),
+            Res::None => Ok(EventAndInsights::default()),
+            Res::Data(data) => Ok(data),
+        }
     }
 
     #[allow(clippy::too_many_lines)]
@@ -1242,13 +1291,9 @@ impl Operator for TrickleSelect {
                 node_meta,
             }  = stmt;
             let mut res = EventAndInsights::default();
-            // artificial event
-            let artificial_event = Event {
-                id: signal.id.clone(),
-                ingest_ns,
-                data: (Value::null(), Value::object()).into(),
-                ..Event::default()
-            };
+
+            let vm: ValueAndMeta = (Value::null(), Value::object()).into();
+            let op_meta = OpMeta::default();
             let local_stack = tremor_script::interpreter::LocalStack::with_size(*locals);
 
             consts.window = Value::null();
@@ -1290,7 +1335,9 @@ impl Operator for TrickleSelect {
                                     state,
                                     &env,
                                     outgoing_event_id,
-                                    &artificial_event,
+                                    &vm,
+                                    ingest_ns,
+                                    &op_meta,
                                     None,
                                     group_data.transactional
                                 ));
@@ -1422,8 +1469,10 @@ impl Operator for TrickleSelect {
                                         state,
                                         &env,
                                         outgoing_event_id,
-                                        &artificial_event,
-                                        None,
+                                        &vm,
+                                        ingest_ns,
+                                        &op_meta,
+                                            None,
                                         this_group.transactional
                                     )) {
                                         res.events.push(port_and_event);
@@ -1464,8 +1513,10 @@ impl Operator for TrickleSelect {
                                         state,
                                         &env,
                                         outgoing_event_id,
-                                        &artificial_event,
-                                        None,
+                                        &vm,
+                                        ingest_ns,
+                                        &op_meta,
+                                            None,
                                         this_group.transactional
                                     )) {
                                         res.events.push(port_and_event);
@@ -1567,7 +1618,6 @@ mod test {
 
     use super::*;
 
-    use simd_json::{json, StaticNode};
     use tremor_script::ast::Stmt;
     use tremor_script::{
         ast::{self, Ident, ImutExpr, Literal},
@@ -1577,6 +1627,7 @@ mod test {
         ast::{AggregateScratch, Consts},
         Value,
     };
+    use tremor_value::literal;
 
     fn test_target<'test>() -> ast::ImutExpr<'test> {
         let target: ast::ImutExpr<'test> = ImutExpr::from(ast::Literal {
@@ -1613,13 +1664,16 @@ mod test {
         }
     }
 
+    fn ingest_ns(s: u64) -> u64 {
+        s * 1_000_000_000
+    }
     fn test_event(s: u64) -> Event {
         Event {
             id: (0, 0, s).into(),
-            ingest_ns: s * 1_000_000_000,
-            data: Value::from(json!({
+            ingest_ns: ingest_ns(s),
+            data: literal!({
                "h2g2" : 42,
-            }))
+            })
             .into(),
             ..Event::default()
         }
@@ -1629,7 +1683,7 @@ mod test {
         Event {
             id: (0, 0, s).into(),
             ingest_ns: s + 100,
-            data: Value::from(json!({ "group": group })).into(),
+            data: literal!({ "group": group }).into(),
             transactional,
             ..Event::default()
         }
@@ -1835,10 +1889,10 @@ mod test {
         let event = Event {
             id: (1, 1, 300).into(),
             ingest_ns: 1_000,
-            data: Value::from(json!({
+            data: literal!({
                "time" : 4,
                "g": "group"
-            }))
+            })
             .into(),
             ..Event::default()
         };
@@ -1856,10 +1910,10 @@ mod test {
         let event = Event {
             id: (1, 1, 300).into(),
             ingest_ns: 3_000,
-            data: Value::from(json!({
+            data: literal!({
                "time" : 11,
                "g": "group"
-            }))
+            })
             .into(),
             ..Event::default()
         };
@@ -1891,9 +1945,9 @@ mod test {
         let event = Event {
             id: (1, 1, 300).into(),
             ingest_ns: 2,
-            data: Value::from(json!({
+            data: literal!({
                "g": "group"
-            }))
+            })
             .into(),
             ..Event::default()
         };
@@ -1957,9 +2011,9 @@ mod test {
         let event = Event {
             id: (1, 1, 300).into(),
             ingest_ns: 300,
-            data: Value::from(json!({
+            data: literal!({
                "cat" : 42,
-            }))
+            })
             .into(),
             transactional: true,
             ..Event::default()
@@ -2359,22 +2413,21 @@ mod test {
             None,
             None,
         );
+        let vm = literal!({
+           "h2g2" : 42,
+        })
+        .into();
         assert_eq!(
             WindowEvent {
                 include: false,
                 opened: true,
                 emit: false
             },
-            window.on_event(&test_event(5))?
+            window.on_event(&vm, ingest_ns(5), &None)?
         );
-        assert_eq!(WindowEvent::all_false(), window.on_event(&test_event(10))?);
         assert_eq!(
-            WindowEvent {
-                include: false,
-                opened: true,
-                emit: true
-            },
-            window.on_event(&test_event(15))? // exactly on time
+            WindowEvent::all_false(),
+            window.on_event(&vm, ingest_ns(10), &None)?
         );
         assert_eq!(
             WindowEvent {
@@ -2382,18 +2435,17 @@ mod test {
                 opened: true,
                 emit: true
             },
-            window.on_event(&test_event(26))? // exactly on time
+            window.on_event(&vm, ingest_ns(15), &None)? // exactly on time
+        );
+        assert_eq!(
+            WindowEvent {
+                include: false,
+                opened: true,
+                emit: true
+            },
+            window.on_event(&vm, ingest_ns(26), &None)? // exactly on time
         );
         Ok(())
-    }
-
-    fn json_event(ingest_ns: u64, payload: OwnedValue) -> Event {
-        Event {
-            id: (0, 0, ingest_ns).into(),
-            ingest_ns,
-            data: Value::from(payload).into(),
-            ..Event::default()
-        }
     }
 
     #[test]
@@ -2422,7 +2474,7 @@ mod test {
             other => return Err(format!("Didnt get a window decl, got: {:?}", other).into()),
         };
         let mut params = halfbrown::HashMap::with_capacity(1);
-        params.insert("size".to_string(), Value::Static(StaticNode::U64(3)));
+        params.insert("size".to_string(), Value::from(3));
         let interval = window_decl
             .params
             .get("interval")
@@ -2435,27 +2487,27 @@ mod test {
             None,
             Some(&window_decl),
         );
-        let json1 = json!({
+        let json1 = literal!({
             "timestamp": 1_000_000_000
-        });
+        })
+        .into();
         assert_eq!(
             WindowEvent {
                 opened: true,
                 include: false,
                 emit: false
             },
-            window.on_event(&json_event(1, json1))?
+            window.on_event(&json1, 1, &None)?
         );
-        let json2 = json!({
+        let json2 = literal!({
             "timestamp": 1_999_999_999
-        });
-        assert_eq!(
-            WindowEvent::all_false(),
-            window.on_event(&json_event(2, json2))?
-        );
-        let json3 = json!({
+        })
+        .into();
+        assert_eq!(WindowEvent::all_false(), window.on_event(&json2, 2, &None)?);
+        let json3 = literal!({
             "timestamp": 2_000_000_000
-        });
+        })
+        .into();
         // ignoring on_tick as we have a script
         assert_eq!(WindowEvent::all_false(), window.on_tick(2_000_000_000)?);
         assert_eq!(
@@ -2464,7 +2516,7 @@ mod test {
                 include: false,
                 emit: true
             },
-            window.on_event(&json_event(3, json3))?
+            window.on_event(&json3, 3, &None)?
         );
         Ok(())
     }
@@ -2497,7 +2549,7 @@ mod test {
         );
         assert_eq!(
             WindowEvent::all_false(),
-            window.on_event(&json_event(101, json!({})))?
+            window.on_event(&ValueAndMeta::default(), 101, &None)?
         );
         assert_eq!(WindowEvent::all_false(), window.on_tick(102)?);
         assert_eq!(
@@ -2534,7 +2586,7 @@ mod test {
         );
         assert_eq!(
             WindowEvent::all_false(),
-            window.on_event(&json_event(101, json!({})))?
+            window.on_event(&ValueAndMeta::default(), 101, &None)?
         );
         assert_eq!(WindowEvent::all_false(), window.on_tick(102)?);
         assert_eq!(
@@ -2552,9 +2604,21 @@ mod test {
     #[test]
     fn no_window_emit() -> Result<()> {
         let mut window = NoWindow::default();
-        assert_eq!(WindowEvent::all_true(), window.on_event(&test_event(0))?);
+
+        let vm = literal!({
+           "h2g2" : 42,
+        })
+        .into();
+
+        assert_eq!(
+            WindowEvent::all_true(),
+            window.on_event(&vm, ingest_ns(0), &None)?
+        );
         assert_eq!(WindowEvent::all_false(), window.on_tick(0)?);
-        assert_eq!(WindowEvent::all_true(), window.on_event(&test_event(1))?);
+        assert_eq!(
+            WindowEvent::all_true(),
+            window.on_event(&vm, ingest_ns(1), &None)?
+        );
         assert_eq!(WindowEvent::all_false(), window.on_tick(1)?);
         Ok(())
     }
@@ -2563,16 +2627,34 @@ mod test {
     fn tumbling_window_on_number_emit() -> Result<()> {
         let mut window =
             TumblingWindowOnNumber::from_stmt(3, WindowImpl::DEFAULT_MAX_GROUPS, None, None);
+
+        let vm = literal!({
+           "h2g2" : 42,
+        })
+        .into();
+
         // do not emit yet
-        assert_eq!(WindowEvent::all_false(), window.on_event(&test_event(0))?);
+        assert_eq!(
+            WindowEvent::all_false(),
+            window.on_event(&vm, ingest_ns(0), &None)?
+        );
         assert_eq!(WindowEvent::all_false(), window.on_tick(1_000_000_000)?);
         // do not emit yet
-        assert_eq!(WindowEvent::all_false(), window.on_event(&test_event(1))?);
+        assert_eq!(
+            WindowEvent::all_false(),
+            window.on_event(&vm, ingest_ns(1), &None)?
+        );
         assert_eq!(WindowEvent::all_false(), window.on_tick(2_000_000_000)?);
         // emit and open on the third event
-        assert_eq!(WindowEvent::all_true(), window.on_event(&test_event(2))?);
+        assert_eq!(
+            WindowEvent::all_true(),
+            window.on_event(&vm, ingest_ns(2), &None)?
+        );
         // no emit here, next window
-        assert_eq!(WindowEvent::all_false(), window.on_event(&test_event(3))?);
+        assert_eq!(
+            WindowEvent::all_false(),
+            window.on_event(&vm, ingest_ns(3), &None)?
+        );
 
         Ok(())
     }

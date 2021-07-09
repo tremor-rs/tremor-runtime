@@ -6553,6 +6553,7 @@ dependencies = [
  "tremor-common",
  "tremor-influx",
  "tremor-script",
+ "tremor-value",
  "url 2.2.2",
  "value-trait",
  "window",
