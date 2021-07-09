@@ -11,6 +11,7 @@
 - Put event raw payload into `Arc` to improve cloning perf
 - Remove `rental` from the entire runtime [#1037](https://github.com/tremor-rs/tremor-runtime/issues/1037)
 - Restructure operators and select to avoid transmutation [#1024](https://github.com/tremor-rs/tremor-runtime/issues/1024)
+- Fix tremor-cli to use it's own binary when possible [#1096](https://github.com/tremor-rs/tremor-runtime/issues/1096)
 
 ### Fixes
 
