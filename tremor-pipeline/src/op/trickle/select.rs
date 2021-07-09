@@ -555,11 +555,22 @@ impl Operator for TrickleSelect {
             event_id_gen,
             ..
         } = self;
+
+        // Reset the groups
         select.rent_mut(|stmt| {
-            let opts = Self::opts();
             // We guarantee at compile time that select in itself can't have locals, so this is safe
 
-            // NOTE We are unwrapping our rental wrapped stmt
+            stmt.consts.window = Value::null();
+            stmt.consts.group = Value::null();
+            stmt.consts.args = Value::null();
+        });
+
+        // TODO avoid origin_uri clone here
+        let ctx = EventContext::new(event.ingest_ns, event.origin_uri.clone());
+
+        let opts = Self::opts();
+
+        select.rent_mut(|stmt| {
 
             let SelectStmt {
                 stmt: ref select,
@@ -575,25 +586,22 @@ impl Operator for TrickleSelect {
             // sink -> pipeline -> source
             // There is no way to explain this to rust's borrow checker so we circumvent it here
             // We need this for clippy
+            // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1024
+            let select: &Select = unsafe { mem::transmute(select) };
+            // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1024
+            let consts: &mut Consts = unsafe { mem::transmute(consts) };
+
             let select: &Select = select;
-            // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1024
-            let select: &Select = unsafe{ mem::transmute(select)};
-            // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1024
-            let consts: &mut Consts  = unsafe{ mem::transmute(consts)};
+
             let Select {
                 target,
                 maybe_where,
                 maybe_having,
                 maybe_group_by,
                 ..
-             } = select;
+            } = select;
 
             let local_stack = tremor_script::interpreter::LocalStack::with_size(*locals);
-            consts.window = Value::null();
-            consts.group = Value::null();
-            consts.args = Value::null();
-            // TODO avoid origin_uri clone here
-            let ctx = EventContext::new(event.ingest_ns, event.origin_uri.clone());
 
             //
             // Before any select processing, we filter by where clause
