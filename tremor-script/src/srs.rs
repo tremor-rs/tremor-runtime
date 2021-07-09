@@ -544,6 +544,28 @@ impl EventPayload {
         // into our own `raw` before. This equalizes `iref` and `head` for `self` and `other`
         apply_f(&mut self.structured, &other.script)
     }
+
+    /// Applies another SRS into this, this functions **needs** to
+    ///
+    /// # Errors
+    /// if `join_f` errors
+    pub fn apply_select<R, F>(&mut self, other: &mut Select, apply_f: F) -> R
+    where
+        F: for<'iref, 'head> FnOnce(
+            &'iref mut ValueAndMeta<'head>,
+            &'iref mut ast::SelectStmt<'head>,
+        ) -> R,
+        R: ,
+    {
+        // We append first in the case that some data already moved into self.structured by the time
+        // that the join_f fails
+        // READ: ORDER MATTERS!
+        self.raw.extend_from_slice(&other.raw);
+
+        // We can access `other.script` here with it's static lifetime since we did clone the `raw`
+        // into our own `raw` before. This equalizes `iref` and `head` for `self` and `other`
+        apply_f(&mut self.structured, &mut other.select)
+    }
 }
 
 impl<T> From<T> for EventPayload
@@ -630,6 +652,12 @@ impl<'event> ValueAndMeta<'event> {
     #[must_use]
     pub fn parts_mut(&mut self) -> (&mut Value<'event>, &mut Value<'event>) {
         (&mut self.v, &mut self.m)
+    }
+
+    /// borrows both parts as mutalbe
+    #[must_use]
+    pub fn parts(&self) -> (&Value<'event>, &Value<'event>) {
+        (&self.v, &self.m)
     }
 }
 
