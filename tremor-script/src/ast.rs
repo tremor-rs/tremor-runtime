@@ -51,7 +51,6 @@ use halfbrown::HashMap;
 pub use query::*;
 use raw::reduce2;
 use serde::Serialize;
-use simd_json::StaticNode;
 
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -403,9 +402,9 @@ impl<'script> Consts<'script> {
         Consts {
             names: HashMap::new(),
             values: Vec::new(),
-            args: Value::Static(StaticNode::Null),
-            group: Value::Static(StaticNode::Null),
-            window: Value::Static(StaticNode::Null),
+            args: Value::const_null(),
+            group: Value::const_null(),
+            window: Value::const_null(),
         }
     }
     fn is_const(&self, id: &[String]) -> Option<&usize> {

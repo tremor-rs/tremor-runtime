@@ -38,6 +38,7 @@ pub struct Script {
     script: ast::Script<'static>,
 }
 
+#[cfg(not(tarpaulin_include))] // this is a simple Debug implementation
 impl Debug for Script {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.script.fmt(f)
@@ -101,6 +102,7 @@ pub struct Query {
     query: ast::Query<'static>,
 }
 
+#[cfg(not(tarpaulin_include))] // this is a simple Debug implementation
 impl Debug for Query {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.query.fmt(f)
@@ -184,25 +186,36 @@ pub struct Stmt {
     structured: ast::Stmt<'static>,
 }
 
+#[cfg(not(tarpaulin_include))] // this is a simple Debug implementation
 impl Debug for Stmt {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.structured.fmt(f)
     }
 }
 
-impl PartialEq for Stmt {
-    fn eq(&self, other: &Self) -> bool {
-        self.structured == other.structured
-    }
-}
+mod eq_for_stmt {
+    ///! We have this simply for the same of allowing `NodeConfig` to be `PartialEq` for the use in
+    ///! and `PartialOrd`.
+    ///!
+    ///! We define equality and order by the metadata Id's as they identify statements
+    ///! so two code wise equal statements that are re-typed won't be considered equal
+    use crate::ast::BaseExpr;
 
-impl PartialOrd for Stmt {
-    fn partial_cmp(&self, _other: &Self) -> Option<std::cmp::Ordering> {
-        None // NOTE Here be dragons
+    use super::Stmt;
+    impl PartialEq for Stmt {
+        fn eq(&self, other: &Self) -> bool {
+            self.structured.mid() == other.structured.mid()
+        }
     }
-}
 
-impl Eq for Stmt {}
+    /// We order statements by their mid
+    impl PartialOrd for Stmt {
+        fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+            self.structured.mid().partial_cmp(&other.structured.mid())
+        }
+    }
+    impl Eq for Stmt {}
+}
 
 impl Stmt {
     /// borrow the suffix
@@ -239,6 +252,7 @@ pub struct ScriptDecl {
     script: ast::ScriptDecl<'static>,
 }
 
+#[cfg(not(tarpaulin_include))] // this is a simple Debug implementation
 impl Debug for ScriptDecl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.script.fmt(f)
@@ -317,6 +331,7 @@ pub struct Select {
     select: ast::SelectStmt<'static>,
 }
 
+#[cfg(not(tarpaulin_include))] // this is a simple Debug implementation
 impl Debug for Select {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.select.fmt(f)
@@ -392,6 +407,7 @@ pub struct EventPayload {
     structured: ValueAndMeta<'static>,
 }
 
+#[cfg(not(tarpaulin_include))] // this is a simple Debug implementation
 impl Debug for EventPayload {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.structured.fmt(f)
