@@ -81,7 +81,7 @@ impl Operator for SimpleSelect {
                     let (unwind_event, event_meta) = event.data.parts();
                     let env = Env {
                         context: &ctx,
-                        consts: &consts,
+                        consts: consts.run(),
                         aggrs: &NO_AGGRS,
                         meta: &node_meta,
                         recursion_limit: tremor_script::recursion_limit(),
@@ -104,7 +104,7 @@ impl Operator for SimpleSelect {
                     let (unwind_event, event_meta) = event.data.parts();
                     let env = Env {
                         context: &ctx,
-                        consts: &consts,
+                        consts: consts.run(),
                         aggrs: &NO_AGGRS,
                         meta: &node_meta,
                         recursion_limit: tremor_script::recursion_limit(),

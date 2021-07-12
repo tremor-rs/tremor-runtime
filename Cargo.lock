@@ -6643,7 +6643,7 @@ dependencies = [
  "tremor-pipeline",
  "tremor-script",
  "tremor-value",
- "tungstenite 0.13.0",
+ "tungstenite 0.14.0",
  "url 2.2.2",
  "value-trait",
  "xz2",
@@ -6807,6 +6807,25 @@ dependencies = [
  "http 0.2.4",
  "httparse",
  "input_buffer 0.4.0",
+ "log",
+ "rand 0.8.4",
+ "sha-1",
+ "thiserror",
+ "url 2.2.2",
+ "utf-8",
+]
+
+[[package]]
+name = "tungstenite"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a0b2d8558abd2e276b0a8df5c05a2ec762609344191e5fd23e292c910e9165b5"
+dependencies = [
+ "base64 0.13.0",
+ "byteorder",
+ "bytes 1.0.1",
+ "http 0.2.4",
+ "httparse",
  "log",
  "rand 0.8.4",
  "sha-1",

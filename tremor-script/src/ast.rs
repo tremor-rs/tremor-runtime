@@ -384,6 +384,43 @@ impl Default for Docs {
 }
 
 /// Constants and special keyword values
+pub struct RunConsts<'run, 'script>
+where
+    'script: 'run,
+{
+    names: &'run HashMap<Vec<String>, usize>,
+    values: &'run Vec<Value<'script>>,
+    /// the `args` keyword
+    pub args: &'run Value<'script>,
+    /// the `group` keyword
+    pub group: &'run Value<'script>,
+    /// the `window` keyword
+    pub window: &'run Value<'script>,
+}
+
+impl<'run, 'script> RunConsts<'run, 'script>
+where
+    'script: 'run,
+{
+    pub(crate) fn get(&self, idx: usize) -> Option<&Value<'script>> {
+        self.values.get(idx)
+    }
+
+    pub(crate) fn with_new_args<'r>(&'r self, args: &'r Value<'script>) -> RunConsts<'r, 'script>
+    where
+        'run: 'r,
+    {
+        RunConsts {
+            names: self.names,
+            values: self.values,
+            args,
+            group: self.group,
+            window: self.window,
+        }
+    }
+}
+
+/// Constants and special keyword values
 #[derive(Debug, Default, Clone, PartialEq, Serialize)]
 pub struct Consts<'script> {
     names: HashMap<Vec<String>, usize>,
@@ -398,6 +435,17 @@ pub struct Consts<'script> {
 }
 
 impl<'script> Consts<'script> {
+    /// Generates runtime borrow of the costs
+    #[must_use]
+    pub fn run(&self) -> RunConsts<'_, 'script> {
+        RunConsts {
+            names: &self.names,
+            values: &self.values,
+            args: &self.args,
+            group: &self.group,
+            window: &self.window,
+        }
+    }
     pub(crate) fn new() -> Self {
         Consts {
             names: HashMap::new(),
@@ -430,7 +478,6 @@ impl<'script> Consts<'script> {
             Err,
         )
     }
-
     pub(crate) fn get(&self, idx: usize) -> Option<&Value<'script>> {
         self.values.get(idx)
     }
@@ -659,7 +706,7 @@ impl<'script> Script<'script> {
 
         let env = Env {
             context,
-            consts: &self.consts,
+            consts: self.consts.run(),
             aggrs: &self.aggregates,
             meta: &self.node_meta,
             recursion_limit: crate::recursion_limit(),
@@ -708,7 +755,7 @@ impl<'script> Script<'script> {
 
         let env = Env {
             context,
-            consts: &self.consts,
+            consts: self.consts.run(),
             aggrs: &self.aggregates,
             meta: &self.node_meta,
             recursion_limit: crate::recursion_limit(),
@@ -1297,7 +1344,7 @@ impl<'script> Invoke<'script> {
             let args2: Vec<&Value<'script>> = args.iter().collect();
             let env = Env {
                 context: &EventContext::default(),
-                consts: &NO_CONSTS,
+                consts: NO_CONSTS.run(),
                 aggrs: &NO_AGGRS,
                 meta: &helper.meta,
                 recursion_limit: crate::recursion_limit(),
