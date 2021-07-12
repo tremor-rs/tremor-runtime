@@ -642,7 +642,7 @@ impl Operator for TrickleSelect {
                 let (unwind_event, event_meta) = data.parts();
                 let env = Env {
                     context: &ctx,
-                    consts: &consts,
+                    consts: consts.run(),
                     aggrs: &NO_AGGRS,
                     meta: &node_meta,
                     recursion_limit: tremor_script::recursion_limit(),
@@ -682,7 +682,7 @@ impl Operator for TrickleSelect {
 
                     let env = Env {
                         context: &ctx,
-                        consts: &consts,
+                        consts: consts.run(),
                         aggrs: &NO_AGGRS,
                         meta: &node_meta,
                         recursion_limit: tremor_script::recursion_limit(),
@@ -753,7 +753,7 @@ impl Operator for TrickleSelect {
                         // evaluate select clause
                         let env = Env {
                             context: &ctx,
-                            consts: &consts,
+                            consts: consts.run(),
                             aggrs: &NO_AGGRS,
                             meta: &node_meta,
                             recursion_limit: tremor_script::recursion_limit(),
@@ -804,7 +804,7 @@ impl Operator for TrickleSelect {
                             // push
                             let env = Env {
                                 context: &ctx,
-                                consts: &consts,
+                                consts: consts.run(),
                                 aggrs: &this_group.aggrs,
                                 meta: &node_meta,
                                 recursion_limit: tremor_script::recursion_limit(),
@@ -837,7 +837,7 @@ impl Operator for TrickleSelect {
                         // accumulate the current event
                         let env = Env {
                             context: &ctx,
-                            consts: &consts,
+                            consts: consts.run(),
                             aggrs: &NO_AGGRS,
                             meta: &node_meta,
                             recursion_limit: tremor_script::recursion_limit(),
@@ -858,7 +858,7 @@ impl Operator for TrickleSelect {
                             // push
                             let env = Env {
                                 context: &ctx,
-                                consts: &consts,
+                                consts: consts.run(),
                                 aggrs: &this_group.aggrs,
                                 meta: &node_meta,
                                 recursion_limit: tremor_script::recursion_limit(),
@@ -999,7 +999,7 @@ impl Operator for TrickleSelect {
                                 // accumulate the current event
                                 let env = Env {
                                     context: &ctx,
-                                    consts: &consts,
+                                    consts: consts.run(),
                                     aggrs: &NO_AGGRS,
                                     meta: &node_meta,
                                     recursion_limit: tremor_script::recursion_limit(),
@@ -1057,7 +1057,7 @@ impl Operator for TrickleSelect {
                                     // push event
                                     let env = Env {
                                         context: &ctx,
-                                        consts: &consts,
+                                        consts: consts.run(),
                                         aggrs: &this_group.aggrs,
                                         meta: &node_meta,
                                         recursion_limit: tremor_script::recursion_limit(),
@@ -1096,7 +1096,7 @@ impl Operator for TrickleSelect {
                                     // push event
                                     let env = Env {
                                         context: &ctx,
-                                        consts: &consts,
+                                        consts: consts.run(),
                                         aggrs: &this_group.aggrs,
                                         meta: &node_meta,
                                         recursion_limit: tremor_script::recursion_limit(),
@@ -1187,7 +1187,7 @@ impl Operator for TrickleSelect {
                                     // accumulate the current event
                                     let env = Env {
                                         context: &ctx,
-                                        consts: &consts,
+                                        consts: consts.run(),
                                         aggrs: &NO_AGGRS,
                                         meta: &node_meta,
                                         recursion_limit: tremor_script::recursion_limit(),
@@ -1320,7 +1320,7 @@ impl Operator for TrickleSelect {
                                 // evaluate the event and push
                                 let env = Env {
                                     context: &ctx,
-                                    consts: &consts,
+                                    consts: consts.run(),
                                     aggrs: &group_data.aggrs,
                                     meta: &node_meta,
                                     recursion_limit: tremor_script::recursion_limit(),
@@ -1452,7 +1452,7 @@ impl Operator for TrickleSelect {
                                     // push event
                                     let env = Env {
                                         context: &ctx,
-                                        consts: &consts,
+                                        consts: consts.run(),
                                         aggrs: &this_group.aggrs,
                                         meta: &node_meta,
                                         recursion_limit: tremor_script::recursion_limit(),
@@ -1489,7 +1489,7 @@ impl Operator for TrickleSelect {
                                     // push event
                                     let env = Env {
                                         context: &ctx,
-                                        consts: &consts,
+                                        consts: consts.run(),
                                         aggrs: &this_group.aggrs,
                                         meta: &node_meta,
                                         recursion_limit: tremor_script::recursion_limit(),
