@@ -66,10 +66,11 @@ impl Script {
     where
         F: for<'head> FnOnce(&'head mut String) -> std::result::Result<ast::Script<'head>, E>,
     {
+        use ast::Script;
         let structured = f(&mut raw)?;
         // This is where the magic happens
         // ALLOW: this is sound since we implement a self referential struct
-        let structured: ast::Script<'static> = unsafe { mem::transmute(structured) };
+        let structured = unsafe { mem::transmute::<Script<'_>, Script<'static>>(structured) };
         // This is possibl as String::into_bytes just returns the `vec` of the string
         let raw = Pin::new(raw.into_bytes());
         let raw = vec![Arc::new(raw)];
@@ -131,10 +132,11 @@ impl Query {
     where
         F: for<'head> FnOnce(&'head mut String) -> std::result::Result<ast::Query<'head>, E>,
     {
+        use ast::Query;
         let structured = f(&mut raw)?;
         // This is where the magic happens
         // ALLOW: this is sound since we implement a self referential struct
-        let structured: ast::Query<'static> = unsafe { mem::transmute(structured) };
+        let structured = unsafe { mem::transmute::<Query<'_>, Query<'static>>(structured) };
         // This is possibl as String::into_bytes just returns the `vec` of the string
         let raw = Pin::new(raw.into_bytes());
         let raw = vec![Arc::new(raw)];
@@ -231,11 +233,12 @@ impl Stmt {
     where
         F: for<'head> FnOnce(&'head ast::Query) -> std::result::Result<ast::Stmt<'head>, E>,
     {
+        use ast::Stmt;
         let raw = other.raw.clone();
         let structured = f(other.suffix())?;
         // This is where the magic happens
         // ALLOW: this is sound since we implement a self referential struct
-        let structured: ast::Stmt<'static> = unsafe { mem::transmute(structured) };
+        let structured = unsafe { mem::transmute::<Stmt<'_>, Stmt<'static>>(structured) };
 
         Ok(Self { raw, structured })
     }
@@ -368,11 +371,12 @@ impl Select {
     /// # Errors
     /// if other isn't a select statment
     pub fn try_new_from_stmt(other: &Stmt) -> Result<Self> {
+        use ast::SelectStmt as Select;
         if let ast::Stmt::Select(select) = other.suffix() {
             let raw = other.raw.clone();
             // This is where the magic happens
             // ALLOW: this is sound since we implement a self referential struct
-            let select: ast::SelectStmt<'static> = unsafe { mem::transmute(select.clone()) };
+            let select = unsafe { mem::transmute::<Select<'_>, Select<'static>>(select.clone()) };
             Ok(Self { raw, select })
         } else {
             Err(Error::from(
@@ -404,13 +408,13 @@ impl Select {
 pub struct EventPayload {
     /// The vector of raw input values
     raw: Vec<Arc<Pin<Vec<u8>>>>,
-    structured: ValueAndMeta<'static>,
+    data: ValueAndMeta<'static>,
 }
 
 #[cfg(not(tarpaulin_include))] // this is a simple Debug implementation
 impl Debug for EventPayload {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.structured.fmt(f)
+        self.data.fmt(f)
     }
 }
 
@@ -431,7 +435,7 @@ impl EventPayload {
 
     #[must_use]
     pub fn suffix(&self) -> &ValueAndMeta {
-        &self.structured
+        &self.data
     }
 
     /// a function to turn it into a value and metadata set.
@@ -447,12 +451,15 @@ impl EventPayload {
         F: for<'head> FnOnce(&'head mut [u8]) -> ValueAndMeta<'head>,
     {
         let mut raw = Pin::new(raw);
-        let structured = f(raw.as_mut().get_mut());
+        let data = f(raw.as_mut().get_mut());
         // This is where the magic happens
         // ALLOW: this is sound since we implement a self referential struct
-        let structured: ValueAndMeta<'static> = unsafe { mem::transmute(structured) };
+        let structured = unsafe { mem::transmute::<ValueAndMeta<'_>, ValueAndMeta<'static>>(data) };
         let raw = vec![Arc::new(raw)];
-        Self { raw, structured }
+        Self {
+            raw,
+            data: structured,
+        }
     }
 
     /// Creates a new Payload with a given byte vector and
@@ -471,12 +478,15 @@ impl EventPayload {
         F: for<'head> FnOnce(&'head mut [u8]) -> std::result::Result<ValueAndMeta<'head>, E>,
     {
         let mut raw = Pin::new(raw);
-        let structured = f(raw.as_mut().get_mut())?;
+        let data = f(raw.as_mut().get_mut())?;
         // This is where the magic happens
         // ALLOW: this is sound since we implement a self referential struct
-        let structured: ValueAndMeta<'static> = unsafe { mem::transmute(structured) };
+        let structured = unsafe { mem::transmute::<ValueAndMeta<'_>, ValueAndMeta<'static>>(data) };
         let raw = vec![Arc::new(raw)];
-        Ok(Self { raw, structured })
+        Ok(Self {
+            raw,
+            data: structured,
+        })
     }
 
     /// Named after the original rental struct for easy rewriting.
@@ -497,7 +507,7 @@ impl EventPayload {
     where
         F: for<'iref, 'head> FnOnce(&'iref ValueAndMeta<'head>) -> R,
     {
-        f(&self.structured)
+        f(&self.data)
     }
 
     /// Named after the original rental struct for easy rewriting.
@@ -517,7 +527,7 @@ impl EventPayload {
     where
         F: for<'iref, 'head> FnOnce(&'iref mut ValueAndMeta<'head>) -> R,
     {
-        f(&mut self.structured)
+        f(&mut self.data)
     }
 
     /// Borrow the parts (event and metadata) from a rental.
@@ -537,11 +547,30 @@ impl EventPayload {
     where
         'borrow: 'value,
     {
-        let ValueAndMeta { ref v, ref m } = self.structured;
+        let ValueAndMeta { ref v, ref m } = self.data;
         (v, m)
     }
 
     /// Consumes one payload into another
+    ///
+    /// ```compile_fail
+    ///   use tremor_script::prelude::*;
+    ///   use tremor_script::errors::Error;
+    ///   let vec1 = br#"{"key": "value"}"#.to_vec();
+    ///   let mut e1 = EventPayload::new(vec1, |d| tremor_value::parse_to_value(d).unwrap().into());
+    ///   let vec2 = br#"{"snot": "badger"}"#.to_vec();
+    ///   let e2 = EventPayload::new(vec2, |d| tremor_value::parse_to_value(d).unwrap().into());
+    ///   let mut v = Value::null();
+    ///   // We try to move the data ov v2 outside of this closure to trick the borrow checker
+    ///   // into letting us have it even if it's referenced data no longer exist
+    ///   e1.consume::<Error,_>(e2, |v1, v2| {
+    ///     let (v2,_) = v2.into_parts();
+    ///     v = v2;
+    ///     Ok(())
+    ///   }).unwrap();
+    ///   drop(e1);
+    ///   println!("v: {}", v);
+    /// ```
     ///
     /// # Errors
     /// if `join_f` errors
@@ -552,13 +581,16 @@ impl EventPayload {
     ) -> std::result::Result<(), E>
     where
         E: std::error::Error,
-        F: FnOnce(&mut ValueAndMeta<'static>, ValueAndMeta<'static>) -> std::result::Result<(), E>,
+        F: for<'iref, 'head> FnOnce(
+            &'iref mut ValueAndMeta<'head>,
+            ValueAndMeta<'head>,
+        ) -> std::result::Result<(), E>,
     {
         // We append first in the case that some data already moved into self.structured by the time
         // that the join_f fails
         // READ: ORDER MATTERS!
         self.raw.append(&mut other.raw);
-        join_f(&mut self.structured, other.structured)
+        join_f(&mut self.data, other.data)
     }
 
     /// Applies another SRS into this, this functions **needs** to
@@ -580,7 +612,7 @@ impl EventPayload {
 
         // We can access `other.script` here with it's static lifetime since we did clone the `raw`
         // into our own `raw` before. This equalizes `iref` and `head` for `self` and `other`
-        apply_f(&mut self.structured, &other.script)
+        apply_f(&mut self.data, &other.script)
     }
 
     /// Applies another SRS into this, this functions **needs** to
@@ -599,7 +631,7 @@ impl EventPayload {
 
         // We can access `other.script` here with it's static lifetime since we did clone the `raw`
         // into our own `raw` before. This equalizes `iref` and `head` for `self` and `other`
-        apply_f(&mut self.structured, &other.script)
+        apply_f(&mut self.data, &other.script)
     }
 
     /// Applies another SRS into this, this functions **needs** to
@@ -621,7 +653,7 @@ impl EventPayload {
 
         // We can access `other.script` here with it's static lifetime since we did clone the `raw`
         // into our own `raw` before. This equalizes `iref` and `head` for `self` and `other`
-        apply_f(&mut self.structured, &mut other.select)
+        apply_f(&mut self.data, &mut other.select)
     }
 }
 
@@ -632,14 +664,14 @@ where
     fn from(vm: T) -> Self {
         Self {
             raw: Vec::new(),
-            structured: vm.into(),
+            data: vm.into(),
         }
     }
 }
 
 impl PartialEq for EventPayload {
     fn eq(&self, other: &Self) -> bool {
-        self.structured.eq(&other.structured)
+        self.data.eq(&other.data)
     }
 }
 
