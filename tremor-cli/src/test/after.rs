@@ -39,8 +39,8 @@ impl After {
 }
 
 pub(crate) fn load_after(path: &Path) -> Result<After> {
-    let tags_data = slurp_string(path)?;
-    match serde_json::from_str(&tags_data) {
+    let mut tags_data = slurp_string(path)?;
+    match simd_json::from_str(&mut tags_data) {
         Ok(s) => Ok(s),
         Err(_not_well_formed) => Err(Error::from(format!(
             "Unable to load `after.json` from path: {}",

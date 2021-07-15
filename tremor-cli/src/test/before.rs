@@ -108,8 +108,8 @@ fn default_min_await_secs() -> u64 {
 }
 
 pub(crate) fn load_before(path: &Path) -> Result<Before> {
-    let tags_data = slurp_string(path)?;
-    match serde_json::from_str(&tags_data) {
+    let mut tags_data = slurp_string(path)?;
+    match simd_json::from_str(&mut tags_data) {
         Ok(s) => Ok(s),
         Err(e) => Err(Error::from(format!(
             "Invalid `before.json` in path `{}`: {}",
