@@ -91,7 +91,7 @@ impl Operator for Batch {
         self.is_transactional = self.is_transactional || transactional;
         self.data.consume(
             data,
-            move |this: &mut ValueAndMeta<'static>, other: ValueAndMeta<'static>| -> Result<()> {
+            move |this: &mut ValueAndMeta, other: ValueAndMeta| -> Result<()> {
                 if let Some(ref mut a) = this.value_mut().as_array_mut() {
                     let (value, meta) = other.into_parts();
                     let e = literal!({
