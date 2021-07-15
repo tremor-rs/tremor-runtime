@@ -85,6 +85,10 @@ pub fn load(registry: &mut Registry) {
             }else {
                 Some(v.clone())
             }).collect::<Vec<_>>()))
+        }))
+        .insert(tremor_const_fn!(array|concatenate(_context, _left: Array, _right: Array) {
+            let output: Vec<Value> = [_left.as_slice(), _right.as_slice()].concat();
+            Ok(Value::from(output))
         }));
 }
 
@@ -222,5 +226,27 @@ mod test {
                 "this", "cake", "is", "really", "a", "good", "test", "cake", "!",
             ])
         );
+    }
+
+    #[test]
+    fn concatenate() {
+        let f = fun("array", "concatenate");
+        let v1 = Value::from(vec!["this", "is"]);
+        let v2 = Value::from(vec!["the", "way"]);
+
+        // Concat two non empty vectors.
+        assert_val!(
+            f(&[&v1, &v2]),
+            Value::from(vec!["this", "is", "the", "way"])
+        );
+
+        let empty_vector: Vec<Value> = vec![];
+        let empty = Value::from(empty_vector);
+
+        // Concat one empty vector with one non empty vector.
+        assert_val!(f(&[&v1, &empty]), Value::from(vec!["this", "is"]));
+
+        // Concat two empty vectors.
+        assert_val!(f(&[&empty, &empty]), Value::from(empty));
     }
 }
