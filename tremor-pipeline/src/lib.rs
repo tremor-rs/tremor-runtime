@@ -39,7 +39,7 @@ use beef::Cow;
 use executable_graph::NodeConfig;
 use halfbrown::HashMap;
 use lazy_static::lazy_static;
-use op::trickle::select::WindowImpl;
+use op::trickle::window;
 use petgraph::graph::{self, NodeIndex};
 use simd_json::OwnedValue;
 use std::cmp::Ordering;
@@ -86,7 +86,7 @@ pub type NodeLookupFn = fn(
     uid: u64,
     defn: Option<&tremor_script::srs::Stmt>,
     node: Option<&tremor_script::srs::Stmt>,
-    windows: Option<HashMap<String, WindowImpl>>,
+    windows: Option<HashMap<String, window::Impl>>,
 ) -> Result<OperatorNode>;
 
 /// Stringified numeric key

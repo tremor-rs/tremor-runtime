@@ -22,8 +22,9 @@ use crate::{
         trickle::{
             operator::TrickleOperator,
             script::Script,
-            select::{Groups, TrickleSelect, WindowImpl},
+            select::TrickleSelect,
             simple_select::SimpleSelect,
+            window::{self, Groups},
         },
     },
     ConfigGraph, Connection, NodeConfig, NodeKind, Operator, OperatorNode, PortIndexMap,
@@ -88,8 +89,8 @@ fn resolve_output_port(port: &(Ident, Ident), meta: &NodeMetas) -> OutputPort {
     }
 }
 
-pub(crate) fn window_decl_to_impl(d: &WindowDecl) -> Result<WindowImpl> {
-    use op::trickle::select::{TumblingWindowOnNumber, TumblingWindowOnTime};
+pub(crate) fn window_decl_to_impl(d: &WindowDecl) -> Result<window::Impl> {
+    use op::trickle::window::{TumblingOnNumber, TumblingOnTime};
     match &d.kind {
         WindowKind::Sliding => Err("Sliding windows are not yet implemented".into()),
         WindowKind::Tumbling => {
@@ -102,25 +103,25 @@ pub(crate) fn window_decl_to_impl(d: &WindowDecl) -> Result<WindowImpl> {
                 .params
                 .get(WindowDecl::MAX_GROUPS)
                 .and_then(Value::as_u64)
-                .unwrap_or(WindowImpl::DEFAULT_MAX_GROUPS);
+                .unwrap_or(window::Impl::DEFAULT_MAX_GROUPS);
             let emit_empty_windows = d
                 .params
                 .get(WindowDecl::EMIT_EMPTY_WINDOWS)
                 .and_then(Value::as_bool)
-                .unwrap_or(WindowImpl::DEFAULT_EMIT_EMPTY_WINDOWS);
+                .unwrap_or(window::Impl::DEFAULT_EMIT_EMPTY_WINDOWS);
 
             match (
                 d.params.get(WindowDecl::INTERVAL).and_then(Value::as_u64),
                 d.params.get(WindowDecl::SIZE).and_then(Value::as_u64),
             ) {
-                (Some(interval), None) => Ok(WindowImpl::from(TumblingWindowOnTime::from_stmt(
+                (Some(interval), None) => Ok(window::Impl::from(TumblingOnTime::from_stmt(
                     interval,
                     emit_empty_windows,
                     max_groups,
                     ttl,
                     script,
                 ))),
-                (None, Some(size)) => Ok(WindowImpl::from(TumblingWindowOnNumber::from_stmt(
+                (None, Some(size)) => Ok(window::Impl::from(TumblingOnNumber::from_stmt(
                     size, max_groups, ttl, script,
                 ))),
                 (Some(_), Some(_)) => Err(Error::from(
@@ -659,7 +660,7 @@ fn select(
     operator_uid: u64,
     config: &NodeConfig,
     node: Option<&srs::Stmt>,
-    windows: Option<HashMap<String, WindowImpl>>,
+    windows: Option<HashMap<String, window::Impl>>,
 ) -> Result<Box<dyn Operator>> {
     let node = node.ok_or_else(|| {
         ErrorKind::MissingOpConfig("trickle operators require a statement".into())
@@ -684,7 +685,7 @@ fn select(
             let windows = windows.ok_or_else(|| {
                 ErrorKind::MissingOpConfig("select operators require a window mapping".into())
             })?;
-            let windows: Result<Vec<(String, WindowImpl)>> =
+            let windows: Result<Vec<(String, window::Impl)>> =
                 if let tremor_script::ast::Stmt::Select(s) = node.suffix() {
                     s.stmt
                         .windows
@@ -748,7 +749,7 @@ pub(crate) fn supported_operators(
     uid: u64,
     defn: Option<&srs::Stmt>,
     node: Option<&srs::Stmt>,
-    windows: Option<HashMap<String, WindowImpl>>,
+    windows: Option<HashMap<String, window::Impl>>,
 ) -> Result<OperatorNode> {
     let name_parts: Vec<&str> = config.op_type.split("::").collect();
 
