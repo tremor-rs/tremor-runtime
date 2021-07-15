@@ -345,7 +345,10 @@ mod test {
     use simd_json::OwnedValue;
     use tremor_script::{Object, ValueAndMeta};
 
-    fn merge(this: &mut ValueAndMeta<'static>, other: ValueAndMeta<'static>) -> Result<()> {
+    fn merge<'iref, 'head>(
+        this: &'iref mut ValueAndMeta<'head>,
+        other: ValueAndMeta<'head>,
+    ) -> Result<()> {
         if let Some(ref mut a) = this.value_mut().as_array_mut() {
             let mut e = Object::with_capacity(7);
             // {"id":1,

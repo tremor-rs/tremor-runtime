@@ -14,6 +14,7 @@
 - Fix tremor-cli to use it's own binary when possible [#1096](https://github.com/tremor-rs/tremor-runtime/issues/1096)
 - Restructure functions to avoid transmutation [#1028](https://github.com/tremor-rs/tremor-runtime/issues/1028)
 - Update blackhole to print events / s [#1129](https://github.com/tremor-rs/tremor-runtime/issues/1129)
+- Improve soundness and documentation of SRS code.
 
 ### Fixes
 
@@ -24,6 +25,7 @@
 - Fix some errors in otel pb <-> json translation
 - Fix windowed queries emitting events with `null` metadata on tick
 - Fix sorting for artefacts
+- Fix issde where the test framework would generate reports without being asked for it [#1072](https://github.com/tremor-rs/tremor-runtime/issues/1072)
 
 ## 0.11.4
 

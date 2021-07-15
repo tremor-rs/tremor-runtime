@@ -223,7 +223,7 @@ fn suite_unit(
 pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
     let kind: test::TestKind = matches.value_of("MODE").unwrap_or_default().try_into()?;
     let path = matches.value_of("PATH").unwrap_or_default();
-    let report = matches.value_of("REPORT").unwrap_or_default();
+    let report = matches.value_of("REPORT");
     let quiet = matches.is_present("QUIET");
     let mut includes: Vec<String> = if matches.is_present("INCLUDES") {
         if let Some(matches) = matches.values_of("INCLUDES") {
@@ -344,9 +344,9 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
         reports,
         stats: stats_map,
     };
-    let mut file = file::create(report)?;
-
-    if let Ok(result) = serde_json::to_string(&test_run) {
+    if let Some(report) = report {
+        let mut file = file::create(report)?;
+        let result = simd_json::to_string(&test_run)?;
         file.write_all(&result.as_bytes())
             .map_err(|e| Error::from(format!("Failed to write report to `{}`: {}", report, e)))?;
     }
