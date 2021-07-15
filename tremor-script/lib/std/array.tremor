@@ -73,3 +73,13 @@ intrinsic fn coalesce(array) as array::coalesce;
 ##
 ## Returns a `string`.
 intrinsic fn join(array, string) as array::join;
+
+## Concatenates two arrays returning a new array. The new array is not a set,
+## i.e. it can contain duplicates depending on the input arrays.
+##
+## ```tremor
+## array::concatenate([1, 2, 3], [3, 4]) == [1, 2, 3, 3, 4]
+## ```
+##
+## Returns an `array`
+intrinsic fn concatenate(left, right) as array::concatenate
