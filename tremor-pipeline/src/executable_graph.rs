@@ -19,7 +19,7 @@ use crate::{
     errors::Result,
     errors::{Error, ErrorKind},
     influx_value,
-    op::{prelude::IN, trickle::select::WindowImpl},
+    op::{prelude::IN, trickle::window},
     ConfigMap, ExecPortIndexMap, NodeLookupFn,
 };
 use crate::{op::EventAndInsights, Event, NodeKind, Operator};
@@ -98,7 +98,7 @@ impl NodeConfig {
         resolver: NodeLookupFn,
         defn: Option<&srs::Stmt>,
         node: Option<&srs::Stmt>,
-        window: Option<HashMap<String, WindowImpl>>,
+        window: Option<HashMap<String, window::Impl>>,
     ) -> Result<OperatorNode> {
         resolver(&self, uid, defn, node, window)
     }
