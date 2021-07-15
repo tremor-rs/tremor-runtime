@@ -25,6 +25,7 @@
 - Fix some errors in otel pb <-> json translation
 - Fix windowed queries emitting events with `null` metadata on tick
 - Fix sorting for artefacts
+- Fix issde where the test framework would generate reports without being asked for it [#1072](https://github.com/tremor-rs/tremor-runtime/issues/1072)
 
 ## 0.11.4
 

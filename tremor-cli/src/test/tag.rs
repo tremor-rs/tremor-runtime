@@ -27,7 +27,7 @@ pub(crate) type Tags = Vec<String>;
 pub(crate) fn maybe_slurp_tags(path: &Path) -> Tags {
     let tags_data = slurp_string(path);
     match tags_data {
-        Ok(tags_data) => serde_json::from_str(&tags_data).unwrap_or_default(),
+        Ok(mut tags_data) => simd_json::from_str(&mut tags_data).unwrap_or_default(),
         Err(_not_found) => vec![],
     }
 }
