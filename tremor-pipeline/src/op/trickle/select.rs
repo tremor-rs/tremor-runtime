@@ -17,12 +17,13 @@
 #[cfg(test)]
 mod test;
 
-use super::window::{self, accumulate, get_or_create_group, Trait, Window, WindowEvent};
+use super::window::{self, accumulate, get_or_create_group, GroupData, Trait, Window, WindowEvent};
 use crate::{errors::Result, EventId, SignalKind};
 use crate::{op::prelude::*, EventIdGenerator};
 use crate::{Event, Operator};
 use std::mem;
 use tremor_common::stry;
+use tremor_script::ast::AggregateScratch;
 use tremor_script::{
     self,
     ast::{InvokeAggrFn, NodeMetas, Select, SelectStmt},
@@ -545,6 +546,7 @@ impl Operator for TrickleSelect {
                         // merge previous aggr state, push window event out, re-initialize for new window
                         let mut first = true;
                         let emit_window_iter = emit_window_events.iter().zip(windows.iter_mut());
+
                         for (window_event, window) in emit_window_iter {
                             consts.window = Value::from(window.name().to_string());
 
@@ -604,16 +606,7 @@ impl Operator for TrickleSelect {
                                     events.push(port_and_event);
                                 };
 
-                                // swap(aggrs, scratch) - store state before init to scratch as we need it for the next window
-                                std::mem::swap(
-                                    &mut scratch_last_window.aggregates,
-                                    &mut this_group.aggrs,
-                                );
-                                // store transactional state for mixing into the next window
-                                scratch_last_window.transactional = this_group.transactional;
-
-                                // aggrs.init() and reset transactional state
-                                this_group.reset();
+                                swap_and_reset_group(scratch_last_window, this_group);
                             } else {
                                 // add this event to the aggr state **AFTER** emit and propagate to next windows
 
@@ -629,13 +622,14 @@ impl Operator for TrickleSelect {
                                 let mut outgoing_event_id = event_id_gen.next_id();
                                 if !first {
                                     // store old event_ids state from last window into scratch2
-                                    std::mem::swap(
+                                    mem::swap(
                                         &mut event_id_scratch_last_window,
                                         &mut event_id_scratch2,
                                     );
                                 }
                                 event_id_scratch_last_window = this_group.id.clone(); // store the id for to be tracked by the next window
                                 mem::swap(&mut outgoing_event_id, &mut this_group.id);
+
                                 if let Some(port_and_event) = stry!(execute_select_and_having(
                                     &select,
                                     &node_meta,
@@ -656,33 +650,15 @@ impl Operator for TrickleSelect {
                                 if first {
                                     // first window
                                     //          swap(scratch, aggrs)
-                                    std::mem::swap(
-                                        &mut scratch_last_window.aggregates,
-                                        &mut this_group.aggrs,
-                                    ); // store current state before init
-                                    scratch_last_window.transactional = this_group.transactional;
-                                    //          aggrs.init() and reset transactional state
-                                    this_group.reset();
+                                    swap_and_reset_group(scratch_last_window, this_group);
                                 } else {
                                     // not first window
                                     // store old aggrs state from last window into scratch2
 
-                                    std::mem::swap(scratch2, scratch_last_window);
+                                    mem::swap(scratch2, scratch_last_window);
                                     //          swap(aggrs, scratch)
                                     // store aggrs state before init() into scratch1 for next window
-                                    std::mem::swap(
-                                        &mut scratch_last_window.aggregates,
-                                        &mut this_group.aggrs,
-                                    );
-                                    scratch_last_window.transactional = this_group.transactional;
-                                    //          aggrs.init() and reset transactional state
-                                    // scratch2 <=> scratch_last_window
-                                    // scratch_last_window <=> this
-                                    //
-                                    // scratchg 2 == last window
-                                    // scratch_last_window == this
-                                    // this == empty
-                                    this_group.reset();
+                                    swap_and_reset_group(scratch_last_window, this_group);
 
                                     //          merge state from last window into this one
                                     for (this, prev) in
@@ -970,7 +946,7 @@ impl Operator for TrickleSelect {
                             };
 
                             // swap(aggrs, scratch) - store state before init to scratch as we need it for the next window
-                            std::mem::swap(&mut scratch1.aggregates, &mut this_group.aggrs);
+                            mem::swap(&mut scratch1.aggregates, &mut this_group.aggrs);
                             scratch1.transactional = this_group.transactional;
                             // aggrs.init() and reset transactional state
                             this_group.reset();
@@ -989,7 +965,7 @@ impl Operator for TrickleSelect {
                             let mut outgoing_event_id = event_id_gen.next_id();
                             if !first {
                                 // store previous window event_id in scratch2
-                                std::mem::swap(&mut event_id_scratch1, &mut event_id_scratch2);
+                                mem::swap(&mut event_id_scratch1, &mut event_id_scratch2);
                             }
                             event_id_scratch1 = this_group.id.clone(); // store event id before swapping it out, for tracking in next window
                             mem::swap(&mut this_group.id, &mut outgoing_event_id);
@@ -1013,16 +989,16 @@ impl Operator for TrickleSelect {
                             if first {
                                 // first window
                                 //          swap(scratch, aggrs)
-                                std::mem::swap(&mut scratch1.aggregates, &mut this_group.aggrs); // store current state before init
+                                mem::swap(&mut scratch1.aggregates, &mut this_group.aggrs); // store current state before init
                                 scratch1.transactional = this_group.transactional;
                                 //          aggrs.init() and reset transactional state
                                 this_group.reset();
                             } else {
                                 // not first window
                                 // store old aggrs state from last window into scratch2
-                                std::mem::swap(scratch1, scratch2);
+                                mem::swap(scratch1, scratch2);
                                 //          swap(aggrs, scratch) // store aggrs state before init() into scratch1 for next window
-                                std::mem::swap(&mut this_group.aggrs, &mut scratch1.aggregates);
+                                mem::swap(&mut this_group.aggrs, &mut scratch1.aggregates);
                                 scratch1.transactional = this_group.transactional;
 
                                 //          aggrs.init() and reset transactional state
@@ -1078,4 +1054,10 @@ impl Operator for TrickleSelect {
     fn handles_signal(&self) -> bool {
         true
     }
+}
+
+fn swap_and_reset_group(scratch: &mut AggregateScratch, group: &mut GroupData) {
+    mem::swap(&mut scratch.aggregates, &mut group.aggrs);
+    scratch.transactional = group.transactional;
+    group.reset();
 }

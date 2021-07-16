@@ -94,6 +94,7 @@ impl Window {
     pub(crate) fn ident_name(fqwn: &str) -> &str {
         fqwn.split("::").last().map_or(fqwn, |last| last)
     }
+
     pub(crate) fn maybe_evict(&mut self, ns: u64) {
         if self.window_impl.should_evict(ns) {
             self.last_dims.clear();
@@ -193,6 +194,7 @@ pub struct No {
 
 impl Trait for No {
     fn should_evict(&mut self, _ns: u64) -> bool {
+        // TODO: should this be true or false
         false
     }
     fn on_event(
@@ -215,9 +217,12 @@ pub struct TumblingOnTime {
     pub(crate) emit_empty_windows: bool,
     pub(crate) max_groups: u64,
     pub(crate) events: u64,
+    /// How long a window lasts (how many ns we accumulate)
     pub(crate) interval: u64,
-    pub(crate) next_swap: u64,
-    pub(crate) ttl: u64,
+    /// The timestamp when we evict next
+    pub(crate) next_eviction: u64,
+    /// (half) The durction between two evictions
+    pub(crate) eviction_period: u64,
     pub(crate) script: Option<WindowDecl<'static>>,
 }
 impl TumblingOnTime {
@@ -225,19 +230,20 @@ impl TumblingOnTime {
         interval: u64,
         emit_empty_windows: bool,
         max_groups: u64,
-        ttl: Option<u64>,
+        eviction_period: Option<u64>,
         script: Option<&WindowDecl>,
     ) -> Self {
         let script = script.cloned().map(WindowDecl::into_static);
-        let ttl = ttl.unwrap_or(interval);
+        let eviction_period = eviction_period.unwrap_or(interval);
         Self {
             next_window: None,
             emit_empty_windows,
             max_groups,
             events: 0,
             interval,
-            next_swap: ttl * 2,
-            ttl,
+            // assume 1st timestamp to be 0
+            next_eviction: 0 + eviction_period,
+            eviction_period,
             script,
         }
     }
@@ -268,9 +274,9 @@ impl TumblingOnTime {
 }
 
 impl Trait for TumblingOnTime {
-    fn should_evict(&mut self, ns: u64) -> bool {
-        if self.next_swap < ns {
-            self.next_swap = ns + self.ttl * 2;
+    fn should_evict(&mut self, now_ns: u64) -> bool {
+        if self.next_eviction < now_ns {
+            self.next_eviction = now_ns + self.eviction_period;
             true
         } else {
             false
@@ -327,8 +333,8 @@ pub struct TumblingOnNumber {
     count: u64,
     max_groups: u64,
     size: u64,
-    next_swap: u64,
-    ttl: Option<u64>,
+    next_eviction: u64,
+    eviction_period: Option<u64>,
     script: Option<WindowDecl<'static>>,
 }
 
@@ -336,7 +342,7 @@ impl TumblingOnNumber {
     pub fn from_stmt(
         size: u64,
         max_groups: u64,
-        ttl: Option<u64>,
+        eviction_period: Option<u64>,
         script: Option<&WindowDecl>,
     ) -> Self {
         let script = script.cloned().map(WindowDecl::into_static);
@@ -345,16 +351,16 @@ impl TumblingOnNumber {
             max_groups,
             size,
             script,
-            ttl,
+            eviction_period,
             ..Default::default()
         }
     }
 }
 impl Trait for TumblingOnNumber {
     fn should_evict(&mut self, ns: u64) -> bool {
-        if let Some(ttl) = self.ttl {
-            if self.next_swap < ns {
-                self.next_swap = ns + ttl * 2;
+        if let Some(ttl) = self.eviction_period {
+            if self.next_eviction < ns {
+                self.next_eviction = ns + ttl * 2;
                 true
             } else {
                 false
@@ -395,7 +401,7 @@ impl Trait for TumblingOnNumber {
                 data.ok_or_else(|| Error::from("Data based window didn't provide a valid value"))
             })?;
 
-        // If we're above count we emit and  set the new count to 1
+        // If we're above count we emit and set the new count to 1
         // ( we emit on the ) previous event
         let new_count = self.count + count;
         if new_count >= self.size {
