@@ -278,7 +278,7 @@ fn get_sink_meta<'lt, 'value>(
         .and_then(|rt_meta| {
             ctx.url
                 .artefact()
-                .and_then(|artefact| rt_meta.get(artefact.into()))
+                .and_then(|artefact| rt_meta.get(artefact))
         })
 }
 

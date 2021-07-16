@@ -733,9 +733,20 @@ pub async fn register_builtin_sources(world: &World) -> Result<()> {
     world
         .register_builtin_onramp_type("ws", Box::new(ws::Builder {}))
         .await?;
+    register_unix_sources(world).await?;
+    Ok(())
+}
+
+#[cfg(unix)]
+pub async fn register_unix_sources(world: &World) -> Result<()> {
     world
         .register_builtin_onramp_type("unix_socket", Box::new(unix_socket::Builder {}))
         .await?;
+    Ok(())
+}
+
+#[cfg(not(unix))]
+pub async fn register_unix_sources(world: &World) -> Result<()> {
     Ok(())
 }
 

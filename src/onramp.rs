@@ -16,12 +16,6 @@ use crate::metrics::RampReporter;
 use crate::pipeline;
 use crate::repository::ServantId;
 use crate::source::prelude::*;
-#[cfg(unix)]
-use crate::source::unix_socket;
-use crate::source::{
-    amqp, blaster, cb, crononome, discord, env, file, gsub, kafka, metronome, nats, otel, postgres,
-    rest, sse, stdin, tcp, udp, ws,
-};
 use crate::url::TremorUrl;
 use crate::OpConfig;
 use async_std::task::{self, JoinHandle};

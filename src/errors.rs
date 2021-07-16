@@ -165,6 +165,7 @@ error_chain! {
         GoogleAuthError(gouth::Error);
         ReqwestError(reqwest::Error);
         HttpHeaderError(http::header::InvalidHeaderValue);
+        Timeout(async_std::future::TimeoutError);
         TonicTransportError(tonic::transport::Error);
         TonicStatusError(tonic::Status);
         RustlsError(rustls::TLSError);
@@ -178,9 +179,21 @@ error_chain! {
             description("Unknown operator")
                 display("Unknown operator: {}::{}", n, o)
         }
+        UnknownOnrampType(t: String) {
+            description("Unknown onramp type")
+                display("Unknown onramp type {}", t)
+        }
+        UnknownOfframpType(t: String) {
+            description("Unknown offramp type")
+                display("Unknown offramp type {}", t)
+        }
         UnknownConnector(n: String) {
             description("Unknown connector")
                 display("Unknown connector {}", n)
+        }
+        UnknownConnectorType(t: String) {
+            description("Unknown connector type")
+                display("Unknown connector type {}", t)
         }
         ArtefactNotFound(id: String) {
             description("The artifact was not found")

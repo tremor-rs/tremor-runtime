@@ -192,11 +192,11 @@ mod tests {
     use crate::onramp::Impl;
     use crate::source::unix_socket::{Config, Int, UnixSocket};
     use crate::url::TremorUrl;
-    use simd_json::json;
+    use tremor_value::literal;
 
     #[test]
     pub fn default_codec_is_json() {
-        let onramp_config = json!({
+        let onramp_config = literal!({
             "path": "/tmp/test.sock"
         });
         let onramp = UnixSocket::from_config(
