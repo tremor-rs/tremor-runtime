@@ -116,7 +116,6 @@ pub(crate) enum SourceReply {
         origin_uri: EventOriginUri,
         /// already structured data (including metadata)
         data: EventPayload,
-        data: LineValue,
     },
     /// A stream is opened
     StartStream(usize),
@@ -733,6 +732,9 @@ pub async fn register_builtin_sources(world: &World) -> Result<()> {
         .await?;
     world
         .register_builtin_onramp_type("ws", Box::new(ws::Builder {}))
+        .await?;
+    world
+        .register_builtin_onramp_type("unix_socket", Box::new(unix_socket::Builder {}))
         .await?;
     Ok(())
 }

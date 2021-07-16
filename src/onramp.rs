@@ -78,38 +78,6 @@ pub struct OnrampConfig<'cfg> {
     pub err_required: bool,
 }
 
-// just a lookup
-#[cfg(not(tarpaulin_include))]
-pub(crate) fn lookup(
-    name: &str,
-    id: &TremorUrl,
-    config: &Option<Value>,
-) -> Result<Box<dyn Onramp>> {
-    match name {
-        "amqp" => amqp::Amqp::from_config(id, config),
-        "blaster" => blaster::Blaster::from_config(id, config),
-        "cb" => cb::Cb::from_config(id, config),
-        "env" => env::Env::from_config(id, config),
-        "file" => file::File::from_config(id, config),
-        "kafka" => kafka::Kafka::from_config(id, config),
-        "postgres" => postgres::Postgres::from_config(id, config),
-        "metronome" => metronome::Metronome::from_config(id, config),
-        "crononome" => crononome::Crononome::from_config(id, config),
-        "stdin" => stdin::Stdin::from_config(id, config),
-        "udp" => udp::Udp::from_config(id, config),
-        "tcp" => tcp::Tcp::from_config(id, config),
-        "rest" => rest::Rest::from_config(id, config),
-        "sse" => sse::Sse::from_config(id, config),
-        "ws" => ws::Ws::from_config(id, config),
-        "discord" => discord::Discord::from_config(id, config),
-        "otel" => otel::OpenTelemetry::from_config(id, config),
-        "nats" => nats::Nats::from_config(id, config),
-        "gsub" => gsub::GoogleCloudPubSub::from_config(id, config),
-        #[cfg(unix)]
-        "unix-socket" => unix_socket::UnixSocket::from_config(id, config),
-        _ => Err(format!("[onramp:{}] Onramp type {} not known", id, name).into()),
-    }
-}
 /// onramp - legacy source of events
 #[async_trait::async_trait]
 pub trait Onramp: Send {
