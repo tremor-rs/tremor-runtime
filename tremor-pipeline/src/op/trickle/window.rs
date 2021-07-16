@@ -21,11 +21,13 @@ use halfbrown::{HashMap, RawEntryMut};
 use std::borrow::Cow as SCow;
 use tremor_script::{
     self,
-    ast::{Aggregates, InvokeAggrFn, NodeMetas, WindowDecl},
+    ast::{Aggregates, InvokeAggrFn, NodeMetas, RunConsts, WindowDecl},
     interpreter::{Env, LocalStack},
     prelude::*,
     Value,
 };
+
+use super::select::NO_AGGRS;
 
 #[derive(Debug, Clone)]
 pub struct GroupData {
@@ -100,7 +102,6 @@ impl Window {
     }
 }
 
-// We allow this since No is barely ever used.
 #[derive(Debug, Clone)]
 pub enum Impl {
     TumblingCountBased(TumblingOnNumber),
@@ -411,9 +412,10 @@ impl Trait for TumblingOnNumber {
 /// accumulate the given `event` into the current `group`s aggregates
 #[allow(clippy::too_many_arguments)] // this is the price for no transmutation
 pub(crate) fn accumulate(
+    context: &EventContext,
+    consts: RunConsts,
     opts: ExecOpts,
     node_meta: &NodeMetas,
-    env: &Env,
     local_stack: &LocalStack,
     state: &mut Value<'static>,
     group: &mut GroupData,
@@ -421,6 +423,14 @@ pub(crate) fn accumulate(
     id: &EventId,
     transactional: bool,
 ) -> Result<()> {
+    let env = Env {
+        context,
+        consts,
+        aggrs: &NO_AGGRS,
+        meta: &node_meta,
+        recursion_limit: tremor_script::recursion_limit(),
+    };
+
     // we incorporate the event into this group below, so track it here
     group.id.track(&id);
 
@@ -433,7 +443,7 @@ pub(crate) fn accumulate(
         let mut argv: Vec<SCow<Value>> = Vec::with_capacity(aggr.args.len());
         let mut argv1: Vec<&Value> = Vec::with_capacity(aggr.args.len());
         for arg in &aggr.args {
-            let result = arg.run(opts, env, event_data, state, event_meta, &local_stack)?;
+            let result = arg.run(opts, &env, event_data, state, event_meta, &local_stack)?;
             argv.push(result);
         }
         for arg in &argv {

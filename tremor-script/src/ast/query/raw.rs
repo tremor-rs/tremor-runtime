@@ -157,12 +157,12 @@ impl<'script> Upable<'script> for StmtRaw<'script> {
                     .collect();
                 // only allocate scratches if they are really needed - when we have multiple windows
                 let aggregate_scratches = if stmt.windows.len() > 1 {
-                    Some((
+                    (
                         AggregateScratch::new(aggregates.clone()),
                         AggregateScratch::new(aggregates.clone()),
-                    ))
+                    )
                 } else {
-                    None
+                    (AggregateScratch::new(vec![]), AggregateScratch::new(vec![]))
                 };
 
                 Ok(Stmt::Select(SelectStmt {
