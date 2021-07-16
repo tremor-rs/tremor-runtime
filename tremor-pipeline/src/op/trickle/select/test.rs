@@ -104,7 +104,7 @@ fn test_select(uid: u64, stmt: srs::Stmt) -> Result<TrickleSelect> {
             "w30s".into(),
             window::TumblingOnTime {
                 emit_empty_windows: false,
-                ttl: 30_000_000_000,
+                eviction_period: 30_000_000_000,
                 max_groups: window::Impl::DEFAULT_MAX_GROUPS,
                 interval: 30_000_000_000,
                 ..Default::default()
