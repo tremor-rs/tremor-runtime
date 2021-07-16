@@ -28,8 +28,8 @@ impl std::fmt::Debug for Env {
     }
 }
 pub(crate) struct Builder {}
-impl onramp::Builder for Env {
-    fn from_config(&self, id: &TremorUrl, config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
+impl onramp::Builder for Builder {
+    fn from_config(&self, id: &TremorUrl, _config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
         let origin_uri = EventOriginUri {
             uid: 0,
             scheme: "tremor-env".to_string(),
@@ -38,7 +38,7 @@ impl onramp::Builder for Env {
             path: vec![],
         };
 
-        Ok(Box::new(Self {
+        Ok(Box::new(Env {
             sent: false,
             origin_uri,
             onramp_id: id.clone(),

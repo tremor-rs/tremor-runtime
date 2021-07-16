@@ -405,7 +405,7 @@ mod test {
         let mut msg = b"an invalid message".to_vec();
         let mut codec = test_codec();
         let decoded = codec.decode(msg.as_mut_slice(), 0)?.unwrap();
-        let expected = Value::from(simd_json::json!({
+        let expected = Value::from(literal!({
             "msg": "an invalid message",
             "protocol": "RFC3164",
         }));
