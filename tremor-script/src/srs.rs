@@ -434,7 +434,7 @@ impl EventPayload {
     /// ```
 
     #[must_use]
-    pub fn suffix(&self) -> &ValueAndMeta {
+    pub fn suffix<'iref>(&'iref self) -> &'iref ValueAndMeta<'iref> {
         &self.data
     }
 
@@ -503,11 +503,18 @@ impl EventPayload {
     ///   });
     ///   println!("v: {}", v)
     /// ```
-    pub fn rent<F, R>(&self, f: F) -> R
+    pub fn rent<'iref, F, R>(&'iref self, f: F) -> R
     where
-        F: for<'iref, 'head> FnOnce(&'iref ValueAndMeta<'head>) -> R,
+        F: for<'head> FnOnce(&'head ValueAndMeta<'head>) -> R,
     {
-        f(&self.data)
+        // ALLOW: we are turning a longer lifetime into a shorter one for a
+        // covariant type ValueAndMeta. &mut is invariant over it's lifetime,
+        // but we are choosing a shorter one and passing it down not up. So a
+        // user should not be able to choose an inappropriate lifetime for it,
+        // plus they don't control the owner here.
+        f(unsafe {
+            mem::transmute::<&'iref ValueAndMeta<'static>, &'iref ValueAndMeta<'iref>>(&self.data)
+        })
     }
 
     /// Named after the original rental struct for easy rewriting.
@@ -523,11 +530,20 @@ impl EventPayload {
     ///   });
     ///   println!("v: {}", v)
     /// ```
-    pub fn rent_mut<F, R>(&mut self, f: F) -> R
+    pub fn rent_mut<'iref, F, R>(&'iref mut self, f: F) -> R
     where
-        F: for<'iref, 'head> FnOnce(&'iref mut ValueAndMeta<'head>) -> R,
+        F: for<'head> FnOnce(&'head mut ValueAndMeta<'head>) -> R,
     {
-        f(&mut self.data)
+        // ALLOW: we are turning a longer lifetime into a shorter one for a
+        // covariant type ValueAndMeta. &mut is invariant over it's lifetime,
+        // but we are choosing a shorter one and passing it down not up. So a
+        // user should not be able to choose an inappropriate lifetime for it,
+        // plus they don't control the owner here.
+        f(unsafe {
+            mem::transmute::<&'iref mut ValueAndMeta<'static>, &'iref mut ValueAndMeta<'iref>>(
+                &mut self.data,
+            )
+        })
     }
 
     /// Borrow the parts (event and metadata) from a rental.
@@ -574,15 +590,15 @@ impl EventPayload {
     ///
     /// # Errors
     /// if `join_f` errors
-    pub fn consume<E, F>(
-        &mut self,
+    pub fn consume<'iref, E, F>(
+        &'iref mut self,
         mut other: EventPayload,
         join_f: F,
     ) -> std::result::Result<(), E>
     where
         E: std::error::Error,
-        F: for<'iref, 'head> FnOnce(
-            &'iref mut ValueAndMeta<'head>,
+        F: for<'head> FnOnce(
+            &'head mut ValueAndMeta<'head>,
             ValueAndMeta<'head>,
         ) -> std::result::Result<(), E>,
     {
@@ -590,7 +606,20 @@ impl EventPayload {
         // that the join_f fails
         // READ: ORDER MATTERS!
         self.raw.append(&mut other.raw);
-        join_f(&mut self.data, other.data)
+
+        // ALLOW: we are turning a longer lifetime into a shorter one for a
+        // covariant type ValueAndMeta. &mut is invariant over it's lifetime,
+        // but we are choosing a shorter one and passing it down not up. So a
+        // user should not be able to choose an inappropriate lifetime for it,
+        // plus they don't control the owner here.
+        join_f(
+            unsafe {
+                mem::transmute::<&'iref mut ValueAndMeta<'static>, &'iref mut ValueAndMeta<'iref>>(
+                    &mut self.data,
+                )
+            },
+            unsafe { mem::transmute::<ValueAndMeta<'static>, ValueAndMeta<'iref>>(other.data) },
+        )
     }
 
     /// Applies another SRS into this, this functions **needs** to
