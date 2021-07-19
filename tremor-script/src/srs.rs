@@ -535,12 +535,13 @@ impl EventPayload {
     where
         F: for<'head> FnOnce(&'head mut ValueAndMeta<'head>) -> R,
     {
-        // ALLOW: we are turning a longer lifetime into a shorter one for a
-        // covariant type ValueAndMeta. &mut is invariant over it's lifetime,
-        // but we are choosing a shorter one and passing it down not up. So a
-        // user should not be able to choose an inappropriate lifetime for it,
-        // plus they don't control the owner here.
+        // we are turning a longer lifetime into a shorter one for a covariant
+        // type ValueAndMeta. &mut is invariant over it's lifetime, but we are
+        // choosing a shorter one and passing it down not up. So a user should
+        // not be able to choose an inappropriate lifetime for it, plus they
+        // don't control the owner here.
         f(unsafe {
+            // ALLOW: See above explenation
             mem::transmute::<&'iref mut ValueAndMeta<'static>, &'iref mut ValueAndMeta<'iref>>(
                 &mut self.data,
             )
