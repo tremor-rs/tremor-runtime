@@ -149,7 +149,7 @@ impl Operator for OperatorNode {
     fn on_signal(
         &mut self,
         _uid: u64,
-        state: &Value<'static>,
+        state: &mut Value<'static>,
         signal: &mut Event,
     ) -> Result<EventAndInsights> {
         self.op.on_signal(self.uid, state, signal)
@@ -589,7 +589,7 @@ impl ExecutableGraph {
             let i = unsafe { *self.signalflow.get_unchecked(idx) };
             let EventAndInsights { events, insights } = {
                 let op = unsafe { self.graph.get_unchecked_mut(i) }; // We know this exists
-                let state = unsafe { self.state.ops.get_unchecked(i) }; // we know this has been initialized
+                let state = unsafe { self.state.ops.get_unchecked_mut(i) }; // we know this has been initialized
                 stry!(op.on_signal(op.uid, state, &mut signal))
             };
             self.insights.extend(insights.into_iter().map(|cf| (i, cf)));
@@ -646,11 +646,11 @@ mod test {
         assert!(!n.handles_signal());
         assert!(!n.handles_contraflow());
         let mut e = Event::default();
-        let state = Value::null();
+        let mut state = Value::null();
         n.on_contraflow(0, &mut e);
         assert_eq!(e, Event::default());
         assert_eq!(
-            n.on_signal(0, &state, &mut e).unwrap(),
+            n.on_signal(0, &mut state, &mut e).unwrap(),
             EventAndInsights::default()
         );
         assert_eq!(e, Event::default());
@@ -704,7 +704,7 @@ mod test {
         fn on_signal(
             &mut self,
             _uid: u64,
-            _state: &Value<'static>,
+            _state: &mut Value<'static>,
             _signal: &mut Event,
         ) -> Result<EventAndInsights> {
             // Make the trait signature nicer

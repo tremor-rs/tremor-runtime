@@ -384,7 +384,7 @@ impl Default for Docs {
 }
 
 /// Constants and special keyword values
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct RunConsts<'run, 'script>
 where
     'script: 'run,

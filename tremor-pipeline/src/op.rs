@@ -100,7 +100,7 @@ pub trait Operator: std::fmt::Debug + Send {
     fn on_signal(
         &mut self,
         _uid: u64,
-        _state: &Value<'static>,
+        _state: &mut Value<'static>,
         _signal: &mut Event,
     ) -> Result<EventAndInsights> {
         // Make the trait signature nicer

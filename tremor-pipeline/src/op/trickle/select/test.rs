@@ -13,7 +13,9 @@
 // limitations under the License.
 
 #![allow(clippy::float_cmp)]
+use crate::op::prelude::trickle::window::{Trait, WindowEvent};
 use crate::query::window_decl_to_impl;
+use crate::EventId;
 
 use super::*;
 
@@ -82,14 +84,13 @@ fn test_event_tx(s: u64, transactional: bool, group: u64) -> Event {
     Event {
         id: (0, 0, s).into(),
         ingest_ns: s + 100,
-        data: literal!({ "group": group }).into(),
+        data: literal!({ "group": group, "s": s }).into(),
         transactional,
         ..Event::default()
     }
 }
 
 fn test_select(uid: u64, stmt: srs::Stmt) -> Result<TrickleSelect> {
-    let groups = window::Groups::new();
     let windows = vec![
         (
             "w15s".into(),
@@ -103,8 +104,6 @@ fn test_select(uid: u64, stmt: srs::Stmt) -> Result<TrickleSelect> {
         (
             "w30s".into(),
             window::TumblingOnTime {
-                emit_empty_windows: false,
-                eviction_period: 30_000_000_000,
                 max_groups: window::Impl::DEFAULT_MAX_GROUPS,
                 interval: 30_000_000_000,
                 ..Default::default()
@@ -113,7 +112,7 @@ fn test_select(uid: u64, stmt: srs::Stmt) -> Result<TrickleSelect> {
         ),
     ];
     let id = "select".to_string();
-    TrickleSelect::with_stmt(uid, id, &groups, windows, &stmt)
+    TrickleSelect::with_stmt(uid, id, windows, &stmt)
 }
 
 fn try_enqueue(op: &mut TrickleSelect, event: Event) -> Result<Option<(Cow<'static, str>, Event)>> {
@@ -229,10 +228,9 @@ fn select_stmt_from_query(query_str: &str) -> Result<TrickleSelect> {
             )
         })
         .collect();
-    let groups = window::Groups::new();
 
     let id = "select".to_string();
-    Ok(TrickleSelect::with_stmt(42, id, &groups, windows, &stmt)?)
+    Ok(TrickleSelect::with_stmt(42, id, windows, &stmt)?)
 }
 
 fn test_tick(ns: u64) -> Event {
@@ -260,7 +258,7 @@ fn select_single_win_with_script_on_signal() -> Result<()> {
     let uid = 42;
     let mut state = Value::null();
     let mut tick1 = test_tick(1);
-    let mut eis = select.on_signal(uid, &state, &mut tick1)?;
+    let mut eis = select.on_signal(uid, &mut state, &mut tick1)?;
     assert!(eis.insights.is_empty());
     assert_eq!(0, eis.events.len());
 
@@ -274,13 +272,13 @@ fn select_single_win_with_script_on_signal() -> Result<()> {
         .into(),
         ..Event::default()
     };
-    eis = select.on_event(uid, "IN", &mut state, event)?;
+    eis = select.on_event(uid, "in", &mut state, event)?;
     assert!(eis.insights.is_empty());
     assert_eq!(0, eis.events.len());
 
     // no emit on signal, although window interval would be passed
     let mut tick2 = test_tick(10);
-    eis = select.on_signal(uid, &state, &mut tick2)?;
+    eis = select.on_signal(uid, &mut state, &mut tick2)?;
     assert!(eis.insights.is_empty());
     assert_eq!(0, eis.events.len());
 
@@ -316,7 +314,7 @@ fn select_single_win_on_signal() -> Result<()> {
     let uid = 42;
     let mut state = Value::null();
     let mut tick1 = test_tick(1);
-    let mut eis = select.on_signal(uid, &state, &mut tick1)?;
+    let mut eis = select.on_signal(uid, &mut state, &mut tick1)?;
     assert!(eis.insights.is_empty());
     assert_eq!(0, eis.events.len());
 
@@ -335,13 +333,13 @@ fn select_single_win_on_signal() -> Result<()> {
 
     // no emit yet
     let mut tick2 = test_tick(3);
-    eis = select.on_signal(uid, &state, &mut tick2)?;
+    eis = select.on_signal(uid, &mut state, &mut tick2)?;
     assert!(eis.insights.is_empty());
     assert_eq!(0, eis.events.len());
 
     // now emit
     let mut tick3 = test_tick(4);
-    eis = select.on_signal(uid, &state, &mut tick3)?;
+    eis = select.on_signal(uid, &mut state, &mut tick3)?;
     assert!(eis.insights.is_empty());
     assert_eq!(1, eis.events.len());
     assert_eq!(
@@ -370,18 +368,18 @@ fn select_multiple_wins_on_signal() -> Result<()> {
     let uid = 42;
     let mut state = Value::null();
     let mut tick1 = test_tick(1);
-    let mut eis = select.on_signal(uid, &state, &mut tick1)?;
+    let mut eis = select.on_signal(uid, &mut state, &mut tick1)?;
     assert!(eis.insights.is_empty());
     assert_eq!(0, eis.events.len());
 
     let mut tick2 = test_tick(100);
-    eis = select.on_signal(uid, &state, &mut tick2)?;
+    eis = select.on_signal(uid, &mut state, &mut tick2)?;
     assert!(eis.insights.is_empty());
     assert_eq!(0, eis.events.len());
 
     // we have no groups, so no emit yet
     let mut tick3 = test_tick(201);
-    eis = select.on_signal(uid, &state, &mut tick3)?;
+    eis = select.on_signal(uid, &mut state, &mut tick3)?;
     assert!(eis.insights.is_empty());
     assert_eq!(0, eis.events.len());
 
@@ -402,7 +400,7 @@ fn select_multiple_wins_on_signal() -> Result<()> {
 
     // finish the window with the next tick
     let mut tick4 = test_tick(401);
-    eis = select.on_signal(uid, &state, &mut tick4)?;
+    eis = select.on_signal(uid, &mut state, &mut tick4)?;
     assert!(eis.insights.is_empty());
     assert_eq!(1, eis.events.len());
     let (_port, event) = dbg!(eis).events.remove(0);
@@ -410,7 +408,7 @@ fn select_multiple_wins_on_signal() -> Result<()> {
     assert_eq!(true, event.transactional);
 
     let mut tick5 = test_tick(499);
-    eis = select.on_signal(uid, &state, &mut tick5)?;
+    eis = select.on_signal(uid, &mut state, &mut tick5)?;
     assert!(eis.insights.is_empty());
     assert_eq!(0, eis.events.len());
 
@@ -440,6 +438,7 @@ fn test_transactional_single_window() -> Result<()> {
     let mut res = op.on_event(0, "in", &mut state, event2)?;
     assert_eq!(1, res.events.len());
     let (_, event) = res.events.pop().unwrap();
+    dbg!(&event);
     assert_eq!(true, event.transactional);
     assert_eq!(true, event.id.is_tracking(&id1));
     assert_eq!(true, event.id.is_tracking(&id2));
@@ -477,56 +476,56 @@ fn test_transactional_multiple_windows() -> Result<()> {
         "#,
     )?;
     let mut state = Value::null();
-    let event1 = test_event_tx(0, true, 0);
+    let event0 = test_event_tx(0, true, 0);
+    let id0 = event0.id.clone();
+    let res = op.on_event(0, "in", &mut state, event0)?;
+    assert_eq!(0, res.len());
+
+    let event1 = test_event_tx(1, false, 1);
     let id1 = event1.id.clone();
     let res = op.on_event(0, "in", &mut state, event1)?;
     assert_eq!(0, res.len());
 
-    let event2 = test_event_tx(1, false, 1);
+    let event2 = test_event_tx(2, false, 0);
     let id2 = event2.id.clone();
-    let res = op.on_event(0, "in", &mut state, event2)?;
-    assert_eq!(0, res.len());
-
-    let event3 = test_event_tx(2, false, 0);
-    let id3 = event3.id.clone();
-    let mut res = op.on_event(0, "in", &mut state, event3)?;
+    let mut res = op.on_event(0, "in", &mut state, event2)?;
     assert_eq!(1, res.len());
     let (_, event) = res.events.pop().unwrap();
     assert_eq!(true, event.transactional);
-    assert_eq!(true, event.id.is_tracking(&id1));
-    assert_eq!(true, event.id.is_tracking(&id3));
+    assert_eq!(true, event.id.is_tracking(&id0));
+    assert_eq!(true, event.id.is_tracking(&id2));
 
-    let event4 = test_event_tx(3, false, 1);
-    let id4 = event4.id.clone();
-    let mut res = op.on_event(0, "in", &mut state, event4)?;
+    let event3 = test_event_tx(3, false, 1);
+    let id3 = event3.id.clone();
+    let mut res = op.on_event(0, "in", &mut state, event3)?;
     assert_eq!(1, res.len());
     let (_, event) = res.events.remove(0);
     assert_eq!(false, event.transactional);
-    assert_eq!(true, event.id.is_tracking(&id2));
-    assert_eq!(true, event.id.is_tracking(&id4));
+    assert_eq!(true, event.id.is_tracking(&id1));
+    assert_eq!(true, event.id.is_tracking(&id3));
 
-    let event5 = test_event_tx(4, false, 0);
-    let id5 = event5.id.clone();
-    let res = op.on_event(0, "in", &mut state, event5)?;
+    let event4 = test_event_tx(4, false, 0);
+    let id4 = event4.id.clone();
+    let res = op.on_event(0, "in", &mut state, event4)?;
     assert_eq!(0, res.len());
 
-    let event6 = test_event_tx(5, false, 0);
-    let id6 = event6.id.clone();
-    let mut res = op.on_event(0, "in", &mut state, event6)?;
+    let event5 = test_event_tx(5, false, 0);
+    let id5 = event5.id.clone();
+    let mut res = op.on_event(0, "in", &mut state, event5)?;
     assert_eq!(2, res.len());
 
     // first event from event5 and event6 - none of the source events are transactional
     let (_, event_w1) = res.events.remove(0);
-    assert_eq!(false, event_w1.transactional);
-    assert_eq!(true, event_w1.id.is_tracking(&id5));
-    assert_eq!(true, event_w1.id.is_tracking(&id6));
+    assert!(!event_w1.transactional);
+    assert!(event_w1.id.is_tracking(&id4));
+    assert!(event_w1.id.is_tracking(&id5));
 
     let (_, event_w2) = res.events.remove(0);
-    assert_eq!(true, event_w2.transactional);
-    assert_eq!(true, event_w2.id.is_tracking(&id1));
-    assert_eq!(true, event_w2.id.is_tracking(&id3));
-    assert_eq!(true, event_w2.id.is_tracking(&id5));
-    assert_eq!(true, event_w2.id.is_tracking(&id6));
+    assert!(event_w2.transactional);
+    assert!(event_w2.id.is_tracking(&id0));
+    assert!(event_w2.id.is_tracking(&id2));
+    assert!(event_w2.id.is_tracking(&id4));
+    assert!(event_w2.id.is_tracking(&id5));
 
     Ok(())
 }
@@ -786,9 +785,7 @@ fn tumbling_window_on_time_emit() -> Result<()> {
     // interval = 10 seconds
     let mut window = window::TumblingOnTime::from_stmt(
         10 * 1_000_000_000,
-        window::Impl::DEFAULT_EMIT_EMPTY_WINDOWS,
         window::Impl::DEFAULT_MAX_GROUPS,
-        None,
         None,
     );
     let vm = literal!({
@@ -860,9 +857,7 @@ fn tumbling_window_on_time_from_script_emit() -> Result<()> {
         .ok_or(Error::from("no interval found"))?;
     let mut window = window::TumblingOnTime::from_stmt(
         interval,
-        window::Impl::DEFAULT_EMIT_EMPTY_WINDOWS,
         window::Impl::DEFAULT_MAX_GROUPS,
-        None,
         Some(&window_decl),
     );
     let json1 = literal!({
@@ -901,13 +896,7 @@ fn tumbling_window_on_time_from_script_emit() -> Result<()> {
 
 #[test]
 fn tumbling_window_on_time_on_tick() -> Result<()> {
-    let mut window = window::TumblingOnTime::from_stmt(
-        100,
-        window::Impl::DEFAULT_EMIT_EMPTY_WINDOWS,
-        window::Impl::DEFAULT_MAX_GROUPS,
-        None,
-        None,
-    );
+    let mut window = window::TumblingOnTime::from_stmt(100, window::Impl::DEFAULT_MAX_GROUPS, None);
     assert_eq!(
         WindowEvent {
             opened: true,
@@ -921,7 +910,7 @@ fn tumbling_window_on_time_on_tick() -> Result<()> {
         WindowEvent {
             opened: true,
             include: false,
-            emit: false // we dont emit if we had no event
+            emit: true // we delete windows that do not have content so this is fine
         },
         window.on_tick(100)?
     );
@@ -943,8 +932,7 @@ fn tumbling_window_on_time_on_tick() -> Result<()> {
 
 #[test]
 fn tumbling_window_on_time_emit_empty_windows() -> Result<()> {
-    let mut window =
-        window::TumblingOnTime::from_stmt(100, true, window::Impl::DEFAULT_MAX_GROUPS, None, None);
+    let mut window = window::TumblingOnTime::from_stmt(100, window::Impl::DEFAULT_MAX_GROUPS, None);
     assert_eq!(
         WindowEvent {
             opened: true,
@@ -1003,8 +991,7 @@ fn no_window_emit() -> Result<()> {
 
 #[test]
 fn tumbling_window_on_number_emit() -> Result<()> {
-    let mut window =
-        window::TumblingOnNumber::from_stmt(3, window::Impl::DEFAULT_MAX_GROUPS, None, None);
+    let mut window = window::TumblingOnNumber::from_stmt(3, window::Impl::DEFAULT_MAX_GROUPS, None);
 
     let vm = literal!({
        "h2g2" : 42,

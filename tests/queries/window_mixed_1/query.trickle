@@ -1,6 +1,9 @@
 define tumbling window four_nanos
 with
-  interval = 4 # the test framework emits 1 event per nanosecond, so we should get two events per window
+  # the events have to sets of groups that alternate,
+  # a window of interval 4, since we emit an event per nanosecond,
+  # should contain 2 events for group 1 and two for group 2
+  interval = 4
 end;
 define tumbling window two_size
 with

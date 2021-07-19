@@ -381,7 +381,7 @@ impl Operator for Wal {
     fn on_signal(
         &mut self,
         _uid: u64,
-        _state: &Value<'static>,
+        _state: &mut Value<'static>,
         signal: &mut Event,
     ) -> Result<EventAndInsights> {
         let now = signal.ingest_ns;
@@ -534,7 +534,7 @@ mod test {
             kind: Some(SignalKind::Tick),
             ..Event::default()
         };
-        let s = o.on_signal(wal_uid, &state, &mut signal)?;
+        let s = o.on_signal(wal_uid, &mut state, &mut signal)?;
         assert_eq!(0, s.events.len());
         assert_eq!(0, s.insights.len());
 
@@ -557,7 +557,7 @@ mod test {
             kind: Some(SignalKind::Tick),
             ..Event::default()
         };
-        let s = o.on_signal(wal_uid, &state, &mut signal2)?;
+        let s = o.on_signal(wal_uid, &mut state, &mut signal2)?;
         assert_eq!(0, s.events.len());
         assert_eq!(0, s.insights.len());
 
@@ -639,7 +639,7 @@ mod test {
         o.on_contraflow(0, &mut i);
 
         // since we failed before we should see 3 events the retransmit of 1-3
-        let r = o.on_signal(0, &v, &mut i)?;
+        let r = o.on_signal(0, &mut v, &mut i)?;
         assert_eq!(r.len(), 3);
 
         o.gc()?;
