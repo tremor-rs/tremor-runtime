@@ -24,7 +24,7 @@ use crate::{
             script::Script,
             select::TrickleSelect,
             simple_select::SimpleSelect,
-            window::{self, Groups},
+            window::{self},
         },
     },
     ConfigGraph, Connection, NodeConfig, NodeKind, Operator, OperatorNode, PortIndexMap,
@@ -95,34 +95,21 @@ pub(crate) fn window_decl_to_impl(d: &WindowDecl) -> Result<window::Impl> {
         WindowKind::Sliding => Err("Sliding windows are not yet implemented".into()),
         WindowKind::Tumbling => {
             let script = if d.script.is_some() { Some(d) } else { None };
-            let ttl = d
-                .params
-                .get(WindowDecl::EVICTION_PERIOD)
-                .and_then(Value::as_u64);
             let max_groups = d
                 .params
                 .get(WindowDecl::MAX_GROUPS)
                 .and_then(Value::as_u64)
                 .unwrap_or(window::Impl::DEFAULT_MAX_GROUPS);
-            let emit_empty_windows = d
-                .params
-                .get(WindowDecl::EMIT_EMPTY_WINDOWS)
-                .and_then(Value::as_bool)
-                .unwrap_or(window::Impl::DEFAULT_EMIT_EMPTY_WINDOWS);
 
             match (
                 d.params.get(WindowDecl::INTERVAL).and_then(Value::as_u64),
                 d.params.get(WindowDecl::SIZE).and_then(Value::as_u64),
             ) {
                 (Some(interval), None) => Ok(window::Impl::from(TumblingOnTime::from_stmt(
-                    interval,
-                    emit_empty_windows,
-                    max_groups,
-                    ttl,
-                    script,
+                    interval, max_groups, script,
                 ))),
                 (None, Some(size)) => Ok(window::Impl::from(TumblingOnNumber::from_stmt(
-                    size, max_groups, ttl, script,
+                    size, max_groups, script,
                 ))),
                 (Some(_), Some(_)) => Err(Error::from(
                     "Bad window configuration, only one of `size` or `interval` is allowed.",
@@ -681,7 +668,6 @@ fn select(
         }
         SelectType::Simple => Ok(Box::new(SimpleSelect::with_stmt(config.id.clone(), &node)?)),
         SelectType::Normal => {
-            let groups = Groups::new();
             let windows = windows.ok_or_else(|| {
                 ErrorKind::MissingOpConfig("select operators require a window mapping".into())
             })?;
@@ -707,7 +693,6 @@ fn select(
             Ok(Box::new(TrickleSelect::with_stmt(
                 operator_uid,
                 config.id.clone(),
-                &groups,
                 windows?,
                 &node,
             )?))

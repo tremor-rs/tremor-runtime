@@ -90,7 +90,7 @@ impl Operator for TrickleOperator {
     fn on_signal(
         &mut self,
         uid: u64,
-        state: &Value<'static>,
+        state: &mut Value<'static>,
         signal: &mut Event,
     ) -> Result<EventAndInsights> {
         self.op.on_signal(uid, state, signal)

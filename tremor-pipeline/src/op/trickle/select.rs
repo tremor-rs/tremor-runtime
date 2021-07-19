@@ -17,18 +17,17 @@
 #[cfg(test)]
 mod test;
 
-use super::window::{self, accumulate, get_or_create_group, GroupData, Trait, Window, WindowEvent};
-use crate::{errors::Result, EventId, SignalKind};
+use std::mem;
+
+use super::window::{self, Group, Window};
+use crate::op::prelude::trickle::window::{GroupWindow, SelectCtx, Trait};
+use crate::{errors::Result, SignalKind};
 use crate::{op::prelude::*, EventIdGenerator};
 use crate::{Event, Operator};
-use std::mem;
-use tremor_common::stry;
-use tremor_script::ast::AggregateScratch;
 use tremor_script::{
     self,
-    ast::{InvokeAggrFn, NodeMetas, Select, SelectStmt},
+    ast::{InvokeAggrFn, Select, SelectStmt},
     interpreter::Env,
-    interpreter::LocalStack,
     prelude::*,
     srs,
     utils::sorted_serialize,
@@ -41,6 +40,7 @@ pub struct TrickleSelect {
     pub id: String,
     pub(crate) select: srs::Select,
     pub windows: Vec<Window>,
+    pub groups: HashMap<String, Group>,
     pub event_id_gen: EventIdGenerator,
 }
 
@@ -50,15 +50,12 @@ impl TrickleSelect {
     pub fn with_stmt(
         operator_uid: u64,
         id: String,
-        dims: &window::Groups,
         windows: Vec<(String, window::Impl)>,
         stmt: &srs::Stmt,
     ) -> Result<Self> {
         let windows = windows
             .into_iter()
             .map(|(fqwn, window_impl)| Window {
-                dims: dims.clone(),
-                last_dims: dims.clone(),
                 module: Window::module_path(&fqwn),
                 name: Window::ident_name(&fqwn).to_string(),
                 window_impl,
@@ -69,6 +66,7 @@ impl TrickleSelect {
             id,
             windows,
             select,
+            groups: HashMap::new(),
             event_id_gen: EventIdGenerator::new(operator_uid),
         })
     }
@@ -82,38 +80,36 @@ impl TrickleSelect {
 
 /// execute the select clause of the statement and filter results by having clause, if provided
 #[allow(clippy::too_many_arguments)]
-fn execute_select_and_having(
-    stmt: &Select,
-    node_meta: &NodeMetas,
-    opts: ExecOpts,
-    local_stack: &LocalStack,
-    state: &Value<'static>,
+pub(crate) fn execute_select_and_having(
+    ctx: &SelectCtx,
     env: &Env,
-    event_id: EventId,
     data: &ValueAndMeta,
-    ingest_ns: u64,
-    op_meta: &OpMeta,
-    origin_uri: Option<EventOriginUri>,
-    transactional: bool,
 ) -> Result<Option<(Cow<'static, str>, Event)>> {
     let (event_payload, event_meta) = data.parts();
 
-    let value = stmt
-        .target
-        .run(opts, env, event_payload, state, event_meta, local_stack)?;
+    let value = ctx.select.target.run(
+        ctx.opts,
+        env,
+        event_payload,
+        ctx.state,
+        event_meta,
+        ctx.local_stack,
+    )?;
 
     // check having clause
     let result = value.into_owned();
-    if let Some(guard) = &stmt.maybe_having {
-        let test = guard.run(opts, env, &result, state, &NULL, local_stack)?;
+    if let Some(guard) = &ctx.select.maybe_having {
+        let test = guard.run(ctx.opts, env, &result, ctx.state, &NULL, ctx.local_stack)?;
         if let Some(test) = test.as_bool() {
             if !test {
                 return Ok(None);
             }
         } else {
-            let s: &Select = &stmt;
             return Err(tremor_script::errors::query_guard_not_bool_err(
-                s, guard, &test, node_meta,
+                ctx.select,
+                guard,
+                &test,
+                ctx.node_meta,
             )
             .into());
         }
@@ -121,14 +117,14 @@ fn execute_select_and_having(
     Ok(Some((
         OUT,
         Event {
-            id: event_id,
-            ingest_ns,
-            origin_uri,
+            id: ctx.event_id.clone(),
+            ingest_ns: ctx.ingest_ns,
+            origin_uri: ctx.origin_uri.clone(),
             // TODO: this will ignore op_metas from all other events this one is based upon and might break operators requiring this
-            op_meta: op_meta.clone(),
+            op_meta: ctx.op_meta.clone(),
             is_batch: false,
             data: (result.into_static(), event_meta.clone_static()).into(),
-            transactional,
+            transactional: ctx.transactional,
             ..Event::default()
         },
     )))
@@ -154,6 +150,7 @@ impl Operator for TrickleSelect {
             select,
             windows,
             event_id_gen,
+            groups,
             ..
         } = self;
 
@@ -175,11 +172,10 @@ impl Operator for TrickleSelect {
         let res = data.apply_select(select, |data, stmt| -> Result<Res> {
             let SelectStmt {
                 stmt: ref select,
-                ref mut aggregates,
-                ref mut aggregate_scratches,
                 ref mut consts,
                 ref locals,
                 ref node_meta,
+                ..
             } = stmt;
 
             consts.window = Value::const_null();
@@ -281,459 +277,48 @@ impl Operator for TrickleSelect {
                 group_values.push(vec![Value::null()])
             };
 
-            // Handle eviction
-            // retire the group data that didnt receive an event in `eviction_ns()` nanoseconds
-            // if no event came after `2 * eviction_ns()` this group is finally cleared out
-            windows.iter_mut().for_each(|w| w.maybe_evict(ingest_ns));
-
-            let group_values: Vec<Value> = group_values.into_iter().map(Value::Array).collect();
+            let group_values: Vec<Value> = group_values.into_iter().map(Value::from).collect();
 
             for group_value in group_values {
                 let group_str = sorted_serialize(&group_value)?;
 
-                consts.group = group_value.clone_static();
-                consts.group.push(group_str.clone())?;
-
-                match windows.len() {
-                    0 => {
-                        // group by without windows
-                        // otherwise we just pass it through the select portion of the statement
-
-                        // evaluate select clause
-                        let env = Env {
-                            context: &ctx,
-                            consts: consts.run(),
-                            aggrs: &NO_AGGRS,
-                            meta: &node_meta,
-                            recursion_limit: tremor_script::recursion_limit(),
-                        };
-                        // here we have a 1:1 between input and output event and thus can keep the origin uri
-                        if let Some(port_and_event) = stry!(execute_select_and_having(
-                            &select,
-                            &node_meta,
-                            opts,
-                            &local_stack,
-                            state,
-                            &env,
-                            id.clone(),
-                            &data,
-                            ingest_ns,
-                            op_meta,
-                            origin_uri.clone(),
-                            transactional // no windows, we can safely pass through the events field
-                        )) {
-                            events.push(port_and_event);
-                        };
+                let ctx = SelectCtx {
+                    select,
+                    local_stack: &local_stack,
+                    node_meta,
+                    opts,
+                    ctx: &ctx,
+                    state,
+                    event_id: id.clone(),
+                    event_id_gen,
+                    ingest_ns,
+                    op_meta,
+                    origin_uri,
+                    transactional,
+                };
+                if let Some(mut g) = groups.remove(&group_str) {
+                    let del = g.on_event(ctx, consts, data, &mut events)?;
+                    if !del {
+                        groups.insert(group_str, g);
                     }
-                    1 => {
-                        // simple case of single window
-                        // window_event = on_event(event)
-                        // if emit && !include
-                        //   push
-                        //   init
-                        // accumulate
-                        // if emit && include
-                        //   push
-                        //   init
+                } else {
+                    let mut value = group_value.clone_static();
+                    value.push(group_str.clone())?;
 
-                        // ALLOW: we verified that an element exists
-                        let window = &mut windows[0];
-                        consts.window = Value::from(window.name().to_string());
-
-                        // get current window group
-                        let this_group = stry!(get_or_create_group(
-                            window,
-                            event_id_gen,
-                            aggregates,
-                            &group_str,
-                            &group_value,
-                        ));
-                        let window_event =
-                            stry!(this_group.window.on_event(&data, ingest_ns, origin_uri));
-
-                        // If we include the event we accumulate before we emit
-                        if window_event.include {
-                            stry!(accumulate(
-                                &ctx,
-                                consts.run(),
-                                opts,
-                                &node_meta,
-                                &local_stack,
-                                state,
-                                this_group,
-                                data,
-                                id,
-                                transactional
-                            ));
-                        }
-                        if window_event.emit {
-                            // push
-                            let env = Env {
-                                context: &ctx,
-                                consts: consts.run(),
-                                aggrs: &this_group.aggrs,
-                                meta: &node_meta,
-                                recursion_limit: tremor_script::recursion_limit(),
-                            };
-                            let mut outgoing_event_id = event_id_gen.next_id();
-                            mem::swap(&mut outgoing_event_id, &mut this_group.id);
-                            if let Some(port_and_event) = stry!(execute_select_and_having(
-                                &select,
-                                &node_meta,
-                                opts,
-                                &local_stack,
-                                state,
-                                &env,
-                                outgoing_event_id,
-                                &data,
-                                ingest_ns,
-                                op_meta,
-                                None,
-                                this_group.transactional
-                            )) {
-                                events.push(port_and_event);
-                            };
-                            // re-initialize aggr state for new window
-                            // reset transactional state for outgoing events
-                            this_group.reset();
-                        }
-
-                        // If we do not include the event we accumulate after we emit
-                        if !window_event.include {
-                            stry!(accumulate(
-                                &ctx,
-                                consts.run(),
-                                opts,
-                                &node_meta,
-                                &local_stack,
-                                state,
-                                this_group,
-                                data,
-                                id,
-                                transactional
-                            ));
-                        }
-                    }
-                    _ => {
-                        // multiple windows
-                        // emit_window_events = while emit { on_event() }
-                        // if !emit || include {
-                        //    accumulate
-                        // }
-                        // for window in emit_windows {
-                        //   if include
-                        //      this.aggrs.merge(scratch_last_window);
-                        //      push event
-                        //      swap(scratch_last_window, aggrs)
-                        //      aggrs.init() // init next window
-                        //   else
-                        //      push event
-                        //      if first {
-                        //          swap(scratch_last_window, aggrs)
-                        //          this.aggrs.init() // no merge needed
-                        //      } else {
-                        //          scratch2 = this.aggrs.clone()
-                        //          swap(scratch_last_window, scratch2) // store old aggrs state from last window
-                        //          swap(this.aggrs, scratch_last_window) // store aggrs state from this before init
-                        //          this.aggrs.init()
-                        //          this.aggrs.merge(scratch2);
-                        //      }
-                        // }
-                        // if emit && !include { // if the first window is !include we postpone accumulation until here
-                        //    accumulate
-                        // }
-                        // // if we have a window after the last emit one, we need to propagate the event/aggregation data to it
-                        // if let Some(non_emit_window) = self.windows.get(emit_window_events.len()) {
-                        //      this.aggrs.merge(scratch)
-                        // }
-                        //
-                        // The issue with the windows is the following:
-                        // We emit on the first event of the next windows, this works well for the initial frame
-                        // on a second frame, we have the coordinate with the first we have a problem as we
-                        // merge the higher resolution data into the lower resolution data before we get a chance
-                        // to emit the lower res frame - causing us to have an element too much
-                        // problems get worse as we now have windows that might emit before the current event
-                        // is accumulated into the aggregation state or after
-                        // we need to store the state before re-init in a scratch, so the next window can pull it whenever
-                        // it is ready to do so, before or after accumulating
-                        //
-                        // event | size 2 | tilt   | size 3 |
-                        //     1 | [1]    |        |
-                        //     2 | [1, 2] |        |
-                        //     3 | emit   | [1, 2] | [1, 2]
-                        //       | [3]    |        | [1, 2]
-                        //     4 | [3, 4] |        | [1, 2]
-                        //     5 | emit   | [3, 4] | [1, 2, 3, 4]
-                        //       | [5]    |        | [1, 2, 3, 4]
-                        //     6 | [5, 6] |        | [1, 2, 3, 4]
-                        //     7 | emit   | [5, 6] | [1, 2, 3, 4, 5, 6]
-                        //       | [7]    |        | [1, 2, 3, 4, 5, 6]
-                        //     8 | [7, 8] |        | [1, 2, 3, 4, 5, 6]
-                        //     9 | emit   | [7, 8] | [1, 2, 3, 4, 5, 6, 7, 8] // this is where things break
-                        //       | [9]    |        | [1, 2, 3, 4, 5, 6, 7, 8] // since we tilt up before we check
-                        //       |        |        | emit                     // the next window we collect one too many elements
-
-                        // we need scratches for multiple window handling, to avoid allocating on the hot path here
-                        let (scratch_last_window, scratch2) = aggregate_scratches;
-                        // scratches for passing on the event id between windows to track all events contributing to an outgoing windowed event
-                        // cannot put them in AggregateScratch, as this is in tremor_script and doesnt know about EventId
-                        // cannot put AggregateScratch in TrickleSelect as it has lifetimes which we tried to avoid here
-                        let mut event_id_scratch_last_window = EventId::default();
-                        let mut event_id_scratch2 = EventId::default();
-
-                        // gather window events
-                        let mut emit_window_events = Vec::with_capacity(windows.len());
-                        let step1_iter = windows.iter_mut();
-                        for window in step1_iter {
-                            consts.window = Value::from(window.name().to_string());
-                            // get current window group
-                            let this_group = stry!(get_or_create_group(
-                                window,
-                                event_id_gen,
-                                aggregates,
-                                &group_str,
-                                &group_value,
-                            ));
-                            let window_event =
-                                stry!(this_group.window.on_event(&data, ingest_ns, origin_uri));
-                            if window_event.emit {
-                                emit_window_events.push(window_event);
-                            } else {
-                                break;
-                            }
-                        }
-
-                        // accumulate if we do not emit anything or the first emitting window includes the current event into its state (window_event.include == true)
-                        let pending_accumulate = if let Some(WindowEvent {
-                            emit: true,
-                            include: false,
-                            ..
-                        }) = emit_window_events.first()
-                        {
-                            // postpone
-                            true
-                        } else if let Some(first_window) = windows.first_mut() {
-                            consts.window = Value::from(first_window.name().to_string());
-
-                            // get current window group
-                            let this_group = stry!(get_or_create_group(
-                                first_window,
-                                event_id_gen,
-                                aggregates,
-                                &group_str,
-                                &group_value,
-                            ));
-
-                            // accumulate the current event
-                            stry!(accumulate(
-                                &ctx,
-                                consts.run(),
-                                opts,
-                                &node_meta,
-                                &local_stack,
-                                state,
-                                this_group,
-                                data,
-                                id,
-                                transactional
-                            ));
-                            false
-                        } else {
-                            // should not happen
-                            false
-                        };
-
-                        // merge previous aggr state, push window event out, re-initialize for new window
-                        let mut first = true;
-                        let emit_window_iter = emit_window_events.iter().zip(windows.iter_mut());
-
-                        for (window_event, window) in emit_window_iter {
-                            consts.window = Value::from(window.name().to_string());
-
-                            // get current window group
-                            let this_group = stry!(get_or_create_group(
-                                window,
-                                event_id_gen,
-                                aggregates,
-                                &group_str,
-                                &group_value,
-                            ));
-
-                            if window_event.include {
-                                // add this event to the aggr state **BEFORE** emit and propagate to next windows
-                                // merge with scratch
-                                if !first {
-                                    for (this, prev) in this_group
-                                        .aggrs
-                                        .iter_mut()
-                                        .zip(scratch_last_window.aggregates.iter())
-                                    {
-                                        this.invocable.merge(&prev.invocable).map_err(|e| {
-                                            let r: Option<&Registry> = None;
-                                            e.into_err(prev, prev, r, &node_meta)
-                                        })?;
-                                    }
-                                    this_group
-                                        .track_transactional(scratch_last_window.transactional);
-                                    this_group.id.track(&event_id_scratch_last_window);
-                                }
-                                // push event
-                                let env = Env {
-                                    context: &ctx,
-                                    consts: consts.run(),
-                                    aggrs: &this_group.aggrs,
-                                    meta: &node_meta,
-                                    recursion_limit: tremor_script::recursion_limit(),
-                                };
-
-                                let mut outgoing_event_id = event_id_gen.next_id();
-                                event_id_scratch_last_window = this_group.id.clone(); // store the id for to be tracked by the next window
-                                mem::swap(&mut outgoing_event_id, &mut this_group.id);
-                                if let Some(port_and_event) = stry!(execute_select_and_having(
-                                    &select,
-                                    &node_meta,
-                                    opts,
-                                    &local_stack,
-                                    state,
-                                    &env,
-                                    outgoing_event_id,
-                                    &data,
-                                    ingest_ns,
-                                    op_meta,
-                                    None,
-                                    this_group.transactional
-                                )) {
-                                    events.push(port_and_event);
-                                };
-
-                                swap_and_reset_group(scratch_last_window, this_group);
-                            } else {
-                                // add this event to the aggr state **AFTER** emit and propagate to next windows
-
-                                // push event
-                                let env = Env {
-                                    context: &ctx,
-                                    consts: consts.run(),
-                                    aggrs: &this_group.aggrs,
-                                    meta: &node_meta,
-                                    recursion_limit: tremor_script::recursion_limit(),
-                                };
-
-                                let mut outgoing_event_id = event_id_gen.next_id();
-                                if !first {
-                                    // store old event_ids state from last window into scratch2
-                                    mem::swap(
-                                        &mut event_id_scratch_last_window,
-                                        &mut event_id_scratch2,
-                                    );
-                                }
-                                event_id_scratch_last_window = this_group.id.clone(); // store the id for to be tracked by the next window
-                                mem::swap(&mut outgoing_event_id, &mut this_group.id);
-
-                                if let Some(port_and_event) = stry!(execute_select_and_having(
-                                    &select,
-                                    &node_meta,
-                                    opts,
-                                    &local_stack,
-                                    state,
-                                    &env,
-                                    outgoing_event_id,
-                                    &data,
-                                    ingest_ns,
-                                    op_meta,
-                                    None,
-                                    this_group.transactional
-                                )) {
-                                    events.push(port_and_event);
-                                };
-
-                                if first {
-                                    // first window
-                                    //          swap(scratch, aggrs)
-                                    swap_and_reset_group(scratch_last_window, this_group);
-                                } else {
-                                    // not first window
-                                    // store old aggrs state from last window into scratch2
-
-                                    mem::swap(scratch2, scratch_last_window);
-                                    //          swap(aggrs, scratch)
-                                    // store aggrs state before init() into scratch1 for next window
-                                    swap_and_reset_group(scratch_last_window, this_group);
-
-                                    //          merge state from last window into this one
-                                    for (this, prev) in
-                                        this_group.aggrs.iter_mut().zip(scratch2.aggregates.iter())
-                                    {
-                                        this.invocable.merge(&prev.invocable).map_err(|e| {
-                                            let r: Option<&Registry> = None;
-                                            e.into_err(prev, prev, r, &node_meta)
-                                        })?;
-                                    }
-                                    this_group.track_transactional(scratch2.transactional);
-                                    this_group.id.track(&event_id_scratch2);
-                                }
-                            }
-
-                            first = false;
-                        }
-
-                        // execute the pending accumulate (if window_event.include == false of first window)
-                        if pending_accumulate {
-                            if let Some(first_window) = windows.first_mut() {
-                                consts.window = Value::from(first_window.name().to_string());
-                                // get current window group
-                                let this_group = stry!(get_or_create_group(
-                                    first_window,
-                                    event_id_gen,
-                                    aggregates,
-                                    &group_str,
-                                    &group_value,
-                                ));
-
-                                // accumulate the current event
-                                stry!(accumulate(
-                                    &ctx,
-                                    consts.run(),
-                                    opts,
-                                    &node_meta,
-                                    &local_stack,
-                                    state,
-                                    this_group,
-                                    data,
-                                    id,
-                                    transactional
-                                ));
-                            }
-                        }
-
-                        // merge state from last emit window into next non-emit window if there is any
-                        if !emit_window_events.is_empty() {
-                            if let Some(non_emit_window) = windows.get_mut(emit_window_events.len())
-                            {
-                                consts.window = Value::from(non_emit_window.name().to_string());
-
-                                // get current window group
-                                let this_group = stry!(get_or_create_group(
-                                    non_emit_window,
-                                    event_id_gen,
-                                    aggregates,
-                                    &group_str,
-                                    &group_value,
-                                ));
-                                for (this, prev) in this_group
-                                    .aggrs
-                                    .iter_mut()
-                                    .zip(scratch_last_window.aggregates.iter())
-                                {
-                                    this.invocable.merge(&prev.invocable).map_err(|e| {
-                                        let r: Option<&Registry> = None;
-                                        e.into_err(prev, prev, r, &node_meta)
-                                    })?;
-                                }
-                                this_group.track_transactional(scratch_last_window.transactional);
-                                this_group.id.track(&event_id_scratch_last_window);
-                            }
-                        }
+                    let windows = windows.iter();
+                    let mut g = Group {
+                        value,
+                        aggrs: stmt.aggregates.clone(),
+                        windows: GroupWindow::from_windows(
+                            ctx.event_id_gen,
+                            &stmt.aggregates,
+                            &id,
+                            windows,
+                        ),
+                    };
+                    let del = g.on_event(ctx, consts, data, &mut events)?;
+                    if !del {
+                        groups.insert(group_str, g);
                     }
                 }
             }
@@ -751,7 +336,7 @@ impl Operator for TrickleSelect {
     fn on_signal(
         &mut self,
         _uid: u64,
-        state: &Value<'static>, // we only reference state here immutably, no chance to change it here
+        state: &mut Value<'static>, // we only reference state here immutably, no chance to change it here
         signal: &mut Event,
     ) -> Result<EventAndInsights> {
         // we only react on ticks and when we have windows
@@ -759,6 +344,7 @@ impl Operator for TrickleSelect {
             select,
             windows,
             event_id_gen,
+            groups,
             ..
         } = self;
 
@@ -766,24 +352,19 @@ impl Operator for TrickleSelect {
             return Ok(EventAndInsights::default());
         }
         let ingest_ns = signal.ingest_ns;
-        // Handle eviction
-        // retire the group data that didnt receive an event in `eviction_ns()` nanoseconds
-        // if no event came after `2 * eviction_ns()` this group is finally cleared out
-        windows.iter_mut().for_each(|w| w.maybe_evict(ingest_ns));
 
         let opts = Self::opts();
         select.rent_mut(|stmt| {
             let SelectStmt {
-                stmt,
-                aggregates,
-                aggregate_scratches,
+                stmt: select,
                 consts,
                 locals,
                 node_meta,
+                ..
             } = stmt;
             let mut res = EventAndInsights::default();
 
-            let vm: ValueAndMeta = (Value::null(), Value::object()).into();
+            let data: ValueAndMeta = (Value::const_null(), Value::object()).into();
             let op_meta = OpMeta::default();
             let local_stack = tremor_script::interpreter::LocalStack::with_size(*locals);
 
@@ -792,261 +373,76 @@ impl Operator for TrickleSelect {
             consts.args = Value::const_null();
 
             let ctx = EventContext::new(ingest_ns, None);
-            if windows.len() == 1 {
-                for window in windows.iter_mut() {
-                    consts.window = Value::from(window.name().to_string());
-                    // iterate all groups, including the ones from last_dims
-                    for (group_str, group_data) in
-                        window.dims.iter_mut().chain(window.last_dims.iter_mut())
-                    {
-                        consts.group = group_data.group.clone_static();
-                        consts.group.push(group_str.clone())?;
 
-                        let window_event = stry!(group_data.window.on_tick(ingest_ns));
-                        if window_event.emit {
-                            // evaluate the event and push
-                            let env = Env {
-                                context: &ctx,
-                                consts: consts.run(),
-                                aggrs: &group_data.aggrs,
-                                meta: &node_meta,
-                                recursion_limit: tremor_script::recursion_limit(),
-                            };
-                            let mut outgoing_event_id = event_id_gen.next_id();
-                            mem::swap(&mut group_data.id, &mut outgoing_event_id);
-                            let executed = stry!(execute_select_and_having(
-                                &stmt,
-                                node_meta,
-                                opts,
-                                &local_stack,
-                                state,
-                                &env,
-                                outgoing_event_id,
-                                &vm,
-                                ingest_ns,
-                                &op_meta,
-                                None,
-                                group_data.transactional
-                            ));
-                            if let Some(port_and_event) = executed {
-                                res.events.push(port_and_event);
-                            }
+            let mut to_remove = vec![];
+            for (group_str, g) in groups.iter_mut() {
+                if let Some(w) = &mut g.windows {
+                    let mut outgoing_event_id = event_id_gen.next_id();
+                    mem::swap(&mut w.id, &mut outgoing_event_id);
 
-                            // init aggregates and reset transactional status
-                            group_data.reset();
+                    let mut run = consts.run();
+                    run.group = &g.value;
+                    run.window = &w.name;
+                    let window_event = w.window.on_tick(ingest_ns)?;
+                    let mut can_remove = window_event.emit;
+
+                    if window_event.emit {
+                        // push
+                        let env = Env {
+                            context: &ctx,
+                            consts: run,
+                            aggrs: &w.aggrs,
+                            meta: &node_meta,
+                            recursion_limit: tremor_script::recursion_limit(),
+                        };
+
+                        let mut outgoing_event_id = event_id_gen.next_id();
+
+                        mem::swap(&mut outgoing_event_id, &mut w.id);
+
+                        let mut ctx = SelectCtx {
+                            select,
+                            local_stack: &local_stack,
+                            node_meta,
+                            opts,
+                            ctx: &ctx,
+                            state,
+                            event_id: outgoing_event_id,
+                            event_id_gen,
+                            ingest_ns,
+                            op_meta: &op_meta,
+                            origin_uri: &None,
+                            transactional: w.transactional,
+                        };
+
+                        if let Some(port_and_event) =
+                            super::select::execute_select_and_having(&ctx, &env, &data)?
+                        {
+                            res.events.push(port_and_event);
+                        };
+                        // re-initialize aggr state for new window
+                        // reset transactional state for outgoing events
+
+                        if let Some(next) = &mut w.next {
+                            can_remove = next.on_event(
+                                &mut ctx,
+                                run,
+                                &data,
+                                &mut res.events,
+                                Some(&w.aggrs),
+                                can_remove,
+                            )?;
                         }
+                        w.reset();
+                    }
+                    if can_remove {
+                        to_remove.push(group_str.clone());
                     }
                 }
-            } else {
-                // complicated logic
-                // get a set of groups
-                //   for each window
-                //      get the corresponding group data
-                //      on_event ... do the magic dance with scratches etc
-                // we need scratches for multiple window handling
-
-                // we get away with just checking the first window as there can be no group in a further window
-                // that is not also in the first.
-                let distinct_groups: Vec<(String, Value)> = windows
-                    .first()
-                    .iter()
-                    .flat_map(|window| (*window).dims.iter().chain(window.last_dims.iter()))
-                    .map(|(group_str, group_data)| {
-                        (group_str.clone(), group_data.group.clone_static())
-                    })
-                    .collect();
-
-                for (group_str, group_value) in distinct_groups {
-                    consts.group = group_value.clone();
-                    consts.group.push(group_str.clone())?;
-
-                    let (scratch1, scratch2) = aggregate_scratches;
-                    // scratches for passing on the event id between windows to track all events contributing to an outgoing windowed event
-                    let mut event_id_scratch1 = EventId::default();
-                    let mut event_id_scratch2 = EventId::default();
-
-                    // gather window events
-                    let mut emit_window_events = Vec::with_capacity(windows.len());
-                    let step1_iter = windows.iter_mut();
-                    for window in step1_iter {
-                        consts.window = Value::from(window.name().to_string());
-                        // get current window group
-                        let this_group = stry!(get_or_create_group(
-                            window,
-                            event_id_gen,
-                            aggregates,
-                            &group_str,
-                            &group_value,
-                        ));
-                        let window_event = stry!(this_group.window.on_tick(ingest_ns));
-                        if window_event.emit {
-                            emit_window_events.push(window_event);
-                        } else {
-                            break;
-                        }
-                    }
-
-                    // merge previous aggr state, push window event out, re-initialize for new window
-                    let mut first = true;
-                    let emit_window_iter = emit_window_events.iter().zip(windows.iter_mut());
-                    for (window_event, window) in emit_window_iter {
-                        consts.window = Value::from(window.name().to_string());
-
-                        // get current window group
-                        let this_group = stry!(get_or_create_group(
-                            window,
-                            event_id_gen,
-                            aggregates,
-                            &group_str,
-                            &group_value,
-                        ));
-
-                        if window_event.include {
-                            // add this event to the aggr state **BEFORE** emit and propagate to next windows
-                            // merge with scratch
-                            if !first {
-                                for (this, prev) in
-                                    this_group.aggrs.iter_mut().zip(scratch1.aggregates.iter())
-                                {
-                                    this.invocable.merge(&prev.invocable).map_err(|e| {
-                                        let r: Option<&Registry> = None;
-                                        e.into_err(prev, prev, r, &node_meta)
-                                    })?;
-                                }
-                                this_group.track_transactional(scratch1.transactional);
-                                this_group.id.track(&event_id_scratch1);
-                            }
-                            // push event
-                            let env = Env {
-                                context: &ctx,
-                                consts: consts.run(),
-                                aggrs: &this_group.aggrs,
-                                meta: &node_meta,
-                                recursion_limit: tremor_script::recursion_limit(),
-                            };
-
-                            let mut outgoing_event_id = event_id_gen.next_id();
-                            event_id_scratch1 = this_group.id.clone(); // store event_id in a scratch for tracking it in the next window in the tilt-frame
-                            mem::swap(&mut this_group.id, &mut outgoing_event_id);
-                            if let Some(port_and_event) = stry!(execute_select_and_having(
-                                &stmt,
-                                &node_meta,
-                                opts,
-                                &local_stack,
-                                state,
-                                &env,
-                                outgoing_event_id,
-                                &vm,
-                                ingest_ns,
-                                &op_meta,
-                                None,
-                                this_group.transactional
-                            )) {
-                                res.events.push(port_and_event);
-                            };
-
-                            // swap(aggrs, scratch) - store state before init to scratch as we need it for the next window
-                            mem::swap(&mut scratch1.aggregates, &mut this_group.aggrs);
-                            scratch1.transactional = this_group.transactional;
-                            // aggrs.init() and reset transactional state
-                            this_group.reset();
-                        } else {
-                            // add this event to the aggr state **AFTER** emit and propagate to next windows
-
-                            // push event
-                            let env = Env {
-                                context: &ctx,
-                                consts: consts.run(),
-                                aggrs: &this_group.aggrs,
-                                meta: &node_meta,
-                                recursion_limit: tremor_script::recursion_limit(),
-                            };
-
-                            let mut outgoing_event_id = event_id_gen.next_id();
-                            if !first {
-                                // store previous window event_id in scratch2
-                                mem::swap(&mut event_id_scratch1, &mut event_id_scratch2);
-                            }
-                            event_id_scratch1 = this_group.id.clone(); // store event id before swapping it out, for tracking in next window
-                            mem::swap(&mut this_group.id, &mut outgoing_event_id);
-                            if let Some(port_and_event) = stry!(execute_select_and_having(
-                                &stmt,
-                                &node_meta,
-                                opts,
-                                &local_stack,
-                                state,
-                                &env,
-                                outgoing_event_id,
-                                &vm,
-                                ingest_ns,
-                                &op_meta,
-                                None,
-                                this_group.transactional
-                            )) {
-                                res.events.push(port_and_event);
-                            };
-
-                            if first {
-                                // first window
-                                //          swap(scratch, aggrs)
-                                mem::swap(&mut scratch1.aggregates, &mut this_group.aggrs); // store current state before init
-                                scratch1.transactional = this_group.transactional;
-                                //          aggrs.init() and reset transactional state
-                                this_group.reset();
-                            } else {
-                                // not first window
-                                // store old aggrs state from last window into scratch2
-                                mem::swap(scratch1, scratch2);
-                                //          swap(aggrs, scratch) // store aggrs state before init() into scratch1 for next window
-                                mem::swap(&mut this_group.aggrs, &mut scratch1.aggregates);
-                                scratch1.transactional = this_group.transactional;
-
-                                //          aggrs.init() and reset transactional state
-                                this_group.reset();
-                                //          merge state from last window into this one
-                                for (this, prev) in
-                                    this_group.aggrs.iter_mut().zip(scratch2.aggregates.iter())
-                                {
-                                    this.invocable.merge(&prev.invocable).map_err(|e| {
-                                        let r: Option<&Registry> = None;
-                                        e.into_err(prev, prev, r, &node_meta)
-                                    })?;
-                                }
-                                this_group.track_transactional(scratch2.transactional);
-                                this_group.id.track(&event_id_scratch2);
-                            }
-                        }
-
-                        first = false;
-                    }
-
-                    // merge state from last emit window into next non-emit window if there is any
-                    if !emit_window_events.is_empty() {
-                        if let Some(non_emit_window) = windows.get_mut(emit_window_events.len()) {
-                            consts.window = Value::from(non_emit_window.name().to_string());
-
-                            // get current window group
-                            let this_group = stry!(get_or_create_group(
-                                non_emit_window,
-                                event_id_gen,
-                                aggregates,
-                                &group_str,
-                                &group_value,
-                            ));
-                            for (this, prev) in
-                                this_group.aggrs.iter_mut().zip(scratch1.aggregates.iter())
-                            {
-                                this.invocable.merge(&prev.invocable).map_err(|e| {
-                                    let r: Option<&Registry> = None;
-                                    e.into_err(prev, prev, r, &node_meta)
-                                })?;
-                            }
-                            this_group.track_transactional(scratch1.transactional);
-                            this_group.id.track(&event_id_scratch1);
-                        }
-                    }
-                }
-            };
+            }
+            for g in to_remove {
+                groups.remove(&g);
+            }
             Ok(res)
         })
     }
@@ -1054,10 +450,4 @@ impl Operator for TrickleSelect {
     fn handles_signal(&self) -> bool {
         true
     }
-}
-
-fn swap_and_reset_group(scratch: &mut AggregateScratch, group: &mut GroupData) {
-    mem::swap(&mut scratch.aggregates, &mut group.aggrs);
-    scratch.transactional = group.transactional;
-    group.reset();
 }

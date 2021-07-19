@@ -121,7 +121,7 @@ impl Operator for RoundRobin {
     fn on_signal(
         &mut self,
         _uid: u64,
-        _state: &Value<'static>,
+        _state: &mut Value<'static>,
         signal: &mut Event,
     ) -> Result<EventAndInsights> {
         if self.first && self.outputs.iter().any(|o| o.open) {
