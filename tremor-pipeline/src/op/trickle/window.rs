@@ -20,7 +20,7 @@ use beef::Cow;
 use std::{borrow::Cow as SCow, mem};
 use tremor_script::{
     self,
-    ast::{Aggregates, Consts, NodeMetas, RunConsts, Select, WindowDecl},
+    ast::{AggrSlice, Aggregates, Consts, NodeMetas, RunConsts, Select, WindowDecl},
     interpreter::{Env, LocalStack},
     prelude::*,
     Value,
@@ -43,6 +43,7 @@ pub(crate) struct SelectCtx<'run, 'script, 'local> {
     pub(crate) transactional: bool,
 }
 
+#[allow(clippy::module_name_repetitions)]
 #[derive(Clone, Debug)]
 pub struct GroupWindow {
     pub(crate) name: Value<'static>,
@@ -56,7 +57,7 @@ pub struct GroupWindow {
 impl GroupWindow {
     pub(crate) fn from_windows<'i, I>(
         event_id_gen: &mut EventIdGenerator,
-        aggrs: &Aggregates<'static>,
+        aggrs: &AggrSlice<'static>,
         id: &EventId,
         mut iter: I,
     ) -> Option<Box<Self>>
@@ -66,7 +67,7 @@ impl GroupWindow {
         iter.next().map(|w| {
             Box::new(Self {
                 window: w.window_impl.clone(),
-                aggrs: aggrs.clone(),
+                aggrs: aggrs.to_vec(),
                 id: id.clone(),
                 name: w.name.clone().into(),
                 transactional: false,
@@ -87,7 +88,7 @@ impl GroupWindow {
         consts: RunConsts,
         data: &ValueAndMeta,
     ) -> Result<()> {
-        let mut consts = consts.clone();
+        let mut consts = consts;
         consts.window = &self.name;
 
         let env = Env {
@@ -133,7 +134,7 @@ impl GroupWindow {
         Ok(())
     }
 
-    fn merge(&mut self, ctx: &SelectCtx, prev: &Aggregates<'static>) -> Result<()> {
+    fn merge(&mut self, ctx: &SelectCtx, prev: &AggrSlice<'static>) -> Result<()> {
         self.id.track(&ctx.event_id);
         self.transactional |= ctx.transactional;
         for (this, prev) in self.aggrs.iter_mut().zip(prev.iter()) {
@@ -177,8 +178,7 @@ impl GroupWindow {
             let mut outgoing_event_id = ctx.event_id_gen.next_id();
             mem::swap(&mut self.id, &mut outgoing_event_id);
             ctx.transactional = self.transactional;
-
-            let mut consts = consts.clone();
+            let mut consts = consts;
             consts.window = &self.name;
             std::mem::swap(&mut ctx.event_id, &mut outgoing_event_id);
             if let Some(port_and_event) = execute_select_and_having(ctx, &env, data)? {
@@ -195,15 +195,15 @@ impl GroupWindow {
             self.transactional = false;
             self.reset();
         }
-        if !window_event.include {
+        if window_event.include {
+            Ok(can_remove)
+        } else {
             if let Some(prev) = prev {
                 self.merge(ctx, prev)?;
             } else {
                 self.accumulate(ctx, consts, data)?;
             }
             Ok(false)
-        } else {
-            Ok(can_remove)
         }
     }
 }
@@ -249,10 +249,10 @@ pub trait Trait: std::fmt::Debug {
         data: &ValueAndMeta,
         ingest_ns: u64,
         origin_uri: &Option<EventOriginUri>,
-    ) -> Result<WindowEvent>;
+    ) -> Result<Actions>;
     /// handle a tick with the current time in nanoseconds as `ns` argument
-    fn on_tick(&mut self, _ns: u64) -> Result<WindowEvent> {
-        Ok(WindowEvent::all_false())
+    fn on_tick(&mut self, _ns: u64) -> Result<Actions> {
+        Ok(Actions::all_false())
     }
     /// maximum number of groups to keep around simultaneously
     /// a value of `u64::MAX` allows as much simultaneous groups as possible
@@ -298,14 +298,14 @@ impl Trait for Impl {
         data: &ValueAndMeta,
         ingest_ns: u64,
         origin_uri: &Option<EventOriginUri>,
-    ) -> Result<WindowEvent> {
+    ) -> Result<Actions> {
         match self {
             Self::TumblingTimeBased(w) => w.on_event(data, ingest_ns, origin_uri),
             Self::TumblingCountBased(w) => w.on_event(data, ingest_ns, origin_uri),
         }
     }
 
-    fn on_tick(&mut self, ns: u64) -> Result<WindowEvent> {
+    fn on_tick(&mut self, ns: u64) -> Result<Actions> {
         match self {
             Self::TumblingTimeBased(w) => w.on_tick(ns),
             Self::TumblingCountBased(w) => w.on_tick(ns),
@@ -332,7 +332,7 @@ impl From<TumblingOnTime> for Impl {
 }
 
 #[derive(Debug, PartialEq, Default)]
-pub struct WindowEvent {
+pub struct Actions {
     /// New window has opened
     pub opened: bool,
     /// Include the current event in the window event to be emitted
@@ -341,7 +341,7 @@ pub struct WindowEvent {
     pub emit: bool,
 }
 
-impl WindowEvent {
+impl Actions {
     pub(crate) fn all_true() -> Self {
         Self {
             opened: true,
@@ -363,8 +363,8 @@ impl Trait for No {
         _data: &ValueAndMeta,
         _ingest_ns: u64,
         _origin_uri: &Option<EventOriginUri>,
-    ) -> Result<WindowEvent> {
-        Ok(WindowEvent::all_true())
+    ) -> Result<Actions> {
+        Ok(Actions::all_true())
     }
     fn max_groups(&self) -> u64 {
         u64::MAX
@@ -391,11 +391,11 @@ impl TumblingOnTime {
         }
     }
 
-    fn get_window_event(&mut self, time: u64) -> WindowEvent {
+    fn get_window_event(&mut self, time: u64) -> Actions {
         match self.next_window {
             None => {
                 self.next_window = Some(time + self.interval);
-                WindowEvent {
+                Actions {
                     opened: true,
                     include: false,
                     emit: false,
@@ -403,13 +403,13 @@ impl TumblingOnTime {
             }
             Some(next_window) if next_window <= time => {
                 self.next_window = Some(time + self.interval);
-                WindowEvent {
+                Actions {
                     opened: true,   // this event has been put into the newly opened window
                     include: false, // event is beyond the current window, put it into the next
                     emit: true,     // only emit if we had any events in this interval
                 }
             }
-            Some(_) => WindowEvent::all_false(),
+            Some(_) => Actions::all_false(),
         }
     }
 }
@@ -423,7 +423,7 @@ impl Trait for TumblingOnTime {
         data: &ValueAndMeta,
         ingest_ns: u64,
         origin_uri: &Option<EventOriginUri>,
-    ) -> Result<WindowEvent> {
+    ) -> Result<Actions> {
         let time = self
             .script
             .as_ref()
@@ -450,12 +450,12 @@ impl Trait for TumblingOnTime {
         Ok(self.get_window_event(time))
     }
 
-    fn on_tick(&mut self, ns: u64) -> Result<WindowEvent> {
+    fn on_tick(&mut self, ns: u64) -> Result<Actions> {
         if self.script.is_none() {
             Ok(self.get_window_event(ns))
         } else {
             // we basically ignore ticks when we have a script with a custom timestamp
-            Ok(WindowEvent::all_false())
+            Ok(Actions::all_false())
         }
     }
 }
@@ -477,7 +477,7 @@ impl TumblingOnNumber {
             max_groups,
             size,
             script,
-            ..Default::default()
+            ..TumblingOnNumber::default()
         }
     }
 }
@@ -490,7 +490,7 @@ impl Trait for TumblingOnNumber {
         data: &ValueAndMeta,
         ingest_ns: u64,
         origin_uri: &Option<EventOriginUri>,
-    ) -> Result<WindowEvent> {
+    ) -> Result<Actions> {
         let count = self
             .script
             .as_ref()
@@ -520,10 +520,10 @@ impl Trait for TumblingOnNumber {
         if new_count >= self.size {
             self.count = new_count - self.size;
             // we can emit now, including this event
-            Ok(WindowEvent::all_true())
+            Ok(Actions::all_true())
         } else {
             self.count = new_count;
-            Ok(WindowEvent::all_false())
+            Ok(Actions::all_false())
         }
     }
 }

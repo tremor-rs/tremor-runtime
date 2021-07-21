@@ -75,7 +75,9 @@ impl<'script> BaseExpr for Stmt<'script> {
 }
 
 /// array of aggregate functions
-pub type Aggregates<'a> = Vec<InvokeAggrFn<'a>>;
+pub type Aggregates<'f> = Vec<InvokeAggrFn<'f>>;
+/// array of aggregate functions (as slice)
+pub type AggrSlice<'f> = [InvokeAggrFn<'f>];
 
 /// Scratch data for efficiently merging window states in a tilt-frame without additional allocations at runtime.
 /// This is basically what needs to be dragged through
