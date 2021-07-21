@@ -13,7 +13,7 @@
 // limitations under the License.
 
 #![allow(clippy::float_cmp)]
-use crate::op::prelude::trickle::window::{Trait, WindowEvent};
+use crate::op::prelude::trickle::window::{Actions, Trait};
 use crate::query::window_decl_to_impl;
 use crate::EventId;
 
@@ -793,7 +793,7 @@ fn tumbling_window_on_time_emit() -> Result<()> {
     })
     .into();
     assert_eq!(
-        WindowEvent {
+        Actions {
             include: false,
             opened: true,
             emit: false
@@ -801,11 +801,11 @@ fn tumbling_window_on_time_emit() -> Result<()> {
         window.on_event(&vm, ingest_ns(5), &None)?
     );
     assert_eq!(
-        WindowEvent::all_false(),
+        Actions::all_false(),
         window.on_event(&vm, ingest_ns(10), &None)?
     );
     assert_eq!(
-        WindowEvent {
+        Actions {
             include: false,
             opened: true,
             emit: true
@@ -813,7 +813,7 @@ fn tumbling_window_on_time_emit() -> Result<()> {
         window.on_event(&vm, ingest_ns(15), &None)? // exactly on time
     );
     assert_eq!(
-        WindowEvent {
+        Actions {
             include: false,
             opened: true,
             emit: true
@@ -865,7 +865,7 @@ fn tumbling_window_on_time_from_script_emit() -> Result<()> {
     })
     .into();
     assert_eq!(
-        WindowEvent {
+        Actions {
             opened: true,
             include: false,
             emit: false
@@ -876,15 +876,15 @@ fn tumbling_window_on_time_from_script_emit() -> Result<()> {
         "timestamp": 1_999_999_999
     })
     .into();
-    assert_eq!(WindowEvent::all_false(), window.on_event(&json2, 2, &None)?);
+    assert_eq!(Actions::all_false(), window.on_event(&json2, 2, &None)?);
     let json3 = literal!({
         "timestamp": 2_000_000_000
     })
     .into();
     // ignoring on_tick as we have a script
-    assert_eq!(WindowEvent::all_false(), window.on_tick(2_000_000_000)?);
+    assert_eq!(Actions::all_false(), window.on_tick(2_000_000_000)?);
     assert_eq!(
-        WindowEvent {
+        Actions {
             opened: true,
             include: false,
             emit: true
@@ -898,16 +898,16 @@ fn tumbling_window_on_time_from_script_emit() -> Result<()> {
 fn tumbling_window_on_time_on_tick() -> Result<()> {
     let mut window = window::TumblingOnTime::from_stmt(100, window::Impl::DEFAULT_MAX_GROUPS, None);
     assert_eq!(
-        WindowEvent {
+        Actions {
             opened: true,
             include: false,
             emit: false
         },
         window.on_tick(0)?
     );
-    assert_eq!(WindowEvent::all_false(), window.on_tick(99)?);
+    assert_eq!(Actions::all_false(), window.on_tick(99)?);
     assert_eq!(
-        WindowEvent {
+        Actions {
             opened: true,
             include: false,
             emit: true // we delete windows that do not have content so this is fine
@@ -915,12 +915,12 @@ fn tumbling_window_on_time_on_tick() -> Result<()> {
         window.on_tick(100)?
     );
     assert_eq!(
-        WindowEvent::all_false(),
+        Actions::all_false(),
         window.on_event(&ValueAndMeta::default(), 101, &None)?
     );
-    assert_eq!(WindowEvent::all_false(), window.on_tick(102)?);
+    assert_eq!(Actions::all_false(), window.on_tick(102)?);
     assert_eq!(
-        WindowEvent {
+        Actions {
             opened: true,
             include: false,
             emit: true // we had an event yeah
@@ -934,16 +934,16 @@ fn tumbling_window_on_time_on_tick() -> Result<()> {
 fn tumbling_window_on_time_emit_empty_windows() -> Result<()> {
     let mut window = window::TumblingOnTime::from_stmt(100, window::Impl::DEFAULT_MAX_GROUPS, None);
     assert_eq!(
-        WindowEvent {
+        Actions {
             opened: true,
             include: false,
             emit: false
         },
         window.on_tick(0)?
     );
-    assert_eq!(WindowEvent::all_false(), window.on_tick(99)?);
+    assert_eq!(Actions::all_false(), window.on_tick(99)?);
     assert_eq!(
-        WindowEvent {
+        Actions {
             opened: true,
             include: false,
             emit: true // we **DO** emit even if we had no event
@@ -951,12 +951,12 @@ fn tumbling_window_on_time_emit_empty_windows() -> Result<()> {
         window.on_tick(100)?
     );
     assert_eq!(
-        WindowEvent::all_false(),
+        Actions::all_false(),
         window.on_event(&ValueAndMeta::default(), 101, &None)?
     );
-    assert_eq!(WindowEvent::all_false(), window.on_tick(102)?);
+    assert_eq!(Actions::all_false(), window.on_tick(102)?);
     assert_eq!(
-        WindowEvent {
+        Actions {
             opened: true,
             include: false,
             emit: true // we had an event yeah
@@ -977,15 +977,15 @@ fn no_window_emit() -> Result<()> {
     .into();
 
     assert_eq!(
-        WindowEvent::all_true(),
+        Actions::all_true(),
         window.on_event(&vm, ingest_ns(0), &None)?
     );
-    assert_eq!(WindowEvent::all_false(), window.on_tick(0)?);
+    assert_eq!(Actions::all_false(), window.on_tick(0)?);
     assert_eq!(
-        WindowEvent::all_true(),
+        Actions::all_true(),
         window.on_event(&vm, ingest_ns(1), &None)?
     );
-    assert_eq!(WindowEvent::all_false(), window.on_tick(1)?);
+    assert_eq!(Actions::all_false(), window.on_tick(1)?);
     Ok(())
 }
 
@@ -1000,24 +1000,24 @@ fn tumbling_window_on_number_emit() -> Result<()> {
 
     // do not emit yet
     assert_eq!(
-        WindowEvent::all_false(),
+        Actions::all_false(),
         window.on_event(&vm, ingest_ns(0), &None)?
     );
-    assert_eq!(WindowEvent::all_false(), window.on_tick(1_000_000_000)?);
+    assert_eq!(Actions::all_false(), window.on_tick(1_000_000_000)?);
     // do not emit yet
     assert_eq!(
-        WindowEvent::all_false(),
+        Actions::all_false(),
         window.on_event(&vm, ingest_ns(1), &None)?
     );
-    assert_eq!(WindowEvent::all_false(), window.on_tick(2_000_000_000)?);
+    assert_eq!(Actions::all_false(), window.on_tick(2_000_000_000)?);
     // emit and open on the third event
     assert_eq!(
-        WindowEvent::all_true(),
+        Actions::all_true(),
         window.on_event(&vm, ingest_ns(2), &None)?
     );
     // no emit here, next window
     assert_eq!(
-        WindowEvent::all_false(),
+        Actions::all_false(),
         window.on_event(&vm, ingest_ns(3), &None)?
     );
 
