@@ -1,0 +1,5 @@
+define tumbling window two with
+  size = 2
+end;
+
+select aggr::win::collect_flattened(event) from in[two, two] group by event.application into out;

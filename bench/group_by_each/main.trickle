@@ -1,0 +1,2 @@
+
+select event from in group by each(event.tags) into out;
