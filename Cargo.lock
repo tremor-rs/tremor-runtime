@@ -1875,6 +1875,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "float-cmp"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "98de4bbd547a563b716d8dfa9aad1cb19bfab00f4fa09a6a4ed21dbcf44ce9c4"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
 name = "fluent_builder"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6453,7 +6462,7 @@ dependencies = [
  "dirs-next",
  "env_logger 0.9.0",
  "error-chain 0.12.4",
- "float-cmp",
+ "float-cmp 0.9.0",
  "globwalk",
  "halfbrown",
  "http-types",
@@ -6663,7 +6672,7 @@ dependencies = [
  "distance",
  "downcast-rs",
  "error-chain 0.12.4",
- "float-cmp",
+ "float-cmp 0.9.0",
  "fxhash",
  "glob",
  "grok",
@@ -6704,7 +6713,7 @@ version = "0.3.2"
 dependencies = [
  "base64 0.13.0",
  "beef",
- "float-cmp",
+ "float-cmp 0.9.0",
  "getopts",
  "halfbrown",
  "proptest",
@@ -7024,7 +7033,7 @@ version = "0.2.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4b637f98040dfa411b01a85b238a8cadbd797b303c23007157dee4bbbd3a72af"
 dependencies = [
- "float-cmp",
+ "float-cmp 0.8.0",
  "halfbrown",
  "itoa",
  "ryu",
