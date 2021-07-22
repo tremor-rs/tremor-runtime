@@ -65,7 +65,7 @@ lalrpop = "0.19"
 
 [dev-dependencies]
 criterion = "0.3"
-float-cmp = "0.8"
+float-cmp = "0.9"
 matches = "0.1"
 pretty_assertions = "0.7.2"
 proptest = "1.0"
