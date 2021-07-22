@@ -118,7 +118,7 @@ tide = "0.16"
 surf-sse = { git="https://github.com/dak-x/surf-sse", tag="2.0" }
 
 # nats
-async-nats = "0.9.18"
+async-nats = "0.10.1"
 
 # discord
 serenity = { version="0.10", default-features=false, features=[

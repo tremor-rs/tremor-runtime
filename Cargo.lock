@@ -366,9 +366,9 @@ dependencies = [
 
 [[package]]
 name = "async-nats"
-version = "0.9.18"
+version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "baee5c52a335d4ced7f7f8913516a17f663ab7d707cda0b399e1920ef9459171"
+checksum = "3dae854440faecce70f0664f41f09a588de1e7a4366931ec3962ded3d8f903c5"
 dependencies = [
  "blocking",
  "nats",
@@ -1631,8 +1631,6 @@ checksum = "c762bae6dcaf24c4c84667b8579785430908723d5c889f469d76a41d59cc7a9d"
 dependencies = [
  "curve25519-dalek",
  "ed25519",
- "rand 0.7.3",
- "serde",
  "sha2",
  "zeroize",
 ]
@@ -1808,9 +1806,9 @@ checksum = "4443176a9f2c162692bd3d352d745ef9413eec5782a80d8fd6f8a1ac692a07f7"
 
 [[package]]
 name = "fastrand"
-version = "1.4.1"
+version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "77b705829d1e87f762c2df6da140b26af5839e1033aa84aa5f56bb688e4e1bdb"
+checksum = "b394ed3d285a429378d3b384b9eb1285267e7df4b166df24b7a6939a04dc392e"
 dependencies = [
  "instant",
 ]
@@ -3061,9 +3059,9 @@ dependencies = [
 
 [[package]]
 name = "libc"
-version = "0.2.94"
+version = "0.2.98"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "18794a8ad5b29321f790b55d93dfba91e125cb1a9edbd4f8e3150acc771c1a5e"
+checksum = "320cfe77175da3a483efed4bc0adc1968ca050b098ce4f2f1c13a56626128790"
 
 [[package]]
 name = "libflate"
@@ -3416,9 +3414,9 @@ dependencies = [
 
 [[package]]
 name = "nats"
-version = "0.9.18"
+version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ffcf29146fe0d7954a0f35f299ea01a44589a984c94255441f10de9e3becd630"
+checksum = "1c0cfa3903c3e613edddaa4a2f86b2053a1d6fbcf315a3ff352c25ba9f0a8585"
 dependencies = [
  "base64 0.13.0",
  "base64-url",
@@ -3472,9 +3470,9 @@ checksum = "e4a24736216ec316047a1fc4252e27dabb04218aa4a3f37c6e7ddbf1f9782b54"
 
 [[package]]
 name = "nkeys"
-version = "0.0.11"
+version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd0aa1a33567887c95af653f9f88e482e34df8eaabb98df92cf5c81dfd882b0a"
+checksum = "c1a98f0a974ff737974b57ba1c71d2e0fe7ec18e5a828d4b8e02683171349dfa"
 dependencies = [
  "byteorder",
  "data-encoding",
@@ -3533,12 +3531,12 @@ dependencies = [
 
 [[package]]
 name = "nuid"
-version = "0.2.2"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8061bec52f76dc109f1a392ee03afcf2fae4c7950953de6388bc2f5a57b61979"
+checksum = "7000c9392b545c4ba43e8abc086bf7d01cd2948690934c16980170b0549a2bd3"
 dependencies = [
  "lazy_static",
- "rand 0.7.3",
+ "rand 0.8.4",
 ]
 
 [[package]]
@@ -3638,9 +3636,9 @@ checksum = "1a5b3dd1c072ee7963717671d1ca129f1048fda25edea6b752bfc71ac8854170"
 
 [[package]]
 name = "once_cell"
-version = "1.7.2"
+version = "1.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "af8b08b04175473088b46763e51ee54da5f9a164bc162f615b91bc179dbf15a3"
+checksum = "692fcb63b64b1758029e0a96ee63e049ce8c5948587f2f7208df04625e5f6b56"
 
 [[package]]
 name = "onig"
