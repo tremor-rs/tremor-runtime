@@ -25,7 +25,7 @@ use test::tag;
 use tremor_common::time::nanotime;
 use tremor_script::ast::base_expr::BaseExpr;
 use tremor_script::ast::{Expr, ImutExpr, ImutExprInt, Invoke, List, NodeMetas, Record};
-use tremor_script::ctx::{EventContext, EventOriginUri};
+use tremor_script::ctx::EventContext;
 use tremor_script::highlighter::{Dumb as DumbHighlighter, Highlighter, Term as TermHighlighter};
 use tremor_script::interpreter::{AggrType, Env, ExecOpts, LocalStack};
 use tremor_script::prelude::*;
@@ -291,7 +291,7 @@ pub(crate) fn run_suite(
 
             let script = runnable.script.suffix();
 
-            let context = &EventContext::new(nanotime(), Some(EventOriginUri::default()));
+            let context = &EventContext::new(nanotime(), None);
             let env = Env {
                 context,
                 consts: script.consts.run(),

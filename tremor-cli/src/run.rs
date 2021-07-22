@@ -29,10 +29,7 @@ use tremor_script::highlighter::{Highlighter, Term as TermHighlighter};
 use tremor_script::prelude::*;
 use tremor_script::query::Query;
 use tremor_script::script::{AggrType, Return, Script};
-use tremor_script::{
-    ctx::{EventContext, EventOriginUri},
-    lexer::Tokenizer,
-};
+use tremor_script::{ctx::EventContext, lexer::Tokenizer};
 use tremor_script::{EventPayload, Value, ValueAndMeta};
 struct Ingress {
     is_interactive: bool,
@@ -253,7 +250,7 @@ fn run_tremor_source(matches: &ArgMatches, src: String) -> Result<()> {
                     let mut state = Value::null();
                     let mut event = event.clone_static();
                     match runnable.run(
-                        &EventContext::new(at, Some(EventOriginUri::default())),
+                        &EventContext::new(at, None),
                         AggrType::Tick,
                         &mut event,
                         &mut state,

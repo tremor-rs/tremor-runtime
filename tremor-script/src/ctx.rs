@@ -131,18 +131,18 @@ impl default::Default for EventOriginUri {
 
 /// Context in that an event is executed
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash, simd_json_derive::Serialize)]
-pub struct EventContext {
+pub struct EventContext<'run> {
     at: u64,
     /// URI of the origin
-    pub origin_uri: Option<EventOriginUri>,
+    pub origin_uri: Option<&'run EventOriginUri>,
     /// Allow panicing on asserts
     pub panic_on_assert: bool,
 }
 
-impl EventContext {
+impl<'run> EventContext<'run> {
     /// Creates a new context
     #[must_use]
-    pub fn new(ingest_ns: u64, origin_uri: Option<EventOriginUri>) -> Self {
+    pub fn new(ingest_ns: u64, origin_uri: Option<&'run EventOriginUri>) -> Self {
         Self {
             at: ingest_ns,
             origin_uri,
@@ -159,7 +159,7 @@ impl EventContext {
     /// returns the events origin uri
     #[must_use]
     pub fn origin_uri(&self) -> Option<&EventOriginUri> {
-        self.origin_uri.as_ref()
+        self.origin_uri
     }
 }
 

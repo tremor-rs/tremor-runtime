@@ -60,7 +60,7 @@ macro_rules! test_cases {
                         uid: 42
 
                     };
-                    let context = EventContext::new(id as u64, Some(uri));
+                    let context = EventContext::new(id as u64, Some(&uri));
                     let mut meta = Value::from(Object::default());
                     let mut state = Value::null();
                     match script.run(&context, AggrType::Tick, &mut json, &mut state, &mut meta)? {
