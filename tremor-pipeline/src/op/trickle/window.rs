@@ -12,15 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::{
-    errors::{Error, Result},
-    Event, EventId, EventIdGenerator, OpMeta,
-};
+use crate::{Event, EventId, EventIdGenerator, OpMeta};
 use beef::Cow;
 use std::{borrow::Cow as SCow, mem};
+use tremor_common::stry;
 use tremor_script::{
     self,
     ast::{AggrSlice, Aggregates, Consts, NodeMetas, RunConsts, Select, WindowDecl},
+    errors::Result,
     interpreter::{Env, LocalStack},
     prelude::*,
     Value,
@@ -33,7 +32,7 @@ pub(crate) struct SelectCtx<'run, 'script, 'local> {
     pub(crate) local_stack: &'run LocalStack<'local>,
     pub(crate) node_meta: &'run NodeMetas,
     pub(crate) opts: ExecOpts,
-    pub(crate) ctx: &'run EventContext,
+    pub(crate) ctx: &'run EventContext<'run>,
     pub(crate) state: &'run mut Value<'static>,
     pub(crate) event_id: EventId,
     pub(crate) event_id_gen: &'run mut EventIdGenerator,
@@ -41,6 +40,7 @@ pub(crate) struct SelectCtx<'run, 'script, 'local> {
     pub(crate) op_meta: &'run OpMeta,
     pub(crate) origin_uri: &'run Option<EventOriginUri>,
     pub(crate) transactional: bool,
+    pub(crate) recursion_limit: u32,
 }
 
 #[allow(clippy::module_name_repetitions)]
@@ -56,7 +56,6 @@ pub struct GroupWindow {
 
 impl GroupWindow {
     pub(crate) fn from_windows<'i, I>(
-        event_id_gen: &mut EventIdGenerator,
         aggrs: &AggrSlice<'static>,
         id: &EventId,
         mut iter: I,
@@ -71,7 +70,7 @@ impl GroupWindow {
                 id: id.clone(),
                 name: w.name.clone().into(),
                 transactional: false,
-                next: GroupWindow::from_windows(event_id_gen, aggrs, id, iter),
+                next: GroupWindow::from_windows(aggrs, id, iter),
             })
         })
     }
@@ -96,7 +95,7 @@ impl GroupWindow {
             consts,
             aggrs: &NO_AGGRS,
             meta: &ctx.node_meta,
-            recursion_limit: tremor_script::recursion_limit(),
+            recursion_limit: ctx.recursion_limit,
         };
 
         // we incorporate the event into this group below, so track it here
@@ -118,18 +117,18 @@ impl GroupWindow {
             let mut argv1: Vec<&Value> = Vec::with_capacity(aggr.args.len());
             for arg in &aggr.args {
                 let result =
-                    arg.run(*opts, &env, event_data, state, event_meta, ctx.local_stack)?;
+                    stry!(arg.run(*opts, &env, event_data, state, event_meta, ctx.local_stack));
                 argv.push(result);
             }
             for arg in &argv {
                 argv1.push(arg);
             }
 
-            invocable.accumulate(argv1.as_slice()).map_err(|e| {
+            stry!(invocable.accumulate(argv1.as_slice()).map_err(|e| {
                 // TODO nice error
                 let r: Option<&Registry> = None;
                 e.into_err(aggr, aggr, r, node_meta)
-            })?;
+            }));
         }
         Ok(())
     }
@@ -138,10 +137,10 @@ impl GroupWindow {
         self.id.track(&ctx.event_id);
         self.transactional |= ctx.transactional;
         for (this, prev) in self.aggrs.iter_mut().zip(prev.iter()) {
-            this.invocable.merge(&prev.invocable).map_err(|e| {
+            stry!(this.invocable.merge(&prev.invocable).map_err(|e| {
                 let r: Option<&Registry> = None;
                 e.into_err(prev, prev, r, ctx.node_meta)
-            })?;
+            }));
         }
         Ok(())
     }
@@ -155,13 +154,13 @@ impl GroupWindow {
         prev: Option<&Aggregates<'static>>,
         mut can_remove: bool,
     ) -> Result<bool> {
-        let window_event = self.window.on_event(data, ctx.ingest_ns, ctx.origin_uri)?;
+        let window_event = stry!(self.window.on_event(data, ctx.ingest_ns, ctx.origin_uri));
 
         if window_event.include {
             if let Some(prev) = prev {
-                self.merge(ctx, prev)?;
+                stry!(self.merge(ctx, prev));
             } else {
-                self.accumulate(ctx, consts, data)?;
+                stry!(self.accumulate(ctx, consts, data));
             }
         }
 
@@ -172,7 +171,7 @@ impl GroupWindow {
                 consts,
                 aggrs: &self.aggrs,
                 meta: &ctx.node_meta,
-                recursion_limit: tremor_script::recursion_limit(),
+                recursion_limit: ctx.recursion_limit,
             };
 
             let mut outgoing_event_id = ctx.event_id_gen.next_id();
@@ -181,7 +180,7 @@ impl GroupWindow {
             let mut consts = consts;
             consts.window = &self.name;
             std::mem::swap(&mut ctx.event_id, &mut outgoing_event_id);
-            if let Some(port_and_event) = execute_select_and_having(ctx, &env, data)? {
+            if let Some(port_and_event) = stry!(execute_select_and_having(ctx, &env, data)) {
                 events.push(port_and_event);
             };
             // re-initialize aggr state for new window
@@ -189,7 +188,14 @@ impl GroupWindow {
 
             if let Some(next) = &mut self.next {
                 can_remove = can_remove
-                    && next.on_event(ctx, consts, data, events, Some(&self.aggrs), can_remove)?;
+                    && stry!(next.on_event(
+                        ctx,
+                        consts,
+                        data,
+                        events,
+                        Some(&self.aggrs),
+                        can_remove
+                    ));
             }
             std::mem::swap(&mut ctx.event_id, &mut outgoing_event_id);
             self.transactional = false;
@@ -199,9 +205,9 @@ impl GroupWindow {
             Ok(can_remove)
         } else {
             if let Some(prev) = prev {
-                self.merge(ctx, prev)?;
+                stry!(self.merge(ctx, prev));
             } else {
-                self.accumulate(ctx, consts, data)?;
+                stry!(self.accumulate(ctx, consts, data));
             }
             Ok(false)
         }
@@ -216,6 +222,14 @@ pub struct Group {
 }
 
 impl Group {
+    pub(crate) fn reset(&mut self) {
+        let mut w = &mut self.windows;
+        while let Some(g) = w {
+            g.reset();
+            g.window.reset();
+            w = &mut g.next
+        }
+    }
     pub(crate) fn on_event(
         &mut self,
         mut ctx: SelectCtx,
@@ -233,9 +247,9 @@ impl Group {
                 consts: run,
                 aggrs: &NO_AGGRS,
                 meta: &ctx.node_meta,
-                recursion_limit: tremor_script::recursion_limit(),
+                recursion_limit: ctx.recursion_limit,
             };
-            if let Some(port_and_event) = execute_select_and_having(&ctx, &env, &data)? {
+            if let Some(port_and_event) = stry!(execute_select_and_having(&ctx, &env, &data)) {
                 events.push(port_and_event);
             };
             Ok(true)
@@ -290,6 +304,13 @@ impl Impl {
     // allow all the groups we can take by default
     // this preserves backward compatibility
     pub const DEFAULT_MAX_GROUPS: u64 = u64::MAX;
+
+    pub(crate) fn reset(&mut self) {
+        match self {
+            Self::TumblingTimeBased(w) => w.reset(),
+            Self::TumblingCountBased(w) => w.reset(),
+        }
+    }
 }
 
 impl Trait for Impl {
@@ -380,6 +401,10 @@ pub struct TumblingOnTime {
     pub(crate) script: Option<WindowDecl<'static>>,
 }
 impl TumblingOnTime {
+    pub(crate) fn reset(&mut self) {
+        self.next_window = None;
+    }
+
     pub fn from_stmt(interval: u64, max_groups: u64, script: Option<&WindowDecl>) -> Self {
         let script = script.cloned().map(WindowDecl::into_static);
         Self {
@@ -424,29 +449,28 @@ impl Trait for TumblingOnTime {
         ingest_ns: u64,
         origin_uri: &Option<EventOriginUri>,
     ) -> Result<Actions> {
-        let time = self
+        let time = stry!(self
             .script
             .as_ref()
             .and_then(|script| script.script.as_ref())
             .map(|script| {
-                // TODO avoid origin_uri clone here
-                let context = EventContext::new(ingest_ns, origin_uri.clone());
+                let context = EventContext::new(ingest_ns, origin_uri.as_ref());
                 let (unwind_event, event_meta) = data.parts();
-                let value = script.run_imut(
+                let value = stry!(script.run_imut(
                     &context,
                     AggrType::Emit,
                     &unwind_event,  // event
                     &Value::null(), // state for the window
                     &event_meta,    // $
-                )?;
+                ));
                 let data = match value {
                     Return::Emit { value, .. } => value.as_u64(),
                     Return::EmitEvent { .. } => unwind_event.as_u64(),
                     Return::Drop { .. } => None,
                 };
-                data.ok_or_else(|| Error::from("Data based window didn't provide a valid value"))
+                data.ok_or_else(|| "Data based window didn't provide a valid value".into())
             })
-            .unwrap_or(Ok(ingest_ns))?;
+            .unwrap_or(Ok(ingest_ns)));
         Ok(self.get_window_event(time))
     }
 
@@ -470,6 +494,10 @@ pub struct TumblingOnNumber {
 }
 
 impl TumblingOnNumber {
+    pub(crate) fn reset(&mut self) {
+        self.next_eviction = 0;
+        self.count = 0;
+    }
     pub fn from_stmt(size: u64, max_groups: u64, script: Option<&WindowDecl>) -> Self {
         let script = script.cloned().map(WindowDecl::into_static);
 
@@ -491,28 +519,27 @@ impl Trait for TumblingOnNumber {
         ingest_ns: u64,
         origin_uri: &Option<EventOriginUri>,
     ) -> Result<Actions> {
-        let count = self
+        let count = stry!(self
             .script
             .as_ref()
             .and_then(|script| script.script.as_ref())
             .map_or(Ok(1), |script| {
-                // TODO avoid origin_uri clone here
-                let context = EventContext::new(ingest_ns, origin_uri.clone());
+                let context = EventContext::new(ingest_ns, origin_uri.as_ref());
                 let (unwind_event, event_meta) = data.parts();
-                let value = script.run_imut(
+                let value = stry!(script.run_imut(
                     &context,
                     AggrType::Emit,
                     &unwind_event,  // event
                     &Value::null(), // state for the window
                     &event_meta,    // $
-                )?;
+                ));
                 let data = match value {
                     Return::Emit { value, .. } => value.as_u64(),
                     Return::EmitEvent { .. } => unwind_event.as_u64(),
                     Return::Drop { .. } => None,
                 };
-                data.ok_or_else(|| Error::from("Data based window didn't provide a valid value"))
-            })?;
+                data.ok_or_else(|| "Data based window didn't provide a valid value".into())
+            }));
 
         // If we're above count we emit and set the new count to 1
         // ( we emit on the ) previous event

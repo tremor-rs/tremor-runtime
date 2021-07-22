@@ -72,7 +72,7 @@ impl Operator for SimpleSelect {
                 let local_stack = tremor_script::interpreter::LocalStack::with_size(*locals);
 
                 // TODO avoid origin_uri clone here
-                let ctx = EventContext::new(event.ingest_ns, event.origin_uri.clone());
+                let ctx = EventContext::new(event.ingest_ns, event.origin_uri.as_ref());
 
                 //
                 // Before any select processing, we filter by where clause

@@ -274,7 +274,16 @@ impl<'value> Value<'value> {
     #[inline]
     #[must_use]
     pub fn into_static(self) -> Value<'static> {
-        self.clone_static()
+        match self {
+            Self::String(s) => Value::String(Cow::owned(s.to_string())),
+            Self::Array(arr) => arr.into_iter().map(Value::into_static).collect(),
+            Self::Object(obj) => obj
+                .into_iter()
+                .map(|(k, v)| (Cow::owned(k.to_string()), v.into_static()))
+                .collect(),
+            Self::Static(s) => Value::Static(s),
+            Self::Bytes(b) => Value::Bytes(Cow::owned(b.to_vec())),
+        }
     }
 
     /// Clones the current value and enforces a static lifetime, it works the same

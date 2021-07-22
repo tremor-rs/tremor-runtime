@@ -23,10 +23,14 @@ use super::window::{self, Group, Window};
 use crate::op::prelude::trickle::window::{GroupWindow, SelectCtx, Trait};
 use crate::{errors::Result, SignalKind};
 use crate::{op::prelude::*, EventIdGenerator};
-use crate::{Event, Operator};
+use crate::{Event, EventId, Operator};
+use halfbrown::Entry;
+use tremor_common::stry;
+use tremor_script::ast;
 use tremor_script::{
     self,
     ast::{InvokeAggrFn, Select, SelectStmt},
+    errors::Result as TSResult,
     interpreter::Env,
     prelude::*,
     srs,
@@ -42,6 +46,8 @@ pub struct TrickleSelect {
     pub windows: Vec<Window>,
     pub groups: HashMap<String, Group>,
     pub event_id_gen: EventIdGenerator,
+    recursion_limit: u32,
+    dflt_group: Group,
 }
 
 pub(crate) const NO_AGGRS: [InvokeAggrFn<'static>; 0] = [];
@@ -53,7 +59,7 @@ impl TrickleSelect {
         windows: Vec<(String, window::Impl)>,
         stmt: &srs::Stmt,
     ) -> Result<Self> {
-        let windows = windows
+        let windows: Vec<_> = windows
             .into_iter()
             .map(|(fqwn, window_impl)| Window {
                 module: Window::module_path(&fqwn),
@@ -62,13 +68,26 @@ impl TrickleSelect {
             })
             .collect();
         let select = srs::Select::try_new_from_stmt(stmt)?;
-        Ok(Self {
-            id,
-            windows,
-            select,
-            groups: HashMap::new(),
-            event_id_gen: EventIdGenerator::new(operator_uid),
-        })
+        let event_id_gen = EventIdGenerator::new(operator_uid);
+        if let ast::Stmt::Select(SelectStmt { aggregates, .. }) = stmt.suffix() {
+            let windows_itr = windows.iter();
+            let dflt_group = Group {
+                value: Value::const_null(),
+                aggrs: aggregates.clone(),
+                windows: GroupWindow::from_windows(aggregates, &EventId::default(), windows_itr),
+            };
+            Ok(Self {
+                id,
+                windows,
+                select,
+                groups: HashMap::new(),
+                event_id_gen,
+                recursion_limit: tremor_script::recursion_limit(),
+                dflt_group,
+            })
+        } else {
+            Err("Wrong type of statement".into())
+        }
     }
     fn opts() -> ExecOpts {
         ExecOpts {
@@ -84,7 +103,7 @@ pub(crate) fn execute_select_and_having(
     ctx: &SelectCtx,
     env: &Env,
     data: &ValueAndMeta,
-) -> Result<Option<(Cow<'static, str>, Event)>> {
+) -> TSResult<Option<(Cow<'static, str>, Event)>> {
     let (event_payload, event_meta) = data.parts();
 
     let value = ctx.select.target.run(
@@ -110,8 +129,7 @@ pub(crate) fn execute_select_and_having(
                 guard,
                 &test,
                 ctx.node_meta,
-            )
-            .into());
+            ));
         }
     }
     Ok(Some((
@@ -151,8 +169,11 @@ impl Operator for TrickleSelect {
             windows,
             event_id_gen,
             groups,
+            recursion_limit,
+            dflt_group,
             ..
         } = self;
+        let recursion_limit = *recursion_limit;
 
         let Event {
             ingest_ns,
@@ -164,12 +185,11 @@ impl Operator for TrickleSelect {
             ..
         } = event;
 
-        // TODO avoid origin_uri clone here
-        let ctx = EventContext::new(ingest_ns, origin_uri.clone());
+        let ctx = EventContext::new(ingest_ns, origin_uri.as_ref());
 
         let opts = Self::opts();
 
-        let res = data.apply_select(select, |data, stmt| -> Result<Res> {
+        let res = data.apply_select(select, |data, stmt| -> TSResult<Res> {
             let SelectStmt {
                 stmt: ref select,
                 ref mut consts,
@@ -177,10 +197,6 @@ impl Operator for TrickleSelect {
                 ref node_meta,
                 ..
             } = stmt;
-
-            consts.window = Value::const_null();
-            consts.group = Value::const_null();
-            consts.args = Value::const_null();
 
             let select: &Select = select;
 
@@ -204,26 +220,24 @@ impl Operator for TrickleSelect {
                     consts: consts.run(),
                     aggrs: &NO_AGGRS,
                     meta: &node_meta,
-                    recursion_limit: tremor_script::recursion_limit(),
+                    recursion_limit,
                 };
-                let test = guard.run(opts, &env, unwind_event, state, event_meta, &local_stack)?;
-                if let Some(test) = test.as_bool() {
-                    if !test {
-                        return Ok(Res::None);
-                    };
-                } else {
-                    let s: &Select = &select;
-                    return Err(tremor_script::errors::query_guard_not_bool_err(
-                        s, guard, &test, &node_meta,
-                    )
-                    .into());
+                let test = stry!(guard
+                    .run(opts, &env, unwind_event, state, event_meta, &local_stack)
+                    .and_then(|test| {
+                        test.as_bool().ok_or_else(|| {
+                            tremor_script::errors::query_guard_not_bool_err(
+                                select, guard, &test, &node_meta,
+                            )
+                        })
+                    }));
+                if !test {
+                    return Ok(Res::None);
                 };
             }
 
-            let mut events = Vec::with_capacity(1);
-
             let mut group_values = if let Some(group_by) = &maybe_group_by {
-                group_by.generate_groups(&ctx, data.value(), state, &node_meta, data.meta())?
+                stry!(group_by.generate_groups(&ctx, data.value(), state, &node_meta, data.meta()))
             } else {
                 //
                 // select without group by or windows
@@ -240,17 +254,24 @@ impl Operator for TrickleSelect {
                         consts: consts.run(),
                         aggrs: &NO_AGGRS,
                         meta: &node_meta,
-                        recursion_limit: tremor_script::recursion_limit(),
+                        recursion_limit,
                     };
-                    let value =
-                        target.run(opts, &env, unwind_event, state, event_meta, &local_stack)?;
+                    let value = stry!(target.run(
+                        opts,
+                        &env,
+                        unwind_event,
+                        state,
+                        event_meta,
+                        &local_stack
+                    ));
 
                     let result = value.into_owned();
 
                     // evaluate having clause, if one exists
                     #[allow(clippy::option_if_let_else)] // The borrow checker prevents map_or
                     return if let Some(guard) = maybe_having {
-                        let test = guard.run(opts, &env, &result, state, &NULL, &local_stack)?;
+                        let test =
+                            stry!(guard.run(opts, &env, &result, state, &NULL, &local_stack));
                         #[allow(clippy::option_if_let_else)] // The borrow checker prevents map_or
                         if let Some(test) = test.as_bool() {
                             if test {
@@ -262,8 +283,7 @@ impl Operator for TrickleSelect {
                         } else {
                             Err(tremor_script::errors::query_guard_not_bool_err(
                                 select, guard, &test, &node_meta,
-                            )
-                            .into())
+                            ))
                         }
                     } else {
                         *unwind_event = result;
@@ -279,8 +299,12 @@ impl Operator for TrickleSelect {
 
             let group_values: Vec<Value> = group_values.into_iter().map(Value::from).collect();
 
+            // Usually one or two windows emit, this is the common case so we don't pre-allocate
+            // for the entire window depth
+            let mut events = Vec::with_capacity(group_values.len() * 2);
+
             for group_value in group_values {
-                let group_str = sorted_serialize(&group_value)?;
+                let group_str = stry!(sorted_serialize(&group_value));
 
                 let ctx = SelectCtx {
                     select,
@@ -295,30 +319,25 @@ impl Operator for TrickleSelect {
                     op_meta,
                     origin_uri,
                     transactional,
+                    recursion_limit,
                 };
-                if let Some(mut g) = groups.remove(&group_str) {
-                    let del = g.on_event(ctx, consts, data, &mut events)?;
-                    if !del {
-                        groups.insert(group_str, g);
-                    }
-                } else {
-                    let mut value = group_value.clone_static();
-                    value.push(group_str.clone())?;
 
-                    let windows = windows.iter();
-                    let mut g = Group {
-                        value,
-                        aggrs: stmt.aggregates.clone(),
-                        windows: GroupWindow::from_windows(
-                            ctx.event_id_gen,
-                            &stmt.aggregates,
-                            &id,
-                            windows,
-                        ),
-                    };
-                    let del = g.on_event(ctx, consts, data, &mut events)?;
-                    if !del {
-                        groups.insert(group_str, g);
+                match groups.entry(group_str) {
+                    Entry::Occupied(mut o) => {
+                        let del = stry!(o.get_mut().on_event(ctx, consts, data, &mut events));
+                        if del {
+                            o.remove();
+                        }
+                    }
+                    Entry::Vacant(v) => {
+                        dflt_group.value = group_value;
+                        dflt_group.value.try_push(v.key().to_string());
+
+                        let del = stry!(dflt_group.on_event(ctx, consts, data, &mut events));
+                        if !del {
+                            v.insert(dflt_group.clone());
+                            dflt_group.reset();
+                        }
                     }
                 }
             }
@@ -345,8 +364,10 @@ impl Operator for TrickleSelect {
             windows,
             event_id_gen,
             groups,
+            recursion_limit,
             ..
         } = self;
+        let recursion_limit = *recursion_limit;
 
         if signal.kind != Some(SignalKind::Tick) || windows.is_empty() {
             return Ok(EventAndInsights::default());
@@ -393,7 +414,7 @@ impl Operator for TrickleSelect {
                             consts: run,
                             aggrs: &w.aggrs,
                             meta: &node_meta,
-                            recursion_limit: tremor_script::recursion_limit(),
+                            recursion_limit,
                         };
 
                         let mut outgoing_event_id = event_id_gen.next_id();
@@ -413,6 +434,7 @@ impl Operator for TrickleSelect {
                             op_meta: &op_meta,
                             origin_uri: &None,
                             transactional: w.transactional,
+                            recursion_limit,
                         };
 
                         if let Some(port_and_event) =

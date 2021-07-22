@@ -80,7 +80,7 @@ where
     'event: 'run,
 {
     /// Context of the event
-    pub context: &'run EventContext,
+    pub context: &'run EventContext<'run>,
     /// Constants
     pub consts: RunConsts<'run, 'event>,
     /// Aggregates
@@ -1503,7 +1503,7 @@ impl<'script> GroupBy<'script> {
         state: &Value<'static>,
         node_meta: &NodeMetas,
         meta: &Value<'event>,
-    ) -> Result<Vec<Vec<Value<'event>>>>
+    ) -> Result<Vec<Vec<Value<'static>>>>
     where
         'script: 'event,
     {
@@ -1523,7 +1523,7 @@ impl<'script> GroupByInt<'script> {
         state: &Value<'static>,
         node_meta: &NodeMetas,
         meta: &Value<'event>,
-        groups: &mut Vec<Vec<Value<'event>>>,
+        groups: &mut Vec<Vec<Value<'static>>>,
     ) -> Result<()>
     where
         'script: 'event,
@@ -1542,13 +1542,15 @@ impl<'script> GroupByInt<'script> {
         };
         match self {
             GroupByInt::Expr { expr, .. } => {
-                let v = stry!(expr.run(opts, &env, event, state, meta, &local_stack)).into_owned();
+                let v = stry!(expr.run(opts, &env, event, state, meta, &local_stack));
                 if let Some((last_group, other_groups)) = groups.split_last_mut() {
-                    other_groups.iter_mut().for_each(|g| g.push(v.clone()));
-                    last_group.push(v)
+                    other_groups
+                        .iter_mut()
+                        .for_each(|g| g.push(v.clone_static()));
+                    last_group.push(v.clone_static())
                 } else {
                     // No last group existed, i.e, `groups` was empty. Push a new group:
-                    groups.push(vec![v]);
+                    groups.push(vec![v.clone_static()]);
                 }
                 Ok(())
             }
@@ -1575,18 +1577,22 @@ impl<'script> GroupByInt<'script> {
                 Ok(())
             }
             GroupByInt::Each { expr, .. } => {
-                let v = stry!(expr.run(opts, &env, event, state, meta, &local_stack)).into_owned();
+                let v = stry!(expr.run(opts, &env, event, state, meta, &local_stack));
                 if let Some(each) = v.as_array() {
                     if groups.is_empty() {
                         for e in each {
-                            groups.push(vec![e.clone()]);
+                            groups.push(vec![e.clone_static()]);
                         }
                     } else {
                         let mut new_groups = Vec::with_capacity(each.len() * groups.len());
-                        for g in groups.drain(..) {
-                            for e in each {
-                                let mut g = g.clone();
-                                g.push(e.clone());
+                        for mut g in groups.drain(..) {
+                            if let Some((last, rest)) = each.split_last() {
+                                for e in rest {
+                                    let mut g = g.clone();
+                                    g.push(e.clone_static());
+                                    new_groups.push(g);
+                                }
+                                g.push(last.clone_static());
                                 new_groups.push(g);
                             }
                         }

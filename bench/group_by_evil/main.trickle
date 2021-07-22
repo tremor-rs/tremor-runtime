@@ -1,0 +1,3 @@
+use tremor::system;
+
+select event from in group by system::ingest_ns() into out;
