@@ -25,15 +25,11 @@ use super::{
     error_generic, error_no_consts, error_no_locals, AggrRegistry, GroupBy, GroupByInt, HashMap,
     Helper, ImutExpr, Location, NodeMetas, OperatorDecl, OperatorKind, OperatorStmt, Query,
     Registry, Result, ScriptDecl, ScriptStmt, Select, SelectStmt, Serialize, Stmt, StreamStmt,
-    Upable, Value, Warning, WindowDecl, WindowKind,
+    Upable, Value, WindowDecl, WindowKind,
 };
-use crate::{
-    ast::visitors::{GroupByExprExtractor, TargetEventRefVisitor},
-    lexer::Range,
-};
+use crate::ast::visitors::{GroupByExprExtractor, TargetEventRefVisitor};
 use crate::{ast::InvokeAggrFn, impl_expr};
 use beef::Cow;
-use value_trait::prelude::*;
 
 fn up_params<'script, 'registry>(
     params: WithExprsRaw<'script>,
@@ -416,24 +412,6 @@ impl<'script> Upable<'script> for WindowDeclRaw<'script> {
 
         // warn params if `emit_empty_windows` is defined, but neither `max_groups` nor `evicition_period` is defined
         let params = up_params(self.params, helper)?;
-        let custom_max_groups = params
-            .get(WindowDecl::MAX_GROUPS)
-            .and_then(ValueAccess::as_u64)
-            .map(|x| x < u64::MAX)
-            .unwrap_or_default();
-        let emit_empty_windows = params
-            .get(WindowDecl::EMIT_EMPTY_WINDOWS)
-            .and_then(ValueAccess::as_bool)
-            .unwrap_or_default();
-        if emit_empty_windows
-            && !(custom_max_groups || params.contains_key(WindowDecl::EVICTION_PERIOD))
-        {
-            let range: Range = (self.start, self.end).into();
-            helper.warn(Warning::new_with_scope(
-                range,
-                "Using `emit_empty_windows` without guard is potentially dangerous. Consider limiting the amount of groups maintained internally by using `max_groups` and/or `eviction_period`.".to_owned(),
-            ));
-        }
 
         Ok(WindowDecl {
             mid: helper.add_meta_w_name(self.start, self.end, &self.id),

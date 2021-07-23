@@ -18,7 +18,7 @@ use crate::{errors::Result, op::prelude::*, Event, Operator};
 use tremor_script::{
     self,
     ast::{InvokeAggrFn, Select, SelectStmt},
-    interpreter::Env,
+    interpreter::{Env, LocalStack},
     prelude::*,
     srs,
 };
@@ -30,6 +30,7 @@ use tremor_script::{
 pub struct SimpleSelect {
     pub id: String,
     pub(crate) select: srs::Select,
+    recursion_limit: u32,
 }
 
 const NO_AGGRS: [InvokeAggrFn<'static>; 0] = [];
@@ -37,7 +38,11 @@ const NO_AGGRS: [InvokeAggrFn<'static>; 0] = [];
 impl SimpleSelect {
     pub fn with_stmt(id: String, stmt: &srs::Stmt) -> Result<Self> {
         let select = srs::Select::try_new_from_stmt(stmt)?;
-        Ok(Self { id, select })
+        Ok(Self {
+            id,
+            select,
+            recursion_limit: tremor_script::recursion_limit(),
+        })
     }
     fn opts() -> ExecOpts {
         ExecOpts {
@@ -56,69 +61,56 @@ impl Operator for SimpleSelect {
         event: Event,
     ) -> Result<EventAndInsights> {
         let opts = Self::opts();
-        // We guarantee at compile time that select in itself can't have locals, so this is safe
-
-        // NOTE We are unwrapping our rental wrapped stmt
-        // TODO: add soundness reasoning
 
         self.select.rent(
             |SelectStmt {
                  stmt,
-                 locals,
                  consts,
                  node_meta,
                  ..
              }| {
-                let local_stack = tremor_script::interpreter::LocalStack::with_size(*locals);
+                let stmt: &Select = &stmt;
 
-                // TODO avoid origin_uri clone here
+                // We can't have locals in the where and having clause
+                let local_stack = LocalStack::with_size(0);
+
                 let ctx = EventContext::new(event.ingest_ns, event.origin_uri.as_ref());
 
                 //
                 // Before any select processing, we filter by where clause
                 //
+                let env = Env {
+                    context: &ctx,
+                    consts: consts.run(),
+                    aggrs: &NO_AGGRS,
+                    meta: &node_meta,
+                    recursion_limit: self.recursion_limit,
+                };
                 if let Some(guard) = &stmt.maybe_where {
-                    let (unwind_event, event_meta) = event.data.parts();
-                    let env = Env {
-                        context: &ctx,
-                        consts: consts.run(),
-                        aggrs: &NO_AGGRS,
-                        meta: &node_meta,
-                        recursion_limit: tremor_script::recursion_limit(),
-                    };
-                    let test =
-                        guard.run(opts, &env, unwind_event, state, event_meta, &local_stack)?;
+                    let (data, meta) = event.data.parts();
+                    let test = guard.run(opts, &env, data, state, meta, &local_stack)?;
                     if let Some(test) = test.as_bool() {
                         if !test {
                             return Ok(EventAndInsights::default());
                         };
                     } else {
-                        let s: &Select = &stmt;
                         return tremor_script::errors::query_guard_not_bool(
-                            s, guard, &test, &node_meta,
+                            stmt, guard, &test, &node_meta,
                         )?;
                     };
                 }
 
                 if let Some(guard) = &stmt.maybe_having {
-                    let (unwind_event, event_meta) = event.data.parts();
-                    let env = Env {
-                        context: &ctx,
-                        consts: consts.run(),
-                        aggrs: &NO_AGGRS,
-                        meta: &node_meta,
-                        recursion_limit: tremor_script::recursion_limit(),
-                    };
-                    let test =
-                        guard.run(opts, &env, unwind_event, state, event_meta, &local_stack)?;
+                    let (data, meta) = event.data.parts();
+
+                    let test = guard.run(opts, &env, data, state, meta, &local_stack)?;
                     if let Some(test) = test.as_bool() {
                         if !test {
                             return Ok(EventAndInsights::default());
                         };
                     } else {
-                        let s: &Select = &stmt;
                         return tremor_script::errors::query_guard_not_bool(
-                            s, guard, &test, &node_meta,
+                            stmt, guard, &test, &node_meta,
                         )?;
                     };
                 }

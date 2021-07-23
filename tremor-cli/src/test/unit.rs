@@ -90,8 +90,7 @@ fn eval(expr: &ImutExprInt, env: &Env, local: &LocalStack) -> Result<Value<'stat
         .into_static())
 }
 
-#[allow(clippy::too_many_lines)]
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_lines, clippy::too_many_arguments)]
 fn eval_suite_tests(
     env: &Env,
     local: &LocalStack,

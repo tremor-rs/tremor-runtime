@@ -334,7 +334,6 @@ pub(crate) fn metrics_data_to_json(pb: Option<metric::Data>) -> Value<'static> {
     .unwrap_or_default()
 }
 
-#[allow(clippy::too_many_lines)]
 pub(crate) fn metrics_data_to_pb(data: &Value<'_>) -> Result<metric::Data> {
     if let Some(json) = data.get_object("int-gauge") {
         let data_points = int_data_points_to_pb(json.get("data_points"))?;

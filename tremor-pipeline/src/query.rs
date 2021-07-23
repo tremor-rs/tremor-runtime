@@ -20,11 +20,8 @@ use crate::{
         identity::PassthroughFactory,
         prelude::{ERR, IN, METRICS, OUT},
         trickle::{
-            operator::TrickleOperator,
-            script::Script,
-            select::TrickleSelect,
-            simple_select::SimpleSelect,
-            window::{self},
+            operator::TrickleOperator, script::Script, select::Select, simple_select::SimpleSelect,
+            window,
         },
     },
     ConfigGraph, Connection, NodeConfig, NodeKind, Operator, OperatorNode, PortIndexMap,
@@ -36,8 +33,7 @@ use petgraph::algo::is_cyclic_directed;
 use tremor_common::ids::OperatorIdGen;
 use tremor_script::{
     ast::{
-        BaseExpr, CompilationUnit, Ident, NodeMetas, Select, SelectType, Stmt, WindowDecl,
-        WindowKind,
+        self, BaseExpr, CompilationUnit, Ident, NodeMetas, SelectType, Stmt, WindowDecl, WindowKind,
     },
     errors::{
         query_node_duplicate_name_err, query_node_reserved_name_err, query_stream_not_defined_err,
@@ -98,7 +94,7 @@ pub(crate) fn window_decl_to_impl(d: &WindowDecl) -> Result<window::Impl> {
             let max_groups = d
                 .params
                 .get(WindowDecl::MAX_GROUPS)
-                .and_then(Value::as_u64)
+                .and_then(Value::as_usize)
                 .unwrap_or(window::Impl::DEFAULT_MAX_GROUPS);
 
             match (
@@ -233,7 +229,7 @@ impl Query {
         for (i, stmt) in stmts.into_iter().enumerate() {
             match stmt.suffix() {
                 Stmt::Select(ref select) => {
-                    let s: &Select<'_> = &select.stmt;
+                    let s: &ast::Select<'_> = &select.stmt;
 
                     if !nodes.contains_key(&s.from.0.id) {
                         return Err(query_stream_not_defined_err(
@@ -690,7 +686,7 @@ fn select(
                     Err("Declared as select but isn't a select".into())
                 };
 
-            Ok(Box::new(TrickleSelect::with_stmt(
+            Ok(Box::new(Select::with_stmt(
                 operator_uid,
                 config.id.clone(),
                 windows?,

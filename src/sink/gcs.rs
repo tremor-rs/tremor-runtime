@@ -33,8 +33,6 @@ use tremor_pipeline::{EventIdGenerator, OpMeta};
 use tremor_value::Value;
 
 pub struct GoogleCloudStorage {
-    #[allow(dead_code)]
-    config: Config,
     remote: Option<Client>,
     is_down: bool,
     qos_facility: Box<dyn SinkQoS>,
@@ -45,9 +43,6 @@ pub struct GoogleCloudStorage {
     sink_url: TremorUrl,
     event_id_gen: EventIdGenerator,
 }
-
-#[derive(Deserialize)]
-pub struct Config {}
 
 enum StorageCommand {
     Create(String, String),
@@ -81,76 +76,61 @@ impl std::fmt::Display for StorageCommand {
     }
 }
 
-impl ConfigImpl for Config {}
-
 impl offramp::Impl for GoogleCloudStorage {
-    fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
-        if let Some(config) = config {
-            let config: Config = Config::new(config)?;
-            let headers = HeaderMap::new();
-            let remote = Some(block_on(auth::json_api_client(&headers))?);
-            let hostport = "storage.googleapis.com:443";
-            Ok(SinkManager::new_box(Self {
-                config,
-                remote,
-                is_down: false,
-                qos_facility: Box::new(QoSFacilities::recoverable(hostport.to_string())),
-                reply_channel: None,
-                is_linked: false,
-                preprocessors: vec![],
-                postprocessors: vec![],
-                sink_url: TremorUrl::from_offramp_id("gcs")?,
-                event_id_gen: EventIdGenerator::new(0), // Fake ID overwritten in init
-            }))
-        } else {
-            Err("Offramp Google Cloud Storage requires a config".into())
-        }
+    fn from_config(_config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
+        let headers = HeaderMap::new();
+        let remote = Some(block_on(auth::json_api_client(&headers))?);
+        let hostport = "storage.googleapis.com:443";
+        Ok(SinkManager::new_box(Self {
+            remote,
+            is_down: false,
+            qos_facility: Box::new(QoSFacilities::recoverable(hostport.to_string())),
+            reply_channel: None,
+            is_linked: false,
+            preprocessors: vec![],
+            postprocessors: vec![],
+            sink_url: TremorUrl::from_offramp_id("gcs")?,
+            event_id_gen: EventIdGenerator::new(0), // Fake ID overwritten in init
+        }))
     }
 }
 
-macro_rules! parse_arg {
-    ($field_name: expr, $o: expr) => {
-        if let Some(Value::String(snot)) = $o.get($field_name) {
-            snot.to_string()
-        } else {
-            return Err(format!("Invalid Command, expected `{}` field", $field_name).into());
-        }
-    };
+fn parse_arg(field_name: &'static str, o: &Value) -> std::result::Result<String, String> {
+    o.get_str(field_name)
+        .map(ToString::to_string)
+        .ok_or_else(|| format!("Invalid Command, expected `{}` field", field_name))
 }
 
 fn parse_command(value: &Value) -> Result<StorageCommand> {
-    if let Value::Object(o) = value {
-        let cmd_name: &str = &parse_arg!("command", o);
+    let cmd_name: &str = value
+        .get_str("command")
+        .ok_or("Invalid Command, expected `command` field")?;
 
-        let command = match cmd_name {
-            "fetch" => StorageCommand::Fetch(parse_arg!("bucket", o), parse_arg!("object", o)),
-            "list_buckets" => StorageCommand::ListBuckets(parse_arg!("project_id", o)),
-            "list_objects" => StorageCommand::ListObjects(parse_arg!("bucket", o)),
-            "upload_object" => StorageCommand::Add(
-                parse_arg!("bucket", o),
-                parse_arg!("object", o),
-                if let Some(body) = o.get("body") {
-                    body.clone().into_static()
-                } else {
-                    return Err("Invalid Command, expected `body` field".into());
-                },
-            ),
-            "remove_object" => {
-                StorageCommand::RemoveObject(parse_arg!("bucket", o), parse_arg!("object", o))
-            }
-            "create_bucket" => {
-                StorageCommand::Create(parse_arg!("project_id", o), parse_arg!("bucket", o))
-            }
-            "remove_bucket" => StorageCommand::RemoveBucket(parse_arg!("bucket", o)),
-            "download_object" => {
-                StorageCommand::Download(parse_arg!("bucket", o), parse_arg!("object", o))
-            }
-            _ => StorageCommand::Unknown,
-        };
-        return Ok(command);
-    }
-
-    Err("Invalid Command".into())
+    let command = match cmd_name {
+        "fetch" => StorageCommand::Fetch(parse_arg("bucket", value)?, parse_arg("object", value)?),
+        "list_buckets" => StorageCommand::ListBuckets(parse_arg("project_id", value)?),
+        "list_objects" => StorageCommand::ListObjects(parse_arg("bucket", value)?),
+        "upload_object" => StorageCommand::Add(
+            parse_arg("bucket", value)?,
+            parse_arg("object", value)?,
+            value
+                .get("body")
+                .map(Value::clone_static)
+                .ok_or("Invalid Command, expected `body` field")?,
+        ),
+        "remove_object" => {
+            StorageCommand::RemoveObject(parse_arg("bucket", value)?, parse_arg("object", value)?)
+        }
+        "create_bucket" => {
+            StorageCommand::Create(parse_arg("project_id", value)?, parse_arg("bucket", value)?)
+        }
+        "remove_bucket" => StorageCommand::RemoveBucket(parse_arg("bucket", value)?),
+        "download_object" => {
+            StorageCommand::Download(parse_arg("bucket", value)?, parse_arg("object", value)?)
+        }
+        _ => StorageCommand::Unknown,
+    };
+    Ok(command)
 }
 
 #[async_trait::async_trait]
@@ -317,15 +297,12 @@ impl Sink for GoogleCloudStorage {
         Ok(())
     }
 
-    async fn on_signal(&mut self, signal: Event) -> ResultVec {
+    async fn on_signal(&mut self, mut signal: Event) -> ResultVec {
         if self.is_down && self.qos_facility.probe(signal.ingest_ns) {
             self.is_down = false;
             // This means the port is connectable
             info!("Google Cloud Storage -  sink remote endpoint - recovered and contactable");
             self.is_down = false;
-            // Clone needed to make it mutable, lint is wrong
-            #[allow(clippy::redundant_clone)]
-            let mut signal = signal.clone();
             return Ok(Some(vec![qos::open(&mut signal)]));
         }
 

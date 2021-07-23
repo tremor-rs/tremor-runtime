@@ -33,8 +33,6 @@ use tremor_pipeline::{EventIdGenerator, OpMeta};
 use tremor_value::Value;
 
 pub struct GoogleCloudPubSub {
-    #[allow(dead_code)]
-    config: Config,
     remote_publisher: Option<PublisherClient<Channel>>,
     remote_subscriber: Option<SubscriberClient<Channel>>,
     is_down: bool,
@@ -44,9 +42,6 @@ pub struct GoogleCloudPubSub {
     postprocessors: Postprocessors,
     event_id_gen: EventIdGenerator,
 }
-
-#[derive(Deserialize)]
-pub struct Config {}
 
 enum PubSubCommand {
     SendMessage {
@@ -88,18 +83,10 @@ impl std::fmt::Display for PubSubCommand {
     }
 }
 
-impl ConfigImpl for Config {}
-
 impl offramp::Impl for GoogleCloudPubSub {
-    fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
-        let config = Config::new(
-            config
-                .as_ref()
-                .ok_or("Offramp Google Cloud Pubsub (pub) requires a config")?,
-        )?;
+    fn from_config(_config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         let hostport = "pubsub.googleapis.com:443";
         Ok(SinkManager::new_box(Self {
-            config,
             remote_publisher: None,  // overwritten in init
             remote_subscriber: None, // overwritten in init
             is_down: false,
@@ -112,35 +99,31 @@ impl offramp::Impl for GoogleCloudPubSub {
     }
 }
 
-macro_rules! parse_arg {
-    ($field_name: expr, $o: expr) => {
-        if let Some(Value::String(snot)) = $o.get($field_name) {
-            snot.to_string()
-        } else {
-            return Err(format!("Invalid Command, expected `{}` field", $field_name).into());
-        }
-    };
+fn parse_arg(field_name: &'static str, o: &Value) -> std::result::Result<String, String> {
+    o.get_str(field_name)
+        .map(ToString::to_string)
+        .ok_or_else(|| format!("Invalid Command, expected `{}` field", field_name))
 }
 
 fn parse_command(value: &Value) -> Result<PubSubCommand> {
-    let o = value.as_object().ok_or("Invalid Command")?;
-    let cmd_name: &str = &parse_arg!("command", o);
+    let cmd_name: &str = value
+        .get_str("command")
+        .ok_or("Invalid Command, expected `command` field")?;
     let command = match cmd_name {
         "send_message" => PubSubCommand::SendMessage {
-            project_id: parse_arg!("project", o),
-            topic_name: parse_arg!("topic", o),
-            data: if let Some(data) = o.get("data") {
-                data.clone_static()
-            } else {
-                return Err("Invalid Command, expected `data` field".into());
-            },
-            ordering_key: parse_arg!("ordering_key", o),
+            project_id: parse_arg("project", value)?,
+            topic_name: parse_arg("topic", value)?,
+            data: value
+                .get("data")
+                .map(Value::clone_static)
+                .ok_or("Invalid Command, expected `data` field")?,
+            ordering_key: parse_arg("ordering_key", value)?,
         },
         "create_subscription" => PubSubCommand::CreateSubscription {
-            project_id: parse_arg!("project", o),
-            topic_name: parse_arg!("topic", o),
-            subscription_name: parse_arg!("subscription", o),
-            enable_message_ordering: o.get("message_ordering").as_bool().unwrap_or_default(),
+            project_id: parse_arg("project", value)?,
+            topic_name: parse_arg("topic", value)?,
+            subscription_name: parse_arg("subscription", value)?,
+            enable_message_ordering: value.get_bool("message_ordering").unwrap_or_default(),
         },
         _ => PubSubCommand::Unknown,
     };
@@ -330,15 +313,12 @@ impl Sink for GoogleCloudPubSub {
         Ok(())
     }
 
-    async fn on_signal(&mut self, signal: Event) -> ResultVec {
+    async fn on_signal(&mut self, mut signal: Event) -> ResultVec {
         if self.is_down && self.qos_facility.probe(signal.ingest_ns) {
             self.is_down = false;
             // This means the port is connectable
             info!("Google Cloud PubSub -  sink remote endpoint - recovered and contactable");
             self.is_down = false;
-            // Clone needed to make it mutable, lint is wrong
-            #[allow(clippy::redundant_clone)]
-            let mut signal = signal.clone();
             return Ok(Some(vec![qos::open(&mut signal)]));
         }
 

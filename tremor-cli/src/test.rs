@@ -20,8 +20,8 @@ use crate::test;
 use crate::util::{basename, slurp_string};
 use clap::ArgMatches;
 use globwalk::{FileType, GlobWalkerBuilder};
-use kind::TestKind;
-pub(crate) use kind::UnknownKind;
+use kind::Kind;
+pub(crate) use kind::Unknown;
 use metadata::Meta;
 use std::collections::HashMap;
 use std::convert::TryInto;
@@ -221,7 +221,7 @@ fn suite_unit(
 
 #[allow(clippy::too_many_lines)]
 pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
-    let kind: test::TestKind = matches.value_of("MODE").unwrap_or_default().try_into()?;
+    let kind: test::Kind = matches.value_of("MODE").unwrap_or_default().try_into()?;
     let path = matches.value_of("PATH").unwrap_or_default();
     let report = matches.value_of("REPORT");
     let quiet = matches.is_present("QUIET");
@@ -266,11 +266,11 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
             let mut meta_str = slurp_string(&meta.path())?;
             let meta: Meta = simd_json::from_str(meta_str.as_mut_str())?;
 
-            if meta.kind == TestKind::All {
+            if meta.kind == Kind::All {
                 includes.push("all".into());
             }
 
-            if meta.kind == TestKind::Bench && (kind == TestKind::All || kind == TestKind::Bench) {
+            if meta.kind == Kind::Bench && (kind == Kind::All || kind == Kind::Bench) {
                 let tag_filter = (&["bench"][..], includes.as_slice(), excludes.as_slice());
                 let (stats, test_reports) = suite_bench(&base, root, &meta, tag_filter)?;
                 reports.insert("bench".to_string(), test_reports);
@@ -278,9 +278,7 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
                 status::hr();
             }
 
-            if meta.kind == TestKind::Integration
-                && (kind == TestKind::All || kind == TestKind::Integration)
-            {
+            if meta.kind == Kind::Integration && (kind == Kind::All || kind == Kind::Integration) {
                 let (stats, test_reports) =
                     suite_integration(&base, root, &meta, &["integration"], &includes, &excludes)?;
                 reports.insert("integration".to_string(), test_reports);
@@ -288,9 +286,7 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
                 status::hr();
             }
 
-            if meta.kind == TestKind::Command
-                && (kind == TestKind::All || kind == TestKind::Command)
-            {
+            if meta.kind == Kind::Command && (kind == Kind::All || kind == Kind::Command) {
                 let (stats, test_reports) = command::suite_command(
                     &base,
                     root,
@@ -305,7 +301,7 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
                 status::hr();
             }
 
-            if meta.kind == TestKind::Unit && (kind == TestKind::All || kind == TestKind::Unit) {
+            if meta.kind == Kind::Unit && (kind == Kind::All || kind == Kind::Unit) {
                 let (stats, test_reports) =
                     suite_unit(&base, root, &meta, &["unit"], &includes, &excludes)?;
                 reports.insert("unit".to_string(), test_reports);

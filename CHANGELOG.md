@@ -18,6 +18,9 @@
 - Add support for concatenating arrays [#1113](https://github.com/tremor-rs/tremor-runtime/issues/1113)
 - Allow gcp headers to be included in `rest` offramp with `auth: gcp`
 - Add env source [#1136](https://github.com/tremor-rs/tremor-runtime/issues/1136)
+- Complete refactor of the windowing code for maintainability, remove emit_emtpy_window
+- Box apropriately in the rest sink
+- replace macros with functions in gcp code
 
 ### Fixes
 
@@ -29,6 +32,9 @@
 - Fix windowed queries emitting events with `null` metadata on tick
 - Fix sorting for artefacts
 - Fix issde where the test framework would generate reports without being asked for it [#1072](https://github.com/tremor-rs/tremor-runtime/issues/1072)
+- Remove the need for eviction_period for time based windows
+- Remove dead code and unneeded allows in otel and gcp code
+
 
 ## 0.11.4
 

@@ -1500,7 +1500,6 @@ impl<'script> GroupBy<'script> {
         &self,
         ctx: &EventContext,
         event: &Value<'event>,
-        state: &Value<'static>,
         node_meta: &NodeMetas,
         meta: &Value<'event>,
     ) -> Result<Vec<Vec<Value<'static>>>>
@@ -1510,7 +1509,7 @@ impl<'script> GroupBy<'script> {
         let mut groups = Vec::with_capacity(16);
         stry!(self
             .0
-            .generate_groups(ctx, event, state, node_meta, meta, &mut groups));
+            .generate_groups(ctx, event, &NULL, node_meta, meta, &mut groups));
         Ok(groups)
     }
 }

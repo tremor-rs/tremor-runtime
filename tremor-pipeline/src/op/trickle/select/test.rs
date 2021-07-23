@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// mod test { <- this is for safety.sh
+
 #![allow(clippy::float_cmp)]
 use crate::op::prelude::trickle::window::{Actions, Trait};
 use crate::query::window_decl_to_impl;
@@ -90,7 +92,7 @@ fn test_event_tx(s: u64, transactional: bool, group: u64) -> Event {
     }
 }
 
-fn test_select(uid: u64, stmt: srs::Stmt) -> Result<TrickleSelect> {
+fn test_select(uid: u64, stmt: srs::Stmt) -> Result<Select> {
     let windows = vec![
         (
             "w15s".into(),
@@ -112,10 +114,10 @@ fn test_select(uid: u64, stmt: srs::Stmt) -> Result<TrickleSelect> {
         ),
     ];
     let id = "select".to_string();
-    TrickleSelect::with_stmt(uid, id, windows, &stmt)
+    Select::with_stmt(uid, id, windows, &stmt)
 }
 
-fn try_enqueue(op: &mut TrickleSelect, event: Event) -> Result<Option<(Cow<'static, str>, Event)>> {
+fn try_enqueue(op: &mut Select, event: Event) -> Result<Option<(Cow<'static, str>, Event)>> {
     let mut state = Value::null();
     let mut action = op.on_event(0, "in", &mut state, event)?;
     let first = action.events.pop();
@@ -127,7 +129,7 @@ fn try_enqueue(op: &mut TrickleSelect, event: Event) -> Result<Option<(Cow<'stat
 }
 
 fn try_enqueue_two(
-    op: &mut TrickleSelect,
+    op: &mut Select,
     event: Event,
 ) -> Result<Option<[(Cow<'static, str>, Event); 2]>> {
     let mut state = Value::null();
@@ -143,10 +145,7 @@ fn try_enqueue_two(
     }
 }
 
-fn parse_query(
-    file_name: String,
-    query: &str,
-) -> Result<crate::op::trickle::select::TrickleSelect> {
+fn parse_query(file_name: String, query: &str) -> Result<crate::op::trickle::select::Select> {
     let reg = tremor_script::registry();
     let aggr_reg = tremor_script::aggr_registry();
     let module_path = tremor_script::path::load();
@@ -194,7 +193,7 @@ fn test_count() -> Result<()> {
     Ok(())
 }
 
-fn select_stmt_from_query(query_str: &str) -> Result<TrickleSelect> {
+fn select_stmt_from_query(query_str: &str) -> Result<Select> {
     let reg = tremor_script::registry();
     let aggr_reg = tremor_script::aggr_registry();
     let module_path = tremor_script::path::load();
@@ -230,7 +229,7 @@ fn select_stmt_from_query(query_str: &str) -> Result<TrickleSelect> {
         .collect();
 
     let id = "select".to_string();
-    Ok(TrickleSelect::with_stmt(42, id, windows, &stmt)?)
+    Ok(Select::with_stmt(42, id, windows, &stmt)?)
 }
 
 fn test_tick(ns: u64) -> Event {
@@ -795,7 +794,6 @@ fn tumbling_window_on_time_emit() -> Result<()> {
     assert_eq!(
         Actions {
             include: false,
-            opened: true,
             emit: false
         },
         window.on_event(&vm, ingest_ns(5), &None)?
@@ -807,7 +805,6 @@ fn tumbling_window_on_time_emit() -> Result<()> {
     assert_eq!(
         Actions {
             include: false,
-            opened: true,
             emit: true
         },
         window.on_event(&vm, ingest_ns(15), &None)? // exactly on time
@@ -815,7 +812,6 @@ fn tumbling_window_on_time_emit() -> Result<()> {
     assert_eq!(
         Actions {
             include: false,
-            opened: true,
             emit: true
         },
         window.on_event(&vm, ingest_ns(26), &None)? // exactly on time
@@ -866,7 +862,6 @@ fn tumbling_window_on_time_from_script_emit() -> Result<()> {
     .into();
     assert_eq!(
         Actions {
-            opened: true,
             include: false,
             emit: false
         },
@@ -882,10 +877,9 @@ fn tumbling_window_on_time_from_script_emit() -> Result<()> {
     })
     .into();
     // ignoring on_tick as we have a script
-    assert_eq!(Actions::all_false(), window.on_tick(2_000_000_000)?);
+    assert_eq!(Actions::all_false(), window.on_tick(2_000_000_000));
     assert_eq!(
         Actions {
-            opened: true,
             include: false,
             emit: true
         },
@@ -899,33 +893,30 @@ fn tumbling_window_on_time_on_tick() -> Result<()> {
     let mut window = window::TumblingOnTime::from_stmt(100, window::Impl::DEFAULT_MAX_GROUPS, None);
     assert_eq!(
         Actions {
-            opened: true,
             include: false,
             emit: false
         },
-        window.on_tick(0)?
+        window.on_tick(0)
     );
-    assert_eq!(Actions::all_false(), window.on_tick(99)?);
+    assert_eq!(Actions::all_false(), window.on_tick(99));
     assert_eq!(
         Actions {
-            opened: true,
             include: false,
             emit: true // we delete windows that do not have content so this is fine
         },
-        window.on_tick(100)?
+        window.on_tick(100)
     );
     assert_eq!(
         Actions::all_false(),
         window.on_event(&ValueAndMeta::default(), 101, &None)?
     );
-    assert_eq!(Actions::all_false(), window.on_tick(102)?);
+    assert_eq!(Actions::all_false(), window.on_tick(102));
     assert_eq!(
         Actions {
-            opened: true,
             include: false,
             emit: true // we had an event yeah
         },
-        window.on_tick(200)?
+        window.on_tick(200)
     );
     Ok(())
 }
@@ -935,33 +926,30 @@ fn tumbling_window_on_time_emit_empty_windows() -> Result<()> {
     let mut window = window::TumblingOnTime::from_stmt(100, window::Impl::DEFAULT_MAX_GROUPS, None);
     assert_eq!(
         Actions {
-            opened: true,
             include: false,
             emit: false
         },
-        window.on_tick(0)?
+        window.on_tick(0)
     );
-    assert_eq!(Actions::all_false(), window.on_tick(99)?);
+    assert_eq!(Actions::all_false(), window.on_tick(99));
     assert_eq!(
         Actions {
-            opened: true,
             include: false,
             emit: true // we **DO** emit even if we had no event
         },
-        window.on_tick(100)?
+        window.on_tick(100)
     );
     assert_eq!(
         Actions::all_false(),
         window.on_event(&ValueAndMeta::default(), 101, &None)?
     );
-    assert_eq!(Actions::all_false(), window.on_tick(102)?);
+    assert_eq!(Actions::all_false(), window.on_tick(102));
     assert_eq!(
         Actions {
-            opened: true,
             include: false,
             emit: true // we had an event yeah
         },
-        window.on_tick(200)?
+        window.on_tick(200)
     );
 
     Ok(())
@@ -980,12 +968,12 @@ fn no_window_emit() -> Result<()> {
         Actions::all_true(),
         window.on_event(&vm, ingest_ns(0), &None)?
     );
-    assert_eq!(Actions::all_false(), window.on_tick(0)?);
+    assert_eq!(Actions::all_false(), window.on_tick(0));
     assert_eq!(
         Actions::all_true(),
         window.on_event(&vm, ingest_ns(1), &None)?
     );
-    assert_eq!(Actions::all_false(), window.on_tick(1)?);
+    assert_eq!(Actions::all_false(), window.on_tick(1));
     Ok(())
 }
 
@@ -1003,13 +991,13 @@ fn tumbling_window_on_number_emit() -> Result<()> {
         Actions::all_false(),
         window.on_event(&vm, ingest_ns(0), &None)?
     );
-    assert_eq!(Actions::all_false(), window.on_tick(1_000_000_000)?);
+    assert_eq!(Actions::all_false(), window.on_tick(1_000_000_000));
     // do not emit yet
     assert_eq!(
         Actions::all_false(),
         window.on_event(&vm, ingest_ns(1), &None)?
     );
-    assert_eq!(Actions::all_false(), window.on_tick(2_000_000_000)?);
+    assert_eq!(Actions::all_false(), window.on_tick(2_000_000_000));
     // emit and open on the third event
     assert_eq!(
         Actions::all_true(),

@@ -50,12 +50,10 @@ fn affirm_severity_number_valid(severity_number: i32) -> Result<i32> {
     }
 }
 
-#[allow(clippy::unnecessary_wraps)] // NOTE until const / const fn support improves - see TODO
-fn affirm_severity_text_valid<T>(severity_text: &T) -> Result<String>
+fn affirm_severity_text_valid<T>(severity_text: &T) -> String
 where
     T: ToString,
 {
-    let text = severity_text.to_string();
     // TODO find a nice way to do this without RT regex comp
     //
     // if SEVERITY_TEXT_RE.is_match(&text) {
@@ -63,7 +61,7 @@ where
     // } else {
     //     Err(format!("The `severity_text` is invalid {}", text).into())
     // }
-    Ok(text)
+    severity_text.to_string()
 }
 
 fn log_record_to_json(log: LogRecord) -> Result<Value<'static>> {
@@ -71,7 +69,7 @@ fn log_record_to_json(log: LogRecord) -> Result<Value<'static>> {
         "name": log.name,
         "time_unix_nano": log.time_unix_nano,
         "severity_number": affirm_severity_number_valid(log.severity_number)?,
-        "severity_text": affirm_severity_text_valid(&log.severity_text)?,
+        "severity_text": affirm_severity_text_valid(&log.severity_text),
         "flags": affirm_traceflags_valid(log.flags)?,
         "span_id": id::hex_span_id_to_json(&log.span_id),
         "trace_id": id::hex_trace_id_to_json(&log.trace_id),
@@ -122,7 +120,7 @@ pub(crate) fn maybe_instrumentation_library_logs_to_pb(
                         )?)?,
                         severity_text: affirm_severity_text_valid(&pb::maybe_string_to_pb(
                             log.get("severity_text"),
-                        )?)?,
+                        )?),
                         flags: affirm_traceflags_valid(pb::maybe_int_to_pbu32(log.get("flags"))?)?,
                         span_id: id::hex_span_id_to_pb(log.get("span_id"))?,
                         trace_id: id::hex_trace_id_to_pb(log.get("trace_id"))?,

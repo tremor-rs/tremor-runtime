@@ -18,7 +18,7 @@ use crate::test::tag::Tags;
 #[derive(Deserialize, Debug)]
 pub(crate) struct Meta {
     pub(crate) about: Option<String>,
-    pub(crate) kind: kind::TestKind,
+    pub(crate) kind: kind::Kind,
     pub(crate) tags: Option<Tags>,
     pub(crate) includes: String,
 }

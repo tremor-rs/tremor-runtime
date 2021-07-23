@@ -16,7 +16,7 @@ pub(crate) mod raw;
 use super::{
     error_generic, error_no_consts, error_no_locals, AggrRegistry, EventPath, HashMap, Helper,
     Ident, ImutExpr, ImutExprInt, InvokeAggrFn, Location, NodeMetas, Path, Registry, Result,
-    Script, Serialize, Stmts, Upable, Value, Warning,
+    Script, Serialize, Stmts, Upable, Value,
 };
 use super::{raw::BaseExpr, Consts};
 use crate::ast::eq::AstEq;

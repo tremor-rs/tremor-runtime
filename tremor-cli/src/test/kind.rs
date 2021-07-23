@@ -15,8 +15,7 @@
 use std::{convert::TryFrom, error::Error, fmt::Debug, fmt::Display};
 /// Specifies a kind of test framework, or a composite `all` to capture all framework variants
 #[derive(Deserialize, Debug, PartialEq)]
-#[allow(clippy::module_name_repetitions)]
-pub(crate) enum TestKind {
+pub(crate) enum Kind {
     Bench,
     Integration,
     Command,
@@ -27,28 +26,27 @@ pub(crate) enum TestKind {
 
 /// An unknown test kind
 #[derive(Debug)]
-#[allow(clippy::module_name_repetitions)]
-pub struct UnknownKind(String);
+pub struct Unknown(String);
 
-impl Display for UnknownKind {
+impl Display for Unknown {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Unknown test kind `{}`, please choose one of `all`, `api`, `bench`, `command`, `integration`, `rest`, or `unit`", self.0)
     }
 }
 
-impl Error for UnknownKind {}
+impl Error for Unknown {}
 
-impl TryFrom<&str> for TestKind {
-    fn try_from(from: &str) -> Result<Self, UnknownKind> {
+impl TryFrom<&str> for Kind {
+    fn try_from(from: &str) -> Result<Self, Unknown> {
         match from.to_lowercase().as_str() {
-            "all" => Ok(TestKind::All),
-            "api" | "command" | "rest" => Ok(TestKind::Command),
-            "bench" | "benchmark" => Ok(TestKind::Bench),
-            "it" | "integration" => Ok(TestKind::Integration),
-            "unit" => Ok(TestKind::Unit),
-            default => Err(UnknownKind(default.into())),
+            "all" => Ok(Kind::All),
+            "api" | "command" | "rest" => Ok(Kind::Command),
+            "bench" | "benchmark" => Ok(Kind::Bench),
+            "it" | "integration" => Ok(Kind::Integration),
+            "unit" => Ok(Kind::Unit),
+            default => Err(Unknown(default.into())),
         }
     }
 
-    type Error = UnknownKind;
+    type Error = Unknown;
 }

@@ -263,7 +263,6 @@ where
         Ok(Some(decoded))
     }
 
-    #[allow(clippy::too_many_lines)]
     fn encode(&self, data: &Value) -> Result<Vec<u8>> {
         let protocol = match (data.get_str("protocol"), data.get_u32("protocol_version")) {
             (Some("RFC3164"), _) => Protocol::RFC3164,
