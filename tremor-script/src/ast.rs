@@ -195,10 +195,14 @@ pub struct Warning {
 }
 
 impl Warning {
-    fn new(inner: Range, outer: Range, msg: String) -> Self {
-        Self { outer, inner, msg }
+    fn new<T: ToString>(inner: Range, outer: Range, msg: &T) -> Self {
+        Self {
+            outer,
+            inner,
+            msg: msg.to_string(),
+        }
     }
-    fn new_with_scope(warning_scope: Range, msg: String) -> Self {
+    fn new_with_scope<T: ToString>(warning_scope: Range, msg: &T) -> Self {
         Self::new(warning_scope, warning_scope, msg)
     }
 }
@@ -654,8 +658,11 @@ where
         })
     }
 
-    fn warn(&mut self, warning: Warning) {
-        self.warnings.insert(warning);
+    fn warn<S: ToString>(&mut self, inner: Range, outer: Range, msg: &S) {
+        self.warnings.insert(Warning::new(inner, outer, msg));
+    }
+    fn warn_with_scope<S: ToString>(&mut self, r: Range, msg: &S) {
+        self.warnings.insert(Warning::new_with_scope(r, msg));
     }
 }
 
@@ -1576,6 +1583,13 @@ impl<'script, Ex: Expression + 'script> ClauseGroup<'script, Ex> {
     const MAX_OPT_RUNS: u64 = 128;
     const MIN_BTREE_SIZE: usize = 16;
 
+    pub(crate) fn simple(p: PredicateClause<'script, Ex>) -> Self {
+        ClauseGroup::Simple {
+            precondition: None,
+            patterns: vec![p],
+        }
+    }
+
     fn combinable(&self, other: &Self) -> bool {
         self.precondition().ast_eq(&other.precondition()) && self.precondition().is_some()
     }
@@ -1657,7 +1671,7 @@ impl<'script, Ex: Expression + 'script> ClauseGroup<'script, Ex> {
 
     // allow this otherwise clippy complains after telling us to use matches
     #[allow(
-        clippy::blocks_in_if_conditions,
+        // clippy::blocks_in_if_conditions,
         clippy::too_many_lines,
         // we allow this because of the borrow checker
         clippy::option_if_let_else

@@ -59,7 +59,7 @@ pub(crate) async fn receive_message(
     subscription_name: &str,
 ) -> Result<PullResponse> {
     // TODO: Use streaming pull
-    #[allow(warnings)]
+    #[allow(deprecated)]
     // to allow use of deprecated field googapis::google::pubsub::v1::PullRequest::return_immediately
     let response = client
         .pull(PullRequest {

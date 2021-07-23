@@ -46,9 +46,7 @@ pub struct OpenTelemetry {
     onramp_id: TremorUrl,
 }
 
-#[allow(dead_code)]
 pub struct Int {
-    uid: u64,
     config: Config,
     onramp_id: TremorUrl,
     tx: tremor_otelapis::all::OpenTelemetrySender,
@@ -67,7 +65,7 @@ impl Int {
         let (tx, rx) = bounded(128);
         let config = config.clone();
         let origin = EventOriginUri {
-            uid: 0,
+            uid,
             scheme: "tremor-otel".to_string(),
             host: hostname(),
             port: None,
@@ -75,7 +73,6 @@ impl Int {
         };
 
         Self {
-            uid,
             config,
             onramp_id,
             tx,

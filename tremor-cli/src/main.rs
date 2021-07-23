@@ -25,9 +25,6 @@
 
 #[macro_use]
 extern crate serde_derive;
-// This is silly but serde is forcing you to import serde if you want serde_derive
-#[allow(unused_extern_crates)]
-extern crate serde;
 
 #[macro_use]
 extern crate log;

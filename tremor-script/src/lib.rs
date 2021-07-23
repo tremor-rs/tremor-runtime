@@ -49,7 +49,6 @@ pub mod highlighter;
 pub mod interpreter;
 /// The Tremor Script Lexer
 pub mod lexer;
-#[allow(unused)]
 pub(crate) mod parser;
 /// Support for module paths
 pub mod path;

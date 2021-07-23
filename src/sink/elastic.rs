@@ -252,7 +252,6 @@ fn build_event_payload(event: &Event) -> Result<Vec<u8>> {
 }
 
 impl Elastic {
-    #[allow(clippy::cast_possible_truncation)]
     #[allow(clippy::too_many_lines)]
     async fn enqueue_send_future(&mut self, event: Event) {
         let (tx, rx) = bounded(1);
@@ -325,6 +324,7 @@ impl Elastic {
             })();
 
             // The truncation we do is sensible since we're only looking at a short timeframe
+            #[allow(clippy::cast_possible_truncation)]
             let time = start.elapsed().as_millis() as u64;
             let mut insight_meta = Value::object_with_capacity(1);
             let cb = match &r {

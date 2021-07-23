@@ -118,7 +118,7 @@ pub(crate) enum MgmtMsg {
     },
     DisconnectOutput(Cow<'static, str>, TremorUrl),
     DisconnectInput(TremorUrl),
-    // only for testing
+    #[cfg(test)]
     Echo(async_channel::Sender<()>),
 }
 
@@ -354,14 +354,6 @@ fn maybe_send(r: Result<()>) {
     }
 }
 
-#[allow(dead_code)]
-async fn echo(addr: &Addr) -> Result<()> {
-    let (tx, rx) = async_channel::bounded(1);
-    addr.send_mgmt(MgmtMsg::Echo(tx)).await?;
-    rx.recv().await?;
-    Ok(())
-}
-
 #[allow(clippy::too_many_lines)]
 async fn pipeline_task(
     id: TremorUrl,
@@ -519,6 +511,7 @@ async fn pipeline_task(
                 info!("[Pipeline::{}] Disconnecting {} from 'in'", pid, &input_url);
                 inputs.remove(&input_url);
             }
+            #[cfg(test)]
             M::M(MgmtMsg::Echo(sender)) => {
                 if let Err(e) = sender.send(()).await {
                     error!(
@@ -624,6 +617,13 @@ mod tests {
     const POSITIVE_RECV_TIMEOUT: Duration = Duration::from_millis(10000);
     // used when we expect nothing, to not spend too much time in this test
     const NEGATIVE_RECV_TIMEOUT: Duration = Duration::from_millis(200);
+
+    async fn echo(addr: &Addr) -> Result<()> {
+        let (tx, rx) = async_channel::bounded(1);
+        addr.send_mgmt(MgmtMsg::Echo(tx)).await?;
+        rx.recv().await?;
+        Ok(())
+    }
 
     /// ensure the last message has been processed by waiting for the manager to answer
     /// leveraging the sequential execution at the manager task

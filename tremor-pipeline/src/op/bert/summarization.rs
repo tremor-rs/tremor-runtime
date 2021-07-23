@@ -59,7 +59,6 @@ op!(SummerizationFactory(_uid, node) {
     }
 });
 
-#[allow(unused_mut)]
 impl Operator for Summerization {
     fn handles_contraflow(&self) -> bool {
         false

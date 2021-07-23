@@ -11,6 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+#[allow(dead_code, unused_imports)]
 use pretty_assertions::assert_eq;
 //use regex::Regex;
 use std::io::prelude::*;
@@ -103,7 +104,6 @@ macro_rules! test_cases {
     };
 }
 
-test_cases!(
-    emit_empty_windows,
-    // INSERT
-);
+// test_cases!(
+//     // INSERT
+// );

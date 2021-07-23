@@ -23,7 +23,7 @@ use super::{
     ImutExprInt, Invocable, Invoke, InvokeAggr, InvokeAggrFn, List, Literal, LocalPath, Match,
     Merge, MetadataPath, ModDoc, NodeMetas, Patch, PatchOperation, Path, Pattern, PredicateClause,
     PredicatePattern, Record, RecordPattern, Recur, ReservedPath, Script, Segment, StatePath,
-    StrLitElement, StringLit, TestExpr, TuplePattern, UnaryExpr, UnaryOpKind, Warning,
+    StrLitElement, StringLit, TestExpr, TuplePattern, UnaryExpr, UnaryOpKind,
 };
 use super::{upable::Upable, BytesPart};
 use crate::impl_expr;
@@ -597,7 +597,6 @@ impl<'script> ExpressionRaw<'script> for ExprRaw<'script> {}
 
 impl<'script> Upable<'script> for ExprRaw<'script> {
     type Target = Expr<'script>;
-    #[allow(clippy::too_many_lines)]
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(match self {
             ExprRaw::FnDecl(_) | ExprRaw::Const { .. } | ExprRaw::Module(ModuleRaw { .. }) => {
@@ -1024,7 +1023,6 @@ impl<'script> ExpressionRaw<'script> for ImutExprRaw<'script> {}
 
 impl<'script> Upable<'script> for ImutExprRaw<'script> {
     type Target = ImutExprInt<'script>;
-    #[allow(clippy::too_many_lines)]
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let was_leaf = helper.possible_leaf;
         helper.possible_leaf = false;
@@ -1670,11 +1668,11 @@ impl<'script> Upable<'script> for RecordPatternRaw<'script> {
             });
             if duplicated {
                 let extent = (self.start, self.end).into();
-                helper.warn(Warning::new(
+                helper.warn(
                     extent,
                     extent.expand_lines(2),
-                    format!("The field {} is checked with both present and another extractor, this is redundant as extractors imply presence. It may also overwrite the result of the extractor.", present),
-                ));
+                    &format!("The field {} is checked with both present and another extractor, this is redundant as extractors imply presence. It may also overwrite the result of the extractor.", present),
+                );
             }
         }
 
@@ -1688,11 +1686,11 @@ impl<'script> Upable<'script> for RecordPatternRaw<'script> {
             });
             if duplicated {
                 let extent = (self.start, self.end).into();
-                helper.warn(Warning::new(
+                helper.warn(
                     extent,
                     extent.expand_lines(2),
-                    format!("The field {} is checked with both absence and another extractor, this test can never be true.", absent),
-                ))
+                    &format!("The field {} is checked with both absence and another extractor, this test can never be true.", absent),
+                )
             }
         }
 
@@ -2275,13 +2273,14 @@ fn sort_clauses<Ex: Expression>(patterns: &mut [PredicateClause<Ex>]) {
     }
 }
 
+const NO_DFLT: &str = "This match expression has no default clause, if the other clauses do not cover all possibilities this will lead to events being discarded with runtime errors.";
+const MULT_DFLT: &str = "A match statement with more then one default clause will never reach any but the first default clause.";
 impl<'script, Ex> Upable<'script> for MatchRaw<'script, Ex>
 where
     <Ex as Upable<'script>>::Target: Expression + 'script,
     Ex: ExpressionRaw<'script> + 'script,
 {
     type Target = Match<'script, Ex::Target>;
-    #[allow(clippy::too_many_lines)]
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let mut patterns: Vec<PredicateClause<_>> = self
             .patterns
@@ -2294,15 +2293,9 @@ where
             .filter(|p| p.pattern.is_default() && p.guard.is_none())
             .count();
         match defaults {
-                0 => helper.warn(Warning::new_with_scope(
-                    Range(self.start, self.end),
-                    "This match expression has no default clause, if the other clauses do not cover all possibilities this will lead to events being discarded with runtime errors.".into()
-                )),
-                x if x > 1 => helper.warn(Warning::new_with_scope(
-                    Range(self.start, self.end),
-                    "A match statement with more then one default clause will never reach any but the first default clause.".into()
-                )),
-            _ => ()
+            0 => helper.warn_with_scope(Range(self.start, self.end), &NO_DFLT),
+            x if x > 1 => helper.warn_with_scope(Range(self.start, self.end), &MULT_DFLT),
+            _ => (),
         };
         // If the last statement is a global default we can simply remove it
         let default = if let Some(PredicateClause {
@@ -2339,13 +2332,7 @@ where
 
         // This shortcuts for if / else style matches
         if patterns.len() == 1 {
-            let patterns = patterns
-                .into_iter()
-                .map(|p| ClauseGroup::Simple {
-                    precondition: None,
-                    patterns: vec![p],
-                })
-                .collect();
+            let patterns = patterns.into_iter().map(ClauseGroup::simple).collect();
             return Ok(Match {
                 mid: helper.add_meta(self.start, self.end),
                 target: self.target.up(helper)?,
@@ -2534,7 +2521,7 @@ impl<'script> Upable<'script> for InvokeAggrRaw<'script> {
             .into());
         }
         if let Some(warning) = invocable.warning() {
-            helper.warn(Warning::new_with_scope(self.extent(&helper.meta), warning));
+            helper.warn_with_scope(self.extent(&helper.meta), &warning);
         }
         let aggr_id = helper.aggregates.len();
         let args = self.args.up(helper)?.into_iter().map(ImutExpr).collect();

@@ -265,7 +265,6 @@ fn dflt_method() -> SerdeMethod {
 
 impl ConfigImpl for Config {}
 
-#[allow(clippy::large_enum_variant)]
 enum CodecTaskInMsg {
     ToRequest(Event, Sender<SendTaskInMsg>),
     ToEvent {
@@ -274,7 +273,7 @@ enum CodecTaskInMsg {
         op_meta: Box<Option<OpMeta>>,
         request_meta: Value<'static>,
         correlation: Option<Value<'static>>,
-        response: Response,
+        response: Box<Response>,
         duration: u64,
     },
     ReportFailure {
@@ -395,7 +394,7 @@ impl Sink for Rest {
                                         op_meta: Box::new(op_meta),
                                         request_meta,
                                         correlation,
-                                        response,
+                                        response: Box::new(response),
                                         duration,
                                     })
                                     .await?
@@ -645,7 +644,7 @@ async fn codec_task(
                         origin_uri.as_ref(),
                         request_meta,
                         correlation.as_ref(),
-                        response,
+                        *response,
                         codec,
                         &mut codec_map,
                         preprocessors.as_mut_slice(),

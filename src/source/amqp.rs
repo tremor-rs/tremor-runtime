@@ -31,7 +31,6 @@ use url::Url;
     NoWait 8
 }*/
 #[derive(Deserialize, Debug, Clone)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct Config {
     pub amqp_addr: String,
     queue_name: String,

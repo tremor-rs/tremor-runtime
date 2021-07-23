@@ -543,7 +543,6 @@ where
         error
     }
 
-    #[allow(clippy::too_many_lines)]
     async fn run(mut self) -> Result<()> {
         loop {
             if self.handle_pipelines().await? {

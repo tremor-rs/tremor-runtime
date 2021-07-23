@@ -26,21 +26,20 @@ use crate::{op::prelude::*, EventIdGenerator};
 use crate::{Event, EventId, Operator};
 use halfbrown::Entry;
 use tremor_common::stry;
-use tremor_script::ast;
+
 use tremor_script::{
     self,
-    ast::{InvokeAggrFn, Select, SelectStmt},
+    ast::{self, ImutExpr, InvokeAggrFn, NodeMetas, RunConsts, SelectStmt},
     errors::Result as TSResult,
-    interpreter::Env,
+    interpreter::{Env, LocalStack},
     prelude::*,
     srs,
     utils::sorted_serialize,
     Value,
 };
 
-#[allow(clippy::module_name_repetitions)]
 #[derive(Debug)]
-pub struct TrickleSelect {
+pub struct Select {
     pub id: String,
     pub(crate) select: srs::Select,
     pub windows: Vec<Window>,
@@ -48,11 +47,12 @@ pub struct TrickleSelect {
     pub event_id_gen: EventIdGenerator,
     recursion_limit: u32,
     dflt_group: Group,
+    max_groups: usize,
 }
 
 pub(crate) const NO_AGGRS: [InvokeAggrFn<'static>; 0] = [];
 
-impl TrickleSelect {
+impl Select {
     pub fn with_stmt(
         operator_uid: u64,
         id: String,
@@ -73,9 +73,13 @@ impl TrickleSelect {
             let windows_itr = windows.iter();
             let dflt_group = Group {
                 value: Value::const_null(),
-                aggrs: aggregates.clone(),
                 windows: GroupWindow::from_windows(aggregates, &EventId::default(), windows_itr),
             };
+            let windows_itr = windows.iter();
+            let max_groups = windows_itr
+                .map(|w| w.window_impl.max_groups())
+                .min()
+                .unwrap_or(0) as usize;
             Ok(Self {
                 id,
                 windows,
@@ -84,12 +88,13 @@ impl TrickleSelect {
                 event_id_gen,
                 recursion_limit: tremor_script::recursion_limit(),
                 dflt_group,
+                max_groups,
             })
         } else {
             Err("Wrong type of statement".into())
         }
     }
-    fn opts() -> ExecOpts {
+    const fn opts() -> ExecOpts {
         ExecOpts {
             result_needed: true,
             aggr: AggrType::Emit,
@@ -98,7 +103,6 @@ impl TrickleSelect {
 }
 
 /// execute the select clause of the statement and filter results by having clause, if provided
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn execute_select_and_having(
     ctx: &SelectCtx,
     env: &Env,
@@ -110,60 +114,85 @@ pub(crate) fn execute_select_and_having(
         ctx.opts,
         env,
         event_payload,
-        ctx.state,
+        &NULL,
         event_meta,
         ctx.local_stack,
     )?;
 
     // check having clause
     let result = value.into_owned();
-    if let Some(guard) = &ctx.select.maybe_having {
-        let test = guard.run(ctx.opts, env, &result, ctx.state, &NULL, ctx.local_stack)?;
-        if let Some(test) = test.as_bool() {
-            if !test {
-                return Ok(None);
-            }
-        } else {
-            return Err(tremor_script::errors::query_guard_not_bool_err(
-                ctx.select,
-                guard,
-                &test,
-                ctx.node_meta,
-            ));
-        }
+    let having = stry!(run_guard(
+        &ctx.select,
+        &ctx.select.maybe_having,
+        ctx.opts,
+        env,
+        &result,
+        ctx.local_stack,
+        ctx.node_meta,
+    ));
+    if having {
+        Ok(Some((
+            OUT,
+            Event {
+                id: ctx.event_id.clone(),
+                ingest_ns: ctx.ingest_ns,
+                origin_uri: ctx.origin_uri.clone(),
+                // TODO: this will ignore op_metas from all other events this one is based upon and might break operators requiring this
+                op_meta: ctx.op_meta.clone(),
+                is_batch: false,
+                data: (result.into_static(), event_meta.clone_static()).into(),
+                transactional: ctx.transactional,
+                ..Event::default()
+            },
+        )))
+    } else {
+        Ok(None)
     }
-    Ok(Some((
-        OUT,
-        Event {
-            id: ctx.event_id.clone(),
-            ingest_ns: ctx.ingest_ns,
-            origin_uri: ctx.origin_uri.clone(),
-            // TODO: this will ignore op_metas from all other events this one is based upon and might break operators requiring this
-            op_meta: ctx.op_meta.clone(),
-            is_batch: false,
-            data: (result.into_static(), event_meta.clone_static()).into(),
-            transactional: ctx.transactional,
-            ..Event::default()
-        },
-    )))
 }
 
-impl Operator for TrickleSelect {
-    #[allow(clippy::too_many_lines)]
+fn env<'run, 'script>(
+    context: &'run EventContext<'run>,
+    consts: RunConsts<'run, 'script>,
+    meta: &'run NodeMetas,
+    recursion_limit: u32,
+) -> Env<'run, 'script> {
+    Env {
+        context,
+        consts,
+        aggrs: &NO_AGGRS,
+        meta: &meta,
+        recursion_limit,
+    }
+}
+
+/// Simple enum to decide what we return
+enum Res {
+    Event,
+    None,
+    Data(EventAndInsights),
+}
+
+impl Res {
+    /// Turn a result into `EventAndInsights`
+    fn into_insights(self, event: Event) -> EventAndInsights {
+        match self {
+            Res::Event => event.into(),
+            Res::None => EventAndInsights::default(),
+            Res::Data(data) => data,
+        }
+    }
+}
+
+impl Operator for Select {
+    // Note: we don't use state in this function as select does not allow mutation
+    // so the state can never be changed.
     fn on_event(
         &mut self,
         _uid: u64,
         _port: &str,
-        state: &mut Value<'static>,
+        _state: &mut Value<'static>,
         mut event: Event,
     ) -> Result<EventAndInsights> {
-        /// Simple enum to decide what we return
-        enum Res {
-            Event,
-            None,
-            Data(EventAndInsights),
-        }
-
         let Self {
             select,
             windows,
@@ -171,9 +200,9 @@ impl Operator for TrickleSelect {
             groups,
             recursion_limit,
             dflt_group,
+            max_groups,
             ..
         } = self;
-        let recursion_limit = *recursion_limit;
 
         let Event {
             ingest_ns,
@@ -189,173 +218,125 @@ impl Operator for TrickleSelect {
 
         let opts = Self::opts();
 
-        let res = data.apply_select(select, |data, stmt| -> TSResult<Res> {
-            let SelectStmt {
-                stmt: ref select,
-                ref mut consts,
-                ref locals,
-                ref node_meta,
-                ..
-            } = stmt;
+        let res = data.apply_select(
+            select,
+            |event,
+             SelectStmt {
+                 stmt: select,
+                 consts,
+                 locals,
+                 node_meta,
+                 ..
+             }|
+             -> TSResult<Res> {
+                let locals = tremor_script::interpreter::LocalStack::with_size(*locals);
 
-            let select: &Select = select;
+                let (data, meta) = event.parts_mut();
+                //
+                // Before any select processing, we filter by where clause
+                //
 
-            let Select {
-                target,
-                maybe_where,
-                maybe_having,
-                maybe_group_by,
-                ..
-            } = select;
-
-            let local_stack = tremor_script::interpreter::LocalStack::with_size(*locals);
-
-            //
-            // Before any select processing, we filter by where clause
-            //
-            if let Some(guard) = maybe_where {
-                let (unwind_event, event_meta) = data.parts();
-                let env = Env {
-                    context: &ctx,
-                    consts: consts.run(),
-                    aggrs: &NO_AGGRS,
-                    meta: &node_meta,
-                    recursion_limit,
-                };
-                let test = stry!(guard
-                    .run(opts, &env, unwind_event, state, event_meta, &local_stack)
-                    .and_then(|test| {
-                        test.as_bool().ok_or_else(|| {
-                            tremor_script::errors::query_guard_not_bool_err(
-                                select, guard, &test, &node_meta,
-                            )
-                        })
-                    }));
-                if !test {
+                let guard = &select.maybe_where;
+                let e = env(&ctx, consts.run(), node_meta, *recursion_limit);
+                let w_guard = run_guard(select, &guard, opts, &e, data, &locals, node_meta);
+                if !stry!(w_guard) {
                     return Ok(Res::None);
                 };
-            }
 
-            let mut group_values = if let Some(group_by) = &maybe_group_by {
-                stry!(group_by.generate_groups(&ctx, data.value(), state, &node_meta, data.meta()))
-            } else {
-                //
-                // select without group by or windows
-                // event stays the same, only the value might change based on select clause
-                // and we might drop it altogether based on having clause.
-                //
-                if windows.is_empty() {
+                let group_values = if let Some(group_by) = &select.maybe_group_by {
+                    let groups = stry!(group_by.generate_groups(&ctx, data, &node_meta, meta));
+                    groups.into_iter().map(Value::from).collect()
+                } else if windows.is_empty() {
+                    //
+                    // select without group by or windows
+                    // event stays the same, only the value might change based on select clause
+                    // and we might drop it altogether based on having clause.
+                    //
                     consts.group = Value::from(vec![Value::const_null(), Value::from("[null]")]);
 
-                    let (unwind_event, event_meta): (&mut Value, &mut Value) = data.parts_mut();
-
-                    let env = Env {
-                        context: &ctx,
-                        consts: consts.run(),
-                        aggrs: &NO_AGGRS,
-                        meta: &node_meta,
-                        recursion_limit,
-                    };
-                    let value = stry!(target.run(
-                        opts,
-                        &env,
-                        unwind_event,
-                        state,
-                        event_meta,
-                        &local_stack
-                    ));
-
-                    let result = value.into_owned();
-
-                    // evaluate having clause, if one exists
-                    #[allow(clippy::option_if_let_else)] // The borrow checker prevents map_or
-                    return if let Some(guard) = maybe_having {
-                        let test =
-                            stry!(guard.run(opts, &env, &result, state, &NULL, &local_stack));
-                        #[allow(clippy::option_if_let_else)] // The borrow checker prevents map_or
-                        if let Some(test) = test.as_bool() {
-                            if test {
-                                *unwind_event = result;
-                                Ok(Res::Event)
-                            } else {
-                                Ok(Res::None)
-                            }
-                        } else {
-                            Err(tremor_script::errors::query_guard_not_bool_err(
-                                select, guard, &test, &node_meta,
-                            ))
-                        }
-                    } else {
-                        *unwind_event = result;
+                    let e = env(&ctx, consts.run(), &node_meta, *recursion_limit);
+                    let value = stry!(select.target.run(opts, &e, data, &NULL, meta, &locals));
+                    let h_guard = &select.maybe_having;
+                    let h_guard = run_guard(select, h_guard, opts, &e, &value, &locals, node_meta);
+                    return if stry!(h_guard) {
+                        *data = value.into_owned();
                         Ok(Res::Event)
+                    } else {
+                        Ok(Res::None)
                     };
-                };
-                vec![]
-            };
-
-            if group_values.is_empty() {
-                group_values.push(vec![Value::null()])
-            };
-
-            let group_values: Vec<Value> = group_values.into_iter().map(Value::from).collect();
-
-            // Usually one or two windows emit, this is the common case so we don't pre-allocate
-            // for the entire window depth
-            let mut events = Vec::with_capacity(group_values.len() * 2);
-
-            for group_value in group_values {
-                let group_str = stry!(sorted_serialize(&group_value));
-
-                let ctx = SelectCtx {
-                    select,
-                    local_stack: &local_stack,
-                    node_meta,
-                    opts,
-                    ctx: &ctx,
-                    state,
-                    event_id: id.clone(),
-                    event_id_gen,
-                    ingest_ns,
-                    op_meta,
-                    origin_uri,
-                    transactional,
-                    recursion_limit,
+                } else {
+                    vec![Value::from(vec![Value::const_null()])]
                 };
 
-                match groups.entry(group_str) {
-                    Entry::Occupied(mut o) => {
-                        let del = stry!(o.get_mut().on_event(ctx, consts, data, &mut events));
-                        if del {
-                            o.remove();
+                // Usually one or two windows emit, this is the common case so we don't pre-allocate
+                // for the entire window depth
+                let mut events = Vec::with_capacity(group_values.len() * 2);
+
+                // with the `each` grouping an event could be in more then one group, so we
+                // iterate over all groups we found
+                for group_value in group_values {
+                    let group_str = stry!(sorted_serialize(&group_value));
+
+                    let ctx = SelectCtx {
+                        select,
+                        local_stack: &locals,
+                        node_meta,
+                        opts,
+                        ctx: &ctx,
+                        event_id: id.clone(),
+                        event_id_gen,
+                        ingest_ns,
+                        op_meta,
+                        origin_uri,
+                        transactional,
+                        recursion_limit: *recursion_limit,
+                    };
+
+                    let groups_len = groups.len();
+
+                    // see if we know the group already, we use the `entry` here so we don't
+                    // need to add / remove from the groups unenessessarily
+                    match groups.entry(group_str) {
+                        Entry::Occupied(mut o) => {
+                            // If we found a group execute it, and remove it if it is not longer
+                            // needed
+                            if stry!(o.get_mut().on_event(ctx, consts, event, &mut events)) {
+                                o.remove();
+                            }
                         }
-                    }
-                    Entry::Vacant(v) => {
-                        dflt_group.value = group_value;
-                        dflt_group.value.try_push(v.key().to_string());
+                        Entry::Vacant(v) => {
+                            // If we didn't find a group re-use the statements default group and set
+                            // the group value of it
+                            dflt_group.value = group_value;
+                            dflt_group.value.try_push(v.key().to_string());
 
-                        let del = stry!(dflt_group.on_event(ctx, consts, data, &mut events));
-                        if !del {
-                            v.insert(dflt_group.clone());
-                            dflt_group.reset();
+                            // execute it
+                            if !stry!(dflt_group.on_event(ctx, consts, event, &mut events)) {
+                                // if we can't delete it check if we're having too many groups,
+                                // if so, error.
+                                if groups_len >= *max_groups {
+                                    return Err("Too many groups are present".into());
+                                }
+                                // otherwise we clone the default group (this is a cost we got to pay)
+                                // and reset it . If we didn't clone here we'd need to allocate a new
+                                // group for every event we haven't seen yet
+                                v.insert(dflt_group.clone());
+                                dflt_group.reset();
+                            }
                         }
                     }
                 }
-            }
-            Ok(Res::Data(events.into()))
-        })?;
+                Ok(Res::Data(events.into()))
+            },
+        )?;
 
-        match res {
-            Res::Event => Ok(event.into()),
-            Res::None => Ok(EventAndInsights::default()),
-            Res::Data(data) => Ok(data),
-        }
+        Ok(res.into_insights(event))
     }
 
-    #[allow(clippy::too_many_lines)]
     fn on_signal(
         &mut self,
         _uid: u64,
-        state: &mut Value<'static>, // we only reference state here immutably, no chance to change it here
+        _state: &mut Value<'static>,
         signal: &mut Event,
     ) -> Result<EventAndInsights> {
         // we only react on ticks and when we have windows
@@ -369,9 +350,12 @@ impl Operator for TrickleSelect {
         } = self;
         let recursion_limit = *recursion_limit;
 
-        if signal.kind != Some(SignalKind::Tick) || windows.is_empty() {
+        // if it isn't a tick or we do not have any windows, or have no
+        // recorded groups, we can just return
+        if signal.kind != Some(SignalKind::Tick) || windows.is_empty() || groups.is_empty() {
             return Ok(EventAndInsights::default());
         }
+
         let ingest_ns = signal.ingest_ns;
 
         let opts = Self::opts();
@@ -404,18 +388,13 @@ impl Operator for TrickleSelect {
                     let mut run = consts.run();
                     run.group = &g.value;
                     run.window = &w.name;
-                    let window_event = w.window.on_tick(ingest_ns)?;
+                    let window_event = w.window.on_tick(ingest_ns);
                     let mut can_remove = window_event.emit;
 
                     if window_event.emit {
                         // push
-                        let env = Env {
-                            context: &ctx,
-                            consts: run,
-                            aggrs: &w.aggrs,
-                            meta: &node_meta,
-                            recursion_limit,
-                        };
+                        let mut env = env(&ctx, run, node_meta, recursion_limit);
+                        env.aggrs = &w.aggrs;
 
                         let mut outgoing_event_id = event_id_gen.next_id();
 
@@ -427,7 +406,6 @@ impl Operator for TrickleSelect {
                             node_meta,
                             opts,
                             ctx: &ctx,
-                            state,
                             event_id: outgoing_event_id,
                             event_id_gen,
                             ingest_ns,
@@ -471,5 +449,24 @@ impl Operator for TrickleSelect {
 
     fn handles_signal(&self) -> bool {
         true
+    }
+}
+
+fn run_guard(
+    select: &ast::Select,
+    guard: &Option<ImutExpr>,
+    opts: ExecOpts,
+    env: &Env,
+    result: &Value,
+    local_stack: &LocalStack,
+    node_meta: &NodeMetas,
+) -> TSResult<bool> {
+    if let Some(guard) = guard {
+        let test = stry!(guard.run(opts, env, result, &NULL, &NULL, local_stack));
+        test.as_bool().ok_or_else(|| {
+            tremor_script::errors::query_guard_not_bool_err(select, guard, &test, node_meta)
+        })
+    } else {
+        Ok(true)
     }
 }
