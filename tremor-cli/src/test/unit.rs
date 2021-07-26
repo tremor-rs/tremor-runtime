@@ -135,7 +135,10 @@ fn eval_suite_tests(
                         }
 
                         let case_tags = suite_tags.join(Some(found_tags));
-
+                        let test_name = spec
+                            .get_literal("name")
+                            .map(ToString::to_string)
+                            .unwrap_or_default();
                         if let Some(item) = spec.get_field_expr("test") {
                             let start = nanotime();
                             let value = eval(item, env, local)?;
@@ -152,7 +155,7 @@ fn eval_suite_tests(
                                 if let (matched, false) =
                                     case_tags.matches(sys_filter, includes, excludes)
                                 {
-                                    status::h1("    Test ( Skipping )", "")?;
+                                    status::h1("    Test ( Skipping )", &test_name)?;
                                     status::tagsx(
                                         "        ",
                                         &case_tags,
@@ -162,7 +165,7 @@ fn eval_suite_tests(
                                     stats.skip();
                                     continue;
                                 }
-                                status::h1("    Test", "")?;
+                                status::h1("    Test", &test_name)?;
                                 status::tagsx(
                                     "        ",
                                     &case_tags,
@@ -339,15 +342,16 @@ pub(crate) fn run_suite(
 
                             let suite_tags = scenario_tags.join(Some(found_tags));
                             if let Some(ImutExprInt::Record(r)) = spec.get_field_expr("suite") {
-                                if let Some(value) = spec.get_literal("name") {
-                                    suite_name = value.to_string()
-                                };
+                                suite_name = spec
+                                    .get_literal("name")
+                                    .map(ToString::to_string)
+                                    .unwrap_or_default();
 
                                 // TODO revisit tags in unit tests
                                 if let (_matched, true) =
                                     suite_tags.matches(sys_filter, includes, excludes)
                                 {
-                                    status::h1("  Suite", &suite_name.to_string())?;
+                                    status::h1("  Suite", &suite_name)?;
                                     status::tagsx(
                                         "      ",
                                         &suite_tags,
@@ -373,7 +377,7 @@ pub(crate) fn run_suite(
                             } else {
                                 stat_s.skip();
 
-                                status::h1("  Suite", &suite_name.to_string())?;
+                                status::h1("  Suite", &suite_name)?;
                                 status::tagsx(
                                     "      ",
                                     &suite_tags,
