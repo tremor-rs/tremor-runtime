@@ -434,7 +434,7 @@ impl EventPayload {
     /// ```
 
     #[must_use]
-    pub fn suffix<'iref>(&'iref self) -> &'iref ValueAndMeta<'iref> {
+    pub fn suffix(&self) -> &ValueAndMeta {
         &self.data
     }
 
@@ -616,7 +616,7 @@ impl EventPayload {
         // don't control the owner here.
         join_f(
             unsafe {
-                // ALLOW: See above for explenation            
+                // ALLOW: See above for explenation
                 mem::transmute::<&'iref mut ValueAndMeta<'static>, &'iref mut ValueAndMeta<'iref>>(
                     &mut self.data,
                 )
