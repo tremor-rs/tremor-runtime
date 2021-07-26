@@ -901,10 +901,10 @@ impl<'script> Record<'script> {
     /// Tries to fetch a literal from a record
     #[must_use]
     pub fn get_literal(&self, name: &str) -> Option<&Value> {
-        if let ImutExprInt::Literal(Literal { value, .. }) = self.get_field_expr(name)? {
+        if let Some(ImutExprInt::Literal(Literal { value, .. })) = self.get_field_expr(name) {
             Some(value)
         } else {
-            None
+            self.base.get(name)
         }
     }
 }
