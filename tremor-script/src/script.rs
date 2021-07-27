@@ -160,21 +160,7 @@ impl Script {
         r: Range,
         h: &mut H,
     ) -> io::Result<()> {
-        let mut s = script.to_string();
-        let mut include_stack = lexer::IncludeStack::default();
-        let cu = include_stack.push("test.tremor")?;
-
-        let tokens: Vec<_> = lexer::Preprocessor::preprocess(
-            &crate::path::load(),
-            "test.tremor",
-            &mut s,
-            cu,
-            &mut include_stack,
-        )?
-        .into_iter()
-        .filter_map(Result::ok)
-        .collect();
-
+        let tokens: Vec<_> = lexer::Tokenizer::new(script).collect::<Result<_>>()?;
         h.highlight(None, &tokens, line_prefix, true, Some(r))?;
         io::Result::Ok(())
     }

@@ -1002,6 +1002,22 @@ pub enum Expr<'script> {
     Imut(ImutExprInt<'script>),
 }
 
+impl<'script> Expr<'script> {
+    /// Tries to borrow the Expor as an `Invoke`
+    #[must_use]
+    pub fn as_invoke(&self) -> Option<&Invoke<'script>> {
+        match self {
+            Expr::Imut(
+                ImutExprInt::Invoke(i)
+                | ImutExprInt::Invoke1(i)
+                | ImutExprInt::Invoke2(i)
+                | ImutExprInt::Invoke3(i),
+            ) => Some(i),
+            _ => None,
+        }
+    }
+}
+
 impl<'script> Expression for Expr<'script> {
     fn replace_last_shadow_use(&mut self, replace_idx: usize) {
         match self {
@@ -1046,6 +1062,18 @@ impl<'script> From<ImutExprInt<'script>> for Expr<'script> {
 /// An immutable expression
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ImutExpr<'script>(pub ImutExprInt<'script>);
+
+impl<'script> ImutExpr<'script> {
+    /// Tries to borrow the `ImutExpr` as a `Record`
+    #[must_use]
+    pub fn as_record(&self) -> Option<&Record<'script>> {
+        if let ImutExpr(ImutExprInt::Record(r)) = self {
+            Some(r)
+        } else {
+            None
+        }
+    }
+}
 #[cfg(not(tarpaulin_include))] // this is a simple passthrough
 impl<'script> Expression for ImutExpr<'script> {
     fn replace_last_shadow_use(&mut self, replace_idx: usize) {
@@ -1142,6 +1170,15 @@ pub enum ImutExprInt<'script> {
 }
 
 impl<'script> ImutExprInt<'script> {
+    /// Tries to borrow the expression as a list
+    #[must_use]
+    pub fn as_list(&self) -> Option<&List<'script>> {
+        if let ImutExprInt::List(l) = self {
+            Some(l)
+        } else {
+            None
+        }
+    }
     pub(crate) fn try_reduce(self, helper: &Helper<'script, '_>) -> Result<Self> {
         match self {
             ImutExprInt::Unary(u) => u.try_reduce(helper),

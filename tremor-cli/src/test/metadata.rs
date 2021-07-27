@@ -15,7 +15,7 @@
 use crate::test::kind;
 use crate::test::tag::Tags;
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Default)]
 pub(crate) struct Meta {
     pub(crate) about: Option<String>,
     pub(crate) kind: kind::Kind,

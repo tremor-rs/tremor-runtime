@@ -47,13 +47,6 @@ impl TagFilter {
             .collect()
     }
 
-    pub(crate) fn excludes(&self) -> Tags {
-        self.excludes
-            .iter()
-            .map(std::string::ToString::to_string)
-            .collect()
-    }
-
     // We allow this since the logic below is more readable when allowing for if not else
     #[allow(clippy::if_not_else)]
     pub(crate) fn matches(

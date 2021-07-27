@@ -128,14 +128,14 @@ fn run(mut app: App, cmd: &ArgMatches) -> Result<()> {
         Some(("explain", Some(_matches))) => Err("Not yet implemented".into()),
         Some(("completions", Some(matches))) => completions::run_cmd(app, matches),
         Some(("server", Some(matches))) => server::run_cmd(app, matches),
-        Some(("run", Some(matches))) => run::run_cmd(&matches),
-        Some(("doc", Some(matches))) => doc::run_cmd(&matches),
+        Some(("run", Some(matches))) => run::run_cmd(matches),
+        Some(("doc", Some(matches))) => doc::run_cmd(matches),
         Some(("api", Some(matches))) => task::block_on(api::run_cmd(
             TremorApp {
                 format,
                 config: load_config()?,
             },
-            &matches,
+            matches,
         )),
         Some(("dbg", Some(matches))) => debug::run_cmd(&matches),
         Some(("test", Some(matches))) => test::run_cmd(&matches),

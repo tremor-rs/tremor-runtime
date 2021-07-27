@@ -14,7 +14,7 @@
 
 use std::{convert::TryFrom, error::Error, fmt::Debug, fmt::Display};
 /// Specifies a kind of test framework, or a composite `all` to capture all framework variants
-#[derive(Deserialize, Debug, PartialEq)]
+#[derive(Deserialize, Debug, PartialEq, Clone)]
 pub(crate) enum Kind {
     Bench,
     Integration,
@@ -22,6 +22,23 @@ pub(crate) enum Kind {
     Unit,
     All,
     Unknown(String),
+}
+impl ToString for Kind {
+    fn to_string(&self) -> String {
+        match self {
+            Kind::Bench => "bench".to_string(),
+            Kind::Integration => "integration".to_string(),
+            Kind::Command => "command".to_string(),
+            Kind::Unit => "unit".to_string(),
+            Kind::All => "all".to_string(),
+            Kind::Unknown(u) => format!("unknown({})", u),
+        }
+    }
+}
+impl Default for Kind {
+    fn default() -> Self {
+        Self::All
+    }
 }
 
 /// An unknown test kind
