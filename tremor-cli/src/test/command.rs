@@ -21,13 +21,14 @@ use crate::test::before;
 use crate::test::report;
 use crate::test::stats;
 use crate::test::tag::{self, Tags};
-use crate::test::Meta;
 use crate::util::slurp_string;
 use globwalk::{FileType, GlobWalkerBuilder};
 use std::path::Path;
 use std::{collections::HashMap, thread};
 use tremor_common::file;
 use tremor_common::time::nanotime;
+
+use super::TestConfig;
 
 #[derive(Deserialize, Debug)]
 pub(crate) struct CommandRun {
@@ -58,11 +59,7 @@ pub(crate) struct CommandTest {
 pub(crate) fn suite_command(
     base: &Path,
     root: &Path,
-    _meta: &Meta,
-    quiet: bool,
-    sys_filter: &[&str],
-    includes: &[String],
-    excludes: &[String],
+    config: &TestConfig,
 ) -> Result<(stats::Stats, Vec<report::TestReport>)> {
     let api_suites = GlobWalkerBuilder::new(root, "**/command.yml")
         .case_insensitive(true)
@@ -110,10 +107,14 @@ pub(crate) fn suite_command(
                 let mut casex = stats::Stats::new();
                 for case in suite.cases {
                     let current_tags = suite_tags.join(case.tags.clone());
-                    if let (_, false) = current_tags.matches(sys_filter, includes, excludes) {
-                        if !quiet {
+                    if let (_, false) = config.matches(&current_tags) {
+                        if config.verbose {
                             status::h1("Command Test ( Skipping )", &case.name)?;
-                            status::tags(&current_tags, Some(includes), Some(excludes))?;
+                            status::tags(
+                                &current_tags,
+                                Some(&config.includes),
+                                Some(&config.excludes),
+                            )?;
                         }
                         continue; // SKIP
                     }
@@ -123,7 +124,11 @@ pub(crate) fn suite_command(
                         header_printed = true;
                     }
                     status::h1("Command Test", &case.name)?;
-                    status::tags(&current_tags, Some(includes), Some(excludes))?;
+                    status::tags(
+                        &current_tags,
+                        Some(&config.includes),
+                        Some(&config.excludes),
+                    )?;
 
                     let args = shell_words::split(&case.command).unwrap_or_default();
 
