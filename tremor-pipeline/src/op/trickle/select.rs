@@ -316,7 +316,7 @@ impl Operator for Select {
                                 // if we can't delete it check if we're having too many groups,
                                 // if so, error.
                                 if ctx.cardinality >= *max_groups {
-                                    return Err("Too many groups are present".into());
+                                    return Err(format!("Maxmimum amount of groups reached ({}). Ignoring group [{}]", max_groups, *max_groups+1).into());
                                 }
                                 // otherwise we clone the default group (this is a cost we got to pay)
                                 // and reset it . If we didn't clone here we'd need to allocate a new
@@ -395,7 +395,7 @@ impl Operator for Select {
                     if window_event.emit {
                         // push
                         let mut env = env(&ctx, run, node_meta, recursion_limit);
-                        env.aggrs = &w.aggrs;
+                        env.aggrs = dbg!(&w.aggrs);
 
                         let mut outgoing_event_id = event_id_gen.next_id();
 
@@ -415,12 +415,13 @@ impl Operator for Select {
                             transactional: w.transactional,
                             recursion_limit,
                         };
-
-                        if let Some(port_and_event) =
-                            super::select::execute_select_and_having(&ctx, &env, &data)?
-                        {
-                            res.events.push(port_and_event);
-                        };
+                        if w.holds_data {
+                            if let Some(port_and_event) =
+                                super::select::execute_select_and_having(&ctx, &env, &data)?
+                            {
+                                res.events.push(port_and_event);
+                            };
+                        }
                         // re-initialize aggr state for new window
                         // reset transactional state for outgoing events
 
@@ -430,7 +431,7 @@ impl Operator for Select {
                                 run,
                                 &data,
                                 &mut res.events,
-                                Some(&w.aggrs),
+                                Some((w.holds_data, &w.aggrs)),
                                 can_remove,
                             )?;
                         }

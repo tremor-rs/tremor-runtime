@@ -62,6 +62,8 @@ pub struct GroupWindow {
     pub(crate) transactional: bool,
     /// The next (larger) tilt frame in a group
     pub(crate) next: Option<Box<GroupWindow>>,
+    /// If the window holds any data
+    pub(crate) holds_data: bool,
 }
 
 impl GroupWindow {
@@ -82,6 +84,7 @@ impl GroupWindow {
                 name: w.name.clone().into(),
                 transactional: false,
                 next: GroupWindow::from_windows(aggrs, id, iter),
+                holds_data: false,
             })
         })
     }
@@ -91,6 +94,7 @@ impl GroupWindow {
             aggr.invocable.init();
         }
         self.transactional = false;
+        self.holds_data = false;
     }
 
     /// Accumultes data into the window
@@ -105,6 +109,7 @@ impl GroupWindow {
         self.id.track(&ctx.event_id);
         //   - track transactional state
         self.transactional |= ctx.transactional;
+        self.holds_data = true;
 
         // Ensure the `window` constant is set propery
         let mut consts = consts;
@@ -166,6 +171,7 @@ impl GroupWindow {
         // Track the parents id's and transactionality
         self.id.track(&ctx.event_id);
         self.transactional |= ctx.transactional;
+        self.holds_data = true;
         // Ingest the data
         for (this, prev) in self.aggrs.iter_mut().zip(prev.iter()) {
             stry!(this.invocable.merge(&prev.invocable).map_err(|e| {
@@ -194,7 +200,7 @@ impl GroupWindow {
         consts: RunConsts,
         data: &ValueAndMeta,
         events: &mut Vec<(Cow<'static, str>, Event)>,
-        prev: Option<&Aggregates<'static>>,
+        prev: Option<(bool, &Aggregates<'static>)>,
         mut can_remove: bool,
     ) -> Result<bool> {
         // determin what to do with the event
@@ -202,10 +208,12 @@ impl GroupWindow {
 
         // if it should be included in the current window include it
         if window_event.include {
-            if let Some(prev) = prev {
+            if let Some((had_data, prev)) = prev {
                 // We are not a top level window so we merge the previos
                 // window data
-                stry!(self.merge(ctx, prev));
+                if had_data {
+                    stry!(self.merge(ctx, prev))
+                };
             } else {
                 // We are a root level window so we accumulate the event data
                 stry!(self.accumulate(ctx, consts, data));
@@ -214,13 +222,6 @@ impl GroupWindow {
 
         // if we should emit, do that
         if window_event.emit {
-            let env = Env {
-                context: &ctx.ctx,
-                consts,
-                aggrs: &self.aggrs,
-                meta: &ctx.node_meta,
-                recursion_limit: ctx.recursion_limit,
-            };
             // create a new event id for the next window recording
 
             // Move the recorded event ID into the context so it is
@@ -235,14 +236,23 @@ impl GroupWindow {
             ctx.transactional = self.transactional;
 
             // Set the window name for emission
-            let mut consts = consts;
-            consts.window = &self.name;
 
-            // execute thw select body and apply the `having` to see if we publish an event
-            if let Some(port_and_event) = stry!(execute_select_and_having(ctx, &env, data)) {
-                events.push(port_and_event);
-            };
+            if self.holds_data {
+                let mut consts = consts;
+                consts.window = &self.name;
+                let env = Env {
+                    context: &ctx.ctx,
+                    consts,
+                    aggrs: &self.aggrs,
+                    meta: &ctx.node_meta,
+                    recursion_limit: ctx.recursion_limit,
+                };
 
+                // execute thw select body and apply the `having` to see if we publish an event
+                if let Some(port_and_event) = stry!(execute_select_and_having(ctx, &env, data)) {
+                    events.push(port_and_event);
+                };
+            }
             // if we have another tilt frame after that emit our aggregated data to it
             // this happens after emitting so we keep order of the events from the
             // smallest to the largest window
@@ -253,7 +263,7 @@ impl GroupWindow {
                         consts,
                         data,
                         events,
-                        Some(&self.aggrs),
+                        Some((self.holds_data, &self.aggrs)),
                         can_remove
                     ));
             }
@@ -268,8 +278,10 @@ impl GroupWindow {
             // The event wasn't recorded earlier so we need to record it now
             // either by merging the pervious aggregates or accumulating the
             // event data
-            if let Some(prev) = prev {
-                stry!(self.merge(ctx, prev));
+            if let Some((had_data, prev)) = prev {
+                if had_data {
+                    stry!(self.merge(ctx, prev))
+                };
             } else {
                 stry!(self.accumulate(ctx, consts, data));
             }
