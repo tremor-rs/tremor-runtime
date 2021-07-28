@@ -1,7 +1,7 @@
 # Changelog
 
 ## Unreleased
-'
+
 ### New featues
 
 - Experimental ARM support
@@ -22,6 +22,7 @@
 - Box apropriately in the rest sink
 - replace macros with functions in gcp code
 - Add -q flag and clarify -v flag for unit tests
+- Add win::cardinality function
 
 ### Fixes
 

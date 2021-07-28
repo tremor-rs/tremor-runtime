@@ -137,6 +137,8 @@ pub struct EventContext<'run> {
     pub origin_uri: Option<&'run EventOriginUri>,
     /// Allow panicing on asserts
     pub panic_on_assert: bool,
+    /// The cardinality of the current window, if any
+    pub cardinality: usize,
 }
 
 impl<'run> EventContext<'run> {
@@ -147,6 +149,7 @@ impl<'run> EventContext<'run> {
             at: ingest_ns,
             origin_uri,
             panic_on_assert: false,
+            cardinality: 0,
         }
     }
 

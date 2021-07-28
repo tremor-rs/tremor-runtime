@@ -214,7 +214,8 @@ impl Operator for Select {
             ..
         } = event;
 
-        let ctx = EventContext::new(ingest_ns, origin_uri.as_ref());
+        let mut ctx = EventContext::new(ingest_ns, origin_uri.as_ref());
+        ctx.cardinality = groups.len();
 
         let opts = Self::opts();
 
@@ -277,7 +278,9 @@ impl Operator for Select {
                 for group_value in group_values {
                     let group_str = stry!(sorted_serialize(&group_value));
 
-                    let ctx = SelectCtx {
+                    ctx.cardinality = groups.len();
+
+                    let sel_ctx = SelectCtx {
                         select,
                         local_stack: &locals,
                         node_meta,
@@ -292,15 +295,13 @@ impl Operator for Select {
                         recursion_limit: *recursion_limit,
                     };
 
-                    let groups_len = groups.len();
-
                     // see if we know the group already, we use the `entry` here so we don't
                     // need to add / remove from the groups unenessessarily
                     match groups.entry(group_str) {
                         Entry::Occupied(mut o) => {
                             // If we found a group execute it, and remove it if it is not longer
                             // needed
-                            if stry!(o.get_mut().on_event(ctx, consts, event, &mut events)) {
+                            if stry!(o.get_mut().on_event(sel_ctx, consts, event, &mut events)) {
                                 o.remove();
                             }
                         }
@@ -311,10 +312,10 @@ impl Operator for Select {
                             dflt_group.value.try_push(v.key().to_string());
 
                             // execute it
-                            if !stry!(dflt_group.on_event(ctx, consts, event, &mut events)) {
+                            if !stry!(dflt_group.on_event(sel_ctx, consts, event, &mut events)) {
                                 // if we can't delete it check if we're having too many groups,
                                 // if so, error.
-                                if groups_len >= *max_groups {
+                                if ctx.cardinality >= *max_groups {
                                     return Err("Too many groups are present".into());
                                 }
                                 // otherwise we clone the default group (this is a cost we got to pay)

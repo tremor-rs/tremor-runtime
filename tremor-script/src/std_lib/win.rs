@@ -14,7 +14,7 @@
 
 use crate::registry::{Aggr as AggrRegistry, FResult, TremorAggrFn, TremorAggrFnWrapper};
 
-use crate::prelude::*;
+use crate::{prelude::*, tremor_fn};
 
 use std::ops::RangeInclusive;
 
@@ -220,10 +220,20 @@ pub fn load_aggr(registry: &mut AggrRegistry) {
         ));
 }
 
+pub fn load(registry: &mut Registry) {
+    registry.insert(tremor_fn! (win|cardinality(ctx) {
+            Ok(Value::from(ctx.cardinality))
+
+    }));
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::registry::fun;
     use crate::registry::FResult as Result;
+    use crate::Value;
+
     #[test]
     fn first() -> Result<()> {
         let mut a = First::default();
@@ -282,5 +292,12 @@ mod test {
         a.accumulate(&[&two])?;
         assert_eq!(a.emit_and_init()?, 2);
         Ok(())
+    }
+
+    #[test]
+    fn cardinality() {
+        let f = fun("win", "cardinality");
+
+        assert_val!(f(&[]), 0);
     }
 }
