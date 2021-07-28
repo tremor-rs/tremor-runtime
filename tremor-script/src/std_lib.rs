@@ -65,6 +65,7 @@ pub fn load(registry: &mut Registry) {
     test::load(registry);
     r#type::load(registry);
     url::load(registry);
+    win::load(registry);
 }
 
 pub fn load_aggr(registry: &mut AggrRegistry) {
