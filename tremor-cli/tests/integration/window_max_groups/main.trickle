@@ -1,6 +1,6 @@
 define tumbling window my_window
 with
-  size = 2,
+  size = 3,
   max_groups = 2
 end;
 

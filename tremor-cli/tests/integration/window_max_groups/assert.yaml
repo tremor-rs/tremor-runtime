@@ -5,5 +5,4 @@ asserts:
     equals_file: expected.json
   - source: fg.err.log
     contains:
-      - |
-        Error handling event: Maxmimum amount of groups reached (2). Ignoring group [3]
+      - Maxmimum amount of groups reached (2). Ignoring group [3]
