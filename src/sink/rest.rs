@@ -535,7 +535,7 @@ async fn codec_task(
     // create token in this lifetime (ambiguous to compiler), instead of bound to the sink.
     let token = match auth {
         Some(Auth::GCP) => {
-            let (t, _) = auth::authenticate_bearer().await?;
+            let t = Token::new()?;
             Some(t)
         }
         None => None,
