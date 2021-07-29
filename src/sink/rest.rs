@@ -15,10 +15,10 @@
 #![cfg(not(tarpaulin_include))]
 
 use crate::codec::Codec;
-use crate::connectors::gcp::auth;
 use crate::errors::ErrorKind;
 use crate::sink::prelude::*;
 use async_channel::{bounded, Receiver, Sender};
+use gouth::Token;
 use halfbrown::HashMap;
 use http_types::mime::Mime;
 use http_types::{headers::HeaderValue, Method};
