@@ -705,7 +705,7 @@ dependencies = [
  "regex",
  "rustc-hash",
  "shlex",
- "which",
+ "which 3.1.1",
 ]
 
 [[package]]
@@ -2275,9 +2275,9 @@ version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9512782490ab8a5c752851ba49214f9e4d46c78f14a708098d8352cece35b235"
 dependencies = [
- "prost",
- "prost-types",
- "tonic",
+ "prost 0.7.0",
+ "prost-types 0.7.0",
+ "tonic 0.4.3",
 ]
 
 [[package]]
@@ -2693,6 +2693,18 @@ dependencies = [
  "tokio 1.6.0",
  "tokio-rustls",
  "webpki",
+]
+
+[[package]]
+name = "hyper-timeout"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bbb958482e8c7be4bc3cf272a766a2b0bf1a6755e7a6ae777f017a31d11b13b1"
+dependencies = [
+ "hyper 0.14.7",
+ "pin-project-lite 0.2.7",
+ "tokio 1.6.0",
+ "tokio-io-timeout",
 ]
 
 [[package]]
@@ -3387,6 +3399,12 @@ checksum = "b9f1c5b025cda876f66ef43a113f91ebc9f4ccef34843000e0adf6ebbab84e21"
 dependencies = [
  "winapi 0.3.9",
 ]
+
+[[package]]
+name = "multimap"
+version = "0.8.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
 
 [[package]]
 name = "native-tls"
@@ -4165,7 +4183,35 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9e6984d2f1a23009bd270b8bb56d0926810a3d483f59c987d77969e9d8e840b2"
 dependencies = [
  "bytes 1.0.1",
- "prost-derive",
+ "prost-derive 0.7.0",
+]
+
+[[package]]
+name = "prost"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "de5e2533f59d08fcf364fd374ebda0692a70bd6d7e66ef97f306f45c6c5d8020"
+dependencies = [
+ "bytes 1.0.1",
+ "prost-derive 0.8.0",
+]
+
+[[package]]
+name = "prost-build"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "355f634b43cdd80724ee7848f95770e7e70eefa6dcf14fea676216573b8fd603"
+dependencies = [
+ "bytes 1.0.1",
+ "heck",
+ "itertools 0.10.0",
+ "log",
+ "multimap",
+ "petgraph 0.5.1",
+ "prost 0.8.0",
+ "prost-types 0.8.0",
+ "tempfile",
+ "which 4.2.1",
 ]
 
 [[package]]
@@ -4182,13 +4228,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "prost-derive"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "600d2f334aa05acb02a755e217ef1ab6dea4d51b58b7846588b747edec04efba"
+dependencies = [
+ "anyhow",
+ "itertools 0.10.0",
+ "proc-macro2",
+ "quote 1.0.9",
+ "syn 1.0.72",
+]
+
+[[package]]
 name = "prost-types"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b518d7cdd93dab1d1122cf07fa9a60771836c668dde9d9e2a139f957f0d9f1bb"
 dependencies = [
  "bytes 1.0.1",
- "prost",
+ "prost 0.7.0",
+]
+
+[[package]]
+name = "prost-types"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "603bbd6394701d13f3f25aada59c7de9d35a6a5887cfc156181234a44002771b"
+dependencies = [
+ "bytes 1.0.1",
+ "prost 0.8.0",
 ]
 
 [[package]]
@@ -6075,6 +6144,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "tokio-io-timeout"
+version = "1.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "90c49f106be240de154571dd31fbe48acb10ba6c6dd6f6517ad603abffa42de9"
+dependencies = [
+ "pin-project-lite 0.2.7",
+ "tokio 1.6.0",
+]
+
+[[package]]
 name = "tokio-macros"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6310,8 +6389,8 @@ dependencies = [
  "hyper 0.14.7",
  "percent-encoding 2.1.0",
  "pin-project 1.0.7",
- "prost",
- "prost-derive",
+ "prost 0.7.0",
+ "prost-derive 0.7.0",
  "tokio 1.6.0",
  "tokio-rustls",
  "tokio-stream",
@@ -6320,6 +6399,49 @@ dependencies = [
  "tower-service",
  "tracing",
  "tracing-futures",
+]
+
+[[package]]
+name = "tonic"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b584f064fdfc50017ec39162d5aebce49912f1eb16fd128e04b7f4ce4907c7e5"
+dependencies = [
+ "async-stream",
+ "async-trait",
+ "base64 0.13.0",
+ "bytes 1.0.1",
+ "futures-core",
+ "futures-util",
+ "h2 0.3.3",
+ "http 0.2.4",
+ "http-body 0.4.2",
+ "hyper 0.14.7",
+ "hyper-timeout",
+ "percent-encoding 2.1.0",
+ "pin-project 1.0.7",
+ "prost 0.8.0",
+ "prost-derive 0.8.0",
+ "tokio 1.6.0",
+ "tokio-stream",
+ "tokio-util 0.6.7",
+ "tower",
+ "tower-layer",
+ "tower-service",
+ "tracing",
+ "tracing-futures",
+]
+
+[[package]]
+name = "tonic-build"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d12faebbe071b06f486be82cc9318350814fdd07fcb28f3690840cd770599283"
+dependencies = [
+ "proc-macro2",
+ "prost-build",
+ "quote 1.0.9",
+ "syn 1.0.72",
 ]
 
 [[package]]
@@ -6507,13 +6629,14 @@ dependencies = [
 
 [[package]]
 name = "tremor-otelapis"
-version = "0.1.1"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d32d9f22b8e6c6f3a9dc9f2b1c893fde999f7d1077e170c7a61f5b1063fed454"
+checksum = "0051b535d70e596493a8121e59bc1b317d9c6628e895c20cc89ffb454ea91bf8"
 dependencies = [
  "async-channel",
- "prost",
- "tonic",
+ "prost 0.8.0",
+ "tonic 0.5.0",
+ "tonic-build",
 ]
 
 [[package]]
@@ -6625,7 +6748,7 @@ dependencies = [
  "test-case",
  "tide",
  "tokio-postgres",
- "tonic",
+ "tonic 0.4.3",
  "tremor-common",
  "tremor-influx",
  "tremor-otelapis",
@@ -7238,6 +7361,17 @@ version = "3.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d011071ae14a2f6671d0b74080ae0cd8ebf3a6f8c9589a2cd45f23126fe29724"
 dependencies = [
+ "libc",
+]
+
+[[package]]
+name = "which"
+version = "4.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7cc009ab82a2afc94b9e467ab4214aee9cad1356cd9191264203d7d72006e00d"
+dependencies = [
+ "either",
+ "lazy_static",
  "libc",
 ]
 
