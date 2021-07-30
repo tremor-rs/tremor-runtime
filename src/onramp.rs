@@ -17,7 +17,7 @@ use crate::pipeline;
 use crate::repository::ServantId;
 use crate::source::prelude::*;
 use crate::source::{
-    amqp, blaster, cb, crononome, discord, file, gsub, kafka, metronome, nats, otel, postgres,
+    amqp, blaster, cb, crononome, discord, env, file, gsub, kafka, metronome, nats, otel, postgres,
     rest, sse, stdin, tcp, udp, ws,
 };
 use crate::url::TremorUrl;
@@ -73,6 +73,7 @@ pub(crate) fn lookup(
         "amqp" => amqp::Amqp::from_config(id, config),
         "blaster" => blaster::Blaster::from_config(id, config),
         "cb" => cb::Cb::from_config(id, config),
+        "env" => env::Env::from_config(id, config),
         "file" => file::File::from_config(id, config),
         "kafka" => kafka::Kafka::from_config(id, config),
         "postgres" => postgres::Postgres::from_config(id, config),
