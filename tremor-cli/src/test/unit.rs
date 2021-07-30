@@ -53,7 +53,7 @@ fn eval_suite_entrypoint(
         .and_then(ImutExprInt::as_list)
         .ok_or("Missing suite tests")?;
 
-    if let Ok((s, mut e)) = eval_suite_tests(&env, &local, script, spec, &tags, config) {
+    if let Ok((s, mut e)) = eval_suite_tests(env, local, script, spec, tags, config) {
         elements.append(&mut e);
         stats.merge(&s);
     } else {
@@ -68,7 +68,7 @@ fn eval(expr: &ImutExprInt, env: &Env, local: &LocalStack) -> Result<Value<'stat
     let meta = Value::object();
     let event = Value::object();
     Ok(expr
-        .run(EXEC_OPTS, &env, &event, &state, &meta, local)?
+        .run(EXEC_OPTS, env, &event, &state, &meta, local)?
         .into_owned()
         .into_static())
 }
@@ -133,7 +133,7 @@ fn eval_suite_tests(
                 let elapsed = nanotime() - start;
 
                 // Non colorized test source extent for json report capture
-                let extent = item.extent(&env.meta);
+                let extent = item.extent(env.meta);
                 let mut hh = DumbHighlighter::new();
                 tremor_script::Script::highlight_script_with_range(script, extent, &mut hh)?;
 
@@ -300,7 +300,7 @@ pub(crate) fn run_suite(
     }
 
     for v in suites.values() {
-        stats.merge(&v.stats)
+        stats.merge(&v.stats);
     }
 
     Ok(report::TestReport {

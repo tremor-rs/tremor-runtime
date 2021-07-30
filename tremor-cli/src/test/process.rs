@@ -64,7 +64,7 @@ pub(crate) fn run_process(
 
     let process_start = nanotime();
 
-    let mut before = before::BeforeController::new(&bench_root);
+    let mut before = before::BeforeController::new(bench_root);
     let before_process = before.spawn()?;
 
     let bench_rootx = bench_root.to_path_buf();
@@ -96,12 +96,12 @@ pub(crate) fn run_process(
         Err(_) => return Err("Failed to join test foreground thread/process error".into()),
     };
 
-    before::update_evidence(&bench_root, &mut evidence)?;
+    before::update_evidence(bench_root, &mut evidence)?;
 
     // As our primary process is finished, check for after hooks
-    let mut after = after::AfterController::new(&bench_root);
+    let mut after = after::AfterController::new(bench_root);
     after.spawn()?;
-    after::update_evidence(&bench_root, &mut evidence)?;
+    after::update_evidence(bench_root, &mut evidence)?;
     // Assertions
     let assert_path = bench_root.join("assert.yaml");
     let report = if (&assert_path).is_file() {

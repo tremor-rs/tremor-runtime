@@ -199,18 +199,18 @@ impl Sink for Amqp {
                                 error!(
                                     "[Sink::{}] failed to send message: {} {}",
                                     &self.sink_url, e.reply_code, e.reply_text
-                                )
+                                );
                             } else {
                                 error!(
                                     "[Sink::{}] failed to send message: unknown error",
                                     &self.sink_url
-                                )
+                                );
                             }
                             if self.error_tx.send(()).await.is_err() {
                                 error!(
                                     "[Sink::{}] Error notifying the system about amqp error",
                                     &self.sink_url
-                                )
+                                );
                             }
                             if event.transactional {
                                 let mut insight = insight_event.clone();

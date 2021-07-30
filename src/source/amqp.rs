@@ -220,12 +220,12 @@ impl Source for Int {
     // should be used.
     fn fail(&mut self, id: u64) {
         if self.with_ack {
-            error!("[amqp] fail not implemented, msgid: {}", id)
+            error!("[amqp] fail not implemented, msgid: {}", id);
         }
     }
     fn ack(&mut self, id: u64) {
         if self.with_ack {
-            error!("[amqp] ack not implemented, msgid: {}", id)
+            error!("[amqp] ack not implemented, msgid: {}", id);
         }
     }
 }

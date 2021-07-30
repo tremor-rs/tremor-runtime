@@ -164,7 +164,7 @@ impl Operator for Grouper {
             let dimensions = d.encode();
             let window = match groups.cache.get_mut(&dimensions) {
                 None => {
-                    let rate = if let Some(rate) = Rate::from_meta(&meta) {
+                    let rate = if let Some(rate) = Rate::from_meta(meta) {
                         rate
                     } else {
                         return Ok(vec![(ERR, event)].into());

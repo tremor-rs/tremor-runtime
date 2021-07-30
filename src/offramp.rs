@@ -384,7 +384,7 @@ impl Manager {
                                     false
                                 } else {
                                     if let Some(port_ps) = dest_pipelines.get_mut(&port) {
-                                        port_ps.retain(|(url, _)| url != &id)
+                                        port_ps.retain(|(url, _)| url != &id);
                                     }
                                     offramp.remove_dest_pipeline(port.clone(), id.clone())
                                 };
@@ -408,12 +408,12 @@ impl Manager {
                         }
                     }
                     OfframpMsg::Reply(sink::Reply::Insight(event)) => {
-                        send_to_pipelines(&offramp_url, &mut pipelines, event).await
+                        send_to_pipelines(&offramp_url, &mut pipelines, event).await;
                     }
                     OfframpMsg::Reply(sink::Reply::Response(port, event)) => {
                         if let Some(pipelines) = dest_pipelines.get_mut(&port) {
                             if let Err(e) = handle_response(event, pipelines.iter()).await {
-                                error!("[Offramp::{}] Response error: {}", offramp_url, e)
+                                error!("[Offramp::{}] Response error: {}", offramp_url, e);
                             }
                         }
                     }
@@ -438,7 +438,7 @@ impl Manager {
                         break;
                     }
                     ManagerMsg::Create(r, c) => {
-                        self.offramp_task(r, *c, offramp_id_gen.next_id()).await?
+                        self.offramp_task(r, *c, offramp_id_gen.next_id()).await?;
                     }
                 };
                 info!("Stopping offramps...");

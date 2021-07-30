@@ -25,7 +25,6 @@
 use crate::connectors::gcp::{auth, storage};
 use crate::connectors::qos::{self, QoSFacilities, SinkQoS};
 use crate::sink::prelude::*;
-use futures::executor::block_on;
 use halfbrown::HashMap;
 use http::HeaderMap;
 use reqwest::Client;
@@ -79,7 +78,7 @@ impl std::fmt::Display for StorageCommand {
 impl offramp::Impl for GoogleCloudStorage {
     fn from_config(_config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
         let headers = HeaderMap::new();
-        let remote = Some(block_on(auth::json_api_client(&headers))?);
+        let remote = Some(auth::json_api_client(&headers)?);
         let hostport = "storage.googleapis.com:443";
         Ok(SinkManager::new_box(Self {
             remote,
@@ -148,7 +147,7 @@ impl Sink for GoogleCloudStorage {
         let remote = if let Some(remote) = &self.remote {
             remote
         } else {
-            self.remote = Some(auth::json_api_client(&HeaderMap::new()).await?);
+            self.remote = Some(auth::json_api_client(&HeaderMap::new())?);
             let remote = self.remote.as_ref().ok_or("Client error!")?;
             remote
             // TODO - Qos checks
@@ -162,26 +161,26 @@ impl Sink for GoogleCloudStorage {
                 StorageCommand::Fetch(bucket_name, object_name) => {
                     response.push(make_command_response(
                         "fetch",
-                        storage::get_object(&remote, &bucket_name, &object_name).await?,
+                        storage::get_object(remote, &bucket_name, &object_name).await?,
                     ));
                 }
                 StorageCommand::ListBuckets(project_id) => {
                     response.push(make_command_response(
                         "list_buckets",
-                        storage::list_buckets(&remote, &project_id).await?,
+                        storage::list_buckets(remote, &project_id).await?,
                     ));
                 }
                 StorageCommand::ListObjects(bucket_name) => {
                     response.push(make_command_response(
                         "list_objects",
-                        storage::list_objects(&remote, &bucket_name).await?,
+                        storage::list_objects(remote, &bucket_name).await?,
                     ));
                 }
                 StorageCommand::Add(bucket_name, object, body) => {
                     response.push(make_command_response(
                         "upload_object",
                         upload_object(
-                            &remote,
+                            remote,
                             &bucket_name,
                             &object,
                             &body,
@@ -195,26 +194,26 @@ impl Sink for GoogleCloudStorage {
                 StorageCommand::RemoveObject(bucket_name, object) => {
                     response.push(make_command_response(
                         "remove_object",
-                        storage::delete_object(&remote, &bucket_name, &object).await?,
+                        storage::delete_object(remote, &bucket_name, &object).await?,
                     ));
                 }
                 StorageCommand::Create(project_id, bucket_name) => {
                     response.push(make_command_response(
                         "create_bucket",
-                        storage::create_bucket(&remote, &project_id, &bucket_name).await?,
+                        storage::create_bucket(remote, &project_id, &bucket_name).await?,
                     ));
                 }
                 StorageCommand::RemoveBucket(bucket_name) => {
                     response.push(make_command_response(
                         "remove_bucket",
-                        storage::delete_bucket(&remote, &bucket_name).await?,
+                        storage::delete_bucket(remote, &bucket_name).await?,
                     ));
                 }
                 StorageCommand::Download(bucket_name, object_name) => {
                     response.push(make_command_response(
                         "download_object",
                         download_object(
-                            &remote,
+                            remote,
                             &bucket_name,
                             &object_name,
                             &self.sink_url,

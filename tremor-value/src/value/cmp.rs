@@ -332,9 +332,6 @@ mod test {
             Value::Bytes(v1.clone().into()),
             Value::Bytes(v1.clone().into())
         );
-        assert_ne!(
-            Value::Bytes(v1.clone().into()),
-            Value::Bytes(v2.clone().into())
-        );
+        assert_ne!(Value::Bytes(v1.into()), Value::Bytes(v2.into()));
     }
 }

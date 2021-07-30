@@ -121,10 +121,10 @@ impl GroupWindow {
         // the function arguments for the aggregates not the
         // aggregates themsefls
         let env = Env {
-            context: &ctx.ctx,
+            context: ctx.ctx,
             consts,
             aggrs: &NO_AGGRS,
-            meta: &ctx.node_meta,
+            meta: ctx.node_meta,
             recursion_limit: ctx.recursion_limit,
         };
 
@@ -212,7 +212,7 @@ impl GroupWindow {
                 // We are not a top level window so we merge the previos
                 // window data
                 if had_data {
-                    stry!(self.merge(ctx, prev))
+                    stry!(self.merge(ctx, prev));
                 };
             } else {
                 // We are a root level window so we accumulate the event data
@@ -241,10 +241,10 @@ impl GroupWindow {
                 let mut consts = consts;
                 consts.window = &self.name;
                 let env = Env {
-                    context: &ctx.ctx,
+                    context: ctx.ctx,
                     consts,
                     aggrs: &self.aggrs,
-                    meta: &ctx.node_meta,
+                    meta: ctx.node_meta,
                     recursion_limit: ctx.recursion_limit,
                 };
 
@@ -280,7 +280,7 @@ impl GroupWindow {
             // event data
             if let Some((had_data, prev)) = prev {
                 if had_data {
-                    stry!(self.merge(ctx, prev))
+                    stry!(self.merge(ctx, prev));
                 };
             } else {
                 stry!(self.accumulate(ctx, consts, data));
@@ -310,7 +310,7 @@ impl Group {
         while let Some(g) = w {
             g.reset();
             g.window.reset();
-            w = &mut g.next
+            w = &mut g.next;
         }
     }
 
@@ -343,10 +343,10 @@ impl Group {
                 context: ctx.ctx,
                 consts: run,
                 aggrs: &NO_AGGRS,
-                meta: &ctx.node_meta,
+                meta: ctx.node_meta,
                 recursion_limit: ctx.recursion_limit,
             };
-            if let Some(port_and_event) = stry!(execute_select_and_having(&ctx, &env, &data)) {
+            if let Some(port_and_event) = stry!(execute_select_and_having(&ctx, &env, data)) {
                 events.push(port_and_event);
             };
             Ok(true)
@@ -549,9 +549,9 @@ impl Trait for TumblingOnTime {
                 let value = stry!(script.run_imut(
                     &context,
                     AggrType::Emit,
-                    &unwind_event,  // event
+                    unwind_event,   // event
                     &Value::null(), // state for the window
-                    &event_meta,    // $
+                    event_meta,     // $
                 ));
                 let data = match value {
                     Return::Emit { value, .. } => value.as_u64(),
@@ -619,9 +619,9 @@ impl Trait for TumblingOnNumber {
                 let value = stry!(script.run_imut(
                     &context,
                     AggrType::Emit,
-                    &unwind_event,  // event
+                    unwind_event,   // event
                     &Value::null(), // state for the window
-                    &event_meta,    // $
+                    event_meta,     // $
                 ));
                 let data = match value {
                     Return::Emit { value, .. } => value.as_u64(),

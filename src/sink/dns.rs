@@ -188,7 +188,7 @@ impl Sink for Dns {
                         ..Event::default()
                     };
 
-                    res.push(Reply::Response(ERR, error_e))
+                    res.push(Reply::Response(ERR, error_e));
                 }
             }
         }

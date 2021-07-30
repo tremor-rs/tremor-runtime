@@ -165,7 +165,7 @@ impl<A: Artefact + Send + Sync + 'static> Repository<A> {
                     Msg::SerializeArtefacts(r) => r.send(self.values()).await?,
                     Msg::FindArtefact(r, id) => {
                         r.send(A::artefact_id(&id).map(|id| self.find(id).cloned()))
-                            .await?
+                            .await?;
                     }
                     Msg::PublishArtefact(r, id, sys, a) => {
                         r.send(
@@ -173,11 +173,11 @@ impl<A: Artefact + Send + Sync + 'static> Repository<A> {
                                 self.publish(id, sys, a).map(std::clone::Clone::clone)
                             }),
                         )
-                        .await?
+                        .await?;
                     }
                     Msg::UnpublishArtefact(r, id) => {
                         r.send(A::artefact_id(&id).and_then(|id| self.unpublish(id)))
-                            .await?
+                            .await?;
                     }
                     Msg::RegisterInstance(r, a_id, s_id) => {
                         r.send(
@@ -187,7 +187,7 @@ impl<A: Artefact + Send + Sync + 'static> Repository<A> {
                                     self.bind(aid, sid).map(std::clone::Clone::clone)
                                 }),
                         )
-                        .await?
+                        .await?;
                     }
                     Msg::UnregisterInstance(r, a_id, s_id) => {
                         r.send(
@@ -197,7 +197,7 @@ impl<A: Artefact + Send + Sync + 'static> Repository<A> {
                                     self.unbind(a_id, s_id).map(std::clone::Clone::clone)
                                 }),
                         )
-                        .await?
+                        .await?;
                     }
                 }
             }

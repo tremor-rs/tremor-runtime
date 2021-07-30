@@ -257,7 +257,7 @@ impl SnotCombiner {
         for x in &rules {
             //Cidr::from_str(x).map_err(|e| ExtractorError { msg: e.to_string() })?;
             if let Some(y) = parse_ipv4_fast(x) {
-                combiner.push(y)
+                combiner.push(y);
             } else {
                 return Err(ExtractorError {
                     msg: format!("could not parse CIDR: '{}'", x),
@@ -357,7 +357,7 @@ impl Extractor {
         let id = id.to_lowercase();
         let e = match id.as_str() {
             "glob" => {
-                if is_prefix(&rule_text) {
+                if is_prefix(rule_text) {
                     // ALLOW: we know the rule has a `*` at the end
                     Extractor::Prefix(rule_text[..rule_text.len() - 1].to_string())
                 } else if is_suffix(rule_text) {
@@ -365,17 +365,17 @@ impl Extractor {
                     Extractor::Suffix(rule_text[1..].to_string())
                 } else {
                     Extractor::Glob {
-                        compiled: glob::Pattern::new(&rule_text)?,
+                        compiled: glob::Pattern::new(rule_text)?,
                         rule: rule_text.to_string(),
                     }
                 }
             }
             "re" => Extractor::Re {
-                compiled: Regex::new(&rule_text)?,
+                compiled: Regex::new(rule_text)?,
                 rule: rule_text.to_string(),
             },
             "rerg" => Extractor::Rerg {
-                compiled: Regex::new(&rule_text)?,
+                compiled: Regex::new(rule_text)?,
                 rule: rule_text.to_string(),
             },
             "base64" => Extractor::Base64,
@@ -396,7 +396,7 @@ impl Extractor {
                     }
                 } else {
                     let mut grok = grok::Grok::default();
-                    let pat = grok.compile(&rule_text, true)?;
+                    let pat = grok.compile(rule_text, true)?;
                     Extractor::Grok {
                         rule: rule_text.to_string(),
                         compiled: GrokPattern {
@@ -582,7 +582,7 @@ impl Extractor {
                                     None => {
                                         if results.insert(*name, vec![cap.as_str()]).is_err() {
                                             // ALLOW: we know results is an object
-                                            unreachable!()
+                                            unreachable!();
                                         }
                                     }
                                 }
@@ -699,7 +699,7 @@ impl<'cidr> From<Cidr>
 
 #[cfg(test)]
 mod test {
-    use super::ExtractorResult::*;
+    use super::ExtractorResult::{Match, MatchNull, NoMatch};
     use super::*;
     use crate::Value;
     use halfbrown::hashmap;
@@ -801,7 +801,7 @@ mod test {
                         &Value::from("8J+agHNuZWFreSByb2NrZXQh"),
                         &EventContext::new(0, None)
                     ),
-                    Match("🚀sneaky rocket!".into())
+                    Match("\u{1f680}sneaky rocket!".into())
                 );
             }
             _ => unreachable!(),
@@ -956,7 +956,7 @@ mod test {
                 Match(Value::from(hashmap! (
                        "measurement".into() => "wea ther".into(),
                        "tags".into() => Value::from(hashmap!("location".into() => "us-midwest".into())),
-                       "fields".into() => Value::from(hashmap!("temperature".into() => 82.0f64.into())),
+                       "fields".into() => Value::from(hashmap!("temperature".into() => 82.0_f64.into())),
                        "timestamp".into() => Value::from(1_465_839_830_100_400_200_u64)
                 )))
             ),

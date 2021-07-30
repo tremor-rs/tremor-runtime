@@ -15,7 +15,7 @@ use pretty_assertions::assert_eq;
 use std::io::prelude::*;
 use tremor_common::file;
 use tremor_pipeline::FN_REGISTRY;
-use tremor_runtime;
+
 use tremor_runtime::errors::*;
 use tremor_script::errors::CompilerError;
 use tremor_script::highlighter::{Dumb, Highlighter};

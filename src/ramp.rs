@@ -165,7 +165,7 @@ impl MmapFile {
             let string = obj.encode();
             let bytes = string.as_bytes();
             let end = bytes.len();
-            file.write_all(&bytes)?;
+            file.write_all(bytes)?;
             let store = unsafe { MmapOptions::new().map(&file)? };
             let store = store.make_mut()?;
 
@@ -187,8 +187,8 @@ pub fn lookup(
     obj: &simd_json::OwnedValue,
 ) -> Result<Box<dyn Kv + Send>> {
     match name {
-        "mmap_file" => MmapFile::from_config(config, &obj),
-        "mmap_anon" => MmapAnon::from_config(config, &obj),
+        "mmap_file" => MmapFile::from_config(config, obj),
+        "mmap_anon" => MmapAnon::from_config(config, obj),
         _ => Err(format!("Cache {} not known", name).into()),
     }
 }

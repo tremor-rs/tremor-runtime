@@ -235,7 +235,7 @@ impl Event {
     pub fn correlation_metas(&self) -> Vec<Option<Value<'static>>> {
         let mut res = Vec::with_capacity(self.len());
         for (_, meta) in self.value_meta_iter() {
-            res.push(meta.get("correlation").map(Value::clone_static))
+            res.push(meta.get("correlation").map(Value::clone_static));
         }
         res
     }
@@ -289,7 +289,7 @@ impl<'value> Iterator for ValueMetaIter<'value> {
         } else if self.idx == 0 {
             let v = self.event.data.suffix();
             self.idx += 1;
-            Some((&v.value(), &v.meta()))
+            Some((v.value(), v.meta()))
         } else {
             None
         }
@@ -512,7 +512,7 @@ mod test {
         e2.data.consume(e.data.clone(), merge).unwrap();
         m.try_insert("correlation", 2);
         e.data = (Value::null(), m.clone()).into();
-        e2.data.consume(e.clone().data, merge).unwrap();
+        e2.data.consume(e.data, merge).unwrap();
         assert_eq!(e2.correlation_meta().unwrap(), Value::from(vec![1, 2]));
 
         Ok(())

@@ -425,7 +425,7 @@ pub trait ImutExprIntVisitor<'script> {
             ) => segments,
         };
         for segment in segments {
-            self.walk_segment(segment)?
+            self.walk_segment(segment)?;
         }
         Ok(())
     }
@@ -444,7 +444,7 @@ pub trait ImutExprIntVisitor<'script> {
     fn walk_string(&mut self, string: &mut StringLit<'script>) -> Result<()> {
         for element in &mut string.elements {
             if let StrLitElement::Expr(expr) = element {
-                self.walk_expr(expr)?
+                self.walk_expr(expr)?;
             }
         }
         Ok(())
@@ -681,7 +681,7 @@ pub(crate) trait GroupByVisitor<'script> {
             GroupByInt::Expr { expr, .. } | GroupByInt::Each { expr, .. } => self.visit_expr(expr),
             GroupByInt::Set { items, .. } => {
                 for inner_group_by in items {
-                    self.walk_group_by(&inner_group_by.0)
+                    self.walk_group_by(&inner_group_by.0);
                 }
             }
         }

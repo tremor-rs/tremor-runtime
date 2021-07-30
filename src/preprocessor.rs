@@ -80,7 +80,7 @@ pub fn lookup(name: &str) -> Result<Box<dyn Preprocessor>> {
 ///
 ///   * If the preprocessor is not known.
 pub fn make_preprocessors(preprocessors: &[String]) -> Result<Preprocessors> {
-    preprocessors.iter().map(|n| lookup(&n)).collect()
+    preprocessors.iter().map(|n| lookup(n)).collect()
 }
 
 /// Canonical way to preprocess data before it is fed to a codec for decoding.

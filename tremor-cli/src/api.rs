@@ -25,17 +25,17 @@ use crate::util::{accept, content_type, load, save_config, ser, TremorApp};
 
 pub(crate) async fn run_cmd(mut app: TremorApp, cmd: &ArgMatches) -> Result<()> {
     if let Some(matches) = cmd.subcommand_matches("version") {
-        conductor_version_cmd(&app, &matches).await
+        conductor_version_cmd(&app, matches).await
     } else if let Some(matches) = cmd.subcommand_matches("binding") {
-        conductor_binding_cmd(&app, &matches).await
+        conductor_binding_cmd(&app, matches).await
     } else if let Some(matches) = cmd.subcommand_matches("pipeline") {
-        conductor_pipeline_cmd(&app, &matches).await
+        conductor_pipeline_cmd(&app, matches).await
     } else if let Some(matches) = cmd.subcommand_matches("onramp") {
-        conductor_onramp_cmd(&app, &matches).await
+        conductor_onramp_cmd(&app, matches).await
     } else if let Some(matches) = cmd.subcommand_matches("offramp") {
-        conductor_offramp_cmd(&app, &matches).await
+        conductor_offramp_cmd(&app, matches).await
     } else if let Some(matches) = cmd.subcommand_matches("target") {
-        conductor_target_cmd(&mut app, &matches).await
+        conductor_target_cmd(&mut app, matches)
     } else {
         Err(Error::from("Invalid command"))
     }
@@ -61,13 +61,14 @@ struct Binding {
 // API host targetting //
 /////////////////////////
 
-async fn conductor_target_cmd(app: &mut TremorApp, cmd: &ArgMatches) -> Result<()> {
+fn conductor_target_cmd(app: &mut TremorApp, cmd: &ArgMatches) -> Result<()> {
     if cmd.subcommand_matches("list").is_some() {
-        conductor_target_list_cmd(app).await
+        conductor_target_list_cmd(app);
+        Ok(())
     } else if let Some(matches) = cmd.subcommand_matches("create") {
-        conductor_target_create_cmd(app, &matches).await
+        conductor_target_create_cmd(app, matches)
     } else if let Some(matches) = cmd.subcommand_matches("delete") {
-        conductor_target_delete_cmd(app, &matches).await
+        conductor_target_delete_cmd(app, matches)
     } else {
         println!("{}", simd_json::to_string(&app.config.instances)?);
         Ok(())
@@ -78,7 +79,7 @@ async fn conductor_target_cmd(app: &mut TremorApp, cmd: &ArgMatches) -> Result<(
 // API endpoint targetting //
 /////////////////////////////
 
-async fn conductor_target_list_cmd(app: &TremorApp) -> Result<()> {
+fn conductor_target_list_cmd(app: &TremorApp) {
     println!(
         "{:?}",
         app.config
@@ -87,10 +88,9 @@ async fn conductor_target_list_cmd(app: &TremorApp) -> Result<()> {
             .cloned()
             .collect::<Vec<String>>()
     );
-    Ok(())
 }
 
-async fn conductor_target_create_cmd(app: &mut TremorApp, cmd: &ArgMatches) -> Result<()> {
+fn conductor_target_create_cmd(app: &mut TremorApp, cmd: &ArgMatches) -> Result<()> {
     let id = cmd.value_of("TARGET_ID").ok_or("TARGET_ID not provided")?;
     let path_to_file = cmd.value_of("SOURCE").ok_or("SOURCE not provided")?;
     let json = load(path_to_file)?;
@@ -104,7 +104,7 @@ async fn conductor_target_create_cmd(app: &mut TremorApp, cmd: &ArgMatches) -> R
     save_config(&app.config)
 }
 
-async fn conductor_target_delete_cmd(app: &mut TremorApp, cmd: &ArgMatches) -> Result<()> {
+fn conductor_target_delete_cmd(app: &mut TremorApp, cmd: &ArgMatches) -> Result<()> {
     let id = cmd.value_of("TARGET_ID").ok_or("TARGET_ID not provided")?;
     app.config.instances.remove(&id.to_string());
     save_config(&app.config)
@@ -136,13 +136,13 @@ async fn conductor_pipeline_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()>
     if cmd.subcommand_matches("list").is_some() {
         conductor_list_cmd(app, "pipeline").await
     } else if let Some(matches) = cmd.subcommand_matches("fetch") {
-        conductor_get_cmd(app, &matches, "pipeline").await
+        conductor_get_cmd(app, matches, "pipeline").await
     } else if let Some(matches) = cmd.subcommand_matches("delete") {
-        conductor_delete_cmd(app, &matches, "pipeline").await
+        conductor_delete_cmd(app, matches, "pipeline").await
     } else if let Some(matches) = cmd.subcommand_matches("create") {
-        conductor_create_cmd_trickle(app, &matches, "pipeline").await
+        conductor_create_cmd_trickle(app, matches, "pipeline").await
     } else if let Some(matches) = cmd.subcommand_matches("instance") {
-        conductor_instance_cmd(app, &matches, "pipeline").await
+        conductor_instance_cmd(app, matches, "pipeline").await
     } else {
         Err("Invalid command".into())
     }
@@ -156,17 +156,17 @@ async fn conductor_binding_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> 
     if cmd.subcommand_matches("list").is_some() {
         conductor_list_cmd(app, "binding").await
     } else if let Some(matches) = cmd.subcommand_matches("fetch") {
-        conductor_get_cmd(app, &matches, "binding").await
+        conductor_get_cmd(app, matches, "binding").await
     } else if let Some(matches) = cmd.subcommand_matches("delete") {
-        conductor_delete_cmd(app, &matches, "binding").await
+        conductor_delete_cmd(app, matches, "binding").await
     } else if let Some(matches) = cmd.subcommand_matches("create") {
-        conductor_create_cmd(app, &matches, "binding").await
+        conductor_create_cmd(app, matches, "binding").await
     } else if let Some(matches) = cmd.subcommand_matches("instance") {
-        conductor_instance_cmd(app, &matches, "binding").await
+        conductor_instance_cmd(app, matches, "binding").await
     } else if let Some(matches) = cmd.subcommand_matches("activate") {
-        conductor_binding_activate_cmd(app, &matches).await
+        conductor_binding_activate_cmd(app, matches).await
     } else if let Some(matches) = cmd.subcommand_matches("deactivate") {
-        conductor_binding_deactivate_cmd(app, &matches).await
+        conductor_binding_deactivate_cmd(app, matches).await
     } else {
         Err("Invalid command".into())
     }
@@ -182,7 +182,7 @@ async fn conductor_binding_activate_cmd(app: &TremorApp, cmd: &ArgMatches) -> Re
     let endpoint = app.endpoint_id_instance("binding", a_id, s_id)?;
     let path_to_file = cmd.value_of("SOURCE").ok_or("SOURCE not provided")?;
     let json = load(path_to_file)?;
-    let ser = ser(&app, &json)?;
+    let ser = ser(app, &json)?;
     let response = surf::post(&endpoint)
         .header(headers::CONTENT_TYPE, content_type(app))
         .header(headers::ACCEPT, accept(app))
@@ -212,13 +212,13 @@ async fn conductor_offramp_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> 
     if cmd.subcommand_matches("list").is_some() {
         conductor_list_cmd(app, "offramp").await
     } else if let Some(matches) = cmd.subcommand_matches("fetch") {
-        conductor_get_cmd(app, &matches, "offramp").await
+        conductor_get_cmd(app, matches, "offramp").await
     } else if let Some(matches) = cmd.subcommand_matches("delete") {
-        conductor_delete_cmd(app, &matches, "offramp").await
+        conductor_delete_cmd(app, matches, "offramp").await
     } else if let Some(matches) = cmd.subcommand_matches("create") {
-        conductor_create_cmd(app, &matches, "offramp").await
+        conductor_create_cmd(app, matches, "offramp").await
     } else if let Some(matches) = cmd.subcommand_matches("instance") {
-        conductor_instance_cmd(app, &matches, "offramp").await
+        conductor_instance_cmd(app, matches, "offramp").await
     } else {
         Err("Invalid command".into())
     }
@@ -232,13 +232,13 @@ async fn conductor_onramp_cmd(app: &TremorApp, cmd: &ArgMatches) -> Result<()> {
     if cmd.subcommand_matches("list").is_some() {
         conductor_list_cmd(app, "onramp").await
     } else if let Some(matches) = cmd.subcommand_matches("fetch") {
-        conductor_get_cmd(app, &matches, "onramp").await
+        conductor_get_cmd(app, matches, "onramp").await
     } else if let Some(matches) = cmd.subcommand_matches("delete") {
-        conductor_delete_cmd(app, &matches, "onramp").await
+        conductor_delete_cmd(app, matches, "onramp").await
     } else if let Some(matches) = cmd.subcommand_matches("create") {
-        conductor_create_cmd(app, &matches, "onramp").await
+        conductor_create_cmd(app, matches, "onramp").await
     } else if let Some(matches) = cmd.subcommand_matches("instance") {
-        conductor_instance_cmd(app, &matches, "onramp").await
+        conductor_instance_cmd(app, matches, "onramp").await
     } else {
         Err("Invalid command".into())
     }
@@ -268,7 +268,7 @@ async fn conductor_create_cmd(app: &TremorApp, cmd: &ArgMatches, endpoint: &str)
     let endpoint = app.endpoint(endpoint)?;
     let path_to_file = cmd.value_of("SOURCE").ok_or("SOURCE not provided")?;
     let json = load(path_to_file)?;
-    let ser = ser(&app, &json)?;
+    let ser = ser(app, &json)?;
     let response = surf::post(&endpoint)
         .header(http_types::headers::CONTENT_TYPE, content_type(app))
         .header("accept", accept(app))

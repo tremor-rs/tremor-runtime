@@ -150,20 +150,20 @@ where
                             A::servant_id(&id)
                                 .map(|id| self.find(id).and_then(|v| v.resolution.clone())),
                         )
-                        .await?
+                        .await?;
                     }
                     Msg::PublishServant(r, id, s) => {
                         r.send(
                             A::servant_id(&id).and_then(|id| self.publish(id, s).map(|p| p.state)),
                         )
-                        .await?
+                        .await?;
                     }
 
                     Msg::UnpublishServant(r, id) => {
                         r.send(
                             A::servant_id(&id).and_then(|id| self.unpublish(id).map(|p| p.state)),
                         )
-                        .await?
+                        .await?;
                     }
                     Msg::Transition(r, mut id, new_state) => {
                         id.trim_to_instance();
@@ -172,7 +172,7 @@ where
                             None => Err("Servant not found".into()),
                         };
 
-                        r.send(res).await?
+                        r.send(res).await?;
                     }
                 }
             }

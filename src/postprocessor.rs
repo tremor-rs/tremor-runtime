@@ -66,7 +66,7 @@ pub fn lookup(name: &str) -> Result<Box<dyn Postprocessor>> {
 ///
 ///   * If any postprocessor is not known.
 pub fn make_postprocessors(postprocessors: &[String]) -> Result<Postprocessors> {
-    postprocessors.iter().map(|n| lookup(&n)).collect()
+    postprocessors.iter().map(|n| lookup(n)).collect()
 }
 
 /// canonical way to process encoded data passed from a `Codec`
@@ -141,7 +141,7 @@ impl Postprocessor for Gzip {
         use libflate::gzip::Encoder;
 
         let mut encoder = Encoder::new(Vec::new())?;
-        encoder.write_all(&data)?;
+        encoder.write_all(data)?;
         Ok(vec![encoder.finish().into_result()?])
     }
 }
@@ -157,7 +157,7 @@ impl Postprocessor for Zlib {
     fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         use libflate::zlib::Encoder;
         let mut encoder = Encoder::new(Vec::new())?;
-        encoder.write_all(&data)?;
+        encoder.write_all(data)?;
         Ok(vec![encoder.finish().into_result()?])
     }
 }
@@ -173,7 +173,7 @@ impl Postprocessor for Xz2 {
     fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         use xz2::write::XzEncoder as Encoder;
         let mut encoder = Encoder::new(Vec::new(), 9);
-        encoder.write_all(&data)?;
+        encoder.write_all(data)?;
         Ok(vec![encoder.finish()?])
     }
 }
@@ -209,7 +209,7 @@ impl Postprocessor for Lz4 {
         use lz4::EncoderBuilder;
         let buffer = Vec::<u8>::new();
         let mut encoder = EncoderBuilder::new().level(4).build(buffer)?;
-        encoder.write_all(&data)?;
+        encoder.write_all(data)?;
         Ok(vec![encoder.finish().0])
     }
 }
@@ -224,7 +224,7 @@ impl Postprocessor for AttachIngresTs {
     fn process(&mut self, ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         let mut res = Vec::with_capacity(data.len() + 8);
         res.write_u64::<BigEndian>(ingres_ns)?;
-        res.write_all(&data)?;
+        res.write_all(data)?;
 
         Ok(vec![res])
     }
@@ -241,7 +241,7 @@ impl Postprocessor for LengthPrefix {
     fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         let mut res = Vec::with_capacity(data.len() + 8);
         res.write_u64::<BigEndian>(data.len() as u64)?;
-        res.write_all(&data)?;
+        res.write_all(data)?;
         Ok(vec![res])
     }
 }
@@ -260,7 +260,7 @@ impl Postprocessor for TextualLength {
         let mut res = Vec::with_capacity(digits.len() + 1 + size);
         res.append(&mut digits);
         res.push(32);
-        res.write_all(&data)?;
+        res.write_all(data)?;
         Ok(vec![res])
     }
 }

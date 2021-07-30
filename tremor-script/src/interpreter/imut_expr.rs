@@ -89,7 +89,7 @@ impl<'script> ImutExprInt<'script> {
     ) -> Result<beef::Cow<'event, str>> {
         let value = stry!(self.run(opts, env, event, state, meta, local));
         value.as_str().map_or_else(
-            || error_need_str(self, self, value.value_type(), &env.meta),
+            || error_need_str(self, self, value.value_type(), env.meta),
             |s| Ok(beef::Cow::from(s.to_owned())),
         )
     }
@@ -193,13 +193,13 @@ impl<'script> ImutExprInt<'script> {
                     let tpe = part.data_type;
                     let end = part.endianess;
                     let ex = extend_bytes_from_value(
-                        self, part, &env.meta, tpe, end, part.bits, &mut buf, &mut used, &mut bs,
+                        self, part, env.meta, tpe, end, part.bits, &mut buf, &mut used, &mut bs,
                         &value,
                     );
                     stry!(ex);
                 }
                 if used > 0 {
-                    bs.push(buf >> (8 - used))
+                    bs.push(buf >> (8 - used));
                 }
 
                 Ok(Cow::Owned(Value::Bytes(bs.into())))
@@ -232,7 +232,7 @@ impl<'script> ImutExprInt<'script> {
                 mid,
                 is_const: false,
             } => {
-                if let Some(l) = stry!(local.get(*idx, self, *mid, &env.meta)) {
+                if let Some(l) = stry!(local.get(*idx, self, *mid, env.meta)) {
                     Ok(Cow::Borrowed(l))
                 } else {
                     let path: Path = Path::Local(LocalPath {
@@ -243,14 +243,14 @@ impl<'script> ImutExprInt<'script> {
                     });
                     let key = env.meta.name_dflt(*mid).to_string();
                     //TODO: get root key
-                    error_bad_key(self, self, &path, key, vec![], &env.meta)
+                    error_bad_key(self, self, &path, key, vec![], env.meta)
                 }
             }
             ImutExprInt::Local {
                 idx,
                 is_const: true,
                 ..
-            } => env.get_const(*idx, self, &env.meta).map(Cow::Borrowed),
+            } => env.get_const(*idx, self, env.meta).map(Cow::Borrowed),
             ImutExprInt::Unary(ref expr) => self.unary(opts, env, event, state, meta, local, expr),
             ImutExprInt::Binary(ref expr) => {
                 self.binary(opts, env, event, state, meta, local, expr)
@@ -314,8 +314,8 @@ impl<'script> ImutExprInt<'script> {
         let cases = &expr.cases;
 
         'outer: for (k, v) in items {
-            stry!(set_local_shadow(self, local, &env.meta, expr.key_id, k));
-            stry!(set_local_shadow(self, local, &env.meta, expr.val_id, v));
+            stry!(set_local_shadow(self, local, env.meta, expr.key_id, k));
+            stry!(set_local_shadow(self, local, env.meta, expr.val_id, v));
 
             for e in cases {
                 if stry!(test_guard(
@@ -370,7 +370,7 @@ impl<'script> ImutExprInt<'script> {
 
         for cg in &expr.patterns {
             let maybe_target = if let Some(ClausePreCondition { path, .. }) = cg.precondition() {
-                let v = resolve_value(self, opts, env, event, state, meta, local, &path, &target);
+                let v = resolve_value(self, opts, env, event, state, meta, local, path, &target);
                 if let Ok(target) = v {
                     Some(target)
                 } else {
@@ -396,15 +396,15 @@ impl<'script> ImutExprInt<'script> {
             match cg {
                 ClauseGroup::Simple { patterns, .. } => {
                     for predicate in patterns {
-                        execute!(predicate)
+                        execute!(predicate);
                     }
                 }
                 ClauseGroup::SearchTree { tree, rest, .. } => {
-                    if let Some((_, l)) = tree.get(&target) {
+                    if let Some((_, l)) = tree.get(target) {
                         return Self::execute_effectors(opts, env, event, state, meta, local, l);
                     }
                     for predicate in rest {
-                        execute!(predicate)
+                        execute!(predicate);
                     }
                 }
                 ClauseGroup::Combined { groups, .. } => {
@@ -413,17 +413,17 @@ impl<'script> ImutExprInt<'script> {
                         match cg {
                             ClauseGroup::Simple { patterns, .. } => {
                                 for predicate in patterns {
-                                    execute!(predicate)
+                                    execute!(predicate);
                                 }
                             }
                             ClauseGroup::SearchTree { tree, rest, .. } => {
-                                if let Some((_, l)) = tree.get(&target) {
+                                if let Some((_, l)) = tree.get(target) {
                                     return Self::execute_effectors(
                                         opts, env, event, state, meta, local, l,
                                     );
                                 }
                                 for predicate in rest {
-                                    execute!(predicate)
+                                    execute!(predicate);
                                 }
                             }
                             ClauseGroup::Combined { .. } => {
@@ -444,7 +444,7 @@ impl<'script> ImutExprInt<'script> {
         }
 
         match &expr.default {
-            DefaultCase::None => error_no_clause_hit(self, &env.meta),
+            DefaultCase::None => error_no_clause_hit(self, env.meta),
             DefaultCase::Null => Ok(Cow::Borrowed(&NULL)),
             DefaultCase::Many { last_expr, .. } => {
                 Self::execute_effectors(opts, env, event, state, meta, local, last_expr)
@@ -470,7 +470,7 @@ impl<'script> ImutExprInt<'script> {
     {
         let lhs = stry!(expr.lhs.run(opts, env, event, state, meta, local));
         let rhs = stry!(expr.rhs.run(opts, env, event, state, meta, local));
-        exec_binary(self, expr, &env.meta, expr.kind, &lhs, &rhs)
+        exec_binary(self, expr, env.meta, expr.kind, &lhs, &rhs)
     }
 
     fn unary<'run, 'event>(
@@ -490,7 +490,7 @@ impl<'script> ImutExprInt<'script> {
         // TODO align this implemenation to be similar to exec_binary?
         match exec_unary(expr.kind, &rhs) {
             Some(v) => Ok(v),
-            None => error_invalid_unary(self, &expr.expr, expr.kind, &rhs, &env.meta),
+            None => error_invalid_unary(self, &expr.expr, expr.kind, &rhs, env.meta),
         }
     }
 
@@ -512,19 +512,19 @@ impl<'script> ImutExprInt<'script> {
         // TODO: Extract this into a method on `Path`?
         let base_value: &Value = match path {
             Path::Local(path) => {
-                if let Some(l) = stry!(local.get(path.idx, self, path.mid, &env.meta)) {
+                if let Some(l) = stry!(local.get(path.idx, self, path.mid, env.meta)) {
                     l
                 } else {
                     return Ok(Cow::Borrowed(&FALSE));
                 }
             }
-            Path::Const(path) => stry!(env.get_const(path.idx, self, &env.meta)),
+            Path::Const(path) => stry!(env.get_const(path.idx, self, env.meta)),
             Path::Meta(_path) => meta,
             Path::Event(_path) => event,
             Path::State(_path) => state,
-            Path::Reserved(ReservedPath::Args { .. }) => &env.consts.args,
-            Path::Reserved(ReservedPath::Group { .. }) => &env.consts.group,
-            Path::Reserved(ReservedPath::Window { .. }) => &env.consts.window,
+            Path::Reserved(ReservedPath::Args { .. }) => env.consts.args,
+            Path::Reserved(ReservedPath::Group { .. }) => env.consts.group,
+            Path::Reserved(ReservedPath::Window { .. }) => env.consts.window,
         };
 
         // Resolve the targeted value by applying all path segments
@@ -567,15 +567,15 @@ impl<'script> ImutExprInt<'script> {
                     if let Some(a) = current.as_array() {
                         let array = subrange.unwrap_or_else(|| a.as_slice());
                         let start_idx = stry!(range_start.eval_to_index(
-                            self, opts, env, event, state, meta, local, path, &array,
+                            self, opts, env, event, state, meta, local, path, array,
                         ));
                         let end_idx = stry!(range_end.eval_to_index(
-                            self, opts, env, event, state, meta, local, path, &array,
+                            self, opts, env, event, state, meta, local, path, array,
                         ));
 
                         if end_idx < start_idx {
                             return error_decreasing_range(
-                                self, segment, &path, start_idx, end_idx, &env.meta,
+                                self, segment, path, start_idx, end_idx, env.meta,
                             );
                         } else if end_idx > array.len() {
                             // Index is out of array bounds: not present
@@ -636,8 +636,8 @@ impl<'script> ImutExprInt<'script> {
             .map(Cow::Owned)
             .map_err(|e| {
                 let r: Option<&Registry> = None;
-                let outer: Range = self.extent(&env.meta).expand_lines(2);
-                e.into_err(&outer, self, r, &env.meta)
+                let outer: Range = self.extent(env.meta).expand_lines(2);
+                e.into_err(&outer, self, r, env.meta)
             })
     }
 
@@ -662,8 +662,8 @@ impl<'script> ImutExprInt<'script> {
             .map(Cow::Owned)
             .map_err(|e| {
                 let r: Option<&Registry> = None;
-                let outer: Range = self.extent(&env.meta).expand_lines(2);
-                e.into_err(&outer, self, r, &env.meta)
+                let outer: Range = self.extent(env.meta).expand_lines(2);
+                e.into_err(&outer, self, r, env.meta)
             })
     }
 
@@ -696,8 +696,8 @@ impl<'script> ImutExprInt<'script> {
             .map(Cow::Owned)
             .map_err(|e| {
                 let r: Option<&Registry> = None;
-                let outer: Range = self.extent(&env.meta).expand_lines(2);
-                e.into_err(&outer, self, r, &env.meta)
+                let outer: Range = self.extent(env.meta).expand_lines(2);
+                e.into_err(&outer, self, r, env.meta)
             })
     }
 
@@ -728,8 +728,8 @@ impl<'script> ImutExprInt<'script> {
             .map(Cow::Owned)
             .map_err(|e| {
                 let r: Option<&Registry> = None;
-                let outer: Range = self.extent(&env.meta).expand_lines(2);
-                e.into_err(&outer, self, r, &env.meta)
+                let outer: Range = self.extent(env.meta).expand_lines(2);
+                e.into_err(&outer, self, r, env.meta)
             })
     }
 
@@ -744,7 +744,7 @@ impl<'script> ImutExprInt<'script> {
                 self,
                 0xdead_0011,
                 "Trying to emit aggreagate outside of emit context",
-                &env.meta,
+                env.meta,
             );
         }
 
@@ -753,7 +753,7 @@ impl<'script> ImutExprInt<'script> {
             .get(expr.aggr_id)
             .map(|a| &a.invocable)
             .ok_or_else(|| {
-                error_oops_err(self, 0xdead_0012, "Unknown aggregate function", &env.meta)
+                error_oops_err(self, 0xdead_0012, "Unknown aggregate function", env.meta)
             }));
         // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1035
         #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
@@ -761,7 +761,7 @@ impl<'script> ImutExprInt<'script> {
         let invocable: &mut TremorAggrFnWrapper = unsafe { mem::transmute(inv) };
         let r = stry!(invocable.emit().map(Cow::Owned).map_err(|e| {
             let r: Option<&Registry> = None;
-            e.into_err(self, self, r, &env.meta)
+            e.into_err(self, self, r, env.meta)
         }));
         Ok(r)
     }
@@ -812,10 +812,10 @@ impl<'script> ImutExprInt<'script> {
                 stry!(merge_values(self, &expr.expr, &mut value, &replacement));
                 Ok(Cow::Owned(value))
             } else {
-                error_need_obj(self, &expr.expr, replacement.value_type(), &env.meta)
+                error_need_obj(self, &expr.expr, replacement.value_type(), env.meta)
             }
         } else {
-            error_need_obj(self, &expr.target, value.value_type(), &env.meta)
+            error_need_obj(self, &expr.target, value.value_type(), env.meta)
         }
     }
 }

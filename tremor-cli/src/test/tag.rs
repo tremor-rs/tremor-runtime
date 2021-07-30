@@ -64,13 +64,12 @@ impl TagFilter {
         // Tags in the current
         let includes: HashSet<&str> = self.includes.iter().map(String::as_str).collect();
         // Tags that passed the system req
-        let sys_accepted: Vec<_> = includes.intersection(&system_allow).collect();
+
         // The tags that were accepted
         let accepted: Vec<_> = includes.intersection(&allowing).collect();
         // The tags that were rejected
-        let redacted: Vec<_> = includes.intersection(&denying).collect();
 
-        if sys_accepted.is_empty() && !system_allow.is_empty() {
+        if includes.intersection(&system_allow).next().is_none() && !system_allow.is_empty() {
             // If this was excluded by the system we don't want to run it
             (vec!["<system>".into()], false)
         } else if allowing.is_empty() && denying.is_empty() {
@@ -81,7 +80,7 @@ impl TagFilter {
             // This test is specifically included
             let is_included = !accepted.is_empty();
             // This test is specifically excluded
-            let is_excluded = !redacted.is_empty();
+            let is_excluded = includes.intersection(&denying).next().is_some();
 
             let accept = if is_included {
                 // If we included a tag specifically we always accept it

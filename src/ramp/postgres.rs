@@ -55,7 +55,7 @@ impl postgres::types::ToSql for Record<'_> {
                     None => {
                         return Err(
                             format!("Could not serialize {} into {}", self.name, "bool").into()
-                        )
+                        );
                     }
                 };
             }
@@ -69,7 +69,7 @@ impl postgres::types::ToSql for Record<'_> {
                     None => {
                         return Err(
                             format!("Could not serialize {} into {}", self.name, "text").into()
-                        )
+                        );
                     }
                 };
             }
@@ -83,7 +83,7 @@ impl postgres::types::ToSql for Record<'_> {
                     }
                 };
 
-                postgres_protocol::types::int2_to_sql(val, w)
+                postgres_protocol::types::int2_to_sql(val, w);
             }
             postgres::types::Type::INT4 => {
                 let val = match self.value.as_i32() {
@@ -91,7 +91,7 @@ impl postgres::types::ToSql for Record<'_> {
                     None => return Err("Could not serialize".into()),
                 };
 
-                postgres_protocol::types::int4_to_sql(val, w)
+                postgres_protocol::types::int4_to_sql(val, w);
             }
             postgres::types::Type::INT8 => {
                 let val = match self.value.as_i64() {
@@ -99,7 +99,7 @@ impl postgres::types::ToSql for Record<'_> {
                     None => return Err("Could not serialize".into()),
                 };
 
-                postgres_protocol::types::int8_to_sql(val, w)
+                postgres_protocol::types::int8_to_sql(val, w);
             }
             postgres::types::Type::JSON => {
                 let val = self.value.as_str().unwrap_or_default();
@@ -133,7 +133,7 @@ impl postgres::types::ToSql for Record<'_> {
                     None => return Err("value too large".into()),
                 };
 
-                postgres_protocol::types::timestamp_to_sql(time, w)
+                postgres_protocol::types::timestamp_to_sql(time, w);
             }
             _ => return Err(format!("Not supported type: {}", self.t).into()),
         };

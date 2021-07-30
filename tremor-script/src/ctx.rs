@@ -235,7 +235,8 @@ mod tests {
         );
 
         // Non-ASCII characters in host
-        let eouri = EventOriginUri::parse(0, "protocol://host.names.are.🔥").expect("Valid URI");
+        let eouri =
+            EventOriginUri::parse(0, "protocol://host.names.are.\u{1f525}").expect("Valid URI");
         assert_eq!(eouri.scheme(), "protocol");
         assert_eq!(eouri.host(), "host.names.are.%F0%9F%94%A5"); // 🔥 gets percent-encoded by `url`
         assert_eq!(eouri.port(), None);

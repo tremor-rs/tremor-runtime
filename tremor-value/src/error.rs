@@ -40,7 +40,7 @@ impl Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Error::ExpectedMap => write!(f, "Expected a struct, but did not find out"),
-            Error::Serde(s) | Error::Generic(s) => f.write_str(&s),
+            Error::Serde(s) | Error::Generic(s) => f.write_str(s),
             Error::SimdJson(e) => write!(f, "SIMD JSON error: {}", e),
         }
     }

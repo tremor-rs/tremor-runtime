@@ -34,7 +34,7 @@ fn up_params<'script, 'registry>(
 ) -> Result<HashMap<String, Value<'script>>> {
     params
         .into_iter()
-        .map(|(name, value)| Ok((name.id.to_string(), reduce2(value.up(helper)?, &helper)?)))
+        .map(|(name, value)| Ok((name.id.to_string(), reduce2(value.up(helper)?, helper)?)))
         .collect()
 }
 

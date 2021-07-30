@@ -31,7 +31,7 @@ pub struct ModulePath {
 impl ModulePath {
     /// Adds to the module path
     pub fn add(&mut self, path: String) {
-        self.mounts.push(path)
+        self.mounts.push(path);
     }
 
     /// Does a particular module exist relative to the module path in force
@@ -165,7 +165,7 @@ mod tests {
         let mp = load_(&tremor_path);
         assert_ne!(empty, mp.mounts);
         assert_eq!(1, mp.mounts.len());
-        assert_eq!(format!("{}", d.display()).to_string(), mp.mounts[0]);
+        assert_eq!(format!("{}", d.display()), mp.mounts[0]);
 
         assert!(mp.resolve("there.tremor").is_some());
         assert!(mp.resolve("not_there.tremor").is_none());
@@ -188,6 +188,6 @@ mod tests {
         let mp = load_(&tremor_path);
         assert_ne!(empty, mp.mounts);
         assert_eq!(1, mp.mounts.len());
-        assert_eq!(format!("{}", d.display()).to_string(), mp.mounts[0]);
+        assert_eq!(format!("{}", d.display()), mp.mounts[0]);
     }
 }

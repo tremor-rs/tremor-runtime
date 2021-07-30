@@ -187,7 +187,7 @@ fn suite_unit(
         status::h0("  Unit Test Scenario", &suite.path().to_string_lossy())?;
         let scenario_tags = tag::resolve(base, root)?;
         status::tags(&scenario_tags, Some(&conf.includes), Some(&conf.excludes))?;
-        let report = unit::run_suite(&suite.path(), &scenario_tags, conf)?;
+        let report = unit::run_suite(suite.path(), &scenario_tags, conf)?;
         stats.merge(&report.stats);
         status::stats(&report.stats, "  ")?;
         status::duration(report.duration, "    ")?;
@@ -338,7 +338,7 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
     if let Some(report) = report {
         let mut file = file::create(report)?;
         let result = simd_json::to_string(&test_run)?;
-        file.write_all(&result.as_bytes())
+        file.write_all(result.as_bytes())
             .map_err(|e| Error::from(format!("Failed to write report to `{}`: {}", report, e)))?;
     }
 
