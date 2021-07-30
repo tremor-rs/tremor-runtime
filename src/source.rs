@@ -42,6 +42,7 @@ pub(crate) mod blaster;
 pub(crate) mod cb;
 pub(crate) mod crononome;
 pub(crate) mod discord;
+pub(crate) mod env;
 pub(crate) mod file;
 pub(crate) mod gsub;
 pub(crate) mod kafka;
