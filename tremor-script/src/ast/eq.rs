@@ -36,7 +36,7 @@ where
     T: AstEq,
 {
     fn ast_eq(&self, other: &Self) -> bool {
-        self.len() == other.len() && self.iter().zip(other.iter()).all(|(p1, p2)| p1.ast_eq(&p2))
+        self.len() == other.len() && self.iter().zip(other.iter()).all(|(p1, p2)| p1.ast_eq(p2))
     }
 }
 
@@ -1176,7 +1176,7 @@ mod tests {
         assert!(!path.ast_eq(&local));
         let path2 = ImutExprInt::Path(Path::Local(LocalPath {
             idx: 1,
-            mid: 1212432,
+            mid: 1_212_432,
             is_const: false,
             segments: vec![],
         }));
@@ -1200,7 +1200,7 @@ mod tests {
 
         assert!(Path::Local(LocalPath {
             idx: 1,
-            mid: 34786752389,
+            mid: 34_786_752_389,
             is_const: false,
             segments: vec![]
         })

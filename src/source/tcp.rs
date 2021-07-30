@@ -143,7 +143,7 @@ impl Source for Int {
                     if let Some(acceptor) = tls_acceptor {
                         match acceptor.accept(stream).await {
                             Ok(tls_stream) => {
-                                read_loop(tls_stream, tx, stream_id, origin_uri).await
+                                read_loop(tls_stream, tx, stream_id, origin_uri).await;
                             }
                             Err(_e) => {
                                 if let Err(e) = tx.send(SourceReply::EndStream(stream_id)).await {
@@ -153,7 +153,7 @@ impl Source for Int {
                             }
                         }
                     } else {
-                        read_loop(stream, tx, stream_id, origin_uri).await
+                        read_loop(stream, tx, stream_id, origin_uri).await;
                     };
                 });
             }

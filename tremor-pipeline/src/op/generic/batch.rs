@@ -103,7 +103,7 @@ impl Operator for Batch {
                             "is_batch": is_batch
                         }
                     });
-                    a.push(e)
+                    a.push(e);
                 };
                 Ok(())
             },

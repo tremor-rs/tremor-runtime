@@ -205,12 +205,12 @@ pub(crate) type PathVisitor = dyn Fn(Option<&Path>, &Path) -> Result<()>;
 
 pub(crate) fn visit_path_str(path: &str, visitor: &PathVisitor) -> Result<()> {
     let path = Path::new(path);
-    visit_path(&path, &path, visitor)
+    visit_path(path, path, visitor)
 }
 
 pub(crate) fn visit_path<'a>(base: &Path, path: &Path, visitor: &'a PathVisitor) -> Result<()> {
     if path.is_file() {
-        visitor(None, &path)?
+        visitor(None, path)?;
     } else if path.is_dir() {
         // We process files first, followed by directories to impose
         // an order of visitation that follows the nested heirarchy from
@@ -225,7 +225,7 @@ pub(crate) fn visit_path<'a>(base: &Path, path: &Path, visitor: &'a PathVisitor)
             match rel_path {
                 Ok(rel_path) => {
                     if path.is_file() {
-                        visitor(Some(&rel_path), path.as_path())?;
+                        visitor(Some(rel_path), path.as_path())?;
                     }
                 }
                 Err(e) => error!(
@@ -240,7 +240,7 @@ pub(crate) fn visit_path<'a>(base: &Path, path: &Path, visitor: &'a PathVisitor)
             let entry = entry?;
             let path = entry.path();
             if path.is_dir() {
-                visit_path(base, path.as_path(), visitor)?
+                visit_path(base, path.as_path(), visitor)?;
             }
         }
     }

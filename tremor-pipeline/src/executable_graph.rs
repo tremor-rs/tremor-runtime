@@ -100,7 +100,7 @@ impl NodeConfig {
         node: Option<&srs::Stmt>,
         window: Option<HashMap<String, window::Impl>>,
     ) -> Result<OperatorNode> {
-        resolver(&self, uid, defn, node, window)
+        resolver(self, uid, defn, node, window)
     }
 }
 
@@ -159,7 +159,7 @@ impl Operator for OperatorNode {
         self.op.handles_contraflow()
     }
     fn on_contraflow(&mut self, _uid: u64, contraevent: &mut Event) {
-        self.op.on_contraflow(self.uid, contraevent)
+        self.op.on_contraflow(self.uid, contraevent);
     }
 
     fn metrics(
@@ -186,7 +186,7 @@ impl NodeMetrics {
     // it might be owned so cloning early would be costly
     #[allow(clippy::ptr_arg)]
     pub(crate) fn inc_input(&mut self, input: &Cow<'static, str>) {
-        self.inc_input_n(input, 1)
+        self.inc_input_n(input, 1);
     }
 
     // this makes sense since we might not need to clone the cow and
@@ -204,7 +204,7 @@ impl NodeMetrics {
     // it might be owned so cloning early would be costly
     #[allow(clippy::ptr_arg)]
     pub(crate) fn inc_output(&mut self, output: &Cow<'static, str>) {
-        self.inc_output_n(output, 1)
+        self.inc_output_n(output, 1);
     }
 
     // this makes sense since we might not need to clone the cow and
@@ -412,11 +412,11 @@ impl ExecutableGraph {
                         // If it is the skippable node replace this entry
                         // with all the outputs the skippable had
                         for o in &outputs {
-                            srcs1.push(o.clone())
+                            srcs1.push(o.clone());
                         }
                     } else {
                         // Otherwise keep the connection untoucehd.
-                        srcs1.push((src_id, src_port))
+                        srcs1.push((src_id, src_port));
                     }
                 }
                 // Add the node back in
@@ -485,7 +485,7 @@ impl ExecutableGraph {
                         unsafe { self.metrics.get_unchecked_mut(idx) }.inc_output(out_port);
                     }
                     for insight in insights {
-                        self.insights.push((idx, insight))
+                        self.insights.push((idx, insight));
                     }
                     self.enqueue_events(idx, events);
                 };
@@ -523,7 +523,7 @@ impl ExecutableGraph {
                 }
             }
 
-            for value in m.to_value(&metric_name, &mut tags, ingest_ns) {
+            for value in m.to_value(metric_name, &mut tags, ingest_ns) {
                 self.stack.push((
                     self.metrics_idx,
                     IN,
@@ -552,7 +552,7 @@ impl ExecutableGraph {
                 }
                 let (idx, in_port) = last;
                 unsafe { self.metrics.get_unchecked_mut(*idx) }.inc_input(in_port);
-                self.stack.push((*idx, in_port.clone(), event))
+                self.stack.push((*idx, in_port.clone(), event));
             }
         }
     }
@@ -563,7 +563,7 @@ impl ExecutableGraph {
                 let op = unsafe { self.graph.get_unchecked_mut(*idx) }; // We know this exists
                 op.on_contraflow(op.uid, &mut insight);
             } else if skip_to == Some(*idx) {
-                skip_to = None
+                skip_to = None;
             }
         }
         insight
@@ -959,12 +959,12 @@ mod test {
 
         // check that node 2, a passthrough, was optimized out
         assert_eq!(
-            g.port_indexes.get(&(1usize, OUT)),
-            Some(&vec![(3usize, IN)])
+            g.port_indexes.get(&(1_usize, OUT)),
+            Some(&vec![(3_usize, IN)])
         );
         assert_eq!(
-            g.port_indexes.get(&(3usize, OUT)),
-            Some(&vec![(4usize, IN)])
+            g.port_indexes.get(&(3_usize, OUT)),
+            Some(&vec![(4_usize, IN)])
         );
     }
 }

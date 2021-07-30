@@ -335,7 +335,7 @@ impl Query {
 
                     let mut ww = HashMap::with_capacity(query.windows.len());
                     for (name, decl) in &query.windows {
-                        ww.insert(name.clone(), window_decl_to_impl(&decl)?);
+                        ww.insert(name.clone(), window_decl_to_impl(decl)?);
                     }
                     let op = node.to_op(
                         idgen.next_id(),
@@ -597,7 +597,7 @@ impl Query {
             for ((i1, s1), connections) in &port_indexes {
                 let connections = connections
                     .iter()
-                    .filter_map(|(i, s)| Some((*i2pos.get(&i)?, s.clone())))
+                    .filter_map(|(i, s)| Some((*i2pos.get(i)?, s.clone())))
                     .collect();
                 let k = *i2pos.get(i1).ok_or_else(|| Error::from("Invalid graph"))?;
                 port_indexes2.insert((k, s1.clone()), connections);
@@ -662,7 +662,7 @@ fn select(
             let op = PassthroughFactory::new_boxed();
             op.from_node(operator_uid, config)
         }
-        SelectType::Simple => Ok(Box::new(SimpleSelect::with_stmt(config.id.clone(), &node)?)),
+        SelectType::Simple => Ok(Box::new(SimpleSelect::with_stmt(config.id.clone(), node)?)),
         SelectType::Normal => {
             let windows = windows.ok_or_else(|| {
                 ErrorKind::MissingOpConfig("select operators require a window mapping".into())
@@ -690,7 +690,7 @@ fn select(
                 operator_uid,
                 config.id.clone(),
                 windows?,
-                &node,
+                node,
             )?))
         }
     }
@@ -738,7 +738,7 @@ pub(crate) fn supported_operators(
         ["trickle", "select"] => select(uid, config, node, windows)?,
         ["trickle", "operator"] => operator(uid, config, node)?,
         ["trickle", "script"] => script(config, defn, node)?,
-        _ => crate::operator(uid, &config)?,
+        _ => crate::operator(uid, config)?,
     };
     Ok(OperatorNode {
         uid,
@@ -766,7 +766,7 @@ mod test {
 
         let src = "select event from in into out;";
         let query = Query::parse(
-            &module_path,
+            module_path,
             src,
             "<test>",
             Vec::new(),
@@ -780,7 +780,7 @@ mod test {
         // check that we can overwrite the id with a config variable
         let src = "#!config id = \"test\"\nselect event from in into out;";
         let query = Query::parse(
-            &module_path,
+            module_path,
             src,
             "<test>",
             Vec::new(),
@@ -799,7 +799,7 @@ mod test {
 
         let src = "select event from in/test_in into out/test_out;";
         let q = Query::parse(
-            &module_path,
+            module_path,
             src,
             "<test>",
             Vec::new(),

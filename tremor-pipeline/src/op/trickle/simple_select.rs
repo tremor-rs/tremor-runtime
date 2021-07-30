@@ -69,7 +69,7 @@ impl Operator for SimpleSelect {
                  node_meta,
                  ..
              }| {
-                let stmt: &Select = &stmt;
+                let stmt: &Select = stmt;
 
                 // We can't have locals in the where and having clause
                 let local_stack = LocalStack::with_size(0);
@@ -83,7 +83,7 @@ impl Operator for SimpleSelect {
                     context: &ctx,
                     consts: consts.run(),
                     aggrs: &NO_AGGRS,
-                    meta: &node_meta,
+                    meta: node_meta,
                     recursion_limit: self.recursion_limit,
                 };
                 if let Some(guard) = &stmt.maybe_where {
@@ -95,7 +95,7 @@ impl Operator for SimpleSelect {
                         };
                     } else {
                         return tremor_script::errors::query_guard_not_bool(
-                            stmt, guard, &test, &node_meta,
+                            stmt, guard, &test, node_meta,
                         )?;
                     };
                 }
@@ -110,7 +110,7 @@ impl Operator for SimpleSelect {
                         };
                     } else {
                         return tremor_script::errors::query_guard_not_bool(
-                            stmt, guard, &test, &node_meta,
+                            stmt, guard, &test, node_meta,
                         )?;
                     };
                 }

@@ -47,7 +47,7 @@ fn gen_doc(
 
     let path = path.to_str().ok_or_else(|| Error::from("Bad path"))?;
 
-    let runnable = Script::parse(&env.module_path, &path, raw, &env.fun)?;
+    let runnable = Script::parse(&env.module_path, path, raw, &env.fun)?;
     let docs = runnable.docs();
     let consts = &docs.consts;
     let fns = &docs.fns;
@@ -59,14 +59,14 @@ fn gen_doc(
     if !consts.is_empty() {
         gen.push_str("## Constants");
         for c in consts {
-            gen.push_str(&c.to_string())
+            gen.push_str(&c.to_string());
         }
     }
 
     if !fns.is_empty() {
         gen.push_str("## Functions");
         for f in fns {
-            gen.push_str(&f.to_string())
+            gen.push_str(&f.to_string());
         }
     }
 

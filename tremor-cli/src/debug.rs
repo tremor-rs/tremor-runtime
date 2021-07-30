@@ -85,7 +85,7 @@ where
                 let lexemes = preprocessed_tokens(opts, &mut raw_src)?;
                 h.highlight(None, &lexemes, "", !opts.raw_output, None)?;
             } else {
-                Script::highlight_script_with(&opts.raw, h, !&opts.raw_output)?
+                Script::highlight_script_with(&opts.raw, h, !&opts.raw_output)?;
             }
         }
         SourceKind::Trickle => {
@@ -94,7 +94,7 @@ where
                 let lexemes = preprocessed_tokens(opts, &mut raw_src)?;
                 h.highlight(None, &lexemes, "", !opts.raw_output, None)?;
             } else {
-                Query::highlight_script_with(&opts.raw, h, !opts.raw_output)?
+                Query::highlight_script_with(&opts.raw, h, !opts.raw_output)?;
             }
         }
         SourceKind::Yaml => error!("Unsupported: yaml"),
@@ -215,7 +215,7 @@ fn dbg_ast<'src, W>(h: &mut W, opts: &Opts<'src>, exprs_only: bool) -> Result<()
 where
     W: Highlighter,
 {
-    banner(h, &opts, "AST", "Abstract Syntax Tree")?;
+    banner(h, opts, "AST", "Abstract Syntax Tree")?;
 
     let env = env::setup()?;
     match opts.kind {
@@ -319,7 +319,7 @@ where
             let mut idgen = OperatorIdGen::new();
             let g = tremor_pipeline::query::Query(runnable).to_pipe(&mut idgen)?;
 
-            println!("{}", g.dot)
+            println!("{}", g.dot);
         }
         Err(e) => {
             if let Err(e) = Script::format_error_from_script(&opts.raw, h, &e) {
@@ -359,7 +359,7 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
         h.finalize()?;
         h.reset()?;
         println!("{}", h.to_string());
-        r?
+        r?;
     } else {
         let mut h = TermHighlighter::default();
         let r = if let Some(args) = matches.subcommand_matches("ast") {
@@ -382,7 +382,7 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
         };
         h.finalize()?;
         h.reset()?;
-        r?
+        r?;
     };
 
     Ok(())

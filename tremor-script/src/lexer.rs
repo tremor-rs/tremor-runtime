@@ -19,6 +19,7 @@ use crate::errors::{Error, ErrorKind, Result, ResultExt, UnfinishedToken};
 #[cfg_attr(feature = "cargo-clippy", allow(clippy::all, clippy::unwrap_used))]
 use crate::parser::g::__ToTriple;
 use crate::path::ModulePath;
+use crate::pos;
 pub use crate::pos::*;
 use crate::Value;
 use beef::Cow;
@@ -38,15 +39,15 @@ pub trait ParserSource {
     /// The source as a str
     fn src(&self) -> &str;
     /// the initial index
-    fn start_index(&self) -> BytePos;
+    fn start_index(&self) -> pos::Byte;
 }
 
 impl ParserSource for str {
     fn src(&self) -> &str {
         self
     }
-    fn start_index(&self) -> BytePos {
-        BytePos::from(0)
+    fn start_index(&self) -> pos::Byte {
+        pos::Byte::from(0)
     }
 }
 
@@ -578,13 +579,13 @@ impl<'input> fmt::Display for Token<'input> {
     #[allow(clippy::too_many_lines)]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Token::Whitespace(ref ws) => write!(f, "{}", ws),
+            Token::Whitespace(ws) => write!(f, "{}", &ws),
             Token::NewLine => writeln!(f),
             Token::Ident(ref name, true) => write!(f, "`{}`", name),
             Token::Ident(ref name, false) => write!(f, "{}", name),
-            Token::ModComment(ref comment) => write!(f, "### {}", comment),
-            Token::DocComment(ref comment) => write!(f, "## {}", comment),
-            Token::SingleLineComment(ref comment) => write!(f, "# {}", comment),
+            Token::ModComment(comment) => write!(f, "### {}", &comment),
+            Token::DocComment(comment) => write!(f, "## {}", &comment),
+            Token::SingleLineComment(comment) => write!(f, "# {}", &comment),
             Token::IntLiteral(value) => write!(f, "{}", value),
             Token::FloatLiteral(_, txt) => write!(f, "{}", txt),
             Token::DQuote => write!(f, "\""),
@@ -592,7 +593,7 @@ impl<'input> fmt::Display for Token<'input> {
             Token::EscapedHash => write!(f, "\\#"),
             Token::StringLiteral(value) => {
                 // We do those to ensure proper escaping
-                let value: &str = &value;
+                let value: &str = value;
                 let s = Value::from(value).encode();
                 // Strip the quotes
                 write!(f, "{}", s.get(1..s.len() - 1).unwrap_or_default())
@@ -609,7 +610,7 @@ impl<'input> fmt::Display for Token<'input> {
                 // do not escape linebreaks
                 let (value, add_linebreak) = value
                     .strip_suffix('\n')
-                    .map_or_else(|| (&value as &str, false), |stripped| (stripped, true));
+                    .map_or_else(|| (value as &str, false), |stripped| (stripped, true));
                 let s = Value::from(value).encode();
                 // Strip the quotes
                 if let Some(s) = s.get(1..s.len() - 1) {
@@ -1011,10 +1012,10 @@ impl<'input> Preprocessor {
         let file_name = Path::new(file_name);
 
         let top = input.clone();
-        let lexemes: Vec<Result<TokenSpan>> = Tokenizer::new(top.as_str()).collect();
+
         input.clear();
 
-        let mut iter = lexemes.into_iter();
+        let mut iter = Tokenizer::new(top.as_str());
 
         let mut next;
         loop {
@@ -1101,7 +1102,7 @@ impl<'input> Preprocessor {
 
                         s.push(' ');
                         let s = Preprocessor::preprocess(
-                            &module_path,
+                            module_path,
                             file_path.as_os_str(),
                             &mut s,
                             inner_cu,
@@ -1160,7 +1161,7 @@ impl<'input> Preprocessor {
 pub struct Lexer<'input> {
     input: &'input str,
     chars: CharLocations<'input>,
-    start_index: BytePos,
+    start_index: pos::Byte,
     file_offset: Location,
     cu: usize,
     stored_tokens: VecDeque<TokenSpan<'input>>,
@@ -1208,7 +1209,7 @@ impl<'input> Lexer<'input> {
     fn starts_with(&mut self, start: Location, s: &str) -> Option<(Location, &'input str)> {
         let mut end = start;
         for c in s.chars() {
-            end.shift(c)
+            end.shift(c);
         }
 
         if let Some(head) = self.slice(start, end) {
@@ -2426,7 +2427,7 @@ impl<'input> Iterator for Lexer<'input> {
             '"' => match self.qs_or_hd(start) {
                 Ok(mut tokens) => {
                     for t in tokens.drain(..) {
-                        self.stored_tokens.push_back(t)
+                        self.stored_tokens.push_back(t);
                     }
                     self.next()
                 }
@@ -2540,10 +2541,10 @@ mod tests {
     fn number_parsing() -> Result<()> {
         lex_ok! {
         "1_000_000",
-        "~~~~~~~~~" => Token::IntLiteral(1000000), };
+        "~~~~~~~~~" => Token::IntLiteral(1_000_000), };
         lex_ok! {
         "1_000_000_",
-        "~~~~~~~~~~" => Token::IntLiteral(1000000), };
+        "~~~~~~~~~~" => Token::IntLiteral(1_000_000), };
 
         lex_ok! {
         "100.0000",
@@ -2554,10 +2555,10 @@ mod tests {
 
         lex_ok! {
         "0xFFAA00",
-        "~~~~~~~~" => Token::IntLiteral(16755200), };
+        "~~~~~~~~" => Token::IntLiteral(16_755_200), };
         lex_ok! {
         "0xFF_AA_00",
-        "~~~~~~~~~~" => Token::IntLiteral(16755200), };
+        "~~~~~~~~~~" => Token::IntLiteral(16_755_200), };
         Ok(())
     }
 
@@ -2932,7 +2933,7 @@ mod tests {
     fn test_test_literal_format_bug_regression() -> Result<()> {
         let snot = "match %{ test ~= base64|| } of default => \"badger\" end ".to_string();
         let mut snot2 = snot.clone();
-        let badger: Vec<_> = Tokenizer::new(&snot).collect();
+
         let mut include_stack = IncludeStack::default();
         let badger2 = Preprocessor::preprocess(
             &ModulePath { mounts: vec![] },
@@ -2942,8 +2943,7 @@ mod tests {
             &mut include_stack,
         )?;
         let mut res = String::new();
-        for b in badger
-            .into_iter()
+        for b in Tokenizer::new(&snot)
             .filter_map(Result::ok)
             .collect::<Vec<TokenSpan>>()
         {
@@ -2964,7 +2964,7 @@ mod tests {
 
     #[test]
     fn lexer_long_float() -> Result<()> {
-        let f = 48354865651623290000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000.0;
+        let f = 48_354_865_651_623_290_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000.0;
         let source = format!("{:.1}", f); // ensure we keep the .0
         match Tokenizer::new(&source).next() {
             Some(Ok(token)) => match token.value {
@@ -2982,7 +2982,7 @@ mod tests {
     proptest! {
         // negative floats are constructed in the AST later
         #[test]
-        fn float_literals_precision(f in 0f64..f64::MAX) {
+        fn float_literals_precision(f in 0_f64..f64::MAX) {
             if f.round() != f {
                 let float = format!("{:.}", f);
                 for token in Tokenizer::new(& float) {
@@ -2995,7 +2995,7 @@ mod tests {
     proptest! {
         // negative floats are constructed in the AST later
         #[test]
-        fn float_literals_scientific(f in 0f64..f64::MAX) {
+        fn float_literals_scientific(f in 0_f64..f64::MAX) {
             let float = format!("{:e}", f);
             for token in Tokenizer::new(& float) {
                 match token {

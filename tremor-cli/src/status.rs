@@ -251,7 +251,7 @@ pub(crate) fn tagsx(
         (None, None) => (EMPTY, EMPTY),
     };
 
-    let (active, _status) = filter.matches(&[], &config.0, &config.1);
+    let (active, _status) = filter.matches(&[], config.0, config.1);
     let mut h = TermHighlighter::default();
     fg_bold!(h, Yellow);
     write!(h.get_writer(), "{}Tags: ", prefix)?;

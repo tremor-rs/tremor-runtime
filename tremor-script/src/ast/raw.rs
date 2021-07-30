@@ -76,8 +76,8 @@ impl<'script> ScriptRaw<'script> {
                     let name_v = vec![name.to_string()];
                     let r = Range::from((start, end));
 
-                    let expr = expr.up(&mut helper)?.try_reduce(&helper)?;
-                    let v = reduce2(expr, &helper)?;
+                    let expr = expr.up(&mut helper)?.try_reduce(helper)?;
+                    let v = reduce2(expr, helper)?;
                     let value_type = v.value_type();
 
                     let idx = helper.consts.insert(name_v, v).map_err(|_old| {
@@ -92,7 +92,7 @@ impl<'script> ScriptRaw<'script> {
                             is_const: true,
                             idx,
                             mid: helper.add_meta_w_name(start, end, &name),
-                        }))
+                        }));
                     }
                     helper.add_const_doc(&name, comment, value_type);
                 }
@@ -128,7 +128,7 @@ impl<'script> ScriptRaw<'script> {
                 })),
                 port: None,
             };
-            exprs.push(Expr::Emit(Box::new(expr)))
+            exprs.push(Expr::Emit(Box::new(expr)));
         }
 
         helper.docs.module = Some(ModDoc {
@@ -305,7 +305,7 @@ impl<'script> ModuleRaw<'script> {
                     let mut name_v = helper.module.clone();
                     name_v.push(name.to_string());
                     let expr = expr.up(helper)?;
-                    let v = reduce2(expr, &helper)?;
+                    let v = reduce2(expr, helper)?;
                     helper.consts.insert(name_v, v).map_err(|_old| {
                         let r = Range::from((start, end));
                         ErrorKind::DoubleConst(r.expand_lines(2), r, name.to_string())
@@ -492,18 +492,18 @@ impl<'script> Upable<'script> for StringLitRaw<'script> {
                         StrLitElement::Lit(l) => {
                             let mut o = l.into_owned();
                             o.push_str(&next_lit);
-                            new.push(StrLitElement::Lit(o.into()))
+                            new.push(StrLitElement::Lit(o.into()));
                         }
                         prev @ StrLitElement::Expr(..) => {
                             new.push(prev);
-                            new.push(StrLitElement::Lit(next_lit))
+                            new.push(StrLitElement::Lit(next_lit));
                         }
                     }
                 } else {
-                    new.push(StrLitElement::Lit(next_lit))
+                    new.push(StrLitElement::Lit(next_lit));
                 }
             } else {
-                new.push(next)
+                new.push(next);
             }
         }
         Ok(StringLit { mid, elements: new })
@@ -1690,7 +1690,7 @@ impl<'script> Upable<'script> for RecordPatternRaw<'script> {
                     extent,
                     extent.expand_lines(2),
                     &format!("The field {} is checked with both absence and another extractor, this test can never be true.", absent),
-                )
+                );
             }
         }
 
@@ -1877,7 +1877,7 @@ impl<'script> Upable<'script> for SegmentElementRaw<'script> {
         let expr = expr.up(helper)?;
         let r = expr.extent(&helper.meta);
         match expr {
-            ImutExprInt::Literal(l) => match reduce2(ImutExprInt::Literal(l), &helper)? {
+            ImutExprInt::Literal(l) => match reduce2(ImutExprInt::Literal(l), helper)? {
                 Value::String(id) => {
                     let mid = helper.add_meta_w_name(start, end, &id);
                     Ok(Segment::Id {
@@ -2267,7 +2267,7 @@ fn sort_clauses<Ex: Expression>(patterns: &mut [PredicateClause<Ex>]) {
                 })
                 .unwrap_or_default()
             {
-                patterns.swap(j, j - 1)
+                patterns.swap(j, j - 1);
             }
         }
     }
@@ -2414,7 +2414,7 @@ impl<'script> Upable<'script> for InvokeRaw<'script> {
             let invocable = helper
                 .reg
                 .find(&module, &self.fun)
-                .map_err(|e| e.into_err(&self, &self, Some(&helper.reg), &helper.meta))?;
+                .map_err(|e| e.into_err(&self, &self, Some(helper.reg), &helper.meta))?;
             let args = self.args.up(helper)?.into_iter().map(ImutExpr).collect();
             let mf = format!("{}::{}", self.module.join("::"), self.fun);
             Ok(Invoke {
@@ -2507,7 +2507,7 @@ impl<'script> Upable<'script> for InvokeAggrRaw<'script> {
         let invocable = helper
             .aggr_reg
             .find(&self.module, &self.fun)
-            .map_err(|e| e.into_err(&self, &self, Some(&helper.reg), &helper.meta))?
+            .map_err(|e| e.into_err(&self, &self, Some(helper.reg), &helper.meta))?
             .clone();
         if !invocable.valid_arity(self.args.len()) {
             return Err(ErrorKind::BadArity(

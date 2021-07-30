@@ -68,7 +68,7 @@ impl TremorFn for StringFormat {
                     '{' => match iter.next() {
                         Some((_, '}')) => if let Some(arg) = arg_stack.pop() {
                             if let Some(s) = arg.as_str() {
-                                out.push_str(&s);
+                                out.push_str(s);
                             } else {
                                 out.push_str(arg.encode().as_str());
                             };
@@ -83,7 +83,7 @@ impl TremorFn for StringFormat {
                         }
                     },
                     '}' => if let Some((_, '}')) =  iter.next() {
-                        out.push('}')
+                        out.push('}');
                     } else {
                         return Err(FunctionError::RuntimeError{mfa: this_mfa(), error: format!("the format specifier at {} is invalid. You have to terminate `}}` with another `}}` to escape it", pos)});
                     },
@@ -190,7 +190,7 @@ mod test {
         let v = Value::Bytes("badger".as_bytes().into());
         assert_val!(f(&[&v]), "badger");
         let v = Value::Bytes(b"badger\xF0\x90\x80".to_vec().into());
-        assert_val!(f(&[&v]), "badger�");
+        assert_val!(f(&[&v]), "badger\u{fffd}");
     }
     #[test]
     fn into_binary() {
@@ -233,7 +233,7 @@ mod test {
         let v = Value::from("this is a test");
         assert_val!(f(&[&v]), 14);
 
-        let v = Value::from("this is another test ♥");
+        let v = Value::from("this is another test \u{2665}");
         assert_val!(f(&[&v]), 22);
     }
 
@@ -247,7 +247,7 @@ mod test {
         let v = Value::from("this is a test");
         assert_val!(f(&[&v]), 14);
 
-        let v = Value::from("this is another test ♥");
+        let v = Value::from("this is another test \u{2665}");
         assert_val!(f(&[&v]), 24);
     }
 
@@ -309,10 +309,10 @@ mod test {
         let e = Value::from(7);
         assert_val!(f(&[&v, &s, &e]), "is");
         let f = fun("string", "substr");
-        let v = Value::from("♥ utf8");
+        let v = Value::from("\u{2665} utf8");
         let s = Value::from(0);
         let e = Value::from(1);
-        assert_val!(f(&[&v, &s, &e]), "♥");
+        assert_val!(f(&[&v, &s, &e]), "\u{2665}");
         let s = Value::from(2);
         let e = Value::from(6);
         assert_val!(f(&[&v, &s, &e]), "utf8");

@@ -16,11 +16,11 @@ use regex::Regex;
 use std::io::prelude::*;
 use std::path::Path;
 use tremor_common::{file, ids::OperatorIdGen};
-use tremor_pipeline;
+
 use tremor_pipeline::query::Query;
 use tremor_pipeline::ExecutableGraph;
 use tremor_pipeline::FN_REGISTRY;
-use tremor_runtime;
+
 use tremor_runtime::errors::*;
 use tremor_script::highlighter::{Dumb, Highlighter};
 use tremor_script::path::ModulePath;

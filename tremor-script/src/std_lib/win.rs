@@ -88,7 +88,7 @@ impl TremorAggrFn for Last {
             // On self is earlier then other, so as long
             // as other has a value we take it
             if other.0.is_some() {
-                self.0 = other.0.clone()
+                self.0 = other.0.clone();
             }
         }
         Ok(())

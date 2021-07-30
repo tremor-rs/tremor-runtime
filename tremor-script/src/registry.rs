@@ -727,7 +727,7 @@ impl TremorAggrFnWrapper {
 
     /// Initialises an aggregate function
     pub fn init(&mut self) {
-        self.fun.init()
+        self.fun.init();
     }
 
     /// Tests if a given arity is valid
@@ -845,7 +845,7 @@ mod tests {
             .find(m, f)
             .expect("could not find function")
             .clone();
-        move |args: &[&Value]| -> FResult<Value> { f.invoke(&EventContext::new(0, None), &args) }
+        move |args: &[&Value]| -> FResult<Value> { f.invoke(&EventContext::new(0, None), args) }
     }
     #[test]
     pub fn call_a_function_from_a_registry_works() {

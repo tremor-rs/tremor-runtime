@@ -257,7 +257,7 @@ impl<'script> Bytes<'script> {
 
             for part in self.value {
                 let inner = part.extent(&helper.meta);
-                let value = reduce2(part.data.0, &helper)?;
+                let value = reduce2(part.data.0, helper)?;
                 extend_bytes_from_value(
                     &outer,
                     &inner,
@@ -272,7 +272,7 @@ impl<'script> Bytes<'script> {
                 )?;
             }
             if used > 0 {
-                bytes.push(buf >> (8 - used))
+                bytes.push(buf >> (8 - used));
             }
             Ok(ImutExprInt::Literal(Literal {
                 mid: self.mid,
@@ -541,7 +541,7 @@ where
             name: name.to_string(),
             doc,
             value_type,
-        })
+        });
     }
     pub(crate) fn add_meta(&mut self, start: Location, end: Location) -> usize {
         self.meta
@@ -632,7 +632,7 @@ where
         for (i, s) in self.shadowed_vars.iter().enumerate() {
             if s == id {
                 //TODO: make sure we never overwrite this,
-                r = Some(shadow_name(i))
+                r = Some(shadow_name(i));
             }
         }
         r
@@ -870,7 +870,7 @@ impl<'script> Record<'script> {
             .into_iter()
             .map(|f| {
                 let n = f.name.try_into_cow()?;
-                reduce2(f.value, &helper).map(|v| (n, v))
+                reduce2(f.value, helper).map(|v| (n, v))
             })
             .collect();
         let base = base?;
@@ -925,7 +925,7 @@ impl<'script> List<'script> {
             let elements: Result<Vec<Value>> = self
                 .exprs
                 .into_iter()
-                .map(|v| reduce2(v.0, &helper))
+                .map(|v| reduce2(v.0, helper))
                 .collect();
             Ok(ImutExprInt::Literal(Literal {
                 mid: self.mid,
@@ -1077,7 +1077,7 @@ impl<'script> ImutExpr<'script> {
 #[cfg(not(tarpaulin_include))] // this is a simple passthrough
 impl<'script> Expression for ImutExpr<'script> {
     fn replace_last_shadow_use(&mut self, replace_idx: usize) {
-        self.0.replace_last_shadow_use(replace_idx)
+        self.0.replace_last_shadow_use(replace_idx);
     }
     fn is_null_lit(&self) -> bool {
         self.0.is_null_lit()
@@ -1240,7 +1240,7 @@ impl<'script> StringLit<'script> {
 
     pub(crate) fn as_str(&self) -> Option<&str> {
         if let [StrLitElement::Lit(l)] = self.elements.as_slice() {
-            Some(&l)
+            Some(l)
         } else {
             None
         }
@@ -1382,7 +1382,7 @@ impl<'script> Invoke<'script> {
             let args: Result<Vec<Value<'script>>> = self
                 .args
                 .into_iter()
-                .map(|v| reduce2(v.0, &helper))
+                .map(|v| reduce2(v.0, helper))
                 .collect();
             let args = args?;
             // Construct a view into `args`, since `invoke` expects a slice of references.
@@ -1398,7 +1398,7 @@ impl<'script> Invoke<'script> {
             let v = self
                 .invocable
                 .invoke(&env, &args2)
-                .map_err(|e| e.into_err(&ex, &ex, Some(&helper.reg), &helper.meta))?
+                .map_err(|e| e.into_err(&ex, &ex, Some(helper.reg), &helper.meta))?
                 .into_static();
             Ok(ImutExprInt::Literal(Literal {
                 value: v,
@@ -1634,11 +1634,11 @@ impl<'script, Ex: Expression + 'script> ClauseGroup<'script, Ex> {
     fn combine(&mut self, other: Self) {
         match (self, other) {
             (Self::Combined { groups, .. }, Self::Combined { groups: mut o, .. }) => {
-                groups.append(&mut o)
+                groups.append(&mut o);
             }
             (Self::Combined { groups, .. }, mut other) => {
                 other.clear_precondition();
-                groups.push(other)
+                groups.push(other);
             }
             (this, other) => {
                 // Swap out precondition
@@ -1658,7 +1658,7 @@ impl<'script, Ex: Expression + 'script> ClauseGroup<'script, Ex> {
         }
     }
     fn clear_precondition(&mut self) {
-        *(self.precondition_mut()) = None
+        *(self.precondition_mut()) = None;
     }
 
     pub(crate) fn precondition(&self) -> Option<&ClausePreCondition<'script>> {
@@ -1683,20 +1683,20 @@ impl<'script, Ex: Expression + 'script> ClauseGroup<'script, Ex> {
         match self {
             Self::Simple { patterns, .. } => {
                 for PredicateClause { last_expr, .. } in patterns {
-                    last_expr.replace_last_shadow_use(replace_idx)
+                    last_expr.replace_last_shadow_use(replace_idx);
                 }
             }
             Self::SearchTree { tree, rest, .. } => {
                 for p in tree.values_mut() {
-                    p.1.replace_last_shadow_use(replace_idx)
+                    p.1.replace_last_shadow_use(replace_idx);
                 }
                 for PredicateClause { last_expr, .. } in rest {
-                    last_expr.replace_last_shadow_use(replace_idx)
+                    last_expr.replace_last_shadow_use(replace_idx);
                 }
             }
             Self::Combined { groups, .. } => {
                 for cg in groups {
-                    cg.replace_last_shadow_use(replace_idx)
+                    cg.replace_last_shadow_use(replace_idx);
                 }
             }
             Self::Single {
@@ -1804,7 +1804,7 @@ impl<'script, Ex: Expression + 'script> ClauseGroup<'script, Ex> {
                         };
 
                         if let Some(p) = p {
-                            pattern.pattern = p
+                            pattern.pattern = p;
                         }
                     }
                 }
@@ -2251,7 +2251,7 @@ impl<'script> PredicatePattern<'script> {
             | RecordPatternEq { key, .. }
             | ArrayPatternEq { key, .. }
             | FieldPresent { key, .. }
-            | FieldAbsent { key, .. } => &key,
+            | FieldAbsent { key, .. } => key,
         }
     }
 
@@ -2265,7 +2265,7 @@ impl<'script> PredicatePattern<'script> {
             | RecordPatternEq { lhs, .. }
             | ArrayPatternEq { lhs, .. }
             | FieldPresent { lhs, .. }
-            | FieldAbsent { lhs, .. } => &lhs,
+            | FieldAbsent { lhs, .. } => lhs,
         }
     }
 }
@@ -2667,7 +2667,7 @@ impl<'script> UnaryExpr<'script> {
             UnaryExpr {
                 expr, mid, kind, ..
             } if expr.is_lit() => {
-                let expr = reduce2(expr.clone(), &helper)?;
+                let expr = reduce2(expr.clone(), helper)?;
                 let value = if let Some(v) = exec_unary(*kind, &expr) {
                     v.into_owned()
                 } else {

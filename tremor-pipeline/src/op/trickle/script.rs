@@ -82,7 +82,7 @@ impl Operator for Script {
                         .raw()
                         .get(0)
                         .and_then(|v| {
-                            let s: &[u8] = &v;
+                            let s: &[u8] = v;
                             let s = std::str::from_utf8(s).ok()?;
                             let mut h = highlighter::Dumb::default();
                             Query::format_error_from_script(s, &mut h, &e).ok()?;

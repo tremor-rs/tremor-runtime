@@ -390,7 +390,7 @@ impl TremorAggrFn for Stdev {
             .map(|v| v.as_f64().map_or(v, |v| Value::from(v.sqrt())))
     }
     fn init(&mut self) {
-        self.0.init()
+        self.0.init();
     }
     fn merge(&mut self, src: &dyn TremorAggrFn) -> FResult<()> {
         if let Some(other) = src.downcast_ref::<Self>() {
@@ -425,7 +425,7 @@ impl std::clone::Clone for Dds {
                 Some(dds) => {
                     let config = DDSketchConfig::defaults();
                     let mut histo = DDSketch::new(config);
-                    histo.merge(&dds).ok();
+                    histo.merge(dds).ok();
                     Some(histo)
                 }
                 None => None,
@@ -474,7 +474,7 @@ impl TremorAggrFn for Dds {
                     })
                     .collect();
                 self.percentiles = percentiles?;
-                self.percentiles_set = true
+                self.percentiles_set = true;
             }
         }
         if let Some(v) = args.first().cast_f64() {
@@ -585,7 +585,7 @@ impl TremorAggrFn for Dds {
                         for v in self.cache.drain(..) {
                             histo.add(v);
                         }
-                        self.histo = Some(histo)
+                        self.histo = Some(histo);
                     }
                     None => {
                         // If both are caches
@@ -676,7 +676,7 @@ impl TremorAggrFn for Hdr {
                     })
                     .collect();
                 self.percentiles = percentiles?;
-                self.percentiles_set = true
+                self.percentiles_set = true;
             }
         }
         if let Some(v) = args.first().cast_f64() {
@@ -755,7 +755,7 @@ impl TremorAggrFn for Hdr {
                             error: format!("failed to record value: {:?}", e),
                         })?;
                     }
-                    self.histo = Some(histo)
+                    self.histo = Some(histo);
                 } else {
                     // If both are caches
                     if self.cache.len() + other.cache.len() > HIST_MAX_CACHE_SIZE {
@@ -1096,11 +1096,11 @@ mod test {
         a.accumulate(&[&two])?;
         a.accumulate(&[&four])?;
         a.accumulate(&[&nineteen])?;
-        assert!((a.emit()?.cast_f64().expect("screw it") - (259.0 as f64 / 3.0).sqrt()) < 0.001);
+        assert!((a.emit()?.cast_f64().expect("screw it") - (259.0_f64 / 3.0).sqrt()) < 0.001);
 
         let mut b = Stdev::default();
         b.merge(&a)?;
-        assert!((b.emit()?.cast_f64().expect("screw it") - (259.0 as f64 / 3.0).sqrt()) < 0.001);
+        assert!((b.emit()?.cast_f64().expect("screw it") - (259.0_f64 / 3.0).sqrt()) < 0.001);
 
         assert_eq!(a.arity(), 1..=1);
 

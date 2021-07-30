@@ -101,7 +101,7 @@ fn main() -> Result<()> {
             .value_of("instance")
             .ok_or_else(|| Error::from("instance argument missing"))?;
         // ALLOW: We do this on startup and forget the memory once we drop it, that's on purpose
-        let forget_s = std::mem::transmute(&s as &str);
+        let forget_s = std::mem::transmute(s as &str);
         // This means we're going to LEAK this memory, however
         // it is fine since as we do actually need it for the
         // rest of the program execution.
@@ -137,8 +137,8 @@ fn run(mut app: App, cmd: &ArgMatches) -> Result<()> {
             },
             matches,
         )),
-        Some(("dbg", Some(matches))) => debug::run_cmd(&matches),
-        Some(("test", Some(matches))) => test::run_cmd(&matches),
+        Some(("dbg", Some(matches))) => debug::run_cmd(matches),
+        Some(("test", Some(matches))) => test::run_cmd(matches),
         _ => app
             .print_long_help()
             .map_err(|e| Error::from(format!("failed to print help: {}", e))),

@@ -110,7 +110,7 @@ impl Kv {
                         "key": Value::Bytes(key.to_vec().into()),
                         "value": decode(Some(e), codec, ingest_ns)?
                     });
-                    res.push(value)
+                    res.push(value);
                 }
                 Ok(literal!({ "ok": res }))
             }
@@ -292,7 +292,7 @@ impl Sink for Kv {
                         origin_uri: Some(self.event_origin_uri.clone()),
                         ..Event::default()
                     };
-                    r.push(Reply::Response(OUT, e))
+                    r.push(Reply::Response(OUT, e));
                 }
                 Err((op, key, e)) => {
                     // send ERR response and log err

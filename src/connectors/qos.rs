@@ -142,19 +142,19 @@ impl FailureDetector for GrpcEndpointSupervisor {
 
     fn trigger(&mut self) {
         self.is_down = true;
-        info!("Grpc Endpoint {} has failed", self.canary.about())
+        info!("Grpc Endpoint {} has failed", self.canary.about());
     }
 
     fn probe(&mut self) {
         if self.canary.chirp() {
             self.is_down = false;
-            info!("Grpc Endpoint {} has recovered", self.canary.about())
+            info!("Grpc Endpoint {} has recovered", self.canary.about());
         }
     }
 
     fn restore(&mut self) {
         self.is_down = false;
-        info!("Grpc Endpoint {} force recovered", self.canary.about())
+        info!("Grpc Endpoint {} force recovered", self.canary.about());
     }
 
     fn is_down(&self) -> bool {

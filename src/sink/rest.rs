@@ -52,7 +52,7 @@ pub struct Endpoint {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "lowercase")]
 pub enum Auth {
-    GCP,
+    Gcp,
 }
 
 fn none_if_empty(s: &str) -> Option<String> {
@@ -397,7 +397,7 @@ impl Sink for Rest {
                                         response: Box::new(response),
                                         duration,
                                     })
-                                    .await?
+                                    .await?;
                             }
                             Err(e) => {
                                 error!("[Sink::Rest] Error sending HTTP request: {}", e);
@@ -533,7 +533,7 @@ async fn codec_task(
     };
     // create token in this lifetime (ambiguous to compiler), instead of bound to the sink.
     let token = match auth {
-        Some(Auth::GCP) => {
+        Some(Auth::Gcp) => {
             let t = Token::new()?;
             Some(t)
         }
@@ -625,10 +625,10 @@ async fn codec_task(
                                 error!(
                                     "[Sink::{}] HTTP request failed: {} => {}",
                                     &sink_url, status, body
-                                )
+                                );
                             }
                         } else {
-                            error!("[Sink::{}] HTTP request failed: {}", &sink_url, status)
+                            error!("[Sink::{}] HTTP request failed: {}", &sink_url, status);
                         }
                     }
                     CbAction::Fail

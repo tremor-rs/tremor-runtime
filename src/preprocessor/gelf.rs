@@ -246,7 +246,7 @@ fn assemble(key: u64, m: GelfMsgs) -> Option<Vec<u8>> {
     let mut result = Vec::with_capacity(m.bytes);
     for v in m.segments {
         if let Some(mut v) = v {
-            result.append(&mut v)
+            result.append(&mut v);
         } else {
             error!("Missing segment in GELF chunks for {}", key);
             return None;

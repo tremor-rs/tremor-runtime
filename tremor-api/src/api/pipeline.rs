@@ -56,7 +56,7 @@ pub async fn publish_artefact(mut req: Request) -> Result<Response> {
                 )
             })?;
 
-            let url = build_url(&["pipeline", &id])?;
+            let url = build_url(&["pipeline", id])?;
             let repo = &req.state().world.repo;
             let result = repo
                 .publish_pipeline(&url, false, query)

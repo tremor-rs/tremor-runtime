@@ -320,9 +320,9 @@ pub trait Highlighter {
                         file,
                         start.line(),
                         start.column()
-                    )?
+                    )?;
                 } else {
-                    writeln!(self.get_writer(), "Error: ")?
+                    writeln!(self.get_writer(), "Error: ")?;
                 }
             }
             Some(Error {
@@ -460,7 +460,7 @@ pub trait Highlighter {
                 Token::HereDocEnd => {
                     write!(self.get_writer(), r#"""""#)?;
                     // no line increment
-                    self.reset()?
+                    self.reset()?;
                 }
                 Token::TestLiteral(indent, lines) => {
                     write!(self.get_writer(), "|")?;
@@ -476,7 +476,7 @@ pub trait Highlighter {
                             self.reset()?;
                             c.set_intense(true).set_fg(Some(Color::Magenta));
                         }
-                        write!(self.get_writer(), "{}{}", " ".repeat(*indent), l)?
+                        write!(self.get_writer(), "{}{}", " ".repeat(*indent), l)?;
                     }
                     self.reset()?;
                     write!(self.get_writer(), "|")?;

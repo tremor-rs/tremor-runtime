@@ -122,7 +122,7 @@ pub(crate) fn execute_select_and_having(
     // check having clause
     let result = value.into_owned();
     let having = stry!(run_guard(
-        &ctx.select,
+        ctx.select,
         &ctx.select.maybe_having,
         ctx.opts,
         env,
@@ -160,7 +160,7 @@ fn env<'run, 'script>(
         context,
         consts,
         aggrs: &NO_AGGRS,
-        meta: &meta,
+        meta,
         recursion_limit,
     }
 }
@@ -239,13 +239,13 @@ impl Operator for Select {
 
                 let guard = &select.maybe_where;
                 let e = env(&ctx, consts.run(), node_meta, *recursion_limit);
-                let w_guard = run_guard(select, &guard, opts, &e, data, &locals, node_meta);
+                let w_guard = run_guard(select, guard, opts, &e, data, &locals, node_meta);
                 if !stry!(w_guard) {
                     return Ok(Res::None);
                 };
 
                 let group_values = if let Some(group_by) = &select.maybe_group_by {
-                    let groups = stry!(group_by.generate_groups(&ctx, data, &node_meta, meta));
+                    let groups = stry!(group_by.generate_groups(&ctx, data, node_meta, meta));
                     groups.into_iter().map(Value::from).collect()
                 } else if windows.is_empty() {
                     //
@@ -255,7 +255,7 @@ impl Operator for Select {
                     //
                     consts.group = Value::from(vec![Value::const_null(), Value::from("[null]")]);
 
-                    let e = env(&ctx, consts.run(), &node_meta, *recursion_limit);
+                    let e = env(&ctx, consts.run(), node_meta, *recursion_limit);
                     let value = stry!(select.target.run(opts, &e, data, &NULL, meta, &locals));
                     let h_guard = &select.maybe_having;
                     let h_guard = run_guard(select, h_guard, opts, &e, &value, &locals, node_meta);

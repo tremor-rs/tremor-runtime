@@ -95,13 +95,13 @@ impl Manager {
                     ManagerMsg::CreatePipeline(r, c) => {
                         self.pipeline
                             .send(pipeline::ManagerMsg::Create(r, Box::new(c)))
-                            .await?
+                            .await?;
                     }
                     ManagerMsg::CreateOnramp(r, c) => {
-                        self.onramp.send(onramp::ManagerMsg::Create(r, c)).await?
+                        self.onramp.send(onramp::ManagerMsg::Create(r, c)).await?;
                     }
                     ManagerMsg::CreateOfframp(r, c) => {
-                        self.offramp.send(offramp::ManagerMsg::Create(r, c)).await?
+                        self.offramp.send(offramp::ManagerMsg::Create(r, c)).await?;
                     }
                     ManagerMsg::Stop => {
                         info!("Stopping offramps...");
@@ -138,12 +138,12 @@ impl World {
     /// # Errors
     ///  * if we can't ensure the onramp is bound
     pub async fn ensure_onramp(&self, id: &TremorUrl) -> Result<()> {
-        if self.reg.find_onramp(&id).await?.is_none() {
+        if self.reg.find_onramp(id).await?.is_none() {
             info!(
                 "Onramp not found during binding process, binding {} to create a new instance.",
                 &id
             );
-            self.bind_onramp(&id).await?;
+            self.bind_onramp(id).await?;
         } else {
             info!("Existing onramp {} found", id);
         }
@@ -155,12 +155,12 @@ impl World {
     /// # Errors
     ///  * if we can't ensure the offramp is bound
     pub async fn ensure_offramp(&self, id: &TremorUrl) -> Result<()> {
-        if self.reg.find_offramp(&id).await?.is_none() {
+        if self.reg.find_offramp(id).await?.is_none() {
             info!(
                 "Offramp not found during binding process, binding {} to create a new instance.",
                 &id
             );
-            self.bind_offramp(&id).await?;
+            self.bind_offramp(id).await?;
         } else {
             info!("Existing offramp {} found", id);
         }
@@ -171,12 +171,12 @@ impl World {
     /// # Errors
     ///  * if we can't ensure the pipeline is bound
     pub async fn ensure_pipeline(&self, id: &TremorUrl) -> Result<()> {
-        if self.reg.find_pipeline(&id).await?.is_none() {
+        if self.reg.find_pipeline(id).await?.is_none() {
             info!(
                 "Pipeline not found during binding process, binding {} to create a new instance.",
                 &id
             );
-            self.bind_pipeline(&id).await?;
+            self.bind_pipeline(id).await?;
         } else {
             info!("Existing pipeline {} found", id);
         }
@@ -249,7 +249,7 @@ impl World {
         info!("Linking pipeline {} to {:?}", id, mappings);
         if let Some(pipeline_a) = self.repo.find_pipeline(id).await? {
             if self.reg.find_pipeline(id).await?.is_none() {
-                self.bind_pipeline(&id).await?;
+                self.bind_pipeline(id).await?;
             };
             pipeline_a.artefact.link(self, id, mappings).await
         } else {
@@ -363,7 +363,7 @@ impl World {
     ) -> Result<<OnrampArtefact as Artefact>::LinkResult> {
         if let Some(onramp_a) = self.repo.find_onramp(id).await? {
             if self.reg.find_onramp(id).await?.is_none() {
-                self.bind_onramp(&id).await?;
+                self.bind_onramp(id).await?;
             };
             onramp_a.artefact.link(self, id, mappings).await
         } else {
@@ -401,7 +401,7 @@ impl World {
         if let Some(onramp_a) = self.repo.find_onramp(id).await? {
             let r = onramp_a.artefact.unlink(self, id, mappings).await?;
             if r {
-                self.unbind_onramp(&id).await?;
+                self.unbind_onramp(id).await?;
             };
             Ok(r)
         } else {
@@ -428,7 +428,7 @@ impl World {
                 let m = vec![(METRICS_PIPELINE.clone(), metrics_id.clone())]
                     .into_iter()
                     .collect();
-                self.link_existing_offramp(&id, m).await?;
+                self.link_existing_offramp(id, m).await?;
                 Ok(res)
             }
             (None, _) => Err(ErrorKind::ArtefactNotFound(id.to_string()).into()),
@@ -467,7 +467,7 @@ impl World {
     ) -> Result<<OfframpArtefact as Artefact>::LinkResult> {
         if let Some(offramp_a) = self.repo.find_offramp(id).await? {
             if self.reg.find_offramp(id).await?.is_none() {
-                self.bind_offramp(&id).await?;
+                self.bind_offramp(id).await?;
             };
             offramp_a.artefact.link(self, id, mappings).await
         } else {
@@ -684,7 +684,7 @@ impl World {
         let module_path = &tremor_script::path::ModulePath { mounts: Vec::new() };
         let aggr_reg = tremor_script::aggr_registry();
         let artefact_metrics = tremor_pipeline::query::Query::parse(
-            &module_path,
+            module_path,
             "#!config id = \"system::metrics\"\nselect event from in into out;",
             "<metrics>",
             Vec::new(),
@@ -702,7 +702,7 @@ impl World {
             .ok_or_else(|| Error::from("Failed to initialize metrics pipeline."))?;
 
         let artefact_passthrough = tremor_pipeline::query::Query::parse(
-            &module_path,
+            module_path,
             "#!config id = \"system::passthrough\"\nselect event from in into out;",
             "<passthrough>",
             Vec::new(),

@@ -97,7 +97,7 @@ impl Source for Int {
         let project_id = &self.project_id;
 
         // TODO: Error Handling
-        let data = pubsub::receive_message(&mut remote, &project_id, &subscription_name).await?;
+        let data = pubsub::receive_message(&mut remote, project_id, subscription_name).await?;
         let mut res = Vec::new();
         let mut ack_ids = Vec::new();
         for msg in data.received_messages {
@@ -121,7 +121,7 @@ impl Source for Int {
             res.push((data, Some(meta)));
         }
         // TODO: Construct tests to make sure that duplicate messages are not coming since acknowledgement is done after
-        pubsub::acknowledge(&mut remote, &project_id, &subscription_name, ack_ids).await?;
+        pubsub::acknowledge(&mut remote, project_id, subscription_name, ack_ids).await?;
         return Ok(SourceReply::BatchData {
             origin_uri: self.origin.clone(),
             batch_data: res,

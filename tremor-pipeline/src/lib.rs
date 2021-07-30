@@ -353,7 +353,7 @@ impl EventId {
                 Ok(idx) => {
                     // ALLOW: binary_search_by verified this idx exists
                     unsafe { self.tracked_event_ids.get_unchecked_mut(idx) }
-                        .track_ids(other_tracked.min_event_id, other_tracked.max_event_id)
+                        .track_ids(other_tracked.min_event_id, other_tracked.max_event_id);
                 }
                 Err(idx) => self.tracked_event_ids.insert(idx, other_tracked.clone()),
             }
@@ -362,7 +362,7 @@ impl EventId {
 
     /// track the given event id by its raw numeric ids
     pub fn track_id(&mut self, source_id: u64, stream_id: u64, event_id: u64) {
-        self.track_ids(source_id, stream_id, event_id, event_id)
+        self.track_ids(source_id, stream_id, event_id, event_id);
     }
 
     fn track_ids(&mut self, source_id: u64, stream_id: u64, min_event_id: u64, max_event_id: u64) {
@@ -726,7 +726,7 @@ fn factory(node: &NodeConfig) -> Result<Box<dyn InitializableOperator>> {
 }
 
 fn operator(uid: u64, node: &NodeConfig) -> Result<Box<dyn Operator + 'static>> {
-    factory(&node)?.from_node(uid, node)
+    factory(node)?.from_node(uid, node)
 }
 
 /// Takes a name, tags and creates a influx codec compatible Value
@@ -868,7 +868,7 @@ mod test {
         assert_eq!(ids1.get_min_by_stream(2, DEFAULT_STREAM_ID), Some(1));
         assert_eq!(ids1.get_min_by_stream(2, 42), None);
 
-        let id = EventId::from((1, DEFAULT_STREAM_ID, 42u64));
+        let id = EventId::from((1, DEFAULT_STREAM_ID, 42_u64));
         assert_eq!(id.get_max_by_stream(1, DEFAULT_STREAM_ID), Some(42));
         assert_eq!(id.get_max_by_stream(5, DEFAULT_STREAM_ID), None);
     }

@@ -51,12 +51,12 @@ fn sorted_serialize_<'v, W: Write>(j: &Value<'v>, w: &mut W) -> Result<()> {
             write!(w, "[")?;
 
             if let Some(e) = iter.next() {
-                sorted_serialize_(e, w)?
+                sorted_serialize_(e, w)?;
             }
 
             for e in iter {
                 write!(w, ",")?;
-                sorted_serialize_(e, w)?
+                sorted_serialize_(e, w)?;
             }
             write!(w, "]")?;
         }
@@ -104,7 +104,7 @@ pub fn load_event_file(base_name: &str) -> crate::errors::Result<Vec<Value<'stat
     use tremor_common::file as cfile;
     use xz2::read::XzDecoder;
 
-    let (xz_name, name) = if is_xz_file(&base_name) {
+    let (xz_name, name) = if is_xz_file(base_name) {
         (base_name.to_owned(), base_name.trim_end_matches(".xz"))
     } else {
         let mut tmp = base_name.to_owned();
@@ -119,7 +119,7 @@ pub fn load_event_file(base_name: &str) -> crate::errors::Result<Vec<Value<'stat
         return Err(format!("File not found or not readable: {}", base_name).into());
     };
     let mut in_data = Vec::new();
-    if is_xz_file(&effective_name) {
+    if is_xz_file(effective_name) {
         XzDecoder::new(file).read_to_end(&mut in_data)?
     } else {
         file.read_to_end(&mut in_data)?
@@ -131,12 +131,12 @@ pub fn load_event_file(base_name: &str) -> crate::errors::Result<Vec<Value<'stat
     let mut in_bytes = Vec::new();
     unsafe {
         for line in &mut in_lines {
-            in_bytes.push(line.as_bytes_mut())
+            in_bytes.push(line.as_bytes_mut());
         }
     }
     let mut json = Vec::new();
     for bytes in in_bytes {
-        json.push(tremor_value::parse_to_value(bytes)?.into_static())
+        json.push(tremor_value::parse_to_value(bytes)?.into_static());
     }
     Ok(json)
 }

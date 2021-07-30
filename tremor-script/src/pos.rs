@@ -17,7 +17,7 @@
 
 use super::lexer::Token;
 pub use codespan::{
-    ByteIndex as BytePos, ByteOffset, ColumnIndex as Column, ColumnOffset, LineIndex as Line,
+    ByteIndex as Byte, ByteOffset, ColumnIndex as Column, ColumnOffset, LineIndex as Line,
     LineOffset,
 };
 /// A location in a source file

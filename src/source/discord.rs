@@ -438,7 +438,7 @@ async fn reply_loop(rx: Receiver<Value<'static>>, ctx: Context) {
                     })
                     .await
                 {
-                    error!("Discord send error: {}", e)
+                    error!("Discord send error: {}", e);
                 };
             };
         }
@@ -458,7 +458,7 @@ impl Handler {
             }
         };
         if let Err(e) = self.tx.send(event).await {
-            error!("Failed to forward event: {}", e)
+            error!("Failed to forward event: {}", e);
         }
     }
 }
@@ -474,7 +474,9 @@ impl EventHandler for Handler {
             // tokio::spawn creates a new green thread that can run in parallel with the rest of
             // the application.
             let rx = self.rx.clone();
-            task::spawn(async move { reply_loop(rx, ctx).await });
+            task::spawn(async move {
+                reply_loop(rx, ctx).await;
+            });
 
             // Now that the loop is running, we set the bool to true
             self.is_loop_running.swap(true, Ordering::Relaxed);
@@ -483,52 +485,52 @@ impl EventHandler for Handler {
 
     async fn channel_create(&self, _ctx: Context, channel: &GuildChannel) {
         self.forward(DiscordMessage::ChannelCreate(channel.clone()))
-            .await
+            .await;
     }
 
     async fn category_create(&self, _ctx: Context, category: &ChannelCategory) {
         self.forward(DiscordMessage::CategoryCreate(category.clone()))
-            .await
+            .await;
     }
 
     async fn category_delete(&self, _ctx: Context, category: &ChannelCategory) {
         self.forward(DiscordMessage::CategoryDelete(category.clone()))
-            .await
+            .await;
     }
 
     async fn channel_delete(&self, _ctx: Context, channel: &GuildChannel) {
         self.forward(DiscordMessage::ChannelDelete(channel.clone()))
-            .await
+            .await;
     }
 
     async fn channel_pins_update(&self, _ctx: Context, pin: ChannelPinsUpdateEvent) {
-        self.forward(pin).await
+        self.forward(pin).await;
     }
 
     async fn invite_create(&self, _ctx: Context, data: serenity::model::event::InviteCreateEvent) {
-        self.forward(data).await
+        self.forward(data).await;
     }
 
     async fn invite_delete(&self, _ctx: Context, data: serenity::model::event::InviteDeleteEvent) {
-        self.forward(data).await
+        self.forward(data).await;
     }
 
     async fn message(&self, _ctx: Context, msg: Message) {
-        self.forward(msg).await
+        self.forward(msg).await;
     }
 
     async fn reaction_add(&self, _ctx: Context, add_reaction: Reaction) {
         self.forward(DiscordMessage::AddReaction(add_reaction))
-            .await
+            .await;
     }
 
     async fn reaction_remove(&self, _ctx: Context, removed_reaction: Reaction) {
         self.forward(DiscordMessage::RemoveReaction(removed_reaction))
-            .await
+            .await;
     }
 
     async fn presence_replace(&self, _ctx: Context, p: Vec<Presence>) {
-        self.forward(DiscordMessage::PresenceReplace(p)).await
+        self.forward(DiscordMessage::PresenceReplace(p)).await;
     }
 
     async fn presence_update(
@@ -536,7 +538,7 @@ impl EventHandler for Handler {
         _ctx: Context,
         new_data: serenity::model::event::PresenceUpdateEvent,
     ) {
-        self.forward(new_data).await
+        self.forward(new_data).await;
     }
 
     async fn ready(&self, _: Context, ready: Ready) {
@@ -544,32 +546,32 @@ impl EventHandler for Handler {
     }
 
     async fn typing_start(&self, _ctx: Context, e: TypingStartEvent) {
-        self.forward(DiscordMessage::TypingStart(e)).await
+        self.forward(DiscordMessage::TypingStart(e)).await;
     }
 
     async fn channel_update(&self, _ctx: Context, old: Option<Channel>, new: Channel) {
         self.forward(DiscordMessage::ChannelUpdate { old, new })
-            .await
+            .await;
     }
 
     async fn guild_ban_addition(&self, _ctx: Context, guild_id: GuildId, user: User) {
         self.forward(DiscordMessage::BanAddition { guild_id, user })
-            .await
+            .await;
     }
 
     async fn guild_ban_removal(&self, _ctx: Context, guild_id: GuildId, user: User) {
         self.forward(DiscordMessage::BanRemoval { guild_id, user })
-            .await
+            .await;
     }
 
     async fn guild_create(&self, _ctx: Context, guild: Guild, is_new: bool) {
         self.forward(DiscordMessage::GuildCreate { guild, is_new })
-            .await
+            .await;
     }
 
     async fn guild_delete(&self, _ctx: Context, incomplete: GuildUnavailable, full: Option<Guild>) {
         self.forward(DiscordMessage::GuildDelete { incomplete, full })
-            .await
+            .await;
     }
 
     async fn guild_emojis_update(
@@ -582,12 +584,12 @@ impl EventHandler for Handler {
             guild_id,
             current_state,
         })
-        .await
+        .await;
     }
 
     async fn guild_integrations_update(&self, _ctx: Context, guild_id: GuildId) {
         self.forward(DiscordMessage::IntegrationsUpdate(guild_id))
-            .await
+            .await;
     }
 
     async fn guild_member_addition(&self, _ctx: Context, guild_id: GuildId, new_member: Member) {
@@ -595,7 +597,7 @@ impl EventHandler for Handler {
             guild_id,
             new_member,
         })
-        .await
+        .await;
     }
 
     async fn guild_member_removal(
@@ -610,7 +612,7 @@ impl EventHandler for Handler {
             user,
             member_data_if_available,
         })
-        .await
+        .await;
     }
 
     async fn guild_member_update(
@@ -623,16 +625,16 @@ impl EventHandler for Handler {
             old_if_available,
             new,
         })
-        .await
+        .await;
     }
 
     async fn guild_members_chunk(&self, _ctx: Context, chunk: GuildMembersChunkEvent) {
-        self.forward(DiscordMessage::GuildMembersChunk(chunk)).await
+        self.forward(DiscordMessage::GuildMembersChunk(chunk)).await;
     }
 
     async fn guild_role_create(&self, _ctx: Context, guild_id: GuildId, new: Role) {
         self.forward(DiscordMessage::RoleCreate { guild_id, new })
-            .await
+            .await;
     }
 
     async fn guild_role_delete(
@@ -647,7 +649,7 @@ impl EventHandler for Handler {
             removed_role_id,
             removed_role_data_if_available,
         })
-        .await
+        .await;
     }
 
     async fn guild_role_update(
@@ -662,12 +664,12 @@ impl EventHandler for Handler {
             old_data_if_available,
             new,
         })
-        .await
+        .await;
     }
 
     async fn guild_unavailable(&self, _ctx: Context, guild_id: GuildId) {
         self.forward(DiscordMessage::GuildUnavailable(guild_id))
-            .await
+            .await;
     }
 
     async fn guild_update(
@@ -680,7 +682,7 @@ impl EventHandler for Handler {
             old_data_if_available,
             new_but_incomplete,
         })
-        .await
+        .await;
     }
 
     async fn message_delete(
@@ -695,7 +697,7 @@ impl EventHandler for Handler {
             deleted_message_id,
             guild_id,
         })
-        .await
+        .await;
     }
 
     async fn message_delete_bulk(
@@ -710,7 +712,7 @@ impl EventHandler for Handler {
             multiple_deleted_messages_ids,
             guild_id,
         })
-        .await
+        .await;
     }
 
     async fn message_update(
@@ -725,7 +727,7 @@ impl EventHandler for Handler {
             new,
             event,
         })
-        .await
+        .await;
     }
 
     async fn reaction_remove_all(
@@ -738,21 +740,21 @@ impl EventHandler for Handler {
             channel_id,
             removed_from_message_id,
         })
-        .await
+        .await;
     }
 
     async fn resume(&self, _ctx: Context, resume: ResumedEvent) {
-        self.forward(DiscordMessage::Resume(resume)).await
+        self.forward(DiscordMessage::Resume(resume)).await;
     }
 
     async fn user_update(&self, _ctx: Context, old_data: CurrentUser, new: CurrentUser) {
         self.forward(DiscordMessage::UserUpdate { old_data, new })
-            .await
+            .await;
     }
 
     async fn voice_server_update(&self, _ctx: Context, update: VoiceServerUpdateEvent) {
         self.forward(DiscordMessage::VoiceServerUpdate(update))
-            .await
+            .await;
     }
 
     async fn voice_state_update(
@@ -762,7 +764,7 @@ impl EventHandler for Handler {
         old: Option<VoiceState>,
         new: VoiceState,
     ) {
-        self.forward(DiscordMessage::VoiceUpdate { old, new }).await
+        self.forward(DiscordMessage::VoiceUpdate { old, new }).await;
     }
 
     async fn webhook_update(
@@ -775,7 +777,7 @@ impl EventHandler for Handler {
             guild_id,
             belongs_to_channel_id,
         })
-        .await
+        .await;
     }
 }
 

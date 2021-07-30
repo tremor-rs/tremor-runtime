@@ -36,7 +36,7 @@ impl ConfigImpl for Config {}
 impl Config {
     async fn connection(&self) -> Result<NatsConnection> {
         let hosts = self.hosts.join(",");
-        let connection = self.options.generate()?.connect(&hosts).await?;
+        let connection = self.options.generate().connect(&hosts).await?;
         Ok(connection)
     }
 }
