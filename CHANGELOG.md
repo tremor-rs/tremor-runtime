@@ -16,7 +16,7 @@
 - Update blackhole to print events / s [#1129](https://github.com/tremor-rs/tremor-runtime/issues/1129)
 - Improve soundness and documentation of SRS code.
 - Add support for concatenating arrays [#1113](https://github.com/tremor-rs/tremor-runtime/issues/1113)
-
+- Allow gcp headers to be included in `rest` offramp with `auth: gcp`
 ### Fixes
 
 - Skip instead of fail EQC on out of repo PRs
