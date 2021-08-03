@@ -77,7 +77,7 @@ impl<'script> ScriptRaw<'script> {
                     let r = Range::from((start, end));
 
                     let expr = expr.up(&mut helper)?.try_reduce(helper)?;
-                    let v = reduce2(expr, helper)?;
+                    let v = expr.try_into_value(helper)?;
                     let value_type = v.value_type();
 
                     let idx = helper.consts.insert(name_v, v).map_err(|_old| {
@@ -289,7 +289,7 @@ impl_expr!(ModuleRaw);
 
 impl<'script> ModuleRaw<'script> {
     pub(crate) fn define<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<()> {
-        helper.module.push(self.name.id.to_string());
+        helper.module.push(self.name.to_string());
         for e in self.exprs {
             match e {
                 ExprRaw::Module(m) => {
@@ -305,7 +305,7 @@ impl<'script> ModuleRaw<'script> {
                     let mut name_v = helper.module.clone();
                     name_v.push(name.to_string());
                     let expr = expr.up(helper)?;
-                    let v = reduce2(expr, helper)?;
+                    let v = expr.try_into_value(helper)?;
                     helper.consts.insert(name_v, v).map_err(|_old| {
                         let r = Range::from((start, end));
                         ErrorKind::DoubleConst(r.expand_lines(2), r, name.to_string())
@@ -315,7 +315,7 @@ impl<'script> ModuleRaw<'script> {
                     let f = f.up(helper)?;
                     let f = CustomFn {
                         name: f.name.id,
-                        args: f.args.iter().map(|i| i.id.to_string()).collect(),
+                        args: f.args.iter().map(ToString::to_string).collect(),
                         locals: f.locals,
                         body: f.body,
                         is_const: false, // TODO: we should find a way to examine this
@@ -342,6 +342,11 @@ pub struct IdentRaw<'script> {
     pub id: beef::Cow<'script, str>,
 }
 impl_expr!(IdentRaw);
+impl<'script> ToString for IdentRaw<'script> {
+    fn to_string(&self) -> String {
+        self.id.to_string()
+    }
+}
 
 impl<'script> Upable<'script> for IdentRaw<'script> {
     type Target = Ident<'script>;
@@ -439,6 +444,36 @@ pub struct StringLitRaw<'script> {
     pub(crate) end: Location,
     pub(crate) elements: StrLitElementsRaw<'script>,
 }
+#[cfg(not(feature = "erlang-float-testing"))]
+fn to_strl_elem(l: &Literal) -> StrLitElement<'static> {
+    l.value.as_str().map_or_else(
+        || StrLitElement::Lit(l.value.encode().into()),
+        |s| StrLitElement::Lit(s.to_string().into()),
+    )
+}
+
+// TODO: The float scenario is different in erlang and rust
+// We knowingly excluded float correctness in string interpolation
+// as we don't want to over engineer and write own format functions.
+// any suggestions are welcome
+#[cfg(feature = "erlang-float-testing")]
+#[cfg(not(tarpaulin_include))]
+fn to_strl_elem(l: &Literal) -> StrLitElement<'static> {
+    l.value.as_str().map_or_else(
+        || {
+            if let Some(_f) = l.value.as_f64() {
+                StrLitElement::Lit("42".into())
+            } else {
+                StrLitElement::Lit(
+                    crate::utils::sorted_serialize(&l.value)
+                        .unwrap_or_default()
+                        .into(),
+                )
+            }
+        },
+        |s| StrLitElement::Lit(s.to_string().into()),
+    )
+}
 
 impl<'script> Upable<'script> for StringLitRaw<'script> {
     type Target = StringLit<'script>;
@@ -453,40 +488,15 @@ impl<'script> Upable<'script> for StringLitRaw<'script> {
                 StrLitElementRaw::Expr(e) => {
                     let i = e.up(helper)?;
                     let i = i.try_reduce(helper)?;
-                    match i {
-                        #[cfg(not(feature = "erlang-float-testing"))]
-                        ImutExprInt::Literal(l) => l.value.as_str().map_or_else(
-                            || StrLitElement::Lit(l.value.encode().into()),
-                            |s| StrLitElement::Lit(s.to_string().into()),
-                        ),
-                        // TODO: The float scenario is different in erlang and rust
-                        // We knowingly excluded float correctness in string interpolation
-                        // as we don't want to over engineer and write own format functions.
-                        // any suggestions are welcome
-                        #[cfg(feature = "erlang-float-testing")]
-                        #[cfg(not(tarpaulin_include))]
-                        ImutExprInt::Literal(l) => l.value.as_str().map_or_else(
-                            || {
-                                if let Some(_f) = l.value.as_f64() {
-                                    StrLitElement::Lit("42".into())
-                                } else {
-                                    StrLitElement::Lit(
-                                        crate::utils::sorted_serialize(&l.value)
-                                            .unwrap_or_default()
-                                            .into(),
-                                    )
-                                }
-                            },
-                            |s| StrLitElement::Lit(s.to_string().into()),
-                        ),
-                        _ => StrLitElement::Expr(i),
+                    if let ImutExprInt::Literal(l) = i {
+                        to_strl_elem(&l)
+                    } else {
+                        StrLitElement::Expr(i)
                     }
                 }
                 StrLitElementRaw::Lit(l) => StrLitElement::Lit(l),
             };
             if let StrLitElement::Lit(next_lit) = next {
-                // We need this because otherwise we run into lifetime issues
-                #[allow(clippy::option_if_let_else)]
                 if let Some(prev) = new.pop() {
                     match prev {
                         StrLitElement::Lit(l) => {
@@ -537,25 +547,6 @@ impl<'script> From<&'script str> for StrLitElementRaw<'script> {
 /// we're forced to make this pub because of lalrpop
 pub type StrLitElementsRaw<'script> = Vec<StrLitElementRaw<'script>>;
 
-pub(crate) fn reduce2<'script>(
-    expr: ImutExprInt<'script>,
-    helper: &Helper,
-) -> Result<Value<'script>> {
-    match expr {
-        ImutExprInt::Literal(Literal { value: v, .. }) => Ok(v),
-        ImutExprInt::Local {
-            is_const: true,
-            idx,
-            ..
-        } => Ok(Value::from(idx)),
-        other => Err(ErrorKind::NotConstant(
-            other.extent(&helper.meta),
-            other.extent(&helper.meta).expand_lines(2),
-        )
-        .into()),
-    }
-}
-
 /// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum ExprRaw<'script> {
@@ -595,6 +586,25 @@ pub enum ExprRaw<'script> {
 }
 impl<'script> ExpressionRaw<'script> for ExprRaw<'script> {}
 
+fn is_one_simple_group<'script>(patterns: &[ClauseGroup<'script, Expr<'script>>]) -> bool {
+    let is_one = patterns.len() == 1;
+    let is_simple = patterns
+        .first()
+        .map(|cg| {
+            if let ClauseGroup::Simple {
+                precondition: None,
+                patterns,
+            } = cg
+            {
+                patterns.len() == 1
+            } else {
+                false
+            }
+        })
+        .unwrap_or_default();
+    is_one && is_simple
+}
+
 impl<'script> Upable<'script> for ExprRaw<'script> {
     type Target = Expr<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
@@ -609,22 +619,7 @@ impl<'script> Upable<'script> for ExprRaw<'script> {
                     target,
                     mut patterns,
                     default,
-                } if patterns.len() == 1
-                    && patterns
-                        .first()
-                        .map(|cg| {
-                            if let ClauseGroup::Simple {
-                                precondition: None,
-                                patterns,
-                            } = cg
-                            {
-                                patterns.len() == 1
-                            } else {
-                                false
-                            }
-                        })
-                        .unwrap_or_default() =>
-                {
+                } if is_one_simple_group(&patterns) => {
                     if let Some(ClauseGroup::Simple {
                         precondition: None,
                         mut patterns,
@@ -699,39 +694,6 @@ impl<'script> Upable<'script> for ExprRaw<'script> {
     }
 }
 
-#[cfg(not(tarpaulin_include))] // just dispatch
-impl<'script> BaseExpr for ExprRaw<'script> {
-    fn mid(&self) -> usize {
-        0
-    }
-
-    fn s(&self, meta: &NodeMetas) -> Location {
-        match self {
-            ExprRaw::Const { start, .. } | ExprRaw::Drop { start, .. } => *start,
-            ExprRaw::Module(e) => e.s(meta),
-            ExprRaw::MatchExpr(e) => e.s(meta),
-            ExprRaw::Assign(e) => e.s(meta),
-            ExprRaw::Comprehension(e) => e.s(meta),
-            ExprRaw::Emit(e) => e.s(meta),
-            ExprRaw::FnDecl(e) => e.s(meta),
-            ExprRaw::Imut(e) => e.s(meta),
-        }
-    }
-
-    fn e(&self, meta: &NodeMetas) -> Location {
-        match self {
-            ExprRaw::Const { end, .. } | ExprRaw::Drop { end, .. } => *end,
-            ExprRaw::Module(e) => e.e(meta),
-            ExprRaw::MatchExpr(e) => e.e(meta),
-            ExprRaw::Assign(e) => e.e(meta),
-            ExprRaw::Comprehension(e) => e.e(meta),
-            ExprRaw::Emit(e) => e.e(meta),
-            ExprRaw::FnDecl(e) => e.e(meta),
-            ExprRaw::Imut(e) => e.e(meta),
-        }
-    }
-}
-
 /// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct FnDeclRaw<'script> {
@@ -749,8 +711,8 @@ impl_expr!(FnDeclRaw);
 impl<'script> FnDeclRaw<'script> {
     pub(crate) fn doc(&self) -> FnDoc {
         FnDoc {
-            name: self.name.id.to_string(),
-            args: self.args.iter().map(|a| a.id.to_string()).collect(),
+            name: self.name.to_string(),
+            args: self.args.iter().map(|a| a.to_string()).collect(),
             open: self.open,
             doc: self
                 .doc
@@ -769,7 +731,7 @@ impl<'script> Upable<'script> for FnDeclRaw<'script> {
             .args
             .iter()
             .enumerate()
-            .map(|(i, a)| (a.id.to_string(), i))
+            .map(|(i, a)| (a.to_string(), i))
             .collect();
 
         helper.can_emit = false;
@@ -822,25 +784,6 @@ impl<'script> Upable<'script> for AnyFnRaw<'script> {
     }
 }
 
-#[cfg(not(tarpaulin_include))] // just dispatch
-impl<'script> BaseExpr for AnyFnRaw<'script> {
-    fn mid(&self) -> usize {
-        0
-    }
-    fn s(&self, _meta: &NodeMetas) -> Location {
-        match self {
-            AnyFnRaw::Match(m) => m.start,
-            AnyFnRaw::Normal(m) => m.start,
-        }
-    }
-    fn e(&self, _meta: &NodeMetas) -> Location {
-        match self {
-            AnyFnRaw::Match(m) => m.end,
-            AnyFnRaw::Normal(m) => m.end,
-        }
-    }
-}
-
 /// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct MatchFnDeclRaw<'script> {
@@ -858,8 +801,8 @@ impl_expr!(MatchFnDeclRaw);
 impl<'script> MatchFnDeclRaw<'script> {
     pub(crate) fn doc(&self) -> FnDoc {
         FnDoc {
-            name: self.name.id.to_string(),
-            args: self.args.iter().map(|a| a.id.to_string()).collect(),
+            name: self.name.to_string(),
+            args: self.args.iter().map(|a| a.to_string()).collect(),
             open: self.open,
             doc: self
                 .doc
@@ -877,7 +820,7 @@ impl<'script> Upable<'script> for MatchFnDeclRaw<'script> {
         let mut locals = HashMap::new();
 
         for (i, a) in self.args.iter().enumerate() {
-            locals.insert(a.id.to_string(), i);
+            locals.insert(a.to_string(), i);
         }
 
         helper.is_open = self.open;
@@ -907,10 +850,8 @@ impl<'script> Upable<'script> for MatchFnDeclRaw<'script> {
             .into_iter()
             .map(|mut c: PredicateClauseRaw<_>| {
                 if c.pattern != PatternRaw::Default {
-                    let mut exprs: Vec<_> = self
-                        .args
-                        .iter()
-                        .enumerate()
+                    let args = self.args.iter().enumerate();
+                    let mut exprs: Vec<_> = args
                         .map(|(i, a)| {
                             ExprRaw::Assign(Box::new(AssignRaw {
                                 start: c.start,
@@ -1877,7 +1818,7 @@ impl<'script> Upable<'script> for SegmentElementRaw<'script> {
         let expr = expr.up(helper)?;
         let r = expr.extent(&helper.meta);
         match expr {
-            ImutExprInt::Literal(l) => match reduce2(ImutExprInt::Literal(l), helper)? {
+            ImutExprInt::Literal(l) => match ImutExprInt::Literal(l).try_into_value(helper)? {
                 Value::String(id) => {
                     let mid = helper.add_meta_w_name(start, end, &id);
                     Ok(Segment::Id {
@@ -1989,7 +1930,7 @@ impl<'script> Upable<'script> for ConstPathRaw<'script> {
             let id = helper.meta.name_dflt(mid).to_string();
             let mid = helper.add_meta_w_name(self.start, self.end, &id);
             let mut module_direct: Vec<String> =
-                self.module.iter().map(|m| m.id.to_string()).collect();
+                self.module.iter().map(|m| m.to_string()).collect();
             let mut module = helper.module.clone();
             module.append(&mut module_direct);
             module.push(id);
@@ -2041,27 +1982,7 @@ pub enum ReservedPathRaw<'script> {
         segments: SegmentsRaw<'script>,
     },
 }
-impl<'script> BaseExpr for ReservedPathRaw<'script> {
-    fn s(&self, _meta: &NodeMetas) -> Location {
-        match self {
-            ReservedPathRaw::Args { start, .. }
-            | ReservedPathRaw::Window { start, .. }
-            | ReservedPathRaw::Group { start, .. } => *start,
-        }
-    }
 
-    fn e(&self, _meta: &NodeMetas) -> Location {
-        match self {
-            ReservedPathRaw::Args { end, .. }
-            | ReservedPathRaw::Window { end, .. }
-            | ReservedPathRaw::Group { end, .. } => *end,
-        }
-    }
-
-    fn mid(&self) -> usize {
-        0
-    }
-}
 impl<'script> Upable<'script> for ReservedPathRaw<'script> {
     type Target = ReservedPath<'script>;
 

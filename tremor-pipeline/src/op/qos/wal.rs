@@ -176,13 +176,13 @@ pub struct Wal {
 }
 
 op!(WalFactory(_uid, node) {
-    let map = node.config.as_ref().ok_or_else(|| ErrorKind::MissingOpConfig(node.id.to_string()))?;
+    let map = node.config.as_ref().ok_or_else(|| ErrorKind::MissingOpConfig(node.id.clone()))?;
     let config: Config = Config::new(map)?;
 
     if config.max_elements.or(config.max_bytes).is_none() {
         Err(ErrorKind::BadOpConfig("WAL operator needs at least one of `max_elements` or `max_bytes` config entries.".to_string()).into())
     } else {
-        Ok(Box::new(Wal::new(node.id.to_string(), config)?))
+        Ok(Box::new(Wal::new(node.id.clone(), config)?))
     }
 });
 
@@ -446,6 +446,8 @@ impl Operator for Wal {
 
 #[cfg(test)]
 mod test {
+    use std::time::Duration;
+
     use crate::EventIdGenerator;
     use crate::SignalKind;
 
@@ -682,6 +684,9 @@ mod test {
             assert_eq!(r.events.len(), 1);
             assert_eq!(r.insights.len(), 0);
         }
+
+        // Sleep for a second so the lock is gone, this is terrible
+        std::thread::sleep(Duration::from_millis(100));
 
         {
             // create the operator - second time

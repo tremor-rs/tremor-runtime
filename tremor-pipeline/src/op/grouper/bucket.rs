@@ -86,7 +86,7 @@ op!(BucketGrouperFactory(_uid, node) {
             _id: node.id.clone(),
         }))
     } else {
-        Err(ErrorKind::ExtraOpConfig(node.id.to_string()).into())
+        Err(ErrorKind::ExtraOpConfig(node.id.clone()).into())
     }
 });
 /// Single bucket specification

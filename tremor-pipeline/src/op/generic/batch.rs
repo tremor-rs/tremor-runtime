@@ -64,7 +64,7 @@ if let Some(map) = &node.config {
         event_id_gen: idgen,
     }))
 } else {
-    Err(ErrorKind::MissingOpConfig(node.id.to_string()).into())
+    Err(ErrorKind::MissingOpConfig(node.id.clone()).into())
 
 }});
 

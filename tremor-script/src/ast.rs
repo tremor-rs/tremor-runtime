@@ -49,7 +49,6 @@ pub use base_expr::BaseExpr;
 use beef::Cow;
 use halfbrown::HashMap;
 pub use query::*;
-use raw::reduce2;
 use serde::Serialize;
 
 use std::{
@@ -257,7 +256,7 @@ impl<'script> Bytes<'script> {
 
             for part in self.value {
                 let inner = part.extent(&helper.meta);
-                let value = reduce2(part.data.0, helper)?;
+                let value = part.data.0.try_into_value(helper)?;
                 extend_bytes_from_value(
                     &outer,
                     &inner,
@@ -689,6 +688,7 @@ pub struct Script<'script> {
 }
 
 impl<'script> Script<'script> {
+    const NOT_IMUT: &'static str = "Not an imutable expression";
     /// Runs the script and evaluates to a resulting event.
     /// This expects the script to be imutable!
     ///
@@ -729,12 +729,7 @@ impl<'script> Script<'script> {
                 })
             } else {
                 let e = expr.extent(&self.node_meta);
-                error_generic(
-                    &e.expand_lines(2),
-                    expr,
-                    &"Not an imutable expression",
-                    &self.node_meta,
-                )
+                error_generic(&e.expand_lines(2), expr, &Self::NOT_IMUT, &self.node_meta)
             }
         })
     }
@@ -795,8 +790,10 @@ impl<'script> Script<'script> {
             }
         }
 
-        // We never reach here but rust can't figure that out
-        Ok(Return::Drop)
+        // We never reach here but rust can't figure that out, if this ever happens
+        // we got a serious logic error and want to fail hard to alert us.
+        // ALLOW: see above
+        unreachable!()
     }
 }
 
@@ -848,7 +845,7 @@ pub struct Field<'script> {
 }
 impl_expr_mid!(Field);
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Default)]
 /// Encapsulation of a record structure
 pub struct Record<'script> {
     /// Id
@@ -870,7 +867,7 @@ impl<'script> Record<'script> {
             .into_iter()
             .map(|f| {
                 let n = f.name.try_into_cow()?;
-                reduce2(f.value, helper).map(|v| (n, v))
+                f.value.try_into_value(helper).map(|v| (n, v))
             })
             .collect();
         let base = base?;
@@ -925,7 +922,7 @@ impl<'script> List<'script> {
             let elements: Result<Vec<Value>> = self
                 .exprs
                 .into_iter()
-                .map(|v| reduce2(v.0, helper))
+                .map(|v| v.0.try_into_value(helper))
                 .collect();
             Ok(ImutExprInt::Literal(Literal {
                 mid: self.mid,
@@ -1170,6 +1167,14 @@ pub enum ImutExprInt<'script> {
 }
 
 impl<'script> ImutExprInt<'script> {
+    pub(crate) fn try_into_value(self, helper: &Helper<'script, '_>) -> Result<Value<'script>> {
+        if let ImutExprInt::Literal(Literal { value: v, .. }) = self {
+            Ok(v)
+        } else {
+            let e = self.extent(&helper.meta);
+            Err(ErrorKind::NotConstant(e, e.expand_lines(2)).into())
+        }
+    }
     /// Tries to borrow the expression as a list
     #[must_use]
     pub fn as_list(&self) -> Option<&List<'script>> {
@@ -1382,7 +1387,7 @@ impl<'script> Invoke<'script> {
             let args: Result<Vec<Value<'script>>> = self
                 .args
                 .into_iter()
-                .map(|v| reduce2(v.0, helper))
+                .map(|v| v.0.try_into_value(helper))
                 .collect();
             let args = args?;
             // Construct a view into `args`, since `invoke` expects a slice of references.
@@ -2621,8 +2626,9 @@ impl<'script> BinExpr<'script> {
     fn try_reduce(self, helper: &Helper<'script, '_>) -> Result<ImutExprInt<'script>> {
         match &self {
             BinExpr { lhs, rhs, .. } if lhs.is_lit() && rhs.is_lit() => {
-                let l = reduce2(lhs.clone(), helper)?;
-                let r = reduce2(rhs.clone(), helper)?;
+                // We need to clone here and use &self in the match so we can `exec_binary` later
+                let l = lhs.clone().try_into_value(helper)?;
+                let r = rhs.clone().try_into_value(helper)?;
                 let value =
                     exec_binary(&self, &self, &helper.meta, self.kind, &l, &r)?.into_owned();
                 let lit = Literal {
@@ -2663,21 +2669,21 @@ impl_expr_mid!(UnaryExpr);
 
 impl<'script> UnaryExpr<'script> {
     fn try_reduce(self, helper: &Helper<'script, '_>) -> Result<ImutExprInt<'script>> {
-        match &self {
+        let ex = self.extent(&helper.meta);
+        match self {
             UnaryExpr {
                 expr, mid, kind, ..
             } if expr.is_lit() => {
-                let expr = reduce2(expr.clone(), helper)?;
-                let value = if let Some(v) = exec_unary(*kind, &expr) {
+                let expr = expr.try_into_value(helper)?;
+                let value = if let Some(v) = exec_unary(kind, &expr) {
                     v.into_owned()
                 } else {
-                    let ex = self.extent(&helper.meta);
                     let outer = ex.expand_lines(2);
-                    let e = ErrorKind::InvalidUnary(outer, ex, *kind, expr.value_type());
+                    let e = ErrorKind::InvalidUnary(outer, ex, kind, expr.value_type());
                     return Err(e.into());
                 };
 
-                let lit = Literal { mid: *mid, value };
+                let lit = Literal { mid, value };
                 Ok(ImutExprInt::Literal(lit))
             }
             _ => Ok(ImutExprInt::Unary(Box::new(self))),
@@ -2687,8 +2693,13 @@ impl<'script> UnaryExpr<'script> {
 
 #[cfg(test)]
 mod test {
-    use super::{ConstDoc, FnDoc, ModDoc};
-    use crate::prelude::*;
+
+    use super::{ConstDoc, FnDoc, ImutExpr, ModDoc};
+    use crate::{
+        ast::{Expr, ImutExprInt, Invocable, Invoke, Record},
+        prelude::*,
+        CustomFn,
+    };
 
     fn v(s: &'static str) -> super::ImutExprInt<'static> {
         super::ImutExprInt::Literal(super::Literal {
@@ -2776,5 +2787,41 @@ hello
             Some("snot")
         );
         assert_eq!(r.get_field_expr("adgerb"), None);
+    }
+
+    #[test]
+    fn as_record() {
+        let i = ImutExpr(v("snot"));
+        assert!(i.as_record().is_none());
+        let i = ImutExpr(ImutExprInt::Record(Record::default()));
+        assert!(i.as_record().is_some());
+    }
+    #[test]
+    fn as_invoke() {
+        let invocable = Invocable::Tremor(CustomFn {
+            name: "f".into(),
+            body: Vec::new(),
+            args: Vec::new(),
+            open: false,
+            locals: 0,
+            is_const: false,
+            inline: false,
+        });
+        let i = Invoke {
+            mid: 0,
+            module: Vec::new(),
+            fun: "fun".to_string(),
+            invocable,
+            args: Vec::new(),
+        };
+        assert!(Expr::Imut(v("snut")).as_invoke().is_none());
+        let e = ImutExprInt::Invoke(i.clone());
+        assert!(Expr::Imut(e).as_invoke().is_some());
+        let e = ImutExprInt::Invoke1(i.clone());
+        assert!(Expr::Imut(e).as_invoke().is_some());
+        let e = ImutExprInt::Invoke2(i.clone());
+        assert!(Expr::Imut(e).as_invoke().is_some());
+        let e = ImutExprInt::Invoke3(i.clone());
+        assert!(Expr::Imut(e).as_invoke().is_some());
     }
 }
