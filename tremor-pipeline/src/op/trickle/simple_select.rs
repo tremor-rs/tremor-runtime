@@ -18,6 +18,7 @@ use crate::{errors::Result, op::prelude::*, Event, Operator};
 use tremor_script::{
     self,
     ast::{InvokeAggrFn, Select, SelectStmt},
+    errors::query_guard_not_bool,
     interpreter::{Env, LocalStack},
     prelude::*,
     srs,
@@ -94,9 +95,7 @@ impl Operator for SimpleSelect {
                             return Ok(EventAndInsights::default());
                         };
                     } else {
-                        return tremor_script::errors::query_guard_not_bool(
-                            stmt, guard, &test, node_meta,
-                        )?;
+                        return query_guard_not_bool(stmt, guard, &test, node_meta)?;
                     };
                 }
 
@@ -109,9 +108,7 @@ impl Operator for SimpleSelect {
                             return Ok(EventAndInsights::default());
                         };
                     } else {
-                        return tremor_script::errors::query_guard_not_bool(
-                            stmt, guard, &test, node_meta,
-                        )?;
+                        return query_guard_not_bool(stmt, guard, &test, node_meta)?;
                     };
                 }
 

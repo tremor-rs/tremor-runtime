@@ -65,6 +65,16 @@ impl<'script> ImutExpr<'script> {
     }
 }
 
+fn owned_val<'val, T>(v: T) -> Cow<'val, Value<'val>>
+where
+    T: 'val,
+    Value<'val>: From<T>,
+{
+    Cow::Owned(Value::from(v))
+}
+
+type Bi<'v, 'r> = (usize, Box<dyn Iterator<Item = (Value<'v>, Value<'v>)> + 'r>);
+
 impl<'script> ImutExprInt<'script> {
     /// Checks if the expression is a literal expression
     #[inline]
@@ -141,10 +151,7 @@ impl<'script> ImutExprInt<'script> {
         'script: 'event,
     {
         match self {
-            ImutExprInt::String(s) => s
-                .run(opts, env, event, state, meta, local)
-                .map(Value::from)
-                .map(Cow::Owned),
+            ImutExprInt::String(s) => s.run(opts, env, event, state, meta, local).map(owned_val),
             ImutExprInt::Recur(Recur { exprs, argc, .. }) => {
                 // We need to pre calculate that to ensure that we don't overwrite
                 // local variables that are not used
@@ -182,7 +189,7 @@ impl<'script> ImutExprInt<'script> {
                     object.insert(name, result.into_owned());
                 }
 
-                Ok(Cow::Owned(Value::from(object)))
+                Ok(owned_val(object))
             }
             ImutExprInt::Bytes(ref bytes) => {
                 let mut bs: Vec<u8> = Vec::with_capacity(bytes.value.len());
@@ -210,7 +217,7 @@ impl<'script> ImutExprInt<'script> {
                 for expr in &list.exprs {
                     r.push(stry!(expr.run(opts, env, event, state, meta, local)).into_owned());
                 }
-                Ok(Cow::Owned(Value::from(r)))
+                Ok(owned_val(r))
             }
             ImutExprInt::Invoke1(ref call) => {
                 self.invoke1(opts, env, event, state, meta, local, call)
@@ -277,7 +284,6 @@ impl<'script> ImutExprInt<'script> {
     where
         'script: 'event,
     {
-        type Bi<'v, 'r> = (usize, Box<dyn Iterator<Item = (Value<'v>, Value<'v>)> + 'r>);
         fn kv<'v, K>((k, v): (K, &Value<'v>)) -> (Value<'v>, Value<'v>)
         where
             K: 'v + Clone,
@@ -331,7 +337,7 @@ impl<'script> ImutExprInt<'script> {
                 }
             }
         }
-        Ok(Cow::Owned(Value::from(value_vec)))
+        Ok(owned_val(value_vec))
     }
 
     #[inline]

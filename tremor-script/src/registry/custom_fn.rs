@@ -47,7 +47,7 @@ impl<'script> From<FnDecl<'script>> for CustomFn<'script> {
     fn from(f: FnDecl<'script>) -> Self {
         CustomFn {
             name: f.name.id,
-            args: f.args.iter().map(|i| i.id.to_string()).collect(),
+            args: f.args.iter().map(ToString::to_string).collect(),
             locals: f.locals,
             body: f.body,
             is_const: false, // TODO we should find a way to examine this!

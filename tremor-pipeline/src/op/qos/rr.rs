@@ -78,12 +78,12 @@ if let Some(map) = &node.config {
     let config: Config = Config::new(map)?;
     if config.outputs.is_empty() {
         error!("No outputs supplied for round robin operators");
-        return Err(ErrorKind::MissingOpConfig(node.id.to_string()).into());
+        return Err(ErrorKind::MissingOpConfig(node.id.clone()).into());
     };
     // convert backoff to ns
     Ok(Box::new(RoundRobin::from(config)))
 } else {
-    Err(ErrorKind::MissingOpConfig(node.id.to_string()).into())
+    Err(ErrorKind::MissingOpConfig(node.id.clone()).into())
 
 }});
 

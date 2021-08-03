@@ -235,7 +235,7 @@ impl Query {
                         return Err(query_stream_not_defined_err(
                             s,
                             &s.from.0,
-                            s.from.0.id.to_string(),
+                            s.from.0.to_string(),
                             &query.node_meta,
                         )
                         .into());
@@ -391,7 +391,7 @@ impl Query {
                     };
 
                     let node = NodeConfig {
-                        id: o.id.to_string(),
+                        id: o.id.clone(),
                         kind: NodeKind::Operator,
                         op_type: "trickle::operator".to_string(),
                         ..NodeConfig::default()
@@ -472,7 +472,7 @@ impl Query {
                     let that_defn = stmt_srs;
 
                     let node = NodeConfig {
-                        id: o.id.to_string(),
+                        id: o.id.clone(),
                         kind: NodeKind::Script,
                         label,
                         op_type: "trickle::script".to_string(),
@@ -676,7 +676,7 @@ fn select(
                             let fqwn = w.fqwn();
                             Ok(windows
                                 .get(&fqwn)
-                                .map(|imp| (w.id.to_string(), imp.clone()))
+                                .map(|imp| (w.id.clone(), imp.clone()))
                                 .ok_or_else(|| {
                                     ErrorKind::BadOpConfig(format!("Unknown window: {}", &fqwn))
                                 })?)
@@ -742,7 +742,7 @@ pub(crate) fn supported_operators(
     };
     Ok(OperatorNode {
         uid,
-        id: config.id.to_string(),
+        id: config.id.clone(),
         kind: config.kind.clone(),
         op_type: config.op_type.clone(),
         op,

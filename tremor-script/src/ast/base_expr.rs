@@ -15,7 +15,10 @@
 // Don't cover this file it's only getters
 #![cfg(not(tarpaulin_include))]
 
-use super::raw::{GroupBy, GroupByInt, ImutExprRaw, PathRaw, TestExprRaw};
+use super::query::raw::{OperatorKindRaw, StmtRaw};
+use super::raw::{
+    AnyFnRaw, ExprRaw, GroupBy, GroupByInt, ImutExprRaw, PathRaw, ReservedPathRaw, TestExprRaw,
+};
 use super::{Expr, ImutExprInt, InvokeAggr, NodeMetas, Path, Segment, TestExpr};
 use crate::pos::{Location, Range};
 
@@ -396,5 +399,121 @@ impl<'script> BaseExpr for GroupByInt<'script> {
             | GroupByInt::Set { mid, .. }
             | GroupByInt::Each { mid, .. } => *mid,
         }
+    }
+}
+
+impl<'script> BaseExpr for ReservedPathRaw<'script> {
+    fn s(&self, _meta: &NodeMetas) -> Location {
+        match self {
+            ReservedPathRaw::Args { start, .. }
+            | ReservedPathRaw::Window { start, .. }
+            | ReservedPathRaw::Group { start, .. } => *start,
+        }
+    }
+
+    fn e(&self, _meta: &NodeMetas) -> Location {
+        match self {
+            ReservedPathRaw::Args { end, .. }
+            | ReservedPathRaw::Window { end, .. }
+            | ReservedPathRaw::Group { end, .. } => *end,
+        }
+    }
+
+    fn mid(&self) -> usize {
+        0
+    }
+}
+
+impl<'script> BaseExpr for ExprRaw<'script> {
+    fn mid(&self) -> usize {
+        0
+    }
+
+    fn s(&self, meta: &NodeMetas) -> Location {
+        match self {
+            ExprRaw::Const { start, .. } | ExprRaw::Drop { start, .. } => *start,
+            ExprRaw::Module(e) => e.s(meta),
+            ExprRaw::MatchExpr(e) => e.s(meta),
+            ExprRaw::Assign(e) => e.s(meta),
+            ExprRaw::Comprehension(e) => e.s(meta),
+            ExprRaw::Emit(e) => e.s(meta),
+            ExprRaw::FnDecl(e) => e.s(meta),
+            ExprRaw::Imut(e) => e.s(meta),
+        }
+    }
+
+    fn e(&self, meta: &NodeMetas) -> Location {
+        match self {
+            ExprRaw::Const { end, .. } | ExprRaw::Drop { end, .. } => *end,
+            ExprRaw::Module(e) => e.e(meta),
+            ExprRaw::MatchExpr(e) => e.e(meta),
+            ExprRaw::Assign(e) => e.e(meta),
+            ExprRaw::Comprehension(e) => e.e(meta),
+            ExprRaw::Emit(e) => e.e(meta),
+            ExprRaw::FnDecl(e) => e.e(meta),
+            ExprRaw::Imut(e) => e.e(meta),
+        }
+    }
+}
+
+impl<'script> BaseExpr for AnyFnRaw<'script> {
+    fn mid(&self) -> usize {
+        0
+    }
+    fn s(&self, _meta: &NodeMetas) -> Location {
+        match self {
+            AnyFnRaw::Match(m) => m.start,
+            AnyFnRaw::Normal(m) => m.start,
+        }
+    }
+    fn e(&self, _meta: &NodeMetas) -> Location {
+        match self {
+            AnyFnRaw::Match(m) => m.end,
+            AnyFnRaw::Normal(m) => m.end,
+        }
+    }
+}
+
+impl<'script> BaseExpr for StmtRaw<'script> {
+    fn mid(&self) -> usize {
+        0
+    }
+    fn s(&self, meta: &NodeMetas) -> Location {
+        match self {
+            StmtRaw::ModuleStmt(s) => s.start,
+            StmtRaw::Operator(s) => s.start,
+            StmtRaw::OperatorDecl(s) => s.start,
+            StmtRaw::Script(s) => s.start,
+            StmtRaw::ScriptDecl(s) => s.start,
+            StmtRaw::Select(s) => s.start,
+            StmtRaw::Stream(s) => s.start,
+            StmtRaw::WindowDecl(s) => s.start,
+            StmtRaw::Expr(s) => s.s(meta),
+        }
+    }
+    fn e(&self, meta: &NodeMetas) -> Location {
+        match self {
+            StmtRaw::ModuleStmt(e) => e.end,
+            StmtRaw::Operator(e) => e.end,
+            StmtRaw::OperatorDecl(e) => e.end,
+            StmtRaw::Script(e) => e.end,
+            StmtRaw::ScriptDecl(e) => e.end,
+            StmtRaw::Select(e) => e.end,
+            StmtRaw::Stream(e) => e.end,
+            StmtRaw::WindowDecl(e) => e.end,
+            StmtRaw::Expr(e) => e.e(meta),
+        }
+    }
+}
+
+impl BaseExpr for OperatorKindRaw {
+    fn s(&self, _meta: &NodeMetas) -> Location {
+        self.start
+    }
+    fn e(&self, _meta: &NodeMetas) -> Location {
+        self.end
+    }
+    fn mid(&self) -> usize {
+        0
     }
 }

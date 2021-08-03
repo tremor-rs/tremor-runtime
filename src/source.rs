@@ -650,6 +650,7 @@ where
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
 
     #[derive(Debug)]
@@ -726,6 +727,7 @@ mod tests {
             }
             _ => return Err("Invalid Pipeline connect answer.".into()),
         }
+
         // ensure no events are pulled as long as we are not opened yet
         task::sleep(Duration::from_millis(200)).await;
         assert!(rx1.try_recv().is_err()); // nothing put into connected pipeline yet
@@ -735,8 +737,14 @@ mod tests {
             .send(onramp::Msg::Cb(CbAction::Open, EventId::default()))
             .await?;
 
-        // wait some time
-        task::sleep(Duration::from_millis(200)).await;
+        // yield so we can let other tasks progress
+        task::yield_now().await;
+        let mut n = 0;
+
+        while rx1.len() == 0 && n < 10 {
+            task::sleep(Duration::from_millis(100)).await;
+            n += 1;
+        }
         assert!(rx1.len() > 0);
 
         let (tx4, rx4) = async_channel::unbounded();

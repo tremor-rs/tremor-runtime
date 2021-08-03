@@ -34,7 +34,7 @@ if let Some(map) = &node.config {
         id: node.id.clone(),
     }))
 } else {
-    Err(ErrorKind::MissingOpConfig(node.id.to_string()).into())
+    Err(ErrorKind::MissingOpConfig(node.id.clone()).into())
 
 }});
 

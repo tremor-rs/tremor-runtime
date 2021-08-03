@@ -105,7 +105,7 @@ op!(BackpressureFactory(_uid, node) {
         let config: Config = Config::new(map)?;
         Ok(Box::new(Backpressure::from(config)))
     } else {
-        Err(ErrorKind::MissingOpConfig(node.id.to_string()).into())
+        Err(ErrorKind::MissingOpConfig(node.id.clone()).into())
     }
 });
 
