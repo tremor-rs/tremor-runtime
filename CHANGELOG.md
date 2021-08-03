@@ -18,7 +18,8 @@
 - Add support for concatenating arrays [#1113](https://github.com/tremor-rs/tremor-runtime/issues/1113)
 - Allow gcp headers to be included in `rest` offramp with `auth: gcp`
 - Add env source [#1136](https://github.com/tremor-rs/tremor-runtime/issues/1136)
-- Complete refactor of the windowing code for maintainability, remove emit_emtpy_window
+- Remove need for emit_emtpy_window by automatic eviction for groups where no window holds data
+- Ensure all windows of a group are alligned and can not go out of sync
 - Box apropriately in the rest sink
 - replace macros with functions in gcp code
 - Add -q flag and clarify -v flag for unit tests
@@ -39,7 +40,7 @@
 - Fix test and suite names not being printed
 - Fix badly nested structure in unit tests
 - Fix bug in the unit testing framework that would ignore all tags
-- Fix illegical structure
+- Fix illogical structure of suites that required a doubly nested record
 - Fix `-v` flag
 - Fix issue with double counting of unit test stats
 - Fix issue with wrong script snippets being shown for unit tests

@@ -22,13 +22,10 @@ use crate::EventId;
 use super::*;
 
 use tremor_script::ast::{Stmt, WindowDecl};
+use tremor_script::{ast::Consts, Value};
 use tremor_script::{
     ast::{self, Ident, ImutExpr, Literal},
     path::ModulePath,
-};
-use tremor_script::{
-    ast::{AggregateScratch, Consts},
-    Value,
 };
 use tremor_value::literal;
 
@@ -735,14 +732,9 @@ fn select_nowin_nogrp_whrt_havf() -> Result<()> {
 
 fn test_select_stmt(stmt: tremor_script::ast::Select) -> tremor_script::ast::Stmt {
     let aggregates = vec![];
-    let aggregate_scratches = (
-        AggregateScratch::new(aggregates.clone()),
-        AggregateScratch::new(aggregates.clone()),
-    );
     ast::Stmt::Select(SelectStmt {
         stmt: Box::new(stmt),
         aggregates,
-        aggregate_scratches,
         consts: Consts::default(),
         locals: 0,
         node_meta: ast::NodeMetas::new(vec![]),

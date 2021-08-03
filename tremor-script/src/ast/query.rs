@@ -79,27 +79,7 @@ pub type Aggregates<'f> = Vec<InvokeAggrFn<'f>>;
 /// array of aggregate functions (as slice)
 pub type AggrSlice<'f> = [InvokeAggrFn<'f>];
 
-/// Scratch data for efficiently merging window states in a tilt-frame without additional allocations at runtime.
-/// This is basically what needs to be dragged through
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct AggregateScratch {
-    /// aggregate states
-    pub aggregates: Aggregates<'static>,
-    /// transactional state for the outgoing event from a window
-    pub transactional: bool,
-}
-
-impl AggregateScratch {
-    /// constructor
-    #[must_use]
-    pub fn new(aggregates: Aggregates<'static>) -> Self {
-        Self {
-            aggregates,
-            transactional: false,
-        }
-    }
-}
-
+///
 /// A Select statement
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct SelectStmt<'script> {
@@ -107,9 +87,6 @@ pub struct SelectStmt<'script> {
     pub stmt: Box<Select<'script>>,
     /// Aggregates
     pub aggregates: Aggregates<'static>,
-    /// scratches needed when executing multiple windows
-    /// only necessary if we have multiple windows, otherwise empty
-    pub aggregate_scratches: (AggregateScratch, AggregateScratch),
     /// Constants
     pub consts: Consts<'script>,
     /// Number of locals
@@ -292,8 +269,6 @@ impl_expr_mid!(WindowDecl);
 impl<'script> WindowDecl<'script> {
     /// `emit_empty_windows` setting
     pub const EMIT_EMPTY_WINDOWS: &'static str = "emit_empty_windows";
-    /// `eviction_period` setting
-    pub const EVICTION_PERIOD: &'static str = "eviction_period";
     /// `max_groups` setting
     pub const MAX_GROUPS: &'static str = "max_groups";
     /// `interval` setting

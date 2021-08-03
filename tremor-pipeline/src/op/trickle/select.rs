@@ -378,7 +378,8 @@ impl Operator for Select {
             consts.group = Value::const_null();
             consts.args = Value::const_null();
 
-            let ctx = EventContext::new(ingest_ns, None);
+            let mut ctx = EventContext::new(ingest_ns, None);
+            ctx.cardinality = groups.len();
 
             let mut to_remove = vec![];
             for (group_str, g) in groups.iter_mut() {
@@ -395,7 +396,7 @@ impl Operator for Select {
                     if window_event.emit {
                         // push
                         let mut env = env(&ctx, run, node_meta, recursion_limit);
-                        env.aggrs = dbg!(&w.aggrs);
+                        env.aggrs = &w.aggrs;
 
                         let mut outgoing_event_id = event_id_gen.next_id();
 
