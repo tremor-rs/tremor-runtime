@@ -24,6 +24,7 @@
 - replace macros with functions in gcp code
 - Add -q flag and clarify -v flag for unit tests
 - Add win::cardinality function
+- Backpressure now allows lossless (no discard) circuit breaker behaviour [#1119](https://github.com/tremor-rs/tremor-runtime/issues/1119)
 
 ### Fixes
 

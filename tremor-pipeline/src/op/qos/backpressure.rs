@@ -32,6 +32,20 @@ use tremor_script::prelude::*;
 
 const OVERFLOW: Cow<'static, str> = Cow::const_str("overflow");
 
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum Method {
+    /// messages are discarded
+    Discard,
+    /// a circuit breaker is triggerd
+    Circuitbreaker,
+}
+impl Default for Method {
+    fn default() -> Self {
+        Method::Discard
+    }
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
     /// The maximum allowed timeout before backoff is applied in ms
@@ -43,13 +57,13 @@ pub struct Config {
     #[serde(default = "d_steps")]
     pub steps: Vec<u64>,
 
-    /// If set to true will propagate circuit breaker events when the
-    /// backpressure is introduced.
+    /// Defines the behaviour of the backpressure operator.
     ///
-    /// This should be used with caution as it does, to a degree defeate the
-    /// purpose of escalating backpressure
+    /// - `discard`: messages are discared
+    /// - `circuitbreaker`: it acts as a circuit breaker but
+    ///    does let the messages pass
     #[serde(default)]
-    pub circuit_breaker: bool,
+    pub method: Method,
 }
 
 impl ConfigImpl for Config {}
@@ -122,12 +136,15 @@ impl Operator for Backpressure {
         // and thus do effective backpressure
         // if we don't and the events arent transactional themselves, we won't be notified, which would render this operator useless
         event.transactional = true;
-        if self.output.next <= event.ingest_ns {
+        let output = if self.output.next <= event.ingest_ns {
             self.output.next = event.ingest_ns + self.output.backoff;
-            Ok(vec![(self.output.output.clone(), event)].into())
+            self.output.output.clone()
+        } else if self.config.method == Method::Circuitbreaker {
+            self.output.output.clone()
         } else {
-            Ok(vec![(OVERFLOW, event)].into())
-        }
+            OVERFLOW
+        };
+        Ok(vec![(output, event)].into())
     }
 
     fn handles_contraflow(&self) -> bool {
@@ -147,7 +164,7 @@ impl Operator for Backpressure {
         let insights = if self.output.backoff > 0 && self.output.next <= signal.ingest_ns {
             self.output.backoff = 0;
             self.output.next = 0;
-            if self.config.circuit_breaker {
+            if self.config.method == Method::Circuitbreaker {
                 vec![Event::cb_restore(signal.ingest_ns)]
             } else {
                 vec![]
@@ -192,8 +209,10 @@ impl Operator for Backpressure {
             output.next = 0;
         }
 
-        if self.config.circuit_breaker && was_open && output.backoff > 0 {
+        if self.config.method == Method::Circuitbreaker && was_open && output.backoff > 0 {
             insight.cb = CbAction::Close;
+        } else if self.config.method == Method::Circuitbreaker && !was_open && output.backoff == 0 {
+            insight.cb = CbAction::Open;
         } else if insight.cb == CbAction::Close {
             insight.cb = CbAction::None;
         };
@@ -202,6 +221,8 @@ impl Operator for Backpressure {
 
 #[cfg(test)]
 mod test {
+    use crate::SignalKind;
+
     use super::*;
 
     #[test]
@@ -209,7 +230,7 @@ mod test {
         let mut op: Backpressure = Config {
             timeout: 100.0,
             steps: vec![1, 10, 100],
-            circuit_breaker: false,
+            method: Method::Discard,
         }
         .into();
 
@@ -253,7 +274,7 @@ mod test {
         let mut op: Backpressure = Config {
             timeout: 100.0,
             steps: vec![1, 10, 100],
-            circuit_breaker: false,
+            method: Method::Discard,
         }
         .into();
 
@@ -345,11 +366,109 @@ mod test {
     }
 
     #[test]
+    fn block_on_error_cb() -> Result<()> {
+        let mut op: Backpressure = Config {
+            timeout: 100.0,
+            steps: vec![1, 10, 100],
+            method: Method::Circuitbreaker,
+        }
+        .into();
+
+        let mut state = Value::null();
+
+        // Sent a first event, as all is initited clean
+        // we syould see this pass
+        let event1 = Event {
+            id: (1, 1, 1).into(),
+            ingest_ns: 1_000_000,
+            ..Event::default()
+        };
+        let mut r = op.on_event(0, "in", &mut state, event1)?.events;
+        assert_eq!(r.len(), 1);
+        let (out, event) = r.pop().expect("no results");
+        assert_eq!("out", out);
+        assert!(event.transactional);
+
+        // Insert a timeout event with `time` set top `200`
+        // this is over our limit of `100` so we syould move
+        // one up the backup steps
+        let mut m = Object::new();
+        m.insert("time".into(), 200.0.into());
+
+        let mut op_meta = OpMeta::default();
+        op_meta.insert(0, OwnedValue::null());
+        let mut insight = Event {
+            id: (1, 1, 1).into(),
+            ingest_ns: 1_000_000,
+            data: (Value::null(), m).into(),
+            op_meta,
+            ..Event::default()
+        };
+
+        // Verify that we now have a backoff of 1ms
+        op.on_contraflow(0, &mut insight);
+        assert_eq!(insight.cb, CbAction::Close);
+        assert_eq!(op.output.backoff, 1_000_000);
+
+        // The first event was sent at exactly 1ms
+        // our we should block all eventsup to
+        // 1_999_999
+        // this event syould overflow
+        let event2 = Event {
+            id: (1, 1, 2).into(),
+            ingest_ns: 2_000_000 - 1,
+            ..Event::default()
+        };
+        let mut r = op.on_event(0, "in", &mut state, event2)?.events;
+        assert_eq!(r.len(), 1);
+        let (out, _event) = r.pop().expect("no results");
+        // since we are in CB mode we will STILL pass an event even if we're closerd
+        // that way we can handle in flight events w/o loss
+        assert_eq!("out", out);
+
+        // On exactly 2_000_000 we should be allowed to send
+        // again
+        let event3 = Event {
+            id: (1, 1, 3).into(),
+            ingest_ns: 2_000_000,
+            ..Event::default()
+        };
+        let mut r = op.on_event(0, "in", &mut state, event3)?.events;
+        assert_eq!(r.len(), 1);
+        let (out, event) = r.pop().expect("no results");
+        assert_eq!("out", out);
+        assert!(event.transactional);
+
+        // Since now the last successful event was at 2_000_000
+        // the next event should overflow at 2_000_001
+        let event3 = Event {
+            id: (1, 1, 3).into(),
+            ingest_ns: 2_000_000 + 1,
+            ..Event::default()
+        };
+        let mut r = op.on_event(0, "in", &mut state, event3)?.events;
+        assert_eq!(r.len(), 1);
+        let (out, _event) = r.pop().expect("no results");
+        assert_eq!("out", out);
+        let mut signal = Event {
+            id: (1, 1, 3).into(),
+            ingest_ns: 3_000_000 + 1,
+            kind: Some(SignalKind::Tick),
+            ..Event::default()
+        };
+        let mut r = op.on_signal(0, &mut state, &mut signal)?;
+        let i = r.insights.pop().expect("No Insight received");
+        assert_eq!(i.cb, CbAction::Open);
+        assert_eq!(op.output.backoff, 0);
+        Ok(())
+    }
+
+    #[test]
     fn walk_backoff() {
         let mut op: Backpressure = Config {
             timeout: 100.0,
             steps: vec![1, 10, 100],
-            circuit_breaker: false,
+            method: Method::Discard,
         }
         .into();
         // An contraflow that fails the timeout
