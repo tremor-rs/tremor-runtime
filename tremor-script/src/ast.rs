@@ -49,7 +49,6 @@ pub use base_expr::BaseExpr;
 use beef::Cow;
 use halfbrown::HashMap;
 pub use query::*;
-use raw::reduce2;
 use serde::Serialize;
 
 use std::{
@@ -195,10 +194,14 @@ pub struct Warning {
 }
 
 impl Warning {
-    fn new(inner: Range, outer: Range, msg: String) -> Self {
-        Self { outer, inner, msg }
+    fn new<T: ToString>(inner: Range, outer: Range, msg: &T) -> Self {
+        Self {
+            outer,
+            inner,
+            msg: msg.to_string(),
+        }
     }
-    fn new_with_scope(warning_scope: Range, msg: String) -> Self {
+    fn new_with_scope<T: ToString>(warning_scope: Range, msg: &T) -> Self {
         Self::new(warning_scope, warning_scope, msg)
     }
 }
@@ -253,7 +256,7 @@ impl<'script> Bytes<'script> {
 
             for part in self.value {
                 let inner = part.extent(&helper.meta);
-                let value = reduce2(part.data.0, &helper)?;
+                let value = part.data.0.try_into_value(helper)?;
                 extend_bytes_from_value(
                     &outer,
                     &inner,
@@ -268,7 +271,7 @@ impl<'script> Bytes<'script> {
                 )?;
             }
             if used > 0 {
-                bytes.push(buf >> (8 - used))
+                bytes.push(buf >> (8 - used));
             }
             Ok(ImutExprInt::Literal(Literal {
                 mid: self.mid,
@@ -384,6 +387,7 @@ impl Default for Docs {
 }
 
 /// Constants and special keyword values
+#[derive(Clone, Copy, Debug)]
 pub struct RunConsts<'run, 'script>
 where
     'script: 'run,
@@ -536,7 +540,7 @@ where
             name: name.to_string(),
             doc,
             value_type,
-        })
+        });
     }
     pub(crate) fn add_meta(&mut self, start: Location, end: Location) -> usize {
         self.meta
@@ -627,7 +631,7 @@ where
         for (i, s) in self.shadowed_vars.iter().enumerate() {
             if s == id {
                 //TODO: make sure we never overwrite this,
-                r = Some(shadow_name(i))
+                r = Some(shadow_name(i));
             }
         }
         r
@@ -653,8 +657,11 @@ where
         })
     }
 
-    fn warn(&mut self, warning: Warning) {
-        self.warnings.insert(warning);
+    fn warn<S: ToString>(&mut self, inner: Range, outer: Range, msg: &S) {
+        self.warnings.insert(Warning::new(inner, outer, msg));
+    }
+    fn warn_with_scope<S: ToString>(&mut self, r: Range, msg: &S) {
+        self.warnings.insert(Warning::new_with_scope(r, msg));
     }
 }
 
@@ -681,6 +688,7 @@ pub struct Script<'script> {
 }
 
 impl<'script> Script<'script> {
+    const NOT_IMUT: &'static str = "Not an imutable expression";
     /// Runs the script and evaluates to a resulting event.
     /// This expects the script to be imutable!
     ///
@@ -721,12 +729,7 @@ impl<'script> Script<'script> {
                 })
             } else {
                 let e = expr.extent(&self.node_meta);
-                error_generic(
-                    &e.expand_lines(2),
-                    expr,
-                    &"Not an imutable expression",
-                    &self.node_meta,
-                )
+                error_generic(&e.expand_lines(2), expr, &Self::NOT_IMUT, &self.node_meta)
             }
         })
     }
@@ -787,8 +790,10 @@ impl<'script> Script<'script> {
             }
         }
 
-        // We never reach here but rust can't figure that out
-        Ok(Return::Drop)
+        // We never reach here but rust can't figure that out, if this ever happens
+        // we got a serious logic error and want to fail hard to alert us.
+        // ALLOW: see above
+        unreachable!()
     }
 }
 
@@ -840,7 +845,7 @@ pub struct Field<'script> {
 }
 impl_expr_mid!(Field);
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Default)]
 /// Encapsulation of a record structure
 pub struct Record<'script> {
     /// Id
@@ -862,7 +867,7 @@ impl<'script> Record<'script> {
             .into_iter()
             .map(|f| {
                 let n = f.name.try_into_cow()?;
-                reduce2(f.value, &helper).map(|v| (n, v))
+                f.value.try_into_value(helper).map(|v| (n, v))
             })
             .collect();
         let base = base?;
@@ -893,10 +898,10 @@ impl<'script> Record<'script> {
     /// Tries to fetch a literal from a record
     #[must_use]
     pub fn get_literal(&self, name: &str) -> Option<&Value> {
-        if let ImutExprInt::Literal(Literal { value, .. }) = self.get_field_expr(name)? {
+        if let Some(ImutExprInt::Literal(Literal { value, .. })) = self.get_field_expr(name) {
             Some(value)
         } else {
-            None
+            self.base.get(name)
         }
     }
 }
@@ -917,7 +922,7 @@ impl<'script> List<'script> {
             let elements: Result<Vec<Value>> = self
                 .exprs
                 .into_iter()
-                .map(|v| reduce2(v.0, &helper))
+                .map(|v| v.0.try_into_value(helper))
                 .collect();
             Ok(ImutExprInt::Literal(Literal {
                 mid: self.mid,
@@ -994,6 +999,22 @@ pub enum Expr<'script> {
     Imut(ImutExprInt<'script>),
 }
 
+impl<'script> Expr<'script> {
+    /// Tries to borrow the Expor as an `Invoke`
+    #[must_use]
+    pub fn as_invoke(&self) -> Option<&Invoke<'script>> {
+        match self {
+            Expr::Imut(
+                ImutExprInt::Invoke(i)
+                | ImutExprInt::Invoke1(i)
+                | ImutExprInt::Invoke2(i)
+                | ImutExprInt::Invoke3(i),
+            ) => Some(i),
+            _ => None,
+        }
+    }
+}
+
 impl<'script> Expression for Expr<'script> {
     fn replace_last_shadow_use(&mut self, replace_idx: usize) {
         match self {
@@ -1038,10 +1059,22 @@ impl<'script> From<ImutExprInt<'script>> for Expr<'script> {
 /// An immutable expression
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ImutExpr<'script>(pub ImutExprInt<'script>);
+
+impl<'script> ImutExpr<'script> {
+    /// Tries to borrow the `ImutExpr` as a `Record`
+    #[must_use]
+    pub fn as_record(&self) -> Option<&Record<'script>> {
+        if let ImutExpr(ImutExprInt::Record(r)) = self {
+            Some(r)
+        } else {
+            None
+        }
+    }
+}
 #[cfg(not(tarpaulin_include))] // this is a simple passthrough
 impl<'script> Expression for ImutExpr<'script> {
     fn replace_last_shadow_use(&mut self, replace_idx: usize) {
-        self.0.replace_last_shadow_use(replace_idx)
+        self.0.replace_last_shadow_use(replace_idx);
     }
     fn is_null_lit(&self) -> bool {
         self.0.is_null_lit()
@@ -1134,6 +1167,23 @@ pub enum ImutExprInt<'script> {
 }
 
 impl<'script> ImutExprInt<'script> {
+    pub(crate) fn try_into_value(self, helper: &Helper<'script, '_>) -> Result<Value<'script>> {
+        if let ImutExprInt::Literal(Literal { value: v, .. }) = self {
+            Ok(v)
+        } else {
+            let e = self.extent(&helper.meta);
+            Err(ErrorKind::NotConstant(e, e.expand_lines(2)).into())
+        }
+    }
+    /// Tries to borrow the expression as a list
+    #[must_use]
+    pub fn as_list(&self) -> Option<&List<'script>> {
+        if let ImutExprInt::List(l) = self {
+            Some(l)
+        } else {
+            None
+        }
+    }
     pub(crate) fn try_reduce(self, helper: &Helper<'script, '_>) -> Result<Self> {
         match self {
             ImutExprInt::Unary(u) => u.try_reduce(helper),
@@ -1195,7 +1245,7 @@ impl<'script> StringLit<'script> {
 
     pub(crate) fn as_str(&self) -> Option<&str> {
         if let [StrLitElement::Lit(l)] = self.elements.as_slice() {
-            Some(&l)
+            Some(l)
         } else {
             None
         }
@@ -1337,7 +1387,7 @@ impl<'script> Invoke<'script> {
             let args: Result<Vec<Value<'script>>> = self
                 .args
                 .into_iter()
-                .map(|v| reduce2(v.0, &helper))
+                .map(|v| v.0.try_into_value(helper))
                 .collect();
             let args = args?;
             // Construct a view into `args`, since `invoke` expects a slice of references.
@@ -1353,7 +1403,7 @@ impl<'script> Invoke<'script> {
             let v = self
                 .invocable
                 .invoke(&env, &args2)
-                .map_err(|e| e.into_err(&ex, &ex, Some(&helper.reg), &helper.meta))?
+                .map_err(|e| e.into_err(&ex, &ex, Some(helper.reg), &helper.meta))?
                 .into_static();
             Ok(ImutExprInt::Literal(Literal {
                 value: v,
@@ -1575,6 +1625,13 @@ impl<'script, Ex: Expression + 'script> ClauseGroup<'script, Ex> {
     const MAX_OPT_RUNS: u64 = 128;
     const MIN_BTREE_SIZE: usize = 16;
 
+    pub(crate) fn simple(p: PredicateClause<'script, Ex>) -> Self {
+        ClauseGroup::Simple {
+            precondition: None,
+            patterns: vec![p],
+        }
+    }
+
     fn combinable(&self, other: &Self) -> bool {
         self.precondition().ast_eq(&other.precondition()) && self.precondition().is_some()
     }
@@ -1582,11 +1639,11 @@ impl<'script, Ex: Expression + 'script> ClauseGroup<'script, Ex> {
     fn combine(&mut self, other: Self) {
         match (self, other) {
             (Self::Combined { groups, .. }, Self::Combined { groups: mut o, .. }) => {
-                groups.append(&mut o)
+                groups.append(&mut o);
             }
             (Self::Combined { groups, .. }, mut other) => {
                 other.clear_precondition();
-                groups.push(other)
+                groups.push(other);
             }
             (this, other) => {
                 // Swap out precondition
@@ -1606,7 +1663,7 @@ impl<'script, Ex: Expression + 'script> ClauseGroup<'script, Ex> {
         }
     }
     fn clear_precondition(&mut self) {
-        *(self.precondition_mut()) = None
+        *(self.precondition_mut()) = None;
     }
 
     pub(crate) fn precondition(&self) -> Option<&ClausePreCondition<'script>> {
@@ -1631,20 +1688,20 @@ impl<'script, Ex: Expression + 'script> ClauseGroup<'script, Ex> {
         match self {
             Self::Simple { patterns, .. } => {
                 for PredicateClause { last_expr, .. } in patterns {
-                    last_expr.replace_last_shadow_use(replace_idx)
+                    last_expr.replace_last_shadow_use(replace_idx);
                 }
             }
             Self::SearchTree { tree, rest, .. } => {
                 for p in tree.values_mut() {
-                    p.1.replace_last_shadow_use(replace_idx)
+                    p.1.replace_last_shadow_use(replace_idx);
                 }
                 for PredicateClause { last_expr, .. } in rest {
-                    last_expr.replace_last_shadow_use(replace_idx)
+                    last_expr.replace_last_shadow_use(replace_idx);
                 }
             }
             Self::Combined { groups, .. } => {
                 for cg in groups {
-                    cg.replace_last_shadow_use(replace_idx)
+                    cg.replace_last_shadow_use(replace_idx);
                 }
             }
             Self::Single {
@@ -1656,7 +1713,7 @@ impl<'script, Ex: Expression + 'script> ClauseGroup<'script, Ex> {
 
     // allow this otherwise clippy complains after telling us to use matches
     #[allow(
-        clippy::blocks_in_if_conditions,
+        // clippy::blocks_in_if_conditions,
         clippy::too_many_lines,
         // we allow this because of the borrow checker
         clippy::option_if_let_else
@@ -1752,7 +1809,7 @@ impl<'script, Ex: Expression + 'script> ClauseGroup<'script, Ex> {
                         };
 
                         if let Some(p) = p {
-                            pattern.pattern = p
+                            pattern.pattern = p;
                         }
                     }
                 }
@@ -2199,7 +2256,7 @@ impl<'script> PredicatePattern<'script> {
             | RecordPatternEq { key, .. }
             | ArrayPatternEq { key, .. }
             | FieldPresent { key, .. }
-            | FieldAbsent { key, .. } => &key,
+            | FieldAbsent { key, .. } => key,
         }
     }
 
@@ -2213,7 +2270,7 @@ impl<'script> PredicatePattern<'script> {
             | RecordPatternEq { lhs, .. }
             | ArrayPatternEq { lhs, .. }
             | FieldPresent { lhs, .. }
-            | FieldAbsent { lhs, .. } => &lhs,
+            | FieldAbsent { lhs, .. } => lhs,
         }
     }
 }
@@ -2569,8 +2626,9 @@ impl<'script> BinExpr<'script> {
     fn try_reduce(self, helper: &Helper<'script, '_>) -> Result<ImutExprInt<'script>> {
         match &self {
             BinExpr { lhs, rhs, .. } if lhs.is_lit() && rhs.is_lit() => {
-                let l = reduce2(lhs.clone(), helper)?;
-                let r = reduce2(rhs.clone(), helper)?;
+                // We need to clone here and use &self in the match so we can `exec_binary` later
+                let l = lhs.clone().try_into_value(helper)?;
+                let r = rhs.clone().try_into_value(helper)?;
                 let value =
                     exec_binary(&self, &self, &helper.meta, self.kind, &l, &r)?.into_owned();
                 let lit = Literal {
@@ -2611,21 +2669,21 @@ impl_expr_mid!(UnaryExpr);
 
 impl<'script> UnaryExpr<'script> {
     fn try_reduce(self, helper: &Helper<'script, '_>) -> Result<ImutExprInt<'script>> {
-        match &self {
+        let ex = self.extent(&helper.meta);
+        match self {
             UnaryExpr {
                 expr, mid, kind, ..
             } if expr.is_lit() => {
-                let expr = reduce2(expr.clone(), &helper)?;
-                let value = if let Some(v) = exec_unary(*kind, &expr) {
+                let expr = expr.try_into_value(helper)?;
+                let value = if let Some(v) = exec_unary(kind, &expr) {
                     v.into_owned()
                 } else {
-                    let ex = self.extent(&helper.meta);
                     let outer = ex.expand_lines(2);
-                    let e = ErrorKind::InvalidUnary(outer, ex, *kind, expr.value_type());
+                    let e = ErrorKind::InvalidUnary(outer, ex, kind, expr.value_type());
                     return Err(e.into());
                 };
 
-                let lit = Literal { mid: *mid, value };
+                let lit = Literal { mid, value };
                 Ok(ImutExprInt::Literal(lit))
             }
             _ => Ok(ImutExprInt::Unary(Box::new(self))),
@@ -2635,8 +2693,13 @@ impl<'script> UnaryExpr<'script> {
 
 #[cfg(test)]
 mod test {
-    use super::{ConstDoc, FnDoc, ModDoc};
-    use crate::prelude::*;
+
+    use super::{ConstDoc, FnDoc, ImutExpr, ModDoc};
+    use crate::{
+        ast::{Expr, ImutExprInt, Invocable, Invoke, Record},
+        prelude::*,
+        CustomFn,
+    };
 
     fn v(s: &'static str) -> super::ImutExprInt<'static> {
         super::ImutExprInt::Literal(super::Literal {
@@ -2724,5 +2787,41 @@ hello
             Some("snot")
         );
         assert_eq!(r.get_field_expr("adgerb"), None);
+    }
+
+    #[test]
+    fn as_record() {
+        let i = ImutExpr(v("snot"));
+        assert!(i.as_record().is_none());
+        let i = ImutExpr(ImutExprInt::Record(Record::default()));
+        assert!(i.as_record().is_some());
+    }
+    #[test]
+    fn as_invoke() {
+        let invocable = Invocable::Tremor(CustomFn {
+            name: "f".into(),
+            body: Vec::new(),
+            args: Vec::new(),
+            open: false,
+            locals: 0,
+            is_const: false,
+            inline: false,
+        });
+        let i = Invoke {
+            mid: 0,
+            module: Vec::new(),
+            fun: "fun".to_string(),
+            invocable,
+            args: Vec::new(),
+        };
+        assert!(Expr::Imut(v("snut")).as_invoke().is_none());
+        let e = ImutExprInt::Invoke(i.clone());
+        assert!(Expr::Imut(e).as_invoke().is_some());
+        let e = ImutExprInt::Invoke1(i.clone());
+        assert!(Expr::Imut(e).as_invoke().is_some());
+        let e = ImutExprInt::Invoke2(i.clone());
+        assert!(Expr::Imut(e).as_invoke().is_some());
+        let e = ImutExprInt::Invoke3(i.clone());
+        assert!(Expr::Imut(e).as_invoke().is_some());
     }
 }

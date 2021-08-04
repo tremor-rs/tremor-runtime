@@ -49,7 +49,6 @@ pub mod highlighter;
 pub mod interpreter;
 /// The Tremor Script Lexer
 pub mod lexer;
-#[allow(unused)]
 pub(crate) mod parser;
 /// Support for module paths
 pub mod path;
@@ -108,7 +107,7 @@ lazy_static! {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::errors::*;
+    use crate::errors::Result;
     use crate::interpreter::AggrType;
     use crate::lexer::TokenSpan;
     use crate::path::ModulePath;
@@ -244,11 +243,11 @@ mod tests {
         eval!("\"hello\";\"world\";", Value::from("world"));
         eval!(
             "true;\"hello\";[1,2,3,4,5];",
-            Value::from(vec![1u64, 2, 3, 4, 5])
+            Value::from(vec![1_u64, 2, 3, 4, 5])
         );
         eval!(
             "true;\"hello\";[1,2,3,4,5,];",
-            Value::from(vec![1u64, 2, 3, 4, 5])
+            Value::from(vec![1_u64, 2, 3, 4, 5])
         );
     }
 
@@ -260,12 +259,12 @@ mod tests {
         eval!("\"hello\"; let test = \"world\";", Value::from("world"));
         eval!(
             "\"hello\"; let test = [2,4,6,8];",
-            Value::from(vec![2u64, 4, 6, 8])
+            Value::from(vec![2_u64, 4, 6, 8])
         );
         eval!("\"hello\"; let $test = \"world\";", Value::from("world"));
         eval!(
             "\"hello\"; let $test = [2,4,6,8];",
-            Value::from(vec![2u64, 4, 6, 8])
+            Value::from(vec![2_u64, 4, 6, 8])
         );
     }
 
@@ -336,13 +335,13 @@ mod tests {
         eval_global!(
             "\"hello\"; let test = [2,4,6,8]; let $out = test;",
             Value::from(hashmap! {
-                "out".into() => Value::from(vec![2u64, 4, 6, 8]),
+                "out".into() => Value::from(vec![2_u64, 4, 6, 8]),
             })
         );
         eval_global!(
             "\"hello\"; let test = [4,6,8,10]; let test = [test]; let $out = test;",
             Value::from(hashmap! {
-                "out".into() => Value::from(vec![vec![4u64, 6, 8, 10]]),
+                "out".into() => Value::from(vec![vec![4_u64, 6, 8, 10]]),
             })
         );
     }
@@ -352,13 +351,13 @@ mod tests {
         eval_global!(
             "\"hello\"; let $test = [2,4,6,8];",
             Value::from(hashmap! {
-                "test".into() => Value::from(vec![2u64, 4, 6, 8]),
+                "test".into() => Value::from(vec![2_u64, 4, 6, 8]),
             })
         );
         eval_global!(
             "\"hello\"; let test = [2,4,6,8]; let $test = [test];",
             Value::from(hashmap! {
-                "test".into() => Value::from(vec![vec![2u64, 4, 6, 8]]),
+                "test".into() => Value::from(vec![vec![2_u64, 4, 6, 8]]),
             })
         );
     }
@@ -368,13 +367,13 @@ mod tests {
         eval_event!(
             "\"hello\"; let event.test = [2,4,6,8];",
             Value::from(hashmap! {
-                "test".into() => Value::from(vec![2u64, 4, 6, 8]),
+                "test".into() => Value::from(vec![2_u64, 4, 6, 8]),
             })
         );
         eval_event!(
             "\"hello\"; let $test = [2,4,6,8]; let event.test = [$test];",
             Value::from(hashmap! {
-                "test".into() => Value::from(vec![vec![2u64, 4, 6, 8]]),
+                "test".into() => Value::from(vec![vec![2_u64, 4, 6, 8]]),
             })
         );
     }

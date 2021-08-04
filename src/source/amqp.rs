@@ -31,7 +31,6 @@ use url::Url;
     NoWait 8
 }*/
 #[derive(Deserialize, Debug, Clone)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct Config {
     pub amqp_addr: String,
     queue_name: String,
@@ -221,12 +220,12 @@ impl Source for Int {
     // should be used.
     fn fail(&mut self, id: u64) {
         if self.with_ack {
-            error!("[amqp] fail not implemented, msgid: {}", id)
+            error!("[amqp] fail not implemented, msgid: {}", id);
         }
     }
     fn ack(&mut self, id: u64) {
         if self.with_ack {
-            error!("[amqp] ack not implemented, msgid: {}", id)
+            error!("[amqp] ack not implemented, msgid: {}", id);
         }
     }
 }

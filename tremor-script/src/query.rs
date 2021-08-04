@@ -168,7 +168,7 @@ where
     #[must_use]
     pub fn format_error(&self, e: &Error) -> String {
         let mut h = DumbHighlighter::default();
-        if self.format_error_with(&mut h, &e).is_ok() {
+        if self.format_error_with(&mut h, e).is_ok() {
             h.to_string()
         } else {
             format!("Failed to extract code for error: {}", e)

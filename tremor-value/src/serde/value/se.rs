@@ -35,7 +35,7 @@ impl<'value> Serialize for Value<'value> {
             Value::Static(StaticNode::I64(i)) => serializer.serialize_i64(*i),
             #[cfg(feature = "128bit")]
             Value::Static(StaticNode::I128(i)) => serializer.serialize_i128(*i),
-            Value::String(s) => serializer.serialize_str(&s),
+            Value::String(s) => serializer.serialize_str(s),
             Value::Array(v) => {
                 let mut seq = serializer.serialize_seq(Some(v.len()))?;
                 for e in v {
@@ -46,12 +46,12 @@ impl<'value> Serialize for Value<'value> {
             Value::Object(m) => {
                 let mut map = serializer.serialize_map(Some(m.len()))?;
                 for (k, v) in m.iter() {
-                    let k: &str = &k;
+                    let k: &str = k;
                     map.serialize_entry(k, v)?;
                 }
                 map.end()
             }
-            Value::Bytes(b) => serializer.serialize_bytes(&b),
+            Value::Bytes(b) => serializer.serialize_bytes(b),
         }
     }
 }
@@ -685,14 +685,11 @@ mod tests {
         };
         let value = to_value(x)?;
         let inner = value
-            .get("Struct".into())
+            .get("Struct")
             .ok_or("Struct not serialized with its name at teh toplevel")?;
-        let snot = inner.get("snot".into());
+        let snot = inner.get("snot");
         assert_eq!(Some(&Value::Static(StaticNode::U64(0))), snot);
-        assert_eq!(
-            Some(&Value::String("snot".into())),
-            inner.get("badger".into())
-        );
+        assert_eq!(Some(&Value::String("snot".into())), inner.get("badger"));
 
         let not_a_struct = Snot::NotAStruct;
         let nas_value = to_value(not_a_struct)?;
@@ -701,7 +698,7 @@ mod tests {
         let tuple = Snot::TupleStruct(vec![1, 2, 3], 3);
         let t_value = to_value(tuple)?;
         if let Value::Object(map) = t_value {
-            if let Some(&Value::Array(values)) = map.get("TupleStruct".into()).as_ref() {
+            if let Some(&Value::Array(values)) = map.get("TupleStruct").as_ref() {
                 let first_field = values
                     .first()
                     .and_then(ValueAccessTrait::as_array)
@@ -750,18 +747,21 @@ mod tests {
         assert_to_value!(Value::Static(StaticNode::I64(32767)), i16::max_value());
         assert_to_value!(Value::Static(StaticNode::I64(-32768)), i16::min_value());
         assert_to_value!(Value::Static(StaticNode::I64(1)), 1_i32);
-        assert_to_value!(Value::Static(StaticNode::I64(2147483647)), i32::max_value());
         assert_to_value!(
-            Value::Static(StaticNode::I64(-2147483648)),
+            Value::Static(StaticNode::I64(2_147_483_647)),
+            i32::max_value()
+        );
+        assert_to_value!(
+            Value::Static(StaticNode::I64(-2_147_483_648)),
             i32::min_value()
         );
         assert_to_value!(Value::Static(StaticNode::I64(1)), 1_i64);
         assert_to_value!(
-            Value::Static(StaticNode::I64(9223372036854775807)),
+            Value::Static(StaticNode::I64(9_223_372_036_854_775_807)),
             i64::max_value()
         );
         assert_to_value!(
-            Value::Static(StaticNode::I64(-9223372036854775808)),
+            Value::Static(StaticNode::I64(-9_223_372_036_854_775_808)),
             i64::min_value()
         );
 
@@ -775,12 +775,15 @@ mod tests {
         assert_to_value!(Value::Static(StaticNode::U64(0)), u16::min_value());
 
         assert_to_value!(Value::Static(StaticNode::U64(1)), 1_u32);
-        assert_to_value!(Value::Static(StaticNode::U64(4294967295)), u32::max_value());
+        assert_to_value!(
+            Value::Static(StaticNode::U64(4_294_967_295)),
+            u32::max_value()
+        );
         assert_to_value!(Value::Static(StaticNode::U64(0)), u32::min_value());
 
         assert_to_value!(Value::Static(StaticNode::U64(1)), 1_u64);
         assert_to_value!(
-            Value::Static(StaticNode::U64(18446744073709551615)),
+            Value::Static(StaticNode::U64(18_446_744_073_709_551_615)),
             u64::max_value()
         );
         assert_to_value!(Value::Static(StaticNode::U64(0)), u64::min_value());

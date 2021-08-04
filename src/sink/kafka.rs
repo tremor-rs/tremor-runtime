@@ -157,7 +157,7 @@ async fn wait_for_delivery(
                         error!(
                             "[Sink::{}] Error notifying the system about kafka error: {}",
                             &sink_url, &err_msg
-                        )
+                        );
                     }
                 }
                 CbAction::Fail

@@ -25,7 +25,6 @@
 use crate::connectors::gcp::{auth, storage};
 use crate::connectors::qos::{self, QoSFacilities, SinkQoS};
 use crate::sink::prelude::*;
-use futures::executor::block_on;
 use halfbrown::HashMap;
 use http::HeaderMap;
 use reqwest::Client;
@@ -33,8 +32,6 @@ use tremor_pipeline::{EventIdGenerator, OpMeta};
 use tremor_value::Value;
 
 pub struct GoogleCloudStorage {
-    #[allow(dead_code)]
-    config: Config,
     remote: Option<Client>,
     is_down: bool,
     qos_facility: Box<dyn SinkQoS>,
@@ -45,9 +42,6 @@ pub struct GoogleCloudStorage {
     sink_url: TremorUrl,
     event_id_gen: EventIdGenerator,
 }
-
-#[derive(Deserialize)]
-pub struct Config {}
 
 enum StorageCommand {
     Create(String, String),
@@ -81,76 +75,61 @@ impl std::fmt::Display for StorageCommand {
     }
 }
 
-impl ConfigImpl for Config {}
-
 impl offramp::Impl for GoogleCloudStorage {
-    fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
-        if let Some(config) = config {
-            let config: Config = Config::new(config)?;
-            let headers = HeaderMap::new();
-            let remote = Some(block_on(auth::json_api_client(&headers))?);
-            let hostport = "storage.googleapis.com:443";
-            Ok(SinkManager::new_box(Self {
-                config,
-                remote,
-                is_down: false,
-                qos_facility: Box::new(QoSFacilities::recoverable(hostport.to_string())),
-                reply_channel: None,
-                is_linked: false,
-                preprocessors: vec![],
-                postprocessors: vec![],
-                sink_url: TremorUrl::from_offramp_id("gcs")?,
-                event_id_gen: EventIdGenerator::new(0), // Fake ID overwritten in init
-            }))
-        } else {
-            Err("Offramp Google Cloud Storage requires a config".into())
-        }
+    fn from_config(_config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
+        let headers = HeaderMap::new();
+        let remote = Some(auth::json_api_client(&headers)?);
+        let hostport = "storage.googleapis.com:443";
+        Ok(SinkManager::new_box(Self {
+            remote,
+            is_down: false,
+            qos_facility: Box::new(QoSFacilities::recoverable(hostport.to_string())),
+            reply_channel: None,
+            is_linked: false,
+            preprocessors: vec![],
+            postprocessors: vec![],
+            sink_url: TremorUrl::from_offramp_id("gcs")?,
+            event_id_gen: EventIdGenerator::new(0), // Fake ID overwritten in init
+        }))
     }
 }
 
-macro_rules! parse_arg {
-    ($field_name: expr, $o: expr) => {
-        if let Some(Value::String(snot)) = $o.get($field_name) {
-            snot.to_string()
-        } else {
-            return Err(format!("Invalid Command, expected `{}` field", $field_name).into());
-        }
-    };
+fn parse_arg(field_name: &'static str, o: &Value) -> std::result::Result<String, String> {
+    o.get_str(field_name)
+        .map(ToString::to_string)
+        .ok_or_else(|| format!("Invalid Command, expected `{}` field", field_name))
 }
 
 fn parse_command(value: &Value) -> Result<StorageCommand> {
-    if let Value::Object(o) = value {
-        let cmd_name: &str = &parse_arg!("command", o);
+    let cmd_name: &str = value
+        .get_str("command")
+        .ok_or("Invalid Command, expected `command` field")?;
 
-        let command = match cmd_name {
-            "fetch" => StorageCommand::Fetch(parse_arg!("bucket", o), parse_arg!("object", o)),
-            "list_buckets" => StorageCommand::ListBuckets(parse_arg!("project_id", o)),
-            "list_objects" => StorageCommand::ListObjects(parse_arg!("bucket", o)),
-            "upload_object" => StorageCommand::Add(
-                parse_arg!("bucket", o),
-                parse_arg!("object", o),
-                if let Some(body) = o.get("body") {
-                    body.clone().into_static()
-                } else {
-                    return Err("Invalid Command, expected `body` field".into());
-                },
-            ),
-            "remove_object" => {
-                StorageCommand::RemoveObject(parse_arg!("bucket", o), parse_arg!("object", o))
-            }
-            "create_bucket" => {
-                StorageCommand::Create(parse_arg!("project_id", o), parse_arg!("bucket", o))
-            }
-            "remove_bucket" => StorageCommand::RemoveBucket(parse_arg!("bucket", o)),
-            "download_object" => {
-                StorageCommand::Download(parse_arg!("bucket", o), parse_arg!("object", o))
-            }
-            _ => StorageCommand::Unknown,
-        };
-        return Ok(command);
-    }
-
-    Err("Invalid Command".into())
+    let command = match cmd_name {
+        "fetch" => StorageCommand::Fetch(parse_arg("bucket", value)?, parse_arg("object", value)?),
+        "list_buckets" => StorageCommand::ListBuckets(parse_arg("project_id", value)?),
+        "list_objects" => StorageCommand::ListObjects(parse_arg("bucket", value)?),
+        "upload_object" => StorageCommand::Add(
+            parse_arg("bucket", value)?,
+            parse_arg("object", value)?,
+            value
+                .get("body")
+                .map(Value::clone_static)
+                .ok_or("Invalid Command, expected `body` field")?,
+        ),
+        "remove_object" => {
+            StorageCommand::RemoveObject(parse_arg("bucket", value)?, parse_arg("object", value)?)
+        }
+        "create_bucket" => {
+            StorageCommand::Create(parse_arg("project_id", value)?, parse_arg("bucket", value)?)
+        }
+        "remove_bucket" => StorageCommand::RemoveBucket(parse_arg("bucket", value)?),
+        "download_object" => {
+            StorageCommand::Download(parse_arg("bucket", value)?, parse_arg("object", value)?)
+        }
+        _ => StorageCommand::Unknown,
+    };
+    Ok(command)
 }
 
 #[async_trait::async_trait]
@@ -168,7 +147,7 @@ impl Sink for GoogleCloudStorage {
         let remote = if let Some(remote) = &self.remote {
             remote
         } else {
-            self.remote = Some(auth::json_api_client(&HeaderMap::new()).await?);
+            self.remote = Some(auth::json_api_client(&HeaderMap::new())?);
             let remote = self.remote.as_ref().ok_or("Client error!")?;
             remote
             // TODO - Qos checks
@@ -182,26 +161,26 @@ impl Sink for GoogleCloudStorage {
                 StorageCommand::Fetch(bucket_name, object_name) => {
                     response.push(make_command_response(
                         "fetch",
-                        storage::get_object(&remote, &bucket_name, &object_name).await?,
+                        storage::get_object(remote, &bucket_name, &object_name).await?,
                     ));
                 }
                 StorageCommand::ListBuckets(project_id) => {
                     response.push(make_command_response(
                         "list_buckets",
-                        storage::list_buckets(&remote, &project_id).await?,
+                        storage::list_buckets(remote, &project_id).await?,
                     ));
                 }
                 StorageCommand::ListObjects(bucket_name) => {
                     response.push(make_command_response(
                         "list_objects",
-                        storage::list_objects(&remote, &bucket_name).await?,
+                        storage::list_objects(remote, &bucket_name).await?,
                     ));
                 }
                 StorageCommand::Add(bucket_name, object, body) => {
                     response.push(make_command_response(
                         "upload_object",
                         upload_object(
-                            &remote,
+                            remote,
                             &bucket_name,
                             &object,
                             &body,
@@ -215,26 +194,26 @@ impl Sink for GoogleCloudStorage {
                 StorageCommand::RemoveObject(bucket_name, object) => {
                     response.push(make_command_response(
                         "remove_object",
-                        storage::delete_object(&remote, &bucket_name, &object).await?,
+                        storage::delete_object(remote, &bucket_name, &object).await?,
                     ));
                 }
                 StorageCommand::Create(project_id, bucket_name) => {
                     response.push(make_command_response(
                         "create_bucket",
-                        storage::create_bucket(&remote, &project_id, &bucket_name).await?,
+                        storage::create_bucket(remote, &project_id, &bucket_name).await?,
                     ));
                 }
                 StorageCommand::RemoveBucket(bucket_name) => {
                     response.push(make_command_response(
                         "remove_bucket",
-                        storage::delete_bucket(&remote, &bucket_name).await?,
+                        storage::delete_bucket(remote, &bucket_name).await?,
                     ));
                 }
                 StorageCommand::Download(bucket_name, object_name) => {
                     response.push(make_command_response(
                         "download_object",
                         download_object(
-                            &remote,
+                            remote,
                             &bucket_name,
                             &object_name,
                             &self.sink_url,
@@ -317,15 +296,12 @@ impl Sink for GoogleCloudStorage {
         Ok(())
     }
 
-    async fn on_signal(&mut self, signal: Event) -> ResultVec {
+    async fn on_signal(&mut self, mut signal: Event) -> ResultVec {
         if self.is_down && self.qos_facility.probe(signal.ingest_ns) {
             self.is_down = false;
             // This means the port is connectable
             info!("Google Cloud Storage -  sink remote endpoint - recovered and contactable");
             self.is_down = false;
-            // Clone needed to make it mutable, lint is wrong
-            #[allow(clippy::redundant_clone)]
-            let mut signal = signal.clone();
             return Ok(Some(vec![qos::open(&mut signal)]));
         }
 

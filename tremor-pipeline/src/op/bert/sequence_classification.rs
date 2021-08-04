@@ -100,7 +100,6 @@ op!(SequenceClassificationFactory(_uid, node) {
     }
 });
 
-#[allow(unused_mut)]
 impl Operator for SequenceClassification {
     fn handles_contraflow(&self) -> bool {
         false

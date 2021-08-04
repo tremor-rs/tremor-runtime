@@ -19,11 +19,7 @@ use value_trait::prelude::*;
 
 macro_rules! cant_error {
     ($e:expr) => {
-        if $e.is_err() {
-            // ALLOW: this errors can never happen
-            // unreachable!()
-            ()
-        }
+        if $e.is_err() {}
     };
 }
 
@@ -44,7 +40,7 @@ where
     };
     let mut total_idx = 0;
 
-    let (measurement, idx1) = parse_to(total_idx, &data, |c| c == ',' || c == ' ')?;
+    let (measurement, idx1) = parse_to(total_idx, data, |c| c == ',' || c == ' ')?;
     total_idx += idx1;
     data = get_rest(data, idx1)?;
     let (tags, idx2) = if let Some(rest) = data.strip_prefix(',') {
@@ -329,7 +325,7 @@ where
                 }
                 offset += 2;
             } else {
-                res.push_str(&data);
+                res.push_str(data);
                 return Ok((res.into(), offset));
             }
         } else {

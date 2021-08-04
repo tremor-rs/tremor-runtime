@@ -415,7 +415,7 @@ where
         };
         if let Some((last, pipelines)) = pipelines.split_last_mut() {
             if let Some(t) = self.metrics_reporter.periodic_flush(ingest_ns) {
-                self.metrics_reporter.send(self.source.metrics(t))
+                self.metrics_reporter.send(self.source.metrics(t));
             }
 
             // TODO refactor metrics_reporter to do this by port now
@@ -480,7 +480,7 @@ where
         // N is the maximum number of counterflow events a single event can trigger.
         // N is normally < 1.
         let (tx, rx) = unbounded();
-        let codec = codec::lookup(&config.codec)?;
+        let codec = codec::lookup(config.codec)?;
         let mut resolved_codec_map = codec::builtin_codec_map();
         // override the builtin map
         for (k, v) in config.codec_map {
@@ -488,7 +488,7 @@ where
         }
         let pp_template = config.processors.pre.to_vec();
         let mut preprocessors = BTreeMap::new();
-        preprocessors.insert(0, make_preprocessors(&&pp_template)?);
+        preprocessors.insert(0, make_preprocessors(&pp_template)?);
 
         source.init().await?;
         let is_transactional = source.is_transactional();
@@ -543,7 +543,6 @@ where
         error
     }
 
-    #[allow(clippy::too_many_lines)]
     async fn run(mut self) -> Result<()> {
         loop {
             if self.handle_pipelines().await? {
@@ -637,7 +636,7 @@ where
                     Ok(SourceReply::StateChange(SourceState::Disconnected)) => return Ok(()),
                     Ok(SourceReply::StateChange(SourceState::Connected)) => (),
                     Ok(SourceReply::Empty(sleep_ms)) => {
-                        task::sleep(Duration::from_millis(sleep_ms)).await
+                        task::sleep(Duration::from_millis(sleep_ms)).await;
                     }
                     Err(e) => {
                         warn!("[Source::{}] Error: {}", self.source_id, e);
@@ -651,6 +650,7 @@ where
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
 
     #[derive(Debug)]
@@ -727,6 +727,7 @@ mod tests {
             }
             _ => return Err("Invalid Pipeline connect answer.".into()),
         }
+
         // ensure no events are pulled as long as we are not opened yet
         task::sleep(Duration::from_millis(200)).await;
         assert!(rx1.try_recv().is_err()); // nothing put into connected pipeline yet
@@ -736,8 +737,14 @@ mod tests {
             .send(onramp::Msg::Cb(CbAction::Open, EventId::default()))
             .await?;
 
-        // wait some time
-        task::sleep(Duration::from_millis(200)).await;
+        // yield so we can let other tasks progress
+        task::yield_now().await;
+        let mut n = 0;
+
+        while rx1.len() == 0 && n < 10 {
+            task::sleep(Duration::from_millis(100)).await;
+            n += 1;
+        }
         assert!(rx1.len() > 0);
 
         let (tx4, rx4) = async_channel::unbounded();

@@ -103,7 +103,7 @@ impl<'input, 'tape> ValueDeser<'input, 'tape> {
                 res.insert_nocheck(key.into(), self.parse().unwrap());
             } else {
                 // ALLOW: We check against this in tape
-                unreachable!()
+                unreachable!();
             }
         }
         Value::from(res)

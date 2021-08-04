@@ -78,7 +78,7 @@ fn write_bits_be(
                 let l = bytes.len();
                 bytes.extend_from_slice(&[0, 0]);
                 // ALLOW: we know bytes is at least `l` long
-                BigEndian::write_u16(&mut bytes[l..], v as u16)
+                BigEndian::write_u16(&mut bytes[l..], v as u16);
             }
             24 => {
                 // write the higher 8 bytes first
@@ -86,20 +86,20 @@ fn write_bits_be(
                 let l = bytes.len();
                 bytes.extend_from_slice(&[0, 0]);
                 // ALLOW: we know bytes is at least `l` long
-                BigEndian::write_u16(&mut bytes[l..], v as u16)
+                BigEndian::write_u16(&mut bytes[l..], v as u16);
             }
             32 => {
                 let l = bytes.len();
                 bytes.extend_from_slice(&[0, 0, 0, 0]);
                 // ALLOW: we know bytes is at least `l` long
-                BigEndian::write_u32(&mut bytes[l..], v as u32)
+                BigEndian::write_u32(&mut bytes[l..], v as u32);
             }
             40 => {
                 bytes.push((v >> 32) as u8);
                 let l = bytes.len();
                 bytes.extend_from_slice(&[0, 0, 0, 0]);
                 // ALLOW: we know bytes is at least `l` long
-                BigEndian::write_u32(&mut bytes[l..], v as u32)
+                BigEndian::write_u32(&mut bytes[l..], v as u32);
             }
             48 => {
                 let l = bytes.len();
@@ -122,7 +122,7 @@ fn write_bits_be(
                 let l = bytes.len();
                 bytes.extend_from_slice(&[0, 0, 0, 0, 0, 0, 0, 0]);
                 // ALLOW: we know bytes is at least `l` long
-                BigEndian::write_u64(&mut bytes[l..], v)
+                BigEndian::write_u64(&mut bytes[l..], v);
             }
         }
         Ok(())
@@ -210,11 +210,11 @@ pub(crate) fn extend_bytes_from_value<'value, O: BaseExpr, I: BaseExpr>(
 
     match data_type {
         BytesDataType::UnsignedInteger => value.as_u64().map_or_else(
-            || err("Not an unsigned integer", &value),
+            || err("Not an unsigned integer", value),
             |v| write_bits(bytes, bits as u8, endianess, buf, pending, v as u64),
         ),
         BytesDataType::SignedInteger => value.as_i64().map_or_else(
-            || err("Not an signed integer", &value),
+            || err("Not an signed integer", value),
             |v| write_bits(bytes, bits as u8, endianess, buf, pending, v as u64),
         ),
         BytesDataType::Binary => {
@@ -226,15 +226,15 @@ pub(crate) fn extend_bytes_from_value<'value, O: BaseExpr, I: BaseExpr>(
                 }
             }) {
                 if *pending == 0 {
-                    bytes.extend_from_slice(&b);
+                    bytes.extend_from_slice(b);
                 } else {
                     for v in b {
-                        stry!(write_bits(bytes, 8, endianess, buf, pending, *v as u64))
+                        stry!(write_bits(bytes, 8, endianess, buf, pending, *v as u64));
                     }
                 }
                 Ok(())
             } else {
-                err("Not a long enough binary", &value)
+                err("Not a long enough binary", value)
             }
         }
     }

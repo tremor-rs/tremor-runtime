@@ -159,7 +159,7 @@ where
     T: Sink + Send,
 {
     async fn terminate(&mut self) {
-        self.sink.terminate().await
+        self.sink.terminate().await;
     }
     #[allow(clippy::too_many_arguments)]
     async fn start(
@@ -199,7 +199,7 @@ where
                     Reply::Insight(e) => handle_insight(e, self.pipelines.values()).await?,
                     Reply::Response(port, event) => {
                         if let Some(pipelines) = self.dest_pipelines.get_mut(&port) {
-                            handle_response(event, pipelines.iter()).await?
+                            handle_response(event, pipelines.iter()).await?;
                         }
                     }
                 }
@@ -231,7 +231,7 @@ where
     }
     fn remove_dest_pipeline(&mut self, port: Cow<'static, str>, id: TremorUrl) -> bool {
         if let Some(port_ps) = self.dest_pipelines.get_mut(&port) {
-            port_ps.retain(|(url, _)| url != &id)
+            port_ps.retain(|(url, _)| url != &id);
         }
         self.pipelines.is_empty() && !self.has_dest_pipelines()
     }
@@ -290,11 +290,11 @@ where
         for p in pipelines {
             if let Err(e) = p.send_insight(insight.clone()).await {
                 // TODO: is this wanted to not raise the error here?
-                error!("Error: {}", e)
+                error!("Error: {}", e);
             };
         }
         if let Err(e) = first.send_insight(insight).await {
-            error!("Error: {}", e)
+            error!("Error: {}", e);
         };
     }
     Ok(())
@@ -319,7 +319,7 @@ where
                 })
                 .await
             {
-                error!("Error: {}", e)
+                error!("Error: {}", e);
             };
         }
         let first_port = first_id.instance_port_required()?.to_owned();
@@ -331,7 +331,7 @@ where
             })
             .await
         {
-            error!("Error: {}", e)
+            error!("Error: {}", e);
         };
     }
     Ok(())

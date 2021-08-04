@@ -79,13 +79,13 @@ where
         output.write_all(&[b'='])?;
 
         if let Some(s) = value.as_str() {
-            write_escaped_value(&mut output, s.as_bytes())?
+            write_escaped_value(&mut output, s.as_bytes())?;
         } else {
             match value.value_type() {
                 ValueType::F64 | ValueType::Bool => value.write(&mut output)?,
                 ValueType::U64 | ValueType::I64 => {
                     value.write(&mut output)?;
-                    output.write_all(&[b'i'])?
+                    output.write_all(&[b'i'])?;
                 }
                 _ => return Err(Error::InvalidValue(key.to_string(), value.value_type())),
             }

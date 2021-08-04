@@ -399,7 +399,7 @@ impl Source for Int {
                         builder.build()
                     }
                 };
-                response_tx.send(res).await?
+                response_tx.send(res).await?;
             } else {
                 debug!("No outstanding HTTP session for event-id {}", event_id);
             }
@@ -449,7 +449,7 @@ impl Source for Int {
                 error!(
                     "[Source::{}] Error while listening from the rest server: {}",
                     e, source_id
-                )
+                );
             }
             warn!("[Source::{}] Server stopped", source_id);
 
@@ -477,7 +477,7 @@ impl Onramp for Rest {
             config.onramp_uid,
             self.onramp_id.clone(),
             &self.config,
-            &config.processors.post,
+            config.processors.post,
             config.is_linked,
         )?;
         SourceManager::start(source, config).await

@@ -80,7 +80,7 @@ where
     'event: 'run,
 {
     /// Context of the event
-    pub context: &'run EventContext,
+    pub context: &'run EventContext<'run>,
     /// Constants
     pub consts: RunConsts<'run, 'event>,
     /// Aggregates
@@ -105,7 +105,7 @@ where
     {
         self.consts
             .get(idx)
-            .ok_or_else(|| error_oops_err(outer, 0xdead_0010, "Unknown constant", &meta))
+            .ok_or_else(|| error_oops_err(outer, 0xdead_0010, "Unknown constant", meta))
     }
 }
 
@@ -260,9 +260,9 @@ where
     match val.as_usize() {
         Some(n) => Ok(n),
         None if val.is_i64() => {
-            error_bad_array_index(outer, inner, path, val.borrow(), array.len(), &env.meta)
+            error_bad_array_index(outer, inner, path, val.borrow(), array.len(), env.meta)
         }
-        None => error_need_int(outer, inner, val.value_type(), &env.meta),
+        None => error_need_int(outer, inner, val.value_type(), env.meta),
     }
 }
 
@@ -404,12 +404,9 @@ where
         (NotEq, l, r) => Ok(static_bool!(!val_eq(l, r))),
 
         // Bool
-        (And, Static(Bool(l)), Static(Bool(r))) => Ok(static_bool!(*l && *r)),
-        (Or, Static(Bool(l)), Static(Bool(r))) => Ok(static_bool!(*l || *r)),
-        (Xor, Static(Bool(l)), Static(Bool(r))) => Ok(static_bool!(*l != *r)),
-        (BitAnd, Static(Bool(l)), Static(Bool(r))) => Ok(static_bool!(*l & *r)),
-        (BitOr, Static(Bool(l)), Static(Bool(r))) => Ok(static_bool!(*l | *r)),
-        (BitXor, Static(Bool(l)), Static(Bool(r))) => Ok(static_bool!(*l ^ *r)),
+        (And | BitAnd, Static(Bool(l)), Static(Bool(r))) => Ok(static_bool!(*l && *r)),
+        (Or | BitOr, Static(Bool(l)), Static(Bool(r))) => Ok(static_bool!(*l || *r)),
+        (Xor | BitXor, Static(Bool(l)), Static(Bool(r))) => Ok(static_bool!(*l != *r)),
 
         // Binary
         (Gt, Bytes(l), Bytes(r)) => Ok(static_bool!(l > r)),
@@ -420,37 +417,37 @@ where
         // Binary String
         // we have to reverse the comparison here because of types
         (Gt, Bytes(l), String(r)) => {
-            let l: &[u8] = &l;
+            let l: &[u8] = l;
             Ok(static_bool!(l > r.as_bytes()))
         }
         (Gte, Bytes(l), String(r)) => {
-            let l: &[u8] = &l;
+            let l: &[u8] = l;
             Ok(static_bool!(l >= r.as_bytes()))
         }
         (Lt, Bytes(l), String(r)) => {
-            let l: &[u8] = &l;
+            let l: &[u8] = l;
             Ok(static_bool!(r.as_bytes() > l))
         }
         (Lte, Bytes(l), String(r)) => {
-            let l: &[u8] = &l;
+            let l: &[u8] = l;
             Ok(static_bool!(r.as_bytes() >= l))
         }
 
         // String Binary
         (Gt, String(l), Bytes(r)) => {
-            let r: &[u8] = &r;
+            let r: &[u8] = r;
             Ok(static_bool!(l.as_bytes() > r))
         }
         (Gte, String(l), Bytes(r)) => {
-            let r: &[u8] = &r;
+            let r: &[u8] = r;
             Ok(static_bool!(l.as_bytes() >= r))
         }
         (Lt, String(l), Bytes(r)) => {
-            let r: &[u8] = &r;
+            let r: &[u8] = r;
             Ok(static_bool!(l.as_bytes() < r))
         }
         (Lte, String(l), Bytes(r)) => {
-            let r: &[u8] = &r;
+            let r: &[u8] = r;
             Ok(static_bool!(l.as_bytes() <= r))
         }
 
@@ -533,20 +530,20 @@ where
     // TODO: Extract this into a method on `Path`?
     let base_value: &Value = match path {
         Path::Local(lpath) => {
-            if let Some(l) = stry!(local.get(lpath.idx, outer, lpath.mid, &env.meta)) {
+            if let Some(l) = stry!(local.get(lpath.idx, outer, lpath.mid, env.meta)) {
                 l
             } else {
                 let key = env.meta.name_dflt(lpath.mid).to_string();
-                return error_bad_key(outer, lpath, &path, key, vec![], &env.meta);
+                return error_bad_key(outer, lpath, path, key, vec![], env.meta);
             }
         }
-        Path::Const(lpath) => stry!(env.get_const(lpath.idx, outer, &env.meta)),
+        Path::Const(lpath) => stry!(env.get_const(lpath.idx, outer, env.meta)),
         Path::Meta(_path) => meta,
         Path::Event(_path) => event,
         Path::State(_path) => state,
-        Path::Reserved(ReservedPath::Args { .. }) => &env.consts.args,
-        Path::Reserved(ReservedPath::Group { .. }) => &env.consts.group,
-        Path::Reserved(ReservedPath::Window { .. }) => &env.consts.window,
+        Path::Reserved(ReservedPath::Args { .. }) => env.consts.args,
+        Path::Reserved(ReservedPath::Group { .. }) => env.consts.group,
+        Path::Reserved(ReservedPath::Window { .. }) => env.consts.window,
     };
     resolve_value(
         outer, opts, env, event, state, meta, local, path, base_value,
@@ -582,13 +579,13 @@ where
 
                 current = stry!(key.lookup(current).ok_or_else(|| {
                     current.as_object().map_or_else(
-                        || error_need_obj_err(outer, segment, current.value_type(), &env.meta),
+                        || error_need_obj_err(outer, segment, current.value_type(), env.meta),
                         |o| {
                             let key = env.meta.name_dflt(*mid).to_string();
                             let options = o.keys().map(ToString::to_string).collect();
                             error_bad_key_err(
                                 outer, segment, //&Expr::dummy(*start, *end),
-                                &path, key, options, &env.meta,
+                                path, key, options, env.meta,
                             )
                         },
                     )
@@ -608,9 +605,9 @@ where
                     }
                     let r = idx..idx;
                     let l = range_to_consider.len();
-                    return error_array_out_of_bound(outer, segment, &path, r, l, &env.meta);
+                    return error_array_out_of_bound(outer, segment, path, r, l, env.meta);
                 }
-                return error_need_arr(outer, segment, current.value_type(), &env.meta);
+                return error_need_arr(outer, segment, current.value_type(), env.meta);
             }
             // Next segment is an index range: index into `current`, if it's an array
             Segment::Range {
@@ -621,23 +618,23 @@ where
                 if let Some(a) = current.as_array() {
                     let array = subrange.unwrap_or_else(|| a.as_slice());
                     let start_idx = stry!(range_start
-                        .eval_to_index(outer, opts, env, event, state, meta, local, path, &array));
+                        .eval_to_index(outer, opts, env, event, state, meta, local, path, array));
                     let end_idx = stry!(range_end
-                        .eval_to_index(outer, opts, env, event, state, meta, local, path, &array));
+                        .eval_to_index(outer, opts, env, event, state, meta, local, path, array));
 
                     if end_idx < start_idx {
                         return error_decreasing_range(
-                            outer, segment, &path, start_idx, end_idx, &env.meta,
+                            outer, segment, path, start_idx, end_idx, env.meta,
                         );
                     } else if end_idx > array.len() {
                         let r = start_idx..end_idx;
                         let l = array.len();
-                        return error_array_out_of_bound(outer, segment, &path, r, l, &env.meta);
+                        return error_array_out_of_bound(outer, segment, path, r, l, env.meta);
                     }
                     subrange = array.get(start_idx..end_idx);
                     continue;
                 };
-                return error_need_arr(outer, segment, current.value_type(), &env.meta);
+                return error_need_arr(outer, segment, current.value_type(), env.meta);
             }
             // Next segment is an expression: run `expr` to know which key it signifies at runtime
             Segment::Element { expr, .. } => {
@@ -653,11 +650,11 @@ where
                         };
                         let key = id.to_string();
                         let options = o.keys().map(ToString::to_string).collect();
-                        return error_bad_key(outer, segment, &path, key, options, &env.meta);
+                        return error_bad_key(outer, segment, path, key, options, env.meta);
                     }
                     // The segment did not resolve to an identifier, but `current` is an object: err
                     (Value::Object(_), other) => {
-                        return error_need_str(outer, segment, other.value_type(), &env.meta)
+                        return error_need_str(outer, segment, other.value_type(), env.meta)
                     }
                     // If `current` is an array, the segment has to be an index
                     (Value::Array(a), idx) => {
@@ -671,18 +668,18 @@ where
                         };
                         let r = idx..idx;
                         let l = array.len();
-                        return error_array_out_of_bound(outer, segment, &path, r, l, &env.meta);
+                        return error_array_out_of_bound(outer, segment, path, r, l, env.meta);
                     }
                     // The segment resolved to an identifier, but `current` isn't an object: err
                     (other, key) if key.is_str() => {
-                        return error_need_obj(outer, segment, other.value_type(), &env.meta);
+                        return error_need_obj(outer, segment, other.value_type(), env.meta);
                     }
                     // The segment resolved to an index, but `current` isn't an array: err
                     (other, key) if key.is_usize() => {
-                        return error_need_arr(outer, segment, other.value_type(), &env.meta);
+                        return error_need_arr(outer, segment, other.value_type(), env.meta);
                     }
                     // Anything else: err
-                    _ => return error_oops(outer, 0xdead_0003, "Bad path segments", &env.meta),
+                    _ => return error_oops(outer, 0xdead_0003, "Bad path segments", env.meta),
                 }
             }
         }
@@ -709,7 +706,7 @@ where
             if v.is_null() {
                 map.remove(k);
             } else if let Some(k) = map.get_mut(k) {
-                stry!(merge_values(outer, inner, k, v))
+                stry!(merge_values(outer, inner, k, v));
             } else {
                 //NOTE: We got to clone here since we're duplicating values
                 map.insert(k.clone(), v.clone());
@@ -856,7 +853,7 @@ fn patch_value<'run, 'event>(
     for op in &expr.operations {
         evaluated.push(stry!(PreEvaluatedPatchOperation::from(
             op, opts, env, event, state, meta, local,
-        )))
+        )));
     }
 
     // second pass over pre-evaluated operations
@@ -872,7 +869,7 @@ fn patch_value<'run, 'event>(
                 } => {
                     if obj.contains_key(&ident) {
                         let key = ident.to_string();
-                        return error_patch_key_exists(patch_expr, ident_expr, key, &env.meta);
+                        return error_patch_key_exists(patch_expr, ident_expr, key, env.meta);
                     };
                     obj.insert(ident, value);
                 }
@@ -886,7 +883,7 @@ fn patch_value<'run, 'event>(
                     } else {
                         let key = ident.to_string();
                         return error_patch_update_key_missing(
-                            patch_expr, ident_expr, key, &env.meta,
+                            patch_expr, ident_expr, key, env.meta,
                         );
                     }
                 }
@@ -898,7 +895,7 @@ fn patch_value<'run, 'event>(
                 }
                 PreEvaluatedPatchOperation::Copy { from, to } => {
                     if obj.contains_key(&to) {
-                        return error_patch_key_exists(patch_expr, expr, to.to_string(), &env.meta);
+                        return error_patch_key_exists(patch_expr, expr, to.to_string(), env.meta);
                     }
                     if let Some(old) = obj.get(&from) {
                         let old = old.clone();
@@ -907,7 +904,7 @@ fn patch_value<'run, 'event>(
                 }
                 PreEvaluatedPatchOperation::Move { from, to } => {
                     if obj.contains_key(&to) {
-                        return error_patch_key_exists(patch_expr, expr, to.to_string(), &env.meta);
+                        return error_patch_key_exists(patch_expr, expr, to.to_string(), env.meta);
                     }
                     if let Some(old) = obj.remove(&from) {
                         obj.insert(to, old);
@@ -924,7 +921,7 @@ fn patch_value<'run, 'event>(
                     Some(other) => {
                         let key = ident.to_string();
                         return error_patch_merge_type_conflict(
-                            patch_expr, ident_expr, key, &other, &env.meta,
+                            patch_expr, ident_expr, key, other, env.meta,
                         );
                     }
                     None => {
@@ -947,14 +944,14 @@ fn patch_value<'run, 'event>(
                 PreEvaluatedPatchOperation::DefaultRecord { expr: inner } => {
                     let default_value = stry!(inner.run(opts, env, event, state, meta, local));
                     if let Some(dflt) = default_value.as_object() {
-                        apply_default(obj, dflt)
+                        apply_default(obj, dflt);
                     } else {
-                        return error_need_obj(expr, inner, default_value.value_type(), &env.meta);
+                        return error_need_obj(expr, inner, default_value.value_type(), env.meta);
                     }
                 }
             }
         } else {
-            return error_need_obj(patch_expr, &expr.target, target.value_type(), &env.meta);
+            return error_need_obj(patch_expr, &expr.target, target.value_type(), env.meta);
         }
     }
     Ok(())
@@ -972,7 +969,7 @@ fn apply_default<'event>(
             .and_then(Value::as_object_mut)
             .zip(v.as_object())
         {
-            apply_default(target, dflt)
+            apply_default(target, dflt);
         }
     }
 }
@@ -996,7 +993,7 @@ where
         |guard| {
             let test = stry!(guard.run(opts, env, event, state, meta, local));
             test.as_bool().map_or_else(
-                || error_guard_not_bool(outer, guard, &test, &env.meta),
+                || error_guard_not_bool(outer, guard, &test, env.meta),
                 Result::Ok,
             )
         },
@@ -1024,7 +1021,7 @@ where
         Pattern::Extract(test) => {
             if test
                 .extractor
-                .extract(false, &target, &env.context)
+                .extract(false, target, env.context)
                 .is_match()
             {
                 test_guard(outer, opts, env, event, state, meta, local, guard)
@@ -1036,7 +1033,7 @@ where
         Pattern::Tuple(ref tp) => {
             let opts_wo = opts.without_result();
             if stry!(match_tp_expr(
-                outer, opts_wo, env, event, state, meta, local, &target, &tp,
+                outer, opts_wo, env, event, state, meta, local, target, tp,
             ))
             .is_some()
             {
@@ -1048,7 +1045,7 @@ where
         Pattern::Record(ref rp) => {
             let opts_wo = opts.without_result();
             if stry!(match_rp_expr(
-                outer, opts_wo, env, event, state, meta, local, &target, &rp,
+                outer, opts_wo, env, event, state, meta, local, target, rp,
             ))
             .is_some()
             {
@@ -1060,7 +1057,7 @@ where
         Pattern::Array(ref ap) => {
             let opts_wo = opts.without_result();
             if stry!(match_ap_expr(
-                outer, opts_wo, env, event, state, meta, local, &target, &ap,
+                outer, opts_wo, env, event, state, meta, local, target, ap,
             ))
             .is_some()
             {
@@ -1085,12 +1082,12 @@ where
                 Pattern::Extract(ref test) => {
                     if let Some(v) = test
                         .extractor
-                        .extract(true, &target, &env.context)
+                        .extract(true, target, env.context)
                         .into_match()
                     {
                         // we need to assign prior to the guard so we can check
                         // against the pattern expressions
-                        stry!(set_local_shadow(outer, local, &env.meta, a.idx, v));
+                        stry!(set_local_shadow(outer, local, env.meta, a.idx, v));
                         test_guard(outer, opts, env, event, state, meta, local, guard)
                     } else {
                         Ok(false)
@@ -1098,29 +1095,29 @@ where
                 }
                 Pattern::DoNotCare => {
                     let v = target.clone();
-                    stry!(set_local_shadow(outer, local, &env.meta, a.idx, v));
+                    stry!(set_local_shadow(outer, local, env.meta, a.idx, v));
                     test_guard(outer, opts, env, event, state, meta, local, guard)
                 }
                 Pattern::Array(ref ap) => {
                     stry!(match_ap_expr(
-                        outer, opts_w, env, event, state, meta, local, &target, &ap,
+                        outer, opts_w, env, event, state, meta, local, target, ap,
                     ))
                     .map_or(Ok(false), |v| {
                         // we need to assign prior to the guard so we can check
                         // against the pattern expressions
-                        stry!(set_local_shadow(outer, local, &env.meta, a.idx, v));
+                        stry!(set_local_shadow(outer, local, env.meta, a.idx, v));
 
                         test_guard(outer, opts, env, event, state, meta, local, guard)
                     })
                 }
                 Pattern::Record(ref rp) => {
                     stry!(match_rp_expr(
-                        outer, opts_w, env, event, state, meta, local, &target, &rp,
+                        outer, opts_w, env, event, state, meta, local, target, rp,
                     ))
                     .map_or(Ok(false), |v| {
                         // we need to assign prior to the guard so we can check
                         // against the pattern expressions
-                        stry!(set_local_shadow(outer, local, &env.meta, a.idx, v));
+                        stry!(set_local_shadow(outer, local, env.meta, a.idx, v));
 
                         test_guard(outer, opts, env, event, state, meta, local, guard)
                     })
@@ -1132,7 +1129,7 @@ where
                         // we need to assign prior to the guard so we can check
                         // against the pattern expressions
                         let v = v.into_owned();
-                        stry!(set_local_shadow(outer, local, &env.meta, a.idx, v));
+                        stry!(set_local_shadow(outer, local, env.meta, a.idx, v));
 
                         test_guard(outer, opts, env, event, state, meta, local, guard)
                     } else {
@@ -1141,19 +1138,19 @@ where
                 }
                 Pattern::Tuple(ref tp) => {
                     stry!(match_tp_expr(
-                        outer, opts_w, env, event, state, meta, local, &target, &tp,
+                        outer, opts_w, env, event, state, meta, local, target, tp,
                     ))
                     .map_or(Ok(false), |v| {
                         // we need to assign prior to the guard so we can cehck
                         // against the pattern expressions
-                        stry!(set_local_shadow(outer, local, &env.meta, a.idx, v));
+                        stry!(set_local_shadow(outer, local, env.meta, a.idx, v));
                         test_guard(outer, opts, env, event, state, meta, local, guard)
                     })
                 }
                 Pattern::Assign(_) => {
-                    error_oops(outer, 0xdead_0004, "nested assign pattern", &env.meta)
+                    error_oops(outer, 0xdead_0004, "nested assign pattern", env.meta)
                 }
-                Pattern::Default => error_oops(outer, 0xdead_0005, "default in assign", &env.meta),
+                Pattern::Default => error_oops(outer, 0xdead_0005, "default in assign", env.meta),
             }
         }
         Pattern::Default => Ok(true),
@@ -1211,7 +1208,7 @@ where
                     };
                     if let Some(x) = test
                         .extractor
-                        .extract(opts.result_needed, &testee, &env.context)
+                        .extract(opts.result_needed, testee, env.context)
                         .into_match()
                     {
                         if opts.result_needed {
@@ -1230,7 +1227,7 @@ where
 
                     let rhs = stry!(rhs.run(opts, env, event, state, meta, local));
                     let vb: &Value = rhs.borrow();
-                    let r = stry!(exec_binary(outer, outer, &env.meta, *kind, testee, vb));
+                    let r = stry!(exec_binary(outer, outer, env.meta, *kind, testee, vb));
 
                     if !r.as_bool().unwrap_or_default() {
                         return Ok(None);
@@ -1342,7 +1339,7 @@ where
                         'inner_tilde: for (idx, candidate) in a.iter().enumerate() {
                             if let Some(r) = test
                                 .extractor
-                                .extract(opts.result_needed, &candidate, &env.context)
+                                .extract(opts.result_needed, candidate, env.context)
                                 .into_match()
                             {
                                 matched |= true;
@@ -1362,7 +1359,7 @@ where
                             )) {
                                 matched |= true;
                                 if opts.result_needed {
-                                    acc.push(Value::from(vec![Value::from(idx), r]))
+                                    acc.push(Value::from(vec![Value::from(idx), r]));
                                 } else {
                                     // if we don't need the results, we can abort here as we have a match
                                     break 'inner_rec;
@@ -1430,7 +1427,7 @@ where
                 ArrayPredicatePattern::Tilde(test) => {
                     if let Some(r) = test
                         .extractor
-                        .extract(opts.result_needed, &candidate, &env.context)
+                        .extract(opts.result_needed, candidate, env.context)
                         .into_match()
                     {
                         if opts.result_needed {
@@ -1445,7 +1442,7 @@ where
                         outer, opts, env, event, state, meta, local, candidate, rp,
                     )) {
                         if opts.result_needed {
-                            acc.push(r)
+                            acc.push(r);
                         };
                     } else {
                         return Ok(None);
@@ -1481,7 +1478,7 @@ where
                 outer,
                 0xdead_0006,
                 "Unknown local variable in set_local_shadow",
-                &node_meta,
+                node_meta,
             )
         },
         |d| {
@@ -1500,17 +1497,16 @@ impl<'script> GroupBy<'script> {
         &self,
         ctx: &EventContext,
         event: &Value<'event>,
-        state: &Value<'static>,
         node_meta: &NodeMetas,
         meta: &Value<'event>,
-    ) -> Result<Vec<Vec<Value<'event>>>>
+    ) -> Result<Vec<Vec<Value<'static>>>>
     where
         'script: 'event,
     {
         let mut groups = Vec::with_capacity(16);
         stry!(self
             .0
-            .generate_groups(ctx, event, state, node_meta, meta, &mut groups));
+            .generate_groups(ctx, event, &NULL, node_meta, meta, &mut groups));
         Ok(groups)
     }
 }
@@ -1523,7 +1519,7 @@ impl<'script> GroupByInt<'script> {
         state: &Value<'static>,
         node_meta: &NodeMetas,
         meta: &Value<'event>,
-        groups: &mut Vec<Vec<Value<'event>>>,
+        groups: &mut Vec<Vec<Value<'static>>>,
     ) -> Result<()>
     where
         'script: 'event,
@@ -1542,13 +1538,15 @@ impl<'script> GroupByInt<'script> {
         };
         match self {
             GroupByInt::Expr { expr, .. } => {
-                let v = stry!(expr.run(opts, &env, event, state, meta, &local_stack)).into_owned();
+                let v = stry!(expr.run(opts, &env, event, state, meta, &local_stack));
                 if let Some((last_group, other_groups)) = groups.split_last_mut() {
-                    other_groups.iter_mut().for_each(|g| g.push(v.clone()));
-                    last_group.push(v)
+                    other_groups
+                        .iter_mut()
+                        .for_each(|g| g.push(v.clone_static()));
+                    last_group.push(v.clone_static());
                 } else {
                     // No last group existed, i.e, `groups` was empty. Push a new group:
-                    groups.push(vec![v]);
+                    groups.push(vec![v.clone_static()]);
                 }
                 Ok(())
             }
@@ -1557,7 +1555,7 @@ impl<'script> GroupByInt<'script> {
                 for item in items {
                     stry!(item
                         .0
-                        .generate_groups(ctx, event, state, node_meta, meta, groups))
+                        .generate_groups(ctx, event, state, node_meta, meta, groups));
                 }
 
                 // set(event.measurement, each(record::keys(event.fields)))
@@ -1575,18 +1573,22 @@ impl<'script> GroupByInt<'script> {
                 Ok(())
             }
             GroupByInt::Each { expr, .. } => {
-                let v = stry!(expr.run(opts, &env, event, state, meta, &local_stack)).into_owned();
+                let v = stry!(expr.run(opts, &env, event, state, meta, &local_stack));
                 if let Some(each) = v.as_array() {
                     if groups.is_empty() {
                         for e in each {
-                            groups.push(vec![e.clone()]);
+                            groups.push(vec![e.clone_static()]);
                         }
                     } else {
                         let mut new_groups = Vec::with_capacity(each.len() * groups.len());
-                        for g in groups.drain(..) {
-                            for e in each {
-                                let mut g = g.clone();
-                                g.push(e.clone());
+                        for mut g in groups.drain(..) {
+                            if let Some((last, rest)) = each.split_last() {
+                                for e in rest {
+                                    let mut g = g.clone();
+                                    g.push(e.clone_static());
+                                    new_groups.push(g);
+                                }
+                                g.push(last.clone_static());
                                 new_groups.push(g);
                             }
                         }
@@ -1594,7 +1596,7 @@ impl<'script> GroupByInt<'script> {
                     }
                     Ok(())
                 } else {
-                    error_need_arr(self, self, v.value_type(), &env.meta)
+                    error_need_arr(self, self, v.value_type(), env.meta)
                 }
             }
         }

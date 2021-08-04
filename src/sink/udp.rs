@@ -98,7 +98,7 @@ impl offramp::Impl for Udp {
         if let Some(config) = config {
             let mut config: Config = Config::new(config)?;
             if !config.bound {
-                warn!("The `bound` setting of the UDP offramp is deprecated, in future re-binding will only work over the $udp metadata")
+                warn!("The `bound` setting of the UDP offramp is deprecated, in future re-binding will only work over the $udp metadata");
             }
             if let Some(dst_port) = config.dst_port.take() {
                 warn!("The `dst_port` setting of the UDP offramp is deprecated, this will in future be `port` and current `port` will be `bind.port`.");

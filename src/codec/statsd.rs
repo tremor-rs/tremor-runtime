@@ -61,7 +61,7 @@ fn encode(value: &Value) -> Result<Vec<u8>> {
 
     r.push_str(&val.encode());
     r.push('|');
-    r.push_str(&t);
+    r.push_str(t);
 
     if let Some(val) = value.get("sample_rate") {
         if val.is_number() {
@@ -123,7 +123,7 @@ fn decode(data: &[u8], _ingest_ns: u64) -> Result<Value> {
         }
     }
     match d.next() {
-        Some((i, b'c' | b'h' | b's')) => m.insert("type".into(), substr(&data, i..=i)?.into()),
+        Some((i, b'c' | b'h' | b's')) => m.insert("type".into(), substr(data, i..=i)?.into()),
         Some((i, b'm')) => {
             if let Some((j, b's')) = d.next() {
                 m.insert("type".into(), substr(data, i..=j)?.into())

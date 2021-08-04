@@ -14,7 +14,7 @@
 
 use crate::prelude::*;
 use crate::tremor_fn;
-use crate::{registry::Registry, FALSE, TRUE};
+use crate::{registry::Registry, TRUE};
 
 pub fn load(registry: &mut Registry) {
     registry.insert(tremor_fn! (test|assert(ctx, desc, expected, got) {
@@ -27,7 +27,7 @@ Assertion for {} failed:
     got: {}
 "#, desc, expected.encode(), got.encode())))
         } else {
-            Ok(FALSE)
+            Ok(Value::from(vec![(*expected).clone(), (*got).clone()]))
         }
     }));
 }

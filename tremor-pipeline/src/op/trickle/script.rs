@@ -55,7 +55,7 @@ impl Operator for Script {
         state: &mut Value<'static>,
         mut event: Event,
     ) -> Result<EventAndInsights> {
-        let context = EventContext::new(event.ingest_ns, event.origin_uri);
+        let context = EventContext::new(event.ingest_ns, event.origin_uri.as_ref());
 
         let port = event.data.apply_decl(&self.script, |data, decl| {
             let (unwind_event, event_meta) = data.parts_mut();
@@ -82,7 +82,7 @@ impl Operator for Script {
                         .raw()
                         .get(0)
                         .and_then(|v| {
-                            let s: &[u8] = &v;
+                            let s: &[u8] = v;
                             let s = std::str::from_utf8(s).ok()?;
                             let mut h = highlighter::Dumb::default();
                             Query::format_error_from_script(s, &mut h, &e).ok()?;
@@ -102,9 +102,6 @@ impl Operator for Script {
                 }
             }
         });
-
-        // move origin_uri back to event again
-        event.origin_uri = context.origin_uri;
 
         Ok(port.map_or_else(EventAndInsights::default, |port| vec![(port, event)].into()))
     }

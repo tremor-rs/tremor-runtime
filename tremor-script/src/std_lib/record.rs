@@ -64,7 +64,7 @@ pub fn load(registry: &mut Registry) {
         })).insert(tremor_const_fn!(record|select(_context, _input: Object, _keys: Array) {
         let keys: Vec<_> = _keys.iter().filter_map(ValueAccess::as_str).collect();
         let r: Object =_input.iter().filter_map(|(k, v)| {
-            let k: &str = &k;
+            let k: &str = k;
             if keys.contains(&k) {
                 Some((k.to_string().into(), v.clone()))
             } else {

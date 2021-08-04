@@ -19,7 +19,7 @@ use crate::{
     errors::Result,
     errors::{Error, ErrorKind},
     influx_value,
-    op::{prelude::IN, trickle::select::WindowImpl},
+    op::{prelude::IN, trickle::window},
     ConfigMap, ExecPortIndexMap, NodeLookupFn,
 };
 use crate::{op::EventAndInsights, Event, NodeKind, Operator};
@@ -98,9 +98,9 @@ impl NodeConfig {
         resolver: NodeLookupFn,
         defn: Option<&srs::Stmt>,
         node: Option<&srs::Stmt>,
-        window: Option<HashMap<String, WindowImpl>>,
+        window: Option<HashMap<String, window::Impl>>,
     ) -> Result<OperatorNode> {
-        resolver(&self, uid, defn, node, window)
+        resolver(self, uid, defn, node, window)
     }
 }
 
@@ -149,7 +149,7 @@ impl Operator for OperatorNode {
     fn on_signal(
         &mut self,
         _uid: u64,
-        state: &Value<'static>,
+        state: &mut Value<'static>,
         signal: &mut Event,
     ) -> Result<EventAndInsights> {
         self.op.on_signal(self.uid, state, signal)
@@ -159,7 +159,7 @@ impl Operator for OperatorNode {
         self.op.handles_contraflow()
     }
     fn on_contraflow(&mut self, _uid: u64, contraevent: &mut Event) {
-        self.op.on_contraflow(self.uid, contraevent)
+        self.op.on_contraflow(self.uid, contraevent);
     }
 
     fn metrics(
@@ -186,7 +186,7 @@ impl NodeMetrics {
     // it might be owned so cloning early would be costly
     #[allow(clippy::ptr_arg)]
     pub(crate) fn inc_input(&mut self, input: &Cow<'static, str>) {
-        self.inc_input_n(input, 1)
+        self.inc_input_n(input, 1);
     }
 
     // this makes sense since we might not need to clone the cow and
@@ -204,7 +204,7 @@ impl NodeMetrics {
     // it might be owned so cloning early would be costly
     #[allow(clippy::ptr_arg)]
     pub(crate) fn inc_output(&mut self, output: &Cow<'static, str>) {
-        self.inc_output_n(output, 1)
+        self.inc_output_n(output, 1);
     }
 
     // this makes sense since we might not need to clone the cow and
@@ -412,11 +412,11 @@ impl ExecutableGraph {
                         // If it is the skippable node replace this entry
                         // with all the outputs the skippable had
                         for o in &outputs {
-                            srcs1.push(o.clone())
+                            srcs1.push(o.clone());
                         }
                     } else {
                         // Otherwise keep the connection untoucehd.
-                        srcs1.push((src_id, src_port))
+                        srcs1.push((src_id, src_port));
                     }
                 }
                 // Add the node back in
@@ -485,7 +485,7 @@ impl ExecutableGraph {
                         unsafe { self.metrics.get_unchecked_mut(idx) }.inc_output(out_port);
                     }
                     for insight in insights {
-                        self.insights.push((idx, insight))
+                        self.insights.push((idx, insight));
                     }
                     self.enqueue_events(idx, events);
                 };
@@ -523,7 +523,7 @@ impl ExecutableGraph {
                 }
             }
 
-            for value in m.to_value(&metric_name, &mut tags, ingest_ns) {
+            for value in m.to_value(metric_name, &mut tags, ingest_ns) {
                 self.stack.push((
                     self.metrics_idx,
                     IN,
@@ -552,7 +552,7 @@ impl ExecutableGraph {
                 }
                 let (idx, in_port) = last;
                 unsafe { self.metrics.get_unchecked_mut(*idx) }.inc_input(in_port);
-                self.stack.push((*idx, in_port.clone(), event))
+                self.stack.push((*idx, in_port.clone(), event));
             }
         }
     }
@@ -563,7 +563,7 @@ impl ExecutableGraph {
                 let op = unsafe { self.graph.get_unchecked_mut(*idx) }; // We know this exists
                 op.on_contraflow(op.uid, &mut insight);
             } else if skip_to == Some(*idx) {
-                skip_to = None
+                skip_to = None;
             }
         }
         insight
@@ -589,7 +589,7 @@ impl ExecutableGraph {
             let i = unsafe { *self.signalflow.get_unchecked(idx) };
             let EventAndInsights { events, insights } = {
                 let op = unsafe { self.graph.get_unchecked_mut(i) }; // We know this exists
-                let state = unsafe { self.state.ops.get_unchecked(i) }; // we know this has been initialized
+                let state = unsafe { self.state.ops.get_unchecked_mut(i) }; // we know this has been initialized
                 stry!(op.on_signal(op.uid, state, &mut signal))
             };
             self.insights.extend(insights.into_iter().map(|cf| (i, cf)));
@@ -646,11 +646,11 @@ mod test {
         assert!(!n.handles_signal());
         assert!(!n.handles_contraflow());
         let mut e = Event::default();
-        let state = Value::null();
+        let mut state = Value::null();
         n.on_contraflow(0, &mut e);
         assert_eq!(e, Event::default());
         assert_eq!(
-            n.on_signal(0, &state, &mut e).unwrap(),
+            n.on_signal(0, &mut state, &mut e).unwrap(),
             EventAndInsights::default()
         );
         assert_eq!(e, Event::default());
@@ -704,7 +704,7 @@ mod test {
         fn on_signal(
             &mut self,
             _uid: u64,
-            _state: &Value<'static>,
+            _state: &mut Value<'static>,
             _signal: &mut Event,
         ) -> Result<EventAndInsights> {
             // Make the trait signature nicer
@@ -959,12 +959,12 @@ mod test {
 
         // check that node 2, a passthrough, was optimized out
         assert_eq!(
-            g.port_indexes.get(&(1usize, OUT)),
-            Some(&vec![(3usize, IN)])
+            g.port_indexes.get(&(1_usize, OUT)),
+            Some(&vec![(3_usize, IN)])
         );
         assert_eq!(
-            g.port_indexes.get(&(3usize, OUT)),
-            Some(&vec![(4usize, IN)])
+            g.port_indexes.get(&(3_usize, OUT)),
+            Some(&vec![(4_usize, IN)])
         );
     }
 }

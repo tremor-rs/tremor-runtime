@@ -94,7 +94,7 @@ impl Idx {
     }
     fn set_min(&mut self, v: u64) {
         if v < u64::from(&*self) {
-            self.set(v)
+            self.set(v);
         }
     }
 }
@@ -176,13 +176,13 @@ pub struct Wal {
 }
 
 op!(WalFactory(_uid, node) {
-    let map = node.config.as_ref().ok_or_else(|| ErrorKind::MissingOpConfig(node.id.to_string()))?;
-    let config: Config = Config::new(&map)?;
+    let map = node.config.as_ref().ok_or_else(|| ErrorKind::MissingOpConfig(node.id.clone()))?;
+    let config: Config = Config::new(map)?;
 
     if config.max_elements.or(config.max_bytes).is_none() {
         Err(ErrorKind::BadOpConfig("WAL operator needs at least one of `max_elements` or `max_bytes` config entries.".to_string()).into())
     } else {
-        Ok(Box::new(Wal::new(node.id.to_string(), config)?))
+        Ok(Box::new(Wal::new(node.id.clone(), config)?))
     }
 });
 
@@ -245,7 +245,7 @@ impl Wal {
             let e_slice: &mut [u8] = &mut e;
             let mut event = Event::from_slice(e_slice)?;
             event.transactional = true;
-            events.push((OUT, event))
+            events.push((OUT, event));
         }
         self.gc()?;
         Ok(events)
@@ -305,11 +305,11 @@ impl Operator for Wal {
             CbAction::None => {}
             CbAction::Open => {
                 debug!("WAL CB open.");
-                self.broken = false
+                self.broken = false;
             }
             CbAction::Close => {
                 debug!("WAL CB close");
-                self.broken = true
+                self.broken = true;
             }
             CbAction::Ack => {
                 let event_id =
@@ -381,7 +381,7 @@ impl Operator for Wal {
     fn on_signal(
         &mut self,
         _uid: u64,
-        _state: &Value<'static>,
+        _state: &mut Value<'static>,
         signal: &mut Event,
     ) -> Result<EventAndInsights> {
         let now = signal.ingest_ns;
@@ -446,6 +446,8 @@ impl Operator for Wal {
 
 #[cfg(test)]
 mod test {
+    use std::time::Duration;
+
     use crate::EventIdGenerator;
     use crate::SignalKind;
 
@@ -534,7 +536,7 @@ mod test {
             kind: Some(SignalKind::Tick),
             ..Event::default()
         };
-        let s = o.on_signal(wal_uid, &state, &mut signal)?;
+        let s = o.on_signal(wal_uid, &mut state, &mut signal)?;
         assert_eq!(0, s.events.len());
         assert_eq!(0, s.insights.len());
 
@@ -557,7 +559,7 @@ mod test {
             kind: Some(SignalKind::Tick),
             ..Event::default()
         };
-        let s = o.on_signal(wal_uid, &state, &mut signal2)?;
+        let s = o.on_signal(wal_uid, &mut state, &mut signal2)?;
         assert_eq!(0, s.events.len());
         assert_eq!(0, s.insights.len());
 
@@ -625,7 +627,7 @@ mod test {
         // Send a third event
         e.id = idgen.next_id();
         e.transactional = false;
-        let r = o.on_event(0, "in", &mut v, e.clone())?;
+        let r = o.on_event(0, "in", &mut v, e)?;
         // since we failed before we should see 2 events, 3 and the retransmit
         // of 2
         assert_eq!(r.len(), 2);
@@ -639,7 +641,7 @@ mod test {
         o.on_contraflow(0, &mut i);
 
         // since we failed before we should see 3 events the retransmit of 1-3
-        let r = o.on_signal(0, &v, &mut i)?;
+        let r = o.on_signal(0, &mut v, &mut i)?;
         assert_eq!(r.len(), 3);
 
         o.gc()?;
@@ -683,6 +685,9 @@ mod test {
             assert_eq!(r.insights.len(), 0);
         }
 
+        // Sleep for a second so the lock is gone, this is terrible
+        std::thread::sleep(Duration::from_millis(100));
+
         {
             // create the operator - second time
             // simulating a tremor restart
@@ -707,7 +712,7 @@ mod test {
             );
             assert_eq!(r.insights.len(), 0);
 
-            let r = o2.on_event(wal_uid, "in", &mut v, e.clone())?;
+            let r = o2.on_event(wal_uid, "in", &mut v, e)?;
             assert_eq!(r.events.len(), 1);
         }
 
@@ -724,7 +729,7 @@ mod test {
             flush_on_evnt: None,
         };
 
-        let r = WalFactory::new().from_node(1, &NodeConfig::from_config(&"wal-test-1", c.clone())?);
+        let r = WalFactory::new().from_node(1, &NodeConfig::from_config(&"wal-test-1", c)?);
         assert!(r.is_err());
         if let Err(Error(ErrorKind::BadOpConfig(s), _)) = r {
             assert_eq!(
@@ -737,17 +742,17 @@ mod test {
 
     #[test]
     fn from() -> Result<()> {
-        assert_eq!(42, u64::from(&(Idx::from(40u64) + 2u64)));
-        assert_eq!(42, u64::from(&(Idx::from(40u64) + 2usize)));
+        assert_eq!(42, u64::from(&(Idx::from(40_u64) + 2_u64)));
+        assert_eq!(42, u64::from(&(Idx::from(40_u64) + 2_usize)));
 
         Ok(())
     }
 
     #[test]
     fn as_ref() -> Result<()> {
-        let i = Idx::from(42u64);
+        let i = Idx::from(42_u64);
         let s: &[u8] = i.as_ref();
-        assert_eq!(&[0, 0, 0, 0, 0, 0, 0, 42u8][..], s);
+        assert_eq!(&[0, 0, 0, 0, 0, 0, 0, 42_u8][..], s);
         Ok(())
     }
 }

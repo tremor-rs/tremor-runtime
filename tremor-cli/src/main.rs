@@ -25,9 +25,6 @@
 
 #[macro_use]
 extern crate serde_derive;
-// This is silly but serde is forcing you to import serde if you want serde_derive
-#[allow(unused_extern_crates)]
-extern crate serde;
 
 #[macro_use]
 extern crate log;
@@ -104,7 +101,7 @@ fn main() -> Result<()> {
             .value_of("instance")
             .ok_or_else(|| Error::from("instance argument missing"))?;
         // ALLOW: We do this on startup and forget the memory once we drop it, that's on purpose
-        let forget_s = std::mem::transmute(&s as &str);
+        let forget_s = std::mem::transmute(s as &str);
         // This means we're going to LEAK this memory, however
         // it is fine since as we do actually need it for the
         // rest of the program execution.
@@ -131,17 +128,17 @@ fn run(mut app: App, cmd: &ArgMatches) -> Result<()> {
         Some(("explain", Some(_matches))) => Err("Not yet implemented".into()),
         Some(("completions", Some(matches))) => completions::run_cmd(app, matches),
         Some(("server", Some(matches))) => server::run_cmd(app, matches),
-        Some(("run", Some(matches))) => run::run_cmd(&matches),
-        Some(("doc", Some(matches))) => doc::run_cmd(&matches),
+        Some(("run", Some(matches))) => run::run_cmd(matches),
+        Some(("doc", Some(matches))) => doc::run_cmd(matches),
         Some(("api", Some(matches))) => task::block_on(api::run_cmd(
             TremorApp {
                 format,
                 config: load_config()?,
             },
-            &matches,
+            matches,
         )),
-        Some(("dbg", Some(matches))) => debug::run_cmd(&matches),
-        Some(("test", Some(matches))) => test::run_cmd(&matches),
+        Some(("dbg", Some(matches))) => debug::run_cmd(matches),
+        Some(("test", Some(matches))) => test::run_cmd(matches),
         _ => app
             .print_long_help()
             .map_err(|e| Error::from(format!("failed to print help: {}", e))),

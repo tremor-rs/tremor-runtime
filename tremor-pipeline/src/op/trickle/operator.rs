@@ -90,7 +90,7 @@ impl Operator for TrickleOperator {
     fn on_signal(
         &mut self,
         uid: u64,
-        state: &Value<'static>,
+        state: &mut Value<'static>,
         signal: &mut Event,
     ) -> Result<EventAndInsights> {
         self.op.on_signal(uid, state, signal)
@@ -100,7 +100,7 @@ impl Operator for TrickleOperator {
         self.op.handles_contraflow()
     }
     fn on_contraflow(&mut self, uid: u64, contraevent: &mut Event) {
-        self.op.on_contraflow(uid, contraevent)
+        self.op.on_contraflow(uid, contraevent);
     }
 
     fn metrics(

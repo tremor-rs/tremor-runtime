@@ -78,12 +78,12 @@ if let Some(map) = &node.config {
     let config: Config = Config::new(map)?;
     if config.outputs.is_empty() {
         error!("No outputs supplied for round robin operators");
-        return Err(ErrorKind::MissingOpConfig(node.id.to_string()).into());
+        return Err(ErrorKind::MissingOpConfig(node.id.clone()).into());
     };
     // convert backoff to ns
     Ok(Box::new(RoundRobin::from(config)))
 } else {
-    Err(ErrorKind::MissingOpConfig(node.id.to_string()).into())
+    Err(ErrorKind::MissingOpConfig(node.id.clone()).into())
 
 }});
 
@@ -121,7 +121,7 @@ impl Operator for RoundRobin {
     fn on_signal(
         &mut self,
         _uid: u64,
-        _state: &Value<'static>,
+        _state: &mut Value<'static>,
         signal: &mut Event,
     ) -> Result<EventAndInsights> {
         if self.first && self.outputs.iter().any(|o| o.open) {
@@ -194,7 +194,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(0, "in", &mut state, event1.clone())
+            .on_event(0, "in", &mut state, event1)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -209,7 +209,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(0, "in", &mut state, event2.clone())
+            .on_event(0, "in", &mut state, event2)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -240,7 +240,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(0, "in", &mut state, event2.clone())
+            .on_event(0, "in", &mut state, event2)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -254,7 +254,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(0, "in", &mut state, event3.clone())
+            .on_event(0, "in", &mut state, event3)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -285,7 +285,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(0, "in", &mut state, event3.clone())
+            .on_event(0, "in", &mut state, event3)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);

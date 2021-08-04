@@ -137,7 +137,7 @@ impl Sink for Blackhole {
                 };
                 self.count += 1;
                 self.buf.clear();
-                self.delivered.record(delta_ns)?
+                self.delivered.record(delta_ns)?;
             }
         }
         Ok(None)

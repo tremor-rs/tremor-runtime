@@ -17,11 +17,12 @@ use crate::job;
 use crate::report;
 use crate::status;
 use crate::test;
+use crate::test::command::suite_command;
 use crate::util::{basename, slurp_string};
 use clap::ArgMatches;
 use globwalk::{FileType, GlobWalkerBuilder};
-use kind::TestKind;
-pub(crate) use kind::UnknownKind;
+use kind::Kind;
+pub(crate) use kind::Unknown;
 use metadata::Meta;
 use std::collections::HashMap;
 use std::convert::TryInto;
@@ -45,10 +46,9 @@ mod unit;
 fn suite_bench(
     base: &Path,
     root: &Path,
-    meta: &Meta,
-    by_tag: (&[&str], &[String], &[String]),
+    config: &TestConfig,
 ) -> Result<(stats::Stats, Vec<report::TestReport>)> {
-    if let Ok(benches) = GlobWalkerBuilder::new(root, &meta.includes)
+    if let Ok(benches) = GlobWalkerBuilder::new(root, &config.meta.includes)
         .case_insensitive(true)
         .file_type(FileType::DIR)
         .build()
@@ -65,12 +65,12 @@ fn suite_bench(
             let bench_root = root.to_string_lossy();
             let tags = tag::resolve(base, root)?;
 
-            let (matched, is_match) = tags.matches(&by_tag.0, &by_tag.1, &by_tag.1);
+            let (matched, is_match) = config.matches(&tags);
             if is_match {
                 status::h1("Benchmark", &format!("Running {}", &basename(&bench_root)))?;
                 let cwd = std::env::current_dir()?;
                 std::env::set_current_dir(Path::new(&root))?;
-                status::tags(&tags, Some(&matched), Some(&by_tag.1))?;
+                status::tags(&tags, Some(&matched), Some(&config.excludes))?;
                 let test_report = process::run_process("bench", base, root, &tags)?;
 
                 // Restore cwd
@@ -89,7 +89,7 @@ fn suite_bench(
                     "  Benchmark",
                     &format!("Skipping {}", &basename(&bench_root)),
                 )?;
-                status::tags(&tags, Some(&matched), Some(&by_tag.1))?;
+                status::tags(&tags, Some(&matched), Some(&config.excludes))?;
             }
         }
 
@@ -102,12 +102,9 @@ fn suite_bench(
 fn suite_integration(
     base: &Path,
     root: &Path,
-    meta: &Meta,
-    sys_filter: &[&str],
-    include: &[String],
-    exclude: &[String],
+    config: &TestConfig,
 ) -> Result<(stats::Stats, Vec<report::TestReport>)> {
-    if let Ok(tests) = GlobWalkerBuilder::new(root, &meta.includes)
+    if let Ok(tests) = GlobWalkerBuilder::new(root, &config.meta.includes)
         .case_insensitive(true)
         .file_type(FileType::DIR)
         .build()
@@ -124,7 +121,7 @@ fn suite_integration(
             let bench_root = root.to_string_lossy();
             let tags = tag::resolve(base, root)?;
 
-            let (matched, is_match) = tags.matches(sys_filter, include, exclude);
+            let (matched, is_match) = config.matches(&tags);
             if is_match {
                 status::h1(
                     "Integration",
@@ -133,7 +130,7 @@ fn suite_integration(
                 // Set cwd to test root
                 let cwd = std::env::current_dir()?;
                 std::env::set_current_dir(&root)?;
-                status::tags(&tags, Some(&matched), Some(exclude))?;
+                status::tags(&tags, Some(&matched), Some(&config.excludes))?;
 
                 // Run integration tests
                 let test_report = process::run_process("integration", base, root, &tags)?;
@@ -157,7 +154,7 @@ fn suite_integration(
                     "Integration",
                     &format!("Skipping {}", &basename(&bench_root)),
                 )?;
-                status::tags(&tags, Some(&matched), Some(exclude))?;
+                status::tags(&tags, Some(&matched), Some(&config.excludes))?;
             }
         }
 
@@ -172,60 +169,58 @@ fn suite_integration(
 fn suite_unit(
     base: &Path,
     root: &Path,
-    _meta: &Meta,
-    sys_filter: &[&str],
-    includes: &[String],
-    excludes: &[String],
+    conf: &TestConfig,
 ) -> Result<(stats::Stats, Vec<report::TestReport>)> {
-    if let Ok(suites) = GlobWalkerBuilder::new(root, "all.tremor")
+    let suites = GlobWalkerBuilder::new(root, "all.tremor")
         .case_insensitive(true)
         .file_type(FileType::FILE)
         .build()
-    {
-        let suites = suites.filter_map(std::result::Result::ok);
-        let mut reports = vec![];
-        let mut stats = stats::Stats::new();
+        .map_err(|e| format!("Unable to walk test path for unit tests: {}", e))?;
 
-        status::h0("Framework", "Finding unit test scenarios")?;
+    let suites = suites.filter_map(std::result::Result::ok);
+    let mut reports = vec![];
+    let mut stats = stats::Stats::new();
 
-        for suite in suites {
-            status::h0("  Unit Test Scenario", &suite.path().to_string_lossy())?;
-            let scenario_tags = tag::resolve(base, root)?;
-            let (matched, _is_match) = scenario_tags.matches(
-                sys_filter,
-                &scenario_tags.includes(),
-                &scenario_tags.excludes(),
-            );
-            status::tags(&scenario_tags, Some(&matched), Some(&excludes))?;
+    status::h0("Framework", "Finding unit test scenarios")?;
 
-            let report = unit::run_suite(
-                &suite.path(),
-                &scenario_tags,
-                sys_filter,
-                includes,
-                excludes,
-            )?;
-            stats.merge(&report.stats);
-            status::stats(&report.stats, "  ")?;
-            status::duration(report.duration, "    ")?;
-            reports.push(report);
-        }
+    for suite in suites {
+        status::h0("  Unit Test Scenario", &suite.path().to_string_lossy())?;
+        let scenario_tags = tag::resolve(base, root)?;
+        status::tags(&scenario_tags, Some(&conf.includes), Some(&conf.excludes))?;
+        let report = unit::run_suite(suite.path(), &scenario_tags, conf)?;
+        stats.merge(&report.stats);
+        status::stats(&report.stats, "  ")?;
+        status::duration(report.duration, "    ")?;
+        reports.push(report);
+    }
 
-        status::rollups("  Unit", &stats)?;
+    status::rollups("  Unit", &stats)?;
 
-        Ok((stats, reports))
-    } else {
-        Err("Unable to walk test path for unit tests".into())
+    Ok((stats, reports))
+}
+
+pub(crate) struct TestConfig {
+    pub(crate) quiet: bool,
+    pub(crate) verbose: bool,
+    pub(crate) sys_filter: &'static [&'static str],
+    pub(crate) includes: Vec<String>,
+    pub(crate) excludes: Vec<String>,
+    pub(crate) meta: Meta,
+}
+impl TestConfig {
+    fn matches(&self, filter: &TagFilter) -> (Vec<String>, bool) {
+        filter.matches(self.sys_filter, &self.includes, &self.excludes)
     }
 }
 
 #[allow(clippy::too_many_lines)]
 pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
-    let kind: test::TestKind = matches.value_of("MODE").unwrap_or_default().try_into()?;
+    let kind: test::Kind = matches.value_of("MODE").unwrap_or_default().try_into()?;
     let path = matches.value_of("PATH").unwrap_or_default();
     let report = matches.value_of("REPORT");
     let quiet = matches.is_present("QUIET");
-    let mut includes: Vec<String> = if matches.is_present("INCLUDES") {
+    let verbose = matches.is_present("verbose");
+    let includes: Vec<String> = if matches.is_present("INCLUDES") {
         if let Some(matches) = matches.values_of("INCLUDES") {
             matches.map(std::string::ToString::to_string).collect()
         } else {
@@ -243,6 +238,14 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
         }
     } else {
         vec![]
+    };
+    let mut config = TestConfig {
+        quiet,
+        verbose,
+        includes,
+        excludes,
+        sys_filter: &[],
+        meta: Meta::default(),
     };
 
     let found = GlobWalkerBuilder::new(tremor_common::file::canonicalize(&path)?, "meta.json")
@@ -265,53 +268,41 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
         if let Some(root) = meta.path().parent() {
             let mut meta_str = slurp_string(&meta.path())?;
             let meta: Meta = simd_json::from_str(meta_str.as_mut_str())?;
+            config.meta = meta;
 
-            if meta.kind == TestKind::All {
-                includes.push("all".into());
+            if config.meta.kind == Kind::All {
+                config.includes.push("all".into());
             }
 
-            if meta.kind == TestKind::Bench && (kind == TestKind::All || kind == TestKind::Bench) {
-                let tag_filter = (&["bench"][..], includes.as_slice(), excludes.as_slice());
-                let (stats, test_reports) = suite_bench(&base, root, &meta, tag_filter)?;
-                reports.insert("bench".to_string(), test_reports);
-                bench_stats.merge(&stats);
-                status::hr();
+            if !(kind == Kind::All || kind == config.meta.kind) {
+                continue;
             }
 
-            if meta.kind == TestKind::Integration
-                && (kind == TestKind::All || kind == TestKind::Integration)
-            {
-                let (stats, test_reports) =
-                    suite_integration(&base, root, &meta, &["integration"], &includes, &excludes)?;
-                reports.insert("integration".to_string(), test_reports);
-                integration_stats.merge(&stats);
-                status::hr();
-            }
-
-            if meta.kind == TestKind::Command
-                && (kind == TestKind::All || kind == TestKind::Command)
-            {
-                let (stats, test_reports) = command::suite_command(
-                    &base,
-                    root,
-                    &meta,
-                    quiet,
-                    &["command"],
-                    &includes,
-                    &excludes,
-                )?;
-                reports.insert("command".to_string(), test_reports);
-                cmd_stats.merge(&stats);
-                status::hr();
-            }
-
-            if meta.kind == TestKind::Unit && (kind == TestKind::All || kind == TestKind::Unit) {
-                let (stats, test_reports) =
-                    suite_unit(&base, root, &meta, &["unit"], &includes, &excludes)?;
-                reports.insert("unit".to_string(), test_reports);
-                unit_stats.merge(&stats);
-                status::hr();
-            }
+            let test_reports = match config.meta.kind {
+                Kind::Bench => {
+                    let (s, t) = suite_bench(&base, root, &config)?;
+                    bench_stats.merge(&s);
+                    t
+                }
+                Kind::Integration => {
+                    let (s, t) = suite_integration(&base, root, &config)?;
+                    integration_stats.merge(&s);
+                    t
+                }
+                Kind::Command => {
+                    let (s, t) = suite_command(&base, root, &config)?;
+                    cmd_stats.merge(&s);
+                    t
+                }
+                Kind::Unit => {
+                    let (s, t) = suite_unit(&base, root, &config)?;
+                    unit_stats.merge(&s);
+                    t
+                }
+                Kind::All | Kind::Unknown(_) => continue,
+            };
+            reports.insert(config.meta.kind.to_string(), test_reports);
+            status::hr();
         }
 
         elapsed = nanotime() - start;
@@ -339,15 +330,15 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
 
     let test_run = report::TestRun {
         metadata: report::metadata(),
-        includes,
-        excludes,
+        includes: config.includes,
+        excludes: config.excludes,
         reports,
         stats: stats_map,
     };
     if let Some(report) = report {
         let mut file = file::create(report)?;
         let result = simd_json::to_string(&test_run)?;
-        file.write_all(&result.as_bytes())
+        file.write_all(result.as_bytes())
             .map_err(|e| Error::from(format!("Failed to write report to `{}`: {}", report, e)))?;
     }
 

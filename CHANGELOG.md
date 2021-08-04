@@ -18,6 +18,12 @@
 - Add support for concatenating arrays [#1113](https://github.com/tremor-rs/tremor-runtime/issues/1113)
 - Allow gcp headers to be included in `rest` offramp with `auth: gcp`
 - Add env source [#1136](https://github.com/tremor-rs/tremor-runtime/issues/1136)
+- Remove need for emit_emtpy_window by automatic eviction for groups where no window holds data
+- Ensure all windows of a group are alligned and can not go out of sync
+- Box apropriately in the rest sink
+- replace macros with functions in gcp code
+- Add -q flag and clarify -v flag for unit tests
+- Add win::cardinality function
 
 ### Fixes
 
@@ -29,6 +35,17 @@
 - Fix windowed queries emitting events with `null` metadata on tick
 - Fix sorting for artefacts
 - Fix issde where the test framework would generate reports without being asked for it [#1072](https://github.com/tremor-rs/tremor-runtime/issues/1072)
+- Remove the need for eviction_period for time based windows
+- Remove dead code and unneeded allows in otel and gcp code
+- Fix test and suite names not being printed
+- Fix badly nested structure in unit tests
+- Fix bug in the unit testing framework that would ignore all tags
+- Fix illogical structure of suites that required a doubly nested record
+- Fix `-v` flag
+- Fix issue with double counting of unit test stats
+- Fix issue with wrong script snippets being shown for unit tests
+- Fix argument order in test cases
+
 
 ## 0.11.4
 

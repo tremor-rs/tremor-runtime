@@ -47,7 +47,7 @@ impl Pattern {
         let input: Box<dyn BufRead> = Box::new(BufReader::new(file));
 
         let mut grok = Grok::default();
-        let recognizer = grok.compile(&PATTERNS_FILE_TUPLE, true)?;
+        let recognizer = grok.compile(PATTERNS_FILE_TUPLE, true)?;
 
         let mut result = Grok::default();
 
@@ -62,7 +62,7 @@ impl Pattern {
                     .get("alias")
                     .and_then(|alias| Some((alias, m.get("pattern")?)))
                 {
-                    result.insert_definition(alias.to_string(), pattern.to_string())
+                    result.insert_definition(alias.to_string(), pattern.to_string());
                 } else {
                     return Err(format!("{}: {:?}", "Expected a non-NONE value", (num, &l)).into());
                 }
@@ -74,7 +74,7 @@ impl Pattern {
         let p: &Path = file_path.as_ref();
         Ok(Self {
             definition: format!("file://{}", p.as_os_str().to_string_lossy()),
-            pattern: result.compile(&definition, true)?,
+            pattern: result.compile(definition, true)?,
         })
     }
 
@@ -105,7 +105,7 @@ impl Pattern {
     /// # Errors
     /// if the data isn't valid utf8 or doesn't match
     pub fn matches(&self, data: &[u8]) -> Result<Value<'static>> {
-        let text: String = str::from_utf8(&data)?.to_string();
+        let text: String = str::from_utf8(data)?.to_string();
         match self.pattern.match_against(&text) {
             Some(m) => {
                 let mut o = Value::object();

@@ -34,14 +34,12 @@ use tremor_otelapis::opentelemetry::proto::collector::{
     trace::v1::{trace_service_client::TraceServiceClient, ExportTraceServiceRequest},
 };
 
-#[allow(dead_code)]
 pub struct RemoteOpenTelemetryEndpoint {
     logs_client: LogsServiceClient<TonicChannel>,
     metrics_client: MetricsServiceClient<TonicChannel>,
     trace_client: TraceServiceClient<TonicChannel>,
 }
 
-#[allow(dead_code)]
 pub struct OpenTelemetry {
     config: Config,
     endpoint: String,
@@ -75,20 +73,17 @@ impl ConfigImpl for Config {}
 
 impl offramp::Impl for OpenTelemetry {
     fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
-        if let Some(config) = config {
-            let config: Config = Config::new(config)?;
-            let hostport = format!("{}:{}", config.host.clone(), config.port);
-            let endpoint = format!("https://{}:{}", config.host.clone().as_str(), config.port);
-            Ok(SinkManager::new_box(Self {
-                config,
-                endpoint,
-                remote: None,
-                is_down: false,
-                qos_facility: Box::new(QoSFacilities::recoverable(hostport)),
-            }))
-        } else {
-            Err("Offramp otel requires a config".into())
-        }
+        let config = config.as_ref().ok_or("Offramp otel requires a config")?;
+        let config: Config = Config::new(config)?;
+        let hostport = format!("{}:{}", config.host.clone(), config.port);
+        let endpoint = format!("https://{}:{}", config.host.clone().as_str(), config.port);
+        Ok(SinkManager::new_box(Self {
+            config,
+            endpoint,
+            remote: None,
+            is_down: false,
+            qos_facility: Box::new(QoSFacilities::recoverable(hostport)),
+        }))
     }
 }
 
@@ -234,15 +229,13 @@ impl Sink for OpenTelemetry {
 
         Ok(())
     }
-    async fn on_signal(&mut self, signal: Event) -> ResultVec {
+    async fn on_signal(&mut self, mut signal: Event) -> ResultVec {
         if self.is_down && self.qos_facility.probe(signal.ingest_ns) {
             self.is_down = false;
             // This means the port is connectable
             info!("CNCF OpenTelemetry -  sink remote endpoint - recovered and contactable");
             self.is_down = false;
             // Clone needed to make it mutable, lint is wrong
-            #[allow(clippy::redundant_clone)]
-            let mut signal = signal.clone();
             return Ok(Some(vec![qos::open(&mut signal)]));
         }
 

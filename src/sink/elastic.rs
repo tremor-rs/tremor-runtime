@@ -252,7 +252,6 @@ fn build_event_payload(event: &Event) -> Result<Vec<u8>> {
 }
 
 impl Elastic {
-    #[allow(clippy::cast_possible_truncation)]
     #[allow(clippy::too_many_lines)]
     async fn enqueue_send_future(&mut self, event: Event) {
         let (tx, rx) = bounded(1);
@@ -325,6 +324,7 @@ impl Elastic {
             })();
 
             // The truncation we do is sensible since we're only looking at a short timeframe
+            #[allow(clippy::cast_possible_truncation)]
             let time = start.elapsed().as_millis() as u64;
             let mut insight_meta = Value::object_with_capacity(1);
             let cb = match &r {
@@ -426,13 +426,13 @@ impl Elastic {
                         ..Event::default()
                     };
                     if let Err(e) = insight_tx.send(sink::Reply::Insight(insight)).await {
-                        error!("[Sink::ES] Failed to send insight: {}", e)
+                        error!("[Sink::ES] Failed to send insight: {}", e);
                     }
                 }
 
                 // mark this task as done in order to free a slot
                 if let Err(e) = tx.send(r.map(|_| time)).await {
-                    error!("[Sink::ES] Failed to send AsyncSink done message: {}", e)
+                    error!("[Sink::ES] Failed to send AsyncSink done message: {}", e);
                 }
             });
         });
@@ -485,7 +485,7 @@ impl Elastic {
     // we swallow send errors here, we only log them
     async fn send_insight(&mut self, insight: Event) {
         if let Err(e) = self.insight_tx.send(sink::Reply::Insight(insight)).await {
-            error!("[Sink::{}] Failed to send insight: {}", &self.sink_url, e)
+            error!("[Sink::{}] Failed to send insight: {}", &self.sink_url, e);
         }
     }
 }

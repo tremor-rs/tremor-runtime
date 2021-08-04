@@ -29,10 +29,7 @@ use tremor_script::highlighter::{Highlighter, Term as TermHighlighter};
 use tremor_script::prelude::*;
 use tremor_script::query::Query;
 use tremor_script::script::{AggrType, Return, Script};
-use tremor_script::{
-    ctx::{EventContext, EventOriginUri},
-    lexer::Tokenizer,
-};
+use tremor_script::{ctx::EventContext, lexer::Tokenizer};
 use tremor_script::{EventPayload, Value, ValueAndMeta};
 struct Ingress {
     is_interactive: bool,
@@ -240,8 +237,8 @@ fn run_tremor_source(matches: &ArgMatches, src: String) -> Result<()> {
         Ok(mut script) => {
             script.format_warnings_with(&mut outer)?;
 
-            let mut ingress = Ingress::from_args(&matches)?;
-            let mut egress = Egress::from_args(&matches)?;
+            let mut ingress = Ingress::from_args(matches)?;
+            let mut egress = Egress::from_args(matches)?;
             let id = 0_u64;
 
             ingress.process(
@@ -253,7 +250,7 @@ fn run_tremor_source(matches: &ArgMatches, src: String) -> Result<()> {
                     let mut state = Value::null();
                     let mut event = event.clone_static();
                     match runnable.run(
-                        &EventContext::new(at, Some(EventOriginUri::default())),
+                        &EventContext::new(at, None),
                         AggrType::Tick,
                         &mut event,
                         &mut state,
@@ -331,8 +328,8 @@ fn run_trickle_source(matches: &ArgMatches, src: String) -> Result<()> {
 
     runnable.format_warnings_with(&mut h)?;
 
-    let mut ingress = Ingress::from_args(&matches)?;
-    let mut egress = Egress::from_args(&matches)?;
+    let mut ingress = Ingress::from_args(matches)?;
+    let mut egress = Egress::from_args(matches)?;
 
     let runnable = tremor_pipeline::query::Query(runnable);
     let mut idgen = OperatorIdGen::new();
@@ -416,8 +413,8 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
         .ok_or_else(|| Error::from("No script file provided"))?;
     let script_file = script_file.to_string();
     match get_source_kind(&script_file) {
-        SourceKind::Tremor | SourceKind::Json => run_tremor_source(&matches, script_file),
-        SourceKind::Trickle => run_trickle_source(&matches, script_file),
+        SourceKind::Tremor | SourceKind::Json => run_tremor_source(matches, script_file),
+        SourceKind::Trickle => run_trickle_source(matches, script_file),
         SourceKind::Unsupported(_) | SourceKind::Yaml => {
             Err(format!("Error: Unable to execute source: {}", &script_file).into())
         }

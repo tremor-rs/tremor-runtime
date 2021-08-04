@@ -94,7 +94,7 @@ impl<'screw_lalrpop> From<ParserError<'screw_lalrpop>> for Error {
                             "`{}`",
                             s.strip_prefix('"')
                                 .and_then(|s| s.strip_suffix('"'))
-                                .unwrap_or(&s)
+                                .unwrap_or(s)
                                 .replace(r#"\""#, r#"""#)
                         ),
                     })
@@ -144,7 +144,7 @@ pub(crate) fn best_hint(
 ) -> Option<(usize, String)> {
     options
         .iter()
-        .map(|option| (distance::damerau_levenshtein(given, &option), option))
+        .map(|option| (distance::damerau_levenshtein(given, option), option))
         .filter(|(distance, _)| *distance <= max_dist)
         .min()
         .map(|(d, s)| (d, s.clone()))
@@ -312,7 +312,7 @@ impl ErrorKind {
             UnrecognizedToken(_, _, t, l) if !matches!(lexer::ident_to_token(t), lexer::Token::Ident(_, _)) && l.contains(&("`<ident>`".to_string())) => Some(format!("It looks like you tried to use the '{}' as a ident, consider quoting it as `{}` to make it an identifier.", t, t)),
             UnrecognizedToken(_, _, t, l) if t == "-" && l.contains(&("`(`".to_string())) => Some("Try wrapping this expression in parentheses `(` ... `)`".into()),
             UnrecognizedToken(_, _, key, options) => {
-                match best_hint(&key, &options, 3) {
+                match best_hint(key, options, 3) {
                     Some((_d, o)) if o == r#"`"`"# || o == r#"`"""`"#  => Some("Did you mean to use a string?".to_string()),
                     Some((_d, o)) if o != r#"`"`"# && o != r#"`"""`"# => Some(format!("Did you mean to use {}?", o)),
                     _ => None
@@ -331,14 +331,14 @@ impl ErrorKind {
                 options.push("true".to_owned());
                 options.push("false".to_owned());
                 options.push("null".to_owned());
-                match best_hint(&key, &options, 2) {
+                match best_hint(key, &options, 2) {
                     Some((_d, o)) => Some(format!("Did you mean to use `{}`?", o)),
                     _ => None
                 }
             }
 
             BadAccessInEvent(_, _, key, options) |BadAccessInGlobal(_, _, key, options) => {
-                match best_hint(&key, &options, 2) {
+                match best_hint(key, options, 2) {
                     Some((_d, o)) => Some(format!("Did you mean to use `{}`?", o)),
                     _ => None
                 }

@@ -15,25 +15,16 @@
 // We want to keep the names here
 #![allow(clippy::module_name_repetitions)]
 
+use super::super::raw::{ExprRaw, IdentRaw, ImutExprRaw, ModuleRaw, ScriptRaw, WithExprsRaw};
 use super::{
-    super::raw::{
-        reduce2, BaseExpr, ExprRaw, IdentRaw, ImutExprRaw, ModuleRaw, ScriptRaw, WithExprsRaw,
-    },
-    AggregateScratch,
+    error_generic, error_no_consts, error_no_locals, AggrRegistry, BaseExpr, GroupBy, GroupByInt,
+    HashMap, Helper, ImutExpr, Location, NodeMetas, OperatorDecl, OperatorKind, OperatorStmt,
+    Query, Registry, Result, ScriptDecl, ScriptStmt, Select, SelectStmt, Serialize, Stmt,
+    StreamStmt, Upable, Value, WindowDecl, WindowKind,
 };
-use super::{
-    error_generic, error_no_consts, error_no_locals, AggrRegistry, GroupBy, GroupByInt, HashMap,
-    Helper, ImutExpr, Location, NodeMetas, OperatorDecl, OperatorKind, OperatorStmt, Query,
-    Registry, Result, ScriptDecl, ScriptStmt, Select, SelectStmt, Serialize, Stmt, StreamStmt,
-    Upable, Value, Warning, WindowDecl, WindowKind,
-};
-use crate::{
-    ast::visitors::{GroupByExprExtractor, TargetEventRefVisitor},
-    lexer::Range,
-};
+use crate::ast::visitors::{GroupByExprExtractor, TargetEventRefVisitor};
 use crate::{ast::InvokeAggrFn, impl_expr};
 use beef::Cow;
-use value_trait::prelude::*;
 
 fn up_params<'script, 'registry>(
     params: WithExprsRaw<'script>,
@@ -41,7 +32,7 @@ fn up_params<'script, 'registry>(
 ) -> Result<HashMap<String, Value<'script>>> {
     params
         .into_iter()
-        .map(|(name, value)| Ok((name.id.to_string(), reduce2(value.up(helper)?, &helper)?)))
+        .map(|(name, value)| Ok((name.to_string(), value.up(helper)?.try_into_value(helper)?)))
         .collect()
 }
 
@@ -108,37 +99,9 @@ pub enum StmtRaw<'script> {
     /// we're forced to make this pub because of lalrpop
     Expr(Box<ExprRaw<'script>>),
 }
-
-impl<'script> BaseExpr for StmtRaw<'script> {
-    fn mid(&self) -> usize {
-        0
-    }
-    fn s(&self, meta: &NodeMetas) -> Location {
-        match self {
-            StmtRaw::ModuleStmt(s) => s.start,
-            StmtRaw::Operator(s) => s.start,
-            StmtRaw::OperatorDecl(s) => s.start,
-            StmtRaw::Script(s) => s.start,
-            StmtRaw::ScriptDecl(s) => s.start,
-            StmtRaw::Select(s) => s.start,
-            StmtRaw::Stream(s) => s.start,
-            StmtRaw::WindowDecl(s) => s.start,
-            StmtRaw::Expr(s) => s.s(meta),
-        }
-    }
-    fn e(&self, meta: &NodeMetas) -> Location {
-        match self {
-            StmtRaw::ModuleStmt(e) => e.end,
-            StmtRaw::Operator(e) => e.end,
-            StmtRaw::OperatorDecl(e) => e.end,
-            StmtRaw::Script(e) => e.end,
-            StmtRaw::ScriptDecl(e) => e.end,
-            StmtRaw::Select(e) => e.end,
-            StmtRaw::Stream(e) => e.end,
-            StmtRaw::WindowDecl(e) => e.end,
-            StmtRaw::Expr(e) => e.e(meta),
-        }
-    }
+impl<'script> StmtRaw<'script> {
+    const BAD_MODULE: &'static str = "Module in wrong place error";
+    const BAD_EXPR: &'static str = "Expression in wrong place error";
 }
 
 impl<'script> Upable<'script> for StmtRaw<'script> {
@@ -156,19 +119,10 @@ impl<'script> Upable<'script> for StmtRaw<'script> {
                     .map(InvokeAggrFn::into_static)
                     .collect();
                 // only allocate scratches if they are really needed - when we have multiple windows
-                let aggregate_scratches = if stmt.windows.len() > 1 {
-                    Some((
-                        AggregateScratch::new(aggregates.clone()),
-                        AggregateScratch::new(aggregates.clone()),
-                    ))
-                } else {
-                    None
-                };
 
                 Ok(Stmt::Select(SelectStmt {
                     stmt: Box::new(stmt),
                     aggregates,
-                    aggregate_scratches,
                     consts: helper.consts.clone(),
                     locals: locals.len(),
                     node_meta: helper.meta.clone(),
@@ -194,12 +148,8 @@ impl<'script> Upable<'script> for StmtRaw<'script> {
                 helper.windows.insert(stmt.fqwn(&stmt.module), stmt.clone());
                 Ok(Stmt::WindowDecl(Box::new(stmt)))
             }
-            StmtRaw::ModuleStmt(m) => {
-                error_generic(&m, &m, &"Module in wrong place error", &helper.meta)
-            }
-            StmtRaw::Expr(m) => {
-                error_generic(&*m, &*m, &"Expression in wrong place error", &helper.meta)
-            }
+            StmtRaw::ModuleStmt(ref m) => error_generic(m, m, &Self::BAD_MODULE, &helper.meta),
+            StmtRaw::Expr(m) => error_generic(&*m, &*m, &Self::BAD_EXPR, &helper.meta),
         }
     }
 }
@@ -242,6 +192,7 @@ pub struct ModuleStmtRaw<'script> {
 impl_expr!(ModuleStmtRaw);
 
 impl<'script> ModuleStmtRaw<'script> {
+    const BAD_STMT: &'static str = "Can't have statements inside of query modules";
     pub(crate) fn define<'registry>(
         self,
         reg: &'registry Registry,
@@ -249,7 +200,7 @@ impl<'script> ModuleStmtRaw<'script> {
         consts: &mut Vec<Value<'script>>,
         mut helper: &mut Helper<'script, 'registry>,
     ) -> Result<()> {
-        helper.module.push(self.name.id.to_string());
+        helper.module.push(self.name.to_string());
         for e in self.stmts {
             match e {
                 StmtRaw::ModuleStmt(m) => {
@@ -270,7 +221,7 @@ impl<'script> ModuleStmtRaw<'script> {
                     // add it back later
                     helper.module.pop();
                     expr_m.define(helper)?;
-                    helper.module.push(self.name.id.to_string());
+                    helper.module.push(self.name.to_string());
                 }
                 StmtRaw::WindowDecl(stmt) => {
                     let w = stmt.up(&mut helper)?;
@@ -284,13 +235,8 @@ impl<'script> ModuleStmtRaw<'script> {
                     let o = stmt.up(&mut helper)?;
                     helper.operators.insert(o.fqon(&helper.module), o);
                 }
-                e => {
-                    return error_generic(
-                        &e,
-                        &e,
-                        &"Can't have statements inside of query modules",
-                        &helper.meta,
-                    )
+                ref e => {
+                    return error_generic(e, e, &Self::BAD_STMT, &helper.meta);
                 }
             }
         }
@@ -314,15 +260,11 @@ impl_expr!(OperatorStmtRaw);
 impl<'script> Upable<'script> for OperatorStmtRaw<'script> {
     type Target = OperatorStmt<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+        let module = self.module.iter().map(ToString::to_string).collect();
         Ok(OperatorStmt {
             mid: helper.add_meta_w_name(self.start, self.end, &self.id),
             id: self.id,
-            module: self
-                .module
-                .into_iter()
-                .map(|x| x.id.to_string())
-                .collect::<Vec<String>>(),
-
+            module,
             target: self.target,
             params: up_maybe_params(self.params, helper)?,
         })
@@ -350,7 +292,7 @@ impl<'script> Upable<'script> for ScriptDeclRaw<'script> {
         // definitions. This is achieved with the push/pop pointcut around the up() call
         // below. The actual function registration occurs in the up() call in the usual way.
         //
-        helper.module.push(self.id.to_string());
+        helper.module.push(self.id.clone());
         let script = self.script.up_script(helper)?;
 
         let script_decl = ScriptDecl {
@@ -361,9 +303,8 @@ impl<'script> Upable<'script> for ScriptDeclRaw<'script> {
             script,
         };
         helper.module.pop();
-        helper
-            .scripts
-            .insert(script_decl.fqsn(&helper.module), script_decl.clone());
+        let script_name = script_decl.fqsn(&helper.module);
+        helper.scripts.insert(script_name, script_decl.clone());
         Ok(script_decl)
     }
 }
@@ -382,18 +323,13 @@ pub struct ScriptStmtRaw<'script> {
 impl<'script> Upable<'script> for ScriptStmtRaw<'script> {
     type Target = ScriptStmt<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        // let (script, mut warnings) = self.script.up_script(helper.reg, helper.aggr_reg)?;
-        // helper.warnings.append(&mut warnings);
+        let module = self.module.iter().map(ToString::to_string).collect();
         Ok(ScriptStmt {
             mid: helper.add_meta_w_name(self.start, self.end, &self.id),
             id: self.id,
             params: up_maybe_params(self.params, helper)?,
             target: self.target,
-            module: self
-                .module
-                .into_iter()
-                .map(|x| x.id.to_string())
-                .collect::<Vec<String>>(),
+            module,
         })
     }
 }
@@ -416,24 +352,6 @@ impl<'script> Upable<'script> for WindowDeclRaw<'script> {
 
         // warn params if `emit_empty_windows` is defined, but neither `max_groups` nor `evicition_period` is defined
         let params = up_params(self.params, helper)?;
-        let custom_max_groups = params
-            .get(WindowDecl::MAX_GROUPS)
-            .and_then(ValueAccess::as_u64)
-            .map(|x| x < u64::MAX)
-            .unwrap_or_default();
-        let emit_empty_windows = params
-            .get(WindowDecl::EMIT_EMPTY_WINDOWS)
-            .and_then(ValueAccess::as_bool)
-            .unwrap_or_default();
-        if emit_empty_windows
-            && !(custom_max_groups || params.contains_key(WindowDecl::EVICTION_PERIOD))
-        {
-            let range: Range = (self.start, self.end).into();
-            helper.warn(Warning::new_with_scope(
-                range,
-                "Using `emit_empty_windows` without guard is potentially dangerous. Consider limiting the amount of groups maintained internally by using `max_groups` and/or `eviction_period`.".to_owned(),
-            ));
-        }
 
         Ok(WindowDecl {
             mid: helper.add_meta_w_name(self.start, self.end, &self.id),
@@ -463,15 +381,8 @@ impl<'script> WindowDefnRaw<'script> {
         if self.module.is_empty() {
             self.id.clone()
         } else {
-            format!(
-                "{}::{}",
-                self.module
-                    .iter()
-                    .map(|x| x.id.to_string())
-                    .collect::<Vec<String>>()
-                    .join("::"),
-                self.id
-            )
+            let parts: Vec<_> = self.module.iter().map(ToString::to_string).collect();
+            format!("{}::{}", parts.join("::"), self.id)
         }
     }
 }
@@ -632,17 +543,6 @@ pub struct OperatorKindRaw {
     pub(crate) end: Location,
     pub(crate) module: String,
     pub(crate) operation: String,
-}
-impl BaseExpr for OperatorKindRaw {
-    fn s(&self, _meta: &NodeMetas) -> Location {
-        self.start
-    }
-    fn e(&self, _meta: &NodeMetas) -> Location {
-        self.end
-    }
-    fn mid(&self) -> usize {
-        0
-    }
 }
 
 impl<'script> Upable<'script> for OperatorKindRaw {

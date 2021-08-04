@@ -52,7 +52,7 @@ pub struct Endpoint {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "lowercase")]
 pub enum Auth {
-    GCP,
+    Gcp,
 }
 
 fn none_if_empty(s: &str) -> Option<String> {
@@ -265,7 +265,6 @@ fn dflt_method() -> SerdeMethod {
 
 impl ConfigImpl for Config {}
 
-#[allow(clippy::large_enum_variant)]
 enum CodecTaskInMsg {
     ToRequest(Event, Sender<SendTaskInMsg>),
     ToEvent {
@@ -274,7 +273,7 @@ enum CodecTaskInMsg {
         op_meta: Box<Option<OpMeta>>,
         request_meta: Value<'static>,
         correlation: Option<Value<'static>>,
-        response: Response,
+        response: Box<Response>,
         duration: u64,
     },
     ReportFailure {
@@ -395,10 +394,10 @@ impl Sink for Rest {
                                         op_meta: Box::new(op_meta),
                                         request_meta,
                                         correlation,
-                                        response,
+                                        response: Box::new(response),
                                         duration,
                                     })
-                                    .await?
+                                    .await?;
                             }
                             Err(e) => {
                                 error!("[Sink::Rest] Error sending HTTP request: {}", e);
@@ -534,7 +533,7 @@ async fn codec_task(
     };
     // create token in this lifetime (ambiguous to compiler), instead of bound to the sink.
     let token = match auth {
-        Some(Auth::GCP) => {
+        Some(Auth::Gcp) => {
             let t = Token::new()?;
             Some(t)
         }
@@ -626,10 +625,10 @@ async fn codec_task(
                                 error!(
                                     "[Sink::{}] HTTP request failed: {} => {}",
                                     &sink_url, status, body
-                                )
+                                );
                             }
                         } else {
-                            error!("[Sink::{}] HTTP request failed: {}", &sink_url, status)
+                            error!("[Sink::{}] HTTP request failed: {}", &sink_url, status);
                         }
                     }
                     CbAction::Fail
@@ -645,7 +644,7 @@ async fn codec_task(
                         origin_uri.as_ref(),
                         request_meta,
                         correlation.as_ref(),
-                        response,
+                        *response,
                         codec,
                         &mut codec_map,
                         preprocessors.as_mut_slice(),

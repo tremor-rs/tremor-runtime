@@ -140,7 +140,7 @@ suites:
         expects:
           - source: stdout
             contains:
-              - complete -c tremor -n "__fish_use_subcommand" -s v -l verbose -d 'Sets the level of verbosity'
+              - complete -c tremor -n "__fish_use_subcommand"
       - name: |
           `tremor completions powershell` returns powershell completions
         command: tremor completions powershell

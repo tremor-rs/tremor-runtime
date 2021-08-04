@@ -398,7 +398,7 @@ fn message_to_event(
             return Err(msg.into());
         }
     };
-    let preprocessed = preprocess(preprocessors, ingest_ns, response_bytes, &sink_url)?;
+    let preprocessed = preprocess(preprocessors, ingest_ns, response_bytes, sink_url)?;
     // tried using an iter, but failed, so here we go
     let mut res = Vec::with_capacity(preprocessed.len());
     for pp in preprocessed {

@@ -131,22 +131,25 @@ impl default::Default for EventOriginUri {
 
 /// Context in that an event is executed
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash, simd_json_derive::Serialize)]
-pub struct EventContext {
+pub struct EventContext<'run> {
     at: u64,
     /// URI of the origin
-    pub origin_uri: Option<EventOriginUri>,
+    pub origin_uri: Option<&'run EventOriginUri>,
     /// Allow panicing on asserts
     pub panic_on_assert: bool,
+    /// The cardinality of the current window, if any
+    pub cardinality: usize,
 }
 
-impl EventContext {
+impl<'run> EventContext<'run> {
     /// Creates a new context
     #[must_use]
-    pub fn new(ingest_ns: u64, origin_uri: Option<EventOriginUri>) -> Self {
+    pub fn new(ingest_ns: u64, origin_uri: Option<&'run EventOriginUri>) -> Self {
         Self {
             at: ingest_ns,
             origin_uri,
             panic_on_assert: false,
+            cardinality: 0,
         }
     }
 
@@ -159,7 +162,7 @@ impl EventContext {
     /// returns the events origin uri
     #[must_use]
     pub fn origin_uri(&self) -> Option<&EventOriginUri> {
-        self.origin_uri.as_ref()
+        self.origin_uri
     }
 }
 
@@ -232,7 +235,8 @@ mod tests {
         );
 
         // Non-ASCII characters in host
-        let eouri = EventOriginUri::parse(0, "protocol://host.names.are.🔥").expect("Valid URI");
+        let eouri =
+            EventOriginUri::parse(0, "protocol://host.names.are.\u{1f525}").expect("Valid URI");
         assert_eq!(eouri.scheme(), "protocol");
         assert_eq!(eouri.host(), "host.names.are.%F0%9F%94%A5"); // 🔥 gets percent-encoded by `url`
         assert_eq!(eouri.port(), None);

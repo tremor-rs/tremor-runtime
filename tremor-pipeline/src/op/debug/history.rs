@@ -34,7 +34,7 @@ if let Some(map) = &node.config {
         id: node.id.clone(),
     }))
 } else {
-    Err(ErrorKind::MissingOpConfig(node.id.to_string()).into())
+    Err(ErrorKind::MissingOpConfig(node.id.clone()).into())
 
 }});
 
@@ -90,7 +90,7 @@ impl Operator for History {
     fn on_signal(
         &mut self,
         _uid: u64,
-        _state: &Value<'static>,
+        _state: &mut Value<'static>,
         signal: &mut Event,
     ) -> Result<EventAndInsights> {
         let Event {
@@ -170,10 +170,10 @@ mod test {
             data: (Value::from("snot"), Value::object()).into(),
             ..Event::default()
         };
-        let state = Value::null();
+        let mut state = Value::null();
 
-        let _ = op.on_signal(0, &state, &mut event);
-        let _ = op.on_signal(0, &state, &mut event);
+        let _ = op.on_signal(0, &mut state, &mut event);
+        let _ = op.on_signal(0, &mut state, &mut event);
 
         let history = event.data.suffix().meta().get(op.config.name.as_str());
 

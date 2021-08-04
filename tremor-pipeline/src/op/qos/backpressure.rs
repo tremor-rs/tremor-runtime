@@ -105,7 +105,7 @@ op!(BackpressureFactory(_uid, node) {
         let config: Config = Config::new(map)?;
         Ok(Box::new(Backpressure::from(config)))
     } else {
-        Err(ErrorKind::MissingOpConfig(node.id.to_string()).into())
+        Err(ErrorKind::MissingOpConfig(node.id.clone()).into())
     }
 });
 
@@ -141,7 +141,7 @@ impl Operator for Backpressure {
     fn on_signal(
         &mut self,
         _uid: u64,
-        _state: &Value<'static>,
+        _state: &mut Value<'static>,
         signal: &mut Event,
     ) -> Result<EventAndInsights> {
         let insights = if self.output.backoff > 0 && self.output.next <= signal.ingest_ns {
@@ -223,7 +223,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(0, "in", &mut state, event1.clone())
+            .on_event(0, "in", &mut state, event1)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -239,7 +239,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(0, "in", &mut state, event2.clone())
+            .on_event(0, "in", &mut state, event2)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -267,7 +267,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(0, "in", &mut state, event1.clone())
+            .on_event(0, "in", &mut state, event1)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -305,7 +305,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(0, "in", &mut state, event2.clone())
+            .on_event(0, "in", &mut state, event2)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -320,7 +320,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(0, "in", &mut state, event3.clone())
+            .on_event(0, "in", &mut state, event3)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -336,7 +336,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(0, "in", &mut state, event3.clone())
+            .on_event(0, "in", &mut state, event3)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);

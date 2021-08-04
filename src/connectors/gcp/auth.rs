@@ -22,14 +22,14 @@ use reqwest::header::HeaderMap;
 use reqwest::Client;
 
 /// returns `gouth::Token` object and bearer token header as a string
-pub(crate) async fn authenticate_bearer() -> Result<(Token, String)> {
+pub(crate) fn authenticate_bearer() -> Result<(Token, String)> {
     let token = Token::new()?;
     let header_value_string = token.header_value()?.to_string();
     Ok((token, header_value_string))
 }
 
-pub(crate) async fn json_api_client(extra_headers: &HeaderMap) -> Result<Client> {
-    let (_, bearer) = authenticate_bearer().await?;
+pub(crate) fn json_api_client(extra_headers: &HeaderMap) -> Result<Client> {
+    let (_, bearer) = authenticate_bearer()?;
     let mut headers = reqwest::header::HeaderMap::new();
     headers.insert(
         "authorization",

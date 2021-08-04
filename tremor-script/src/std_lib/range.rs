@@ -42,7 +42,7 @@ mod test {
         let f = fun("range", "range");
         let s = Value::from(0);
         let e = Value::from(42);
-        let a: Vec<i32> = (0i32..42i32).collect();
+        let a: Vec<i32> = (0_i32..42_i32).collect();
         assert_val!(f(&[&s, &e]), a);
     }
 }

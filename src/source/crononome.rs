@@ -142,7 +142,7 @@ impl<I> PartialOrd for TemporalItem<I> {
 
 impl<I> Eq for TemporalItem<I> {
     fn assert_receiver_is_total_eq(&self) {
-        self.at.assert_receiver_is_total_eq()
+        self.at.assert_receiver_is_total_eq();
     }
 }
 
@@ -185,7 +185,7 @@ impl<I> TemporalPriorityQueue<I> {
     }
 
     pub fn enqueue(&mut self, at: TemporalItem<I>) {
-        self.q.push(Reverse(at))
+        self.q.push(Reverse(at));
     }
 
     pub fn pop(&mut self) -> Option<TemporalItem<I>> {

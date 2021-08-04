@@ -48,7 +48,7 @@ impl AsyncRuntime for SmolRuntime {
         T: Future<Output = ()> + Send + 'static,
     {
         // This needs to be smol::spawn we can't use async_std::task::spawn
-        smol::spawn(task).detach()
+        smol::spawn(task).detach();
     }
 
     fn delay_for(duration: Duration) -> Self::Delay {
@@ -170,7 +170,9 @@ impl rentals::MessageStream {
     fn commit(&mut self, map: &StdMap<(String, i32), Offset>, mode: CommitMode) -> Result<()> {
         let offsets = TopicPartitionList::from_topic_map(map)?;
 
-        unsafe { self.consumer().commit(&offsets, mode)? };
+        unsafe {
+            self.consumer().commit(&offsets, mode)?;
+        };
 
         Ok(())
     }
@@ -229,7 +231,7 @@ impl Int {
                 let commit_offset = Offset::Offset(msg_offset + 1);
                 let this_offset = tm.entry((topic, partition)).or_insert(commit_offset);
                 if let (Offset::Offset(old), Offset::Offset(new)) = (this_offset, commit_offset) {
-                    *old = (*old).max(new)
+                    *old = (*old).max(new);
                 }
             }
         }
@@ -307,13 +309,13 @@ impl ConsumerContext for LoggingConsumerContext {
                 );
             }
             Rebalance::Revoke => {
-                info!("[Source::{}] ALL partitions are REVOKED", self.onramp_id)
+                info!("[Source::{}] ALL partitions are REVOKED", self.onramp_id);
             }
             Rebalance::Error(err_info) => {
                 warn!(
                     "[Source::{}] Post Rebalance error {}",
                     self.onramp_id, err_info
-                )
+                );
             }
         }
     }
@@ -624,7 +626,7 @@ impl Source for Int {
             let tm = self.get_topic_map_for_id(id);
             if let Some(consumer) = self.stream.as_mut() {
                 if let Err(e) = consumer.seek(&tm) {
-                    error!("[Source::{}] failed to seek message: {}", self.onramp_id, e)
+                    error!("[Source::{}] failed to seek message: {}", self.onramp_id, e);
                 }
             }
         }
@@ -639,7 +641,7 @@ impl Source for Int {
                         error!(
                             "[Source::{}] failed to commit message: {}",
                             self.onramp_id, e
-                        )
+                        );
                     }
                 }
             }

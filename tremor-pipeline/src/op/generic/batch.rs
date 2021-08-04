@@ -64,7 +64,7 @@ if let Some(map) = &node.config {
         event_id_gen: idgen,
     }))
 } else {
-    Err(ErrorKind::MissingOpConfig(node.id.to_string()).into())
+    Err(ErrorKind::MissingOpConfig(node.id.clone()).into())
 
 }});
 
@@ -103,7 +103,7 @@ impl Operator for Batch {
                             "is_batch": is_batch
                         }
                     });
-                    a.push(e)
+                    a.push(e);
                 };
                 Ok(())
             },
@@ -145,7 +145,7 @@ impl Operator for Batch {
     fn on_signal(
         &mut self,
         _uid: u64,
-        _state: &Value<'static>,
+        _state: &mut Value<'static>,
         signal: &mut Event,
     ) -> Result<EventAndInsights> {
         Ok(self
@@ -366,7 +366,7 @@ mod test {
         };
 
         let mut r = op
-            .on_signal(0, &state, &mut signal)
+            .on_signal(0, &mut state, &mut signal)
             .expect("failed to run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -429,7 +429,7 @@ mod test {
         };
 
         let r = op
-            .on_signal(0, &state, &mut signal)
+            .on_signal(0, &mut state, &mut signal)
             .expect("failed to run pipeline")
             .events;
         assert_eq!(r.len(), 0);
@@ -448,7 +448,7 @@ mod test {
         signal.ingest_ns = 3_000_000;
         signal.id = (1, 1, 2).into();
         let r = op
-            .on_signal(0, &state, &mut signal)
+            .on_signal(0, &mut state, &mut signal)
             .expect("failed to run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -456,7 +456,7 @@ mod test {
         signal.ingest_ns = 4_000_000;
         signal.id = (1, 1, 3).into();
         let r = op
-            .on_signal(0, &state, &mut signal)
+            .on_signal(0, &mut state, &mut signal)
             .expect("failed to run pipeline")
             .events;
         assert_eq!(r.len(), 0);

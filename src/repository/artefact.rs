@@ -196,7 +196,7 @@ impl Artefact for OfframpArtefact {
         // lookup codecs already here
         // this will bail out early if something is mistyped or so
         let codec = if let Some(codec) = &self.codec {
-            codec::lookup(&codec)?
+            codec::lookup(codec)?
         } else {
             codec::lookup(offramp.default_codec())?
         };
@@ -421,7 +421,7 @@ impl Artefact for OnrampArtefact {
             let (tx, rx) = bounded(mappings.len());
 
             for to in mappings.values() {
-                links.push(to.clone())
+                links.push(to.clone());
             }
             let mut expect_answers = mappings.len();
             for (_port, pipeline_id) in mappings {
@@ -497,7 +497,7 @@ impl Artefact for Binding {
             if let Some(inst) = src.instance() {
                 let mut instance = String::new();
                 for (map_name, map_replace) in &mappings {
-                    instance = inst.replace(&format!("%7B{}%7D", map_name), &map_replace);
+                    instance = inst.replace(&format!("%7B{}%7D", map_name), map_replace);
                 }
                 let mut from = src.clone();
                 from.set_instance(&instance);
@@ -510,7 +510,7 @@ impl Artefact for Binding {
 
                         // This is because it is an URL and we have to use escape codes
                         for (map_name, map_replace) in &mappings {
-                            instance = inst.replace(&format!("%7B{}%7D", map_name), &map_replace);
+                            instance = inst.replace(&format!("%7B{}%7D", map_name), map_replace);
                         }
                         let mut to = dst.clone();
                         to.set_instance(&instance);
@@ -520,7 +520,7 @@ impl Artefact for Binding {
                                 onramps.push((from.clone(), to));
                             }
                             (Some(Pipeline), Some(Offramp | Pipeline | Onramp)) => {
-                                pipelines.push((from.clone(), to))
+                                pipelines.push((from.clone(), to));
                             }
                             // for linked offramps
                             // TODO improve this process: this should really be treated as onramps,
@@ -622,7 +622,7 @@ impl Artefact for Binding {
                 for p in tos {
                     mappings.insert(from.instance_port_required()?.to_string(), p.clone());
                 }
-                system.unlink_onramp(&from, mappings).await?;
+                system.unlink_onramp(from, mappings).await?;
             }
         }
         // keep track of already handled pipelines, so we don't unlink twice and run into errors
@@ -636,11 +636,11 @@ impl Artefact for Binding {
                     for to in tos {
                         let mut mappings = HashMap::new();
                         mappings.insert(from.instance_port_required()?.to_string(), to.clone());
-                        system.unlink_pipeline(&from, mappings).await?;
+                        system.unlink_pipeline(from, mappings).await?;
                         if let Some(ResourceType::Offramp) = to.resource_type() {
                             let mut mappings = HashMap::new();
                             mappings.insert(to.clone(), from.clone());
-                            system.unlink_offramp(&to, mappings).await?;
+                            system.unlink_offramp(to, mappings).await?;
                         }
                     }
                     unlinked.insert(from_instance);

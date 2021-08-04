@@ -77,7 +77,7 @@ op!(PercentileFactory(_uid, node) {
         let config: Config = Config::new(map)?;
         Ok(Box::new(Percentile::from(config)))
     } else {
-        Err(ErrorKind::MissingOpConfig(node.id.to_string()).into())
+        Err(ErrorKind::MissingOpConfig(node.id.clone()).into())
     }
 });
 
@@ -164,7 +164,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(uid, "in", &mut state, event1.clone())
+            .on_event(uid, "in", &mut state, event1)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -180,7 +180,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(uid, "in", &mut state, event2.clone())
+            .on_event(uid, "in", &mut state, event2)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -209,7 +209,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(uid, "in", &mut state, event1.clone())
+            .on_event(uid, "in", &mut state, event1)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -238,7 +238,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(uid, "in", &mut state, event2.clone())
+            .on_event(uid, "in", &mut state, event2)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);

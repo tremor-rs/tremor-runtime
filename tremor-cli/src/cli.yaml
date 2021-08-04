@@ -13,7 +13,8 @@ args:
       short: v
       long: verbose
       multiple: true
-      help: Sets the level of verbosity
+      help: Sets the level of verbosity (does not apply to logging)
+      takes_value: false
   - instance:
       help: Instance identifier
       short: i
@@ -120,7 +121,7 @@ subcommands:
             multiple: true
             takes_value: true
         - QUIET:
-            help: do not print skipped tests
+            help: only print failed tests
             short: q
             long: quiet
             required: false

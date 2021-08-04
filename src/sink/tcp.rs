@@ -119,7 +119,7 @@ impl Tcp {
             }
             Some(Either::Left(tls)) => {
                 debug!("Returns a TLS stream by a TLS connector started wiht cafile provided in the config");
-                let c = connector(&tls).await?;
+                let c = connector(tls).await?;
                 Box::new(
                     c.connect(
                         tls.domain

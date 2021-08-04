@@ -20,10 +20,8 @@ use crate::{
         identity::PassthroughFactory,
         prelude::{ERR, IN, METRICS, OUT},
         trickle::{
-            operator::TrickleOperator,
-            script::Script,
-            select::{Groups, TrickleSelect, WindowImpl},
-            simple_select::SimpleSelect,
+            operator::TrickleOperator, script::Script, select::Select, simple_select::SimpleSelect,
+            window,
         },
     },
     ConfigGraph, Connection, NodeConfig, NodeKind, Operator, OperatorNode, PortIndexMap,
@@ -35,8 +33,7 @@ use petgraph::algo::is_cyclic_directed;
 use tremor_common::ids::OperatorIdGen;
 use tremor_script::{
     ast::{
-        BaseExpr, CompilationUnit, Ident, NodeMetas, Select, SelectType, Stmt, WindowDecl,
-        WindowKind,
+        self, BaseExpr, CompilationUnit, Ident, NodeMetas, SelectType, Stmt, WindowDecl, WindowKind,
     },
     errors::{
         query_node_duplicate_name_err, query_node_reserved_name_err, query_stream_not_defined_err,
@@ -88,40 +85,27 @@ fn resolve_output_port(port: &(Ident, Ident), meta: &NodeMetas) -> OutputPort {
     }
 }
 
-pub(crate) fn window_decl_to_impl(d: &WindowDecl) -> Result<WindowImpl> {
-    use op::trickle::select::{TumblingWindowOnNumber, TumblingWindowOnTime};
+pub(crate) fn window_decl_to_impl(d: &WindowDecl) -> Result<window::Impl> {
+    use op::trickle::window::{TumblingOnNumber, TumblingOnTime};
     match &d.kind {
         WindowKind::Sliding => Err("Sliding windows are not yet implemented".into()),
         WindowKind::Tumbling => {
             let script = if d.script.is_some() { Some(d) } else { None };
-            let ttl = d
-                .params
-                .get(WindowDecl::EVICTION_PERIOD)
-                .and_then(Value::as_u64);
             let max_groups = d
                 .params
                 .get(WindowDecl::MAX_GROUPS)
-                .and_then(Value::as_u64)
-                .unwrap_or(WindowImpl::DEFAULT_MAX_GROUPS);
-            let emit_empty_windows = d
-                .params
-                .get(WindowDecl::EMIT_EMPTY_WINDOWS)
-                .and_then(Value::as_bool)
-                .unwrap_or(WindowImpl::DEFAULT_EMIT_EMPTY_WINDOWS);
+                .and_then(Value::as_usize)
+                .unwrap_or(window::Impl::DEFAULT_MAX_GROUPS);
 
             match (
                 d.params.get(WindowDecl::INTERVAL).and_then(Value::as_u64),
                 d.params.get(WindowDecl::SIZE).and_then(Value::as_u64),
             ) {
-                (Some(interval), None) => Ok(WindowImpl::from(TumblingWindowOnTime::from_stmt(
-                    interval,
-                    emit_empty_windows,
-                    max_groups,
-                    ttl,
-                    script,
+                (Some(interval), None) => Ok(window::Impl::from(TumblingOnTime::from_stmt(
+                    interval, max_groups, script,
                 ))),
-                (None, Some(size)) => Ok(WindowImpl::from(TumblingWindowOnNumber::from_stmt(
-                    size, max_groups, ttl, script,
+                (None, Some(size)) => Ok(window::Impl::from(TumblingOnNumber::from_stmt(
+                    size, max_groups, script,
                 ))),
                 (Some(_), Some(_)) => Err(Error::from(
                     "Bad window configuration, only one of `size` or `interval` is allowed.",
@@ -245,13 +229,13 @@ impl Query {
         for (i, stmt) in stmts.into_iter().enumerate() {
             match stmt.suffix() {
                 Stmt::Select(ref select) => {
-                    let s: &Select<'_> = &select.stmt;
+                    let s: &ast::Select<'_> = &select.stmt;
 
                     if !nodes.contains_key(&s.from.0.id) {
                         return Err(query_stream_not_defined_err(
                             s,
                             &s.from.0,
-                            s.from.0.id.to_string(),
+                            s.from.0.to_string(),
                             &query.node_meta,
                         )
                         .into());
@@ -351,7 +335,7 @@ impl Query {
 
                     let mut ww = HashMap::with_capacity(query.windows.len());
                     for (name, decl) in &query.windows {
-                        ww.insert(name.clone(), window_decl_to_impl(&decl)?);
+                        ww.insert(name.clone(), window_decl_to_impl(decl)?);
                     }
                     let op = node.to_op(
                         idgen.next_id(),
@@ -407,7 +391,7 @@ impl Query {
                     };
 
                     let node = NodeConfig {
-                        id: o.id.to_string(),
+                        id: o.id.clone(),
                         kind: NodeKind::Operator,
                         op_type: "trickle::operator".to_string(),
                         ..NodeConfig::default()
@@ -488,7 +472,7 @@ impl Query {
                     let that_defn = stmt_srs;
 
                     let node = NodeConfig {
-                        id: o.id.to_string(),
+                        id: o.id.clone(),
                         kind: NodeKind::Script,
                         label,
                         op_type: "trickle::script".to_string(),
@@ -613,7 +597,7 @@ impl Query {
             for ((i1, s1), connections) in &port_indexes {
                 let connections = connections
                     .iter()
-                    .filter_map(|(i, s)| Some((*i2pos.get(&i)?, s.clone())))
+                    .filter_map(|(i, s)| Some((*i2pos.get(i)?, s.clone())))
                     .collect();
                 let k = *i2pos.get(i1).ok_or_else(|| Error::from("Invalid graph"))?;
                 port_indexes2.insert((k, s1.clone()), connections);
@@ -659,7 +643,7 @@ fn select(
     operator_uid: u64,
     config: &NodeConfig,
     node: Option<&srs::Stmt>,
-    windows: Option<HashMap<String, WindowImpl>>,
+    windows: Option<HashMap<String, window::Impl>>,
 ) -> Result<Box<dyn Operator>> {
     let node = node.ok_or_else(|| {
         ErrorKind::MissingOpConfig("trickle operators require a statement".into())
@@ -678,13 +662,12 @@ fn select(
             let op = PassthroughFactory::new_boxed();
             op.from_node(operator_uid, config)
         }
-        SelectType::Simple => Ok(Box::new(SimpleSelect::with_stmt(config.id.clone(), &node)?)),
+        SelectType::Simple => Ok(Box::new(SimpleSelect::with_stmt(config.id.clone(), node)?)),
         SelectType::Normal => {
-            let groups = Groups::new();
             let windows = windows.ok_or_else(|| {
                 ErrorKind::MissingOpConfig("select operators require a window mapping".into())
             })?;
-            let windows: Result<Vec<(String, WindowImpl)>> =
+            let windows: Result<Vec<(String, window::Impl)>> =
                 if let tremor_script::ast::Stmt::Select(s) = node.suffix() {
                     s.stmt
                         .windows
@@ -693,7 +676,7 @@ fn select(
                             let fqwn = w.fqwn();
                             Ok(windows
                                 .get(&fqwn)
-                                .map(|imp| (w.id.to_string(), imp.clone()))
+                                .map(|imp| (w.id.clone(), imp.clone()))
                                 .ok_or_else(|| {
                                     ErrorKind::BadOpConfig(format!("Unknown window: {}", &fqwn))
                                 })?)
@@ -703,12 +686,11 @@ fn select(
                     Err("Declared as select but isn't a select".into())
                 };
 
-            Ok(Box::new(TrickleSelect::with_stmt(
+            Ok(Box::new(Select::with_stmt(
                 operator_uid,
                 config.id.clone(),
-                &groups,
                 windows?,
-                &node,
+                node,
             )?))
         }
     }
@@ -748,7 +730,7 @@ pub(crate) fn supported_operators(
     uid: u64,
     defn: Option<&srs::Stmt>,
     node: Option<&srs::Stmt>,
-    windows: Option<HashMap<String, WindowImpl>>,
+    windows: Option<HashMap<String, window::Impl>>,
 ) -> Result<OperatorNode> {
     let name_parts: Vec<&str> = config.op_type.split("::").collect();
 
@@ -756,11 +738,11 @@ pub(crate) fn supported_operators(
         ["trickle", "select"] => select(uid, config, node, windows)?,
         ["trickle", "operator"] => operator(uid, config, node)?,
         ["trickle", "script"] => script(config, defn, node)?,
-        _ => crate::operator(uid, &config)?,
+        _ => crate::operator(uid, config)?,
     };
     Ok(OperatorNode {
         uid,
-        id: config.id.to_string(),
+        id: config.id.clone(),
         kind: config.kind.clone(),
         op_type: config.op_type.clone(),
         op,
@@ -784,7 +766,7 @@ mod test {
 
         let src = "select event from in into out;";
         let query = Query::parse(
-            &module_path,
+            module_path,
             src,
             "<test>",
             Vec::new(),
@@ -798,7 +780,7 @@ mod test {
         // check that we can overwrite the id with a config variable
         let src = "#!config id = \"test\"\nselect event from in into out;";
         let query = Query::parse(
-            &module_path,
+            module_path,
             src,
             "<test>",
             Vec::new(),
@@ -817,7 +799,7 @@ mod test {
 
         let src = "select event from in/test_in into out/test_out;";
         let q = Query::parse(
-            &module_path,
+            module_path,
             src,
             "<test>",
             Vec::new(),

@@ -85,7 +85,7 @@ impl Sink for File {
                     file.write_all(b"\n").await?;
                 }
             }
-            file.flush().await?
+            file.flush().await?;
         }
         Ok(Some(vec![sink::Reply::Insight(event.insight_ack())]))
     }

@@ -118,7 +118,7 @@ pub(crate) enum MgmtMsg {
     },
     DisconnectOutput(Cow<'static, str>, TremorUrl),
     DisconnectInput(TremorUrl),
-    // only for testing
+    #[cfg(test)]
     Echo(async_channel::Sender<()>),
 }
 
@@ -154,7 +154,7 @@ impl Dest {
                 // Each pipeline has their own ticks, we don't
                 // want to propagate them
                 if signal.kind != Some(SignalKind::Tick) {
-                    addr.send(Msg::Signal(signal)).await?
+                    addr.send(Msg::Signal(signal)).await?;
                 }
             }
             Self::LinkedOnramp(_addr) => {
@@ -322,7 +322,7 @@ async fn handle_insights(pipeline: &mut ExecutableGraph, onramps: &Inputs) {
         let mut insights = Vec::with_capacity(pipeline.insights.len());
         std::mem::swap(&mut insights, &mut pipeline.insights);
         for (skip_to, insight) in insights.drain(..) {
-            handle_insight(Some(skip_to), insight, pipeline, onramps).await
+            handle_insight(Some(skip_to), insight, pipeline, onramps).await;
         }
     }
 }
@@ -350,16 +350,8 @@ async fn handle_cf_msg(msg: CfMsg, pipeline: &mut ExecutableGraph, inputs: &Inpu
 #[cfg(not(tarpaulin_include))]
 fn maybe_send(r: Result<()>) {
     if let Err(e) = r {
-        error!("Failed to send : {}", e)
+        error!("Failed to send : {}", e);
     }
-}
-
-#[allow(dead_code)]
-async fn echo(addr: &Addr) -> Result<()> {
-    let (tx, rx) = async_channel::bounded(1);
-    addr.send_mgmt(MgmtMsg::Echo(tx)).await?;
-    rx.recv().await?;
-    Ok(())
 }
 
 #[allow(clippy::too_many_lines)]
@@ -519,6 +511,7 @@ async fn pipeline_task(
                 info!("[Pipeline::{}] Disconnecting {} from 'in'", pid, &input_url);
                 inputs.remove(&input_url);
             }
+            #[cfg(test)]
             M::M(MgmtMsg::Echo(sender)) => {
                 if let Err(e) = sender.send(()).await {
                     error!(
@@ -552,7 +545,7 @@ impl Manager {
                         break;
                     }
                     Ok(ManagerMsg::Create(r, create)) => {
-                        r.send(self.start_pipeline(*create)).await?
+                        r.send(self.start_pipeline(*create)).await?;
                     }
                     Err(e) => {
                         info!("Stopping Pipeline manager... {}", e);
@@ -624,6 +617,13 @@ mod tests {
     const POSITIVE_RECV_TIMEOUT: Duration = Duration::from_millis(10000);
     // used when we expect nothing, to not spend too much time in this test
     const NEGATIVE_RECV_TIMEOUT: Duration = Duration::from_millis(200);
+
+    async fn echo(addr: &Addr) -> Result<()> {
+        let (tx, rx) = async_channel::bounded(1);
+        addr.send_mgmt(MgmtMsg::Echo(tx)).await?;
+        rx.recv().await?;
+        Ok(())
+    }
 
     /// ensure the last message has been processed by waiting for the manager to answer
     /// leveraging the sequential execution at the manager task

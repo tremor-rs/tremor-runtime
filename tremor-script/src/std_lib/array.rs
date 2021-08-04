@@ -29,7 +29,7 @@ pub fn load(registry: &mut Registry) {
             _input.as_array().map_or_else(
                 ||Err(FunctionError::BadType{mfa: mfa("array", "contains", 2)}),
                 |input| {
-                    Ok(Value::from(input.contains(&_contains)))
+                    Ok(Value::from(input.contains(_contains)))
                 }
             )
         }))
@@ -247,6 +247,6 @@ mod test {
         assert_val!(f(&[&v1, &empty]), Value::from(vec!["this", "is"]));
 
         // Concat two empty vectors.
-        assert_val!(f(&[&empty, &empty]), Value::from(empty));
+        assert_val!(f(&[&empty, &empty]), empty);
     }
 }

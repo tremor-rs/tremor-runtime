@@ -45,7 +45,7 @@ pub struct ConnectOptions {
 }
 
 impl ConnectOptions {
-    pub fn generate(&self) -> Result<NatsOptions> {
+    pub fn generate(&self) -> NatsOptions {
         let mut options = None;
         if let Some(token) = &self.token {
             options = Some(NatsOptions::with_token(token.as_str()));
@@ -79,7 +79,7 @@ impl ConnectOptions {
             nats_options = nats_options.no_echo();
         }
         nats_options = nats_options.tls_required(self.tls);
-        Ok(nats_options)
+        nats_options
     }
 }
 
@@ -104,7 +104,7 @@ impl Config {
     fn connection(&self) -> Result<NatsConnection> {
         let hosts = self.hosts.join(",");
         task::block_on(async {
-            let connection = self.options.generate()?.connect(&hosts).await?;
+            let connection = self.options.generate().connect(&hosts).await?;
             Ok(connection)
         })
     }

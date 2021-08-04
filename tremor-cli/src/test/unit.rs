@@ -24,57 +24,40 @@ use std::{collections::HashMap, path::Path};
 use test::tag;
 use tremor_common::time::nanotime;
 use tremor_script::ast::base_expr::BaseExpr;
-use tremor_script::ast::{Expr, ImutExpr, ImutExprInt, Invoke, List, NodeMetas, Record};
-use tremor_script::ctx::{EventContext, EventOriginUri};
+use tremor_script::ast::{Expr, ImutExpr, ImutExprInt, Invoke, List, Record};
+use tremor_script::ctx::EventContext;
 use tremor_script::highlighter::{Dumb as DumbHighlighter, Highlighter, Term as TermHighlighter};
 use tremor_script::interpreter::{AggrType, Env, ExecOpts, LocalStack};
 use tremor_script::prelude::*;
 use tremor_script::Value;
+
+use super::TestConfig;
 const EXEC_OPTS: ExecOpts = ExecOpts {
     result_needed: true,
     aggr: AggrType::Tick,
 };
 
-#[allow(clippy::too_many_arguments)]
 fn eval_suite_entrypoint(
     env: &Env,
     local: &LocalStack,
     script: &str,
-    meta: &NodeMetas,
     suite_spec: &Record<'_>,
-    suite_result: &[Value<'_>],
     tags: &tag::TagFilter,
-    sys_filter: &[&str],
-    includes: &[String],
-    excludes: &[String],
+    config: &TestConfig,
 ) -> Result<(stats::Stats, Vec<report::TestElement>)> {
     let mut elements = Vec::new();
     let mut stats = stats::Stats::new();
 
-    let o = suite_result
-        .first()
-        .and_then(ValueAccess::as_object)
-        .ok_or_else(|| Error::from("bad suite results"))?;
-    if o.contains_key("name") {
-        // let name = suite_spec
-        //     .get_literal("name")
-        //     .ok_or_else(|| Error::from("Missing suite name"))?;
-        let spec = suite_spec
-            .get_field_expr("tests")
-            .ok_or_else(|| Error::from("Missing suite tests"))?;
+    let spec = suite_spec
+        .get_field_expr("tests")
+        .and_then(ImutExprInt::as_list)
+        .ok_or("Missing suite tests")?;
 
-        if let ImutExprInt::List(l) = spec {
-            if let Some(tests) = o.get("suite").get("tests") {
-                if let Ok((s, mut e)) = eval_suite_tests(
-                    &env, &local, script, meta, l, tests, &tags, sys_filter, includes, excludes,
-                ) {
-                    elements.append(&mut e);
-                    stats.merge(&s);
-                } else {
-                    stats.fail();
-                }
-            }
-        } // TODO error/warning handling when no tests found
+    if let Ok((s, mut e)) = eval_suite_tests(env, local, script, spec, tags, config) {
+        elements.append(&mut e);
+        stats.merge(&s);
+    } else {
+        stats.fail();
     }
 
     Ok((stats, elements))
@@ -85,176 +68,122 @@ fn eval(expr: &ImutExprInt, env: &Env, local: &LocalStack) -> Result<Value<'stat
     let meta = Value::object();
     let event = Value::object();
     Ok(expr
-        .run(EXEC_OPTS, &env, &event, &state, &meta, local)?
+        .run(EXEC_OPTS, env, &event, &state, &meta, local)?
         .into_owned()
         .into_static())
 }
 
-#[allow(clippy::too_many_lines)]
-#[allow(clippy::too_many_arguments)]
 fn eval_suite_tests(
     env: &Env,
     local: &LocalStack,
     script: &str,
-    node_metas: &NodeMetas,
     suite_spec: &List,
-    suite_result: &Value,
     suite_tags: &test::TagFilter,
-    sys_filter: &[&str],
-    includes: &[String],
-    excludes: &[String],
+    config: &TestConfig,
 ) -> Result<(stats::Stats, Vec<report::TestElement>)> {
     let mut elements = Vec::new();
     let mut stats = stats::Stats::new();
-    if let Some(a) = suite_result.as_array() {
-        let al = a.len();
-        let ll = suite_spec.exprs.len();
-        for (idx, item) in suite_spec.exprs.iter().enumerate() {
-            if let ImutExpr(ImutExprInt::Invoke1(Invoke {
-                module, fun, args, ..
-            })) = item
-            {
-                let m = module.join("").to_string();
-                if m == "test" && fun == "test" {
-                    if let ImutExpr(ImutExprInt::Record(spec)) = &args
-                        .first()
-                        .ok_or_else(|| Error::from("Invalid test specification"))?
-                    {
-                        let mut found_tags = Vec::new();
 
-                        if let Some(tags) = spec.get_field_expr("tags") {
-                            let tag_value = eval(tags, env, local)?;
-                            if let Some(tags) = tag_value.as_array() {
-                                let inner_tags = tags.iter().map(|x| (*x).to_string());
-                                found_tags.extend(inner_tags);
-                            }
-                        } else if let Some(tags) =
-                            spec.get_literal("tags").and_then(Value::as_array)
-                        {
-                            let inner_tags = tags.iter().map(|x| (*x).to_string());
-                            found_tags.extend(inner_tags);
-                        }
+    let ll = suite_spec.exprs.len();
+    for (idx, item) in suite_spec.exprs.iter().enumerate() {
+        if let ImutExpr(ImutExprInt::Invoke1(Invoke {
+            module, fun, args, ..
+        })) = item
+        {
+            if module != &["test"] || fun != "test" {
+                continue;
+            }
+            let spec = &args
+                .first()
+                .and_then(ImutExpr::as_record)
+                .ok_or_else(|| Error::from("Invalid test specification"))?;
 
-                        let case_tags = suite_tags.join(Some(found_tags));
+            let mut found_tags = Vec::new();
 
-                        if let Some(item) = spec.get_field_expr("test") {
-                            let start = nanotime();
-                            let value = eval(item, env, local)?;
-                            let elapsed = nanotime() - start;
-
-                            if let Some(status) = value.as_bool() {
-                                // Non colorized test source extent for json report capture
-                                let extent = item.extent(node_metas);
-                                let mut hh = DumbHighlighter::new();
-                                tremor_script::Script::highlight_script_with_range(
-                                    script, extent, &mut hh,
-                                )?;
-
-                                if let (matched, false) =
-                                    case_tags.matches(sys_filter, includes, excludes)
-                                {
-                                    status::h1("    Test ( Skipping )", "")?;
-                                    status::tagsx(
-                                        "        ",
-                                        &case_tags,
-                                        Some(&matched),
-                                        Some(excludes),
-                                    )?;
-                                    stats.skip();
-                                    continue;
-                                }
-                                status::h1("    Test", "")?;
-                                status::tagsx(
-                                    "        ",
-                                    &case_tags,
-                                    Some(includes),
-                                    Some(excludes),
-                                )?;
-
-                                let prefix = if status { "(+)" } else { "(-)" };
-                                // Test record
-                                elements.push(report::TestElement {
-                                    description: format!(
-                                        "{} Executing test {} of {}",
-                                        prefix,
-                                        idx + 1,
-                                        ll
-                                    ),
-                                    keyword: report::KeywordKind::Test,
-                                    result: report::ResultKind {
-                                        status: stats.report(status),
-                                        duration: elapsed,
-                                    },
-                                    info: Some(hh.to_string()),
-                                    hidden: false,
-                                });
-                                drop(hh);
-                                stats.assert();
-
-                                // Interactive console report
-                                status::executing_unit_testcase(idx, ll, status)?;
-                                let mut hh: TermHighlighter = TermHighlighter::default();
-                                tremor_script::Script::highlight_script_with_range_indent(
-                                    "       ", script, extent, &mut hh,
-                                )?;
-                                hh.finalize()?;
-                                drop(hh);
-                                println!();
-                            }
-                            continue;
-                        }
-                    };
+            if let Some(tags) = spec.get_field_expr("tags") {
+                let tag_value = eval(tags, env, local)?;
+                if let Some(tags) = tag_value.as_array() {
+                    let inner_tags = tags.iter().map(ToString::to_string);
+                    found_tags.extend(inner_tags);
                 }
+            } else if let Some(tags) = spec.get_literal("tags").and_then(Value::as_array) {
+                let inner_tags = tags.iter().map(ToString::to_string);
+                found_tags.extend(inner_tags);
             }
 
-            if let Some(status) = suite_result
-                .get_idx(idx)
-                .ok_or_else(|| Error::from("Invalid test result"))?
-                .as_bool()
-            {
-                // Predicate tests do not have tags support
+            let case_tags = suite_tags.join(Some(found_tags));
+            let test_name = spec
+                .get_literal("name")
+                .map(ToString::to_string)
+                .unwrap_or_default();
+            if let (matched, false) = config.matches(&case_tags) {
+                if !config.verbose {
+                    status::h1("    Test ( Skipping )", &test_name)?;
+                    status::tagsx(
+                        "        ",
+                        &case_tags,
+                        Some(&matched),
+                        Some(&config.excludes),
+                    )?;
+                }
+                stats.skip();
+            } else if let Some(item) = spec.get_field_expr("test") {
+                let start = nanotime();
+                let value = eval(item, env, local)?;
+                let elapsed = nanotime() - start;
 
                 // Non colorized test source extent for json report capture
-                let extent = item.extent(node_metas);
+                let extent = item.extent(env.meta);
                 let mut hh = DumbHighlighter::new();
                 tremor_script::Script::highlight_script_with_range(script, extent, &mut hh)?;
-                let prefix = if status { "(+)" } else { "(-)" };
 
-                let case_tags = suite_tags;
-
-                let (matched, is_match) = case_tags.matches(sys_filter, includes, excludes);
-                if is_match {
-                    status::h1("    Test", "")?;
-                    status::tagsx("        ", &case_tags, Some(&matched), Some(excludes))?;
+                let mut info = hh.to_string();
+                let success = if let Some(success) = value.as_bool() {
+                    success
+                } else if let Some([expected, got]) = value.as_array().map(Vec::as_slice) {
+                    info.push_str(&format!("{} != {}", expected, got));
+                    false
                 } else {
-                    status::h1("    Test ( Skipping )", "")?;
-                    status::tagsx("        ", &case_tags, Some(&matched), Some(excludes))?;
-                    continue;
-                }
+                    false
+                };
 
+                let prefix = if success { "(+)" } else { "(-)" };
+                let report = stats.report(success);
+
+                let hidden = config.quiet && success;
+                if !hidden {
+                    status::h1("    Test", &test_name)?;
+                    status::tagsx(
+                        "        ",
+                        &case_tags,
+                        Some(&config.includes),
+                        Some(&config.excludes),
+                    )?;
+                    // Interactive console report
+                    status::executing_unit_testcase(idx, ll, success)?;
+
+                    let mut hh: TermHighlighter = TermHighlighter::default();
+                    tremor_script::Script::highlight_script_with_range_indent(
+                        "       ", script, extent, &mut hh,
+                    )?;
+                    if let Some([expected, got]) = value.as_array().map(Vec::as_slice) {
+                        println!("             | {} != {}", expected, got);
+                    }
+                    hh.finalize()?;
+                    println!();
+                }
                 // Test record
                 elements.push(report::TestElement {
-                    description: format!("    {} Executing test {} of {}", prefix, idx + 1, al),
-                    keyword: report::KeywordKind::Predicate,
+                    description: format!("{} Executing test {} of {}", prefix, idx + 1, ll),
+                    keyword: report::KeywordKind::Test,
                     result: report::ResultKind {
-                        status: stats.report(status),
-                        duration: 0, // Compile time evaluation
+                        status: report,
+                        duration: elapsed,
                     },
-                    info: Some(hh.to_string()),
-                    hidden: false,
+                    info: Some(info),
+                    hidden,
                 });
-                drop(hh);
-
                 stats.assert();
-
-                // Interactive console report
-                status::executing_unit_testcase(idx, ll, status)?;
-                let mut h = TermHighlighter::default();
-                tremor_script::Script::highlight_script_with_range_indent(
-                    "      ", script, extent, &mut h,
-                )?;
-                h.finalize()?;
-                drop(h);
             }
         }
     }
@@ -266,9 +195,7 @@ fn eval_suite_tests(
 pub(crate) fn run_suite(
     path: &Path,
     scenario_tags: &tag::TagFilter,
-    sys_filter: &[&str],
-    includes: &[String],
-    excludes: &[String],
+    config: &TestConfig,
 ) -> Result<report::TestReport> {
     println!();
 
@@ -281,7 +208,7 @@ pub(crate) fn run_suite(
 
     let env = env::setup()?;
     let report_start = nanotime();
-    let mut stat_x = stats::Stats::new();
+    let mut stats = stats::Stats::new();
     match tremor_script::Script::parse(&env.module_path, &script, raw.clone(), &env.fun) {
         Ok(runnable) => {
             let local = LocalStack::default();
@@ -291,7 +218,7 @@ pub(crate) fn run_suite(
 
             let script = runnable.script.suffix();
 
-            let context = &EventContext::new(nanotime(), Some(EventOriginUri::default()));
+            let context = &EventContext::new(nanotime(), None);
             let env = Env {
                 context,
                 consts: script.consts.run(),
@@ -300,107 +227,71 @@ pub(crate) fn run_suite(
                 recursion_limit: tremor_script::recursion_limit(),
             };
 
-            let mut stat_s = stats::Stats::new();
-            for expr in &script.exprs {
-                let state = Value::object();
-                let event = Value::object();
-                let meta = Value::object();
+            for expr in script.exprs.iter().filter_map(Expr::as_invoke) {
+                let mut stats = stats::Stats::new();
                 let mut elements = Vec::new();
-                let mut suite_name = "".to_string();
 
-                if let Expr::Imut(ImutExprInt::Invoke1(Invoke {
+                let Invoke {
                     module, fun, args, ..
-                })) = expr
-                {
-                    let m = module.join("").to_string();
-                    if m == "test" && fun == "suite" {
-                        // A Test suite
-                        let mut specs: Vec<Value> = vec![];
-                        for arg in args {
-                            let value = arg.run(EXEC_OPTS, &env, &event, &state, &meta, &local)?;
-                            specs.push(value.into_owned());
+                } = expr;
+
+                let m = module.join("").to_string();
+                if m == "test" && fun == "suite" {
+                    // A Test suite
+                    let spec = args
+                        .first()
+                        .and_then(ImutExpr::as_record)
+                        .ok_or_else(|| Error::from("Invalid test specification"))?;
+
+                    let mut found_tags = Vec::new();
+                    if let Some(tags) = spec.get_field_expr("tags") {
+                        let tag_value = eval(tags, &env, &local)?;
+                        if let Some(tags) = tag_value.as_array() {
+                            let inner_tags = tags.iter().map(|x| (*x).to_string());
+                            found_tags.extend(inner_tags);
                         }
-                        if let ImutExpr(ImutExprInt::Record(spec)) = args
-                            .first()
-                            .ok_or_else(|| Error::from("Invalid test specification"))?
-                        {
-                            let mut found_tags = Vec::new();
-                            if let Some(tags) = spec.get_field_expr("tags") {
-                                let tag_value = eval(tags, &env, &local)?;
-                                if let Some(tags) = tag_value.as_array() {
-                                    let inner_tags = tags.iter().map(|x| (*x).to_string());
-                                    found_tags.extend(inner_tags);
-                                }
-                            } else if let Some(tags) =
-                                spec.get_literal("tags").and_then(Value::as_array)
-                            {
-                                let inner_tags = tags.iter().map(|x| (*x).to_string());
-                                found_tags.extend(inner_tags);
-                            }
-
-                            let suite_tags = scenario_tags.join(Some(found_tags));
-                            if let Some(ImutExprInt::Record(r)) = spec.get_field_expr("suite") {
-                                if let Some(value) = spec.get_literal("name") {
-                                    suite_name = value.to_string()
-                                };
-
-                                // TODO revisit tags in unit tests
-                                if let (_matched, true) =
-                                    suite_tags.matches(sys_filter, includes, excludes)
-                                {
-                                    status::h1("  Suite", &suite_name.to_string())?;
-                                    status::tagsx(
-                                        "      ",
-                                        &suite_tags,
-                                        Some(includes),
-                                        Some(excludes),
-                                    )?;
-
-                                    let (test_stats, mut test_reports) = eval_suite_entrypoint(
-                                        &env,
-                                        &local,
-                                        &runnable.source,
-                                        &script.node_meta,
-                                        r,
-                                        &specs,
-                                        &suite_tags,
-                                        sys_filter,
-                                        includes,
-                                        excludes,
-                                    )?;
-                                    stat_s.merge(&test_stats);
-                                    elements.append(&mut test_reports);
-                                }
-                            } else {
-                                stat_s.skip();
-
-                                status::h1("  Suite", &suite_name.to_string())?;
-                                status::tagsx(
-                                    "      ",
-                                    &suite_tags,
-                                    Some(includes),
-                                    Some(excludes),
-                                )?;
-                            }
-
-                            suites.insert(
-                                suite_name.clone(),
-                                TestSuite {
-                                    name: suite_name.to_string(),
-                                    description: suite_name,
-                                    elements,
-                                    evidence: None,
-                                    stats: stat_s.clone(),
-                                    duration: 0,
-                                },
-                            );
-                        };
+                    } else if let Some(tags) = spec.get_literal("tags").and_then(Value::as_array) {
+                        let inner_tags = tags.iter().map(|x| (*x).to_string());
+                        found_tags.extend(inner_tags);
                     }
-                };
+
+                    let suite_tags = scenario_tags.join(Some(found_tags));
+                    let suite_name = spec
+                        .get_literal("name")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default();
+
+                    // TODO revisit tags in unit tests
+                    if let (_matched, true) = config.matches(&suite_tags) {
+                        status::h1("  Suite", suite_name)?;
+                        status::tagsx(
+                            "      ",
+                            &suite_tags,
+                            Some(&config.includes),
+                            Some(&config.excludes),
+                        )?;
+                        let (test_stats, mut test_reports) =
+                            eval_suite_entrypoint(&env, &local, &raw, spec, &suite_tags, config)?;
+
+                        stats.merge(&test_stats);
+                        elements.append(&mut test_reports);
+                    }
+                    suites.insert(
+                        suite_name.to_string(),
+                        TestSuite {
+                            name: suite_name.to_string(),
+                            description: suite_name.to_string(),
+                            elements,
+                            evidence: None,
+                            stats,
+                            duration: 0,
+                        },
+                    );
+                }
             }
         }
         Err(e) => {
-            stat_x.fail();
+            stats.fail();
             let mut h = TermHighlighter::default();
             if let Err(e) = tremor_script::Script::format_error_from_script(&raw, &mut h, &e) {
                 eprintln!("Error: {}", e);
@@ -409,13 +300,13 @@ pub(crate) fn run_suite(
     }
 
     for v in suites.values() {
-        stat_x.merge(&v.stats)
+        stats.merge(&v.stats);
     }
 
     Ok(report::TestReport {
         description: "unit test suites".into(),
         elements: suites,
-        stats: stat_x,
+        stats,
         duration: nanotime() - report_start,
     })
 }

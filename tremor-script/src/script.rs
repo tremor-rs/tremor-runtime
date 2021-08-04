@@ -98,7 +98,7 @@ impl Script {
 
                 let script_raw = grammar::ScriptParser::new().parse(filtered_tokens)?;
                 let fake_aggr_reg = AggrRegistry::default();
-                let mut helper = Helper::new(&reg, &fake_aggr_reg, include_stack.cus.clone());
+                let mut helper = Helper::new(reg, &fake_aggr_reg, include_stack.cus.clone());
                 let screw_rust = script_raw.up_script(&mut helper)?;
                 std::mem::swap(&mut warnings, &mut helper.warnings);
                 Ok(screw_rust)
@@ -131,9 +131,7 @@ impl Script {
         h: &mut H,
         emit_lines: bool,
     ) -> io::Result<()> {
-        let tokens: Vec<_> = lexer::Tokenizer::new(&script)
-            .tokenize_until_err()
-            .collect();
+        let tokens: Vec<_> = lexer::Tokenizer::new(script).tokenize_until_err().collect();
         h.highlight(None, &tokens, "", emit_lines, None)?;
         io::Result::Ok(())
     }
@@ -160,21 +158,7 @@ impl Script {
         r: Range,
         h: &mut H,
     ) -> io::Result<()> {
-        let mut s = script.to_string();
-        let mut include_stack = lexer::IncludeStack::default();
-        let cu = include_stack.push("test.tremor")?;
-
-        let tokens: Vec<_> = lexer::Preprocessor::preprocess(
-            &crate::path::load(),
-            "test.tremor",
-            &mut s,
-            cu,
-            &mut include_stack,
-        )?
-        .into_iter()
-        .filter_map(Result::ok)
-        .collect();
-
+        let tokens: Vec<_> = lexer::Tokenizer::new(script).collect::<Result<_>>()?;
         h.highlight(None, &tokens, line_prefix, true, Some(r))?;
         io::Result::Ok(())
     }
@@ -201,9 +185,7 @@ impl Script {
             let cu = error.cu();
             if cu == 0 {
                 // i wanna use map_while here, but it is still unstable :(
-                let tokens: Vec<_> = lexer::Tokenizer::new(&script)
-                    .tokenize_until_err()
-                    .collect();
+                let tokens: Vec<_> = lexer::Tokenizer::new(script).tokenize_until_err().collect();
                 h.highlight_error(None, &tokens, "", true, Some(r), Some(error.into()))?;
             } else if let Some(cu) = cus.get(cu) {
                 let script = std::fs::read_to_string(cu.file_path())?;
@@ -244,7 +226,7 @@ impl Script {
     #[must_use]
     pub fn format_error(&self, e: &Error) -> String {
         let mut h = DumbHighlighter::default();
-        if self.format_error_with(&mut h, &e).is_ok() {
+        if self.format_error_with(&mut h, e).is_ok() {
             h.to_string()
         } else {
             format!("Failed to extract code for error: {}", e)
