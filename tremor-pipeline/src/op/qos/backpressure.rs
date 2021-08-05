@@ -38,7 +38,7 @@ pub enum Method {
     /// messages are discarded
     Discard,
     /// a circuit breaker is triggerd
-    Circuitbreaker,
+    Pause,
 }
 impl Default for Method {
     fn default() -> Self {
@@ -139,7 +139,7 @@ impl Operator for Backpressure {
         let output = if self.output.next <= event.ingest_ns {
             self.output.next = event.ingest_ns + self.output.backoff;
             self.output.output.clone()
-        } else if self.config.method == Method::Circuitbreaker {
+        } else if self.config.method == Method::Pause {
             self.output.output.clone()
         } else {
             OVERFLOW
@@ -164,7 +164,7 @@ impl Operator for Backpressure {
         let insights = if self.output.backoff > 0 && self.output.next <= signal.ingest_ns {
             self.output.backoff = 0;
             self.output.next = 0;
-            if self.config.method == Method::Circuitbreaker {
+            if self.config.method == Method::Pause {
                 vec![Event::cb_restore(signal.ingest_ns)]
             } else {
                 vec![]
@@ -209,9 +209,9 @@ impl Operator for Backpressure {
             output.next = 0;
         }
 
-        if self.config.method == Method::Circuitbreaker && was_open && output.backoff > 0 {
+        if self.config.method == Method::Pause && was_open && output.backoff > 0 {
             insight.cb = CbAction::Close;
-        } else if self.config.method == Method::Circuitbreaker && !was_open && output.backoff == 0 {
+        } else if self.config.method == Method::Pause && !was_open && output.backoff == 0 {
             insight.cb = CbAction::Open;
         } else if insight.cb == CbAction::Close {
             insight.cb = CbAction::None;
@@ -370,7 +370,7 @@ mod test {
         let mut op: Backpressure = Config {
             timeout: 100.0,
             steps: vec![1, 10, 100],
-            method: Method::Circuitbreaker,
+            method: Method::Pause,
         }
         .into();
 
@@ -410,10 +410,8 @@ mod test {
         assert_eq!(insight.cb, CbAction::Close);
         assert_eq!(op.output.backoff, 1_000_000);
 
-        // The first event was sent at exactly 1ms
-        // our we should block all eventsup to
-        // 1_999_999
-        // this event syould overflow
+        // even if we have backoff we don't want to discard events so we
+        // pass it.
         let event2 = Event {
             id: (1, 1, 2).into(),
             ingest_ns: 2_000_000 - 1,
@@ -426,8 +424,7 @@ mod test {
         // that way we can handle in flight events w/o loss
         assert_eq!("out", out);
 
-        // On exactly 2_000_000 we should be allowed to send
-        // again
+        // We had always passed this
         let event3 = Event {
             id: (1, 1, 3).into(),
             ingest_ns: 2_000_000,
@@ -439,8 +436,8 @@ mod test {
         assert_eq!("out", out);
         assert!(event.transactional);
 
-        // Since now the last successful event was at 2_000_000
-        // the next event should overflow at 2_000_001
+        // even if we have backoff we don't want to discard events so we
+        // pass it.
         let event3 = Event {
             id: (1, 1, 3).into(),
             ingest_ns: 2_000_000 + 1,
@@ -450,6 +447,9 @@ mod test {
         assert_eq!(r.len(), 1);
         let (out, _event) = r.pop().expect("no results");
         assert_eq!("out", out);
+
+        // Inserting a tick singnal beyond the backoff should re-enable the
+        // CB
         let mut signal = Event {
             id: (1, 1, 3).into(),
             ingest_ns: 3_000_000 + 1,
@@ -458,7 +458,9 @@ mod test {
         };
         let mut r = op.on_signal(0, &mut state, &mut signal)?;
         let i = r.insights.pop().expect("No Insight received");
+        // We receive an open signal
         assert_eq!(i.cb, CbAction::Open);
+        // And reset our backoff
         assert_eq!(op.output.backoff, 0);
         Ok(())
     }
