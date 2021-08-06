@@ -16,28 +16,27 @@
 // We want to keep the names here
 #![allow(clippy::module_name_repetitions)]
 
-use super::{
-    base_expr, eq::AstEq, query, ArrayPattern, ArrayPredicatePattern, AssignPattern, BinExpr,
-    BinOpKind, Bytes, ClauseGroup, Comprehension, ComprehensionCase, Costly, DefaultCase, EmitExpr,
-    EventPath, Expr, Expression, Field, FnDecl, FnDoc, Helper, Ident, IfElse, ImutExpr,
-    ImutExprInt, Invocable, Invoke, InvokeAggr, InvokeAggrFn, List, Literal, LocalPath, Match,
-    Merge, MetadataPath, ModDoc, NodeMetas, Patch, PatchOperation, Path, Pattern, PredicateClause,
-    PredicatePattern, Record, RecordPattern, Recur, ReservedPath, Script, Segment, StatePath,
-    StrLitElement, StringLit, TestExpr, TuplePattern, UnaryExpr, UnaryOpKind,
-};
-use super::{upable::Upable, BytesPart};
-use crate::impl_expr;
-use crate::pos::{Location, Range};
-use crate::prelude::*;
-use crate::registry::CustomFn;
-use crate::tilde::Extractor;
 use crate::{
+    ast::{
+        base_expr, eq::AstEq, query, upable::Upable, ArrayPattern, ArrayPredicatePattern,
+        AssignPattern, BinExpr, BinOpKind, Bytes, BytesPart, ClauseGroup, Comprehension,
+        ComprehensionCase, Costly, DefaultCase, EmitExpr, EventPath, Expr, ExprPath, Expression,
+        Field, FnDecl, FnDoc, Helper, Ident, IfElse, ImutExpr, ImutExprInt, Invocable, Invoke,
+        InvokeAggr, InvokeAggrFn, List, Literal, LocalPath, Match, Merge, MetadataPath, ModDoc,
+        NodeMetas, Patch, PatchOperation, Path, Pattern, PredicateClause, PredicatePattern, Record,
+        RecordPattern, Recur, ReservedPath, Script, Segment, StatePath, StrLitElement, StringLit,
+        TestExpr, TuplePattern, UnaryExpr, UnaryOpKind,
+    },
     errors::{
         err_generic, error_generic, error_missing_effector, error_oops, Error, ErrorKind, Result,
     },
-    impl_expr_exraw,
+    impl_expr, impl_expr_exraw,
+    pos::{Location, Range},
+    prelude::*,
+    registry::CustomFn,
+    tilde::Extractor,
+    KnownKey, Value,
 };
-use crate::{KnownKey, Value};
 pub use base_expr::BaseExpr;
 use beef::Cow;
 use halfbrown::HashMap;
@@ -1743,12 +1742,14 @@ pub enum PathRaw<'script> {
     Const(ConstPathRaw<'script>),
     /// Special reserved path
     Reserved(ReservedPathRaw<'script>),
+    /// Special reserved path an expression path
+    Expr(ExprPathRaw<'script>),
 }
 
 impl<'script> Upable<'script> for PathRaw<'script> {
     type Target = Path<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        use PathRaw::{Const, Event, Local, Meta, Reserved, State};
+        use PathRaw::{Const, Event, Expr, Local, Meta, Reserved, State};
         Ok(match self {
             Local(p) => {
                 let p = p.up(helper)?;
@@ -1762,6 +1763,7 @@ impl<'script> Upable<'script> for PathRaw<'script> {
             Event(p) => Path::Event(p.up(helper)?),
             State(p) => Path::State(p.up(helper)?),
             Meta(p) => Path::Meta(p.up(helper)?),
+            Expr(p) => Path::Expr(p.up(helper)?),
             Reserved(p) => Path::Reserved(p.up(helper)?),
         })
     }
@@ -1961,6 +1963,31 @@ impl<'script> Upable<'script> for ConstPathRaw<'script> {
                 &helper.meta,
             )
         }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct ExprPathRaw<'script> {
+    pub(crate) start: Location,
+    pub(crate) end: Location,
+    pub(crate) expr: Box<ImutExprRaw<'script>>,
+    pub(crate) segments: SegmentsRaw<'script>,
+}
+impl<'script> Upable<'script> for ExprPathRaw<'script> {
+    type Target = ExprPath<'script>;
+
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+        let var = helper.reserve_shadow();
+        let segments = self.segments.up(helper)?;
+        let expr = Box::new(self.expr.up(helper)?);
+        helper.end_shadow_var();
+
+        Ok(ExprPath {
+            var,
+            segments,
+            expr,
+            mid: helper.add_meta(self.start, self.end),
+        })
     }
 }
 

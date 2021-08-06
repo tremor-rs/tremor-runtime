@@ -28,19 +28,23 @@ mod upable;
 /// collection of AST visitors
 pub mod visitors;
 
-use self::eq::AstEq;
-use crate::interpreter::{exec_binary, exec_unary, AggrType, Cont, Env, ExecOpts, LocalStack};
 pub use crate::lexer::CompilationUnit;
-use crate::pos::{Location, Range};
-use crate::prelude::*;
-use crate::registry::FResult;
-use crate::registry::{
-    Aggr as AggrRegistry, CustomFn, Registry, TremorAggrFnWrapper, TremorFnWrapper,
-};
-use crate::script::Return;
 use crate::{
+    ast::{
+        binary::extend_bytes_from_value,
+        eq::AstEq,
+        raw::{BytesDataType, Endian},
+    },
     errors::{error_generic, error_no_consts, error_no_locals, ErrorKind, Result},
-    impl_expr_ex_mid, impl_expr_mid, stry,
+    impl_expr_ex_mid, impl_expr_mid,
+    interpreter::{exec_binary, exec_unary, AggrType, Cont, Env, ExecOpts, LocalStack},
+    pos::{Location, Range},
+    prelude::*,
+    registry::{
+        Aggr as AggrRegistry, CustomFn, FResult, Registry, TremorAggrFnWrapper, TremorFnWrapper,
+    },
+    script::Return,
+    stry,
     tilde::Extractor,
     EventContext, KnownKey, Value, NO_AGGRS, NO_CONSTS,
 };
@@ -50,18 +54,11 @@ use beef::Cow;
 use halfbrown::HashMap;
 pub use query::*;
 use serde::Serialize;
-
 use std::{
     collections::{BTreeMap, BTreeSet},
     mem,
 };
-
 use upable::Upable;
-
-use self::{
-    binary::extend_bytes_from_value,
-    raw::{BytesDataType, Endian},
-};
 
 pub(crate) type Exprs<'script> = Vec<Expr<'script>>;
 /// A list of lexical compilation units
@@ -2369,6 +2366,8 @@ pub enum Path<'script> {
     State(StatePath<'script>),
     /// Runtime type information ( meta-state )
     Meta(MetadataPath<'script>),
+    /// Expression based path
+    Expr(ExprPath<'script>),
     /// Special reserved path
     Reserved(ReservedPath<'script>),
 }
@@ -2382,6 +2381,7 @@ impl<'script> Path<'script> {
             Path::Meta(path) => &path.segments,
             Path::Event(path) => &path.segments,
             Path::State(path) => &path.segments,
+            Path::Expr(path) => &path.segments,
             Path::Reserved(path) => path.segments(),
         }
     }
@@ -2394,6 +2394,7 @@ impl<'script> Path<'script> {
             Path::Meta(path) => &mut path.segments,
             Path::Event(path) => &mut path.segments,
             Path::State(path) => &mut path.segments,
+            Path::Expr(path) => &mut path.segments,
             Path::Reserved(path) => path.segments_mut(),
         }
     }
@@ -2484,6 +2485,16 @@ pub struct MetadataPath<'script> {
     pub segments: Segments<'script>,
 }
 impl_expr_mid!(MetadataPath);
+
+/// A expression path
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct ExprPath<'script> {
+    pub(crate) expr: Box<ImutExprInt<'script>>,
+    pub(crate) segments: Segments<'script>,
+    pub(crate) var: usize,
+    pub(crate) mid: usize,
+}
+impl_expr_mid!(ExprPath);
 
 /// Reserved keyword path
 #[derive(Clone, Debug, PartialEq, Serialize)]

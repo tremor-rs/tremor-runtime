@@ -12,36 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::{
-    exec_binary, exec_unary, merge_values, patch_value, resolve, set_local_shadow, test_guard,
-    test_predicate_expr, AggrType, Env, ExecOpts, LocalStack, FALSE, TRUE,
-};
-
-use crate::interpreter::value_to_index;
-use crate::{
-    ast::binary::extend_bytes_from_value,
-    errors::{
-        error_bad_key, error_decreasing_range, error_invalid_unary, error_need_obj, error_need_str,
-        error_no_clause_hit, error_oops, Result,
-    },
-};
-use crate::{ast::Comprehension, stry};
-use crate::{
-    ast::Match,
-    registry::{Registry, TremorAggrFnWrapper, RECUR_REF},
-};
 use crate::{
     ast::{
-        BaseExpr, BinExpr, ImutExpr, ImutExprInt, Invoke, InvokeAggr, LocalPath, Merge, Patch,
-        Path, Recur, ReservedPath, Segment, UnaryExpr,
+        binary::extend_bytes_from_value, BaseExpr, BinExpr, Comprehension, ExprPath, ImutExpr,
+        ImutExprInt, Invoke, InvokeAggr, LocalPath, Match, Merge, Patch, Path, Recur, ReservedPath,
+        Segment, UnaryExpr,
     },
-    errors::error_oops_err,
+    errors::{
+        error_bad_key, error_decreasing_range, error_invalid_unary, error_need_obj, error_need_str,
+        error_no_clause_hit, error_oops, error_oops_err, Result,
+    },
+    interpreter::{
+        exec_binary, exec_unary, merge_values, patch_value, resolve, set_local_shadow, test_guard,
+        test_predicate_expr, value_to_index, AggrType, Env, ExecOpts, LocalStack, FALSE, TRUE,
+    },
+    lexer::Range,
+    prelude::*,
+    registry::{Registry, TremorAggrFnWrapper, RECUR_REF},
+    stry, Object, Value,
 };
-use crate::{lexer::Range, prelude::*};
-use crate::{Object, Value};
-use std::borrow::Cow;
-use std::mem;
-use std::{borrow::Borrow, iter};
+use std::{
+    borrow::{Borrow, Cow},
+    iter, mem,
+};
 
 impl<'script> ImutExpr<'script> {
     /// Evaluates the expression
@@ -162,14 +155,8 @@ impl<'script> ImutExprInt<'script> {
                         next.push((i, r.into_owned()));
                     }
                 }
-                // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1030
-                #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
-                // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1030
-                let local: &'run mut LocalStack<'event> = unsafe { mem::transmute(local) };
                 for (i, v) in next.drain(..) {
-                    if let Some(loc) = local.values.get_mut(i) {
-                        *loc = Some(v);
-                    }
+                    set_local_shadow(self, local, env.meta, i, v)?;
                 }
 
                 Ok(Cow::Borrowed(RECUR_REF))
@@ -522,6 +509,12 @@ impl<'script> ImutExprInt<'script> {
                     l
                 } else {
                     return Ok(Cow::Borrowed(&FALSE));
+                }
+            }
+            Path::Expr(ExprPath { expr, var, .. }) => {
+                match expr.run(opts, env, event, state, meta, local)? {
+                    Cow::Borrowed(p) => p,
+                    Cow::Owned(o) => set_local_shadow(self, local, env.meta, *var, o)?,
                 }
             }
             Path::Const(path) => stry!(env.get_const(path.idx, self, env.meta)),

@@ -739,6 +739,32 @@ Path: PathRaw<'input> = {
     ConstPath => <>,
     AggrPath => <>,
     ArgsPath => <>,
+    ExprPath => <>,
+}
+
+ExprPathRoot: ImutExprRaw<'input> = {
+    // We allow any complex expression when encased in parens
+    "(" <expr: ComplexExprImut> ")" => expr,
+    // Otherwise we allow invocations (function calls)
+    <call:Invoke> => ImutExprRaw::Invoke(call),
+    // records
+    <record:Record> => ImutExprRaw::Record(Box::new(record)),
+    // lists
+    <list:List> => ImutExprRaw::List(Box::new(list)),
+    // we could allow other things like match / patch / merge
+    // but it's less readable to have `match ... end.something`
+    // then `(match ... end).something`
+    //
+    // Also we technically could use any literal as root
+    // but we know that something like `null[1]` will always
+    // fail so we might as well forbid it at expression 
+}
+
+ExprPath: PathRaw<'input> = {
+    <start:@L> <expr:ExprPathRoot> <segments:PathSegments> <end:@L> => {
+        let expr = Box::new(expr);
+        PathRaw::Expr(ExprPathRaw { expr, segments, start, end })
+    }
 }
 
 /// A metadata path

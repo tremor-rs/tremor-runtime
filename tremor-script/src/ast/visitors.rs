@@ -12,13 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::{base_expr::BaseExpr, ClauseGroup, Comprehension};
-use super::{eq::AstEq, PredicateClause};
 use super::{
-    ArrayPattern, ArrayPredicatePattern, BinExpr, Bytes, EventPath, GroupBy, GroupByInt,
-    ImutExprInt, Invoke, InvokeAggr, List, Literal, LocalPath, Match, Merge, MetadataPath,
-    NodeMetas, Patch, PatchOperation, Path, Pattern, PredicatePattern, Record, RecordPattern,
-    Recur, ReservedPath, Segment, StatePath, StrLitElement, StringLit, UnaryExpr,
+    base_expr::BaseExpr, eq::AstEq, ArrayPattern, ArrayPredicatePattern, BinExpr, Bytes,
+    ClauseGroup, Comprehension, EventPath, ExprPath, GroupBy, GroupByInt, ImutExprInt, Invoke,
+    InvokeAggr, List, Literal, LocalPath, Match, Merge, MetadataPath, NodeMetas, Patch,
+    PatchOperation, Path, Pattern, PredicateClause, PredicatePattern, Record, RecordPattern, Recur,
+    ReservedPath, Segment, StatePath, StrLitElement, StringLit, UnaryExpr,
 };
 use crate::errors::{error_event_ref_not_allowed, Result};
 /// Return value from visit methods for `ImutExprIntVisitor`
@@ -412,12 +411,16 @@ pub trait ImutExprIntVisitor<'script> {
     /// # Errors
     /// if the walker function fails
     fn walk_path(&mut self, path: &mut Path<'script>) -> Result<()> {
+        if let Path::Expr(ExprPath { expr, .. }) = path {
+            self.walk_expr(expr)?;
+        }
         let segments = match path {
             Path::Const(LocalPath { segments, .. })
             | Path::Local(LocalPath { segments, .. })
             | Path::Event(EventPath { segments, .. })
             | Path::State(StatePath { segments, .. })
             | Path::Meta(MetadataPath { segments, .. })
+            | Path::Expr(ExprPath { segments, .. })
             | Path::Reserved(
                 ReservedPath::Args { segments, .. }
                 | ReservedPath::Group { segments, .. }
