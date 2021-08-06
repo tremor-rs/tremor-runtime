@@ -138,7 +138,7 @@ tonic = { version="0.4", default-features=false, features=["transport", "tls"] }
 tremor-otelapis = "0.1"
 
 # gcp
-googapis = { version="0.4.2", default-features=false, features=["google-pubsub-v1"] }
+googapis = { version="0.5.0", default-features=false, features=["google-pubsub-v1"] }
 gouth = { version="0.2" }
 http = "0.2.4"
 reqwest = "0.11.4"
