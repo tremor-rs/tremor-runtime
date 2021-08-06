@@ -15,12 +15,17 @@
 // Don't cover this file it's only getters
 #![cfg(not(tarpaulin_include))]
 
-use super::query::raw::{OperatorKindRaw, StmtRaw};
-use super::raw::{
-    AnyFnRaw, ExprRaw, GroupBy, GroupByInt, ImutExprRaw, PathRaw, ReservedPathRaw, TestExprRaw,
+use crate::{
+    ast::{
+        query::raw::{OperatorKindRaw, StmtRaw},
+        raw::{
+            AnyFnRaw, ExprRaw, GroupBy, GroupByInt, ImutExprRaw, PathRaw, ReservedPathRaw,
+            TestExprRaw,
+        },
+        Expr, ImutExprInt, InvokeAggr, NodeMetas, Path, Segment, TestExpr,
+    },
+    pos::{Location, Range},
 };
-use super::{Expr, ImutExprInt, InvokeAggr, NodeMetas, Path, Segment, TestExpr};
-use crate::pos::{Location, Range};
 
 #[doc(hidden)]
 /// Implements the BaseExpr trait for a given expression
@@ -260,6 +265,7 @@ impl<'script> BaseExpr for PathRaw<'script> {
             PathRaw::Meta(e) => e.start,
             PathRaw::Event(e) => e.start,
             PathRaw::State(e) => e.start,
+            PathRaw::Expr(e) => e.start,
             PathRaw::Reserved(e) => e.s(meta),
         }
     }
@@ -270,6 +276,7 @@ impl<'script> BaseExpr for PathRaw<'script> {
             PathRaw::Meta(e) => e.end,
             PathRaw::Event(e) => e.end,
             PathRaw::State(e) => e.end,
+            PathRaw::Expr(e) => e.end,
             PathRaw::Reserved(e) => e.e(meta),
         }
     }
@@ -287,6 +294,7 @@ impl<'script> BaseExpr for Path<'script> {
             Path::Meta(e) => e.mid(),
             Path::Event(e) => e.mid(),
             Path::State(e) => e.mid(),
+            Path::Expr(e) => e.mid(),
             Path::Reserved(e) => e.mid(),
         }
     }

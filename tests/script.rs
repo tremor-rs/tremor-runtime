@@ -154,6 +154,7 @@ test_cases!(
     // TODO
     // const_in_const_lookup,
     // INSERT
+    expr_path,
     patch_default,
     patch_default_key,
     match_multiple_exprs,
