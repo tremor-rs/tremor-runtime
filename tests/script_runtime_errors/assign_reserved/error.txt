@@ -1,0 +1,3 @@
+Error: 
+    1 | let group.snot = event;
+      |     ^^^^^^^^^^^^^^^^^^ Can't assign to the `group` constant

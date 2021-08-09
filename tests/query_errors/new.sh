@@ -23,7 +23,7 @@ cp -r ${BASEDIR}/_template ${TARGET}
 git add ${TARGET}
 
 sed -e '/^    \/\/ INSERT/a\
-'"${NAME}," "${TEST_SUITE_FILE}" > "${TMPDIR}" && mv "${TMPDIR}" "${TEST_SUITE_FILE}"
+'"    ${NAME}," "${TEST_SUITE_FILE}" > "${TMPDIR}" && mv "${TMPDIR}" "${TEST_SUITE_FILE}"
 
 for f in ${TARGET}/*
 do

@@ -1,0 +1,5 @@
+const a = {"snot": "badger"};
+
+let a.snot = event;
+
+a
