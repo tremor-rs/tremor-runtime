@@ -5,6 +5,7 @@ use std::float;
 use std::integer;
 use std::json;
 use std::math;
+use std::path;
 use std::random;
 use std::range;
 use std::re;
@@ -624,7 +625,7 @@ test::suite({
       "name": "Tests the len function",
       "test": test::assert("binary::len", binary::len(<< 115, 110, 111, 116 >>), 4),
     }),
-    test::test({
+    test::test({ 
       "name": "Tests the from_bytes function",
       "test": test::assert("binary::from_bytes", binary::from_bytes([115, 110, 111, 116]), << 115, 110, 111, 116 >>),
     }),
@@ -639,5 +640,35 @@ test::suite({
   ],
 });
 
+test::suite({
+  "name": "path utility functions",
+  "tags": [ "path" ],
+  "tests": [
+    test::test({
+      "name": "Path resolve or default 0",
+      "test": test::assert("path::try_default", path::try_default(null, ["snot"], "horse"), "horse")
+    }),
+    test::test({
+      "name": "Path resolve or default 0",
+      "test": test::assert("path::try_default", path::try_default(null, [], "horse"), "horse")
+    }),
+    test::test({
+      "name": "Path resolve or default 1",
+      "test": test::assert("path::try_default", path::try_default({"snort": "badger"}, ["snot"], "horse"), "horse")
+    }),
+    test::test({
+      "name": "Path resolve or default 1",
+      "test": test::assert("path::try_default", path::try_default({"snot": [ "badger" ]}, ["snot"], "horse"), [ "badger" ])
+    }),
+    test::test({
+      "name": "Path resolve or default 1",
+      "test": test::assert("path::try_default", path::try_default({"snot": [ "badger" ]}, ["snort"], "horse"), "horse")
+    }),
+    test::test({
+      "name": "Path resolve or default 1",
+      "test": test::assert("path::try_default", path::try_default({"snot": [ "badger" ]}, ["snot", 0], "horse"), "badger")
+    }),
+  ],
+});
 
 "snot badger";

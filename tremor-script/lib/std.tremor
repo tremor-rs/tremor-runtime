@@ -7,6 +7,7 @@
 ### * [integer](std/integer.md) - functions to deal with integer numbers
 ### * [json](std/json.md) - functions to deal with JSON
 ### * [math](std/math.md) - mathematical functions
+### * [path](std/path.md) - path utility functions
 ### * [random](std/random.md) - random related functions
 ### * [range](std/range.md) - range related functions
 ### * [re](std/re.md) - functions handeling regular expressions
@@ -23,6 +24,7 @@ use std::float;
 use std::integer;
 use std::json;
 use std::math;
+use std::path;
 use std::random;
 use std::range;
 use std::re;

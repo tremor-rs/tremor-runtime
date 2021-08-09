@@ -30,6 +30,7 @@ mod integer;
 mod json;
 mod math;
 mod origin;
+mod path;
 mod random;
 mod range;
 mod re;
@@ -66,6 +67,7 @@ pub fn load(registry: &mut Registry) {
     r#type::load(registry);
     url::load(registry);
     win::load(registry);
+    path::load(registry);
 }
 
 pub fn load_aggr(registry: &mut AggrRegistry) {
