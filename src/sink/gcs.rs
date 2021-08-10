@@ -22,17 +22,19 @@
 
 #![cfg(not(tarpaulin_include))]
 
-use crate::connectors::gcp::{auth, storage};
+use crate::connectors::gcp::{
+    auth::{self, GcsClient},
+    storage,
+};
 use crate::connectors::qos::{self, QoSFacilities, SinkQoS};
 use crate::sink::prelude::*;
 use halfbrown::HashMap;
 use http::HeaderMap;
-use reqwest::Client;
 use tremor_pipeline::{EventIdGenerator, OpMeta};
 use tremor_value::Value;
 
 pub struct GoogleCloudStorage {
-    remote: Option<Client>,
+    remote: Option<GcsClient>,
     is_down: bool,
     qos_facility: Box<dyn SinkQoS>,
     reply_channel: Option<Sender<sink::Reply>>,
@@ -317,7 +319,7 @@ impl Sink for GoogleCloudStorage {
 }
 
 async fn upload_object(
-    client: &Client,
+    client: &GcsClient,
     bucket_name: &str,
     object_name: &str,
     data: &Value<'_>,
@@ -337,7 +339,7 @@ async fn upload_object(
 }
 
 async fn download_object(
-    client: &Client,
+    client: &GcsClient,
     bucket_name: &str,
     object_name: &str,
     sink_url: &TremorUrl,
