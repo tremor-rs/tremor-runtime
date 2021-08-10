@@ -46,38 +46,39 @@ pub(crate) fn any_value_to_json(pb: AnyValue) -> Value<'static> {
 
             // Value::from(record)
         }
+        Some(Inner::BytesValue(b)) => Value::Bytes(b.into()),
         None => Value::null(),
     };
     v
 }
 
 pub(crate) fn any_value_to_pb(data: &Value<'_>) -> AnyValue {
-    use any_value::Value as PbAnyValue;
+    use any_value::Value as Inner;
     match data {
         Value::Static(StaticNode::Null) => AnyValue { value: None },
         Value::Static(StaticNode::Bool(v)) => AnyValue {
-            value: Some(PbAnyValue::BoolValue(*v)),
+            value: Some(Inner::BoolValue(*v)),
         },
         Value::Static(StaticNode::I64(v)) => AnyValue {
-            value: Some(PbAnyValue::IntValue(*v)),
+            value: Some(Inner::IntValue(*v)),
         },
         Value::Static(StaticNode::U64(v)) => {
             #[allow(clippy::cast_sign_loss, clippy::cast_possible_wrap)]
             let v = *v as i64;
 
             AnyValue {
-                value: Some(PbAnyValue::IntValue(v)),
+                value: Some(Inner::IntValue(v)),
             }
         }
         Value::Static(StaticNode::F64(v)) => AnyValue {
-            value: Some(PbAnyValue::DoubleValue(*v)),
+            value: Some(Inner::DoubleValue(*v)),
         },
         Value::String(v) => AnyValue {
-            value: Some(PbAnyValue::StringValue(v.to_string())),
+            value: Some(Inner::StringValue(v.to_string())),
         },
         Value::Array(va) => {
             let a: Vec<AnyValue> = va.iter().map(|v| any_value_to_pb(v)).collect();
-            let x = PbAnyValue::ArrayValue(ArrayValue { values: a });
+            let x = Inner::ArrayValue(ArrayValue { values: a });
             AnyValue { value: Some(x) }
         }
         Value::Object(vo) => {
@@ -90,20 +91,12 @@ pub(crate) fn any_value_to_pb(data: &Value<'_>) -> AnyValue {
             }
             let pb = KeyValueList { values: kvl };
             AnyValue {
-                value: Some(PbAnyValue::KvlistValue(pb)),
+                value: Some(Inner::KvlistValue(pb)),
             }
         }
-        Value::Bytes(b) => {
-            // TODO find a better binary mapping - the below is clearly not right!
-            let b: Vec<AnyValue> = b
-                .iter()
-                .map(|b| AnyValue {
-                    value: Some(PbAnyValue::IntValue(i64::from(*b))),
-                })
-                .collect();
-            let x = PbAnyValue::ArrayValue(ArrayValue { values: b });
-            AnyValue { value: Some(x) }
-        }
+        Value::Bytes(b) => AnyValue {
+            value: Some(Inner::BytesValue(b.into_owned())),
+        },
     }
 }
 
@@ -136,13 +129,18 @@ pub(crate) fn key_value_list_to_json(pb: Vec<KeyValue>) -> Value<'static> {
 }
 
 pub(crate) fn maybe_key_value_list_to_pb(data: Option<&Value<'_>>) -> Result<Vec<KeyValue>> {
-    data.as_object()
-        .ok_or("Expected a json object, found otherwise - cannot map to pb")?
-        .iter()
+    let obj = data
+        .as_object()
+        .ok_or("Expected a json object, found otherwise - cannot map to pb")?;
+    Ok(obj_key_value_list_to_pb(obj))
+}
+
+fn obj_key_value_list_to_pb(data: &tremor_value::Object<'_>) -> Vec<KeyValue> {
+    data.iter()
         .map(|(key, value)| {
             let key = key.to_string();
             let value = Some(any_value_to_pb(value));
-            Ok(KeyValue { key, value })
+            KeyValue { key, value }
         })
         .collect()
 }

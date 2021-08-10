@@ -203,6 +203,10 @@ pub(crate) fn instrumentation_library_spans_to_pb(
                     .get("instrumentation_library")
                     .map(common::instrumentation_library_to_pb)
                     .transpose()?,
+                schema_url: data
+                    .get("schema_url")
+                    .map(ToString::to_string)
+                    .unwrap_or_default(),
                 spans,
             })
         })
@@ -236,6 +240,10 @@ pub(crate) fn resource_spans_to_pb(json: Option<&Value<'_>>) -> Result<Vec<Resou
                 instrumentation_library_spans: instrumentation_library_spans_to_pb(
                     json.get("instrumentation_library_spans"),
                 )?,
+                schema_url: json
+                    .get("schema_url")
+                    .map(ToString::to_string)
+                    .unwrap_or_default(),
                 resource: json.get("resource").map(resource_to_pb).transpose()?,
             })
         })
@@ -371,6 +379,7 @@ mod tests {
         let trace_id_pb = id::test::json_trace_id_to_pb(Some(&trace_id_json))?;
 
         let pb = vec![InstrumentationLibrarySpans {
+            schema_url: "schema_url".into(),
             instrumentation_library: Some(InstrumentationLibrary {
                 name: "name".into(),
                 version: "v0.1.2".into(),
@@ -447,11 +456,13 @@ mod tests {
         #[allow(deprecated)]
         let pb = ExportTraceServiceRequest {
             resource_spans: vec![ResourceSpans {
+                schema_url: "schema_url".into(),
                 resource: Some(Resource {
                     attributes: vec![],
                     dropped_attributes_count: 8,
                 }),
                 instrumentation_library_spans: vec![InstrumentationLibrarySpans {
+                    schema_url: "schema_url".into(),
                     instrumentation_library: Some(InstrumentationLibrary {
                         name: "name".into(),
                         version: "v0.1.2".into(),

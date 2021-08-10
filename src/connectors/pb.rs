@@ -13,9 +13,9 @@
 // limitations under the License.
 
 use crate::errors::{Error, Result};
+use tremor_otelapis::opentelemetry::proto::metrics::v1;
 use tremor_value::Value;
 use value_trait::ValueAccess;
-
 pub(crate) fn maybe_string_to_pb(data: Option<&Value<'_>>) -> Result<String> {
     if let Some(s) = data.as_str() {
         Ok(s.to_string())
@@ -56,9 +56,38 @@ pub(crate) fn maybe_double_to_pb(data: Option<&Value<'_>>) -> Result<f64> {
         .ok_or_else(|| Error::from("not coercable to f64"))
 }
 
+pub(crate) trait FromValue: Sized {
+    fn maybe_from_value(data: Option<&Value<'_>>) -> Result<Option<Self>> {
+        data.map(|d| Self::from_value(d)).transpose()
+    }
+    fn from_value(data: &Value<'_>) -> Result<Self>;
+}
+
+impl FromValue for v1::exemplar::Value {
+    fn from_value(data: &Value<'_>) -> Result<Self> {
+        Ok(v1::exemplar::Value::AsDouble(
+            data.as_f64()
+                .ok_or_else(|| Error::from("not coercable to f64"))?,
+        ))
+    }
+}
+
+impl FromValue for v1::number_data_point::Value {
+    fn from_value(data: &Value<'_>) -> Result<Self> {
+        Ok(v1::number_data_point::Value::AsDouble(
+            data.as_f64()
+                .ok_or_else(|| Error::from("not coercable to f64"))?,
+        ))
+    }
+}
+
 pub(crate) fn maybe_bool_to_pb(data: Option<&Value<'_>>) -> Result<bool> {
     data.as_bool()
         .ok_or_else(|| Error::from("not coercable to bool"))
+}
+
+pub(crate) fn maybe_from_value<T: FromValue>(data: Option<&Value<'_>>) -> Result<Option<T>> {
+    T::maybe_from_value(data)
 }
 
 pub(crate) fn f64_repeated_to_pb(json: Option<&Value<'_>>) -> Result<Vec<f64>> {
