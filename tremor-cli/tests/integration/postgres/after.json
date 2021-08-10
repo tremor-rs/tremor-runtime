@@ -1,0 +1,9 @@
+{
+    "run": "tests/integration/postgres",
+    "cmd": "docker-compose",
+    "args": [
+        "--project-directory",
+        "before",
+        "down"
+    ]
+}

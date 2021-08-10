@@ -1,0 +1,46 @@
+# The script that does all the logic, we define our alerts here
+define script alert with
+  sunup_low_limit = 78,
+  sunup_high_limit = 100,
+  sundown_low_limit = 70,
+  sundown_high_limit = 80
+script
+  use std::type;
+  match type::is_null(state) of
+    case true =>
+      let state = {"sunup": false}
+    default =>
+      null
+  end;
+
+  match state.sunup of
+    case true =>
+      let low_limit = args.sunup_low_limit,
+      let high_limit = args.sunup_high_limit
+    default =>
+      let low_limit = args.sundown_low_limit,
+      let high_limit = args.sundown_high_limit
+  end;
+
+  match event of
+    case %{temperature <= low_limit} =>
+      let event.alert = true,
+      let event.alert_description = "Low Temp Alarm",
+      emit event => "err"
+    case %{temperature  > high_limit} =>
+      let event.alert = true,
+      let event.alert_description = "High Temp Alarm",
+      emit event => "err"
+    default =>
+      let event.alert = true,
+      let event.sunup = state.sunup,
+      let event.alert_description = "No Alarm",
+      emit event => "err"
+  end
+end;
+
+create script alert;
+
+select event from in into alert;
+select event from alert/err into err;
+select event from alert into err;

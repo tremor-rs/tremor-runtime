@@ -1,0 +1,22 @@
+version: "3.8"
+
+services:
+  pgweb:
+    image: sosedoff/pgweb
+    depends_on:
+      - timescaledb
+    ports:
+      - 8081:8081
+    environment:
+      - DATABASE_URL=postgres://postgres:example@timescaledb:5432/measurements?sslmode=disable
+  timescaledb:
+    image: timescale/timescaledb:2.4.0-pg12
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: example
+    ports:
+      - 5432:5432
+    volumes:
+      - ./seed_tsdb.sh:/docker-entrypoint-initdb.d/init.sh
+    command: ["postgres", "-c", "log_statement=all", "-c", "log_destination=stderr"]

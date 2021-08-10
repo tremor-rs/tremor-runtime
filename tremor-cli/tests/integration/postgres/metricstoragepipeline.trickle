@@ -1,0 +1,36 @@
+
+define script process
+script
+  use std::array;
+  use std::json;
+  use std::type;
+  use tremor::system;
+
+  let event.sensor_id = 4;
+
+  let now = system::nanotime();
+  #let tm_format = "%Y-%m-%d %H:%M:%S.%f %z+00:00";
+
+  #let timestamp = core::datetime::format(event.time, tm_format);
+  #let timestamp_diff = (now - timestamp);
+  #let event.humidity = timestamp_diff;
+  emit event;
+end;
+
+create script process;
+create stream sqlize;
+
+# main request processing
+select event from in into process;
+select event from process into sqlize;
+
+
+select {
+    "time": {"fieldType": "TIMESTAMPTZ", "name": "time","value": "#{event.time}"},
+    "humidity": {"fieldType": "FLOAT4","name": "humidity","value": event.humidity },
+    "temperature": {"fieldType": "FLOAT4","name": "temperature","value": event.temperature },
+    "sensor_id": {"fieldType": "INT4","name": "sensor_id","value": event.sensor_id }
+} from sqlize into out;
+
+# tremor runtime errors from the processing script
+select event from process/err into err;

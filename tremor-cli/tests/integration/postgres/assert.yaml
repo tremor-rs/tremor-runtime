@@ -1,0 +1,7 @@
+status: 0
+name: postgres
+asserts:
+  - source: measurements.log
+    equals_file: expected_measurements.json
+  - source: alerts.log
+    equals_file: expected_alerts.json
