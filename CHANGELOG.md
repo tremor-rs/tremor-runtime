@@ -4,6 +4,7 @@
 
 ### New featues
 
+- Add support for `FLOAT4` and `FLOAT8` serialization/deserialization to postgres connectors
 - Add `std::path::try_default` fn
 - Experimental ARM support
 - Add `default => {...}` and `default "key" => "value` to patch
