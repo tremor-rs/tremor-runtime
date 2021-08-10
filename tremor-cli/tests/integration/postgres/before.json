@@ -1,0 +1,15 @@
+{
+    "run": "tests/integrations/postgres",
+    "cmd": "docker-compose",
+    "args": [
+        "--project-directory",
+        "before",
+        "up"
+    ],
+    "await": {
+        "http-ok": [
+            "http://0.0.0.0:8081/"
+        ]
+    },
+    "max-await-secs": 120
+}
