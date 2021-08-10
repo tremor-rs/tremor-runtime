@@ -458,7 +458,16 @@ impl ExecutableGraph {
 
     #[inline]
     fn run(&mut self, returns: &mut Returns) -> Result<()> {
-        while stry!(self.next(returns)) {}
+        while match self.next(returns) {
+            Ok(res) => res,
+            Err(e) => {
+                // if we error handling an event, we need to clear the stack
+                // In the case of branching where the stack has > 1 element
+                // we would keep the old errored event around for the numbers of branches that havent been executed
+                self.stack.clear();
+                return Err(e);
+            }
+        } {}
         returns.reverse();
         Ok(())
     }
