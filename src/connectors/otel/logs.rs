@@ -134,6 +134,10 @@ pub(crate) fn maybe_instrumentation_library_logs_to_pb(
                 .collect::<Result<Vec<_>>>()?;
 
             Ok(InstrumentationLibraryLogs {
+                schema_url: data
+                    .get_str("schema_url")
+                    .map(ToString::to_string)
+                    .unwrap_or_default(),
                 instrumentation_library: ill
                     .get("instrumentation_library")
                     .map(instrumentation_library_to_pb)
@@ -166,12 +170,16 @@ pub(crate) fn resource_logs_to_pb(json: &Value<'_>) -> Result<Vec<ResourceLogs>>
         .ok_or("Invalid json mapping for otel logs message - cannot convert to pb")?
         .iter()
         .filter_map(Value::as_object)
-        .map(|json| {
+        .map(|data| {
             Ok(ResourceLogs {
+                schema_url: data
+                    .get("schema_url")
+                    .map(ToString::to_string)
+                    .unwrap_or_default(),
                 instrumentation_library_logs: maybe_instrumentation_library_logs_to_pb(
-                    json.get("instrumentation_library_logs"),
+                    data.get("instrumentation_library_logs"),
                 )?,
-                resource: json.get("resource").map(resource_to_pb).transpose()?,
+                resource: data.get("resource").map(resource_to_pb).transpose()?,
             })
         })
         .collect()
@@ -195,6 +203,8 @@ mod tests {
         let trace_id_pb = id::test::json_trace_id_to_pb(Some(&trace_id_json))?;
 
         let pb = vec![InstrumentationLibraryLogs {
+            schema_url: "schema_url".into(),
+
             instrumentation_library: Some(InstrumentationLibrary {
                 name: "name".into(),
                 version: "v0.1.2".into(),
@@ -249,11 +259,13 @@ mod tests {
 
         let pb = ExportLogsServiceRequest {
             resource_logs: vec![ResourceLogs {
+                schema_url: "schema_url".into(),
                 resource: Some(Resource {
                     attributes: vec![],
                     dropped_attributes_count: 8,
                 }),
                 instrumentation_library_logs: vec![InstrumentationLibraryLogs {
+                    schema_url: "schema_url".into(),
                     instrumentation_library: Some(InstrumentationLibrary {
                         name: "name".into(),
                         version: "v0.1.2".into(),
