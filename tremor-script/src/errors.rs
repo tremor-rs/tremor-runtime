@@ -176,12 +176,12 @@ impl ErrorKind {
             CantSetWindowConst, Common, DecreasingRange, DoubleConst, DoubleStream,
             EmptyInterpolation, EmptyScript, ExtraToken, Generic, Grok, InvalidAssign,
             InvalidBinary, InvalidBitshift, InvalidConst, InvalidDrop, InvalidEmit,
-            InvalidExtractor, InvalidFloatLiteral, InvalidFn, InvalidHexLiteral, InvalidInfluxData,
-            InvalidIntLiteral, InvalidMod, InvalidRecur, InvalidToken, InvalidUnary,
-            InvalidUtf8Sequence, Io, JsonError, MergeTypeConflict, MissingEffectors,
-            MissingFunction, MissingModule, ModuleNotFound, Msg, NoClauseHit, NoConstsAllowed,
-            NoEventReferencesAllowed, NoLocalsAllowed, NoObjectError, NotConstant, NotFound, Oops,
-            ParseIntError, ParserError, PatchKeyExists, PreprocessorError, QueryNodeDuplicateName,
+            InvalidExtractor, InvalidFloatLiteral, InvalidFn, InvalidHexLiteral, InvalidIntLiteral,
+            InvalidMod, InvalidRecur, InvalidToken, InvalidUnary, InvalidUtf8Sequence, Io,
+            JsonError, MergeTypeConflict, MissingEffectors, MissingFunction, MissingModule,
+            ModuleNotFound, Msg, NoClauseHit, NoConstsAllowed, NoEventReferencesAllowed,
+            NoLocalsAllowed, NoObjectError, NotConstant, NotFound, Oops, ParseIntError,
+            ParserError, PatchKeyExists, PreprocessorError, QueryNodeDuplicateName,
             QueryNodeReservedName, QueryStreamNotDefined, RecursionLimit, RuntimeError,
             TailingHereDoc, TypeConflict, UnexpectedCharacter, UnexpectedEndOfStream,
             UnexpectedEscapeCode, UnrecognizedToken, UnterminatedExtractor, UnterminatedHereDoc,
@@ -256,7 +256,6 @@ impl ErrorKind {
             EmptyScript
             | Common(_)
             | Grok(_)
-            | InvalidInfluxData(_, _)
             | Io(_)
             | JsonError(_)
             | ValueError(_)
@@ -778,11 +777,6 @@ error_chain! {
         MergeTypeConflict(expr: Range, inner: Range, key:String, val: ValueType) {
             description("Merge can only be performed on keys that either do not exist or are records")
                 display("Merge can only be performed on keys that either do not exist or are records but the key '{}' has the type {}", key, t2s(*val))
-        }
-
-        InvalidInfluxData(s: String, e: tremor_influx::DecoderError) {
-            description("Invalid Influx Line Protocol data")
-                display("Invalid Influx Line Protocol data: {}\n{}", e, s)
         }
 
         /*
