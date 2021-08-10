@@ -99,16 +99,3 @@ impl From<io::Error> for EncoderError {
         Self::Io(e)
     }
 }
-
-/*
-    Err(ErrorKind::InvalidInfluxData(format!(
-        "Expected '{}', '{:?}' or '{:?}' but did not find it",
-        end1, end2, end3
-    ))
-
-    return Err(ErrorKind::InvalidInfluxData("non terminated escape sequence".into(),).into());
-    return Err(ErrorKind::InvalidInfluxData("= found in tag value".into()).into());
-    return Err(ErrorKind::InvalidInfluxData("Tag without value".into()).into());
-    return Err(ErrorKind::InvalidInfluxData("Failed to parse fields.".into()).into()),
-
-*/

@@ -73,20 +73,15 @@ error_chain! {
             description("Operator has extra config")
                 display("Operator {} has a config but can't be configured", e)
         }
+        BadOpConfig(e: String) {
+            description("Operator config has a bad syntax")
+                display("Operator config has a bad syntax: {}", e)
+        }
+
 
         UnknownOp(n: String, o: String) {
             description("Unknown operator")
                 display("Unknown operator: {}::{}", n, o)
-        }
-
-        MissingSteps(t: String) {
-            description("missing steps")
-                display("missing steps in: '{}'", t)
-        }
-
-        BadOpConfig(e: String) {
-            description("Operator config has a bad syntax")
-                display("Operator config has a bad syntax: {}", e)
         }
 
         UnknownNamespace(n: String) {
@@ -94,50 +89,6 @@ error_chain! {
                 display("Unknown namespace: {}", n)
         }
 
-
-        UnknownSubPipeline(p: String) {
-            description("Reference to unknown sub-pipeline")
-                display("The sub-pipelines '{}' is not defined", p)
-        }
-
-        UnknownPipeline(p: String) {
-            description("Reference to unknown pipeline")
-                display("The pipelines '{}' is not defined", p)
-        }
-
-        PipelineStartError(p: String) {
-            description("Failed to start pipeline")
-                display("Failed to start pipeline '{}'", p)
-        }
-
-        OnrampError(i: u64) {
-            description("Error in onramp")
-                display("Error in onramp '{}'", i)
-        }
-
-        OnrampMissingPipeline(o: String) {
-            description("Onramp is missing a pipeline")
-                display("The onramp '{}' is missing a pipeline", o)
-        }
-        InvalidInfluxData(s: String, e: tremor_influx::DecoderError) {
-            description("Invalid Influx Line Protocol data")
-                display("Invalid Influx Line Protocol data: {}\n{}", e, s)
-        }
-        InvalidJsonData(s: String) {
-            description("Invalid JSON")
-                display("Invalid JSON data: {}", s)
-        }
-
-        BadOutputid(i: usize) {
-            description("Bad output pipeline id.")
-                display("Bad output pipeline id {}", i - 1)
-        }
-
-        // runtime errors
-        MaxGroups(max: u64, group: String) {
-            description("Maximum amount of groups reached.")
-                display("Maxmimum amount of groups reached ({}). Ignoring group {}", max, group)
-        }
         InvalidInputStreamName(stream_name: String, pipeline: String) {
             description("Invalid input stream name.")
             display("Invalid input stream name '{}' for pipeline '{}'.", stream_name, pipeline)
@@ -150,9 +101,4 @@ error_chain! {
 #[must_use]
 pub fn missing_config(f: &str) -> Error {
     ErrorKind::MissingOpConfig(format!("missing field {}", f)).into()
-}
-
-#[must_use]
-pub fn max_groups_reached(max: u64, group: &str) -> Error {
-    ErrorKind::MaxGroups(max, group.to_owned()).into()
 }

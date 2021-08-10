@@ -211,10 +211,6 @@ error_chain! {
             description("This is a cloned error we need to get rod of this")
                 display("Cloned error: {}", t)
         }
-        MissingSteps(t: String) {
-            description("missing steps")
-                display("missing steps in: '{}'", t)
-        }
 
         BadOpConfig(e: String) {
             description("Operator config has a bad syntax")
@@ -235,32 +231,6 @@ error_chain! {
             description("Invalid statsd metric")
                 display("Invalid statsd metric")
         }
-
-
-        UnknownSubPipeline(p: String) {
-            description("Reference to unknown sub-pipeline")
-                display("The sub-pipelines '{}' is not defined", p)
-        }
-
-        UnknownPipeline(p: String) {
-            description("Reference to unknown pipeline")
-                display("The pipelines '{}' is not defined", p)
-        }
-
-        PipelineStartError(p: String) {
-            description("Failed to start pipeline")
-                display("Failed to start pipeline '{}'", p)
-        }
-
-        OnrampError(i: u64) {
-            description("Error in onramp")
-                display("Error in onramp '{}'", i)
-        }
-
-        OnrampMissingPipeline(o: String) {
-            description("Onramp is missing a pipeline")
-                display("The onramp '{}' is missing a pipeline", o)
-        }
         InvalidInfluxData(s: String, e: influx::DecoderError) {
             description("Invalid Influx Line Protocol data")
                 display("Invalid Influx Line Protocol data: {}\n{}", e, s)
@@ -272,10 +242,6 @@ error_chain! {
         InvalidSyslogData(s: &'static str) {
             description("Invalid Syslog Protocol data")
                 display("Invalid Syslog Protocol data: {}", s)
-        }
-        BadOutputid(i: usize) {
-            description("Bad output pipeline id.")
-                display("Bad output pipeline id {}", i - 1)
         }
         BadUtF8InString {
             description("Bad UTF8 in input string")
