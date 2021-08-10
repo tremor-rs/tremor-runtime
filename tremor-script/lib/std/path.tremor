@@ -1,0 +1,43 @@
+### The path module contains utility functions for path handling
+
+use std::type;
+
+## Determine if a base value matches an segment index array.
+## Returns the value under the match on a hit.
+## Returns a default user provided value on no match.
+##
+## The `base` value can be a record, an array or the literal null.
+##
+## The `segments` value should be an array where each field is used
+## to traverse the `base` value, as follows:
+## * String yielding expression segments used for field traversal
+## * Integer yielding expression segments used for array traversal
+## * A empty segment list yields is considered a match yielding the base value
+##
+## Examples
+##
+## ```tremor
+## use std::path;
+##
+## {"snot": "badger"} == path::try_default({"snot": "badger"}, [], "test")
+##
+## "flook" == path::try_default([{"snot": "badger"}, ["fleek", "flook"]], [1, 1], "test")
+##
+## "badger" == path::try_default([{"snot": "badger"}, ["fleek", "flook"]], [0, "snot"], "test")
+##
+## "fleek" == path::try_default([{"snot": "badger"}, ["fleek", "flook"]], [1, 0], "test")
+##
+## "test" == path::try_default([{"snot": "badger"}, ["fleek", "flook"]], [1, 2], "test")
+##
+## # Statements of the general form
+##  match event of
+##    case %{ absent host } => let event.host = system::hostname()
+##    default => event.host
+##  end;
+##
+## Can now be written more tersely as:
+## # If host is absent, default to the system hostname
+## let host = try_default(event, ["host"], system::hostname())
+## ```
+## Returns a tremor value
+intrinsic fn try_default(base, segments, otherwise) as path::try_default;

@@ -1,0 +1,4 @@
+{ "base": {"snot": "badger", "arr": [{"beep": "boop"}, 1234]}, "segments": ["snot"], "default": "not-used"}
+{ "base": {"snot": "badger", "arr": [{"beep": "boop"}, 1234]}, "segments": [], "default": "not-used"}
+{ "base": {"snot": "badger", "arr": [{"beep": "boop"}, 1234]}, "segments": ["bad"], "default": "good"}
+{ "base": {"snot": "badger", "arr": [{"beep": "boop"}, 1234]}, "segments": ["arr", 0, "beep"], "default": "good"}

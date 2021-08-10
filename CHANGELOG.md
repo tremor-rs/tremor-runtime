@@ -4,6 +4,7 @@
 
 ### New featues
 
+- Add `std::path::try_default` fn
 - Experimental ARM support
 - Add `default => {...}` and `default "key" => "value` to patch
 - Add `zstd` pre- and post-processors [#1100](https://github.com/tremor-rs/tremor-runtime/issues/1100)
@@ -29,6 +30,7 @@
 
 ### Fixes
 
+- Fix delayed event re-execution in case of errors in a branched pipeline
 - Skip instead of fail EQC on out of repo PRs
 - Ensure patch keys are strings to move runtime errors into the compiletime
 - Fix issue with the token `"` being presented as a tick in errors

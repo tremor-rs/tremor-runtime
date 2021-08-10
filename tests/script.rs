@@ -202,4 +202,5 @@ test_cases!(
     heredoc_interpolation,
     heredoc_usefn_interpolation,
     heredoc_regression,
+    path_defaulting,
 );

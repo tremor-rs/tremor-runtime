@@ -213,8 +213,44 @@ pub enum FunctionError {
 
 #[cfg(not(tarpaulin_include))]
 impl PartialEq for FunctionError {
-    fn eq(&self, _other: &Self) -> bool {
-        false
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (FunctionError::Error(_inner), _rhs) => false,
+            (_lhs, FunctionError::Error(_inner)) => false,
+            (
+                FunctionError::BadArity {
+                    mfa: lhs_mfa,
+                    calling_a: lhs_a,
+                },
+                FunctionError::BadArity {
+                    mfa: rhs_mfa,
+                    calling_a: rhs_a,
+                },
+            ) => lhs_mfa == rhs_mfa && lhs_a == rhs_a,
+            (FunctionError::BadType { mfa: lhs_mfa }, FunctionError::BadType { mfa: rhs_mfa }) => {
+                lhs_mfa == rhs_mfa
+            }
+            (
+                FunctionError::MissingModule { m: lhs_m },
+                FunctionError::MissingModule { m: rhs_m },
+            ) => lhs_m == rhs_m,
+            (
+                FunctionError::MissingFunction { m: lhs_m, f: lhs_f },
+                FunctionError::MissingFunction { m: rhs_m, f: rhs_f },
+            ) => lhs_m == rhs_m && lhs_f == rhs_f,
+            (
+                FunctionError::RuntimeError {
+                    mfa: lhs_mfa,
+                    error: lhs_error,
+                },
+                FunctionError::RuntimeError {
+                    mfa: rhs_mfa,
+                    error: rhs_error,
+                },
+            ) => lhs_mfa == rhs_mfa && lhs_error == rhs_error,
+            (FunctionError::RecursionLimit, FunctionError::RecursionLimit) => true,
+            _otherwise => false,
+        }
     }
 }
 
@@ -847,6 +883,58 @@ mod tests {
             .clone();
         move |args: &[&Value]| -> FResult<Value> { f.invoke(&EventContext::new(0, None), args) }
     }
+
+    #[test]
+    pub fn fun_error_equality_checks() {
+        fn mfa() -> Mfa {
+            Mfa::new("snot", "badger", 42)
+        }
+
+        let exemplars = vec![
+            FunctionError::BadArity {
+                mfa: mfa(),
+                calling_a: 42,
+            },
+            FunctionError::BadType { mfa: mfa() },
+            FunctionError::MissingFunction {
+                m: "some_mod".to_string(),
+                f: "some_fun".to_string(),
+            },
+            FunctionError::MissingModule {
+                m: "some_mod".to_string(),
+            },
+            FunctionError::RecursionLimit,
+            FunctionError::RuntimeError {
+                mfa: mfa(),
+                error: "Some text explanation".to_string(),
+            },
+        ];
+
+        let mut i = 0;
+        for lhs in &exemplars {
+            let mut j = 0;
+            for rhs in &exemplars {
+                if i == j {
+                    assert!(lhs == rhs);
+                } else {
+                    assert!(lhs != rhs);
+                }
+                j += 1;
+            }
+            i += 1;
+        }
+
+        // NOTE - equality checking of errors is unsupported and will always fail
+        assert!(
+            FunctionError::Error(Box::new(Error::from("Snot")))
+                != FunctionError::Error(Box::new(Error::from("Snot")))
+        );
+        assert!(
+            FunctionError::Error(Box::new(Error::from("Snot")))
+                != FunctionError::Error(Box::new(Error::from("Badger")))
+        );
+    }
+
     #[test]
     pub fn call_a_function_from_a_registry_works() {
         let max = fun("math", "max");
