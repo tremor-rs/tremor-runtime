@@ -1,0 +1,2 @@
+select event from in where event.format == "valid" into out;
+select event from in where event.format != "valid" into err;

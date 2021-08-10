@@ -1,0 +1,3 @@
+Error: 
+    2 | select event from in where event.format != "valid" into err;
+      |                                  ^^^^^^ Trying to access a non existing event key `format`
