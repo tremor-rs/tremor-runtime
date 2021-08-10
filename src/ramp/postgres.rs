@@ -88,7 +88,7 @@ impl postgres::types::ToSql for Record<'_> {
             postgres::types::Type::INT4 => {
                 let val = match self.value.as_i32() {
                     Some(v) => v,
-                    None => return Err("Could not serialize".into()),
+                    None => return Err("Could not serialize as `INT4`".into()),
                 };
 
                 postgres_protocol::types::int4_to_sql(val, w);
@@ -96,10 +96,26 @@ impl postgres::types::ToSql for Record<'_> {
             postgres::types::Type::INT8 => {
                 let val = match self.value.as_i64() {
                     Some(v) => v,
-                    None => return Err("Could not serialize".into()),
+                    None => return Err("Could not serialize as `INT8`".into()),
                 };
 
                 postgres_protocol::types::int8_to_sql(val, w);
+            }
+            postgres::types::Type::FLOAT4 => {
+                let val = match self.value.as_f32() {
+                    Some(v) => v,
+                    None => return Err("Could not serialize as `FLOAT4`".into()),
+                };
+
+                postgres_protocol::types::float4_to_sql(val, w);
+            }
+            postgres::types::Type::FLOAT8 => {
+                let val = match self.value.as_f64() {
+                    Some(v) => v,
+                    None => return Err("Could not serialize  as `FLOAT8`".into()),
+                };
+
+                postgres_protocol::types::float8_to_sql(val, w);
             }
             postgres::types::Type::JSON => {
                 let val = self.value.as_str().unwrap_or_default();
@@ -153,6 +169,8 @@ impl postgres::types::ToSql for Record<'_> {
                 | postgres::types::Type::INT2
                 | postgres::types::Type::INT4
                 | postgres::types::Type::INT8
+                | postgres::types::Type::FLOAT4
+                | postgres::types::Type::FLOAT8
                 | postgres::types::Type::JSON
                 | postgres::types::Type::JSONB
                 | postgres::types::Type::TIMESTAMP
@@ -181,6 +199,8 @@ pub fn json_to_record<'a>(json: &'a Value<'a>) -> Result<Record> {
         "INT8" => postgres::types::Type::INT8,
         "INT2" => postgres::types::Type::INT2,
         "INT4" => postgres::types::Type::INT4,
+        "FLOAT4" => postgres::types::Type::FLOAT4,
+        "FLOAT8" => postgres::types::Type::FLOAT8,
         "JSON" => postgres::types::Type::JSON,
         "JSONB" => postgres::types::Type::JSONB,
         "TIMESTAMPTZ" => postgres::types::Type::TIMESTAMPTZ,
@@ -212,6 +232,8 @@ pub fn row_to_json(
             postgres::types::Type::INT8 => ("INT8", Value::from(row.get::<_, i64>(cid))),
             postgres::types::Type::INT2 => ("INT2", Value::from(row.get::<_, i64>(cid))),
             postgres::types::Type::INT4 => ("INT4", Value::from(row.get::<_, i64>(cid))),
+            postgres::types::Type::FLOAT4 => ("FLOAT4", Value::from(row.get::<_, f32>(cid))),
+            postgres::types::Type::FLOAT8 => ("FLOAT8", Value::from(row.get::<_, f64>(cid))),
             postgres::types::Type::JSON => ("JSON", Value::from(row.get::<_, String>(cid))),
             postgres::types::Type::JSONB => ("JSONB", Value::from(row.get::<_, String>(cid))),
             postgres::types::Type::NAME => ("NAME", Value::from(row.get::<_, String>(cid))),
