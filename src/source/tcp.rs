@@ -49,7 +49,6 @@ pub struct Tcp {
 }
 
 pub struct Int {
-    uid: u64,
     config: Config,
     listener: Option<Receiver<SourceReply>>,
     onramp_id: TremorUrl,
@@ -60,11 +59,10 @@ impl std::fmt::Debug for Int {
     }
 }
 impl Int {
-    fn from_config(uid: u64, onramp_id: TremorUrl, config: &Config) -> Self {
+    fn from_config(onramp_id: TremorUrl, config: &Config) -> Self {
         let config = config.clone();
 
         Self {
-            uid,
             config,
             listener: None,
             onramp_id,
@@ -109,7 +107,6 @@ impl Source for Int {
     async fn init(&mut self) -> Result<SourceState> {
         let listener = TcpListener::bind((self.config.host.as_str(), self.config.port)).await?;
         let (tx, rx) = bounded(crate::QSIZE);
-        let uid = self.uid;
         let path = vec![self.config.port.to_string()];
 
         let server_config: Option<ServerConfig> = if let Some(tls_config) = self.config.tls.as_ref()
@@ -124,7 +121,6 @@ impl Source for Int {
                 let tx = tx.clone();
                 stream_id += 1;
                 let origin_uri = EventOriginUri {
-                    uid,
                     scheme: "tremor-tcp".to_string(),
                     host: peer.ip().to_string(),
                     port: Some(peer.port()),
@@ -168,7 +164,7 @@ impl Source for Int {
 #[async_trait::async_trait]
 impl Onramp for Tcp {
     async fn start(&mut self, config: OnrampConfig<'_>) -> Result<onramp::Addr> {
-        let source = Int::from_config(config.onramp_uid, self.onramp_id.clone(), &self.config);
+        let source = Int::from_config(self.onramp_id.clone(), &self.config);
         SourceManager::start(source, config).await
     }
 

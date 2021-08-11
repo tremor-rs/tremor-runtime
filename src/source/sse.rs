@@ -74,7 +74,7 @@ impl onramp::Builder for Builder {
 #[async_trait::async_trait()]
 impl Onramp for Sse {
     async fn start(&mut self, config: OnrampConfig<'_>) -> Result<onramp::Addr> {
-        let source = Int::from_config(config.onramp_uid, self.onramp_id.clone(), &self.config);
+        let source = Int::from_config(self.onramp_id.clone(), &self.config);
         SourceManager::start(source, config).await
     }
 
@@ -85,7 +85,6 @@ impl Onramp for Sse {
 }
 
 pub struct Int {
-    uid: u64,
     config: Config,
     onramp_id: TremorUrl,
     event_source: Option<Receiver<surf_sse::Event>>,
@@ -97,9 +96,8 @@ impl std::fmt::Debug for Int {
 }
 
 impl Int {
-    fn from_config(uid: u64, onramp_id: TremorUrl, config: &Config) -> Self {
+    fn from_config(onramp_id: TremorUrl, config: &Config) -> Self {
         Int {
-            uid,
             config: config.clone(),
             onramp_id,
             event_source: None,
@@ -165,7 +163,6 @@ impl Source for Int {
 
     async fn pull_event(&mut self, _id: u64) -> Result<SourceReply> {
         let origin_uri = EventOriginUri {
-            uid: self.uid,
             scheme: "tremor-sse".to_string(),
             // What even is the host here?
             host: hostname(),

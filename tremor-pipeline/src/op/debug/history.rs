@@ -140,7 +140,7 @@ mod test {
             id: "badger".into(),
         };
         let event = Event {
-            id: EventId::new(0, 0, 1),
+            id: EventId::from_id(0, 0, 1),
             ingest_ns: 1,
             data: (Value::from("snot"), Value::object()).into(),
             ..Event::default()
@@ -165,7 +165,7 @@ mod test {
         assert_eq!(out, "out");
 
         let mut event = Event {
-            id: EventId::new(0, 0, 1),
+            id: EventId::from_id(0, 0, 1),
             ingest_ns: 1,
             data: (Value::from("snot"), Value::object()).into(),
             ..Event::default()

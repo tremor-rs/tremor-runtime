@@ -145,7 +145,6 @@ struct ServerState {
 async fn handle_request(mut req: Request<ServerState>) -> tide::Result<Response> {
     // TODO cache parts of this and update host only on new request
     let origin_uri = EventOriginUri {
-        uid: req.state().uid,
         scheme: "tremor-rest".to_string(),
         host: req
             .host()

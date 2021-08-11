@@ -654,7 +654,7 @@ impl Sink for Ws {
     #[allow(clippy::too_many_arguments)]
     async fn init(
         &mut self,
-        sink_uid: u64,
+        _sink_uid: u64,
         sink_url: &TremorUrl,
         codec: &dyn Codec,
         _codec_map: &HashMap<String, Box<dyn Codec>>,
@@ -670,7 +670,6 @@ impl Sink for Ws {
         self.sink_url = sink_url.clone();
         let parsed = Url::parse(&self.config.url)?; // should not fail as it has already been verified
         let origin_url = EventOriginUri {
-            uid: sink_uid,
             scheme: "tremor-ws".to_string(),
             host: parsed.host_str().unwrap_or("UNKNOWN").to_string(),
             port: parsed.port(),
@@ -811,7 +810,7 @@ mod test {
 
         // lets try to send an event
         let mut event = Event::default();
-        event.id = EventId::new(1, 1, 1);
+        event.id = EventId::from_id(1, 1, 1);
         sink.on_event("in", codec.as_mut(), &HashMap::new(), event)
             .await?;
 

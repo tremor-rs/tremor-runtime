@@ -205,7 +205,7 @@ mod test {
             event_id_gen: idgen,
         };
         let event1 = Event {
-            id: EventId::new(0, 0, 1),
+            id: EventId::from_id(0, 0, 1),
             ingest_ns: 1,
             data: Value::from("snot").into(),
             ..Event::default()

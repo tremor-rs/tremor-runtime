@@ -231,7 +231,7 @@ fn select_stmt_from_query(query_str: &str) -> Result<Select> {
 
 fn test_tick(ns: u64) -> Event {
     Event {
-        id: EventId::new(1, 1, ns),
+        id: EventId::from_id(1, 1, ns),
         kind: Some(SignalKind::Tick),
         ingest_ns: ns,
         ..Event::default()
