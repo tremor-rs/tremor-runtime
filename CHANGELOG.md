@@ -27,6 +27,7 @@
 - Add -q flag and clarify -v flag for unit tests
 - Add win::cardinality function
 - Backpressure now allows lossless (no discard) circuit breaker behaviour [#1119](https://github.com/tremor-rs/tremor-runtime/issues/1119)
+- Allow functions, constants and expressions as roots for path lookups
 
 ### Fixes
 
@@ -49,7 +50,7 @@
 - Fix issue with double counting of unit test stats
 - Fix issue with wrong script snippets being shown for unit tests
 - Fix argument order in test cases
-
+- Fix gcs go-auth token refresh
 
 ## 0.11.4
 

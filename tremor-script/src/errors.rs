@@ -18,11 +18,11 @@
 #![allow(missing_docs)]
 
 pub use crate::prelude::ValueType;
-use crate::prelude::*;
 use crate::{
     ast::{self, BaseExpr, NodeMetas},
     errors, lexer,
     pos::{self, Range},
+    prelude::*,
     Value,
 };
 use error_chain::error_chain;
@@ -1149,6 +1149,7 @@ pub(crate) fn error_array_out_of_bound<'script, T, O: BaseExpr, I: BaseExpr>(
         | ast::Path::State(_)
         | ast::Path::Reserved(_)
         | ast::Path::Local(_)
+        | ast::Path::Expr(_)
         | ast::Path::Const(_) => {
             ErrorKind::ArrayOutOfRange(expr, inner.extent(meta), r, len).into()
         }
@@ -1171,6 +1172,7 @@ pub(crate) fn error_bad_array_index<'script, 'idx, T, O: BaseExpr, I: BaseExpr>(
         | ast::Path::Event(_)
         | ast::Path::Meta(_)
         | ast::Path::Local(_)
+        | ast::Path::Expr(_)
         | ast::Path::Const(_) => {
             ErrorKind::BadArrayIndex(expr, inner.extent(meta), idx, len).into()
         }
@@ -1191,6 +1193,7 @@ pub(crate) fn error_decreasing_range<'script, T, O: BaseExpr, I: BaseExpr>(
         | ast::Path::State(_)
         | ast::Path::Reserved(_)
         | ast::Path::Local(_)
+        | ast::Path::Expr(_)
         | ast::Path::Const(_) => {
             ErrorKind::DecreasingRange(expr, inner.extent(meta), start_idx, end_idx).into()
         }
@@ -1218,7 +1221,7 @@ pub(crate) fn error_bad_key_err<'script, O: BaseExpr, I: BaseExpr>(
 ) -> Error {
     let expr: Range = outer.extent(meta);
     match path {
-        ast::Path::Reserved(_) | ast::Path::Local(_) | ast::Path::Const(_) => {
+        ast::Path::Reserved(_) | ast::Path::Local(_) | ast::Path::Const(_) | ast::Path::Expr(_) => {
             ErrorKind::BadAccessInLocal(expr, inner.extent(meta), key, options).into()
         }
         ast::Path::Meta(_p) => {

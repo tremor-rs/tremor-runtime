@@ -442,6 +442,9 @@ impl<'script> Expr<'script> {
                 let name = env.meta.name_dflt(p.mid()).to_string();
                 return error_assign_to_const(self, name, env.meta);
             }
+            Path::Expr(_p) => {
+                return error_assign_to_const(self, "<expr>".to_string(), env.meta);
+            }
 
             Path::Local(lpath) => {
                 stry!(local
@@ -532,22 +535,10 @@ impl<'script> Expr<'script> {
             Path::Reserved(p) => {
                 error_assign_to_const(self, env.meta.name_dflt(p.mid()).into(), env.meta)
             }
+            Path::Expr(_) => error_assign_to_const(self, "<expr>".to_string(), env.meta),
             Path::Local(lpath) => {
-                match stry!(local.get_mut(lpath.idx, self, lpath.mid(), env.meta)) {
-                    Some(l) => {
-                        *l = value;
-                        Ok(Cow::Borrowed(l))
-                    }
-                    d => {
-                        *d = Some(value);
-                        if let Some(l) = d {
-                            Ok(Cow::Borrowed(l))
-                        } else {
-                            // ALLOW: we assign d in the line above the access, we know it is Some
-                            unreachable!()
-                        }
-                    }
-                }
+                let o = stry!(local.get_mut(lpath.idx, self, lpath.mid(), env.meta));
+                Ok(Cow::Borrowed(o.insert(value)))
             }
             Path::Meta(_path) => error_invalid_assign_target(self, env.meta),
             Path::Event(_path) => {

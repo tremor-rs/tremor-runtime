@@ -164,6 +164,9 @@ test_cases!(
     subslice_no_arr,
     subslice_out_of_bounds,
     // INSERT
+    assign_expr,
+    assign_reserved,
+    assign_const,
     error_after_heredoc,
     undefined_local,
     recursion_limit,

@@ -1,0 +1,9 @@
+use std::array;
+use std::record;
+[
+  [1][0],
+  array::push([1], "snot")[1],
+  {"snot": "badger"}.snot,
+  record::from_array([["snot", "badger"]]).snot,
+  (merge {} of {"snot":"badger"} end).snot,
+]

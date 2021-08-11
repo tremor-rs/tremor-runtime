@@ -15,21 +15,18 @@
 // This is just one big identify function with a few Cow::owned in it
 #![cfg(not(tarpaulin_include))]
 
+use super::{
+    query::WindowDecl, ArrayPattern, ArrayPredicatePattern, AssignPattern, BinExpr, Bytes,
+    BytesPart, ClauseGroup, ClausePreCondition, Comprehension, ComprehensionCase, Consts,
+    DefaultCase, EmitExpr, EventPath, Expr, ExprPath, Field, IfElse, ImutExpr, ImutExprInt,
+    Invocable, Invoke, InvokeAggrFn, List, Literal, LocalPath, Match, Merge, MetadataPath,
+    OperatorDecl, Patch, PatchOperation, Path, Pattern, PredicateClause, PredicatePattern, Record,
+    RecordPattern, Recur, ReservedPath, Script, Segment, StatePath, StrLitElement, StringLit,
+    TuplePattern, UnaryExpr,
+};
+use crate::CustomFn;
 use beef::Cow;
 use tremor_value::Value;
-
-use crate::CustomFn;
-
-use super::{
-    ArrayPattern, ArrayPredicatePattern, AssignPattern, BinExpr, Bytes, BytesPart, ClauseGroup,
-    ClausePreCondition, Comprehension, ComprehensionCase, Consts, DefaultCase, EmitExpr, EventPath,
-    Expr, Field, IfElse, ImutExpr, ImutExprInt, Invocable, Invoke, InvokeAggrFn, List, Literal,
-    LocalPath, Match, Merge, MetadataPath, OperatorDecl, Patch, PatchOperation, Path, Pattern,
-    PredicateClause, PredicatePattern, Record, RecordPattern, Recur, ReservedPath, Script, Segment,
-    StatePath, StrLitElement, StringLit, TuplePattern, UnaryExpr,
-};
-
-use super::query::WindowDecl;
 
 impl<'script> ImutExpr<'script> {
     pub(crate) fn into_static(self) -> ImutExpr<'static> {
@@ -100,6 +97,7 @@ impl<'script> Path<'script> {
             Path::Event(p) => Path::Event(p.into_static()),
             Path::State(p) => Path::State(p.into_static()),
             Path::Meta(p) => Path::Meta(p.into_static()),
+            Path::Expr(p) => Path::Expr(p.into_static()),
             Path::Reserved(p) => Path::Reserved(p.into_static()),
         }
     }
@@ -673,6 +671,23 @@ impl<'script> LocalPath<'script> {
             is_const,
             mid,
             segments: segments.into_iter().map(Segment::into_static).collect(),
+        }
+    }
+}
+
+impl<'script> ExprPath<'script> {
+    pub(crate) fn into_static(self) -> ExprPath<'static> {
+        let ExprPath {
+            segments,
+            expr,
+            mid,
+            var,
+        } = self;
+        ExprPath {
+            expr: Box::new(expr.into_static()),
+            segments: segments.into_iter().map(Segment::into_static).collect(),
+            var,
+            mid,
         }
     }
 }

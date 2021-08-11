@@ -34,25 +34,29 @@ mod expr;
 mod imut_expr;
 
 pub use self::expr::Cont;
-use crate::ast::{
-    ArrayPattern, ArrayPredicatePattern, BaseExpr, BinOpKind, GroupBy, GroupByInt, ImutExprInt,
-    InvokeAggrFn, NodeMetas, Patch, PatchOperation, Path, Pattern, PredicatePattern, RecordPattern,
-    ReservedPath, RunConsts, Segment, StringLit, TuplePattern, UnaryOpKind,
+use crate::{
+    ast::{
+        ArrayPattern, ArrayPredicatePattern, BaseExpr, BinOpKind, ExprPath, GroupBy, GroupByInt,
+        ImutExprInt, InvokeAggrFn, NodeMetas, Patch, PatchOperation, Path, Pattern,
+        PredicatePattern, RecordPattern, ReservedPath, RunConsts, Segment, StringLit, TuplePattern,
+        UnaryOpKind,
+    },
+    errors::{
+        error_array_out_of_bound, error_bad_array_index, error_bad_key, error_bad_key_err,
+        error_decreasing_range, error_guard_not_bool, error_invalid_binary, error_invalid_bitshift,
+        error_need_arr, error_need_int, error_need_obj, error_need_obj_err, error_need_str,
+        error_oops, error_oops_err, error_patch_key_exists, error_patch_merge_type_conflict,
+        error_patch_update_key_missing, Result,
+    },
+    prelude::*,
+    stry, EventContext, Value, NO_AGGRS, NO_CONSTS,
 };
-use crate::errors::{
-    error_array_out_of_bound, error_bad_array_index, error_bad_key, error_bad_key_err,
-    error_decreasing_range, error_guard_not_bool, error_invalid_binary, error_invalid_bitshift,
-    error_need_arr, error_need_int, error_need_obj, error_need_obj_err, error_need_str, error_oops,
-    error_oops_err, error_patch_key_exists, error_patch_merge_type_conflict,
-    error_patch_update_key_missing, Result,
-};
-use crate::prelude::*;
-use crate::{stry, EventContext, Value, NO_AGGRS, NO_CONSTS};
 use simd_json::StaticNode;
-use std::borrow::Borrow;
-use std::borrow::Cow;
-use std::convert::TryInto;
-use std::iter::Iterator;
+use std::{
+    borrow::{Borrow, Cow},
+    convert::TryInto,
+    iter::Iterator,
+};
 
 /// constant `true` value
 pub const TRUE: Value<'static> = Value::Static(StaticNode::Bool(true));
@@ -541,6 +545,14 @@ where
         Path::Meta(_path) => meta,
         Path::Event(_path) => event,
         Path::State(_path) => state,
+        Path::Expr(ExprPath { expr, var, .. }) => {
+            // If the expression is already borrowed we can refer to it
+            // if not we've to store it in a local shadow variable
+            match expr.run(opts, env, event, state, meta, local)? {
+                Cow::Borrowed(p) => p,
+                Cow::Owned(o) => set_local_shadow(outer, local, env.meta, *var, o)?,
+            }
+        }
         Path::Reserved(ReservedPath::Args { .. }) => env.consts.args,
         Path::Reserved(ReservedPath::Group { .. }) => env.consts.group,
         Path::Reserved(ReservedPath::Window { .. }) => env.consts.window,
@@ -1459,13 +1471,13 @@ where
 #[inline]
 // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1029
 #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
-fn set_local_shadow<'event, Expr>(
+fn set_local_shadow<'local, 'event, Expr>(
     outer: &Expr,
     local: &LocalStack<'event>,
     node_meta: &NodeMetas,
     idx: usize,
     v: Value<'event>,
-) -> Result<()>
+) -> Result<&'local mut Value<'event>>
 where
     Expr: BaseExpr,
 {
@@ -1481,10 +1493,7 @@ where
                 node_meta,
             )
         },
-        |d| {
-            *d = Some(v);
-            Ok(())
-        },
+        |d| Ok(d.insert(v)),
     )
 }
 

@@ -21,20 +21,50 @@ use gouth::Token;
 use reqwest::header::HeaderMap;
 use reqwest::Client;
 
-/// returns `gouth::Token` object and bearer token header as a string
-pub(crate) fn authenticate_bearer() -> Result<(Token, String)> {
-    let token = Token::new()?;
-    let header_value_string = token.header_value()?.to_string();
-    Ok((token, header_value_string))
+#[cfg(not(tarpaulin_include))]
+pub(crate) struct GcsClient {
+    client: Client,
+    token: gouth::Token,
 }
 
-pub(crate) fn json_api_client(extra_headers: &HeaderMap) -> Result<Client> {
-    let (_, bearer) = authenticate_bearer()?;
+#[cfg(not(tarpaulin_include))]
+impl GcsClient {
+    // Create a wrapper around reqwest::client
+    // which keeps the token with itself and inserts on each request.
+
+    pub fn get(&self, url: String) -> Result<reqwest::RequestBuilder> {
+        let token: String = self.token.header_value()?.to_string();
+
+        Ok(self.client.get(url).header(
+            "authorization",
+            reqwest::header::HeaderValue::from_maybe_shared(token)?,
+        ))
+    }
+
+    pub fn post(&self, url: String) -> Result<reqwest::RequestBuilder> {
+        let token: String = self.token.header_value()?.to_string();
+
+        Ok(self.client.post(url).header(
+            "authorization",
+            reqwest::header::HeaderValue::from_maybe_shared(token)?,
+        ))
+    }
+
+    pub fn delete(&self, url: String) -> Result<reqwest::RequestBuilder> {
+        let token: String = self.token.header_value()?.to_string();
+
+        Ok(self.client.delete(url).header(
+            "authorization",
+            reqwest::header::HeaderValue::from_maybe_shared(token)?,
+        ))
+    }
+}
+
+/// Returns the gcs json-api-client
+pub(crate) fn json_api_client(extra_headers: &HeaderMap) -> Result<GcsClient> {
+    // create a new goauth::Token.
+    let token = Token::new()?;
     let mut headers = reqwest::header::HeaderMap::new();
-    headers.insert(
-        "authorization",
-        reqwest::header::HeaderValue::from_maybe_shared(bearer)?,
-    );
     headers.insert(
         "content-type",
         reqwest::header::HeaderValue::from_static("application/json"),
@@ -42,7 +72,10 @@ pub(crate) fn json_api_client(extra_headers: &HeaderMap) -> Result<Client> {
     for header in extra_headers {
         headers.append(header.0, header.1.clone());
     }
-    Ok(reqwest::Client::builder()
-        .default_headers(headers)
-        .build()?)
+    Ok(GcsClient {
+        token,
+        client: reqwest::Client::builder()
+            .default_headers(headers)
+            .build()?,
+    })
 }
