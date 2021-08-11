@@ -4,7 +4,8 @@
     "args": [
         "--project-directory",
         "before",
-        "up"
+        "up",
+        "-d"
     ],
     "await": {
         "http-ok": [
