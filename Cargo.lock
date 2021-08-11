@@ -2273,7 +2273,7 @@ checksum = "8894a4cb9b32a73030f2c2dd6a251114d5ec62fb786d011850ae98cdfb8d2ff2"
 dependencies = [
  "prost",
  "prost-types",
- "tonic 0.5.0",
+ "tonic",
 ]
 
 [[package]]
@@ -3052,9 +3052,9 @@ dependencies = [
 
 [[package]]
 name = "libc"
-version = "0.2.98"
+version = "0.2.99"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "320cfe77175da3a483efed4bc0adc1968ca050b098ce4f2f1c13a56626128790"
+checksum = "a7f823d141fe0a24df1e23b4af4e3c7ba9e5966ec514ea068c93024aa7deb765"
 
 [[package]]
 name = "libflate"
@@ -3395,9 +3395,9 @@ checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
 
 [[package]]
 name = "native-tls"
-version = "0.2.7"
+version = "0.2.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b8d96b2e1c8da3957d58100b09f102c6d9cfdfced01b7ec5a8974044bb09dbd4"
+checksum = "48ba9f7719b5a0f42f338907614285fb5fd70e53858141f69898a1fb7203b24d"
 dependencies = [
  "lazy_static",
  "libc",
@@ -5677,9 +5677,9 @@ checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
 
 [[package]]
 name = "tar"
-version = "0.4.35"
+version = "0.4.36"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7d779dc6aeff029314570f666ec83f19df7280bb36ef338442cfa8c604021b80"
+checksum = "8190d9cdacf6ee1b080605fd719b58d80a9fcbcea64db6744b26f743da02e447"
 dependencies = [
  "filetime",
  "libc",
@@ -6308,36 +6308,9 @@ dependencies = [
 
 [[package]]
 name = "tonic"
-version = "0.4.3"
+version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2ac42cd97ac6bd2339af5bcabf105540e21e45636ec6fa6aae5e85d44db31be0"
-dependencies = [
- "async-stream",
- "base64 0.13.0",
- "bytes 1.0.1",
- "futures-core",
- "futures-util",
- "h2 0.3.3",
- "http 0.2.4",
- "http-body 0.4.3",
- "hyper 0.14.11",
- "percent-encoding 2.1.0",
- "pin-project 1.0.8",
- "tokio 1.9.0",
- "tokio-rustls",
- "tokio-stream",
- "tokio-util 0.6.7",
- "tower",
- "tower-service",
- "tracing",
- "tracing-futures",
-]
-
-[[package]]
-name = "tonic"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b584f064fdfc50017ec39162d5aebce49912f1eb16fd128e04b7f4ce4907c7e5"
+checksum = "796c5e1cd49905e65dd8e700d4cb1dffcbfdb4fc9d017de08c1a537afd83627c"
 dependencies = [
  "async-stream",
  "async-trait",
@@ -6355,6 +6328,7 @@ dependencies = [
  "prost",
  "prost-derive",
  "tokio 1.9.0",
+ "tokio-rustls",
  "tokio-stream",
  "tokio-util 0.6.7",
  "tower",
@@ -6366,9 +6340,9 @@ dependencies = [
 
 [[package]]
 name = "tonic-build"
-version = "0.5.1"
+version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d12faebbe071b06f486be82cc9318350814fdd07fcb28f3690840cd770599283"
+checksum = "12b52d07035516c2b74337d2ac7746075e7dcae7643816c1b12c5ff8a7484c08"
 dependencies = [
  "proc-macro2",
  "prost-build",
@@ -6561,11 +6535,13 @@ dependencies = [
 
 [[package]]
 name = "tremor-otelapis"
-version = "0.2.0"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5c029f406f53b2d4df45f19a1235c0f842c453abd909e53891b4918f0aed5e48"
 dependencies = [
  "async-channel",
  "prost",
- "tonic 0.5.0",
+ "tonic",
  "tonic-build",
 ]
 
@@ -6678,7 +6654,7 @@ dependencies = [
  "test-case",
  "tide",
  "tokio-postgres",
- "tonic 0.4.3",
+ "tonic",
  "tremor-common",
  "tremor-influx",
  "tremor-otelapis",

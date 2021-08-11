@@ -88,7 +88,8 @@ pub(crate) fn instrumentation_library_logs_to_json(
                 .into_iter()
                 .map(log_record_to_json)
                 .collect::<Result<Value>>()?;
-            let mut e = literal!({ "logs": logs });
+
+            let mut e = literal!({ "logs": logs, "schema_url": data.schema_url });
             if let Some(il) = data.instrumentation_library {
                 let il = maybe_instrumentation_library_to_json(il);
                 e.try_insert("instrumentation_library", il);
@@ -134,8 +135,9 @@ pub(crate) fn maybe_instrumentation_library_logs_to_pb(
                 .collect::<Result<Vec<_>>>()?;
 
             Ok(InstrumentationLibraryLogs {
-                schema_url: data
-                    .get_str("schema_url")
+                schema_url: ill
+                    .get("schema_url")
+                    .and_then(Value::as_str)
                     .map(ToString::to_string)
                     .unwrap_or_default(),
                 instrumentation_library: ill
@@ -154,7 +156,9 @@ pub(crate) fn resource_logs_to_json(request: ExportLogsServiceRequest) -> Result
         .into_iter()
         .map(|log| {
             let ill = instrumentation_library_logs_to_json(log.instrumentation_library_logs)?;
-            let mut base = literal!({ "instrumentation_library_logs": ill });
+
+            let mut base =
+                literal!({ "instrumentation_library_logs": ill, "schema_url": log.schema_url});
             if let Some(r) = log.resource {
                 base.try_insert("resource", resource::resource_to_json(r));
             };
@@ -191,6 +195,7 @@ mod tests {
         common::v1::{any_value, AnyValue, InstrumentationLibrary},
         resource::v1::Resource,
     };
+    use tremor_script::utils::sorted_serialize;
 
     use super::*;
 
@@ -204,7 +209,6 @@ mod tests {
 
         let pb = vec![InstrumentationLibraryLogs {
             schema_url: "schema_url".into(),
-
             instrumentation_library: Some(InstrumentationLibrary {
                 name: "name".into(),
                 version: "v0.1.2".into(),
@@ -228,6 +232,7 @@ mod tests {
         let back_again = maybe_instrumentation_library_logs_to_pb(Some(&json))?;
         let expected: Value = literal!([{
             "instrumentation_library": { "name": "name", "version": "v0.1.2" },
+            "schema_url": "schema_url",
             "logs": [
                 { "severity_number": 9,
                   "flags": 128,
@@ -293,9 +298,11 @@ mod tests {
             "logs": [
                 {
                     "resource": { "attributes": {}, "dropped_attributes_count": 8 },
+                    "schema_url": "schema_url",
                     "instrumentation_library_logs": [
                         {
                             "instrumentation_library": { "name": "name", "version": "v0.1.2" },
+                            "schema_url": "schema_url",
                             "logs": [{
                                 "severity_number": 9,
                                 "flags": 128,
@@ -314,7 +321,7 @@ mod tests {
             ]
         });
 
-        assert_eq!(expected, json);
+        assert_eq!(sorted_serialize(&expected)?, sorted_serialize(&json)?);
         assert_eq!(pb.resource_logs, back_again);
 
         Ok(())

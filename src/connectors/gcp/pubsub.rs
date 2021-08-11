@@ -22,10 +22,11 @@ use googapis::google::pubsub::v1::{
     AcknowledgeRequest, PublishRequest, PubsubMessage, PullRequest, PullResponse, Subscription,
 };
 use std::collections::HashMap;
-use tonic::transport::Channel;
+
+use super::pubsub_auth::AuthedService;
 
 pub(crate) async fn send_message(
-    client: &mut PublisherClient<Channel>,
+    client: &mut PublisherClient<AuthedService>,
     project_id: &str,
     topic_name: &str,
     data_val: &[u8],
@@ -54,7 +55,7 @@ pub(crate) async fn send_message(
 }
 
 pub(crate) async fn receive_message(
-    client: &mut SubscriberClient<Channel>,
+    client: &mut SubscriberClient<AuthedService>,
     project_id: &str,
     subscription_name: &str,
 ) -> Result<PullResponse> {
@@ -75,7 +76,7 @@ pub(crate) async fn receive_message(
 }
 
 pub(crate) async fn acknowledge(
-    client: &mut SubscriberClient<Channel>,
+    client: &mut SubscriberClient<AuthedService>,
     project_id: &str,
     subscription_name: &str,
     ack_ids: Vec<String>,
@@ -93,7 +94,7 @@ pub(crate) async fn acknowledge(
 }
 
 pub(crate) async fn create_subscription(
-    client: &mut SubscriberClient<Channel>,
+    client: &mut SubscriberClient<AuthedService>,
     project_id: &str,
     topic_name: &str,
     subscription_name: &str,

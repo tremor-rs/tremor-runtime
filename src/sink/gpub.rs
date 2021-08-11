@@ -22,19 +22,19 @@
 
 #![cfg(not(tarpaulin_include))]
 
+use crate::connectors::gcp::pubsub_auth::AuthedService;
 use crate::connectors::gcp::{pubsub, pubsub_auth};
 use crate::connectors::qos::{self, QoSFacilities, SinkQoS};
 use crate::sink::prelude::*;
 use googapis::google::pubsub::v1::publisher_client::PublisherClient;
 use googapis::google::pubsub::v1::subscriber_client::SubscriberClient;
 use halfbrown::HashMap;
-use tonic::transport::Channel;
 use tremor_pipeline::{EventIdGenerator, OpMeta};
 use tremor_value::Value;
 
 pub struct GoogleCloudPubSub {
-    remote_publisher: Option<PublisherClient<Channel>>,
-    remote_subscriber: Option<SubscriberClient<Channel>>,
+    remote_publisher: Option<PublisherClient<AuthedService>>,
+    remote_subscriber: Option<SubscriberClient<AuthedService>>,
     is_down: bool,
     qos_facility: Box<dyn SinkQoS>,
     reply_channel: Option<Sender<sink::Reply>>,
