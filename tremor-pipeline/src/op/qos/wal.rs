@@ -217,7 +217,6 @@ impl Wal {
             broken: true,
             full: false,
             origin_uri: Some(EventOriginUri {
-                uid: 0,
                 scheme: Self::URI_SCHEME.to_string(),
                 host: "pipeline".to_string(),
                 port: None,
@@ -260,7 +259,7 @@ impl Wal {
         (&mut write[..]).write_u64::<BigEndian>(wal_id)?;
 
         // TODO: figure out if handling of separate streams makes sense here
-        let mut new_event_id = EventId::new(source_id, DEFAULT_STREAM_ID, wal_id);
+        let mut new_event_id = EventId::from_id(source_id, DEFAULT_STREAM_ID, wal_id);
         new_event_id.track(&event.id);
         event.id = new_event_id;
 

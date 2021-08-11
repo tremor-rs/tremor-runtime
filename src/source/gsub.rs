@@ -50,7 +50,6 @@ impl Int {
         let remote = None;
         let project_id = "".to_string();
         let origin = EventOriginUri {
-            uid: 0,
             scheme: "google-sub".to_string(),
             host: hostname(),
             port: None,

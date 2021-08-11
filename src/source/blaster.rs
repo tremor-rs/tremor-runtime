@@ -62,7 +62,6 @@ impl onramp::Builder for Builder {
                 source_data_file.read_to_end(&mut data)?;
             };
             let origin_uri = EventOriginUri {
-                uid: 0,
                 scheme: "tremor-blaster".to_string(),
                 host: hostname(),
                 port: None,
@@ -142,7 +141,6 @@ impl Source for Blaster {
 #[async_trait::async_trait]
 impl Onramp for Blaster {
     async fn start(&mut self, config: OnrampConfig<'_>) -> Result<onramp::Addr> {
-        self.origin_uri.uid = config.onramp_uid;
         SourceManager::start(self.clone(), config).await
     }
     fn default_codec(&self) -> &str {

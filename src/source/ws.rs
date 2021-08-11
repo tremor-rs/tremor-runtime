@@ -344,7 +344,6 @@ impl Source for Int {
         let listen_port = self.config.port;
         let listener = TcpListener::bind((self.config.host.as_str(), listen_port)).await?;
         let (tx, rx) = bounded(crate::QSIZE);
-        let uid = self.uid;
         let source_url = self.onramp_id.clone();
 
         let link = self.is_linked;
@@ -355,7 +354,6 @@ impl Source for Int {
             let mut stream_id = 0;
             while let Ok((stream, socket)) = listener.accept().await {
                 let uri = EventOriginUri {
-                    uid,
                     scheme: "tremor-ws".to_string(),
                     host: socket.ip().to_string(),
                     port: Some(socket.port()),

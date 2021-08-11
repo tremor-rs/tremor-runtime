@@ -563,11 +563,17 @@ impl EventSerializer {
     }
 
     /// serialize event for the default stream
+    ///
+    /// # Errors
+    ///   * if serialization failed (codec or postprocessors)
     pub fn serialize(&mut self, value: &Value, ingest_ns: u64) -> Result<Vec<Vec<u8>>> {
         self.serialize_for_stream(value, ingest_ns, DEFAULT_STREAM_ID)
     }
 
     /// serialize event for a certain stream
+    ///
+    /// # Errors
+    ///   * if serialization failed (codec or postprocessors)
     pub fn serialize_for_stream(
         &mut self,
         value: &Value,

@@ -342,7 +342,6 @@ impl Sink for Rest {
                 None
             });
         }
-        let sink_uid = self.uid;
         let id = event.id.clone();
         let op_meta = if event.transactional {
             Some(event.op_meta.clone())
@@ -373,7 +372,6 @@ impl Sink for Rest {
                     SendTaskInMsg::Request(request) => {
                         let url = request.url();
                         let event_origin_uri = EventOriginUri {
-                            uid: sink_uid,
                             scheme: "tremor-rest".to_string(),
                             host: url.host_str().map_or(String::new(), ToString::to_string),
                             port: url.port(),
@@ -527,7 +525,6 @@ async fn codec_task(
     debug!("[Sink::{}] Codec task started.", &sink_url);
     let mut response_ids = EventIdGenerator::new(sink_uid);
     let response_origin_uri = EventOriginUri {
-        uid: sink_uid,
         scheme: "tremor-rest".to_string(),
         host: hostname(),
         ..EventOriginUri::default()

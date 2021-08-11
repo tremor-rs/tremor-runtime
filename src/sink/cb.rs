@@ -148,9 +148,8 @@ mod tests {
         .await?;
         let mut data = Value::object_with_capacity(1);
         data.insert("cb", "ack")?;
-        let id = EventId::new(1, 2, 3);
+        let id = EventId::from_id(1, 2, 3);
         let origin_uri = Some(EventOriginUri {
-            uid: 1,
             scheme: "test".to_string(),
             host: "localhost".to_string(),
             port: Some(1),

@@ -83,9 +83,8 @@ impl onramp::Builder for Builder {
 }
 
 impl Int {
-    async fn from_config(uid: u64, onramp_id: TremorUrl, config: &Config) -> Result<Self> {
+    fn from_config(onramp_id: TremorUrl, config: &Config) -> Result<Self> {
         let origin_uri = EventOriginUri {
-            uid,
             scheme: "tremor-file".to_string(),
             host: hostname(),
             port: None,
@@ -226,8 +225,7 @@ impl Source for Int {
 #[async_trait::async_trait]
 impl Onramp for Postgres {
     async fn start(&mut self, config: OnrampConfig<'_>) -> Result<onramp::Addr> {
-        let source =
-            Int::from_config(config.onramp_uid, self.onramp_id.clone(), &self.config).await?;
+        let source = Int::from_config(self.onramp_id.clone(), &self.config)?;
         SourceManager::start(source, config).await
     }
 

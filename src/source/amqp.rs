@@ -49,7 +49,6 @@ pub struct Amqp {
 }
 
 pub struct Int {
-    uid: u64,
     config: Config,
     amqp_url: Url,
     onramp_id: TremorUrl,
@@ -80,7 +79,7 @@ impl onramp::Builder for Builder {
 }
 
 impl Int {
-    async fn from_config(uid: u64, onramp_id: TremorUrl, config: &Config) -> Result<Self> {
+    async fn from_config(onramp_id: TremorUrl, config: &Config) -> Result<Self> {
         let amqp_url = match Url::parse(&config.amqp_addr) {
             Ok(amqp_url) => amqp_url,
             Err(e) => {
@@ -92,14 +91,12 @@ impl Int {
             }
         };
         let origin_uri = EventOriginUri {
-            uid,
             scheme: "amqp".to_string(),
             host: "not-connected".to_string(),
             port: None,
             path: vec![],
         };
         Ok(Self {
-            uid,
             config: config.clone(),
             amqp_url,
             onramp_id,
@@ -162,7 +159,6 @@ impl Source for Int {
         info!("[amqp] connected {}", self.config.amqp_addr);
 
         self.origin_uri = EventOriginUri {
-            uid: self.uid,
             scheme: self.amqp_url.scheme().to_string(),
             host: match self.amqp_url.host_str() {
                 Some(h) => h.to_string(),
@@ -234,8 +230,7 @@ impl Source for Int {
 #[async_trait::async_trait]
 impl Onramp for Amqp {
     async fn start(&mut self, config: OnrampConfig<'_>) -> Result<onramp::Addr> {
-        let source =
-            Int::from_config(config.onramp_uid, self.onramp_id.clone(), &self.config).await?;
+        let source = Int::from_config(self.onramp_id.clone(), &self.config).await?;
         SourceManager::start(source, config).await
     }
     fn default_codec(&self) -> &str {

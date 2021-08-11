@@ -40,7 +40,6 @@ impl onramp::Builder for Builder {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
             let origin_uri = EventOriginUri {
-                uid: 0,
                 scheme: "tremor-metronome".to_string(),
                 host: hostname(),
                 port: None,

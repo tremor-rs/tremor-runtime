@@ -61,11 +61,10 @@ impl std::fmt::Debug for Int {
 }
 
 impl Int {
-    fn from_config(uid: u64, onramp_id: TremorUrl, config: &Config) -> Self {
+    fn from_config(onramp_id: TremorUrl, config: &Config) -> Self {
         let (tx, rx) = bounded(128);
         let config = config.clone();
         let origin = EventOriginUri {
-            uid,
             scheme: "tremor-otel".to_string(),
             host: hostname(),
             port: None,
@@ -193,7 +192,7 @@ impl Source for Int {
 #[async_trait::async_trait]
 impl Onramp for OpenTelemetry {
     async fn start(&mut self, config: OnrampConfig<'_>) -> Result<onramp::Addr> {
-        let source = Int::from_config(config.onramp_uid, self.onramp_id.clone(), &self.config);
+        let source = Int::from_config(self.onramp_id.clone(), &self.config);
         SourceManager::start(source, config).await
     }
 

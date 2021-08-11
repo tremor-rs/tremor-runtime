@@ -158,11 +158,10 @@ impl Connector for TcpServer {
 
     async fn connect(
         &mut self,
-        ctx: &ConnectorContext,
+        _ctx: &ConnectorContext,
         notifier: ConnectionLostNotifier,
     ) -> Result<bool> {
         let path = vec![self.config.port.to_string()];
-        let uid = ctx.uid;
         let accept_url = self.url.clone();
 
         let source_tx = self.source_channel.clone();
@@ -189,7 +188,6 @@ impl Connector for TcpServer {
                 let stream_url = accept_url.clone();
                 let sink_url = accept_url.clone();
                 let origin_uri = EventOriginUri {
-                    uid,
                     scheme: URL_SCHEME.to_string(),
                     host: peer_addr.ip().to_string(),
                     port: Some(peer_addr.port()),
@@ -212,7 +210,6 @@ impl Connector for TcpServer {
                         });
                         let sc_data = SourceReply::Data {
                             origin_uri: origin_uri.clone(),
-                            codec_override: None,
                             stream: my_id,
                             meta: Some(meta),
                             // ALLOW: we know bytes_read is smaller than or equal buf_size

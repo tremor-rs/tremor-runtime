@@ -31,7 +31,6 @@ pub(crate) struct Builder {}
 impl onramp::Builder for Builder {
     fn from_config(&self, id: &TremorUrl, _config: &Option<YamlValue>) -> Result<Box<dyn Onramp>> {
         let origin_uri = EventOriginUri {
-            uid: 0,
             scheme: "tremor-env".to_string(),
             host: hostname(),
             port: None,

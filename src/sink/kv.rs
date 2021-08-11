@@ -128,7 +128,6 @@ impl offramp::Builder for Builder {
 
             let db = sled::open(&config.dir)?;
             let event_origin_uri = EventOriginUri {
-                uid: 0,
                 scheme: "tremor-kv".to_string(),
                 host: "localhost".to_string(),
                 port: None,
@@ -352,7 +351,6 @@ impl Sink for Kv {
         _is_linked: bool,
         reply_channel: Sender<sink::Reply>,
     ) -> Result<()> {
-        self.event_origin_uri.uid = sink_uid;
         self.sink_url = sink_url.clone();
         self.idgen.set_source(sink_uid);
         self.reply_tx = reply_channel;
