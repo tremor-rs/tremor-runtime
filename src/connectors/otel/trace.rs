@@ -151,7 +151,7 @@ pub(crate) fn instrumentation_library_spans_to_json(
     for data in data {
         let spans: Value = data.spans.into_iter().map(span_to_json).collect();
 
-        let mut e = literal!({ "spans": spans });
+        let mut e = literal!({ "spans": spans, "schema_url": data.schema_url });
         if let Some(il) = data.instrumentation_library {
             let il = common::maybe_instrumentation_library_to_json(il);
             e.try_insert("instrumentation_library", il);
@@ -219,7 +219,8 @@ pub(crate) fn resource_spans_to_json(request: ExportTraceServiceRequest) -> Valu
         .into_iter()
         .map(|span| {
             let ill = instrumentation_library_spans_to_json(span.instrumentation_library_spans);
-            let mut base = literal!({ "instrumentation_library_spans": ill });
+            let mut base =
+                literal!({ "instrumentation_library_spans": ill, "schema_url": span.schema_url });
             if let Some(r) = span.resource {
                 base.try_insert("resource", resource::resource_to_json(r));
             };
@@ -255,6 +256,7 @@ mod tests {
     use tremor_otelapis::opentelemetry::proto::{
         common::v1::InstrumentationLibrary, resource::v1::Resource,
     };
+    use tremor_script::utils::sorted_serialize;
 
     use super::*;
 
@@ -410,6 +412,7 @@ mod tests {
         let back_again = instrumentation_library_spans_to_pb(Some(&json))?;
         let expected: Value = literal!([{
             "instrumentation_library": { "name": "name", "version": "v0.1.2" },
+            "schema_url": "schema_url",
             "spans": [{
                   "start_time_unix_nano": 0,
                   "end_time_unix_nano": 0,
@@ -497,8 +500,10 @@ mod tests {
             "trace": [
                 {
                     "resource": { "attributes": {}, "dropped_attributes_count": 8 },
+                    "schema_url": "schema_url",
                     "instrumentation_library_spans": [{
                         "instrumentation_library": { "name": "name", "version": "v0.1.2" },
+                        "schema_url": "schema_url",
                         "spans": [{
                             "start_time_unix_nano": 0,
                             "end_time_unix_nano": 0,
@@ -526,7 +531,7 @@ mod tests {
             ]
         });
 
-        assert_eq!(expected, json);
+        assert_eq!(sorted_serialize(&expected)?, sorted_serialize(&json)?);
         assert_eq!(pb.resource_spans, back_again);
 
         let invalid = resource_spans_to_pb(Some(&literal!("snot")));

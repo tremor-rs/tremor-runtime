@@ -27,11 +27,32 @@ use gouth::Token;
 // use http_types::headers;
 use tonic::{
     metadata::MetadataValue,
+    service::interceptor::InterceptedService,
+    service::Interceptor,
     transport::{Certificate, Channel, ClientTlsConfig},
     Request, Status,
 };
 
-pub(crate) async fn setup_publisher_client() -> Result<PublisherClient<Channel>> {
+pub(crate) struct AuthInterceptor {
+    token: Token,
+}
+
+pub(crate) type AuthedService = InterceptedService<Channel, AuthInterceptor>;
+
+impl Interceptor for AuthInterceptor {
+    fn call(&mut self, mut req: Request<()>) -> std::result::Result<Request<()>, Status> {
+        let token = &*self
+            .token
+            .header_value()
+            .map_err(|_| Status::unauthenticated("Error getting token header value"))?;
+        let meta = MetadataValue::from_str(token)
+            .map_err(|_| Status::not_found("Error getting token header value"))?;
+        req.metadata_mut().insert("authorization", meta);
+        Ok(req)
+    }
+}
+
+pub(crate) async fn setup_publisher_client() -> Result<PublisherClient<AuthedService>> {
     let token = Token::new()?;
     let tls_config = ClientTlsConfig::new()
         .ca_certificate(Certificate::from_pem(CERTIFICATES))
@@ -41,20 +62,12 @@ pub(crate) async fn setup_publisher_client() -> Result<PublisherClient<Channel>>
         .tls_config(tls_config)?
         .connect()
         .await?;
-
-    let service = PublisherClient::with_interceptor(channel, move |mut req: Request<()>| {
-        let token = &*token
-            .header_value()
-            .map_err(|_| Status::unauthenticated("Error getting token header value"))?;
-        let meta = MetadataValue::from_str(token)
-            .map_err(|_| Status::not_found("Error getting token header value"))?;
-        req.metadata_mut().insert("authorization", meta);
-        Ok(req)
-    });
+    let interceptor = InterceptedService::new(channel, AuthInterceptor { token });
+    let service = PublisherClient::new(interceptor);
     Ok(service)
 }
 
-pub(crate) async fn setup_subscriber_client() -> Result<SubscriberClient<Channel>> {
+pub(crate) async fn setup_subscriber_client() -> Result<SubscriberClient<AuthedService>> {
     let token = Token::new()?;
     let tls_config = ClientTlsConfig::new()
         .ca_certificate(Certificate::from_pem(CERTIFICATES))
@@ -64,15 +77,8 @@ pub(crate) async fn setup_subscriber_client() -> Result<SubscriberClient<Channel
         .tls_config(tls_config)?
         .connect()
         .await?;
+    let interceptor = InterceptedService::new(channel, AuthInterceptor { token });
 
-    let service = SubscriberClient::with_interceptor(channel, move |mut req: Request<()>| {
-        let token = &*token
-            .header_value()
-            .map_err(|_| Status::unauthenticated("Error getting token header value"))?;
-        let meta = MetadataValue::from_str(token)
-            .map_err(|_| Status::not_found("Error getting token header value"))?;
-        req.metadata_mut().insert("authorization", meta);
-        Ok(req)
-    });
+    let service = SubscriberClient::new(interceptor);
     Ok(service)
 }

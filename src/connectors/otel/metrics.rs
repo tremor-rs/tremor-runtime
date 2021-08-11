@@ -103,11 +103,18 @@ pub(crate) fn double_exemplars_to_pb(json: Option<&Value<'_>>) -> Result<Vec<Exe
         .ok_or("Unable to map json value to Exemplars pb")?
         .iter()
         .map(|data| {
-            let mut filtered_attributes =
-                common::maybe_key_value_list_to_pb(data.get("filtered_attributes"))?;
-            filtered_attributes.append(&mut common::maybe_key_value_list_to_pb(
-                data.get("filtered_labels"),
-            )?);
+            let filtered_attributes = match (
+                data.get_object("filtered_attributes"),
+                data.get_object("filtered_labels"),
+            ) {
+                (None, None) => return Err("missing field `filtered_attributes`".into()),
+                (Some(a), None) | (None, Some(a)) => common::obj_key_value_list_to_pb(a),
+                (Some(a), Some(l)) => {
+                    let mut a = common::obj_key_value_list_to_pb(a);
+                    a.append(&mut common::obj_key_value_list_to_pb(l));
+                    a
+                }
+            };
             Ok(Exemplar {
                 filtered_attributes,
                 filtered_labels: vec![],
@@ -212,8 +219,7 @@ pub(crate) fn double_data_points_to_pb(json: Option<&Value<'_>>) -> Result<Vec<N
         .ok_or("Unable to map json value to otel pb NumberDataPoint list")?
         .iter()
         .map(|data| {
-            let mut attributes = common::maybe_key_value_list_to_pb(data.get("attributes"))?;
-            attributes.append(&mut common::maybe_key_value_list_to_pb(data.get("labels"))?);
+            let attributes = common::get_attributes_or_labes(data)?;
             Ok(NumberDataPoint {
                 labels: vec![],
                 attributes,
@@ -261,8 +267,7 @@ pub(crate) fn double_histo_data_points_to_pb(
         .ok_or("Unable to map json value to otel pb HistogramDataPoint list")?
         .iter()
         .map(|data| {
-            let mut attributes = common::maybe_key_value_list_to_pb(data.get("attributes"))?;
-            attributes.append(&mut common::maybe_key_value_list_to_pb(data.get("labels"))?);
+            let attributes = common::get_attributes_or_labes(data)?;
             Ok(HistogramDataPoint {
                 labels: vec![],
                 attributes,
@@ -311,8 +316,7 @@ pub(crate) fn double_summary_data_points_to_pb(
         .ok_or("Unable to map json value to otel pb SummaryDataPoint list")?
         .iter()
         .map(|data| {
-            let mut attributes = common::maybe_key_value_list_to_pb(data.get("attributes"))?;
-            attributes.append(&mut common::maybe_key_value_list_to_pb(data.get("labels"))?);
+            let attributes = common::get_attributes_or_labes(data)?;
             Ok(SummaryDataPoint {
                 labels: vec![],
                 attributes,
@@ -471,7 +475,7 @@ pub(crate) fn instrumentation_library_metrics_to_json<'event>(
     let mut json = Vec::with_capacity(pb.len());
     for data in pb {
         let metrics: Value = data.metrics.into_iter().map(metric_to_json).collect();
-        let mut e = literal!({ "metrics": metrics });
+        let mut e = literal!({ "metrics": metrics, "schema_url": data.schema_url });
         if let Some(il) = data.instrumentation_library {
             let il = common::maybe_instrumentation_library_to_json(il);
             e.try_insert("instrumentation_library", il);
@@ -525,7 +529,7 @@ pub(crate) fn resource_metrics_to_json(request: ExportMetricsServiceRequest) -> 
         .map(|metric| {
             let ill =
                 instrumentation_library_metrics_to_json(metric.instrumentation_library_metrics);
-            let mut base = literal!({ "instrumentation_library_metrics": ill });
+            let mut base = literal!({ "instrumentation_library_metrics": ill,  "schema_url": metric.schema_url });
             if let Some(r) = metric.resource {
                 base.try_insert("resource", resource::resource_to_json(r));
             };
@@ -543,8 +547,9 @@ pub(crate) fn resource_metrics_to_pb(json: Option<&Value<'_>>) -> Result<Vec<Res
         .filter_map(Value::as_object)
         .map(|item| {
             Ok(ResourceMetrics {
-                schema_url: json
-                    .get_str("schema_url")
+                schema_url: item
+                    .get("schema_url")
+                    .and_then(Value::as_str)
                     .map(ToString::to_string)
                     .unwrap_or_default(),
                 instrumentation_library_metrics: instrumentation_library_metrics_to_pb(
@@ -562,6 +567,7 @@ mod tests {
     use tremor_otelapis::opentelemetry::proto::{
         common::v1::InstrumentationLibrary, resource::v1::Resource,
     };
+    use tremor_script::utils::sorted_serialize;
 
     use super::*;
 
@@ -624,7 +630,7 @@ mod tests {
             "time_unix_nano": 0,
             "span_id": span_id_json,
             "trace_id": trace_id_json,
-            "filtered_labels": {},
+            "filtered_attributes": {},
             "value": 42.42
         }]);
         assert_eq!(expected, json);
@@ -712,7 +718,7 @@ mod tests {
             "value": 42.42,
             "start_time_unix_nano": 0,
             "time_unix_nano": 0,
-            "labels": {},
+            "attributes": {},
             "exemplars": []
         }]);
         assert_eq!(expected, json);
@@ -783,7 +789,7 @@ mod tests {
         let expected: Value = literal!([{
             "start_time_unix_nano": 0,
             "time_unix_nano": 0,
-            "labels": {},
+            "attributes": {},
             "exemplars": [],
             "sum": 0.0,
             "count": 0,
@@ -822,7 +828,7 @@ mod tests {
         let expected: Value = literal!([{
             "start_time_unix_nano": 0,
             "time_unix_nano": 0,
-            "labels": {},
+            "attributes": {},
             "sum": 0.0,
             "count": 0,
             "quantile_values": [ { "value": 0.1, "quantile": 0.2 }]
@@ -893,7 +899,7 @@ mod tests {
                 "data_points": [{
                     "start_time_unix_nano": 0,
                     "time_unix_nano": 0,
-                    "labels": {},
+                    "attributes": {},
                     "exemplars": [],
                     "value": 43.43
                 }]
@@ -923,7 +929,7 @@ mod tests {
                 "data_points": [{
                     "start_time_unix_nano": 0,
                     "time_unix_nano": 0,
-                    "labels": {},
+                    "attributes": {},
                     "exemplars": [],
                     "value": 43.43
                 }]
@@ -958,7 +964,7 @@ mod tests {
                 "data_points": [{
                     "start_time_unix_nano": 0,
                     "time_unix_nano": 0,
-                    "labels": {},
+                    "attributes": {},
                     "exemplars": [],
                     "sum": 10.0,
                     "count": 5,
@@ -993,7 +999,7 @@ mod tests {
                 "data_points": [{
                     "start_time_unix_nano": 0,
                     "time_unix_nano": 0,
-                    "labels": {},
+                    "attributes": {},
                     "count": 0,
                     "sum": 0.0,
                     "quantile_values": []
@@ -1101,6 +1107,7 @@ mod tests {
         let back_again = instrumentation_library_metrics_to_pb(Some(&json))?;
         let expected: Value = literal!([{
             "instrumentation_library": { "name": "name", "version": "v0.1.2" },
+            "schema_url": "schema_url",
             "metrics": [{
                 "name": "test",
                 "description": "blah blah blah blah",
@@ -1119,7 +1126,7 @@ mod tests {
             }]
         }]);
 
-        assert_eq!(expected, json);
+        assert_eq!(sorted_serialize(&expected)?, sorted_serialize(&json)?);
         assert_eq!(pb, back_again);
 
         Ok(())
@@ -1148,6 +1155,7 @@ mod tests {
         let json = instrumentation_library_metrics_to_json(pb.clone());
         let back_again = instrumentation_library_metrics_to_pb(Some(&json))?;
         let expected: Value = literal!([{
+            "schema_url": "schema_url",
             "metrics": [{
                 "name": "test",
                 "description": "blah blah blah blah",
@@ -1166,7 +1174,7 @@ mod tests {
             }]
         }]);
 
-        assert_eq!(expected, json);
+        assert_eq!(sorted_serialize(&expected)?, sorted_serialize(&json)?);
         assert_eq!(pb, back_again);
 
         Ok(())
@@ -1210,8 +1218,10 @@ mod tests {
             "metrics": [
                 {
                     "resource": { "attributes": {}, "dropped_attributes_count": 8 },
+                    "schema_url": "schema_url",
                     "instrumentation_library_metrics": [{
                             "instrumentation_library": { "name": "name", "version": "v0.1.2" },
+                            "schema_url": "schema_url",
                             "metrics": [{
                                 "name": "test",
                                 "description": "blah blah blah blah",
@@ -1233,7 +1243,7 @@ mod tests {
             ]
         });
 
-        assert_eq!(expected, json);
+        assert_eq!(sorted_serialize(&expected)?, sorted_serialize(&json)?);
         assert_eq!(pb.resource_metrics, back_again);
 
         Ok(())

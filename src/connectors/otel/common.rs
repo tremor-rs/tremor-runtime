@@ -95,7 +95,7 @@ pub(crate) fn any_value_to_pb(data: &Value<'_>) -> AnyValue {
             }
         }
         Value::Bytes(b) => AnyValue {
-            value: Some(Inner::BytesValue(b.into_owned())),
+            value: Some(Inner::BytesValue(b.to_vec())),
         },
     }
 }
@@ -135,7 +135,19 @@ pub(crate) fn maybe_key_value_list_to_pb(data: Option<&Value<'_>>) -> Result<Vec
     Ok(obj_key_value_list_to_pb(obj))
 }
 
-fn obj_key_value_list_to_pb(data: &tremor_value::Object<'_>) -> Vec<KeyValue> {
+pub(crate) fn get_attributes_or_labes(data: &Value) -> Result<Vec<KeyValue>> {
+    match (data.get_object("attributes"), data.get_object("labels")) {
+        (None, None) => Err("missing field `attributes`".into()),
+        (Some(a), None) | (None, Some(a)) => Ok(obj_key_value_list_to_pb(a)),
+        (Some(a), Some(l)) => {
+            let mut a = obj_key_value_list_to_pb(a);
+            a.append(&mut obj_key_value_list_to_pb(l));
+            Ok(a)
+        }
+    }
+}
+
+pub(crate) fn obj_key_value_list_to_pb(data: &tremor_value::Object<'_>) -> Vec<KeyValue> {
     data.iter()
         .map(|(key, value)| {
             let key = key.to_string();

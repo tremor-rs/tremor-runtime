@@ -152,11 +152,11 @@ sled = "0.34"
 
 # opentelemetry
 port_scanner = "0.1.5"
-tonic = { version = "0.4", default-features = false, features = [
+tonic = { version = "0.5.2", default-features = false, features = [
   "transport",
   "tls",
 ] }
-tremor-otelapis = { version = "0.2", path = "../tremor-otelapis" }
+tremor-otelapis = { version = "0.2.2" }
 
 # gcp
 googapis = { version = "0.5", default-features = false, features = [
