@@ -244,7 +244,7 @@ where
         }
     }
 
-    async fn make_event_data(
+    fn make_event_data(
         &mut self,
         stream: usize,
         ingest_ns: &mut u64,
@@ -416,7 +416,7 @@ where
     ) -> bool {
         let event = Event {
             // TODO: use EventIdGen and stream handling
-            id: EventId::new(self.uid, DEFAULT_STREAM_ID, self.id),
+            id: EventId::from_id(self.uid, DEFAULT_STREAM_ID, self.id),
             data,
             ingest_ns,
             // TODO make origin_uri non-optional here too?
@@ -588,25 +588,22 @@ where
                         self.transmit_event(data, ingest_ns, origin_uri, OUT).await;
                     }
                     Ok(SourceReply::BatchData {
-                        mut origin_uri,
+                        origin_uri,
                         batch_data,
                         codec_override,
                         stream,
                     }) => {
                         for (data, meta_data) in batch_data {
-                            origin_uri.maybe_set_uid(self.uid);
                             let mut ingest_ns = nanotime();
 
                             let original_id = self.id;
-                            let results = self
-                                .make_event_data(
-                                    stream,
-                                    &mut ingest_ns,
-                                    codec_override.clone(),
-                                    data,
-                                    meta_data.map(StaticValue),
-                                )
-                                .await;
+                            let results = self.make_event_data(
+                                stream,
+                                &mut ingest_ns,
+                                codec_override.clone(),
+                                data,
+                                meta_data.map(StaticValue),
+                            );
                             if results.is_empty() {
                                 self.source.on_empty_event(original_id, stream).await?;
                             }
@@ -622,25 +619,22 @@ where
                         }
                     }
                     Ok(SourceReply::Data {
-                        mut origin_uri,
+                        origin_uri,
                         data,
                         meta,
                         codec_override,
                         stream,
                     }) => {
-                        origin_uri.maybe_set_uid(self.uid);
                         let mut ingest_ns = nanotime();
 
                         let original_id = self.id;
-                        let results = self
-                            .make_event_data(
-                                stream,
-                                &mut ingest_ns,
-                                codec_override,
-                                data,
-                                meta.map(StaticValue),
-                            )
-                            .await;
+                        let results = self.make_event_data(
+                            stream,
+                            &mut ingest_ns,
+                            codec_override,
+                            data,
+                            meta.map(StaticValue),
+                        );
                         if results.is_empty() {
                             self.source.on_empty_event(original_id, stream).await?;
                         }

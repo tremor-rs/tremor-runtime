@@ -47,7 +47,7 @@ use crate::connectors::source::{SourceAddr, SourceContext, SourceMsg};
 use crate::errors::{Error, ErrorKind, Result};
 use crate::pipeline;
 use crate::system::World;
-use crate::url::ports::IN;
+use crate::url::ports::{ERR, IN, OUT};
 use crate::url::TremorUrl;
 use crate::OpConfig;
 use async_channel::bounded;
@@ -304,7 +304,7 @@ impl Manager {
         dbg!(connector_state);
 
         let default_codec = connector.default_codec();
-        let source_builder = source::builder(&config, default_codec, self.qsize)?;
+        let source_builder = source::builder(uid, &config, default_codec, self.qsize)?;
         let source_ctx = SourceContext {
             uid,
             url: url.clone(),
@@ -362,7 +362,26 @@ impl Manager {
                         } else {
                             pipelines.insert(port.clone(), mapping.clone());
                         }
-                        let res: Result<()> = if port.eq_ignore_ascii_case(IN.as_ref()) {
+                        let res = if port.eq_ignore_ascii_case(IN.as_ref()) {
+                            // connect to sink part
+                            match addr.sink.as_ref() {
+                                Some(sink) => sink
+                                    .addr
+                                    .send(SinkMsg::Connect {
+                                        port,
+                                        pipelines: mapping,
+                                    })
+                                    .await
+                                    .map_err(|e| e.into()),
+                                None => Err(ErrorKind::InvalidConnect(
+                                    addr.url.to_string(),
+                                    port.clone(),
+                                )
+                                .into()),
+                            }
+                        } else if port.eq_ignore_ascii_case(OUT.as_ref())
+                            || port.eq_ignore_ascii_case(ERR.as_ref())
+                        {
                             // connect to source part
                             match addr.source.as_ref() {
                                 Some(source) => source
@@ -380,22 +399,14 @@ impl Manager {
                                 .into()),
                             }
                         } else {
-                            // connect to sink part
-                            match addr.sink.as_ref() {
-                                Some(sink) => sink
-                                    .addr
-                                    .send(SinkMsg::Connect {
-                                        port,
-                                        pipelines: mapping,
-                                    })
-                                    .await
-                                    .map_err(|e| e.into()),
-                                None => Err(ErrorKind::InvalidConnect(
-                                    addr.url.to_string(),
-                                    port.clone(),
-                                )
-                                .into()),
-                            }
+                            error!(
+                                "[Connector::{}] Tried to connect to unsupported port: {}",
+                                &addr.url, &port
+                            );
+                            Err(
+                                ErrorKind::InvalidConnect(addr.url.to_string(), port.clone())
+                                    .into(),
+                            )
                         };
                         // TODO: only send result after sink/source have finished connecting?
                         // send back the connect result

@@ -134,7 +134,6 @@ impl Source for Int {
                 self.last_sent = self.last_sent.max(id);
                 Ok(SourceReply::Data {
                     origin_uri: EventOriginUri {
-                        uid: self.uid,
                         scheme: "tremor-cb".to_owned(),
                         host: hostname(),
                         ..EventOriginUri::default()

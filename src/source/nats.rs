@@ -64,7 +64,7 @@ impl onramp::Builder for Builder {
 #[async_trait::async_trait]
 impl Onramp for Nats {
     async fn start(&mut self, config: OnrampConfig<'_>) -> Result<onramp::Addr> {
-        let source = Int::from_config(config.onramp_uid, self.onramp_id.clone(), &self.config);
+        let source = Int::from_config(self.onramp_id.clone(), &self.config);
         SourceManager::start(source, config).await
     }
 
@@ -74,7 +74,6 @@ impl Onramp for Nats {
 }
 
 pub struct Int {
-    uid: u64,
     onramp_id: TremorUrl,
     config: Config,
     subscription: Option<Subscription>,
@@ -89,17 +88,15 @@ impl std::fmt::Debug for Int {
 }
 
 impl Int {
-    fn from_config(uid: u64, onramp_id: TremorUrl, config: &Config) -> Self {
+    fn from_config(onramp_id: TremorUrl, config: &Config) -> Self {
         let config = config.clone();
         let origin_uri = EventOriginUri {
-            uid,
             scheme: "tremor-nats".to_string(),
             host: "not-connected".to_string(),
             port: None,
             path: vec![],
         };
         Self {
-            uid,
             onramp_id,
             config,
             subscription: None,
@@ -180,7 +177,6 @@ impl Source for Int {
             }
         };
         self.origin_uri = EventOriginUri {
-            uid: self.uid,
             scheme: "tremor-nats".to_string(),
             host,
             port,

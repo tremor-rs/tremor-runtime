@@ -576,7 +576,6 @@ impl Sink for Elastic {
         if is_linked {
             let event_id_gen = EventIdGenerator::new(sink_uid);
             self.origin_uri = EventOriginUri {
-                uid: sink_uid, // placeholder,
                 scheme: "elastic".to_string(),
                 host: cluster_name,
                 port: None,

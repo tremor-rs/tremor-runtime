@@ -43,9 +43,8 @@ impl std::fmt::Debug for Int {
 }
 
 impl Int {
-    fn from_config(uid: u64, onramp_id: TremorUrl, config: &Config) -> Self {
+    fn from_config(onramp_id: TremorUrl, config: &Config) -> Self {
         let origin_uri = EventOriginUri {
-            uid,
             scheme: "tremor-udp".to_string(),
             host: String::default(),
             port: None,
@@ -136,7 +135,7 @@ impl Source for Int {
 #[async_trait::async_trait]
 impl Onramp for Udp {
     async fn start(&mut self, config: OnrampConfig<'_>) -> Result<onramp::Addr> {
-        let source = Int::from_config(config.onramp_uid, self.onramp_id.clone(), &self.config);
+        let source = Int::from_config(self.onramp_id.clone(), &self.config);
         SourceManager::start(source, config).await
     }
     fn default_codec(&self) -> &str {

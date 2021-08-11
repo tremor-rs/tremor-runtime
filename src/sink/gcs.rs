@@ -255,7 +255,6 @@ impl Sink for GoogleCloudStorage {
                             data: (response, meta).into(),
                             ingest_ns: nanotime(),
                             origin_uri: Some(EventOriginUri {
-                                uid: 0,
                                 scheme: "gRPC".into(),
                                 host: "".into(),
                                 port: None,
