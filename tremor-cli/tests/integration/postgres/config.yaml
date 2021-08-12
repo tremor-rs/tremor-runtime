@@ -65,11 +65,11 @@ offramp:
 binding:
   - id: tcppipeline
     links:
-      '/onramp/fake_sensor_feed/{instance}/out': [ '/pipeline/alert_pipeline/{instance}/in', '/pipeline/metricstoragepipeline/{instance}/in' ]
+      '/onramp/fake_sensor_feed/{instance}/out': [ '/pipeline/alert_pipeline/{instance}/in', '/pipeline/metricstoragepipeline/{instance}/in', '/pipeline/alert_pipeline/{instance}/in' ]
       '/onramp/tcp/{instance}/out': [ '/pipeline/metricstoragepipeline/{instance}/in',  '/pipeline/alert_pipeline/{instance}/in']
       '/pipeline/alert_pipeline/{instance}/out': [ '/offramp/system::stdout/{instance}/in' ]
-      '/pipeline/alert_pipeline/{instance}/err': [ '/offramp/system::stdout/{instance}/in', '/offramp/alerts_log/{instance}/in' ]
-      '/pipeline/metricstoragepipeline/{instance}/out': [ '/offramp/timescaledb-output/{instance}/in', '/offramp/system::stdout/{instance}/in', '/offramp/measurements_log/{instance}/in' ]
+      '/pipeline/alert_pipeline/{instance}/err': [ '/offramp/alerts_log/{instance}/in', '/offramp/system::stdout/{instance}/in' ]
+      '/pipeline/metricstoragepipeline/{instance}/out': [ '/offramp/measurements_log/{instance}/in', '/offramp/timescaledb-output/{instance}/in', '/offramp/system::stdout/{instance}/in' ]
       '/pipeline/metricstoragepipeline/{instance}/err': [ '/offramp/system::stdout/{instance}/in' ]
 
 mapping:
