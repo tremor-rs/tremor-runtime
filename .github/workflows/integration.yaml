@@ -46,6 +46,9 @@ jobs:
       - name: Build test runner
         run: cargo build -p tremor-cli
 
+      - name: Print docker-compose version
+        run: docker-compose --version
+
       - name: run ${{ matrix.kind }} tests
         run: cargo run -p tremor-cli -- test ${{ matrix.kind }} tremor-cli/tests ${{ matrix.exclude_tests }}
 
