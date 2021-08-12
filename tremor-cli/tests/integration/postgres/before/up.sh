@@ -2,4 +2,4 @@
 set -e
 
 cd before
-docker-compose up &
+docker-compose up | tee docker-compose.log &
