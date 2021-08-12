@@ -2,7 +2,7 @@
     "run": "tests/integrations/postgres",
     "cmd": "docker-compose",
     "args": [
-        "--f",
+        "-f",
         "before/docker-compose.yaml",
         "up"
     ],
