@@ -2,10 +2,9 @@
     "run": "tests/integrations/postgres",
     "cmd": "docker-compose",
     "args": [
-        "--project-directory",
-        "before",
-        "up",
-        "-d"
+        "--f",
+        "before/docker-compose.yaml",
+        "up"
     ],
     "await": {
         "http-ok": [

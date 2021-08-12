@@ -5,7 +5,7 @@ onramp:
     config:
       source: "sensor_data.json"
       close_on_done: true
-      sleep_on_done: 1000
+      sleep_on_done: 3000
 
   - id: tcp
     type: tcp
@@ -65,7 +65,7 @@ offramp:
 binding:
   - id: tcppipeline
     links:
-      '/onramp/fake_sensor_feed/{instance}/out': [ '/pipeline/metricstoragepipeline/{instance}/in',  '/pipeline/alert_pipeline/{instance}/in']
+      '/onramp/fake_sensor_feed/{instance}/out': [ '/pipeline/alert_pipeline/{instance}/in', '/pipeline/metricstoragepipeline/{instance}/in' ]
       '/onramp/tcp/{instance}/out': [ '/pipeline/metricstoragepipeline/{instance}/in',  '/pipeline/alert_pipeline/{instance}/in']
       '/pipeline/alert_pipeline/{instance}/out': [ '/offramp/system::stdout/{instance}/in' ]
       '/pipeline/alert_pipeline/{instance}/err': [ '/offramp/system::stdout/{instance}/in', '/offramp/alerts_log/{instance}/in' ]
