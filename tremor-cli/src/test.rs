@@ -215,6 +215,8 @@ impl TestConfig {
 
 #[allow(clippy::too_many_lines)]
 pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
+    env_logger::init();
+
     let kind: test::Kind = matches.value_of("MODE").unwrap_or_default().try_into()?;
     let path = matches.value_of("PATH").unwrap_or_default();
     let report = matches.value_of("REPORT");

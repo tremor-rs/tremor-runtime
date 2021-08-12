@@ -1,9 +1,7 @@
 {
     "run": "tests/integration/postgres",
-    "cmd": "docker-compose",
+    "cmd": "bash",
     "args": [
-        "-f",
-        "before/docker-compose.yaml",
-        "down"
+        "before/down.sh"
     ]
 }
