@@ -2,8 +2,8 @@
     "run": "tests/integration/postgres",
     "cmd": "docker-compose",
     "args": [
-        "--project-directory",
-        "before",
+        "-f",
+        "before/docker-compose.yaml",
         "down"
     ]
 }
