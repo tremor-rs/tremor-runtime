@@ -1,10 +1,8 @@
 {
     "run": "tests/integrations/postgres",
-    "cmd": "docker-compose",
+    "cmd": "bash",
     "args": [
-        "-f",
-        "before/docker-compose.yaml",
-        "up"
+        "./before/up.sh"
     ],
     "await": {
         "http-ok": [
