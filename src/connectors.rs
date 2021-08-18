@@ -38,10 +38,14 @@ pub(crate) mod pb;
 /// tcp server connector impl
 pub(crate) mod tcp_server;
 
+/// Home of the famous metrics collector
+pub(crate) mod metrics;
+
 use async_std::task::{self, JoinHandle};
 use beef::Cow;
 
 use crate::config::Connector as ConnectorConfig;
+use crate::connectors::metrics::{MetricsMsg, MetricsSinkReporter, MetricsSourceReporter};
 use crate::connectors::sink::{SinkAddr, SinkContext, SinkMsg};
 use crate::connectors::source::{SourceAddr, SourceContext, SourceMsg};
 use crate::errors::{Error, ErrorKind, Result};
@@ -69,6 +73,10 @@ pub struct Addr {
 }
 
 impl Addr {
+    pub async fn send(&self, msg: Msg) -> Result<()> {
+        Ok(self.sender.send(msg).await?)
+    }
+
     pub(crate) async fn send_sink(&self, msg: SinkMsg) -> Result<()> {
         if let Some(sink) = self.sink.as_ref() {
             sink.addr.send(msg).await?
@@ -168,12 +176,16 @@ pub enum ManagerMsg {
 /// and handles available connector types
 pub struct Manager {
     qsize: usize,
+    metrics_sender: async_channel::Sender<MetricsMsg>,
 }
 
 impl Manager {
     /// constructor
-    pub fn new(qsize: usize) -> Self {
-        Self { qsize }
+    pub fn new(qsize: usize, metrics_sender: async_channel::Sender<MetricsMsg>) -> Self {
+        Self {
+            qsize,
+            metrics_sender,
+        }
     }
 
     /// start the manager
@@ -303,13 +315,32 @@ impl Manager {
         let mut connector_state = ConnectorState::Stopped;
         dbg!(connector_state);
 
+        let source_metrics_reporter = MetricsSourceReporter::new(
+            url.clone(),
+            self.metrics_sender.clone(),
+            config.metrics_interval_s,
+        );
+
         let default_codec = connector.default_codec();
-        let source_builder = source::builder(uid, &config, default_codec, self.qsize)?;
+        let source_builder = source::builder(
+            uid,
+            &config,
+            default_codec,
+            self.qsize,
+            source_metrics_reporter,
+        )?;
         let source_ctx = SourceContext {
             uid,
             url: url.clone(),
         };
-        let sink_builder = sink::builder(&config, default_codec, self.qsize)?;
+
+        let sink_metrics_reporter = MetricsSinkReporter::new(
+            url.clone(),
+            self.metrics_sender.clone(),
+            config.metrics_interval_s,
+        );
+        let sink_builder =
+            sink::builder(&config, default_codec, self.qsize, sink_metrics_reporter)?;
         let sink_ctx = SinkContext {
             uid,
             url: url.clone(),
@@ -338,6 +369,7 @@ impl Manager {
         connector_state = ConnectorState::Initialized;
         dbg!(&connector_state);
 
+        // TODO: add connector metrics reporter (e.g. for reconnect attempts, cb's received, uptime, etc.)
         task::spawn::<_, Result<()>>(async move {
             // typical 1 pipeline connected to IN, OUT, ERR
             let mut pipelines: HashMap<Cow<'static, str>, Vec<(TremorUrl, pipeline::Addr)>> =
@@ -497,7 +529,7 @@ impl Manager {
                     }
                     Msg::Start if connector_state == ConnectorState::Initialized => {
                         info!("[Connector::{}] Starting...", &addr.url);
-                        // TODO: start connector
+                        // start connector
                         connector_state = match connector.on_start(&ctx).await {
                             Ok(new_state) => new_state,
                             Err(e) => {
@@ -659,7 +691,7 @@ pub trait Connector: Send {
         Ok(None)
     }
 
-    /// Attempt to connect to the outside world
+    /// Attempt to connect to the outside world.
     /// Return `Ok(true)` if a connection could be established.
     /// This method will be retried if it fails or returns `Ok(false)`.
     ///
@@ -695,6 +727,12 @@ pub trait ConnectorBuilder: Sync + Send {
 
 #[cfg(not(tarpaulin_include))]
 pub async fn register_builtin_connectors(world: &World) -> Result<()> {
+    world
+        .register_builtin_connector_type(
+            "metrics",
+            Box::new(metrics::Builder::new(world.metrics_channel.clone())),
+        )
+        .await?;
     world
         .register_builtin_connector_type("tcp_server", Box::new(tcp_server::Builder {}))
         .await?;

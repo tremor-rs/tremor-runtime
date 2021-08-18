@@ -34,8 +34,11 @@ use std::collections::BTreeMap;
 use std::hash::Hash;
 use tremor_common::time::nanotime;
 use tremor_pipeline::{CbAction, Event, EventId, OpMeta, SignalKind, DEFAULT_STREAM_ID};
+use tremor_script::EventPayload;
 
 use tremor_value::Value;
+
+use super::metrics::MetricsSinkReporter;
 
 /// stuff a sink replies back upon an event or a signal
 /// to the calling sink/connector manager
@@ -49,6 +52,16 @@ pub enum SinkReply {
     Fail,
     /// the whole sink became unavailable or available again
     CB(CbAction),
+}
+
+impl From<bool> for SinkReply {
+    fn from(ok: bool) -> Self {
+        if ok {
+            Self::Ack
+        } else {
+            Self::Fail
+        }
+    }
 }
 
 /// some basic Event data needed for generating correct contraflow messages
@@ -101,10 +114,17 @@ pub trait Sink: Send {
     /// called when receiving a signal
     async fn on_signal(
         &mut self,
-        signal: Event,
-        ctx: &SinkContext,
-        serializer: &mut EventSerializer,
-    ) -> ResultVec;
+        _signal: Event,
+        _ctx: &SinkContext,
+        _serializer: &mut EventSerializer,
+    ) -> ResultVec {
+        Ok(vec![])
+    }
+
+    /// Pull metrics from the sink
+    fn metrics(&mut self, _timestamp: u64) -> Vec<EventPayload> {
+        vec![]
+    }
 
     // lifecycle stuff
     /// called when started
@@ -461,6 +481,7 @@ pub struct SinkManagerBuilder {
         async_channel::Sender<AsyncSinkReply>,
         async_channel::Receiver<AsyncSinkReply>,
     ),
+    metrics_reporter: MetricsSinkReporter,
 }
 
 impl SinkManagerBuilder {
@@ -500,6 +521,7 @@ pub(crate) fn builder(
     config: &ConnectorConfig,
     connector_default_codec: &str,
     qsize: usize,
+    metrics_reporter: MetricsSinkReporter,
 ) -> Result<SinkManagerBuilder> {
     // resolve codec and processors
     let postprocessor_names = config.postprocessors.clone().unwrap_or_else(Vec::new);
@@ -515,6 +537,7 @@ pub(crate) fn builder(
         qsize,
         serializer,
         reply_channel,
+        metrics_reporter,
     })
 }
 
@@ -613,6 +636,7 @@ where
     rx: async_channel::Receiver<SinkMsg>,
     reply_rx: async_channel::Receiver<AsyncSinkReply>,
     serializer: EventSerializer,
+    metrics_reporter: MetricsSinkReporter,
     /// tracking which operators all incoming events visited
     merged_operator_meta: OpMeta,
     // pipelines connected to IN port
@@ -628,6 +652,7 @@ where
         let SinkManagerBuilder {
             serializer,
             reply_channel,
+            metrics_reporter,
             ..
         } = builder;
         Self {
@@ -636,6 +661,7 @@ where
             rx,
             reply_rx: reply_channel.1,
             serializer,
+            metrics_reporter,
             merged_operator_meta: OpMeta::default(),
             pipelines: Vec::with_capacity(1), // by default 1 connected to "in" port
             paused: true,                     // instantiated in paused state
@@ -699,6 +725,14 @@ where
                             }
                             SinkMsg::Event { event, port } => {
                                 let cf_builder = ContraflowBuilder::from(&event);
+
+                                self.metrics_reporter.increment_in();
+                                if let Some(t) =
+                                    self.metrics_reporter.periodic_flush(event.ingest_ns)
+                                {
+                                    self.metrics_reporter
+                                        .send_sink_metrics(self.sink.metrics(t));
+                                }
 
                                 // FIXME: fix additional clones here for merge
                                 self.merged_operator_meta.merge(event.op_meta.clone());

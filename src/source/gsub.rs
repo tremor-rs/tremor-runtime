@@ -13,7 +13,8 @@
 // limitations under the License.
 #![cfg(not(tarpaulin_include))]
 
-use crate::connectors::gcp::pubsub_auth::AuthedService;
+use crate::codec::Codec;
+use crate::connectors::gcp::{pubsub, pubsub_auth};
 use crate::source::prelude::*;
 use googapis::google::pubsub::v1::subscriber_client::SubscriberClient;
 use std::env;
@@ -33,7 +34,7 @@ impl ConfigImpl for Config {}
 pub struct Int {
     config: Config,
     onramp_id: TremorUrl,
-    remote: Option<SubscriberClient<AuthedService>>,
+    remote: Option<SubscriberClient<pubsub_auth::AuthedService>>,
     origin: EventOriginUri,
     project_id: String,
 }

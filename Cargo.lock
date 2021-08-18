@@ -541,9 +541,9 @@ dependencies = [
 
 [[package]]
 name = "async-tungstenite"
-version = "0.13.1"
+version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "07b30ef0ea5c20caaa54baea49514a206308989c68be7ecd86c7f956e4da6378"
+checksum = "8645e929ec7964448a901db9da30cd2ae8c7fecf4d6176af427837531dbbb63b"
 dependencies = [
  "async-std",
  "futures-io",
@@ -6604,6 +6604,7 @@ dependencies = [
 name = "tremor-runtime"
 version = "0.11.4"
 dependencies = [
+ "anyhow",
  "async-channel",
  "async-compat",
  "async-compression",
@@ -6612,7 +6613,7 @@ dependencies = [
  "async-std-resolver",
  "async-tls",
  "async-trait",
- "async-tungstenite 0.13.1",
+ "async-tungstenite 0.14.0",
  "base64 0.13.0",
  "beef",
  "bimap",
@@ -6674,6 +6675,7 @@ dependencies = [
  "syslog_loose",
  "tempfile",
  "test-case",
+ "tide",
  "tokio-postgres",
  "tonic",
  "tremor-common",

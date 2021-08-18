@@ -39,7 +39,8 @@
 use crate::errors::{ErrorKind, Result};
 use crate::lifecycle::{ActivationState, ActivatorLifecycleFsm};
 use crate::repository::{
-    Artefact, ArtefactId, BindingArtefact, OfframpArtefact, OnrampArtefact, PipelineArtefact, ConnectorArtefact
+    Artefact, ArtefactId, BindingArtefact, ConnectorArtefact, OfframpArtefact, OnrampArtefact,
+    PipelineArtefact,
 };
 use crate::url::TremorUrl;
 use async_channel::bounded;
@@ -51,8 +52,8 @@ use std::fmt;
 mod servant;
 
 pub use servant::{
-    Binding as BindingServant, Id as ServantId, Offramp as OfframpServant, Onramp as OnrampServant,
-    Pipeline as PipelineServant,
+    Binding as BindingServant, Connector as ConnectorServant, Id as ServantId,
+    Offramp as OfframpServant, Onramp as OnrampServant, Pipeline as PipelineServant,
 };
 
 #[derive(Clone, Debug)]
@@ -214,7 +215,7 @@ impl Registries {
             pipeline: Registry::new().start(),
             onramp: Registry::new().start(),
             offramp: Registry::new().start(),
-            connector: Registry::new().start()
+            connector: Registry::new().start(),
         }
     }
     /// serialize the mappings of this registry
@@ -387,6 +388,61 @@ impl Registries {
     ) -> Result<ActivationState> {
         let (tx, rx) = bounded(1);
         self.offramp
+            .send(Msg::Transition(tx, id.clone(), new_state))
+            .await?;
+        rx.recv().await?
+    }
+
+    /// Finds a connector
+    ///
+    /// # Errors
+    ///  * if we can't find the connector instance identified by `id`
+    pub async fn find_connector(
+        &self,
+        id: &TremorUrl,
+    ) -> Result<Option<<ConnectorArtefact as Artefact>::SpawnResult>> {
+        let (tx, rx) = bounded(1);
+        self.connector
+            .send(Msg::FindServant(tx, id.clone()))
+            .await?;
+        rx.recv().await?
+    }
+
+    /// Publishes a connector
+    ///
+    /// # Errors
+    ///  * if we can't publish the connector identified by `id`
+    pub async fn publish_connector(
+        &self,
+        id: &TremorUrl,
+        servant: ConnectorServant,
+    ) -> Result<ActivationState> {
+        let (tx, rx) = bounded(1);
+        self.connector
+            .send(Msg::PublishServant(tx, id.clone(), servant))
+            .await?;
+        rx.recv().await?
+    }
+    /// Unpublishes a connector
+    ///
+    /// # Errors
+    ///  * if we can't unpublish the connector identified by `id`
+    pub async fn unpublish_connector(&self, id: &TremorUrl) -> Result<ActivationState> {
+        let (tx, rx) = bounded(1);
+        self.connector
+            .send(Msg::UnpublishServant(tx, id.clone()))
+            .await?;
+        rx.recv().await?
+    }
+
+    #[cfg(test)]
+    pub async fn transition_connector(
+        &self,
+        id: &TremorUrl,
+        new_state: ActivationState,
+    ) -> Result<ActivationState> {
+        let (tx, rx) = bounded(1);
+        self.connector
             .send(Msg::Transition(tx, id.clone(), new_state))
             .await?;
         rx.recv().await?
