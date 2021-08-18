@@ -58,8 +58,6 @@ macro_rules! test_cases {
                         path: vec!["snot".into()],
                         port: Some(23),
                         scheme: "snot".into(),
-                        uid: 42
-
                     };
                     let context = EventContext::new(id as u64, Some(&uri));
                     let mut meta = Value::from(Object::default());
