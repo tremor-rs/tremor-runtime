@@ -34,6 +34,8 @@ use tremor_pipeline::{
 use tremor_value::{literal, Value};
 use value_trait::Builder;
 
+use super::metrics::MetricsSourceReporter;
+
 /// Messages a Source can receive
 pub enum SourceMsg {
     /// connect a pipeline
@@ -68,6 +70,7 @@ pub enum SourceMsg {
 }
 
 /// reply from `Source::on_event`
+#[derive(Debug)]
 pub enum SourceReply {
     /// A normal data event with a `Vec<u8>` for data
     Data {
@@ -106,13 +109,23 @@ pub enum SourceReply {
 pub trait Source: Send {
     /// Pulls an event from the source if one exists
     /// `idgen` is passed in so the source can inspect what event id it would get if it was producing 1 event from the pulled data
-    async fn pull_data(&mut self, pull_id: u64) -> Result<SourceReply>;
+    async fn pull_data(&mut self, pull_id: u64, ctx: &SourceContext) -> Result<SourceReply>;
     /// This callback is called when the data provided from
     /// pull_event did not create any events, this is needed for
     /// linked sources that require a 1:1 mapping between requests
     /// and responses, we're looking at you REST
-    async fn on_no_events(&mut self, _pull_id: u64, _stream: u64) -> Result<()> {
+    async fn on_no_events(
+        &mut self,
+        _pull_id: u64,
+        _stream: u64,
+        _ctx: &SourceContext,
+    ) -> Result<()> {
         Ok(())
+    }
+
+    /// Pulls custom metrics from the source
+    fn metrics(&mut self, _timestamp: u64) -> Vec<EventPayload> {
+        vec![]
     }
 
     ///////////////////////////
@@ -158,6 +171,12 @@ pub trait Source: Send {
     fn is_transactional(&self) -> bool {
         false
     }
+
+    /// if `true` this source is polled for data even if it is not connected to
+    /// any pipeline and is not terminated if it is completely disconnected.
+    fn keep_alive(&self) -> bool {
+        false
+    }
 }
 
 /// A source that receives `SourceReply` messages via a channel.
@@ -186,7 +205,7 @@ impl ChannelSource {
 
 #[async_trait::async_trait()]
 impl Source for ChannelSource {
-    async fn pull_data(&mut self, _pull_id: u64) -> Result<SourceReply> {
+    async fn pull_data(&mut self, _pull_id: u64, _ctx: &SourceContext) -> Result<SourceReply> {
         match self.rx.try_recv() {
             Ok(reply) => Ok(reply),
             Err(async_channel::TryRecvError::Empty) => {
@@ -221,6 +240,7 @@ pub struct SourceAddr {
 pub struct SourceManagerBuilder {
     qsize: usize,
     streams: Streams,
+    source_metrics_reporter: MetricsSourceReporter,
 }
 
 impl SourceManagerBuilder {
@@ -251,6 +271,7 @@ pub fn builder(
     config: &ConnectorConfig,
     connector_default_codec: &str,
     qsize: usize,
+    source_metrics_reporter: MetricsSourceReporter,
 ) -> Result<SourceManagerBuilder> {
     let preprocessor_names = config.preprocessors.clone().unwrap_or_else(Vec::new);
     let codec_config = config
@@ -259,7 +280,11 @@ pub fn builder(
         .unwrap_or_else(|| Either::Left(connector_default_codec.to_string()));
     let streams = Streams::new(connector_uid, codec_config, preprocessor_names)?;
 
-    Ok(SourceManagerBuilder { qsize, streams })
+    Ok(SourceManagerBuilder {
+        qsize,
+        streams,
+        source_metrics_reporter,
+    })
 }
 
 /// maintaining stream state
@@ -369,11 +394,15 @@ where
     pipelines_out: Vec<(TremorUrl, pipeline::Addr)>,
     pipelines_err: Vec<(TremorUrl, pipeline::Addr)>,
     streams: Streams,
+    metrics_reporter: MetricsSourceReporter,
     // used for both explicitly pausing and CB close/open
     // this way we can explicitly resume a Cb triggered source if need be
     // but also an explicitly paused source might receive a Cb open and continue sending data :scream:
     paused: bool,
-    is_transactional: bool, // TODO: add metrics reporter to metrics connector
+    is_transactional: bool, // TODO: add metrics reporter
+    /// keep the source alive if not connected to any pipeline
+    /// and pull data even if not connected to any pipeline
+    keep_alive: bool,
 }
 
 impl<S> SourceManager<S>
@@ -386,22 +415,36 @@ where
         builder: SourceManagerBuilder,
         rx: Receiver<SourceMsg>,
     ) -> Self {
-        let SourceManagerBuilder { streams, .. } = builder;
+        let SourceManagerBuilder {
+            streams,
+            source_metrics_reporter,
+            ..
+        } = builder;
         let is_transactional = source.is_transactional();
+
+        // if true pull data even if nothing is connected and not terminate if completely disconnected
+        let keep_alive = source.keep_alive();
         Self {
             source,
             ctx,
             rx,
             streams,
+            metrics_reporter: source_metrics_reporter,
             pipelines_out: Vec::with_capacity(1),
             pipelines_err: Vec::with_capacity(1),
             paused: false,
             is_transactional,
+            keep_alive,
         }
     }
 
+    /// we wait for control plane messages iff
+    ///
+    /// - we are paused
+    /// - we have some control plane messages (here we don't need to wait)
+    /// - if we have no pipelines connected and the managed source is not marked as `keep_alive`
     fn needs_control_plane_msg(&self) -> bool {
-        self.paused || !self.rx.is_empty() || self.pipelines_out.is_empty()
+        self.paused || !self.rx.is_empty() || (self.pipelines_out.is_empty() && !self.keep_alive)
     }
 
     /// returns `Ok(true)` if this source should be terminated
@@ -502,18 +545,24 @@ where
 
         for (port, event) in events {
             let pipelines = if port.eq_ignore_ascii_case(OUT.as_ref()) {
+                self.metrics_reporter.increment_out();
                 &mut self.pipelines_out
             } else if port.eq_ignore_ascii_case(ERR.as_ref()) {
+                self.metrics_reporter.increment_err();
                 &mut self.pipelines_err
             } else {
                 error!(
-                    "[Source::{}] Tryiong to send event to invalid port: {}",
+                    "[Source::{}] Trying to send event to invalid port: {}",
                     &self.ctx.url, &port
                 );
                 continue;
             };
-            // TODO: increment metric out/err
-            // TODO: flush metrics reporter or similar
+
+            // flush metrics reporter or similar
+            if let Some(t) = self.metrics_reporter.periodic_flush(event.ingest_ns) {
+                self.metrics_reporter
+                    .send_source_metrics(self.source.metrics(t))
+            }
 
             if let Some((last, pipelines)) = pipelines.split_last_mut() {
                 for (pipe_url, addr) in pipelines {
@@ -592,7 +641,7 @@ where
             }
 
             if !self.paused && !self.pipelines_out.is_empty() {
-                match self.source.pull_data(pull_counter).await {
+                match self.source.pull_data(pull_counter, &self.ctx).await {
                     Ok(SourceReply::Data {
                         origin_uri,
                         data,
@@ -612,16 +661,21 @@ where
                             self.is_transactional,
                         );
                         if results.is_empty() {
-                            if let Err(e) = self.source.on_no_events(pull_counter, stream).await {
+                            if let Err(e) = self
+                                .source
+                                .on_no_events(pull_counter, stream, &self.ctx)
+                                .await
+                            {
                                 error!(
                                     "[Source::{}] Error on no events callback: {}",
                                     &self.ctx.url, e
                                 );
                             }
-                        }
-                        let error = self.route_events(results).await;
-                        if error {
-                            self.source.fail(stream, pull_counter).await;
+                        } else {
+                            let error = self.route_events(results).await;
+                            if error {
+                                self.source.fail(stream, pull_counter).await;
+                            }
                         }
                     }
                     Ok(SourceReply::BatchData {
@@ -648,16 +702,21 @@ where
                             results.append(&mut events)
                         }
                         if results.is_empty() {
-                            if let Err(e) = self.source.on_no_events(pull_counter, stream).await {
+                            if let Err(e) = self
+                                .source
+                                .on_no_events(pull_counter, stream, &self.ctx)
+                                .await
+                            {
                                 error!(
                                     "[Source::{}] Error on no events callback: {}",
                                     &self.ctx.url, e
                                 );
                             }
-                        }
-                        let error = self.route_events(results).await;
-                        if error {
-                            self.source.fail(stream, pull_counter).await;
+                        } else {
+                            let error = self.route_events(results).await;
+                            if error {
+                                self.source.fail(stream, pull_counter).await;
+                            }
                         }
                     }
                     Ok(SourceReply::Structured {
@@ -689,7 +748,7 @@ where
                     }
                     Err(e) => {
                         warn!("[Source::{}] Error pulling data: {}", &self.ctx.url, e);
-                        // increment metrics err
+                        // TODO: increment metrics err
                     }
                 }
                 pull_counter += 1;

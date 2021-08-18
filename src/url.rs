@@ -285,22 +285,22 @@ impl TremorUrl {
             self.scope = Scope::Port;
         }
     }
-    /// Retrives the instance
+    /// Retrieves the instance
     #[must_use]
     pub fn instance(&self) -> Option<&str> {
         self.instance.as_deref()
     }
-    /// Retrives the artefact
+    /// Retrieves the artefact
     #[must_use]
     pub fn artefact(&self) -> Option<&str> {
         self.artefact.as_deref()
     }
-    /// Retrives the port
+    /// Retrieves the port
     #[must_use]
     pub fn instance_port(&self) -> Option<&str> {
         self.instance_port.as_deref()
     }
-    /// Retrives the port
+    /// Retrieves the port
     ///
     /// # Errors
     ///  * if the URL has no port
@@ -308,15 +308,23 @@ impl TremorUrl {
         self.instance_port()
             .ok_or_else(|| Error::from(format!("{} is missing an instance port", self)))
     }
-    /// Retrives the type
+    /// Retrieves the type
     #[must_use]
     pub fn resource_type(&self) -> Option<ResourceType> {
         self.resource_type
     }
-    /// Retrives the scope
+    /// Retrieves the scope
     #[must_use]
     pub fn scope(&self) -> Scope {
         self.scope
+    }
+
+    /// returns true if this url references a `Connector`
+    #[must_use]
+    pub fn is_connector(&self) -> bool {
+        self.resource_type
+            .map(|t| t == ResourceType::Connector)
+            .unwrap_or(false)
     }
 
     /// returns true if `self` and `other` refer to the same instance, ignoring the port

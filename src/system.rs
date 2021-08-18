@@ -17,7 +17,8 @@ use crate::errors::{Error, ErrorKind, Result};
 use crate::lifecycle::{ActivationState, ActivatorLifecycleFsm};
 use crate::registry::{Registries, ServantId};
 use crate::repository::{
-    Artefact, BindingArtefact, OfframpArtefact, OnrampArtefact, PipelineArtefact, Repositories,
+    Artefact, BindingArtefact, ConnectorArtefact, OfframpArtefact, OnrampArtefact,
+    PipelineArtefact, Repositories,
 };
 use crate::url::ports::METRICS;
 use crate::url::TremorUrl;
@@ -36,7 +37,15 @@ pub(crate) use crate::offramp;
 pub(crate) use crate::onramp;
 pub(crate) use crate::pipeline;
 
+use connectors::metrics::MetricsChannel;
+
 lazy_static! {
+
+    pub(crate) static ref METRICS_CONNECTOR: TremorUrl = {
+        TremorUrl::parse("/connector/system::metrics/system/in")
+        //ALLOW: We want this to panic, it only happens at startup time
+        .expect("Failed to initialize id for metrics connector")
+    };
     pub(crate) static ref METRICS_PIPELINE: TremorUrl = {
         TremorUrl::parse("/pipeline/system::metrics/system/in")
             //ALLOW: We want this to panic, it only happens at startup time
@@ -142,6 +151,7 @@ pub struct World {
     /// Registry
     pub reg: Registries,
     storage_directory: Option<String>,
+    pub(crate) metrics_channel: MetricsChannel,
 }
 
 impl World {
@@ -672,6 +682,81 @@ impl World {
         }
     }
 
+    /// Bind a connector - create an instance and stick it into the registry
+    ///
+    /// # Errors
+    ///  * if the id isn't a connector instance or it can't be bound
+    pub async fn bind_connector(&self, id: &TremorUrl) -> Result<ActivationState> {
+        info!("Binding connector {}", id);
+        match (&self.repo.find_connector(id).await?, &id.instance()) {
+            (Some(artefact), Some(_instance_id)) => {
+                let servant =
+                    ActivatorLifecycleFsm::new(self.clone(), artefact.artefact.clone(), id.clone())
+                        .await?;
+                self.repo.bind_connector(id).await?;
+                let res = self.reg.publish_connector(id, servant).await?;
+                Ok(res)
+            }
+            (None, _) => Err(ErrorKind::ArtefactNotFound(id.to_string()).into()),
+            (_, None) => Err(format!("Invalid URI for instance {} ", id).into()),
+        }
+    }
+
+    /// Start a connector from a bound instance, identified by `id`.
+    ///
+    /// Starting a connector will make it begin emitting events.
+    ///
+    /// # Errors
+    ///  * if finding
+    pub async fn start_connector(&self, id: &TremorUrl) -> Result<()> {
+        info!("Starting connector {}", id);
+        if let Some(connector) = self.reg.find_connector(id).await? {
+            connector.send(connectors::Msg::Start).await?;
+        } else {
+            return Err(ErrorKind::InstanceNotFound(id.to_string()).into());
+        }
+        Ok(())
+    }
+
+    /// Ensures the existance of a connector instance, bdingin it if required.
+    ///
+    /// # Errors
+    ///  * if we can't ensure the connector is bound
+    pub async fn ensure_connector(&self, id: &TremorUrl) -> Result<()> {
+        if self.reg.find_connector(id).await?.is_none() {
+            info!(
+                "Connector not found during binding process, binding {} to create a new instance.",
+                &id
+            );
+            self.bind_connector(id).await?;
+        } else {
+            info!("Existing connector {} found", id);
+        }
+        Ok(())
+    }
+
+    /// Link a connector
+    ///
+    /// # Errors
+    ///  * if the id isn't a connector or can't be linked
+    pub async fn link_connector(
+        &self,
+        id: &TremorUrl,
+        mappings: HashMap<
+            <ConnectorArtefact as Artefact>::LinkLHS,
+            <ConnectorArtefact as Artefact>::LinkRHS,
+        >,
+    ) -> Result<<ConnectorArtefact as Artefact>::LinkResult> {
+        if let Some(connector_a) = self.repo.find_connector(id).await? {
+            //if self.reg.find_connector(id).await?.is_none() {
+            //    self.bind_connector(id).await?;
+            //}
+            connector_a.artefact.link(self, id, mappings).await
+        } else {
+            Err(ErrorKind::ArtefactNotFound(id.to_string()).into())
+        }
+    }
+
     pub(crate) async fn bind_binding_a(
         &self,
         id: &TremorUrl,
@@ -810,7 +895,10 @@ impl World {
         qsize: usize,
         storage_directory: Option<String>,
     ) -> Result<(Self, JoinHandle<Result<()>>)> {
-        let (connector_h, connector) = connectors::Manager::new(qsize).start();
+        let metrics_channel = connectors::metrics::MetricsChannel::new(qsize);
+        let (connector_h, connector) =
+            connectors::Manager::new(qsize, metrics_channel.sender()).start();
+        // TODO: use metrics channel for pipelines as well
         let (onramp_h, onramp) = onramp::Manager::new(qsize).start();
         let (offramp_h, offramp) = offramp::Manager::new(qsize).start();
         let (pipeline_h, pipeline) = pipeline::Manager::new(qsize).start();
@@ -835,6 +923,7 @@ impl World {
             repo,
             reg,
             storage_directory,
+            metrics_channel,
         };
 
         crate::sink::register_builtin_sinks(&world).await?;
@@ -846,8 +935,26 @@ impl World {
     }
 
     async fn register_system(&mut self) -> Result<()> {
-        // register metrics pipeline
+        // register metrics connector
+        let artefact: ConnectorArtefact = serde_yaml::from_str(
+            r#"
+id: system::metrics
+type: metrics
+            "#,
+        )?;
+        self.repo
+            .publish_connector(&METRICS_CONNECTOR, true, artefact)
+            .await?;
+        self.bind_connector(&METRICS_CONNECTOR).await?;
+        self.reg
+            .find_connector(&METRICS_CONNECTOR)
+            .await?
+            .ok_or_else(|| Error::from("Failed to initialize system::metrics connector."))?;
+        // we need to make sure the metrics connector is consuming metrics events
+        // before anything else is started, so we don't fill up the metrics_channel and thus lose messages
+        self.start_connector(&METRICS_CONNECTOR).await?;
 
+        // register metrics pipeline
         let module_path = &tremor_script::path::ModulePath { mounts: Vec::new() };
         let aggr_reg = tremor_script::aggr_registry();
         let artefact_metrics = tremor_pipeline::query::Query::parse(
@@ -868,6 +975,7 @@ impl World {
             .await?
             .ok_or_else(|| Error::from("Failed to initialize metrics pipeline."))?;
 
+        // register passthrough pipeline
         let artefact_passthrough = tremor_pipeline::query::Query::parse(
             module_path,
             "#!config id = \"system::passthrough\"\nselect event from in into out;",
@@ -879,6 +987,7 @@ impl World {
         self.repo
             .publish_pipeline(&PASSTHROUGH_PIPELINE, true, artefact_passthrough)
             .await?;
+
         // Register stdout offramp
         let artefact: OfframpArtefact = serde_yaml::from_str(
             r#"

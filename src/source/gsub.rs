@@ -15,7 +15,7 @@
 
 use crate::codec::Codec;
 use crate::connectors::gcp::pubsub;
-use crate::connectors::gcp::pubsub_auth::{self, AuthedService};
+use crate::connectors::gcp::pubsub_auth;
 use crate::source::prelude::*;
 use googapis::google::pubsub::v1::subscriber_client::SubscriberClient;
 use std::env;
@@ -35,7 +35,7 @@ impl ConfigImpl for Config {}
 pub struct Int {
     config: Config,
     onramp_id: TremorUrl,
-    remote: Option<SubscriberClient<AuthedService>>,
+    remote: Option<SubscriberClient<pubsub_auth::AuthedService>>,
     origin: EventOriginUri,
     project_id: String,
 }

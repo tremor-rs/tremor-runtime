@@ -245,6 +245,9 @@ pub struct Connector {
 
     #[serde(default)]
     pub(crate) on_pause: PauseBehaviour,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) metrics_interval_s: Option<u64>,
 }
 
 /// Configuration for a Binding

@@ -31,7 +31,6 @@ pub struct UnixSocket {
 }
 
 pub struct Int {
-    uid: u64,
     config: Config,
     listener: Option<Receiver<SourceReply>>,
     onramp_id: TremorUrl,
@@ -44,11 +43,10 @@ impl std::fmt::Debug for Int {
 }
 
 impl Int {
-    fn from_config(uid: u64, onramp_id: TremorUrl, config: &Config) -> Self {
+    fn from_config(onramp_id: TremorUrl, config: &Config) -> Self {
         let config = config.clone();
 
         Self {
-            uid,
             config,
             listener: None,
             onramp_id,
@@ -59,7 +57,7 @@ impl Int {
 #[async_trait::async_trait()]
 impl Onramp for UnixSocket {
     async fn start(&mut self, config: OnrampConfig<'_>) -> Result<onramp::Addr> {
-        let source = Int::from_config(config.onramp_uid, self.onramp_id.clone(), &self.config);
+        let source = Int::from_config(self.onramp_id.clone(), &self.config);
         SourceManager::start(source, config).await
     }
 
@@ -113,7 +111,6 @@ impl Source for Int {
         let (tx, rx) = bounded(crate::QSIZE);
 
         let path = vec![self.config.path.clone()];
-        let uid = self.uid;
         task::spawn(async move {
             if let Err(e) = tx.send(SourceReply::StartStream(0)).await {
                 error!("Unix Socket Error: {}", e);
@@ -121,7 +118,6 @@ impl Source for Int {
             }
 
             let origin_uri = EventOriginUri {
-                uid,
                 scheme: "tremor-unix-socket".to_string(),
                 host: String::new(),
                 port: None,
