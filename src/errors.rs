@@ -199,6 +199,10 @@ error_chain! {
             description("The artifact was not found")
                 display("The artifact was not found: {}", id)
         }
+        InstanceNotFound(id: String) {
+            description("The artefact instance not found")
+                display("The artefact instance {} not found", id)
+        }
         CodecNotFound(name: String) {
             description("Codec not found")
                 display("The codec was not found: {}", name)
@@ -307,6 +311,11 @@ error_chain! {
         MaxRetriesExceeded(max_retries: u64) {
             description("Max reconnect retries exceeded")
                 display("Max reconnect retries ({}) exceeded", max_retries)
+        }
+
+        InvalidMetricsData {
+            description("Invalid Metrics data")
+                display("Invalid Metrics data")
         }
     }
 }

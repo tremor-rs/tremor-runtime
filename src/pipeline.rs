@@ -16,7 +16,7 @@ use crate::permge::{PriorityMerge, M};
 use crate::registry::ServantId;
 use crate::repository::PipelineArtefact;
 use crate::url::TremorUrl;
-use crate::{offramp, onramp};
+use crate::{connectors, offramp, onramp};
 use async_channel::{bounded, unbounded};
 use async_std::stream::StreamExt;
 use async_std::task::{self, JoinHandle};
@@ -100,6 +100,7 @@ pub(crate) enum ConnectTarget {
     Onramp(onramp::Addr),
     Offramp(offramp::Addr),
     Pipeline(Box<Addr>),
+    Connector(connectors::Addr),
 }
 
 #[derive(Debug)]
@@ -136,6 +137,7 @@ pub enum Dest {
     Offramp(offramp::Addr),
     Pipeline(Addr),
     LinkedOnramp(onramp::Addr),
+    Connector(connectors::Addr),
 }
 
 impl Dest {
@@ -144,6 +146,10 @@ impl Dest {
             Self::Offramp(addr) => addr.send(offramp::Msg::Event { input, event }).await?,
             Self::Pipeline(addr) => addr.send(Msg::Event { input, event }).await?,
             Self::LinkedOnramp(addr) => addr.send(onramp::Msg::Response(event)).await?,
+            Self::Connector(addr) => {
+                addr.send_sink(connectors::sink::SinkMsg::Event { event, port: input })
+                    .await?
+            }
         }
         Ok(())
     }
@@ -161,6 +167,10 @@ impl Dest {
                 // TODO implement!
                 //addr.send(onramp::Msg::Signal(signal)).await?
             }
+            Self::Connector(addr) => {
+                addr.send_sink(connectors::sink::SinkMsg::Signal { signal })
+                    .await?
+            }
         }
         Ok(())
     }
@@ -173,6 +183,7 @@ impl From<ConnectTarget> for Dest {
             ConnectTarget::Offramp(off) => Self::Offramp(off),
             ConnectTarget::Onramp(on) => Self::LinkedOnramp(on),
             ConnectTarget::Pipeline(pipe) => Self::Pipeline(*pipe),
+            ConnectTarget::Connector(addr) => Self::Connector(addr),
         }
     }
 }
@@ -184,6 +195,7 @@ pub enum Input {
     LinkedOfframp(offramp::Addr),
     Pipeline(Addr),
     Onramp(onramp::Addr),
+    Connector(connectors::Addr),
 }
 
 impl From<ConnectTarget> for Input {
@@ -193,6 +205,7 @@ impl From<ConnectTarget> for Input {
             ConnectTarget::Offramp(off) => Self::LinkedOfframp(off),
             ConnectTarget::Onramp(on) => Self::Onramp(on),
             ConnectTarget::Pipeline(pipe) => Self::Pipeline(*pipe),
+            ConnectTarget::Connector(addr) => Self::Connector(addr),
         }
     }
 }
@@ -278,6 +291,13 @@ async fn handle_insight(
                     {
                         Ok(())
                     }
+                    Input::Connector(addr) => {
+                        addr.send_source(connectors::source::SourceMsg::Cb(
+                            insight.cb,
+                            insight.id.clone(),
+                        ))
+                        .await
+                    }
                 } {
                     error!(
                         "[Pipeline::{}] failed to send insight to input: {} {}",
@@ -305,6 +325,10 @@ async fn handle_insight(
                     {
                         Ok(())
                     }
+                    Input::Connector(addr) => addr
+                        .send_source(connectors::source::SourceMsg::Cb(insight.cb, insight.id))
+                        .await
+                        .map_err(Error::from),
                 } {
                     error!(
                         "[Pipeline::{}] failed to send insight to input: {} {}",
