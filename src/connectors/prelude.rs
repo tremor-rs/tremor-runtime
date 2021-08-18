@@ -12,9 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub use crate::connectors::sink::{Sink, SinkContext, SinkData};
-pub use crate::connectors::source::{Source, SourceContext, SourceReply};
+pub use crate::connectors::reconnect::ConnectionLostNotifier;
+pub use crate::connectors::sink::{
+    EventSerializer, ResultVec, Sink, SinkAddr, SinkContext, SinkData, SinkManagerBuilder,
+};
+pub use crate::connectors::source::{
+    Source, SourceAddr, SourceContext, SourceManagerBuilder, SourceReply,
+};
 pub use crate::connectors::{Connector, ConnectorBuilder, ConnectorContext, ConnectorState};
+pub use crate::errors::{Error, ErrorKind, Result};
 pub use crate::url::TremorUrl;
 pub use crate::OpConfig;
 pub use tremor_pipeline::ConfigImpl;

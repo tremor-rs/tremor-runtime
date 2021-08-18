@@ -46,6 +46,21 @@ lazy_static! {
         //ALLOW: We want this to panic, it only happens at startup time
         .expect("Failed to initialize id for metrics connector")
     };
+    pub(crate) static ref STDOUT_CONNECTOR: TremorUrl = {
+        TremorUrl::parse("/connector/system::stdout/system/in")
+            //ALLOW: We want this to panic, it only happens at startup time
+            .expect("Failed to initialize id for stdout connector")
+    };
+    pub(crate) static ref STDERR_CONNECTOR: TremorUrl = {
+        TremorUrl::parse("/connector/system::stderr/system/in")
+            //ALLOW: We want this to panic, it only happens at startup time
+            .expect("Failed to initialize id for stderr connector")
+    };
+    pub(crate) static ref STDIN_CONNECTOR: TremorUrl = {
+        TremorUrl::parse("/connector/system::stdin/system/out")
+            //ALLOW: We want this to panic, it only happens at startup time
+            .expect("Failed to initialize id for stderr connector")
+    };
     pub(crate) static ref METRICS_PIPELINE: TremorUrl = {
         TremorUrl::parse("/pipeline/system::metrics/system/in")
             //ALLOW: We want this to panic, it only happens at startup time
@@ -987,6 +1002,26 @@ type: metrics
         self.repo
             .publish_pipeline(&PASSTHROUGH_PIPELINE, true, artefact_passthrough)
             .await?;
+
+        // Register stdout connector
+        let artefact: ConnectorArtefact = serde_yaml::from_str(
+            r#"
+id: system::stdout
+type: std_stream
+config:
+  stream: stdout
+            "#,
+        )?;
+        self.repo
+            .publish_connector(&STDOUT_CONNECTOR, true, artefact)
+            .await?;
+        self.bind_connector(&STDOUT_CONNECTOR).await?;
+        self.reg
+            .find_connector(&STDOUT_CONNECTOR)
+            .await?
+            .ok_or_else(|| Error::from("Failed to initialize system::stdout connector"))?;
+
+        // FIXME: stderr and stdin connectors
 
         // Register stdout offramp
         let artefact: OfframpArtefact = serde_yaml::from_str(

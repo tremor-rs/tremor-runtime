@@ -696,6 +696,7 @@ where
                                 );
                                 self.pipelines.retain(|(url, _)| url != &id);
                             }
+                            // FIXME: only handle those if in the right state (see source part)
                             SinkMsg::Start => self.sink.on_start(&mut self.ctx).await,
                             SinkMsg::Resume => {
                                 self.paused = false;

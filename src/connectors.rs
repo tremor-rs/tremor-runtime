@@ -38,6 +38,9 @@ pub(crate) mod pb;
 /// tcp server connector impl
 pub(crate) mod tcp_server;
 
+/// std streams connector (stdout, stderr, stdin)
+pub(crate) mod std_streams;
+
 /// Home of the famous metrics collector
 pub(crate) mod metrics;
 
@@ -735,6 +738,9 @@ pub async fn register_builtin_connectors(world: &World) -> Result<()> {
         .await?;
     world
         .register_builtin_connector_type("tcp_server", Box::new(tcp_server::Builder {}))
+        .await?;
+    world
+        .register_builtin_connector_type("std_stream", Box::new(std_streams::Builder {}))
         .await?;
     Ok(())
 }

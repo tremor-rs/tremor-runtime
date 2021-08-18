@@ -55,6 +55,13 @@ pub fn log() {
     info!("rd_kafka version: 0x{:08x}, {}", version_n, version_s);
 }
 
+/// Gets the librdkafka version string
+#[must_use]
+pub fn rdkafka() -> String {
+    let (_, version) = get_rdkafka_version();
+    version
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
