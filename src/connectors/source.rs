@@ -748,7 +748,8 @@ where
                     }
                     Err(e) => {
                         warn!("[Source::{}] Error pulling data: {}", &self.ctx.url, e);
-                        // TODO: increment metrics err
+                        // TODO: increment error metric
+                        // FIXME: emit event to err port
                     }
                 }
                 pull_counter += 1;

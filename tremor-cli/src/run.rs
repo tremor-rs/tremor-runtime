@@ -348,7 +348,7 @@ fn run_trickle_source(matches: &ArgMatches, src: String) -> Result<()> {
             if let Err(e) = runnable.enqueue(
                 "in",
                 Event {
-                    id: EventId::new(0, 0, *id),
+                    id: EventId::from_id(0, 0, *id),
                     data: value.clone(),
                     ingest_ns: at,
                     ..Event::default()
