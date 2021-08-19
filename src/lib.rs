@@ -160,28 +160,37 @@ pub async fn load_query_file(world: &World, file_name: &str) -> Result<usize> {
 /// # Errors
 /// Fails if the file can not be loaded
 pub async fn load_cfg_file(world: &World, file_name: &str) -> Result<usize> {
-    info!("Loading configuration from {}", file_name);
+    info!(
+        "Loading configuration from {}",
+        std::path::Path::new(file_name).canonicalize()?.display()
+    );
     let mut count = 0;
     let file = tremor_common::file::open(file_name)?;
     let buffered_reader = BufReader::new(file);
     let config: config::Config = serde_yaml::from_reader(buffered_reader)?;
 
+    for c in config.connector {
+        let id = TremorUrl::parse(&format!("/connector/{}", c.id))?;
+        info!("Loading {} from file {}.", id, file_name);
+        world.repo.publish_connector(&id, false, c).await?;
+        count += 1;
+    }
     for o in config.offramp {
         let id = TremorUrl::parse(&format!("/offramp/{}", o.id))?;
-        info!("Loading {} from file.", id);
+        info!("Loading {} from file {}.", id, file_name);
         world.repo.publish_offramp(&id, false, o).await?;
         count += 1;
     }
 
     for o in config.onramp {
         let id = TremorUrl::parse(&format!("/onramp/{}", o.id))?;
-        info!("Loading {} from file.", id);
+        info!("Loading {} from file {}.", id, file_name);
         world.repo.publish_onramp(&id, false, o).await?;
         count += 1;
     }
     for binding in config.binding {
         let id = TremorUrl::parse(&format!("/binding/{}", binding.id))?;
-        info!("Loading {} from file.", id);
+        info!("Loading {} from file {}.", id, file_name);
         world
             .repo
             .publish_binding(

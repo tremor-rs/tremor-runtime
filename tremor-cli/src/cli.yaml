@@ -96,9 +96,11 @@ subcommands:
             about: One of `all`, `api`, `bench`, `command`, `integration`, `rest`, or `unit`
             takes_value: true
             default_value: "all"
+            index: 1
         - PATH:
             about: The root test path
             default_value: "tests"
+            index: 2
         - REPORT:
             about: Should generate a test report to specified path
             short: o
@@ -110,6 +112,7 @@ subcommands:
             short: i
             long: includes
             required: false
+            multiple_occurrences: true
             multiple_values: true
             takes_value: true
         - EXCLUDES:
@@ -117,6 +120,7 @@ subcommands:
             short: e
             long: excludes
             required: false
+            multiple_occurrences: true
             multiple_values: true
             takes_value: true
         - QUIET:
@@ -213,13 +217,11 @@ subcommands:
             default_value: "-"
         - PREPROCESSOR:
             long: pre-processor
-            # multiple_values: true
             about: preprocessor to pass data through before decoding
             default_value: lines
             takes_value: true
         - POSTPROCESSOR:
             long: post-processor
-            # multiple_values: true
             about: postprocessor to pass data through after encoding
             takes_value: true
         - output-port:
@@ -247,6 +249,8 @@ subcommands:
       args:
         - FORMAT:
             short: f
+            multiple_values: false
+            multiple_occurrences: false
             about: Sets the output format
             possible_values: [json, yaml]
             takes_value: true

@@ -186,7 +186,11 @@ impl Manager {
                             error!("Onramp type '{}' already registered.", e.key());
                         }
                         Entry::Vacant(e) => {
-                            info!("Onramp type '{}' successfully registered.", e.key());
+                            debug!(
+                                "Onramp type '{}' successfully registered{}.",
+                                e.key(),
+                                if builtin { " as builtin" } else { "" }
+                            );
                             e.insert((builder, builtin));
                         }
                     },
@@ -197,7 +201,7 @@ impl Manager {
                                 error!("Cannot unregister builtin onramp type '{}'", e.key());
                             } else {
                                 let (k, _) = e.remove_entry();
-                                info!("Unregistered onramp type '{}'", k);
+                                debug!("Unregistered onramp type '{}'", k);
                             }
                         }
                     }

@@ -86,10 +86,11 @@ where
 fn main() -> Result<()> {
     let yaml = load_yaml!("./cli.yaml");
     let long_version = tremor_runtime::version::long_ver();
-    let app = App::from(yaml);
-    let app = app.version(long_version.as_str());
-    let app = app.global_setting(AppSettings::ColoredHelp);
-    let app = app.global_setting(AppSettings::ColorAlways);
+    let app = App::from(yaml)
+        .version(long_version.as_str())
+        .global_setting(AppSettings::ColoredHelp)
+        .global_setting(AppSettings::ColorAlways)
+        .global_setting(AppSettings::PropagateVersion);
 
     tremor_runtime::functions::load()?;
     let matches = app.clone().get_matches();

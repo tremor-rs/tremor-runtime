@@ -18,6 +18,7 @@ use futures::AsyncWriteExt;
 use tremor_pipeline::{EventOriginUri, DEFAULT_STREAM_ID};
 
 #[derive(Deserialize, Debug, Clone)]
+#[serde(rename_all = "lowercase")]
 pub enum StdStream {
     Stdout,
     Stderr,
