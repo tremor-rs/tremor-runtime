@@ -132,6 +132,13 @@ pub enum Msg {
     Resume,
     /// stop the connector
     Stop,
+    Report(async_channel::Sender<StatusReport>),
+}
+
+#[derive(Debug, Serialize)]
+pub struct StatusReport {
+    status: ConnectorState,
+    connectivity: Connectivity,
 }
 
 /// msg used for connector creation
@@ -254,13 +261,13 @@ impl Manager {
                         builder,
                         builtin,
                     }) => {
-                        info!("Registering {} Connector Type.", &connector_type);
+                        debug!("Registering {} Connector Type.", &connector_type);
                         match known_connectors.entry(connector_type) {
                             Entry::Occupied(e) => {
                                 warn!("Connector Type {} already registered.", e.key());
                             }
                             Entry::Vacant(e) => {
-                                info!(
+                                debug!(
                                     "Connector Type {} registered{}.",
                                     e.key(),
                                     if builtin { " as builtin" } else { " " }
@@ -270,14 +277,14 @@ impl Manager {
                         }
                     }
                     Ok(ManagerMsg::Unregister(connector_type)) => {
-                        info!("Unregistering {} Connector Type.", &connector_type);
+                        debug!("Unregistering {} Connector Type.", &connector_type);
                         match known_connectors.entry(connector_type) {
                             Entry::Occupied(e) => {
                                 let (_, builtin) = e.get();
                                 if *builtin {
                                     error!("Cannot unregister builtin Connector Type {}", e.key());
                                 } else {
-                                    info!("Connector Type {} unregistered.", e.key());
+                                    debug!("Connector Type {} unregistered.", e.key());
                                     e.remove_entry();
                                 }
                             }
@@ -315,8 +322,6 @@ impl Manager {
         let (msg_tx, msg_rx) = bounded(self.qsize);
 
         let mut connectivity = Connectivity::Disconnected;
-        let mut connector_state = ConnectorState::Stopped;
-        dbg!(connector_state);
 
         let source_metrics_reporter = MetricsSourceReporter::new(
             url.clone(),
@@ -369,8 +374,7 @@ impl Manager {
 
         let mut reconnect: Reconnect = Reconnect::new(&addr, config.reconnect);
         let send_addr = addr.clone();
-        connector_state = ConnectorState::Initialized;
-        dbg!(&connector_state);
+        let mut connector_state = ConnectorState::Initialized;
 
         // TODO: add connector metrics reporter (e.g. for reconnect attempts, cb's received, uptime, etc.)
         task::spawn::<_, Result<()>>(async move {
@@ -381,6 +385,17 @@ impl Manager {
             // connector control plane loop
             while let Ok(msg) = msg_rx.recv().await {
                 match msg {
+                    Msg::Report(tx) => {
+                        if let Err(e) = tx
+                            .send(StatusReport {
+                                status: connector_state,
+                                connectivity,
+                            })
+                            .await
+                        {
+                            error!("[Connector::{}] Error sending status report {}.", &url, e)
+                        }
+                    }
                     Msg::Connect {
                         port,
                         pipelines: mut mapping,
@@ -512,7 +527,7 @@ impl Manager {
                         // reconnect if we are below max_retries, otherwise bail out and fail the connector
                         info!("[Connector::{}] Connecting...", &addr.url);
                         let new = reconnect.attempt(connector.as_mut(), &ctx).await?;
-                        match (&new, &connectivity) {
+                        match (&connectivity, &new) {
                             (Connectivity::Disconnected, Connectivity::Connected) => {
                                 info!("[Connector::{}] Connected.", &addr.url);
                                 // notify sink
@@ -541,7 +556,7 @@ impl Manager {
                             }
                         };
                         info!(
-                            "[Connector::{}] started. New state: {:?}",
+                            "[Connector::{}] Started. New state: {:?}",
                             &addr.url, &connector_state
                         );
                         // forward to source/sink if available
@@ -550,8 +565,6 @@ impl Manager {
 
                         // initiate connect asynchronously
                         addr.sender.send(Msg::Reconnect).await?;
-
-                        info!("[Connector::{}] Started.", &addr.url);
                     }
                     Msg::Start => {
                         info!(
@@ -625,7 +638,8 @@ impl Manager {
 }
 
 /// state of a connector
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize, Copy, Clone)]
+#[serde(rename_all = "lowercase")]
 pub enum ConnectorState {
     /// connector has been initialized, but not yet started
     Initialized,
@@ -648,7 +662,8 @@ pub struct ConnectorContext {
 }
 
 /// describes connectivity state of the connector
-#[derive(Debug)]
+#[derive(Debug, Serialize, Copy, Clone)]
+#[serde(rename_all = "lowercase")]
 pub enum Connectivity {
     /// connector is connected
     Connected,
