@@ -196,8 +196,8 @@ error_chain! {
                 display("Unknown connector type {}", t)
         }
         ArtefactNotFound(id: String) {
-            description("The artifact was not found")
-                display("The artifact was not found: {}", id)
+            description("The artefact was not found")
+                display("The artefact was not found: {}", id)
         }
         InstanceNotFound(id: String) {
             description("The artefact instance not found")

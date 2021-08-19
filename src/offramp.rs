@@ -469,18 +469,19 @@ impl Manager {
                         offramp_type,
                         builder,
                         builtin,
-                    } => {
-                        info!("Registering offramp type '{}'...", &offramp_type);
-                        match types.entry(offramp_type) {
-                            Entry::Occupied(e) => {
-                                error!("Offramp type '{}' already registered.", e.key());
-                            }
-                            Entry::Vacant(c) => {
-                                info!("Offramp type '{}' successfully registered.", c.key());
-                                c.insert((builder, builtin));
-                            }
+                    } => match types.entry(offramp_type) {
+                        Entry::Occupied(e) => {
+                            error!("Offramp type '{}' already registered.", e.key());
                         }
-                    }
+                        Entry::Vacant(c) => {
+                            debug!(
+                                "Offramp type '{}' successfully registered{}.",
+                                c.key(),
+                                if builtin { " as builtin" } else { "" }
+                            );
+                            c.insert((builder, builtin));
+                        }
+                    },
                     ManagerMsg::Unregister(offramp_type) => {
                         if let Entry::Occupied(entry) = types.entry(offramp_type) {
                             let (_builder, builtin) = entry.get();
@@ -488,7 +489,7 @@ impl Manager {
                                 error!("Cannot unregister builtin offramp type '{}'.", entry.key());
                             } else {
                                 let (k, _) = entry.remove_entry();
-                                info!("Unregistered offramp type '{}'.", k);
+                                debug!("Unregistered offramp type '{}'.", k);
                             }
                         }
                     }
@@ -515,7 +516,6 @@ impl Manager {
                         }
                     }
                 };
-                info!("Stopping offramps...");
             }
             info!("Offramp manager stopped.");
             Ok(())

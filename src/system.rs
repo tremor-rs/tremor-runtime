@@ -430,7 +430,15 @@ impl World {
             <PipelineArtefact as Artefact>::LinkRHS,
         >,
     ) -> Result<<PipelineArtefact as Artefact>::LinkResult> {
-        info!("Linking pipeline {} to {:?}", id, mappings);
+        info!(
+            "Linking pipeline {} to {}",
+            id,
+            mappings
+                .iter()
+                .map(|(port, url)| format!("{} -> {}", port, url))
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
         if let Some(pipeline_a) = self.repo.find_pipeline(id).await? {
             if self.reg.find_pipeline(id).await?.is_none() {
                 self.bind_pipeline(id).await?;
@@ -450,7 +458,15 @@ impl World {
             <PipelineArtefact as Artefact>::LinkRHS,
         >,
     ) -> Result<<PipelineArtefact as Artefact>::LinkResult> {
-        info!("Linking pipeline {} to {:?}", id, mappings);
+        info!(
+            "Linking pipeline {}\n\t{}",
+            id,
+            mappings
+                .iter()
+                .map(|(port, url)| format!("{} -> {}", port, url))
+                .collect::<Vec<_>>()
+                .join("\n\t")
+        );
         if let Some(pipeline_a) = self.repo.find_pipeline(id).await? {
             pipeline_a.artefact.link(self, id, mappings).await
         } else {
@@ -740,7 +756,7 @@ impl World {
     pub async fn ensure_connector(&self, id: &TremorUrl) -> Result<()> {
         if self.reg.find_connector(id).await?.is_none() {
             info!(
-                "Connector not found during binding process, binding {} to create a new instance.",
+                "Connector not found in registry, binding {} to create a new instance.",
                 &id
             );
             self.bind_connector(id).await?;
@@ -1004,7 +1020,7 @@ type: metrics
             .await?;
 
         // Register stdout connector
-        let artefact: ConnectorArtefact = serde_yaml::from_str(
+        let stdout_artefact: ConnectorArtefact = serde_yaml::from_str(
             r#"
 id: system::stdout
 type: std_stream
@@ -1013,7 +1029,7 @@ config:
             "#,
         )?;
         self.repo
-            .publish_connector(&STDOUT_CONNECTOR, true, artefact)
+            .publish_connector(&STDOUT_CONNECTOR, true, stdout_artefact)
             .await?;
         self.bind_connector(&STDOUT_CONNECTOR).await?;
         self.reg
@@ -1021,7 +1037,41 @@ config:
             .await?
             .ok_or_else(|| Error::from("Failed to initialize system::stdout connector"))?;
 
-        // FIXME: stderr and stdin connectors
+        // Register stderr connector
+        let stderr_artefact: ConnectorArtefact = serde_yaml::from_str(
+            r#"
+id: system::stderr
+type: std_stream
+config:
+  stream: stderr
+            "#,
+        )?;
+        self.repo
+            .publish_connector(&STDERR_CONNECTOR, true, stderr_artefact)
+            .await?;
+        self.bind_connector(&STDERR_CONNECTOR).await?;
+        self.reg
+            .find_connector(&STDERR_CONNECTOR)
+            .await?
+            .ok_or_else(|| Error::from("Failed to initialize system::stderr connector"))?;
+
+        // Register stdin connector
+        let stdin_artefact: ConnectorArtefact = serde_yaml::from_str(
+            r#"
+id: system::stdin
+type: std_stream
+config:
+  stream: stdin
+            "#,
+        )?;
+        self.repo
+            .publish_connector(&STDIN_CONNECTOR, true, stdin_artefact)
+            .await?;
+        self.bind_connector(&STDIN_CONNECTOR).await?;
+        self.reg
+            .find_connector(&STDIN_CONNECTOR)
+            .await?
+            .ok_or_else(|| Error::from("Failed to initialize system::stdin connector"))?;
 
         // Register stdout offramp
         let artefact: OfframpArtefact = serde_yaml::from_str(

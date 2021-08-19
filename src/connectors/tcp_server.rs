@@ -179,6 +179,11 @@ impl Connector for TcpServer {
             // TODO: provide utility for stream id generation
             let mut stream_id = 0_u64;
             while let Ok((stream, peer_addr)) = listener.accept().await {
+                trace!(
+                    "[Connector::{}] new connection from {}",
+                    &accept_url,
+                    peer_addr
+                );
                 let my_id: u64 = stream_id;
                 stream_id += 1;
                 let connection_meta = peer_addr.into();
@@ -200,8 +205,9 @@ impl Connector for TcpServer {
 
                 // spawn source stream task
                 task::spawn(async move {
-                    let mut buffer = Vec::with_capacity(buf_size);
+                    let mut buffer = vec![0; buf_size];
                     while let Ok(bytes_read) = read_half.read(&mut buffer).await {
+                        trace!("[Connector::{}] read {} bytes", &stream_url, bytes_read);
                         // TODO: meta needs to be wrapped in <RESOURCE_TYPE>.<ARTEFACT> by the source manager
                         // this is only the connector specific part, without the path mentioned above
                         let meta = literal!({
