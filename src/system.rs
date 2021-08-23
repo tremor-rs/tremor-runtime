@@ -390,7 +390,7 @@ impl World {
                 Ok(res)
             }
             (None, _) => Err(ErrorKind::ArtefactNotFound(id.to_string()).into()),
-            (_, None) => Err(format!("Invalid URI for instance {} ", id).into()),
+            (_, None) => Err(ErrorKind::InvalidInstanceUrl(id.to_string()).into()),
         }
     }
 
@@ -407,7 +407,7 @@ impl World {
                 Ok(r)
             }
             (None, _) => Err(ErrorKind::ArtefactNotFound(id.to_string()).into()),
-            (_, None) => Err(format!("Invalid URI for instance {}", id).into()),
+            (_, None) => Err(ErrorKind::InvalidInstanceUrl(id.to_string()).into()),
         }
     }
 
@@ -529,7 +529,7 @@ impl World {
                 Ok(res)
             }
             (None, _) => Err(ErrorKind::ArtefactNotFound(id.to_string()).into()),
-            (_, None) => Err(format!("Invalid URI for instance {} ", id).into()),
+            (_, None) => Err(ErrorKind::InvalidInstanceUrl(id.to_string()).into()),
         }
     }
     /// Unbind an onramp
@@ -545,7 +545,7 @@ impl World {
                 r
             }
             (None, _) => Err(ErrorKind::ArtefactNotFound(id.to_string()).into()),
-            (_, None) => Err(format!("Invalid URI for instance {} ", id).into()),
+            (_, None) => Err(ErrorKind::InvalidInstanceUrl(id.to_string()).into()),
         }
     }
 
@@ -632,7 +632,7 @@ impl World {
                 Ok(res)
             }
             (None, _) => Err(ErrorKind::ArtefactNotFound(id.to_string()).into()),
-            (_, None) => Err(format!("Invalid URI for instance {} ", id).into()),
+            (_, None) => Err(ErrorKind::InvalidInstanceUrl(id.to_string()).into()),
         }
     }
 
@@ -649,7 +649,7 @@ impl World {
                 r
             }
             (None, _) => Err(ErrorKind::ArtefactNotFound(id.to_string()).into()),
-            (_, None) => Err(format!("Invalid URI for instance {} ", id).into()),
+            (_, None) => Err(ErrorKind::InvalidInstanceUrl(id.to_string()).into()),
         }
     }
 
@@ -729,7 +729,7 @@ impl World {
                 Ok(res)
             }
             (None, _) => Err(ErrorKind::ArtefactNotFound(id.to_string()).into()),
-            (_, None) => Err(format!("Invalid URI for instance {} ", id).into()),
+            (_, None) => Err(ErrorKind::InvalidInstanceUrl(id.to_string()).into()),
         }
     }
 
@@ -801,7 +801,7 @@ impl World {
                 self.repo.bind_binding(id).await?;
                 self.reg.publish_binding(id, servant).await
             }
-            None => Err(format!("Invalid URI for instance {}", id).into()),
+            None => Err(ErrorKind::InvalidInstanceUrl(id.to_string()).into()),
         }
     }
 
@@ -817,7 +817,7 @@ impl World {
                 self.repo.unbind_binding(id).await?;
                 Ok(servant)
             }
-            None => Err(format!("Invalid URI for instance {}", id).into()),
+            None => Err(ErrorKind::InvalidInstanceUrl(id.to_string()).into()),
         }
     }
 
@@ -959,7 +959,7 @@ impl World {
 
         crate::sink::register_builtin_sinks(&world).await?;
         crate::source::register_builtin_sources(&world).await?;
-        crate::connectors::register_builtin_connectors(&world).await?;
+        crate::connectors::register_builtin_connector_types(&world).await?;
 
         world.register_system().await?;
         Ok((world, system_h))
@@ -1139,7 +1139,6 @@ type: stderr
         self.system.send(ManagerMsg::Offramp(msg)).await?;
         async_std::future::timeout(timeout, rx.recv()).await??
     }
-    // TODO: start_offramp method
 
     pub(crate) async fn instantiate_onramp(
         &self,

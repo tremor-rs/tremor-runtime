@@ -20,6 +20,7 @@ use tremor_runtime::system::World;
 use tremor_runtime::url::TremorUrl;
 
 pub mod binding;
+pub mod connector;
 pub mod offramp;
 pub mod onramp;
 pub mod pipeline;
@@ -145,14 +146,4 @@ where
             "No content type provided".into(),
         )),
     }
-}
-
-fn build_url(path: &[&str]) -> Result<TremorUrl> {
-    let url = format!("/{}", path.join("/"));
-    TremorUrl::parse(&url).map_err(|_e| {
-        Error::new(
-            StatusCode::InternalServerError,
-            format!("Could not decode Tremor URL: {}", url),
-        )
-    })
 }

@@ -81,10 +81,10 @@ pub trait Artefact: Clone {
         let rt = Self::resource_type();
         match (id.resource_type(), id.artefact()) {
             (Some(id_rt), Some(_id)) if id_rt == rt => Ok(id),
-            _ => Err(ErrorKind::InvalidTremorUrl(format!(
-                "URL does not contain a {} artifact id: {}",
-                rt, id
-            ))
+            _ => Err(ErrorKind::InvalidTremorUrl(
+                format!("Url does not contain a {} artefact id", rt),
+                id.to_string(),
+            )
             .into()),
         }
     }
@@ -94,10 +94,10 @@ pub trait Artefact: Clone {
         let rt = Self::resource_type();
         match (id.resource_type(), id.instance()) {
             (Some(id_rt), Some(_id)) if id_rt == rt => Ok(id),
-            _ => Err(ErrorKind::InvalidTremorUrl(format!(
-                "URL does not contain a {} servant id: {}",
-                rt, id
-            ))
+            _ => Err(ErrorKind::InvalidTremorUrl(
+                format!("Url does not contain a {} servant id", rt),
+                id.to_string(),
+            )
             .into()),
         }
     }

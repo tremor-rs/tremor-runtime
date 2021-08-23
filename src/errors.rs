@@ -292,9 +292,13 @@ error_chain! {
             description("TLS error")
                 display("{}", s)
         }
-        InvalidTremorUrl(s: String) {
+        InvalidTremorUrl(msg: String, invalid_url: String) {
             description("Invalid Tremor URL")
-                display("{}", s)
+                display("Invalid Tremor URL {}: {}", invalid_url, msg)
+        }
+        InvalidInstanceUrl(url: String) {
+            description("Invalid artefact instance URL")
+                 display("Invalid artefact instance URL: {}", url)
         }
         MissingConfiguration(s: String) {
             description("Missing Configuration")
