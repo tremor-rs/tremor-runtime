@@ -15,6 +15,7 @@
 use crate::api::prelude::*;
 use hashbrown::HashMap;
 use tremor_runtime::repository::BindingArtefact;
+use tremor_runtime::url::TremorUrl;
 
 #[derive(Serialize)]
 struct BindingWrap {
@@ -36,7 +37,7 @@ pub async fn list_artefact(req: Request) -> Result<Response> {
 
 pub async fn publish_artefact(req: Request) -> Result<Response> {
     let (req, binding): (_, tremor_runtime::config::Binding) = decode(req).await?;
-    let url = build_url(&["binding", &binding.id])?;
+    let url = TremorUrl::from_binding_id(&binding.id)?;
 
     let repo = &req.state().world.repo;
     let result = repo
@@ -55,7 +56,7 @@ pub async fn publish_artefact(req: Request) -> Result<Response> {
 
 pub async fn unpublish_artefact(req: Request) -> Result<Response> {
     let id = req.param("aid").unwrap_or_default();
-    let url = build_url(&["binding", id])?;
+    let url = TremorUrl::from_binding_id(id)?;
     let repo = &req.state().world.repo;
     let result = repo.unpublish_binding(&url).await?;
     reply(req, result.binding, true, StatusCode::Ok).await
@@ -63,13 +64,13 @@ pub async fn unpublish_artefact(req: Request) -> Result<Response> {
 
 pub async fn get_artefact(req: Request) -> Result<Response> {
     let id = req.param("aid").unwrap_or_default();
-    let url = build_url(&["binding", id])?;
+    let url = TremorUrl::from_binding_id(id)?;
 
     let repo = &req.state().world.repo;
     let result = repo
         .find_binding(&url)
         .await?
-        .ok_or_else(Error::not_found)?;
+        .ok_or_else(Error::artefact_not_found)?;
 
     let result = BindingWrap {
         artefact: result.artefact.binding,
@@ -86,13 +87,13 @@ pub async fn get_artefact(req: Request) -> Result<Response> {
 pub async fn get_servant(req: Request) -> Result<Response> {
     let a_id = req.param("aid").unwrap_or_default();
     let s_id = req.param("sid").unwrap_or_default();
-    let url = build_url(&["binding", a_id, s_id])?;
+    let url = TremorUrl::from_binding_instance(a_id, s_id)?;
 
     let registry = &req.state().world.reg;
     let result = registry
         .find_binding(&url)
         .await?
-        .ok_or_else(Error::not_found)?
+        .ok_or_else(Error::artefact_not_found)?
         .binding;
 
     reply(req, result, false, StatusCode::Ok).await
@@ -104,7 +105,7 @@ pub async fn link_servant(req: Request) -> Result<Response> {
 
     let a_id = req.param("aid").unwrap_or_default();
     let s_id = req.param("sid").unwrap_or_default();
-    let url = build_url(&["binding", a_id, s_id])?;
+    let url = TremorUrl::from_binding_instance(a_id, s_id)?;
     let world = &req.state().world;
 
     let result = world.link_binding(&url, decoded_data).await?.binding;
@@ -116,7 +117,7 @@ pub async fn link_servant(req: Request) -> Result<Response> {
 pub async fn unlink_servant(req: Request) -> Result<Response> {
     let a_id = req.param("aid").unwrap_or_default();
     let s_id = req.param("sid").unwrap_or_default();
-    let url = build_url(&["binding", a_id, s_id])?;
+    let url = TremorUrl::from_binding_instance(a_id, s_id)?;
 
     let world = &req.state().world;
     let result = world.unlink_binding(&url, HashMap::new()).await?.binding;

@@ -44,6 +44,8 @@ pub(crate) mod std_streams;
 /// Home of the famous metrics collector
 pub(crate) mod metrics;
 
+use std::fmt::Display;
+
 use async_std::task::{self, JoinHandle};
 use beef::Cow;
 
@@ -69,13 +71,15 @@ pub type Sender = async_channel::Sender<ManagerMsg>;
 #[derive(Clone, Debug)]
 pub struct Addr {
     uid: u64,
-    url: TremorUrl,
+    /// connector instance url
+    pub url: TremorUrl,
     sender: async_channel::Sender<Msg>,
     source: Option<SourceAddr>,
     sink: Option<SinkAddr>,
 }
 
 impl Addr {
+    /// send a message
     pub async fn send(&self, msg: Msg) -> Result<()> {
         Ok(self.sender.send(msg).await?)
     }
@@ -132,13 +136,21 @@ pub enum Msg {
     Resume,
     /// stop the connector
     Stop,
+    /// request a status report
     Report(async_channel::Sender<StatusReport>),
 }
 
+/// Connector instance status report
 #[derive(Debug, Serialize)]
 pub struct StatusReport {
-    status: ConnectorState,
-    connectivity: Connectivity,
+    /// connector instance url
+    pub url: TremorUrl,
+    /// state of the connector
+    pub status: ConnectorState,
+    /// current connectivity
+    pub connectivity: Connectivity,
+    /// connected pipelines
+    pub pipelines: HashMap<Cow<'static, str>, Vec<TremorUrl>>,
 }
 
 /// msg used for connector creation
@@ -386,10 +398,25 @@ impl Manager {
             while let Ok(msg) = msg_rx.recv().await {
                 match msg {
                     Msg::Report(tx) => {
+                        let pipes: HashMap<Cow<'static, str>, Vec<TremorUrl>> = pipelines
+                            .iter()
+                            .map(|(port, connected)| {
+                                (
+                                    port.clone(),
+                                    connected
+                                        .iter()
+                                        .map(|(url, _)| url)
+                                        .cloned()
+                                        .collect::<Vec<_>>(),
+                                )
+                            })
+                            .collect();
                         if let Err(e) = tx
                             .send(StatusReport {
+                                url: url.clone(),
                                 status: connector_state,
                                 connectivity,
+                                pipelines: pipes,
                             })
                             .await
                         {
@@ -572,13 +599,8 @@ impl Manager {
                             &addr.url, &connector_state
                         );
                     }
-                    Msg::Pause if connector_state != ConnectorState::Paused => {
-                        info!(
-                            "[Connector::{}] Ignoring Pause Msg. Current state: {:?}",
-                            &addr.url, &connector_state
-                        );
-                    }
-                    Msg::Pause => {
+
+                    Msg::Pause if connector_state == ConnectorState::Running => {
                         info!("[Connector::{}] Pausing...", &addr.url);
 
                         // TODO: in implementations that don't really support pausing
@@ -592,6 +614,12 @@ impl Manager {
                         addr.send_sink(SinkMsg::Pause).await?;
 
                         info!("[Connector::{}] Paused.", &addr.url);
+                    }
+                    Msg::Pause => {
+                        info!(
+                            "[Connector::{}] Ignoring Pause Msg. Current state: {:?}",
+                            &addr.url, &connector_state
+                        );
                     }
                     Msg::Resume if connector_state == ConnectorState::Paused => {
                         info!("[Connector::{}] Resuming...", &addr.url);
@@ -630,6 +658,7 @@ impl Manager {
                 "[Connector::{}] Connector Stopped. Reason: {:?}",
                 &addr.url, &connector_state
             );
+            // TODO: inform registry that this instance is gone now
             Ok(())
         });
         addr_tx.send(Ok(send_addr)).await?;
@@ -638,7 +667,7 @@ impl Manager {
 }
 
 /// state of a connector
-#[derive(Debug, PartialEq, Serialize, Copy, Clone)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Copy, Clone)]
 #[serde(rename_all = "lowercase")]
 pub enum ConnectorState {
     /// connector has been initialized, but not yet started
@@ -651,6 +680,18 @@ pub enum ConnectorState {
     Stopped,
     /// connector failed to start
     Failed,
+}
+
+impl Display for ConnectorState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Initialized => "initialized",
+            Self::Running => "running",
+            Self::Paused => "paused",
+            Self::Stopped => "stopped",
+            Self::Failed => "failed",
+        })
+    }
 }
 
 /// connector context
@@ -743,8 +784,9 @@ pub trait ConnectorBuilder: Sync + Send {
     fn from_config(&self, id: &TremorUrl, config: &Option<OpConfig>) -> Result<Box<dyn Connector>>;
 }
 
+/// registering builtin connector types
 #[cfg(not(tarpaulin_include))]
-pub async fn register_builtin_connectors(world: &World) -> Result<()> {
+pub async fn register_builtin_connector_types(world: &World) -> Result<()> {
     world
         .register_builtin_connector_type(
             "metrics",
