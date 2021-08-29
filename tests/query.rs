@@ -129,6 +129,7 @@ test_cases!(
     pp_alias_operator,
     pp_config_directive,
     // INSERT
+    alias_script_params_overwrite,
     cardinality,
     mod_def,
     window_mixed_2,

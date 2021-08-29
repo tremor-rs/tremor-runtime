@@ -51,6 +51,7 @@
 - Fix issue with wrong script snippets being shown for unit tests
 - Fix argument order in test cases
 - Fix gcs go-auth token refresh
+- Fix `create script` syntax for aliased scripts with overridden `params`
 
 ## 0.11.4
 

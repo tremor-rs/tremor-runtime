@@ -134,7 +134,7 @@ Stmt: StmtRaw<'input> = {
     <start:@L> "create" "operator" <id:Ident> <params:WithClause> <end:@L> => StmtRaw::Operator(OperatorStmtRaw { start, end, id: id.to_string(), module: vec![], target: id.to_string(), params: Some(params) }),
     <start:@L> "create" "operator" <id:Ident> <end:@L> => StmtRaw::Operator(OperatorStmtRaw { start, end, id: id.to_string(), module: vec![], target: id.to_string(), params: None }),
 
-    <start:@L> "create" "script" <id:Ident> "from" <target:ModularTarget> <params:WithClause> <end:@L> => StmtRaw::Script(ScriptStmtRaw { start, end, module: vec![], id: id.to_string(), target: target.1.id.to_string(), params: Some(params) }),
+    <start:@L> "create" "script" <id:Ident> "from" <target:ModularTarget> <params:WithClause> <end:@L> => StmtRaw::Script(ScriptStmtRaw { start, end, module: target.0, id: id.to_string(), target: target.1.id.to_string(), params: Some(params) }),
     <start:@L> "create" "script" <id:Ident> "from" <target:ModularTarget> <end:@L> => StmtRaw::Script(ScriptStmtRaw { start, end, id: id.to_string(), module: target.0, target: target.1.id.to_string(), params: None }),
 
     <start:@L> "create" "script" <id:Ident> <params:WithClause> <end:@L> => StmtRaw::Script(ScriptStmtRaw { start, end, id: id.to_string(), module: vec![], target: id.to_string(), params: Some(params) }),
