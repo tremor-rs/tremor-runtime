@@ -1,0 +1,9 @@
+define query passthrough
+query
+  select event from in into out;
+end;
+
+create query passthrough;
+
+select event from in into passthrough/in;
+select event from passthrough/out into out;

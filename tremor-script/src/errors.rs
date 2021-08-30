@@ -174,8 +174,8 @@ impl ErrorKind {
             BadAccessInEvent, BadAccessInGlobal, BadAccessInLocal, BadAccessInState, BadArity,
             BadArrayIndex, BadType, BinaryDrop, BinaryEmit, CantSetArgsConst, CantSetGroupConst,
             CantSetWindowConst, Common, DecreasingRange, DoubleConst, DoubleStream,
-            EmptyInterpolation, EmptyScript, ExtraToken, Generic, Grok, InvalidAssign,
-            InvalidBinary, InvalidBitshift, InvalidConst, InvalidDrop, InvalidEmit,
+            DoubleSubqueryStmt, EmptyInterpolation, EmptyScript, ExtraToken, Generic, Grok,
+            InvalidAssign, InvalidBinary, InvalidBitshift, InvalidConst, InvalidDrop, InvalidEmit,
             InvalidExtractor, InvalidFloatLiteral, InvalidFn, InvalidHexLiteral, InvalidIntLiteral,
             InvalidMod, InvalidRecur, InvalidToken, InvalidUnary, InvalidUtf8Sequence, Io,
             JsonError, MergeTypeConflict, MissingEffectors, MissingFunction, MissingModule,
@@ -183,10 +183,10 @@ impl ErrorKind {
             NoLocalsAllowed, NoObjectError, NotConstant, NotFound, Oops, ParseIntError,
             ParserError, PatchKeyExists, PreprocessorError, QueryNodeDuplicateName,
             QueryNodeReservedName, QueryStreamNotDefined, RecursionLimit, RuntimeError,
-            TailingHereDoc, TypeConflict, UnexpectedCharacter, UnexpectedEndOfStream,
-            UnexpectedEscapeCode, UnrecognizedToken, UnterminatedExtractor, UnterminatedHereDoc,
-            UnterminatedIdentLiteral, UnterminatedInterpolation, UnterminatedStringLiteral,
-            UpdateKeyMissing, Utf8Error, ValueError,
+            SubqueryUnknownPort, TailingHereDoc, TypeConflict, UnexpectedCharacter,
+            UnexpectedEndOfStream, UnexpectedEscapeCode, UnrecognizedToken, UnterminatedExtractor,
+            UnterminatedHereDoc, UnterminatedIdentLiteral, UnterminatedInterpolation,
+            UnterminatedStringLiteral, UpdateKeyMissing, Utf8Error, ValueError,
         };
         match self {
             NoClauseHit(outer)
@@ -220,6 +220,7 @@ impl ErrorKind {
             | AssignToConst(outer, inner, _)
             | DoubleConst(outer, inner, _)
             | DoubleStream(outer, inner, _)
+            | DoubleSubqueryStmt(outer, inner, _)
             | InvalidExtractor(outer, inner, _, _, _)
             | InvalidFloatLiteral(outer, inner, _)
             | InvalidHexLiteral(outer, inner, _)
@@ -235,6 +236,7 @@ impl ErrorKind {
             | NoLocalsAllowed(outer, inner)
             | NoConstsAllowed(outer, inner)
             | QueryStreamNotDefined(outer, inner, _)
+            | SubqueryUnknownPort(outer, inner, _, _)
             | RuntimeError(outer, inner, _, _, _, _)
             | TypeConflict(outer, inner, _, _)
             | UnexpectedCharacter(outer, inner, _, _)
@@ -707,6 +709,10 @@ error_chain! {
             description("Can't declare a stream twice")
                 display("Can't declare the stream `{}` twice", name)
         }
+        DoubleSubqueryStmt(expr: Range, inner: Range, name: String) {
+            description("Can't create a query twice")
+                display("Can't create the query `{}` twice", name)
+        }
         AssignToConst(expr: Range, inner: Range, name: String) {
             description("Can't assign to a constant")
                 display("Can't assign to the `{}` constant", name)
@@ -822,6 +828,10 @@ error_chain! {
                 display("Name `{}` is already in use for another node, please use another name.", name)
         }
 
+        SubqueryUnknownPort(stmt: Range, inner: Range, subq_name: String, port_name: String) {
+            description("Query does not have this port")
+                display("Query `{}` does not have port `{}`", subq_name, port_name)
+        }
     }
 }
 
@@ -833,7 +843,45 @@ pub fn query_stream_not_defined_err<S: BaseExpr, I: BaseExpr>(
     name: String,
     meta: &NodeMetas,
 ) -> Error {
+    // Subqueries store unmangled `name` in `meta`
+    // Use `name` from `meta` if it exists.
+    let name = meta.name(inner.mid()).map_or(name, |s| s.into());
     ErrorKind::QueryStreamNotDefined(stmt.extent(meta), inner.extent(meta), name).into()
+}
+
+/// Creates a query stream duplicate name error
+pub fn query_stream_duplicate_name_err<S: BaseExpr, I: BaseExpr>(
+    stmt: &S,
+    inner: &I,
+    name: String,
+    meta: &NodeMetas,
+) -> Error {
+    let name = meta.name(stmt.mid()).map_or(name, |s| s.into());
+    ErrorKind::DoubleStream(stmt.extent(meta), inner.extent(meta), name).into()
+}
+
+/// Creates a subquery stmt duplicate name error
+pub fn subquery_stmt_duplicate_name_err<S: BaseExpr, I: BaseExpr>(
+    stmt: &S,
+    inner: &I,
+    name: String,
+    meta: &NodeMetas,
+) -> Error {
+    let name = meta.name(stmt.mid()).map_or(name, |s| s.into());
+    ErrorKind::DoubleSubqueryStmt(stmt.extent(meta), inner.extent(meta), name).into()
+}
+
+/// Creates a subquery unknown port error
+pub fn subquery_unknown_port_err<S: BaseExpr, I: BaseExpr>(
+    stmt: &S,
+    inner: &I,
+    subq_name: String,
+    port_name: String,
+    meta: &NodeMetas,
+) -> Error {
+    let subq_name = meta.name(inner.mid()).map_or(subq_name, |s| s.into());
+    ErrorKind::SubqueryUnknownPort(stmt.extent(meta), inner.extent(meta), subq_name, port_name)
+        .into()
 }
 
 /// Creates a query node reserved name error
@@ -842,6 +890,7 @@ pub fn query_node_reserved_name_err<S: BaseExpr>(
     name: String,
     meta: &NodeMetas,
 ) -> Error {
+    let name = meta.name(stmt.mid()).map_or(name, |s| s.into());
     ErrorKind::QueryNodeReservedName(stmt.extent(meta), name).into()
 }
 
@@ -851,6 +900,7 @@ pub fn query_node_duplicate_name_err<S: BaseExpr>(
     name: String,
     meta: &NodeMetas,
 ) -> Error {
+    let name = meta.name(stmt.mid()).map_or(name, |s| s.into());
     ErrorKind::QueryNodeDuplicateName(stmt.extent(meta), name).into()
 }
 

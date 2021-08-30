@@ -1,0 +1,18 @@
+mod m with
+  define query pass
+  query
+    mod m with
+      define query pass
+      query
+        select event from in into out
+      end
+    end;
+    create query pass from m::pass;
+    select event from in into pass;
+    select event from pass into out;
+  end
+end;
+
+create query pass from m::pass;
+select event from in into pass;
+select event from pass into out;

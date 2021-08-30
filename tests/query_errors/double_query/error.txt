@@ -1,0 +1,3 @@
+Error: 
+    6 | create query add;
+      | ^^^^^^^^^^^^^^^^ Can't create the query `add` twice

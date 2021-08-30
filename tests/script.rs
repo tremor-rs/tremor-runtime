@@ -154,6 +154,7 @@ test_cases!(
     // TODO
     // const_in_const_lookup,
     // INSERT
+    const_expr_path_non_const_segment,
     merge_assign_target_state,
     expr_path,
     patch_default,

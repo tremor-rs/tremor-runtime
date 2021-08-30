@@ -1,0 +1,27 @@
+define query first
+with
+ min_aint = 20
+query
+  define query second
+  with
+    min_aint = 30
+  query
+    select event from in where event.aint>args.min_aint into out;
+  end;
+
+  create query snot from second
+  with
+    min_aint = args.min_aint
+  end;
+
+  select event from in into snot;
+  select event from snot into out having event.abool;
+end;
+
+create query badger from first
+with
+  min_aint = 35
+end;
+
+select event from in into badger;
+select event from badger into out;

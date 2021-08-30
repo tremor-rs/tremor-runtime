@@ -1,0 +1,6 @@
+define query add
+query
+  select event + 1 from in into out;
+end;
+create query add;
+create query add;

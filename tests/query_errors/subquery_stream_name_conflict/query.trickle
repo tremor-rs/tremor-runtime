@@ -1,0 +1,9 @@
+define query snot
+query
+  select event + 1 from in into out;
+end;
+
+create stream snot;
+create query snot;
+select event from in into snot;
+select event from snot into out;

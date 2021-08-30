@@ -1,0 +1,3 @@
+Error: 
+    1 | {"snot": "badger"}.bad_key
+      |                    ^^^^^^^ Trying to access a non existing local key `bad_key`

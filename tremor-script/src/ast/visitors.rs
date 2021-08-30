@@ -14,10 +14,11 @@
 
 use super::{
     base_expr::BaseExpr, eq::AstEq, ArrayPattern, ArrayPredicatePattern, BinExpr, Bytes,
-    ClauseGroup, Comprehension, EventPath, ExprPath, GroupBy, GroupByInt, ImutExprInt, Invoke,
-    InvokeAggr, List, Literal, LocalPath, Match, Merge, MetadataPath, NodeMetas, Patch,
-    PatchOperation, Path, Pattern, PredicateClause, PredicatePattern, Record, RecordPattern, Recur,
-    ReservedPath, Segment, StatePath, StrLitElement, StringLit, UnaryExpr,
+    ClauseGroup, Comprehension, EventPath, ExprPath, GroupBy, GroupByInt, Helper, ImutExpr,
+    ImutExprInt, Invoke, InvokeAggr, List, Literal, LocalPath, Match, Merge, MetadataPath,
+    NodeMetas, Patch, PatchOperation, Path, Pattern, PredicateClause, PredicatePattern, Record,
+    RecordPattern, Recur, ReservedPath, Segment, StatePath, StrLitElement, StringLit, UnaryExpr,
+    Value,
 };
 use crate::errors::{error_event_ref_not_allowed, Result};
 /// Return value from visit methods for `ImutExprIntVisitor`
@@ -768,6 +769,95 @@ impl<'script> GroupByExprExtractor<'script> {
 impl<'script> GroupByVisitor<'script> for GroupByExprExtractor<'script> {
     fn visit_expr(&mut self, expr: &ImutExprInt<'script>) {
         self.expressions.push(expr.clone()); // take this, lifetimes (yes, i am stupid)
+    }
+}
+
+pub(crate) struct ArgsRewriter<'script, 'registry, 'meta> {
+    args: ImutExprInt<'script>,
+    helper: &'meta mut Helper<'script, 'registry>,
+}
+
+impl<'script, 'registry, 'meta> ArgsRewriter<'script, 'registry, 'meta> {
+    pub(crate) fn new(args: Value<'script>, helper: &'meta mut Helper<'script, 'registry>) -> Self {
+        let args: ImutExpr = Literal {
+            mid: 0,
+            value: args,
+        }
+        .into();
+        Self {
+            args: args.0,
+            helper,
+        }
+    }
+
+    pub(crate) fn rewrite_expr(&mut self, expr: &mut ImutExprInt<'script>) -> Result<()> {
+        self.walk_expr(expr)?;
+        Ok(())
+    }
+
+    pub(crate) fn rewrite_group_by(&mut self, group_by: &mut GroupByInt<'script>) -> Result<()> {
+        match group_by {
+            GroupByInt::Expr { expr, .. } | GroupByInt::Each { expr, .. } => {
+                self.rewrite_expr(expr)?;
+            }
+            GroupByInt::Set { items, .. } => {
+                for inner_group_by in items {
+                    self.rewrite_group_by(&mut inner_group_by.0)?;
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+impl<'script, 'registry, 'meta> ImutExprIntVisitor<'script>
+    for ArgsRewriter<'script, 'registry, 'meta>
+{
+    fn visit_path(&mut self, path: &mut Path<'script>) -> Result<VisitRes> {
+        if let Path::Reserved(ReservedPath::Args { segments, mid }) = path {
+            let new = ExprPath {
+                expr: Box::new(self.args.clone()),
+                segments: segments.clone(),
+                mid: *mid,
+                var: self.helper.reserve_shadow(),
+            };
+            *path = Path::Expr(new);
+            self.helper.end_shadow_var();
+        }
+        Ok(VisitRes::Walk)
+    }
+}
+
+pub(crate) struct ExprReducer<'script, 'registry, 'meta> {
+    visits: u64,
+    helper: &'meta mut Helper<'script, 'registry>,
+}
+
+impl<'script, 'registry, 'meta> ExprReducer<'script, 'registry, 'meta> {
+    pub(crate) fn new(helper: &'meta mut Helper<'script, 'registry>) -> Self {
+        Self { helper, visits: 0 }
+    }
+
+    pub(crate) fn reduce(&mut self, expr: &'meta mut ImutExprInt<'script>) -> Result<()> {
+        // Counts the number of visits needed to walk the expr.
+        self.walk_expr(expr)?;
+
+        // TODO: This is slow
+        let loops = self.visits;
+        for _ in 1..loops {
+            self.walk_expr(expr)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'script, 'registry, 'meta> ImutExprIntVisitor<'script>
+    for ExprReducer<'script, 'registry, 'meta>
+{
+    fn visit_expr(&mut self, e: &mut ImutExprInt<'script>) -> Result<VisitRes> {
+        self.visits += 1;
+        *e = e.clone().try_reduce(self.helper)?;
+        Ok(VisitRes::Walk)
     }
 }
 

@@ -1,0 +1,3 @@
+Error: 
+    5 |   create stream input_stream;
+      |   ^^^^^^^^^^^^^^^^^^^^^^^^^^ Streams cannot share names with from/into ports
