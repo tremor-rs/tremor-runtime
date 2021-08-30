@@ -1,0 +1,4 @@
+Error: 
+    8 |     invalid_val = args.add[random::integer(0, 3)]
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ The expression isn't constant and can't be evaluated at compile time
+

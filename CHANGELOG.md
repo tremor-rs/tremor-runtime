@@ -4,6 +4,7 @@
 
 ### New featues
 
+- Add support for modular subqueries in Trickle
 - Add `check_topic_metadata` configuration flag to kafka source to bypass topic metadata fetch
 - port `json!` improvements to `literal!`
 - Add support for `FLOAT4` and `FLOAT8` serialization/deserialization to postgres connectors

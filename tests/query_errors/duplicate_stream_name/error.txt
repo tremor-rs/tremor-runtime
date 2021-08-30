@@ -1,3 +1,3 @@
 Error: 
     2 | create stream snot; #  this should error
-      | ^^^^^^^^^^^^^^^^^^ duplicate stream name
+      | ^^^^^^^^^^^^^^^^^^ Can't declare the stream `snot` twice

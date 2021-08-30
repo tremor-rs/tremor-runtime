@@ -1,0 +1,21 @@
+define query snot
+with
+  add = 42
+query
+  define query badger
+  with
+    add = args.add
+  query
+    select args from in into out;
+  end;
+
+  create query badger;
+
+  select event from in into badger;
+  select event from badger into out;
+end;
+
+create query snot;
+
+select event from in into snot;
+select event from snot into out;

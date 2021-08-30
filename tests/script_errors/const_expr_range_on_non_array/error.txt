@@ -1,0 +1,3 @@
+Error: 
+    1 | {"snot":"badger"}[5:9]
+      |                   ^^^ Conflicting types, got record but expected array

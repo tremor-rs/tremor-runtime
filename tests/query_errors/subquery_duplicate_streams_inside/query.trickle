@@ -1,0 +1,8 @@
+define query passthrough
+query
+  create stream snot;
+  create stream snot;  
+  select event from in into out;
+end;
+
+create query passthrough;

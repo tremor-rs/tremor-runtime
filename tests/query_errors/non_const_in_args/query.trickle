@@ -1,0 +1,18 @@
+define query add
+with
+  add = [1,2,3],
+query
+  use std::random;
+  define script rand
+  with
+    invalid_val = args.add[random::integer(0, 3)]
+  script
+    event + args.invalid_val
+  end;
+  create script rand;
+
+  select event from in into rand;
+  select event from rand into out;
+end;
+
+create query add;

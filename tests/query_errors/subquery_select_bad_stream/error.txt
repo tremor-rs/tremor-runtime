@@ -1,0 +1,3 @@
+Error: 
+    5 |   select event from in into out;
+      |                     ^^ Stream used in `from` or `into` is not defined: in

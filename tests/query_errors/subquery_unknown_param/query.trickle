@@ -1,0 +1,11 @@
+define query passthrough_42
+with
+ param = 42
+query
+  select event from in into out;
+end;
+
+create query passthrough_42
+with
+ new_param = 43
+end;

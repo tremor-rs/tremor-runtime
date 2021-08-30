@@ -1,0 +1,21 @@
+mod m with
+  const a = 2;
+      fn add(v) with
+      v - a
+    end;
+end;
+
+define query add
+query
+  mod m with
+    const a = 1;
+    fn add(v) with
+      v + a
+    end;
+  end;
+  select m::add(event) from in into out;
+end;
+
+create query add;
+select event from in into add;
+select event from add into out;

@@ -35,7 +35,11 @@ use crate::{
         eq::AstEq,
         raw::{BytesDataType, Endian},
     },
-    errors::{error_generic, error_no_consts, error_no_locals, ErrorKind, Result},
+    errors::{
+        error_array_out_of_bound, error_bad_key_err, error_decreasing_range, error_generic,
+        error_need_arr, error_need_int, error_need_obj_err, error_no_consts, error_no_locals,
+        ErrorKind, Result,
+    },
     impl_expr_ex_mid, impl_expr_mid,
     interpreter::{exec_binary, exec_unary, AggrType, Cont, Env, ExecOpts, LocalStack},
     pos::{Location, Range},
@@ -362,6 +366,29 @@ impl ModDoc {
     }
 }
 
+/// Documentation from a query statement
+#[derive(Debug, Clone, PartialEq)]
+pub struct QueryDeclDoc {
+    /// Statment name
+    pub name: String,
+    /// Statment documentation
+    pub doc: Option<String>,
+}
+
+impl ToString for QueryDeclDoc {
+    fn to_string(&self) -> String {
+        format!(
+            r#"
+### {}
+
+{}
+"#,
+            self.name,
+            &self.doc.clone().unwrap_or_default()
+        )
+    }
+}
+
 /// Documentation from a module
 #[derive(Debug, Clone, PartialEq)]
 pub struct Docs {
@@ -369,6 +396,8 @@ pub struct Docs {
     pub consts: Vec<ConstDoc>,
     /// Functions
     pub fns: Vec<FnDoc>,
+    /// Query Stament documentation
+    pub query_decls: Vec<QueryDeclDoc>,
     /// Module level documentation
     pub module: Option<ModDoc>,
 }
@@ -378,6 +407,7 @@ impl Default for Docs {
         Self {
             consts: Vec::new(),
             fns: Vec::new(),
+            query_decls: Vec::new(),
             module: None,
         }
     }
@@ -500,6 +530,7 @@ where
     windows: HashMap<String, WindowDecl<'script>>,
     scripts: HashMap<String, ScriptDecl<'script>>,
     operators: HashMap<String, OperatorDecl<'script>>,
+    subquery_defns: HashMap<String, SubqueryDecl<'script>>,
     aggregates: Vec<InvokeAggrFn<'script>>,
     /// Warnings
     pub warnings: Warnings,
@@ -537,6 +568,13 @@ where
             name: name.to_string(),
             doc,
             value_type,
+        });
+    }
+    fn add_query_decl_doc<N: ToString>(&mut self, name: &N, doc: Option<Vec<Cow<'script, str>>>) {
+        let doc = doc.map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n"));
+        self.docs.query_decls.push(QueryDeclDoc {
+            name: name.to_string(),
+            doc,
         });
     }
     pub(crate) fn add_meta(&mut self, start: Location, end: Location) -> usize {
@@ -582,6 +620,7 @@ where
             windows: HashMap::new(),
             scripts: HashMap::new(),
             operators: HashMap::new(),
+            subquery_defns: HashMap::new(),
             aggregates: Vec::new(),
             warnings: BTreeSet::new(),
             locals: HashMap::new(),
@@ -1184,7 +1223,7 @@ impl<'script> ImutExprInt<'script> {
             ImutExprInt::Binary(b) => b.try_reduce(helper),
             ImutExprInt::List(l) => l.try_reduce(helper),
             ImutExprInt::Record(r) => r.try_reduce(helper),
-            ImutExprInt::Path(p) => Ok(p.try_reduce(helper)),
+            ImutExprInt::Path(p) => p.try_reduce(helper),
             ImutExprInt::String(s) => Ok(s.try_reduce(helper)),
             ImutExprInt::Invoke1(i)
             | ImutExprInt::Invoke2(i)
@@ -2394,7 +2433,8 @@ impl<'script> Path<'script> {
             Path::Reserved(path) => path.segments_mut(),
         }
     }
-    fn try_reduce(self, helper: &Helper<'script, '_>) -> ImutExprInt<'script> {
+    #[allow(clippy::too_many_lines)]
+    fn try_reduce(self, helper: &Helper<'script, '_>) -> Result<ImutExprInt<'script>> {
         match self {
             Path::Const(LocalPath {
                 is_const: true,
@@ -2407,13 +2447,177 @@ impl<'script> Path<'script> {
                         mid,
                         value: v.clone(),
                     };
-                    ImutExprInt::Literal(lit)
+                    Ok(ImutExprInt::Literal(lit))
                 } else {
                     // ALLOW: if something is is_const: true it is a constant.
                     unreachable!()
                 }
             }
-            other => ImutExprInt::Path(other),
+            Path::Expr(path) => {
+                if let ImutExprInt::Literal(lit) = *path.expr.clone() {
+                    let base_value = lit.value;
+                    let mut subrange: Option<&[Value<'script>]> = None;
+                    let mut current = &base_value;
+                    for segment in &path.segments.clone() {
+                        match segment {
+                            // Next segment is an identifier: lookup the identifier on `current`, if it's an object
+                            Segment::Id { mid, key, .. } => {
+                                subrange = None;
+                                current = key.lookup(current).ok_or_else(|| {
+                                    current.as_object().map_or_else(
+                                        || {
+                                            error_need_obj_err(
+                                                &*path.expr,
+                                                segment,
+                                                current.value_type(),
+                                                &helper.meta,
+                                            )
+                                        },
+                                        |o| {
+                                            let key = helper.meta.name_dflt(*mid).to_string();
+                                            let options =
+                                                o.keys().map(ToString::to_string).collect();
+                                            error_bad_key_err(
+                                                &*path.expr,
+                                                segment,
+                                                &Path::Expr(path.clone()),
+                                                key,
+                                                options,
+                                                &helper.meta,
+                                            )
+                                        },
+                                    )
+                                })?;
+                                continue;
+                            }
+                            // Next segment is an index: index into `current`, if it's an array
+                            Segment::Idx { idx, .. } => {
+                                if let Some(a) = current.as_array() {
+                                    let range_to_consider =
+                                        subrange.unwrap_or_else(|| a.as_slice());
+                                    let idx = *idx;
+
+                                    if let Some(c) = range_to_consider.get(idx) {
+                                        current = c;
+                                        subrange = None;
+                                        continue;
+                                    }
+                                    let r = idx..idx;
+                                    let l = range_to_consider.len();
+                                    return error_array_out_of_bound(
+                                        &*path.expr,
+                                        segment,
+                                        &Path::Expr(path.clone()),
+                                        r,
+                                        l,
+                                        &helper.meta,
+                                    );
+                                }
+                                return error_need_arr(
+                                    &*path.expr,
+                                    segment,
+                                    current.value_type(),
+                                    &helper.meta,
+                                );
+                            }
+                            // Next segment is an index range: index into `current`, if it's an array
+                            Segment::Range {
+                                range_start,
+                                range_end,
+                                ..
+                            } => {
+                                if let Some(a) = current.as_array() {
+                                    let array = subrange.unwrap_or_else(|| a.as_slice());
+                                    let start_idx = range_start
+                                        .clone()
+                                        .try_reduce(helper)?
+                                        .try_into_value(helper);
+                                    let end_idx = range_end
+                                        .clone()
+                                        .try_reduce(helper)?
+                                        .try_into_value(helper);
+
+                                    // start_idx or end_idx couldn't be reduced
+                                    // so the ExprPath can't be reduced
+                                    if start_idx.is_err() || end_idx.is_err() {
+                                        return Ok(ImutExprInt::Path(Path::Expr(path)));
+                                    }
+
+                                    let start_idx = match start_idx.as_usize() {
+                                        Some(id) => id,
+                                        None => {
+                                            return error_need_int(
+                                                &*path.expr,
+                                                segment,
+                                                current.value_type(),
+                                                &helper.meta,
+                                            )
+                                        }
+                                    };
+                                    let end_idx = match end_idx.as_usize() {
+                                        Some(id) => id,
+                                        None => {
+                                            return error_need_int(
+                                                &*path.expr,
+                                                segment,
+                                                current.value_type(),
+                                                &helper.meta,
+                                            )
+                                        }
+                                    };
+
+                                    if end_idx < start_idx {
+                                        return error_decreasing_range(
+                                            &*path.expr,
+                                            segment,
+                                            &Path::Expr(path.clone()),
+                                            start_idx,
+                                            end_idx,
+                                            &helper.meta,
+                                        );
+                                    } else if end_idx > array.len() {
+                                        let r = start_idx..end_idx;
+                                        let l = array.len();
+                                        return error_array_out_of_bound(
+                                            &*path.expr,
+                                            segment,
+                                            &Path::Expr(path.clone()),
+                                            r,
+                                            l,
+                                            &helper.meta,
+                                        );
+                                    }
+                                    subrange = array.get(start_idx..end_idx);
+                                    continue;
+                                };
+                                return error_need_arr(
+                                    &*path.expr,
+                                    segment,
+                                    current.value_type(),
+                                    &helper.meta,
+                                );
+                            }
+                            // Next segment is an expression:
+                            // The `expr` inside `Segment::Element` is non-const
+                            // and cannot be reduced at compile time
+                            Segment::Element { .. } => {
+                                return Ok(ImutExprInt::Path(Path::Expr(path)))
+                            }
+                        }
+                    }
+                    let val = subrange.map_or_else(
+                        || current.clone(),
+                        |range_to_consider| Value::from(range_to_consider.to_vec()),
+                    );
+                    Ok(ImutExprInt::Literal(Literal {
+                        mid: path.mid,
+                        value: val,
+                    }))
+                } else {
+                    Ok(ImutExprInt::Path(Path::Expr(path)))
+                }
+            }
+            other => Ok(ImutExprInt::Path(other)),
         }
     }
 }
@@ -2701,7 +2905,7 @@ impl<'script> UnaryExpr<'script> {
 #[cfg(test)]
 mod test {
 
-    use super::{ConstDoc, FnDoc, ImutExpr, ModDoc};
+    use super::{ConstDoc, FnDoc, ImutExpr, ModDoc, QueryDeclDoc};
     use crate::{
         ast::{Expr, ImutExprInt, Invocable, Invoke, Record},
         prelude::*,
@@ -2761,6 +2965,22 @@ hello
             c.print_with_name(&c.name),
             r#"
 # test mod
+
+hello
+"#
+        );
+    }
+
+    #[test]
+    fn query_doc() {
+        let q = QueryDeclDoc {
+            name: "test query".into(),
+            doc: Some("hello".into()),
+        };
+        assert_eq!(
+            q.to_string(),
+            r#"
+### test query
 
 hello
 "#

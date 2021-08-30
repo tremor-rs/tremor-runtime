@@ -33,11 +33,13 @@ use petgraph::algo::is_cyclic_directed;
 use tremor_common::ids::OperatorIdGen;
 use tremor_script::{
     ast::{
-        self, BaseExpr, CompilationUnit, Ident, NodeMetas, SelectType, Stmt, WindowDecl, WindowKind,
+        self, BaseExpr, CompilationUnit, Ident, NodeMetas, SelectType, Stmt, SubqueryStmt,
+        WindowDecl, WindowKind,
     },
     errors::{
-        query_node_duplicate_name_err, query_node_reserved_name_err, query_stream_not_defined_err,
-        CompilerError,
+        query_node_duplicate_name_err, query_node_reserved_name_err,
+        query_stream_duplicate_name_err, query_stream_not_defined_err,
+        subquery_stmt_duplicate_name_err, subquery_unknown_port_err, CompilerError,
     },
     highlighter::{Dumb, Highlighter},
     path::ModulePath,
@@ -175,6 +177,8 @@ impl Query {
         let mut links: IndexMap<OutputPort, Vec<InputPort>> = IndexMap::new();
         let mut inputs = HashMap::new();
         let mut outputs: Vec<petgraph::graph::NodeIndex> = Vec::new();
+        // Used to rewrite `subquery/port` to `internal_stream`
+        let mut subqueries: HashMap<String, SubqueryStmt> = HashMap::new();
 
         let metric_interval = query
             .config
@@ -229,6 +233,31 @@ impl Query {
         for (i, stmt) in stmts.into_iter().enumerate() {
             match stmt.suffix() {
                 Stmt::Select(ref select) => {
+                    // Rewrite subquery/port to their internal streams
+                    let mut select_rewrite = select.clone();
+                    for select_io in
+                        vec![&mut select_rewrite.stmt.from, &mut select_rewrite.stmt.into]
+                    {
+                        if let Some(subq_stmt) = subqueries.get(&select_io.0.to_string()) {
+                            if let Some(internal_stream) =
+                                subq_stmt.port_stream_map.get(&select_io.1.to_string())
+                            {
+                                select_io.0.id = internal_stream.clone().into();
+                            } else {
+                                let sio = select_io.clone();
+                                return Err(subquery_unknown_port_err(
+                                    &select_rewrite,
+                                    &sio.0,
+                                    sio.0.to_string(),
+                                    sio.1.to_string(),
+                                    &query.node_meta,
+                                )
+                                .into());
+                            }
+                        }
+                    }
+                    let select = select_rewrite;
+
                     let s: &ast::Select<'_> = &select.stmt;
 
                     if !nodes.contains_key(&s.from.0.id) {
@@ -351,28 +380,51 @@ impl Query {
                 Stmt::Stream(s) => {
                     let name = common_cow(&s.id);
                     let id = name.clone();
-                    if !nodes.contains_key(&id) {
-                        let node = NodeConfig {
-                            id: id.to_string(),
-                            kind: NodeKind::Operator,
-                            op_type: "passthrough".to_string(),
-                            ..NodeConfig::default()
-                        };
-                        let id = pipe_graph.add_node(node.clone());
-                        nodes.insert(name.clone(), id);
-                        let op = node.to_op(
-                            idgen.next_id(),
-                            supported_operators,
-                            None,
-                            Some(&stmt),
-                            Some(HashMap::new()),
-                        )?;
-                        inputs.insert(name.clone(), id);
-                        pipe_ops.insert(id, op);
-                        outputs.push(id);
+                    if nodes.contains_key(&id) {
+                        return Err(query_stream_duplicate_name_err(
+                            s,
+                            s,
+                            s.id.to_string(),
+                            &query.node_meta,
+                        )
+                        .into());
+                    }
+
+                    let node = NodeConfig {
+                        id: id.to_string(),
+                        kind: NodeKind::Operator,
+                        op_type: "passthrough".to_string(),
+                        ..NodeConfig::default()
                     };
+                    let id = pipe_graph.add_node(node.clone());
+                    nodes.insert(name.clone(), id);
+                    let op = node.to_op(
+                        idgen.next_id(),
+                        supported_operators,
+                        None,
+                        Some(&stmt),
+                        Some(HashMap::new()),
+                    )?;
+                    inputs.insert(name.clone(), id);
+                    pipe_ops.insert(id, op);
+                    outputs.push(id);
                 }
-                Stmt::WindowDecl(_) | Stmt::ScriptDecl(_) | Stmt::OperatorDecl(_) => {}
+                Stmt::WindowDecl(_)
+                | Stmt::ScriptDecl(_)
+                | Stmt::OperatorDecl(_)
+                | Stmt::SubqueryDecl(_) => {}
+                Stmt::SubqueryStmt(s) => {
+                    if subqueries.contains_key(&s.id) {
+                        return Err(subquery_stmt_duplicate_name_err(
+                            s,
+                            s,
+                            s.id.to_string(),
+                            &query.node_meta,
+                        )
+                        .into());
+                    }
+                    subqueries.insert(s.id.clone(), s.clone());
+                }
                 Stmt::Operator(o) => {
                     if nodes.contains_key(&common_cow(&o.id)) {
                         let error_func = if has_builtin_node_name(&common_cow(&o.id)) {
@@ -494,6 +546,19 @@ impl Query {
                     outputs.push(id);
                 }
             };
+        }
+
+        // Make sure the subq names don't conlict  with operators or
+        // reserved names in `nodes` (or vice versa).
+        for (id, stmt) in subqueries {
+            if nodes.contains_key(&common_cow(&id)) {
+                let error_func = if has_builtin_node_name(&common_cow(&id)) {
+                    query_node_reserved_name_err
+                } else {
+                    query_node_duplicate_name_err
+                };
+                return Err(error_func(&stmt, id, &query.node_meta).into());
+            }
         }
 
         // Link graph edges

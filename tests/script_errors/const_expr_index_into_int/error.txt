@@ -1,0 +1,3 @@
+Error: 
+    1 | {"snot": 42}.snot[5]
+      |                   ^ Conflicting types, got integer but expected array
