@@ -1,0 +1,7 @@
+define connector empty
+end;
+
+deploy fake
+script
+  { nope = "yes" }
+end;

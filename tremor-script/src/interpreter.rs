@@ -30,7 +30,8 @@
 // NOTE: For env / end
 #![allow(clippy::similar_names)]
 
-mod expr;
+/// Runtime interpreter support for expressions
+pub mod expr;
 mod imut_expr;
 
 pub use self::expr::Cont;

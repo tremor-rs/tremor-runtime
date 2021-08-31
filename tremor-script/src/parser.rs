@@ -28,6 +28,5 @@ lalrpop_mod!(
             clippy::pedantic,
         )
     )]
-    #[allow(unused)]
     grammar
 );

@@ -58,6 +58,7 @@ tremor-common = { path = "../tremor-common" }
 tremor-pipeline = { path = "../tremor-pipeline" }
 tremor-runtime = { path = "../" }
 tremor-script = { path = "../tremor-script" }
+tremor-value = { path = "../tremor-value" }
 url = "2"
 # mimalloc-rs = { version = "0.1", default-features = true, optional = true }
 # allocator_api = "0.6.0"
@@ -67,6 +68,9 @@ port_scanner = "0.1"
 shell-words = "1.0"
 tch = { version = "*", optional = true }
 termcolor = "1.1"
+beef = { version = "0.5", features = ["impl_serde"] }
+hashbrown = { version = "0.11", features = ["serde"] } # FIXME REMOVE
+
 [[bin]]
 name = "tremor"
 path = "src/main.rs"

@@ -36,6 +36,9 @@ pub mod ids;
 /// Random numbers
 pub mod rand;
 
+/// Tremor URL format
+pub mod url;
+
 pub use errors::Error;
 
 #[cfg(test)]

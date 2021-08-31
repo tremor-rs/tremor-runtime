@@ -13,14 +13,15 @@
 // limitations under the License.
 
 use crate::pipeline;
-use crate::url::TremorUrl;
 use beef::Cow;
 use halfbrown::HashMap;
+use tremor_common::url::TremorUrl;
 use tremor_pipeline::Event;
 use tremor_script::prelude::*;
 
 #[derive(Debug)]
-pub(crate) struct Ramp {
+/// Metrics internals
+pub struct Ramp {
     r#in: u64,
     out: u64,
     err: u64,
@@ -28,8 +29,8 @@ pub(crate) struct Ramp {
 
 /// metrics reporter for onramps and offramps
 #[derive(Debug)]
+/// Ramp metrics reporter
 pub struct RampReporter {
-    /// url
     artefact_url: TremorUrl,
     /// metrics counter
     metrics: Ramp,
@@ -42,6 +43,7 @@ pub struct RampReporter {
 }
 
 impl RampReporter {
+    /// Create a new metrics ramp
     pub(crate) fn new(artefact_url: TremorUrl, flush_interval_s: Option<u64>) -> Self {
         Self {
             artefact_url,

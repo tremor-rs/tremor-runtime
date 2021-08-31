@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::{connectors::ConnectorType, url::TremorUrl};
+use crate::connectors::ConnectorType;
 use either::Either;
 use hashbrown::HashMap;
+use tremor_common::url::TremorUrl;
 
 pub(crate) type Id = String;
 pub(crate) type ConnectorVec = Vec<Connector>;
@@ -193,8 +194,10 @@ pub struct Binding {
     /// ID of the binding
     pub id: Id,
     #[serde(default = "Default::default")]
-    pub(crate) description: String,
-    pub(crate) links: BindingMap, // is this right? this should be url to url?
+    /// Description
+    pub description: String,
+    /// Binding map
+    pub links: BindingMap, // is this right? this should be url to url?
 }
 
 #[cfg(test)]

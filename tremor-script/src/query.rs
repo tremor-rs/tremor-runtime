@@ -49,6 +49,25 @@ where
     pub fn suffix(&self) -> &ast::Query {
         self.query.suffix()
     }
+
+    /// Converts a troy embedded pipeline with resolved arguments to a runnable query
+    /// # Errors
+    ///   If the query fails to parse and convert correctly
+    pub fn from_troy(
+        src: &str,
+        deploy: &srs::Deploy,
+        query: &crate::srs::Query,
+    ) -> std::result::Result<Self, CompilerError> {
+        let warnings = BTreeSet::new();
+        let locals = 0;
+        Ok(Self {
+            query: crate::srs::Query::new_from_deploy(deploy, &query.node_id, &query.node_id)?,
+            source: src.to_string(),
+            warnings,
+            locals,
+        })
+    }
+
     /// Parses a string into a query
     ///
     /// # Errors
@@ -61,6 +80,30 @@ where
         reg: &Registry,
         aggr_reg: &AggrRegistry,
     ) -> std::result::Result<Self, CompilerError> {
+        Query::parse_with_args(
+            module_path,
+            file_name,
+            script,
+            cus,
+            reg,
+            aggr_reg,
+            &literal!("{}"),
+        )
+    }
+
+    /// Parses a string into a query supporting query arguments
+    ///
+    /// # Errors
+    /// if the query can not be parsed
+    pub fn parse_with_args(
+        module_path: &ModulePath,
+        file_name: &str,
+        script: &'script str,
+        cus: Vec<ast::CompilationUnit>,
+        reg: &Registry,
+        aggr_reg: &AggrRegistry,
+        args: &Value<'_>,
+    ) -> std::result::Result<Self, CompilerError> {
         let mut source = script.to_string();
 
         let mut warnings = BTreeSet::new();
@@ -71,28 +114,44 @@ where
 
         let mut include_stack = lexer::IncludeStack::default();
 
-        let r = |include_stack: &mut lexer::IncludeStack| -> Result<Self> {
-            let query = srs::Query::try_new::<Error, _>(source.clone(), |src: &mut String| {
-                let mut helper = ast::Helper::new(reg, aggr_reg, cus);
-                let cu = include_stack.push(&file_name)?;
-                let lexemes: Vec<_> = lexer::Preprocessor::preprocess(
-                    module_path,
-                    file_name,
-                    src,
-                    cu,
-                    include_stack,
-                )?;
-                let filtered_tokens = lexemes
-                    .into_iter()
-                    .filter_map(Result::ok)
-                    .filter(|t| !t.value.is_ignorable());
-                let script_stage_1 = crate::parser::g::QueryParser::new().parse(filtered_tokens)?;
-                let script = script_stage_1.up_script(&mut helper)?;
+        let target_name = std::path::Path::new(file_name)
+            .file_stem()
+            .ok_or(CompilerError {
+                error: "Snot".into(),
+                cus: lexer::IncludeStack::default().into_cus(),
+            })?
+            .to_string_lossy()
+            .to_string();
 
-                std::mem::swap(&mut warnings, &mut helper.warnings);
-                locals = helper.locals.len();
-                Ok(script)
-            })?;
+        let r = |include_stack: &mut lexer::IncludeStack| -> Result<Self> {
+            let query = srs::Query::try_new::<Error, _>(
+                &target_name,
+                source.clone(),
+                |src: &mut String| {
+                    let mut helper = ast::Helper::new(reg, aggr_reg, cus);
+                    helper.consts.args = args.clone_static();
+                    let cu = include_stack.push(&file_name)?;
+                    let lexemes: Vec<_> = lexer::Preprocessor::preprocess(
+                        module_path,
+                        file_name,
+                        src,
+                        cu,
+                        include_stack,
+                    )?;
+                    let filtered_tokens = lexemes
+                        .into_iter()
+                        .filter_map(Result::ok)
+                        .filter(|t| !t.value.is_ignorable());
+                    let script_stage_1 =
+                        crate::parser::g::QueryParser::new().parse(filtered_tokens)?;
+                    let script = script_stage_1.up_script(&mut helper)?;
+
+                    std::mem::swap(&mut warnings, &mut helper.warnings);
+                    locals = helper.locals.len();
+
+                    Ok(script)
+                },
+            )?;
 
             Ok(Self {
                 query,
@@ -210,7 +269,7 @@ mod test {
         parse(
             r#"
 define script test
-with
+args
   beep = "beep"
 script
   { "beep": "{args.beep}" }

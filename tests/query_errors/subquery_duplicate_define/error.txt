@@ -1,6 +1,0 @@
-Error: 
-    6 | define query passthrough
-    7 | query
-    8 |   select event from in into out;
-    9 | end;
-      | ^^^ Can't define the query `passthrough` twice

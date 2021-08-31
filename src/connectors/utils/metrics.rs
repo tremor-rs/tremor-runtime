@@ -15,11 +15,13 @@
 use std::sync::atomic::Ordering;
 
 use crate::connectors::impls::metrics::{MetricsChannel, Msg};
-use crate::url::ports::{ERR, IN, OUT};
-use crate::url::TremorUrl;
 use async_broadcast::Sender;
 use beef::Cow;
 use halfbrown::HashMap;
+use tremor_common::url::{
+    ports::{ERR, IN, OUT},
+    TremorUrl,
+};
 use tremor_script::EventPayload;
 use tremor_value::prelude::*;
 
