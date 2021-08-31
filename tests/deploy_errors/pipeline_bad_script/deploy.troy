@@ -7,4 +7,4 @@ pipeline
    select { "#{args.snot}": "#{args.badger}" } from in into out;
 end;
 
-create instance passthrough
+deploy passthrough
