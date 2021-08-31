@@ -1,0 +1,7 @@
+define connector empty
+end;
+
+create instance fake
+script
+  { nope = "yes" }
+end;

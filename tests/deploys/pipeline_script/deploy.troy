@@ -1,0 +1,10 @@
+define pipeline identity
+args
+  snot,
+with
+  snot = "snot",
+script
+  { "snot": "badger" }
+pipeline
+  select args.snot from in into out;
+end;

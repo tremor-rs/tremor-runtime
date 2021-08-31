@@ -6558,6 +6558,8 @@ dependencies = [
  "tremor-pipeline",
  "tremor-runtime",
  "tremor-script",
+ "tremor-value",
+ "value-trait",
 ]
 
 [[package]]
@@ -6603,7 +6605,9 @@ dependencies = [
  "tremor-pipeline",
  "tremor-runtime",
  "tremor-script",
+ "tremor-value",
  "url 2.2.2",
+ "value-trait",
 ]
 
 [[package]]
@@ -6611,7 +6615,10 @@ name = "tremor-common"
 version = "0.11.4"
 dependencies = [
  "async-std",
+ "beef",
  "rand 0.8.4",
+ "serde",
+ "url 2.2.2",
 ]
 
 [[package]]

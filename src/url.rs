@@ -27,38 +27,27 @@ pub enum ResourceType {
     Binding,
 }
 
-/// The scrope of the URL
-#[derive(Clone, Copy, Eq, PartialEq, Hash, Debug)]
-pub enum Scope {
-    /// This URL identifies a specific port
-    Port,
-    /// This URL identifies a servant (a running instance)
-    Servant,
-    /// This URL identifes an artefact (a non running configuration)
-    Artefact,
-    /// This URL identifies a type of artefact
-    Type,
-}
+/// Deprecated - Alias for `tremor_common::url::Scope`
+pub type Scope = tremor_common::url::Scope;
 
 /// module for standard port names
 pub mod ports {
     use beef::Cow;
 
     /// standard input port
-    pub const IN: Cow<'static, str> = Cow::const_str("in");
+    pub const IN: Cow<'static, str> = tremor_common::url::ports::IN;
 
     /// standard output port
-    pub const OUT: Cow<'static, str> = Cow::const_str("out");
+    pub const OUT: Cow<'static, str> = tremor_common::url::ports::OUT;
 
     /// standard err port
-    pub const ERR: Cow<'static, str> = Cow::const_str("err");
+    pub const ERR: Cow<'static, str> = tremor_common::url::ports::ERR;
 
     /// standard metrics port
-    pub const METRICS: Cow<'static, str> = Cow::const_str("metrics");
+    pub const METRICS: Cow<'static, str> = tremor_common::url::ports::METRICS;
 }
 
 /// A tremor URL identifying an entity in tremor
-
 #[allow(clippy::module_name_repetitions)]
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct TremorUrl {
@@ -425,6 +414,13 @@ impl Serialize for TremorUrl {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::errors::Result;
+
+    // These tests are a duplicate of the tests in `tremor_common::url`
+    // These are kept to assert that the lifted and shifted code hasn't
+    // changed materially having been moved from the top-level to the
+    // `tremor-common` repo
+    //
 
     #[test]
     fn bad_url() {
