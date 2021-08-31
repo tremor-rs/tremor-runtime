@@ -4,7 +4,7 @@ script
 
   let state = match state of
     # exit when we have all metrics events
-    case %{ present onramp, present pipeline, present offramp } when state.onramp >= 9 and state.pipeline >= 4 and state.offramp >= 6 => emit {"exit": 0, "delay": 100} => "done"
+    case %{ present onramp, present `pipeline`, present offramp } when state.onramp >= 9 and state.`pipeline` >= 4 and state.offramp >= 6 => emit {"exit": 0, "delay": 100} => "done"
     # state is valid
     case %{} => state
     # initialize state
@@ -36,7 +36,7 @@ create script process;
 
 select event from in into process;
 
-select event from process/pipeline into out/pipeline;
+select event from process/`pipeline` into out/`pipeline`;
 select event from process/onramp into out/onramp;
 select event from process/offramp into out/offramp;
 select event from process/done into out/done;

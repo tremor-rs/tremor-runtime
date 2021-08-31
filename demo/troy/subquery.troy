@@ -1,0 +1,24 @@
+# main.trickle
+
+define pipeline foo
+pipeline
+	select event from in into out;
+end;
+
+# .troy
+
+define pipeline outer
+pipeline
+	# can we use this inner inside out flow??
+	define pipeline inner
+		select event from in into out;
+	end;
+end;
+
+define flow my_flow
+flow
+	use main;
+	create pipeline my_pipeline from main::foo;
+
+	connect bla to my_pipeline;
+end;

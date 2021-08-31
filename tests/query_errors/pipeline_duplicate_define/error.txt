@@ -1,0 +1,6 @@
+Error: 
+    6 | define pipeline passthrough
+    7 | pipeline
+    8 |   select event from in into out;
+    9 | end;
+      | ^^^ Can't define the pipeline `passthrough` twice

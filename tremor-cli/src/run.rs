@@ -23,11 +23,13 @@ use tremor_pipeline::{Event, EventId};
 use tremor_runtime::codec::Codec;
 use tremor_runtime::postprocessor::Postprocessor;
 use tremor_runtime::preprocessor::Preprocessor;
+use tremor_script::deploy::Deploy;
 use tremor_script::highlighter::Error as HighlighterError;
 use tremor_script::highlighter::{Highlighter, Term as TermHighlighter};
 use tremor_script::prelude::*;
 use tremor_script::query::Query;
 use tremor_script::script::{AggrType, Return, Script};
+use tremor_script::srs;
 use tremor_script::{ctx::EventContext, lexer::Tokenizer};
 use tremor_script::{EventPayload, Value, ValueAndMeta};
 struct Ingress {
@@ -219,6 +221,7 @@ impl Run {
         match get_source_kind(&self.script) {
             SourceKind::Tremor | SourceKind::Json => self.run_tremor_source(),
             SourceKind::Trickle => self.run_trickle_source(),
+            SourceKind::Troy => self.run_troy_source(),
             SourceKind::Unsupported(_) | SourceKind::Yaml => {
                 Err(format!("Error: Unable to execute source: {}", &self.script).into())
             }
@@ -417,6 +420,91 @@ impl Run {
         )?;
 
         h.finalize()?;
+
+        Ok(())
+    }
+    fn run_troy_source(&self) -> Result<()> {
+        use tremor_script::ast;
+        let raw = slurp_string(&self.script);
+        if let Err(e) = raw {
+            eprintln!("Error processing file {}: {}", &self.script, e);
+            // ALLOW: main.rs
+            std::process::exit(1);
+        }
+        let raw = raw?;
+        let env = env::setup()?;
+        let mut h = TermHighlighter::stderr();
+
+        let deployable = match Deploy::parse(
+            &env.module_path,
+            &self.script,
+            &raw,
+            vec![],
+            &env.fun,
+            &env.aggr,
+        ) {
+            Ok(deployable) => deployable,
+            Err(e) => {
+                if let Err(e) = Script::format_error_from_script(&raw, &mut h, &e) {
+                    eprintln!("Error: {}", e);
+                };
+                // ALLOW: main.rs
+                std::process::exit(1);
+            }
+        };
+
+        let unit = deployable.deploy.as_deployment_unit()?;
+        let mut unit_pipeline: Option<ast::Query> = None;
+
+        let mut num_pipelines = 0;
+        // let _params = literal!({});
+
+        // FIXME - static analysis prototyping
+        // TODO When done - refactor and push down into compilation phase
+        for (_name, stmt) in unit.instances {
+            let fqsn = stmt.fqsn(&stmt.module);
+            if let Some(deployable) = unit.pipelines.get(&fqsn) {
+                unit_pipeline = Some(deployable.query.clone());
+                num_pipelines += 1;
+            //            dbg!(&deployable);
+            } else if let Some(_deployable) = unit.flows.get(&fqsn) {
+                dbg!("It's a flow instance");
+            //            dbg!(&deployable);
+            } else if let Some(_deployable) = unit.connectors.get(&fqsn) {
+                dbg!("It's a connector instance");
+            //            dbg!(&deployable);
+            } else {
+                eprintln!(
+                    "Error: Unable to find target definition {} for `create` {}",
+                    &fqsn, &stmt.idS
+                );
+                std::process::exit(1);
+            }
+        }
+
+        // dbg!(&num_pipelines);
+        if num_pipelines == 1 {
+            // let mut h = TermHighlighter::stderr();
+            if let Some(_unit_pipeline) = unit_pipeline {
+                // if let Some(query) = unit_pipeline.query {
+                // dbg!("got here");
+                // dbg!("Params: ", unit_pipeline.params);
+                // unit_pipeline.consts.args.insert("snot", Value::from("badger"));
+                // unit_pipeline.args = literal!({"snot": "badger badger badger"});
+                // let query = tremor_script::srs::Query::new_from_ast(unit_pipeline);
+                // let query = tremor_script::Query {
+                //     query,
+                //     warnings: BTreeSet::new(),
+                //     locals: 0,
+                //     source: self.script.clone(),
+                // };
+
+                // FIXME
+                // self.run_trickle_query(query, raw, &mut h)?;
+                S
+                //}
+            }
+        }
 
         Ok(())
     }

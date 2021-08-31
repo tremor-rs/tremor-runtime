@@ -16,7 +16,6 @@ use crate::errors::Result;
 use crate::permge::PriorityMerge;
 use crate::registry::instance::InstanceState;
 use crate::repository::PipelineArtefact;
-use crate::url::TremorUrl;
 use async_std::channel::{bounded, unbounded, Receiver, Sender};
 use async_std::stream::StreamExt;
 use async_std::task::{self, JoinHandle};
@@ -25,6 +24,7 @@ use std::fmt;
 use std::time::Duration;
 use tremor_common::ids::OperatorIdGen;
 use tremor_common::time::nanotime;
+use tremor_common::url::TremorUrl;
 use tremor_pipeline::errors::ErrorKind as PipelineErrorKind;
 use tremor_pipeline::{CbAction, Event, ExecutableGraph, SignalKind};
 

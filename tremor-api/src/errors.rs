@@ -76,6 +76,12 @@ impl From<std::io::Error> for Error {
     }
 }
 
+impl From<tremor_common::Error> for Error {
+    fn from(e: tremor_common::Error) -> Self {
+        Self::new(StatusCode::InternalServerError, format!("{}", e))
+    }
+}
+
 impl From<RecvError> for Error {
     fn from(e: RecvError) -> Self {
         Self::new(

@@ -1,0 +1,3 @@
+Error: 
+    1 | create pipeline snot;
+      | ^^^^^^^^^^^^^^^^^^^^ pipeline `snot` not found in:

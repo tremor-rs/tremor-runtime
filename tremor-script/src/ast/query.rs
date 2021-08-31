@@ -13,14 +13,15 @@
 // limitations under the License.
 
 pub(crate) mod raw;
+
 use super::{
     error_generic, error_no_consts, error_no_locals, node_id::NodeId, AggrRegistry, EventPath,
     HashMap, Helper, Ident, ImutExpr, ImutExprInt, InvokeAggrFn, Location, NodeMetas, Path,
     Registry, Result, Script, Serialize, Stmts, Upable, Value,
 };
 use super::{raw::BaseExpr, Consts};
-use crate::impl_expr_mid;
-use crate::{ast::eq::AstEq, impl_fqn};
+use crate::ast::eq::AstEq;
+use crate::{impl_expr_mid, impl_fqn};
 use raw::WindowDefnRaw;
 
 /// A Tremor query
@@ -38,6 +39,8 @@ pub struct Query<'script> {
     pub scripts: HashMap<String, ScriptDecl<'script>>,
     /// Operators declarations
     pub operators: HashMap<String, OperatorDecl<'script>>,
+    /// Query arguments
+    pub args: Value<'script>,
 }
 
 /// Query statement
@@ -55,10 +58,10 @@ pub enum Stmt<'script> {
     Operator(OperatorStmt<'script>),
     /// A script creation
     Script(ScriptStmt<'script>),
-    /// An subquery declaration
-    SubqueryDecl(SubqueryDecl<'script>),
-    /// An subquery creation
-    SubqueryStmt(SubqueryStmt),
+    /// An pipeline declaration
+    PipelineDecl(Box<PipelineDecl<'script>>),
+    /// An pipeline creation
+    PipelineStmt(PipelineStmt),
     /// A select statement
     Select(SelectStmt<'script>),
 }
@@ -71,8 +74,8 @@ impl<'script> BaseExpr for Stmt<'script> {
             Stmt::Stream(s) => s.mid(),
             Stmt::OperatorDecl(s) => s.mid(),
             Stmt::ScriptDecl(s) => s.mid(),
-            Stmt::SubqueryDecl(s) => s.mid(),
-            Stmt::SubqueryStmt(s) => s.mid(),
+            Stmt::PipelineDecl(s) => s.mid(),
+            Stmt::PipelineStmt(s) => s.mid(),
             Stmt::Operator(s) => s.mid(),
             Stmt::Script(s) => s.mid(),
             Stmt::Select(s) => s.mid(),
@@ -171,7 +174,7 @@ pub struct OperatorDecl<'script> {
     /// Type of the operator
     pub kind: OperatorKind,
     /// Parameters for the operator
-    pub params: Option<HashMap<String, Value<'script>>>,
+    pub params: HashMap<String, Value<'script>>,
 }
 impl_expr_mid!(OperatorDecl);
 impl_fqn!(OperatorDecl);
@@ -186,7 +189,7 @@ pub struct OperatorStmt<'script> {
     /// Target of the operator
     pub target: String,
     /// parameters of the instance
-    pub params: Option<HashMap<String, Value<'script>>>,
+    pub params: HashMap<String, Value<'script>>,
 }
 impl_expr_mid!(OperatorStmt);
 
@@ -197,11 +200,12 @@ pub struct ScriptDecl<'script> {
     /// The ID and Module of the Script
     pub node_id: NodeId,
     /// Parameters of a script declaration
-    pub params: Option<HashMap<String, Value<'script>>>,
+    pub params: HashMap<String, Value<'script>>,
     /// The script itself
     pub script: Script<'script>,
 }
 impl_expr_mid!(ScriptDecl);
+impl_fqn!(ScriptDecl);
 
 /// A script creation
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -213,41 +217,43 @@ pub struct ScriptStmt<'script> {
     /// Target of the script
     pub target: String,
     /// Parameters of the script statement
-    pub params: Option<HashMap<String, Value<'script>>>,
+    pub params: HashMap<String, Value<'script>>,
 }
 impl_expr_mid!(ScriptStmt);
 
-/// A subquery declaration
+/// A pipeline declaration
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct SubqueryDecl<'script> {
+pub struct PipelineDecl<'script> {
     /// The ID and Module of the SubqueryDecl
     pub node_id: NodeId,
     /// metadata id
     pub(crate) mid: usize,
     /// Parameters of a subquery declaration
-    pub params: Option<HashMap<String, Value<'script>>>,
+    pub params: HashMap<String, Value<'script>>,
     /// Input Ports
     pub from: Vec<Ident<'script>>,
     /// Output Ports
     pub into: Vec<Ident<'script>>,
-    /// The raw subquery statements
+    /// The raw pipeline statements
     pub raw_stmts: raw::StmtsRaw<'script>,
+    /// The query in it's runnable form
+    pub query: Option<Query<'script>>,
 }
-impl_expr_mid!(SubqueryDecl);
-impl_fqn!(SubqueryDecl);
+impl_expr_mid!(PipelineDecl);
+impl_fqn!(PipelineDecl);
 
-/// A subquery creation
+/// A pipeline creation
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct SubqueryStmt {
+pub struct PipelineStmt {
     pub(crate) mid: usize,
-    /// Module of the subquery
+    /// Module of the pipeline
     pub module: Vec<String>,
-    /// ID of the subquery
+    /// ID of the pipeline
     pub id: String,
-    /// Map of subquery ports and internal stream id
+    /// Map of pipeline ports and internal stream id
     pub port_stream_map: HashMap<String, String>,
 }
-impl BaseExpr for SubqueryStmt {
+impl BaseExpr for PipelineStmt {
     fn mid(&self) -> usize {
         self.mid
     }

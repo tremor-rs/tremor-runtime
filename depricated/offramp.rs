@@ -21,7 +21,7 @@ use crate::registry::ServantId;
 use crate::sink::{self, handle_response};
 use crate::source::Processors;
 use crate::url::ports::{IN, METRICS};
-use crate::url::TremorUrl;
+use tremor_common::url::TremorUrl;
 use crate::{Event, OpConfig};
 use async_std::channel::{bounded, unbounded, Sender};
 use async_std::stream::StreamExt; // for .next() on PriorityMerge
@@ -145,8 +145,39 @@ pub trait Builder: Send {
     fn from_config(&self, config: &Option<OpConfig>) -> Result<Box<dyn Offramp>>;
 }
 
-// just a lookup
+/// Lookup Offramp builtin implementations given its builtin name as a search key
+/// # Errors
+///   If no ramp implementation is found for the provided key name
+#[cfg(not(tarpaulin_include))]
+pub fn lookup(name: &str, config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
+    match name {
+        "amqp" => amqp::Amqp::from_config(config),
+        "blackhole" => blackhole::Blackhole::from_config(config),
+        "cb" => cb::Cb::from_config(config),
+        "debug" => debug::Debug::from_config(config),
+        "dns" => dns::Dns::from_config(config),
+        "elastic" => elastic::Elastic::from_config(config),
+        "exit" => exit::Exit::from_config(config),
+        "file" => file::File::from_config(config),
+        "kafka" => kafka::Kafka::from_config(config),
+        "kv" => kv::Kv::from_config(config),
+        "nats" => nats::Nats::from_config(config),
+        "newrelic" => newrelic::NewRelic::from_config(config),
+        "otel" => otel::OpenTelemetry::from_config(config),
+        "postgres" => postgres::Postgres::from_config(config),
+        "rest" => rest::Rest::from_config(config),
+        "stderr" => stderr::StdErr::from_config(config),
+        "stdout" => stdout::StdOut::from_config(config),
+        "tcp" => tcp::Tcp::from_config(config),
+        "udp" => udp::Udp::from_config(config),
+        "ws" => ws::Ws::from_config(config),
+        "gcs" => gcs::GoogleCloudStorage::from_config(config),
+        "gpub" => gpub::GoogleCloudPubSub::from_config(config),
+        _ => Err(format!("Offramp {} not known", name).into()),
+    }
+}
 
+/// Create control event message
 pub struct Create {
     pub id: ServantId,
     pub offramp: Box<dyn Offramp>,
@@ -165,32 +196,17 @@ impl fmt::Debug for Create {
     }
 }
 
-/// Offramp Manager control plane
+/// This is control plane
 pub enum ManagerMsg {
-    /// register an offramp type with its corresponding builder
-    Register {
-        offramp_type: String,
-        builder: Box<dyn Builder>,
-        builtin: bool,
-    },
-    /// unregister an offramp type
-    Unregister(String),
-    /// asks for existence of the given type inside the runtime type registry
-    TypeExists(String, Sender<bool>),
-    /// instantiate an offramp of provided type and config and send it back using the given sender
-    Instantiate {
-        offramp_type: String,
-        config: Option<OpConfig>,
-        sender: Sender<Result<Box<dyn Offramp>>>,
-    },
-    /// Start an already instantiated offramp and start receiving events
-    Create(Sender<Result<Addr>>, Box<Create>),
-    /// Stop the whole manager
+    /// Create command
+    Create(async_channel::Sender<Result<Addr>>, Box<Create>),
+    /// Stop command
     Stop,
 }
 
+/// Manager for offramps
 #[derive(Debug, Default)]
-pub(crate) struct Manager {
+pub struct Manager {
     qsize: usize,
 }
 
@@ -218,6 +234,7 @@ pub(crate) enum OfframpMsg {
 }
 
 impl Manager {
+    /// Creates a new manager
     pub fn new(qsize: usize) -> Self {
         Self { qsize }
     }
@@ -463,8 +480,9 @@ impl Manager {
         Ok(())
     }
 
-    pub fn start(self) -> (JoinHandle<Result<()>>, ManagerSender) {
-        let (tx, rx) = bounded(self.qsize);
+    /// Starts a new instance
+    pub fn start(self) -> (JoinHandle<Result<()>>, Sender) {
+        let (tx, rx) = bounded(crate::QSIZE);
         let h = task::spawn(async move {
             info!("Offramp manager started");
             let mut offramp_id_gen = OfframpIdGen::new();

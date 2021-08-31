@@ -1703,9 +1703,9 @@ checksum = "56899898ce76aaf4a0f24d914c97ea6ed976d42fec6ad33fcbb0a1103e07b2b0"
 
 [[package]]
 name = "easy-parallel"
-version = "3.1.0"
+version = "3.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1dd4afd79212583ff429b913ad6605242ed7eec277e950b1438f300748f948f4"
+checksum = "6907e25393cdcc1f4f3f513d9aac1e840eb1cc341a0fccb01171f7d14d10b946"
 
 [[package]]
 name = "ed25519"
@@ -2471,6 +2471,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ab5ef0d4909ef3724cc8cce6ccc8572c5c817592e9285f5464f8e86f8bd3726e"
 dependencies = [
  "ahash 0.7.6",
+ "serde",
 ]
 
 [[package]]
@@ -4407,7 +4408,7 @@ dependencies = [
 [[package]]
 name = "qwal"
 version = "0.1.0"
-source = "git+https://github.com/tremor-rs/qwal#38c5d3085d893d7ed2c0d954587d07511bab677f"
+source = "git+https://github.com/tremor-rs/qwal#ab83d6850b03a432329984ff071ff41caf9f2f31"
 dependencies = [
  "async-std",
  "byteorder",
@@ -5450,9 +5451,9 @@ dependencies = [
 
 [[package]]
 name = "signal-hook-async-std"
-version = "0.2.1"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "90526e74631c69a79b38212e3d4fda4b00de9d6be56b3cead133bf67ad371af1"
+checksum = "0c4aa94397e2023af5b7cff5b8d4785e935cfb77f0e4aab0cae3b26258ace556"
 dependencies = [
  "async-io",
  "futures-lite",
@@ -6709,9 +6710,11 @@ dependencies = [
  "serde_yaml",
  "simd-json",
  "tide",
+ "tremor-common",
  "tremor-pipeline",
  "tremor-runtime",
  "tremor-script",
+ "tremor-value",
 ]
 
 [[package]]
@@ -6720,6 +6723,7 @@ version = "0.11.4"
 dependencies = [
  "anyhow",
  "async-std",
+ "beef",
  "clap 3.1.6",
  "clap_complete",
  "criterion",
@@ -6731,6 +6735,7 @@ dependencies = [
  "futures 0.3.21",
  "globwalk",
  "halfbrown",
+ "hashbrown 0.11.2",
  "http-types",
  "lalrpop",
  "lazy_static",
@@ -6757,6 +6762,7 @@ dependencies = [
  "tremor-pipeline",
  "tremor-runtime",
  "tremor-script",
+ "tremor-value",
  "url 2.2.2",
 ]
 
@@ -6765,7 +6771,10 @@ name = "tremor-common"
 version = "0.11.4"
 dependencies = [
  "async-std",
+ "beef",
  "rand 0.8.5",
+ "serde",
+ "url 2.2.2",
 ]
 
 [[package]]

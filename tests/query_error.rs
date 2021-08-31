@@ -24,18 +24,20 @@ use tremor_pipeline::FN_REGISTRY;
 use tremor_runtime::errors::*;
 use tremor_script::highlighter::{Dumb, Highlighter};
 use tremor_script::path::ModulePath;
+use tremor_value::literal;
 
 fn to_pipe(module_path: &ModulePath, file_name: &str, query: &str) -> Result<ExecutableGraph> {
     let aggr_reg = tremor_script::aggr_registry();
     let cus = vec![];
     let mut idgen = OperatorIdGen::new();
-    let q = Query::parse(
+    let q = Query::parse_with_args(
         module_path,
         query,
         file_name,
         cus,
         &*FN_REGISTRY.lock()?,
         &aggr_reg,
+        &literal!({}),
     )?;
     Ok(q.to_pipe(&mut idgen)?)
 }
@@ -142,19 +144,19 @@ test_cases!(
     pp_embed_unrecognized_token4,
     pp_embed_unrecognized_token5,
     // INSERT
-    subquery_stream_name_conflict,
-    subquery_out,
-    subquery_in,
+    pipeline_stream_name_conflict,
+    pipeline_out,
+    pipeline_in,
     double_query,
-    subq_name_overlap,
+    pipeline_name_overlap,
     non_const_in_args,
-    subquery_unknown_port,
-    subquery_duplicate_streams_inside,
-    subquery_select_bad_stream,
-    subquery_stream_port_conflict,
-    subquery_duplicate_define,
-    subquery_undefined,
-    subquery_unknown_param,
+    pipeline_unknown_port,
+    pipeline_duplicate_streams_inside,
+    pipeline_select_bad_stream,
+    pipeline_stream_port_conflict,
+    pipeline_duplicate_define,
+    pipeline_undefined,
+    pipeline_unknown_param,
     duplicate_stream_name,
     window_both_settings,
     window_group_by_event_in_target,

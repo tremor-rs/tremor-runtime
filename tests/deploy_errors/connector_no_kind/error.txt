@@ -1,0 +1,6 @@
+Error: 
+    1 | define connector empty
+      |        ^^^^^^^^^ Found the token `connector` but expected one of `<ident>`, `flow`, `pipeline`
+      |                  NOTE: It looks like you tried to use the 'connector' as a ident, consider quoting it as `connector` to make it an identifier.
+    2 | end;
+    3 |

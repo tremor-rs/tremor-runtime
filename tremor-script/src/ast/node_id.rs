@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 // Copyright 2020-2021, The Tremor Team
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,7 +15,7 @@
 // limitations under the License.
 
 /// Identifies a node in the AST.
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Hash, Eq)]
 pub struct NodeId {
     /// The ID of the Node
     id: String,
@@ -23,16 +25,19 @@ pub struct NodeId {
 
 impl NodeId {
     /// Create a new `NodeId` from an ID and Module list.
+    #[must_use]
     pub fn new(id: String, module: Vec<String>) -> Self {
         Self { id, module }
     }
 
     /// The node's id.
+    #[must_use]
     pub fn id(&self) -> &str {
         self.id.as_str()
     }
 
     /// The node's module.
+    #[must_use]
     pub fn module(&self) -> &[String] {
         &self.module
     }
@@ -46,11 +51,7 @@ impl NodeId {
     /// the given module path.
     #[must_use]
     pub fn fqn(&self) -> String {
-        if self.module.is_empty() {
-            self.id.to_string()
-        } else {
-            format!("{}::{}", self.module.join("::"), self.id)
-        }
+        self.to_string()
     }
 
     /// Calculate the fully qualified name of some
@@ -66,11 +67,27 @@ impl NodeId {
     }
 }
 
+impl Display for NodeId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.module.is_empty() {
+            write!(f, "{}", self.id)
+        } else {
+            write!(f, "{}::{}", self.module.join("::"), self.id)
+        }
+    }
+}
+
+/// fully qualified reference to nodes
+pub trait BaseRef {
+    /// Generates the fully qualified name
+    fn fqn(&self) -> String;
+}
+
 #[doc(hidden)]
 #[macro_export]
 macro_rules! impl_fqn {
     ($struct:ident) => {
-        impl $struct<'_> {
+        impl crate::ast::node_id::BaseRef for $struct<'_> {
             fn fqn(&self) -> String {
                 self.node_id.fqn()
             }

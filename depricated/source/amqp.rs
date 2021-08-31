@@ -15,7 +15,7 @@
 
 use crate::errors::Error;
 use crate::source::prelude::*;
-use crate::url::TremorUrl;
+use tremor_common::url::TremorUrl;
 use lapin::{
     options::{BasicAckOptions, BasicConsumeOptions, QueueBindOptions, QueueDeclareOptions},
     types::FieldTable,
