@@ -10,4 +10,7 @@ version = "0.11.4"
 
 [dependencies]
 async-std = "1"
-rand = { version = "0.8", features = ["small_rng"] }
+rand = {version = "0.8", features = ["small_rng"]}
+beef = { version = "0.5", features = ["impl_serde"] }
+serde = "1"
+url = "2.2"

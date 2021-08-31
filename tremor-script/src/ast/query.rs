@@ -38,6 +38,8 @@ pub struct Query<'script> {
     pub scripts: HashMap<String, ScriptDecl<'script>>,
     /// Operators declarations
     pub operators: HashMap<String, OperatorDecl<'script>>,
+    /// Query arguments
+    pub args: Value<'script>,
 }
 
 /// Query statement

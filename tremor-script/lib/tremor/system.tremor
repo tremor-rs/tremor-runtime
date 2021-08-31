@@ -14,7 +14,7 @@ intrinsic fn ingest_ns() as system::ingest_ns;
 ## Returns the instance of tremor.
 ##
 ## Returns a `string`
-intrinsic fn instance() as system::instance;
+intrinsic fn `instance`() as system::`instance`;
 
 ## Returns the current time in epoch nanoseconds
 intrinsic fn nanotime() as system::nanotime;

@@ -1,0 +1,10 @@
+define flow test
+args
+  badger,
+script
+  { "snot": "naughty badger"}
+links
+  connect "snot" to "badger"
+end;
+
+create instance test

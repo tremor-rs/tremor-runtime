@@ -21,6 +21,7 @@ use std::io::Write;
 use std::io::{self, Read};
 use termcolor::{Color, ColorSpec};
 use tremor_common::ids::OperatorIdGen;
+use tremor_script::deploy::Deploy;
 use tremor_script::highlighter::{Dumb as TermNoHighlighter, Highlighter, Term as TermHighlighter};
 use tremor_script::lexer::{self, Token};
 use tremor_script::pos::{Span, Spanned};
@@ -95,6 +96,15 @@ where
                 h.highlight(None, &lexemes, "", !opts.raw_output, None)?;
             } else {
                 Query::highlight_script_with(&opts.raw, h, !opts.raw_output)?;
+            }
+        }
+        SourceKind::Troy => {
+            if preprocess {
+                let mut raw_src = opts.raw.clone();
+                let lexemes = preprocessed_tokens(opts, &mut raw_src)?;
+                h.highlight(None, &lexemes, "", !opts.raw_output, None)?;
+            } else {
+                Deploy::highlight_script_with(&opts.raw, h, !opts.raw_output)?;
             }
         }
         SourceKind::Yaml => error!("Unsupported: yaml"),
@@ -258,6 +268,27 @@ where
                 }
             };
         }
+        SourceKind::Troy => {
+            match Deploy::parse(
+                &env.module_path,
+                opts.src,
+                &opts.raw,
+                vec![],
+                &env.fun,
+                &env.aggr,
+            ) {
+                Ok(runnable) => {
+                    let ast = simd_json::to_string_pretty(&runnable.deploy.suffix())?;
+                    println!();
+                    Script::highlight_script_with(&ast, h, !opts.raw_output)?;
+                }
+                Err(e) => {
+                    if let Err(e) = Script::format_error_from_script(&opts.raw, h, &e) {
+                        eprintln!("Error: {}", e);
+                    };
+                }
+            };
+        }
         SourceKind::Unsupported(_) | SourceKind::Yaml => {
             eprintln!("Unsupported");
         }
@@ -303,30 +334,50 @@ fn dbg_dot<W>(h: &mut W, opts: &Opts) -> Result<()>
 where
     W: Highlighter,
 {
-    if opts.kind != SourceKind::Trickle {
-        return Err("Dot visualisation is only supported for trickle files.".into());
-    }
-    let env = env::setup()?;
-    match Query::parse(
-        &env.module_path,
-        opts.src,
-        &opts.raw,
-        vec![],
-        &env.fun,
-        &env.aggr,
-    ) {
-        Ok(runnable) => {
-            let mut idgen = OperatorIdGen::new();
-            let g = tremor_pipeline::query::Query(runnable).to_pipe(&mut idgen)?;
+    if opts.kind == SourceKind::Trickle {
+        let env = env::setup()?;
+        match Query::parse(
+            &env.module_path,
+            opts.src,
+            &opts.raw,
+            vec![],
+            &env.fun,
+            &env.aggr,
+        ) {
+            Ok(runnable) => {
+                let mut idgen = OperatorIdGen::new();
+                let g = tremor_pipeline::query::Query(runnable).to_pipe(&mut idgen)?;
 
-            println!("{}", g.dot);
-        }
-        Err(e) => {
-            if let Err(e) = Script::format_error_from_script(&opts.raw, h, &e) {
-                eprintln!("Error: {}", e);
-            };
-        }
-    };
+                println!("{}", g.dot);
+            }
+            Err(e) => {
+                if let Err(e) = Script::format_error_from_script(&opts.raw, h, &e) {
+                    eprintln!("Error: {}", e);
+                };
+            }
+        };
+    } else if opts.kind == SourceKind::Troy {
+        let env = env::setup()?;
+        match Deploy::parse(
+            &env.module_path,
+            opts.src,
+            &opts.raw,
+            vec![],
+            &env.fun,
+            &env.aggr,
+        ) {
+            Ok(runnable) => {
+                println!("{}", runnable.dot());
+            }
+            Err(e) => {
+                if let Err(e) = Script::format_error_from_script(&opts.raw, h, &e) {
+                    eprintln!("Error: {}", e);
+                };
+            }
+        };
+    } else {
+        return Err("Dot visualisation is only supported for trickle/troy files.".into());
+    }
     Ok(())
 }
 

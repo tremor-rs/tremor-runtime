@@ -1,0 +1,14 @@
+define flow test
+args
+  snot,
+  badger,
+with
+  snot = "naughty badger"
+links
+  connect "snot" to "badger"
+end;
+
+deploy test
+with
+  snot = "snot",
+end;

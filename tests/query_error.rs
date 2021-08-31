@@ -24,18 +24,20 @@ use tremor_pipeline::FN_REGISTRY;
 use tremor_runtime::errors::*;
 use tremor_script::highlighter::{Dumb, Highlighter};
 use tremor_script::path::ModulePath;
+use tremor_value::literal;
 
 fn to_pipe(module_path: &ModulePath, file_name: &str, query: &str) -> Result<ExecutableGraph> {
     let aggr_reg = tremor_script::aggr_registry();
     let cus = vec![];
     let mut idgen = OperatorIdGen::new();
-    let q = Query::parse(
+    let q = Query::parse_with_args(
         module_path,
         query,
         file_name,
         cus,
         &*FN_REGISTRY.lock()?,
         &aggr_reg,
+        &literal!({}),
     )?;
     Ok(q.to_pipe(&mut idgen)?)
 }

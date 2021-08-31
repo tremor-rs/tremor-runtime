@@ -1,0 +1,2 @@
+use snot;
+create instance broken from snot::badger

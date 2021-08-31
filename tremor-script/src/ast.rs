@@ -16,6 +16,8 @@ pub(crate) mod analyzer;
 /// Base definition for expressions
 pub mod base_expr;
 pub(crate) mod binary;
+/// Tremor Deploy ( troy ) AST
+pub mod deploy;
 /// custom equality definition - checking for equivalence of different AST nodes
 /// e.g. two different event paths with different metadata
 pub mod eq;
@@ -59,6 +61,7 @@ use crate::{
 pub(crate) use analyzer::*;
 pub use base_expr::BaseExpr;
 use beef::Cow;
+pub use deploy::*;
 use halfbrown::HashMap;
 pub use query::*;
 use serde::Serialize;
@@ -531,11 +534,17 @@ where
     aggr_reg: &'registry AggrRegistry,
     can_emit: bool,
     is_in_aggr: bool,
+    // Troy
+    instances: HashMap<String, CreateStmt<'script>>,
+    flows: HashMap<String, FlowDecl<'script>>,
+    connectors: HashMap<String, ConnectorDecl<'script>>,
+    pipelines: HashMap<String, QueryDecl<'script>>,
+    // Trickle
     windows: HashMap<String, WindowDecl<'script>>,
     scripts: HashMap<String, ScriptDecl<'script>>,
     operators: HashMap<String, OperatorDecl<'script>>,
     subquery_defns: HashMap<String, SubqueryDecl<'script>>,
-    aggregates: Vec<InvokeAggrFn<'script>>,
+    pub(crate) aggregates: Vec<InvokeAggrFn<'script>>,
     /// Warnings
     pub warnings: Warnings,
     shadowed_vars: Vec<String>,
@@ -621,6 +630,10 @@ where
             aggr_reg,
             can_emit: true,
             is_in_aggr: false,
+            instances: HashMap::new(),
+            flows: HashMap::new(),
+            connectors: HashMap::new(),
+            pipelines: HashMap::new(),
             windows: HashMap::new(),
             scripts: HashMap::new(),
             operators: HashMap::new(),
@@ -1312,7 +1325,7 @@ impl<'script> StringLit<'script> {
     where
         'script: 'event,
     {
-        // Shortcircut when we have a 1 literal string
+        // Short-circuit when we have a 1 literal string
         if let [StrLitElement::Lit(l)] = self.elements.as_slice() {
             return Ok(l.clone());
         }

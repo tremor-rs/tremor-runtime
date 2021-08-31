@@ -32,6 +32,7 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 use tremor_common::asy::file;
 use tremor_common::time::nanotime;
+use tremor_value::literal;
 
 pub(crate) use crate::binding;
 pub(crate) use crate::connectors;
@@ -740,13 +741,14 @@ type: metrics
         let aggr_reg = tremor_script::aggr_registry();
 
         // register passthrough pipeline
-        let artefact_passthrough = tremor_pipeline::query::Query::parse(
+        let artefact_passthrough = tremor_pipeline::query::Query::parse_with_args(
             module_path,
             "#!config id = \"system::passthrough\"\nselect event from in into out;",
             "<passthrough>",
             Vec::new(),
             &*tremor_pipeline::FN_REGISTRY.lock()?,
             &aggr_reg,
+            &literal!({}), // FIXME runtime args
         )?;
         self.repo
             .publish_pipeline(&PASSTHROUGH_PIPELINE, true, artefact_passthrough)

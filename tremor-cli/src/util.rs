@@ -254,6 +254,8 @@ pub enum SourceKind {
     Tremor,
     /// A trickle source file
     Trickle,
+    /// A troy source file
+    Troy,
     /// A json file
     Json,
     /// A yaml file
@@ -266,6 +268,7 @@ impl fmt::Display for SourceKind {
         match self {
             SourceKind::Tremor => write!(f, "tremor"),
             SourceKind::Trickle => write!(f, "trickle"),
+            SourceKind::Troy => write!(f, "troy"),
             SourceKind::Json => write!(f, "json"),
             SourceKind::Unsupported(None) => write!(f, "<NONE>"),
             SourceKind::Unsupported(Some(ext)) => write!(f, "{}", ext),
@@ -279,6 +282,7 @@ pub(crate) fn get_source_kind(path: &str) -> SourceKind {
         Some("json") => SourceKind::Json,
         Some("tremor") => SourceKind::Tremor,
         Some("trickle") => SourceKind::Trickle,
+        Some("troy") => SourceKind::Troy,
         Some("yml" | "yaml") => SourceKind::Yaml,
         otherwise => SourceKind::Unsupported(otherwise.map(ToString::to_string)),
     }
