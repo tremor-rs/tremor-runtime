@@ -3,4 +3,4 @@ Error:
       |          ^ Module `snot` not found or not readable error in module path: 
                          - tests/deploy_errors/module_not_found/
                          - tremor-script/lib/
-    2 | create instance broken from snot::badger
+    2 | deploy broken from snot::badger

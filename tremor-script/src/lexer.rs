@@ -143,7 +143,6 @@ pub(crate) fn ident_to_token(ident: &str) -> Token {
         "connect" => Token::Connect,
         "flow" => Token::Flow,
         "links" => Token::Links,
-        "instance" => Token::Instance,
         "to" => Token::To,
         "deploy" => Token::Deploy,
         src => Token::Ident(src.into(), false),
@@ -415,8 +414,6 @@ pub enum Token<'input> {
     Links,
     /// The `to` keyword
     To,
-    /// The `instance` keyword
-    Instance,
     /// The `deploy` keyword
     Deploy,
 }
@@ -501,7 +498,6 @@ impl<'input> Token<'input> {
                 | Token::Links
                 | Token::Connect
                 | Token::To
-                | Token::Instance
                 | Token::Deploy
         )
     }
@@ -798,7 +794,6 @@ impl<'input> fmt::Display for Token<'input> {
             Token::Links => write!(f, "links"),
             Token::Connect => write!(f, "connect"),
             Token::To => write!(f, "to"),
-            Token::Instance => write!(f, "instance"),
             Token::Deploy => write!(f, "deploy"),
         }
     }

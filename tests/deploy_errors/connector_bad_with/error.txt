@@ -1,5 +1,5 @@
 Error: 
-    4 | create instance fake
+    4 | deploy fake
     5 | with
     6 |   nope = "yes"
     7 | end;
