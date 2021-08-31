@@ -37,6 +37,8 @@ mod compat;
 /// Context struct for tremor-script
 pub mod ctx;
 mod datetime;
+/// Tremor Deploy ( troy )
+pub mod deploy;
 /// Tremor script function doc helper
 pub mod docs;
 /// Errors
@@ -56,7 +58,7 @@ pub mod path;
 pub mod pos;
 /// Prelude module with important exports
 pub mod prelude;
-/// Tremor Query
+/// Tremor Query ( trickle )
 pub mod query;
 /// Function registry
 pub mod registry;

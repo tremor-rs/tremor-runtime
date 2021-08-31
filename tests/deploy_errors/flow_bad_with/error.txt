@@ -1,0 +1,7 @@
+Error: 
+   11 | deploy test
+   12 | with
+   13 |   snot = "snot",
+   14 | end;
+      | ^^^ Argument `badger` is required, but no defaults are provided in the definition and no final values in the instance
+

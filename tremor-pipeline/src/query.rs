@@ -133,30 +133,57 @@ impl Query {
             .get("id")
             .and_then(ValueAccess::as_str)
     }
+
     /// Source of the query
     #[must_use]
     pub fn source(&self) -> &str {
         &self.0.source
     }
-    /// Parse a query
+
+    // /// Parse a query
+    // ///
+    // /// # Errors
+    // /// if the trickle script can not be parsed
+    // pub fn parse(
+    //     module_path: &ModulePath,
+    //     script: &str,
+    //     file_name: &str,
+    //     cus: Vec<CompilationUnit>,
+    //     reg: &Registry,
+    //     aggr_reg: &AggrRegistry,
+    // ) -> std::result::Result<Self, CompilerError> {
+    //     Ok(Self(tremor_script::query::Query::parse_with_args(
+    //         module_path,
+    //         file_name,
+    //         script,
+    //         cus,
+    //         reg,
+    //         aggr_reg,
+    //         literal!({}),
+    //     )?))
+    // }
+
+    /// Parse a query with arguments
     ///
     /// # Errors
     /// if the trickle script can not be parsed
-    pub fn parse(
+    pub fn parse_with_args(
         module_path: &ModulePath,
         script: &str,
         file_name: &str,
         cus: Vec<CompilationUnit>,
         reg: &Registry,
         aggr_reg: &AggrRegistry,
+        args: &Value<'_>,
     ) -> std::result::Result<Self, CompilerError> {
-        Ok(Self(tremor_script::query::Query::parse(
+        Ok(Self(tremor_script::query::Query::parse_with_args(
             module_path,
             file_name,
             script,
             cus,
             reg,
             aggr_reg,
+            args,
         )?))
     }
 
@@ -824,13 +851,14 @@ mod test {
         let aggr_reg = tremor_script::aggr_registry();
 
         let src = "select event from in into out;";
-        let query = Query::parse(
+        let query = Query::parse_with_args(
             module_path,
             src,
             "<test>",
             Vec::new(),
             &*crate::FN_REGISTRY.lock().unwrap(),
             &aggr_reg,
+            &literal!({}),
         )
         .unwrap();
         assert!(query.id().is_none());
@@ -838,13 +866,14 @@ mod test {
 
         // check that we can overwrite the id with a config variable
         let src = "#!config id = \"test\"\nselect event from in into out;";
-        let query = Query::parse(
+        let query = Query::parse_with_args(
             module_path,
             src,
             "<test>",
             Vec::new(),
             &*crate::FN_REGISTRY.lock().unwrap(),
             &aggr_reg,
+            &literal!({}),
         )
         .unwrap();
         assert_eq!(query.id().unwrap(), "test");
@@ -857,13 +886,14 @@ mod test {
         let aggr_reg = tremor_script::aggr_registry();
 
         let src = "select event from in/test_in into out/test_out;";
-        let q = Query::parse(
+        let q = Query::parse_with_args(
             module_path,
             src,
             "<test>",
             Vec::new(),
             &*crate::FN_REGISTRY.lock().unwrap(),
             &aggr_reg,
+            &literal!({}),
         )
         .unwrap();
 

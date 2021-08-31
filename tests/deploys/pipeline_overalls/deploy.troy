@@ -1,0 +1,12 @@
+define pipeline identity
+args
+  snot = "1",
+with
+  snot = "#{args.snot}2",
+script
+  { "snot": "#{args.snot}3" }
+pipeline
+  select args from in into out;
+end;
+
+deploy identity;

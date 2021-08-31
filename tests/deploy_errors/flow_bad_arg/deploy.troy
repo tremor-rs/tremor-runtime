@@ -1,0 +1,8 @@
+define flow test
+args
+  snot
+links
+  connect "snot" to "badger"
+end;
+
+deploy test;
