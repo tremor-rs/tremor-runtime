@@ -13,6 +13,8 @@
 // limitations under the License.
 use std::fmt::Display;
 
+pub type Result<T> = std::result::Result<T, Error>;
+
 /// A shared error for common functions
 #[derive(Debug)]
 pub enum Error {
@@ -24,6 +26,30 @@ pub enum Error {
     FileCanonicalize(std::io::Error, String),
     /// Failed to change working directory
     Cwd(std::io::Error, String),
+    /// Failed to parse URL
+    UrlParseError(url::ParseError),
+    /// Invalid Tremor Url
+    InvalidTremorUrl(String, String),
+    /// Generic untyped error message
+    Generic(String),
+}
+
+impl From<String> for Error {
+    fn from(e: String) -> Self {
+        Self::Generic(e)
+    }
+}
+
+impl From<&str> for Error {
+    fn from(e: &str) -> Self {
+        Self::Generic(e.to_string())
+    }
+}
+
+impl From<url::ParseError> for Error {
+    fn from(e: url::ParseError) -> Self {
+        Self::UrlParseError(e)
+    }
 }
 
 impl Display for Error {
@@ -35,6 +61,11 @@ impl Display for Error {
                 write!(w, "Failed to canonicalize path `{}`: {}", f, e)
             }
             Error::Cwd(e, f) => write!(w, "Failed to change working directory `{}`: {}", f, e),
+            Error::UrlParseError(e) => write!(w, "Failed to parse URL `{}`", e),
+            Error::InvalidTremorUrl(reason, detail) => {
+                write!(w, "Invalid Tremor URL, {}: `{}`", reason, detail)
+            }
+            Error::Generic(msg) => write!(w, "Error: {}", msg),
         }
     }
 }

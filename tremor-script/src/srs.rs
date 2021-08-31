@@ -13,13 +13,166 @@
 // limitations under the License.
 
 use crate::{
-    ast::{self, query},
+    ast::BaseRef,
+    ast::{self, query, DeployLink, NodeId},
     errors::{Error, Result},
     prelude::*,
 };
+use halfbrown::HashMap;
 use std::{fmt::Debug, mem, pin::Pin, sync::Arc};
 
-///! Thisn file includes our self referential structs
+///! This file includes our self referential structs
+
+/// A deployment ( troy ) and it's attached source.
+///
+/// Implemention analougous to `EventPayload`
+///
+/// It is essential to never access the parts of the struct outside of it's
+/// implementation! This will void all warenties and likely lead to errors.
+///
+/// They **must** remain private. All interactions with them have to be guarded
+/// by the implementation logic to ensure they remain sane.
+///
+#[derive(Clone)]
+pub struct Deploy {
+    /// The vector of raw input values
+    raw: Vec<Arc<Pin<Vec<u8>>>>,
+    pub(crate) script: ast::Deploy<'static>,
+}
+
+#[cfg(not(tarpaulin_include))] // this is a simple Debug implementation
+impl Debug for Deploy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.script.fmt(f)
+    }
+}
+
+/// Captures the deployable artefacts resolved from a top level troy definition
+/// This type isn't directly self-referential but it stores a mapping of nominal
+/// identities to deployoment creation statements that are self-referential
+///
+/// This represents a single atomic unit of deployment and can be composed of
+/// multiple artefacts ( connectors or pipelines)  that are interconnected through
+/// flow statements.
+///
+/// The `deploy` that build on these artefacts are the atoms of deployment that
+/// result in similarly named runtime counterparts being deployed against them.
+///
+pub struct UnitOfDeployment {
+    /// Instances for this deployment unit
+    pub instances: HashMap<String, CreateStmt>,
+}
+
+/// A fully resolved deployable artefact
+#[derive(Clone, Debug, PartialEq)]
+pub enum AtomOfDeployment {
+    /// A deployable pipeline instance
+    Pipeline(String, Query),
+    /// A deployable connector instance
+    Connector(ConnectorDecl),
+    /// A deployable flow instance
+    Flow(FlowDecl),
+}
+
+impl Deploy {
+    /// Provides a Graphviz dot representation of the deployment graph
+    #[must_use]
+    pub fn dot(&self) -> String {
+        self.script.dot()
+    }
+
+    /// borrows the script
+    #[must_use]
+    pub fn suffix(&self) -> &ast::Deploy {
+        &self.script
+    }
+    /// Creates a new Payload with a given byte vector and
+    /// a function to turn it into a value and metadata set.
+    ///
+    /// The return can reference the the data it gets passed
+    /// in the function.
+    ///
+    /// Internally the lifetime will be bound to the raw part
+    /// of the struct.
+    ///
+    /// # Errors
+    /// errors if the conversion function fails
+    pub fn try_new<E, F>(mut raw: String, f: F) -> std::result::Result<Self, E>
+    where
+        F: for<'head> FnOnce(&'head mut String) -> std::result::Result<ast::Deploy<'head>, E>,
+    {
+        use ast::Deploy;
+        let structured = f(&mut raw)?;
+        // This is where the magic happens
+        // ALLOW: this is sound since we implement a self referential struct
+        let structured = unsafe { mem::transmute::<Deploy<'_>, Deploy<'static>>(structured) };
+        // This is possibl as String::into_bytes just returns the `vec` of the string
+        let raw = Pin::new(raw.into_bytes());
+        let raw = vec![Arc::new(raw)];
+        Ok(Self {
+            raw,
+            script: structured,
+        })
+    }
+
+    /// Analyses a deployment file ( troy ) to determine if the
+    /// specification is deployable.
+    ///
+    /// This analysis will check that flow definitions and instances
+    /// are correctly defined based on static compile time checks.
+    ///
+    /// Runtime checks are not performed.
+    ///
+    /// # Errors
+    /// If definitions are incomplete or invalid and instances
+    /// are not deployable based on static analysis
+    ///
+    pub fn as_deployment_unit(&self) -> Result<UnitOfDeployment> {
+        use ast::deploy::DeployStmt as StmtKind;
+        let mut instances = HashMap::new();
+
+        for stmt in &self.script.stmts {
+            if let StmtKind::DeployFlowStmt(ref stmt) = stmt {
+                // FIXME TODO Caching pre friday-design behaviour - until we verify the friday semantics
+                //                let atom = FlowDecl::new_from_deploy(self, &stmt.atom.fqn())?;
+                let atom = match &stmt.atom {
+                    StmtKind::FlowDecl(atom) => FlowDecl::new_from_deploy(self, &atom.node_id)?,
+                    _otherwise => todo!(),
+                };
+                instances.insert(
+                    stmt.fqn(),
+                    CreateStmt {
+                        node_id: stmt.node_id.clone(),
+                        atom,
+                    },
+                );
+            }
+        }
+
+        Ok(UnitOfDeployment { instances })
+    }
+}
+
+/*
+====================================
+*/
+
+/// A troy create statement and it's attached source.
+///
+/// This type is not itself self-referential but contains
+/// deployment atoms which may in turn be self-referential.
+///
+pub struct CreateStmt {
+    /// Identity
+    pub node_id: NodeId,
+    /// Atomic unit of deployment
+    pub atom: FlowDecl,
+    //    pub atom: AtomOfDeployment,
+}
+
+/*
+====================================
+*/
 
 /// A script and it's attached source.
 ///
@@ -96,11 +249,15 @@ impl Script {
 /// by the implementation logic to ensure they remain sane.
 ///
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct Query {
     /// The vector of raw input values
     raw: Vec<Arc<Pin<Vec<u8>>>>,
     query: ast::Query<'static>,
+    /// NodeId of this declaration
+    pub node_id: NodeId,
+    /// NodeId of definition this declaration refers to
+    target_node_id: NodeId,
 }
 
 #[cfg(not(tarpaulin_include))] // this is a simple Debug implementation
@@ -111,6 +268,52 @@ impl Debug for Query {
 }
 
 impl Query {
+    /// Creates a new Query with a pre-existing query sourced from a troy
+    /// deployment where the query is embedded in pipeline statements
+    /// # Errors
+    /// If the query self-referential struct cannot be safely created by id from the deployment provided
+    pub fn new_from_deploy(
+        origin: &Deploy,
+        id: &NodeId,
+        target: &NodeId,
+    ) -> std::result::Result<Self, CompilerError> {
+        let pipeline_refutable = origin
+            .script
+            .definitions
+            .values()
+            .find(|query| {
+                if let ast::deploy::DeployStmt::PipelineDecl(candidate) = query {
+                    target == &candidate.node_id
+                } else {
+                    false
+                }
+            })
+            .ok_or_else(|| CompilerError {
+                error: Error::from(format!("Invalid query for pipeline {}", &id).as_str()),
+                cus: vec![],
+            })?;
+
+        if let ast::deploy::DeployStmt::PipelineDecl(pipeline) = pipeline_refutable {
+            let query = pipeline.query.clone();
+            Ok(Self {
+                /// We capture the origin - so that the pinned raw memory is cached
+                /// with our own self-reference composing a self-referential struct
+                /// by composition - by tracking the origin with the embedded query
+                /// of interest referential safety should be preserved
+                raw: origin.raw.clone(),
+                query: unsafe { mem::transmute(query) },
+                node_id: id.clone(),
+                target_node_id: pipeline.node_id.clone(),
+            })
+        } else {
+            return Err(CompilerError {
+                // FIXME TODO hygienic
+                error: Error::from(format!("Expected a pipeline definition {}", id.fqn()).as_str()),
+                cus: vec![],
+            });
+        }
+    }
+
     /// borrows the query
     #[must_use]
     pub fn suffix(&self) -> &ast::Query {
@@ -128,21 +331,30 @@ impl Query {
     ///
     /// # Errors
     /// errors if the conversion function fails
-    pub fn try_new<E, F>(mut raw: String, f: F) -> std::result::Result<Self, E>
+    // FIXME TODO pass in filename of trickle or id of troy pipe definiton here
+    pub fn try_new<E, F>(target: &str, mut raw: String, f: F) -> std::result::Result<Self, E>
     where
         F: for<'head> FnOnce(&'head mut String) -> std::result::Result<ast::Query<'head>, E>,
     {
         use ast::Query;
         let structured = f(&mut raw)?;
-        // This is where the magic happens
+        // We leverage pinning and atomic reference counting in this
+        // self referential struct so that we can safely transmute to
+        // and narrow down to the structural query type.
+        //
         // ALLOW: this is sound since we implement a self referential struct
         let structured = unsafe { mem::transmute::<Query<'_>, Query<'static>>(structured) };
-        // This is possibl as String::into_bytes just returns the `vec` of the string
+        // This is possible as String::into_bytes just returns the `vec` of the string
         let raw = Pin::new(raw.into_bytes());
         let raw = vec![Arc::new(raw)];
+        // This is a top level query and is not embedded - so we don't need to track the origin for referential safety
+        // Thus we do not need to track nor pin the origin as we are the top level self referential structure or origin
+        // ourselves
         Ok(Self {
             raw,
             query: structured,
+            node_id: NodeId::new(target.to_string(), vec![]), // FIXME TODO fix
+            target_node_id: NodeId::new(target.to_string(), vec![]),
         })
     }
 
@@ -171,9 +383,90 @@ impl Query {
 ====================================
 */
 
+/// A troy tatement and it's attached source.
+///
+/// Implemention analougous to `EventPayload`
+///
+/// It is essential to never access the parts of the struct outside of it's
+/// implementation! This will void all warenties and likely lead to errors.
+///
+/// They **must** remain private. All interactions with them have to be guarded
+/// by the implementation logic to ensure they remain sane.
+///
+#[derive(Clone)]
+pub struct DeployStmt {
+    /// The vector of raw input values
+    raw: Vec<Arc<Pin<Vec<u8>>>>,
+    structured: ast::deploy::DeployStmt<'static>,
+}
+
+#[cfg(not(tarpaulin_include))] // this is a simple Debug implementation
+impl Debug for DeployStmt {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.structured.fmt(f)
+    }
+}
+
+mod eq_for_deploy_stmt {
+    ///! We have this simply for the same of allowing `NodeConfig` to be `PartialEq` for the use in
+    ///! and `PartialOrd`.
+    ///!
+    ///! We define equality and order by the metadata Id's as they identify statements
+    ///! so two code wise equal statements that are re-typed won't be considered equal
+    use crate::ast::BaseExpr;
+
+    use super::DeployStmt;
+    impl PartialEq for DeployStmt {
+        fn eq(&self, other: &Self) -> bool {
+            self.structured.mid() == other.structured.mid()
+        }
+    }
+
+    /// We order statements by their mid
+    impl PartialOrd for DeployStmt {
+        fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+            self.structured.mid().partial_cmp(&other.structured.mid())
+        }
+    }
+    impl Eq for DeployStmt {}
+}
+
+impl DeployStmt {
+    /// borrow the suffix
+    #[must_use]
+    pub fn suffix(&self) -> &ast::DeployStmt {
+        &self.structured
+    }
+
+    /// Creates a new statement from another SRS
+    ///
+    /// # Errors
+    /// if query `f` errors
+    pub fn try_new_from_query<E, F>(other: &Deploy, f: F) -> std::result::Result<Self, E>
+    where
+        F: for<'head> FnOnce(
+            &'head ast::Deploy,
+        ) -> std::result::Result<ast::deploy::DeployStmt<'head>, E>,
+    {
+        use ast::deploy::DeployStmt;
+        let raw = other.raw.clone();
+        let structured = f(other.suffix())?;
+        // This is where the magic happens
+        // ALLOW: this is sound since we implement a self referential struct
+        let structured =
+            unsafe { mem::transmute::<DeployStmt<'_>, DeployStmt<'static>>(structured) };
+
+        Ok(Self { raw, structured })
+    }
+}
+
+/*
+====================================
+*/
+
 /// A statement and it's attached source.
 ///
-/// Implemention alalougous to `EventPayload`
+/// Implemention analougous to `EventPayload`
 ///
 /// It is essential to never access the parts of the struct outside of it's
 /// implementation! This will void all warenties and likely lead to errors.
@@ -248,6 +541,205 @@ impl Stmt {
 =========================================================================
 */
 
+/// A connector declaration
+#[derive(Clone, PartialEq)]
+pub struct ConnectorDecl {
+    /// The local alias of this connector
+    pub alias: String,
+    /// The target identity of this connector
+    pub id: NodeId,
+    raw: Vec<Arc<Pin<Vec<u8>>>>,
+    /// Arguments for this connector definition
+    pub params: HashMap<String, Value<'static>>,
+    /// The type of connector
+    pub kind: String,
+}
+
+#[cfg(not(tarpaulin_include))] // this is a simple Debug implementation
+impl Debug for ConnectorDecl {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.kind.fmt(f)
+    }
+}
+
+impl ConnectorDecl {
+    /// Creates a new `ConnectorDecl` with a pre-existing connector sourced from a troy
+    /// deployment
+    /// # Errors
+    /// If the self-referential struct cannot be created safely from the deployment provided
+    pub fn new_from_deploy(
+        origin: &Deploy,
+        alias: String,
+        id: &NodeId,
+    ) -> std::result::Result<Self, CompilerError> {
+        let connector_refutable = origin
+            .script
+            .definitions
+            .values()
+            .find(|query| {
+                if let ast::deploy::DeployStmt::ConnectorDecl(target) = query {
+                    id == &target.node_id
+                } else {
+                    false
+                }
+            })
+            .ok_or_else(|| CompilerError {
+                error: Error::from(format!("Invalid connector for deployment {}", &id).as_str()),
+                cus: vec![],
+            })?;
+
+        if let ast::deploy::DeployStmt::ConnectorDecl(connector) = connector_refutable {
+            // Irrefutable
+            Ok(Self {
+                /// We capture the origin - so that the pinned raw memory is cached
+                /// with our own self-reference composing a self-referential struct
+                /// by composition - by tracking the origin with the embedded query
+                /// of interest referential safety should be preserved
+                raw: origin.raw.clone(),
+                id: id.clone(),
+                alias,
+                params: connector.params.clone(),
+                kind: connector.builtin_kind.clone(),
+            })
+        } else {
+            return Err(CompilerError {
+                // FIXME TODO hygienic
+                error: Error::from(
+                    format!("Expected a connector definition {}", id.fqn()).as_str(),
+                ),
+                cus: vec![],
+            });
+        }
+    }
+}
+
+/*
+=========================================================================
+*/
+
+/// A flow declaration
+#[derive(Clone, PartialEq)]
+pub struct FlowDecl {
+    /// The identity of this connector
+    pub node_id: NodeId,
+    raw: Vec<Arc<Pin<Vec<u8>>>>,
+    /// Arguments for this flow definition
+    pub params: HashMap<String, Value<'static>>,
+    /// Link specifications
+    pub links: Vec<DeployLink>,
+    /// Artefacts to deploy with this flow
+    pub atoms: Vec<AtomOfDeployment>,
+}
+
+#[cfg(not(tarpaulin_include))] // this is a simple Debug implementation
+impl Debug for FlowDecl {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.node_id.fmt(f)
+    }
+}
+
+impl FlowDecl {
+    /// Creates a new `FlowDecl` with a pre-existing connector sourced from a troy
+    /// deployment
+    /// # Errors
+    /// If the self-referential struct cannot be created safely from the deployment provided
+    pub fn new_from_deploy(
+        origin: &Deploy,
+        id: &NodeId,
+    ) -> std::result::Result<Self, CompilerError> {
+        let flow_refutable = origin
+            .script
+            .definitions
+            .values()
+            .find(|flow| {
+                if let ast::deploy::DeployStmt::FlowDecl(flow) = flow {
+                    id == &flow.node_id
+                } else {
+                    false
+                }
+            })
+            .ok_or_else(|| CompilerError {
+                error: Error::from(format!("Invalid flow for deployment {}", &id).as_str()),
+                cus: vec![],
+            })?;
+
+        let flow = if let ast::deploy::DeployStmt::FlowDecl(flow) = flow_refutable {
+            flow
+        } else {
+            return Err(CompilerError {
+                // FIXME TODO hygienic
+                error: Error::from(format!("Expected a flow definition {}", id.fqn()).as_str()),
+                cus: vec![],
+            });
+        };
+
+        let mut srs_atoms = Vec::new();
+        for stmt in &flow.atoms {
+            match &stmt.atom {
+                ast::DeployStmt::ConnectorDecl(instance) => {
+                    // TODO wire up args
+                    srs_atoms.push(AtomOfDeployment::Connector(ConnectorDecl::new_from_deploy(
+                        origin,
+                        stmt.alias.to_string(),
+                        &instance.node_id,
+                    )?));
+                }
+                ast::DeployStmt::PipelineDecl(instance) => {
+                    // TODO wire up args
+                    srs_atoms.push(AtomOfDeployment::Pipeline(
+                        stmt.alias.to_string(),
+                        Query::new_from_deploy(origin, &instance.node_id, &instance.node_id)?,
+                    ));
+                }
+                ast::DeployStmt::FlowDecl(flow) => {
+                    // FIXME TODO We do not enable sub-flows within flows at this time
+                    //      Decision
+                    //          1 - Error ( cheap )
+                    //          2 - Or, allow sub-flows where they are self-describing and don't use the system connection type ( not so cheap, preferable )
+                    //
+                    return Err(CompilerError {
+                        // FIXME TODO hygienic
+                        error: Error::from(
+                            format!("Invalid statement for deployment {}", &flow.node_id.fqn())
+                                .as_str(),
+                        ),
+                        cus: vec![],
+                    });
+                }
+                ast::DeployStmt::DeployFlowStmt(create) => {
+                    return Err(CompilerError {
+                        // FIXME TODO hygienic
+                        error: Error::from(
+                            format!(
+                                "Unexpected statement for flow statement {}",
+                                &create.node_id.fqn()
+                            )
+                            .as_str(),
+                        ),
+                        cus: vec![],
+                    });
+                }
+            }
+        }
+
+        Ok(Self {
+            /// We capture the origin - so that the pinned raw memory is cached
+            /// with our own self-reference composing a self-referential struct
+            /// by composition - by tracking the origin with the embedded query
+            /// of interest referential safety should be preserved
+            raw: origin.raw.clone(),
+            node_id: id.clone(),
+            params: flow.params.clone(),
+            links: flow.links.clone(),
+            atoms: srs_atoms,
+        })
+    }
+}
+
+/*
+=========================================================================
+*/
+
 /// A script declaration
 #[derive(Clone)]
 pub struct ScriptDecl {
@@ -281,16 +773,13 @@ impl ScriptDecl {
         };
         script.script.consts.args = Value::object();
 
-        if let Some(p) = &script.params {
-            // Set params from decl as meta vars
-            for (name, value) in p {
-                // We could clone here since we bind Script to defn_rentwrapped.stmt's lifetime
-                script
-                    .script
-                    .consts
-                    .args
-                    .try_insert(name.clone(), value.clone());
-            }
+        for (name, value) in &script.params {
+            // We could clone here since we bind Script to defn_rentwrapped.stmt's lifetime
+            script
+                .script
+                .consts
+                .args
+                .try_insert(name.clone(), value.clone());
         }
 
         Ok(Self { raw, script })
@@ -306,16 +795,15 @@ impl ScriptDecl {
         self.raw.extend_from_slice(&stmt.raw);
 
         if let query::Stmt::Script(instance) = &stmt.structured {
-            if let Some(map) = &instance.params {
-                for (name, value) in map {
-                    // We can not clone here since we do not bind Script to node_rentwrapped's lifetime
-                    self.script
-                        .script
-                        .consts
-                        .args
-                        .try_insert(name.clone(), value.clone());
-                }
+            for (name, value) in &instance.params {
+                // We can not clone here since we do not bind Script to node_rentwrapped's lifetime
+                self.script
+                    .script
+                    .consts
+                    .args
+                    .try_insert(name.clone(), value.clone());
             }
+
             Ok(())
         } else {
             Err("Trying to turn something into script create that isn't a script create".into())

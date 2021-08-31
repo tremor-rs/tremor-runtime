@@ -8,7 +8,7 @@
 ## inserting the capture named foo.
 ##
 ## Returns a `string`
-intrinsic fn replace(regex, input, to) as re::replace;
+intrinsic fn replace(regex, input, `to`) as re::replace;
 
 ## Replaces all occurrences of regex in the input string with to.
 ##
@@ -17,7 +17,7 @@ intrinsic fn replace(regex, input, to) as re::replace;
 ## inserting the capture named foo.
 ##
 ## Returns a `string`
-intrinsic fn replace_all(regex, input, to) as re::replace_all;
+intrinsic fn replace_all(regex, input, `to`) as re::replace_all;
 
 ## Returns if the regex machines input.
 ##

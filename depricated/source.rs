@@ -20,7 +20,7 @@ use crate::pipeline;
 use crate::preprocessor::{make_preprocessors, preprocess, Preprocessors};
 use crate::system::World;
 use crate::url::ports::{ERR, METRICS, OUT};
-use crate::url::TremorUrl;
+use tremor_common::url::TremorUrl;
 
 use crate::Result;
 use async_std::channel::{unbounded, Receiver};
@@ -56,7 +56,7 @@ pub(crate) mod stdin;
 pub(crate) mod tcp;
 pub(crate) mod udp;
 #[cfg(unix)]
-pub mod unix_socket;
+pub(crate) mod unix_socket;
 pub(crate) mod ws;
 
 struct StaticValue(Value<'static>);

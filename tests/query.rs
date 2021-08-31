@@ -23,17 +23,19 @@ use tremor_pipeline::{Event, EventId};
 use tremor_runtime::errors::*;
 use tremor_script::path::ModulePath;
 use tremor_script::utils::*;
+use tremor_value::literal;
 
 fn to_pipe(module_path: &ModulePath, file_name: &str, query: &str) -> Result<ExecutableGraph> {
     let aggr_reg = tremor_script::aggr_registry();
     let mut idgen = OperatorIdGen::new();
-    let q = Query::parse(
+    let q = Query::parse_with_args(
         module_path,
         query,
         file_name,
         vec![],
         &*FN_REGISTRY.lock()?,
         &aggr_reg,
+        &literal!({}),
     )?;
     Ok(q.to_pipe(&mut idgen)?)
 }
@@ -129,16 +131,16 @@ test_cases!(
     pp_alias_operator,
     pp_config_directive,
     // INSERT
-    subquery_group_by_size,
-    subquery_complex_args,
-    subquery_nested_script,
-    subquery_nested_operator,
+    pipeline_group_by_size,
+    pipeline_complex_args,
+    pipeline_nested_script,
+    pipeline_nested_operator,
     args_nesting_no_leakage,
     args_nesting_redefine,
     module_module_containment,
-    module_in_subquery,
-    subquery_nested_subquery,
-    subquery_passthrough,
+    module_in_pipeline,
+    pipeline_nested_pipeline,
+    pipeline_passthrough,
     alias_script_params_overwrite,
     cardinality,
     mod_def,

@@ -1,6 +1,6 @@
 define script s
 script
-  let event.nested = patch event.nested of insert "new key" => "value", erase "nested_key" end;
+  let event.nested = patch event.nested of insert "new key" => "value"; erase "nested_key" end;
   event
 end;
 

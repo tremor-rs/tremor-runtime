@@ -5,8 +5,8 @@ mod m with
     end;
 end;
 
-define query add
-query
+define pipeline add
+pipeline
   mod m with
     const a = 1;
     fn add(v) with
@@ -16,6 +16,6 @@ query
   select m::add(event) from in into out;
 end;
 
-create query add;
+create pipeline add;
 select event from in into add;
 select event from add into out;

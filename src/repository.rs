@@ -19,14 +19,13 @@
 mod artefact;
 
 use crate::errors::{Kind as ErrorKind, Result};
-use crate::url::TremorUrl;
-use crate::QSIZE;
 use async_std::channel::{bounded, Sender};
 use async_std::task;
 use hashbrown::{hash_map::Entry, HashMap};
 use std::default::Default;
 use std::fmt;
 use std::sync::atomic::Ordering;
+use tremor_common::url::TremorUrl;
 
 /// A binding artefact
 pub use artefact::Binding as BindingArtefact;

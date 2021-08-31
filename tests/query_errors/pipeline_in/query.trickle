@@ -1,0 +1,8 @@
+define pipeline in
+pipeline
+  select event from in into out;
+end;
+
+create pipeline in;
+select event from in into in;
+select event from in into out;

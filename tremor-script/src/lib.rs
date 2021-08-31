@@ -22,10 +22,6 @@
     clippy::unnecessary_unwrap,
     clippy::pedantic
 )]
-// TODO this is needed due to a false positive in clippy
-// https://github.com/rust-lang/rust/issues/83125
-// we will need this in 1.53.1
-#![allow(proc_macro_back_compat)]
 
 #[cfg(test)]
 #[macro_use]
@@ -37,6 +33,8 @@ mod compat;
 /// Context struct for tremor-script
 pub mod ctx;
 mod datetime;
+/// Tremor Deploy ( troy )
+pub mod deploy;
 /// Tremor script function doc helper
 pub mod docs;
 /// Errors
@@ -56,7 +54,7 @@ pub mod path;
 pub mod pos;
 /// Prelude module with important exports
 pub mod prelude;
-/// Tremor Query
+/// Tremor Query ( trickle )
 pub mod query;
 /// Function registry
 pub mod registry;
@@ -75,6 +73,7 @@ extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 
+pub use crate::ast::deploy::raw::run_script;
 pub use crate::ast::query::SelectType;
 pub use crate::ctx::{EventContext, EventOriginUri};
 pub use crate::query::Query;

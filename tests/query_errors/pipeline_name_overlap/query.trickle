@@ -1,0 +1,11 @@
+define script add
+script
+  event + 1
+end;
+
+define pipeline add
+pipeline
+  select event + 1 from in into out;
+end;
+create pipeline add;
+create script add;

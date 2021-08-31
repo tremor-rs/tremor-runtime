@@ -1,0 +1,15 @@
+define pipeline subq
+pipeline
+  define script adder
+  script
+    event.a + event.b
+  end;
+  create script adder;
+  select event from in into adder;
+  select event from adder into out;
+end;
+
+create pipeline subq;
+
+select event from in into subq;
+select event from subq into out;

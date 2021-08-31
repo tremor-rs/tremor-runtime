@@ -71,7 +71,11 @@ impl ServerRun {
 
         // Logging
         if let Some(logger_config) = &self.logger_config {
-            log4rs::init_file(logger_config, log4rs::config::Deserializers::default())?;
+            if let Err(e) =
+                log4rs::init_file(logger_config, log4rs::config::Deserializers::default())
+            {
+                return Err(e.into());
+            }
         } else {
             env_logger::init();
         }
@@ -117,6 +121,14 @@ impl ServerRun {
         for config_file in &self.artefacts {
             let kind = get_source_kind(config_file);
             match kind {
+                SourceKind::Troy => {
+                    return Err(ErrorKind::UnsupportedFileType(
+                        config_file.to_string(),
+                        kind,
+                        "troy",
+                    )
+                    .into());
+                }
                 SourceKind::Trickle => {
                     if let Err(e) = tremor_runtime::load_query_file(&world, config_file).await {
                         return Err(ErrorKind::FileLoadError(config_file.to_string(), e).into());
@@ -141,21 +153,23 @@ impl ServerRun {
             }
         }
 
-        let api_handle = if !self.no_api {
+        let api_handle = if self.no_api {
+            // dummy task never finishing
+            async_std::task::spawn(async move {
+                future::pending::<()>().await;
+            })
+        } else {
             let host = self.api_host.clone();
-            let app = api_server(&world);
             eprintln!("Listening at: http://{}", host);
             info!("Listening at: http://{}", host);
 
+            let app = api_server(&world);
             async_std::task::spawn(async move {
                 if let Err(e) = app.listen(host).await {
                     error!("API Error: {}", e);
                 }
                 warn!("API stopped.");
             })
-        } else {
-            // dummy task never finishing
-            async_std::task::spawn(async move { future::pending().await })
         };
         // waiting for either
         match future::select(handle, api_handle).await {

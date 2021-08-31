@@ -14,8 +14,8 @@
 
 use crate::api::prelude::*;
 use hashbrown::HashMap;
+use tremor_common::url::TremorUrl;
 use tremor_runtime::repository::{BindingArtefact, RepoWrapper};
-use tremor_runtime::url::TremorUrl;
 
 #[derive(Serialize)]
 struct BindingWrap {
