@@ -91,16 +91,16 @@ fn eval_suite_tests(
 
     let ll = suite_spec.exprs.len();
     for (idx, item) in suite_spec.exprs.iter().enumerate() {
-        if let ImutExpr(ImutExprInt::Invoke1(Invoke {
+        if let ImutExprInt::Invoke1(Invoke {
             module, fun, args, ..
-        })) = item
+        }) = item
         {
             if module != &["test"] || fun != "test" {
                 continue;
             }
-            let spec = &args
+            let spec = args
                 .first()
-                .and_then(ImutExpr::as_record)
+                .and_then(ImutExprInt::as_record)
                 .ok_or_else(|| Error::from("Invalid test specification"))?;
 
             let mut found_tags = Vec::new();
@@ -245,7 +245,7 @@ pub(crate) fn run_suite(
                     // A Test suite
                     let spec = args
                         .first()
-                        .and_then(ImutExpr::as_record)
+                        .and_then(ImutExprInt::as_record)
                         .ok_or_else(|| Error::from("Invalid test specification"))?;
 
                     let mut found_tags = Vec::new();

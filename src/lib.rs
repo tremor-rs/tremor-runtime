@@ -67,8 +67,6 @@ pub mod registry;
 pub mod repository;
 /// Tremor runtime system
 pub mod system;
-/// Tremor URI
-pub mod url;
 /// Utility functions
 pub mod utils;
 /// Tremor runtime version tools
@@ -89,13 +87,14 @@ use crate::errors::{Error, Result};
 
 pub(crate) use crate::config::{Binding, Connector};
 use crate::repository::BindingArtefact;
-use crate::url::TremorUrl;
 pub use serde_yaml::Value as OpConfig;
 use system::World;
+use tremor_common::url::TremorUrl;
 pub use tremor_pipeline::Event;
 use tremor_pipeline::{query::Query, FN_REGISTRY};
 use tremor_script::highlighter::Term as TermHighlighter;
 use tremor_script::Script;
+use tremor_value::literal;
 
 lazy_static! {
     /// Default Q Size
@@ -121,13 +120,14 @@ pub async fn load_query_file(world: &World, file_name: &str) -> Result<usize> {
     // TODO: Should ideally be const
     let aggr_reg = tremor_script::registry::aggr();
     let module_path = tremor_script::path::load();
-    let query = Query::parse(
+    let query = Query::parse_with_args(
         &module_path,
         &raw,
         file_name,
         vec![],
         &*FN_REGISTRY.lock()?,
         &aggr_reg,
+        &literal!({}), // TODO add support for runtime args once troy+connectors branches have merged
     );
     let query = match query {
         Ok(query) => query,

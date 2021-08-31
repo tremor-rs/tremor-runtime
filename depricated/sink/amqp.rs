@@ -19,7 +19,7 @@
 //! The `amqp` offramp allows producing events to an amqp broker.
 
 use crate::sink::prelude::*;
-use crate::url::TremorUrl;
+use tremor_common::url::TremorUrl;
 use async_std::channel::{bounded, Receiver};
 use halfbrown::HashMap;
 use lapin::{

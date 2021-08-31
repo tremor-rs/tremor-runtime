@@ -1,0 +1,8 @@
+define pipeline passthrough
+args
+  badger = "snot",
+pipeline
+   dark horse
+end;
+
+deploy passthrough

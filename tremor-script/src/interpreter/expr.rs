@@ -35,6 +35,7 @@ use std::{
     borrow::{Borrow, Cow},
     iter,
 };
+
 #[derive(Debug)]
 /// Continuation context to control program flow
 pub enum Cont<'run, 'event>

@@ -1,0 +1,9 @@
+define pipeline passthrough
+pipeline
+  select event from in into out;
+end;
+
+create pipeline passthrough;
+
+select event from in into passthrough/in;
+select event from passthrough/snot into out;

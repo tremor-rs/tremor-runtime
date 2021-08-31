@@ -1,5 +1,5 @@
 define script countable
-with
+args
   seed = 10,
   name = "s0",
 script

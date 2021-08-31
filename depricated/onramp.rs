@@ -16,7 +16,7 @@ use crate::metrics::RampReporter;
 use crate::pipeline;
 use crate::repository::ServantId;
 use crate::source::prelude::*;
-use crate::url::TremorUrl;
+use tremor_common::url::TremorUrl;
 use crate::OpConfig;
 use async_std::{
     channel::Sender,
@@ -58,45 +58,65 @@ pub enum Msg {
 /// onramp address
 pub struct Addr(pub(crate) Sender<Msg>);
 
-impl Addr {
-    pub(crate) async fn send(&self, msg: Msg) -> Result<()> {
-        Ok(self.0.send(msg).await?)
-    }
-}
-
-impl From<Sender<Msg>> for Addr {
-    fn from(sender: Sender<Msg>) -> Self {
-        Self(sender)
-    }
-}
-
-/// config for onramps
-pub struct Config<'cfg> {
-    /// unique numeric identifier
+/// Onramp Configuration
+#[allow(clippy::module_name_repetitions)]
+pub struct OnrampConfig<'cfg> {
+    /// Unique onramp id
     pub onramp_uid: u64,
-    /// configured codec
+    /// Codec
     pub codec: &'cfg str,
-    /// map of dynamic codecs
+    /// Codec map
     pub codec_map: halfbrown::HashMap<String, String>,
-    /// pre- and postprocessors
+    /// Processors
     pub processors: Processors<'cfg>,
-    /// thingy that reports metrics
+    /// Metrics reporter
     pub metrics_reporter: RampReporter,
-    /// flag: is this a linked transport?
+    /// Is the onramp a linked transport
     pub is_linked: bool,
-    /// if true only start event processing when the `err` port is connected
+    /// Are errors required
     pub err_required: bool,
 }
 
 /// onramp - legacy source of events
 #[async_trait::async_trait]
+/// Trait for legacy onramps ( replaced by source connectors )
 pub trait Onramp: Send {
-    /// start the onramp
-    async fn start(&mut self, config: Config<'_>) -> Result<Addr>;
-    /// default codec
+    async fn start(&mut self, config: OnrampConfig<'_>) -> Result<Addr>;
     fn default_codec(&self) -> &str;
 }
 
+/// Lookup Onramp builtin implementations given its builtin name as a search key
+/// # Errors
+///   If no ramp implementation is found for the provided key name
+#[cfg(not(tarpaulin_include))]
+pub fn lookup(name: &str, id: &TremorUrl, config: &Option<Value>) -> Result<Box<dyn Onramp>> {
+    match name {
+        "amqp" => amqp::Amqp::from_config(id, config),
+        "blaster" => blaster::Blaster::from_config(id, config),
+        "cb" => cb::Cb::from_config(id, config),
+        "env" => env::Env::from_config(id, config),
+        "file" => file::File::from_config(id, config),
+        "kafka" => kafka::Kafka::from_config(id, config),
+        "postgres" => postgres::Postgres::from_config(id, config),
+        "metronome" => metronome::Metronome::from_config(id, config),
+        "crononome" => crononome::Crononome::from_config(id, config),
+        "stdin" => stdin::Stdin::from_config(id, config),
+        "udp" => udp::Udp::from_config(id, config),
+        "tcp" => tcp::Tcp::from_config(id, config),
+        "rest" => rest::Rest::from_config(id, config),
+        "sse" => sse::Sse::from_config(id, config),
+        "ws" => ws::Ws::from_config(id, config),
+        "discord" => discord::Discord::from_config(id, config),
+        "otel" => otel::OpenTelemetry::from_config(id, config),
+        "nats" => nats::Nats::from_config(id, config),
+        "gsub" => gsub::GoogleCloudPubSub::from_config(id, config),
+        #[cfg(unix)]
+        "unix-socket" => unix_socket::UnixSocket::from_config(id, config),
+        _ => Err(format!("[onramp:{}] Onramp type {} not known", id, name).into()),
+    }
+}
+
+/// Create control event message
 pub struct Create {
     pub id: ServantId,
     pub stream: Box<dyn Onramp>,
@@ -117,36 +137,25 @@ impl fmt::Debug for Create {
 
 /// This is control plane
 pub enum ManagerMsg {
-    Register {
-        onramp_type: String,
-        builder: Box<dyn Builder>,
-        builtin: bool,
-    },
-    Unregister(String),
-    TypeExists(String, Sender<bool>),
-    /// create an onramp instance from the given type and config and send it back
-    Instantiate {
-        onramp_type: String,
-        url: TremorUrl,
-        config: Option<OpConfig>,
-        sender: Sender<Result<Box<dyn Onramp>>>,
-    },
-    // start an onramp, start polling for data if connected
-    Create(Sender<Result<Addr>>, Box<Create>),
+    /// Create command
+    Create(async_channel::Sender<Result<Addr>>, Box<Create>),
+    /// Stop command
     Stop,
 }
 
+/// Manager for onramps
 #[derive(Debug, Default)]
-pub(crate) struct Manager {
+pub struct Manager {
     qsize: usize,
 }
 
 impl Manager {
+    /// Creates a new manager
     pub fn new(qsize: usize) -> Self {
         Self { qsize }
     }
-    #[allow(clippy::too_many_lines)]
-    pub fn start(self) -> (JoinHandle<Result<()>>, ManagerSender) {
+    /// Start
+    pub fn start(self) -> (JoinHandle<Result<()>>, Sender) {
         let (tx, rx) = bounded(self.qsize);
 
         let h = task::spawn::<_, Result<()>>(async move {
@@ -265,7 +274,7 @@ mod test {
     use crate::config::MappingMap;
     use crate::repository::BindingArtefact;
     use crate::system;
-    use crate::url::TremorUrl;
+    use tremor_common::url::TremorUrl;
     use simd_json::json;
     use std::io::Write;
     use std::net::TcpListener;

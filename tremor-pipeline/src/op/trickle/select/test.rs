@@ -61,6 +61,7 @@ fn test_query(stmt: ast::Stmt) -> ast::Query {
         scripts: HashMap::new(),
         operators: HashMap::new(),
         config: HashMap::new(),
+        args: literal!({"snot": "badger"}),
     }
 }
 
@@ -587,7 +588,9 @@ fn select_nowin_nogrp_nowhr_nohav() -> Result<()> {
 
     let stmt_ast = test_select_stmt(stmt_ast);
     let script = "fake".to_string();
-    let query = srs::Query::try_new::<Error, _>(script, |_| Ok(test_query(stmt_ast.clone())))?;
+    let query = srs::Query::try_new::<Error, _>("target".into(), script, |_| {
+        Ok(test_query(stmt_ast.clone()))
+    })?;
 
     let stmt = srs::Stmt::try_new_from_query::<Error, _>(&query, |_| Ok(stmt_ast))?;
 
@@ -613,7 +616,9 @@ fn select_nowin_nogrp_whrt_nohav() -> Result<()> {
 
     let stmt_ast = test_select_stmt(stmt_ast);
     let script = "fake".to_string();
-    let query = srs::Query::try_new::<Error, _>(script, |_| Ok(test_query(stmt_ast.clone())))?;
+    let query = srs::Query::try_new::<Error, _>("target".into(), script, |_| {
+        Ok(test_query(stmt_ast.clone()))
+    })?;
 
     let stmt = srs::Stmt::try_new_from_query::<Error, _>(&query, |_| Ok(stmt_ast))?;
 
@@ -639,7 +644,9 @@ fn select_nowin_nogrp_whrf_nohav() -> Result<()> {
         value: Value::from(false),
     }));
     let stmt_ast = test_select_stmt(stmt_ast);
-    let query = srs::Query::try_new::<Error, _>(script, |_| Ok(test_query(stmt_ast.clone())))?;
+    let query = srs::Query::try_new::<Error, _>("target".into(), script, |_| {
+        Ok(test_query(stmt_ast.clone()))
+    })?;
 
     let stmt = srs::Stmt::try_new_from_query::<Error, _>(&query, |_| Ok(stmt_ast))?;
 
@@ -660,7 +667,9 @@ fn select_nowin_nogrp_whrbad_nohav() -> Result<()> {
 
     let stmt_ast = test_select_stmt(stmt_ast);
     let script = "fake".to_string();
-    let query = srs::Query::try_new::<Error, _>(script, |_| Ok(test_query(stmt_ast.clone())))?;
+    let query = srs::Query::try_new::<Error, _>("target".into(), script, |_| {
+        Ok(test_query(stmt_ast.clone()))
+    })?;
 
     let stmt = srs::Stmt::try_new_from_query::<Error, _>(&query, |_| Ok(stmt_ast))?;
 
@@ -686,7 +695,9 @@ fn select_nowin_nogrp_whrt_havt() -> Result<()> {
 
     let stmt_ast = test_select_stmt(stmt_ast);
     let script = "fake".to_string();
-    let query = srs::Query::try_new::<Error, _>(script, |_| Ok(test_query(stmt_ast.clone())))?;
+    let query = srs::Query::try_new::<Error, _>("target".into(), script, |_| {
+        Ok(test_query(stmt_ast.clone()))
+    })?;
 
     let stmt = srs::Stmt::try_new_from_query::<Error, _>(&query, |_| Ok(stmt_ast))?;
 
@@ -717,7 +728,9 @@ fn select_nowin_nogrp_whrt_havf() -> Result<()> {
 
     let stmt_ast = test_select_stmt(stmt_ast);
     let script = "fake".to_string();
-    let query = srs::Query::try_new::<Error, _>(script, |_| Ok(test_query(stmt_ast.clone())))?;
+    let query = srs::Query::try_new::<Error, _>("target".into(), script, |_| {
+        Ok(test_query(stmt_ast.clone()))
+    })?;
 
     let stmt = srs::Stmt::try_new_from_query::<Error, _>(&query, |_| Ok(stmt_ast))?;
 
@@ -758,7 +771,9 @@ fn select_nowin_nogrp_whrt_havbad() -> Result<()> {
 
     let stmt_ast = test_select_stmt(stmt_ast);
     let script = "fake".to_string();
-    let query = srs::Query::try_new::<Error, _>(script, |_| Ok(test_query(stmt_ast.clone())))?;
+    let query = srs::Query::try_new::<Error, _>("target".into(), script, |_| {
+        Ok(test_query(stmt_ast.clone()))
+    })?;
 
     let stmt = srs::Stmt::try_new_from_query::<Error, _>(&query, |_| Ok(stmt_ast))?;
 

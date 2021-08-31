@@ -34,14 +34,16 @@ use crate::connectors::{
 use crate::errors::{Error, Result};
 use crate::pipeline;
 use crate::preprocessor::{finish, make_preprocessors, preprocess, Preprocessors};
-use crate::url::ports::{ERR, OUT};
-use crate::url::TremorUrl;
 use crate::{
     codec::{self, Codec},
     pipeline::InputTarget,
 };
 use async_std::channel::{bounded, Receiver, Sender, TryRecvError};
 use beef::Cow;
+use tremor_common::url::{
+    ports::{ERR, OUT},
+    TremorUrl,
+};
 use tremor_pipeline::{
     CbAction, Event, EventId, EventIdGenerator, EventOriginUri, DEFAULT_STREAM_ID,
 };
