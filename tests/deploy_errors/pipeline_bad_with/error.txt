@@ -1,5 +1,5 @@
 Error: 
-   11 | create instance passthrough
+   11 | deploy passthrough
    12 | with
    13 |   snot = "snot",
    14 | end;

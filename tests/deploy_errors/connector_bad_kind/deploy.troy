@@ -1,7 +1,7 @@
 define 1 + 2 + 3 connector empty
 end;
 
-create instance fake
+deploy fake
 script
   { nope = "yes" }
 end;

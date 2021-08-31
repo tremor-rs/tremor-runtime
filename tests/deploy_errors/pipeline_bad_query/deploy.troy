@@ -7,4 +7,4 @@ pipeline
    dark horse
 end;
 
-create instance passthrough
+deploy passthrough

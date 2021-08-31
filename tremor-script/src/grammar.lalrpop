@@ -54,17 +54,6 @@ DeployStmt: DeployStmtRaw<'input> = {
     <start:@L> "define" "flow" <id:Ident> <args:ArgSpecificationClause> <links:WithDeployLinks> "end" <end:@L> => DeployStmtRaw::FlowDecl(FlowDeclRaw { start, end, id: id.to_string(), args: args.0, params: args.1, script: args.2, links }),
     <start:@L> "define" "flow" <id:Ident> <links:WithDeployLinks> "end" <end:@L> => DeployStmtRaw::FlowDecl(FlowDeclRaw { start, end, id: id.to_string(), args: None, params: None, script: None, links }),
 
-    //     create          = "create" "instance" instance_id "from" artefact_type "/" artefact_id
-    //                   [ "with" assignment_list ]
-    //                   "end"
-    // assignment_list = assignment [ "," assignment_list ]
-    // assignment      = let_path "=" expr
-    // let_path        = id [ "." id ]
-
-    <start:@L> "create" "instance" <id:Ident> "from" <target:ModularTarget> <args:ArgFinalizationClause> <end:@L> => DeployStmtRaw::CreateStmt(CreateStmtRaw { start, end, id, module: target.0, target: target.1, params: args.0, script: args.1 }),
-    <start:@L> "create" "instance" <id:Ident> "from" <target:ModularTarget> <end:@L> => DeployStmtRaw::CreateStmt(CreateStmtRaw { start, end, id: id.clone(),  module: target.0, target: target.1, params: None, script: None }),
-    <start:@L> "create" "instance" <id:Ident> <args:ArgFinalizationClause> <end:@L> => DeployStmtRaw::CreateStmt(CreateStmtRaw { start, end, id: id.clone(),  module: vec![], target: id, params: args.0, script: args.1 }),
-    <start:@L> "create" "instance" <id:Ident>  <end:@L> => DeployStmtRaw::CreateStmt(CreateStmtRaw { start, end, id: id.clone(), module: vec![], target: id, params: None, script: None }),
     <start:@L> "deploy" <id:Ident> "from" <target:ModularTarget> <args:ArgFinalizationClause> <end:@L> => DeployStmtRaw::CreateStmt(CreateStmtRaw { start, end, id, module: target.0, target: target.1, params: args.0, script: args.1 }),
     <start:@L> "deploy" <id:Ident> "from" <target:ModularTarget> <end:@L> => DeployStmtRaw::CreateStmt(CreateStmtRaw { start, end, id: id.clone(),  module: target.0, target: target.1, params: None, script: None }),
     <start:@L> "deploy" <id:Ident> <args:ArgFinalizationClause> <end:@L> => DeployStmtRaw::CreateStmt(CreateStmtRaw { start, end, id: id.clone(),  module: vec![], target: id, params: args.0, script: args.1 }),
@@ -1659,7 +1648,6 @@ extern {
         "links" => Token::Links,
         "connect" => Token::Connect,
         "to" => Token::To,
-        "instance" => Token::Instance,
         "deploy" => Token::Deploy,
 
         "#!config" => Token::ConfigDirective,

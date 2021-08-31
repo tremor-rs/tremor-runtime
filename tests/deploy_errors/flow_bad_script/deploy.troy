@@ -7,4 +7,4 @@ links
   connect "snot" to "badger"
 end;
 
-create instance test
+deploy test

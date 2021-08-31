@@ -1,7 +1,7 @@
 define snot::badger connector fake
 end;
 
-create instance fake
+deploy fake
 with
   nope = "yes"
 end;
