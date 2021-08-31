@@ -14,13 +14,22 @@
 use tremor_common::ids::OperatorIdGen;
 use tremor_pipeline::query::Query;
 use tremor_script::errors::CompilerError;
+use tremor_value::literal;
 
 fn to_pipe(file_name: String, query: &str) -> std::result::Result<(), CompilerError> {
     let reg = tremor_script::registry();
     let aggr_reg = tremor_script::aggr_registry();
     let module_path = tremor_script::path::load();
     let cus = vec![];
-    let q = Query::parse(&module_path, query, &file_name, cus, &reg, &aggr_reg)?;
+    let q = Query::parse_with_args(
+        &module_path,
+        query,
+        &file_name,
+        cus,
+        &reg,
+        &aggr_reg,
+        &literal!({}),
+    )?;
     let mut idgen = OperatorIdGen::new();
     q.to_pipe(&mut idgen).map_err(|error| CompilerError {
         error: format!("{}", error).into(),

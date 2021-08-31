@@ -126,6 +126,14 @@ pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
         for config_file in config_files {
             let kind = get_source_kind(config_file);
             match kind {
+                SourceKind::Troy => {
+                    return Err(ErrorKind::UnsupportedFileType(
+                        config_file.to_string(),
+                        kind,
+                        "troy",
+                    )
+                    .into());
+                }
                 SourceKind::Trickle => {
                     if let Err(e) = tremor_runtime::load_query_file(&world, config_file).await {
                         return Err(ErrorKind::FileLoadError(config_file.to_string(), e).into());

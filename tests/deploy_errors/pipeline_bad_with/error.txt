@@ -1,0 +1,6 @@
+Error: 
+   11 | create instance passthrough
+   12 | with
+   13 |   snot = "snot",
+   14 | end;
+      | ^^^ Argument `badger` is required, but no defaults are provided in the definition and no final values in the instance

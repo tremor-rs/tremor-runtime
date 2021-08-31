@@ -1,0 +1,7 @@
+define snot::badger connector fake
+end;
+
+create instance fake
+script
+  { "nope": "yes" }
+end;

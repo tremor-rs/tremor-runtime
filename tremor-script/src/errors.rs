@@ -173,7 +173,8 @@ impl ErrorKind {
             AccessError, AggrInAggr, ArrayOutOfRange, AssignIntoArray, AssignToConst,
             BadAccessInEvent, BadAccessInGlobal, BadAccessInLocal, BadAccessInState, BadArity,
             BadArrayIndex, BadType, BinaryDrop, BinaryEmit, CantSetArgsConst, CantSetGroupConst,
-            CantSetWindowConst, Common, DecreasingRange, DoubleConst, DoubleStream,
+            CantSetWindowConst, Common, DecreasingRange, DeployArgNotSpecified,
+            DeployArtefactNotDefined, DeployRequiredArgDoesNotResolve, DoubleConst, DoubleStream,
             DoubleSubqueryStmt, EmptyInterpolation, EmptyScript, ExtraToken, Generic, Grok,
             InvalidAssign, InvalidBinary, InvalidBitshift, InvalidConst, InvalidDrop, InvalidEmit,
             InvalidExtractor, InvalidFloatLiteral, InvalidFn, InvalidHexLiteral, InvalidIntLiteral,
@@ -253,7 +254,10 @@ impl ErrorKind {
             | TailingHereDoc(outer, inner, _, _)
             | Generic(outer, inner, _)
             | AggrInAggr(outer, inner)
-            | NotConstant(outer, inner) => (Some(*outer), Some(*inner)),
+            | NotConstant(outer, inner)
+            | DeployArtefactNotDefined(outer, inner, _)
+            | DeployArgNotSpecified(outer, inner, _)
+            | DeployRequiredArgDoesNotResolve(outer, inner, _) => (Some(*outer), Some(*inner)),
             // Special cases
             EmptyScript
             | Common(_)
@@ -831,6 +835,21 @@ error_chain! {
         SubqueryUnknownPort(stmt: Range, inner: Range, subq_name: String, port_name: String) {
             description("Query does not have this port")
                 display("Query `{}` does not have port `{}`", subq_name, port_name)
+        }
+        /*
+         * Troy statements
+         */
+        DeployArtefactNotDefined(stmt: Range, inner: Range, name: String) {
+            description("Deployment artefact is not defined")
+                display("Artefact used in `from` is not defined or not found: {}", name)
+        }
+        DeployArgNotSpecified(stmt: Range, inner: Range, name: String) {
+            description("Deployment artefact has unknown argument")
+                display("Argument used was not formally specified in originating definition: {}", name)
+        }
+        DeployRequiredArgDoesNotResolve(stmt: Range, inner: Range, name: String) {
+            description("Deployment artefact argument has no value bound")
+                display("Argument `{}` is required, but no defaults are provided in the definition and no final values in the instance", name)
         }
     }
 }

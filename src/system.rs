@@ -28,6 +28,7 @@ use async_std::task::{self, JoinHandle};
 use hashbrown::HashMap;
 use tremor_common::asy::file;
 use tremor_common::time::nanotime;
+use tremor_value::literal;
 
 pub(crate) use crate::offramp;
 pub(crate) use crate::onramp;
@@ -683,13 +684,14 @@ impl World {
 
         let module_path = &tremor_script::path::ModulePath { mounts: Vec::new() };
         let aggr_reg = tremor_script::aggr_registry();
-        let artefact_metrics = tremor_pipeline::query::Query::parse(
+        let artefact_metrics = tremor_pipeline::query::Query::parse_with_args(
             module_path,
             "#!config id = \"system::metrics\"\nselect event from in into out;",
             "<metrics>",
             Vec::new(),
             &*tremor_pipeline::FN_REGISTRY.lock()?,
             &aggr_reg,
+            &literal!({}), // FIXME runtime args
         )?;
         self.repo
             .publish_pipeline(&METRICS_PIPELINE, true, artefact_metrics)
@@ -701,13 +703,14 @@ impl World {
             .await?
             .ok_or_else(|| Error::from("Failed to initialize metrics pipeline."))?;
 
-        let artefact_passthrough = tremor_pipeline::query::Query::parse(
+        let artefact_passthrough = tremor_pipeline::query::Query::parse_with_args(
             module_path,
             "#!config id = \"system::passthrough\"\nselect event from in into out;",
             "<passthrough>",
             Vec::new(),
             &*tremor_pipeline::FN_REGISTRY.lock()?,
             &aggr_reg,
+            &literal!({}), // FIXME runtime args
         )?;
         self.repo
             .publish_pipeline(&PASSTHROUGH_PIPELINE, true, artefact_passthrough)

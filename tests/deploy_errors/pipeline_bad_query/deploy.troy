@@ -1,0 +1,10 @@
+define pipeline passthrough
+args
+  badger,
+script
+  { "snot": "naughty badger", "badger": "dark #{args.snot}" }
+pipeline
+   dark horse
+end;
+
+create instance passthrough

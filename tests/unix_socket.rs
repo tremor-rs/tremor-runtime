@@ -26,6 +26,7 @@ use tremor_runtime::errors::*;
 
 use simd_json::json;
 use tremor_runtime::repository::BindingArtefact;
+use tremor_value::literal;
 
 const SOCKET_PATH: &'static str = "/tmp/test-unix-socket-onramp.sock";
 
@@ -102,13 +103,14 @@ pub async fn unix_socket() -> Result<()> {
     let id = TremorUrl::parse(&format!("/pipeline/{}", "test"))?;
     let module_path = &tremor_script::path::ModulePath { mounts: Vec::new() };
     let aggr_reg = tremor_script::aggr_registry();
-    let artefact = tremor_pipeline::query::Query::parse(
+    let artefact = tremor_pipeline::query::Query::parse_with_args(
         &module_path,
         "select event from in into out;",
         "<test>",
         Vec::new(),
         &*tremor_pipeline::FN_REGISTRY.lock()?,
         &aggr_reg,
+        &literal!({}),
     )?;
     world.repo.publish_pipeline(&id, false, artefact).await?;
 

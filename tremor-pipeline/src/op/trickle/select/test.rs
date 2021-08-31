@@ -61,6 +61,7 @@ fn test_query(stmt: ast::Stmt) -> ast::Query {
         scripts: HashMap::new(),
         operators: HashMap::new(),
         config: HashMap::new(),
+        args: literal!({"snot": "badger"}),
     }
 }
 

@@ -1,0 +1,6 @@
+define pipeline identity
+args
+  snot,
+pipeline
+  select args.snot from in into out;
+end;

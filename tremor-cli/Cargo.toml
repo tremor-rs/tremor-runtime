@@ -50,6 +50,8 @@ tremor-common = { path = "../tremor-common" }
 tremor-pipeline = { path = "../tremor-pipeline" }
 tremor-runtime = { path = "../" }
 tremor-script = { path = "../tremor-script" }
+tremor-value = { path = "../tremor-value" }
+value-trait = "0.2"
 url = "2"
 # mimalloc-rs = { version = "0.1", default-features = true, optional = true }
 # allocator_api = "0.6.0"

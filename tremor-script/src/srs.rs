@@ -13,13 +13,179 @@
 // limitations under the License.
 
 use crate::{
-    ast::{self, query},
+    ast::{self, deploy, query},
     errors::{Error, Result},
     prelude::*,
 };
+use halfbrown::HashMap;
 use std::{fmt::Debug, mem, pin::Pin, sync::Arc};
 
-///! Thisn file includes our self referential structs
+///! This file includes our self referential structs
+
+/// A deployment ( troy ) and it's attached source.
+///
+/// Implemention analougous to `EventPayload`
+///
+/// It is essential to never access the parts of the struct outside of it's
+/// implementation! This will void all warenties and likely lead to errors.
+///
+/// They **must** remain private. All interactions with them have to be guarded
+/// by the implementation logic to ensure they remain sane.
+///
+#[derive(Clone)]
+pub struct Deploy {
+    /// The vector of raw input values
+    raw: Vec<Arc<Pin<Vec<u8>>>>,
+    pub(crate) script: ast::Deploy<'static>,
+}
+
+#[cfg(not(tarpaulin_include))] // this is a simple Debug implementation
+impl Debug for Deploy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.script.fmt(f)
+    }
+}
+
+/// Captures deployment ready artefacts for one troy unit of deployment
+#[derive(Debug)]
+pub struct UnitOfDeployment<'script> {
+    /// Connector definitions for this deployment unit
+    pub connectors: HashMap<String, Box<ast::deploy::ConnectorDecl<'script>>>,
+    /// Pipeline definitions for this deployment unit
+    pub pipelines: HashMap<String, Box<ast::deploy::QueryDecl<'script>>>,
+    /// Flow definitions for this deployment unit
+    pub flows: HashMap<String, Box<ast::deploy::FlowDecl<'script>>>,
+    /// Instances for this deployment unit
+    pub instances: HashMap<String, Box<ast::deploy::CreateStmt<'script>>>,
+}
+
+impl Deploy {
+    /// Provides a Graphviz dot representation of the deployment graph
+    #[must_use]
+    pub fn dot(&self) -> String {
+        self.script.dot()
+    }
+
+    /// borrows the script
+    #[must_use]
+    pub fn suffix(&self) -> &ast::Deploy {
+        &self.script
+    }
+    /// Creates a new Payload with a given byte vector and
+    /// a function to turn it into a value and metadata set.
+    ///
+    /// The return can reference the the data it gets passed
+    /// in the function.
+    ///
+    /// Internally the lifetime will be bound to the raw part
+    /// of the struct.
+    ///
+    /// # Errors
+    /// errors if the conversion function fails
+    pub fn try_new<E, F>(mut raw: String, f: F) -> std::result::Result<Self, E>
+    where
+        F: for<'head> FnOnce(&'head mut String) -> std::result::Result<ast::Deploy<'head>, E>,
+    {
+        use ast::Deploy;
+        let structured = f(&mut raw)?;
+        // This is where the magic happens
+        // ALLOW: this is sound since we implement a self referential struct
+        let structured = unsafe { mem::transmute::<Deploy<'_>, Deploy<'static>>(structured) };
+        // This is possibl as String::into_bytes just returns the `vec` of the string
+        let raw = Pin::new(raw.into_bytes());
+        let raw = vec![Arc::new(raw)];
+        Ok(Self {
+            raw,
+            script: structured,
+        })
+    }
+
+    /// Extracts SRS statements
+    ///
+    /// This clones all statements
+    #[must_use]
+    pub fn extract_stmts(&self) -> Vec<DeployStmt> {
+        // This is valid since we clone `raw` into each
+        // self referential struct, so we keep the data each
+        // SRS points to inside the SRS
+        self.script
+            .stmts
+            .iter()
+            .cloned()
+            .map(|structured| DeployStmt {
+                // THIS IS VERY IMPORTANT (a load bearing clone)
+                raw: self.raw.clone(),
+                structured,
+            })
+            .collect()
+    }
+
+    /// Analyses a deployment file ( troy ) to determine if the
+    /// specification is deployable.
+    ///
+    /// This analysis will check that flow definitions and instances
+    /// are correctly defined based on static compile time checks.
+    ///
+    /// Runtime checks are not performed.
+    ///
+    /// # Errors
+    /// If definitions are incomplete or invalid and instances
+    /// are not deployable based on static analysis
+    ///
+    pub fn as_deployment_unit(&self) -> Result<UnitOfDeployment> {
+        use ast::deploy::ConnectorDecl;
+        use ast::deploy::DeployStmt as StmtKind;
+        use ast::deploy::FlowDecl;
+        use ast::deploy::QueryDecl;
+        let mut connectors: HashMap<String, Box<ConnectorDecl>> = self
+            .script
+            .connectors
+            .iter()
+            .map(|(k, v)| (k.clone(), Box::new(v.clone())))
+            .collect();
+        let mut pipelines: HashMap<String, Box<QueryDecl<'_>>> = self
+            .script
+            .pipelines
+            .iter()
+            .map(|(k, v)| (k.clone(), Box::new(v.clone())))
+            .collect();
+        let mut flows: HashMap<String, Box<FlowDecl<'_>>> = self
+            .script
+            .flows
+            .iter()
+            .map(|(k, v)| (k.clone(), Box::new(v.clone())))
+            .collect();
+        let mut instances = HashMap::new();
+
+        for stmt in &self.script.stmts {
+            match stmt {
+                StmtKind::ConnectorDecl(stmt) => {
+                    connectors.insert(stmt.id.to_string(), stmt.clone());
+                }
+                StmtKind::PipelineDecl(stmt) => {
+                    pipelines.insert(stmt.id.to_string(), stmt.clone());
+                }
+                StmtKind::FlowDecl(stmt) => {
+                    flows.insert(stmt.id.to_string(), stmt.clone());
+                }
+                StmtKind::CreateStmt(stmt) => {
+                    instances.insert(stmt.id.to_string(), stmt.clone());
+                }
+            }
+        }
+
+        Ok(UnitOfDeployment {
+            connectors,
+            pipelines,
+            flows,
+            instances,
+        })
+    }
+}
+
+/*
+====================================
+*/
 
 /// A script and it's attached source.
 ///
@@ -111,6 +277,15 @@ impl Debug for Query {
 }
 
 impl Query {
+    /// Creates a new Query with a pre-existing query
+    #[must_use]
+    pub fn new_from_ast(structured: ast::Query) -> Self {
+        Self {
+            raw: vec![Arc::new(Pin::new(vec![]))],
+            query: unsafe { mem::transmute(structured) },
+        }
+    }
+
     /// borrows the query
     #[must_use]
     pub fn suffix(&self) -> &ast::Query {
@@ -171,9 +346,89 @@ impl Query {
 ====================================
 */
 
+/// A troy tatement and it's attached source.
+///
+/// Implemention analougous to `EventPayload`
+///
+/// It is essential to never access the parts of the struct outside of it's
+/// implementation! This will void all warenties and likely lead to errors.
+///
+/// They **must** remain private. All interactions with them have to be guarded
+/// by the implementation logic to ensure they remain sane.
+///
+#[derive(Clone)]
+pub struct DeployStmt {
+    /// The vector of raw input values
+    raw: Vec<Arc<Pin<Vec<u8>>>>,
+    structured: ast::deploy::DeployStmt<'static>,
+}
+
+#[cfg(not(tarpaulin_include))] // this is a simple Debug implementation
+impl Debug for DeployStmt {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.structured.fmt(f)
+    }
+}
+
+mod eq_for_deploy_stmt {
+    ///! We have this simply for the same of allowing `NodeConfig` to be `PartialEq` for the use in
+    ///! and `PartialOrd`.
+    ///!
+    ///! We define equality and order by the metadata Id's as they identify statements
+    ///! so two code wise equal statements that are re-typed won't be considered equal
+    use crate::ast::BaseExpr;
+
+    use super::DeployStmt;
+    impl PartialEq for DeployStmt {
+        fn eq(&self, other: &Self) -> bool {
+            self.structured.mid() == other.structured.mid()
+        }
+    }
+
+    /// We order statements by their mid
+    impl PartialOrd for DeployStmt {
+        fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+            self.structured.mid().partial_cmp(&other.structured.mid())
+        }
+    }
+    impl Eq for DeployStmt {}
+}
+
+impl DeployStmt {
+    /// borrow the suffix
+    #[must_use]
+    pub fn suffix(&self) -> &ast::DeployStmt {
+        &self.structured
+    }
+    /// Creates a new statement from another SRS
+    ///
+    /// # Errors
+    /// if query `f` errors
+    pub fn try_new_from_query<E, F>(other: &Deploy, f: F) -> std::result::Result<Self, E>
+    where
+        F: for<'head> FnOnce(
+            &'head ast::Deploy,
+        ) -> std::result::Result<ast::deploy::DeployStmt<'head>, E>,
+    {
+        use ast::deploy::DeployStmt;
+        let raw = other.raw.clone();
+        let structured = f(other.suffix())?;
+        // This is where the magic happens
+        // ALLOW: this is sound since we implement a self referential struct
+        let structured =
+            unsafe { mem::transmute::<DeployStmt<'_>, DeployStmt<'static>>(structured) };
+
+        Ok(Self { raw, structured })
+    }
+}
+
+/*
+====================================
+*/
+
 /// A statement and it's attached source.
 ///
-/// Implemention alalougous to `EventPayload`
+/// Implemention analougous to `EventPayload`
 ///
 /// It is essential to never access the parts of the struct outside of it's
 /// implementation! This will void all warenties and likely lead to errors.
@@ -241,6 +496,88 @@ impl Stmt {
         let structured = unsafe { mem::transmute::<Stmt<'_>, Stmt<'static>>(structured) };
 
         Ok(Self { raw, structured })
+    }
+}
+
+/*
+=========================================================================
+*/
+
+/// A query declaration
+#[derive(Clone)]
+pub struct QueryDecl {
+    raw: Vec<Arc<Pin<Vec<u8>>>>,
+    script: ast::QueryDecl<'static>,
+}
+
+#[cfg(not(tarpaulin_include))] // this is a simple Debug implementation
+impl Debug for QueryDecl {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.script.fmt(f)
+    }
+}
+
+impl QueryDecl {
+    /// Access to the raw part of the script
+    #[must_use]
+    pub fn raw(&self) -> &[Arc<Pin<Vec<u8>>>] {
+        &self.raw
+    }
+
+    /// Creates a new decl from a statement
+    ///
+    /// # Errors
+    /// if decl isn't a script declaration
+    pub fn try_new_from_stmt(decl: &DeployStmt) -> Result<Self> {
+        let raw = decl.raw.clone();
+
+        let script = match &decl.structured {
+            deploy::DeployStmt::PipelineDecl(script) => *script.clone(),
+            _other => return Err("Trying to turn a non query into a query operator".into()),
+        };
+
+        // FIXME - add support for const params to query
+        // script.query.consts.args = Value::object();
+        // if let Some(p) = &script.params {
+        //     // Set params from decl as meta vars
+        //     for (name, value) in p {
+        //         // We could clone here since we bind Script to defn_rentwrapped.stmt's lifetime
+        //         script
+        //             .query
+        //             .consts
+        //             .args
+        //             .try_insert(name.clone(), value.clone());
+        //     }
+        // }
+
+        Ok(Self { raw, script })
+    }
+
+    /// Applies a statment to the decl
+    ///
+    /// # Errors
+    /// if stmt is ot a Script
+    pub fn apply_stmt(&mut self, stmt: &DeployStmt) -> Result<()> {
+        // We append first in the case that some data already moved into self.structured by the time
+        // that the join_f fails
+        self.raw.extend_from_slice(&stmt.raw);
+
+        if let ast::deploy::DeployStmt::PipelineDecl(_instance) = &stmt.structured {
+            // FIXME add support for params
+            // if let Some(map) = &instance.params {
+            //     for (name, value) in map {
+            //         // We can not clone here since we do not bind Script to node_rentwrapped's lifetime
+            //         self.script
+            //             .scripts
+            //             .consts
+            //             .args
+            //             .try_insert(name.clone(), value.clone());
+            //     }
+            // }
+            Ok(())
+        } else {
+            Err("Trying to turn something into script create that isn't a script create".into())
+        }
     }
 }
 

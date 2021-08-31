@@ -1,0 +1,6 @@
+define pipeline passthrough
+with
+  snot = "badger"
+pipeline
+  select event from in into out;
+end;
