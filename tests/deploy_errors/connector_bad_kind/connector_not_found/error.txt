@@ -1,3 +1,0 @@
-Error: 
-    1 | create instance broken from snot::badger
-      |                             ^^^^^^^^^^^^ Artefact used in `from` is not defined or not found: snot::badger
