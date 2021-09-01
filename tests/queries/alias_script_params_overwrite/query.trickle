@@ -1,0 +1,10 @@
+use foo::bar as baz;
+
+create script badger from baz::badger
+with
+  value = "badger"
+end;
+
+select event from in into badger;
+
+select event from badger into out;

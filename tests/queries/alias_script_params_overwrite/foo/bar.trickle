@@ -1,0 +1,8 @@
+define script badger
+with
+  value = "snot"
+script
+  let event.badger = args.value;
+  event
+end;
+
