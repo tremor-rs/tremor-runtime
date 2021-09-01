@@ -303,6 +303,13 @@ impl TremorUrl {
         self.scope = Scope::Servant;
     }
 
+    /// Return a clone which is trimmed to the instance
+    pub fn to_instance(&self) -> Self {
+        let mut instance = self.clone();
+        instance.trim_to_instance();
+        instance
+    }
+
     /// Trims the url to the artefact
     pub fn trim_to_artefact(&mut self) {
         self.instance_port = None;
@@ -374,6 +381,14 @@ impl TremorUrl {
     pub fn is_connector(&self) -> bool {
         self.resource_type
             .map(|t| t == ResourceType::Connector)
+            .unwrap_or(false)
+    }
+
+    /// returns `true` if this url references a `Pipeline`
+    #[must_use]
+    pub fn is_pipeline(&self) -> bool {
+        self.resource_type
+            .map(|t| t == ResourceType::Pipeline)
             .unwrap_or(false)
     }
 

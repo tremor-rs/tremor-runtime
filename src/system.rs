@@ -14,8 +14,8 @@
 
 use crate::config::{BindingVec, Config, MappingMap, OffRampVec, OnRampVec};
 use crate::errors::{Error, ErrorKind, Result};
-use crate::lifecycle::{ActivationState, ActivatorLifecycleFsm};
-use crate::registry::{Registries, ServantId};
+use crate::lifecycle::{InstanceLifecycleFsm, InstanceState};
+use crate::registry::{Instance, Registries, ServantId};
 use crate::repository::{
     Artefact, BindingArtefact, ConnectorArtefact, OfframpArtefact, OnrampArtefact,
     PipelineArtefact, Repositories,
@@ -317,7 +317,7 @@ impl World {
         Ok(())
     }
 
-    /// Ensures the existance of an onramp, creating it if required.
+    /// Ensures the existance of an onramp instance, creating it if required.
     ///
     /// # Errors
     ///  * if we can't ensure the onramp is bound
@@ -334,7 +334,7 @@ impl World {
         Ok(())
     }
 
-    /// Ensures the existance of an offramp, creating it if required.
+    /// Ensures the existance of an offramp instance, creating it if required.
     ///
     /// # Errors
     ///  * if we can't ensure the offramp is bound
@@ -350,7 +350,7 @@ impl World {
         }
         Ok(())
     }
-    /// Ensures the existance of an pipeline, creating it if required.
+    /// Ensures the existance of a pipeline instance, creating it if required.
     ///
     /// # Errors
     ///  * if we can't ensure the pipeline is bound
@@ -367,20 +367,22 @@ impl World {
         Ok(())
     }
 
-    /// Bind a pipeline
+    /// Create a pipeline instance, identified by `id` for an existing artefact in the repository
+    /// and start the instance
     ///
     /// # Errors
     ///  * if the id isn't a pipeline instance or can't be bound
-    pub async fn bind_pipeline(&self, id: &TremorUrl) -> Result<ActivationState> {
+    pub async fn bind_pipeline(&self, id: &TremorUrl) -> Result<InstanceState> {
         info!("Binding pipeline {}", id);
         match (&self.repo.find_pipeline(id).await?, &id.instance()) {
             (Some(artefact), Some(_instance_id)) => {
                 let servant =
-                    ActivatorLifecycleFsm::new(self.clone(), artefact.artefact.clone(), id.clone())
+                    InstanceLifecycleFsm::new(self.clone(), artefact.artefact.clone(), id.clone())
                         .await?;
                 self.repo.bind_pipeline(id).await?;
-                // We link to the metrics pipeline
                 let res = self.reg.publish_pipeline(id, servant).await?;
+
+                // We link to the metrics pipeline
                 let mut id = id.clone();
                 id.set_port(&METRICS);
                 let m = vec![(METRICS.to_string(), METRICS_PIPELINE.clone())]
@@ -394,30 +396,27 @@ impl World {
         }
     }
 
-    /// Unbind a pipeline
+    /// Remove a pipeline instance identified by `id` from registry and repo and stop the instance
     ///
     /// # Errors
     ///  * if the id isn't an pipeline instance or the pipeline can't be unbound
-    pub async fn unbind_pipeline(&self, id: &TremorUrl) -> Result<ActivationState> {
+    pub async fn unbind_pipeline(&self, id: &TremorUrl) -> Result<InstanceState> {
         info!("Unbinding pipeline {}", id);
-        match (&self.repo.find_pipeline(id).await?, &id.instance()) {
-            (Some(_artefact), Some(_instance_id)) => {
-                let r = self.reg.unpublish_pipeline(id).await?;
+        match (&self.reg.find_pipeline(id).await?, id.instance()) {
+            (Some(_instance), Some(_instance_id)) => {
+                // remove instance from registry
+                let mut r = self.reg.unpublish_pipeline(id).await?;
+                // stop instance
+                let state = r.stop().await?.state;
+                // unregister instance from repo
                 self.repo.unbind_pipeline(id).await?;
-                Ok(r)
+                Ok(state)
             }
-            (None, _) => Err(ErrorKind::ArtefactNotFound(id.to_string()).into()),
+            (None, _) => Err(ErrorKind::InstanceNotFound(id.to_string()).into()),
             (_, None) => Err(ErrorKind::InvalidInstanceUrl(id.to_string()).into()),
         }
     }
 
-    /// Stop the runtime
-    ///
-    /// # Errors
-    ///  * if the system failed to stop
-    pub async fn stop(&self) -> Result<()> {
-        Ok(self.system.send(ManagerMsg::Stop).await?)
-    }
     /// Links a pipeline
     ///
     /// # Errors
@@ -474,7 +473,7 @@ impl World {
         }
     }
 
-    /// Unlink a pipelein
+    /// Unlink a pipeline
     ///
     /// # Errors
     ///  * if the id isn't a pipeline or the pipeline can't be unlinked
@@ -487,11 +486,11 @@ impl World {
         >,
     ) -> Result<<PipelineArtefact as Artefact>::LinkResult> {
         if let Some(pipeline_a) = self.repo.find_pipeline(id).await? {
-            let r = pipeline_a.artefact.unlink(self, id, mappings).await;
-            if self.reg.find_pipeline(id).await?.is_some() {
+            let r = pipeline_a.artefact.unlink(self, id, mappings).await?;
+            if r {
                 self.unbind_pipeline(id).await?;
             };
-            r
+            Ok(r)
         } else {
             Err(ErrorKind::ArtefactNotFound(id.to_string()).into())
         }
@@ -502,7 +501,7 @@ impl World {
         &self,
         id: &TremorUrl,
         artefact: PipelineArtefact,
-    ) -> Result<ActivationState> {
+    ) -> Result<InstanceState> {
         self.repo.publish_pipeline(id, false, artefact).await?;
         self.bind_pipeline(id).await
     }
@@ -510,12 +509,12 @@ impl World {
     ///
     /// # Errors
     ///  * if the id isn't a onramp instance or the onramp can't be bound
-    pub async fn bind_onramp(&self, id: &TremorUrl) -> Result<ActivationState> {
+    pub async fn bind_onramp(&self, id: &TremorUrl) -> Result<InstanceState> {
         info!("Binding onramp {}", id);
         match (&self.repo.find_onramp(id).await?, &id.instance()) {
             (Some(artefact), Some(_instance_id)) => {
                 let servant =
-                    ActivatorLifecycleFsm::new(self.clone(), artefact.artefact.clone(), id.clone())
+                    InstanceLifecycleFsm::new(self.clone(), artefact.artefact.clone(), id.clone())
                         .await?;
                 self.repo.bind_onramp(id).await?;
                 // We link to the metrics pipeline
@@ -532,19 +531,23 @@ impl World {
             (_, None) => Err(ErrorKind::InvalidInstanceUrl(id.to_string()).into()),
         }
     }
-    /// Unbind an onramp
+    /// Unbind an onramp instance - remove from registry, repo and stop instance
     ///
     /// # Errors
     ///  * if the id isn't an onramp or the onramp can't be unbound
-    pub async fn unbind_onramp(&self, id: &TremorUrl) -> Result<ActivationState> {
+    pub async fn unbind_onramp(&self, id: &TremorUrl) -> Result<InstanceState> {
         info!("Unbinding onramp {}", id);
-        match (&self.repo.find_onramp(id).await?, &id.instance()) {
-            (Some(_artefact), Some(_instsance_id)) => {
-                let r = self.reg.unpublish_onramp(id).await;
+        match (&self.reg.find_onramp(id).await?, id.instance()) {
+            (Some(_instance), Some(_instance_id)) => {
+                // remove from registry
+                let mut fsm = self.reg.unpublish_onramp(id).await?;
+                // stop instance
+                let state = fsm.stop().await?.state;
+                // remove instance from repo
                 self.repo.unbind_onramp(id).await?;
-                r
+                Ok(state)
             }
-            (None, _) => Err(ErrorKind::ArtefactNotFound(id.to_string()).into()),
+            (None, _) => Err(ErrorKind::InstanceNotFound(id.to_string()).into()),
             (_, None) => Err(ErrorKind::InvalidInstanceUrl(id.to_string()).into()),
         }
     }
@@ -613,12 +616,12 @@ impl World {
     ///
     /// # Errors
     ///  * if the id isn't a offramp instance or it can't be bound
-    pub async fn bind_offramp(&self, id: &TremorUrl) -> Result<ActivationState> {
+    pub async fn bind_offramp(&self, id: &TremorUrl) -> Result<InstanceState> {
         info!("Binding offramp {}", id);
         match (&self.repo.find_offramp(id).await?, &id.instance()) {
             (Some(artefact), Some(_instance_id)) => {
                 let servant =
-                    ActivatorLifecycleFsm::new(self.clone(), artefact.artefact.clone(), id.clone())
+                    InstanceLifecycleFsm::new(self.clone(), artefact.artefact.clone(), id.clone())
                         .await?;
                 self.repo.bind_offramp(id).await?;
                 // We link to the metrics pipeline
@@ -640,15 +643,19 @@ impl World {
     ///
     /// # Errors
     ///  * if the id isn't an offramp instance or the offramp can't be unbound
-    pub async fn unbind_offramp(&self, id: &TremorUrl) -> Result<ActivationState> {
+    pub async fn unbind_offramp(&self, id: &TremorUrl) -> Result<InstanceState> {
         info!("Unbinding offramp {} ..", id);
-        match (&self.repo.find_offramp(id).await?, &id.instance()) {
-            (Some(_artefact), Some(_instsance_id)) => {
-                let r = self.reg.unpublish_offramp(id).await;
+        match (&self.reg.find_offramp(id).await?, id.instance()) {
+            (Some(_instance), Some(_instance_id)) => {
+                // remove from registry
+                let mut fsm = self.reg.unpublish_offramp(id).await?;
+                // stop instance
+                let state = fsm.stop().await?.state;
+                // remove instance from repo
                 self.repo.unbind_offramp(id).await?;
-                r
+                Ok(state)
             }
-            (None, _) => Err(ErrorKind::ArtefactNotFound(id.to_string()).into()),
+            (None, _) => Err(ErrorKind::InstanceNotFound(id.to_string()).into()),
             (_, None) => Err(ErrorKind::InvalidInstanceUrl(id.to_string()).into()),
         }
     }
@@ -717,12 +724,12 @@ impl World {
     ///
     /// # Errors
     ///  * if the id isn't a connector instance or it can't be bound
-    pub async fn bind_connector(&self, id: &TremorUrl) -> Result<ActivationState> {
+    pub async fn bind_connector(&self, id: &TremorUrl) -> Result<InstanceState> {
         info!("Binding connector {}", id);
         match (&self.repo.find_connector(id).await?, &id.instance()) {
             (Some(artefact), Some(_instance_id)) => {
                 let servant =
-                    ActivatorLifecycleFsm::new(self.clone(), artefact.artefact.clone(), id.clone())
+                    InstanceLifecycleFsm::new(self.clone(), artefact.artefact.clone(), id.clone())
                         .await?;
                 self.repo.bind_connector(id).await?;
                 let res = self.reg.publish_connector(id, servant).await?;
@@ -733,20 +740,25 @@ impl World {
         }
     }
 
-    /// Start a connector from a bound instance, identified by `id`.
-    ///
-    /// Starting a connector will make it begin emitting events.
+    /// Unbind a connector - remove from registry, stop and unregister from repo
     ///
     /// # Errors
-    ///  * if finding
-    pub async fn start_connector(&self, id: &TremorUrl) -> Result<()> {
-        info!("Starting connector {}", id);
-        if let Some(connector) = self.reg.find_connector(id).await? {
-            connector.send(connectors::Msg::Start).await?;
-        } else {
-            return Err(ErrorKind::InstanceNotFound(id.to_string()).into());
+    ///  * if the id isn't a connector instance or it can't be found in the registry1
+    pub async fn unbind_connector(&self, id: &TremorUrl) -> Result<InstanceState> {
+        info!("Unbinding connector {}", id);
+        match (&self.reg.find_connector(id).await?, id.instance()) {
+            (Some(_instance), Some(_instance_id)) => {
+                // remove from registry
+                let mut fsm = self.reg.unpublish_offramp(id).await?;
+                // stop instance
+                let state = fsm.stop().await?.state;
+                // remove instance from repo
+                self.repo.unbind_offramp(id).await?;
+                Ok(state)
+            }
+            (None, _) => Err(ErrorKind::InstanceNotFound(id.to_string()).into()),
+            (_, None) => Err(ErrorKind::InvalidInstanceUrl(id.to_string()).into()),
         }
-        Ok(())
     }
 
     /// Ensures the existance of a connector instance, bdingin it if required.
@@ -779,10 +791,34 @@ impl World {
         >,
     ) -> Result<<ConnectorArtefact as Artefact>::LinkResult> {
         if let Some(connector_a) = self.repo.find_connector(id).await? {
-            //if self.reg.find_connector(id).await?.is_none() {
-            //    self.bind_connector(id).await?;
-            //}
+            if self.reg.find_connector(id).await?.is_none() {
+                self.bind_connector(id).await?;
+            }
             connector_a.artefact.link(self, id, mappings).await
+        } else {
+            Err(ErrorKind::ArtefactNotFound(id.to_string()).into())
+        }
+    }
+
+    /// Disconnect connector from the connections given in `mappings`
+    /// if fully disconnected, the connector is terminated
+    ///
+    /// # Errors
+    ///  * invalid id, artefact or instance not found, error unlinking or unbinding
+    pub async fn unlink_connector(
+        &self,
+        id: &TremorUrl,
+        mappings: HashMap<
+            <ConnectorArtefact as Artefact>::LinkLHS,
+            <ConnectorArtefact as Artefact>::LinkRHS,
+        >,
+    ) -> Result<<ConnectorArtefact as Artefact>::LinkResult> {
+        if let Some(connector) = self.repo.find_connector(id).await? {
+            let fully_disconnected = connector.artefact.unlink(self, id, mappings).await?;
+            if fully_disconnected {
+                self.unbind_connector(id).await?;
+            }
+            Ok(fully_disconnected)
         } else {
             Err(ErrorKind::ArtefactNotFound(id.to_string()).into())
         }
@@ -792,12 +828,12 @@ impl World {
         &self,
         id: &TremorUrl,
         artefact: &BindingArtefact,
-    ) -> Result<ActivationState> {
+    ) -> Result<InstanceState> {
         info!("Binding binding {}", id);
         match &id.instance() {
             Some(_instance_id) => {
                 let servant =
-                    ActivatorLifecycleFsm::new(self.clone(), artefact.clone(), id.clone()).await?;
+                    InstanceLifecycleFsm::new(self.clone(), artefact.clone(), id.clone()).await?;
                 self.repo.bind_binding(id).await?;
                 self.reg.publish_binding(id, servant).await
             }
@@ -805,23 +841,94 @@ impl World {
         }
     }
 
-    pub(crate) async fn unbind_binding_a(
-        &self,
-        id: &TremorUrl,
-        _artefact: &BindingArtefact,
-    ) -> Result<ActivationState> {
+    pub(crate) async fn unbind_binding(&self, id: &TremorUrl) -> Result<InstanceState> {
         info!("Unbinding binding {}", id);
         match &id.instance() {
             Some(_instance_id) => {
-                let servant = self.reg.unpublish_binding(id).await?;
+                // remove from registry
+                let mut servant = self.reg.unpublish_binding(id).await?;
+                // stop instance
+                let state = servant.stop().await?.state;
+                // remove instance from repo
                 self.repo.unbind_binding(id).await?;
-                Ok(servant)
+                Ok(state)
             }
             None => Err(ErrorKind::InvalidInstanceUrl(id.to_string()).into()),
         }
     }
 
-    /// Links a binding
+    /// create and start an instance of a published binding artefact given a mapping in `mappings`
+    ///
+    /// # Errors
+    ///  * If the id is not a valid binding instance Url
+    ///  * If a binding instance with the same instance id is already running
+    ///  * If for some reason it couldn't be linked or started
+    pub async fn launch_binding(
+        &self,
+        id: &TremorUrl,
+        mappings: HashMap<
+            <BindingArtefact as Artefact>::LinkLHS,
+            <BindingArtefact as Artefact>::LinkRHS,
+        >,
+    ) -> Result<<BindingArtefact as Artefact>::LinkResult> {
+        // ensure no instance is running yet
+        if let Some(_instance) = self.reg.find_binding(id).await? {
+            return Err(ErrorKind::InstanceAlreadyExists(id.to_string()).into());
+        }
+        // find the artefact
+        if let Some(artefact) = self.repo.find_binding(id).await? {
+            // spawn an instance
+            let spawned = artefact.artefact.spawn(self, id.clone()).await?;
+
+            // link the instance given the mappings
+            let link_result = spawned.link(self, id, mappings).await?;
+
+            // create lifecycle FSM, register in repo, publish to registry
+            let servant =
+                InstanceLifecycleFsm::new(self.clone(), link_result.clone(), id.clone()).await?;
+            self.repo.bind_binding(id).await?;
+            self.reg.publish_binding(id, servant).await?;
+
+            // start the instance -> thus starting all contained instances
+            self.reg.start_binding(id).await?;
+            Ok(link_result)
+        } else {
+            return Err(ErrorKind::ArtefactNotFound(id.to_string()).into());
+        }
+    }
+
+    /// Stop, unlink and unregister/unpublish the instance identified by `id`
+    ///
+    /// # Errors
+    ///  * If the id is not a valid binding instance url
+    ///  * If no binding with `id` is currently running, or no artefact could be found
+    ///  * If for some reason stopping, unlinking unpublishing failed
+    pub async fn destroy_binding(&self, id: &TremorUrl) -> Result<()> {
+        if let Some(mut instance) = self.reg.find_binding(id).await? {
+            let mappings = instance
+                .mapping
+                .as_ref()
+                .and_then(|mapping| mapping.get(id).cloned())
+                .unwrap_or(HashMap::new());
+
+            instance.unlink(self, id, mappings).await?;
+
+            // stop this instance - and thus all contained instances
+            instance.stop(self, id).await?;
+
+            // unregister from repository
+            self.repo.unbind_binding(id).await?;
+            // unpublish from registry
+            self.reg.unpublish_binding(id).await?;
+
+            Ok(())
+        } else {
+            return Err(ErrorKind::InstanceNotFound(id.to_string()).into());
+        }
+    }
+
+    /// Instantiates a binding given the mapping in `mappings`
+    ///  * creates an instance if none is running yet
     ///
     /// # Errors
     ///  * If the id isn't a binding or the bindig can't be linked
@@ -842,6 +949,28 @@ impl World {
         } else {
             Err(ErrorKind::ArtefactNotFound(id.to_string()).into())
         }
+    }
+
+    /// Unlinks a binding
+    ///
+    /// # Errors
+    ///  * if the id isn't an binding or the binding can't be unbound
+    pub async fn unlink_binding(
+        &self,
+        id: &TremorUrl,
+        mappings: HashMap<
+            <BindingArtefact as Artefact>::LinkLHS,
+            <BindingArtefact as Artefact>::LinkRHS,
+        >,
+    ) -> Result<<BindingArtefact as Artefact>::LinkResult> {
+        if let Some(binding) = self.reg.find_binding(id).await? {
+            if binding.unlink(self, id, mappings).await? {
+                self.unbind_binding(id).await?;
+            }
+            return Ok(binding);
+        }
+
+        Err(ErrorKind::ArtefactNotFound(id.to_string()).into())
     }
 
     /// Turns the running system into a config
@@ -896,28 +1025,6 @@ impl World {
         }
     }
 
-    /// Unlinks a binding
-    ///
-    /// # Errors
-    ///  * if the id isn't an binding or the binding can't be unbound
-    pub async fn unlink_binding(
-        &self,
-        id: &TremorUrl,
-        mappings: HashMap<
-            <BindingArtefact as Artefact>::LinkLHS,
-            <BindingArtefact as Artefact>::LinkRHS,
-        >,
-    ) -> Result<<BindingArtefact as Artefact>::LinkResult> {
-        if let Some(binding) = self.reg.find_binding(id).await? {
-            if binding.unlink(self, id, mappings).await? {
-                self.unbind_binding_a(id, &binding).await?;
-            }
-            return Ok(binding);
-        }
-
-        Err(ErrorKind::ArtefactNotFound(id.to_string()).into())
-    }
-
     /// Starts the runtime system
     ///
     /// # Errors
@@ -965,6 +1072,15 @@ impl World {
         Ok((world, system_h))
     }
 
+    /// Stop the runtime
+    ///
+    /// # Errors
+    ///  * if the system failed to stop
+    pub async fn stop(&self) -> Result<()> {
+        // TODO: properly stop all the
+        Ok(self.system.send(ManagerMsg::Stop).await?)
+    }
+
     async fn register_system(&mut self) -> Result<()> {
         // register metrics connector
         let artefact: ConnectorArtefact = serde_yaml::from_str(
@@ -983,7 +1099,7 @@ type: metrics
             .ok_or_else(|| Error::from("Failed to initialize system::metrics connector."))?;
         // we need to make sure the metrics connector is consuming metrics events
         // before anything else is started, so we don't fill up the metrics_channel and thus lose messages
-        self.start_connector(&METRICS_CONNECTOR).await?;
+        self.reg.start_connector(&METRICS_CONNECTOR).await?;
 
         // register metrics pipeline
         let module_path = &tremor_script::path::ModulePath { mounts: Vec::new() };
@@ -1019,7 +1135,7 @@ type: metrics
             .publish_pipeline(&PASSTHROUGH_PIPELINE, true, artefact_passthrough)
             .await?;
 
-        // Register stdout connector
+        // Register stdout connector - do not start yet
         let stdout_artefact: ConnectorArtefact = serde_yaml::from_str(
             r#"
 id: system::stdout
@@ -1037,7 +1153,7 @@ config:
             .await?
             .ok_or_else(|| Error::from("Failed to initialize system::stdout connector"))?;
 
-        // Register stderr connector
+        // Register stderr connector - do not start yet
         let stderr_artefact: ConnectorArtefact = serde_yaml::from_str(
             r#"
 id: system::stderr
@@ -1055,7 +1171,7 @@ config:
             .await?
             .ok_or_else(|| Error::from("Failed to initialize system::stderr connector"))?;
 
-        // Register stdin connector
+        // Register stdin connector - do not start yet
         let stdin_artefact: ConnectorArtefact = serde_yaml::from_str(
             r#"
 id: system::stdin
@@ -1108,7 +1224,7 @@ type: stderr
         Ok(())
     }
 
-    pub(crate) async fn start_pipeline(
+    pub(crate) async fn instantiate_pipeline(
         &self,
         config: PipelineArtefact,
         id: ServantId,

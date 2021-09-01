@@ -182,7 +182,7 @@ mod test {
         assert!(super::lookup("syslog").is_ok());
         assert_eq!(
             super::lookup("snot").err().unwrap().to_string(),
-            "Codec 'snot' not found."
+            "Codec \"snot\" not found."
         )
     }
 

@@ -51,8 +51,21 @@ pub enum Msg {
     Response(tremor_pipeline::Event),
 }
 
+#[derive(Debug, Clone)]
 /// onramp address
-pub type Addr = async_channel::Sender<Msg>;
+pub struct Addr(pub(crate) async_channel::Sender<Msg>);
+
+impl Addr {
+    pub(crate) async fn send(&self, msg: Msg) -> Result<()> {
+        Ok(self.0.send(msg).await?)
+    }
+}
+
+impl From<async_channel::Sender<Msg>> for Addr {
+    fn from(sender: async_channel::Sender<Msg>) -> Self {
+        Self(sender)
+    }
+}
 
 /// config for onramps
 pub struct OnrampConfig<'cfg> {
@@ -353,10 +366,7 @@ links:
                 .publish_binding(
                     &TremorUrl::parse(&format!("/binding/{}", "test"))?,
                     false,
-                    BindingArtefact {
-                        binding,
-                        mapping: None,
-                    },
+                    BindingArtefact::new(binding, None),
                 )
                 .await?;
 

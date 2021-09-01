@@ -85,7 +85,7 @@ impl From<async_channel::RecvError> for Error {
 }
 
 impl From<async_std::future::TimeoutError> for Error {
-    fn from(e: async_std::future::TimeoutError) -> Self {
+    fn from(_e: async_std::future::TimeoutError) -> Self {
         Self::new(StatusCode::InternalServerError, "Request timed out".into())
     }
 }

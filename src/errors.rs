@@ -189,7 +189,7 @@ error_chain! {
         }
         CodecNotFound(name: String) {
             description("Codec not found")
-                display("The codec was not found: {}", name)
+                display("Codec \"{}\" not found.", name)
         }
         PublishFailedAlreadyExists(key: String) {
             description("The published artefact already exists")
@@ -209,9 +209,9 @@ error_chain! {
                 display("Cannot unpublish system artefact {}.", key)
         }
 
-        BindFailedAlreadyExists(key: String) {
-            description("The binding already exists")
-                display("The binding with the id {} already exists.", key)
+        InstanceAlreadyExists(key: String) {
+            description("An instance with the same id already exists")
+                display("An instance with the id {} already exists.", key)
         }
 
         BindFailedKeyNotExists(key: String) {
