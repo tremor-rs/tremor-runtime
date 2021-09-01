@@ -13,10 +13,11 @@ offramp:
       stop_after_secs: 40
       significant_figures: 2
 
-# We bind the main pipeline to a bench-001 deployment
 binding:
-  - id: default
+  - id: test
     links:
-      /onramp/blaster/{instance}/: [/pipeline/main/in]
-      # /offramp/bench-001/blaster: /pipeline/main/in perhapp
-      /pipeline/main/out: [/offramp/bench-001/blackhole]
+      /onramp/blaster/{instance}/: ["/pipeline/system::passthrough/{instance}/in"]
+      /pipeline/system::passthrough/{instance}/out: ["/offramp/blackhole/{instance}/in"]
+mapping:
+  /binding/test/snot:
+    instance: "snot"

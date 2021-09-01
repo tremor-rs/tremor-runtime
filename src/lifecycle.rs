@@ -13,28 +13,61 @@
 // limitations under the License.
 
 use crate::errors::Result;
-use crate::registry::ServantId;
+use crate::registry::{Instance, ServantId};
 use crate::repository::Artefact;
 use crate::system::World;
 use std::fmt;
 
+/// Possible lifecycle states of an instance
 #[derive(Copy, Clone, Debug, PartialEq)]
-pub enum ActivationState {
-    Deactivated,
-    Activated,
-    Zombie,
+pub enum InstanceState {
+    Initialized,
+    Running,
+    Paused,
+    Stopped,
 }
 
+//
+//         Start
+//       ┌────────────────────┐
+//       │                    │
+// ┌─────┤ Initialized        │
+// │     │                    │
+// │     └─────────┬──────────┘
+// │               │
+// │ stop          │ start
+// │               │
+// │               ▼
+// │     ┌────────────────────┐  pause    ┌────────────────────┐
+// │     │                    ├──────────►│                    │
+// │     │ Running            │  resume   │ Paused             │
+// │     │                    │◄──────────┤                    │
+// │     └─────────┬──────────┘           └───┬────────────────┘
+// │               │                          │
+// │               │ stop                     │ stop
+// │               │                          │
+// │               │                          │
+// │               ▼                          │
+// │     ┌───────────────────┐                │
+// │     │                   │                │
+// └────►│ Stopped           │◄───────────────┘
+//       │                   │
+//       └───────────────────┘
+//         End
+/// Instance lifecycle FSM
 #[derive(Clone)]
-pub struct ActivatorLifecycleFsm<A: Artefact> {
+pub struct InstanceLifecycleFsm<A: Artefact> {
+    /// The artefact this instance is derived from
     pub artefact: A,
     world: World,
-    pub state: ActivationState,
-    pub resolution: Option<A::SpawnResult>,
+    /// The current instance state
+    pub state: InstanceState,
+    /// the specialized spawn result - representing the living instance
+    pub instance: A::SpawnResult,
     id: ServantId,
 }
 
-impl<A: Artefact> fmt::Debug for ActivatorLifecycleFsm<A> {
+impl<A: Artefact> fmt::Debug for InstanceLifecycleFsm<A> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
@@ -44,78 +77,93 @@ impl<A: Artefact> fmt::Debug for ActivatorLifecycleFsm<A> {
     }
 }
 
-impl<A: Artefact> ActivatorLifecycleFsm<A> {
+impl<A: Artefact> InstanceLifecycleFsm<A> {
+    /// -> Initialized
     pub async fn new(world: World, artefact: A, id: ServantId) -> Result<Self> {
-        let mut fresh = Self {
+        // delegating actual spawning to the artefact
+        let instance = artefact.spawn(&world, id.clone()).await?;
+        let fresh = Self {
             artefact,
             world,
-            state: ActivationState::Deactivated,
-            resolution: None,
+            state: InstanceState::Initialized,
+            instance,
             id,
         };
-        let resoluion = fresh.on_spawn().await?; // Initial transition
-        fresh.resolution = Some(resoluion);
         Ok(fresh)
     }
 
-    async fn on_spawn(&self) -> Result<A::SpawnResult> {
-        self.artefact.spawn(&self.world, self.id.clone()).await
+    /// Initialized -> Running
+    async fn on_start(&mut self) -> Result<()> {
+        self.instance.start(&self.world, &self.id).await
     }
 
-    fn on_activate(&self) {
-        // ALLOW: this is for clippy
-        let _clippy = self;
-        debug!(
-            "Lifecycle on_activate not implemented state is now: {:?}",
-            ActivationState::Activated
-        );
+    /// Running -> Paused
+    async fn on_pause(&mut self) -> Result<()> {
+        self.instance.pause(&self.world, &self.id).await
     }
 
-    fn on_passivate(&self) {
-        // ALLOW: this is for clippy
-        let _clippy = self;
-        debug!("Lifecycle on_passivate not implemented");
+    /// Paused -> Running
+    async fn on_resume(&mut self) -> Result<()> {
+        self.instance.resume(&self.world, &self.id).await
     }
 
-    fn on_destroy(&self) {
-        // ALLOW: this is for clippy
-        let _clippy = self;
-        debug!(
-            "Lifecycle on_destroy not implemented state is now:: {:?}",
-            ActivationState::Zombie
-        );
+    /// _ -> Stopped
+    async fn on_stop(&mut self) -> Result<()> {
+        self.instance.stop(&self.world, &self.id).await
     }
 }
 
-impl<A: Artefact> ActivatorLifecycleFsm<A> {
-    pub fn transition(&mut self, to: ActivationState) -> Result<&mut Self> {
-        loop {
-            match (&self.state, &to) {
-                (ActivationState::Deactivated, ActivationState::Activated) => {
-                    self.state = ActivationState::Activated;
-                    self.on_activate();
-                    break;
-                }
-                (ActivationState::Deactivated, ActivationState::Zombie) => {
-                    self.state = ActivationState::Zombie;
-                    self.on_destroy();
-                    break;
-                }
-                (ActivationState::Activated, ActivationState::Zombie) => {
-                    self.state = ActivationState::Deactivated;
-                    self.on_passivate();
-                    continue; // NOTE by composition Active -> Deactive, Deactive -> Zombie
-                }
-                (ActivationState::Zombie, _) => break,
-                _ => {
-                    // NOTE Default transition is 'do nothing'
-                    //    TODO dev mode -> defaults to panic ( not yet implemented )
-                    //    TODO prod mode -> defaults to loopback / noop / do nothing
-                    //    TODO convenience macro loopback!
-                    return Err("Illegel State Transition".into());
-                }
-            };
-        }
+impl<A: Artefact> InstanceLifecycleFsm<A> {
+    pub async fn start(&mut self) -> Result<&mut Self> {
+        self.transition(InstanceState::Running).await
+    }
+
+    pub async fn stop(&mut self) -> Result<&mut Self> {
+        self.transition(InstanceState::Stopped).await
+    }
+
+    pub async fn pause(&mut self) -> Result<&mut Self> {
+        self.transition(InstanceState::Paused).await
+    }
+
+    pub async fn resume(&mut self) -> Result<&mut Self> {
+        self.transition(InstanceState::Running).await
+    }
+
+    pub async fn transition(&mut self, to: InstanceState) -> Result<&mut Self> {
+        use InstanceState::*;
+        match (&self.state, &to) {
+            (Initialized, Running) => {
+                self.state = Running;
+                self.on_start().await?;
+            }
+            (_, Stopped) => {
+                self.state = Stopped;
+                self.on_stop().await?;
+            }
+            (Stopped, _) => {
+                // do nothing
+            }
+            (Running, Paused) => {
+                self.state = Paused;
+                self.on_pause().await?;
+            }
+            (Paused, Running) => {
+                self.state = Running;
+                self.on_resume().await?;
+            }
+            _ => {
+                // NOTE Default transition is 'do nothing'
+                //    TODO dev mode -> defaults to panic ( not yet implemented )
+                //    TODO prod mode -> defaults to loopback / noop / do nothing
+                //    TODO convenience macro loopback!
+                return Err(format!(
+                    "Illegal State Transition from {:?} to {:?}",
+                    &self.state, &to
+                )
+                .into());
+            }
+        };
 
         Ok(self)
     }
@@ -125,7 +173,6 @@ impl<A: Artefact> ActivatorLifecycleFsm<A> {
 mod test {
     use super::*;
     use crate::config;
-    use crate::repository::BindingArtefact;
     use crate::system::World;
     use crate::url::TremorUrl;
     use std::io::BufReader;
@@ -138,12 +185,12 @@ mod test {
     }
 
     #[async_std::test]
-    async fn onramp_activation_lifecycle() {
-        let (world, _) = World::start(10, None).await.expect("failed to start world");
+    async fn onramp_activation_lifecycle() -> Result<()> {
+        let (world, _) = World::start(10, None).await?;
 
         let mut config = slurp("tests/configs/ut.passthrough.yaml");
         let artefact = config.onramp.pop().expect("artefact not found");
-        let id = TremorUrl::parse("/onramp/blaster/00").expect("artefact not found");
+        let id = TremorUrl::from_onramp_instance(&artefact.id, "snot")?;
         assert!(world
             .repo
             .find_onramp(&id)
@@ -157,47 +204,44 @@ mod test {
             .await
             .is_ok());
 
-        // Legal <initial> -> Deactivated
-        assert_eq!(
-            Ok(ActivationState::Deactivated),
-            world.bind_onramp(&id).await,
-        );
+        // Legal <initial> -> Running
+        assert_eq!(Ok(InstanceState::Initialized), world.bind_onramp(&id).await,);
 
-        // Legal Deactivated -> Activated
+        // Legal Initialized -> Running
         assert_eq!(
-            Ok(ActivationState::Activated),
+            Ok(InstanceState::Running),
             world
                 .reg
-                .transition_onramp(&id, ActivationState::Activated)
+                .transition_onramp(&id, InstanceState::Running)
+                .await
+        );
+        // Legal Running -> Paused
+        assert_eq!(
+            Ok(InstanceState::Paused),
+            world
+                .reg
+                .transition_onramp(&id, InstanceState::Paused)
                 .await
         );
 
-        // Legal Activated -> Zombie ( via hidden transition trampoline )
+        // Legal Paused -> Stopped
         assert_eq!(
-            Ok(ActivationState::Zombie),
+            Ok(InstanceState::Stopped),
             world
                 .reg
-                .transition_onramp(&id, ActivationState::Zombie)
+                .transition_onramp(&id, InstanceState::Stopped)
                 .await
         );
 
-        // Zombies don't return from the dead
+        // stopped onramps cannot be transitioned back
         assert_eq!(
-            Ok(ActivationState::Zombie),
+            Ok(InstanceState::Stopped),
             world
                 .reg
-                .transition_onramp(&id, ActivationState::Deactivated)
+                .transition_onramp(&id, InstanceState::Running)
                 .await
         );
-
-        // Zombies don't return from the deady
-        assert_eq!(
-            Ok(ActivationState::Zombie),
-            world
-                .reg
-                .transition_onramp(&id, ActivationState::Activated)
-                .await
-        );
+        Ok(())
     }
 
     #[async_std::test]
@@ -206,7 +250,8 @@ mod test {
 
         let mut config = slurp("tests/configs/ut.passthrough.yaml");
         let artefact = config.offramp.pop().expect("artefact not found");
-        let id = TremorUrl::parse("/offramp/test/out/00").expect("artefact not found");
+        let id =
+            TremorUrl::from_offramp_instance(&artefact.id, "snot").expect("artefact not found");
         assert!(world
             .repo
             .find_offramp(&id)
@@ -220,45 +265,44 @@ mod test {
             .await
             .is_ok());
 
-        // Legal <initial> -> Deactivated
+        // Legal <initial> -> Running
         assert_eq!(
-            Ok(ActivationState::Deactivated),
+            Ok(InstanceState::Initialized),
             world.bind_offramp(&id).await
         );
 
-        // Legal Deactivated -> Activated
+        // Legal Initialized -> Running
         assert_eq!(
-            Ok(ActivationState::Activated),
+            Ok(InstanceState::Running),
             world
                 .reg
-                .transition_offramp(&id, ActivationState::Activated)
+                .transition_offramp(&id, InstanceState::Running)
+                .await
+        );
+        // Legal Running -> Paused
+        assert_eq!(
+            Ok(InstanceState::Paused),
+            world
+                .reg
+                .transition_offramp(&id, InstanceState::Paused)
                 .await
         );
 
-        // Legal Activated -> Zombie ( via hidden transition trampoline )
+        // Legal Paused -> Stopped
         assert_eq!(
-            Ok(ActivationState::Zombie),
+            Ok(InstanceState::Stopped),
             world
                 .reg
-                .transition_offramp(&id, ActivationState::Zombie)
+                .transition_offramp(&id, InstanceState::Stopped)
                 .await
         );
 
-        // Zombies don't return from the dead
+        // Stopped offramps can't return from the dead
         assert_eq!(
-            Ok(ActivationState::Zombie),
+            Ok(InstanceState::Stopped),
             world
                 .reg
-                .transition_offramp(&id, ActivationState::Deactivated)
-                .await
-        );
-
-        // Zombies don't return from the deady
-        assert_eq!(
-            Ok(ActivationState::Zombie),
-            world
-                .reg
-                .transition_offramp(&id, ActivationState::Activated)
+                .transition_offramp(&id, InstanceState::Running)
                 .await
         );
     }
@@ -267,38 +311,11 @@ mod test {
     async fn binding_activation_lifecycle() {
         let (world, _) = World::start(10, None).await.expect("failed to start world");
 
-        let mut config = slurp("tests/configs/ut.passthrough.yaml");
-        let artefact = BindingArtefact {
-            binding: config.binding.pop().expect("artefact not found"),
-            mapping: None,
-        };
-        let id = TremorUrl::parse("/binding/test/snot").expect("artefact not found");
-
-        assert!(world
-            .repo
-            .find_binding(&id)
+        // -> Initialized -> Running
+        crate::load_cfg_file(&world, "tests/configs/ut.passthrough.yaml")
             .await
-            .expect("failed to communicate to repository")
-            .is_none());
-
-        assert!(world
-            .repo
-            .publish_binding(&id, false, artefact.clone())
-            .await
-            .is_ok());
-
-        assert!(world
-            .reg
-            .find_binding(&id)
-            .await
-            .expect("failed to communicate to registry")
-            .is_none());
-
-        // Legal <initial> -> Deactivated
-        assert_eq!(
-            Ok(ActivationState::Deactivated),
-            world.bind_binding_a(&id, &artefact).await,
-        );
+            .unwrap();
+        let id = TremorUrl::from_binding_instance("test", "snot").expect("invalid binding url");
 
         assert!(world
             .reg
@@ -307,45 +324,44 @@ mod test {
             .expect("failed to communicate to registry")
             .is_some());
 
-        // Legal Deactivated -> Activated
+        // Legal Running -> Paused
         assert_eq!(
-            Ok(ActivationState::Activated),
+            Ok(InstanceState::Paused),
             world
                 .reg
-                .transition_binding(&id, ActivationState::Activated)
+                .transition_binding(&id, InstanceState::Paused)
                 .await
         );
 
-        // Legal Activated -> Zombie ( via hidden transition trampoline )
+        // Legal Paused -> Running
         assert_eq!(
-            Ok(ActivationState::Zombie),
+            Ok(InstanceState::Running),
             world
                 .reg
-                .transition_binding(&id, ActivationState::Zombie)
+                .transition_binding(&id, InstanceState::Running)
+                .await
+        );
+        // Legal Running -> Stopped
+        assert_eq!(
+            Ok(InstanceState::Stopped),
+            world
+                .reg
+                .transition_binding(&id, InstanceState::Stopped)
                 .await
         );
 
         // Zombies don't return from the dead
         assert_eq!(
-            Ok(ActivationState::Zombie),
+            Ok(InstanceState::Stopped),
             world
                 .reg
-                .transition_binding(&id, ActivationState::Deactivated)
-                .await
-        );
-
-        // Zombies don't return from the deady
-        assert_eq!(
-            Ok(ActivationState::Zombie),
-            world
-                .reg
-                .transition_binding(&id, ActivationState::Activated)
+                .transition_binding(&id, InstanceState::Running)
                 .await
         );
 
         // TODO - full undeployment 'white-box' acceptance tests
         //        println!("TODO {:?}", world.repo.unpublish_binding(&id));
-        let _r = world.unbind_binding_a(&id, &artefact).await;
+        let _r = world.unbind_binding(&id).await;
         //        assert!(world.repo.unpublish_binding(&id).is_ok());
         println!(
             "TODO {:?}",

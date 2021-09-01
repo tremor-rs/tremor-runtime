@@ -351,6 +351,9 @@ pub async fn register_builtin_sinks(world: &World) -> Result<()> {
         .register_builtin_offramp_type("amqp", Box::new(amqp::Builder {}))
         .await?;
     world
+        .register_builtin_offramp_type("blackhole", Box::new(blackhole::Builder {}))
+        .await?;
+    world
         .register_builtin_offramp_type("cb", Box::new(cb::Builder {}))
         .await?;
     world
