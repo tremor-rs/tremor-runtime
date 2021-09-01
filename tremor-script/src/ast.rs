@@ -526,6 +526,7 @@ pub type Warnings = std::collections::BTreeSet<Warning>;
 
 /// don't use
 #[allow(clippy::struct_excessive_bools)]
+#[derive(Clone)]
 pub struct Helper<'script, 'registry>
 where
     'script: 'registry,
@@ -536,9 +537,9 @@ where
     is_in_aggr: bool,
     // Troy
     instances: HashMap<String, CreateStmt<'script>>,
-    flows: HashMap<String, FlowDecl<'script>>,
-    connectors: HashMap<String, ConnectorDecl<'script>>,
-    pipelines: HashMap<String, QueryDecl<'script>>,
+    flow_defns: HashMap<String, FlowDecl<'script>>,
+    connector_defns: HashMap<String, ConnectorDecl<'script>>,
+    pipeline_defns: HashMap<String, PipelineDecl<'script>>,
     // Trickle
     windows: HashMap<String, WindowDecl<'script>>,
     scripts: HashMap<String, ScriptDecl<'script>>,
@@ -631,9 +632,9 @@ where
             can_emit: true,
             is_in_aggr: false,
             instances: HashMap::new(),
-            flows: HashMap::new(),
-            connectors: HashMap::new(),
-            pipelines: HashMap::new(),
+            flow_defns: HashMap::new(),
+            connector_defns: HashMap::new(),
+            pipeline_defns: HashMap::new(),
             windows: HashMap::new(),
             scripts: HashMap::new(),
             operators: HashMap::new(),

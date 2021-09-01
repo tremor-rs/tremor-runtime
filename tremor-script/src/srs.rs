@@ -49,12 +49,6 @@ impl Debug for Deploy {
 /// Captures deployment ready artefacts for one troy unit of deployment
 #[derive(Debug)]
 pub struct UnitOfDeployment<'script> {
-    /// Connector definitions for this deployment unit
-    pub connectors: HashMap<String, Box<ast::deploy::ConnectorDecl<'script>>>,
-    /// Pipeline definitions for this deployment unit
-    pub pipelines: HashMap<String, Box<ast::deploy::QueryDecl<'script>>>,
-    /// Flow definitions for this deployment unit
-    pub flows: HashMap<String, Box<ast::deploy::FlowDecl<'script>>>,
     /// Instances for this deployment unit
     pub instances: HashMap<String, Box<ast::deploy::CreateStmt<'script>>>,
 }
@@ -133,51 +127,24 @@ impl Deploy {
     /// are not deployable based on static analysis
     ///
     pub fn as_deployment_unit(&self) -> Result<UnitOfDeployment> {
-        use ast::deploy::ConnectorDecl;
         use ast::deploy::DeployStmt as StmtKind;
-        use ast::deploy::FlowDecl;
-        use ast::deploy::QueryDecl;
-        let mut connectors: HashMap<String, Box<ConnectorDecl>> = self
-            .script
-            .connectors
-            .iter()
-            .map(|(k, v)| (k.clone(), Box::new(v.clone())))
-            .collect();
-        let mut pipelines: HashMap<String, Box<QueryDecl<'_>>> = self
-            .script
-            .pipelines
-            .iter()
-            .map(|(k, v)| (k.clone(), Box::new(v.clone())))
-            .collect();
-        let mut flows: HashMap<String, Box<FlowDecl<'_>>> = self
-            .script
-            .flows
-            .iter()
-            .map(|(k, v)| (k.clone(), Box::new(v.clone())))
-            .collect();
         let mut instances = HashMap::new();
 
         for stmt in &self.script.stmts {
             match stmt {
-                StmtKind::ConnectorDecl(stmt) => {
-                    connectors.insert(stmt.id.to_string(), stmt.clone());
-                }
-                StmtKind::PipelineDecl(stmt) => {
-                    pipelines.insert(stmt.id.to_string(), stmt.clone());
-                }
-                StmtKind::FlowDecl(stmt) => {
-                    flows.insert(stmt.id.to_string(), stmt.clone());
-                }
                 StmtKind::CreateStmt(stmt) => {
                     instances.insert(stmt.id.to_string(), stmt.clone());
+                }
+                _otherwise => {
+                    ();
                 }
             }
         }
 
         Ok(UnitOfDeployment {
-            connectors,
-            pipelines,
-            flows,
+            // connectors,
+            // pipelines,
+            // flows,
             instances,
         })
     }
@@ -505,19 +472,19 @@ impl Stmt {
 
 /// A query declaration
 #[derive(Clone)]
-pub struct QueryDecl {
+pub struct PipelineDecl {
     raw: Vec<Arc<Pin<Vec<u8>>>>,
-    script: ast::QueryDecl<'static>,
+    script: ast::PipelineDecl<'static>,
 }
 
 #[cfg(not(tarpaulin_include))] // this is a simple Debug implementation
-impl Debug for QueryDecl {
+impl Debug for PipelineDecl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.script.fmt(f)
     }
 }
 
-impl QueryDecl {
+impl PipelineDecl {
     /// Access to the raw part of the script
     #[must_use]
     pub fn raw(&self) -> &[Arc<Pin<Vec<u8>>>] {

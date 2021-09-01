@@ -46,13 +46,13 @@ DeployStmt: DeployStmtRaw<'input> = {
     <m:DeployModuleStmt> => DeployStmtRaw::ModuleStmt(m),
     // Pipelines - these define parameterized queries for deployment
     <start:@L> "define" "pipeline" <id:Ident> <args:ArgSpecificationClause> <query:EmbeddedQuery> <end:@L> => DeployStmtRaw::PipelineDecl(PipelineDeclRaw { start, end, id: id.to_string(), query, args: args.0, params: args.1, script: args.2 }),
-    <start:@L> "define" "pipeline" <id:Ident> <query:EmbeddedQuery> <end:@L> => DeployStmtRaw::PipelineDecl(PipelineDeclRaw { start, end, id: id.to_string(), query, args: None, params: None, script: None }),
+    <start:@L> "define" "pipeline" <id:Ident> <query:EmbeddedQuery> <end:@L> => DeployStmtRaw::PipelineDecl(PipelineDeclRaw { start, end, id: id.to_string(), query, args: vec![], params: None, script: None }),
     // Connectors - these define connectors for deployment
     <start:@L> "define" <kind:ConnectorKind> "connector" <id:Ident> <args:ArgSpecificationClause> "end" <end:@L> => DeployStmtRaw::ConnectorDecl(ConnectorDeclRaw { start, end, id: id.to_string(), kind, args: args.0, params: args.1, script: args.2 }),
-    <start:@L> "define" <kind:ConnectorKind> "connector" <id:Ident> "end" <end:@L> => DeployStmtRaw::ConnectorDecl(ConnectorDeclRaw { start, end, id: id.to_string(), kind, args: None, params: None, script: None }),
+    <start:@L> "define" <kind:ConnectorKind> "connector" <id:Ident> "end" <end:@L> => DeployStmtRaw::ConnectorDecl(ConnectorDeclRaw { start, end, id: id.to_string(), kind, args: vec![], params: None, script: None }),
     // Flow - these define how pipelines and connectors are interconnected to form a unit deployment graph
     <start:@L> "define" "flow" <id:Ident> <args:ArgSpecificationClause> <links:WithDeployLinks> "end" <end:@L> => DeployStmtRaw::FlowDecl(FlowDeclRaw { start, end, id: id.to_string(), args: args.0, params: args.1, script: args.2, links }),
-    <start:@L> "define" "flow" <id:Ident> <links:WithDeployLinks> "end" <end:@L> => DeployStmtRaw::FlowDecl(FlowDeclRaw { start, end, id: id.to_string(), args: None, params: None, script: None, links }),
+    <start:@L> "define" "flow" <id:Ident> <links:WithDeployLinks> "end" <end:@L> => DeployStmtRaw::FlowDecl(FlowDeclRaw { start, end, id: id.to_string(), args: vec![], params: None, script: None, links }),
 
     <start:@L> "deploy" <id:Ident> "from" <target:ModularTarget> <args:ArgFinalizationClause> <end:@L> => DeployStmtRaw::CreateStmt(CreateStmtRaw { start, end, id, module: target.0, target: target.1, params: args.0, script: args.1 }),
     <start:@L> "deploy" <id:Ident> "from" <target:ModularTarget> <end:@L> => DeployStmtRaw::CreateStmt(CreateStmtRaw { start, end, id: id.clone(),  module: target.0, target: target.1, params: None, script: None }),
@@ -61,13 +61,13 @@ DeployStmt: DeployStmtRaw<'input> = {
 }
 
 // Allows arguments to be specified and defaults to be provided and overridden in definitions
-ArgSpecificationClause: (Option<WithArgsRaw<'input>>, Option<DeployWithExprsRaw<'input>>, Option<ScriptRaw<'input>>) = {
-    <args:DeployArgs> <params:DeployWithClause> <script:DeployScript> => (Some(args), Some(params), Some(script)),
-    <args:DeployArgs> <params:DeployWithClause> => (Some(args), Some(params), None),
-    <args:DeployArgs> <script:DeployScript> => (Some(args), None, Some(script)),
-    <args:DeployArgs> => (Some(args), None, None),
-    <params:DeployWithClause> <script:DeployScript> => (None, Some(params), Some(script)),
-    <params:DeployWithClause> => (None, Some(params), None),
+ArgSpecificationClause: (WithArgsRaw<'input>, Option<DeployWithExprsRaw<'input>>, Option<ScriptRaw<'input>>) = {
+    <args:DeployArgs> <params:DeployWithClause> <script:DeployScript> => (args, Some(params), Some(script)),
+    <args:DeployArgs> <params:DeployWithClause> => (args, Some(params), None),
+    <args:DeployArgs> <script:DeployScript> => (args, None, Some(script)),
+    <args:DeployArgs> => (args, None, None),
+    <params:DeployWithClause> <script:DeployScript> => (vec![], Some(params), Some(script)),
+    <params:DeployWithClause> => (vec![], Some(params), None),
     // DISALLOW - Specifications require a nominal key/value mechanism to establish required+defaulted parameters
     // <script:EmbeddedScript> => (Some(args, None, Some(script)),
 }
@@ -141,13 +141,13 @@ DeployModuleInnerStmt: DeployStmtRaw<'input> = {
     <m:DeployModuleStmt> => DeployStmtRaw::ModuleStmt(m),
     // Pipelines - these define parameterized queries for deployment
     <start:@L> "define" "pipeline" <id:Ident> <args:ArgSpecificationClause> <query:EmbeddedQuery> <end:@L> => DeployStmtRaw::PipelineDecl(PipelineDeclRaw { start, end, id: id.to_string(), query, args: args.0, params: args.1, script: args.2 }),
-    <start:@L> "define" "pipeline" <id:Ident> <query:EmbeddedQuery> <end:@L> => DeployStmtRaw::PipelineDecl(PipelineDeclRaw { start, end, id: id.to_string(), query, args: None, params: None, script: None }),
+    <start:@L> "define" "pipeline" <id:Ident> <query:EmbeddedQuery> <end:@L> => DeployStmtRaw::PipelineDecl(PipelineDeclRaw { start, end, id: id.to_string(), query, args: vec![], params: None, script: None }),
     // Connectors - these define connectors for deployment
     <start:@L> "define" <kind:ConnectorKind> "connector" <id:Ident> <args:ArgSpecificationClause> "end" <end:@L> => DeployStmtRaw::ConnectorDecl(ConnectorDeclRaw { start, end, id: id.to_string(), kind, args: args.0, params: args.1, script: args.2 }),
-    <start:@L> "define" <kind:ConnectorKind> "connector" <id:Ident> "end" <end:@L> => DeployStmtRaw::ConnectorDecl(ConnectorDeclRaw { start, end, id: id.to_string(), kind, args: None, params: None, script: None }),
+    <start:@L> "define" <kind:ConnectorKind> "connector" <id:Ident> "end" <end:@L> => DeployStmtRaw::ConnectorDecl(ConnectorDeclRaw { start, end, id: id.to_string(), kind, args: vec![], params: None, script: None }),
     // Flow - these define how pipelines and connectors are interconnected to form a unit deployment graph
     <start:@L> "define" "flow" <id:Ident> <args:ArgSpecificationClause> <links:WithDeployLinks> "end" <end:@L> => DeployStmtRaw::FlowDecl(FlowDeclRaw { start, end, id: id.to_string(), args: args.0, params: args.1, script: args.2, links }),
-    <start:@L> "define" "flow" <id:Ident> <links:WithDeployLinks> "end" <end:@L> => DeployStmtRaw::FlowDecl(FlowDeclRaw { start, end, id: id.to_string(), args: None, params: None, script: None, links }),
+    <start:@L> "define" "flow" <id:Ident> <links:WithDeployLinks> "end" <end:@L> => DeployStmtRaw::FlowDecl(FlowDeclRaw { start, end, id: id.to_string(), args: vec![], params: None, script: None, links }),
 
     // Allow imports of tremor-script definitions
     Const => DeployStmtRaw::Expr(Box::new(<>)),
@@ -173,7 +173,7 @@ WithArgs_: WithArgsRaw<'input> = {
 
 WithArg: ArgumentDeclRaw<'input> = {
     <start:@L> <name:Ident> => ArgumentDeclRaw::Required(name),
-    <start:@L> <name:Ident> "=" <default_value:ExprImut> => ArgumentDeclRaw::Optional(name, default_value)
+    <start:@L> <name:Ident> "=" <default_value:Expr> => ArgumentDeclRaw::Optional(name, default_value)
 }
 
 DeployWithClause: DeployWithExprsRaw<'input> = {

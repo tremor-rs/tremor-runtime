@@ -15,6 +15,7 @@
 use crate::env;
 use crate::errors::{Error, Result};
 use crate::util::{get_source_kind, highlight, slurp_string, SourceKind};
+use beef::Cow;
 use clap::ArgMatches;
 use std::collections::BTreeSet;
 use std::io::prelude::*;
@@ -25,6 +26,7 @@ use tremor_pipeline::{Event, EventId};
 use tremor_runtime::codec::Codec;
 use tremor_runtime::postprocessor::Postprocessor;
 use tremor_runtime::preprocessor::Preprocessor;
+use tremor_script::ast::deploy::AtomOfDeployment;
 use tremor_script::deploy::Deploy;
 use tremor_script::highlighter::Error as HighlighterError;
 use tremor_script::highlighter::{Highlighter, Term as TermHighlighter};
@@ -34,7 +36,6 @@ use tremor_script::script::{AggrType, Return, Script};
 use tremor_script::{ctx::EventContext, lexer::Tokenizer};
 use tremor_script::{EventPayload, Value, ValueAndMeta};
 use tremor_value::literal;
-
 struct Ingress {
     is_interactive: bool,
     is_pretty: bool,
@@ -226,7 +227,7 @@ impl Egress {
     }
 }
 
-fn run_tremor_source(matches: &ArgMatches, src: String) -> Result<()> {
+fn run_tremor_source(matches: &ArgMatches, src: String, args: &Value) -> Result<()> {
     let raw = slurp_string(&src);
     if let Err(e) = raw {
         eprintln!("Error processing file {}: {}", &src, e);
@@ -238,7 +239,7 @@ fn run_tremor_source(matches: &ArgMatches, src: String) -> Result<()> {
     let env = env::setup()?;
 
     let mut outer = TermHighlighter::stderr();
-    match Script::parse(&env.module_path, &src, raw.clone(), &env.fun) {
+    match Script::parse_with_args(&env.module_path, &src, raw.clone(), &env.fun, &args) {
         Ok(mut script) => {
             script.format_warnings_with(&mut outer)?;
 
@@ -308,7 +309,7 @@ fn run_tremor_source(matches: &ArgMatches, src: String) -> Result<()> {
     }
 }
 
-fn run_trickle_source(matches: &ArgMatches, src: &str) -> Result<()> {
+fn run_trickle_source(matches: &ArgMatches, src: &str, args: &Value) -> Result<()> {
     let raw = slurp_string(src);
     if let Err(e) = raw {
         eprintln!("Error processing file {}: {}", src, e);
@@ -326,7 +327,7 @@ fn run_trickle_source(matches: &ArgMatches, src: &str) -> Result<()> {
         vec![],
         &env.fun,
         &env.aggr,
-        &literal!(null),
+        args,
     ) {
         Ok(runnable) => runnable,
         Err(e) => {
@@ -428,7 +429,7 @@ fn run_trickle_query(
     Ok(())
 }
 
-fn run_troy_source(matches: &ArgMatches, src: &str) -> Result<()> {
+fn run_troy_source(matches: &ArgMatches, src: &str, args: &Value) -> Result<()> {
     use tremor_script::ast;
     // FIXME TODO implement for troy
     let raw = slurp_string(&src);
@@ -441,7 +442,17 @@ fn run_troy_source(matches: &ArgMatches, src: &str) -> Result<()> {
     let env = env::setup()?;
     let mut h = TermHighlighter::stderr();
 
-    let deployable = match Deploy::parse(&env.module_path, src, &raw, vec![], &env.fun, &env.aggr) {
+    dbg!(args);
+
+    let deployable = match Deploy::parse_with_args(
+        &env.module_path,
+        src,
+        &raw,
+        vec![],
+        &env.fun,
+        &env.aggr,
+        args,
+    ) {
         Ok(deployable) => deployable,
         Err(e) => {
             if let Err(e) = Script::format_error_from_script(&raw, &mut h, &e) {
@@ -456,40 +467,22 @@ fn run_troy_source(matches: &ArgMatches, src: &str) -> Result<()> {
     let mut unit_pipeline: Option<ast::Query> = None;
 
     let mut num_pipelines = 0;
-    // let _params = literal!({});
 
-    // FIXME - static analysis prototyping
-    // TODO When done - refactor and push down into compilation phase
+    // FIXME TODO Multiple pipeline deployments with different args overrides
     for (_name, stmt) in unit.instances {
-        let fqsn = stmt.fqsn(&stmt.module);
-        if let Some(deployable) = unit.pipelines.get(&fqsn) {
-            unit_pipeline = Some(deployable.query.clone());
-            num_pipelines += 1;
-        //            dbg!(&deployable);
-        } else if let Some(_deployable) = unit.flows.get(&fqsn) {
-            dbg!("It's a flow instance");
-        //            dbg!(&deployable);
-        } else if let Some(_deployable) = unit.connectors.get(&fqsn) {
-            dbg!("It's a connector instance");
-        //            dbg!(&deployable);
-        } else {
-            eprintln!(
-                "Error: Unable to find target definition {} for `create` {}",
-                &fqsn, &stmt.id
-            );
-            std::process::exit(1);
+        let _fqsn = stmt.fqsn(&stmt.module);
+        match stmt.atom {
+            AtomOfDeployment::Pipeline(pipe) => {
+                unit_pipeline = Some(pipe.query);
+                num_pipelines += 1;
+            }
+            _ => {}
         }
     }
 
-    // dbg!(&num_pipelines);
     if num_pipelines == 1 {
         let mut h = TermHighlighter::stderr();
         if let Some(unit_pipeline) = unit_pipeline {
-            // if let Some(query) = unit_pipeline.query {
-            // dbg!("got here");
-            // dbg!("Params: ", unit_pipeline.params);
-            // unit_pipeline.consts.args.insert("snot", Value::from("badger"));
-            // unit_pipeline.args = literal!({"snot": "badger badger badger"});
             let query = tremor_script::srs::Query::new_from_ast(unit_pipeline);
             let query = tremor_script::Query {
                 query,
@@ -500,7 +493,6 @@ fn run_troy_source(matches: &ArgMatches, src: &str) -> Result<()> {
             {
                 run_trickle_query(matches, query, src.to_string(), raw, &mut h)?;
             }
-            //}
         }
     }
 
@@ -511,11 +503,50 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
     let script_file = matches
         .value_of("SCRIPT")
         .ok_or_else(|| Error::from("No script file provided"))?;
+
+    let mut args = if let Some(args_file) = matches.value_of("ARGS_FILE") {
+        slurp_string(args_file)?
+    } else {
+        "{}".to_string()
+    };
+    let mut args: Value = simd_json::from_str(&mut args)?;
+    if !args.is_object() {
+        return Err(Error::from(
+            "Expected arguments file to contain a JSON record structure",
+        ));
+    }
+
+    if let Value::Object(ref mut fields) = args {
+        if let Some(overags) = matches.values_of("arg") {
+            for arg in overags {
+                let kv: Vec<String> = arg.split("=").map(ToString::to_string).collect();
+                if kv.len() != 2 {
+                    // FIXME TODO output a nicer error
+                }
+                let key = kv.get(0);
+                let value = kv.get(1);
+                if let Some(key) = key {
+                    if let Some(value) = value {
+                        let mut json = value.clone();
+                        let json: std::result::Result<Value, simd_json::Error> =
+                            simd_json::from_str(&mut json);
+                        if let Ok(json) = json {
+                            let json: Value<'static> = json.clone_static();
+                            fields.insert(Cow::owned(key.to_string()), json);
+                        } else {
+                            fields.insert(Cow::owned(key.to_string()), literal!(value.to_string()));
+                        };
+                    }
+                }
+            }
+        }
+    }
+
     let script_file = script_file.to_string();
     match get_source_kind(&script_file) {
-        SourceKind::Tremor | SourceKind::Json => run_tremor_source(matches, script_file),
-        SourceKind::Troy => run_troy_source(matches, &script_file),
-        SourceKind::Trickle => run_trickle_source(matches, &script_file),
+        SourceKind::Tremor | SourceKind::Json => run_tremor_source(matches, script_file, &args),
+        SourceKind::Troy => run_troy_source(matches, &script_file, &args),
+        SourceKind::Trickle => run_trickle_source(matches, &script_file, &args),
         SourceKind::Unsupported(_) | SourceKind::Yaml => {
             Err(format!("Error: Unable to execute source: {}", &script_file).into())
         }

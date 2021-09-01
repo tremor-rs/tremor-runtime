@@ -15,9 +15,10 @@
 // We want to keep the names here
 #![allow(clippy::module_name_repetitions)]
 
+use super::query::raw::QueryRaw;
 use super::raw::BaseExpr;
 use super::{HashMap, Value};
-use crate::ast::deploy::raw::DeployInstanceKind;
+pub use crate::ast::deploy::raw::AtomOfDeployment;
 use crate::ast::Query;
 use crate::ast::Script;
 use crate::impl_expr_mid;
@@ -36,7 +37,7 @@ pub struct Deploy<'script> {
     /// Connector Definitions
     pub connectors: HashMap<String, ConnectorDecl<'script>>,
     /// Pipeline Definitions
-    pub pipelines: HashMap<String, QueryDecl<'script>>,
+    pub pipelines: HashMap<String, PipelineDecl<'script>>,
 }
 
 impl<'script> Deploy<'script> {
@@ -54,7 +55,7 @@ pub enum DeployStmt<'script> {
     /// A flow declaration
     FlowDecl(Box<FlowDecl<'script>>),
     /// A pipeline declaration
-    PipelineDecl(Box<QueryDecl<'script>>),
+    PipelineDecl(Box<PipelineDecl<'script>>),
     /// A connector declaration
     ConnectorDecl(Box<ConnectorDecl<'script>>),
     /// The create instance constructor
@@ -102,9 +103,9 @@ impl<'script> ConnectorDecl<'script> {
 
 type DeployStmts<'script> = Vec<DeployStmt<'script>>;
 
-/// A query declaration
+/// A pipeline query declaration
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct QueryDecl<'script> {
+pub struct PipelineDecl<'script> {
     pub(crate) mid: usize,
     /// Module of the query
     pub module: Vec<String>,
@@ -114,12 +115,14 @@ pub struct QueryDecl<'script> {
     pub spec: Vec<Cow<'script, str>>,
     /// Resolved argument defaults
     pub args: Value<'script>,
-    /// The pipeline query
+    /// The pipeline query ( before arg injection )
+    pub query_raw: QueryRaw<'script>,
+    /// The pipeline query ( runnable with args injected )
     pub query: Query<'script>,
 }
-impl_expr_mid!(QueryDecl);
+impl_expr_mid!(PipelineDecl);
 
-impl<'script> QueryDecl<'script> {
+impl<'script> PipelineDecl<'script> {
     /// Calculate the fully qualified name
     #[must_use]
     pub fn fqsn(&self, module: &[String]) -> String {
@@ -170,14 +173,10 @@ pub struct CreateStmt<'script> {
     pub target: String,
     /// Identifer for the creation
     pub id: String,
-    /// Parameters for the instance connector
-    // pub params: HashMap<String, Value<'script>>,
     /// Script block for the instance connector
     pub script: Option<Script<'script>>,
-    /// The type of artefact definition being deployed
-    pub kind: DeployInstanceKind,
-    /// Resolved argument specification
-    pub args: Value<'script>,
+    /// Atomic unit of deployment
+    pub atom: AtomOfDeployment<'script>,
 }
 impl_expr_mid!(CreateStmt);
 
