@@ -13,7 +13,7 @@
 // limitations under the License.
 
 /// reconnect logic and execution for connectors
-use crate::config::ReconnectConfig;
+use crate::config::Reconnect as ReconnectConfig;
 use crate::connectors::{Addr, Connectivity, Connector, ConnectorContext, Msg};
 use crate::errors::{ErrorKind, Result};
 use async_channel::Sender;
@@ -70,7 +70,7 @@ impl Reconnect {
         ctx: &ConnectorContext,
     ) -> Result<Connectivity> {
         let notifier = ConnectionLostNotifier::from(&self.addr);
-        match connector.connect(&ctx, notifier).await {
+        match connector.connect(ctx, notifier).await {
             Ok(true) => {
                 self.reset();
                 Ok(Connectivity::Connected)
@@ -95,6 +95,11 @@ impl Reconnect {
 
     /// update internal state for the current failed connect attempt
     /// and spawn a retry task
+    #[allow(
+        clippy::cast_precision_loss,
+        clippy::cast_sign_loss,
+        clippy::cast_possible_truncation
+    )]
     fn update_and_retry(&mut self) -> Result<()> {
         // update internal state
         if let Some(max_retries) = self.config.max_retry {
@@ -107,17 +112,18 @@ impl Reconnect {
         self.interval_ms = (self.interval_ms as f64 * self.config.growth_rate) as u64;
 
         // spawn retry
-        let duration = Duration::from_millis(self.interval_ms);
+        // ALLOW: we are not interested in fractions here
+        let duration = Duration::from_millis(self.interval_ms as u64);
         // TODO: meh, clones. But then again: *shrug*
         let sender = self.addr.sender.clone();
         let url = self.addr.url.clone();
         task::spawn(async move {
             task::sleep(duration).await;
-            if let Err(_) = sender.send(Msg::Reconnect).await {
+            if sender.send(Msg::Reconnect).await.is_err() {
                 error!(
                     "[Connector::{}] Error sending reconnect msg to connector.",
                     &url
-                )
+                );
             }
         });
 

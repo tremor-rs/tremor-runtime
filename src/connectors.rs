@@ -50,10 +50,10 @@ use async_std::task::{self, JoinHandle};
 use beef::Cow;
 
 use crate::config::Connector as ConnectorConfig;
-use crate::connectors::metrics::{MetricsMsg, MetricsSinkReporter, MetricsSourceReporter};
+use crate::connectors::metrics::{MetricsSinkReporter, Msg as MetricsMsg, SourceReporter};
 use crate::connectors::sink::{SinkAddr, SinkContext, SinkMsg};
 use crate::connectors::source::{SourceAddr, SourceContext, SourceMsg};
-use crate::errors::{Error, ErrorKind, Result};
+use crate::errors::{Error, Kind as ErrorKind, Result};
 use crate::pipeline;
 use crate::system::World;
 use crate::url::ports::{ERR, IN, OUT};
@@ -80,20 +80,23 @@ pub struct Addr {
 
 impl Addr {
     /// send a message
+    ///
+    /// # Errors
+    ///  * If sending failed
     pub async fn send(&self, msg: Msg) -> Result<()> {
         Ok(self.sender.send(msg).await?)
     }
 
     pub(crate) async fn send_sink(&self, msg: SinkMsg) -> Result<()> {
         if let Some(sink) = self.sink.as_ref() {
-            sink.addr.send(msg).await?
+            sink.addr.send(msg).await?;
         }
         Ok(())
     }
 
     pub(crate) async fn send_source(&self, msg: SourceMsg) -> Result<()> {
         if let Some(source) = self.source.as_ref() {
-            source.addr.send(msg).await?
+            source.addr.send(msg).await?;
         }
         Ok(())
     }
@@ -162,6 +165,7 @@ pub struct Create {
 
 impl Create {
     /// constructor
+    #[must_use]
     pub fn new(servant_id: TremorUrl, config: ConnectorConfig) -> Self {
         Self { servant_id, config }
     }
@@ -185,7 +189,7 @@ pub enum ManagerMsg {
         /// sender to send the create result to
         tx: async_channel::Sender<Result<Addr>>,
         /// the create command
-        create: Create,
+        create: Box<Create>,
     },
     /// stop the connector manager
     Stop {
@@ -203,6 +207,7 @@ pub struct Manager {
 
 impl Manager {
     /// constructor
+    #[must_use]
     pub fn new(qsize: usize, metrics_sender: async_channel::Sender<MetricsMsg>) -> Self {
         Self {
             qsize,
@@ -211,6 +216,8 @@ impl Manager {
     }
 
     /// start the manager
+    #[must_use]
+    #[allow(clippy::too_many_lines)]
     pub fn start(self) -> (JoinHandle<Result<()>>, Sender) {
         let (tx, rx) = bounded(self.qsize);
         let h = task::spawn(async move {
@@ -321,6 +328,7 @@ impl Manager {
         (h, tx)
     }
 
+    #[allow(clippy::too_many_lines)]
     // instantiates the connector and starts listening for control plane messages
     async fn connector_task(
         &self,
@@ -335,7 +343,7 @@ impl Manager {
 
         let mut connectivity = Connectivity::Disconnected;
 
-        let source_metrics_reporter = MetricsSourceReporter::new(
+        let source_metrics_reporter = SourceReporter::new(
             url.clone(),
             self.metrics_sender.clone(),
             config.metrics_interval_s,
@@ -420,7 +428,7 @@ impl Manager {
                             })
                             .await
                         {
-                            error!("[Connector::{}] Error sending status report {}.", &url, e)
+                            error!("[Connector::{}] Error sending status report {}.", &url, e);
                         }
                     }
                     Msg::Connect {
@@ -428,12 +436,12 @@ impl Manager {
                         pipelines: mut mapping,
                         result_tx,
                     } => {
-                        mapping.iter().for_each(|(url, _)| {
+                        for (url, _) in &mapping {
                             info!(
                                 "[Connector::{}] Connecting {} via port {}",
-                                &url, &url, &port
-                            )
-                        });
+                                &url, &url, port
+                            );
+                        }
                         if let Some(port_pipes) = pipelines.get_mut(&port) {
                             port_pipes.append(&mut mapping);
                         } else {
@@ -492,12 +500,10 @@ impl Manager {
                         }
                     }
                     Msg::Disconnect { port, id, tx } => {
-                        let delete = if let Some(port_pipes) = pipelines.get_mut(&port) {
+                        let delete = pipelines.get_mut(&port).map_or(false, |port_pipes| {
                             port_pipes.retain(|(url, _)| url != &id);
                             port_pipes.is_empty()
-                        } else {
-                            false
-                        };
+                        });
                         // make sure we can simply use `is_empty` for checking for emptiness
                         if delete {
                             pipelines.remove(&port);
@@ -534,7 +540,7 @@ impl Manager {
                             }
                         };
                         // TODO: work out more fine grained "empty" semantics
-                        tx.send(res.map(|_| pipelines.is_empty())).await?
+                        tx.send(res.map(|_| pipelines.is_empty())).await?;
                     }
                     Msg::ConnectionLost => {
                         // react on the connection being lost
@@ -567,7 +573,7 @@ impl Manager {
                                 addr.send_source(SourceMsg::ConnectionLost).await?;
                             }
                             _ => {
-                                debug!("[Connector::{}] No change: {:?}", &addr.url, &new)
+                                debug!("[Connector::{}] No change: {:?}", &addr.url, &new);
                             }
                         }
                         connectivity = new;
@@ -781,10 +787,16 @@ pub trait Connector: Send {
 /// something that is able to create a connector instance
 pub trait ConnectorBuilder: Sync + Send {
     /// create a connector from the given `id` and `config`
+    ///
+    /// # Errors
+    ///  * If the config is invalid for the connector
     fn from_config(&self, id: &TremorUrl, config: &Option<OpConfig>) -> Result<Box<dyn Connector>>;
 }
 
 /// registering builtin connector types
+///
+/// # Errors
+///  * If a builtin connector couldn't be registered
 #[cfg(not(tarpaulin_include))]
 pub async fn register_builtin_connector_types(world: &World) -> Result<()> {
     world

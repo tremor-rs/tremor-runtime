@@ -116,13 +116,13 @@ async fn send<T>(url: &TremorUrl, msg: T, tx: &Sender<T>) -> Result<()> {
     res
 }
 
-fn resolve_connection_meta<'value>(meta: &Value<'value>) -> Option<ConnectionMeta> {
-    meta.get_i32("port")
+fn resolve_connection_meta(meta: &Value) -> Option<ConnectionMeta> {
+    meta.get_u16("port")
         .zip(meta.get_str("host"))
         .map(|(port, host)| -> ConnectionMeta {
             ConnectionMeta {
                 host: host.to_string(),
-                port: port as u16,
+                port,
             }
         })
 }
@@ -131,6 +131,12 @@ fn resolve_connection_meta<'value>(meta: &Value<'value>) -> Option<ConnectionMet
 impl Connector for TcpServer {
     async fn on_start(&mut self, _ctx: &ConnectorContext) -> Result<ConnectorState> {
         Ok(ConnectorState::Running)
+    }
+    async fn on_stop(&mut self, _ctx: &ConnectorContext) {
+        if let Some(accept_task) = self.accept_task.take() {
+            // stop acceptin' new connections
+            accept_task.cancel().await;
+        }
     }
 
     async fn create_source(
@@ -156,6 +162,7 @@ impl Connector for TcpServer {
         Ok(Some(addr))
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn connect(
         &mut self,
         _ctx: &ConnectorContext,
@@ -196,7 +203,6 @@ impl Connector for TcpServer {
                     scheme: URL_SCHEME.to_string(),
                     host: peer_addr.ip().to_string(),
                     port: Some(peer_addr.port()),
-                    // TODO also add token_num here?
                     path: path.clone(), // captures server port
                 };
 
@@ -207,6 +213,11 @@ impl Connector for TcpServer {
                 task::spawn(async move {
                     let mut buffer = vec![0; buf_size];
                     while let Ok(bytes_read) = read_half.read(&mut buffer).await {
+                        if bytes_read == 0 {
+                            // EOF
+                            trace!("[Connector::{}] EOF", &stream_url);
+                            break;
+                        }
                         trace!("[Connector::{}] read {} bytes", &stream_url, bytes_read);
                         // TODO: meta needs to be wrapped in <RESOURCE_TYPE>.<ARTEFACT> by the source manager
                         // this is only the connector specific part, without the path mentioned above
@@ -223,6 +234,7 @@ impl Connector for TcpServer {
                         };
                         stry!(send(&stream_url, sc_data, &sc_stream).await);
                     }
+                    stry!(send(&stream_url, SourceReply::EndStream(my_id), &sc_stream).await);
                     Ok(())
                 });
 
