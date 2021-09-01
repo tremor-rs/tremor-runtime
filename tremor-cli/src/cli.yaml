@@ -226,6 +226,17 @@ subcommands:
             long: port
             short: p
             about: selects the port to pull output
+            help: selects the port to pull output
+        - ARGS_FILE:
+            long: args
+            takes_value: true
+            help: optional arguments - via json record file
+        - arg:
+            long: arg
+            short: a
+            help: arguments to be passed to the runtime
+            multiple: true
+            takes_value: true
   - doc:
       about: >
         Generates documention from tremor script files

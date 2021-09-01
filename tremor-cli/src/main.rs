@@ -33,7 +33,7 @@ use crate::errors::{Error, Result};
 use crate::util::{load_config, FormatKind, TremorApp};
 use async_std::task;
 use clap::App;
-use clap::{load_yaml, AppSettings, ArgMatches};
+use clap::{load_yaml, ArgMatches, ColorChoice};
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use tremor_common::file;
@@ -86,10 +86,8 @@ where
 fn main() -> Result<()> {
     let yaml = load_yaml!("./cli.yaml");
     let long_version = tremor_runtime::version::long_ver();
-    let app = App::from(yaml);
+    let app = App::from(yaml).color(ColorChoice::Always);
     let app = app.version(long_version.as_str());
-    let app = app.global_setting(AppSettings::ColoredHelp);
-    let app = app.global_setting(AppSettings::ColorAlways);
 
     tremor_runtime::functions::load()?;
     let matches = app.clone().get_matches();
