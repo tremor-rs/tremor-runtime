@@ -131,13 +131,8 @@ impl Deploy {
         let mut instances = HashMap::new();
 
         for stmt in &self.script.stmts {
-            match stmt {
-                StmtKind::CreateStmt(stmt) => {
-                    instances.insert(stmt.id.to_string(), stmt.clone());
-                }
-                _otherwise => {
-                    ();
-                }
+            if let StmtKind::CreateStmt(stmt) = stmt {
+                instances.insert(stmt.id.to_string(), stmt.clone());
             }
         }
 
