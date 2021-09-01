@@ -165,8 +165,8 @@ fn api_server(world: &World) -> tide::Server<api::State> {
         .delete(|r| handle_api_request(r, api::binding::unpublish_artefact));
     app.at("/binding/:aid/:sid")
         .get(|r| handle_api_request(r, api::binding::get_servant))
-        .post(|r| handle_api_request(r, api::binding::link_servant))
-        .delete(|r| handle_api_request(r, api::binding::unlink_servant));
+        .put(|r| handle_api_request(r, api::binding::spawn_instance))
+        .delete(|r| handle_api_request(r, api::binding::shutdown_instance));
     app.at("/pipeline")
         .get(|r| handle_api_request(r, api::pipeline::list_artefact))
         .post(|r| handle_api_request(r, api::pipeline::publish_artefact));

@@ -176,7 +176,7 @@ impl FailureDetector for GrpcEndpointSupervisor {
     }
 }
 
-/// QoS checker for sinks
+/// `QoS` checker for sinks
 pub trait SinkQoS: Send + Sync {
     /// Is this quality of service auto acknowledging?
     fn is_auto_acknowledging(&self) -> bool;
@@ -190,7 +190,7 @@ pub trait SinkQoS: Send + Sync {
     /// Probe availability
     fn probe(&mut self, ingest_ns: u64) -> bool;
 }
-/// Gathering QoS Facilities
+/// Gathering `QoS` Facilities
 pub struct QoSFacilities {}
 impl QoSFacilities {
     #[allow(dead_code)]
@@ -214,7 +214,7 @@ impl QoSFacilities {
     }
 }
 
-/// QoS implementation not providing any actial QoS
+/// `QoS` implementation not providing any actual `QoS`
 pub struct LossySinkQoS {}
 
 impl SinkQoS for LossySinkQoS {
@@ -236,7 +236,7 @@ impl SinkQoS for LossySinkQoS {
     }
 }
 
-/// Recoverable Sink QoS
+/// Recoverable Sink `QoS`
 pub struct RecoverableSinkQoS {
     interval: u64,
     epoch: u64,

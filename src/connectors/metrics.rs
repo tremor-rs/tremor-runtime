@@ -37,7 +37,7 @@ const FIELDS: Cow<'static, str> = Cow::const_str("fields");
 const TIMESTAMP: Cow<'static, str> = Cow::const_str("timestamp");
 
 #[derive(Clone, Debug)]
-pub(crate) struct MetricsChannel(Sender<MetricsMsg>, Receiver<MetricsMsg>);
+pub(crate) struct MetricsChannel(Sender<Msg>, Receiver<Msg>);
 
 impl MetricsChannel {
     pub(crate) fn new(qsize: usize) -> Self {
@@ -45,41 +45,37 @@ impl MetricsChannel {
         Self(tx, rx)
     }
 
-    pub(crate) fn sender(&self) -> Sender<MetricsMsg> {
+    pub(crate) fn sender(&self) -> Sender<Msg> {
         self.0.clone()
     }
 }
 #[derive(Debug)]
-pub struct MetricsMsg {
+pub struct Msg {
     payload: EventPayload,
     origin_uri: Option<EventOriginUri>,
 }
 
-impl MetricsMsg {
+impl Msg {
     fn new(payload: EventPayload, origin_uri: Option<EventOriginUri>) -> Self {
         Self {
-            origin_uri,
             payload,
+            origin_uri,
         }
     }
 }
 
 /// metrics reporter for connector sources
-pub struct MetricsSourceReporter {
+pub struct SourceReporter {
     artefact_url: TremorUrl,
     metrics_out: u64,
     metrics_err: u64,
-    tx: Sender<MetricsMsg>,
+    tx: Sender<Msg>,
     flush_interval_ns: Option<u64>,
     last_flush_ns: u64,
 }
 
-impl MetricsSourceReporter {
-    pub(crate) fn new(
-        url: TremorUrl,
-        tx: Sender<MetricsMsg>,
-        flush_interval_s: Option<u64>,
-    ) -> Self {
+impl SourceReporter {
+    pub(crate) fn new(url: TremorUrl, tx: Sender<Msg>, flush_interval_s: Option<u64>) -> Self {
         Self {
             artefact_url: url,
             metrics_out: 0,
@@ -128,17 +124,13 @@ impl MetricsSourceReporter {
 pub(crate) struct MetricsSinkReporter {
     artefact_url: TremorUrl,
     metrics_in: u64,
-    tx: Sender<MetricsMsg>,
+    tx: Sender<Msg>,
     flush_interval_ns: Option<u64>,
     last_flush_ns: u64,
 }
 
 impl MetricsSinkReporter {
-    pub(crate) fn new(
-        url: TremorUrl,
-        tx: Sender<MetricsMsg>,
-        flush_interval_s: Option<u64>,
-    ) -> Self {
+    pub(crate) fn new(url: TremorUrl, tx: Sender<Msg>, flush_interval_s: Option<u64>) -> Self {
         Self {
             artefact_url: url,
             metrics_in: 0,
@@ -175,8 +167,8 @@ impl MetricsSinkReporter {
 
 // this is simple forwarding
 #[cfg(not(tarpaulin_include))]
-pub(crate) fn send(tx: &Sender<MetricsMsg>, metric: EventPayload, artefact_url: &TremorUrl) {
-    if let Err(_e) = tx.try_send(MetricsMsg::new(metric, None)) {
+pub(crate) fn send(tx: &Sender<Msg>, metric: EventPayload, artefact_url: &TremorUrl) {
+    if let Err(_e) = tx.try_send(Msg::new(metric, None)) {
         error!(
             "[Connector::{}] Error sending to system metrics connector.",
             &artefact_url
@@ -210,8 +202,8 @@ fn make_metrics_payload(
 /// There should be only one instance around all the time, identified by `tremor://localhost/connector/system::metrics/system`
 ///
 pub(crate) struct MetricsConnector {
-    tx: Sender<MetricsMsg>,
-    rx: Receiver<MetricsMsg>,
+    tx: Sender<Msg>,
+    rx: Receiver<Msg>,
 }
 
 impl MetricsConnector {
@@ -285,12 +277,12 @@ impl Connector for MetricsConnector {
 }
 
 pub(crate) struct MetricsSource {
-    rx: Receiver<MetricsMsg>,
+    rx: Receiver<Msg>,
     origin_uri: EventOriginUri,
 }
 
 impl MetricsSource {
-    pub(crate) fn new(rx: Receiver<MetricsMsg>) -> Self {
+    pub(crate) fn new(rx: Receiver<Msg>) -> Self {
         Self {
             rx,
             origin_uri: EventOriginUri {
@@ -330,11 +322,11 @@ impl Source for MetricsSource {
 }
 
 pub(crate) struct MetricsSink {
-    tx: Sender<MetricsMsg>,
+    tx: Sender<Msg>,
 }
 
 impl MetricsSink {
-    pub(crate) fn new(tx: Sender<MetricsMsg>) -> Self {
+    pub(crate) fn new(tx: Sender<Msg>) -> Self {
         Self { tx }
     }
 }
@@ -380,7 +372,7 @@ impl Sink for MetricsSink {
         // verify event format
         for (value, _meta) in event.value_meta_iter() {
             // if it fails here an error event is sent to the ERR port of this connector
-            verify_metrics_value(value)?
+            verify_metrics_value(value)?;
         }
 
         let mut res = Vec::with_capacity(1);
@@ -388,7 +380,7 @@ impl Sink for MetricsSink {
             origin_uri, data, ..
         } = event;
 
-        let metrics_msg = MetricsMsg::new(data, origin_uri);
+        let metrics_msg = Msg::new(data, origin_uri);
         let ack_or_fail = match self.tx.try_send(metrics_msg) {
             Err(TrySendError::Closed(_)) => {
                 // channel is closed

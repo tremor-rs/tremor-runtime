@@ -146,9 +146,9 @@ where
                 } else {
                     self.stream
                         .write_all(format!("{:?}", &chunk).as_bytes())
-                        .await?
+                        .await?;
                 }
-                self.stream.write_all(b"\n").await?
+                self.stream.write_all(b"\n").await?;
             }
         }
         self.stream.flush().await?;

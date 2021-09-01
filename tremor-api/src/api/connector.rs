@@ -31,7 +31,7 @@ pub async fn list_artefacts(req: Request) -> Result<Response> {
         .iter()
         .filter_map(|url| url.artefact().map(String::from))
         .collect();
-    reply(req, result, false, StatusCode::Ok).await
+    reply(&req, result, StatusCode::Ok)
 }
 
 pub async fn publish_artefact(req: Request) -> Result<Response> {
@@ -40,7 +40,7 @@ pub async fn publish_artefact(req: Request) -> Result<Response> {
     let url = TremorUrl::from_connector_id(&data.id)?;
     let repo = &req.state().world.repo;
     let result = repo.publish_connector(&url, false, data).await?;
-    reply(req, result, true, StatusCode::Created).await
+    reply(&req, result, StatusCode::Created)
 }
 
 pub async fn unpublish_artefact(req: Request) -> Result<Response> {
@@ -48,7 +48,7 @@ pub async fn unpublish_artefact(req: Request) -> Result<Response> {
     let url = TremorUrl::from_connector_id(id)?;
     let repo = &req.state().world.repo;
     let result = repo.unpublish_connector(&url).await?;
-    reply(req, result, true, StatusCode::Ok).await
+    reply(&req, result, StatusCode::Ok)
 }
 
 pub async fn get_artefact(req: Request) -> Result<Response> {
@@ -67,13 +67,13 @@ pub async fn get_artefact(req: Request) -> Result<Response> {
             .filter_map(|instance_url| instance_url.instance().map(String::from))
             .collect(),
     };
-    reply(req, conn, false, StatusCode::Ok).await
+    reply(&req, conn, StatusCode::Ok)
 }
 
 pub async fn get_instance(req: Request) -> Result<Response> {
-    let aid = req.param("aid")?;
-    let sid = req.param("sid")?;
-    let instance_url = TremorUrl::from_connector_instance(aid, sid)?;
+    let a_id = req.param("aid")?;
+    let s_id = req.param("sid")?;
+    let instance_url = TremorUrl::from_connector_instance(a_id, s_id)?;
     let registry = &req.state().world.reg;
     let instance = registry
         .find_connector(&instance_url)
@@ -83,7 +83,7 @@ pub async fn get_instance(req: Request) -> Result<Response> {
     instance.send(Msg::Report(tx)).await?;
     let report = rx.recv().await?;
 
-    reply(req, report, false, StatusCode::Ok).await
+    reply(&req, report, StatusCode::Ok)
 }
 
 #[derive(Deserialize)]
@@ -93,11 +93,11 @@ struct InstancePatch {
 
 /// this boils down to pause/resume/start/stop
 pub async fn patch_instance(req: Request) -> Result<Response> {
-    use ConnectorState::*;
+    use ConnectorState::{Initialized, Paused, Running, Stopped};
     let (req, patch): (_, InstancePatch) = decode(req).await?;
-    let aid = req.param("aid")?;
-    let sid = req.param("sid")?;
-    let instance_url = TremorUrl::from_connector_instance(aid, sid)?;
+    let a_id = req.param("aid")?;
+    let s_id = req.param("sid")?;
+    let instance_url = TremorUrl::from_connector_instance(a_id, s_id)?;
     let registry = &req.state().world.reg;
     let instance = registry
         .find_connector(&instance_url)
@@ -106,8 +106,7 @@ pub async fn patch_instance(req: Request) -> Result<Response> {
     if instance
         .url
         .artefact()
-        .map(|a| a.starts_with("system::"))
-        .unwrap_or(false)
+        .map_or(false, |a| a.starts_with("system::"))
     {
         return Err(Error::new(
             StatusCode::BadRequest,
@@ -119,28 +118,29 @@ pub async fn patch_instance(req: Request) -> Result<Response> {
     instance.send(Msg::Report(tx.clone())).await?;
     let current_state = rx.recv().await?;
     // dispatch to intended action
-    let msg = match (current_state.status, patch.status) {
+    match (current_state.status, patch.status) {
         (Running, Paused) => {
             // pause
-            Msg::Pause
+            registry.pause_connector(&instance.url).await?;
         }
         (_, Stopped) => {
             // stop - we need to return immediately here, as the
             // connector will be stopped and the addr is now invalid
-            instance.send(Msg::Stop).await?;
+            registry.unpublish_connector(&instance.url).await?;
+            registry.stop_connector(&instance.url).await?;
             let report = StatusReport {
                 status: Stopped,
                 ..current_state
             };
-            return reply(req, report, false, StatusCode::Ok).await;
+            return reply(&req, report, StatusCode::Ok);
         }
         (Paused, Running) => {
             // resume
-            Msg::Resume
+            registry.resume_connector(&instance.url).await?;
         }
         (Initialized, Running) => {
             // start
-            Msg::Start
+            registry.start_connector(&instance.url).await?;
         }
         (current, wanted) => {
             // cannot transition
@@ -153,10 +153,9 @@ pub async fn patch_instance(req: Request) -> Result<Response> {
             ));
         }
     };
-    instance.send(msg).await?;
 
     // fetch new status
     instance.send(Msg::Report(tx)).await?;
     let new_status = async_std::future::timeout(Duration::from_secs(2), rx.recv()).await??;
-    reply(req, new_status, false, StatusCode::Ok).await
+    reply(&req, new_status, StatusCode::Ok)
 }

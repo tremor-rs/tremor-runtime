@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::config::CodecConfig;
+use crate::config::Codec as CodecConfig;
 use crate::errors::{ErrorKind, Result};
 use either::Either;
 use tremor_script::Value;
@@ -133,7 +133,7 @@ pub fn lookup(name: &str) -> Result<Box<dyn Codec>> {
 pub fn resolve(config: &Either<String, CodecConfig>) -> Result<Box<dyn Codec>> {
     match config {
         Either::Left(name) => lookup(name.as_str()),
-        Either::Right(config) => lookup_with_config(&config),
+        Either::Right(config) => lookup_with_config(config),
     }
 }
 
@@ -184,7 +184,7 @@ mod test {
         assert!(super::lookup("syslog").is_ok());
         assert_eq!(
             super::lookup("snot").err().unwrap().to_string(),
-            "Codec 'snot' not found."
+            "Codec \"snot\" not found."
         )
     }
 
