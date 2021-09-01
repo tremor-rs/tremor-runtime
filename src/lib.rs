@@ -170,42 +170,36 @@ pub async fn load_cfg_file(world: &World, file_name: &str) -> Result<usize> {
     let config: config::Config = serde_yaml::from_reader(buffered_reader)?;
 
     for c in config.connector {
-        let id = TremorUrl::parse(&format!("/connector/{}", c.id))?;
+        let id = TremorUrl::from_connector_id(&c.id)?;
         info!("Loading {} from file {}.", id, file_name);
         world.repo.publish_connector(&id, false, c).await?;
         count += 1;
     }
     for o in config.offramp {
-        let id = TremorUrl::parse(&format!("/offramp/{}", o.id))?;
+        let id = TremorUrl::from_offramp_id(&o.id)?;
         info!("Loading {} from file {}.", id, file_name);
         world.repo.publish_offramp(&id, false, o).await?;
         count += 1;
     }
 
     for o in config.onramp {
-        let id = TremorUrl::parse(&format!("/onramp/{}", o.id))?;
+        let id = TremorUrl::from_onramp_id(&o.id)?;
         info!("Loading {} from file {}.", id, file_name);
         world.repo.publish_onramp(&id, false, o).await?;
         count += 1;
     }
     for binding in config.binding {
-        let id = TremorUrl::parse(&format!("/binding/{}", binding.id))?;
+        let id = TremorUrl::from_binding_id(&binding.id)?;
         info!("Loading {} from file {}.", id, file_name);
         world
             .repo
-            .publish_binding(
-                &id,
-                false,
-                BindingArtefact {
-                    binding,
-                    mapping: None,
-                },
-            )
+            .publish_binding(&id, false, BindingArtefact::new(binding, None))
             .await?;
         count += 1;
     }
     for (binding, mapping) in config.mapping {
         world.link_binding(&binding, mapping).await?;
+        world.reg.start_binding(&binding).await?;
         count += 1;
     }
     Ok(count)

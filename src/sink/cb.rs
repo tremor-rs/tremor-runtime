@@ -176,7 +176,6 @@ mod tests {
                 assert_eq!(CbAction::Ack, insight.cb);
                 assert_eq!(id, insight.id);
                 assert_eq!(op_meta, insight.op_meta);
-                assert_eq!(origin_uri, insight.origin_uri);
             } else {
                 assert!(
                     false,
@@ -207,7 +206,6 @@ mod tests {
                 assert_eq!(CbAction::Fail, insight.cb);
                 assert_eq!(id, insight.id);
                 assert_eq!(op_meta, insight.op_meta);
-                assert_eq!(origin_uri, insight.origin_uri);
             } else {
                 assert!(
                     false,
@@ -239,11 +237,9 @@ mod tests {
                     assert_eq!(CbAction::Ack, insight1.cb);
                     assert_eq!(id, insight1.id);
                     assert_eq!(op_meta, insight1.op_meta);
-                    assert_eq!(origin_uri, insight1.origin_uri);
 
                     assert_eq!(CbAction::Open, insight2.cb);
                     assert_eq!(op_meta, insight2.op_meta);
-                    assert_eq!(origin_uri, insight2.origin_uri);
                 }
                 _ => assert!(
                     false,
@@ -274,11 +270,9 @@ mod tests {
                     assert_eq!(CbAction::Fail, insight1.cb);
                     assert_eq!(id, insight1.id);
                     assert_eq!(op_meta, insight1.op_meta);
-                    assert_eq!(origin_uri, insight1.origin_uri);
 
                     assert_eq!(CbAction::Close, insight2.cb);
                     assert_eq!(op_meta, insight2.op_meta);
-                    assert_eq!(origin_uri, insight2.origin_uri);
                 }
                 _ => assert!(
                     false,

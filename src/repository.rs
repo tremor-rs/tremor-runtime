@@ -652,7 +652,7 @@ impl Repositories {
         rx.recv().await?
     }
 
-    /// Binds a binding
+    /// Register the instance identified by `id` for its artefact entry in the repo.
     ///
     /// # Errors
     ///  * if we can't bind the binding

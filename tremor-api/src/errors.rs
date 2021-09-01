@@ -16,7 +16,7 @@ use http_types::{headers, StatusCode};
 use serde::Serialize;
 use std::sync::{MutexGuard, PoisonError};
 use tide::Response;
-use tremor_runtime::errors::{Error as TremorError, ErrorKind};
+use tremor_runtime::errors::{Error as TremorError, Kind as ErrorKind};
 
 /// Tremor API error
 #[derive(Debug, Serialize)]

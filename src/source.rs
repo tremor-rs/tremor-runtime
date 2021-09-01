@@ -26,7 +26,7 @@ use crate::{
 };
 
 use crate::Result;
-use async_channel::{self, unbounded, Receiver, Sender};
+use async_channel::{self, unbounded, Receiver};
 use async_std::task;
 use beef::Cow;
 use halfbrown::HashMap;
@@ -81,7 +81,7 @@ pub(crate) enum SourceState {
     Disconnected,
 }
 
-/// reply of a source from pull_event
+/// reply of a source from call to `pull_event`
 #[derive(Debug)]
 pub(crate) enum SourceReply {
     /// A normal batch_data event with a `Vec<Vec<u8>>` for data
@@ -202,7 +202,7 @@ where
     source_id: TremorUrl,
     source: T,
     rx: Receiver<onramp::Msg>,
-    tx: Sender<onramp::Msg>,
+    onramp_addr: onramp::Addr,
     pp_template: Vec<String>,
     preprocessors: BTreeMap<usize, Preprocessors>,
     codec: Box<dyn Codec>,
@@ -248,7 +248,7 @@ where
         &mut self,
         stream: usize,
         ingest_ns: &mut u64,
-        codec_override: Option<String>,
+        codec_override: &Option<String>,
         data: Vec<u8>,
         meta: Option<StaticValue>, // See: https://github.com/rust-lang/rust/issues/63033
     ) -> Vec<Result<EventPayload>> {
@@ -333,7 +333,7 @@ where
                             };
                             let msg = pipeline::MgmtMsg::ConnectInput {
                                 input_url: self.source_id.clone(),
-                                target: ConnectTarget::Onramp(self.tx.clone()),
+                                target: ConnectTarget::Onramp(self.onramp_addr.clone()),
                                 transactional: self.is_transactional,
                             };
                             p.1.send_mgmt(msg).await?;
@@ -483,7 +483,7 @@ where
     }
 
     /// constructor
-    async fn new(mut source: T, config: OnrampConfig<'_>) -> Result<(Self, Sender<onramp::Msg>)> {
+    async fn new(mut source: T, config: OnrampConfig<'_>) -> Result<(Self, onramp::Addr)> {
         // We use a unbounded channel for counterflow, while an unbounded channel seems dangerous
         // there is soundness to this.
         // The unbounded channel ensures that on counterflow we never have to block, or in other
@@ -501,6 +501,7 @@ where
         // N is the maximum number of counterflow events a single event can trigger.
         // N is normally < 1.
         let (tx, rx) = unbounded();
+        let onramp_addr = onramp::Addr(tx);
         let codec = codec::lookup(config.codec)?;
         let mut resolved_codec_map = codec::builtin_codec_map();
         // override the builtin map
@@ -519,7 +520,7 @@ where
                 pp_template,
                 source,
                 rx,
-                tx: tx.clone(),
+                onramp_addr: onramp_addr.clone(),
                 preprocessors,
                 //postprocessors,
                 codec,
@@ -533,16 +534,16 @@ where
                 is_transactional,
                 err_required: config.err_required,
             },
-            tx,
+            onramp_addr,
         ))
     }
 
     /// start the `SourceManager`
     async fn start(source: T, config: OnrampConfig<'_>) -> Result<onramp::Addr> {
         let name = source.id().short_id("src");
-        let (manager, tx) = SourceManager::new(source, config).await?;
+        let (manager, addr) = SourceManager::new(source, config).await?;
         task::Builder::new().name(name).spawn(manager.run())?;
-        Ok(tx)
+        Ok(addr)
     }
 
     async fn route_result(
@@ -600,7 +601,7 @@ where
                             let results = self.make_event_data(
                                 stream,
                                 &mut ingest_ns,
-                                codec_override.clone(),
+                                &codec_override,
                                 data,
                                 meta_data.map(StaticValue),
                             );
@@ -631,7 +632,7 @@ where
                         let results = self.make_event_data(
                             stream,
                             &mut ingest_ns,
-                            codec_override,
+                            &codec_override,
                             data,
                             meta.map(StaticValue),
                         );
