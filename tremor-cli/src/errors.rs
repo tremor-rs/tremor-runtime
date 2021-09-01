@@ -20,6 +20,12 @@
 use crate::util::SourceKind;
 use error_chain::error_chain;
 
+impl From<tremor_value::Error> for Error {
+    fn from(e: tremor_value::Error) -> Self {
+        Self::from(format!("{}", e))
+    }
+}
+
 impl From<http_types::Error> for Error {
     fn from(e: http_types::Error) -> Self {
         Self::from(format!("{}", e))

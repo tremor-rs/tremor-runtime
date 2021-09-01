@@ -20,6 +20,7 @@ use crate::prelude::*;
 use crate::{lexer, srs};
 use std::collections::BTreeSet;
 use std::io::Write;
+use tremor_value::literal;
 
 /// A tremor deployment ( troy)
 #[derive(Debug, Clone)]
@@ -68,6 +69,30 @@ where
         reg: &Registry,
         aggr_reg: &AggrRegistry,
     ) -> std::result::Result<Self, CompilerError> {
+        Deploy::parse_with_args(
+            module_path,
+            file_name,
+            script,
+            cus,
+            reg,
+            aggr_reg,
+            &literal!({}),
+        )
+    }
+
+    /// Parses a string into a deployment
+    ///
+    /// # Errors
+    /// if the deployment can not be parsed
+    pub fn parse_with_args(
+        module_path: &ModulePath,
+        file_name: &str,
+        script: &'script str,
+        cus: Vec<ast::CompilationUnit>,
+        reg: &Registry,
+        aggr_reg: &AggrRegistry,
+        args: &Value<'_>,
+    ) -> std::result::Result<Self, CompilerError> {
         let mut source = script.to_string();
 
         let mut warnings = BTreeSet::new();
@@ -81,6 +106,7 @@ where
         let r = |include_stack: &mut lexer::IncludeStack| -> Result<Self> {
             let deploy = srs::Deploy::try_new::<Error, _>(source.clone(), |src: &mut String| {
                 let mut helper = ast::Helper::new(reg, aggr_reg, cus);
+                helper.consts.args = args.clone_static();
                 let cu = include_stack.push(&file_name)?;
                 let lexemes: Vec<_> = lexer::Preprocessor::preprocess(
                     module_path,
