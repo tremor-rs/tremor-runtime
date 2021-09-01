@@ -81,7 +81,7 @@ fn test_event(s: u64) -> Event {
 
 fn test_event_tx(s: u64, transactional: bool, group: u64) -> Event {
     Event {
-        id: (0, 0, s).into(),
+        id: (0, 0, s, s).into(),
         ingest_ns: s + 100,
         data: literal!({ "group": group, "s": s }).into(),
         transactional,

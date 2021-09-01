@@ -4,4 +4,4 @@ asserts:
   - source: STDERR
     contains:
       - |
-        bad_onramp not known
+        Unknown onramp type bad_onramp

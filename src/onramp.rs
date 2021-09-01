@@ -51,11 +51,24 @@ pub enum Msg {
     Response(tremor_pipeline::Event),
 }
 
+#[derive(Debug, Clone)]
 /// onramp address
-pub type Addr = async_channel::Sender<Msg>;
+pub struct Addr(pub(crate) async_channel::Sender<Msg>);
+
+impl Addr {
+    pub(crate) async fn send(&self, msg: Msg) -> Result<()> {
+        Ok(self.0.send(msg).await?)
+    }
+}
+
+impl From<async_channel::Sender<Msg>> for Addr {
+    fn from(sender: async_channel::Sender<Msg>) -> Self {
+        Self(sender)
+    }
+}
 
 /// config for onramps
-pub struct OnrampConfig<'cfg> {
+pub struct Config<'cfg> {
     /// unique numeric identifier
     pub onramp_uid: u64,
     /// configured codec
@@ -76,7 +89,7 @@ pub struct OnrampConfig<'cfg> {
 #[async_trait::async_trait]
 pub trait Onramp: Send {
     /// start the onramp
-    async fn start(&mut self, config: OnrampConfig<'_>) -> Result<Addr>;
+    async fn start(&mut self, config: Config<'_>) -> Result<Addr>;
     /// default codec
     fn default_codec(&self) -> &str;
 }
@@ -129,6 +142,7 @@ impl Manager {
     pub fn new(qsize: usize) -> Self {
         Self { qsize }
     }
+    #[allow(clippy::too_many_lines)]
     pub fn start(self) -> (JoinHandle<Result<()>>, Sender) {
         let (tx, rx) = bounded(self.qsize);
 
@@ -156,7 +170,7 @@ impl Manager {
                         } = *c;
 
                         match stream
-                            .start(OnrampConfig {
+                            .start(Config {
                                 onramp_uid: onramp_id_gen.next_id(),
                                 codec: &codec,
                                 codec_map,
@@ -352,10 +366,7 @@ links:
                 .publish_binding(
                     &TremorUrl::parse(&format!("/binding/{}", "test"))?,
                     false,
-                    BindingArtefact {
-                        binding,
-                        mapping: None,
-                    },
+                    BindingArtefact::new(binding, None),
                 )
                 .await?;
 

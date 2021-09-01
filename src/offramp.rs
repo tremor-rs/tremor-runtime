@@ -71,8 +71,22 @@ pub enum Msg {
 }
 
 pub(crate) type Sender = async_channel::Sender<ManagerMsg>;
+
+#[derive(Debug, Clone)]
 /// offramp address
-pub type Addr = async_channel::Sender<Msg>;
+pub struct Addr(async_channel::Sender<Msg>);
+
+impl Addr {
+    pub(crate) async fn send(&self, msg: Msg) -> Result<()> {
+        Ok(self.0.send(msg).await?)
+    }
+}
+
+impl From<async_channel::Sender<Msg>> for Addr {
+    fn from(sender: async_channel::Sender<Msg>) -> Self {
+        Self(sender)
+    }
+}
 
 /// offramp
 #[async_trait::async_trait]
@@ -253,7 +267,8 @@ impl Manager {
         let mut to_and_from_offramp_rx = PriorityMerge::new(c_rx, m_rx);
 
         let offramp_url = id.clone();
-        let offramp_addr = msg_tx.clone();
+        let offramp_addr = Addr(msg_tx.clone());
+        let send_addr = offramp_addr.clone();
 
         task::spawn::<_, Result<()>>(async move {
             let mut pipelines: HashMap<TremorUrl, pipeline::Addr> = HashMap::new();
@@ -446,7 +461,7 @@ impl Manager {
             info!("[Offramp::{}] stopped", offramp_url);
             Ok(())
         });
-        r.send(Ok(msg_tx)).await?;
+        r.send(Ok(send_addr.clone())).await?;
         Ok(())
     }
 
