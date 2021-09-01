@@ -90,6 +90,7 @@ impl fmt::Debug for Addr {
         write!(f, "Pipeline({})", self.id)
     }
 }
+
 #[derive(Debug)]
 pub(crate) enum CfMsg {
     Insight(Event),
@@ -693,10 +694,11 @@ mod tests {
 
         // connect a fake onramp
         let (onramp_tx, onramp_rx) = async_channel::unbounded();
+        let onramp_addr = onramp::Addr(onramp_tx);
         let onramp_url = TremorUrl::parse("/onramp/fake_onramp/instance/out")?;
         addr.send_mgmt(MgmtMsg::ConnectInput {
             input_url: onramp_url.clone(),
-            target: ConnectTarget::Onramp(onramp_tx.clone()), // clone avoids the channel to be closed on disconnect below
+            target: ConnectTarget::Onramp(onramp_addr), // clone avoids the channel to be closed on disconnect below
             transactional: true,
         })
         .await?;
@@ -706,7 +708,7 @@ mod tests {
         let onramp2_url = TremorUrl::parse("/onramp/fake_onramp2/instance/out")?;
         addr.send_mgmt(MgmtMsg::ConnectInput {
             input_url: onramp2_url.clone(),
-            target: ConnectTarget::Onramp(onramp2_tx.clone()),
+            target: ConnectTarget::Onramp(onramp::Addr(onramp2_tx.clone())),
             transactional: false,
         })
         .await?;
@@ -770,7 +772,7 @@ mod tests {
         })
         .await?;
         // we expect nothing after disconnect, so we run into a timeout
-        match timeout(NEGATIVE_RECV_TIMEOUT, onramp_rx.recv()).await {
+        match timeout(NEGATIVE_RECV_TIMEOUT, onramp_rx.recv()).await? {
             Ok(m) => assert!(false, "Didnt expect a message. Got: {:?}", m),
             Err(_e) => {}
         };
@@ -833,12 +835,13 @@ mod tests {
         sender.send(create_msg).await?;
         let addr = rx.recv().await??;
         let (offramp_tx, offramp_rx) = async_channel::unbounded();
+
         let offramp_url = TremorUrl::parse("/offramp/fake_offramp/instance/in")?;
         // connect a channel so we can receive events from the back of the pipeline :)
         addr.send_mgmt(MgmtMsg::ConnectOutput {
             port: OUT,
             output_url: offramp_url.clone(),
-            target: ConnectTarget::Offramp(offramp_tx.clone()),
+            target: ConnectTarget::Offramp(offramp_tx.clone().into()),
         })
         .await?;
         manager_fence(&addr).await?;

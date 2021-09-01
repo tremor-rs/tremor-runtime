@@ -119,15 +119,16 @@ pub async fn patch_instance(req: Request) -> Result<Response> {
     instance.send(Msg::Report(tx.clone())).await?;
     let current_state = rx.recv().await?;
     // dispatch to intended action
-    let msg = match (current_state.status, patch.status) {
+    match (current_state.status, patch.status) {
         (Running, Paused) => {
             // pause
-            Msg::Pause
+            registry.pause_connector(&instance.url).await?;
         }
         (_, Stopped) => {
             // stop - we need to return immediately here, as the
             // connector will be stopped and the addr is now invalid
-            instance.send(Msg::Stop).await?;
+            registry.unpublish_connector(&instance.url).await?;
+            registry.stop_connector(&instance.url).await?;
             let report = StatusReport {
                 status: Stopped,
                 ..current_state
@@ -136,11 +137,11 @@ pub async fn patch_instance(req: Request) -> Result<Response> {
         }
         (Paused, Running) => {
             // resume
-            Msg::Resume
+            registry.resume_connector(&instance.url).await?;
         }
         (Initialized, Running) => {
             // start
-            Msg::Start
+            registry.start_connector(&instance.url).await?;
         }
         (current, wanted) => {
             // cannot transition
@@ -153,7 +154,6 @@ pub async fn patch_instance(req: Request) -> Result<Response> {
             ));
         }
     };
-    instance.send(msg).await?;
 
     // fetch new status
     instance.send(Msg::Report(tx)).await?;
