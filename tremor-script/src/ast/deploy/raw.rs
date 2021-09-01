@@ -577,6 +577,7 @@ impl<'script> Upable<'script> for ConnectorDeclRaw<'script> {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
+#[allow(clippy::large_enum_variant)]
 pub enum ArgumentDeclRaw<'script> {
     Required(IdentRaw<'script>),
     Optional(IdentRaw<'script>, ExprRaw<'script>),

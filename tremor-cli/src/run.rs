@@ -239,7 +239,7 @@ fn run_tremor_source(matches: &ArgMatches, src: String, args: &Value) -> Result<
     let env = env::setup()?;
 
     let mut outer = TermHighlighter::stderr();
-    match Script::parse_with_args(&env.module_path, &src, raw.clone(), &env.fun, &args) {
+    match Script::parse_with_args(&env.module_path, &src, raw.clone(), &env.fun, args) {
         Ok(mut script) => {
             script.format_warnings_with(&mut outer)?;
 
@@ -471,12 +471,9 @@ fn run_troy_source(matches: &ArgMatches, src: &str, args: &Value) -> Result<()> 
     // FIXME TODO Multiple pipeline deployments with different args overrides
     for (_name, stmt) in unit.instances {
         let _fqsn = stmt.fqsn(&stmt.module);
-        match stmt.atom {
-            AtomOfDeployment::Pipeline(pipe) => {
-                unit_pipeline = Some(pipe.query);
-                num_pipelines += 1;
-            }
-            _ => {}
+        if let AtomOfDeployment::Pipeline(pipe) = stmt.atom {
+            unit_pipeline = Some(pipe.query);
+            num_pipelines += 1;
         }
     }
 
@@ -519,7 +516,7 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
     if let Value::Object(ref mut fields) = args {
         if let Some(overags) = matches.values_of("arg") {
             for arg in overags {
-                let kv: Vec<String> = arg.split("=").map(ToString::to_string).collect();
+                let kv: Vec<String> = arg.split('=').map(ToString::to_string).collect();
                 if kv.len() != 2 {
                     // FIXME TODO output a nicer error
                 }
