@@ -19,13 +19,12 @@ use super::BaseExpr;
 use super::ConnectorDecl;
 use super::CreateStmt;
 use super::FlowDecl;
-use super::QueryDecl;
+use super::PipelineDecl;
 use super::Value;
 use crate::ast::error_generic;
 use crate::ast::query::raw::QueryRaw;
 use crate::ast::raw::ExprRaw;
 use crate::ast::raw::IdentRaw;
-use crate::ast::raw::ImutExprRaw;
 use crate::ast::raw::ModuleRaw;
 use crate::ast::raw::ScriptRaw;
 use crate::ast::raw::StringLitRaw;
@@ -50,6 +49,7 @@ use halfbrown::HashMap;
 use tremor_common::time::nanotime;
 use tremor_common::url::TremorUrl;
 use tremor_value::literal;
+use value_trait::Mutable;
 
 // For compile time interpretation support
 use crate::interpreter::Env;
@@ -173,9 +173,9 @@ impl<'script> DeployRaw<'script> {
 
         Ok(Deploy {
             stmts,
-            connectors: helper.connectors.clone(),
-            pipelines: helper.pipelines.clone(),
-            flows: helper.flows.clone(),
+            connectors: helper.connector_defns.clone(),
+            pipelines: helper.pipeline_defns.clone(),
+            flows: helper.flow_defns.clone(),
         })
     }
 }
@@ -207,22 +207,24 @@ impl<'script> Upable<'script> for DeployStmtRaw<'script> {
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         match self {
             DeployStmtRaw::PipelineDecl(stmt) => {
-                let stmt: QueryDecl<'script> = stmt.up(helper)?;
+                let stmt: PipelineDecl<'script> = stmt.up(helper)?;
                 helper
-                    .pipelines
+                    .pipeline_defns
                     .insert(stmt.fqsn(&stmt.module), stmt.clone());
                 Ok(DeployStmt::PipelineDecl(Box::new(stmt)))
             }
             DeployStmtRaw::ConnectorDecl(stmt) => {
                 let stmt: ConnectorDecl<'script> = stmt.up(helper)?;
                 helper
-                    .connectors
+                    .connector_defns
                     .insert(stmt.fqsn(&stmt.module), stmt.clone());
                 Ok(DeployStmt::ConnectorDecl(Box::new(stmt)))
             }
             DeployStmtRaw::FlowDecl(stmt) => {
                 let stmt: FlowDecl<'script> = stmt.up(helper)?;
-                helper.flows.insert(stmt.fqsn(&stmt.module), stmt.clone());
+                helper
+                    .flow_defns
+                    .insert(stmt.fqsn(&stmt.module), stmt.clone());
                 Ok(DeployStmt::FlowDecl(Box::new(stmt)))
             }
             DeployStmtRaw::CreateStmt(stmt) => {
@@ -284,17 +286,19 @@ impl<'script> DeployModuleStmtRaw<'script> {
                 DeployStmtRaw::ConnectorDecl(stmt) => {
                     let stmt: ConnectorDecl<'script> = stmt.up(helper)?;
                     helper
-                        .connectors
+                        .connector_defns
                         .insert(stmt.fqsn(&stmt.module), stmt.clone());
                 }
                 DeployStmtRaw::FlowDecl(stmt) => {
                     let stmt: FlowDecl<'script> = stmt.up(helper)?;
-                    helper.flows.insert(stmt.fqsn(&stmt.module), stmt.clone());
+                    helper
+                        .flow_defns
+                        .insert(stmt.fqsn(&stmt.module), stmt.clone());
                 }
                 DeployStmtRaw::PipelineDecl(stmt) => {
-                    let stmt: QueryDecl<'script> = stmt.up(helper)?;
+                    let stmt: PipelineDecl<'script> = stmt.up(helper)?;
                     helper
-                        .pipelines
+                        .pipeline_defns
                         .insert(stmt.fqsn(&stmt.module), stmt.clone());
                 }
                 DeployStmtRaw::CreateStmt(stmt) => {
@@ -316,14 +320,14 @@ pub struct PipelineDeclRaw<'script> {
     pub(crate) start: Location,
     pub(crate) end: Location,
     pub(crate) id: String,
-    pub(crate) args: Option<WithArgsRaw<'script>>,
+    pub(crate) args: WithArgsRaw<'script>,
     pub(crate) params: Option<DeployWithExprsRaw<'script>>,
     pub(crate) script: Option<ScriptRaw<'script>>,
     pub(crate) query: QueryRaw<'script>,
 }
 
 fn arg_spec_resolver<'script, 'registry>(
-    args_spec: Option<WithArgsRaw<'script>>,
+    args_spec: WithArgsRaw<'script>,
     params_spec: &Option<DeployWithExprsRaw<'script>>,
     script_spec: &Option<ScriptRaw<'script>>,
     helper: &mut Helper<'script, 'registry>,
@@ -331,25 +335,26 @@ fn arg_spec_resolver<'script, 'registry>(
     let mut args: HashMap<Cow<str>, Value<'script>> = HashMap::new();
     let mut spec = vec![];
 
+    let upper_args = helper.consts.args.clone();
+
     // Process explicitly declared required/optional arguments
-    if let Some(args_spec) = args_spec {
-        for arg_spec in args_spec {
-            match arg_spec {
-                ArgumentDeclRaw::Required(name) => {
-                    let moo = name.to_string();
-                    let moo: Cow<str> = Cow::owned(moo);
-                    spec.push(moo.clone());
-                }
-                ArgumentDeclRaw::Optional(name, value) => {
-                    let moo = name.to_string();
-                    let moo: Cow<str> = Cow::owned(moo);
-                    spec.push(moo.clone());
-                    args.insert(moo, value.clone().up(helper)?.try_into_value(helper)?);
-                }
+    for arg_spec in args_spec {
+        match arg_spec {
+            ArgumentDeclRaw::Required(name) => {
+                let moo = name.to_string();
+                let moo: Cow<str> = Cow::owned(moo);
+                spec.push(moo.clone());
+            }
+            ArgumentDeclRaw::Optional(name, value) => {
+                let moo = name.to_string();
+                let moo: Cow<str> = Cow::owned(moo);
+                spec.push(moo.clone());
+                let value = value.up(helper)?;
+                let value = stateless_run_expr!(helper, &value);
+                args.insert(moo, value);
             }
         }
     }
-
     // We inject the args here so that our `with` clause can override based on
     // our specificational arguments and their defaults
     helper.consts.args = Value::Object(Box::new(args.clone()));
@@ -363,14 +368,12 @@ fn arg_spec_resolver<'script, 'registry>(
                 spec.push(moo.clone());
             }
             let up_value = value;
-            dbg!("x", &up_value);
             args.insert(moo, up_value.clone_static());
         }
+        // We inject the args here so that our `script` clause can override based on
+        // our `with` specificational argument overrides and their defaults
+        helper.consts.args = Value::Object(Box::new(args.clone()));
     }
-
-    // We inject the args here so that our `script` clause can override based on
-    // our `with` specificational argument overrides and their defaults
-    helper.consts.args = Value::Object(Box::new(args.clone()));
 
     match &script_spec {
         Some(script) => {
@@ -402,35 +405,27 @@ fn arg_spec_resolver<'script, 'registry>(
     }
 
     // NOTE We don't check for `extra args` here - this is deferred to the resolution in `arg_resolver`
-
+    helper.consts.args = upper_args.clone();
     Ok((spec, Value::Object(Box::new(args))))
 }
 
 fn arg_resolver<'script, 'registry>(
     outer: crate::pos::Range,
     spec: &[Cow<'script, str>],
-    args_as_params: Value<'script>,
+    args_as_params: &Value<'script>,
     params_spec: &Option<DeployWithExprsRaw<'script>>,
     script_spec: &Option<ScriptRaw<'script>>,
     helper: &mut Helper<'script, 'registry>,
 ) -> Result<Value<'script>> {
-    let mut args: HashMap<Cow<str>, Value<'script>> = HashMap::new();
+    let mut args = args_as_params.clone();
     // Process defaulted arguments via `with` expressions
+    helper.consts.args = args_as_params.clone();
     if let Value::Object(args_as_params) = args_as_params {
-        for (name, _value) in args_as_params.iter() {
-            let cow_name = Cow::owned(name.to_string());
-            if spec.contains(&cow_name) {
-                if let Some(value) = args_as_params.get(&cow_name) {
-                    args.insert(cow_name, value.clone());
-                }
-            }
-        }
-
         if let Some(params_spec) = up_maybe_params(params_spec, helper)? {
             for (name, value) in params_spec {
                 let moo = Cow::owned(name);
                 if spec.contains(&moo) {
-                    args.insert(moo, value.clone_static());
+                    args.insert(moo, value.clone_static())?;
                 } else {
                     return Err(ErrorKind::DeployArgNotSpecified(
                         outer.extent(&helper.meta),
@@ -459,7 +454,7 @@ fn arg_resolver<'script, 'registry>(
                 for (name, value) in value.iter() {
                     let cow_name = Cow::owned(name.to_string());
                     if spec.contains(&cow_name) {
-                        args.insert(cow_name, value.clone());
+                        args.insert(cow_name, value.clone())?;
                     } else {
                         return Err(ErrorKind::DeployArgNotSpecified(
                             outer.extent(&helper.meta),
@@ -469,7 +464,7 @@ fn arg_resolver<'script, 'registry>(
                         .into());
                     }
                 }
-                helper.consts.args = Value::Object(Box::new(args.clone()));
+                helper.consts.args = args.clone();
             }
         }
 
@@ -501,11 +496,11 @@ fn arg_resolver<'script, 'registry>(
         }
     }
 
-    Ok(Value::Object(Box::new(args)))
+    Ok(args)
 }
 
 impl<'script> Upable<'script> for PipelineDeclRaw<'script> {
-    type Target = QueryDecl<'script>;
+    type Target = PipelineDecl<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         // NOTE As we can have module aliases and/or nested modules within script definitions
         // that are private to or inline with the script - multiple script definitions in the
@@ -517,19 +512,22 @@ impl<'script> Upable<'script> for PipelineDeclRaw<'script> {
         //
         helper.module.push(self.id.clone());
         let (spec, args) = arg_spec_resolver(self.args, &self.params, &self.script, helper)?;
-        let query = self.query.up_script(helper)?;
+        let query = self.query.clone().up_script(helper)?;
 
-        let query_decl = QueryDecl {
+        let query_decl = PipelineDecl {
             mid: helper.add_meta_w_name(self.start, self.end, &self.id),
             module: helper.module.clone(),
             id: self.id,
             spec: spec.clone(),
             args,
-            query,
+            query_raw: self.query.clone(),
+            query, // The runnable is redefined by `deploy` statements which complete/finalize and seal the runtime arguments
         };
         helper.module.pop();
         let script_name = query_decl.fqsn(&helper.module);
-        helper.pipelines.insert(script_name, query_decl.clone());
+        helper
+            .pipeline_defns
+            .insert(script_name, query_decl.clone());
         Ok(query_decl)
     }
 }
@@ -543,7 +541,7 @@ pub struct ConnectorDeclRaw<'script> {
     pub(crate) end: Location,
     pub(crate) id: String,
     pub(crate) kind: (Vec<IdentRaw<'script>>, IdentRaw<'script>),
-    pub(crate) args: Option<WithArgsRaw<'script>>,
+    pub(crate) args: WithArgsRaw<'script>,
     pub(crate) params: Option<DeployWithExprsRaw<'script>>,
     pub(crate) script: Option<ScriptRaw<'script>>,
 }
@@ -571,7 +569,9 @@ impl<'script> Upable<'script> for ConnectorDeclRaw<'script> {
         };
         helper.module.pop();
         let script_name = query_decl.fqsn(&helper.module);
-        helper.connectors.insert(script_name, query_decl.clone());
+        helper
+            .connector_defns
+            .insert(script_name, query_decl.clone());
         Ok(query_decl)
     }
 }
@@ -579,7 +579,7 @@ impl<'script> Upable<'script> for ConnectorDeclRaw<'script> {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum ArgumentDeclRaw<'script> {
     Required(IdentRaw<'script>),
-    Optional(IdentRaw<'script>, ImutExprRaw<'script>),
+    Optional(IdentRaw<'script>, ExprRaw<'script>),
 }
 
 pub type WithArgsRaw<'script> = Vec<ArgumentDeclRaw<'script>>;
@@ -590,7 +590,7 @@ pub struct FlowDeclRaw<'script> {
     pub(crate) start: Location,
     pub(crate) end: Location,
     pub(crate) id: String,
-    pub(crate) args: Option<WithArgsRaw<'script>>,
+    pub(crate) args: WithArgsRaw<'script>,
     pub(crate) params: Option<DeployWithExprsRaw<'script>>,
     pub(crate) script: Option<ScriptRaw<'script>>,
     pub(crate) links: DeployLinksRaw<'script>,
@@ -655,7 +655,7 @@ impl<'script> Upable<'script> for FlowDeclRaw<'script> {
         };
         helper.module.pop();
         let script_name = flow_decl.fqsn(&helper.module);
-        helper.flows.insert(script_name, flow_decl.clone());
+        helper.flow_defns.insert(script_name, flow_decl.clone());
         Ok(flow_decl)
     }
 }
@@ -673,22 +673,10 @@ pub struct DeployLinkRaw<'script> {
 
 /// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub enum DeployInstanceKind {
-    /// we're forced to make this pub because of lalrpop
-    Pipeline,
-    /// we're forced to make this pub because of lalrpop
-    Connector,
-    /// we're forced to make this pub because of lalrpop
-    Flow,
-}
-
-/// we're forced to make this pub because of lalrpop
-#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct CreateStmtRaw<'script> {
     pub(crate) start: Location,
     pub(crate) end: Location,
     pub(crate) id: IdentRaw<'script>,
-    //   pub(crate) kind: DeployInstanceKind,
     pub(crate) params: Option<DeployWithExprsRaw<'script>>,
     pub(crate) script: Option<ScriptRaw<'script>>,
     /// Id of the definition
@@ -697,6 +685,17 @@ pub struct CreateStmtRaw<'script> {
     pub(crate) module: Vec<IdentRaw<'script>>,
 }
 impl_expr!(CreateStmtRaw);
+
+/// A fully resolved deployable artefact
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub enum AtomOfDeployment<'script> {
+    /// A deployable pipeline instance
+    Pipeline(PipelineDecl<'script>),
+    /// A deployable connector instance
+    Connector(ConnectorDecl<'script>),
+    /// A deployable flow instance
+    Flow(FlowDecl<'script>),
+}
 
 impl<'script> Upable<'script> for CreateStmtRaw<'script> {
     type Target = CreateStmt<'script>;
@@ -721,24 +720,51 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
             .join("");
         let fqsn = format!("{}{}", target_module, self.target.to_string());
 
-        let (kind, spec, args) = if let Some(artefact) = helper.pipelines.get(&fqsn) {
-            (
-                DeployInstanceKind::Pipeline,
-                artefact.spec.clone(),
-                artefact.args.clone(),
-            )
-        } else if let Some(artefact) = helper.connectors.get(&fqsn) {
-            (
-                DeployInstanceKind::Connector,
-                artefact.spec.clone(),
-                artefact.args.clone(),
-            )
-        } else if let Some(artefact) = helper.flows.get(&fqsn) {
-            (
-                DeployInstanceKind::Flow,
-                artefact.spec.clone(),
-                artefact.args.clone(),
-            )
+        let mut h2 = helper.clone(); // Clone to save some accounting/tracking & cleanup
+        let atom = if let Some(artefact) = helper.pipeline_defns.get(&fqsn) {
+            let mut args = arg_resolver(
+                self.extent(&helper.meta),
+                &artefact.spec,
+                &artefact.args,
+                &self.params,
+                &self.script,
+                &mut h2,
+            )?;
+
+            // We use our now resolved compile time arguments to compile
+            // the script to its interpretable and runnable final form with
+            // the resolved arguments provides as the arguments to the underlying
+            // pipeline.
+            std::mem::swap(&mut h2.consts.args, &mut args);
+            let mut query = artefact.query_raw.clone().up_script(&mut h2)?;
+            let mut artefact = artefact.clone();
+            std::mem::swap(&mut artefact.query, &mut query);
+
+            AtomOfDeployment::Pipeline(artefact)
+        } else if let Some(artefact) = helper.connector_defns.get(&fqsn) {
+            let args = arg_resolver(
+                self.extent(&helper.meta),
+                &artefact.spec,
+                &artefact.args,
+                &self.params,
+                &self.script,
+                &mut h2,
+            )?;
+            let mut artefact = artefact.clone();
+            artefact.args = args;
+            AtomOfDeployment::Connector(artefact)
+        } else if let Some(artefact) = helper.flow_defns.get(&fqsn) {
+            let args = arg_resolver(
+                self.extent(&helper.meta),
+                &artefact.spec,
+                &artefact.args,
+                &self.params,
+                &self.script,
+                &mut h2,
+            )?;
+            let mut artefact = artefact.clone();
+            artefact.args = args;
+            AtomOfDeployment::Flow(artefact)
         } else {
             let inner = if target_module.is_empty() {
                 self.id.extent(&helper.meta)
@@ -753,15 +779,6 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
             .into());
         };
 
-        let args = arg_resolver(
-            self.extent(&helper.meta),
-            &spec,
-            args,
-            &self.params,
-            &self.script,
-            helper,
-        )?;
-
         let module = (&self.module).iter().map(ToString::to_string).collect();
         let create_stmt = CreateStmt {
             mid: helper.add_meta_w_name(self.start, self.end, &self.id),
@@ -772,12 +789,11 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
             },
             module,
             target: self.target.to_string(),
-            kind,
-            args,
+            atom,
         };
-        helper.module.pop();
         let script_name = create_stmt.fqsn(&helper.module);
         helper.instances.insert(script_name, create_stmt.clone());
+        helper.module.pop();
 
         Ok(create_stmt)
     }

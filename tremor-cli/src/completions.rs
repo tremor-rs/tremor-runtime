@@ -36,23 +36,23 @@ fn generate_for_shell(mut app: clap::App, shell: &str) -> Result<()> {
     match shell {
         "guess" => guess_shell(app),
         "bash" => {
-            generate::<Bash, _>(&mut app, "tremor", &mut std::io::stdout());
+            generate(Bash, &mut app, "tremor", &mut std::io::stdout());
             Ok(())
         }
         "elvish" => {
-            generate::<Elvish, _>(&mut app, "tremor", &mut std::io::stdout());
+            generate(Elvish, &mut app, "tremor", &mut std::io::stdout());
             Ok(())
         }
         "fish" => {
-            generate::<Fish, _>(&mut app, "tremor", &mut std::io::stdout());
+            generate(Fish, &mut app, "tremor", &mut std::io::stdout());
             Ok(())
         }
         "powershell" => {
-            generate::<PowerShell, _>(&mut app, "tremor", &mut std::io::stdout());
+            generate(PowerShell, &mut app, "tremor", &mut std::io::stdout());
             Ok(())
         }
         "zsh" => {
-            generate::<Zsh, _>(&mut app, "tremor", &mut std::io::stdout());
+            generate(Zsh, &mut app, "tremor", &mut std::io::stdout());
             Ok(())
         }
         _ => Err(format!("Unsupported shell: {}", shell).into()),
