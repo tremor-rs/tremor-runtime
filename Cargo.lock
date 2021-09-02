@@ -6584,6 +6584,7 @@ dependencies = [
  "futures 0.3.17",
  "globwalk",
  "halfbrown",
+ "hashbrown 0.11.2",
  "http-types",
  "lalrpop",
  "lazy_static",

@@ -50,6 +50,21 @@ where
         self.query.suffix()
     }
 
+    /// Converts a troy embedded pipeline with resolved arguments to a runnable query
+    /// # Errors
+    ///   If the query fails to parse and convert correctly
+    pub fn from_troy(query: crate::ast::Query) -> std::result::Result<Self, CompilerError> {
+        let warnings = BTreeSet::new();
+        let locals = 0;
+        Ok(Self {
+            query: crate::srs::Query::new_from_ast(query),
+            // FIXME TODO - To date queries have been top level or via includes rather than embedded
+            source: "troy-precompiled".to_string(),
+            warnings,
+            locals,
+        })
+    }
+
     /// Parses a string into a query
     ///
     /// # Errors
