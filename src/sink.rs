@@ -17,7 +17,7 @@ use crate::pipeline;
 use crate::sink::prelude::*;
 use crate::system::World;
 use crate::url::TremorUrl;
-use async_channel::Sender;
+use async_std::channel::Sender;
 use halfbrown::HashMap;
 
 pub(crate) mod amqp;
@@ -418,6 +418,8 @@ pub async fn register_builtin_sinks(world: &World) -> Result<()> {
 
 #[cfg(test)]
 mod test {
+    use async_std::channel::unbounded;
+
     use super::*;
     use crate::pipeline::Msg;
 
@@ -425,9 +427,9 @@ mod test {
     async fn test_send() -> Result<()> {
         let e = Event::default();
 
-        let (t11, r11) = async_channel::unbounded();
-        let (t12, r12) = async_channel::unbounded();
-        let (t13, r13) = async_channel::unbounded();
+        let (t11, r11) = unbounded();
+        let (t12, r12) = unbounded();
+        let (t13, r13) = unbounded();
         let p1 = pipeline::Addr::new(
             t11,
             t12,
@@ -435,9 +437,9 @@ mod test {
             TremorUrl::parse("tremor://host/pipeline/name1/instance1/port1")?,
         );
 
-        let (t21, r21) = async_channel::unbounded();
-        let (t22, r22) = async_channel::unbounded();
-        let (t23, r23) = async_channel::unbounded();
+        let (t21, r21) = unbounded();
+        let (t22, r22) = unbounded();
+        let (t23, r23) = unbounded();
         let p2 = pipeline::Addr::new(
             t21,
             t22,

@@ -25,7 +25,7 @@ use crate::repository::{
 use crate::url::ports::METRICS;
 use crate::url::TremorUrl;
 use crate::OpConfig;
-use async_channel::bounded;
+use async_std::channel::bounded;
 use async_std::task::{self, JoinHandle};
 use hashbrown::HashMap;
 
@@ -84,35 +84,35 @@ lazy_static! {
 pub(crate) enum ManagerMsg {
     Pipeline(pipeline::ManagerMsg),
     // CreatePipeline(
-    //     async_channel::Sender<Result<pipeline::Addr>>,
+    //     async_std::channel::Sender<Result<pipeline::Addr>>,
     //     pipeline::Create,
     // ),
     Onramp(onramp::ManagerMsg),
     // CreateOnramp(
-    //     async_channel::Sender<Result<onramp::Addr>>,
+    //     async_std::channel::Sender<Result<onramp::Addr>>,
     //     Box<onramp::Create>,
     // ),
     Offramp(offramp::ManagerMsg),
     // CreateOfframp(
-    //     async_channel::Sender<Result<offramp::Addr>>,
+    //     async_std::channel::Sender<Result<offramp::Addr>>,
     //     Box<offramp::Create>,
     // ),
     Connector(connectors::ManagerMsg),
     // CreateConnector(
-    //     async_channel::Sender<Result<connectors::Addr>>,
+    //     async_std::channel::Sender<Result<connectors::Addr>>,
     //     connectors::Create,
     // ),
     Stop,
 }
 
-pub(crate) type Sender = async_channel::Sender<ManagerMsg>;
+pub(crate) type Sender = async_std::channel::Sender<ManagerMsg>;
 
 #[derive(Debug)]
 pub(crate) struct Manager {
-    pub connector: connectors::Sender,
-    pub offramp: offramp::Sender,
-    pub onramp: onramp::Sender,
-    pub pipeline: pipeline::Sender,
+    pub connector: connectors::ManagerSender,
+    pub offramp: offramp::ManagerSender,
+    pub onramp: onramp::ManagerSender,
+    pub pipeline: pipeline::ManagerSender,
     pub connector_h: JoinHandle<Result<()>>,
     pub offramp_h: JoinHandle<Result<()>>,
     pub onramp_h: JoinHandle<Result<()>>,
