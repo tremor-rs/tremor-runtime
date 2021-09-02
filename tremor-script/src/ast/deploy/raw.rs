@@ -58,8 +58,55 @@ use crate::interpreter::LocalStack;
 
 pub type DeployWithExprsRaw<'script> = Vec<(IdentRaw<'script>, ExprRaw<'script>)>;
 
+/// Convenience to evaluate an expression at compile time so that
+/// evaluated results can be used during compilation
+#[macro_export]
+macro_rules! stateless_run_script {
+    ($helper:ident, $expr:expr) => {{
+        // We duplicate these here as it simplifies use of the macro externally
+        let eo = ExecOpts {
+            aggr: AggrType::Emit,
+            result_needed: true,
+        };
+        let ctx = EventContext::new(nanotime(), None);
+        let mut event = literal!({}).into_static();
+        let mut state = literal!({}).into_static();
+        let mut meta = literal!({}).into_static();
+
+        //        let mut local = LocalStack::with_size(0);
+
+        let run_consts = $helper.consts.clone();
+        let run_consts = run_consts.run();
+        let env = Env {
+            context: &ctx,
+            consts: run_consts,
+            aggrs: &$helper.aggregates.clone(),
+            meta: &$helper.meta.clone(),
+            recursion_limit: 1024, // I'm feeling lucky in a power of two kind of way - shoot me
+        };
+        let got = $expr.run(&ctx, AggrType::Emit, &mut event, &mut state, &mut meta);
+        match got {
+            Ok(Return::Emit { value, .. }) => Ok(value),
+            // FIXME this deserves a proper error
+            _otherwise => {
+                Err("snot".into())
+                // return error_generic(
+                //     $expr,
+                //     $expr,
+                //     &"Illegal `with` parameter value specified".to_string(),
+                //     &$helper.meta,
+                // )
+            }
+        }
+    }};
+}
+
+/// Convenience to evaluate an expression at compile time so that
+/// evaluated results can be used during compilation
+#[macro_export]
 macro_rules! stateless_run_expr {
     ($helper:ident, $expr:expr) => {{
+        // We duplicate these here as it simplifies use of the macro externally
         let eo = ExecOpts {
             aggr: AggrType::Emit,
             result_needed: true,
@@ -78,7 +125,7 @@ macro_rules! stateless_run_expr {
             consts: run_consts,
             aggrs: &$helper.aggregates.clone(),
             meta: &$helper.meta.clone(),
-            recursion_limit: crate::recursion_limit(),
+            recursion_limit: 1024, // I'm feeling lucky in a power of two kind of way - shoot me
         };
         let got = $expr.run(eo, &env, &mut event, &mut state, &mut meta, &mut local);
         match got {
@@ -97,6 +144,9 @@ macro_rules! stateless_run_expr {
     }};
 }
 
+/// Convenience to evaluate an expression at compile time so that
+/// evaluated results can be used during compilation
+#[macro_export]
 macro_rules! stateless_run_str {
     ($helper:ident, $expr:expr) => {{
         let eo = ExecOpts {
