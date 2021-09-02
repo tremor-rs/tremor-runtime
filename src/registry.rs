@@ -43,12 +43,14 @@ use crate::repository::{
     PipelineArtefact,
 };
 use crate::url::TremorUrl;
+use crate::QSIZE;
 use async_std::channel::{bounded, Sender};
 use async_std::future::timeout;
 use async_std::task;
 use hashbrown::HashMap;
 use std::default::Default;
 use std::fmt;
+use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 mod instance;
@@ -138,7 +140,7 @@ where
     A::SpawnResult: Send + Sync + 'static,
 {
     fn start(mut self) -> Sender<Msg<A>> {
-        let (tx, rx) = bounded(crate::QSIZE);
+        let (tx, rx) = bounded(QSIZE.load(Ordering::Relaxed));
 
         task::spawn::<_, Result<()>>(async move {
             loop {

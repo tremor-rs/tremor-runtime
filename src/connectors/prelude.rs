@@ -22,5 +22,6 @@ pub use crate::connectors::source::{
 pub use crate::connectors::{Connector, ConnectorBuilder, ConnectorContext, ConnectorState};
 pub use crate::errors::{Error, ErrorKind, Result};
 pub use crate::url::TremorUrl;
-pub use crate::OpConfig;
+pub use crate::{OpConfig, QSIZE};
+pub use std::sync::atomic::Ordering;
 pub use tremor_pipeline::ConfigImpl;

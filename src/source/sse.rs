@@ -149,7 +149,7 @@ impl Source for Int {
             return Err(err.to_string().into());
         }
 
-        let (tx, rx) = bounded(crate::QSIZE);
+        let (tx, rx) = bounded(QSIZE.load(Ordering::Relaxed));
 
         let url: surf_sse::Url = self.config.url.parse()?;
         let headers = self.config.headers.clone();
