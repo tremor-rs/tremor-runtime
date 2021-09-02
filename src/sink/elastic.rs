@@ -33,7 +33,7 @@
 #![cfg(not(tarpaulin_include))]
 
 use crate::sink::prelude::*;
-use async_channel::{bounded, Receiver, Sender};
+use async_std::channel::{bounded, unbounded, Receiver, Sender};
 use async_std::task::JoinHandle;
 use elastic::{
     client::responses::bulk::{ErrorItem, OkItem},
@@ -582,7 +582,7 @@ impl Sink for Elastic {
                 path: vec![],
             };
             // channels that events go through that end up here are bounded, so we should not grow out of memory
-            let (tx, rx) = async_channel::unbounded();
+            let (tx, rx) = unbounded();
             self.response_sender = tx;
             self.response_task_handle = Some(task::spawn(response_task(
                 event_id_gen,

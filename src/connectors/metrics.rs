@@ -23,7 +23,7 @@ use crate::connectors::{Connector, ConnectorBuilder, ConnectorContext, Connector
 use crate::errors::{ErrorKind, Result};
 use crate::url::ports::{ERR, IN, OUT};
 use crate::url::TremorUrl;
-use async_channel::{Receiver, Sender, TryRecvError, TrySendError};
+use async_std::channel::{bounded, Receiver, Sender, TryRecvError, TrySendError};
 use beef::Cow;
 use halfbrown::HashMap;
 use tremor_pipeline::{CbAction, Event, EventOriginUri, DEFAULT_STREAM_ID};
@@ -41,7 +41,7 @@ pub(crate) struct MetricsChannel(Sender<Msg>, Receiver<Msg>);
 
 impl MetricsChannel {
     pub(crate) fn new(qsize: usize) -> Self {
-        let (tx, rx) = async_channel::bounded(qsize);
+        let (tx, rx) = bounded(qsize);
         Self(tx, rx)
     }
 

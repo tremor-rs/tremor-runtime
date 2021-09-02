@@ -19,7 +19,7 @@ use std::{
 };
 
 use crate::{codec::Codec, source::prelude::*, QSIZE};
-use async_channel::{Receiver, Sender, TryRecvError};
+use async_std::channel::{bounded, Receiver, Sender, TryRecvError};
 use halfbrown::HashMap;
 use serde::Serialize;
 use serenity::{
@@ -824,8 +824,8 @@ impl Source for Discord {
     async fn init(&mut self) -> Result<SourceState> {
         // by Discord for bot users.
         let token = self.config.token.clone();
-        let (tx, rx) = async_channel::bounded(QSIZE);
-        let (reply_tx, reply_rx) = async_channel::bounded(QSIZE);
+        let (tx, rx) = bounded(QSIZE);
+        let (reply_tx, reply_rx) = bounded(QSIZE);
         self.client = Some((reply_tx, rx));
         let client = Client::builder(&token).event_handler(Handler {
             tx,

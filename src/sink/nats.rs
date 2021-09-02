@@ -18,10 +18,10 @@ use std::iter::FromIterator;
 use std::time::Instant;
 
 use crate::sink::prelude::*;
-use async_channel::{bounded, Receiver};
 use async_nats::Connection as NatsConnection;
 use async_nats::Headers;
 use async_nats::Options as NatsOptions;
+use async_std::channel::{bounded, Receiver};
 use halfbrown::HashMap;
 use tremor_pipeline::OpMeta;
 

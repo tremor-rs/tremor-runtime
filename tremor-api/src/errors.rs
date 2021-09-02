@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use async_std::channel::RecvError;
 use http_types::{headers, StatusCode};
 use serde::Serialize;
 use std::sync::{MutexGuard, PoisonError};
@@ -75,8 +76,8 @@ impl From<std::io::Error> for Error {
     }
 }
 
-impl From<async_channel::RecvError> for Error {
-    fn from(e: async_channel::RecvError) -> Self {
+impl From<RecvError> for Error {
+    fn from(e: RecvError) -> Self {
         Self::new(
             StatusCode::InternalServerError,
             format!("Error receiving from channel: {}", e),

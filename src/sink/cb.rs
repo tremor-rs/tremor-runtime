@@ -134,7 +134,7 @@ mod tests {
         let mut cb = Cb {};
         let url = TremorUrl::parse("/offramp/cb/instance")?;
         let codec_map = halfbrown::HashMap::new();
-        let (tx, _rx) = async_channel::bounded(1);
+        let (tx, _rx) = async_std::channel::bounded(1);
         let in_ = "IN";
         cb.init(
             0x00,
