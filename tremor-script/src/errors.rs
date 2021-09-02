@@ -946,7 +946,11 @@ pub fn query_guard_not_bool_err<O: BaseExpr, I: BaseExpr>(
     error_type_conflict_mult_err(stmt, inner, got.value_type(), vec![ValueType::Bool], meta)
 }
 
-pub(crate) fn error_generic<T, O: BaseExpr, I: BaseExpr, S: ToString>(
+/// A bad thing happened for which no specialized hygienic error handling strategy is defined
+/// We can still be polite in our error reports!
+/// # Errors
+/// The parameters transformed into a generic error
+pub fn error_generic<T, O: BaseExpr, I: BaseExpr, S: ToString>(
     outer: &O,
     inner: &I,
     error: &S,

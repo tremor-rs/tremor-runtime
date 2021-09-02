@@ -31,6 +31,7 @@ use tremor_runtime::postprocessor::Postprocessor;
 use tremor_runtime::preprocessor::Preprocessor;
 use tremor_runtime::repository::BindingArtefact;
 use tremor_script::ast::deploy::AtomOfDeployment;
+use tremor_script::ast::Helper;
 use tremor_script::deploy::Deploy;
 use tremor_script::highlighter::Error as HighlighterError;
 use tremor_script::highlighter::{Highlighter, Term as TermHighlighter};
@@ -40,6 +41,10 @@ use tremor_script::script::{AggrType, Return, Script};
 use tremor_script::{ctx::EventContext, lexer::Tokenizer};
 use tremor_script::{EventPayload, Value, ValueAndMeta};
 use tremor_value::literal;
+
+use tremor_script::interpreter::Env;
+use tremor_script::interpreter::ExecOpts;
+
 struct Ingress {
     is_interactive: bool,
     is_pretty: bool,
@@ -589,17 +594,29 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
         .value_of("SCRIPT")
         .ok_or_else(|| Error::from("No script file provided"))?;
 
-    let mut args = if let Some(args_file) = matches.value_of("ARGS_FILE") {
+    let args = if let Some(args_file) = matches.value_of("ARGS_FILE") {
         slurp_string(args_file)?
     } else {
         "{}".to_string()
     };
-    let mut args: Value = simd_json::from_str(&mut args)?;
-    if !args.is_object() {
+    let env = env::setup()?;
+    let args = Script::parse(&env.module_path, "args.tremor", args, &env.fun)?;
+    let helper = Helper::new(&env.fun, &env.aggr, vec![]);
+    let args: std::result::Result<Value, tremor_script::errors::Error> =
+        tremor_script::stateless_run_script!(helper, args.script.suffix());
+
+    let mut args = if let Ok(args) = args {
+        if !args.is_object() {
+            return Err(Error::from(
+                "Expected arguments file to contain a JSON record structure",
+            ));
+        }
+        args
+    } else {
         return Err(Error::from(
-            "Expected arguments file to contain a JSON record structure",
+            "Expected arguments tremor file to be a valid tremor document",
         ));
-    }
+    };
 
     if let Value::Object(ref mut fields) = args {
         if let Some(overags) = matches.values_of("arg") {
