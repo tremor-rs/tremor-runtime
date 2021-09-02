@@ -15,7 +15,7 @@ use crate::connectors::prelude::*;
 use crate::connectors::sink::{AsyncSinkReply, ChannelSink, ChannelSinkMsg};
 use crate::connectors::source::ChannelSource;
 pub use crate::errors::{Error, ErrorKind, Result};
-use async_channel::{bounded, Sender, TrySendError};
+use async_std::channel::{bounded, Sender, TrySendError};
 use async_std::net::TcpListener;
 use async_std::task::{self, JoinHandle};
 use futures::io::{AsyncReadExt, AsyncWriteExt};

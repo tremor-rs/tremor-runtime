@@ -17,7 +17,7 @@
 #![cfg(not(tarpaulin_include))]
 use crate::sink::{prelude::*, Reply};
 use crate::source::prelude::*;
-use async_channel::Sender;
+use async_std::channel::{bounded, Sender};
 use halfbrown::HashMap;
 use serde::Deserialize;
 use sled::{CompareAndSwapError, IVec};
@@ -134,7 +134,7 @@ impl offramp::Builder for Builder {
                 path: config.dir.split('/').map(ToString::to_string).collect(),
             };
             // dummy
-            let (dummy_tx, _) = async_channel::bounded(1);
+            let (dummy_tx, _) = bounded(1);
 
             Ok(SinkManager::new_box(Kv {
                 sink_url: TremorUrl::from_onramp_id("kv")?, // dummy value

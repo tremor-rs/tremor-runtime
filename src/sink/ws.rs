@@ -15,7 +15,7 @@
 #![cfg(not(tarpaulin_include))]
 
 use crate::sink::prelude::*;
-use async_channel::{bounded, unbounded, Receiver, Sender};
+use async_std::channel::{bounded, unbounded, Receiver, Sender};
 use async_std::net::TcpStream;
 use async_tungstenite::tungstenite::error::Error as WsError;
 use async_tungstenite::tungstenite::error::ProtocolError as WsProtocolError;

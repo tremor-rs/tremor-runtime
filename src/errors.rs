@@ -84,14 +84,14 @@ impl From<glob::PatternError> for Error {
     }
 }
 
-impl<T> From<async_channel::SendError<T>> for Error {
-    fn from(e: async_channel::SendError<T>) -> Self {
+impl<T> From<async_std::channel::SendError<T>> for Error {
+    fn from(e: async_std::channel::SendError<T>) -> Self {
         Self::from(format!("{:?}", e))
     }
 }
 
-impl<T> From<async_channel::TrySendError<T>> for Error {
-    fn from(e: async_channel::TrySendError<T>) -> Self {
+impl<T> From<async_std::channel::TrySendError<T>> for Error {
+    fn from(e: async_std::channel::TrySendError<T>) -> Self {
         Self::from(format!("{:?}", e))
     }
 }
@@ -128,50 +128,50 @@ error_chain! {
         Pipeline(tremor_pipeline::errors::Error, tremor_pipeline::errors::ErrorKind);
     }
     foreign_links {
-        ValueError(tremor_value::Error);
-        Base64Error(base64::DecodeError);
-        YamlError(serde_yaml::Error) #[doc = "Error during yaml parsing"];
-        JsonError(simd_json::Error);
-        Io(std::io::Error);
-        SinkDequeueError(async_sink::SinkDequeueError);
-        SinkEnqueueError(async_sink::SinkEnqueueError);
-        FromUtf8Error(std::string::FromUtf8Error);
-        Utf8Error(std::str::Utf8Error);
-        ElasticError(elastic::Error);
-        KafkaError(rdkafka::error::KafkaError);
-        ParseIntError(std::num::ParseIntError);
-        TryFromIntError(std::num::TryFromIntError);
-        UrlParserError(url::ParseError);
-        ParseFloatError(std::num::ParseFloatError);
+        AddrParseError(std::net::AddrParseError);
         AnyhowError(anyhow::Error);
+        AsyncChannelRecvError(async_std::channel::RecvError);
+        AsyncChannelTryRecvError(async_std::channel::TryRecvError);
+        Base64Error(base64::DecodeError);
         ChannelReceiveError(std::sync::mpsc::RecvError);
+        Common(tremor_common::Error);
+        CronError(cron::error::Error);
+        CsvError(csv::Error);
+        DateTimeParseError(chrono::ParseError);
+        DnsError(async_std_resolver::ResolveError);
+        ElasticError(elastic::Error);
+        FromUtf8Error(std::string::FromUtf8Error);
+        GoogleAuthError(gouth::Error);
+        GrokError(grok::Error);
+        Hex(hex::FromHexError);
+        HttpHeaderError(http::header::InvalidHeaderValue);
+        InfluxEncoderError(influx::EncoderError);
+        Io(std::io::Error);
+        JsonAccessError(value_trait::AccessError);
+        JsonError(simd_json::Error);
+        KafkaError(rdkafka::error::KafkaError);
+        ModeParseError(file_mode::ModeParseError);
         MsgPackDecoderError(rmp_serde::decode::Error);
         MsgPackEncoderError(rmp_serde::encode::Error);
-        GrokError(grok::Error);
-        DateTimeParseError(chrono::ParseError);
-        SnappyError(snap::Error);
-        AddrParseError(std::net::AddrParseError);
-        RegexError(regex::Error);
-        WsError(async_tungstenite::tungstenite::Error);
-        InfluxEncoderError(influx::EncoderError);
-        AsyncChannelRecvError(async_channel::RecvError);
-        AsyncChannelTryRecvError(async_channel::TryRecvError);
-        JsonAccessError(value_trait::AccessError);
-        CronError(cron::error::Error);
+        ParseIntError(std::num::ParseIntError);
+        ParseFloatError(std::num::ParseFloatError);
         Postgres(postgres::Error);
-        Common(tremor_common::Error);
-        Sled(sled::Error);
-        DnsError(async_std_resolver::ResolveError);
-        GoogleAuthError(gouth::Error);
+        RegexError(regex::Error);
         ReqwestError(reqwest::Error);
-        HttpHeaderError(http::header::InvalidHeaderValue);
-        Timeout(async_std::future::TimeoutError);
-        TonicTransportError(tonic::transport::Error);
-        TonicStatusError(tonic::Status);
         RustlsError(rustls::TLSError);
-        Hex(hex::FromHexError);
-        CsvError(csv::Error);
-        ModeParseError(file_mode::ModeParseError);
+        SinkDequeueError(async_sink::SinkDequeueError);
+        SinkEnqueueError(async_sink::SinkEnqueueError);
+        Sled(sled::Error);
+        SnappyError(snap::Error);
+        Timeout(async_std::future::TimeoutError);
+        TonicStatusError(tonic::Status);
+        TonicTransportError(tonic::transport::Error);
+        TryFromIntError(std::num::TryFromIntError);
+        ValueError(tremor_value::Error);
+        UrlParserError(url::ParseError);
+        Utf8Error(std::str::Utf8Error);
+        WsError(async_tungstenite::tungstenite::Error);
+        YamlError(serde_yaml::Error) #[doc = "Error during yaml parsing"];
     }
 
     errors {
@@ -274,6 +274,7 @@ error_chain! {
         }
         BadUtF8InString {
             description("Bad UTF8 in input string")
+                display("Bad UTF8 in input string")
 
         }
         InvalidCompression {
@@ -316,7 +317,6 @@ error_chain! {
             description("Max reconnect retries exceeded")
                 display("Max reconnect retries ({}) exceeded", max_retries)
         }
-
         InvalidMetricsData {
             description("Invalid Metrics data")
                 display("Invalid Metrics data")

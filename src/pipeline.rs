@@ -17,7 +17,7 @@ use crate::registry::ServantId;
 use crate::repository::PipelineArtefact;
 use crate::url::TremorUrl;
 use crate::{connectors, offramp, onramp};
-use async_channel::{bounded, unbounded};
+use async_std::channel::{bounded, unbounded, Receiver, Sender};
 use async_std::stream::StreamExt;
 use async_std::task::{self, JoinHandle};
 use beef::Cow;
@@ -29,25 +29,25 @@ use tremor_pipeline::errors::ErrorKind as PipelineErrorKind;
 use tremor_pipeline::{CbAction, Event, ExecutableGraph, SignalKind};
 
 const TICK_MS: u64 = 100;
-pub(crate) type Sender = async_channel::Sender<ManagerMsg>;
+pub(crate) type ManagerSender = Sender<ManagerMsg>;
 type Inputs = halfbrown::HashMap<TremorUrl, (bool, Input)>;
 type Dests = halfbrown::HashMap<Cow<'static, str>, Vec<(TremorUrl, Dest)>>;
 type Eventset = Vec<(Cow<'static, str>, Event)>;
 /// Address for a pipeline
 #[derive(Clone)]
 pub struct Addr {
-    addr: async_channel::Sender<Msg>,
-    cf_addr: async_channel::Sender<CfMsg>,
-    mgmt_addr: async_channel::Sender<MgmtMsg>,
+    addr: Sender<Msg>,
+    cf_addr: Sender<CfMsg>,
+    mgmt_addr: Sender<MgmtMsg>,
     id: ServantId,
 }
 
 impl Addr {
     /// creates a new address
     pub(crate) fn new(
-        addr: async_channel::Sender<Msg>,
-        cf_addr: async_channel::Sender<CfMsg>,
-        mgmt_addr: async_channel::Sender<MgmtMsg>,
+        addr: Sender<Msg>,
+        cf_addr: Sender<CfMsg>,
+        mgmt_addr: Sender<MgmtMsg>,
         id: ServantId,
     ) -> Self {
         Self {
@@ -121,7 +121,7 @@ pub(crate) enum MgmtMsg {
     DisconnectOutput(Cow<'static, str>, TremorUrl),
     DisconnectInput(TremorUrl),
     #[cfg(test)]
-    Echo(async_channel::Sender<()>),
+    Echo(Sender<()>),
 }
 
 #[derive(Debug)]
@@ -218,7 +218,7 @@ pub struct Create {
 
 pub(crate) enum ManagerMsg {
     Stop,
-    Create(async_channel::Sender<Result<Addr>>, Box<Create>),
+    Create(Sender<Result<Addr>>, Box<Create>),
 }
 
 #[derive(Default, Debug)]
@@ -352,7 +352,7 @@ async fn handle_insights(pipeline: &mut ExecutableGraph, onramps: &Inputs) {
     }
 }
 
-async fn tick(tick_tx: async_channel::Sender<Msg>) {
+async fn tick(tick_tx: Sender<Msg>) {
     let mut e = Event::signal_tick();
     while tick_tx.send(Msg::Signal(e.clone())).await.is_ok() {
         task::sleep(Duration::from_millis(TICK_MS)).await;
@@ -379,9 +379,9 @@ async fn pipeline_task(
     id: TremorUrl,
     mut pipeline: ExecutableGraph,
     addr: Addr,
-    rx: async_channel::Receiver<Msg>,
-    cf_rx: async_channel::Receiver<CfMsg>,
-    mgmt_rx: async_channel::Receiver<MgmtMsg>,
+    rx: Receiver<Msg>,
+    cf_rx: Receiver<CfMsg>,
+    mgmt_rx: Receiver<MgmtMsg>,
 ) -> Result<()> {
     let mut pid = id.clone();
     pid.trim_to_instance();
@@ -554,7 +554,7 @@ impl Manager {
             operator_id_gen: OperatorIdGen::new(),
         }
     }
-    pub fn start(mut self) -> (JoinHandle<Result<()>>, Sender) {
+    pub fn start(mut self) -> (JoinHandle<Result<()>>, ManagerSender) {
         let (tx, rx) = bounded(crate::QSIZE);
         let h = task::spawn(async move {
             info!("Pipeline manager started");
@@ -639,7 +639,7 @@ mod tests {
     const NEGATIVE_RECV_TIMEOUT: Duration = Duration::from_millis(200);
 
     async fn echo(addr: &Addr) -> Result<()> {
-        let (tx, rx) = async_channel::bounded(1);
+        let (tx, rx) = bounded(1);
         addr.send_mgmt(MgmtMsg::Echo(tx)).await?;
         rx.recv().await?;
         Ok(())
@@ -652,7 +652,7 @@ mod tests {
         echo(&addr).await
     }
     async fn wait_for_event(
-        offramp_rx: &async_channel::Receiver<offramp::Msg>,
+        offramp_rx: &Receiver<offramp::Msg>,
         wait_for: Option<Duration>,
     ) -> Result<Event> {
         loop {
@@ -686,14 +686,14 @@ mod tests {
         let manager = Manager::new(12);
         let (handle, sender) = manager.start();
 
-        let (tx, rx) = async_channel::bounded(1);
+        let (tx, rx) = bounded(1);
         let create = Create { config, id };
         let create_msg = ManagerMsg::Create(tx, Box::new(create));
         sender.send(create_msg).await?;
         let addr = rx.recv().await??;
 
         // connect a fake onramp
-        let (onramp_tx, onramp_rx) = async_channel::unbounded();
+        let (onramp_tx, onramp_rx) = unbounded();
         let onramp_addr = onramp::Addr(onramp_tx);
         let onramp_url = TremorUrl::parse("/onramp/fake_onramp/instance/out")?;
         addr.send_mgmt(MgmtMsg::ConnectInput {
@@ -704,7 +704,7 @@ mod tests {
         .await?;
 
         // connect another fake onramp, not transactional
-        let (onramp2_tx, onramp2_rx) = async_channel::unbounded();
+        let (onramp2_tx, onramp2_rx) = unbounded();
         let onramp2_url = TremorUrl::parse("/onramp/fake_onramp2/instance/out")?;
         addr.send_mgmt(MgmtMsg::ConnectInput {
             input_url: onramp2_url.clone(),
@@ -829,12 +829,12 @@ mod tests {
         let id = TremorUrl::parse("/pipeline/manager_error_test/instance")?;
         let manager = Manager::new(12);
         let (handle, sender) = manager.start();
-        let (tx, rx) = async_channel::bounded(1);
+        let (tx, rx) = bounded(1);
         let create = Create { config, id };
         let create_msg = ManagerMsg::Create(tx, Box::new(create));
         sender.send(create_msg).await?;
         let addr = rx.recv().await??;
-        let (offramp_tx, offramp_rx) = async_channel::unbounded();
+        let (offramp_tx, offramp_rx) = unbounded();
 
         let offramp_url = TremorUrl::parse("/offramp/fake_offramp/instance/in")?;
         // connect a channel so we can receive events from the back of the pipeline :)
