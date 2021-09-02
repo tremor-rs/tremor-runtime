@@ -1,0 +1,50 @@
+define onramp::blaster connector ingress1
+args
+  type = "blaster",
+  id =  "ingress1",
+  description = "redundant",
+  config = {
+    "source": "../../../../demo/data/data.json.xz"
+  }
+end;
+
+define onramp::blaster connector ingress2
+args
+  type = "blaster",
+  id =  "ingress2",
+  description = "redundant",
+  config = {
+    "source": "../../../../demo/data/data.json.xz"
+  }
+end;
+
+define offramp::blackhole connector egress
+args
+  type = "blackhole",
+  id =  "egress",
+  description = "redundant",
+  config = {
+    "stop_after_secs": 100,
+    "significant_figures": 2,
+    "warmup_secs": 10,
+  },
+end;
+
+define pipeline passthrough
+pipeline
+  select event from in into out
+end;
+
+deploy ingress1;
+deploy ingress2;
+deploy passthrough;
+deploy egress;
+
+define flow wiring
+links
+  connect "/onramp/ingress1/01/out" to "/pipeline/passthrough/01/in",
+  connect "/onramp/ingress2/01/out" to "/pipeline/passthrough/01/in",
+  connect "/pipeline/passthrough/01/out" to "/offramp/egress/01/in"
+end;
+
+deploy wiring;

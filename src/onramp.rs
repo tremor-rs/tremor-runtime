@@ -49,28 +49,36 @@ pub enum Msg {
 
 pub type Addr = async_channel::Sender<Msg>;
 
-pub(crate) struct OnrampConfig<'cfg> {
+/// Onramp Configuration
+#[allow(clippy::module_name_repetitions)]
+pub struct OnrampConfig<'cfg> {
+    /// Unique onramp id
     pub onramp_uid: u64,
+    /// Codec
     pub codec: &'cfg str,
+    /// Codec map
     pub codec_map: halfbrown::HashMap<String, String>,
+    /// Processors
     pub processors: Processors<'cfg>,
+    /// Metrics reporter
     pub metrics_reporter: RampReporter,
+    /// Is the onramp a linked transport
     pub is_linked: bool,
+    /// Are errors required
     pub err_required: bool,
 }
 #[async_trait::async_trait]
-pub(crate) trait Onramp: Send {
+/// Trait for legacy onramps ( replaced by source connectors )
+pub trait Onramp: Send {
     async fn start(&mut self, config: OnrampConfig<'_>) -> Result<Addr>;
     fn default_codec(&self) -> &str;
 }
 
-// just a lookup
+/// Lookup Onramp builtin implementations given its builtin name as a search key
+/// # Errors
+///   If no ramp implementation is found for the provided key name
 #[cfg(not(tarpaulin_include))]
-pub(crate) fn lookup(
-    name: &str,
-    id: &TremorUrl,
-    config: &Option<Value>,
-) -> Result<Box<dyn Onramp>> {
+pub fn lookup(name: &str, id: &TremorUrl, config: &Option<Value>) -> Result<Box<dyn Onramp>> {
     match name {
         "amqp" => amqp::Amqp::from_config(id, config),
         "blaster" => blaster::Blaster::from_config(id, config),
@@ -97,7 +105,8 @@ pub(crate) fn lookup(
     }
 }
 
-pub(crate) struct Create {
+/// Create control event message
+pub struct Create {
     pub id: ServantId,
     pub stream: Box<dyn Onramp>,
     pub codec: String,
@@ -116,20 +125,25 @@ impl fmt::Debug for Create {
 }
 
 /// This is control plane
-pub(crate) enum ManagerMsg {
+pub enum ManagerMsg {
+    /// Create command
     Create(async_channel::Sender<Result<Addr>>, Box<Create>),
+    /// Stop command
     Stop,
 }
 
+/// Manager for onramps
 #[derive(Debug, Default)]
-pub(crate) struct Manager {
+pub struct Manager {
     qsize: usize,
 }
 
 impl Manager {
+    /// Creates a new manager
     pub fn new(qsize: usize) -> Self {
         Self { qsize }
     }
+    /// Start
     pub fn start(self) -> (JoinHandle<Result<()>>, Sender) {
         let (tx, rx) = bounded(self.qsize);
 

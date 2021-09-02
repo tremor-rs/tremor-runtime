@@ -104,7 +104,9 @@ pub trait Impl {
     fn from_config(config: &Option<OpConfig>) -> Result<Box<dyn Offramp>>;
 }
 
-// just a lookup
+/// Lookup Offramp builtin implementations given its builtin name as a search key
+/// # Errors
+///   If no ramp implementation is found for the provided key name
 #[cfg(not(tarpaulin_include))]
 pub fn lookup(name: &str, config: &Option<OpConfig>) -> Result<Box<dyn Offramp>> {
     match name {
@@ -134,7 +136,8 @@ pub fn lookup(name: &str, config: &Option<OpConfig>) -> Result<Box<dyn Offramp>>
     }
 }
 
-pub(crate) struct Create {
+/// Create control event message
+pub struct Create {
     pub id: ServantId,
     pub offramp: Box<dyn Offramp>,
     pub codec: Box<dyn Codec>,
@@ -153,13 +156,16 @@ impl fmt::Debug for Create {
 }
 
 /// This is control plane
-pub(crate) enum ManagerMsg {
+pub enum ManagerMsg {
+    /// Create command
     Create(async_channel::Sender<Result<Addr>>, Box<Create>),
+    /// Stop command
     Stop,
 }
 
+/// Manager for offramps
 #[derive(Debug, Default)]
-pub(crate) struct Manager {
+pub struct Manager {
     qsize: usize,
 }
 
@@ -187,6 +193,7 @@ pub(crate) enum OfframpMsg {
 }
 
 impl Manager {
+    /// Creates a new manager
     pub fn new(qsize: usize) -> Self {
         Self { qsize }
     }
@@ -426,6 +433,7 @@ impl Manager {
         Ok(())
     }
 
+    /// Starts a new instance
     pub fn start(self) -> (JoinHandle<Result<()>>, Sender) {
         let (tx, rx) = bounded(crate::QSIZE);
         let h = task::spawn(async move {

@@ -72,7 +72,8 @@ pub mod registry;
 /// The tremor repository
 pub mod repository;
 pub(crate) mod sink;
-pub(crate) mod source;
+/// Source connectors
+pub mod source;
 /// Tremor runtime system
 pub mod system;
 /// Tremor URI
@@ -84,6 +85,9 @@ pub mod version;
 
 /// Tremor connector extensions
 pub mod connectors;
+
+pub use offramp::lookup as offramp_lookup;
+pub use onramp::lookup as onramp_lookup;
 
 use std::{io::BufReader, path::Path};
 
