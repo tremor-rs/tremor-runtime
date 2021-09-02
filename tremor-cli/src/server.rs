@@ -83,7 +83,7 @@ impl ServerRun {
         tremor_script::RECURSION_LIMIT.store(self.recursion_limit, Ordering::Relaxed);
 
         // TODO: Allow configuring this for offramps and pipelines
-        let (world, handle) = World::start(64).await?;
+        let (world, handle) = World::start().await?;
 
         let mut yaml_files = Vec::with_capacity(16);
         // We process trickle files first

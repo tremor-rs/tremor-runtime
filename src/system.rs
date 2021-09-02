@@ -15,6 +15,7 @@
 use std::time::Duration;
 
 use crate::config::{BindingVec, Config, MappingMap, OffRampVec, OnRampVec};
+use crate::connectors::metrics::METRICS_CHANNEL;
 use crate::errors::{Error, Kind as ErrorKind, Result};
 use crate::lifecycle::{InstanceLifecycleFsm, InstanceState};
 use crate::registry::{Instance, Registries, ServantId};
@@ -24,17 +25,16 @@ use crate::repository::{
 };
 use crate::url::ports::METRICS;
 use crate::url::TremorUrl;
-use crate::OpConfig;
+use crate::{OpConfig, QSIZE};
 use async_std::channel::bounded;
 use async_std::task::{self, JoinHandle};
 use hashbrown::HashMap;
+use std::sync::atomic::Ordering;
 
 pub(crate) use crate::connectors;
 pub(crate) use crate::offramp;
 pub(crate) use crate::onramp;
 pub(crate) use crate::pipeline;
-
-use connectors::metrics::MetricsChannel;
 
 lazy_static! {
 
@@ -122,7 +122,7 @@ pub(crate) struct Manager {
 
 impl Manager {
     pub fn start(self) -> (JoinHandle<Result<()>>, Sender) {
-        let (tx, rx) = bounded(crate::QSIZE);
+        let (tx, rx) = bounded(self.qsize);
         let system_h = task::spawn(async move {
             while let Ok(msg) = rx.recv().await {
                 match msg {
@@ -162,7 +162,6 @@ pub struct World {
     pub repo: Repositories,
     /// Registry
     pub reg: Registries,
-    pub(crate) metrics_channel: MetricsChannel,
 }
 
 impl World {
@@ -1028,10 +1027,16 @@ impl World {
     ///
     /// # Errors
     ///  * if the world manager can't be started
-    pub async fn start(qsize: usize) -> Result<(Self, JoinHandle<Result<()>>)> {
-        let metrics_channel = connectors::metrics::MetricsChannel::new(qsize);
+    pub async fn start() -> Result<(Self, JoinHandle<Result<()>>)> {
+        Self::start_with_size(QSIZE.load(Ordering::Relaxed)).await
+    }
+    /// Starts the runtime system
+    ///
+    /// # Errors
+    ///  * if the world manager can't be started
+    pub async fn start_with_size(qsize: usize) -> Result<(Self, JoinHandle<Result<()>>)> {
         let (connector_h, connector) =
-            connectors::Manager::new(qsize, metrics_channel.sender()).start();
+            connectors::Manager::new(qsize, METRICS_CHANNEL.tx()).start();
         // TODO: use metrics channel for pipelines as well
         let (onramp_h, onramp) = onramp::Manager::new(qsize).start();
         let (offramp_h, offramp) = offramp::Manager::new(qsize).start();
@@ -1052,12 +1057,7 @@ impl World {
 
         let repo = Repositories::new();
         let reg = Registries::new();
-        let mut world = Self {
-            system,
-            repo,
-            reg,
-            metrics_channel,
-        };
+        let mut world = Self { system, repo, reg };
 
         crate::sink::register_builtin_sinks(&world).await?;
         crate::source::register_builtin_sources(&world).await?;

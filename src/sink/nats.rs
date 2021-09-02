@@ -129,7 +129,7 @@ impl offramp::Builder for Builder {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
             let (dummy_tx, _) = bounded(1);
-            let (error_tx, error_rx) = bounded(crate::QSIZE);
+            let (error_tx, error_rx) = bounded(QSIZE.load(Ordering::Relaxed));
             Ok(SinkManager::new_box(Nats {
                 sink_url: TremorUrl::from_offramp_id("nats")?,
                 config,

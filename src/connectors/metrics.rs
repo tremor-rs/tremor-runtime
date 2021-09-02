@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::sync::atomic::Ordering;
+
 use crate::connectors::reconnect::ConnectionLostNotifier;
 use crate::connectors::sink::{
     EventSerializer, ResultVec, Sink, SinkAddr, SinkContext, SinkManagerBuilder, SinkReply,
@@ -36,17 +38,28 @@ const TAGS: Cow<'static, str> = Cow::const_str("tags");
 const FIELDS: Cow<'static, str> = Cow::const_str("fields");
 const TIMESTAMP: Cow<'static, str> = Cow::const_str("timestamp");
 
+lazy_static! {
+    pub(crate) static ref METRICS_CHANNEL: MetricsChannel =
+        MetricsChannel::new(crate::QSIZE.load(Ordering::Relaxed));
+}
+
 #[derive(Clone, Debug)]
-pub(crate) struct MetricsChannel(Sender<Msg>, Receiver<Msg>);
+pub(crate) struct MetricsChannel {
+    tx: Sender<Msg>,
+    rx: Receiver<Msg>,
+}
 
 impl MetricsChannel {
     pub(crate) fn new(qsize: usize) -> Self {
         let (tx, rx) = bounded(qsize);
-        Self(tx, rx)
+        Self { tx, rx }
     }
 
-    pub(crate) fn sender(&self) -> Sender<Msg> {
-        self.0.clone()
+    pub(crate) fn tx(&self) -> Sender<Msg> {
+        self.tx.clone()
+    }
+    pub(crate) fn rx(&self) -> Receiver<Msg> {
+        self.rx.clone()
     }
 }
 #[derive(Debug)]
@@ -207,33 +220,26 @@ pub(crate) struct MetricsConnector {
 }
 
 impl MetricsConnector {
-    pub(crate) fn new(metrics_channel: MetricsChannel) -> Self {
+    pub(crate) fn new() -> Self {
         Self {
-            tx: metrics_channel.0,
-            rx: metrics_channel.1,
+            tx: METRICS_CHANNEL.tx(),
+            rx: METRICS_CHANNEL.rx(),
         }
     }
 }
 
 /// builder for the metrics connector
-pub(crate) struct Builder {
-    metrics_channel: MetricsChannel,
-}
 
-impl Builder {
-    pub(crate) fn new(metrics_channel: MetricsChannel) -> Self {
-        Self { metrics_channel }
-    }
-}
+#[derive(Debug, Default)]
+pub(crate) struct Builder {}
+
 impl ConnectorBuilder for Builder {
     fn from_config(
         &self,
         _id: &TremorUrl,
         _config: &Option<serde_yaml::Value>,
     ) -> Result<Box<dyn Connector>> {
-        Ok(Box::new(MetricsConnector::new(
-            self.metrics_channel.clone(),
-        )))
+        Ok(Box::new(MetricsConnector::new()))
     }
 }
 
