@@ -111,7 +111,6 @@ elastic = "0.21.0-pre.5"
 
 # ws
 async-tungstenite = { version = "0.16.0", features = ["async-std-runtime"] }
-tungstenite = { version = "0.16", default-features = false }
 
 # for tcp
 async-tls = "0.11"
