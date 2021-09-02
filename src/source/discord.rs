@@ -824,8 +824,8 @@ impl Source for Discord {
     async fn init(&mut self) -> Result<SourceState> {
         // by Discord for bot users.
         let token = self.config.token.clone();
-        let (tx, rx) = bounded(QSIZE);
-        let (reply_tx, reply_rx) = bounded(QSIZE);
+        let (tx, rx) = bounded(QSIZE.load(Ordering::Relaxed));
+        let (reply_tx, reply_rx) = bounded(QSIZE.load(Ordering::Relaxed));
         self.client = Some((reply_tx, rx));
         let client = Client::builder(&token).event_handler(Handler {
             tx,

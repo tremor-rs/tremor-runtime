@@ -555,7 +555,7 @@ impl Manager {
         }
     }
     pub fn start(mut self) -> (JoinHandle<Result<()>>, ManagerSender) {
-        let (tx, rx) = bounded(crate::QSIZE);
+        let (tx, rx) = bounded(self.qsize);
         let h = task::spawn(async move {
             info!("Pipeline manager started");
             loop {

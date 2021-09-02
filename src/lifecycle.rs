@@ -185,7 +185,7 @@ mod test {
 
     #[async_std::test]
     async fn onramp_activation_lifecycle() -> Result<()> {
-        let (world, _) = World::start(10, None).await?;
+        let (world, _) = World::start(None).await?;
 
         let mut config = slurp("tests/configs/ut.passthrough.yaml");
         let artefact = config.onramp.pop().expect("artefact not found");
@@ -245,7 +245,7 @@ mod test {
 
     #[async_std::test]
     async fn offramp_activation_lifecycle() {
-        let (world, _) = World::start(10, None).await.expect("failed to start world");
+        let (world, _) = World::start(None).await.expect("failed to start world");
 
         let mut config = slurp("tests/configs/ut.passthrough.yaml");
         let artefact = config.offramp.pop().expect("artefact not found");
@@ -308,7 +308,7 @@ mod test {
 
     #[async_std::test]
     async fn binding_activation_lifecycle() {
-        let (world, _) = World::start(10, None).await.expect("failed to start world");
+        let (world, _) = World::start(None).await.expect("failed to start world");
 
         // -> Initialized -> Running
         crate::load_cfg_file(&world, "tests/configs/ut.passthrough.yaml")
