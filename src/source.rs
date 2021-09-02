@@ -763,7 +763,7 @@ mod tests {
         let s = FakeSource {
             url: onramp_url.clone(),
         };
-        let o_config = Config {
+        let o_config = OnrampConfig {
             onramp_uid: 1,
             codec: "string",
             codec_map: HashMap::new(),
