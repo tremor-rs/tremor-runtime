@@ -4,4 +4,4 @@ asserts:
   - source: STDERR
     contains:
       - |
-        bad_offramp not known
+        Unknown offramp type bad_offramp

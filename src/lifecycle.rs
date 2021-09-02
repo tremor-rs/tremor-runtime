@@ -152,11 +152,10 @@ impl<A: Artefact> InstanceLifecycleFsm<A> {
                 self.state = Running;
                 self.on_resume().await?;
             }
+            (current, intended) if current == intended => {
+                // do
+            }
             _ => {
-                // NOTE Default transition is 'do nothing'
-                //    TODO dev mode -> defaults to panic ( not yet implemented )
-                //    TODO prod mode -> defaults to loopback / noop / do nothing
-                //    TODO convenience macro loopback!
                 return Err(format!(
                     "Illegal State Transition from {:?} to {:?}",
                     &self.state, &to
