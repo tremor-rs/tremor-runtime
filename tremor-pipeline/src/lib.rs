@@ -516,7 +516,8 @@ impl EventId {
         }
     }
 
-    /// get all streams for a source_id
+    /// get all streams for a source id
+    #[must_use]
     pub fn get_streams(&self, source_id: u64) -> HashSet<u64> {
         let mut v = HashSet::new();
         if self.source_id == source_id {
@@ -533,6 +534,7 @@ impl EventId {
 
     /// get a stream id for the given `source_id`
     /// will favor the events own stream id, will also look into tracked event ids and return the first it finds
+    #[must_use]
     pub fn get_stream(&self, source_id: u64) -> Option<u64> {
         if self.source_id == source_id {
             Some(self.stream_id)
@@ -594,7 +596,7 @@ pub struct TrackedPullIds {
 
 impl TrackedPullIds {
     #[must_use]
-    /// create a new instance with min and max pull_id
+    /// create a new instance with min and max pull id
     pub fn new(source_id: u64, stream_id: u64, min_pull_id: u64, max_pull_id: u64) -> Self {
         Self {
             source_id,
@@ -709,11 +711,11 @@ impl fmt::Display for TrackedPullIds {
 // TODO adapt for streaming, so we maintain multiple counters per stream
 #[derive(Debug, Clone, Copy, Default)]
 /// for generating consecutive unique event ids
-/// that are always in sync with their pull_id
+/// that are always in sync with their pull id
 pub struct EventIdGenerator(u64, u64, u64);
 impl EventIdGenerator {
     /// generate the next event id for this stream
-    /// with equivalent pull_id
+    /// with equivalent pull id
     pub fn next_id(&mut self) -> EventId {
         let event_id = self.2;
         self.2 = self.2.wrapping_add(1);
@@ -749,7 +751,7 @@ impl EventIdGenerator {
         self.1 = stream_id;
     }
 
-    /// reset the pull_id to zero
+    /// reset the pull id to zero
     pub fn reset(&mut self) {
         self.2 = 0;
     }

@@ -68,7 +68,7 @@ impl From<async_channel::Sender<Msg>> for Addr {
 }
 
 /// config for onramps
-pub struct OnrampConfig<'cfg> {
+pub struct Config<'cfg> {
     /// unique numeric identifier
     pub onramp_uid: u64,
     /// configured codec
@@ -89,7 +89,7 @@ pub struct OnrampConfig<'cfg> {
 #[async_trait::async_trait]
 pub trait Onramp: Send {
     /// start the onramp
-    async fn start(&mut self, config: OnrampConfig<'_>) -> Result<Addr>;
+    async fn start(&mut self, config: Config<'_>) -> Result<Addr>;
     /// default codec
     fn default_codec(&self) -> &str;
 }
@@ -142,6 +142,7 @@ impl Manager {
     pub fn new(qsize: usize) -> Self {
         Self { qsize }
     }
+    #[allow(clippy::too_many_lines)]
     pub fn start(self) -> (JoinHandle<Result<()>>, Sender) {
         let (tx, rx) = bounded(self.qsize);
 
@@ -169,7 +170,7 @@ impl Manager {
                         } = *c;
 
                         match stream
-                            .start(OnrampConfig {
+                            .start(Config {
                                 onramp_uid: onramp_id_gen.next_id(),
                                 codec: &codec,
                                 codec_map,

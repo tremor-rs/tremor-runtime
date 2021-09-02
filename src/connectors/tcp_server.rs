@@ -116,13 +116,13 @@ async fn send<T>(url: &TremorUrl, msg: T, tx: &Sender<T>) -> Result<()> {
     res
 }
 
-fn resolve_connection_meta<'value>(meta: &Value<'value>) -> Option<ConnectionMeta> {
-    meta.get_i32("port")
+fn resolve_connection_meta(meta: &Value) -> Option<ConnectionMeta> {
+    meta.get_u16("port")
         .zip(meta.get_str("host"))
         .map(|(port, host)| -> ConnectionMeta {
             ConnectionMeta {
                 host: host.to_string(),
-                port: port as u16,
+                port,
             }
         })
 }
@@ -162,6 +162,7 @@ impl Connector for TcpServer {
         Ok(Some(addr))
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn connect(
         &mut self,
         _ctx: &ConnectorContext,

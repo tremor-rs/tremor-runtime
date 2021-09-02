@@ -49,6 +49,7 @@ pub struct Binding {
 
 impl Binding {
     /// Constructor
+    #[must_use]
     pub fn new(binding: crate::Binding, mapping: Option<crate::config::MappingMap>) -> Self {
         Self {
             binding,
@@ -518,7 +519,10 @@ impl Artefact for ConnectorArtefact {
         world
             .system
             .send(system::ManagerMsg::Connector(
-                connectors::ManagerMsg::Create { tx, create },
+                connectors::ManagerMsg::Create {
+                    tx,
+                    create: Box::new(create),
+                },
             ))
             .await?;
         rx.recv().await?
@@ -660,6 +664,7 @@ impl Artefact for Binding {
     }
 
     /// apply mapping to this binding - the result is a binding with the mappings applied
+    #[allow(clippy::too_many_lines)]
     async fn link(
         &self,
         system: &World,
@@ -710,11 +715,11 @@ impl Artefact for Binding {
                             // TODO improve this process: this should really be treated as onramps,
                             // or as a separate resource
                             (Some(Offramp), Some(Pipeline)) => {
-                                linked_offramps.push((from.clone(), to))
+                                linked_offramps.push((from.clone(), to));
                             }
                             // handling connectors as source
                             (Some(Connector), Some(Pipeline)) => {
-                                connectors.push((from.clone(), to))
+                                connectors.push((from.clone(), to));
                             }
                             (_, _) => return Err(Self::LINKING_ERROR.into()),
                         };
@@ -849,7 +854,7 @@ impl Artefact for Binding {
 
         // collect incoming connections from external instances - and unlink them
         for (from, tos) in links.iter() {
-            if !self.spawned_instances.contains(&from) {
+            if !self.spawned_instances.contains(from) {
                 // unlink external resource
                 match from.resource_type() {
                     Some(ResourceType::Connector) => {
@@ -858,7 +863,7 @@ impl Artefact for Binding {
                         for to in tos {
                             mappings.insert(port.clone(), to.clone());
                         }
-                        system.unlink_connector(&from, mappings).await?;
+                        system.unlink_connector(from, mappings).await?;
                     }
                     Some(ResourceType::Pipeline) => {
                         let mut mappings = HashMap::new();
@@ -866,7 +871,7 @@ impl Artefact for Binding {
                         for to in tos {
                             mappings.insert(port.clone(), to.clone());
                         }
-                        system.unlink_pipeline(&from, mappings).await?;
+                        system.unlink_pipeline(from, mappings).await?;
                     }
                     Some(ResourceType::Onramp) => {
                         let mut mappings = HashMap::new();
@@ -874,14 +879,14 @@ impl Artefact for Binding {
                         for to in tos {
                             mappings.insert(port.clone(), to.clone());
                         }
-                        system.unlink_onramp(&from, mappings).await?;
+                        system.unlink_onramp(from, mappings).await?;
                     }
                     Some(ResourceType::Offramp) => {
                         let mut mappings = HashMap::new();
                         for to in tos {
                             mappings.insert(to.clone(), from.clone());
                         }
-                        system.unlink_offramp(&from, mappings).await?;
+                        system.unlink_offramp(from, mappings).await?;
                     }
                     Some(_) => return Err(format!("Cannot unlink {}", from).into()),
                     None => {

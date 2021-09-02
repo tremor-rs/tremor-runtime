@@ -71,9 +71,9 @@ pub async fn get_artefact(req: Request) -> Result<Response> {
 }
 
 pub async fn get_instance(req: Request) -> Result<Response> {
-    let aid = req.param("aid")?;
-    let sid = req.param("sid")?;
-    let instance_url = TremorUrl::from_connector_instance(aid, sid)?;
+    let a_id = req.param("aid")?;
+    let s_id = req.param("sid")?;
+    let instance_url = TremorUrl::from_connector_instance(a_id, s_id)?;
     let registry = &req.state().world.reg;
     let instance = registry
         .find_connector(&instance_url)
@@ -93,11 +93,11 @@ struct InstancePatch {
 
 /// this boils down to pause/resume/start/stop
 pub async fn patch_instance(req: Request) -> Result<Response> {
-    use ConnectorState::*;
+    use ConnectorState::{Initialized, Paused, Running, Stopped};
     let (req, patch): (_, InstancePatch) = decode(req).await?;
-    let aid = req.param("aid")?;
-    let sid = req.param("sid")?;
-    let instance_url = TremorUrl::from_connector_instance(aid, sid)?;
+    let a_id = req.param("aid")?;
+    let s_id = req.param("sid")?;
+    let instance_url = TremorUrl::from_connector_instance(a_id, s_id)?;
     let registry = &req.state().world.reg;
     let instance = registry
         .find_connector(&instance_url)
@@ -106,8 +106,7 @@ pub async fn patch_instance(req: Request) -> Result<Response> {
     if instance
         .url
         .artefact()
-        .map(|a| a.starts_with("system::"))
-        .unwrap_or(false)
+        .map_or(false, |a| a.starts_with("system::"))
     {
         return Err(Error::new(
             StatusCode::BadRequest,
