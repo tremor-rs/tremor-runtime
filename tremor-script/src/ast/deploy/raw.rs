@@ -190,8 +190,6 @@ pub enum DeployStmtRaw<'script> {
     PipelineDecl(PipelineDeclRaw<'script>),
     /// we're forced to make this pub because of lalrpop
     ConnectorDecl(ConnectorDeclRaw<'script>),
-    //    /// we're forced to make this pub because of lalrpop
-    //    Select(Box<SelectRaw<'script>>),
     /// we're forced to make this pub because of lalrpop
     ModuleStmt(DeployModuleStmtRaw<'script>),
     /// we're forced to make this pub because of lalrpop
@@ -563,6 +561,16 @@ impl<'script> Upable<'script> for ConnectorDeclRaw<'script> {
         let query_decl = ConnectorDecl {
             mid: helper.add_meta_w_name(self.start, self.end, &self.id),
             module: helper.module.clone(),
+            builtin_kind: format!(
+                "{}::{}",
+                self.kind
+                    .0
+                    .iter()
+                    .map(|x| x.id.to_string())
+                    .collect::<Vec<String>>()
+                    .join("::"),
+                self.kind.1.id.to_string()
+            ),
             id: self.id,
             spec: spec.clone(),
             args,
