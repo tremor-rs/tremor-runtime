@@ -425,7 +425,7 @@ impl Source for Int {
 
     async fn init(&mut self) -> Result<SourceState> {
         // override the builtin map with onramp-instance specific config
-        let (tx, rx) = bounded(crate::QSIZE);
+        let (tx, rx) = bounded(QSIZE.load(Ordering::Relaxed));
 
         let mut server = tide::Server::with_state(ServerState {
             tx: tx.clone(),

@@ -91,6 +91,7 @@ pub mod connectors;
 
 pub(crate) mod common;
 
+use std::sync::atomic::AtomicUsize;
 use std::{io::BufReader, path::Path};
 
 use crate::errors::{Error, Result};
@@ -106,7 +107,7 @@ use tremor_script::highlighter::Term as TermHighlighter;
 use tremor_script::Script;
 
 /// Default Q Size
-pub const QSIZE: usize = 128;
+pub const QSIZE: AtomicUsize = AtomicUsize::new(128);
 
 /// Loads a tremor query file
 /// # Errors

@@ -129,7 +129,7 @@ pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
         .value_of("storage-directory")
         .map(std::string::ToString::to_string);
     // TODO: Allow configuring this for offramps and pipelines
-    let (world, handle) = World::start(64, storage_directory).await?;
+    let (world, handle) = World::start(storage_directory).await?;
 
     if let Some(config_files) = matches.values_of("artefacts") {
         let mut yaml_files = Vec::with_capacity(16);

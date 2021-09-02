@@ -20,11 +20,13 @@ mod artefact;
 
 use crate::errors::{ErrorKind, Result};
 use crate::url::TremorUrl;
+use crate::QSIZE;
 use async_std::channel::{bounded, Sender};
 use async_std::task;
 use hashbrown::{hash_map::Entry, HashMap};
 use std::default::Default;
 use std::fmt;
+use std::sync::atomic::Ordering;
 
 /// A Servant ID
 pub use crate::registry::ServantId;
@@ -154,7 +156,7 @@ pub(crate) enum Msg<A: Artefact> {
 }
 impl<A: Artefact + Send + Sync + 'static> Repository<A> {
     fn start(mut self) -> Sender<Msg<A>> {
-        let (tx, rx) = bounded(crate::QSIZE);
+        let (tx, rx) = bounded(QSIZE.load(Ordering::Relaxed));
 
         task::spawn::<_, Result<()>>(async move {
             while let Ok(msg) = rx.recv().await {
