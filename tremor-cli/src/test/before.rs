@@ -50,6 +50,19 @@ impl Before {
         Ok(Some(process))
     }
 
+    fn cmdline(&self) -> String {
+        format!(
+            "{}{} {}",
+            self.env
+                .iter()
+                .map(|(k, v)| format!("{}={} ", k, v))
+                .collect::<Vec<_>>()
+                .join(""),
+            self.cmd,
+            self.args.join(" ")
+        )
+    }
+
     pub(crate) fn block_on(&self) -> Result<()> {
         let start = Instant::now();
         if let Some(conditions) = &self.conditionals {
@@ -57,7 +70,13 @@ impl Before {
                 let mut success = true;
 
                 if start.elapsed() > Duration::from_secs(self.until) {
-                    return Err("Upper bound exceeded error".into());
+                    return Err(format!(
+                        "Before command: {} did not fulfil conditions {:?} and timed out after {}s",
+                        self.cmdline(),
+                        self.conditionals,
+                        self.until
+                    )
+                    .into());
                 }
                 for (k, v) in conditions.iter() {
                     if "port-open" == k.as_str() {
