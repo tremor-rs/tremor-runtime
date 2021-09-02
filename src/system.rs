@@ -187,6 +187,9 @@ impl World {
     }
 
     /// Registers the given onramp type with `type_name` and the corresponding `builder` to instantiate new onramps
+    ///
+    /// # Errors
+    ///  * If the system is unavailable
     pub async fn register_onramp_type(
         &self,
         type_name: &'static str,
@@ -203,6 +206,9 @@ impl World {
     }
 
     /// unregister onramp type
+    ///
+    /// # Errors
+    ///  * If the system is unavailable
     pub async fn unregister_onramp_type(&self, type_name: String) -> Result<()> {
         self.system
             .send(ManagerMsg::Onramp(onramp::ManagerMsg::Unregister(
@@ -213,6 +219,9 @@ impl World {
     }
 
     /// returns true if the runtime currently supports the given onramp type
+    ///
+    /// # Errors
+    ///  * If the system is unavailable
     pub async fn has_onramp_type(&self, type_name: String) -> Result<bool> {
         let (tx, rx) = bounded(1);
         self.system
@@ -224,6 +233,9 @@ impl World {
     }
 
     /// Registers the given builtin offramp type with `type_name` and the corresponding `builder` to instantiate new offramps
+    ///
+    /// # Errors
+    ///  * If the system is unavailable
     pub(crate) async fn register_builtin_offramp_type(
         &self,
         type_name: &'static str,
@@ -240,6 +252,9 @@ impl World {
     }
 
     /// Registers the given offramp type with `type_name` and the corresponding `builder` to instantiate new offramps
+    ///
+    /// # Errors
+    ///  * If the system is unavailable
     pub async fn register_offramp_type(
         &self,
         type_name: &'static str,
@@ -256,6 +271,9 @@ impl World {
     }
 
     /// unregister offramp type
+    ///
+    /// # Errors
+    ///  * If the system is unavailable
     pub async fn unregister_offramp_type(&self, type_name: String) -> Result<()> {
         self.system
             .send(ManagerMsg::Offramp(offramp::ManagerMsg::Unregister(
@@ -266,6 +284,9 @@ impl World {
     }
 
     /// returns true if the runtime currently supports the given offramp type
+    ///
+    /// # Errors
+    ///  * If the system is unavailable
     pub async fn has_offramp_type(&self, type_name: String) -> Result<bool> {
         let (tx, rx) = bounded(1);
         self.system
@@ -277,6 +298,9 @@ impl World {
     }
 
     /// Registers the given connector type with `type_name` and the corresponding `builder`
+    ///
+    /// # Errors
+    ///  * If the system is unavailable
     pub async fn register_builtin_connector_type(
         &self,
         type_name: &'static str,
@@ -292,6 +316,9 @@ impl World {
         Ok(())
     }
     /// Registers the given connector type with `type_name` and the corresponding `builder`
+    ///
+    /// # Errors
+    ///  * If the system is unavailable
     pub async fn register_connector_type(
         &self,
         type_name: &'static str,
@@ -308,6 +335,9 @@ impl World {
     }
 
     /// unregister a connector type
+    ///
+    /// # Errors
+    ///  * If the system is unavailable
     pub async fn unregister_connector_type(&self, type_name: String) -> Result<()> {
         self.system
             .send(ManagerMsg::Connector(connectors::ManagerMsg::Unregister(
@@ -893,7 +923,7 @@ impl World {
             self.reg.start_binding(id).await?;
             Ok(link_result)
         } else {
-            return Err(ErrorKind::ArtefactNotFound(id.to_string()).into());
+            Err(ErrorKind::ArtefactNotFound(id.to_string()).into())
         }
     }
 
@@ -909,7 +939,7 @@ impl World {
                 .mapping
                 .as_ref()
                 .and_then(|mapping| mapping.get(id).cloned())
-                .unwrap_or(HashMap::new());
+                .unwrap_or_default();
 
             instance.unlink(self, id, mappings).await?;
 
@@ -923,7 +953,7 @@ impl World {
 
             Ok(())
         } else {
-            return Err(ErrorKind::InstanceNotFound(id.to_string()).into());
+            Err(ErrorKind::InstanceNotFound(id.to_string()).into())
         }
     }
 
@@ -1081,6 +1111,7 @@ impl World {
         Ok(self.system.send(ManagerMsg::Stop).await?)
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn register_system(&mut self) -> Result<()> {
         // register metrics connector
         let artefact: ConnectorArtefact = serde_yaml::from_str(

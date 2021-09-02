@@ -131,7 +131,7 @@ impl<A: Artefact> InstanceLifecycleFsm<A> {
     }
 
     pub async fn transition(&mut self, to: InstanceState) -> Result<&mut Self> {
-        use InstanceState::*;
+        use InstanceState::{Initialized, Paused, Running, Stopped};
         match (&self.state, &to) {
             (Initialized, Running) => {
                 self.state = Running;

@@ -149,7 +149,7 @@ impl Dest {
             Self::LinkedOnramp(addr) => addr.send(onramp::Msg::Response(event)).await?,
             Self::Connector(addr) => {
                 addr.send_sink(connectors::sink::SinkMsg::Event { event, port: input })
-                    .await?
+                    .await?;
             }
         }
         Ok(())
@@ -170,7 +170,7 @@ impl Dest {
             }
             Self::Connector(addr) => {
                 addr.send_sink(connectors::sink::SinkMsg::Signal { signal })
-                    .await?
+                    .await?;
             }
         }
         Ok(())

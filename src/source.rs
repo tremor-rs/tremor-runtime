@@ -79,7 +79,7 @@ pub(crate) enum SourceState {
     Disconnected,
 }
 
-/// reply of a source from pull_event
+/// reply of a source from call to `pull_event`
 #[derive(Debug)]
 pub(crate) enum SourceReply {
     /// A normal batch_data event with a `Vec<Vec<u8>>` for data
@@ -246,7 +246,7 @@ where
         &mut self,
         stream: usize,
         ingest_ns: &mut u64,
-        codec_override: Option<String>,
+        codec_override: &Option<String>,
         data: Vec<u8>,
         meta: Option<StaticValue>, // See: https://github.com/rust-lang/rust/issues/63033
     ) -> Vec<Result<EventPayload>> {
@@ -599,7 +599,7 @@ where
                             let results = self.make_event_data(
                                 stream,
                                 &mut ingest_ns,
-                                codec_override.clone(),
+                                &codec_override,
                                 data,
                                 meta_data.map(StaticValue),
                             );
@@ -630,7 +630,7 @@ where
                         let results = self.make_event_data(
                             stream,
                             &mut ingest_ns,
-                            codec_override,
+                            &codec_override,
                             data,
                             meta.map(StaticValue),
                         );
@@ -763,7 +763,7 @@ mod tests {
         let s = FakeSource {
             url: onramp_url.clone(),
         };
-        let o_config = OnrampConfig {
+        let o_config = Config {
             onramp_uid: 1,
             codec: "string",
             codec_map: HashMap::new(),

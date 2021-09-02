@@ -122,25 +122,18 @@ pub struct OffRamp {
 /// if a connection attempt fails
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct ReconnectConfig {
-    #[serde(default = "ReconnectConfig::default_interval_ms")]
+pub struct Reconnect {
+    #[serde(default = "Reconnect::default_interval_ms")]
     pub(crate) interval_ms: u64,
-    #[serde(default = "ReconnectConfig::default_growth_rate")]
+    #[serde(default = "Reconnect::default_growth_rate")]
     pub(crate) growth_rate: f64,
     #[serde(default = "Default::default", skip_serializing_if = "Option::is_none")]
     pub(crate) max_retry: Option<u64>,
 }
 
-impl ReconnectConfig {
+impl Reconnect {
     const DEFAULT_INTERVAL_MS: u64 = 1000;
     const DEFAULT_GROWTH_RATE: f64 = 1.2;
-
-    // fn new(interval_ms: u64) -> Self {
-    //     Self {
-    //         interval_ms,
-    //         ..Self::default()
-    //     }
-    // }
 
     fn default_interval_ms() -> u64 {
         Self::DEFAULT_INTERVAL_MS
@@ -151,7 +144,7 @@ impl ReconnectConfig {
     }
 }
 
-impl Default for ReconnectConfig {
+impl Default for Reconnect {
     fn default() -> Self {
         Self {
             interval_ms: Self::DEFAULT_INTERVAL_MS,
@@ -182,13 +175,13 @@ impl Default for PauseBehaviour {
 /// Codec name and configuration
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct CodecConfig {
+pub struct Codec {
     pub(crate) name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) config: tremor_pipeline::ConfigMap,
 }
 
-impl From<&str> for CodecConfig {
+impl From<&str> for Codec {
     fn from(name: &str) -> Self {
         Self {
             name: name.to_string(),
@@ -215,7 +208,7 @@ pub struct Connector {
         skip_serializing_if = "Option::is_none",
         default = "Default::default"
     )]
-    pub(crate) codec: Option<Either<String, CodecConfig>>,
+    pub(crate) codec: Option<Either<String, Codec>>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) config: tremor_pipeline::ConfigMap,
@@ -232,7 +225,7 @@ pub struct Connector {
     /// A default builtin codec mapping is defined
     /// for msgpack, json, yaml and plaintext codecs with the common mime-types
     #[serde(default = "Default::default", skip_serializing_if = "Option::is_none")]
-    pub(crate) codec_map: Option<halfbrown::HashMap<String, Either<String, CodecConfig>>>,
+    pub(crate) codec_map: Option<halfbrown::HashMap<String, Either<String, Codec>>>,
 
     // TODO: interceptors or configurable processors
     #[serde(default = "Default::default", skip_serializing_if = "Option::is_none")]
@@ -241,7 +234,7 @@ pub struct Connector {
     pub(crate) postprocessors: Option<Vec<String>>,
 
     #[serde(default)]
-    pub(crate) reconnect: ReconnectConfig,
+    pub(crate) reconnect: Reconnect,
 
     #[serde(default)]
     pub(crate) on_pause: PauseBehaviour,

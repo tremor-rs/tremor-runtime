@@ -46,6 +46,7 @@ pub struct Event {
 
 impl Event {
     /// create a tick signal event
+    #[must_use]
     pub fn signal_tick() -> Self {
         Self {
             ingest_ns: nanotime(),
@@ -58,9 +59,9 @@ impl Event {
     #[must_use]
     pub fn insight(cb: CbAction, id: EventId, ingest_ns: u64, op_meta: OpMeta) -> Event {
         Event {
-            cb,
             id,
             ingest_ns,
+            cb,
             op_meta,
             ..Event::default()
         }
@@ -147,9 +148,9 @@ impl Event {
 
     /// Creates a new event to restore/open a CB
     ///
-    /// For those CB events we don't need an explicit EventId.
-    /// Sources should react properly upon any CB message, no matter the EventId
-    /// operators can use the op_meta for checking if they are affected
+    /// For those CB events we don't need an explicit `EventId`.
+    /// Sources should react properly upon any CB message, no matter the `EventId`
+    /// operators can use the `op_meta` for checking if they are affected
     #[must_use]
     pub fn cb_open(ingest_ns: u64, op_meta: OpMeta) -> Self {
         Self {
@@ -162,9 +163,9 @@ impl Event {
 
     /// Creates a new event to trigger/close a CB
     ///
-    /// For those CB events we don't need an explicit EventId.
-    /// Sources should react properly upon any CB message, no matter the EventId
-    /// operators can use the op_meta for checking if they are affected
+    /// For those CB events we don't need an explicit `EventId`.
+    /// Sources should react properly upon any CB message, no matter the `EventId`
+    /// operators can use the `op_meta` for checking if they are affected
     #[must_use]
     pub fn cb_close(ingest_ns: u64, op_meta: OpMeta) -> Self {
         Self {
