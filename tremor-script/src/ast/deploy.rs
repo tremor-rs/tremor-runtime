@@ -86,6 +86,8 @@ pub struct ConnectorDecl<'script> {
     pub spec: Vec<Cow<'script, str>>,
     /// Resolved argument defaults
     pub args: Value<'script>,
+    /// Internal / intrinsic builtin name
+    pub builtin_kind: String,
 }
 impl_expr_mid!(ConnectorDecl);
 

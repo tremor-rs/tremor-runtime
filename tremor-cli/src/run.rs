@@ -15,17 +15,21 @@
 use crate::env;
 use crate::errors::{Error, Result};
 use crate::util::{get_source_kind, highlight, slurp_string, SourceKind};
+use async_std::task::block_on;
 use beef::Cow;
 use clap::ArgMatches;
-use std::collections::BTreeSet;
+use halfbrown::HashMap;
 use std::io::prelude::*;
 use std::io::{self, BufReader, BufWriter, Read, Write};
 use tremor_common::time::nanotime;
+use tremor_common::url::TremorUrl;
 use tremor_common::{file, ids::OperatorIdGen};
 use tremor_pipeline::{Event, EventId};
 use tremor_runtime::codec::Codec;
+use tremor_runtime::config::Binding;
 use tremor_runtime::postprocessor::Postprocessor;
 use tremor_runtime::preprocessor::Preprocessor;
+use tremor_runtime::repository::BindingArtefact;
 use tremor_script::ast::deploy::AtomOfDeployment;
 use tremor_script::deploy::Deploy;
 use tremor_script::highlighter::Error as HighlighterError;
@@ -429,9 +433,12 @@ fn run_trickle_query(
     Ok(())
 }
 
-fn run_troy_source(matches: &ArgMatches, src: &str, args: &Value) -> Result<()> {
+#[allow(clippy::too_many_lines, clippy::unwrap_used)]
+fn run_troy_source(_matches: &ArgMatches, src: &str, args: &Value) -> Result<()> {
     use tremor_script::ast;
-    // FIXME TODO implement for troy
+
+    env_logger::init();
+
     let raw = slurp_string(&src);
     if let Err(e) = raw {
         eprintln!("Error processing file {}: {}", &src, e);
@@ -441,8 +448,6 @@ fn run_troy_source(matches: &ArgMatches, src: &str, args: &Value) -> Result<()> 
     let raw = raw?;
     let env = env::setup()?;
     let mut h = TermHighlighter::stderr();
-
-    dbg!(args);
 
     let deployable = match Deploy::parse_with_args(
         &env.module_path,
@@ -463,35 +468,118 @@ fn run_troy_source(matches: &ArgMatches, src: &str, args: &Value) -> Result<()> 
         }
     };
 
+    // FIXME TODO refactor remove indirection
     let unit = deployable.deploy.as_deployment_unit()?;
-    let mut unit_pipeline: Option<ast::Query> = None;
 
-    let mut num_pipelines = 0;
+    let mut connectors: HashMap<String, ast::ConnectorDecl> = HashMap::new();
+    let mut pipelines: HashMap<String, ast::PipelineDecl> = HashMap::new();
+    let mut flows: HashMap<String, ast::FlowDecl> = HashMap::new();
 
-    // FIXME TODO Multiple pipeline deployments with different args overrides
-    for (_name, stmt) in unit.instances {
+    for (name, stmt) in unit.instances {
         let _fqsn = stmt.fqsn(&stmt.module);
-        if let AtomOfDeployment::Pipeline(pipe) = stmt.atom {
-            unit_pipeline = Some(pipe.query);
-            num_pipelines += 1;
+        if let AtomOfDeployment::Pipeline(pipe) = &stmt.atom {
+            pipelines.insert(name.clone(), pipe.clone());
+        }
+        if let AtomOfDeployment::Connector(connector) = &stmt.atom {
+            connectors.insert(name.clone(), connector.clone());
+        }
+        if let AtomOfDeployment::Flow(flow) = &stmt.atom {
+            flows.insert(name.clone(), flow.clone());
         }
     }
 
-    if num_pipelines == 1 {
-        let mut h = TermHighlighter::stderr();
-        if let Some(unit_pipeline) = unit_pipeline {
-            let query = tremor_script::srs::Query::new_from_ast(unit_pipeline);
-            let query = tremor_script::Query {
-                query,
-                warnings: BTreeSet::new(),
-                locals: 0,
-                source: src.to_string(),
-            };
-            {
-                run_trickle_query(matches, query, src.to_string(), raw, &mut h)?;
+    let storage_directory = Some("./storage".to_string());
+
+    block_on(async {
+        let (world, _handle) = tremor_runtime::system::World::start(50, storage_directory)
+            .await
+            .unwrap();
+
+        // Pipelines are inert until they are interconnected so we can deploy these quiescently
+        for (name, pipeline) in pipelines {
+            let url = TremorUrl::parse(&format!("/pipeline/{}/yellow", name)).unwrap();
+            world
+                .repo
+                .publish_pipeline(
+                    &url,
+                    false,
+                    tremor_pipeline::query::Query(
+                        tremor_script::Query::from_troy(pipeline.query).unwrap(),
+                    ),
+                )
+                .await
+                .unwrap();
+        }
+
+        // Next - we deploy the connectors - no interconnection so quiescent at this juncture
+        for (name, connector) in connectors {
+            match connector.builtin_kind.as_str() {
+                "onramp::blaster" => {
+                    let url = TremorUrl::parse(&format!("/onramp/{}/01", &name)).unwrap();
+                    let yaml = serde_yaml::to_string(&connector.args).unwrap();
+                    let config: tremor_runtime::config::OnRamp =
+                        serde_yaml::from_str(&yaml).unwrap();
+                    world
+                        .repo
+                        .publish_onramp(&url, false, config)
+                        .await
+                        .unwrap();
+                }
+                "offramp::blackhole" => {
+                    let url = TremorUrl::parse(&format!("/offramp/{}/01", &name)).unwrap();
+                    let yaml = serde_yaml::to_string(&connector.args).unwrap();
+                    let config: tremor_runtime::config::OffRamp =
+                        serde_yaml::from_str(&yaml).unwrap();
+                    world
+                        .repo
+                        .publish_offramp(&url, false, config)
+                        .await
+                        .unwrap();
+                }
+                otherwise => {
+                    dbg!("Ignoring ", otherwise);
+                }
             }
         }
-    }
+
+        // Finally we process our flows - this is where the interconnections and
+        // we effectively go live in the legacy ( yaml ) based runtime
+
+        for (name, flow) in &flows {
+            let url = TremorUrl::parse(&format!("/binding/{}/01", name)).unwrap();
+            let mut links: hashbrown::HashMap<TremorUrl, Vec<TremorUrl>> =
+                hashbrown::HashMap::new();
+            for link in &flow.links {
+                links.insert(link.0.clone(), vec![link.1.clone()]);
+            }
+            let binding = BindingArtefact {
+                binding: Binding {
+                    id: name.clone(),
+                    description: "Troy managed binding".to_string(),
+                    links,
+                },
+                mapping: None,
+            };
+            world
+                .repo
+                .publish_binding(&url, false, binding)
+                .await
+                .unwrap();
+            let mut kv = hashbrown::HashMap::new();
+            kv.insert("troy".to_string(), "troy".to_string());
+            world.link_binding(&url, kv).await.unwrap();
+        }
+
+        // dbg!(world.repo.list_onramps().await.unwrap());
+        // dbg!(world.repo.list_offramps().await.unwrap());
+        // dbg!(world.repo.list_pipelines().await.unwrap());
+        // dbg!(world.repo.list_bindings().await.unwrap());
+
+        // At this point we could run a test framework of sorts
+
+        std::thread::sleep(std::time::Duration::from_millis(150_000));
+        world.stop().await.unwrap();
+    });
 
     Ok(())
 }
