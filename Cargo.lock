@@ -6686,7 +6686,6 @@ dependencies = [
  "tremor-pipeline",
  "tremor-script",
  "tremor-value",
- "tungstenite 0.13.0",
  "url 2.2.2",
  "value-trait",
  "xz2",
