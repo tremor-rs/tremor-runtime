@@ -26,7 +26,7 @@ use crate::{
 };
 
 use crate::Result;
-use async_channel::{self, unbounded, Receiver};
+use async_std::channel::{unbounded, Receiver};
 use async_std::task;
 use beef::Cow;
 use halfbrown::HashMap;
@@ -795,9 +795,9 @@ mod tests {
         let handle = task::spawn(sm.run());
 
         let pipeline_url = TremorUrl::parse("/pipeline/bla/01/in")?;
-        let (tx1, rx1) = async_channel::unbounded();
-        let (tx2, _rx2) = async_channel::unbounded();
-        let (tx3, rx3) = async_channel::unbounded();
+        let (tx1, rx1) = unbounded();
+        let (tx2, _rx2) = unbounded();
+        let (tx3, rx3) = unbounded();
         let addr = pipeline::Addr::new(tx1, tx2, tx3, pipeline_url.clone());
 
         // trigger the source to ensure it is not being pulled from
@@ -844,7 +844,7 @@ mod tests {
         }
         assert!(rx1.len() > 0);
 
-        let (tx4, rx4) = async_channel::unbounded();
+        let (tx4, rx4) = unbounded();
         // disconnect to break the busy loop
         sender
             .send(onramp::Msg::Disconnect {

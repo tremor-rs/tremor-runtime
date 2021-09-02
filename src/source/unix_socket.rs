@@ -185,8 +185,8 @@ impl Source for Int {
 
 #[cfg(test)]
 mod tests {
-    use crate::onramp::Impl;
-    use crate::source::unix_socket::{Config, Int, UnixSocket};
+    use crate::onramp::Builder;
+    use crate::source::unix_socket::{Builder as UnixSocketBuilder, Config, Int, UnixSocket};
     use crate::url::TremorUrl;
     use tremor_value::literal;
 
@@ -195,7 +195,8 @@ mod tests {
         let onramp_config = literal!({
             "path": "/tmp/test.sock"
         });
-        let onramp = UnixSocket::from_config(
+        let builder = UnixSocketBuilder {};
+        let onramp = builder::from_config(
             &TremorUrl::from_onramp_id("test").unwrap(),
             &serde_yaml::from_value(serde_yaml::to_value(onramp_config).expect("")).expect(""),
         )

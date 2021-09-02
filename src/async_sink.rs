@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::errors::Result;
-use async_channel::Receiver;
+use async_std::channel::Receiver;
 use std::collections::VecDeque;
 use std::error;
 use std::fmt;
@@ -100,7 +100,7 @@ impl<T> AsyncSink<T> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use async_channel::bounded;
+    use async_std::channel::bounded;
 
     #[test]
     fn dequeue_empty() {

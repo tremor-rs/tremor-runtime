@@ -18,13 +18,16 @@ use crate::repository::ServantId;
 use crate::source::prelude::*;
 use crate::url::TremorUrl;
 use crate::OpConfig;
-use async_std::task::{self, JoinHandle};
+use async_std::{
+    channel::Sender,
+    task::{self, JoinHandle},
+};
 use halfbrown::{Entry, HashMap};
 use std::fmt;
 use tremor_common::ids::OnrampIdGen;
 use tremor_pipeline::EventId;
 
-pub(crate) type Sender = async_channel::Sender<ManagerMsg>;
+pub(crate) type ManagerSender = Sender<ManagerMsg>;
 
 /// builder for onramps
 pub trait Builder: Send {
@@ -42,7 +45,7 @@ pub enum Msg {
         /// url of the pipeline to disconnect
         id: TremorUrl,
         /// receives true if the onramp is not connected anymore
-        tx: async_channel::Sender<bool>,
+        tx: Sender<bool>,
     },
     /// circuit breaker event
     Cb(CbAction, EventId),
@@ -53,7 +56,7 @@ pub enum Msg {
 
 #[derive(Debug, Clone)]
 /// onramp address
-pub struct Addr(pub(crate) async_channel::Sender<Msg>);
+pub struct Addr(pub(crate) Sender<Msg>);
 
 impl Addr {
     pub(crate) async fn send(&self, msg: Msg) -> Result<()> {
@@ -61,8 +64,8 @@ impl Addr {
     }
 }
 
-impl From<async_channel::Sender<Msg>> for Addr {
-    fn from(sender: async_channel::Sender<Msg>) -> Self {
+impl From<Sender<Msg>> for Addr {
+    fn from(sender: Sender<Msg>) -> Self {
         Self(sender)
     }
 }
@@ -120,16 +123,16 @@ pub(crate) enum ManagerMsg {
         builtin: bool,
     },
     Unregister(String),
-    TypeExists(String, async_channel::Sender<bool>),
+    TypeExists(String, Sender<bool>),
     /// create an onramp instance from the given type and config and send it back
     Instantiate {
         onramp_type: String,
         url: TremorUrl,
         config: Option<OpConfig>,
-        sender: async_channel::Sender<Result<Box<dyn Onramp>>>,
+        sender: Sender<Result<Box<dyn Onramp>>>,
     },
     // start an onramp, start polling for data if connected
-    Create(async_channel::Sender<Result<Addr>>, Box<Create>),
+    Create(Sender<Result<Addr>>, Box<Create>),
     Stop,
 }
 
@@ -143,7 +146,7 @@ impl Manager {
         Self { qsize }
     }
     #[allow(clippy::too_many_lines)]
-    pub fn start(self) -> (JoinHandle<Result<()>>, Sender) {
+    pub fn start(self) -> (JoinHandle<Result<()>>, ManagerSender) {
         let (tx, rx) = bounded(self.qsize);
 
         let h = task::spawn::<_, Result<()>>(async move {
