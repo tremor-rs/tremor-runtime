@@ -15,7 +15,7 @@
 
 use crate::postprocessor::{make_postprocessors, postprocess, Postprocessors};
 use crate::{codec::Codec, source::prelude::*};
-use async_channel::{Sender, TryRecvError};
+use async_std::channel::{Sender, TryRecvError};
 use async_std::net::{TcpListener, TcpStream};
 use async_std::task;
 use async_tungstenite::tungstenite::Message;

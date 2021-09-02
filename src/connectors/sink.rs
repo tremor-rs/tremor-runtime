@@ -22,7 +22,7 @@ use crate::pipeline;
 use crate::postprocessor::{make_postprocessors, postprocess, Postprocessors};
 use crate::url::ports::IN;
 use crate::url::TremorUrl;
-use async_channel::{self, bounded, Receiver, Sender};
+use async_std::channel::{bounded, unbounded, Receiver, Sender};
 use async_std::stream::StreamExt; // for .next() on PriorityMerge
 use async_std::task;
 use beef::Cow;
@@ -475,16 +475,13 @@ enum SinkMsgWrapper {
 #[derive(Clone, Debug)]
 pub struct SinkAddr {
     /// the actual sender
-    pub addr: async_channel::Sender<SinkMsg>,
+    pub addr: Sender<SinkMsg>,
 }
 
 pub struct SinkManagerBuilder {
     qsize: usize,
     serializer: EventSerializer,
-    reply_channel: (
-        async_channel::Sender<AsyncSinkReply>,
-        async_channel::Receiver<AsyncSinkReply>,
-    ),
+    reply_channel: (Sender<AsyncSinkReply>, Receiver<AsyncSinkReply>),
     metrics_reporter: MetricsSinkReporter,
 }
 
@@ -498,7 +495,7 @@ impl SinkManagerBuilder {
     ///
     /// This is especially useful if your sink handles events asynchronously
     /// and you can't reply immediately.
-    pub fn reply_tx(&self) -> async_channel::Sender<AsyncSinkReply> {
+    pub fn reply_tx(&self) -> Sender<AsyncSinkReply> {
         self.reply_channel.0.clone()
     }
 
@@ -536,7 +533,7 @@ pub(crate) fn builder(
     )?;
     // the incoming channels for events are all bounded, so we can safely be unbounded here
     // TODO: actually we could have lots of CB events not bound to events here
-    let reply_channel = async_channel::unbounded();
+    let reply_channel = unbounded();
     Ok(SinkManagerBuilder {
         qsize,
         serializer,
@@ -637,8 +634,8 @@ where
 {
     sink: S,
     ctx: SinkContext,
-    rx: async_channel::Receiver<SinkMsg>,
-    reply_rx: async_channel::Receiver<AsyncSinkReply>,
+    rx: Receiver<SinkMsg>,
+    reply_rx: Receiver<AsyncSinkReply>,
     serializer: EventSerializer,
     metrics_reporter: MetricsSinkReporter,
     /// tracking which operators all incoming events visited

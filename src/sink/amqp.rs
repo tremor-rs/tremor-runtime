@@ -20,7 +20,7 @@
 
 use crate::sink::prelude::*;
 use crate::url::TremorUrl;
-use async_channel::{bounded, Receiver};
+use async_std::channel::{bounded, Receiver};
 use halfbrown::HashMap;
 use lapin::{
     options::BasicPublishOptions, publisher_confirm::Confirmation, BasicProperties, Channel,

@@ -16,7 +16,7 @@
 use crate::config::Reconnect as ReconnectConfig;
 use crate::connectors::{Addr, Connectivity, Connector, ConnectorContext, Msg};
 use crate::errors::{ErrorKind, Result};
-use async_channel::Sender;
+use async_std::channel::Sender;
 use async_std::task;
 use std::time::Duration;
 

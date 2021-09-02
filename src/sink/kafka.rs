@@ -23,7 +23,7 @@
 //! See [Config](struct.Config.html) for details.
 
 use crate::sink::prelude::*;
-use async_channel::{bounded, Receiver, Sender};
+use async_std::channel::{bounded, Receiver, Sender};
 use halfbrown::HashMap;
 use rdkafka::config::ClientConfig;
 use rdkafka::error::RDKafkaError;
