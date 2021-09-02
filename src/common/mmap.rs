@@ -28,26 +28,26 @@ pub trait Kv {
     fn set(&mut self, obj: simd_json::OwnedValue) -> Result<()>;
 }
 
-pub struct MmapFile {
+pub struct File {
     pub config: Config,
     pub store: mapr::MmapMut,
     pub len: usize,
     pub end: usize,
 }
-pub struct MmapAnon {
+pub struct Anon {
     pub store: mapr::MmapMut,
     pub end: usize,
     pub len: usize,
 }
 
-impl MmapFile {
+impl File {
     fn as_mut_slice(&mut self) -> &mut [u8] {
         // We read until it's end, so we know it's OK
         unsafe { self.store.get_unchecked_mut(..self.end) }
     }
 }
 
-impl MmapAnon {
+impl Anon {
     fn as_slice(&self) -> &[u8] {
         // We read until it's end, so we know it's OK
         unsafe { self.store.get_unchecked(..self.end) }
@@ -63,7 +63,7 @@ impl MmapAnon {
     }
 }
 
-impl Kv for MmapFile {
+impl Kv for File {
     fn get(&mut self) -> Result<simd_json::OwnedValue> {
         let obj = simd_json::to_owned_value(self.as_mut_slice())?;
 
@@ -83,7 +83,7 @@ impl Kv for MmapFile {
     }
 }
 
-impl Kv for MmapAnon {
+impl Kv for Anon {
     fn get(&mut self) -> Result<simd_json::OwnedValue> {
         let mmap = self.as_slice();
         let mut bytes: Vec<u8> = Vec::with_capacity(mmap.len());
@@ -123,7 +123,7 @@ pub struct Config {
     pub size: usize,
 }
 
-impl MmapAnon {
+impl Anon {
     fn from_config(
         config: Option<Config>,
         obj: &simd_json::OwnedValue,
@@ -147,7 +147,7 @@ impl MmapAnon {
     }
 }
 
-impl MmapFile {
+impl File {
     fn from_config(
         config: Option<Config>,
         obj: &simd_json::OwnedValue,
@@ -186,8 +186,8 @@ pub fn lookup(
     obj: &simd_json::OwnedValue,
 ) -> Result<Box<dyn Kv + Send>> {
     match name {
-        "mmap_file" => MmapFile::from_config(config, obj),
-        "mmap_anon" => MmapAnon::from_config(config, obj),
+        "mmap_file" => File::from_config(config, obj),
+        "mmap_anon" => Anon::from_config(config, obj),
         _ => Err(format!("Cache {} not known", name).into()),
     }
 }
@@ -196,7 +196,7 @@ pub fn lookup(
 
 mod tests {
 
-    use super::{Config, MmapAnon, MmapFile};
+    use super::{Anon, Config, File};
     use tempfile::tempdir;
     use tremor_common::file;
 
@@ -211,7 +211,7 @@ mod tests {
         let opt = Some(config);
         let obj = simd_json::to_owned_value(bytes).unwrap();
         let exp_obj = obj.clone();
-        let mut mmap = MmapAnon::from_config(opt, &obj).expect("To create anon memory map");
+        let mut mmap = Anon::from_config(opt, &obj).expect("To create anon memory map");
 
         assert_eq!(mmap.get().expect("To retrieve object"), exp_obj);
 
@@ -239,7 +239,7 @@ mod tests {
         let bytes = data.as_mut_slice();
         let obj = simd_json::to_owned_value(bytes).unwrap();
         let exp_obj = obj.clone();
-        let mut mmap = MmapFile::from_config(opt, &obj).expect("To create file-backed memory map");
+        let mut mmap = File::from_config(opt, &obj).expect("To create file-backed memory map");
 
         assert_eq!(mmap.get().expect("To retrieve object"), exp_obj);
 

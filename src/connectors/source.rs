@@ -11,6 +11,9 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
+#![allow(clippy::module_name_repetitions)]
+
 use async_std::task;
 use either::Either;
 use std::collections::btree_map::Entry;
@@ -20,7 +23,7 @@ use tremor_common::time::nanotime;
 use tremor_script::{EventPayload, ValueAndMeta};
 
 use crate::codec::{self, Codec};
-use crate::config::{CodecConfig, Connector as ConnectorConfig};
+use crate::config::{Codec as CodecConfig, Connector as ConnectorConfig};
 use crate::errors::{Error, Result};
 use crate::pipeline;
 use crate::preprocessor::{make_preprocessors, preprocess, Preprocessors};
@@ -34,7 +37,7 @@ use tremor_pipeline::{
 use tremor_value::{literal, Value};
 use value_trait::Builder;
 
-use super::metrics::MetricsSourceReporter;
+use super::metrics::SourceReporter;
 
 /// Messages a Source can receive
 pub enum SourceMsg {
@@ -183,7 +186,7 @@ pub trait Source: Send {
 /// It does not handle acks/fails.
 ///
 /// Connector implementations handling their stuff in a separate task can use the
-/// channel obtained by `ChannelSource::sender()` to send SourceReplies to the
+/// channel obtained by `ChannelSource::sender()` to send `SourceReply`s to the
 /// runtime.
 pub struct ChannelSource {
     rx: Receiver<SourceReply>,
@@ -194,7 +197,7 @@ impl ChannelSource {
     /// constructor
     pub fn new(qsize: usize) -> Self {
         let (tx, rx) = bounded(qsize);
-        Self { tx, rx }
+        Self { rx, tx }
     }
 
     /// get the sender for the source
@@ -237,10 +240,11 @@ pub struct SourceAddr {
     pub addr: async_channel::Sender<SourceMsg>,
 }
 
+#[allow(clippy::module_name_repetitions)]
 pub struct SourceManagerBuilder {
     qsize: usize,
     streams: Streams,
-    source_metrics_reporter: MetricsSourceReporter,
+    source_metrics_reporter: SourceReporter,
 }
 
 impl SourceManagerBuilder {
@@ -271,7 +275,7 @@ pub fn builder(
     config: &ConnectorConfig,
     connector_default_codec: &str,
     qsize: usize,
-    source_metrics_reporter: MetricsSourceReporter,
+    source_metrics_reporter: SourceReporter,
 ) -> Result<SourceManagerBuilder> {
     let preprocessor_names = config.preprocessors.clone().unwrap_or_else(Vec::new);
     let codec_config = config
@@ -394,7 +398,7 @@ where
     pipelines_out: Vec<(TremorUrl, pipeline::Addr)>,
     pipelines_err: Vec<(TremorUrl, pipeline::Addr)>,
     streams: Streams,
-    metrics_reporter: MetricsSourceReporter,
+    metrics_reporter: SourceReporter,
     // used for both explicitly pausing and CB close/open
     // this way we can explicitly resume a Cb triggered source if need be
     // but also an explicitly paused source might receive a Cb open and continue sending data :scream:
@@ -493,26 +497,26 @@ where
                     }
                     SourceMsg::Start => {
                         self.paused = false;
-                        self.source.on_start(&mut self.ctx).await
+                        self.source.on_start(&mut self.ctx).await;
                     }
                     SourceMsg::Resume => {
                         self.paused = false;
-                        self.source.on_resume(&mut self.ctx).await
+                        self.source.on_resume(&mut self.ctx).await;
                     }
                     SourceMsg::Pause => {
                         // TODO: execute pause strategy chosen by source / connector / configured by user
                         self.paused = true;
-                        self.source.on_pause(&mut self.ctx).await
+                        self.source.on_pause(&mut self.ctx).await;
                     }
                     SourceMsg::Stop => {
                         self.source.on_stop(&mut self.ctx).await;
                         return Ok(true);
                     }
                     SourceMsg::ConnectionLost => {
-                        self.source.on_connection_lost(&mut self.ctx).await
+                        self.source.on_connection_lost(&mut self.ctx).await;
                     }
                     SourceMsg::ConnectionEstablished => {
-                        self.source.on_connection_established(&mut self.ctx).await
+                        self.source.on_connection_established(&mut self.ctx).await;
                     }
                     SourceMsg::Cb(CbAction::Fail, id) => {
                         if let Some((stream_id, id)) = id.get_min_by_source(self.ctx.uid) {
@@ -561,7 +565,7 @@ where
             // flush metrics reporter or similar
             if let Some(t) = self.metrics_reporter.periodic_flush(event.ingest_ns) {
                 self.metrics_reporter
-                    .send_source_metrics(self.source.metrics(t))
+                    .send_source_metrics(self.source.metrics(t));
             }
 
             if let Some((last, pipelines)) = pipelines.split_last_mut() {
@@ -629,6 +633,7 @@ where
     ///
     /// handling control plane and data plane in a loop
     // TODO: data plane
+    #[allow(clippy::too_many_lines)]
     async fn run(mut self) -> Result<()> {
         // this one serves as simple counter for our pulls from the source
         // we expect 1 source transport unit (stu) per pull, so this counter is equivalent to a stu counter
@@ -657,7 +662,7 @@ where
                             pull_counter,
                             origin_uri,
                             data,
-                            meta.unwrap_or_else(Value::object),
+                            &meta.unwrap_or_else(Value::object),
                             self.is_transactional,
                         );
                         if results.is_empty() {
@@ -696,10 +701,10 @@ where
                                 pull_counter,
                                 origin_uri.clone(), // TODO: use split_last on batch_data to avoid last clone
                                 data,
-                                meta.unwrap_or_else(Value::object),
+                                &meta.unwrap_or_else(Value::object),
                                 self.is_transactional,
                             );
-                            results.append(&mut events)
+                            results.append(&mut events);
                         }
                         if results.is_empty() {
                             if let Err(e) = self
@@ -740,11 +745,11 @@ where
                         }
                     }
                     Ok(SourceReply::StartStream(stream_id)) => {
-                        self.streams.start_stream(stream_id)?
+                        self.streams.start_stream(stream_id)?;
                     } // failing here only due to misconfig, in that case, bail out, #yolo
                     Ok(SourceReply::EndStream(stream_id)) => self.streams.end_stream(stream_id),
                     Ok(SourceReply::Empty(wait_ms)) => {
-                        task::sleep(Duration::from_millis(wait_ms)).await
+                        task::sleep(Duration::from_millis(wait_ms)).await;
                     }
                     Err(e) => {
                         warn!("[Source::{}] Error pulling data: {}", &self.ctx.url, e);
@@ -762,6 +767,7 @@ where
 
 /// build any number of `Event`s from a given Source Transport Unit (`data`)
 /// preprocessor or codec errors are turned into events to the ERR port of the source/connector
+#[allow(clippy::too_many_arguments)]
 fn build_events(
     url: &TremorUrl,
     stream_state: &mut StreamState,
@@ -769,7 +775,7 @@ fn build_events(
     pull_id: u64,
     origin_uri: EventOriginUri,
     data: Vec<u8>,
-    meta: Value<'static>,
+    meta: &Value<'static>,
     is_transactional: bool,
 ) -> Vec<(Cow<'static, str>, Event)> {
     match preprocess(
