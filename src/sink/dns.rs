@@ -15,7 +15,8 @@
 // TODO: Add correlation of reads and replies.
 
 #![cfg(not(tarpaulin_include))]
-use async_channel::Sender;
+use crate::sink::{prelude::*, Reply};
+use async_std::channel::Sender;
 use async_std_resolver::{
     lookup::Lookup,
     proto::{
@@ -26,7 +27,6 @@ use async_std_resolver::{
 };
 use halfbrown::HashMap;
 use std::boxed::Box;
-use crate::sink::{prelude::*, Reply};
 use tremor_value::literal;
 
 pub struct Dns {

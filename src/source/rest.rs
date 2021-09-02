@@ -18,7 +18,7 @@
 use crate::codec::Codec;
 use crate::postprocessor::{make_postprocessors, postprocess, Postprocessors};
 use crate::source::prelude::*;
-use async_channel::{unbounded, Sender, TryRecvError};
+use async_std::channel::{unbounded, Sender, TryRecvError};
 use halfbrown::HashMap;
 use http_types::Mime;
 use std::str::FromStr;

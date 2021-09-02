@@ -32,7 +32,7 @@ pub(crate) type Id = TremorUrl;
 pub(crate) use crate::Connector as ConnectorArtefact;
 pub(crate) use crate::OffRamp as OfframpArtefact;
 pub(crate) use crate::OnRamp as OnrampArtefact;
-use async_channel::bounded;
+use async_std::channel::bounded;
 use async_trait::async_trait;
 
 /// A Binding
