@@ -121,7 +121,7 @@ impl offramp::Builder for Builder {
             let (dummy_tx, _) = bounded(1);
 
             // TODO: does this need to be unbounded?
-            let (error_tx, error_rx) = bounded(crate::QSIZE);
+            let (error_tx, error_rx) = bounded(QSIZE.load(Ordering::Relaxed));
             Ok(SinkManager::new_box(Kafka {
                 sink_url: TremorUrl::from_offramp_id("kafka")?, // dummy
                 config,

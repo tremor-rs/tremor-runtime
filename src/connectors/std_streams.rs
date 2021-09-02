@@ -27,7 +27,7 @@ pub enum StdStream {
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Config {
-    stream: StdStream,
+    stream: StdStream, //FIXME should std_Stream be stdio + err depending on port?
     #[serde(default = "Default::default")]
     prefix: String,
     /// print non-string payloads as raw bytes, not in debug formatting
@@ -44,6 +44,7 @@ pub struct StdStreamConnector {
     raw: bool,
 }
 
+#[derive(Debug, Default)]
 pub(crate) struct Builder {}
 impl ConnectorBuilder for Builder {
     fn from_config(

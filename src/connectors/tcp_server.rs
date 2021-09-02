@@ -71,6 +71,7 @@ pub struct TcpServer {
     source_channel: Sender<SourceReply>,
 }
 
+#[derive(Debug, Default)]
 pub(crate) struct Builder {}
 impl ConnectorBuilder for Builder {
     fn from_config(
@@ -238,7 +239,7 @@ impl Connector for TcpServer {
                     Ok(())
                 });
 
-                let (stream_tx, stream_rx) = bounded::<SinkData>(crate::QSIZE);
+                let (stream_tx, stream_rx) = bounded::<SinkData>(QSIZE.load(Ordering::Relaxed));
 
                 // spawn sink stream task
                 let stream_sink_tx = sink_tx.clone();

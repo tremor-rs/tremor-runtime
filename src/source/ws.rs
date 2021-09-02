@@ -22,6 +22,7 @@ use async_tungstenite::tungstenite::Message;
 use futures::{SinkExt, StreamExt};
 use halfbrown::HashMap;
 use std::collections::BTreeMap;
+use std::sync::atomic::Ordering;
 use tremor_pipeline::EventId;
 use tremor_script::Value;
 
@@ -140,7 +141,7 @@ async fn handle_connection(
     // TODO maybe send ws_write from tx and get rid of this task + extra channel?
     let stream_sender = if link {
         let (stream_tx, stream_rx): (Sender<SerializedResponse>, Receiver<SerializedResponse>) =
-            bounded(crate::QSIZE);
+            bounded(QSIZE.load(Ordering::Relaxed));
         // response handling task
         task::spawn::<_, Result<()>>(async move {
             // create post-processors for this stream
@@ -343,7 +344,7 @@ impl Source for Int {
     async fn init(&mut self) -> Result<SourceState> {
         let listen_port = self.config.port;
         let listener = TcpListener::bind((self.config.host.as_str(), listen_port)).await?;
-        let (tx, rx) = bounded(crate::QSIZE);
+        let (tx, rx) = bounded(QSIZE.load(Ordering::Relaxed));
         let source_url = self.onramp_id.clone();
 
         let link = self.is_linked;

@@ -108,7 +108,7 @@ impl Source for Int {
             mode.set_mode_path(&path)?;
         }
         let mut stream_id = 0;
-        let (tx, rx) = bounded(crate::QSIZE);
+        let (tx, rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
 
         let path = vec![self.config.path.clone()];
         task::spawn(async move {
