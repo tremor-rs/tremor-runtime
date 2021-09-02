@@ -106,7 +106,7 @@ impl Source for Int {
 
     async fn init(&mut self) -> Result<SourceState> {
         let listener = TcpListener::bind((self.config.host.as_str(), self.config.port)).await?;
-        let (tx, rx) = bounded(crate::QSIZE);
+        let (tx, rx) = bounded(QSIZE.load(Ordering::Relaxed));
         let path = vec![self.config.port.to_string()];
 
         let server_config: Option<ServerConfig> = if let Some(tls_config) = self.config.tls.as_ref()

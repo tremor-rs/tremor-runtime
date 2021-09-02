@@ -800,16 +800,13 @@ pub trait ConnectorBuilder: Sync + Send {
 #[cfg(not(tarpaulin_include))]
 pub async fn register_builtin_connector_types(world: &World) -> Result<()> {
     world
-        .register_builtin_connector_type(
-            "metrics",
-            Box::new(metrics::Builder::new(world.metrics_channel.clone())),
-        )
+        .register_builtin_connector_type("metrics", Box::new(metrics::Builder::default()))
         .await?;
     world
-        .register_builtin_connector_type("tcp_server", Box::new(tcp_server::Builder {}))
+        .register_builtin_connector_type("tcp_server", Box::new(tcp_server::Builder::default()))
         .await?;
     world
-        .register_builtin_connector_type("std_stream", Box::new(std_streams::Builder {}))
+        .register_builtin_connector_type("std_stream", Box::new(std_streams::Builder::default()))
         .await?;
     Ok(())
 }

@@ -585,7 +585,7 @@ impl Sink for Ws {
         let ws_conn_tx = if let Some((ws_conn_tx, _)) = self.connections.get(&msg_meta.url) {
             ws_conn_tx
         } else {
-            let (conn_tx, conn_rx) = bounded(crate::QSIZE);
+            let (conn_tx, conn_rx) = bounded(QSIZE.load(Ordering::Relaxed));
             // separate task to handle new url connection
             let handle = task::spawn(ws_connection_loop(
                 self.sink_url.clone(),
@@ -678,7 +678,7 @@ impl Sink for Ws {
         self.event_origin_uri = origin_url;
 
         // handle connection for the offramp config url (as default)
-        let (conn_tx, conn_rx) = bounded(crate::QSIZE);
+        let (conn_tx, conn_rx) = bounded(QSIZE.load(Ordering::Relaxed));
         self.reply_tx = reply_channel;
         let handle = task::Builder::new()
             .name(format!("{}-connection-{}", &sink_url, &self.config.url))

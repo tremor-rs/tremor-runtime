@@ -18,7 +18,6 @@ use crate::metrics::RampReporter;
 use crate::permge::PriorityMerge;
 use crate::pipeline;
 use crate::registry::ServantId;
-
 use crate::sink::{self, handle_response};
 use crate::source::Processors;
 use crate::url::ports::{IN, METRICS};
@@ -542,8 +541,9 @@ impl Manager {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::Ordering;
+
     use super::*;
-    use crate::QSIZE;
 
     #[derive(Debug)]
     enum FakeOfframpMsg {
@@ -667,7 +667,7 @@ mod tests {
 
     #[async_std::test]
     async fn offramp_lifecycle_test() -> Result<()> {
-        let mngr = Manager::new(QSIZE);
+        let mngr = Manager::new(crate::QSIZE.load(Ordering::Relaxed));
         let (handle, sender) = mngr.start();
         let (tx, rx) = bounded(1);
         let codec = crate::codec::lookup("json")?;

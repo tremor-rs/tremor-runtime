@@ -44,6 +44,7 @@ pub struct StdStreamConnector {
     raw: bool,
 }
 
+#[derive(Debug, Default)]
 pub(crate) struct Builder {}
 impl ConnectorBuilder for Builder {
     fn from_config(
