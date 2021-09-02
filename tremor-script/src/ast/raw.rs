@@ -146,6 +146,18 @@ impl<'script> ScriptRaw<'script> {
             node_meta: helper.meta.clone(),
             functions: helper.func_vec.clone(),
             docs: helper.docs.clone(),
+            start: Location {
+                unit_id: 0,
+                line: 0,
+                column: 0,
+                absolute: 0,
+            },
+            end: Location {
+                unit_id: 0,
+                line: 0,
+                column: 0,
+                absolute: 0,
+            },
         })
     }
 }

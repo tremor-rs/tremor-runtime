@@ -1007,6 +1007,8 @@ impl<'script> Script<'script> {
             locals,
             node_meta,
             docs,
+            start,
+            end,
         } = self;
         Script {
             imports,
@@ -1024,6 +1026,8 @@ impl<'script> Script<'script> {
             locals,
             node_meta,
             docs,
+            start,
+            end,
         }
     }
 }
