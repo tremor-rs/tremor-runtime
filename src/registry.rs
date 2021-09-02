@@ -43,7 +43,7 @@ use crate::repository::{
     PipelineArtefact,
 };
 use crate::url::TremorUrl;
-use async_channel::bounded;
+use async_std::channel::{bounded, Sender};
 use async_std::future::timeout;
 use async_std::task;
 use hashbrown::HashMap;
@@ -121,25 +121,15 @@ impl<A: Artefact> Registry<A> {
     }
 }
 pub(crate) enum Msg<A: Artefact> {
-    SerializeServants(async_channel::Sender<Vec<A>>),
-    FindServant(
-        async_channel::Sender<Result<Option<A::SpawnResult>>>,
-        ServantId,
-    ),
+    SerializeServants(Sender<Vec<A>>),
+    FindServant(Sender<Result<Option<A::SpawnResult>>>, ServantId),
     PublishServant(
-        async_channel::Sender<Result<InstanceState>>,
+        Sender<Result<InstanceState>>,
         ServantId,
         InstanceLifecycleFsm<A>,
     ),
-    UnpublishServant(
-        async_channel::Sender<Result<InstanceLifecycleFsm<A>>>,
-        ServantId,
-    ),
-    Transition(
-        async_channel::Sender<Result<InstanceState>>,
-        ServantId,
-        InstanceState,
-    ),
+    UnpublishServant(Sender<Result<InstanceLifecycleFsm<A>>>, ServantId),
+    Transition(Sender<Result<InstanceState>>, ServantId, InstanceState),
 }
 
 impl<A> Registry<A>
@@ -147,7 +137,7 @@ where
     A: Artefact + Send + Sync + 'static,
     A::SpawnResult: Send + Sync + 'static,
 {
-    fn start(mut self) -> async_channel::Sender<Msg<A>> {
+    fn start(mut self) -> Sender<Msg<A>> {
         let (tx, rx) = bounded(crate::QSIZE);
 
         task::spawn::<_, Result<()>>(async move {
@@ -191,11 +181,11 @@ where
 /// The tremor registry holding running artifacts
 #[derive(Clone)]
 pub struct Registries {
-    pipeline: async_channel::Sender<Msg<PipelineArtefact>>,
-    onramp: async_channel::Sender<Msg<OnrampArtefact>>,
-    offramp: async_channel::Sender<Msg<OfframpArtefact>>,
-    connector: async_channel::Sender<Msg<ConnectorArtefact>>,
-    binding: async_channel::Sender<Msg<BindingArtefact>>,
+    pipeline: Sender<Msg<PipelineArtefact>>,
+    onramp: Sender<Msg<OnrampArtefact>>,
+    offramp: Sender<Msg<OfframpArtefact>>,
+    connector: Sender<Msg<ConnectorArtefact>>,
+    binding: Sender<Msg<BindingArtefact>>,
 }
 
 #[cfg(not(tarpaulin_include))]

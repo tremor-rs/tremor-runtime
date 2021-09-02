@@ -15,6 +15,7 @@
 use std::time::Duration;
 
 use crate::api::prelude::*;
+use async_std::channel::bounded;
 use tremor_runtime::connectors::{ConnectorState, Msg, StatusReport};
 
 #[derive(Serialize)]
@@ -79,7 +80,7 @@ pub async fn get_instance(req: Request) -> Result<Response> {
         .find_connector(&instance_url)
         .await?
         .ok_or_else(Error::instance_not_found)?;
-    let (tx, rx) = async_channel::bounded(1);
+    let (tx, rx) = bounded(1);
     instance.send(Msg::Report(tx)).await?;
     let report = rx.recv().await?;
 
@@ -114,7 +115,7 @@ pub async fn patch_instance(req: Request) -> Result<Response> {
         ));
     }
     // fetch current status
-    let (tx, rx) = async_channel::bounded(1);
+    let (tx, rx) = bounded(1);
     instance.send(Msg::Report(tx.clone())).await?;
     let current_state = rx.recv().await?;
     // dispatch to intended action

@@ -59,13 +59,13 @@ use crate::system::World;
 use crate::url::ports::{ERR, IN, OUT};
 use crate::url::TremorUrl;
 use crate::OpConfig;
-use async_channel::bounded;
+use async_std::channel::{bounded, Sender};
 use halfbrown::{Entry, HashMap};
 use reconnect::Reconnect;
 use tremor_common::ids::ConnectorIdGen;
 
 /// sender for connector manager messages
-pub type Sender = async_channel::Sender<ManagerMsg>;
+pub type ManagerSender = Sender<ManagerMsg>;
 
 /// connector address
 #[derive(Clone, Debug)]
@@ -73,7 +73,7 @@ pub struct Addr {
     uid: u64,
     /// connector instance url
     pub url: TremorUrl,
-    sender: async_channel::Sender<Msg>,
+    sender: Sender<Msg>,
     source: Option<SourceAddr>,
     sink: Option<SinkAddr>,
 }
@@ -111,7 +111,7 @@ pub enum Msg {
         /// pipelines to connect
         pipelines: Vec<(TremorUrl, pipeline::Addr)>,
         /// result receiver
-        result_tx: async_channel::Sender<Result<()>>,
+        result_tx: Sender<Result<()>>,
     },
     /// disconnect pipeline `id` from the given `port`
     Disconnect {
@@ -120,7 +120,7 @@ pub enum Msg {
         /// id of the pipeline to disconnect
         id: TremorUrl,
         /// sender to receive a boolean whether this connector is not connected to anything
-        tx: async_channel::Sender<Result<bool>>,
+        tx: Sender<Result<bool>>,
     },
     /// notification from the connector implementation that connectivity is lost and should be reestablished
     ConnectionLost,
@@ -140,7 +140,7 @@ pub enum Msg {
     /// stop the connector
     Stop,
     /// request a status report
-    Report(async_channel::Sender<StatusReport>),
+    Report(Sender<StatusReport>),
 }
 
 /// Connector instance status report
@@ -187,7 +187,7 @@ pub enum ManagerMsg {
     /// create a new connector
     Create {
         /// sender to send the create result to
-        tx: async_channel::Sender<Result<Addr>>,
+        tx: Sender<Result<Addr>>,
         /// the create command
         create: Box<Create>,
     },
@@ -202,13 +202,13 @@ pub enum ManagerMsg {
 /// and handles available connector types
 pub struct Manager {
     qsize: usize,
-    metrics_sender: async_channel::Sender<MetricsMsg>,
+    metrics_sender: Sender<MetricsMsg>,
 }
 
 impl Manager {
     /// constructor
     #[must_use]
-    pub fn new(qsize: usize, metrics_sender: async_channel::Sender<MetricsMsg>) -> Self {
+    pub fn new(qsize: usize, metrics_sender: Sender<MetricsMsg>) -> Self {
         Self {
             qsize,
             metrics_sender,
@@ -218,7 +218,7 @@ impl Manager {
     /// start the manager
     #[must_use]
     #[allow(clippy::too_many_lines)]
-    pub fn start(self) -> (JoinHandle<Result<()>>, Sender) {
+    pub fn start(self) -> (JoinHandle<Result<()>>, ManagerSender) {
         let (tx, rx) = bounded(self.qsize);
         let h = task::spawn(async move {
             info!("Connector manager started.");
@@ -332,7 +332,7 @@ impl Manager {
     // instantiates the connector and starts listening for control plane messages
     async fn connector_task(
         &self,
-        addr_tx: async_channel::Sender<Result<Addr>>,
+        addr_tx: Sender<Result<Addr>>,
         url: TremorUrl,
         mut connector: Box<dyn Connector>,
         config: ConnectorConfig,

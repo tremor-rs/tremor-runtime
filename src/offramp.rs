@@ -24,7 +24,7 @@ use crate::source::Processors;
 use crate::url::ports::{IN, METRICS};
 use crate::url::TremorUrl;
 use crate::{Event, OpConfig};
-use async_channel::{self, bounded, unbounded};
+use async_std::channel::{bounded, unbounded, Sender};
 use async_std::stream::StreamExt; // for .next() on PriorityMerge
 use async_std::task::{self, JoinHandle};
 use beef::Cow;
@@ -64,17 +64,17 @@ pub enum Msg {
         /// url of the pipeline
         id: TremorUrl,
         /// response sender (whether offramp is not connected anymore)
-        tx: async_channel::Sender<bool>,
+        tx: Sender<bool>,
     },
     /// terminate the offramp
     Terminate,
 }
 
-pub(crate) type Sender = async_channel::Sender<ManagerMsg>;
+pub(crate) type ManagerSender = Sender<ManagerMsg>;
 
 #[derive(Debug, Clone)]
 /// offramp address
-pub struct Addr(async_channel::Sender<Msg>);
+pub struct Addr(Sender<Msg>);
 
 impl Addr {
     pub(crate) async fn send(&self, msg: Msg) -> Result<()> {
@@ -82,8 +82,8 @@ impl Addr {
     }
 }
 
-impl From<async_channel::Sender<Msg>> for Addr {
-    fn from(sender: async_channel::Sender<Msg>) -> Self {
+impl From<Sender<Msg>> for Addr {
+    fn from(sender: Sender<Msg>) -> Self {
         Self(sender)
     }
 }
@@ -101,7 +101,7 @@ pub trait Offramp: Send {
         codec_map: &HashMap<String, Box<dyn Codec>>,
         processors: Processors<'_>,
         is_linked: bool,
-        reply_channel: async_channel::Sender<sink::Reply>,
+        reply_channel: Sender<sink::Reply>,
     ) -> Result<()>;
     /// receives events
     async fn on_event(
@@ -178,15 +178,15 @@ pub(crate) enum ManagerMsg {
     /// unregister an offramp type
     Unregister(String),
     /// asks for existence of the given type inside the runtime type registry
-    TypeExists(String, async_channel::Sender<bool>),
+    TypeExists(String, Sender<bool>),
     /// instantiate an offramp of provided type and config and send it back using the given sender
     Instantiate {
         offramp_type: String,
         config: Option<OpConfig>,
-        sender: async_channel::Sender<Result<Box<dyn Offramp>>>,
+        sender: Sender<Result<Box<dyn Offramp>>>,
     },
     /// Start an already instantiated offramp and start receiving events
-    Create(async_channel::Sender<Result<Addr>>, Box<Create>),
+    Create(Sender<Result<Addr>>, Box<Create>),
     /// Stop the whole manager
     Stop,
 }
@@ -227,7 +227,7 @@ impl Manager {
     #[allow(clippy::too_many_lines)]
     async fn offramp_task(
         &self,
-        r: async_channel::Sender<Result<Addr>>,
+        r: Sender<Result<Addr>>,
         Create {
             mut codec,
             codec_map,
@@ -465,7 +465,7 @@ impl Manager {
         Ok(())
     }
 
-    pub fn start(self) -> (JoinHandle<Result<()>>, Sender) {
+    pub fn start(self) -> (JoinHandle<Result<()>>, ManagerSender) {
         let (tx, rx) = bounded(self.qsize);
         let h = task::spawn(async move {
             info!("Offramp manager started");
@@ -558,11 +558,11 @@ mod tests {
     }
     struct FakeOfframp {
         pipelines: usize,
-        sender: async_channel::Sender<FakeOfframpMsg>,
+        sender: Sender<FakeOfframpMsg>,
     }
 
     impl FakeOfframp {
-        fn new(sender: async_channel::Sender<FakeOfframpMsg>) -> Self {
+        fn new(sender: Sender<FakeOfframpMsg>) -> Self {
             Self {
                 pipelines: 0,
                 sender,
@@ -580,7 +580,7 @@ mod tests {
             _codec_map: &HashMap<String, Box<dyn Codec>>,
             _processors: Processors<'_>,
             _is_linked: bool,
-            _reply_channel: async_channel::Sender<sink::Reply>,
+            _reply_channel: Sender<sink::Reply>,
         ) -> Result<()> {
             self.sender.send(FakeOfframpMsg::Start(offramp_uid)).await?;
             Ok(())
@@ -669,11 +669,11 @@ mod tests {
     async fn offramp_lifecycle_test() -> Result<()> {
         let mngr = Manager::new(QSIZE);
         let (handle, sender) = mngr.start();
-        let (tx, rx) = async_channel::bounded(1);
+        let (tx, rx) = bounded(1);
         let codec = crate::codec::lookup("json")?;
         let id = TremorUrl::parse("/offramp/fake/instance")?;
         let ramp_reporter = RampReporter::new(id.clone(), Some(1_000_000_000));
-        let (offramp_tx, offramp_rx) = async_channel::unbounded();
+        let (offramp_tx, offramp_rx) = unbounded();
         let offramp = FakeOfframp::new(offramp_tx);
         let create = ManagerMsg::Create(
             tx,
@@ -698,9 +698,9 @@ mod tests {
         }
 
         let fake_pipeline_id = TremorUrl::parse("/pipeline/fake/instance/out")?;
-        let (tx, _rx) = async_channel::unbounded();
-        let (cf_tx, _cf_rx) = async_channel::unbounded();
-        let (mgmt_tx, _mgmt_rx) = async_channel::unbounded();
+        let (tx, _rx) = unbounded();
+        let (cf_tx, _cf_rx) = unbounded();
+        let (mgmt_tx, _mgmt_rx) = unbounded();
 
         let fake_pipeline = Box::new(pipeline::Addr::new(
             tx,
@@ -737,7 +737,7 @@ mod tests {
             e => assert!(false, "Expected event msg, got {:?}", e),
         }
 
-        let (disc_tx, disc_rx) = async_channel::bounded(1);
+        let (disc_tx, disc_rx) = bounded(1);
         offramp_sender
             .send(Msg::Disconnect {
                 port: IN,

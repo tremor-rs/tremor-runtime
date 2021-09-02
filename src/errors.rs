@@ -78,14 +78,14 @@ impl From<glob::PatternError> for Error {
     }
 }
 
-impl<T> From<async_channel::SendError<T>> for Error {
-    fn from(e: async_channel::SendError<T>) -> Self {
+impl<T> From<async_std::channel::SendError<T>> for Error {
+    fn from(e: async_std::channel::SendError<T>) -> Self {
         Self::from(format!("{:?}", e))
     }
 }
 
-impl<T> From<async_channel::TrySendError<T>> for Error {
-    fn from(e: async_channel::TrySendError<T>) -> Self {
+impl<T> From<async_std::channel::TrySendError<T>> for Error {
+    fn from(e: async_std::channel::TrySendError<T>) -> Self {
         Self::from(format!("{:?}", e))
     }
 }
@@ -117,8 +117,8 @@ error_chain! {
     }
     foreign_links {
         AddrParseError(std::net::AddrParseError);
-        AsyncChannelRecvError(async_channel::RecvError);
-        AsyncChannelTryRecvError(async_channel::TryRecvError);
+        AsyncChannelRecvError(async_std::channel::RecvError);
+        AsyncChannelTryRecvError(async_std::channel::TryRecvError);
         Base64Error(base64::DecodeError);
         ChannelReceiveError(std::sync::mpsc::RecvError);
         Common(tremor_common::Error);

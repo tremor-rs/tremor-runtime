@@ -6471,7 +6471,6 @@ checksum = "efd1f82c56340fdf16f2a953d7bda4f8fdffba13d93b00844c25572110b26079"
 name = "tremor-api"
 version = "0.11.4"
 dependencies = [
- "async-channel",
  "async-std",
  "hashbrown 0.11.2",
  "http-types",
@@ -6607,7 +6606,6 @@ name = "tremor-runtime"
 version = "0.11.4"
 dependencies = [
  "anyhow",
- "async-channel",
  "async-compat",
  "async-compression",
  "async-nats",

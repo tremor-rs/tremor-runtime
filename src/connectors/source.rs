@@ -29,7 +29,7 @@ use crate::pipeline;
 use crate::preprocessor::{make_preprocessors, preprocess, Preprocessors};
 use crate::url::ports::{ERR, OUT};
 use crate::url::TremorUrl;
-use async_channel::{bounded, Receiver, Sender};
+use async_std::channel::{bounded, Receiver, Sender, TryRecvError};
 use beef::Cow;
 use tremor_pipeline::{
     CbAction, Event, EventId, EventIdGenerator, EventOriginUri, DEFAULT_STREAM_ID,
@@ -211,7 +211,7 @@ impl Source for ChannelSource {
     async fn pull_data(&mut self, _pull_id: u64, _ctx: &SourceContext) -> Result<SourceReply> {
         match self.rx.try_recv() {
             Ok(reply) => Ok(reply),
-            Err(async_channel::TryRecvError::Empty) => {
+            Err(TryRecvError::Empty) => {
                 // TODO: configure pull interval in connector config?
                 Ok(SourceReply::Empty(10))
             }
@@ -237,7 +237,7 @@ pub struct SourceContext {
 #[derive(Clone, Debug)]
 pub struct SourceAddr {
     /// the actual address
-    pub addr: async_channel::Sender<SourceMsg>,
+    pub addr: Sender<SourceMsg>,
 }
 
 #[allow(clippy::module_name_repetitions)]
