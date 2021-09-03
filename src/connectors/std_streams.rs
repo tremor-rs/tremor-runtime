@@ -13,9 +13,38 @@
 // limitations under the License.
 use crate::connectors::prelude::*;
 use crate::utils::hostname;
-use async_std::io::{stderr, stdin, stdout, ReadExt, Stderr, Stdin, Stdout, Write};
+use async_broadcast::{broadcast, Receiver, TryRecvError};
+use async_std::io::{stderr, stdin, stdout, ReadExt, Stderr, Stdout, Write};
 use futures::AsyncWriteExt;
+
 use tremor_pipeline::{EventOriginUri, DEFAULT_STREAM_ID};
+
+const INPUT_SIZE_BYTES: usize = 8192;
+
+lazy_static! {
+    pub(crate) static ref STDIN: Receiver<Vec<u8>> = {
+        // This gets initialized only once - the first time a stdio connector
+        // is created, after that we simply clone the channel.
+        let (mut tx, rx) = broadcast(crate::QSIZE.load(Ordering::Relaxed));
+        // We user overflow so that non collected messages can be removed
+        // FIXME: is this what we want? for STDIO it should be good enough
+        tx.set_overflow(true);
+        async_std::task::spawn(async move {
+            let mut stream = stdin();
+            let mut buffer = [0u8; INPUT_SIZE_BYTES];
+            while let Ok(len) = stream.read(&mut buffer).await {
+                if len == 0 {
+                    error!("STDIN empty?!?");
+                    break;
+                } else if let Err(e) = tx.broadcast(buffer[0..len].to_vec()).await {
+                    error!("STDIN error: {}", e);
+                    break;
+                }
+            }
+        });
+        rx
+    };
+}
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "lowercase")]
@@ -67,18 +96,14 @@ impl ConnectorBuilder for Builder {
 
 /// stdstream source (stdin)
 pub struct StdStreamSource {
-    stream: Stdin,
-    buffer: Vec<u8>,
+    stdin: Receiver<Vec<u8>>,
     origin_uri: EventOriginUri,
 }
 
 impl StdStreamSource {
-    const INPUT_SIZE_BYTES: usize = 8192;
-
     fn new() -> Self {
         Self {
-            stream: stdin(),
-            buffer: vec![0; Self::INPUT_SIZE_BYTES],
+            stdin: STDIN.clone(),
             origin_uri: EventOriginUri {
                 scheme: "tremor-stdin".to_string(),
                 host: hostname(),
@@ -92,19 +117,16 @@ impl StdStreamSource {
 #[async_trait::async_trait()]
 impl Source for StdStreamSource {
     async fn pull_data(&mut self, _pull_id: u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        let len = self.stream.read(&mut self.buffer).await?;
-        if len == 0 {
-            // reached the end of stdin
-            // FIXME: initiate state change to stop this source
-            Ok(SourceReply::Empty(1000))
-        } else {
-            Ok(SourceReply::Data {
+        match self.stdin.try_recv() {
+            Ok(data) => Ok(SourceReply::Data {
                 origin_uri: self.origin_uri.clone(),
                 // ALLOW: len cannot be > INPUT_SIZE_BYTES
-                data: self.buffer[0..len].to_vec(),
+                data,
                 meta: None,
                 stream: DEFAULT_STREAM_ID,
-            })
+            }),
+            Err(TryRecvError::Closed) => Err(TryRecvError::Closed.into()),
+            Err(TryRecvError::Empty) => Ok(SourceReply::Empty(10)),
         }
     }
 
