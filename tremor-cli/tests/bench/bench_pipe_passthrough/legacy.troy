@@ -4,7 +4,7 @@ args
   id =  "ingress",
   description = "redundant",
   codec = "string",
-  config = {
+  `config` = {
     "source": "../../../../demo/data/data.json.xz"
   }
 end;
@@ -15,7 +15,7 @@ args
   id =  "egress",
   codec = "string",
   description = "redundant",
-  config = {
+  `config` = {
     "stop_after_secs": 100,
     "significant_figures": 2,
     "warmup_secs": 10,

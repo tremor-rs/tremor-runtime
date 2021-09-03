@@ -2,7 +2,7 @@ define flow test
 args
   snot,
   badger,
-with
+config
   snot = "naughty badger"
 links
   connect "snot" to "badger"
