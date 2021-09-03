@@ -82,12 +82,12 @@ impl Sink for Cb {
                 }
             }
         }
-        Ok(Some(res))
+        Ok(res)
     }
 
     async fn on_signal(&mut self, _signal: Event) -> ResultVec {
         // TODO: add signal reaction via config
-        Ok(None)
+        Ok(Vec::new())
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -169,20 +169,17 @@ mod tests {
         let c: &mut dyn Codec = codec.borrow_mut();
         let res = cb.on_event(in_, c, &codec_map, event).await?;
 
-        assert!(res.is_some(), "got nothing back");
-        if let Some(replies) = res {
-            assert_eq!(1, replies.len());
-            if let Some(Reply::Insight(insight)) = replies.first() {
-                assert_eq!(CbAction::Ack, insight.cb);
-                assert_eq!(id, insight.id);
-                assert_eq!(op_meta, insight.op_meta);
-            } else {
-                assert!(
-                    false,
-                    "expected to get anm insight back. Got {:?}",
-                    replies.first()
-                );
-            }
+        assert_eq!(1, res.len());
+        if let Some(Reply::Insight(insight)) = res.first() {
+            assert_eq!(CbAction::Ack, insight.cb);
+            assert_eq!(id, insight.id);
+            assert_eq!(op_meta, insight.op_meta);
+        } else {
+            assert!(
+                false,
+                "expected to get anm insight back. Got {:?}",
+                res.first()
+            );
         }
 
         // meta takes precedence
@@ -199,20 +196,18 @@ mod tests {
         };
         let c: &mut dyn Codec = codec.borrow_mut();
         let res = cb.on_event(in_, c, &codec_map, event).await?;
-        assert!(res.is_some(), "got nothing back");
-        if let Some(replies) = res {
-            assert_eq!(1, replies.len());
-            if let Some(Reply::Insight(insight)) = replies.first() {
-                assert_eq!(CbAction::Fail, insight.cb);
-                assert_eq!(id, insight.id);
-                assert_eq!(op_meta, insight.op_meta);
-            } else {
-                assert!(
-                    false,
-                    "expected to get anm insight back. Got {:?}",
-                    replies.first()
-                );
-            }
+
+        assert_eq!(1, res.len());
+        if let Some(Reply::Insight(insight)) = res.first() {
+            assert_eq!(CbAction::Fail, insight.cb);
+            assert_eq!(id, insight.id);
+            assert_eq!(op_meta, insight.op_meta);
+        } else {
+            assert!(
+                false,
+                "expected to get anm insight back. Got {:?}",
+                res.first()
+            );
         }
 
         // array data - second ack/fail will be ignored, just one from ack/fail or open/close (trigger/restore) is returned
@@ -229,24 +224,17 @@ mod tests {
 
         let c: &mut dyn Codec = codec.borrow_mut();
         let res = cb.on_event(in_, c, &codec_map, event).await?;
-        assert!(res.is_some(), "got nothing back");
-        if let Some(replies) = res {
-            assert_eq!(2, replies.len());
-            match replies.as_slice() {
-                [Reply::Insight(insight1), Reply::Insight(insight2)] => {
-                    assert_eq!(CbAction::Ack, insight1.cb);
-                    assert_eq!(id, insight1.id);
-                    assert_eq!(op_meta, insight1.op_meta);
+        assert_eq!(2, res.len());
+        match res.as_slice() {
+            [Reply::Insight(insight1), Reply::Insight(insight2)] => {
+                assert_eq!(CbAction::Ack, insight1.cb);
+                assert_eq!(id, insight1.id);
+                assert_eq!(op_meta, insight1.op_meta);
 
-                    assert_eq!(CbAction::Open, insight2.cb);
-                    assert_eq!(op_meta, insight2.op_meta);
-                }
-                _ => assert!(
-                    false,
-                    "expected to get two insights back. Got {:?}",
-                    replies
-                ),
+                assert_eq!(CbAction::Open, insight2.cb);
+                assert_eq!(op_meta, insight2.op_meta);
             }
+            _ => assert!(false, "expected to get two insights back. Got {:?}", res),
         }
 
         // array data - second ack/fail will be ignored, just one from ack/fail or open/close (trigger/restore) is returned
@@ -262,24 +250,17 @@ mod tests {
         };
         let c: &mut dyn Codec = codec.borrow_mut();
         let res = cb.on_event(in_, c, &codec_map, event).await?;
-        assert!(res.is_some(), "got nothing back");
-        if let Some(replies) = res {
-            assert_eq!(2, replies.len());
-            match replies.as_slice() {
-                [Reply::Insight(insight1), Reply::Insight(insight2)] => {
-                    assert_eq!(CbAction::Fail, insight1.cb);
-                    assert_eq!(id, insight1.id);
-                    assert_eq!(op_meta, insight1.op_meta);
+        assert_eq!(2, res.len());
+        match res.as_slice() {
+            [Reply::Insight(insight1), Reply::Insight(insight2)] => {
+                assert_eq!(CbAction::Fail, insight1.cb);
+                assert_eq!(id, insight1.id);
+                assert_eq!(op_meta, insight1.op_meta);
 
-                    assert_eq!(CbAction::Close, insight2.cb);
-                    assert_eq!(op_meta, insight2.op_meta);
-                }
-                _ => assert!(
-                    false,
-                    "expected to get two insights back. Got {:?}",
-                    replies
-                ),
+                assert_eq!(CbAction::Close, insight2.cb);
+                assert_eq!(op_meta, insight2.op_meta);
             }
+            _ => assert!(false, "expected to get two insights back. Got {:?}", res),
         }
 
         cb.terminate().await;

@@ -62,7 +62,7 @@ pub enum Reply {
 /// circuit breaker events, guaranteed delivery events, etc.
 ///
 /// A response is an event generated from the sink delivery.
-pub(crate) type ResultVec = Result<Option<Vec<Reply>>>;
+pub(crate) type ResultVec = Result<Vec<Reply>>;
 
 /// a sink for events -> sent to the outside world
 #[async_trait::async_trait]
@@ -200,14 +200,13 @@ where
         input: &str,
         event: Event,
     ) -> Result<()> {
-        if let Some(mut replies) = self.sink.on_event(input, codec, codec_map, event).await? {
-            for reply in replies.drain(..) {
-                match reply {
-                    Reply::Insight(e) => handle_insight(e, self.pipelines.values()).await?,
-                    Reply::Response(port, event) => {
-                        if let Some(pipelines) = self.dest_pipelines.get_mut(&port) {
-                            handle_response(event, pipelines.iter()).await?;
-                        }
+        let mut replies = self.sink.on_event(input, codec, codec_map, event).await?;
+        for reply in replies.drain(..) {
+            match reply {
+                Reply::Insight(e) => handle_insight(e, self.pipelines.values()).await?,
+                Reply::Response(port, event) => {
+                    if let Some(pipelines) = self.dest_pipelines.get_mut(&port) {
+                        handle_response(event, pipelines.iter()).await?;
                     }
                 }
             }
@@ -245,7 +244,7 @@ where
 
     async fn on_signal(&mut self, signal: Event) -> Option<Event> {
         let replies = match self.sink.on_signal(signal).await {
-            Ok(results) => results?,
+            Ok(results) => results,
             Err(e) => {
                 if let Some(sink_url) = &self.sink_url {
                     error!("[Sink::{}] Error processing signal: {}", sink_url, e);

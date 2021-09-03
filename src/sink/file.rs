@@ -88,7 +88,7 @@ impl Sink for File {
             }
             file.flush().await?;
         }
-        Ok(Some(vec![sink::Reply::Insight(event.insight_ack())]))
+        Ok(vec![sink::Reply::Insight(event.insight_ack())])
     }
     fn default_codec(&self) -> &str {
         "json"
@@ -110,7 +110,7 @@ impl Sink for File {
         Ok(())
     }
     async fn on_signal(&mut self, _signal: Event) -> ResultVec {
-        Ok(None)
+        Ok(Vec::new())
     }
     fn is_active(&self) -> bool {
         true

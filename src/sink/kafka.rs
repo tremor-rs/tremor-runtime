@@ -293,10 +293,11 @@ impl Sink for Kafka {
                             }
                         }
                         // bail out with a CB fail on enqueue error
-                        if event.transactional {
-                            return Ok(Some(vec![sink::Reply::Insight(event.to_fail())]));
-                        }
-                        return Ok(None);
+                        return if event.transactional {
+                            Ok(vec![sink::Reply::Insight(event.to_fail())])
+                        } else {
+                            Ok(Vec::new())
+                        };
                     }
                 }
             }
@@ -317,7 +318,7 @@ impl Sink for Kafka {
             self.reply_tx.clone(),
             self.error_tx.clone(),
         ));
-        Ok(None)
+        Ok(Vec::new())
     }
     fn default_codec(&self) -> &str {
         "json"
@@ -340,7 +341,7 @@ impl Sink for Kafka {
     }
     async fn on_signal(&mut self, _signal: Event) -> ResultVec {
         self.drain_fatal_errors()?;
-        Ok(None)
+        Ok(Vec::new())
     }
     fn is_active(&self) -> bool {
         true

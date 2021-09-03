@@ -22,9 +22,9 @@
 
 #![cfg(not(tarpaulin_include))]
 
+use crate::sink::prelude::*;
 use halfbrown::HashMap;
 use std::time::Duration;
-use crate::sink::prelude::*;
 
 pub struct Exit {}
 
@@ -55,7 +55,7 @@ impl Sink for Exit {
                 return Err("Unexpected event received in exit offramp".into());
             }
         }
-        Ok(None)
+        Ok(Vec::new())
     }
     fn default_codec(&self) -> &str {
         "json"
@@ -74,7 +74,7 @@ impl Sink for Exit {
         Ok(())
     }
     async fn on_signal(&mut self, _signal: Event) -> ResultVec {
-        Ok(None)
+        Ok(Vec::new())
     }
     fn is_active(&self) -> bool {
         true
