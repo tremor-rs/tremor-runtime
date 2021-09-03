@@ -163,7 +163,7 @@ pub async fn load_query_file(world: &World, file_name: &str) -> Result<usize> {
 pub async fn load_cfg_file(world: &World, file_name: &str) -> Result<usize> {
     info!(
         "Loading configuration from {}",
-        std::path::Path::new(file_name).canonicalize()?.display()
+        tremor_common::file::canonicalize(std::path::Path::new(file_name))?.display()
     );
     let mut count = 0;
     let file = tremor_common::file::open(file_name)?;
