@@ -225,7 +225,7 @@ impl Sink for Amqp {
                 }
             }
         }
-        Ok(None)
+        Ok(Vec::new())
     }
     fn default_codec(&self) -> &str {
         "json"
@@ -251,7 +251,7 @@ impl Sink for Amqp {
 
     async fn on_signal(&mut self, _signal: Event) -> ResultVec {
         //self.drain_fatal_errors()?;
-        Ok(None)
+        Ok(Vec::new())
     }
     fn is_active(&self) -> bool {
         true

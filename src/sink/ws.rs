@@ -546,7 +546,7 @@ impl Sink for Ws {
     async fn on_signal(&mut self, signal: Event) -> ResultVec {
         self.handle_connection_lifecycle_events(signal.ingest_ns)
             .await?;
-        Ok(None)
+        Ok(Vec::new())
     }
 
     async fn on_event(
@@ -644,7 +644,7 @@ impl Sink for Ws {
             )
             .await?;
         }
-        Ok(None)
+        Ok(Vec::new())
     }
 
     fn default_codec(&self) -> &str {
