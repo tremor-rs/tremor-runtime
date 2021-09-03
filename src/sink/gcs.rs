@@ -272,7 +272,7 @@ impl Sink for GoogleCloudStorage {
         }
 
         self.is_down = false;
-        return Ok(Some(vec![qos::ack(&mut event)]));
+        return Ok(vec![qos::ack(&mut event)]);
     }
 
     fn default_codec(&self) -> &str {
@@ -304,10 +304,10 @@ impl Sink for GoogleCloudStorage {
             // This means the port is connectable
             info!("Google Cloud Storage -  sink remote endpoint - recovered and contactable");
             self.is_down = false;
-            return Ok(Some(vec![qos::open(&mut signal)]));
+            Ok(vec![qos::open(&mut signal)])
+        } else {
+            Ok(Vec::new())
         }
-
-        Ok(None)
     }
 
     fn is_active(&self) -> bool {

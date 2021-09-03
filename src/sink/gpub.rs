@@ -286,7 +286,7 @@ impl Sink for GoogleCloudPubSub {
         }
 
         self.is_down = false;
-        Ok(Some(vec![qos::ack(&mut event)]))
+        Ok(vec![qos::ack(&mut event)])
     }
 
     fn default_codec(&self) -> &str {
@@ -319,10 +319,10 @@ impl Sink for GoogleCloudPubSub {
             // This means the port is connectable
             info!("Google Cloud PubSub -  sink remote endpoint - recovered and contactable");
             self.is_down = false;
-            return Ok(Some(vec![qos::open(&mut signal)]));
+            Ok(vec![qos::open(&mut signal)])
+        } else {
+            Ok(Vec::new())
         }
-
-        Ok(None)
     }
 
     fn is_active(&self) -> bool {

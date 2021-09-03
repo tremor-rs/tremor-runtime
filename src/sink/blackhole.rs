@@ -24,6 +24,7 @@
 // This is OK, Blackhole is benchmark only
 #![allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
 
+use crate::sink::prelude::*;
 use halfbrown::HashMap;
 use hdrhistogram::serialization::{Deserializer, Serializer, V2Serializer};
 use hdrhistogram::Histogram;
@@ -32,7 +33,6 @@ use std::io::{self, stdout, Read, Write};
 use std::process;
 use std::result;
 use std::str;
-use crate::sink::prelude::*;
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Config {
@@ -141,14 +141,14 @@ impl Sink for Blackhole {
                 self.delivered.record(delta_ns)?;
             }
         }
-        Ok(None)
+        Ok(Vec::new())
     }
     fn default_codec(&self) -> &str {
         "null"
     }
 
     async fn on_signal(&mut self, _signal: Event) -> ResultVec {
-        Ok(None)
+        Ok(Vec::new())
     }
 
     fn is_active(&self) -> bool {
