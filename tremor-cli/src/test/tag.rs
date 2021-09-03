@@ -135,8 +135,8 @@ pub(crate) fn resolve<P>(base: P, other: P) -> Result<TagFilter>
 where
     P: AsRef<Path>,
 {
-    let mut base = base.as_ref().canonicalize()?;
-    let other = other.as_ref().canonicalize()?;
+    let mut base = tremor_common::file::canonicalize(base.as_ref())?;
+    let other = tremor_common::file::canonicalize(other.as_ref())?;
     if let Ok(rel) = other.strip_prefix(&base) {
         let tags_file = base.join("tags.json");
         let mut tags = TagFilter::new(vec![], vec![]);
