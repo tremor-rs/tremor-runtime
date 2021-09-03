@@ -26,7 +26,6 @@ use crate::ast::query::raw::QueryRaw;
 use crate::ast::raw::ExprRaw;
 use crate::ast::raw::IdentRaw;
 use crate::ast::raw::ModuleRaw;
-use crate::ast::raw::ScriptRaw;
 use crate::ast::raw::StringLitRaw;
 use crate::ast::raw::WithExprsRaw;
 use crate::ast::AggrRegistry;
@@ -35,7 +34,6 @@ use crate::ast::DeployStmt;
 use crate::ast::Helper;
 use crate::ast::NodeMetas;
 use crate::ast::Registry;
-use crate::ast::Return;
 use crate::ast::Upable;
 use crate::errors::ErrorKind;
 use crate::errors::Result;
@@ -72,8 +70,6 @@ macro_rules! stateless_run_script {
         let mut event = literal!({}).into_static();
         let mut state = literal!({}).into_static();
         let mut meta = literal!({}).into_static();
-
-        //        let mut local = LocalStack::with_size(0);
 
         let run_consts = $helper.consts.clone();
         let run_consts = run_consts.run();
@@ -370,14 +366,12 @@ pub struct PipelineDeclRaw<'script> {
     pub(crate) id: String,
     pub(crate) args: WithArgsRaw<'script>,
     pub(crate) params: Option<DeployWithExprsRaw<'script>>,
-    pub(crate) script: Option<ScriptRaw<'script>>,
     pub(crate) query: QueryRaw<'script>,
 }
 
 fn arg_spec_resolver<'script, 'registry>(
     args_spec: WithArgsRaw<'script>,
     params_spec: &Option<DeployWithExprsRaw<'script>>,
-    script_spec: &Option<ScriptRaw<'script>>,
     helper: &mut Helper<'script, 'registry>,
 ) -> Result<(Vec<Cow<'script, str>>, Value<'script>)> {
     let mut args: HashMap<Cow<str>, Value<'script>> = HashMap::new();
@@ -423,35 +417,6 @@ fn arg_spec_resolver<'script, 'registry>(
         helper.consts.args = Value::Object(Box::new(args.clone()));
     }
 
-    match &script_spec {
-        Some(script) => {
-            let ctx = EventContext::new(nanotime(), None);
-            let x = script.clone().up_script(helper)?.run_imut(
-                &ctx,
-                AggrType::Emit,
-                &literal!({}),
-                &literal!({}),
-                &literal!({}),
-            )?;
-            if let Return::Emit {
-                value: Value::Object(value),
-                ..
-            } = x
-            {
-                for (name, value) in value.iter() {
-                    let moo = Cow::owned(name.to_string());
-                    if !spec.contains(&moo) {
-                        // FIXME TODO consider duplicate argument specification - ok or ko?
-                        spec.push(moo.clone());
-                    }
-                    args.insert(moo, value.clone());
-                }
-                helper.consts.args = Value::Object(Box::new(args.clone()));
-            }
-        }
-        None => {}
-    }
-
     // NOTE We don't check for `extra args` here - this is deferred to the resolution in `arg_resolver`
     helper.consts.args = upper_args.clone();
     Ok((spec, Value::Object(Box::new(args))))
@@ -462,7 +427,6 @@ fn arg_resolver<'script, 'registry>(
     spec: &[Cow<'script, str>],
     args_as_params: &Value<'script>,
     params_spec: &Option<DeployWithExprsRaw<'script>>,
-    script_spec: &Option<ScriptRaw<'script>>,
     helper: &mut Helper<'script, 'registry>,
 ) -> Result<Value<'script>> {
     let mut args = args_as_params.clone();
@@ -482,37 +446,6 @@ fn arg_resolver<'script, 'registry>(
                     )
                     .into());
                 }
-            }
-        }
-
-        if let Some(script_spec) = script_spec {
-            let ctx = EventContext::new(nanotime(), None);
-            let x = script_spec.clone().up_script(helper)?.run_imut(
-                &ctx,
-                AggrType::Emit,
-                &literal!({}),
-                &literal!({}),
-                &literal!({}),
-            )?;
-            if let Return::Emit {
-                value: Value::Object(value),
-                ..
-            } = x
-            {
-                for (name, value) in value.iter() {
-                    let cow_name = Cow::owned(name.to_string());
-                    if spec.contains(&cow_name) {
-                        args.insert(cow_name, value.clone())?;
-                    } else {
-                        return Err(ErrorKind::DeployArgNotSpecified(
-                            outer.extent(&helper.meta),
-                            outer.extent(&helper.meta),
-                            name.to_string(),
-                        )
-                        .into());
-                    }
-                }
-                helper.consts.args = args.clone();
             }
         }
 
@@ -559,7 +492,7 @@ impl<'script> Upable<'script> for PipelineDeclRaw<'script> {
         // below. The actual function registration occurs in the up() call in the usual way.
         //
         helper.module.push(self.id.clone());
-        let (spec, args) = arg_spec_resolver(self.args, &self.params, &self.script, helper)?;
+        let (spec, args) = arg_spec_resolver(self.args, &self.params, helper)?;
         let query = self.query.clone().up_script(helper)?;
 
         let query_decl = PipelineDecl {
@@ -591,7 +524,6 @@ pub struct ConnectorDeclRaw<'script> {
     pub(crate) kind: (Vec<IdentRaw<'script>>, IdentRaw<'script>),
     pub(crate) args: WithArgsRaw<'script>,
     pub(crate) params: Option<DeployWithExprsRaw<'script>>,
-    pub(crate) script: Option<ScriptRaw<'script>>,
 }
 
 impl<'script> Upable<'script> for ConnectorDeclRaw<'script> {
@@ -606,7 +538,7 @@ impl<'script> Upable<'script> for ConnectorDeclRaw<'script> {
         // below. The actual function registration occurs in the up() call in the usual way.
         //
         helper.module.push(self.id.clone());
-        let (spec, args) = arg_spec_resolver(self.args, &self.params, &self.script, helper)?;
+        let (spec, args) = arg_spec_resolver(self.args, &self.params, helper)?;
 
         let query_decl = ConnectorDecl {
             mid: helper.add_meta_w_name(self.start, self.end, &self.id),
@@ -651,7 +583,6 @@ pub struct FlowDeclRaw<'script> {
     pub(crate) id: String,
     pub(crate) args: WithArgsRaw<'script>,
     pub(crate) params: Option<DeployWithExprsRaw<'script>>,
-    pub(crate) script: Option<ScriptRaw<'script>>,
     pub(crate) links: DeployLinksRaw<'script>,
 }
 
@@ -677,7 +608,7 @@ impl<'script> Upable<'script> for FlowDeclRaw<'script> {
         // below. The actual function registration occurs in the up() call in the usual way.
         //
         helper.module.push(self.id.clone());
-        let (spec, args) = arg_spec_resolver(self.args, &self.params, &self.script, helper)?;
+        let (spec, args) = arg_spec_resolver(self.args, &self.params, helper)?;
 
         let mut links = HashMap::new();
         for link in self.links {
@@ -737,7 +668,6 @@ pub struct CreateStmtRaw<'script> {
     pub(crate) end: Location,
     pub(crate) id: IdentRaw<'script>,
     pub(crate) params: Option<DeployWithExprsRaw<'script>>,
-    pub(crate) script: Option<ScriptRaw<'script>>,
     /// Id of the definition
     pub target: IdentRaw<'script>,
     /// Module of the definition
@@ -780,13 +710,13 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
         let fqsn = format!("{}{}", target_module, self.target.to_string());
 
         let mut h2 = helper.clone(); // Clone to save some accounting/tracking & cleanup
+        h2.module = vec![];
         let atom = if let Some(artefact) = helper.pipeline_defns.get(&fqsn) {
             let mut args = arg_resolver(
                 self.extent(&helper.meta),
                 &artefact.spec,
                 &artefact.args,
                 &self.params,
-                &self.script,
                 &mut h2,
             )?;
 
@@ -794,8 +724,10 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
             // the script to its interpretable and runnable final form with
             // the resolved arguments provides as the arguments to the underlying
             // pipeline.
+            let mut h3 = h2.clone();
+            h3.module = vec![];
             std::mem::swap(&mut h2.consts.args, &mut args);
-            let mut query = artefact.query_raw.clone().up_script(&mut h2)?;
+            let mut query = artefact.query_raw.clone().up_script(&mut h3)?;
             let mut artefact = artefact.clone();
             std::mem::swap(&mut artefact.query, &mut query);
 
@@ -806,7 +738,6 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
                 &artefact.spec,
                 &artefact.args,
                 &self.params,
-                &self.script,
                 &mut h2,
             )?;
             let mut artefact = artefact.clone();
@@ -818,7 +749,6 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
                 &artefact.spec,
                 &artefact.args,
                 &self.params,
-                &self.script,
                 &mut h2,
             )?;
             let mut artefact = artefact.clone();
@@ -842,10 +772,6 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
         let create_stmt = CreateStmt {
             mid: helper.add_meta_w_name(self.start, self.end, &self.id),
             id: self.id.to_string(),
-            script: match self.script {
-                Some(script) => Some(script.up_script(helper)?),
-                None => None,
-            },
             module,
             target: self.target.to_string(),
             atom,

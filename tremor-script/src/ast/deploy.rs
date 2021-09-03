@@ -20,7 +20,6 @@ use super::raw::BaseExpr;
 use super::{HashMap, Value};
 pub use crate::ast::deploy::raw::AtomOfDeployment;
 use crate::ast::Query;
-use crate::ast::Script;
 use crate::impl_expr_mid;
 use beef::Cow;
 use tremor_common::url::TremorUrl;
@@ -175,8 +174,6 @@ pub struct CreateStmt<'script> {
     pub target: String,
     /// Identifer for the creation
     pub id: String,
-    /// Script block for the instance connector
-    pub script: Option<Script<'script>>,
     /// Atomic unit of deployment
     pub atom: AtomOfDeployment<'script>,
 }

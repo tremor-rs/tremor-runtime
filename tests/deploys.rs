@@ -70,6 +70,5 @@ test_cases!(
     pipeline_identity,
     pipeline_args,
     pipeline_with,
-    pipeline_script,
     pipeline_overalls,
 );

@@ -1,7 +1,0 @@
-define snot::badger connector fake
-end;
-
-deploy fake
-script
-  { "nope": "yes" }
-end;

@@ -499,7 +499,6 @@ fn run_troy_source(_matches: &ArgMatches, src: &str, args: &Value) -> Result<()>
         let (world, _handle) = tremor_runtime::system::World::start(50, storage_directory)
             .await
             .unwrap();
-
         // Pipelines are inert until they are interconnected so we can deploy these quiescently
         for (name, pipeline) in pipelines {
             let url = TremorUrl::parse(&format!("/pipeline/{}/yellow", name)).unwrap();
@@ -509,7 +508,7 @@ fn run_troy_source(_matches: &ArgMatches, src: &str, args: &Value) -> Result<()>
                     &url,
                     false,
                     tremor_pipeline::query::Query(
-                        tremor_script::Query::from_troy(pipeline.query).unwrap(),
+                        tremor_script::Query::from_troy(&raw, pipeline.query).unwrap(),
                     ),
                 )
                 .await

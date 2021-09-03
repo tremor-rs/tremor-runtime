@@ -1,6 +1,6 @@
 define pipeline passthrough
-with
+config
   snot = "badger"
 pipeline
-  select event from in into out;
+  select args.snot from in into out;
 end;
