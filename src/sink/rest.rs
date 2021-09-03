@@ -337,9 +337,9 @@ impl Sink for Rest {
                 &self.sink_url
             );
             return Ok(if event.transactional {
-                Some(vec![sink::Reply::Insight(event.to_fail())])
+                vec![sink::Reply::Insight(event.to_fail())]
             } else {
-                None
+                Vec::new()
             });
         }
         let id = event.id.clone();
@@ -430,7 +430,7 @@ impl Sink for Rest {
                 })
                 .await?;
         }
-        Ok(None)
+        Ok(Vec::new())
     }
 
     fn default_codec(&self) -> &str {
@@ -495,7 +495,7 @@ impl Sink for Rest {
     }
 
     async fn on_signal(&mut self, _signal: Event) -> ResultVec {
-        Ok(None)
+        Ok(Vec::new())
     }
     fn is_active(&self) -> bool {
         true

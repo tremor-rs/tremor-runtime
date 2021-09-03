@@ -89,7 +89,7 @@ impl Sink for StdErr {
             }
         }
         self.stderr.flush().await?;
-        Ok(None)
+        Ok(Vec::new())
     }
     #[allow(clippy::too_many_arguments)]
     async fn init(
@@ -109,7 +109,7 @@ impl Sink for StdErr {
         "json"
     }
     async fn on_signal(&mut self, _signal: Event) -> ResultVec {
-        Ok(None)
+        Ok(Vec::new())
     }
     fn is_active(&self) -> bool {
         true

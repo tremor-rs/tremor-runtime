@@ -90,7 +90,7 @@ impl Sink for StdOut {
             }
         }
         self.stdout.flush().await?;
-        Ok(None)
+        Ok(Vec::new())
     }
     #[allow(clippy::too_many_arguments)]
     async fn init(
@@ -110,7 +110,7 @@ impl Sink for StdOut {
         "json"
     }
     async fn on_signal(&mut self, _signal: Event) -> ResultVec {
-        Ok(None)
+        Ok(Vec::new())
     }
     fn is_active(&self) -> bool {
         true
