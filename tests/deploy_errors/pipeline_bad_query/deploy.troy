@@ -1,8 +1,6 @@
 define pipeline passthrough
 args
-  badger,
-script
-  { "snot": "naughty badger", "badger": "dark #{args.snot}" }
+  badger = "snot",
 pipeline
    dark horse
 end;

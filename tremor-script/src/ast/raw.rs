@@ -2404,6 +2404,28 @@ impl<'script> Upable<'script> for InvokeRaw<'script> {
                         args,
                     })
                 } else {
+                    // Relative locability
+                    let mut abs_module = vec![];
+                    abs_module.extend_from_slice(&self.module);
+                    abs_module.push(self.fun.clone());
+
+                    // of the form: [mod, mod1, name] - where the list of idents is effectively a fully qualified resource name
+                    if let Some(f) = helper.functions.get(&abs_module) {
+                        if let Some(f) = helper.func_vec.get(*f) {
+                            let invocable = Invocable::Tremor(f.clone());
+                            let args = self.args.up(helper)?.into_iter().map(ImutExpr).collect();
+                            let mf = abs_module.join("::");
+                            return Ok(Invoke {
+                                mid: helper.add_meta_w_name(self.start, self.end, &mf),
+                                module: self.module,
+                                fun: self.fun,
+                                invocable,
+                                args,
+                            });
+                        }
+                    }
+
+                    // Otherwise
                     let inner: Range = (self.start, self.end).into();
                     let outer: Range = inner.expand_lines(3);
                     Err(

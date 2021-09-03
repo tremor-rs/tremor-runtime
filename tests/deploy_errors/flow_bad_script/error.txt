@@ -1,3 +1,0 @@
-Error: 
-   10 | deploy test
-      | ^^^^^^^^^^^ Argument `badger` is required, but no defaults are provided in the definition and no final values in the instance

@@ -4,7 +4,7 @@ args
   id =  "ingress",
   description = "redundant",
   codec = "msgpack",
-  config = {
+  `config` = {
     "source": "../../../../demo/data/data.msgpack.xz"
   }
 end;
@@ -15,7 +15,7 @@ args
   id =  "egress",
   codec = "msgpack",
   description = "redundant",
-  config = {
+  `config` = {
     "stop_after_secs": 100,
     "significant_figures": 2,
     "warmup_secs": 10,
@@ -24,9 +24,9 @@ end;
 
 define pipeline passthrough
 pipeline
-  use std::array;
   define script runtime
   script
+    use std::array;
     match event.application of
       case "app1" => let $class = "applog_app1",  let $rate = 1250, let $dimension = event.application, emit event
       case "app2" => let $class = "applog_app1",  let $rate = 2500, let $dimension = event.application, emit event

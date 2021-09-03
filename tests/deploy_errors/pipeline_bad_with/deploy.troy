@@ -2,7 +2,7 @@ define pipeline passthrough
 args
   snot,
   badger,
-with
+config
   snot = "naughty badger"
 pipeline
    select { "#{args.snot}": "#{args.badger}" } from in into out;
