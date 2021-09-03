@@ -168,11 +168,11 @@ impl Sink for Udp {
             Ok(()) => {
                 // success
                 if event.transactional {
-                    Some(vec![sink::Reply::Insight(event.insight_ack_with_timing(
+                    vec![sink::Reply::Insight(event.insight_ack_with_timing(
                         processing_start.elapsed().as_millis() as u64,
-                    ))])
+                    ))]
                 } else {
-                    None
+                    Vec::new()
                 }
             }
             // for UDP we only trigger CB if there is no socket available, as we can't recover from anything else
@@ -180,12 +180,12 @@ impl Sink for Udp {
                 // trigger CB
                 error!("[Sink::UDP] Error sending event: {}.", e);
                 if event.transactional {
-                    Some(vec![
+                    vec![
                         sink::Reply::Insight(event.to_fail()),
                         sink::Reply::Insight(event.insight_trigger()),
-                    ])
+                    ]
                 } else {
-                    Some(vec![sink::Reply::Insight(event.insight_trigger())]) // we always send a trigger
+                    vec![sink::Reply::Insight(event.insight_trigger())] // we always send a trigger
                 }
             }
             // all other errors (coded/preprocessor etc.) we just result in a fail
@@ -193,9 +193,9 @@ impl Sink for Udp {
                 // regular error, no reason for CB
                 error!("[Sink::UDP] Error sending event: {}", e);
                 if event.transactional {
-                    Some(vec![sink::Reply::Insight(event.to_fail())])
+                    vec![sink::Reply::Insight(event.to_fail())]
                 } else {
-                    None
+                    Vec::new()
                 }
             }
         };
@@ -222,11 +222,11 @@ impl Sink for Udp {
     async fn on_signal(&mut self, signal: Event) -> ResultVec {
         if self.socket.is_none() {
             self.bind().await?;
-            Ok(Some(vec![sink::Reply::Insight(Event::cb_restore(
+            Ok(vec![sink::Reply::Insight(Event::cb_restore(
                 signal.ingest_ns,
-            ))]))
+            ))])
         } else {
-            Ok(None)
+            Ok(Vec::new())
         }
     }
     fn is_active(&self) -> bool {

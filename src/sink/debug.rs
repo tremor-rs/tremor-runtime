@@ -23,10 +23,10 @@
 
 #![cfg(not(tarpaulin_include))]
 
+use crate::sink::prelude::*;
 use async_std::io;
 use halfbrown::HashMap;
 use std::time::{Duration, Instant};
-use crate::sink::prelude::*;
 
 #[derive(Debug, Clone)]
 struct DebugBucket {
@@ -91,7 +91,7 @@ impl Sink for Debug {
             }
             self.cnt += 1;
         }
-        Ok(None)
+        Ok(Vec::new())
     }
 
     fn default_codec(&self) -> &str {
@@ -113,7 +113,7 @@ impl Sink for Debug {
     }
 
     async fn on_signal(&mut self, _signal: Event) -> ResultVec {
-        Ok(None)
+        Ok(Vec::new())
     }
     fn is_active(&self) -> bool {
         true

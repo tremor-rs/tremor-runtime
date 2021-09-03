@@ -540,15 +540,16 @@ impl Sink for Elastic {
                 "[Sink::{}] Received empty event. Won't send it to ES",
                 self.sink_url
             );
-            Ok(Some(if event.transactional {
+            Ok(if event.transactional {
                 vec![Reply::Insight(event.insight_ack())]
             } else {
                 vec![]
-            }))
+            })
         } else {
             // we have either one event or a batched one with > 1 event
             self.maybe_enque(event).await;
-            Ok(None) // insights are sent via reply_channel directly
+            // insights are sent via reply_channel directly
+            Ok(Vec::new())
         }
     }
 
@@ -595,7 +596,8 @@ impl Sink for Elastic {
     }
 
     async fn on_signal(&mut self, _signal: Event) -> ResultVec {
-        Ok(None) // insights are sent via reply_channel directly
+        // insights are sent via reply_channel directly
+        Ok(Vec::new())
     }
     fn is_active(&self) -> bool {
         true

@@ -120,7 +120,7 @@ impl Sink for NewRelic {
         debug!("Sending a batch of {} items", payload.logs.len());
 
         self.send(&payload).await?;
-        Ok(None)
+        Ok(Vec::new())
     }
 
     fn default_codec(&self) -> &str {
@@ -141,7 +141,7 @@ impl Sink for NewRelic {
         Ok(())
     }
     async fn on_signal(&mut self, _signal: Event) -> ResultVec {
-        Ok(None)
+        Ok(Vec::new())
     }
     fn is_active(&self) -> bool {
         true

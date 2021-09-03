@@ -132,13 +132,11 @@ impl Sink for OpenTelemetry {
                         if let Err(e) = remote.metrics_client.export(request).await {
                             error!("Failed to dispatch otel/gRPC metrics message: {}", e);
                             self.is_down = true;
-                            if event.transactional {
-                                return Ok(Some(vec![
-                                    qos::fail(&mut event.clone()),
-                                    qos::close(&mut event),
-                                ]));
-                            }
-                            return Ok(Some(vec![qos::close(&mut event)]));
+                            return if event.transactional {
+                                Ok(vec![qos::fail(&mut event.clone()), qos::close(&mut event)])
+                            } else {
+                                Ok(vec![qos::close(&mut event)])
+                            };
                         };
                         continue;
                     }
@@ -149,13 +147,11 @@ impl Sink for OpenTelemetry {
                         if let Err(e) = remote.logs_client.export(request).await {
                             error!("Failed to dispatch otel/gRPC logs message: {}", e);
                             self.is_down = true;
-                            if event.transactional {
-                                return Ok(Some(vec![
-                                    qos::fail(&mut event.clone()),
-                                    qos::close(&mut event),
-                                ]));
-                            }
-                            return Ok(Some(vec![qos::close(&mut event)]));
+                            return if event.transactional {
+                                Ok(vec![qos::fail(&mut event.clone()), qos::close(&mut event)])
+                            } else {
+                                Ok(vec![qos::close(&mut event)])
+                            };
                         }
                         continue;
                     }
@@ -168,13 +164,11 @@ impl Sink for OpenTelemetry {
                         if let Err(e) = remote.trace_client.export(request).await {
                             error!("Failed to dispatch otel/gRPC logs message: {}", e);
                             self.is_down = true;
-                            if event.transactional {
-                                return Ok(Some(vec![
-                                    qos::fail(&mut event.clone()),
-                                    qos::close(&mut event),
-                                ]));
-                            }
-                            return Ok(Some(vec![qos::close(&mut event)]));
+                            return if event.transactional {
+                                Ok(vec![qos::fail(&mut event.clone()), qos::close(&mut event)])
+                            } else {
+                                Ok(vec![qos::close(&mut event)])
+                            };
                         }
                         continue;
                     }
@@ -183,14 +177,14 @@ impl Sink for OpenTelemetry {
             }
 
             self.is_down = false;
-            return Ok(Some(if event.transactional {
+            return Ok(if event.transactional {
                 vec![qos::ack(&mut event)]
             } else {
                 vec![]
-            }));
+            });
         }
 
-        Ok(None)
+        Ok(Vec::new())
     }
 
     fn default_codec(&self) -> &str {
@@ -237,10 +231,10 @@ impl Sink for OpenTelemetry {
             info!("CNCF OpenTelemetry -  sink remote endpoint - recovered and contactable");
             self.is_down = false;
             // Clone needed to make it mutable, lint is wrong
-            return Ok(Some(vec![qos::open(&mut signal)]));
+            return Ok(vec![qos::open(&mut signal)]);
         }
 
-        Ok(None)
+        Ok(Vec::new())
     }
 
     fn is_active(&self) -> bool {

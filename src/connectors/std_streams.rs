@@ -36,6 +36,7 @@ lazy_static! {
                 if len == 0 {
                     error!("STDIN empty?!?");
                     break;
+                    // ALLOW: we get len from read
                 } else if let Err(e) = tx.broadcast(buffer[0..len].to_vec()).await {
                     error!("STDIN error: {}", e);
                     break;
