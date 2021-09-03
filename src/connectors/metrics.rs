@@ -25,7 +25,7 @@ use crate::connectors::{Connector, ConnectorBuilder, ConnectorContext, Connector
 use crate::errors::{ErrorKind, Result};
 use crate::url::ports::{ERR, IN, OUT};
 use crate::url::TremorUrl;
-use async_std::channel::{bounded, Receiver, Sender, TryRecvError, TrySendError};
+use async_broadcast::{broadcast, Receiver, Sender, TryRecvError, TrySendError};
 use beef::Cow;
 use halfbrown::HashMap;
 use tremor_pipeline::{CbAction, Event, EventOriginUri, DEFAULT_STREAM_ID};
@@ -42,7 +42,7 @@ lazy_static! {
     pub(crate) static ref METRICS_CHANNEL: MetricsChannel =
         MetricsChannel::new(crate::QSIZE.load(Ordering::Relaxed));
 }
-
+pub(crate) type MetricsSender = Sender<Msg>;
 #[derive(Clone, Debug)]
 pub(crate) struct MetricsChannel {
     tx: Sender<Msg>,
@@ -51,7 +51,11 @@ pub(crate) struct MetricsChannel {
 
 impl MetricsChannel {
     pub(crate) fn new(qsize: usize) -> Self {
-        let (tx, rx) = bounded(qsize);
+        let (mut tx, rx) = broadcast(qsize);
+        // We user overflow so that non collected messages can be removed
+        // FIXME: is this what we want? for Metrics it should be good enough
+        // we consume them quickly and if not we got bigger problems
+        tx.set_overflow(true);
         Self { tx, rx }
     }
 
@@ -62,7 +66,7 @@ impl MetricsChannel {
         self.rx.clone()
     }
 }
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Msg {
     payload: EventPayload,
     origin_uri: Option<EventOriginUri>,
@@ -181,7 +185,7 @@ impl MetricsSinkReporter {
 // this is simple forwarding
 #[cfg(not(tarpaulin_include))]
 pub(crate) fn send(tx: &Sender<Msg>, metric: EventPayload, artefact_url: &TremorUrl) {
-    if let Err(_e) = tx.try_send(Msg::new(metric, None)) {
+    if let Err(_e) = tx.try_broadcast(Msg::new(metric, None)) {
         error!(
             "[Connector::{}] Error sending to system metrics connector.",
             &artefact_url
@@ -387,7 +391,7 @@ impl Sink for MetricsSink {
         } = event;
 
         let metrics_msg = Msg::new(data, origin_uri);
-        let ack_or_fail = match self.tx.try_send(metrics_msg) {
+        let ack_or_fail = match self.tx.try_broadcast(metrics_msg) {
             Err(TrySendError::Closed(_)) => {
                 // channel is closed
                 res.push(SinkReply::CB(CbAction::Close));

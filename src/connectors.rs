@@ -50,7 +50,7 @@ use async_std::task::{self, JoinHandle};
 use beef::Cow;
 
 use crate::config::Connector as ConnectorConfig;
-use crate::connectors::metrics::{MetricsSinkReporter, Msg as MetricsMsg, SourceReporter};
+use crate::connectors::metrics::{MetricsSinkReporter, SourceReporter};
 use crate::connectors::sink::{SinkAddr, SinkContext, SinkMsg};
 use crate::connectors::source::{SourceAddr, SourceContext, SourceMsg};
 use crate::errors::{Error, Kind as ErrorKind, Result};
@@ -63,6 +63,8 @@ use async_std::channel::{bounded, Sender};
 use halfbrown::{Entry, HashMap};
 use reconnect::Reconnect;
 use tremor_common::ids::ConnectorIdGen;
+
+use self::metrics::MetricsSender;
 
 /// sender for connector manager messages
 pub type ManagerSender = Sender<ManagerMsg>;
@@ -202,13 +204,13 @@ pub enum ManagerMsg {
 /// and handles available connector types
 pub struct Manager {
     qsize: usize,
-    metrics_sender: Sender<MetricsMsg>,
+    metrics_sender: MetricsSender,
 }
 
 impl Manager {
     /// constructor
     #[must_use]
-    pub fn new(qsize: usize, metrics_sender: Sender<MetricsMsg>) -> Self {
+    pub fn new(qsize: usize, metrics_sender: MetricsSender) -> Self {
         Self {
             qsize,
             metrics_sender,
