@@ -96,14 +96,14 @@ impl ConnectorBuilder for Builder {
 
 /// stdstream source (stdin)
 pub struct StdStreamSource {
-    stdin: Receiver<Vec<u8>>,
+    stdin: Option<Receiver<Vec<u8>>>,
     origin_uri: EventOriginUri,
 }
 
 impl StdStreamSource {
     fn new() -> Self {
         Self {
-            stdin: STDIN.clone(),
+            stdin: None,
             origin_uri: EventOriginUri {
                 scheme: "tremor-stdin".to_string(),
                 host: hostname(),
@@ -117,7 +117,12 @@ impl StdStreamSource {
 #[async_trait::async_trait()]
 impl Source for StdStreamSource {
     async fn pull_data(&mut self, _pull_id: u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        match self.stdin.try_recv() {
+        let stdin = if let Some(stdin) = &mut self.stdin {
+            stdin
+        } else {
+            self.stdin.insert(STDIN.clone())
+        };
+        match stdin.try_recv() {
             Ok(data) => Ok(SourceReply::Data {
                 origin_uri: self.origin_uri.clone(),
                 // ALLOW: len cannot be > INPUT_SIZE_BYTES
