@@ -265,7 +265,7 @@ impl Sink for Nats {
                 }
             }
         }
-        Ok(None)
+        Ok(Vec::new())
     }
 
     async fn on_signal(&mut self, signal: Event) -> ResultVec {
@@ -273,9 +273,9 @@ impl Sink for Nats {
             Ok(Some(_connection)) => {
                 let mut insight_event = Event::cb_restore(signal.ingest_ns);
                 insight_event.op_meta = self.merged_meta.clone();
-                Ok(Some(vec![sink::Reply::Insight(insight_event)]))
+                Ok(vec![sink::Reply::Insight(insight_event)])
             }
-            Ok(None) => Ok(None),
+            Ok(None) => Ok(Vec::new()),
             Err(e) => {
                 error!(
                     "[Sink::{}] failed to establish connection: {}",
@@ -283,7 +283,7 @@ impl Sink for Nats {
                 );
                 let mut insight_event = Event::cb_trigger(signal.ingest_ns);
                 insight_event.op_meta = self.merged_meta.clone();
-                return Ok(Some(vec![sink::Reply::Insight(insight_event)]));
+                Ok(vec![sink::Reply::Insight(insight_event)])
             }
         }
     }

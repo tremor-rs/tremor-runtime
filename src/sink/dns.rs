@@ -194,11 +194,11 @@ impl Sink for Dns {
                 }
             }
         }
-        Ok(Some(res))
+        Ok(res)
     }
 
     async fn on_signal(&mut self, _signal: Event) -> ResultVec {
-        Ok(None)
+        Ok(Vec::new())
     }
 
     async fn init(
