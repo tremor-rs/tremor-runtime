@@ -108,7 +108,7 @@ pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
         if d.is_cuda() {
             eprintln!("CUDA is supported");
         } else {
-            eprintln!("CUDA is NOT  supported, falling back to the CPU");
+            eprintln!("CUDA is NOT supported, falling back to the CPU");
         }
     }
     if let Some(pid_file) = matches.value_of("pid") {
