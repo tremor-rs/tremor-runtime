@@ -159,23 +159,23 @@ impl Sink for Tcp {
         let replies = match self.send_event(codec, &event).await {
             Ok(()) => {
                 if event.transactional {
-                    Some(vec![sink::Reply::Insight(event.insight_ack_with_timing(
+                    vec![sink::Reply::Insight(event.insight_ack_with_timing(
                         processing_start.elapsed().as_millis() as u64,
-                    ))])
+                    ))]
                 } else {
-                    None
+                    Vec::new()
                 }
             }
             // for TCP we always trigger the CB for IO/socket related errors
             Err(e @ Error(ErrorKind::Io(_) | ErrorKind::NoSocket, _)) => {
                 debug!("[Sink::TCP] Error sending event: {}.", e);
                 if event.transactional {
-                    Some(vec![
+                    vec![
                         sink::Reply::Insight(event.to_fail()),
                         sink::Reply::Insight(event.insight_trigger()),
-                    ])
+                    ]
                 } else {
-                    Some(vec![sink::Reply::Insight(event.insight_trigger())]) // we always send a trigger
+                    vec![sink::Reply::Insight(event.insight_trigger())] // we always send a trigger
                 }
             }
             // all other errors (codec/peprocessor etc.) just result in a fail
@@ -184,9 +184,9 @@ impl Sink for Tcp {
                 debug!("[Sink::TCP] Error sending event: {}", e);
 
                 if event.transactional {
-                    Some(vec![sink::Reply::Insight(event.to_fail())])
+                    vec![sink::Reply::Insight(event.to_fail())]
                 } else {
-                    None
+                    Vec::new()
                 }
             }
         };
@@ -219,16 +219,16 @@ impl Sink for Tcp {
             let stream = if let Ok(stream) = Self::connect(&self.config).await {
                 stream
             } else {
-                return Ok(Some(vec![sink::Reply::Insight(Event::cb_trigger(
+                return Ok(vec![sink::Reply::Insight(Event::cb_trigger(
                     signal.ingest_ns,
-                ))]));
+                ))]);
             };
             self.stream = Some(stream);
-            Ok(Some(vec![sink::Reply::Insight(Event::cb_restore(
+            Ok(vec![sink::Reply::Insight(Event::cb_restore(
                 signal.ingest_ns,
-            ))]))
+            ))])
         } else {
-            Ok(None)
+            Ok(Vec::new())
         }
     }
     fn is_active(&self) -> bool {

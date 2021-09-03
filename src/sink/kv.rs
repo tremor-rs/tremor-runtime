@@ -332,12 +332,12 @@ impl Sink for Kv {
             // trigger CB fail
             Err(e)
         } else {
-            Ok(Some(r))
+            Ok(r)
         }
     }
 
     async fn on_signal(&mut self, _signal: Event) -> ResultVec {
-        Ok(None)
+        Ok(Vec::new())
     }
 
     #[allow(clippy::too_many_arguments)]

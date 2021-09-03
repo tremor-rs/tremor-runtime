@@ -131,13 +131,13 @@ impl Sink for Postgres {
                         .map(|p| p as &dyn postgres::types::ToSql)
                         .collect::<Vec<&dyn postgres::types::ToSql>>(),
                 ) {
-                    Ok(_) => return Ok(None),
+                    Ok(_) => return Ok(Vec::new()),
                     Err(e) => return Err(format!("Failure while querying: {}", e).into()),
                 }
             }
         }
 
-        Ok(None)
+        Ok(Vec::new())
     }
     fn default_codec(&self) -> &str {
         "json"
@@ -157,7 +157,7 @@ impl Sink for Postgres {
         Ok(())
     }
     async fn on_signal(&mut self, _signal: Event) -> ResultVec {
-        Ok(None)
+        Ok(Vec::new())
     }
     fn is_active(&self) -> bool {
         true
