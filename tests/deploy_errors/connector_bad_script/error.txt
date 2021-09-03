@@ -1,6 +1,0 @@
-Error: 
-    4 | deploy fake
-    5 | script
-    6 |   { "nope": "yes" }
-    7 | end;
-      | ^^^ Argument used was not formally specified in originating definition: nope

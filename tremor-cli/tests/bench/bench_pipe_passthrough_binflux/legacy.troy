@@ -4,7 +4,7 @@ args
   id =  "ingress",
   description = "redundant",
   codec = "binflux",
-  config = {
+  `config` = {
     "base64": true,
     "source": "../../../../demo/data/data.binflux.xz"
   }
@@ -16,7 +16,7 @@ args
   id =  "egress",
   codec = "binflux",
   description = "redundant",
-  config = {
+  `config` = {
     "stop_after_secs": 100,
     "significant_figures": 2,
     "warmup_secs": 10,

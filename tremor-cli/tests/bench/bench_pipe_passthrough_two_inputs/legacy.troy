@@ -3,7 +3,7 @@ args
   type = "blaster",
   id =  "ingress1",
   description = "redundant",
-  config = {
+  `config` = {
     "source": "../../../../demo/data/data.json.xz"
   }
 end;
@@ -13,7 +13,7 @@ args
   type = "blaster",
   id =  "ingress2",
   description = "redundant",
-  config = {
+  `config` = {
     "source": "../../../../demo/data/data.json.xz"
   }
 end;
@@ -23,7 +23,7 @@ args
   type = "blackhole",
   id =  "egress",
   description = "redundant",
-  config = {
+  `config` = {
     "stop_after_secs": 100,
     "significant_figures": 2,
     "warmup_secs": 10,
