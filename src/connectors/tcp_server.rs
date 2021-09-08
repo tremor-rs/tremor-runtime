@@ -168,6 +168,7 @@ impl Connector for TcpServer {
         &mut self,
         _ctx: &ConnectorContext,
         notifier: ConnectionLostNotifier,
+        quiescence: &QuiescenceBeacon,
     ) -> Result<bool> {
         let path = vec![self.config.port.to_string()];
         let accept_url = self.url.clone();
@@ -181,22 +182,27 @@ impl Connector for TcpServer {
             previous_handle.cancel().await;
         }
 
+        // for checking if we should stop reading / writing - getting notified by the engine
+        let quiescence = quiescence.clone();
+
         let listener = TcpListener::bind((self.config.host.as_str(), self.config.port)).await?;
         // accept task
         self.accept_task = Some(task::spawn(async move {
-            // TODO: provide utility for stream id generation
-            let mut stream_id = 0_u64;
-            while let Ok((stream, peer_addr)) = listener.accept().await {
+            let mut stream_id_gen = StreamIdGen::default();
+            while let (true, Ok((stream, peer_addr))) =
+                (quiescence.continue_reading(), listener.accept().await)
+            {
                 trace!(
                     "[Connector::{}] new connection from {}",
                     &accept_url,
                     peer_addr
                 );
-                let my_id: u64 = stream_id;
-                stream_id += 1;
+                let stream_id: u64 = stream_id_gen.next_stream_id();
                 let connection_meta = peer_addr.into();
-
-                let (mut read_half, mut write_half) = stream.split();
+                // Async<T> allows us to read in one thread and write in another concurrently - see its documentation
+                // So we don't need no BiLock like we would when using `.split()`
+                let source_stream = stream.clone();
+                let sink_stream = stream;
                 let sc_stream = source_tx.clone();
                 let stream_url = accept_url.clone();
                 let sink_url = accept_url.clone();
@@ -208,12 +214,16 @@ impl Connector for TcpServer {
                 };
 
                 // TODO: issue metrics on send time, to detect queues running full
-                stry!(send(&accept_url, SourceReply::StartStream(my_id), &source_tx).await);
+                stry!(send(&accept_url, SourceReply::StartStream(stream_id), &source_tx).await);
 
+                let read_quiescence = quiescence.clone();
                 // spawn source stream task
                 task::spawn(async move {
                     let mut buffer = vec![0; buf_size];
-                    while let Ok(bytes_read) = read_half.read(&mut buffer).await {
+                    while let (true, Ok(bytes_read)) = (
+                        read_quiescence.continue_reading(),
+                        source_stream.read(&mut buffer).await,
+                    ) {
                         if bytes_read == 0 {
                             // EOF
                             trace!("[Connector::{}] EOF", &stream_url);
@@ -228,33 +238,42 @@ impl Connector for TcpServer {
                         });
                         let sc_data = SourceReply::Data {
                             origin_uri: origin_uri.clone(),
-                            stream: my_id,
+                            stream: stream_id,
                             meta: Some(meta),
                             // ALLOW: we know bytes_read is smaller than or equal buf_size
                             data: buffer[0..bytes_read].to_vec(),
                         };
                         stry!(send(&stream_url, sc_data, &sc_stream).await);
                     }
-                    stry!(send(&stream_url, SourceReply::EndStream(my_id), &sc_stream).await);
+                    if let Err(e) = source_stream.shutdown(std::net::Shutdown::Read) {
+                        error!(
+                            "[Connector::{}] Error shutting down reading half of stream {}: {}",
+                            &stream_url, stream_id, e
+                        );
+                    }
+                    stry!(send(&stream_url, SourceReply::EndStream(stream_id), &sc_stream).await);
                     Ok(())
                 });
 
                 let (stream_tx, stream_rx) = bounded::<SinkData>(QSIZE.load(Ordering::Relaxed));
-
                 // spawn sink stream task
                 let stream_sink_tx = sink_tx.clone();
+                let write_quiescence = quiescence.clone();
                 task::spawn(async move {
                     // receive loop from channel sink
-                    while let Ok(SinkData {
-                        data,
-                        contraflow,
-                        start,
-                    }) = stream_rx.recv().await
+                    while let (
+                        true,
+                        Ok(SinkData {
+                            data,
+                            contraflow,
+                            start,
+                        }),
+                    ) = (write_quiescence.continue_writing(), stream_rx.recv().await)
                     {
                         let mut failed = false;
                         for chunk in data {
                             let slice: &[u8] = &chunk;
-                            if let Err(e) = write_half.write_all(slice).await {
+                            if let Err(e) = sink_stream.write_all(slice).await {
                                 failed = true;
                                 error!("[Connector::{}] Error writing TCP data: {}", &sink_url, e);
                                 break;
@@ -278,19 +297,26 @@ impl Connector for TcpServer {
                             break;
                         }
                     }
+                    if let Err(e) = sink_stream.shutdown(std::net::Shutdown::Write) {
+                        error!(
+                            "[Connector::{}] Error shutting down read half of stream {}: {}",
+                            &sink_url, stream_id, e
+                        );
+                    }
                     stream_sink_tx
-                        .send(ChannelSinkMsg::RemoveStream(my_id))
+                        .send(ChannelSinkMsg::RemoveStream(stream_id))
                         .await?;
                     Result::Ok(())
                 });
                 sink_tx
                     .send(ChannelSinkMsg::NewStream {
-                        stream_id: my_id,
+                        stream_id,
                         meta: Some(connection_meta),
                         sender: stream_tx,
                     })
                     .await?;
             }
+
             // notify connector task about disconnect
             // of the listening socket
             notifier.notify().await?;
