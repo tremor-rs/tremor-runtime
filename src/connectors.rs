@@ -46,6 +46,8 @@ pub(crate) mod metrics;
 
 /// Metronome
 pub(crate) mod metronome;
+/// quiescence stuff
+pub(crate) mod quiescence;
 
 use std::fmt::Display;
 
@@ -68,6 +70,7 @@ use reconnect::Reconnect;
 use tremor_common::ids::ConnectorIdGen;
 
 use self::metrics::MetricsSender;
+use self::quiescence::QuiescenceBeacon;
 
 /// sender for connector manager messages
 pub type ManagerSender = Sender<ManagerMsg>;
@@ -173,6 +176,19 @@ impl Create {
     #[must_use]
     pub fn new(servant_id: TremorUrl, config: ConnectorConfig) -> Self {
         Self { servant_id, config }
+    }
+}
+
+/// Stream id generator
+#[derive(Debug, Default)]
+pub struct StreamIdGen(u64);
+
+impl StreamIdGen {
+    /// get the next stream id and increment the internal state
+    pub fn next_stream_id(&mut self) -> u64 {
+        let res = self.0;
+        self.0 = self.0.wrapping_add(1);
+        res
     }
 }
 
@@ -400,7 +416,7 @@ impl Manager {
         let mut reconnect: Reconnect = Reconnect::new(&addr, config.reconnect);
         let send_addr = addr.clone();
         let mut connector_state = ConnectorState::Initialized;
-
+        let mut quiescence_beacon = QuiescenceBeacon::default();
         // TODO: add connector metrics reporter (e.g. for reconnect attempts, cb's received, uptime, etc.)
         task::spawn::<_, Result<()>>(async move {
             // typical 1 pipeline connected to IN, OUT, ERR
@@ -411,6 +427,7 @@ impl Manager {
             while let Ok(msg) = msg_rx.recv().await {
                 match msg {
                     Msg::Report(tx) => {
+                        // request a status report from this connector
                         let pipes: HashMap<Cow<'static, str>, Vec<TremorUrl>> = pipelines
                             .iter()
                             .map(|(port, connected)| {
@@ -564,7 +581,9 @@ impl Manager {
                     Msg::Reconnect => {
                         // reconnect if we are below max_retries, otherwise bail out and fail the connector
                         info!("[Connector::{}] Connecting...", &addr.url);
-                        let new = reconnect.attempt(connector.as_mut(), &ctx).await?;
+                        let new = reconnect
+                            .attempt(connector.as_mut(), &quiescence_beacon, &ctx)
+                            .await?;
                         match (&connectivity, &new) {
                             (Connectivity::Disconnected, Connectivity::Connected) => {
                                 info!("[Connector::{}] Connected.", &addr.url);
@@ -662,8 +681,6 @@ impl Manager {
                         break;
                     }
                 } // match
-
-                // TODO: react on connector state changes
             } // while
             info!(
                 "[Connector::{}] Connector Stopped. Reason: {:?}",
@@ -768,10 +785,14 @@ pub trait Connector: Send {
     /// To notify the runtime of the main connectivity being lost, a `notifier` is passed in.
     /// Call `notifier.notify().await` as the last thing when you notice the connection is lost.
     /// This is well suited when handling the connection in another task.
+    ///
+    /// To know when to stop reading new data from the external connection, the `quiescence` beacon
+    /// can be used. Call `.reading()` and `.writing()` to see if you should continue doing so, if not, just stop and rest.
     async fn connect(
         &mut self,
         ctx: &ConnectorContext,
         notifier: reconnect::ConnectionLostNotifier,
+        quiescence: &QuiescenceBeacon,
     ) -> Result<bool>;
 
     /// called once when the connector is started
