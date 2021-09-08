@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+pub use crate::connectors::quiescence::QuiescenceBeacon;
 pub use crate::connectors::reconnect::ConnectionLostNotifier;
 pub use crate::connectors::sink::{
     EventSerializer, ResultVec, Sink, SinkAddr, SinkContext, SinkData, SinkManagerBuilder,
@@ -19,7 +20,9 @@ pub use crate::connectors::sink::{
 pub use crate::connectors::source::{
     Source, SourceAddr, SourceContext, SourceManagerBuilder, SourceReply,
 };
-pub use crate::connectors::{Connector, ConnectorBuilder, ConnectorContext, ConnectorState};
+pub use crate::connectors::{
+    Connector, ConnectorBuilder, ConnectorContext, ConnectorState, StreamIdGen,
+};
 pub use crate::errors::{Error, ErrorKind, Result};
 pub use crate::url::TremorUrl;
 pub use crate::utils::hostname;
