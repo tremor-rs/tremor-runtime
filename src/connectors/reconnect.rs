@@ -20,6 +20,8 @@ use async_std::channel::Sender;
 use async_std::task;
 use std::time::Duration;
 
+use super::quiescence::QuiescenceBeacon;
+
 /// Entity that executes the reconnect logic based upon the given `ReconnectConfig`
 pub(crate) struct Reconnect {
     attempt: u64,
@@ -67,10 +69,11 @@ impl Reconnect {
     pub(crate) async fn attempt(
         &mut self,
         connector: &mut dyn Connector,
+        quiescence_beacon: &QuiescenceBeacon,
         ctx: &ConnectorContext,
     ) -> Result<Connectivity> {
         let notifier = ConnectionLostNotifier::from(&self.addr);
-        match connector.connect(ctx, notifier).await {
+        match connector.connect(ctx, notifier, quiescence_beacon).await {
             Ok(true) => {
                 self.reset();
                 Ok(Connectivity::Connected)
