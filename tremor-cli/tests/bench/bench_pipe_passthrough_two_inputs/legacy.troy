@@ -42,8 +42,8 @@ deploy egress;
 
 define flow wiring
 links
-  connect "/onramp/ingress1/01/out" to "/pipeline/passthrough/01/in",
-  connect "/onramp/ingress2/01/out" to "/pipeline/passthrough/01/in",
+  connect "/onramp/ingress1/01/out" to "/pipeline/passthrough/01/in";
+  connect "/onramp/ingress2/01/out" to "/pipeline/passthrough/01/in";
   connect "/pipeline/passthrough/01/out" to "/offramp/egress/01/in"
 end;
 
