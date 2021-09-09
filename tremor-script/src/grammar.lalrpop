@@ -29,8 +29,8 @@ grammar<'input>;
 
 /// Root
 pub(crate) Deploy : DeployRaw<'input> = {
-    <config:ConfigDirectives> <stmts:DeployStmts> "<end-of-stream>"? => DeployRaw{config, stmts},
-    <stmts:DeployStmts> "<end-of-stream>"? => DeployRaw{config: vec![], stmts},
+    <config:ConfigDirectives> <doc:ModComment> <stmts:DeployStmts> "<end-of-stream>"? => DeployRaw{config, stmts, doc},
+    <doc:ModComment> <stmts:DeployStmts> "<end-of-stream>"? => DeployRaw{config: vec![], stmts, doc},
 }
 
 DeployStmts: DeployStmtsRaw<'input> = {

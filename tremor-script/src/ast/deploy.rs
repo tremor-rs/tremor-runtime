@@ -17,7 +17,7 @@
 
 use super::query::raw::QueryRaw;
 use super::raw::BaseExpr;
-use super::{HashMap, Value};
+use super::{Docs, HashMap, Value};
 pub use crate::ast::deploy::raw::AtomOfDeployment;
 use crate::ast::Query;
 use crate::impl_expr_mid;
@@ -37,6 +37,9 @@ pub struct Deploy<'script> {
     pub connectors: HashMap<String, ConnectorDecl<'script>>,
     /// Pipeline Definitions
     pub pipelines: HashMap<String, PipelineDecl<'script>>,
+    #[serde(skip)]
+    /// Documentation comments
+    pub docs: Docs,
 }
 
 impl<'script> Deploy<'script> {
