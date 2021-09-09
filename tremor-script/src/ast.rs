@@ -46,7 +46,7 @@ use crate::{
         error_generic, error_need_arr, error_need_int, error_no_consts, error_no_locals, ErrorKind,
         Result,
     },
-    impl_expr, impl_expr_ex_mid, impl_expr_mid,
+    impl_expr_ex_mid, impl_expr_mid,
     interpreter::{exec_binary, exec_unary, AggrType, Cont, Env, ExecOpts, LocalStack},
     pos::{Location, Range},
     prelude::*,
@@ -732,6 +732,7 @@ where
 /// A tremor script instance
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Script<'script> {
+    pub(crate) mid: usize,
     /// Start
     pub start: crate::pos::Location,
     /// End
@@ -754,7 +755,7 @@ pub struct Script<'script> {
     /// Documentation from the script
     pub docs: Docs,
 }
-impl_expr!(Script);
+impl_expr_mid!(Script);
 
 impl<'script> Script<'script> {
     const NOT_IMUT: &'static str = "Not an imutable expression";
