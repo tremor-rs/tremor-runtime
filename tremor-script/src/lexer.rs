@@ -1560,7 +1560,7 @@ impl<'input> Lexer<'input> {
         }
     }
 
-    /// handle quoted idents `\`` ...
+    /// handle quoted idents `\` ...
     fn id2(&mut self, start: Location) -> Result<TokenSpan<'input>> {
         let mut string = String::new();
         let mut end = start;
