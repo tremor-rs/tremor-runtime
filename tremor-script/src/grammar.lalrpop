@@ -149,7 +149,7 @@ DeployModuleInnerStmt: DeployStmtRaw<'input> = {
     Intrinsic => DeployStmtRaw::Expr(Box::new(ExprRaw::FnDecl(<>))),
 }
 
-
+// TODO FIXME When Yatin's modular sub-query work is merged this production should be corrected accordingly
 EmbeddedQuery: QueryRaw<'input> = {
     "pipeline" <stmts:Stmts> "end" => QueryRaw{config: vec![], stmts},
 }
