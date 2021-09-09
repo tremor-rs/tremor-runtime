@@ -54,6 +54,8 @@ impl<'script> ScriptRaw<'script> {
     pub(crate) fn new(exprs: ExprsRaw<'script>, doc: Option<Vec<Cow<'script, str>>>) -> Self {
         Self { exprs, doc }
     }
+
+    #[allow(clippy::too_many_lines)]
     pub(crate) fn up_script<'registry>(
         self,
         mut helper: &mut Helper<'script, 'registry>,
@@ -136,7 +138,25 @@ impl<'script> ScriptRaw<'script> {
                 .map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n")),
         });
 
+        let start = Location {
+            unit_id: 0,
+            line: 0,
+            column: 0,
+            absolute: 0,
+        };
+
+        let end = Location {
+            unit_id: 0,
+            line: 0,
+            column: 0,
+            absolute: 0,
+        };
+
+        // TODO - Some kind of token for the source origin in a mangled name would aid debuggability
+        let meta_name = "<script>".to_string();
+
         Ok(Script {
+            mid: helper.add_meta_w_name(start, end, &meta_name),
             imports: vec![], // Compiled out
             exprs,
             consts: helper.consts.clone(),

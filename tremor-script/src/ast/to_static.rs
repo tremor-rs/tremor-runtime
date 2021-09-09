@@ -998,6 +998,7 @@ impl<'script> InvokeAggrFn<'script> {
 impl<'script> Script<'script> {
     pub(crate) fn into_static(self) -> Script<'static> {
         let Script {
+            mid,
             imports,
             exprs,
             consts,
@@ -1011,6 +1012,7 @@ impl<'script> Script<'script> {
             end,
         } = self;
         Script {
+            mid,
             imports,
             exprs: exprs.into_iter().map(Expr::into_static).collect(),
             consts: consts.into_static(),
