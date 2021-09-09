@@ -12,6 +12,7 @@
 - print names of failing tests
 - Add `check_topic_metadata` configuration flag to kafka source to bypass topic metadata fetch
 - port `json!` improvements to `literal!`
+- Add support for `troy` deployment language. The language adds the `pipeline`, `connector`, `flow`, `links`, `connect`, `to`, `deploy` and `config` reserved keywords. These are now reserved in the scripting and query languages and must now be escaped when they appear in event data. This is a breaking change in the query and script language dialects.
 - Add support for `FLOAT4` and `FLOAT8` serialization/deserialization to postgres connectors
 - Add `std::path::try_default` fn
 - Experimental ARM support
