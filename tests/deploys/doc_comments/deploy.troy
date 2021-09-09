@@ -1,0 +1,10 @@
+###
+### This is a top level document comment
+###
+
+define pipeline passthrough
+config
+  snot = "badger"
+pipeline
+  select args.snot from in into out;
+end;
