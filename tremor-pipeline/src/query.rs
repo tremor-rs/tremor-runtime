@@ -140,28 +140,27 @@ impl Query {
         &self.0.source
     }
 
-    // /// Parse a query
-    // ///
-    // /// # Errors
-    // /// if the trickle script can not be parsed
-    // pub fn parse(
-    //     module_path: &ModulePath,
-    //     script: &str,
-    //     file_name: &str,
-    //     cus: Vec<CompilationUnit>,
-    //     reg: &Registry,
-    //     aggr_reg: &AggrRegistry,
-    // ) -> std::result::Result<Self, CompilerError> {
-    //     Ok(Self(tremor_script::query::Query::parse_with_args(
-    //         module_path,
-    //         file_name,
-    //         script,
-    //         cus,
-    //         reg,
-    //         aggr_reg,
-    //         literal!({}),
-    //     )?))
-    // }
+    /// Parse a query
+    ///
+    /// # Errors
+    /// if the trickle script can not be parsed
+    pub fn parse(
+        module_path: &ModulePath,
+        script: &str,
+        file_name: &str,
+        cus: Vec<CompilationUnit>,
+        reg: &Registry,
+        aggr_reg: &AggrRegistry,
+    ) -> std::result::Result<Self, CompilerError> {
+        Ok(Self(tremor_script::query::Query::parse(
+            module_path,
+            file_name,
+            script,
+            cus,
+            reg,
+            aggr_reg,
+        )?))
+    }
 
     /// Parse a query with arguments
     ///
