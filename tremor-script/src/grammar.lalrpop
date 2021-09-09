@@ -97,7 +97,14 @@ DeployLinks: DeployLinksRaw<'input> = {
 }
 
 DeployLinks_: DeployLinksRaw<'input> = {
-    <Sep<DeployLinks_, DeployLink, ",">> => <>
+    // TODO FIXME - The troy grammar uses ',' for with, config and args rules
+    // so from one perspective ',' is more consistent than ';' which is what
+    // is documented in the rfc. Erring for the RFC for now - we'll revisit
+    // when `troy` and `connectors` are merged and we have a working set
+    // of migrated deployments in benchmarks, integration tests and tutorials
+    // allowing us to pick the "better" alternative
+    <Sep<DeployLinks_, DeployLink, ";">> => <>
+//    <Sep<DeployLinks_, DeployLink, ",">> => <>
 }
 
 DeployLink: DeployLinkRaw<'input> = {
