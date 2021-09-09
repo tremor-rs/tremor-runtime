@@ -71,4 +71,5 @@ test_cases!(
     pipeline_args,
     pipeline_with,
     pipeline_overalls,
+    doc_comments,
 );

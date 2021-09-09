@@ -32,6 +32,7 @@ use crate::ast::AggrRegistry;
 use crate::ast::Deploy;
 use crate::ast::DeployStmt;
 use crate::ast::Helper;
+use crate::ast::ModDoc;
 use crate::ast::NodeMetas;
 use crate::ast::Registry;
 use crate::ast::Upable;
@@ -199,6 +200,7 @@ pub(crate) fn up_maybe_params<'script, 'registry>(
 pub struct DeployRaw<'script> {
     pub(crate) config: WithExprsRaw<'script>,
     pub(crate) stmts: DeployStmtsRaw<'script>,
+    pub(crate) doc: Option<Vec<Cow<'script, str>>>,
 }
 impl<'script> DeployRaw<'script> {
     pub(crate) fn up_script<'registry>(
@@ -217,11 +219,19 @@ impl<'script> DeployRaw<'script> {
             }
         }
 
+        helper.docs.module = Some(ModDoc {
+            name: "self".into(),
+            doc: self
+                .doc
+                .map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n")),
+        });
+
         Ok(Deploy {
             stmts,
             connectors: helper.connector_defns.clone(),
             pipelines: helper.pipeline_defns.clone(),
             flows: helper.flow_defns.clone(),
+            docs: helper.docs.clone(),
         })
     }
 }
