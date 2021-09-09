@@ -20,22 +20,8 @@ pub type ResourceType = tremor_common::url::ResourceType;
 /// Deprecated - Alias for `tremor_common::url::Scope`
 pub type Scope = tremor_common::url::Scope;
 
-/// module for standard port names
-pub mod ports {
-    use beef::Cow;
-
-    /// standard input port
-    pub const IN: Cow<'static, str> = tremor_common::url::ports::IN;
-
-    /// standard output port
-    pub const OUT: Cow<'static, str> = tremor_common::url::ports::OUT;
-
-    /// standard err port
-    pub const ERR: Cow<'static, str> = tremor_common::url::ports::ERR;
-
-    /// standard metrics port
-    pub const METRICS: Cow<'static, str> = tremor_common::url::ports::METRICS;
-}
+/// Expose common tremor url ports
+pub use tremor_common::url::ports;
 
 /// A tremor URL identifying an entity in tremor
 #[allow(clippy::module_name_repetitions)]
