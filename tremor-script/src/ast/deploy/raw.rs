@@ -294,7 +294,7 @@ pub struct DeployModuleStmtRaw<'script> {
     pub end: Location,
     pub name: IdentRaw<'script>,
     pub stmts: DeployStmtsRaw<'script>,
-    pub doc: Option<Vec<Cow<'script, str>>>,
+    pub docs: Option<Vec<Cow<'script, str>>>,
 }
 impl_expr!(DeployModuleStmtRaw);
 
@@ -319,7 +319,7 @@ impl<'script> DeployModuleStmtRaw<'script> {
                         name: self.name.clone(),
                         start: self.start,
                         end: self.end,
-                        doc: None,
+                        doc: self.docs.clone(),
                         exprs: vec![*e],
                     };
                     // since `ModuleRaw::define` also prepends the module
@@ -369,6 +369,7 @@ pub struct PipelineDeclRaw<'script> {
     pub(crate) args: WithArgsRaw<'script>,
     pub(crate) params: Option<DeployWithExprsRaw<'script>>,
     pub(crate) query: QueryRaw<'script>,
+    pub(crate) docs: Option<Vec<Cow<'script, str>>>,
 }
 
 fn arg_spec_resolver<'script, 'registry>(
@@ -505,6 +506,9 @@ impl<'script> Upable<'script> for PipelineDeclRaw<'script> {
             args,
             query_raw: self.query.clone(),
             query, // The runnable is redefined by `deploy` statements which complete/finalize and seal the runtime arguments
+            docs: self
+                .docs
+                .map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n")),
         };
         helper.module.pop();
         let script_name = query_decl.fqsn(&helper.module);
@@ -526,6 +530,7 @@ pub struct ConnectorDeclRaw<'script> {
     pub(crate) kind: (Vec<IdentRaw<'script>>, IdentRaw<'script>),
     pub(crate) args: WithArgsRaw<'script>,
     pub(crate) params: Option<DeployWithExprsRaw<'script>>,
+    pub(crate) docs: Option<Vec<Cow<'script, str>>>,
 }
 
 impl<'script> Upable<'script> for ConnectorDeclRaw<'script> {
@@ -558,6 +563,9 @@ impl<'script> Upable<'script> for ConnectorDeclRaw<'script> {
             id: self.id,
             spec: spec.clone(),
             args,
+            docs: self
+                .docs
+                .map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n")),
         };
         helper.module.pop();
         let script_name = query_decl.fqsn(&helper.module);
@@ -586,6 +594,7 @@ pub struct FlowDeclRaw<'script> {
     pub(crate) args: WithArgsRaw<'script>,
     pub(crate) params: Option<DeployWithExprsRaw<'script>>,
     pub(crate) links: DeployLinksRaw<'script>,
+    pub(crate) docs: Option<Vec<Cow<'script, str>>>,
 }
 
 type ModularTarget<'script> = (Vec<IdentRaw<'script>>, IdentRaw<'script>);
@@ -646,6 +655,9 @@ impl<'script> Upable<'script> for FlowDeclRaw<'script> {
             spec: spec.clone(),
             args,
             links,
+            docs: self
+                .docs
+                .map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n")),
         };
         helper.module.pop();
         let script_name = flow_decl.fqsn(&helper.module);
@@ -676,6 +688,7 @@ pub struct CreateStmtRaw<'script> {
     pub target: IdentRaw<'script>,
     /// Module of the definition
     pub(crate) module: Vec<IdentRaw<'script>>,
+    pub(crate) docs: Option<Vec<Cow<'script, str>>>,
 }
 impl_expr!(CreateStmtRaw);
 
@@ -779,6 +792,9 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
             module,
             target: self.target.to_string(),
             atom,
+            docs: self
+                .docs
+                .map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n")),
         };
         let script_name = create_stmt.fqsn(&helper.module);
         helper.instances.insert(script_name, create_stmt.clone());
