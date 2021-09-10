@@ -44,6 +44,9 @@ pub(crate) mod std_streams;
 /// Home of the famous metrics collector
 pub(crate) mod metrics;
 
+/// Metronome
+pub(crate) mod metronome;
+
 use std::fmt::Display;
 
 use async_std::task::{self, JoinHandle};
