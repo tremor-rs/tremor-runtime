@@ -19,8 +19,9 @@ use super::query::raw::QueryRaw;
 use super::raw::BaseExpr;
 use super::{Docs, HashMap, Value};
 pub use crate::ast::deploy::raw::AtomOfDeployment;
+use crate::ast::BaseRef;
 use crate::ast::Query;
-use crate::impl_expr_mid;
+use crate::{impl_expr_mid, impl_fqsn};
 use beef::Cow;
 use tremor_common::url::TremorUrl;
 
@@ -92,18 +93,7 @@ pub struct ConnectorDecl<'script> {
     pub builtin_kind: String,
 }
 impl_expr_mid!(ConnectorDecl);
-
-impl<'script> ConnectorDecl<'script> {
-    /// Calculate the fully qualified name
-    #[must_use]
-    pub fn fqsn(&self, module: &[String]) -> String {
-        if module.is_empty() {
-            self.id.clone()
-        } else {
-            format!("{}::{}", module.join("::"), self.id)
-        }
-    }
-}
+impl_fqsn!(ConnectorDecl);
 
 type DeployStmts<'script> = Vec<DeployStmt<'script>>;
 
@@ -125,18 +115,7 @@ pub struct PipelineDecl<'script> {
     pub query: Query<'script>,
 }
 impl_expr_mid!(PipelineDecl);
-
-impl<'script> PipelineDecl<'script> {
-    /// Calculate the fully qualified name
-    #[must_use]
-    pub fn fqsn(&self, module: &[String]) -> String {
-        if module.is_empty() {
-            self.id.clone()
-        } else {
-            format!("{}::{}", module.join("::"), self.id)
-        }
-    }
-}
+impl_fqsn!(PipelineDecl);
 
 /// A flow declaration
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -154,18 +133,7 @@ pub struct FlowDecl<'script> {
     pub links: HashMap<TremorUrl, TremorUrl>,
 }
 impl_expr_mid!(FlowDecl);
-
-impl<'script> FlowDecl<'script> {
-    /// Calculate the fully qualified name
-    #[must_use]
-    pub fn fqsn(&self, module: &[String]) -> String {
-        if module.is_empty() {
-            self.id.clone()
-        } else {
-            format!("{}::{}", module.join("::"), self.id)
-        }
-    }
-}
+impl_fqsn!(FlowDecl);
 
 /// A create statement
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -181,15 +149,4 @@ pub struct CreateStmt<'script> {
     pub atom: AtomOfDeployment<'script>,
 }
 impl_expr_mid!(CreateStmt);
-
-impl<'script> CreateStmt<'script> {
-    /// Calculate the fully qualified name
-    #[must_use]
-    pub fn fqsn(&self, module: &[String]) -> String {
-        if module.is_empty() {
-            self.id.clone()
-        } else {
-            format!("{}::{}", module.join("::"), self.id)
-        }
-    }
-}
+impl_fqsn!(CreateStmt);
