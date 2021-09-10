@@ -31,10 +31,13 @@ use crate::ast::raw::WithExprsRaw;
 use crate::ast::AggrRegistry;
 use crate::ast::Deploy;
 use crate::ast::DeployStmt;
+use crate::ast::Expr;
 use crate::ast::Helper;
 use crate::ast::ModDoc;
 use crate::ast::NodeMetas;
 use crate::ast::Registry;
+use crate::ast::Script;
+use crate::ast::StringLit;
 use crate::ast::Upable;
 use crate::errors::ErrorKind;
 use crate::errors::Result;
@@ -54,120 +57,108 @@ use value_trait::Mutable;
 use crate::interpreter::Env;
 use crate::interpreter::ExecOpts;
 use crate::interpreter::LocalStack;
+use crate::Return;
 
 pub type DeployWithExprsRaw<'script> = Vec<(IdentRaw<'script>, ExprRaw<'script>)>;
 
-/// Convenience to evaluate an expression at compile time so that
-/// evaluated results can be used during compilation
-#[macro_export]
-macro_rules! stateless_run_script {
-    ($helper:ident, $expr:expr) => {{
-        // We duplicate these here as it simplifies use of the macro externally
-        let eo = ExecOpts {
-            aggr: AggrType::Emit,
-            result_needed: true,
-        };
-        let ctx = EventContext::new(nanotime(), None);
-        let mut event = literal!({}).into_static();
-        let mut state = literal!({}).into_static();
-        let mut meta = literal!({}).into_static();
+/// Evaluate a script expression at compile time with an empty state context
+/// for use during compile time reduction
+/// # Errors
+/// If evaluation of the script fails, or a legal value cannot be evaluated by result
+pub fn run_script<'script, 'registry>(
+    helper: &Helper<'script, 'registry>,
+    expr: &Script<'script>,
+) -> Result<Value<'script>> {
+    // We duplicate these here as it simplifies use of the macro externally
+    let ctx = EventContext::new(nanotime(), None);
+    let mut event = literal!({}).into_static();
+    let mut state = literal!({}).into_static();
+    let mut meta = literal!({}).into_static();
 
-        let run_consts = $helper.consts.clone();
-        let run_consts = run_consts.run();
-        let env = Env {
-            context: &ctx,
-            consts: run_consts,
-            aggrs: &$helper.aggregates.clone(),
-            meta: &$helper.meta.clone(),
-            recursion_limit: 1024, // I'm feeling lucky in a power of two kind of way - shoot me
-        };
-        let got = $expr.run(&ctx, AggrType::Emit, &mut event, &mut state, &mut meta);
-        match got {
-            Ok(Return::Emit { value, .. }) => Ok(value),
-            // FIXME this deserves a proper error
-            _otherwise => {
-                Err("snot".into())
-                // return error_generic(
-                //     $expr,
-                //     $expr,
-                //     &"Illegal `with` parameter value specified".to_string(),
-                //     &$helper.meta,
-                // )
-            }
-        }
-    }};
+    match expr.run(&ctx, AggrType::Emit, &mut event, &mut state, &mut meta) {
+        Ok(Return::Emit { value, .. }) => Ok(value),
+        // FIXME this deserves a proper error
+        _otherwise => error_generic(
+            expr,
+            expr,
+            &"Failed to evaluate script at compile time".to_string(),
+            &helper.meta,
+        ),
+    }
 }
 
-/// Convenience to evaluate an expression at compile time so that
-/// evaluated results can be used during compilation
-#[macro_export]
-macro_rules! stateless_run_expr {
-    ($helper:ident, $expr:expr) => {{
-        // We duplicate these here as it simplifies use of the macro externally
-        let eo = ExecOpts {
-            aggr: AggrType::Emit,
-            result_needed: true,
-        };
-        let ctx = EventContext::new(nanotime(), None);
-        let mut event = literal!({}).into_static();
-        let mut state = literal!({}).into_static();
-        let mut meta = literal!({}).into_static();
+/// Evaluate an expression at compile time with an empty state context
+/// for use during compile time reduction
+/// # Errors
+/// If evaluation of the expression fails, or a legal value cannot be evaluated by result
+pub(crate) fn run_expr<'script, 'registry>(
+    helper: &Helper<'script, 'registry>,
+    expr: &Expr<'script>,
+) -> Result<Value<'script>> {
+    // We duplicate these here as it simplifies use of the macro externally
+    let eo = ExecOpts {
+        aggr: AggrType::Emit,
+        result_needed: true,
+    };
+    let ctx = EventContext::new(nanotime(), None);
+    let mut event = literal!({}).into_static();
+    let mut state = literal!({}).into_static();
+    let mut meta = literal!({}).into_static();
 
-        let mut local = LocalStack::with_size(0);
+    let mut local = LocalStack::with_size(0);
 
-        let run_consts = $helper.consts.clone();
-        let run_consts = run_consts.run();
-        let env = Env {
-            context: &ctx,
-            consts: run_consts,
-            aggrs: &$helper.aggregates.clone(),
-            meta: &$helper.meta.clone(),
-            recursion_limit: 1024, // I'm feeling lucky in a power of two kind of way - shoot me
-        };
-        let got = $expr.run(eo, &env, &mut event, &mut state, &mut meta, &mut local);
-        match got {
-            Ok(Cont::Emit(value, _port)) => value,
-            Ok(Cont::Cont(value)) => value.into_owned(),
-            // FIXME this deserves a proper error
-            _otherwise => {
-                return error_generic(
-                    $expr,
-                    $expr,
-                    &"Illegal `with` parameter value specified".to_string(),
-                    &$helper.meta,
-                )
-            }
-        }
-    }};
+    let run_consts = helper.consts.clone();
+    let run_consts = run_consts.run();
+    let env = Env {
+        context: &ctx,
+        consts: run_consts,
+        aggrs: &helper.aggregates.clone(),
+        meta: &helper.meta.clone(),
+        recursion_limit: 1024, // I'm feeling lucky in a power of two kind of way - shoot me
+    };
+    let got = expr.run(eo, &env, &mut event, &mut state, &mut meta, &mut local);
+    match got {
+        Ok(Cont::Emit(value, _port)) => Ok(value),
+        Ok(Cont::Cont(value)) => Ok(value.into_owned()),
+        // FIXME this deserves a proper error
+        _otherwise => error_generic(
+            expr,
+            expr,
+            &"Illegal `with` parameter value specified".to_string(),
+            &helper.meta,
+        ),
+    }
 }
 
-/// Convenience to evaluate an expression at compile time so that
-/// evaluated results can be used during compilation
-#[macro_export]
-macro_rules! stateless_run_str {
-    ($helper:ident, $expr:expr) => {{
-        let eo = ExecOpts {
-            aggr: AggrType::Emit,
-            result_needed: true,
-        };
-        let ctx = EventContext::new(nanotime(), None);
-        let event = literal!({}).into_static();
-        let state = literal!({}).into_static();
-        let meta = literal!({}).into_static();
+/// Evaluate an interpolated literal string at compile time with an empty state context
+/// for use during compile time reduction
+/// # Errors
+/// If evaluation of the expression fails, or a legal value cannot be evaluated by result
+pub(crate) fn run_lit_str<'script, 'registry>(
+    helper: &Helper<'script, 'registry>,
+    literal: &StringLit<'script>,
+) -> Result<Cow<'script, str>> {
+    let eo = ExecOpts {
+        aggr: AggrType::Emit,
+        result_needed: true,
+    };
+    let ctx = EventContext::new(nanotime(), None);
+    let event = literal!({}).into_static();
+    let state = literal!({}).into_static();
+    let meta = literal!({}).into_static();
 
-        let local = LocalStack::with_size(0);
+    let local = LocalStack::with_size(0);
 
-        let run_consts = $helper.consts.clone();
-        let run_consts = run_consts.run();
-        let env = Env {
-            context: &ctx,
-            consts: run_consts,
-            aggrs: &$helper.aggregates.clone(),
-            meta: &$helper.meta.clone(),
-            recursion_limit: crate::recursion_limit(),
-        };
-        $expr.run(eo, &env, &event, &state, &meta, &local)
-    }};
+    let run_consts = helper.consts.clone();
+    let run_consts = run_consts.run();
+    let env = Env {
+        context: &ctx,
+        consts: run_consts,
+        aggrs: &helper.aggregates.clone(),
+        meta: &helper.meta.clone(),
+        recursion_limit: crate::recursion_limit(),
+    };
+    literal.run(eo, &env, &event, &state, &meta, &local)
 }
 
 pub(crate) fn up_params<'script, 'registry>(
@@ -178,7 +169,7 @@ pub(crate) fn up_params<'script, 'registry>(
     for (name, value) in params {
         let name = name.clone().up(helper)?.to_string();
         let expr = value.clone().up(helper)?;
-        let value = stateless_run_expr!(helper, &expr).clone_static();
+        let value = run_expr(helper, &expr)?.clone_static();
         mapped.insert(name, value);
     }
 
@@ -402,7 +393,7 @@ fn arg_spec_resolver<'script, 'registry>(
                 let moo: Cow<str> = Cow::owned(moo);
                 spec.push(moo.clone());
                 let value = value.up(helper)?;
-                let value = stateless_run_expr!(helper, &value);
+                let value = run_expr(helper, &value)?;
                 args.insert(moo, value);
             }
         }
@@ -624,7 +615,8 @@ impl<'script> Upable<'script> for FlowDeclRaw<'script> {
         for link in self.links {
             let from = match link.from {
                 DeployEndpointRaw::Legacy(string_url) => {
-                    let raw_url = stateless_run_str!(helper, string_url.up(helper)?);
+                    let literal = string_url.up(helper)?;
+                    let raw_url = run_lit_str(helper, &literal);
                     TremorUrl::parse(&raw_url?.to_string())?
                 }
                 DeployEndpointRaw::Troy(_modular_target) => {
@@ -634,7 +626,8 @@ impl<'script> Upable<'script> for FlowDeclRaw<'script> {
             };
             let to = match link.to {
                 DeployEndpointRaw::Legacy(string_url) => {
-                    let raw_url = stateless_run_str!(helper, string_url.up(helper)?);
+                    let literal = string_url.up(helper)?;
+                    let raw_url = run_lit_str(helper, &literal);
                     TremorUrl::parse(&raw_url?.to_string())?
                 }
                 DeployEndpointRaw::Troy(_modular_target) => {
