@@ -14,7 +14,6 @@
 
 use crate::api::prelude::*;
 use hashbrown::HashMap;
-use tremor_runtime::lifecycle::InstanceState;
 use tremor_runtime::repository::{BindingArtefact, RepoWrapper};
 use tremor_runtime::url::TremorUrl;
 
@@ -111,11 +110,10 @@ pub async fn spawn_instance(req: Request) -> Result<Response> {
     let result = world.link_binding(&url, decoded_data).await?.binding;
     let state = world.reg.start_binding(&url).await?;
 
-    match state {
-        InstanceState::Paused | InstanceState::Initialized | InstanceState::Running => {
-            reply(&req, result, StatusCode::Created)
-        }
-        InstanceState::Stopped => reply(&req, result, StatusCode::InternalServerError),
+    if state.is_stopped() {
+        reply(&req, result, StatusCode::InternalServerError)
+    } else {
+        reply(&req, result, StatusCode::Created)
     }
 }
 
