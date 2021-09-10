@@ -19,8 +19,9 @@ use super::{
     Registry, Result, Script, Serialize, Stmts, Upable, Value,
 };
 use super::{raw::BaseExpr, Consts};
-use crate::impl_expr_mid;
-use crate::{ast::eq::AstEq, impl_fqn};
+use crate::ast::base_ref::BaseRef;
+use crate::ast::eq::AstEq;
+use crate::{impl_expr_mid, impl_fqsn};
 use raw::WindowDefnRaw;
 
 /// A Tremor query

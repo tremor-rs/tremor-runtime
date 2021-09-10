@@ -29,6 +29,7 @@ use crate::ast::raw::ModuleRaw;
 use crate::ast::raw::StringLitRaw;
 use crate::ast::raw::WithExprsRaw;
 use crate::ast::AggrRegistry;
+use crate::ast::BaseRef;
 use crate::ast::Deploy;
 use crate::ast::DeployStmt;
 use crate::ast::Expr;
