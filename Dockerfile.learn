@@ -1,4 +1,4 @@
-FROM rust:1.54.0 as builder
+FROM rust:1.55.0 as builder
 
 RUN cargo install --features=ssl websocat
 
