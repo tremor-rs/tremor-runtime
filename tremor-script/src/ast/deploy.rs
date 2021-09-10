@@ -91,6 +91,9 @@ pub struct ConnectorDecl<'script> {
     pub args: Value<'script>,
     /// Internal / intrinsic builtin name
     pub builtin_kind: String,
+    /// Documentation comments
+    #[serde(skip)]
+    pub docs: Option<String>,
 }
 impl_expr_mid!(ConnectorDecl);
 impl_fqsn!(ConnectorDecl);
@@ -113,6 +116,9 @@ pub struct PipelineDecl<'script> {
     pub query_raw: QueryRaw<'script>,
     /// The pipeline query ( runnable with args injected )
     pub query: Query<'script>,
+    /// Documentation comments
+    #[serde(skip)]
+    pub docs: Option<String>,
 }
 impl_expr_mid!(PipelineDecl);
 impl_fqsn!(PipelineDecl);
@@ -131,6 +137,9 @@ pub struct FlowDecl<'script> {
     pub args: Value<'script>,
     /// Links between artefacts in the flow
     pub links: HashMap<TremorUrl, TremorUrl>,
+    /// Documentation comments
+    #[serde(skip)]
+    pub docs: Option<String>,
 }
 impl_expr_mid!(FlowDecl);
 impl_fqsn!(FlowDecl);
@@ -147,6 +156,9 @@ pub struct CreateStmt<'script> {
     pub id: String,
     /// Atomic unit of deployment
     pub atom: AtomOfDeployment<'script>,
+    /// Documentation comments
+    #[serde(skip)]
+    pub docs: Option<String>,
 }
 impl_expr_mid!(CreateStmt);
 impl_fqsn!(CreateStmt);
