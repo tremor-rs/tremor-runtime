@@ -24,6 +24,7 @@ use super::{
     Query, Registry, Result, ScriptDecl, ScriptStmt, Select, SelectStmt, Serialize, Stmt,
     StreamStmt, SubqueryDecl, SubqueryStmt, Upable, Value, WindowDecl, WindowKind,
 };
+use crate::ast::base_ref::BaseRef;
 use crate::ast::{
     node_id::NodeId,
     visitors::{ArgsRewriter, ExprReducer, GroupByExprExtractor, TargetEventRef},
@@ -171,12 +172,26 @@ impl<'script> Upable<'script> for StmtRaw<'script> {
                 }))
             }
             StmtRaw::Stream(stmt) => Ok(Stmt::Stream(stmt.up(helper)?)),
-            StmtRaw::OperatorDecl(stmt) => Ok(Stmt::OperatorDecl(stmt.up(helper)?)),
+            StmtRaw::OperatorDecl(stmt) => {
+                let stmt: OperatorDecl<'script> = stmt.up(helper)?;
+                helper
+                    .operators
+                    .insert(stmt.fqsn(&stmt.module), stmt.clone());
+                Ok(Stmt::OperatorDecl(stmt))
+            }
             StmtRaw::Operator(stmt) => Ok(Stmt::Operator(stmt.up(helper)?)),
-            StmtRaw::ScriptDecl(stmt) => Ok(Stmt::ScriptDecl(Box::new(stmt.up(helper)?))),
+            StmtRaw::ScriptDecl(stmt) => {
+                let stmt: ScriptDecl<'script> = stmt.up(helper)?;
+                helper.scripts.insert(stmt.fqsn(&stmt.module), stmt.clone());
+                Ok(Stmt::ScriptDecl(Box::new(stmt)))
+            }
             StmtRaw::Script(stmt) => Ok(Stmt::Script(stmt.up(helper)?)),
             StmtRaw::SubqueryDecl(stmt) => Ok(Stmt::SubqueryDecl(stmt.up(helper)?)),
-            StmtRaw::WindowDecl(stmt) => Ok(Stmt::WindowDecl(Box::new(stmt.up(helper)?))),
+            StmtRaw::WindowDecl(stmt) => {
+                let stmt: WindowDecl<'script> = stmt.up(helper)?;
+                helper.windows.insert(stmt.fqwn(&stmt.module), stmt.clone());
+                Ok(Stmt::WindowDecl(Box::new(stmt)))
+            }
             StmtRaw::ModuleStmt(ref m) => error_generic(m, m, &Self::BAD_MODULE, &helper.meta),
             StmtRaw::SubqueryStmt(ref sq) => error_generic(sq, sq, &Self::BAD_SUBQ, &helper.meta),
             StmtRaw::Expr(m) => error_generic(&*m, &*m, &Self::BAD_EXPR, &helper.meta),
@@ -600,6 +615,7 @@ pub struct ModuleStmtRaw<'script> {
 impl_expr!(ModuleStmtRaw);
 
 impl<'script> ModuleStmtRaw<'script> {
+    // TODO FIXME - this is a misleading error, rephrase
     const BAD_STMT: &'static str = "Can't have statements inside of query modules";
     pub(crate) fn define<'registry>(
         self,
@@ -632,16 +648,22 @@ impl<'script> ModuleStmtRaw<'script> {
                     helper.module.push(self.name.to_string());
                 }
                 StmtRaw::WindowDecl(stmt) => {
-                    stmt.up(&mut helper)?;
+                    let w = stmt.up(&mut helper)?;
+                    helper.windows.insert(w.fqwn(&helper.module), w);
+                    // stmt.up(&mut helper)?;
                 }
                 StmtRaw::ScriptDecl(stmt) => {
-                    stmt.up(&mut helper)?;
-                }
-                StmtRaw::OperatorDecl(stmt) => {
-                    stmt.up(&mut helper)?;
+                    let s = stmt.up(&mut helper)?;
+                    helper.scripts.insert(s.fqsn(&helper.module), s);
+                    // stmt.up(&mut helper)?;
                 }
                 StmtRaw::SubqueryDecl(stmt) => {
-                    stmt.up(helper)?;
+                    let o = stmt.up(&mut helper)?;
+                    helper.subquery_defns.insert(o.fqsqn(&helper.module), o);
+                }
+                StmtRaw::OperatorDecl(stmt) => {
+                    let o = stmt.up(&mut helper)?;
+                    helper.operators.insert(o.fqsn(&helper.module), o);
                 }
                 ref e => {
                     return error_generic(e, e, &Self::BAD_STMT, &helper.meta);

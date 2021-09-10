@@ -31,6 +31,7 @@ use tremor_runtime::postprocessor::Postprocessor;
 use tremor_runtime::preprocessor::Preprocessor;
 use tremor_runtime::repository::BindingArtefact;
 use tremor_script::ast::deploy::AtomOfDeployment;
+use tremor_script::ast::BaseRef;
 use tremor_script::ast::Helper;
 use tremor_script::deploy::Deploy;
 use tremor_script::highlighter::Error as HighlighterError;
