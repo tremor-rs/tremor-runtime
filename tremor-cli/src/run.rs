@@ -42,9 +42,6 @@ use tremor_script::{ctx::EventContext, lexer::Tokenizer};
 use tremor_script::{EventPayload, Value, ValueAndMeta};
 use tremor_value::literal;
 
-use tremor_script::interpreter::Env;
-use tremor_script::interpreter::ExecOpts;
-
 struct Ingress {
     is_interactive: bool,
     is_pretty: bool,
@@ -602,7 +599,7 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
     let args = Script::parse(&env.module_path, "args.tremor", args, &env.fun)?;
     let helper = Helper::new(&env.fun, &env.aggr, vec![]);
     let args: std::result::Result<Value, tremor_script::errors::Error> =
-        tremor_script::stateless_run_script!(helper, args.script.suffix());
+        tremor_script::run_script(&helper, args.script.suffix());
 
     let mut args = if let Ok(args) = args {
         if !args.is_object() {
