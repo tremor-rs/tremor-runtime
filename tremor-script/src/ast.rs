@@ -15,6 +15,8 @@
 pub(crate) mod analyzer;
 /// Base definition for expressions
 pub mod base_expr;
+/// Base definition for references
+pub mod base_ref;
 pub(crate) mod binary;
 /// Tremor Deploy ( troy ) AST
 pub mod deploy;
@@ -60,6 +62,7 @@ use crate::{
 };
 pub(crate) use analyzer::*;
 pub use base_expr::BaseExpr;
+pub use base_ref::BaseRef;
 use beef::Cow;
 pub use deploy::*;
 use halfbrown::HashMap;
