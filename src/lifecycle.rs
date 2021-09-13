@@ -27,6 +27,13 @@ pub enum InstanceState {
     Stopped,
 }
 
+impl InstanceState {
+    /// checks if the state is stopped
+    pub fn is_stopped(&self) -> bool {
+        *self == InstanceState::Stopped
+    }
+}
+
 //
 //         Start
 //       ┌────────────────────┐
