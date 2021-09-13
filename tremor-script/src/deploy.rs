@@ -40,15 +40,17 @@ where
     'script: 'event,
     'event: 'run,
 {
-    /// Extracts SRS  statements
-    #[must_use]
-    pub fn extract_stmts(&self) -> Vec<srs::DeployStmt> {
-        self.deploy.extract_stmts()
-    }
     /// Borrows the query
     #[must_use]
     pub fn suffix(&self) -> &ast::Deploy {
         self.deploy.suffix()
+    }
+
+    /// Retrieve deployment unit
+    /// # Errors
+    /// If the underlying structures do not resolve to a correctly deployable unit
+    pub fn as_deployment_unit(&self) -> Result<srs::UnitOfDeployment> {
+        self.deploy.as_deployment_unit()
     }
 
     /// Provides a `GraphViz` dot representation of the deployment graph

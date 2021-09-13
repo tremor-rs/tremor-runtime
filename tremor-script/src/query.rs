@@ -55,12 +55,13 @@ where
     ///   If the query fails to parse and convert correctly
     pub fn from_troy(
         src: &str,
-        query: crate::ast::Query,
+        deploy: &srs::Deploy,
+        query: &crate::srs::PipelineDecl,
     ) -> std::result::Result<Self, CompilerError> {
         let warnings = BTreeSet::new();
         let locals = 0;
         Ok(Self {
-            query: crate::srs::Query::new_from_ast(query),
+            query: crate::srs::Query::new_from_deploy(deploy, &query.id)?,
             source: src.to_string(),
             warnings,
             locals,
