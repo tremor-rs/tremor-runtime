@@ -13,12 +13,23 @@
 // limitations under the License.
 
 use crate::{
-    ast::{self, deploy, query},
+    ast::{self, query},
     errors::{Error, Result},
     prelude::*,
 };
 use halfbrown::HashMap;
 use std::{fmt::Debug, mem, pin::Pin, sync::Arc};
+
+/// A fully resolved deployable artefact
+#[derive(Clone, Debug, PartialEq)]
+pub enum AtomOfDeployment {
+    /// A deployable pipeline instance
+    Pipeline(PipelineDecl),
+    /// A deployable connector instance
+    Connector(ast::ConnectorDecl<'static>),
+    /// A deployable flow instance
+    Flow(ast::FlowDecl<'static>),
+}
 
 ///! This file includes our self referential structs
 
@@ -46,11 +57,20 @@ impl Debug for Deploy {
     }
 }
 
-/// Captures deployment ready artefacts for one troy unit of deployment
-#[derive(Debug)]
-pub struct UnitOfDeployment<'script> {
+/// Captures the deployable artefacts resolved from a top level troy definition
+/// This type isn't directly self-referential but it stores a mapping of nominal
+/// identities to deployoment creation statements that are self-referential
+///
+/// This represents a single atomic unit of deployment and can be composed of
+/// multiple artefacts ( connectors or pipelines)  that are interconnected through
+/// flow statements.
+///
+/// The `deploy` that build on these artefacts are the atoms of deployment that
+/// result in similarly named runtime counterparts being deployed against them.
+///
+pub struct UnitOfDeployment {
     /// Instances for this deployment unit
-    pub instances: HashMap<String, Box<ast::deploy::CreateStmt<'script>>>,
+    pub instances: HashMap<String, CreateStmt>,
 }
 
 impl Deploy {
@@ -94,26 +114,6 @@ impl Deploy {
         })
     }
 
-    /// Extracts SRS statements
-    ///
-    /// This clones all statements
-    #[must_use]
-    pub fn extract_stmts(&self) -> Vec<DeployStmt> {
-        // This is valid since we clone `raw` into each
-        // self referential struct, so we keep the data each
-        // SRS points to inside the SRS
-        self.script
-            .stmts
-            .iter()
-            .cloned()
-            .map(|structured| DeployStmt {
-                // THIS IS VERY IMPORTANT (a load bearing clone)
-                raw: self.raw.clone(),
-                structured,
-            })
-            .collect()
-    }
-
     /// Analyses a deployment file ( troy ) to determine if the
     /// specification is deployable.
     ///
@@ -131,18 +131,81 @@ impl Deploy {
         let mut instances = HashMap::new();
 
         for stmt in &self.script.stmts {
-            if let StmtKind::CreateStmt(stmt) = stmt {
-                instances.insert(stmt.id.to_string(), stmt.clone());
+            if let StmtKind::CreateStmt(ref stmt) = stmt {
+                let atom = match &stmt.atom {
+                    ast::deploy::AtomOfDeployment::Pipeline(atom) => {
+                        AtomOfDeployment::Pipeline(PipelineDecl::new_from_deploy(self, &atom.id)?)
+                    }
+                    ast::deploy::AtomOfDeployment::Connector(atom) => {
+                        AtomOfDeployment::Connector(atom.clone())
+                    }
+                    ast::deploy::AtomOfDeployment::Flow(atom) => {
+                        AtomOfDeployment::Flow(atom.clone())
+                    }
+                };
+                // let atom = CreateStmt::new_from_stmt(self, &stmt)?;
+                instances.insert(
+                    stmt.id.to_string(),
+                    CreateStmt {
+                        id: stmt.id.clone(),
+                        atom,
+                    },
+                );
             }
         }
 
-        Ok(UnitOfDeployment {
-            // connectors,
-            // pipelines,
-            // flows,
-            instances,
-        })
+        Ok(UnitOfDeployment { instances })
     }
+}
+
+/*
+====================================
+*/
+
+/// A troy create statement and it's attached source.
+///
+/// This type is not itself self-referential but contains
+/// deployment atoms which may in turn be self-referential.
+///
+pub struct CreateStmt {
+    /// Identity
+    pub id: String,
+    /// Atomic unit of deployment
+    pub atom: AtomOfDeployment,
+}
+
+impl CreateStmt {
+    // #[must_use]
+    // pub fn new_from_stmt(
+    //     origin: &Deploy,
+    //     stmt: &ast::CreateStmt,
+    // ) -> std::result::Result<Self, CompilerError> {
+    //     let atom = match &stmt.atom {
+    //         ast::deploy::AtomOfDeployment::Pipeline(atom) => AtomOfDeployment::Pipeline(
+    //             PipelineDecl::new_from_deploy(origin, atom.id.to_string())?,
+    //         ),
+    //         ast::deploy::AtomOfDeployment::Connector(atom) => {
+    //             let atom = unsafe {
+    //                 mem::transmute::<ast::ConnectorDecl<'_>, ast::ConnectorDecl<'static>>(
+    //                     atom.clone(),
+    //                 )
+    //             };
+    //             AtomOfDeployment::Connector(atom)
+    //         }
+
+    //         ast::deploy::AtomOfDeployment::Flow(atom) => {
+    //             let atom = unsafe {
+    //                 mem::transmute::<ast::FlowDecl<'_>, ast::FlowDecl<'static>>(atom.clone())
+    //             };
+    //             AtomOfDeployment::Flow(atom)
+    //         }
+    //     };
+
+    //     Ok(CreateStmt {
+    //         id: stmt.id.clone(),
+    //         atom,
+    //     })
+    // }
 }
 
 /*
@@ -224,7 +287,7 @@ impl Script {
 /// by the implementation logic to ensure they remain sane.
 ///
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct Query {
     /// The vector of raw input values
     raw: Vec<Arc<Pin<Vec<u8>>>>,
@@ -239,13 +302,29 @@ impl Debug for Query {
 }
 
 impl Query {
-    /// Creates a new Query with a pre-existing query
-    #[must_use]
-    pub fn new_from_ast(structured: ast::Query) -> Self {
-        Self {
-            raw: vec![Arc::new(Pin::new(vec![]))],
-            query: unsafe { mem::transmute(structured) },
-        }
+    /// Creates a new Query with a pre-existing query sourced from a troy
+    /// deployment where the query is embedded in pipeline statements
+    /// # Errors
+    /// If the query self-referential struct cannot be safely created by id from the deployment provided
+    pub fn new_from_deploy(origin: &Deploy, id: &str) -> std::result::Result<Self, CompilerError> {
+        let resolved = origin
+            .script
+            .pipelines
+            .values()
+            .find(|query| id == query.id)
+            .ok_or_else(|| CompilerError {
+                error: Error::from(format!("Invalid query for pipeline {}", &id).as_str()),
+                cus: vec![],
+            })?;
+        let query = resolved.query.clone();
+        Ok(Self {
+            /// We capture the origin - so that the pinned raw memory is cached
+            /// with our own self-reference composing a self-referential struct
+            /// by composition - by tracking the origin with the embedded query
+            /// of interest referential safety should be preserved
+            raw: origin.raw.clone(),
+            query: unsafe { mem::transmute(query) },
+        })
     }
 
     /// borrows the query
@@ -271,12 +350,18 @@ impl Query {
     {
         use ast::Query;
         let structured = f(&mut raw)?;
-        // This is where the magic happens
+        // We leverage pinning and atomic reference counting in this
+        // self referential struct so that we can safely transmute to
+        // and narrow down to the structural query type.
+        //
         // ALLOW: this is sound since we implement a self referential struct
         let structured = unsafe { mem::transmute::<Query<'_>, Query<'static>>(structured) };
-        // This is possibl as String::into_bytes just returns the `vec` of the string
+        // This is possible as String::into_bytes just returns the `vec` of the string
         let raw = Pin::new(raw.into_bytes());
         let raw = vec![Arc::new(raw)];
+        // This is a top level query and is not embedded - so we don't need to track the origin for referential safety
+        // Thus we do not need to track nor pin the origin as we are the top level self referential structure or origin
+        // ourselves
         Ok(Self {
             raw,
             query: structured,
@@ -362,6 +447,7 @@ impl DeployStmt {
     pub fn suffix(&self) -> &ast::DeployStmt {
         &self.structured
     }
+
     /// Creates a new statement from another SRS
     ///
     /// # Errors
@@ -466,16 +552,19 @@ impl Stmt {
 */
 
 /// A query declaration
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct PipelineDecl {
+    /// The identity of this pipeline
+    pub id: String,
     raw: Vec<Arc<Pin<Vec<u8>>>>,
-    script: ast::PipelineDecl<'static>,
+    //    ast: ast::PipelineDecl<'static>,
+    query: Query,
 }
 
 #[cfg(not(tarpaulin_include))] // this is a simple Debug implementation
 impl Debug for PipelineDecl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.script.fmt(f)
+        self.query.fmt(f)
     }
 }
 
@@ -486,33 +575,21 @@ impl PipelineDecl {
         &self.raw
     }
 
-    /// Creates a new decl from a statement
-    ///
+    /// Creates a new Pipeline with a pre-existing query sourced from a troy
+    /// deployment where the query is embedded in pipeline statements
     /// # Errors
-    /// if decl isn't a script declaration
-    pub fn try_new_from_stmt(decl: &DeployStmt) -> Result<Self> {
-        let raw = decl.raw.clone();
-
-        let script = match &decl.structured {
-            deploy::DeployStmt::PipelineDecl(script) => *script.clone(),
-            _other => return Err("Trying to turn a non query into a query operator".into()),
-        };
-
-        // FIXME - add support for const params to query
-        // script.query.consts.args = Value::object();
-        // if let Some(p) = &script.params {
-        //     // Set params from decl as meta vars
-        //     for (name, value) in p {
-        //         // We could clone here since we bind Script to defn_rentwrapped.stmt's lifetime
-        //         script
-        //             .query
-        //             .consts
-        //             .args
-        //             .try_insert(name.clone(), value.clone());
-        //     }
-        // }
-
-        Ok(Self { raw, script })
+    /// If the self-referential struct cannot be created safely from the deployment provided
+    pub fn new_from_deploy(origin: &Deploy, id: &str) -> std::result::Result<Self, CompilerError> {
+        let query = Query::new_from_deploy(origin, id)?;
+        Ok(Self {
+            /// We capture the origin - so that the pinned raw memory is cached
+            /// with our own self-reference composing a self-referential struct
+            /// by composition - by tracking the origin with the embedded query
+            /// of interest referential safety should be preserved
+            raw: origin.raw.clone(),
+            id: id.to_string(),
+            query,
+        })
     }
 
     /// Applies a statment to the decl

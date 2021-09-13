@@ -65,6 +65,19 @@ pub enum DeployStmt<'script> {
     CreateStmt(Box<CreateStmt<'script>>),
 }
 
+impl<'script> DeployStmt<'script> {
+    /// Returns the user provided `id` of this statement
+    #[must_use]
+    pub fn id(&self) -> String {
+        match self {
+            DeployStmt::FlowDecl(stmt) => stmt.id.clone(),
+            DeployStmt::PipelineDecl(stmt) => stmt.id.clone(),
+            DeployStmt::ConnectorDecl(stmt) => stmt.id.clone(),
+            DeployStmt::CreateStmt(stmt) => stmt.id.clone(),
+        }
+    }
+}
+
 #[cfg(not(tarpaulin_include))] // this is a simple passthrough
 impl<'script> BaseExpr for DeployStmt<'script> {
     fn mid(&self) -> usize {
