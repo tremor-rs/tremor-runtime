@@ -30,8 +30,6 @@ use tremor_runtime::config::Binding;
 use tremor_runtime::postprocessor::Postprocessor;
 use tremor_runtime::preprocessor::Preprocessor;
 use tremor_runtime::repository::BindingArtefact;
-use tremor_script::ast::deploy::AtomOfDeployment;
-use tremor_script::ast::BaseRef;
 use tremor_script::ast::Helper;
 use tremor_script::deploy::Deploy;
 use tremor_script::highlighter::Error as HighlighterError;
@@ -439,6 +437,7 @@ fn run_trickle_query(
 #[allow(clippy::too_many_lines, clippy::unwrap_used)]
 fn run_troy_source(_matches: &ArgMatches, src: &str, args: &Value) -> Result<()> {
     use tremor_script::ast;
+    use tremor_script::srs;
 
     env_logger::init();
 
@@ -475,18 +474,17 @@ fn run_troy_source(_matches: &ArgMatches, src: &str, args: &Value) -> Result<()>
     let unit = deployable.deploy.as_deployment_unit()?;
 
     let mut connectors: HashMap<String, ast::ConnectorDecl> = HashMap::new();
-    let mut pipelines: HashMap<String, ast::PipelineDecl> = HashMap::new();
+    let mut pipelines: HashMap<String, srs::PipelineDecl> = HashMap::new();
     let mut flows: HashMap<String, ast::FlowDecl> = HashMap::new();
 
     for (name, stmt) in unit.instances {
-        let _fqsn = stmt.fqsn(&stmt.module);
-        if let AtomOfDeployment::Pipeline(pipe) = &stmt.atom {
+        if let srs::AtomOfDeployment::Pipeline(ref pipe) = &stmt.atom {
             pipelines.insert(name.clone(), pipe.clone());
         }
-        if let AtomOfDeployment::Connector(connector) = &stmt.atom {
+        if let srs::AtomOfDeployment::Connector(ref connector) = stmt.atom {
             connectors.insert(name.clone(), connector.clone());
         }
-        if let AtomOfDeployment::Flow(flow) = &stmt.atom {
+        if let srs::AtomOfDeployment::Flow(ref flow) = stmt.atom {
             flows.insert(name.clone(), flow.clone());
         }
     }
@@ -506,7 +504,8 @@ fn run_troy_source(_matches: &ArgMatches, src: &str, args: &Value) -> Result<()>
                     &url,
                     false,
                     tremor_pipeline::query::Query(
-                        tremor_script::Query::from_troy(&raw, pipeline.query).unwrap(),
+                        tremor_script::Query::from_troy(&raw, &deployable.deploy, &pipeline)
+                            .unwrap(),
                     ),
                 )
                 .await

@@ -274,7 +274,7 @@ impl<'script> Upable<'script> for DeployStmtRaw<'script> {
                 Ok(DeployStmt::FlowDecl(Box::new(stmt)))
             }
             DeployStmtRaw::CreateStmt(stmt) => {
-                let stmt: CreateStmt<'script> = stmt.up(helper)?;
+                let stmt: CreateStmt = stmt.up(helper)?;
                 helper
                     .instances
                     .insert(stmt.fqsn(&stmt.module), stmt.clone());
@@ -348,7 +348,7 @@ impl<'script> DeployModuleStmtRaw<'script> {
                         .insert(stmt.fqsn(&stmt.module), stmt.clone());
                 }
                 DeployStmtRaw::CreateStmt(stmt) => {
-                    let stmt: CreateStmt<'script> = stmt.up(helper)?;
+                    let stmt: CreateStmt = stmt.up(helper)?;
                     helper
                         .instances
                         .insert(stmt.fqsn(&stmt.module), stmt.clone());
