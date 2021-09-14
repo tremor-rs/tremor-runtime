@@ -56,7 +56,9 @@ pub mod config;
 pub mod errors;
 /// Tremor function library
 pub mod functions;
-pub(crate) mod lifecycle;
+
+/// entities capturing artefact instance lifecycle
+pub mod lifecycle;
 /// Runtime metrics helper
 pub mod metrics;
 /// offramp stuff

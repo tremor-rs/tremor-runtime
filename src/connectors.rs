@@ -533,7 +533,6 @@ impl Manager {
                                     .into(),
                             )
                         };
-                        // TODO: only send result after sink/source have finished connecting?
                         // send back the connect result
                         if let Err(e) = result_tx.send(res).await {
                             error!("Error sending connect result: {}", e);
@@ -696,7 +695,7 @@ impl Manager {
                             &addr.url, &connector_state
                         );
                     }
-                    Msg::Drain(_) if connector_stat == ConnectorState::Draining => {
+                    Msg::Drain(_) if connector_state == ConnectorState::Draining => {
                         info!(
                             "[Connector::{}] Ignoring Drain Msg. Current state: {:?}",
                             &addr.url, &connector_state
@@ -707,7 +706,6 @@ impl Manager {
 
                         // notify connector that it should stop reading - so no more new events arrive at its source part
                         quiescence_beacon.stop_reading();
-
                         // let connector stop emitting anything to its source part - if possible here
                         connector.on_drain(&ctx).await;
                         connector_state = ConnectorState::Draining;

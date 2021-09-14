@@ -69,6 +69,7 @@ impl Instance for connectors::Addr {
     }
 
     async fn stop(&mut self, _world: &World, _id: &TremorUrl) -> Result<()> {
+        // we do not drain here, only in BindingArtefact::stop
         self.send(connectors::Msg::Stop).await
     }
 
@@ -132,8 +133,12 @@ impl Instance for BindingArtefact {
     }
 
     async fn stop(&mut self, _world: &World, _id: &TremorUrl) -> Result<()> {
-        // FIXME: quiescence
-        // stop all instances - traverse the links graph
+        // QUIESCENCE
+        // - send drain msg to all connectors
+        // - wait until
+        //   a) all connectors are drained (means all pipelines in between are also drained) or
+        //   b) we timed out
+        // - call stop on all instances
         let _sinks: HashSet<TremorUrl> = self
             .binding
             .links
