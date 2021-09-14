@@ -99,7 +99,8 @@ pub async fn patch_instance(req: Request) -> Result<Response> {
     let a_id = req.param("aid")?;
     let s_id = req.param("sid")?;
     let instance_url = TremorUrl::from_connector_instance(a_id, s_id)?;
-    let registry = &req.state().world.reg;
+    let system = &req.state().world;
+    let registry = &system.reg;
     let instance = registry
         .find_connector(&instance_url)
         .await?
@@ -127,8 +128,7 @@ pub async fn patch_instance(req: Request) -> Result<Response> {
         (_, Stopped) => {
             // stop - we need to return immediately here, as the
             // connector will be stopped and the addr is now invalid
-            registry.unpublish_connector(&instance.url).await?;
-            registry.stop_connector(&instance.url).await?;
+            system.unbind_connector(&instance.url).await?; // unbind will properly remove the instance and such
             let report = StatusReport {
                 status: Stopped,
                 ..current_state

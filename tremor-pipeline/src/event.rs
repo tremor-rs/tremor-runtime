@@ -55,6 +55,26 @@ impl Event {
         }
     }
 
+    /// create a drain signal event originating at the connector with the given `uid`
+    #[must_use]
+    pub fn signal_drain(uid: u64) -> Self {
+        Self {
+            ingest_ns: nanotime(),
+            kind: Some(SignalKind::Drain(uid)),
+            ..Self::default()
+        }
+    }
+
+    /// create start signal for the given connector `uid`
+    #[must_use]
+    pub fn signal_start(uid: u64) -> Self {
+        Self {
+            ingest_ns: nanotime(),
+            kind: Some(SignalKind::Start(uid)),
+            ..Self::default()
+        }
+    }
+
     /// turns the event in an insight given it's success
     #[must_use]
     pub fn insight(cb: CbAction, id: EventId, ingest_ns: u64, op_meta: OpMeta) -> Event {
