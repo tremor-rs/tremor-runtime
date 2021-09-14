@@ -241,6 +241,8 @@ pub enum CbAction {
     /// Fail backwards to a given ID
     /// All messages after and including this will be considered non delivered
     Fail,
+    /// answer to a `SignalKind::Drain(uid)` signal from a connector with the same uid
+    Drained(u64),
 }
 impl Default for CbAction {
     fn default() -> Self {
@@ -763,8 +765,8 @@ impl EventIdGenerator {
 )]
 pub enum SignalKind {
     // Lifecycle
-    /// Init signal
-    Init,
+    /// Start signal, containing the connector uid which just started
+    Start(u64),
     /// Shutdown Signal
     Shutdown,
     // Pause, TODO debug trace
@@ -774,6 +776,11 @@ pub enum SignalKind {
     Control,
     /// Periodic Tick
     Tick,
+    /// Drain Signal - this connection is being drained, there should be no events after this
+    /// This signal must be answered with a Drain contraflow event containing the same uid (u64)
+    /// this way a contraflow event will not be interpreted by connectors for which it isn't meant
+    /// reception of such Drain contraflow event notifies the signal sender that the intermittent pipeline is drained and can be safely disconnected
+    Drain(u64),
 }
 
 // We ignore this since it's a simple lookup table
