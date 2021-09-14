@@ -13,19 +13,22 @@
 // limitations under the License.
 
 use crate::{
-    cli::ServerCommand,
+    cli::{ServerCommand, ServerRun},
     errors::{Error, ErrorKind, Result},
-};
-use crate::{
-    cli::ServerRun,
     util::{get_source_kind, SourceKind},
 };
+use async_std::stream::StreamExt;
 use async_std::task;
+use futures::future;
+use signal_hook::consts::signal::*;
+use signal_hook::low_level::signal_name;
+use signal_hook_async_std::Signals;
 use std::io::Write;
 use std::sync::atomic::Ordering;
+use std::time::Duration;
 use tremor_api as api;
 use tremor_common::file;
-use tremor_runtime::system::World;
+use tremor_runtime::system::{ShutdownMode, World};
 use tremor_runtime::{self, version};
 
 impl ServerCommand {
@@ -85,6 +88,11 @@ impl ServerRun {
         // TODO: Allow configuring this for offramps and pipelines
         let (world, handle) = World::start().await?;
 
+        // signal handling
+        let signals = Signals::new(&[SIGTERM, SIGINT, SIGQUIT])?;
+        let signal_handle = signals.handle();
+        let signal_handler_task = async_std::task::spawn(handle_signals(signals, world.clone()));
+
         let mut yaml_files = Vec::with_capacity(16);
         // We process trickle files first
         for config_file in &self.artefacts {
@@ -114,19 +122,46 @@ impl ServerRun {
             }
         }
 
-        if !self.no_api {
+        let api_handle = if !self.no_api {
+            let host = self.api_host.clone();
             let app = api_server(&world);
-            eprintln!("Listening at: http://{}", &self.api_host);
-            info!("Listening at: http://{}", &self.api_host);
+            eprintln!("Listening at: http://{}", host);
+            info!("Listening at: http://{}", host);
 
-            if let Err(e) = app.listen(&self.api_host).await {
-                return Err(format!("API Error: {}", e).into());
+            async_std::task::spawn(async move {
+                if let Err(e) = app.listen(host).await {
+                    error!("API Error: {}", e);
+                }
+                warn!("API stopped.");
+            })
+        } else {
+            // dummy task never finishing
+            async_std::task::spawn(async move { future::pending().await })
+        };
+        match future::select(handle, api_handle).await {
+            future::Either::Left((manager_res, api_handle)) => {
+                // manager stopped
+                if let Err(e) = manager_res {
+                    error!("Manager failed with: {}", e);
+                }
+                api_handle.cancel().await;
             }
-            warn!("API stopped");
-            world.stop().await?;
-        }
+            future::Either::Right((_api_res, manager_handle)) => {
+                // api stopped
+                if let Err(e) = world
+                    .stop(ShutdownMode::Graceful {
+                        timeout: DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT,
+                    })
+                    .await
+                {
+                    error!("Error shutting down gracefully: {}", e);
+                }
+                manager_handle.cancel().await;
+            }
+        };
 
-        handle.await?;
+        signal_handle.close();
+        signal_handler_task.cancel().await;
         warn!("World stopped");
         Ok(())
     }
@@ -198,4 +233,43 @@ fn api_server(world: &World) -> tide::Server<api::State> {
         .patch(|r| handle_api_request(r, api::connector::patch_instance));
 
     app
+}
+
+const DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(2);
+
+async fn handle_signals(signals: Signals, world: World) {
+    let mut signals = signals.fuse();
+
+    while let Some(signal) = signals.next().await {
+        info!(
+            "Received SIGNAL: {}",
+            signal_name(signal).unwrap_or(&signal.to_string())
+        );
+        match signal {
+            SIGINT | SIGTERM => {
+                if let Err(_e) = world
+                    .stop(ShutdownMode::Graceful {
+                        timeout: DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT,
+                    })
+                    .await
+                {
+                    if let Err(e) = signal_hook::low_level::emulate_default_handler(signal) {
+                        error!("Error handling signal {}: {}", signal, e);
+                    }
+                }
+            }
+            SIGQUIT => {
+                if let Err(_e) = world.stop(ShutdownMode::Forceful).await {
+                    if let Err(e) = signal_hook::low_level::emulate_default_handler(signal) {
+                        error!("Error handling signal {}: {}", signal, e);
+                    }
+                }
+            }
+            signal => {
+                if let Err(e) = signal_hook::low_level::emulate_default_handler(signal) {
+                    error!("Error handling signal {}: {}", signal, e);
+                }
+            }
+        }
+    }
 }

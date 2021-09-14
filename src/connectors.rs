@@ -121,7 +121,7 @@ impl Addr {
 /// Messages a Connector instance receives and acts upon
 pub enum Msg {
     /// connect 1 or more pipelines to a port
-    Connect {
+    Link {
         /// port to which to connect
         port: Cow<'static, str>,
         /// pipelines to connect
@@ -130,7 +130,7 @@ pub enum Msg {
         result_tx: Sender<Result<()>>,
     },
     /// disconnect pipeline `id` from the given `port`
-    Disconnect {
+    Unlink {
         /// port from which to disconnect
         port: Cow<'static, str>,
         /// id of the pipeline to disconnect
@@ -471,7 +471,7 @@ impl Manager {
                             error!("[Connector::{}] Error sending status report {}.", &url, e);
                         }
                     }
-                    Msg::Connect {
+                    Msg::Link {
                         port,
                         pipelines: mut mapping,
                         result_tx,
@@ -511,7 +511,7 @@ impl Manager {
                             match addr.source.as_ref() {
                                 Some(source) => source
                                     .addr
-                                    .send(SourceMsg::Connect {
+                                    .send(SourceMsg::Link {
                                         port,
                                         pipelines: mapping,
                                     })
@@ -538,7 +538,7 @@ impl Manager {
                             error!("Error sending connect result: {}", e);
                         }
                     }
-                    Msg::Disconnect { port, id, tx } => {
+                    Msg::Unlink { port, id, tx } => {
                         let delete = pipelines.get_mut(&port).map_or(false, |port_pipes| {
                             port_pipes.retain(|(url, _)| url != &id);
                             port_pipes.is_empty()
@@ -552,7 +552,7 @@ impl Manager {
                             match addr.source.as_ref() {
                                 Some(source) => source
                                     .addr
-                                    .send(SourceMsg::Disconnect { port, id })
+                                    .send(SourceMsg::Unlink { port, id })
                                     .await
                                     .map_err(Error::from),
                                 None => Err(ErrorKind::InvalidDisconnect(
@@ -706,6 +706,7 @@ impl Manager {
 
                         // notify connector that it should stop reading - so no more new events arrive at its source part
                         quiescence_beacon.stop_reading();
+                        // FIXME: add stop_writing()
                         // let connector stop emitting anything to its source part - if possible here
                         connector.on_drain(&ctx).await;
                         connector_state = ConnectorState::Draining;
@@ -716,26 +717,29 @@ impl Manager {
                                 .addr
                                 .send(SourceMsg::Drain(addr.sender.clone()))
                                 .await?;
+                        } else {
+                            // proceed to the next step
+                            addr.send(Msg::SourceDrained).await?;
                         }
+
                         let d = Drainage::new(&addr, tx);
                         if d.all_drained() {
                             if let Err(e) = d.send_all_drained().await {
                                 error!(
-                                    "[Connector::{}] error signalling being fully drained",
-                                    &addr.url
+                                    "[Connector::{}] error signalling being fully drained: {}",
+                                    &addr.url, e
                                 );
                             }
                         }
                         drainage = Some(d);
                     }
                     Msg::SourceDrained => {
-                        if let Some(drainage) = drainage {
-                            // this will signal the entity requesting a drain a message if we are done here
+                        if let Some(drainage) = drainage.as_mut() {
                             drainage.set_source_drained();
                             if drainage.all_drained() {
                                 if let Err(e) = drainage.send_all_drained().await {
                                     error!(
-                                        "[Connector::{}] error signalling source drained: {}",
+                                        "[Connector::{}] Error signalling being fully drained: {}",
                                         &addr.url, e
                                     );
                                 }
@@ -749,20 +753,15 @@ impl Manager {
                         }
                     }
                     Msg::SinkDrained => {
-                        if let Some(drainage) = drainage {
+                        if let Some(drainage) = drainage.as_mut() {
                             drainage.set_sink_drained();
                             if drainage.all_drained() {
                                 if let Err(e) = drainage.send_all_drained().await {
                                     error!(
-                                        "[Connector::{}] error signalling sink drained: {}",
+                                        "[Connector::{}] Error signalling being fully drained: {}",
                                         &addr.url, e
                                     );
                                 }
-                            } else {
-                                error!(
-                                    "[Connector::{}] Something went wrong during Drain process.",
-                                    &addr.url
-                                );
                             }
                         }
                     }
@@ -821,20 +820,12 @@ impl Drainage {
         }
     }
 
-    async fn set_sink_drained(&mut self) -> Result<()> {
+    fn set_sink_drained(&mut self) {
         self.sink_drained = DrainState::Drained;
-        if self.all_drained() {
-            self.send_all_drained().await?;
-        }
-        Ok(())
     }
 
-    async fn set_source_drained(&mut self) -> Result<()> {
+    fn set_source_drained(&mut self) {
         self.source_drained = DrainState::Drained;
-        if self.all_drained() {
-            self.send_all_drained().await?;
-        }
-        Ok(())
     }
 
     fn all_drained(&self) -> bool {
