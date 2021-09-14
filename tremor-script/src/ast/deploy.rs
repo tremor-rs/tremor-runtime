@@ -30,6 +30,9 @@ pub(crate) mod raw;
 /// A Tremor deployment
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Deploy<'script> {
+    // TODO FIXME handle configuration directives for troy definitions
+    /// Configuration directives
+    pub directives: HashMap<String, Value<'script>>,
     /// Statements
     pub stmts: DeployStmts<'script>,
     /// Flow Definitions

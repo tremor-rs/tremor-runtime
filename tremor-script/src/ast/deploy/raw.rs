@@ -187,6 +187,16 @@ pub(crate) fn up_maybe_params<'script, 'registry>(
         .transpose()
 }
 
+fn up_config_directive_params<'script, 'registry>(
+    params: WithExprsRaw<'script>,
+    helper: &mut Helper<'script, 'registry>,
+) -> Result<HashMap<String, Value<'script>>> {
+    params
+        .into_iter()
+        .map(|(name, value)| Ok((name.to_string(), value.up(helper)?.try_into_value(helper)?)))
+        .collect()
+}
+
 #[derive(Debug, PartialEq, Serialize)]
 #[allow(clippy::module_name_repetitions)]
 pub struct DeployRaw<'script> {
@@ -219,6 +229,7 @@ impl<'script> DeployRaw<'script> {
         });
 
         Ok(Deploy {
+            directives: up_config_directive_params(self.config, helper)?,
             stmts,
             connectors: helper.connector_defns.clone(),
             pipelines: helper.pipeline_defns.clone(),
