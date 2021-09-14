@@ -16,6 +16,7 @@
 
 use crate::codec::{self, Codec};
 use crate::config::{Codec as CodecConfig, Connector as ConnectorConfig};
+use crate::connectors::Msg;
 use crate::errors::Result;
 use crate::permge::PriorityMerge;
 use crate::pipeline;
@@ -32,7 +33,7 @@ use hashbrown::HashMap;
 use simd_json::ValueAccess;
 use std::borrow::Borrow;
 use std::collections::btree_map::Entry;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::hash::Hash;
 use tremor_common::time::nanotime;
 use tremor_pipeline::{CbAction, Event, EventId, OpMeta, SignalKind, DEFAULT_STREAM_ID};
@@ -462,6 +463,8 @@ pub enum SinkMsg {
     Resume,
     /// stop the sink
     Stop,
+    /// drain this sink and notify the connector via the provided sender
+    Drain(Sender<Msg>),
 }
 
 /// Wrapper around all possible sink messages
@@ -628,6 +631,16 @@ impl EventSerializer {
     }
 }
 
+#[derive(Debug, PartialEq)]
+enum SinkState {
+    Initialized,
+    Running,
+    Paused,
+    Draining,
+    Drained,
+    Stopped,
+}
+
 pub(crate) struct SinkManager<S>
 where
     S: Sink,
@@ -638,11 +651,16 @@ where
     reply_rx: Receiver<AsyncSinkReply>,
     serializer: EventSerializer,
     metrics_reporter: MetricsSinkReporter,
-    /// tracking which operators all incoming events visited
+    /// tracking which operators incoming events visited
     merged_operator_meta: OpMeta,
     // pipelines connected to IN port
     pipelines: Vec<(TremorUrl, pipeline::Addr)>,
-    paused: bool,
+    // set of connector ids we received start signals from
+    starts_received: HashSet<u64>,
+    // set of connector ids we received drain signals from
+    drains_received: HashSet<u64>, // TODO: use a bitset for both?
+    drain_channel: Option<Sender<Msg>>,
+    state: SinkState,
 }
 
 impl<S> SinkManager<S>
@@ -665,11 +683,15 @@ where
             metrics_reporter,
             merged_operator_meta: OpMeta::default(),
             pipelines: Vec::with_capacity(1), // by default 1 connected to "in" port
-            paused: true,                     // instantiated in paused state
+            starts_received: HashSet::new(),
+            drains_received: HashSet::new(),
+            drain_channel: None,
+            state: Initialized,
         }
     }
     #[allow(clippy::too_many_lines)]
     async fn run(mut self) -> Result<()> {
+        use SinkState::*;
         let from_sink = self.reply_rx.map(SinkMsgWrapper::FromSink);
         let to_sink = self.rx.map(SinkMsgWrapper::ToSink);
         let mut from_and_to_sink_channel = PriorityMerge::new(from_sink, to_sink);
@@ -698,19 +720,70 @@ where
                             self.pipelines.retain(|(url, _)| url != &id);
                         }
                         // FIXME: only handle those if in the right state (see source part)
-                        SinkMsg::Start => self.sink.on_start(&mut self.ctx).await,
-                        SinkMsg::Resume => {
-                            self.paused = false;
+                        SinkMsg::Start if self.state == Initialized => {
+                            self.sink.on_start(&mut self.ctx).await;
+                        }
+                        SinkMsg::Start => {
+                            info!(
+                                "[Sink::{}] Ignoring Start message in {:?} state",
+                                &self.ctx.url, &self.state
+                            );
+                        }
+                        SinkMsg::Resume if self.state == Paused => {
+                            self.state = Running;
                             self.sink.on_resume(&mut self.ctx).await;
                         }
-                        SinkMsg::Pause => {
-                            self.paused = true;
+                        SinkMsg::Resume => {
+                            info!(
+                                "[Sink::{}] Ignoring Resume message in {:?} state",
+                                &self.ctx.url, &self.state
+                            );
+                        }
+                        SinkMsg::Pause if self.state == Running => {
+                            self.state == Paused;
                             self.sink.on_pause(&mut self.ctx).await;
+                        }
+                        SinkMsg::Pause => {
+                            info!(
+                                "[Sink::{}] Ignoring Pause message in {:?} state",
+                                &self.ctx.url, &self.state
+                            );
                         }
                         SinkMsg::Stop => {
                             self.sink.on_stop(&mut self.ctx).await;
                             // exit control plane
                             break;
+                        }
+                        SinkMsg::Drain(sender) if self.state == Draining => {
+                            info!(
+                                "[Sink::{}] Ignoring Drain message in {:?} state",
+                                &self.ctx.url, &self.state
+                            );
+                        }
+                        SinkMsg::Drain(sender) if self.state == Drained => {
+                            if let Err(_) = sender.send(Msg::SinkDrained).await {
+                                error!(
+                                    "[Sink::{}] Error sending SinkDrained message.",
+                                    &self.ctx.url
+                                );
+                            }
+                        }
+                        SinkMsg::Drain(sender) => {
+                            // send message back if we received Drain signal from all input pipelines
+                            self.state = Draining;
+                            self.drain_channel = Some(sender);
+                            if self.drains_received.is_superset(&self.starts_received) {
+                                // we are all drained
+                                self.state = Drained;
+                                if let Some(sender) = self.drain_channel.take() {
+                                    if let Err(_) = sender.send(Msg::SourceDrained).await {
+                                        error!(
+                                            "[Sink::{}] Error sending SinkDrained message",
+                                            &self.ctx.url
+                                        );
+                                    }
+                                }
+                            }
                         }
                         SinkMsg::ConnectionEstablished => {
                             let cf = Event::cb_open(nanotime(), self.merged_operator_meta.clone());
@@ -736,7 +809,6 @@ where
                             // FIXME: fix additional clones here for merge
                             self.merged_operator_meta.merge(event.op_meta.clone());
                             let transactional = event.transactional;
-                            // TODO: increment event in metric
                             let start = nanotime();
                             let res = self
                                 .sink
@@ -773,6 +845,35 @@ where
                             };
                         }
                         SinkMsg::Signal { signal } => {
+                            // special treatment
+                            match signal.kind {
+                                Some(SignalKind::Drain(source_uid)) => {
+                                    // account for all received drains per source
+                                    self.drains_received.insert(source_uid);
+                                    // check if all "reachable sources" did send a `Drain` signal
+                                    if self.drains_received.is_superset(&self.starts_received) {
+                                        self.state = Drained;
+                                        if let Some(sender) = self.drain_channel.take() {
+                                            if let Err(_) = sender.send(Msg::SinkDrained).await {
+                                                error!(
+                                                    "[Sink::{}] Error sending SinkDrained message",
+                                                    &self.ctx.url
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    // send a cb Drained contraflow message back
+                                    let cf = ContraflowBuilder::from(&signal)
+                                        .into_cb(CbAction::Drained(source_uid));
+                                    send_contraflow(&self.pipelines, &self.ctx.url, cf).await
+                                }
+                                Some(SignalKind::Start(source_uid)) => {
+                                    self.starts_received.insert(source_uid);
+                                }
+                                _ => {} // ignore
+                            }
+                            // hand it over to the sink impl
                             let cf_builder = ContraflowBuilder::from(&signal);
                             let start = nanotime();
                             let res = self

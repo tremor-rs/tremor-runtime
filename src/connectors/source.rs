@@ -24,6 +24,7 @@ use tremor_script::{EventPayload, ValueAndMeta};
 
 use crate::codec::{self, Codec};
 use crate::config::{Codec as CodecConfig, Connector as ConnectorConfig};
+use crate::connectors::Msg;
 use crate::errors::{Error, Result};
 use crate::pipeline;
 use crate::preprocessor::{make_preprocessors, preprocess, Preprocessors};
@@ -61,7 +62,6 @@ pub enum SourceMsg {
     ConnectionEstablished,
     /// Circuit Breaker Contraflow Event
     Cb(CbAction, EventId),
-    // TODO: fill those
     /// start the source
     Start,
     /// pause the source
@@ -70,6 +70,8 @@ pub enum SourceMsg {
     Resume,
     /// stop the source
     Stop,
+    /// drain the source - bears a sender for sending out a SourceDrained status notification
+    Drain(Sender<Msg>),
 }
 
 /// reply from `Source::on_event`
@@ -145,6 +147,9 @@ pub trait Source: Send {
     /// called when the source is stopped. This happens only once in the whole source lifecycle, as the very last callback
     async fn on_stop(&mut self, _ctx: &mut SourceContext) {}
 
+    /// called when the source is drained - it should stop reading data from the external connection and only drain the data, that is in flight already
+    async fn on_drain(&mut self, _ctx: &mut SourceContext) {}
+
     // circuit breaker callbacks
     /// called when we receive a `close` Circuit breaker event from any connected pipeline
     /// Expected reaction is to pause receiving messages, which is handled automatically by the runtime
@@ -172,12 +177,6 @@ pub trait Source: Send {
 
     /// Is this source transactional or can acks/fails be ignored
     fn is_transactional(&self) -> bool {
-        false
-    }
-
-    /// if `true` this source is polled for data even if it is not connected to
-    /// any pipeline and is not terminated if it is completely disconnected.
-    fn keep_alive(&self) -> bool {
         false
     }
 }
@@ -219,6 +218,7 @@ impl Source for ChannelSource {
         }
     }
 
+    /// this source is not handling acks/fails
     fn is_transactional(&self) -> bool {
         false
     }
@@ -386,6 +386,22 @@ struct StreamState {
     preprocessors: Preprocessors,
 }
 
+#[derive(Debug, PartialEq)]
+enum SourceState {
+    Initialized,
+    Running,
+    Paused,
+    Draining,
+    Drained,
+    Stopped,
+}
+
+impl SourceState {
+    fn should_pull_data(&self) -> bool {
+        *self == SourceState::Running || *self == SourceState::Draining
+    }
+}
+
 /// entity driving the source task
 /// and keeping the source state around
 pub(crate) struct SourceManager<S>
@@ -399,14 +415,13 @@ where
     pipelines_err: Vec<(TremorUrl, pipeline::Addr)>,
     streams: Streams,
     metrics_reporter: SourceReporter,
-    // used for both explicitly pausing and CB close/open
+    // `Paused` is used for both explicitly pausing and CB close/open
     // this way we can explicitly resume a Cb triggered source if need be
     // but also an explicitly paused source might receive a Cb open and continue sending data :scream:
-    paused: bool,
-    is_transactional: bool, // TODO: add metrics reporter
-    /// keep the source alive if not connected to any pipeline
-    /// and pull data even if not connected to any pipeline
-    keep_alive: bool,
+    state: SourceState,
+    is_transactional: bool,
+    connector_channel: Option<Sender<Msg>>,
+    expected_drained: usize,
 }
 
 impl<S> SourceManager<S>
@@ -426,8 +441,6 @@ where
         } = builder;
         let is_transactional = source.is_transactional();
 
-        // if true pull data even if nothing is connected and not terminate if completely disconnected
-        let keep_alive = source.keep_alive();
         Self {
             source,
             ctx,
@@ -436,9 +449,9 @@ where
             metrics_reporter: source_metrics_reporter,
             pipelines_out: Vec::with_capacity(1),
             pipelines_err: Vec::with_capacity(1),
-            paused: false,
+            state: SourceState::Initialized,
             is_transactional,
-            keep_alive,
+            connector_channel: None,
         }
     }
 
@@ -446,14 +459,15 @@ where
     ///
     /// - we are paused
     /// - we have some control plane messages (here we don't need to wait)
-    /// - if we have no pipelines connected and the managed source is not marked as `keep_alive`
+    /// - if we have no pipelines connected
     fn needs_control_plane_msg(&self) -> bool {
-        self.paused || !self.rx.is_empty() || (self.pipelines_out.is_empty() && !self.keep_alive)
+        self.state == SourceState::Paused || !self.rx.is_empty() || self.pipelines_out.is_empty()
     }
 
     /// returns `Ok(true)` if this source should be terminated
     // FIXME: return meaningful enum
     async fn control_plane(&mut self) -> Result<bool> {
+        use SourceState::*;
         loop {
             if !self.needs_control_plane_msg() {
                 return Ok(false);
@@ -495,22 +509,70 @@ where
                             return Ok(true);
                         }
                     }
-                    SourceMsg::Start => {
-                        self.paused = false;
+                    SourceMsg::Start if self.state == Initialized => {
+                        self.state = Running;
                         self.source.on_start(&mut self.ctx).await;
+
+                        if let Err(e) = self.send_signal(Event::signal_start(self.ctx.uid)).await {
+                            error!(
+                                "[Source::{}] Error sending start signal: {}",
+                                &self.ctx.url, e
+                            );
+                        }
                     }
-                    SourceMsg::Resume => {
-                        self.paused = false;
+                    SourceMsg::Start => {
+                        info!(
+                            "[Source::{}] Ignoring Start msg in {:?} state",
+                            &self.ctx.url, &self.state
+                        );
+                    }
+                    SourceMsg::Resume if self.state == Paused => {
+                        self.state = Running;
                         self.source.on_resume(&mut self.ctx).await;
                     }
-                    SourceMsg::Pause => {
+                    SourceMsg::Resume => {
+                        info!(
+                            "[Source::{}] Ignoring Resume msg in {:?} state",
+                            &self.ctx.url, &self.state
+                        );
+                    }
+                    SourceMsg::Pause if self.state == Running => {
                         // TODO: execute pause strategy chosen by source / connector / configured by user
-                        self.paused = true;
+                        self.state = Paused;
                         self.source.on_pause(&mut self.ctx).await;
                     }
+                    SourceMsg::Pause => {
+                        info!(
+                            "[Source::{}] Ignoring Pause msg in {:?} state",
+                            &self.ctx.url, &self.state
+                        );
+                    }
                     SourceMsg::Stop => {
+                        self.state = Stopped;
                         self.source.on_stop(&mut self.ctx).await;
                         return Ok(true);
+                    }
+                    SourceMsg::Drain(sender) if self.state == Draining => {
+                        info!(
+                            "[Source::{}] Ignoring incoming Drain message in {:?} state",
+                            &self.ctx.url, &self.state
+                        )
+                    }
+                    SourceMsg::Drain(sender) if self.state == Drained => {
+                        if let Err(_) = sender.send(Msg::SourceDrained).await {
+                            error!(
+                                "[Source::{}] Error sending SourceDrained message",
+                                &self.ctx.url
+                            );
+                        }
+                    }
+                    SourceMsg::Drain(drained_sender) => {
+                        // At this point the connector has advised all reading from external connections to stop via the `QuiescenceBeacon`
+                        // We change the source state to `Draining` and wait for `SourceReply::Empty` as we drain out everything that might be in flight
+                        // when reached the `Empty` point, we emit the `Drain` signal and wait for the CB answer (one for each connected pipeline)
+                        self.connector_channel = Some(drained_sender);
+                        self.state = Draining;
+                        self.source.on_drain(&mut self.ctx).await;
                     }
                     SourceMsg::ConnectionLost => {
                         self.source.on_connection_lost(&mut self.ctx).await;
@@ -531,16 +593,40 @@ where
                     SourceMsg::Cb(CbAction::Close, _id) => {
                         // TODO: execute pause strategy chosen by source / connector / configured by user
                         self.source.on_cb_close(&mut self.ctx).await;
-                        self.paused = true; // handling
+                        self.state = Paused;
                     }
                     SourceMsg::Cb(CbAction::Open, _id) => {
                         self.source.on_cb_open(&mut self.ctx).await;
-                        self.paused = false;
+                        self.state = Running;
+                    }
+                    SourceMsg::Cb(CbAction::Drained(uid), _id) => {
+                        // only account for Drained CF which we caused
+                        // as CF is sent back the DAG to all destinations
+                        if uid == self.ctx.uid {
+                            self.expected_drained -= 1;
+                            if self.expected_drained <= 0 {
+                                // we received 1 drain CB event per connected pipeline (hopefully)
+                                if let Some(connector_channel) = self.connector_channel.as_ref() {
+                                    if let Err(_) = connector_channel.send(Msg::SourceDrained).await
+                                    {
+                                        error!("[Source::{}] Error sending SourceDrained message to Connector", &self.ctx.url);
+                                    }
+                                }
+                            }
+                        }
                     }
                     SourceMsg::Cb(CbAction::None, _id) => {}
                 }
             }
         }
+    }
+
+    /// send a signal to all connected pipelines
+    async fn send_signal(&self, signal: Event) -> Result<()> {
+        for (_url, addr) in self.pipelines_out.iter().chain(self.pipelines_err.iter()) {
+            addr.send(pipeline::Msg::Signal(signal.clone())).await?;
+        }
+        Ok(())
     }
 
     /// send events to pipelines
@@ -645,7 +731,7 @@ where
                 return Ok(());
             }
 
-            if !self.paused && !self.pipelines_out.is_empty() {
+            if self.state.should_pull_data() && !self.pipelines_out.is_empty() {
                 match self.source.pull_data(pull_counter, &self.ctx).await {
                     Ok(SourceReply::Data {
                         origin_uri,
@@ -749,7 +835,25 @@ where
                     } // failing here only due to misconfig, in that case, bail out, #yolo
                     Ok(SourceReply::EndStream(stream_id)) => self.streams.end_stream(stream_id),
                     Ok(SourceReply::Empty(wait_ms)) => {
-                        task::sleep(Duration::from_millis(wait_ms)).await;
+                        if self.state == SourceState::Draining {
+                            // this source has been fully drained
+                            self.state = SourceState::Drained;
+                            // send Drain signal
+                            let signal = Event::signal_drain(self.ctx.uid);
+                            if let Err(e) = self.send_signal(signal).await {
+                                error!(
+                                    "[Source::{}] Error sending DRAIN signal: {}",
+                                    &self.ctx.url, e
+                                );
+                            }
+                            // if we get a disconnect in between we might never receive every drain CB
+                            // but we will stop everything forcefully after a certain timeout at some point anyways
+                            self.expected_drained =
+                                self.pipelines_err.len() + self.pipelines_out.len();
+                        } else {
+                            // wait for the given ms
+                            task::sleep(Duration::from_millis(wait_ms)).await;
+                        }
                     }
                     Err(e) => {
                         warn!("[Source::{}] Error pulling data: {}", &self.ctx.url, e);
