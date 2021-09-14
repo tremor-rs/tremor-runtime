@@ -27,6 +27,7 @@ clap_complete = "3"
 difference = "2"
 dirs-next = "2"
 env_logger = "0.9.0"
+futures = "0.3"
 halfbrown = "0.1"
 http-types = "2.12"
 # jemallocator = {version = "0.3", optional = false}
@@ -35,6 +36,8 @@ log4rs = "1.0.0"
 serde = "1"
 serde_derive = "1"
 serde_yaml = "0.8"
+signal-hook = "0.3"
+signal-hook-async-std = "0.2"
 simd-json = { version = "0.4", features = ["known-key"] }
 # we need to stick with 0.2.26 as it includes its own libc
 # which allows us to build on older systems like centos 7
