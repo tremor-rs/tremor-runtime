@@ -108,6 +108,14 @@ impl Addr {
         }
         Ok(())
     }
+
+    fn has_source(&self) -> bool {
+        self.source.is_some()
+    }
+
+    fn has_sink(&self) -> bool {
+        self.sink.is_some()
+    }
 }
 
 /// Messages a Connector instance receives and acts upon
@@ -145,6 +153,16 @@ pub enum Msg {
     Pause,
     /// resume the connector after a pause
     Resume,
+    /// Drain events from this connector
+    ///
+    /// - stop reading events from external connections
+    /// - decline events received via the sink part
+    /// - wait for drainage to be finished
+    Drain(async_std::channel::Sender<Result<()>>),
+    /// notify this connector that its source part has been drained
+    SourceDrained,
+    /// notify this connector that its sink part has been drained
+    SinkDrained,
     /// stop the connector
     Stop,
     /// request a status report
@@ -363,6 +381,7 @@ impl Manager {
         let (msg_tx, msg_rx) = bounded(self.qsize);
 
         let mut connectivity = Connectivity::Disconnected;
+        let mut quiescence_beacon = QuiescenceBeacon::default();
 
         let source_metrics_reporter = SourceReporter::new(
             url.clone(),
@@ -416,13 +435,12 @@ impl Manager {
         let mut reconnect: Reconnect = Reconnect::new(&addr, config.reconnect);
         let send_addr = addr.clone();
         let mut connector_state = ConnectorState::Initialized;
-        let mut quiescence_beacon = QuiescenceBeacon::default();
+        let mut drainage = None;
         // TODO: add connector metrics reporter (e.g. for reconnect attempts, cb's received, uptime, etc.)
         task::spawn::<_, Result<()>>(async move {
             // typical 1 pipeline connected to IN, OUT, ERR
             let mut pipelines: HashMap<Cow<'static, str>, Vec<(TremorUrl, pipeline::Addr)>> =
                 HashMap::with_capacity(3);
-
             // connector control plane loop
             while let Ok(msg) = msg_rx.recv().await {
                 match msg {
@@ -566,7 +584,7 @@ impl Manager {
                     }
                     Msg::ConnectionLost => {
                         // react on the connection being lost
-                        // immediately try to reconnect.
+                        // immediately try to reconnect if we are not in draining state.
                         //
                         // TODO: this might lead to very fast retry loops if the connection is established as connector.connect returns successful
                         //       but in the next instant fails and sends this message.
@@ -575,8 +593,11 @@ impl Manager {
                         addr.send_sink(SinkMsg::ConnectionLost).await?;
                         addr.send_source(SourceMsg::ConnectionLost).await?;
 
-                        // reconnect
-                        addr.sender.send(Msg::Reconnect).await?;
+                        // reconnect if running - wait with reconnect if paused (until resume)
+                        if connector_state == ConnectorState::Running {
+                            info!("[Connector::{}] Triggering reconnect.", &addr.url);
+                            addr.sender.send(Msg::Reconnect).await?;
+                        }
                     }
                     Msg::Reconnect => {
                         // reconnect if we are below max_retries, otherwise bail out and fail the connector
@@ -653,12 +674,19 @@ impl Manager {
                     }
                     Msg::Resume if connector_state == ConnectorState::Paused => {
                         info!("[Connector::{}] Resuming...", &addr.url);
-                        // TODO: resume
                         connector.on_resume(&ctx).await;
                         connector_state = ConnectorState::Running;
 
                         addr.send_source(SourceMsg::Resume).await?;
                         addr.send_sink(SinkMsg::Resume).await?;
+
+                        if connectivity == Connectivity::Disconnected {
+                            info!(
+                                "[Connector::{}] Triggering reconnect as part of resume.",
+                                &addr.url
+                            );
+                            addr.send(Msg::Reconnect).await?;
+                        }
 
                         info!("[Connector::{}] Resumed.", &addr.url);
                     }
@@ -668,9 +696,80 @@ impl Manager {
                             &addr.url, &connector_state
                         );
                     }
+                    Msg::Drain(_) if connector_stat == ConnectorState::Draining => {
+                        info!(
+                            "[Connector::{}] Ignoring Drain Msg. Current state: {:?}",
+                            &addr.url, &connector_state
+                        );
+                    }
+                    Msg::Drain(tx) => {
+                        info!("[Connector::{}] Draining...", &addr.url);
+
+                        // notify connector that it should stop reading - so no more new events arrive at its source part
+                        quiescence_beacon.stop_reading();
+
+                        // let connector stop emitting anything to its source part - if possible here
+                        connector.on_drain(&ctx).await;
+                        connector_state = ConnectorState::Draining;
+
+                        // notify source to drain the source channel and then send the drain signal
+                        if let Some(source) = addr.source.as_ref() {
+                            source
+                                .addr
+                                .send(SourceMsg::Drain(addr.sender.clone()))
+                                .await?;
+                        }
+                        let d = Drainage::new(&addr, tx);
+                        if d.all_drained() {
+                            if let Err(e) = d.send_all_drained().await {
+                                error!(
+                                    "[Connector::{}] error signalling being fully drained",
+                                    &addr.url
+                                );
+                            }
+                        }
+                        drainage = Some(d);
+                    }
+                    Msg::SourceDrained => {
+                        if let Some(drainage) = drainage {
+                            // this will signal the entity requesting a drain a message if we are done here
+                            drainage.set_source_drained();
+                            if drainage.all_drained() {
+                                if let Err(e) = drainage.send_all_drained().await {
+                                    error!(
+                                        "[Connector::{}] error signalling source drained: {}",
+                                        &addr.url, e
+                                    );
+                                }
+                            } else {
+                                // notify sink to go into DRAIN state
+                                // flush all events until we received a drain signal from all inputs
+                                if let Some(sink) = addr.sink.as_ref() {
+                                    sink.addr.send(SinkMsg::Drain(addr.sender.clone())).await?;
+                                }
+                            }
+                        }
+                    }
+                    Msg::SinkDrained => {
+                        if let Some(drainage) = drainage {
+                            drainage.set_sink_drained();
+                            if drainage.all_drained() {
+                                if let Err(e) = drainage.send_all_drained().await {
+                                    error!(
+                                        "[Connector::{}] error signalling sink drained: {}",
+                                        &addr.url, e
+                                    );
+                                }
+                            } else {
+                                error!(
+                                    "[Connector::{}] Something went wrong during Drain process.",
+                                    &addr.url
+                                );
+                            }
+                        }
+                    }
                     Msg::Stop => {
                         info!("[Connector::{}] Stopping...", &addr.url);
-                        // TODO: stop
                         connector.on_stop(&ctx).await;
                         connector_state = ConnectorState::Stopped;
 
@@ -694,6 +793,63 @@ impl Manager {
     }
 }
 
+#[derive(Debug, PartialEq)]
+enum DrainState {
+    None,
+    Expect,
+    Drained,
+}
+
+struct Drainage {
+    tx: Sender<Result<()>>,
+    source_drained: DrainState,
+    sink_drained: DrainState,
+}
+
+impl Drainage {
+    fn new(addr: &Addr, tx: Sender<Result<()>>) -> Self {
+        Self {
+            tx,
+            source_drained: if addr.has_source() {
+                DrainState::Expect
+            } else {
+                DrainState::None
+            },
+            sink_drained: if addr.has_sink() {
+                DrainState::Expect
+            } else {
+                DrainState::None
+            },
+        }
+    }
+
+    async fn set_sink_drained(&mut self) -> Result<()> {
+        self.sink_drained = DrainState::Drained;
+        if self.all_drained() {
+            self.send_all_drained().await?;
+        }
+        Ok(())
+    }
+
+    async fn set_source_drained(&mut self) -> Result<()> {
+        self.source_drained = DrainState::Drained;
+        if self.all_drained() {
+            self.send_all_drained().await?;
+        }
+        Ok(())
+    }
+
+    fn all_drained(&self) -> bool {
+        // None and Drained are valid here
+        self.source_drained != DrainState::Expect && self.sink_drained != DrainState::Expect
+    }
+
+    async fn send_all_drained(&self) -> Result<()> {
+        self.tx.send(Ok(())).await?;
+        Ok(())
+    }
+}
+
 /// state of a connector
 #[derive(Debug, PartialEq, Serialize, Deserialize, Copy, Clone)]
 #[serde(rename_all = "lowercase")]
@@ -706,6 +862,8 @@ pub enum ConnectorState {
     Paused,
     /// connector was stopped
     Stopped,
+    /// Draining - getting rid of in-flight events and avoid emitting new ones
+    Draining,
     /// connector failed to start
     Failed,
 }
@@ -717,6 +875,7 @@ impl Display for ConnectorState {
             Self::Running => "running",
             Self::Paused => "paused",
             Self::Stopped => "stopped",
+            Self::Draining => "draining",
             Self::Failed => "failed",
         })
     }
@@ -731,7 +890,7 @@ pub struct ConnectorContext {
 }
 
 /// describes connectivity state of the connector
-#[derive(Debug, Serialize, Copy, Clone)]
+#[derive(Debug, Serialize, Copy, Clone, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum Connectivity {
     /// connector is connected
@@ -803,6 +962,13 @@ pub trait Connector: Send {
     async fn on_pause(&mut self, _ctx: &ConnectorContext) {}
     /// called when the connector resumes
     async fn on_resume(&mut self, _ctx: &ConnectorContext) {}
+
+    /// Drain
+    ///
+    /// Ensure no new events arrive at the source part of this connector when this function returns
+    /// So we can safely send the `Drain` signal.
+    async fn on_drain(&mut self, _ctx: &ConnectorContext) {}
+
     /// called when the connector is stopped
     async fn on_stop(&mut self, _ctx: &ConnectorContext) {}
 
