@@ -186,7 +186,7 @@ impl Source for Int {
 #[cfg(test)]
 mod tests {
     use crate::onramp::Builder;
-    use crate::source::unix_socket::{Builder as UnixSocketBuilder, Config, Int, UnixSocket};
+    use crate::source::unix_socket::{Builder as UnixSocketBuilder, Config, Int};
     use crate::url::TremorUrl;
     use tremor_value::literal;
 
