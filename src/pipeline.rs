@@ -165,7 +165,6 @@ impl Dest {
                 }
             }
             Self::LinkedOnramp(_addr) => {
-                // TODO implement!
                 //addr.send(onramp::Msg::Signal(signal)).await?
             }
             Self::Connector(addr) => {
@@ -230,11 +229,11 @@ pub(crate) struct Manager {
 #[inline]
 async fn send_events(eventset: &mut Eventset, dests: &mut Dests) -> Result<()> {
     for (output, event) in eventset.drain(..) {
-        if let Some(dest) = dests.get_mut(&output) {
-            if let Some((last, rest)) = dest.split_last_mut() {
-                for (id, offramp) in rest {
+        if let Some(destinations) = dests.get_mut(&output) {
+            if let Some((last, rest)) = destinations.split_last_mut() {
+                for (id, dest) in rest {
                     let port = id.instance_port_required()?.to_string().into();
-                    offramp.send_event(port, event.clone()).await?;
+                    dest.send_event(port, event.clone()).await?;
                 }
                 let last_port = last.0.instance_port_required()?.to_string().into();
                 last.1.send_event(last_port, event).await?;
@@ -246,16 +245,16 @@ async fn send_events(eventset: &mut Eventset, dests: &mut Dests) -> Result<()> {
 
 #[inline]
 async fn send_signal(own_id: &TremorUrl, signal: Event, dests: &mut Dests) -> Result<()> {
-    let mut offramps = dests.values_mut().flatten();
-    let first = offramps.next();
-    for (id, offramp) in offramps {
+    let mut destinations = dests.values_mut().flatten();
+    let first = destinations.next();
+    for (id, dest) in destinations {
         if id != own_id {
-            offramp.send_signal(signal.clone()).await?;
+            dest.send_signal(signal.clone()).await?;
         }
     }
-    if let Some((id, offramp)) = first {
+    if let Some((id, dest)) = first {
         if id != own_id {
-            offramp.send_signal(signal).await?;
+            dest.send_signal(signal).await?;
         }
     }
     Ok(())

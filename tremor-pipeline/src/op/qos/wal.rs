@@ -301,7 +301,10 @@ impl Operator for Wal {
     #[allow(clippy::option_if_let_else)] // borrow checker
     fn on_contraflow(&mut self, u_id: u64, insight: &mut Event) {
         match insight.cb {
-            CbAction::None => {}
+            CbAction::None | CbAction::Drained(_) => {
+                // just pass on this insight
+                return;
+            }
             CbAction::Open => {
                 debug!("WAL CB open.");
                 self.broken = false;
