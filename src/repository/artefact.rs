@@ -900,15 +900,6 @@ impl Artefact for Binding {
             }
         }
 
-        for (from, tos) in &self.binding.links {
-            if let Some(ResourceType::Onramp) = from.resource_type() {
-                let mut mappings = HashMap::new();
-                for p in tos {
-                    mappings.insert(from.instance_port_required()?.to_string(), p.clone());
-                }
-                system.unlink_onramp(from, mappings).await?;
-            }
-        }
         // keep track of already handled pipelines, so we don't unlink twice and run into errors
         let mut unlinked = HashSet::with_capacity(self.binding.links.len());
         for (from, tos) in &self.binding.links {
@@ -921,23 +912,29 @@ impl Artefact for Binding {
                         let mut mappings = HashMap::new();
                         mappings.insert(from.instance_port_required()?.to_string(), to.clone());
                         system.unlink_pipeline(from, mappings).await?;
-                        if let Some(ResourceType::Offramp) = to.resource_type() {
-                            let mut mappings = HashMap::new();
-                            mappings.insert(to.clone(), from.clone());
-                            system.unlink_offramp(to, mappings).await?;
+                        match to.resource_type() {
+                            Some(ResourceType::Offramp) => {
+                                let mut mappings = HashMap::new();
+                                mappings.insert(to.clone(), from.clone());
+                                system.unlink_offramp(to, mappings).await?;
+                            }
+                            Some(ResourceType::Connector) => {
+                                let mut mappings = HashMap::new();
+                                mappings
+                                    .insert(to.instance_port_required()?.to_string(), from.clone());
+                                system.unlink_connector(to, mappings).await?;
+                            }
+                            Some(ResourceType::Onramp) => {
+                                let mut mappings = HashMap::new();
+                                mappings
+                                    .insert(to.instance_port_required()?.to_string(), from.clone());
+                                system.unlink_onramp(to, mappings).await?;
+                            }
+                            _ => {}
                         }
                     }
                     unlinked.insert(from_instance);
                 }
-            }
-        }
-        for (from, tos) in &self.binding.links {
-            if let Some(ResourceType::Offramp) = from.resource_type() {
-                let mut mappings = HashMap::new();
-                for to in tos {
-                    mappings.insert(from.clone(), to.clone());
-                }
-                system.unlink_offramp(from, mappings).await?;
             }
         }
 
