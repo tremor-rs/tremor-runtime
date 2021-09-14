@@ -43,14 +43,14 @@ use super::metrics::SourceReporter;
 /// Messages a Source can receive
 pub enum SourceMsg {
     /// connect a pipeline
-    Connect {
+    Link {
         /// port
         port: Cow<'static, str>,
         /// pipelines to connect
         pipelines: Vec<(TremorUrl, pipeline::Addr)>,
     },
     /// disconnect a pipeline from a port
-    Disconnect {
+    Unlink {
         /// port
         port: Cow<'static, str>,
         /// url of the pipeline
@@ -146,9 +146,6 @@ pub trait Source: Send {
     async fn on_resume(&mut self, _ctx: &mut SourceContext) {}
     /// called when the source is stopped. This happens only once in the whole source lifecycle, as the very last callback
     async fn on_stop(&mut self, _ctx: &mut SourceContext) {}
-
-    /// called when the source is drained - it should stop reading data from the external connection and only drain the data, that is in flight already
-    async fn on_drain(&mut self, _ctx: &mut SourceContext) {}
 
     // circuit breaker callbacks
     /// called when we receive a `close` Circuit breaker event from any connected pipeline
@@ -452,6 +449,7 @@ where
             state: SourceState::Initialized,
             is_transactional,
             connector_channel: None,
+            expected_drained: 0,
         }
     }
 
@@ -474,7 +472,7 @@ where
             }
             if let Ok(source_msg) = self.rx.recv().await {
                 match source_msg {
-                    SourceMsg::Connect {
+                    SourceMsg::Link {
                         port,
                         mut pipelines,
                     } => {
@@ -491,7 +489,7 @@ where
                         };
                         pipes.append(&mut pipelines);
                     }
-                    SourceMsg::Disconnect { id, port } => {
+                    SourceMsg::Unlink { id, port } => {
                         let pipelines = if port.eq_ignore_ascii_case(OUT.as_ref()) {
                             &mut self.pipelines_out
                         } else if port.eq_ignore_ascii_case(ERR.as_ref()) {
@@ -552,7 +550,7 @@ where
                         self.source.on_stop(&mut self.ctx).await;
                         return Ok(true);
                     }
-                    SourceMsg::Drain(sender) if self.state == Draining => {
+                    SourceMsg::Drain(_sender) if self.state == Draining => {
                         info!(
                             "[Source::{}] Ignoring incoming Drain message in {:?} state",
                             &self.ctx.url, &self.state
@@ -572,7 +570,6 @@ where
                         // when reached the `Empty` point, we emit the `Drain` signal and wait for the CB answer (one for each connected pipeline)
                         self.connector_channel = Some(drained_sender);
                         self.state = Draining;
-                        self.source.on_drain(&mut self.ctx).await;
                     }
                     SourceMsg::ConnectionLost => {
                         self.source.on_connection_lost(&mut self.ctx).await;
@@ -622,7 +619,7 @@ where
     }
 
     /// send a signal to all connected pipelines
-    async fn send_signal(&self, signal: Event) -> Result<()> {
+    async fn send_signal(&mut self, signal: Event) -> Result<()> {
         for (_url, addr) in self.pipelines_out.iter().chain(self.pipelines_err.iter()) {
             addr.send(pipeline::Msg::Signal(signal.clone())).await?;
         }
@@ -848,6 +845,8 @@ where
                             }
                             // if we get a disconnect in between we might never receive every drain CB
                             // but we will stop everything forcefully after a certain timeout at some point anyways
+                            // TODO: account for all connector uids that sent some Cb to us upon startup or so, to get the real number to wait for
+                            // otherwise there are cases (branching etc. where quiescence also would be to quick)
                             self.expected_drained =
                                 self.pipelines_err.len() + self.pipelines_out.len();
                         } else {

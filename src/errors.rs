@@ -335,5 +335,9 @@ error_chain! {
             description("Invalid Metrics data")
                 display("Invalid Metrics data")
         }
+        InvalidEventData(context: String, reason: String) {
+            description("Invalid Event data")
+                display("[{}] Invalid Event data: {}", context, reason)
+        }
     }
 }

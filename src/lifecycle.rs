@@ -21,9 +21,13 @@ use std::fmt;
 /// Possible lifecycle states of an instance
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum InstanceState {
+    /// initialized - first state after coming to life
     Initialized,
+    /// Running and consuming/producing/handling events
     Running,
+    /// Paused, not consuming/producing/handling events
     Paused,
+    /// Stopped, final state
     Stopped,
 }
 
@@ -71,7 +75,7 @@ pub struct InstanceLifecycleFsm<A: Artefact> {
     pub state: InstanceState,
     /// the specialized spawn result - representing the living instance
     pub instance: A::SpawnResult,
-    id: ServantId,
+    pub(crate) id: ServantId,
 }
 
 impl<A: Artefact> fmt::Debug for InstanceLifecycleFsm<A> {
@@ -121,22 +125,27 @@ impl<A: Artefact> InstanceLifecycleFsm<A> {
 }
 
 impl<A: Artefact> InstanceLifecycleFsm<A> {
+    /// Transition from Initialized -> Running
     pub async fn start(&mut self) -> Result<&mut Self> {
         self.transition(InstanceState::Running).await
     }
 
+    /// Transition from * -> Stopped
     pub async fn stop(&mut self) -> Result<&mut Self> {
         self.transition(InstanceState::Stopped).await
     }
 
+    /// Transition from Running -> Paused
     pub async fn pause(&mut self) -> Result<&mut Self> {
         self.transition(InstanceState::Paused).await
     }
 
+    /// Transition from Paused -> Running
     pub async fn resume(&mut self) -> Result<&mut Self> {
         self.transition(InstanceState::Running).await
     }
 
+    /// Transition from the current state to the next one
     pub async fn transition(&mut self, to: InstanceState) -> Result<&mut Self> {
         use InstanceState::{Initialized, Paused, Running, Stopped};
         match (&self.state, &to) {
@@ -160,7 +169,7 @@ impl<A: Artefact> InstanceLifecycleFsm<A> {
                 self.on_resume().await?;
             }
             (current, intended) if current == intended => {
-                // do
+                // do nothing
             }
             _ => {
                 return Err(format!(
@@ -333,36 +342,24 @@ mod test {
         // Legal Running -> Paused
         assert_eq!(
             Ok(InstanceState::Paused),
-            world
-                .reg
-                .transition_binding(&id, InstanceState::Paused)
-                .await
+            world.reg.pause_binding(&id).await
         );
 
         // Legal Paused -> Running
         assert_eq!(
             Ok(InstanceState::Running),
-            world
-                .reg
-                .transition_binding(&id, InstanceState::Running)
-                .await
+            world.reg.resume_binding(&id).await
         );
         // Legal Running -> Stopped
         assert_eq!(
             Ok(InstanceState::Stopped),
-            world
-                .reg
-                .transition_binding(&id, InstanceState::Stopped)
-                .await
+            world.reg.stop_binding(&id).await
         );
 
         // Zombies don't return from the dead
         assert_eq!(
             Ok(InstanceState::Stopped),
-            world
-                .reg
-                .transition_binding(&id, InstanceState::Running)
-                .await
+            world.reg.start_binding(&id).await
         );
 
         // TODO - full undeployment 'white-box' acceptance tests
