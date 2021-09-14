@@ -833,21 +833,8 @@ impl Artefact for Binding {
         _: &TremorUrl,
         _: HashMap<Self::LinkLHS, Self::LinkRHS>,
     ) -> Result<bool> {
-        // TODO Quiescence Protocol ( termination correctness checks )
-        //
-        // We should ensure any in-flight events in a pipeline are flushed
-        // to completion before unlinking *OR* unlink should should block/wait
-        // until the pipeline reaches quiescence before returning
-        //
-        // For now, we let this hang wet - May require an FSM
-        //
-        // For example, once shutdown has been signalled via on_signal
-        // we should follow through with a Quiesce signal, when all outputs
-        // have signalled Quiesce we are guaranteed ( ordering ) that the Quiesce
-        // signal has propagated through all branches in a pipeline. At this point
-        // we can latch a quiescence condition in the pipeline which unlink or other
-        // post-quiescence cleanup logic can hook off / block on etc...
-        //
+        // here we assume quiescence is done if the DRAIN mechanism was executed on all connectors as is
+        // implemented in the Binding instance logic in `Instance::stop()`.
         info!("Unlinking Binding {}", self.binding.id);
 
         let links = self.binding.links.clone();
