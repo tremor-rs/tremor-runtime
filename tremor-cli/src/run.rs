@@ -537,6 +537,28 @@ fn run_troy_source(_matches: &ArgMatches, src: &str, args: &Value) -> Result<()>
                         .await
                         .unwrap();
                 }
+                "system::stdin" => {
+                    let url = TremorUrl::parse(&format!("/onramp/{}/01", &name)).unwrap();
+                    let yaml = serde_yaml::to_string(&connector.args).unwrap();
+                    let config: tremor_runtime::config::OnRamp =
+                        serde_yaml::from_str(&yaml).unwrap();
+                    world
+                        .repo
+                        .publish_onramp(&url, false, config)
+                        .await
+                        .unwrap();
+                }
+                "system::stdout" => {
+                    let url = TremorUrl::parse(&format!("/offramp/{}/01", &name)).unwrap();
+                    let yaml = serde_yaml::to_string(&connector.args).unwrap();
+                    let config: tremor_runtime::config::OffRamp =
+                        serde_yaml::from_str(&yaml).unwrap();
+                    world
+                        .repo
+                        .publish_offramp(&url, false, config)
+                        .await
+                        .unwrap();
+                }
                 otherwise => {
                     dbg!("Ignoring ", otherwise);
                 }
