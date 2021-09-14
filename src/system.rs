@@ -853,6 +853,16 @@ impl World {
         }
     }
 
+    pub(crate) async fn drain_connector(&self, id: &TremorUrl) -> Result<()> {
+        if let Some(instance) = self.reg.find_connector(id).await? {
+            let (tx, rx) = async_std::channel::bounded(1);
+            instance.send(connectors::Msg::Drain(tx)).await?;
+            Ok(())
+        } else {
+            Err(ErrorKind::InstanceNotFound(id.to_string()).into())
+        }
+    }
+
     pub(crate) async fn bind_binding_a(
         &self,
         id: &TremorUrl,
