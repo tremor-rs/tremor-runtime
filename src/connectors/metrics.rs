@@ -322,13 +322,6 @@ impl Source for MetricsSource {
     fn is_transactional(&self) -> bool {
         false
     }
-
-    fn keep_alive(&self) -> bool {
-        // We need to consume metrics data even if no pipeline is connected.
-        // In this case the metrics events are swallowed.
-        // This source also needs to live on after being disconnected from everything
-        true
-    }
 }
 
 pub(crate) struct MetricsSink {

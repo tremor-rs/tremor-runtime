@@ -774,11 +774,11 @@ impl World {
         match (&self.reg.find_connector(id).await?, id.instance()) {
             (Some(_instance), Some(_instance_id)) => {
                 // remove from registry
-                let mut fsm = self.reg.unpublish_offramp(id).await?;
+                let mut fsm = self.reg.unpublish_connector(id).await?;
                 // stop instance
                 let state = fsm.stop().await?.state;
                 // remove instance from repo
-                self.repo.unbind_offramp(id).await?;
+                self.repo.unbind_connector(id).await?;
                 Ok(state)
             }
             (None, _) => Err(ErrorKind::InstanceNotFound(id.to_string()).into()),

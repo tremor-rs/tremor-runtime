@@ -23,6 +23,7 @@ pub struct QuiescenceBeacon {
 }
 
 impl QuiescenceBeacon {
+    /// constructor
     pub fn new() -> Self {
         Self {
             read: Arc::new(AtomicBool::new(true)),
@@ -30,19 +31,23 @@ impl QuiescenceBeacon {
         }
     }
 
+    /// returns `true` if consumers should continue reading
     pub fn continue_reading(&self) -> bool {
         self.read.load(Ordering::Relaxed)
     }
 
+    /// returns `true` if consumers should continue writing
     pub fn continue_writing(&self) -> bool {
         self.write.load(Ordering::Relaxed)
     }
 
-    pub fn close_reading(&mut self) {
+    /// notify consumers of this beacon that reading should be stopped
+    pub fn stop_reading(&mut self) {
         self.read.store(false, Ordering::Relaxed)
     }
 
-    pub fn full_close(&mut self) {
+    /// notify consumers of this beacon that reading and writing should be stopped
+    pub fn full_stop(&mut self) {
         self.read.store(false, Ordering::Relaxed);
         self.write.store(false, Ordering::Relaxed);
     }
