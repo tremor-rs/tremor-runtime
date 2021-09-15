@@ -857,7 +857,7 @@ impl World {
         if let Some(instance) = self.reg.find_connector(id).await? {
             let (tx, rx) = async_std::channel::bounded(1);
             instance.send(connectors::Msg::Drain(tx)).await?;
-            Ok(())
+            rx.recv().await?
         } else {
             Err(ErrorKind::InstanceNotFound(id.to_string()).into())
         }

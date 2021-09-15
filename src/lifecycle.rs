@@ -21,9 +21,13 @@ use std::fmt;
 /// Possible lifecycle states of an instance
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum InstanceState {
+    /// initialized - first state after coming to life
     Initialized,
+    /// Running and consuming/producing/handling events
     Running,
+    /// Paused, not consuming/producing/handling events
     Paused,
+    /// Stopped, final state
     Stopped,
 }
 
@@ -121,22 +125,27 @@ impl<A: Artefact> InstanceLifecycleFsm<A> {
 }
 
 impl<A: Artefact> InstanceLifecycleFsm<A> {
+    /// Transition from Initialized -> Running
     pub async fn start(&mut self) -> Result<&mut Self> {
         self.transition(InstanceState::Running).await
     }
 
+    /// Transition from * -> Stopped
     pub async fn stop(&mut self) -> Result<&mut Self> {
         self.transition(InstanceState::Stopped).await
     }
 
+    /// Transition from Running -> Paused
     pub async fn pause(&mut self) -> Result<&mut Self> {
         self.transition(InstanceState::Paused).await
     }
 
+    /// Transition from Paused -> Running
     pub async fn resume(&mut self) -> Result<&mut Self> {
         self.transition(InstanceState::Running).await
     }
 
+    /// Transition from the current state to the next one
     pub async fn transition(&mut self, to: InstanceState) -> Result<&mut Self> {
         use InstanceState::{Initialized, Paused, Running, Stopped};
         match (&self.state, &to) {
@@ -160,7 +169,7 @@ impl<A: Artefact> InstanceLifecycleFsm<A> {
                 self.on_resume().await?;
             }
             (current, intended) if current == intended => {
-                // do
+                // do nothing
             }
             _ => {
                 return Err(format!(

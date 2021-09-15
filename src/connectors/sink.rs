@@ -686,7 +686,7 @@ where
             starts_received: HashSet::new(),
             drains_received: HashSet::new(),
             drain_channel: None,
-            state: Initialized,
+            state: SinkState::Initialized,
         }
     }
     #[allow(clippy::too_many_lines)]
@@ -721,6 +721,7 @@ where
                         }
                         // FIXME: only handle those if in the right state (see source part)
                         SinkMsg::Start if self.state == Initialized => {
+                            self.state = Running;
                             self.sink.on_start(&mut self.ctx).await;
                         }
                         SinkMsg::Start => {
@@ -740,7 +741,7 @@ where
                             );
                         }
                         SinkMsg::Pause if self.state == Running => {
-                            self.state == Paused;
+                            self.state = Paused;
                             self.sink.on_pause(&mut self.ctx).await;
                         }
                         SinkMsg::Pause => {
@@ -751,10 +752,11 @@ where
                         }
                         SinkMsg::Stop => {
                             self.sink.on_stop(&mut self.ctx).await;
+                            self.state = Stopped;
                             // exit control plane
                             break;
                         }
-                        SinkMsg::Drain(sender) if self.state == Draining => {
+                        SinkMsg::Drain(_sender) if self.state == Draining => {
                             info!(
                                 "[Sink::{}] Ignoring Drain message in {:?} state",
                                 &self.ctx.url, &self.state
