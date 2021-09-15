@@ -155,7 +155,6 @@ test_cases!(
     // const_in_const_lookup,
     // INSERT
     merge_assign_target_state,
-    expr_path,
     match_multiple_exprs,
     xz_compressed_fixtures,
     match_assign,
