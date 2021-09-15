@@ -31,6 +31,7 @@
 
 ### Fixes
 
+- Fix memory safety issue when using `merge` or `patch` with `state` as target and reassigning the resulting value to `state` [#1217](https://github.com/tremor-rs/tremor-runtime/pull/1217)
 - Fix delayed event re-execution in case of errors in a branched pipeline
 - Skip instead of fail EQC on out of repo PRs
 - Ensure patch keys are strings to move runtime errors into the compiletime
