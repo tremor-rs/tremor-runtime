@@ -201,8 +201,8 @@ impl Connector for TcpServer {
                 let connection_meta = peer_addr.into();
                 // Async<T> allows us to read in one thread and write in another concurrently - see its documentation
                 // So we don't need no BiLock like we would when using `.split()`
-                let source_stream = stream.clone();
-                let sink_stream = stream;
+                let mut source_stream = stream.clone();
+                let mut sink_stream = stream;
                 let sc_stream = source_tx.clone();
                 let stream_url = accept_url.clone();
                 let sink_url = accept_url.clone();
@@ -233,8 +233,10 @@ impl Connector for TcpServer {
                         // TODO: meta needs to be wrapped in <RESOURCE_TYPE>.<ARTEFACT> by the source manager
                         // this is only the connector specific part, without the path mentioned above
                         let meta = literal!({
-                            "host": peer_addr.ip().to_string(),
-                            "port": peer_addr.port()
+                            "peer": {
+                                "host": peer_addr.ip().to_string(),
+                                "port": peer_addr.port()
+                            }
                         });
                         let sc_data = SourceReply::Data {
                             origin_uri: origin_uri.clone(),
