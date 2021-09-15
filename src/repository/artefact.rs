@@ -545,7 +545,7 @@ impl Artefact for ConnectorArtefact {
                 if let Some(ResourceType::Pipeline) = pipeline.resource_type() {
                     match system.reg.find_pipeline(&pipeline).await {
                         Ok(Some(pipeline_addr)) => {
-                            msgs.push(connectors::Msg::Connect {
+                            msgs.push(connectors::Msg::Link {
                                 port: port.into(),
                                 pipelines: vec![(pipeline.clone(), pipeline_addr)],
                                 result_tx: tx.clone(),
@@ -596,7 +596,7 @@ impl Artefact for ConnectorArtefact {
             let mut msgs = Vec::with_capacity(mappings.len());
             let (tx, rx) = bounded(mappings.len());
             for (port, pipeline_id) in mappings {
-                let msg = connectors::Msg::Disconnect {
+                let msg = connectors::Msg::Unlink {
                     port: port.into(),
                     id: pipeline_id,
                     tx: tx.clone(),

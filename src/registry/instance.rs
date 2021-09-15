@@ -165,8 +165,7 @@ impl Instance for BindingArtefact {
         let start_points = sources.difference(&sinks);
         let mixed_pickles = sinks.intersection(&sources);
         let end_points = sinks.difference(&sources);
-        //let mut connected = vec![];
-        let mut drain_futures = Vec::with_capacity(sinks.union(&sources).len());
+        let mut drain_futures = Vec::with_capacity(sinks.len() + sources.len());
 
         // source only connectors
         for start_point in start_points {
@@ -186,22 +185,135 @@ impl Instance for BindingArtefact {
             Duration::from_secs(5),
             futures::future::join_all(drain_futures),
         )
-        .await?;
-        for r in res {
-            if let Err(e) = r {
-                error!("[Binding::{}] Error during Quiescence Process: {}", id, e);
+        .await;
+        // report some errors if any
+        if let Ok(results) = res {
+            info!("[Binding::{}] Drained.", id);
+            for r in results {
+                if let Err(e) = r {
+                    error!("[Binding::{}] Error during Quiescence Process: {}", id, e);
+                }
+            }
+        } else {
+            info!("[Binding::{}] Timeout during Quiescence Process.", id);
+        }
+        info!("[Binding::{}] Stopping all linked instances...", id);
+
+        // actually stop everything
+        // connectors
+        for connector_url in sources.union(&sinks) {
+            if let Err(e) = world.reg.stop_connector(connector_url).await {
+                error!(
+                    "[Binding::{}] Error while stopping {}: {}",
+                    id, connector_url, e
+                );
             }
         }
-        // FIXME: actually stop everything
-
+        let pipelines: HashSet<TremorUrl> = self
+            .binding
+            .links
+            .iter()
+            .flat_map(|(from, tos)| std::iter::once(from).chain(tos.iter()))
+            .filter(|url| url.is_pipeline())
+            .cloned()
+            .collect();
+        // pipelines
+        for pipeline_url in pipelines {
+            if let Err(e) = world.reg.stop_pipeline(&pipeline_url).await {
+                error!(
+                    "[Binding::{}] Error while stopping {}: {}",
+                    id, &pipeline_url, e
+                );
+            }
+        }
+        info!("[Binding::{}] Stopped.", id);
         Ok(())
     }
 
-    async fn pause(&mut self, _world: &World, _id: &TremorUrl) -> Result<()> {
+    async fn pause(&mut self, world: &World, id: &TremorUrl) -> Result<()> {
+        let sinks: HashSet<TremorUrl> = self
+            .binding
+            .links
+            .iter()
+            .flat_map(|(_from, tos)| tos.iter())
+            //.filter(|c| c.is_connector())
+            .cloned()
+            .collect();
+        let sources: HashSet<TremorUrl> = self
+            .binding
+            .links
+            .iter()
+            .map(|(from, _tos)| from)
+            .filter(|c| c.is_connector())
+            .cloned()
+            .collect();
+        let pipelines: HashSet<TremorUrl> = self
+            .binding
+            .links
+            .iter()
+            .flat_map(|(from, tos)| std::iter::once(from).chain(tos.iter()))
+            .filter(|url| url.is_pipeline())
+            .cloned()
+            .collect();
+
+        for source in sources.difference(&sinks) {
+            world.reg.pause_connector(source).await?;
+        }
+        for source_n_sink in sources.intersection(&sinks) {
+            world.reg.pause_connector(source_n_sink).await?;
+        }
+        for sink in sinks.difference(&sources) {
+            world.reg.pause_connector(sink).await?;
+        }
+
+        for url in pipelines {
+            world.reg.pause_pipeline(&url).await?;
+        }
+        info!("[Binding::{}] Paused.", id);
         Ok(())
     }
 
-    async fn resume(&mut self, _world: &World, _id: &TremorUrl) -> Result<()> {
+    async fn resume(&mut self, world: &World, id: &TremorUrl) -> Result<()> {
+        let sinks: HashSet<TremorUrl> = self
+            .binding
+            .links
+            .iter()
+            .flat_map(|(_from, tos)| tos.iter())
+            //.filter(|c| c.is_connector())
+            .cloned()
+            .collect();
+        let sources: HashSet<TremorUrl> = self
+            .binding
+            .links
+            .iter()
+            .map(|(from, _tos)| from)
+            .filter(|c| c.is_connector())
+            .cloned()
+            .collect();
+        let pipelines: HashSet<TremorUrl> = self
+            .binding
+            .links
+            .iter()
+            .flat_map(|(from, tos)| std::iter::once(from).chain(tos.iter()))
+            .filter(|url| url.is_pipeline())
+            .cloned()
+            .collect();
+
+        for url in pipelines {
+            world.reg.resume_pipeline(&url).await?;
+        }
+
+        for sink in sinks.difference(&sources) {
+            world.reg.resume_connector(sink).await?;
+        }
+        for source_n_sink in sources.intersection(&sinks) {
+            world.reg.resume_connector(source_n_sink).await?;
+        }
+        for source in sources.difference(&sinks) {
+            world.reg.resume_connector(source).await?;
+        }
+
+        info!("[Binding::{}] Paused.", id);
         Ok(())
     }
 }

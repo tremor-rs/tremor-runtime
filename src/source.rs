@@ -387,7 +387,8 @@ where
                     self.source.restore_breaker();
                     self.triggered = false;
                 }
-                onramp::Msg::Cb(CbAction::None, _ids) => {}
+                onramp::Msg::Cb(CbAction::None, _ids)
+                | onramp::Msg::Cb(CbAction::Drained(_), _ids) => {}
 
                 onramp::Msg::Response(event) => {
                     if let Err(e) = self
