@@ -1,0 +1,11 @@
+define script patch_assign_target
+script
+	let event = patch event of insert "foo" => "bar" end;
+	emit event;
+end;
+
+create script patch_assign_target;
+
+select event from in into patch_assign_target;
+select event from patch_assign_target into out;
+select event from patch_assign_target/err into err;
