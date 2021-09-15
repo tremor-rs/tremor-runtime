@@ -604,28 +604,16 @@ impl<'script> Upable<'script> for ExprRaw<'script> {
                 let path = a.path.up(helper)?;
                 let mid = helper.add_meta(a.start, a.end);
                 match a.expr.up(helper)? {
-                    Expr::Imut(ImutExprInt::Merge(m)) => {
-                        if path.ast_eq(&m.target) {
-                            Expr::MergeInPlace(Box::new(*m))
-                        } else {
-                            Expr::Assign {
-                                mid,
-                                path,
-                                expr: Box::new(ImutExprInt::Merge(m).into()),
-                            }
-                        }
-                    }
-                    Expr::Imut(ImutExprInt::Patch(m)) => {
-                        if path.ast_eq(&m.target) {
-                            Expr::PatchInPlace(Box::new(*m))
-                        } else {
-                            Expr::Assign {
-                                mid,
-                                path,
-                                expr: Box::new(ImutExprInt::Patch(m).into()),
-                            }
-                        }
-                    }
+                    Expr::Imut(ImutExprInt::Merge(m)) => Expr::Assign {
+                        mid,
+                        path,
+                        expr: Box::new(ImutExprInt::Merge(m).into()),
+                    },
+                    Expr::Imut(ImutExprInt::Patch(m)) => Expr::Assign {
+                        mid,
+                        path,
+                        expr: Box::new(ImutExprInt::Patch(m).into()),
+                    },
                     expr => Expr::Assign {
                         mid,
                         path,
