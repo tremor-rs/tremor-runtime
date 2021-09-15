@@ -17,11 +17,11 @@
 #![allow(clippy::module_name_repetitions)]
 
 use super::{
-    base_expr, eq::AstEq, query, ArrayPattern, ArrayPredicatePattern, AssignPattern, BinExpr,
-    BinOpKind, Bytes, ClauseGroup, Comprehension, ComprehensionCase, Costly, DefaultCase, EmitExpr,
-    EventPath, Expr, Expression, Field, FnDecl, FnDoc, Helper, Ident, IfElse, ImutExpr,
-    ImutExprInt, Invocable, Invoke, InvokeAggr, InvokeAggrFn, List, Literal, LocalPath, Match,
-    Merge, MetadataPath, ModDoc, NodeMetas, Patch, PatchOperation, Path, Pattern, PredicateClause,
+    base_expr, query, ArrayPattern, ArrayPredicatePattern, AssignPattern, BinExpr, BinOpKind,
+    Bytes, ClauseGroup, Comprehension, ComprehensionCase, Costly, DefaultCase, EmitExpr, EventPath,
+    Expr, Expression, Field, FnDecl, FnDoc, Helper, Ident, IfElse, ImutExpr, ImutExprInt,
+    Invocable, Invoke, InvokeAggr, InvokeAggrFn, List, Literal, LocalPath, Match, Merge,
+    MetadataPath, ModDoc, NodeMetas, Patch, PatchOperation, Path, Pattern, PredicateClause,
     PredicatePattern, Record, RecordPattern, Recur, ReservedPath, Script, Segment, StatePath,
     StrLitElement, StringLit, TestExpr, TuplePattern, UnaryExpr, UnaryOpKind, Warning,
 };

@@ -43,7 +43,8 @@ struct Ingress {
     codec: Box<dyn Codec>,
 }
 
-type IngressHandler<T> = dyn Fn(&mut T, &mut u64, &mut Egress, u64, Value) -> Result<()>;
+type IngressHandler<T> =
+    dyn Fn(&mut T, &mut u64, &mut Egress, &mut Value<'static>, u64, Value) -> Result<()>;
 
 impl Ingress {
     fn from_args(matches: &ArgMatches) -> Result<Self> {
@@ -89,6 +90,7 @@ impl Ingress {
         mut egress: &mut Egress,
         handler: &IngressHandler<T>,
     ) -> Result<()> {
+        let mut state: Value<'static> = Value::null();
         loop {
             match self.buffer.read(&mut self.buf) {
                 Ok(0) => {
@@ -107,7 +109,6 @@ impl Ingress {
                             Ok(None) => continue,
                             Err(e) => return Err(e.into()),
                         };
-                        let event = event.clone();
 
                         if self.is_interactive {
                             eprintln!(
@@ -117,7 +118,7 @@ impl Ingress {
                             );
                             highlight(self.is_pretty, &event)?;
                         }
-                        handler(runnable, &mut id, &mut egress, at, event)?;
+                        handler(runnable, &mut id, &mut egress, &mut state, at, event)?;
                     }
                 }
                 Err(e) => {
@@ -248,15 +249,14 @@ fn run_tremor_source(matches: &ArgMatches, src: String) -> Result<()> {
                 &mut script,
                 id,
                 &mut egress,
-                &move |runnable, _id, egress, at, event| {
+                &move |runnable, _id, egress, state, at, event| {
                     let mut global_map = Value::object();
-                    let mut state = Value::null();
                     let mut event = event.clone_static();
                     match runnable.run(
                         &EventContext::new(at, Some(EventOriginUri::default())),
                         AggrType::Tick,
                         &mut event,
-                        &mut state,
+                        state,
                         &mut global_map,
                     ) {
                         Ok(r) => egress.process(&src, &event, r),
@@ -343,7 +343,7 @@ fn run_trickle_source(matches: &ArgMatches, src: String) -> Result<()> {
         &mut pipeline,
         id,
         &mut egress,
-        &move |runnable, id, egress, at, event| {
+        &move |runnable, id, egress, _state, at, event| {
             let value = LineValue::new(vec![], |_| ValueAndMeta::from(event.clone_static()));
 
             let mut continuation = vec![];
