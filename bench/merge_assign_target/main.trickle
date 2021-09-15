@@ -1,0 +1,11 @@
+define script merge_assign_target
+script
+	let event = merge event of {"foo": "bar"} end;
+	emit event;
+end;
+
+create script merge_assign_target;
+
+select event from in into merge_assign_target;
+select event from merge_assign_target into out;
+select event from merge_assign_target/err into err;
