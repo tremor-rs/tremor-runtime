@@ -105,10 +105,10 @@ macro_rules! ignore_cases {
                 file.read_to_string(&mut err)?;
                 let _err = err.trim();
 
+                let mut state = Value::null();
                 if let Some(mut json) =  in_json.pop() {
                     let context = EventContext::new(0, None);
                     let mut meta = Value::object();
-                    let mut state = Value::null();
                     let s = script.run(&context, AggrType::Tick, &mut json, &mut state, &mut meta);
                     if let Err(e) = s {
                         let mut h = Dumb::new();
@@ -144,8 +144,8 @@ test_cases!(
     function_error_n,
     match_bad_guard_type,
     match_no_clause_hit,
-    merge_in_place_new_no_object,
-    merge_in_place_target_no_object,
+    merge_assign_target_new_no_object,
+    merge_assign_target_target_no_object,
     merge_new_no_object,
     merge_target_no_object,
     missing_local,

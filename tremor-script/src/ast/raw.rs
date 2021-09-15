@@ -18,14 +18,14 @@
 
 use crate::{
     ast::{
-        base_expr, eq::AstEq, query, upable::Upable, ArrayPattern, ArrayPredicatePattern,
-        AssignPattern, BinExpr, BinOpKind, Bytes, BytesPart, ClauseGroup, Comprehension,
-        ComprehensionCase, Costly, DefaultCase, EmitExpr, EventPath, Expr, ExprPath, Expression,
-        Field, FnDecl, FnDoc, Helper, Ident, IfElse, ImutExpr, ImutExprInt, Invocable, Invoke,
-        InvokeAggr, InvokeAggrFn, List, Literal, LocalPath, Match, Merge, MetadataPath, ModDoc,
-        NodeMetas, Patch, PatchOperation, Path, Pattern, PredicateClause, PredicatePattern, Record,
-        RecordPattern, Recur, ReservedPath, Script, Segment, StatePath, StrLitElement, StringLit,
-        TestExpr, TuplePattern, UnaryExpr, UnaryOpKind,
+        base_expr, query, upable::Upable, ArrayPattern, ArrayPredicatePattern, AssignPattern,
+        BinExpr, BinOpKind, Bytes, BytesPart, ClauseGroup, Comprehension, ComprehensionCase,
+        Costly, DefaultCase, EmitExpr, EventPath, Expr, ExprPath, Expression, Field, FnDecl, FnDoc,
+        Helper, Ident, IfElse, ImutExpr, ImutExprInt, Invocable, Invoke, InvokeAggr, InvokeAggrFn,
+        List, Literal, LocalPath, Match, Merge, MetadataPath, ModDoc, NodeMetas, Patch,
+        PatchOperation, Path, Pattern, PredicateClause, PredicatePattern, Record, RecordPattern,
+        Recur, ReservedPath, Script, Segment, StatePath, StrLitElement, StringLit, TestExpr,
+        TuplePattern, UnaryExpr, UnaryOpKind,
     },
     errors::{
         err_generic, error_generic, error_missing_effector, error_oops, Error, ErrorKind, Result,
@@ -646,28 +646,16 @@ impl<'script> Upable<'script> for ExprRaw<'script> {
                 let path = a.path.up(helper)?;
                 let mid = helper.add_meta(a.start, a.end);
                 match a.expr.up(helper)? {
-                    Expr::Imut(ImutExprInt::Merge(m)) => {
-                        if path.ast_eq(&m.target) {
-                            Expr::MergeInPlace(Box::new(*m))
-                        } else {
-                            Expr::Assign {
-                                mid,
-                                path,
-                                expr: Box::new(ImutExprInt::Merge(m).into()),
-                            }
-                        }
-                    }
-                    Expr::Imut(ImutExprInt::Patch(m)) => {
-                        if path.ast_eq(&m.target) {
-                            Expr::PatchInPlace(Box::new(*m))
-                        } else {
-                            Expr::Assign {
-                                mid,
-                                path,
-                                expr: Box::new(ImutExprInt::Patch(m).into()),
-                            }
-                        }
-                    }
+                    Expr::Imut(ImutExprInt::Merge(m)) => Expr::Assign {
+                        mid,
+                        path,
+                        expr: Box::new(ImutExprInt::Merge(m).into()),
+                    },
+                    Expr::Imut(ImutExprInt::Patch(m)) => Expr::Assign {
+                        mid,
+                        path,
+                        expr: Box::new(ImutExprInt::Patch(m).into()),
+                    },
                     expr => Expr::Assign {
                         mid,
                         path,
