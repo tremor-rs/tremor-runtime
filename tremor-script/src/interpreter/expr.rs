@@ -13,24 +13,23 @@
 // limitations under the License.
 
 use super::{
-    merge_values, patch_value, resolve, resolve_value, set_local_shadow, test_guard,
-    test_predicate_expr, Env, ExecOpts, LocalStack, NULL,
+    resolve, resolve_value, set_local_shadow, test_guard, test_predicate_expr, Env, ExecOpts,
+    LocalStack, NULL,
 };
 use crate::errors::{
     error_assign_array, error_assign_to_const, error_bad_key_err, error_invalid_assign_target,
-    error_need_obj, error_need_obj_err, error_no_clause_hit, Result,
+    error_need_obj_err, error_no_clause_hit, Result,
 };
 use crate::prelude::*;
 use crate::registry::RECUR_PTR;
 use crate::{
     ast::{
         BaseExpr, ClauseGroup, ClausePreCondition, Comprehension, DefaultCase, EmitExpr, EventPath,
-        Expr, IfElse, ImutExprInt, Match, Merge, Patch, Path, Segment,
+        Expr, IfElse, ImutExprInt, Match, Path, Segment,
     },
     errors::error_oops_err,
 };
 use crate::{stry, Value};
-use matches::matches;
 use std::mem;
 use std::{
     borrow::{Borrow, Cow},
@@ -223,107 +222,6 @@ where
                     Expr::execute_effectors(opts, env, event, state, meta, local, &[], last_expr)
                 }
             }
-        }
-    }
-
-    fn patch_in_place(
-        &'script self,
-        opts: ExecOpts,
-        env: &'run Env<'run, 'event, 'script>,
-        event: &'run Value<'event>,
-        state: &'run Value<'static>,
-        meta: &'run Value<'event>,
-        local: &'run LocalStack<'event>,
-        expr: &'script Patch,
-    ) -> Result<Cow<'run, Value<'event>>> {
-        // This function is called when we encounter code that consumes a value
-        // to patch it. So the following code:
-        // ```tremor
-        // let event = patch event of insert "key" => "value" end
-        // ```
-        // When executed on it's own would clone the event, add a key and
-        // overwrite original event.
-        //
-        // We optimise this as:
-        // ```
-        // patch_in_place event of insert "key" => "value" end
-        // ```
-        //
-        // This code is generated in impl Upable for ExprRaw where the following
-        // checks are performed:
-        //
-        // 1) the patch is on the RHS of an assignment
-        // 2) the path of the assigned value and the path of the patched
-        //    expression are identical.
-        //
-        // In turn this guarantees (at compile time):
-        //
-        // 1) The target (`expr`) is a path lookup
-        // 2) The target is not a known constant as otherwise the assignment
-        //    will complan
-        // 3) this leave the `expr` to be either a local, the event, the state,
-        //    metadata or a subkey thereof.
-        //
-        // And the following guarantees at run time:
-        //
-        // 1) the `expr` is an existing key of the mentioned categories,
-        //    otherwise `expr.target.run` will error.
-        // 2) `value` will never be owned (however the resolve function is
-        //    generic so it needs to return a Cow)
-
-        let value: Cow<'run, Value<'event>> =
-            stry!(expr.target.run(opts, env, event, state, meta, local));
-        debug_assert!(
-            !matches!(value, Cow::Owned(_)),
-            "We should never see a owned value here as patch_in_place is only ever called on existing data in event, state, meta or local"
-        );
-        let v: &Value<'event> = value.borrow();
-        // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1032
-        #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
-        // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1032
-        let v: &mut Value<'event> = unsafe { mem::transmute(v) };
-        stry!(patch_value(
-            self, opts, env, event, state, meta, local, v, expr
-        ));
-        Ok(value)
-    }
-
-    fn merge_in_place(
-        &'script self,
-        opts: ExecOpts,
-        env: &'run Env<'run, 'event, 'script>,
-        event: &'run mut Value<'event>,
-        state: &'run mut Value<'static>,
-        meta: &'run mut Value<'event>,
-        local: &'run mut LocalStack<'event>,
-        expr: &'script Merge,
-    ) -> Result<Cow<'run, Value<'event>>> {
-        // Please see the soundness reasoning in `patch_in_place` for details
-        // those functions perform the same function just with slighty different
-        // operations.
-        let value_cow: Cow<'run, Value<'event>> =
-            stry!(expr.target.run(opts, env, event, state, meta, local));
-        debug_assert!(
-            !matches!(value_cow, Cow::Owned(_)),
-            "We should never see a owned value here as merge_in_place is only ever called on existing data in event, state, meta or local"
-        );
-
-        if value_cow.is_object() {
-            let value: &Value<'event> = value_cow.borrow();
-            // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1032
-            #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
-            // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1032
-            let value: &mut Value<'event> = unsafe { mem::transmute(value) };
-            let replacement = stry!(expr.expr.run(opts, env, event, state, meta, local,));
-
-            if replacement.is_object() {
-                stry!(merge_values(self, &expr.expr, value, &replacement));
-                Ok(value_cow)
-            } else {
-                error_need_obj(self, &expr.expr, replacement.value_type(), &env.meta)
-            }
-        } else {
-            error_need_obj(self, &expr.target, value_cow.value_type(), &env.meta)
         }
     }
 
@@ -657,12 +555,6 @@ where
             }
             Expr::Match(ref expr) => self.match_expr(opts, env, event, state, meta, local, expr),
             Expr::IfElse(ref expr) => self.if_expr(opts, env, event, state, meta, local, expr),
-            Expr::MergeInPlace(ref expr) => self
-                .merge_in_place(opts, env, event, state, meta, local, expr)
-                .map(Cont::Cont),
-            Expr::PatchInPlace(ref expr) => self
-                .patch_in_place(opts, env, event, state, meta, local, expr)
-                .map(Cont::Cont),
             Expr::Comprehension(ref expr) => {
                 self.comprehension(opts, env, event, state, meta, local, expr)
             }
