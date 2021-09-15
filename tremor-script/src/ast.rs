@@ -910,10 +910,6 @@ pub enum Expr<'script> {
     Match(Box<Match<'script, Self>>),
     /// IfElse style match expression
     IfElse(Box<IfElse<'script, Self>>),
-    /// In place patch expression
-    PatchInPlace(Box<Patch<'script>>),
-    /// In place merge expression
-    MergeInPlace(Box<Merge<'script>>),
     /// Assignment expression
     Assign {
         /// Id

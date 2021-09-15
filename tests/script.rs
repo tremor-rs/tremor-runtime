@@ -51,6 +51,7 @@ macro_rules! test_cases {
                 out_json.reverse();
 
                 let mut results = Vec::new();
+                let mut state = Value::null();
                 for (id, mut json) in in_json.into_iter().enumerate() {
                     let uri = EventOriginUri{
                         host: "test".into(),
@@ -62,7 +63,6 @@ macro_rules! test_cases {
                     };
                     let context = EventContext::new(id as u64, Some(uri));
                     let mut meta = Value::from(Object::default());
-                    let mut state = Value::null();
                     match script.run(&context, AggrType::Tick, &mut json, &mut state, &mut meta)? {
                         Return::Drop => (),
                         Return::EmitEvent{..} => results.push(json),
@@ -154,6 +154,8 @@ test_cases!(
     // TODO
     // const_in_const_lookup,
     // INSERT
+    merge_assign_target_state,
+    expr_path,
     match_multiple_exprs,
     xz_compressed_fixtures,
     match_assign,
@@ -183,7 +185,7 @@ test_cases!(
     heredoc_quoted_curly,
     string_interpolation_import,
     string_interpolation_prefix,
-    patch_in_place,
+    patch_assign_target,
     tuple_pattern,
     pattern_cmp,
     pass_args,
