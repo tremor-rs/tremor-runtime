@@ -159,8 +159,6 @@ impl<'script> Expr<'script> {
         match self {
             Expr::Match(e) => Expr::Match(Box::new(e.into_static())),
             Expr::IfElse(e) => Expr::IfElse(Box::new(e.into_static())),
-            Expr::PatchInPlace(e) => Expr::PatchInPlace(Box::new(e.into_static())),
-            Expr::MergeInPlace(e) => Expr::MergeInPlace(Box::new(e.into_static())),
             Expr::Assign { mid, path, expr } => Expr::Assign {
                 mid,
                 path: path.into_static(),

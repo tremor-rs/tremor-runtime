@@ -1,0 +1,8 @@
+# initialize state to record, so we can do the merge
+let state = match state of
+	case null => {}
+	default => state
+end;
+
+let state = merge state of event end;
+emit state
