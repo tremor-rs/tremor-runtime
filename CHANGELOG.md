@@ -1,5 +1,6 @@
 # Changelog
 
+## 0.11.6
 ### Fixes
 
 - Fix possible memory unsafety issue when using patch or merge on `state` [#1217](https://github.com/tremor-rs/tremor-runtime/pull/1217).
