@@ -1,0 +1,5 @@
+create stream snot;
+create stream snot; # this should error
+
+select event from in into snot;
+select event from snot into out;

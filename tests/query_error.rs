@@ -142,6 +142,7 @@ test_cases!(
     pp_embed_unrecognized_token4,
     pp_embed_unrecognized_token5,
     // INSERT
+    duplicate_stream_name,
     window_both_settings,
     window_group_by_event_in_target,
     window_event_in_target,
