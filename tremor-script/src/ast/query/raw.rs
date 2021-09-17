@@ -15,6 +15,8 @@
 // We want to keep the names here
 #![allow(clippy::module_name_repetitions)]
 
+use std::collections::HashSet;
+
 use super::super::raw::{ExprRaw, IdentRaw, ImutExprRaw, ModuleRaw, ScriptRaw, WithExprsRaw};
 use super::{
     error_generic, error_no_consts, error_no_locals, AggrRegistry, BaseExpr, GroupBy, GroupByInt,
@@ -55,13 +57,22 @@ impl<'script> QueryRaw<'script> {
         mut helper: &mut Helper<'script, 'registry>,
     ) -> Result<Query<'script>> {
         let mut stmts = vec![];
+        let mut stream_names = HashSet::new();
+
         for (_i, e) in self.stmts.into_iter().enumerate() {
             match e {
                 StmtRaw::ModuleStmt(m) => {
                     m.define(helper.reg, helper.aggr_reg, &mut vec![], &mut helper)?;
                 }
                 other => {
-                    stmts.push(other.up(&mut helper)?);
+                    let f = other.up(&mut helper)?;
+
+                    if let Stmt::Stream(s) = &f {
+                        if !stream_names.insert(s.id.clone()) {
+                            return error_generic(&f, &f, &"duplicate stream name", &helper.meta);
+                        }
+                    }
+                    stmts.push(f);
                 }
             }
         }
