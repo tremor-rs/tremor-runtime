@@ -80,6 +80,9 @@ lazy_static! {
     };
 }
 
+/// default graceful shutdown timeout
+pub const DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(2);
+
 #[derive(Debug, PartialEq)]
 /// shutdown mode - controls how we shutdown Tremor
 pub enum ShutdownMode {
