@@ -473,7 +473,7 @@ impl Manager {
             while let Ok(msg) = rx.recv().await {
                 match msg {
                     ManagerMsg::Stop => {
-                        info!("Stopping onramps...");
+                        info!("Stopping offramp manager...");
                         break;
                     }
                     ManagerMsg::Create(r, c) => {

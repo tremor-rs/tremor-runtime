@@ -390,7 +390,7 @@ links:
 
             std::thread::sleep(std::time::Duration::from_millis(1000));
 
-            world.stop().await?;
+            world.stop(system::ShutdownMode::Forceful).await?;
         };
     }
 

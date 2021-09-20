@@ -5235,6 +5235,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "signal-hook-async-std"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "90526e74631c69a79b38212e3d4fda4b00de9d6be56b3cead133bf67ad371af1"
+dependencies = [
+ "async-io",
+ "futures-lite",
+ "libc",
+ "signal-hook",
+]
+
+[[package]]
 name = "signal-hook-registry"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6515,6 +6527,7 @@ dependencies = [
  "env_logger 0.9.0",
  "error-chain 0.12.4",
  "float-cmp 0.9.0",
+ "futures 0.3.17",
  "globwalk",
  "halfbrown",
  "http-types",
@@ -6528,6 +6541,8 @@ dependencies = [
  "serde_derive",
  "serde_yaml",
  "shell-words",
+ "signal-hook",
+ "signal-hook-async-std",
  "simd-json",
  "snmalloc-rs",
  "snmalloc-sys",

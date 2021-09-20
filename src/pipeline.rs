@@ -560,7 +560,7 @@ impl Manager {
             loop {
                 match rx.recv().await {
                     Ok(ManagerMsg::Stop) => {
-                        info!("Stopping onramps...");
+                        info!("Stopping Pipeline manager...");
                         break;
                     }
                     Ok(ManagerMsg::Create(r, create)) => {
