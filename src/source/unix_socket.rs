@@ -108,7 +108,7 @@ impl Source for Int {
             mode.set_mode_path(&path)?;
         }
         let mut stream_id = 0;
-        let (tx, rx) = bounded(crate::QSIZE);
+        let (tx, rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
 
         let path = vec![self.config.path.clone()];
         task::spawn(async move {
@@ -186,7 +186,7 @@ impl Source for Int {
 #[cfg(test)]
 mod tests {
     use crate::onramp::Builder;
-    use crate::source::unix_socket::{Builder as UnixSocketBuilder, Config, Int, UnixSocket};
+    use crate::source::unix_socket::{Builder as UnixSocketBuilder, Config, Int};
     use crate::url::TremorUrl;
     use tremor_value::literal;
 

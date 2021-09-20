@@ -150,7 +150,7 @@ impl Instance for BindingArtefact {
             .links
             .iter()
             .flat_map(|(_from, tos)| tos.iter())
-            //.filter(|c| c.is_connector())
+            .filter(|c| c.is_connector())
             .cloned()
             .collect();
         let sources: HashSet<TremorUrl> = self
@@ -182,7 +182,7 @@ impl Instance for BindingArtefact {
         // wait for 5 secs for all drain futures
         // it might be this binding represents a topology that doesn't support proper quiescence
         let res = async_std::future::timeout(
-            Duration::from_secs(5),
+            Duration::from_secs(2),
             futures::future::join_all(drain_futures),
         )
         .await;

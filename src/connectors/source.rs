@@ -147,9 +147,6 @@ pub trait Source: Send {
     /// called when the source is stopped. This happens only once in the whole source lifecycle, as the very last callback
     async fn on_stop(&mut self, _ctx: &mut SourceContext) {}
 
-    /// called when the source is drained - it should stop reading data from the external connection and only drain the data, that is in flight already
-    async fn on_drain(&mut self, _ctx: &mut SourceContext) {}
-
     // circuit breaker callbacks
     /// called when we receive a `close` Circuit breaker event from any connected pipeline
     /// Expected reaction is to pause receiving messages, which is handled automatically by the runtime
@@ -573,7 +570,6 @@ where
                         // when reached the `Empty` point, we emit the `Drain` signal and wait for the CB answer (one for each connected pipeline)
                         self.connector_channel = Some(drained_sender);
                         self.state = Draining;
-                        self.source.on_drain(&mut self.ctx).await;
                     }
                     SourceMsg::ConnectionLost => {
                         self.source.on_connection_lost(&mut self.ctx).await;

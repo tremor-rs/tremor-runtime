@@ -75,7 +75,7 @@ pub struct InstanceLifecycleFsm<A: Artefact> {
     pub state: InstanceState,
     /// the specialized spawn result - representing the living instance
     pub instance: A::SpawnResult,
-    id: ServantId,
+    pub(crate) id: ServantId,
 }
 
 impl<A: Artefact> fmt::Debug for InstanceLifecycleFsm<A> {
@@ -342,36 +342,24 @@ mod test {
         // Legal Running -> Paused
         assert_eq!(
             Ok(InstanceState::Paused),
-            world
-                .reg
-                .transition_binding(&id, InstanceState::Paused)
-                .await
+            world.reg.pause_binding(&id).await
         );
 
         // Legal Paused -> Running
         assert_eq!(
             Ok(InstanceState::Running),
-            world
-                .reg
-                .transition_binding(&id, InstanceState::Running)
-                .await
+            world.reg.resume_binding(&id).await
         );
         // Legal Running -> Stopped
         assert_eq!(
             Ok(InstanceState::Stopped),
-            world
-                .reg
-                .transition_binding(&id, InstanceState::Stopped)
-                .await
+            world.reg.stop_binding(&id).await
         );
 
         // Zombies don't return from the dead
         assert_eq!(
             Ok(InstanceState::Stopped),
-            world
-                .reg
-                .transition_binding(&id, InstanceState::Running)
-                .await
+            world.reg.start_binding(&id).await
         );
 
         // TODO - full undeployment 'white-box' acceptance tests
