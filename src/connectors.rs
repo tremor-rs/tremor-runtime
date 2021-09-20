@@ -46,6 +46,9 @@ pub(crate) mod metrics;
 
 /// Metronome
 pub(crate) mod metronome;
+
+/// Exit Connector
+pub(crate) mod exit;
 /// quiescence stuff
 pub(crate) mod quiescence;
 
@@ -381,7 +384,7 @@ impl Manager {
         let (msg_tx, msg_rx) = bounded(self.qsize);
 
         let mut connectivity = Connectivity::Disconnected;
-        let mut quiescence_beacon = QuiescenceBeacon::default();
+        let mut quiescence_beacon = QuiescenceBeacon::new();
 
         let source_metrics_reporter = SourceReporter::new(
             url.clone(),
@@ -988,6 +991,9 @@ pub async fn register_builtin_connector_types(world: &World) -> Result<()> {
         .await?;
     world
         .register_builtin_connector_type("std_stream", Box::new(std_streams::Builder::default()))
+        .await?;
+    world
+        .register_builtin_connector_type("exit", Box::new(exit::Builder::new(world)))
         .await?;
     Ok(())
 }
