@@ -23,10 +23,9 @@ use signal_hook::low_level::signal_name;
 use signal_hook_async_std::Signals;
 use std::io::Write;
 use std::sync::atomic::Ordering;
-use std::time::Duration;
 use tremor_api as api;
 use tremor_common::file;
-use tremor_runtime::system::{ShutdownMode, World};
+use tremor_runtime::system::{self, ShutdownMode, World};
 use tremor_runtime::{self, version};
 
 async fn handle_api_request<
@@ -97,8 +96,6 @@ fn api_server(world: &World) -> tide::Server<api::State> {
     app
 }
 
-const DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(2);
-
 async fn handle_signals(signals: Signals, world: World) {
     let mut signals = signals.fuse();
 
@@ -111,7 +108,7 @@ async fn handle_signals(signals: Signals, world: World) {
             SIGINT | SIGTERM => {
                 if let Err(_e) = world
                     .stop(ShutdownMode::Graceful {
-                        timeout: DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT,
+                        timeout: system::DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT,
                     })
                     .await
                 {
@@ -244,7 +241,7 @@ pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
             // api stopped
             if let Err(e) = world
                 .stop(ShutdownMode::Graceful {
-                    timeout: DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT,
+                    timeout: system::DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT,
                 })
                 .await
             {
