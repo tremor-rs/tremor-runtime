@@ -16,7 +16,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 /// use this beacon to check if tasks reading or writing from external connections should stop
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct QuiescenceBeacon {
     read: Arc<AtomicBool>,
     write: Arc<AtomicBool>,
