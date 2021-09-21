@@ -82,14 +82,13 @@ impl ConnectorBuilder for Builder {
 impl Connector for UdpServer {
     async fn connect(
         &mut self,
-        _ctx: &ConnectorContext,
+        ctx: &ConnectorContext,
         notifier: super::reconnect::ConnectionLostNotifier,
-        q: &QuiescenceBeacon,
     ) -> Result<bool> {
         if self.task.is_none() {
             let socket = UdpSocket::bind((self.config.host.as_str(), self.config.port)).await?;
             let origin_uri = self.origin_uri.clone();
-            let q = q.clone();
+            let q = ctx.quiescence_beacon.clone();
             let buf_size = self.config.buf_size;
 
             // let mut buffer = [0_u8; 1024];
