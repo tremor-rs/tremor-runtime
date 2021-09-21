@@ -68,7 +68,7 @@ pub struct TcpServer {
     config: Config,
     accept_task: Option<JoinHandle<Result<()>>>,
     sink_channel: Sender<ChannelSinkMsg<ConnectionMeta>>,
-    source_channel: Sender<SourceReply>,
+    source_channel: SourceReplySender,
 }
 
 #[derive(Debug, Default)]
@@ -130,9 +130,6 @@ fn resolve_connection_meta(meta: &Value) -> Option<ConnectionMeta> {
 
 #[async_trait::async_trait()]
 impl Connector for TcpServer {
-    async fn on_start(&mut self, _ctx: &ConnectorContext) -> Result<ConnectorState> {
-        Ok(ConnectorState::Running)
-    }
     async fn on_stop(&mut self, _ctx: &ConnectorContext) {
         if let Some(accept_task) = self.accept_task.take() {
             // stop acceptin' new connections
