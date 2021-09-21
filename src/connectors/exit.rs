@@ -40,7 +40,6 @@ impl Connector for Exit {
         &mut self,
         _ctx: &ConnectorContext,
         _notifier: super::reconnect::ConnectionLostNotifier,
-        _quiescence: &QuiescenceBeacon,
     ) -> Result<bool> {
         Ok(true)
     }
