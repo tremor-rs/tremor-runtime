@@ -18,7 +18,8 @@ pub use crate::connectors::sink::{
     EventSerializer, ResultVec, Sink, SinkAddr, SinkContext, SinkData, SinkManagerBuilder,
 };
 pub use crate::connectors::source::{
-    Source, SourceAddr, SourceContext, SourceManagerBuilder, SourceReply,
+    ChannelSource, Source, SourceAddr, SourceContext, SourceManagerBuilder, SourceReply,
+    SourceReplySender,
 };
 pub use crate::connectors::{
     Connector, ConnectorBuilder, ConnectorContext, ConnectorState, StreamIdGen,
@@ -29,3 +30,7 @@ pub use crate::utils::hostname;
 pub use crate::{OpConfig, QSIZE};
 pub use std::sync::atomic::Ordering;
 pub use tremor_pipeline::{ConfigImpl, EventOriginUri, DEFAULT_STREAM_ID};
+
+pub(crate) fn default_buf_size() -> usize {
+    8192
+}
