@@ -42,10 +42,6 @@ pub struct Config {
     buf_size: usize,
 }
 
-fn default_buf_size() -> usize {
-    8192
-}
-
 impl ConfigImpl for Config {}
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
