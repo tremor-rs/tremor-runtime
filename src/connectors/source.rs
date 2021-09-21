@@ -39,6 +39,7 @@ use tremor_value::{literal, Value};
 use value_trait::Builder;
 
 use super::metrics::SourceReporter;
+use super::quiescence::QuiescenceBeacon;
 
 /// Messages a Source can receive
 pub enum SourceMsg {
@@ -231,6 +232,8 @@ pub struct SourceContext {
     pub uid: u64,
     /// connector url
     pub url: TremorUrl,
+    /// The Quiescence Beacon
+    pub quiescence_beacon: QuiescenceBeacon,
 }
 
 /// address of a source
