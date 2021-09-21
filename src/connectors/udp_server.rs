@@ -25,6 +25,9 @@ pub struct Config {
     /// The port to listen on.
     pub port: u16,
     pub host: String,
+    // TCP: receive buffer size
+    #[serde(default = "default_buf_size")]
+    buf_size: usize,
 }
 
 impl ConfigImpl for Config {}
@@ -87,6 +90,8 @@ impl Connector for UdpServer {
             let socket = UdpSocket::bind((self.config.host.as_str(), self.config.port)).await?;
             let origin_uri = self.origin_uri.clone();
             let q = q.clone();
+            let buf_size = self.config.buf_size;
+
             // let mut buffer = [0_u8; 1024];
             // Self::register_reader(DEFAULT_STREAM_ID, |stream| async move {
             //     let bytes_read = socket.recv(&mut buffer).await.unwrap_or_default();
@@ -107,7 +112,7 @@ impl Connector for UdpServer {
             // .ok_or("source channel not initialized")?;
 
             self.task = Some(task::spawn(async move {
-                let mut buffer = [0_u8; 1024];
+                let mut buffer = vec![0_u8; buf_size];
                 while let (true, Ok(bytes_read)) =
                     (q.continue_reading(), socket.recv(&mut buffer).await)
                 {
