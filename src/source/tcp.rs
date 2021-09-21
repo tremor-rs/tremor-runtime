@@ -15,8 +15,7 @@
 
 use crate::errors::{Error, ErrorKind, Result};
 use crate::source::prelude::*;
-use async_std::channel::Sender;
-use async_std::channel::TryRecvError;
+use async_std::channel::{Sender, TryRecvError};
 use async_std::net::TcpListener;
 use async_tls::TlsAcceptor;
 use rustls::internal::pemfile::{certs, pkcs8_private_keys, rsa_private_keys};
