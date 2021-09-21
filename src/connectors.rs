@@ -38,6 +38,9 @@ pub(crate) mod pb;
 /// tcp server connector impl
 pub(crate) mod tcp_server;
 
+/// udp server connector impl
+pub(crate) mod udp_server;
+
 /// std streams connector (stdout, stderr, stdin)
 pub(crate) mod std_streams;
 
@@ -948,7 +951,9 @@ pub trait Connector: Send {
 
     /// called once when the connector is started
     /// `connect` will be called after this for the first time, leave connection attempts in `connect`.
-    async fn on_start(&mut self, ctx: &ConnectorContext) -> Result<ConnectorState>;
+    async fn on_start(&mut self, _ctx: &ConnectorContext) -> Result<ConnectorState> {
+        Ok(ConnectorState::Running)
+    }
 
     /// called when the connector pauses
     async fn on_pause(&mut self, _ctx: &ConnectorContext) {}
@@ -988,6 +993,9 @@ pub async fn register_builtin_connector_types(world: &World) -> Result<()> {
         .await?;
     world
         .register_builtin_connector_type("tcp_server", Box::new(tcp_server::Builder::default()))
+        .await?;
+    world
+        .register_builtin_connector_type("udp_server", Box::new(udp_server::Builder::default()))
         .await?;
     world
         .register_builtin_connector_type("std_stream", Box::new(std_streams::Builder::default()))

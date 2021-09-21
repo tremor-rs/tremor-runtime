@@ -109,6 +109,9 @@ pub enum SourceReply {
     Empty(u64),
 }
 
+// sender for source reply
+pub type SourceReplySender = Sender<SourceReply>;
+
 /// source part of a connector
 #[async_trait::async_trait]
 pub trait Source: Send {
@@ -186,7 +189,7 @@ pub trait Source: Send {
 /// runtime.
 pub struct ChannelSource {
     rx: Receiver<SourceReply>,
-    tx: Sender<SourceReply>,
+    tx: SourceReplySender,
 }
 
 impl ChannelSource {
