@@ -406,6 +406,7 @@ impl Manager {
         let source_ctx = SourceContext {
             uid,
             url: url.clone(),
+            quiescence_beacon: quiescence_beacon.clone(),
         };
 
         let sink_metrics_reporter = MetricsSinkReporter::new(
@@ -428,6 +429,7 @@ impl Manager {
         let ctx = ConnectorContext {
             uid,
             url: url.clone(),
+            quiescence_beacon: quiescence_beacon.clone(),
         };
 
         let addr = Addr {
@@ -607,9 +609,7 @@ impl Manager {
                     Msg::Reconnect => {
                         // reconnect if we are below max_retries, otherwise bail out and fail the connector
                         info!("[Connector::{}] Connecting...", &addr.url);
-                        let new = reconnect
-                            .attempt(connector.as_mut(), &quiescence_beacon, &ctx)
-                            .await?;
+                        let new = reconnect.attempt(connector.as_mut(), &ctx).await?;
                         match (&connectivity, &new) {
                             (Connectivity::Disconnected, Connectivity::Connected) => {
                                 info!("[Connector::{}] Connected.", &addr.url);
@@ -882,6 +882,8 @@ pub struct ConnectorContext {
     pub uid: u64,
     /// url of the connector
     pub url: TremorUrl,
+    /// The Quiescence Beacon
+    pub quiescence_beacon: QuiescenceBeacon,
 }
 
 /// describes connectivity state of the connector
@@ -946,7 +948,6 @@ pub trait Connector: Send {
         &mut self,
         ctx: &ConnectorContext,
         notifier: reconnect::ConnectionLostNotifier,
-        quiescence: &QuiescenceBeacon,
     ) -> Result<bool>;
 
     /// called once when the connector is started

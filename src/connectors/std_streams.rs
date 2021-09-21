@@ -195,7 +195,6 @@ impl Connector for StdStreamConnector {
         &mut self,
         _ctx: &ConnectorContext,
         _notifier: ConnectionLostNotifier,
-        _quiescence: &QuiescenceBeacon,
     ) -> Result<bool> {
         Ok(true)
     }

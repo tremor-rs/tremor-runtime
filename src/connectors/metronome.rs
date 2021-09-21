@@ -89,7 +89,6 @@ impl Connector for Metronome {
         &mut self,
         _ctx: &ConnectorContext,
         _notifier: super::reconnect::ConnectionLostNotifier,
-        _q: &QuiescenceBeacon,
     ) -> Result<bool> {
         Ok(true)
     }

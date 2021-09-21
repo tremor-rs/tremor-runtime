@@ -33,8 +33,6 @@ use tremor_script::utils::hostname;
 use tremor_script::EventPayload;
 use tremor_value::prelude::*;
 
-use super::quiescence::QuiescenceBeacon;
-
 const MEASUREMENT: Cow<'static, str> = Cow::const_str("measurement");
 const TAGS: Cow<'static, str> = Cow::const_str("tags");
 const FIELDS: Cow<'static, str> = Cow::const_str("fields");
@@ -255,7 +253,6 @@ impl Connector for MetricsConnector {
         &mut self,
         _ctx: &ConnectorContext,
         _notifier: ConnectionLostNotifier,
-        _q: &QuiescenceBeacon,
     ) -> Result<bool> {
         Ok(!self.tx.is_closed())
     }
