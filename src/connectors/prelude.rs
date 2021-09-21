@@ -18,7 +18,8 @@ pub use crate::connectors::sink::{
     EventSerializer, ResultVec, Sink, SinkAddr, SinkContext, SinkData, SinkManagerBuilder,
 };
 pub use crate::connectors::source::{
-    Source, SourceAddr, SourceContext, SourceManagerBuilder, SourceReply,
+    ChannelSource, Source, SourceAddr, SourceContext, SourceManagerBuilder, SourceReply,
+    SourceReplySender,
 };
 pub use crate::connectors::{
     Connector, ConnectorBuilder, ConnectorContext, ConnectorState, StreamIdGen,
