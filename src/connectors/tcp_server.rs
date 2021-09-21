@@ -159,9 +159,8 @@ impl Connector for TcpServer {
     #[allow(clippy::too_many_lines)]
     async fn connect(
         &mut self,
-        _ctx: &ConnectorContext,
+        ctx: &ConnectorContext,
         notifier: ConnectionLostNotifier,
-        quiescence: &QuiescenceBeacon,
     ) -> Result<bool> {
         let path = vec![self.config.port.to_string()];
         let accept_url = self.url.clone();
@@ -176,7 +175,7 @@ impl Connector for TcpServer {
         }
 
         // for checking if we should stop reading / writing - getting notified by the engine
-        let quiescence = quiescence.clone();
+        let quiescence = ctx.quiescence_beacon.clone();
 
         let listener = TcpListener::bind((self.config.host.as_str(), self.config.port)).await?;
         // accept task
