@@ -32,6 +32,7 @@ pub(crate) struct Reconnect {
 /// can use to asynchronously notify the runtime whenever their connection is lost
 ///
 /// This will change the connector state properly and trigger a new reconnect attempt (according to the configured logic)
+#[derive(Clone)]
 pub struct ConnectionLostNotifier(Sender<Msg>);
 
 impl ConnectionLostNotifier {
@@ -42,13 +43,10 @@ impl ConnectionLostNotifier {
     }
 }
 
-impl From<&Addr> for ConnectionLostNotifier {
-    fn from(addr: &Addr) -> Self {
-        Self(addr.sender.clone())
-    }
-}
-
 impl Reconnect {
+    pub(crate) fn notifier(&self) -> ConnectionLostNotifier {
+        ConnectionLostNotifier(self.addr.sender.clone())
+    }
     /// constructor
     pub(crate) fn new(connector_addr: &Addr, config: ReconnectConfig) -> Self {
         let interval_ms = config.interval_ms;
@@ -69,8 +67,7 @@ impl Reconnect {
         connector: &mut dyn Connector,
         ctx: &ConnectorContext,
     ) -> Result<Connectivity> {
-        let notifier = ConnectionLostNotifier::from(&self.addr);
-        match connector.connect(ctx, notifier).await {
+        match connector.connect(ctx).await {
             Ok(true) => {
                 self.reset();
                 Ok(Connectivity::Connected)
