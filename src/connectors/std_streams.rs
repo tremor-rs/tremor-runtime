@@ -191,11 +191,7 @@ where
 
 #[async_trait::async_trait()]
 impl Connector for StdStreamConnector {
-    async fn connect(
-        &mut self,
-        _ctx: &ConnectorContext,
-        _notifier: ConnectionLostNotifier,
-    ) -> Result<bool> {
+    async fn connect(&mut self, _ctx: &ConnectorContext) -> Result<bool> {
         Ok(true)
     }
 

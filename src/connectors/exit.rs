@@ -36,11 +36,7 @@ pub struct Exit {
 
 #[async_trait::async_trait()]
 impl Connector for Exit {
-    async fn connect(
-        &mut self,
-        _ctx: &ConnectorContext,
-        _notifier: super::reconnect::ConnectionLostNotifier,
-    ) -> Result<bool> {
+    async fn connect(&mut self, _ctx: &ConnectorContext) -> Result<bool> {
         Ok(true)
     }
 

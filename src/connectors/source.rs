@@ -14,6 +14,7 @@
 
 #![allow(clippy::module_name_repetitions)]
 
+use async_std::future::timeout;
 use async_std::task;
 use either::Either;
 use std::collections::btree_map::Entry;
@@ -40,6 +41,7 @@ use value_trait::Builder;
 
 use super::metrics::SourceReporter;
 use super::quiescence::QuiescenceBeacon;
+use super::ConnectorContext;
 
 /// Messages a Source can receive
 pub enum SourceMsg {
@@ -191,18 +193,92 @@ pub trait Source: Send {
 pub struct ChannelSource {
     rx: Receiver<SourceReply>,
     tx: SourceReplySender,
+    ctx: SourceContext,
 }
 
 impl ChannelSource {
     /// constructor
-    pub fn new(qsize: usize) -> Self {
+    pub fn new(ctx: SourceContext, qsize: usize) -> Self {
         let (tx, rx) = bounded(qsize);
-        Self { rx, tx }
+        Self { rx, tx, ctx }
     }
 
     /// get the sender for the source
-    pub fn sender(&self) -> Sender<SourceReply> {
-        self.tx.clone()
+    /// FIXME: change the name
+    pub fn sender(&self) -> ChannelSourceRuntime {
+        ChannelSourceRuntime {
+            sender: self.tx.clone(),
+            ctx: self.ctx.clone(),
+        }
+    }
+}
+
+/// How should we treat a stream being done
+///
+/// * StreamClosed -> Only this stream is closed
+/// * ConnectorClosed -> The entire connector is closed, notify that we are disconnected
+#[derive(Debug, Clone, PartialEq, Copy)]
+pub enum StreamReaderDone {
+    StreamClosed,
+    ConnectorClosed,
+}
+
+///
+#[async_trait::async_trait]
+pub trait StreamReader: Send {
+    /// reads from the source reader
+    async fn read(&mut self, stream: u64) -> Result<SourceReply>;
+    fn on_done(&self, _stream: u64) -> StreamReaderDone {
+        StreamReaderDone::StreamClosed
+    }
+}
+/// FIXME: this needs renaming and docs
+#[derive(Clone)]
+pub struct ChannelSourceRuntime {
+    sender: Sender<SourceReply>,
+    ctx: SourceContext,
+}
+
+impl ChannelSourceRuntime {
+    const READ_TIMEOUT_MS: Duration = Duration::from_millis(100);
+    pub(crate) fn register_stream_reader<R>(
+        &self,
+        stream: u64,
+        ctx: &ConnectorContext,
+        mut reader: R,
+    ) where
+        R: StreamReader + 'static,
+    {
+        let ctx = ctx.clone();
+        let tx = self.sender.clone();
+        task::spawn(async move {
+            if tx.send(SourceReply::StartStream(stream)).await.is_err() {
+                error!("[Connector::{}] Failed to start stream", ctx.url);
+                return;
+            };
+
+            while ctx.quiescence_beacon.continue_reading().await {
+                let sc_data = timeout(Self::READ_TIMEOUT_MS, reader.read(stream)).await;
+
+                let sc_data = match sc_data {
+                    Err(_) => continue,
+                    Ok(Ok(d)) => d,
+                    Ok(Err(e)) => {
+                        error!("[Connector::{}] reader error: {}", ctx.url, e);
+                        break;
+                    }
+                };
+                let last = matches!(&sc_data, SourceReply::EndStream(_));
+                if tx.send(sc_data).await.is_err() || last {
+                    break;
+                };
+            }
+            if reader.on_done(stream) == StreamReaderDone::ConnectorClosed {
+                if let Err(e) = ctx.notifier.notify().await {
+                    error!("[Connector::{}] Failed to notify connector: {}", ctx.url, e);
+                };
+            }
+        });
     }
 }
 
@@ -227,6 +303,7 @@ impl Source for ChannelSource {
 
 // TODO make fields private and add some nice methods
 /// context for a source
+#[derive(Clone)]
 pub struct SourceContext {
     /// connector uid
     pub uid: u64,
