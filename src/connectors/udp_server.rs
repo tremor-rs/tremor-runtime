@@ -86,8 +86,8 @@ impl StreamReader for UdpReader {
         }
     }
 
-    fn on_done(&self, _stream: u64) -> StreamReaderDone {
-        StreamReaderDone::ConnectorClosed
+    fn on_done(&self, _stream: u64) -> StreamDone {
+        StreamDone::ConnectorClosed
     }
 }
 

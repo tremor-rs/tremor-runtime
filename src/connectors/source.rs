@@ -218,7 +218,7 @@ impl ChannelSource {
 /// * StreamClosed -> Only this stream is closed
 /// * ConnectorClosed -> The entire connector is closed, notify that we are disconnected
 #[derive(Debug, Clone, PartialEq, Copy)]
-pub enum StreamReaderDone {
+pub enum StreamDone {
     StreamClosed,
     ConnectorClosed,
 }
@@ -228,8 +228,8 @@ pub enum StreamReaderDone {
 pub trait StreamReader: Send {
     /// reads from the source reader
     async fn read(&mut self, stream: u64) -> Result<SourceReply>;
-    fn on_done(&self, _stream: u64) -> StreamReaderDone {
-        StreamReaderDone::StreamClosed
+    fn on_done(&self, _stream: u64) -> StreamDone {
+        StreamDone::StreamClosed
     }
 }
 /// FIXME: this needs renaming and docs
@@ -273,7 +273,7 @@ impl ChannelSourceRuntime {
                     break;
                 };
             }
-            if reader.on_done(stream) == StreamReaderDone::ConnectorClosed {
+            if reader.on_done(stream) == StreamDone::ConnectorClosed {
                 if let Err(e) = ctx.notifier.notify().await {
                     error!("[Connector::{}] Failed to notify connector: {}", ctx.url, e);
                 };
