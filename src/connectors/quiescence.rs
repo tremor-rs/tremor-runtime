@@ -40,7 +40,10 @@ impl QuiescenceBeacon {
     }
 
     /// returns `true` if consumers should continue writing
-    pub fn continue_writing(&self) -> bool {
+    /// doesn't return untill the beacon is unpaused
+    pub async fn continue_writing(&self) -> bool {
+        // FIXME: implement pausing block via a notifier so
+        // that continue_reading allows for pausing the reader
         self.write.load(Ordering::Relaxed)
     }
 

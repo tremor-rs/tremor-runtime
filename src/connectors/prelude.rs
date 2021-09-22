@@ -15,11 +15,12 @@
 pub use crate::connectors::quiescence::QuiescenceBeacon;
 pub use crate::connectors::reconnect::ConnectionLostNotifier;
 pub use crate::connectors::sink::{
-    EventSerializer, ResultVec, Sink, SinkAddr, SinkContext, SinkData, SinkManagerBuilder,
+    ChannelSink, ChannelSinkWriter, EventSerializer, ResultVec, Sink, SinkAddr, SinkContext,
+    SinkData, SinkManagerBuilder,
 };
 pub use crate::connectors::source::{
     ChannelSource, ChannelSourceRuntime, Source, SourceAddr, SourceContext, SourceManagerBuilder,
-    SourceReply, SourceReplySender, StreamReader, StreamReaderDone,
+    SourceReply, SourceReplySender, StreamDone, StreamReader,
 };
 pub use crate::connectors::{
     Connector, ConnectorBuilder, ConnectorContext, ConnectorState, StreamIdGen,
