@@ -12,21 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use crate::connectors::prelude::*;
-use crate::connectors::sink::{AsyncSinkReply, ChannelSink, ChannelSinkMsg};
-use crate::connectors::source::ChannelSource;
 pub use crate::errors::{Error, ErrorKind, Result};
-use async_std::channel::{bounded, Sender};
 use async_std::net::{TcpListener, TcpStream};
 use async_std::task::{self, JoinHandle};
 use futures::io::{AsyncReadExt, AsyncWriteExt};
 use simd_json::ValueAccess;
 use std::net::SocketAddr;
-use tremor_common::time::nanotime;
 use tremor_pipeline::EventOriginUri;
 use tremor_value::{literal, Value};
 
-use super::sink::{SinkAddr, SinkManagerBuilder};
-use super::source::{SourceAddr, SourceManagerBuilder};
+use super::sink::ChannelSinkRuntime;
 
 const URL_SCHEME: &str = "tremor-tcp";
 
@@ -61,7 +56,7 @@ pub struct TcpServer {
     url: TremorUrl,
     config: Config,
     accept_task: Option<JoinHandle<Result<()>>>,
-    sink_channel: Sender<ChannelSinkMsg<ConnectionMeta>>,
+    sink_channel: Option<ChannelSinkRuntime<ConnectionMeta>>,
     source_channel: Option<ChannelSourceRuntime>,
 }
 
@@ -75,12 +70,11 @@ impl ConnectorBuilder for Builder {
     ) -> crate::errors::Result<Box<dyn Connector>> {
         if let Some(raw_config) = raw_config {
             let config = Config::new(raw_config)?;
-            let (dummy_tx2, _dummy_rx) = bounded(1);
             Ok(Box::new(TcpServer {
                 url: id.clone(),
                 config,
-                accept_task: None,       // not yet started
-                sink_channel: dummy_tx2, // replaced in create_sink()
+                accept_task: None,  // not yet started
+                sink_channel: None, // replaced in create_sink()
                 source_channel: None,
             }))
         } else {
@@ -101,7 +95,7 @@ fn resolve_connection_meta(meta: &Value) -> Option<ConnectionMeta> {
 }
 
 struct TcpReader {
-    socket: TcpStream,
+    stream: TcpStream,
     buffer: Vec<u8>,
     origin_uri: EventOriginUri,
     meta: Value<'static>,
@@ -110,7 +104,7 @@ struct TcpReader {
 #[async_trait::async_trait]
 impl StreamReader for TcpReader {
     async fn read(&mut self, stream: u64) -> Result<SourceReply> {
-        let bytes_read = self.socket.read(&mut self.buffer).await?;
+        let bytes_read = self.stream.read(&mut self.buffer).await?;
         if bytes_read == 0 {
             // EOF
             trace!("[Connector::{}] EOF", self.origin_uri);
@@ -129,15 +123,34 @@ impl StreamReader for TcpReader {
         })
     }
 
-    fn on_done(&self, stream: u64) -> StreamReaderDone {
+    fn on_done(&self, stream: u64) -> StreamDone {
         // THIS IS SHUTDOWN!
-        if let Err(e) = self.socket.shutdown(std::net::Shutdown::Read) {
+        if let Err(e) = self.stream.shutdown(std::net::Shutdown::Read) {
             error!(
                 "[Connector::{}] Error shutting down reading half of stream {}: {}",
                 self.origin_uri, stream, e
             );
         }
-        StreamReaderDone::StreamClosed
+        StreamDone::StreamClosed
+    }
+}
+
+struct TcpWriter {
+    stream: TcpStream,
+}
+
+#[async_trait::async_trait]
+impl ChannelSinkWriter for TcpWriter {
+    async fn write(&mut self, data: Vec<Vec<u8>>) -> Result<()> {
+        for chunk in data {
+            let slice: &[u8] = &chunk;
+            self.stream.write_all(slice).await?;
+        }
+        Ok(())
+    }
+    fn on_done(&self, _stream: u64) -> Result<StreamDone> {
+        self.stream.shutdown(std::net::Shutdown::Write)?;
+        Ok(StreamDone::StreamClosed)
     }
 }
 
@@ -156,6 +169,7 @@ impl Connector for TcpServer {
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
         let source = ChannelSource::new(ctx.clone(), builder.qsize());
+        // FIXME: rename sender
         self.source_channel = Some(source.sender());
         let addr = builder.spawn(source, ctx)?;
 
@@ -168,7 +182,8 @@ impl Connector for TcpServer {
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
         let sink = ChannelSink::new(builder.qsize(), resolve_connection_meta, builder.reply_tx());
-        self.sink_channel = sink.sender();
+        // FIXME: rename sender
+        self.sink_channel = Some(sink.sender());
         let addr = builder.spawn(sink, ctx)?;
         Ok(Some(addr))
     }
@@ -181,8 +196,11 @@ impl Connector for TcpServer {
         let source_tx = self
             .source_channel
             .clone()
-            .ok_or("source channel not initialized")?;
-        let sink_tx = self.sink_channel.clone();
+            .ok_or("source runtime not initialized")?;
+        let sink_tx = self
+            .sink_channel
+            .clone()
+            .ok_or("sink runtime not initialized")?;
         let buf_size = self.config.buf_size;
 
         // cancel last accept task if necessary, this will drop the previous listener
@@ -205,12 +223,10 @@ impl Connector for TcpServer {
                     peer_addr
                 );
                 let stream_id: u64 = stream_id_gen.next_stream_id();
-                let connection_meta = peer_addr.into();
+                let connection_meta: ConnectionMeta = peer_addr.into();
                 // Async<T> allows us to read in one thread and write in another concurrently - see its documentation
                 // So we don't need no BiLock like we would when using `.split()`
                 let source_stream = stream.clone();
-                let mut sink_stream = stream;
-                let sink_url = accept_url.clone();
                 let origin_uri = EventOriginUri {
                     scheme: URL_SCHEME.to_string(),
                     host: peer_addr.ip().to_string(),
@@ -221,7 +237,7 @@ impl Connector for TcpServer {
                 // TODO: issue metrics on send time, to detect queues running full
 
                 let tcp_reader = TcpReader {
-                    socket: source_stream,
+                    stream: source_stream,
                     buffer: vec![0; buf_size],
                     origin_uri: origin_uri.clone(),
                     meta: literal!({
@@ -233,66 +249,14 @@ impl Connector for TcpServer {
                 };
                 source_tx.register_stream_reader(stream_id, &ctx, tcp_reader);
 
-                let (stream_tx, stream_rx) = bounded::<SinkData>(QSIZE.load(Ordering::Relaxed));
                 // spawn sink stream task
-                let stream_sink_tx = sink_tx.clone();
-                let write_quiescence = ctx.quiescence_beacon.clone();
-                task::spawn(async move {
-                    // receive loop from channel sink
-                    while let (
-                        true,
-                        Ok(SinkData {
-                            data,
-                            contraflow,
-                            start,
-                        }),
-                    ) = (write_quiescence.continue_writing(), stream_rx.recv().await)
-                    {
-                        let mut failed = false;
-                        for chunk in data {
-                            let slice: &[u8] = &chunk;
-                            if let Err(e) = sink_stream.write_all(slice).await {
-                                failed = true;
-                                error!("[Connector::{}] Error writing TCP data: {}", &sink_url, e);
-                                break;
-                            }
-                        }
-                        // send asyn contraflow insights if requested (only if event.transactional)
-                        if let Some((cf_data, sender)) = contraflow {
-                            let reply = if failed {
-                                AsyncSinkReply::Fail(cf_data)
-                            } else {
-                                AsyncSinkReply::Ack(cf_data, nanotime() - start)
-                            };
-                            if let Err(e) = sender.send(reply).await {
-                                error!(
-                                    "[Connector::{}] Error sending async sink reply: {}",
-                                    &sink_url, e
-                                );
-                            }
-                        }
-                        if failed {
-                            break;
-                        }
-                    }
-                    if let Err(e) = sink_stream.shutdown(std::net::Shutdown::Write) {
-                        error!(
-                            "[Connector::{}] Error shutting down read half of stream {}: {}",
-                            &sink_url, stream_id, e
-                        );
-                    }
-                    stream_sink_tx
-                        .send(ChannelSinkMsg::RemoveStream(stream_id))
-                        .await?;
-                    Result::Ok(())
-                });
-                sink_tx
-                    .send(ChannelSinkMsg::NewStream {
-                        stream_id,
-                        meta: Some(connection_meta),
-                        sender: stream_tx,
-                    })
-                    .await?;
+
+                sink_tx.register_stream_writer(
+                    stream_id,
+                    Some(connection_meta.clone()),
+                    &ctx,
+                    TcpWriter { stream },
+                );
             }
 
             // notify connector task about disconnect
