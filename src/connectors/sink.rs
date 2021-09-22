@@ -19,10 +19,10 @@ use crate::config::{Codec as CodecConfig, Connector as ConnectorConfig};
 use crate::connectors::Msg;
 use crate::errors::Result;
 use crate::permge::PriorityMerge;
-use crate::pipeline;
 use crate::postprocessor::{make_postprocessors, postprocess, Postprocessors};
 use crate::url::ports::IN;
 use crate::url::TremorUrl;
+use crate::{pipeline, QSIZE};
 use async_std::channel::{bounded, unbounded, Receiver, Sender};
 use async_std::stream::StreamExt; // for .next() on PriorityMerge
 use async_std::task;
@@ -35,6 +35,7 @@ use std::borrow::Borrow;
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, HashSet};
 use std::hash::Hash;
+use std::sync::atomic::Ordering;
 use tremor_common::time::nanotime;
 use tremor_pipeline::{CbAction, Event, EventId, OpMeta, SignalKind, DEFAULT_STREAM_ID};
 use tremor_script::EventPayload;
@@ -42,6 +43,8 @@ use tremor_script::EventPayload;
 use tremor_value::Value;
 
 use super::metrics::MetricsSinkReporter;
+use super::source::StreamDone;
+use super::ConnectorContext;
 
 /// stuff a sink replies back upon an event or a signal
 /// to the calling sink/connector manager
@@ -174,7 +177,7 @@ pub struct SinkData {
 /// messages a channel sink can receive
 pub enum ChannelSinkMsg<T>
 where
-    T: Hash + Eq,
+    T: Hash + Eq + Send + 'static,
 {
     /// add a new stream
     NewStream {
@@ -192,7 +195,7 @@ where
 /// tracking 1 channel per stream
 pub struct ChannelSink<T, F>
 where
-    T: Hash + Eq,
+    T: Hash + Eq + Send + 'static,
     F: Fn(&Value<'_>) -> Option<T>,
 {
     streams_meta: BiMap<T, u64>,
@@ -206,7 +209,7 @@ where
 // FIXME: implement PauseBehaviour correctly
 impl<T, F> ChannelSink<T, F>
 where
-    T: Hash + Eq,
+    T: Hash + Eq + Send + 'static,
     F: Fn(&Value<'_>) -> Option<T>,
 {
     /// constructor
@@ -225,8 +228,10 @@ where
     }
 
     /// hand out a clone of the `Sender` to reach this sink for new streams
-    pub fn sender(&self) -> Sender<ChannelSinkMsg<T>> {
-        self.tx.clone()
+    pub fn sender(&self) -> ChannelSinkRuntime<T> {
+        ChannelSinkRuntime {
+            tx: self.tx.clone(),
+        }
     }
 
     fn handle_channels_quickly(&mut self, serializer: &mut EventSerializer) -> bool {
@@ -284,6 +289,96 @@ where
                     .get(stream_id)
                     .map(|sender| (stream_id, sender))
             })
+    }
+}
+
+#[async_trait::async_trait]
+pub trait ChannelSinkWriter: Send + Sync {
+    async fn write(&mut self, data: Vec<Vec<u8>>) -> Result<()>;
+    fn on_done(&self, _stream: u64) -> Result<StreamDone> {
+        Ok(StreamDone::StreamClosed)
+    }
+}
+#[derive(Clone)]
+pub struct ChannelSinkRuntime<T>
+where
+    T: Hash + Eq + Send + 'static,
+{
+    tx: Sender<ChannelSinkMsg<T>>,
+}
+
+impl<T> ChannelSinkRuntime<T>
+where
+    T: Hash + Eq + Send + 'static,
+{
+    pub(crate) fn register_stream_writer<W>(
+        &self,
+        stream: u64,
+        connection_meta: Option<T>,
+        ctx: &ConnectorContext,
+        mut writer: W,
+    ) where
+        W: ChannelSinkWriter + 'static,
+    {
+        let (stream_tx, stream_rx) = bounded::<SinkData>(QSIZE.load(Ordering::Relaxed));
+        let stream_sink_tx = self.tx.clone();
+        let ctx = ctx.clone();
+        let tx = self.tx.clone();
+        task::spawn(async move {
+            tx.send(ChannelSinkMsg::NewStream {
+                stream_id: stream,
+                meta: connection_meta,
+                sender: stream_tx,
+            })
+            .await?;
+            // receive loop from channel sink
+            while let (
+                true,
+                Ok(SinkData {
+                    data,
+                    contraflow,
+                    start,
+                }),
+            ) = (
+                ctx.quiescence_beacon.continue_writing().await,
+                stream_rx.recv().await,
+            ) {
+                let failed = writer.write(data).await.is_err();
+
+                // send asyn contraflow insights if requested (only if event.transactional)
+                if let Some((cf_data, sender)) = contraflow {
+                    let reply = if failed {
+                        AsyncSinkReply::Fail(cf_data)
+                    } else {
+                        AsyncSinkReply::Ack(cf_data, nanotime() - start)
+                    };
+                    if let Err(e) = sender.send(reply).await {
+                        error!(
+                            "[Connector::{}] Error sending async sink reply: {}",
+                            ctx.url, e
+                        );
+                    }
+                }
+                if failed {
+                    break;
+                }
+            }
+            let error = match writer.on_done(stream) {
+                Err(e) => Some(e),
+                Ok(StreamDone::ConnectorClosed) => ctx.notifier.notify().await.err(),
+                Ok(_) => None,
+            };
+            if let Some(e) = error {
+                error!(
+                    "[Connector::{}] Error shutting down read half of stream {}: {}",
+                    ctx.url, stream, e
+                );
+            }
+            stream_sink_tx
+                .send(ChannelSinkMsg::RemoveStream(stream))
+                .await?;
+            Result::Ok(())
+        });
     }
 }
 
