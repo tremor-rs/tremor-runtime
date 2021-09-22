@@ -426,12 +426,6 @@ impl Manager {
         // create sink instance
         let sink = connector.create_sink(sink_ctx, sink_builder).await?;
 
-        let ctx = ConnectorContext {
-            uid,
-            url: url.clone(),
-            quiescence_beacon: quiescence_beacon.clone(),
-        };
-
         let addr = Addr {
             uid,
             url: url.clone(),
@@ -441,6 +435,15 @@ impl Manager {
         };
 
         let mut reconnect: Reconnect = Reconnect::new(&addr, config.reconnect);
+        let notifier = reconnect.notifier();
+
+        let ctx = ConnectorContext {
+            uid,
+            url: url.clone(),
+            quiescence_beacon: quiescence_beacon.clone(),
+            notifier: notifier.clone(),
+        };
+
         let send_addr = addr.clone();
         let mut connector_state = ConnectorState::Initialized;
         let mut drainage = None;
@@ -877,6 +880,7 @@ impl Display for ConnectorState {
 }
 
 /// connector context
+#[derive(Clone)]
 pub struct ConnectorContext {
     /// unique identifier
     pub uid: u64,
@@ -884,6 +888,8 @@ pub struct ConnectorContext {
     pub url: TremorUrl,
     /// The Quiescence Beacon
     pub quiescence_beacon: QuiescenceBeacon,
+    /// Notifyer
+    pub notifier: reconnect::ConnectionLostNotifier,
 }
 
 /// describes connectivity state of the connector
@@ -944,11 +950,7 @@ pub trait Connector: Send {
     ///
     /// To know when to stop reading new data from the external connection, the `quiescence` beacon
     /// can be used. Call `.reading()` and `.writing()` to see if you should continue doing so, if not, just stop and rest.
-    async fn connect(
-        &mut self,
-        ctx: &ConnectorContext,
-        notifier: reconnect::ConnectionLostNotifier,
-    ) -> Result<bool>;
+    async fn connect(&mut self, ctx: &ConnectorContext) -> Result<bool>;
 
     /// called once when the connector is started
     /// `connect` will be called after this for the first time, leave connection attempts in `connect`.

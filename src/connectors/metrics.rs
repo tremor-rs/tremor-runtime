@@ -14,7 +14,6 @@
 
 use std::sync::atomic::Ordering;
 
-use crate::connectors::reconnect::ConnectionLostNotifier;
 use crate::connectors::sink::{
     EventSerializer, ResultVec, Sink, SinkAddr, SinkContext, SinkManagerBuilder, SinkReply,
 };
@@ -249,11 +248,7 @@ impl ConnectorBuilder for Builder {
 
 #[async_trait::async_trait()]
 impl Connector for MetricsConnector {
-    async fn connect(
-        &mut self,
-        _ctx: &ConnectorContext,
-        _notifier: ConnectionLostNotifier,
-    ) -> Result<bool> {
+    async fn connect(&mut self, _ctx: &ConnectorContext) -> Result<bool> {
         Ok(!self.tx.is_closed())
     }
 

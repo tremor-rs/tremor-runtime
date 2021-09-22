@@ -14,11 +14,9 @@
 
 ///! The UDP server will close the udp spcket on stop
 use crate::connectors::prelude::*;
-use async_std::{
-    channel::bounded,
-    net::UdpSocket,
-    task::{self, JoinHandle},
-};
+use async_std::net::UdpSocket;
+
+use super::source::StreamReader;
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Config {
@@ -34,9 +32,8 @@ impl ConfigImpl for Config {}
 
 struct UdpServer {
     config: Config,
-    task: Option<JoinHandle<()>>,
     origin_uri: EventOriginUri,
-    source_channel: SourceReplySender,
+    channel_src: Option<ChannelSourceRuntime>,
 }
 
 #[derive(Debug, Default)]
@@ -58,9 +55,7 @@ impl ConnectorBuilder for Builder {
             Ok(Box::new(UdpServer {
                 config,
                 origin_uri,
-                task: None,
-                // This is a dummy, we need 1 here since 0 is not allowed, it'll get replaced in create_source
-                source_channel: bounded(1).0,
+                channel_src: None,
             }))
         } else {
             Err(ErrorKind::MissingConfiguration(String::from("udp-server")).into())
@@ -68,72 +63,47 @@ impl ConnectorBuilder for Builder {
     }
 }
 
-// impl UdpServer {
-//     fn register_reader<F, R>(stream: u64, u: F)
-//     where
-//         // F: FnOnce(u64) -> Pin<Box<dyn core::future::Future<Output = SourceReply> + Send>>,
-//         R: core::future::Future<Output = SourceReply>,
-//         F: FnOnce(u64) -> R,
-//     {
-//     }
-// }
+struct UdpReader {
+    socket: UdpSocket,
+    buffer: Vec<u8>,
+    origin_uri: EventOriginUri,
+}
+
+#[async_trait::async_trait]
+impl StreamReader for UdpReader {
+    async fn read(&mut self, stream: u64) -> Result<SourceReply> {
+        let bytes_read = self.socket.recv(&mut self.buffer).await?;
+        if bytes_read == 0 {
+            Ok(SourceReply::EndStream(stream))
+        } else {
+            Ok(SourceReply::Data {
+                origin_uri: self.origin_uri.clone(),
+                stream,
+                meta: None,
+                // ALLOW: we know bytes_read is smaller than or equal buf_size
+                data: self.buffer[0..bytes_read].to_vec(),
+            })
+        }
+    }
+
+    fn on_done(&self, _stream: u64) -> StreamReaderDone {
+        StreamReaderDone::ConnectorClosed
+    }
+}
 
 #[async_trait::async_trait()]
 impl Connector for UdpServer {
-    async fn connect(
-        &mut self,
-        ctx: &ConnectorContext,
-        notifier: super::reconnect::ConnectionLostNotifier,
-    ) -> Result<bool> {
-        if self.task.is_none() {
-            let socket = UdpSocket::bind((self.config.host.as_str(), self.config.port)).await?;
-            let origin_uri = self.origin_uri.clone();
-            let q = ctx.quiescence_beacon.clone();
-            let buf_size = self.config.buf_size;
+    async fn connect(&mut self, ctx: &ConnectorContext) -> Result<bool> {
+        let reader = UdpReader {
+            socket: UdpSocket::bind((self.config.host.as_str(), self.config.port)).await?,
+            origin_uri: self.origin_uri.clone(),
+            buffer: vec![0_u8; self.config.buf_size],
+        };
+        self.channel_src
+            .as_ref()
+            .ok_or("source channel not initialized")?
+            .register_stream_reader(DEFAULT_STREAM_ID, ctx, reader);
 
-            // let mut buffer = [0_u8; 1024];
-            // Self::register_reader(DEFAULT_STREAM_ID, |stream| async move {
-            //     let bytes_read = socket.recv(&mut buffer).await.unwrap_or_default();
-            //     if bytes_read == 0 {
-            //         SourceReply::EndStream(stream)
-            //     } else {
-            //         SourceReply::Data {
-            //             origin_uri: origin_uri.clone(),
-            //             stream,
-            //             meta: None,
-            //             // ALLOW: we know bytes_read is smaller than or equal buf_size
-            //             data: buffer[0..bytes_read].to_vec(),
-            //         }
-            //     }
-            // });
-
-            let source_channel = self.source_channel.clone();
-            // .ok_or("source channel not initialized")?;
-
-            self.task = Some(task::spawn(async move {
-                let mut buffer = vec![0_u8; buf_size];
-                while let (true, Ok(bytes_read)) =
-                    (q.continue_reading(), socket.recv(&mut buffer).await)
-                {
-                    if bytes_read == 0 {
-                        break;
-                    }
-                    let sc_data = SourceReply::Data {
-                        origin_uri: origin_uri.clone(),
-                        stream: DEFAULT_STREAM_ID,
-                        meta: None,
-                        // ALLOW: we know bytes_read is smaller than or equal buf_size
-                        data: buffer[0..bytes_read].to_vec(),
-                    };
-                    if source_channel.send(sc_data).await.is_err() {
-                        break;
-                    };
-                }
-                if let Err(e) = notifier.notify().await {
-                    error!("Failed to notify about UDP server stop: {}", e);
-                };
-            }));
-        }
         Ok(true)
     }
 
@@ -146,8 +116,8 @@ impl Connector for UdpServer {
         source_context: SourceContext,
         builder: super::source::SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
-        let source = ChannelSource::new(builder.qsize());
-        self.source_channel = source.sender();
+        let source = ChannelSource::new(source_context.clone(), builder.qsize());
+        self.channel_src = Some(source.sender());
         let addr = builder.spawn(source, source_context)?;
         Ok(Some(addr))
     }
