@@ -85,11 +85,7 @@ impl Source for Metronome {
 }
 #[async_trait::async_trait()]
 impl Connector for Metronome {
-    async fn connect(
-        &mut self,
-        _ctx: &ConnectorContext,
-        _notifier: super::reconnect::ConnectionLostNotifier,
-    ) -> Result<bool> {
+    async fn connect(&mut self, _ctx: &ConnectorContext) -> Result<bool> {
         Ok(true)
     }
 
