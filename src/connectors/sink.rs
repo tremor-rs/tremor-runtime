@@ -175,16 +175,16 @@ pub struct SinkData {
 }
 
 /// messages a channel sink can receive
-pub enum ChannelSinkMsg<T>
+pub enum ChannelSinkMsg<Meta>
 where
-    T: Hash + Eq + Send + 'static,
+    Meta: Hash + Eq + Send + 'static,
 {
     /// add a new stream
     NewStream {
         /// the id of the stream
         stream_id: u64,
         /// stream metadata used for resolving a stream
-        meta: Option<T>,
+        meta: Option<Meta>,
         /// sender to the actual stream handling data
         sender: Sender<SinkData>,
     },
@@ -193,27 +193,27 @@ where
 }
 
 /// tracking 1 channel per stream
-pub struct ChannelSink<T, F>
+pub struct ChannelSink<Meta, F>
 where
-    T: Hash + Eq + Send + 'static,
-    F: Fn(&Value<'_>) -> Option<T>,
+    Meta: Hash + Eq + Send + 'static,
+    F: Fn(&Value<'_>) -> Option<Meta>,
 {
-    streams_meta: BiMap<T, u64>,
+    streams_meta: BiMap<Meta, u64>,
     streams: HashMap<u64, Sender<SinkData>>,
     resolver: F,
-    tx: Sender<ChannelSinkMsg<T>>,
-    rx: Receiver<ChannelSinkMsg<T>>,
+    tx: Sender<ChannelSinkMsg<Meta>>,
+    rx: Receiver<ChannelSinkMsg<Meta>>,
     reply_tx: Sender<AsyncSinkReply>,
 }
 
 // FIXME: implement PauseBehaviour correctly
-impl<T, F> ChannelSink<T, F>
+impl<Meta, Resolver> ChannelSink<Meta, Resolver>
 where
-    T: Hash + Eq + Send + 'static,
-    F: Fn(&Value<'_>) -> Option<T>,
+    Meta: Hash + Eq + Send + 'static,
+    Resolver: Fn(&Value<'_>) -> Option<Meta>,
 {
     /// constructor
-    pub fn new(qsize: usize, resolver: F, reply_tx: Sender<AsyncSinkReply>) -> Self {
+    pub fn new(qsize: usize, resolver: Resolver, reply_tx: Sender<AsyncSinkReply>) -> Self {
         let (tx, rx) = bounded(qsize);
         let streams = HashMap::with_capacity(8);
         let streams_meta = BiMap::with_capacity(8);
@@ -228,7 +228,7 @@ where
     }
 
     /// hand out a clone of the `Sender` to reach this sink for new streams
-    pub fn sender(&self) -> ChannelSinkRuntime<T> {
+    pub fn sender(&self) -> ChannelSinkRuntime<Meta> {
         ChannelSinkRuntime {
             tx: self.tx.clone(),
         }
@@ -300,21 +300,21 @@ pub trait ChannelSinkWriter: Send + Sync {
     }
 }
 #[derive(Clone)]
-pub struct ChannelSinkRuntime<T>
+pub struct ChannelSinkRuntime<Meta>
 where
-    T: Hash + Eq + Send + 'static,
+    Meta: Hash + Eq + Send + 'static,
 {
-    tx: Sender<ChannelSinkMsg<T>>,
+    tx: Sender<ChannelSinkMsg<Meta>>,
 }
 
-impl<T> ChannelSinkRuntime<T>
+impl<Meta> ChannelSinkRuntime<Meta>
 where
-    T: Hash + Eq + Send + 'static,
+    Meta: Hash + Eq + Send + 'static,
 {
     pub(crate) fn register_stream_writer<W>(
         &self,
         stream: u64,
-        connection_meta: Option<T>,
+        connection_meta: Option<Meta>,
         ctx: &ConnectorContext,
         mut writer: W,
     ) where
