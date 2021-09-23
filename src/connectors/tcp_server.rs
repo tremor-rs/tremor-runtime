@@ -55,8 +55,8 @@ pub struct TcpServer {
     url: TremorUrl,
     config: Config,
     accept_task: Option<JoinHandle<Result<()>>>,
-    sink_channel: Option<ChannelSinkRuntime<ConnectionMeta>>,
-    source_channel: Option<ChannelSourceRuntime>,
+    sink_runtime: Option<ChannelSinkRuntime<ConnectionMeta>>,
+    source_runtime: Option<ChannelSourceRuntime>,
 }
 
 #[derive(Debug, Default)]
@@ -73,8 +73,8 @@ impl ConnectorBuilder for Builder {
                 url: id.clone(),
                 config,
                 accept_task: None,  // not yet started
-                sink_channel: None, // replaced in create_sink()
-                source_channel: None,
+                sink_runtime: None, // replaced in create_sink()
+                source_runtime: None,
             }))
         } else {
             Err(crate::errors::ErrorKind::MissingConfiguration(String::from("TcpServer")).into())
@@ -168,8 +168,7 @@ impl Connector for TcpServer {
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
         let source = ChannelSource::new(ctx.clone(), builder.qsize());
-        // FIXME: rename sender
-        self.source_channel = Some(source.sender());
+        self.source_runtime = Some(source.sender());
         let addr = builder.spawn(source, ctx)?;
 
         Ok(Some(addr))
@@ -181,8 +180,7 @@ impl Connector for TcpServer {
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
         let sink = ChannelSink::new(builder.qsize(), resolve_connection_meta, builder.reply_tx());
-        // FIXME: rename sender
-        self.sink_channel = Some(sink.sender());
+        self.sink_runtime = Some(sink.sender());
         let addr = builder.spawn(sink, ctx)?;
         Ok(Some(addr))
     }
@@ -193,11 +191,11 @@ impl Connector for TcpServer {
         let accept_url = self.url.clone();
 
         let source_tx = self
-            .source_channel
+            .source_runtime
             .clone()
             .ok_or("source runtime not initialized")?;
         let sink_tx = self
-            .sink_channel
+            .sink_runtime
             .clone()
             .ok_or("sink runtime not initialized")?;
         let buf_size = self.config.buf_size;
