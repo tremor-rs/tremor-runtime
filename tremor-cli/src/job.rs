@@ -84,7 +84,8 @@ pub(crate) struct TargetProcess {
 }
 
 impl TargetProcess {
-    pub fn new_with_stderr<S>(
+    /// create a process in the current directory
+    pub fn new_in_current_dir<S>(
         cmd: S,
         args: &[String],
         env: &HashMap<String, String>,
@@ -92,17 +93,43 @@ impl TargetProcess {
     where
         S: AsRef<OsStr>,
     {
-        TargetProcess::new(cmd, args, env)
+        TargetProcess::new(cmd, args, env, std::env::current_dir()?)
+    }
+
+    /// create a process in the given directory via `cwd`
+    pub fn new_in_dir<S, P>(
+        cmd: S,
+        args: &[String],
+        env: &HashMap<String, String>,
+        cwd: P,
+    ) -> Result<Self>
+    where
+        S: AsRef<OsStr>,
+        P: AsRef<Path>,
+    {
+        TargetProcess::new(cmd, args, env, cwd)
     }
 
     /// Spawn target process and pipe IO
-    fn new<S>(cmd: S, args: &[String], env: &HashMap<String, String>) -> Result<Self>
+    fn new<S, P>(cmd: S, args: &[String], env: &HashMap<String, String>, cwd: P) -> Result<Self>
     where
         S: AsRef<OsStr>,
+        P: AsRef<Path>,
     {
         let cmd: &OsStr = cmd.as_ref();
+
+        let cwd = {
+            let tmp = cwd.as_ref();
+            if tmp.is_relative() {
+                std::env::current_dir()?.join(tmp)
+            } else {
+                tmp.to_path_buf()
+            }
+            .canonicalize()?
+        };
         let mut target_cmd = Command::new(cmd)
             .args(args)
+            .current_dir(cwd)
             .envs(env)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())

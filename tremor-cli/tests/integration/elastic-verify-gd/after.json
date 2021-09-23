@@ -1,5 +1,5 @@
 {
-    "run": "tests/integration/elastic",
+    "dir": ".",
     "cmd": "docker",
     "args": [
         "rm",

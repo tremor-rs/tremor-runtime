@@ -35,8 +35,8 @@ pub(crate) mod otel;
 /// protobuf helpers
 pub(crate) mod pb;
 
-/// tcp server connector impl
-pub(crate) mod tcp_server;
+/// tcp server and client connector impls
+pub(crate) mod tcp;
 
 /// udp server connector impl
 pub(crate) mod udp_server;
@@ -57,6 +57,9 @@ pub(crate) mod metronome;
 pub(crate) mod exit;
 /// quiescence stuff
 pub(crate) mod quiescence;
+
+/// collection of TLS utilities and configs
+pub(crate) mod tls;
 
 use std::fmt::Display;
 
@@ -219,6 +222,18 @@ impl StreamIdGen {
     }
 }
 
+/// How should we treat a stream being done
+///
+/// * StreamClosed -> Only this stream is closed
+/// * ConnectorClosed -> The entire connector is closed, notify that we are disconnected
+#[derive(Debug, Clone, PartialEq, Copy)]
+pub enum StreamDone {
+    /// Only this stream is closed, (only one of many)
+    StreamClosed,
+    /// With this stream being closed, the whole connector can be considered done/closed
+    ConnectorClosed,
+}
+
 /// msg for the `ConnectorManager` handling all connectors
 pub enum ManagerMsg {
     /// register a new connector type
@@ -282,7 +297,8 @@ impl Manager {
                         let connector = if let Some((builder, _)) =
                             known_connectors.get(&create.config.binding_type)
                         {
-                            let connector_res = builder.from_config(&url, &create.config.config);
+                            let connector_res =
+                                builder.from_config(&url, &create.config.config).await;
                             match connector_res {
                                 Ok(connector) => connector,
                                 Err(e) => {
@@ -980,12 +996,17 @@ pub trait Connector: Send {
 }
 
 /// something that is able to create a connector instance
+#[async_trait::async_trait]
 pub trait ConnectorBuilder: Sync + Send {
     /// create a connector from the given `id` and `config`
     ///
     /// # Errors
     ///  * If the config is invalid for the connector
-    fn from_config(&self, id: &TremorUrl, config: &Option<OpConfig>) -> Result<Box<dyn Connector>>;
+    async fn from_config(
+        &self,
+        id: &TremorUrl,
+        config: &Option<OpConfig>,
+    ) -> Result<Box<dyn Connector>>;
 }
 
 /// registering builtin connector types
@@ -995,22 +1016,25 @@ pub trait ConnectorBuilder: Sync + Send {
 #[cfg(not(tarpaulin_include))]
 pub async fn register_builtin_connector_types(world: &World) -> Result<()> {
     world
+        .register_builtin_connector_type("exit", Box::new(exit::Builder::new(world)))
+        .await?;
+    world
         .register_builtin_connector_type("metrics", Box::new(metrics::Builder::default()))
-        .await?;
-    world
-        .register_builtin_connector_type("tcp_server", Box::new(tcp_server::Builder::default()))
-        .await?;
-    world
-        .register_builtin_connector_type("udp_server", Box::new(udp_server::Builder::default()))
-        .await?;
-    world
-        .register_builtin_connector_type("udp_client", Box::new(udp_client::Builder::default()))
         .await?;
     world
         .register_builtin_connector_type("std_stream", Box::new(std_streams::Builder::default()))
         .await?;
     world
-        .register_builtin_connector_type("exit", Box::new(exit::Builder::new(world)))
+        .register_builtin_connector_type("tcp_client", Box::new(tcp::client::Builder::default()))
+        .await?;
+    world
+        .register_builtin_connector_type("tcp_server", Box::new(tcp::server::Builder::default()))
+        .await?;
+    world
+        .register_builtin_connector_type("udp_client", Box::new(udp_client::Builder::default()))
+        .await?;
+    world
+        .register_builtin_connector_type("udp_server", Box::new(udp_server::Builder::default()))
         .await?;
     Ok(())
 }

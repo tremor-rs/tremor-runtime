@@ -1,5 +1,5 @@
 {
-  "run": "tests/integration/udp_postprocessors/after",
+  "dir": "./after",
   "cmd": "bash",
   "args": [
     "./after/stop.sh"
