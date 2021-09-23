@@ -137,7 +137,7 @@ pub(crate) fn suite_command(
 
                         // TODO wintel
                         let mut fg_process =
-                            job::TargetProcess::new_with_stderr(resolved_cmd, args, &case.env)?;
+                            job::TargetProcess::new_in_current_dir(resolved_cmd, args, &case.env)?;
                         let exit_status = fg_process.wait_with_output();
 
                         let fg_out_file = suite_root.join(&format!("fg.{}.out.log", counter));

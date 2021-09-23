@@ -6823,6 +6823,7 @@ dependencies = [
  "reqwest 0.11.9",
  "rmp-serde",
  "rustls 0.19.1",
+ "rustls-native-certs",
  "serde",
  "serde_derive",
  "serde_yaml",

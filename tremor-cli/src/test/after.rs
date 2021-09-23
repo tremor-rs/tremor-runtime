@@ -21,7 +21,7 @@ use std::{collections::HashMap, fs, path::Path};
 
 #[derive(Deserialize, Debug)]
 pub(crate) struct After {
-    run: String,
+    dir: String,
     cmd: String,
     args: Vec<String>,
     #[serde(default = "Default::default")]
@@ -29,10 +29,11 @@ pub(crate) struct After {
 }
 
 impl After {
-    pub(crate) fn spawn(&self, _base: &Path) -> Result<Option<TargetProcess>> {
+    pub(crate) fn spawn(&self, base: &Path) -> Result<Option<TargetProcess>> {
         let cmd = job::which(&self.cmd)?;
-
-        let mut process = job::TargetProcess::new_with_stderr(&cmd, &self.args, &self.env)?;
+        // interpret `dir` as relative to `base`
+        let cwd = base.join(&self.dir).canonicalize()?;
+        let mut process = job::TargetProcess::new_in_dir(&cmd, &self.args, &self.env, &cwd)?;
         process.wait_with_output()?;
         Ok(Some(process))
     }

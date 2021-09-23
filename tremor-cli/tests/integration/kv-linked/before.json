@@ -1,5 +1,5 @@
 {
-    "run": "tests/integration/kv-linked",
+    "dir": ".",
     "cmd": "rm",
     "args": [
         "-r",

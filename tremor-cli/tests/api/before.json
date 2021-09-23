@@ -1,5 +1,5 @@
 {
-  "run": "tests/api/before",
+  "dir": "./before",
   "cmd": "tremor",
   "args": [
     "server",
