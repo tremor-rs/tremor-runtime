@@ -41,6 +41,9 @@ pub(crate) mod tcp_server;
 /// udp server connector impl
 pub(crate) mod udp_server;
 
+/// udp server connector impl
+pub(crate) mod udp_client;
+
 /// std streams connector (stdout, stderr, stdin)
 pub(crate) mod std_streams;
 
@@ -999,6 +1002,9 @@ pub async fn register_builtin_connector_types(world: &World) -> Result<()> {
         .await?;
     world
         .register_builtin_connector_type("udp_server", Box::new(udp_server::Builder::default()))
+        .await?;
+    world
+        .register_builtin_connector_type("udp_client", Box::new(udp_client::Builder::default()))
         .await?;
     world
         .register_builtin_connector_type("std_stream", Box::new(std_streams::Builder::default()))
