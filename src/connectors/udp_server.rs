@@ -33,7 +33,7 @@ impl ConfigImpl for Config {}
 struct UdpServer {
     config: Config,
     origin_uri: EventOriginUri,
-    channel_src: Option<ChannelSourceRuntime>,
+    src_runtime: Option<ChannelSourceRuntime>,
 }
 
 #[derive(Debug, Default)]
@@ -55,7 +55,7 @@ impl ConnectorBuilder for Builder {
             Ok(Box::new(UdpServer {
                 config,
                 origin_uri,
-                channel_src: None,
+                src_runtime: None,
             }))
         } else {
             Err(ErrorKind::MissingConfiguration(String::from("udp-server")).into())
@@ -99,7 +99,7 @@ impl Connector for UdpServer {
             origin_uri: self.origin_uri.clone(),
             buffer: vec![0_u8; self.config.buf_size],
         };
-        self.channel_src
+        self.src_runtime
             .as_ref()
             .ok_or("source channel not initialized")?
             .register_stream_reader(DEFAULT_STREAM_ID, ctx, reader);
@@ -117,7 +117,7 @@ impl Connector for UdpServer {
         builder: super::source::SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
         let source = ChannelSource::new(source_context.clone(), builder.qsize());
-        self.channel_src = Some(source.sender());
+        self.src_runtime = Some(source.sender());
         let addr = builder.spawn(source, source_context)?;
         Ok(Some(addr))
     }
