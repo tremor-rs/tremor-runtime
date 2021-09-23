@@ -29,7 +29,7 @@ use std::path::PathBuf;
 
 #[derive(Deserialize, Debug)]
 pub(crate) struct Before {
-    run: String,
+    dir: String,
     cmd: String,
     args: Vec<String>,
     #[serde(default = "Default::default")]
@@ -43,9 +43,12 @@ pub(crate) struct Before {
 }
 
 impl Before {
-    pub(crate) fn spawn(&self) -> Result<Option<TargetProcess>> {
+    pub(crate) fn spawn(&self, base: &PathBuf) -> Result<Option<TargetProcess>> {
         let cmd = job::which(&self.cmd)?;
-        let process = job::TargetProcess::new_with_stderr(&cmd, &self.args, &self.env)?;
+        // interpret `dir` as relative to `base`
+        eprintln!("Before spawn CWD: {}", base.join(&self.dir).display());
+        let cwd = base.join(&self.dir).canonicalize()?;
+        let process = job::TargetProcess::new_in_dir(&cmd, &self.args, &self.env, &cwd)?;
         self.block_on()?;
         Ok(Some(process))
     }
@@ -156,7 +159,7 @@ impl BeforeController {
         if before_path.exists() {
             let before_json = load_before(&before_path);
             match before_json {
-                Ok(before_json) => before_json.spawn(),
+                Ok(before_json) => before_json.spawn(&root),
                 Err(Error(ErrorKind::Common(tremor_common::Error::FileOpen(_, _)), _)) => {
                     // no before json found, all good
                     Ok(None)

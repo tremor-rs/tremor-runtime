@@ -41,7 +41,7 @@ use value_trait::Builder;
 
 use super::metrics::SourceReporter;
 use super::quiescence::QuiescenceBeacon;
-use super::ConnectorContext;
+use super::{ConnectorContext, StreamDone};
 
 /// Messages a Source can receive
 pub enum SourceMsg {
@@ -205,22 +205,12 @@ impl ChannelSource {
 
     /// get the sender for the source
     /// FIXME: change the name
-    pub fn sender(&self) -> ChannelSourceRuntime {
+    pub fn runtime(&self) -> ChannelSourceRuntime {
         ChannelSourceRuntime {
             sender: self.tx.clone(),
             ctx: self.ctx.clone(),
         }
     }
-}
-
-/// How should we treat a stream being done
-///
-/// * StreamClosed -> Only this stream is closed
-/// * ConnectorClosed -> The entire connector is closed, notify that we are disconnected
-#[derive(Debug, Clone, PartialEq, Copy)]
-pub enum StreamDone {
-    StreamClosed,
-    ConnectorClosed,
 }
 
 ///
@@ -232,6 +222,7 @@ pub trait StreamReader: Send {
         StreamDone::StreamClosed
     }
 }
+
 /// FIXME: this needs renaming and docs
 #[derive(Clone)]
 pub struct ChannelSourceRuntime {
