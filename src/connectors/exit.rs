@@ -106,8 +106,9 @@ impl Builder {
     }
 }
 
+#[async_trait::async_trait]
 impl ConnectorBuilder for Builder {
-    fn from_config(
+    async fn from_config(
         &self,
         id: &TremorUrl,
         _config: &Option<OpConfig>,

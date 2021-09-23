@@ -121,6 +121,7 @@ async-tungstenite = { version = "0.16.1", features = ["async-std-runtime"] }
 # for tcp
 async-tls = "0.11"
 rustls = "0.19"
+rustls-native-certs = "0.5"
 
 # dns
 async-std-resolver = "0.20"

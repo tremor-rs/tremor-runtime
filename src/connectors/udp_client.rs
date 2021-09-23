@@ -51,8 +51,10 @@ struct UdpClient {
 
 #[derive(Debug, Default)]
 pub(crate) struct Builder {}
+
+#[async_trait::async_trait]
 impl ConnectorBuilder for Builder {
-    fn from_config(
+    async fn from_config(
         &self,
         _id: &TremorUrl,
         raw_config: &Option<OpConfig>,
@@ -99,7 +101,7 @@ struct UdpWriter {
 // unexpected behaviour - so far we've none
 
 #[async_trait::async_trait]
-impl ChannelSinkWriter for UdpWriter {
+impl StreamWriter for UdpWriter {
     async fn write(&mut self, data: Vec<Vec<u8>>) -> Result<()> {
         for data in data {
             self.socket.send(&data).await?;
@@ -135,7 +137,7 @@ impl Connector for UdpClient {
     ) -> Result<Option<SinkAddr>> {
         let sink = ChannelSink::new(builder.qsize(), resolve_connection_meta, builder.reply_tx());
         // FIXME: rename sender
-        self.sink_runtime = Some(sink.sender());
+        self.sink_runtime = Some(sink.runtime());
         let addr = builder.spawn(sink, ctx)?;
         Ok(Some(addr))
     }
