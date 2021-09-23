@@ -16,10 +16,9 @@ pub use crate::errors::{Error, ErrorKind, Result};
 use async_std::net::{TcpListener, TcpStream};
 use async_std::task::{self, JoinHandle};
 use futures::io::{AsyncReadExt, AsyncWriteExt};
-use simd_json::ValueAccess;
 use std::net::SocketAddr;
 use tremor_pipeline::EventOriginUri;
-use tremor_value::{literal, Value};
+use tremor_value::prelude::*;
 
 use super::sink::ChannelSinkRuntime;
 
@@ -248,9 +247,6 @@ impl Connector for TcpServer {
                     }),
                 };
                 source_tx.register_stream_reader(stream_id, &ctx, tcp_reader);
-
-                // spawn sink stream task
-
                 sink_tx.register_stream_writer(
                     stream_id,
                     Some(connection_meta.clone()),
