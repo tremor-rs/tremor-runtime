@@ -38,8 +38,10 @@ struct UdpServer {
 
 #[derive(Debug, Default)]
 pub(crate) struct Builder {}
+
+#[async_trait::async_trait]
 impl ConnectorBuilder for Builder {
-    fn from_config(
+    async fn from_config(
         &self,
         _id: &TremorUrl,
         raw_config: &Option<OpConfig>,
@@ -117,7 +119,7 @@ impl Connector for UdpServer {
         builder: super::source::SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
         let source = ChannelSource::new(source_context.clone(), builder.qsize());
-        self.src_runtime = Some(source.sender());
+        self.src_runtime = Some(source.runtime());
         let addr = builder.spawn(source, source_context)?;
         Ok(Some(addr))
     }

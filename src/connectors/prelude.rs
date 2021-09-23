@@ -15,15 +15,15 @@
 pub use crate::connectors::quiescence::QuiescenceBeacon;
 pub use crate::connectors::reconnect::ConnectionLostNotifier;
 pub use crate::connectors::sink::{
-    ChannelSink, ChannelSinkWriter, EventSerializer, ResultVec, Sink, SinkAddr, SinkContext,
-    SinkData, SinkManagerBuilder,
+    ChannelSink, ChannelSinkRuntime, EventSerializer, ResultVec, SingleStreamSink,
+    SingleStreamSinkRuntime, Sink, SinkAddr, SinkContext, SinkManagerBuilder, StreamWriter,
 };
 pub use crate::connectors::source::{
     ChannelSource, ChannelSourceRuntime, Source, SourceAddr, SourceContext, SourceManagerBuilder,
-    SourceReply, SourceReplySender, StreamDone, StreamReader,
+    SourceReply, SourceReplySender, StreamReader,
 };
 pub use crate::connectors::{
-    Connector, ConnectorBuilder, ConnectorContext, ConnectorState, StreamIdGen,
+    Connector, ConnectorBuilder, ConnectorContext, ConnectorState, StreamDone, StreamIdGen,
 };
 pub use crate::errors::{Error, ErrorKind, Result};
 pub use crate::url::TremorUrl;

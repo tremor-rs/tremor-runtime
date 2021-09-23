@@ -76,8 +76,10 @@ pub struct StdStreamConnector {
 
 #[derive(Debug, Default)]
 pub(crate) struct Builder {}
+
+#[async_trait::async_trait]
 impl ConnectorBuilder for Builder {
-    fn from_config(
+    async fn from_config(
         &self,
         _id: &TremorUrl,
         raw_config: &Option<OpConfig>,
