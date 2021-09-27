@@ -509,7 +509,7 @@ dependencies = [
  "futures-core",
  "futures-io",
  "rustls 0.19.1",
- "webpki",
+ "webpki 0.21.4",
  "webpki-roots 0.21.1",
 ]
 
@@ -585,7 +585,7 @@ dependencies = [
  "serde",
  "serde_urlencoded 0.6.1",
  "url 2.2.2",
- "webpki",
+ "webpki 0.21.4",
  "webpki-roots 0.19.0",
  "wildmatch",
 ]
@@ -2679,7 +2679,7 @@ dependencies = [
  "rustls 0.19.1",
  "tokio 1.9.0",
  "tokio-rustls",
- "webpki",
+ "webpki 0.21.4",
 ]
 
 [[package]]
@@ -3493,7 +3493,7 @@ dependencies = [
  "regex",
  "rustls 0.19.1",
  "rustls-native-certs",
- "webpki",
+ "webpki 0.21.4",
  "winapi 0.3.9",
 ]
 
@@ -4937,8 +4937,8 @@ dependencies = [
  "base64 0.12.3",
  "log",
  "ring",
- "sct",
- "webpki",
+ "sct 0.6.1",
+ "webpki 0.21.4",
 ]
 
 [[package]]
@@ -4950,8 +4950,20 @@ dependencies = [
  "base64 0.13.0",
  "log",
  "ring",
- "sct",
- "webpki",
+ "sct 0.6.1",
+ "webpki 0.21.4",
+]
+
+[[package]]
+name = "rustls"
+version = "0.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9b5ac6078ca424dc1d3ae2328526a76787fecc7f8011f520e3276730e711fc95"
+dependencies = [
+ "log",
+ "ring",
+ "sct 0.7.0",
+ "webpki 0.22.0",
 ]
 
 [[package]]
@@ -5020,6 +5032,16 @@ name = "sct"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b362b83898e0e69f38515b82ee15aa80636befe47c3b6d3d89a911e78fc228ce"
+dependencies = [
+ "ring",
+ "untrusted",
+]
+
+[[package]]
+name = "sct"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d53dcdb7c9f8158937a7981b48accfd39a43af418591a5d008c7b22b5e1b7ca4"
 dependencies = [
  "ring",
  "untrusted",
@@ -6231,7 +6253,7 @@ checksum = "bc6844de72e57df1980054b38be3a9f4702aba4858be64dd700181a8a6d0e1b6"
 dependencies = [
  "rustls 0.19.1",
  "tokio 1.9.0",
- "webpki",
+ "webpki 0.21.4",
 ]
 
 [[package]]
@@ -6709,7 +6731,7 @@ dependencies = [
  "rental",
  "reqwest 0.11.4",
  "rmp-serde",
- "rustls 0.19.1",
+ "rustls 0.20.0",
  "serde",
  "serde_derive",
  "serde_yaml",
@@ -7284,12 +7306,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "webpki"
+version = "0.22.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f095d78192e208183081cc07bc5515ef55216397af48b873e5edcd72637fa1bd"
+dependencies = [
+ "ring",
+ "untrusted",
+]
+
+[[package]]
 name = "webpki-roots"
 version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8eff4b7516a57307f9349c64bf34caa34b940b66fed4b2fb3136cb7386e5739"
 dependencies = [
- "webpki",
+ "webpki 0.21.4",
 ]
 
 [[package]]
@@ -7298,7 +7330,7 @@ version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0f20dea7535251981a9670857150d571846545088359b28e4951d350bdaf179f"
 dependencies = [
- "webpki",
+ "webpki 0.21.4",
 ]
 
 [[package]]
@@ -7307,7 +7339,7 @@ version = "0.21.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aabe153544e473b775453675851ecc86863d2a81d786d741f6b76778f2a48940"
 dependencies = [
- "webpki",
+ "webpki 0.21.4",
 ]
 
 [[package]]
