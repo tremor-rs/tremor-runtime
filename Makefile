@@ -74,6 +74,11 @@ stdlib-doc:
 	-mkdir docs
 	-TREMOR_PATH=./tremor-script/lib cargo run -p tremor-cli -- doc tremor-script/lib docs
 
+aggr-doc:
+	-rm -rf aggr-docs
+	-mkdir aggr-docs
+	-TREMOR_PATH=./tremor-script/docs cargo run -p tremor-cli -- doc tremor-script/docs aggr-docs
+
 chk_copyright:
 	@./.github/checks/copyright.sh
 
