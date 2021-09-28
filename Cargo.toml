@@ -103,11 +103,11 @@ postgres-protocol = "0.6"
 tokio-postgres = "0.7"
 
 # kafka. cmake is the encouraged way to build this and also the one that works on windows/with musl.
-rdkafka = { version = "0.24", features = [
+rdkafka = { version = "0.26", features = [
   "cmake-build",
   "libz-static",
 ], default-features = false }
-rdkafka-sys = { version = "2.0.0", features = [
+rdkafka-sys = { version = "4.0.0", features = [
   "cmake-build",
   "libz-static",
 ] } # tracking the version rdkafka depends on
