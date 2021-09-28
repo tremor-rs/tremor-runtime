@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+
+- Upgrade dependency on librdkafka to 1.5.2 [#1228](https://github.com/tremor-rs/tremor-runtime/pull/1228).
 ## 0.11.6
 ### Fixes
 
