@@ -41,6 +41,7 @@ perf.data*
 logger-*
 tremor.log
 docs
+aggr-docs
 /packaging/out/
 report.txt
 report.json
