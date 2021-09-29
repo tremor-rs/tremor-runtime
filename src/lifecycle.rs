@@ -33,6 +33,7 @@ pub enum InstanceState {
 
 impl InstanceState {
     /// checks if the state is stopped
+    #[must_use]
     pub fn is_stopped(&self) -> bool {
         *self == InstanceState::Stopped
     }
@@ -90,6 +91,9 @@ impl<A: Artefact> fmt::Debug for InstanceLifecycleFsm<A> {
 
 impl<A: Artefact> InstanceLifecycleFsm<A> {
     /// -> Initialized
+    ///
+    /// # Errors
+    ///   * if the artefact can't be spawned
     pub async fn new(world: World, artefact: A, id: ServantId) -> Result<Self> {
         // delegating actual spawning to the artefact
         let instance = artefact.spawn(&world, id.clone()).await?;
@@ -126,26 +130,41 @@ impl<A: Artefact> InstanceLifecycleFsm<A> {
 
 impl<A: Artefact> InstanceLifecycleFsm<A> {
     /// Transition from Initialized -> Running
+    ///
+    /// # Errors
+    ///   * if we can't transition
     pub async fn start(&mut self) -> Result<&mut Self> {
         self.transition(InstanceState::Running).await
     }
 
     /// Transition from * -> Stopped
+    ///
+    /// # Errors
+    ///   * if we can't transition
     pub async fn stop(&mut self) -> Result<&mut Self> {
         self.transition(InstanceState::Stopped).await
     }
 
     /// Transition from Running -> Paused
+    ///
+    /// # Errors
+    ///   * if we can't transition
     pub async fn pause(&mut self) -> Result<&mut Self> {
         self.transition(InstanceState::Paused).await
     }
 
     /// Transition from Paused -> Running
+    ///
+    /// # Errors
+    ///   * if we can't transition
     pub async fn resume(&mut self) -> Result<&mut Self> {
         self.transition(InstanceState::Running).await
     }
 
     /// Transition from the current state to the next one
+    ///
+    /// # Errors
+    ///   * if we can't transition
     pub async fn transition(&mut self, to: InstanceState) -> Result<&mut Self> {
         use InstanceState::{Initialized, Paused, Running, Stopped};
         match (&self.state, &to) {
