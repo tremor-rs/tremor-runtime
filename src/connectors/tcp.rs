@@ -15,7 +15,13 @@
 pub(crate) mod client;
 pub(crate) mod server;
 
+use super::{
+    sink::StreamWriter,
+    source::{SourceReply, StreamReader},
+    StreamDone,
+};
 use crate::errors::Result;
+use crate::url::TremorUrl;
 use async_std::net::TcpStream;
 use futures::{
     io::{ReadHalf, WriteHalf},
@@ -24,12 +30,6 @@ use futures::{
 use tremor_pipeline::EventOriginUri;
 use tremor_value::Value;
 
-use super::{
-    sink::StreamWriter,
-    source::{SourceReply, StreamReader},
-    StreamDone,
-};
-
 struct TcpReader<S>
 where
     S: futures::io::AsyncRead + std::marker::Unpin + std::marker::Sync + std::marker::Send,
@@ -37,6 +37,7 @@ where
     wrapped_stream: S,
     underlying_stream: TcpStream,
     buffer: Vec<u8>,
+    url: TremorUrl,
     origin_uri: EventOriginUri,
     meta: Value<'static>,
 }
@@ -45,6 +46,7 @@ impl TcpReader<TcpStream> {
     fn new(
         stream: TcpStream,
         buffer: Vec<u8>,
+        url: TremorUrl,
         origin_uri: EventOriginUri,
         meta: Value<'static>,
     ) -> Self {
@@ -52,6 +54,7 @@ impl TcpReader<TcpStream> {
             wrapped_stream: stream.clone(),
             underlying_stream: stream,
             buffer,
+            url,
             origin_uri,
             meta,
         }
@@ -63,6 +66,7 @@ impl TcpReader<ReadHalf<async_tls::server::TlsStream<TcpStream>>> {
         stream: ReadHalf<async_tls::server::TlsStream<TcpStream>>,
         underlying_stream: TcpStream,
         buffer: Vec<u8>,
+        url: TremorUrl,
         origin_uri: EventOriginUri,
         meta: Value<'static>,
     ) -> Self {
@@ -70,6 +74,7 @@ impl TcpReader<ReadHalf<async_tls::server::TlsStream<TcpStream>>> {
             wrapped_stream: stream,
             underlying_stream,
             buffer,
+            url,
             origin_uri,
             meta,
         }
@@ -81,6 +86,7 @@ impl TcpReader<ReadHalf<async_tls::client::TlsStream<TcpStream>>> {
         stream: ReadHalf<async_tls::client::TlsStream<TcpStream>>,
         underlying_stream: TcpStream,
         buffer: Vec<u8>,
+        url: TremorUrl,
         origin_uri: EventOriginUri,
         meta: Value<'static>,
     ) -> Self {
@@ -88,6 +94,7 @@ impl TcpReader<ReadHalf<async_tls::client::TlsStream<TcpStream>>> {
             wrapped_stream: stream,
             underlying_stream,
             buffer,
+            url,
             origin_uri,
             meta,
         }
@@ -103,10 +110,10 @@ where
         let bytes_read = self.wrapped_stream.read(&mut self.buffer).await?;
         if bytes_read == 0 {
             // EOF
-            trace!("[Connector::{}] EOF", self.origin_uri);
+            trace!("[Connector::{}] EOF", &self.url);
             return Ok(SourceReply::EndStream(stream));
         }
-        trace!("[Connector::{}] read {} bytes", self.origin_uri, bytes_read);
+        trace!("[Connector::{}] read {} bytes", &self.url, bytes_read);
 
         // TODO: meta needs to be wrapped in <RESOURCE_TYPE>.<ARTEFACT> by the source manager
         // this is only the connector specific part, without the path mentioned above
@@ -119,12 +126,12 @@ where
         })
     }
 
-    fn on_done(&self, stream: u64) -> StreamDone {
+    async fn on_done(&mut self, stream: u64) -> StreamDone {
         // THIS IS SHUTDOWN!
         if let Err(e) = self.underlying_stream.shutdown(std::net::Shutdown::Read) {
             error!(
                 "[Connector::{}] Error shutting down reading half of stream {}: {}",
-                self.origin_uri, stream, e
+                &self.url, stream, e
             );
         }
         StreamDone::StreamClosed
@@ -182,7 +189,7 @@ where
         }
         Ok(())
     }
-    fn on_done(&self, _stream: u64) -> Result<StreamDone> {
+    async fn on_done(&self, _stream: u64) -> Result<StreamDone> {
         self.underlying_stream.shutdown(std::net::Shutdown::Write)?;
         Ok(StreamDone::StreamClosed)
     }
