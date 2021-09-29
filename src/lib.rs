@@ -108,9 +108,10 @@ use tremor_pipeline::{query::Query, FN_REGISTRY};
 use tremor_script::highlighter::Term as TermHighlighter;
 use tremor_script::Script;
 
-/// Default Q Size
-pub const QSIZE: AtomicUsize = AtomicUsize::new(128);
-
+lazy_static! {
+    /// Default Q Size
+    pub static ref QSIZE: AtomicUsize = AtomicUsize::new(128);
+}
 /// Loads a tremor query file
 /// # Errors
 /// Fails if the file can not be loaded

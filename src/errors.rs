@@ -213,9 +213,9 @@ error_chain! {
             description("The artefact was not found")
                 display("The artefact was not found: {}", id)
         }
-        InstanceNotFound(id: String) {
-            description("The artefact instance not found")
-                display("The artefact instance {} not found", id)
+        InstanceNotFound(artefact: String, id: String) {
+            description("Instance not found")
+                display("The {} instance {} not found", artefact, id)
         }
         CodecNotFound(name: String) {
             description("Codec not found")

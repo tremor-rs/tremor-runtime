@@ -145,9 +145,10 @@ impl From<TremorError> for Error {
             ErrorKind::ArtefactNotFound(url) => {
                 Error::new(StatusCode::NotFound, format!("Artefact not found {}", url))
             }
-            ErrorKind::InstanceNotFound(url) => {
-                Error::new(StatusCode::NotFound, format!("Instance not found {}", url))
-            }
+            ErrorKind::InstanceNotFound(artefact, url) => Error::new(
+                StatusCode::NotFound,
+                format!("{} instance not found {}", artefact, url),
+            ),
             ErrorKind::InvalidTremorUrl(msg, url) => Error::new(
                 StatusCode::BadRequest,
                 format!("Invalid Tremor Url: {} : {}", url, msg),

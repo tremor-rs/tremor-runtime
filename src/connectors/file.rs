@@ -28,7 +28,7 @@ const URL_SCHEME: &str = "tremor-file";
 /// how to open the given file for writing
 #[derive(Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "lowercase")]
-pub enum FileMode {
+pub enum Mode {
     /// read from file
     Read,
     /// Default write mode - equivalent to `truncate`
@@ -42,7 +42,7 @@ pub enum FileMode {
     Overwrite,
 }
 
-impl FileMode {
+impl Mode {
     fn as_open_options(&self) -> OpenOptions {
         let mut o = OpenOptions::new();
         match self {
@@ -67,7 +67,7 @@ impl FileMode {
 #[derive(Deserialize, Debug, Clone)]
 pub struct Config {
     pub path: PathBuf,
-    pub mode: FileMode, // whether we read or write (in various forms)
+    pub mode: Mode, // whether we read or write (in various forms)
     #[serde(default = "default_chunk_size")]
     pub chunk_size: usize,
     #[serde(default = "Default::default")]
@@ -138,13 +138,13 @@ impl Connector for File {
         sink_context: SinkContext,
         builder: super::sink::SinkManagerBuilder,
     ) -> Result<Option<super::sink::SinkAddr>> {
-        Ok(if self.config.mode != FileMode::Read {
+        Ok(if self.config.mode == Mode::Read {
+            None
+        } else {
             let sink = SingleStreamSink::new(builder.qsize(), builder.reply_tx());
             self.sink_runtime = Some(sink.runtime());
             let addr = builder.spawn(sink, sink_context)?;
             Some(addr)
-        } else {
-            None
         })
     }
 
@@ -153,7 +153,7 @@ impl Connector for File {
         source_context: SourceContext,
         builder: super::source::SourceManagerBuilder,
     ) -> Result<Option<super::source::SourceAddr>> {
-        Ok(if self.config.mode == FileMode::Read {
+        Ok(if self.config.mode == Mode::Read {
             let source = ChannelSource::new(source_context.clone(), builder.qsize());
             self.source_runtime = Some(source.runtime());
             let addr = builder.spawn(source, source_context)?;
