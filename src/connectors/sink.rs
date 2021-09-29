@@ -167,7 +167,7 @@ pub trait Sink: Send {
 #[async_trait::async_trait]
 pub trait StreamWriter: Send + Sync {
     async fn write(&mut self, data: Vec<Vec<u8>>) -> Result<()>;
-    fn on_done(&self, _stream: u64) -> Result<StreamDone> {
+    async fn on_done(&self, _stream: u64) -> Result<StreamDone> {
         Ok(StreamDone::StreamClosed)
     }
 }

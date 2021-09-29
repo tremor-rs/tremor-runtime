@@ -205,6 +205,7 @@ impl Connector for TcpServer {
                             tls_read_stream,
                             stream.clone(),
                             vec![0; buf_size],
+                            ctx.url.clone(),
                             origin_uri.clone(),
                             meta,
                         );
@@ -228,6 +229,7 @@ impl Connector for TcpServer {
                         let tcp_reader = TcpReader::new(
                             stream.clone(),
                             vec![0; buf_size],
+                            ctx.url.clone(),
                             origin_uri.clone(),
                             meta,
                         );
