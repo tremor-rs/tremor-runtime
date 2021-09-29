@@ -34,7 +34,7 @@ async-broadcast = "0.3"
 async-compat = "0.2"
 async-compression = { version = "0.3", features = [
   "xz",
-  "futures-bufread",
+  "futures-io",
   "stream",
 ] }
 async-std = { version = "1.11.0", features = [
