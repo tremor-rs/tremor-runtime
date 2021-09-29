@@ -16,7 +16,11 @@
 // basis
 #![cfg(not(tarpaulin_include))]
 
-use async_std::{fs::File, path::Path, path::PathBuf};
+use async_std::{
+    fs::{File, OpenOptions},
+    path::Path,
+    path::PathBuf,
+};
 
 use crate::errors::Error;
 
@@ -29,6 +33,20 @@ where
     S: AsRef<Path> + ?Sized,
 {
     File::open(path).await.map_err(|e| {
+        let p: &Path = path.as_ref();
+        Error::FileOpen(e, p.to_string_lossy().to_string())
+    })
+}
+
+/// A wrapper around `OpenOptions::open` that will give better errors (including the filename)
+///
+/// # Errors
+///   * if the file could not be opened
+pub async fn open_with<S>(path: &S, options: &mut OpenOptions) -> Result<File, Error>
+where
+    S: AsRef<Path> + ?Sized,
+{
+    options.open(path).await.map_err(|e| {
         let p: &Path = path.as_ref();
         Error::FileOpen(e, p.to_string_lossy().to_string())
     })

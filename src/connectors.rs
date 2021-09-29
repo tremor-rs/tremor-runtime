@@ -35,6 +35,8 @@ pub(crate) mod otel;
 /// protobuf helpers
 pub(crate) mod pb;
 
+pub(crate) mod file;
+
 /// tcp server and client connector impls
 pub(crate) mod tcp;
 
@@ -907,7 +909,7 @@ pub struct ConnectorContext {
     pub url: TremorUrl,
     /// The Quiescence Beacon
     pub quiescence_beacon: QuiescenceBeacon,
-    /// Notifyer
+    /// Notifier
     pub notifier: reconnect::ConnectionLostNotifier,
 }
 
@@ -1017,6 +1019,9 @@ pub trait ConnectorBuilder: Sync + Send {
 pub async fn register_builtin_connector_types(world: &World) -> Result<()> {
     world
         .register_builtin_connector_type("exit", Box::new(exit::Builder::new(world)))
+        .await?;
+    world
+        .register_builtin_connector_type("file", Box::new(file::Builder::new(world)))
         .await?;
     world
         .register_builtin_connector_type("metrics", Box::new(metrics::Builder::default()))

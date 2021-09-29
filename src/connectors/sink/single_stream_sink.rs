@@ -98,7 +98,7 @@ impl SingleStreamSinkRuntime {
                     }
                 };
             }
-            let error = match writer.on_done(stream) {
+            let error = match writer.on_done(stream).await {
                 Err(e) => Some(e),
                 Ok(StreamDone::ConnectorClosed) => ctx.notifier.notify().await.err(),
                 Ok(_) => None,

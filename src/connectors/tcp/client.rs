@@ -120,11 +120,11 @@ impl Connector for TcpClient {
         let buf_size = self.config.buf_size;
         let source_runtime = self
             .source_runtime
-            .clone()
+            .as_ref()
             .ok_or("Source runtime not initialized")?;
         let sink_runtime = self
             .sink_runtime
-            .clone()
+            .as_ref()
             .ok_or("Sink runtime not initialized")?;
         let stream = TcpStream::connect((self.config.host.as_str(), self.config.port)).await?;
         let local_addr = stream.local_addr()?;
@@ -164,6 +164,7 @@ impl Connector for TcpClient {
                     read,
                     stream.clone(),
                     vec![0; buf_size],
+                    ctx.url.clone(),
                     origin_uri.clone(),
                     meta,
                 );
@@ -184,8 +185,13 @@ impl Connector for TcpClient {
                     }
                 });
                 // register reader
-                let reader =
-                    TcpReader::new(stream.clone(), vec![0; buf_size], origin_uri.clone(), meta);
+                let reader = TcpReader::new(
+                    stream.clone(),
+                    vec![0; buf_size],
+                    ctx.url.clone(),
+                    origin_uri.clone(),
+                    meta,
+                );
                 source_runtime.register_stream_reader(DEFAULT_STREAM_ID, ctx, reader);
                 // register writer
                 let writer = TcpWriter::new(stream);
