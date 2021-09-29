@@ -614,6 +614,7 @@ impl Manager {
                         tx.send(res.map(|_| pipelines.is_empty())).await?;
                     }
                     Msg::ConnectionLost => {
+                        // FIXME: we don't always want to reconnect - add a flag that determines if a reconnect is appropriate
                         // react on the connection being lost
                         // immediately try to reconnect if we are not in draining state.
                         //

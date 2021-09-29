@@ -236,7 +236,7 @@ impl Instance for BindingArtefact {
             .links
             .iter()
             .flat_map(|(_from, tos)| tos.iter())
-            //.filter(|c| c.is_connector())
+            .filter(|c| c.is_connector())
             .cloned()
             .collect();
         let sources: HashSet<TremorUrl> = self
@@ -279,7 +279,7 @@ impl Instance for BindingArtefact {
             .links
             .iter()
             .flat_map(|(_from, tos)| tos.iter())
-            //.filter(|c| c.is_connector())
+            .filter(|c| c.is_connector())
             .cloned()
             .collect();
         let sources: HashSet<TremorUrl> = self
