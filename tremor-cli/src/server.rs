@@ -14,8 +14,8 @@
 
 use crate::errors::{Error, ErrorKind, Result};
 use crate::util::{get_source_kind, SourceKind};
+use anyhow::Context;
 use async_std::stream::StreamExt;
-use async_std::task;
 use clap::{App, ArgMatches};
 use futures::future;
 use signal_hook::consts::signal::*;
@@ -137,7 +137,11 @@ async fn handle_signals(signals: Signals, world: World) {
 pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
     // Logging
     if let Some(logger_config) = matches.value_of("logger-config") {
-        log4rs::init_file(logger_config, log4rs::config::Deserializers::default())?;
+        if let Err(e) = log4rs::init_file(logger_config, log4rs::config::Deserializers::default())
+            .with_context(|| format!("Error loading logger-config from '{}'", logger_config))
+        {
+            return Err(e.into());
+        }
     } else {
         env_logger::init();
     }
@@ -256,14 +260,28 @@ pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
     Ok(())
 }
 
-fn server_run(matches: &ArgMatches) {
+macro_rules! log_and_print_error {
+    ($($arg:tt)*) => {
+        eprintln!($($arg)*);
+        error!($($arg)*);
+    };
+}
+
+async fn server_run(matches: &ArgMatches) {
     version::print();
-    if let Err(ref e) = task::block_on(run_dun(matches)) {
-        error!("error: {}", e);
-        for e in e.iter().skip(1) {
-            error!("error: {}", e);
+    if let Err(ref e) = run_dun(matches).await {
+        match e {
+            Error(ErrorKind::AnyhowError(anyhow_e), _) => {
+                log_and_print_error!("{:?}", anyhow_e);
+            }
+            e => {
+                log_and_print_error!("Error: {}", e);
+                for e in e.iter().skip(1) {
+                    eprintln!("Caused by: {}", e);
+                }
+            }
         }
-        error!("We are SHUTTING DOWN due to errors during initialization!");
+        log_and_print_error!("We are SHUTTING DOWN due to errors during initialization!");
 
         // ALLOW: main.rs
         ::std::process::exit(1);
@@ -271,9 +289,9 @@ fn server_run(matches: &ArgMatches) {
 }
 
 #[cfg(not(tarpaulin_include))]
-pub(crate) fn run_cmd(mut app: App, cmd: &ArgMatches) -> Result<()> {
+pub(crate) async fn run_cmd(mut app: App<'_>, cmd: &ArgMatches) -> Result<()> {
     if let Some(matches) = cmd.subcommand_matches("run") {
-        server_run(matches);
+        server_run(matches).await;
         Ok(())
     } else {
         app.print_long_help()

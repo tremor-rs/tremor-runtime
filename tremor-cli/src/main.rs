@@ -29,9 +29,11 @@ extern crate serde_derive;
 #[macro_use]
 extern crate log;
 
+#[macro_use]
+extern crate lazy_static;
+
 use crate::errors::{Error, Result};
 use crate::util::{load_config, FormatKind, TremorApp};
-use async_std::task;
 use clap::App;
 use clap::{load_yaml, AppSettings, ArgMatches};
 use std::fs::File;
@@ -81,13 +83,16 @@ where
         Err(e) => Err(e.into()),
     }
 }
+lazy_static! {
+    static ref LONG_VERSION: String = tremor_runtime::version::long_ver();
+}
 
 #[cfg(not(tarpaulin_include))]
-fn main() -> Result<()> {
+#[async_std::main]
+async fn main() -> Result<()> {
     let yaml = load_yaml!("./cli.yaml");
-    let long_version = tremor_runtime::version::long_ver();
     let app = App::from(yaml)
-        .version(long_version.as_str())
+        .version(LONG_VERSION.as_str())
         .global_setting(AppSettings::ColoredHelp)
         .global_setting(AppSettings::ColorAlways)
         .global_setting(AppSettings::PropagateVersion);
@@ -108,15 +113,15 @@ fn main() -> Result<()> {
         // rest of the program execution.
         tremor_runtime::metrics::INSTANCE = forget_s;
     }
-    if let Err(e) = run(app, &matches) {
-        eprintln!("error: {}", e);
+    if let Err(e) = run(app, &matches).await {
+        eprintln!("{}", e);
         // ALLOW: this is supposed to exit
         std::process::exit(1);
     }
     Ok(())
 }
 
-fn run(app: App, cmd: &ArgMatches) -> Result<()> {
+async fn run(mut app: App<'_>, cmd: &ArgMatches) -> Result<()> {
     let format = match &cmd.value_of("format") {
         Some("json") => FormatKind::Json,
         _ => FormatKind::Yaml,
@@ -127,16 +132,19 @@ fn run(app: App, cmd: &ArgMatches) -> Result<()> {
     {
         Some(("explain", Some(_matches))) => Err("Not yet implemented".into()),
         Some(("completions", Some(matches))) => completions::run_cmd(app, matches),
-        Some(("server", Some(matches))) => server::run_cmd(app, matches),
+        Some(("server", Some(matches))) => server::run_cmd(app, matches).await,
         Some(("run", Some(matches))) => run::run_cmd(matches),
         Some(("doc", Some(matches))) => doc::run_cmd(matches),
-        Some(("api", Some(matches))) => task::block_on(api::run_cmd(
-            TremorApp {
-                format,
-                config: load_config()?,
-            },
-            matches,
-        )),
+        Some(("api", Some(matches))) => {
+            api::run_cmd(
+                TremorApp {
+                    format,
+                    config: load_config()?,
+                },
+                matches,
+            )
+            .await
+        }
         Some(("dbg", Some(matches))) => debug::run_cmd(matches),
         Some(("test", Some(matches))) => test::run_cmd(matches),
         other => Err(format!("unknown command: {:?}", other).into()),
