@@ -33,6 +33,7 @@ futures = "0.3"
 halfbrown = "0.1"
 http-types = "2.12"
 # jemallocator = {version = "0.3", optional = false}
+lazy_static = "1"
 log = "0.4"
 log4rs = "1.0.0"
 serde = "1"
