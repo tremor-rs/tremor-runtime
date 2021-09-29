@@ -115,7 +115,7 @@ where
         }
         trace!("[Connector::{}] read {} bytes", &self.url, bytes_read);
 
-        // TODO: meta needs to be wrapped in <RESOURCE_TYPE>.<ARTEFACT> by the source manager
+        // FIXME: meta needs to be wrapped in <RESOURCE_TYPE>.<ARTEFACT> by the source manager
         // this is only the connector specific part, without the path mentioned above
         Ok(SourceReply::Data {
             origin_uri: self.origin_uri.clone(),

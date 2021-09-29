@@ -438,7 +438,9 @@ impl World {
                 self.repo.unbind_pipeline(id).await?;
                 Ok(state)
             }
-            (None, _) => Err(ErrorKind::InstanceNotFound(id.to_string()).into()),
+            (None, _) => {
+                Err(ErrorKind::InstanceNotFound("pipeline".to_string(), id.to_string()).into())
+            }
             (_, None) => Err(ErrorKind::InvalidInstanceUrl(id.to_string()).into()),
         }
     }
@@ -573,7 +575,9 @@ impl World {
                 self.repo.unbind_onramp(id).await?;
                 Ok(state)
             }
-            (None, _) => Err(ErrorKind::InstanceNotFound(id.to_string()).into()),
+            (None, _) => {
+                Err(ErrorKind::InstanceNotFound("onramp".to_string(), id.to_string()).into())
+            }
             (_, None) => Err(ErrorKind::InvalidInstanceUrl(id.to_string()).into()),
         }
     }
@@ -681,7 +685,9 @@ impl World {
                 self.repo.unbind_offramp(id).await?;
                 Ok(state)
             }
-            (None, _) => Err(ErrorKind::InstanceNotFound(id.to_string()).into()),
+            (None, _) => {
+                Err(ErrorKind::InstanceNotFound("offramp".to_string(), id.to_string()).into())
+            }
             (_, None) => Err(ErrorKind::InvalidInstanceUrl(id.to_string()).into()),
         }
     }
@@ -782,7 +788,9 @@ impl World {
                 self.repo.unbind_connector(id).await?;
                 Ok(state)
             }
-            (None, _) => Err(ErrorKind::InstanceNotFound(id.to_string()).into()),
+            (None, _) => {
+                Err(ErrorKind::InstanceNotFound("connector".to_string(), id.to_string()).into())
+            }
             (_, None) => Err(ErrorKind::InvalidInstanceUrl(id.to_string()).into()),
         }
     }
@@ -856,7 +864,7 @@ impl World {
             instance.send(connectors::Msg::Drain(tx)).await?;
             rx.recv().await?
         } else {
-            Err(ErrorKind::InstanceNotFound(id.to_string()).into())
+            Err(ErrorKind::InstanceNotFound("connector".to_string(), id.to_string()).into())
         }
     }
 
@@ -959,7 +967,7 @@ impl World {
 
             Ok(())
         } else {
-            Err(ErrorKind::InstanceNotFound(id.to_string()).into())
+            Err(ErrorKind::InstanceNotFound("binding".to_string(), id.to_string()).into())
         }
     }
 

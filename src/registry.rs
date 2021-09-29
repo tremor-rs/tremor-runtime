@@ -42,7 +42,7 @@ use crate::repository::{
     Artefact, ArtefactId, BindingArtefact, ConnectorArtefact, OfframpArtefact, OnrampArtefact,
     PipelineArtefact,
 };
-use crate::url::TremorUrl;
+use crate::url::{ResourceType, TremorUrl};
 use crate::QSIZE;
 use async_std::channel::{bounded, Sender};
 use async_std::future::timeout;
@@ -73,14 +73,16 @@ where
     id: ServantId,
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub(crate) struct Registry<A: Artefact> {
+    resource_type: ResourceType,
     map: HashMap<ServantId, InstanceLifecycleFsm<A>>,
 }
 
 impl<A: Artefact> Registry<A> {
-    pub fn new() -> Self {
+    pub fn new(resource_type: ResourceType) -> Self {
         Self {
+            resource_type,
             map: HashMap::new(),
         }
     }
@@ -175,7 +177,11 @@ where
                         let id_str = id.to_string();
                         let res = match self.find_mut(id) {
                             Some(s) => s.transition(new_state).await.map(|s| s.state),
-                            None => Err(ErrorKind::InstanceNotFound(id_str).into()),
+                            None => Err(ErrorKind::InstanceNotFound(
+                                self.resource_type.to_string(),
+                                id_str,
+                            )
+                            .into()),
                         };
 
                         r.send(res).await?;
@@ -239,11 +245,11 @@ impl Registries {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            binding: Registry::new().start(),
-            pipeline: Registry::new().start(),
-            onramp: Registry::new().start(),
-            offramp: Registry::new().start(),
-            connector: Registry::new().start(),
+            binding: Registry::new(ResourceType::Binding).start(),
+            pipeline: Registry::new(ResourceType::Pipeline).start(),
+            onramp: Registry::new(ResourceType::Onramp).start(),
+            offramp: Registry::new(ResourceType::Offramp).start(),
+            connector: Registry::new(ResourceType::Connector).start(),
         }
     }
     /// serialize the mappings of this registry
