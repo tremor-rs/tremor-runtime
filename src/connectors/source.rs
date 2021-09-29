@@ -218,7 +218,7 @@ impl ChannelSource {
 pub trait StreamReader: Send {
     /// reads from the source reader
     async fn read(&mut self, stream: u64) -> Result<SourceReply>;
-    fn on_done(&self, _stream: u64) -> StreamDone {
+    async fn on_done(&mut self, _stream: u64) -> StreamDone {
         StreamDone::StreamClosed
     }
 }
@@ -238,7 +238,7 @@ impl ChannelSourceRuntime {
         ctx: &ConnectorContext,
         mut reader: R,
     ) where
-        R: StreamReader + 'static,
+        R: StreamReader + 'static + std::marker::Sync,
     {
         let ctx = ctx.clone();
         let tx = self.sender.clone();
@@ -264,7 +264,7 @@ impl ChannelSourceRuntime {
                     break;
                 };
             }
-            if reader.on_done(stream) == StreamDone::ConnectorClosed {
+            if reader.on_done(stream).await == StreamDone::ConnectorClosed {
                 if let Err(e) = ctx.notifier.notify().await {
                     error!("[Connector::{}] Failed to notify connector: {}", ctx.url, e);
                 };
