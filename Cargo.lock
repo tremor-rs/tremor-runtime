@@ -6558,6 +6558,7 @@ dependencies = [
  "halfbrown",
  "http-types",
  "lalrpop",
+ "lazy_static",
  "log",
  "log4rs",
  "matches",
