@@ -28,6 +28,8 @@ extern crate serde_derive;
 
 #[macro_use]
 extern crate log;
+#[macro_use]
+extern crate lazy_static;
 
 use crate::errors::Result;
 use clap::Parser;
@@ -80,9 +82,13 @@ where
         Err(e) => Err(e.into()),
     }
 }
+lazy_static! {
+    static ref LONG_VERSION: String = tremor_runtime::version::long_ver();
+}
 
 #[cfg(not(tarpaulin_include))]
-fn main() -> Result<()> {
+#[async_std::main]
+async fn main() -> Result<()> {
     let cli = cli::Cli::parse();
 
     tremor_runtime::functions::load()?;
@@ -98,7 +104,7 @@ fn main() -> Result<()> {
         // rest of the program execution.
         tremor_runtime::metrics::INSTANCE = forget_s;
     }
-    if let Err(e) = run(cli) {
+    if let Err(e) = run(cli).await {
         eprintln!("error: {}", e);
         // ALLOW: this is supposed to exit
         std::process::exit(1);
@@ -106,11 +112,11 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn run(cli: Cli) -> Result<()> {
+async fn run(cli: Cli) -> Result<()> {
     match cli.command {
         Command::Completions { shell } => completions::run_cmd(shell),
         Command::Server { command } => {
-            command.run();
+            command.run().await;
             Ok(())
         }
         Command::Test(t) => t.run(cli.verbose > 0),
