@@ -18,7 +18,6 @@ use crate::{
     util::{get_source_kind, SourceKind},
 };
 use async_std::stream::StreamExt;
-use async_std::task;
 use futures::future;
 use signal_hook::consts::signal::*;
 use signal_hook::low_level::signal_name;
@@ -31,16 +30,16 @@ use tremor_runtime::system::{self, ShutdownMode, World};
 use tremor_runtime::{self, version};
 
 impl ServerCommand {
-    pub(crate) fn run(&self) {
+    pub(crate) async fn run(&self) {
         match self {
-            ServerCommand::Run(c) => c.run(),
+            ServerCommand::Run(c) => c.run().await,
         }
     }
 }
 impl ServerRun {
-    pub(crate) fn run(&self) {
+    pub(crate) async fn run(&self) {
         version::print();
-        if let Err(ref e) = task::block_on(self.run_dun()) {
+        if let Err(ref e) = self.run_dun().await {
             error!("error: {}", e);
             for e in e.iter().skip(1) {
                 error!("error: {}", e);
@@ -51,10 +50,9 @@ impl ServerRun {
             ::std::process::exit(1);
         }
     }
+
     #[cfg(not(tarpaulin_include))]
     pub(crate) async fn run_dun(&self) -> Result<()> {
-        use tremor_runtime::system::DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT;
-
         // Logging
         if let Some(logger_config) = &self.logger_config {
             log4rs::init_file(logger_config, log4rs::config::Deserializers::default())?;
@@ -70,7 +68,7 @@ impl ServerRun {
             if d.is_cuda() {
                 eprintln!("CUDA is supported");
             } else {
-                eprintln!("CUDA is NOT  supported, falling back to the CPU");
+                eprintln!("CUDA is NOT supported, falling back to the CPU");
             }
         }
         if let Some(pid_file) = &self.pid {
@@ -139,6 +137,7 @@ impl ServerRun {
             // dummy task never finishing
             async_std::task::spawn(async move { future::pending().await })
         };
+        // waiting for either
         match future::select(handle, api_handle).await {
             future::Either::Left((manager_res, api_handle)) => {
                 // manager stopped
@@ -151,7 +150,7 @@ impl ServerRun {
                 // api stopped
                 if let Err(e) = world
                     .stop(ShutdownMode::Graceful {
-                        timeout: DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT,
+                        timeout: system::DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT,
                     })
                     .await
                 {
@@ -160,10 +159,9 @@ impl ServerRun {
                 manager_handle.cancel().await;
             }
         };
-
         signal_handle.close();
         signal_handler_task.cancel().await;
-        warn!("World stopped");
+        warn!("Tremor stopped.");
         Ok(())
     }
 }
