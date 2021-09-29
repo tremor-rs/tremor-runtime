@@ -148,7 +148,11 @@ impl Artefact for Pipeline {
                         if let Some(offramp) = system.reg.find_offramp(&to).await? {
                             ConnectTarget::Offramp(offramp)
                         } else {
-                            return Err(ErrorKind::InstanceNotFound(to.to_string()).into());
+                            return Err(ErrorKind::InstanceNotFound(
+                                "offramp".to_string(),
+                                to.to_string(),
+                            )
+                            .into());
                         }
                     }
                     Some(ResourceType::Pipeline) => {
@@ -156,21 +160,33 @@ impl Artefact for Pipeline {
                         if let Some(p) = system.reg.find_pipeline(&to).await? {
                             ConnectTarget::Pipeline(Box::new(p))
                         } else {
-                            return Err(ErrorKind::InstanceNotFound(to.to_string()).into());
+                            return Err(ErrorKind::InstanceNotFound(
+                                "pipeline".to_string(),
+                                to.to_string(),
+                            )
+                            .into());
                         }
                     }
                     Some(ResourceType::Onramp) => {
                         if let Some(onramp) = system.reg.find_onramp(&to).await? {
                             ConnectTarget::Onramp(onramp)
                         } else {
-                            return Err(ErrorKind::InstanceNotFound(to.to_string()).into());
+                            return Err(ErrorKind::InstanceNotFound(
+                                "onramp".to_string(),
+                                to.to_string(),
+                            )
+                            .into());
                         }
                     }
                     Some(ResourceType::Connector) => {
                         if let Some(connector) = system.reg.find_connector(&to).await? {
                             ConnectTarget::Connector(connector)
                         } else {
-                            return Err(ErrorKind::InstanceNotFound(to.to_string()).into());
+                            return Err(ErrorKind::InstanceNotFound(
+                                "connector".to_string(),
+                                to.to_string(),
+                            )
+                            .into());
                         }
                     }
                     _ => {
@@ -552,7 +568,11 @@ impl Artefact for ConnectorArtefact {
                             });
                         }
                         Ok(None) => {
-                            return Err(ErrorKind::InstanceNotFound(pipeline.to_string()).into());
+                            return Err(ErrorKind::InstanceNotFound(
+                                "pipeline".to_string(),
+                                pipeline.to_string(),
+                            )
+                            .into());
                         }
                         Err(e) => {
                             return Err(e);
@@ -580,7 +600,7 @@ impl Artefact for ConnectorArtefact {
             }
             Ok(true)
         } else {
-            Err(ErrorKind::InstanceNotFound(id.to_string()).into())
+            Err(ErrorKind::InstanceNotFound("connector".to_string(), id.to_string()).into())
         }
     }
 
@@ -616,7 +636,7 @@ impl Artefact for ConnectorArtefact {
             }
             Ok(now_empty)
         } else {
-            Err(ErrorKind::InstanceNotFound(id.to_string()).into())
+            Err(ErrorKind::InstanceNotFound("connector".to_string(), id.to_string()).into())
         }
     }
 }

@@ -13,6 +13,7 @@
 // limitations under the License.
 
 //! TCP Client connector - maintains a connection to the configured upstream host
+#![allow(clippy::module_name_repetitions)]
 
 use crate::connectors::prelude::*;
 
@@ -139,64 +140,61 @@ impl Connector for TcpClient {
             port: Some(self.config.port),
             path: vec![local_addr.port().to_string()], // local port
         };
-        match self.tls_connector.as_ref() {
-            Some(tls_connector) => {
-                // ~~~ T L S ~~~
-                let tls_stream = tls_connector
-                    .connect(
-                        self.tls_domain
-                            .as_ref()
-                            .map_or_else(|| self.config.host.as_str(), String::as_str),
-                        stream.clone(),
-                    )
-                    .await?;
-                let (read, write) = tls_stream.split();
-                let meta = literal!({
-                    "tls": true,
-                    // TODO: what to put into meta here?
-                    "peer": {
-                        "host": self.config.host.clone(),
-                        "port": self.config.port
-                    }
-                });
-                // register reader
-                let tls_reader = TcpReader::tls_client(
-                    read,
+        if let Some(tls_connector) = self.tls_connector.as_ref() {
+            // ~~~ T L S ~~~
+            let tls_stream = tls_connector
+                .connect(
+                    self.tls_domain
+                        .as_ref()
+                        .map_or_else(|| self.config.host.as_str(), String::as_str),
                     stream.clone(),
-                    vec![0; buf_size],
-                    ctx.url.clone(),
-                    origin_uri.clone(),
-                    meta,
-                );
-                source_runtime.register_stream_reader(DEFAULT_STREAM_ID, ctx, tls_reader);
+                )
+                .await?;
+            let (read, write) = tls_stream.split();
+            let meta = literal!({
+                "tls": true,
+                // TODO: what to put into meta here?
+                "peer": {
+                    "host": self.config.host.clone(),
+                    "port": self.config.port
+                }
+            });
+            // register reader
+            let tls_reader = TcpReader::tls_client(
+                read,
+                stream.clone(),
+                vec![0; buf_size],
+                ctx.url.clone(),
+                origin_uri.clone(),
+                meta,
+            );
+            source_runtime.register_stream_reader(DEFAULT_STREAM_ID, ctx, tls_reader);
 
-                // register writer
-                let tls_writer = TcpWriter::tls_client(write, stream);
-                sink_runtime.register_stream_writer(DEFAULT_STREAM_ID, ctx, tls_writer);
-            }
-            None => {
-                // plain TCP
-                let meta = literal!({
-                    "tls": false,
-                    // TODO: what to put into meta here?
-                    "peer": {
-                        "host": self.config.host.clone(),
-                        "port": self.config.port
-                    }
-                });
-                // register reader
-                let reader = TcpReader::new(
-                    stream.clone(),
-                    vec![0; buf_size],
-                    ctx.url.clone(),
-                    origin_uri.clone(),
-                    meta,
-                );
-                source_runtime.register_stream_reader(DEFAULT_STREAM_ID, ctx, reader);
-                // register writer
-                let writer = TcpWriter::new(stream);
-                sink_runtime.register_stream_writer(DEFAULT_STREAM_ID, ctx, writer);
-            }
+            // register writer
+            let tls_writer = TcpWriter::tls_client(write, stream);
+            sink_runtime.register_stream_writer(DEFAULT_STREAM_ID, ctx, tls_writer);
+        } else {
+            // plain TCP
+            let meta = literal!({
+                "tls": false,
+                // TODO: what to put into meta here?
+                "peer": {
+                    "host": self.config.host.clone(),
+                    "port": self.config.port
+                }
+            });
+            // register reader
+            let reader = TcpReader::new(
+                stream.clone(),
+                vec![0; buf_size],
+                ctx.url.clone(),
+                origin_uri.clone(),
+                meta,
+            );
+            source_runtime.register_stream_reader(DEFAULT_STREAM_ID, ctx, reader);
+            // register writer
+            let writer = TcpWriter::new(stream);
+            sink_runtime.register_stream_writer(DEFAULT_STREAM_ID, ctx, writer);
         }
         Ok(true)
     }
