@@ -1,12 +1,12 @@
-use tremor_runtime::config::{Binding};
-use tremor_runtime::url::TremorUrl;
+use tremor_runtime::config::Binding;
 use tremor_runtime::system;
+use tremor_runtime::url::TremorUrl;
 
+use hashbrown::HashMap;
 use pretty_assertions::assert_eq;
 use std::io::prelude::*;
-use std::os::unix::net::{UnixStream};
+use std::os::unix::net::UnixStream;
 use std::path::Path;
-use hashbrown::HashMap;
 
 use tremor_runtime::errors::*;
 
@@ -28,9 +28,13 @@ pub async fn unix_socket() -> Result<()> {
             "path": socket_path
         }
     });
-    let onramp:tremor_runtime::config::OnRamp = serde_yaml::from_value(serde_yaml::to_value(onramp_config).expect("")).expect("");
+    let onramp: tremor_runtime::config::OnRamp =
+        serde_yaml::from_value(serde_yaml::to_value(onramp_config).expect("")).expect("");
 
-    world.repo.publish_onramp(&onramp_url, false, onramp).await?;
+    world
+        .repo
+        .publish_onramp(&onramp_url, false, onramp)
+        .await?;
 
     let offramp_url = TremorUrl::from_offramp_id("test").expect("");
     let output_file = "/tmp/unix-socket-out.log";
@@ -47,9 +51,13 @@ pub async fn unix_socket() -> Result<()> {
             "file": output_file
         }
     });
-    let offramp:tremor_runtime::config::OffRamp = serde_yaml::from_value(serde_yaml::to_value(offramp_config).expect("")).expect("");
+    let offramp: tremor_runtime::config::OffRamp =
+        serde_yaml::from_value(serde_yaml::to_value(offramp_config).expect("")).expect("");
 
-    world.repo.publish_offramp(&offramp_url, false, offramp).await?;
+    world
+        .repo
+        .publish_offramp(&offramp_url, false, offramp)
+        .await?;
 
     let id = TremorUrl::parse(&format!("/pipeline/{}", "test"))?;
     let module_path = &tremor_script::path::ModulePath { mounts: Vec::new() };
@@ -106,16 +114,18 @@ links:
 
     std::thread::sleep(std::time::Duration::from_millis(1000));
 
-
     world.stop().await?;
 
     let actual_output = std::fs::read_to_string(output_file).unwrap();
-    assert_eq!(r#"{"a":0}
+    assert_eq!(
+        r#"{"a":0}
 {"b":1}
 {"c":2}
 {"d":3}
 {"e":4}
-"#, actual_output);
+"#,
+        actual_output
+    );
 
     Ok(())
 }

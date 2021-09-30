@@ -1,8 +1,8 @@
-use std::path::PathBuf;
-use async_std::channel::TryRecvError;
-use async_std::os::unix::net::{UnixListener};
-use smol::stream::StreamExt;
 use crate::source::prelude::*;
+use async_std::channel::TryRecvError;
+use async_std::os::unix::net::UnixListener;
+use smol::stream::StreamExt;
+use std::path::PathBuf;
 
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct Config {
@@ -13,7 +13,7 @@ impl ConfigImpl for Config {}
 
 pub struct UnixSocket {
     pub config: Config,
-    onramp_id: TremorUrl
+    onramp_id: TremorUrl,
 }
 
 pub struct Int {
@@ -48,7 +48,9 @@ impl Onramp for UnixSocket {
         let source = Int::from_config(config.onramp_uid, self.onramp_id.clone(), &self.config);
         let r = SourceManager::start(source, config).await;
         match r {
-            Err(ref e) => { eprintln!("{:?}", e); }
+            Err(ref e) => {
+                eprintln!("{:?}", e);
+            }
             _ => {}
         }
 
@@ -154,7 +156,7 @@ impl Source for Int {
                         };
                     }
                 });
-                stream_id+=1;
+                stream_id += 1;
             }
         });
 
