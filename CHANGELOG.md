@@ -28,6 +28,7 @@
 - Add win::cardinality function
 - Backpressure now allows lossless (no discard) circuit breaker behaviour [#1119](https://github.com/tremor-rs/tremor-runtime/issues/1119)
 - Allow functions, constants and expressions as roots for path lookups
+- Add the `unix-socket` source
 
 ### Fixes
 
