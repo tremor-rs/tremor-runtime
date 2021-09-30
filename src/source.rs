@@ -54,8 +54,8 @@ pub(crate) mod rest;
 pub(crate) mod stdin;
 pub(crate) mod tcp;
 pub(crate) mod udp;
-pub(crate) mod ws;
 pub mod unix_socket;
+pub(crate) mod ws;
 
 struct StaticValue(Value<'static>);
 
