@@ -46,15 +46,7 @@ impl Int {
 impl Onramp for UnixSocket {
     async fn start(&mut self, config: OnrampConfig<'_>) -> Result<onramp::Addr> {
         let source = Int::from_config(config.onramp_uid, self.onramp_id.clone(), &self.config);
-        let r = SourceManager::start(source, config).await;
-        match r {
-            Err(ref e) => {
-                eprintln!("{:?}", e);
-            }
-            _ => {}
-        }
-
-        r
+        SourceManager::start(source, config).await
     }
 
     fn default_codec(&self) -> &str {
