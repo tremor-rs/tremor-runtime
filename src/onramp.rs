@@ -18,7 +18,7 @@ use crate::repository::ServantId;
 use crate::source::prelude::*;
 use crate::source::{
     amqp, blaster, cb, crononome, discord, file, gsub, kafka, metronome, nats, otel, postgres,
-    rest, stdin, tcp, udp, ws,
+    rest, stdin, tcp, udp, unix_socket, ws,
 };
 use crate::url::TremorUrl;
 use async_std::task::{self, JoinHandle};
@@ -73,20 +73,21 @@ pub(crate) fn lookup(
         "amqp" => amqp::Amqp::from_config(id, config),
         "blaster" => blaster::Blaster::from_config(id, config),
         "cb" => cb::Cb::from_config(id, config),
-        "file" => file::File::from_config(id, config),
-        "kafka" => kafka::Kafka::from_config(id, config),
-        "postgres" => postgres::Postgres::from_config(id, config),
-        "metronome" => metronome::Metronome::from_config(id, config),
         "crononome" => crononome::Crononome::from_config(id, config),
-        "stdin" => stdin::Stdin::from_config(id, config),
-        "udp" => udp::Udp::from_config(id, config),
-        "tcp" => tcp::Tcp::from_config(id, config),
-        "rest" => rest::Rest::from_config(id, config),
-        "ws" => ws::Ws::from_config(id, config),
         "discord" => discord::Discord::from_config(id, config),
-        "otel" => otel::OpenTelemetry::from_config(id, config),
-        "nats" => nats::Nats::from_config(id, config),
+        "file" => file::File::from_config(id, config),
         "gsub" => gsub::GoogleCloudPubSub::from_config(id, config),
+        "kafka" => kafka::Kafka::from_config(id, config),
+        "metronome" => metronome::Metronome::from_config(id, config),
+        "nats" => nats::Nats::from_config(id, config),
+        "otel" => otel::OpenTelemetry::from_config(id, config),
+        "postgres" => postgres::Postgres::from_config(id, config),
+        "rest" => rest::Rest::from_config(id, config),
+        "stdin" => stdin::Stdin::from_config(id, config),
+        "tcp" => tcp::Tcp::from_config(id, config),
+        "udp" => udp::Udp::from_config(id, config),
+        "unix-socket" => unix_socket::UnixSocket::from_config(id, config),
+        "ws" => ws::Ws::from_config(id, config),
         _ => Err(format!("[onramp:{}] Onramp type {} not known", id, name).into()),
     }
 }
