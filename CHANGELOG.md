@@ -6,6 +6,10 @@
 
 - Fix `hdr` and `dds` aggregation function losing events when aggregating > 8192 events
 
+### New Features
+
+- Add the `unix-socket` onramp
+
 ## 0.11.7
 
 ### Fixes
