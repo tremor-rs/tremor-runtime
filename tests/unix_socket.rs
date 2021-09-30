@@ -1,0 +1,121 @@
+use tremor_runtime::config::{Binding};
+use tremor_runtime::url::TremorUrl;
+use tremor_runtime::system;
+
+use pretty_assertions::assert_eq;
+use std::io::prelude::*;
+use std::os::unix::net::{UnixStream};
+use std::path::Path;
+use hashbrown::HashMap;
+
+use tremor_runtime::errors::*;
+
+use simd_json::json;
+use tremor_runtime::repository::BindingArtefact;
+
+#[async_std::test]
+pub async fn unix_socket() -> Result<()> {
+    let socket_path = "/tmp/test-unix-socket-onramp.sock";
+
+    let (world, _handle) = system::World::start(50, None).await?;
+    let onramp_url = TremorUrl::from_onramp_id("test").expect("");
+    let onramp_config = json!({
+        "id": "test",
+        "type": "unix-socket",
+        "codec": "json",
+        "preprocessors": [ "lines" ],
+        "config": {
+            "path": socket_path
+        }
+    });
+    let onramp:tremor_runtime::config::OnRamp = serde_yaml::from_value(serde_yaml::to_value(onramp_config).expect("")).expect("");
+
+    world.repo.publish_onramp(&onramp_url, false, onramp).await?;
+
+    let offramp_url = TremorUrl::from_offramp_id("test").expect("");
+    let output_file = "/tmp/unix-socket-out.log";
+
+    if Path::new(output_file).exists() {
+        std::fs::remove_file(output_file).unwrap();
+    }
+
+    let offramp_config = json!({
+        "id": "test",
+        "type": "file",
+        "codec": "json",
+        "config": {
+            "file": output_file
+        }
+    });
+    let offramp:tremor_runtime::config::OffRamp = serde_yaml::from_value(serde_yaml::to_value(offramp_config).expect("")).expect("");
+
+    world.repo.publish_offramp(&offramp_url, false, offramp).await?;
+
+    let id = TremorUrl::parse(&format!("/pipeline/{}", "test"))?;
+    let module_path = &tremor_script::path::ModulePath { mounts: Vec::new() };
+    let aggr_reg = tremor_script::aggr_registry();
+    let artefact = tremor_pipeline::query::Query::parse(
+        &module_path,
+        "select event from in into out;",
+        "<test>",
+        Vec::new(),
+        &*tremor_pipeline::FN_REGISTRY.lock()?,
+        &aggr_reg,
+    )?;
+    world.repo.publish_pipeline(&id, false, artefact).await?;
+
+    let binding: Binding = serde_yaml::from_str(
+        r#"
+id: test
+links:
+  '/onramp/test/{instance}/out': [ '/pipeline/test/{instance}/in' ]
+  '/pipeline/test/{instance}/out': [ '/offramp/test/{instance}/in' ]
+"#,
+    )?;
+
+    world
+        .repo
+        .publish_binding(
+            &TremorUrl::parse(&format!("/binding/{}", "test"))?,
+            false,
+            BindingArtefact {
+                binding,
+                mapping: None,
+            },
+        )
+        .await?;
+
+    let mapping: HashMap<TremorUrl, HashMap<String, String>> = serde_yaml::from_str(
+        r#"
+/binding/test/01:
+  instance: "01"
+"#,
+    )?;
+
+    let id = TremorUrl::parse(&format!("/binding/{}/01", "test"))?;
+    world.link_binding(&id, mapping[&id].clone()).await?;
+
+    std::thread::sleep(std::time::Duration::from_millis(1000));
+
+    let mut stream = UnixStream::connect(socket_path).unwrap();
+    writeln!(stream, "{}", "{\"a\" : 0}").unwrap();
+    writeln!(stream, "{}", "{\"b\" : 1}").unwrap();
+    writeln!(stream, "{}", "{\"c\" : 2}").unwrap();
+    writeln!(stream, "{}", "{\"d\" : 3}").unwrap();
+    writeln!(stream, "{}", "{\"e\" : 4}").unwrap();
+
+    std::thread::sleep(std::time::Duration::from_millis(1000));
+
+
+    world.stop().await?;
+
+    let actual_output = std::fs::read_to_string(output_file).unwrap();
+    assert_eq!(r#"{"a":0}
+{"b":1}
+{"c":2}
+{"d":3}
+{"e":4}
+"#, actual_output);
+
+    Ok(())
+}
