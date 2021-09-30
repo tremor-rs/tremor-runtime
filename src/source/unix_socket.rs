@@ -174,3 +174,25 @@ impl Source for Int {
         &self.onramp_id
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+    use crate::onramp::Impl;
+    use crate::source::unix_socket::{Config, Int, UnixSocket};
+    use crate::url::TremorUrl;
+
+    #[test]
+    pub fn default_codec_is_json() {
+        let onramp = UnixSocket::from_config(&TremorUrl::from_onramp_id("test").unwrap(), &None).unwrap();
+
+        assert_eq!("json", onramp.default_codec());
+    }
+
+    #[test]
+    pub fn can_be_formatted_for_debug() {
+        let int = Int::from_config(1, TremorUrl::from_onramp_id("test").unwrap(), &Config { path: "/tmp/test.sock".to_string() });
+
+        assert_eq!("unix-socket:/tmp/test.sock", format!("{:?}", int));
+    }
+}
