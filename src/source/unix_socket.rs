@@ -175,24 +175,37 @@ impl Source for Int {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use crate::onramp::Impl;
     use crate::source::unix_socket::{Config, Int, UnixSocket};
     use crate::url::TremorUrl;
+    use simd_json::json;
 
     #[test]
     pub fn default_codec_is_json() {
-        let onramp = UnixSocket::from_config(&TremorUrl::from_onramp_id("test").unwrap(), &None).unwrap();
+        let onramp_config = json!({l
+            "path": "/tmp/test.sock"
+        });
+        let onramp = UnixSocket::from_config(
+            &TremorUrl::from_onramp_id("test").unwrap(),
+            &serde_yaml::from_value(serde_yaml::to_value(onramp_config).expect("")).expect(""),
+        )
+        .unwrap();
 
         assert_eq!("json", onramp.default_codec());
     }
 
     #[test]
     pub fn can_be_formatted_for_debug() {
-        let int = Int::from_config(1, TremorUrl::from_onramp_id("test").unwrap(), &Config { path: "/tmp/test.sock".to_string() });
+        let int = Int::from_config(
+            1,
+            TremorUrl::from_onramp_id("test").unwrap(),
+            &Config {
+                path: "/tmp/test.sock".to_string(),
+            },
+        );
 
-        assert_eq!("unix-socket:/tmp/test.sock", format!("{:?}", int));
+        assert_eq!("UnixSocket:/tmp/test.sock", format!("{:?}", int));
     }
 }
