@@ -16,9 +16,11 @@ use crate::metrics::RampReporter;
 use crate::pipeline;
 use crate::repository::ServantId;
 use crate::source::prelude::*;
+#[cfg(unix)]
+use crate::source::unix_socket;
 use crate::source::{
     amqp, blaster, cb, crononome, discord, file, gsub, kafka, metronome, nats, otel, postgres,
-    rest, stdin, tcp, udp, unix_socket, ws,
+    rest, stdin, tcp, udp, ws,
 };
 use crate::url::TremorUrl;
 use async_std::task::{self, JoinHandle};
@@ -86,6 +88,7 @@ pub(crate) fn lookup(
         "stdin" => stdin::Stdin::from_config(id, config),
         "tcp" => tcp::Tcp::from_config(id, config),
         "udp" => udp::Udp::from_config(id, config),
+        #[cfg(unix)]
         "unix-socket" => unix_socket::UnixSocket::from_config(id, config),
         "ws" => ws::Ws::from_config(id, config),
         _ => Err(format!("[onramp:{}] Onramp type {} not known", id, name).into()),
