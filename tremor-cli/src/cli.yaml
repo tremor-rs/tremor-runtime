@@ -6,17 +6,17 @@ about: Tremor cli - Command Line Interface
 settings:
   - ArgRequiredElseHelp
   - SubcommandRequiredElseHelp
-  - GlobalVersion
+  - PropagateVersion
   - ColorAlways
 args:
   - verbose:
       short: v
       long: verbose
-      multiple: true
-      help: Sets the level of verbosity (does not apply to logging)
+      multiple_occurrences: true
+      about: Sets the level of verbosity (does not apply to logging)
       takes_value: false
   - instance:
-      help: Instance identifier
+      about: Instance identifier
       short: i
       long: instance
       takes_value: true
@@ -46,43 +46,44 @@ subcommands:
             about: Runs the tremor server process
             args:
               - artefacts:
-                  help: Paths to files containing pipelines, onramps, offramps to provision
+                  about: Paths to files containing pipelines, onramps, offramps to provision
                   short: f
                   takes_value: true
                   min_values: 1
                   max_values: 10000 # Imposed practical upper limit
                   required: false
-                  multiple: true
+                  multiple_values: true
+                  multiple_occurrences: true
               - storage-directory:
-                  help: Directory to cache/store runtime type information
+                  about: Directory to cache/store runtime type information
                   short: d
                   takes_value: true
                   required: false
               - pid:
-                  help: Captures process id if set and stores in a file
+                  about: Captures process id if set and stores in a file
                   short: p
                   takes_value: true
                   required: false
               - no-api:
-                  help: Disable the API
+                  about: Disable the API
                   takes_value: false
                   short: n
                   long: no-api
                   required: false
               - api-host:
-                  help: The `host:port` to listen for the API
-                  short: h
+                  about: The `host:port` to listen for the API
+                  short: a
                   long: api-host
                   takes_value: true
                   default_value: "0.0.0.0:9898"
               - logger-config:
-                  help: log4rs config
+                  about: log4rs config
                   short: l
                   long: logger-config
                   takes_value: true
                   required: false
               - recursion-limit:
-                  help: function tail-recursion stack depth limit
+                  about: function tail-recursion stack depth limit
                   short: r
                   long: recursion-limit
                   default_value: "1024"
@@ -92,36 +93,34 @@ subcommands:
       about: Testing facilities
       args:
         - MODE:
-            help: One of `all`, `api`, `bench`, `command`, `integration`, `rest`, or `unit`
-            required: true
+            about: One of `all`, `api`, `bench`, `command`, `integration`, `rest`, or `unit`
             takes_value: true
             default_value: "all"
         - PATH:
-            help: The root test path
-            required: true
+            about: The root test path
             default_value: "tests"
         - REPORT:
-            help: Should generate a test report to specified path
+            about: Should generate a test report to specified path
             short: o
             long: report
             required: false
             takes_value: true
         - INCLUDES:
-            help: Optional tags to filter test executions by
+            about: Optional tags to filter test executions by
             short: i
             long: includes
             required: false
-            multiple: true
+            multiple_values: true
             takes_value: true
         - EXCLUDES:
-            help: Optional tags to filter test executions by
+            about: Optional tags to filter test executions by
             short: e
             long: excludes
             required: false
-            multiple: true
+            multiple_values: true
             takes_value: true
         - QUIET:
-            help: only print failed tests
+            about: only print failed tests
             short: q
             long: quiet
             required: false
@@ -130,15 +129,15 @@ subcommands:
       about: Advanced debugging commands
       args:
         - no-banner:
-            help: do not print the banner
+            about: do not print the banner
             short: b
             long: no-banner
         - no-highlight:
-            help: do not highlight output
+            about: do not highlight output
             short: n
             long: no-highlight
         - raw:
-            help: do not output any formatting. Disables highlight, banner, line numbers.
+            about: do not output any formatting. Disables highlight, banner, line numbers.
             short: r
             long: raw
       subcommands:
@@ -146,35 +145,35 @@ subcommands:
             about: prints the .dot representation for a trickle file (you can use `| dot -Tpng -oout.png` to generate a picture)
             args:
               - SCRIPT:
-                  help: trickle script filename
+                  about: trickle script filename
                   required: true
         - ast:
             about: prints the AST of the source
             args:
               - exprs-only:
-                  help: only prints the expressions
+                  about: only prints the expressions
                   short: x
                   long: exprs-only
               - SCRIPT:
-                  help: tremor/json/trickle script filename
+                  about: tremor/json/trickle script filename
                   required: true
         - lex:
             about: prints lexemes
             args:
               - preprocess:
-                  help: output the pre-processed source.
+                  about: output the pre-processed source.
                   long: preprocess
               - SCRIPT:
-                  help: tremor/json/trickle script filename
+                  about: tremor/json/trickle script filename
                   required: true
         - src:
             about: prints source
             args:
               - preprocess:
-                  help: output the pre-processed source.
+                  about: output the pre-processed source.
                   long: preprocess
               - SCRIPT:
-                  help: tremor/json/trickle script filename
+                  about: tremor/json/trickle script filename
                   required: true
   - run:
       about: >
@@ -182,64 +181,64 @@ subcommands:
         the data will be read from STDIN or an archive and written to STDOUT.
       args:
         - SCRIPT:
-            help: filename to run the data through
+            about: filename to run the data through
             required: true
         - interactive:
-            help: Should not output to consumed source / produced synthetic data or errors
+            about: Should not output to consumed source / produced synthetic data or errors
             long: interactive
         - pretty:
-            help: Should not pretty print data [ when in interactive mode ]
+            about: Should not pretty print data [ when in interactive mode ]
             long: pretty
         - ENCODER:
             short: e
             long: encoder
-            help: The codec to use for encoding the data
+            about: The codec to use for encoding the data
             takes_value: true
             default_value: json
         - DECODER:
             short: d
             long: decoder
-            help: The codec to use for decoding the data
+            about: The codec to use for decoding the data
             takes_value: true
             default_value: json
         - INFILE:
-            help: input file
+            about: input file
             short: i
             takes_value: true
             default_value: "-"
         - OUTFILE:
-            help: output file
+            about: output file
             short: o
             takes_value: true
             default_value: "-"
         - PREPROCESSOR:
             long: pre-processor
-            #            multiple: true
-            help: preprocessor to pass data through before decoding
+            # multiple_values: true
+            about: preprocessor to pass data through before decoding
             default_value: lines
             takes_value: true
         - POSTPROCESSOR:
             long: post-processor
-            #            multiple: true
-            help: postprocessor to pass data through after encoding
+            # multiple_values: true
+            about: postprocessor to pass data through after encoding
             takes_value: true
         - output-port:
             long: port
             short: p
-            help: selects the port to pull output
+            about: selects the port to pull output
   - doc:
       about: >
         Generates documention from tremor script files
       args:
         - interactive:
-            help: generates output to standard output
+            about: generates output to standard output
             short: it
             long: interactive
         - DIR:
-            help: directory or source to generate documents for
+            about: directory or source to generate documents for
             required: true
         - OUTDIR:
-            help: directory to generate documents into
+            about: directory to generate documents into
             takes_value: true
             default_value: "docs"
             required: false
@@ -248,15 +247,14 @@ subcommands:
       args:
         - FORMAT:
             short: f
-            multiple: false
-            help: Sets the output format
+            about: Sets the output format
             possible_values: [json, yaml]
             takes_value: true
         - CONFIG:
             short: c
             long: config
             value_name: FILE
-            help: Sets a custom config file
+            about: Sets a custom config file
             takes_value: true
       subcommands:
         - version:
@@ -270,18 +268,18 @@ subcommands:
                   about: Create a new API target
                   args:
                     - TARGET_ID:
-                        help: The unique target id for the targetted tremor servers
+                        about: The unique target id for the targetted tremor servers
                         required: true
                         takes_value: true
                     - SOURCE:
-                        help: JSON or YAML file request body
+                        about: JSON or YAML file request body
                         required: true
                         takes_value: true
               - delete:
                   about: Delete an existing API target
                   args:
                     - TARGET_ID:
-                        help: The unique target id for the targetted tremor servers
+                        about: The unique target id for the targetted tremor servers
                         required: true
                         takes_value: true
         - binding:
@@ -293,58 +291,58 @@ subcommands:
                   about: Fetch a binding by artefact id
                   args:
                     - ARTEFACT_ID:
-                        help: The unique artefact id for the binding specification
+                        about: The unique artefact id for the binding specification
                         required: true
                         takes_value: true
               - delete:
                   about: Delete a binding by artefact id
                   args:
                     - ARTEFACT_ID:
-                        help: The unique artefact id for the binding specification
+                        about: The unique artefact id for the binding specification
                         required: true
                         takes_value: true
               - create:
                   about: Create and register a binding specification
                   args:
                     - SOURCE:
-                        help: JSON or YAML file request body
+                        about: JSON or YAML file request body
                         takes_value: true
                         required: true
               - instance:
                   about: Fetch an binding instance by artefact id and instance id
                   args:
                     - ARTEFACT_ID:
-                        help: The unique artefact id for the binding specification
+                        about: The unique artefact id for the binding specification
                         required: true
                         takes_value: true
                     - INSTANCE_ID:
-                        help: The unique instance id for the binding specification
+                        about: The unique instance id for the binding specification
                         required: true
                         takes_value: true
               - activate:
                   about: Activate a binding by artefact id and servant instance id
                   args:
                     - ARTEFACT_ID:
-                        help: The unique artefact id for the binding specification
+                        about: The unique artefact id for the binding specification
                         required: true
                         takes_value: true
                     - INSTANCE_ID:
-                        help: The unique instance id for the binding specification
+                        about: The unique instance id for the binding specification
                         required: true
                         takes_value: true
                     - SOURCE:
-                        help: JSON -r YAML file request body
+                        about: JSON -r YAML file request body
                         required: true
                         takes_value: true
               - deactivate:
                   about: Activate a binding by artefact id and servant instance id
                   args:
                     - ARTEFACT_ID:
-                        help: The unique artefact id for the binding specification
+                        about: The unique artefact id for the binding specification
                         required: true
                         takes_value: true
                     - INSTANCE_ID:
-                        help: The unique instance id for the binding specification
+                        about: The unique instance id for the binding specification
                         required: true
                         takes_value: true
         - pipeline:
@@ -356,32 +354,32 @@ subcommands:
                   about: Fetch a pipeline by artefact id
                   args:
                     - ARTEFACT_ID:
-                        help: The unique artefact id for the pipeline specification
+                        about: The unique artefact id for the pipeline specification
                         required: true
                         takes_value: true
               - delete:
                   about: Delete a pipeline by artefact id
                   args:
                     - ARTEFACT_ID:
-                        help: The unique artefact id for the pipeline specification
+                        about: The unique artefact id for the pipeline specification
                         required: true
                         takes_value: true
               - create:
                   about: Create and register a pipeline specification
                   args:
                     - SOURCE:
-                        help: JSON or YAML file request body
+                        about: JSON or YAML file request body
                         required: false
                         takes_value: true
               - instance:
                   about: Fetch an pipeline instance by artefact id and instance id
                   args:
                     - ARTEFACT_ID:
-                        help: The unique artefact id for the pipeline specification
+                        about: The unique artefact id for the pipeline specification
                         required: true
                         takes_value: true
                     - INSTANCE_ID:
-                        help: The unique instance id for the pipeline specification
+                        about: The unique instance id for the pipeline specification
                         required: true
                         takes_value: true
         - onramp:
@@ -393,32 +391,32 @@ subcommands:
                   about: Fetch an onramp by artefact id
                   args:
                     - ARTEFACT_ID:
-                        help: The unique artefact id for the onramp specification
+                        about: The unique artefact id for the onramp specification
                         required: true
                         takes_value: true
               - delete:
                   about: Delete an onramp by artefact id
                   args:
                     - ARTEFACT_ID:
-                        help: The unique artefact id for the onramp specification
+                        about: The unique artefact id for the onramp specification
                         required: true
                         takes_value: true
               - create:
                   about: Create and register an onramp specification
                   args:
                     - SOURCE:
-                        help: JSON or YAML file request body
+                        about: JSON or YAML file request body
                         required: false
                         takes_value: true
               - instance:
                   about: Fetch an onramp instance by artefact id and instance id
                   args:
                     - ARTEFACT_ID:
-                        help: The unique artefact id for the onramp specification
+                        about: The unique artefact id for the onramp specification
                         required: true
                         takes_value: true
                     - INSTANCE_ID:
-                        help: The unique instance id for the onramp specification
+                        about: The unique instance id for the onramp specification
                         required: true
                         takes_value: true
         - offramp:
@@ -430,31 +428,31 @@ subcommands:
                   about: Fetch an offramp by artefact id
                   args:
                     - ARTEFACT_ID:
-                        help: The unique artefact id for the offramp specification
+                        about: The unique artefact id for the offramp specification
                         required: true
                         takes_value: true
               - delete:
                   about: Delete an offramp by artefact id
                   args:
                     - ARTEFACT_ID:
-                        help: The unique artefact id for the offramp specification
+                        about: The unique artefact id for the offramp specification
                         required: true
                         takes_value: true
               - create:
                   about: Create and register an offramp specification
                   args:
                     - SOURCE:
-                        help: JSON or YAML file request body
+                        about: JSON or YAML file request body
                         required: false
                         takes_value: true
               - instance:
                   about: Fetch an offramp instance by artefact id and instance id
                   args:
                     - ARTEFACT_ID:
-                        help: The unique artefact id for the offramp specification
+                        about: The unique artefact id for the offramp specification
                         required: true
                         takes_value: true
                     - INSTANCE_ID:
-                        help: The unique instance id for the offramp specification
+                        about: The unique instance id for the offramp specification
                         required: true
                         takes_value: true
