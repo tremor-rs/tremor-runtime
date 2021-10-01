@@ -193,7 +193,7 @@ where
 
 #[async_trait::async_trait()]
 impl Connector for StdStreamConnector {
-    async fn connect(&mut self, _ctx: &ConnectorContext) -> Result<bool> {
+    async fn connect(&mut self, _ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
         Ok(true)
     }
 

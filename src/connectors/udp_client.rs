@@ -112,7 +112,7 @@ impl StreamWriter for UdpWriter {
 
 #[async_trait::async_trait()]
 impl Connector for UdpClient {
-    async fn connect(&mut self, ctx: &ConnectorContext) -> Result<bool> {
+    async fn connect(&mut self, ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
         let runtime = self
             .sink_runtime
             .as_mut()
