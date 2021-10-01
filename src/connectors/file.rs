@@ -66,10 +66,14 @@ impl Mode {
 /// File connector config
 #[derive(Deserialize, Debug, Clone)]
 pub struct Config {
+    /// path to the file
     pub path: PathBuf,
+    /// how to interface with the file
     pub mode: Mode, // whether we read or write (in various forms)
+    /// chunk_size to read from the file
     #[serde(default = "default_chunk_size")]
     pub chunk_size: usize,
+    /// shutdown the runtime when the file is completely read
     #[serde(default = "Default::default")]
     pub close_on_done: bool,
 }
@@ -81,6 +85,7 @@ fn default_chunk_size() -> usize {
 
 impl ConfigImpl for Config {}
 
+/// file connector
 pub struct File {
     config: Config,
     origin_uri: EventOriginUri,
@@ -89,12 +94,14 @@ pub struct File {
     world: World,
 }
 
-pub(crate) struct Builder {
+/// builder for file connector
+pub struct Builder {
     world: World,
 }
 
 impl Builder {
-    pub(crate) fn new(world: &World) -> Self {
+    /// constructor
+    pub fn new(world: &World) -> Self {
         Self {
             world: world.clone(),
         }

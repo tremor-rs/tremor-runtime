@@ -44,7 +44,7 @@ pub struct Addr {
 
 impl Addr {
     /// creates a new address
-    pub(crate) fn new(
+    pub fn new(
         addr: Sender<Msg>,
         cf_addr: Sender<CfMsg>,
         mgmt_addr: Sender<MgmtMsg>,
@@ -57,10 +57,14 @@ impl Addr {
             id,
         }
     }
+
+    /// number of events in the pipelines channel
     #[cfg(not(tarpaulin_include))]
     pub fn len(&self) -> usize {
         self.addr.len()
     }
+
+    /// pipeline instance id
     #[cfg(not(tarpaulin_include))]
     pub fn id(&self) -> &ServantId {
         &self.id
@@ -91,57 +95,85 @@ impl fmt::Debug for Addr {
     }
 }
 
+/// contraflow message
 #[derive(Debug)]
-pub(crate) enum CfMsg {
+pub enum CfMsg {
+    /// insight
     Insight(Event),
 }
 
+/// possible targets to connect a pipeline to
 #[derive(Debug)]
-pub(crate) enum ConnectTarget {
+pub enum ConnectTarget {
+    /// an onramp
     Onramp(onramp::Addr),
+    /// an offramp
     Offramp(offramp::Addr),
+    /// another pipeline
     Pipeline(Box<Addr>),
+    /// a connector
     Connector(connectors::Addr),
 }
 
+/// control plane message
 #[derive(Debug)]
-pub(crate) enum MgmtMsg {
+pub enum MgmtMsg {
     /// input can only ever be connected to the `in` port, so no need to include it here
     ConnectInput {
+        /// url of the input to connect
         input_url: TremorUrl,
+        /// the target that connects to the `in` port
         target: ConnectTarget,
         /// should we send insights to this input
         transactional: bool,
     },
+    /// connect a target to an output port
     ConnectOutput {
+        /// the port to connect to
         port: Cow<'static, str>,
+        /// the url of the output instance
         output_url: TremorUrl,
+        /// the actual target addr
         target: ConnectTarget,
     },
+    /// disconnect an output
     DisconnectOutput(Cow<'static, str>, TremorUrl),
+    /// disconnect an input
     DisconnectInput(TremorUrl),
+    /// for testing - ensures we drain the channel up to this message
     #[cfg(test)]
     Echo(Sender<()>),
 }
 
+/// an input dataplane message for this pipeline
 #[derive(Debug)]
-pub(crate) enum Msg {
+pub enum Msg {
+    /// an event
     Event {
+        /// the event
         event: Event,
+        /// the port the event came in from
         input: Cow<'static, str>,
     },
+    /// a signal
     Signal(Event),
 }
 
+/// an output destination to send events to
 #[derive(Debug)]
 pub enum Dest {
+    /// an offramp
     Offramp(offramp::Addr),
+    /// another pipeline
     Pipeline(Addr),
+    /// a linked onramp
     LinkedOnramp(onramp::Addr),
+    /// a connector
     Connector(connectors::Addr),
 }
 
 impl Dest {
+    /// send an event out to this destination
     pub async fn send_event(&mut self, input: Cow<'static, str>, event: Event) -> Result<()> {
         match self {
             Self::Offramp(addr) => addr.send(offramp::Msg::Event { input, event }).await?,
@@ -154,6 +186,7 @@ impl Dest {
         }
         Ok(())
     }
+    /// send a signal out to this destination
     pub async fn send_signal(&mut self, signal: Event) -> Result<()> {
         match self {
             Self::Offramp(addr) => addr.send(offramp::Msg::Signal(signal)).await?,
@@ -192,9 +225,13 @@ impl From<ConnectTarget> for Dest {
 /// These are the same as Dest, but kept separately for clarity
 #[derive(Debug)]
 pub enum Input {
+    /// a linked offramp
     LinkedOfframp(offramp::Addr),
+    /// another pipeline
     Pipeline(Addr),
+    /// an onramp
     Onramp(onramp::Addr),
+    /// a connector
     Connector(connectors::Addr),
 }
 
@@ -210,13 +247,19 @@ impl From<ConnectTarget> for Input {
     }
 }
 
+/// all the info for creating a pipeline
 pub struct Create {
+    /// the pipeline config
     pub config: PipelineArtefact,
+    /// the pipeline id
     pub id: ServantId,
 }
 
-pub(crate) enum ManagerMsg {
+/// control plane message for pipeline manager
+pub enum ManagerMsg {
+    /// stop the manager
     Stop,
+    /// create a new pipeline
     Create(Sender<Result<Addr>>, Box<Create>),
 }
 
