@@ -573,6 +573,9 @@ impl Registries {
 
     /// stop all bindings in the binding registry
     /// thereby starting the quiescence process
+    ///
+    /// # Errors
+    ///   * If we can't stop all bindings
     pub async fn stop_all_bindings(&self) -> Result<()> {
         let (tx, rx) = bounded(1);
         self.binding.send(Msg::ListServants(tx)).await?;
