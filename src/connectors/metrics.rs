@@ -14,13 +14,7 @@
 
 use std::sync::atomic::Ordering;
 
-use crate::connectors::sink::{
-    EventSerializer, ResultVec, Sink, SinkAddr, SinkContext, SinkManagerBuilder, SinkReply,
-};
-use crate::connectors::source::{
-    Source, SourceAddr, SourceContext, SourceManagerBuilder, SourceReply,
-};
-use crate::connectors::{Connector, ConnectorBuilder, ConnectorContext, ConnectorState};
+use crate::connectors::prelude::*;
 use crate::errors::{ErrorKind, Result};
 use crate::url::ports::{ERR, IN, OUT};
 use crate::url::TremorUrl;
@@ -248,7 +242,7 @@ impl ConnectorBuilder for Builder {
 
 #[async_trait::async_trait()]
 impl Connector for MetricsConnector {
-    async fn connect(&mut self, _ctx: &ConnectorContext) -> Result<bool> {
+    async fn connect(&mut self, _ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
         Ok(!self.tx.is_closed())
     }
 

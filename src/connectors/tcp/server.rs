@@ -140,7 +140,7 @@ impl Connector for TcpServer {
     }
 
     #[allow(clippy::too_many_lines)]
-    async fn connect(&mut self, ctx: &ConnectorContext) -> Result<bool> {
+    async fn connect(&mut self, ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
         let path = vec![self.config.port.to_string()];
         let accept_url = self.url.clone();
 
