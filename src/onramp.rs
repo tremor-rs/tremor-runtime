@@ -97,7 +97,7 @@ pub trait Onramp: Send {
     fn default_codec(&self) -> &str;
 }
 
-pub(crate) struct Create {
+pub struct Create {
     pub id: ServantId,
     pub stream: Box<dyn Onramp>,
     pub codec: String,
@@ -116,7 +116,7 @@ impl fmt::Debug for Create {
 }
 
 /// This is control plane
-pub(crate) enum ManagerMsg {
+pub enum ManagerMsg {
     Register {
         onramp_type: String,
         builder: Box<dyn Builder>,

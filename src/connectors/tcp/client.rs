@@ -117,7 +117,7 @@ impl Connector for TcpClient {
         Ok(Some(addr))
     }
 
-    async fn connect(&mut self, ctx: &ConnectorContext) -> Result<bool> {
+    async fn connect(&mut self, ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
         let buf_size = self.config.buf_size;
         let source_runtime = self
             .source_runtime
