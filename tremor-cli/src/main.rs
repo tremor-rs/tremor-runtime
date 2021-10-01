@@ -108,19 +108,18 @@ fn main() -> Result<()> {
         tremor_runtime::metrics::INSTANCE = forget_s;
     }
     if let Err(e) = run(app, &matches) {
-        eprintln!("{}", e);
+        eprintln!("error: {}", e);
         // ALLOW: this is supposed to exit
         std::process::exit(1);
     }
     Ok(())
 }
 
-fn run(mut app: App, cmd: &ArgMatches) -> Result<()> {
+fn run(app: App, cmd: &ArgMatches) -> Result<()> {
     let format = match &cmd.value_of("format") {
         Some("json") => FormatKind::Json,
         _ => FormatKind::Yaml,
     };
-
     match cmd
         .subcommand_name()
         .map(|name| (name, cmd.subcommand_matches(name)))
@@ -139,8 +138,6 @@ fn run(mut app: App, cmd: &ArgMatches) -> Result<()> {
         )),
         Some(("dbg", Some(matches))) => debug::run_cmd(matches),
         Some(("test", Some(matches))) => test::run_cmd(matches),
-        _ => app
-            .print_long_help()
-            .map_err(|e| Error::from(format!("failed to print help: {}", e))),
+        other => Err(format!("unknown command: {:?}", other).into()),
     }
 }
