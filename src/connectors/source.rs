@@ -538,8 +538,9 @@ where
 
     /// returns `Ok(true)` if this source should be terminated
     // FIXME: return meaningful enum
+    #[allow(clippy::too_many_lines)]
     async fn control_plane(&mut self) -> Result<bool> {
-        use SourceState::*;
+        use SourceState::{Drained, Draining, Initialized, Paused, Running, Stopped};
         loop {
             if !self.needs_control_plane_msg() {
                 return Ok(false);
@@ -628,10 +629,10 @@ where
                         info!(
                             "[Source::{}] Ignoring incoming Drain message in {:?} state",
                             &self.ctx.url, &self.state
-                        )
+                        );
                     }
                     SourceMsg::Drain(sender) if self.state == Drained => {
-                        if let Err(_) = sender.send(Msg::SourceDrained).await {
+                        if sender.send(Msg::SourceDrained).await.is_err() {
                             error!(
                                 "[Source::{}] Error sending SourceDrained message",
                                 &self.ctx.url
@@ -675,11 +676,10 @@ where
                         // as CF is sent back the DAG to all destinations
                         if uid == self.ctx.uid {
                             self.expected_drained -= 1;
-                            if self.expected_drained <= 0 {
+                            if self.expected_drained == 0 {
                                 // we received 1 drain CB event per connected pipeline (hopefully)
                                 if let Some(connector_channel) = self.connector_channel.as_ref() {
-                                    if let Err(_) = connector_channel.send(Msg::SourceDrained).await
-                                    {
+                                    if connector_channel.send(Msg::SourceDrained).await.is_err() {
                                         error!("[Source::{}] Error sending SourceDrained message to Connector", &self.ctx.url);
                                     }
                                 }

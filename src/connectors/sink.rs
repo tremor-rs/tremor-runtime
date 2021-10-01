@@ -520,7 +520,7 @@ where
                             );
                         }
                         SinkMsg::Drain(sender) if self.state == Drained => {
-                            if let Err(_) = sender.send(Msg::SinkDrained).await {
+                            if sender.send(Msg::SinkDrained).await.is_err() {
                                 error!(
                                     "[Sink::{}] Error sending SinkDrained message.",
                                     &self.ctx.url
@@ -535,7 +535,7 @@ where
                                 // we are all drained
                                 self.state = Drained;
                                 if let Some(sender) = self.drain_channel.take() {
-                                    if let Err(_) = sender.send(Msg::SourceDrained).await {
+                                    if sender.send(Msg::SourceDrained).await.is_err() {
                                         error!(
                                             "[Sink::{}] Error sending SinkDrained message",
                                             &self.ctx.url
@@ -613,11 +613,11 @@ where
                                     if self.drains_received.is_superset(&self.starts_received) {
                                         self.state = Drained;
                                         if let Some(sender) = self.drain_channel.take() {
-                                            if let Err(_) = sender.send(Msg::SinkDrained).await {
+                                            if sender.send(Msg::SinkDrained).await.is_err() {
                                                 error!(
                                                     "[Sink::{}] Error sending SinkDrained message",
                                                     &self.ctx.url
-                                                )
+                                                );
                                             }
                                         }
                                     }
@@ -625,7 +625,7 @@ where
                                     // send a cb Drained contraflow message back
                                     let cf = ContraflowBuilder::from(&signal)
                                         .into_cb(CbAction::Drained(source_uid));
-                                    send_contraflow(&self.pipelines, &self.ctx.url, cf).await
+                                    send_contraflow(&self.pipelines, &self.ctx.url, cf).await;
                                 }
                                 Some(SignalKind::Start(source_uid)) => {
                                     self.starts_received.insert(source_uid);

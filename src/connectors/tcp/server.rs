@@ -190,58 +190,55 @@ impl Connector for TcpServer {
                 let tls_acceptor: Option<TlsAcceptor> = tls_server_config
                     .clone()
                     .map(|sc| TlsAcceptor::from(Arc::new(sc)));
-                match tls_acceptor {
-                    Some(acceptor) => {
-                        let tls_stream = acceptor.accept(stream.clone()).await?; // TODO: this should live in its own task, as it requires rome roundtrips :()
-                        let (tls_read_stream, tls_write_sink) = tls_stream.split();
-                        let meta = literal!({
-                            "tls": true,
-                            "peer": {
-                                "host": peer_addr.ip().to_string(),
-                                "port": peer_addr.port()
-                            }
-                        });
-                        let tls_reader = TcpReader::tls_server(
-                            tls_read_stream,
-                            stream.clone(),
-                            vec![0; buf_size],
-                            ctx.url.clone(),
-                            origin_uri.clone(),
-                            meta,
-                        );
-                        source_runtime.register_stream_reader(stream_id, &ctx, tls_reader);
+                if let Some(acceptor) = tls_acceptor {
+                    let tls_stream = acceptor.accept(stream.clone()).await?; // TODO: this should live in its own task, as it requires rome roundtrips :()
+                    let (tls_read_stream, tls_write_sink) = tls_stream.split();
+                    let meta = literal!({
+                        "tls": true,
+                        "peer": {
+                            "host": peer_addr.ip().to_string(),
+                            "port": peer_addr.port()
+                        }
+                    });
+                    let tls_reader = TcpReader::tls_server(
+                        tls_read_stream,
+                        stream.clone(),
+                        vec![0; buf_size],
+                        ctx.url.clone(),
+                        origin_uri.clone(),
+                        meta,
+                    );
+                    source_runtime.register_stream_reader(stream_id, &ctx, tls_reader);
 
-                        sink_runtime.register_stream_writer(
-                            stream_id,
-                            Some(connection_meta.clone()),
-                            &ctx,
-                            TcpWriter::tls_server(tls_write_sink, stream),
-                        );
-                    }
-                    None => {
-                        let meta = literal!({
-                            "tls": false,
-                            "peer": {
-                                "host": peer_addr.ip().to_string(),
-                                "port": peer_addr.port()
-                            }
-                        });
-                        let tcp_reader = TcpReader::new(
-                            stream.clone(),
-                            vec![0; buf_size],
-                            ctx.url.clone(),
-                            origin_uri.clone(),
-                            meta,
-                        );
-                        source_runtime.register_stream_reader(stream_id, &ctx, tcp_reader);
+                    sink_runtime.register_stream_writer(
+                        stream_id,
+                        Some(connection_meta.clone()),
+                        &ctx,
+                        TcpWriter::tls_server(tls_write_sink, stream),
+                    );
+                } else {
+                    let meta = literal!({
+                        "tls": false,
+                        "peer": {
+                            "host": peer_addr.ip().to_string(),
+                            "port": peer_addr.port()
+                        }
+                    });
+                    let tcp_reader = TcpReader::new(
+                        stream.clone(),
+                        vec![0; buf_size],
+                        ctx.url.clone(),
+                        origin_uri.clone(),
+                        meta,
+                    );
+                    source_runtime.register_stream_reader(stream_id, &ctx, tcp_reader);
 
-                        sink_runtime.register_stream_writer(
-                            stream_id,
-                            Some(connection_meta.clone()),
-                            &ctx,
-                            TcpWriter::new(stream),
-                        );
-                    }
+                    sink_runtime.register_stream_writer(
+                        stream_id,
+                        Some(connection_meta.clone()),
+                        &ctx,
+                        TcpWriter::new(stream),
+                    );
                 }
             }
 
