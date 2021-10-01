@@ -184,7 +184,7 @@ mod tests {
 
     #[test]
     pub fn default_codec_is_json() {
-        let onramp_config = json!({l
+        let onramp_config = json!({
             "path": "/tmp/test.sock"
         });
         let onramp = UnixSocket::from_config(
