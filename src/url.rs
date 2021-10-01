@@ -343,6 +343,19 @@ impl TremorUrl {
             self.scope = Scope::Port;
         }
     }
+
+    /// Sets the port on the given consumed instance and returns the updated instance
+    pub fn with_port<S>(mut self, i: &S) -> Self
+    where
+        S: ToString + ?Sized,
+    {
+        self.instance_port = Some(i.to_string());
+        if self.scope == Scope::Servant {
+            self.scope = Scope::Port;
+        }
+        self
+    }
+
     /// Retrieves the instance
     #[must_use]
     pub fn instance(&self) -> Option<&str> {
