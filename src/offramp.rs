@@ -148,7 +148,7 @@ pub trait Builder: Send {
 
 // just a lookup
 
-pub(crate) struct Create {
+pub struct Create {
     pub id: ServantId,
     pub offramp: Box<dyn Offramp>,
     pub codec: Box<dyn Codec>,
@@ -167,7 +167,7 @@ impl fmt::Debug for Create {
 }
 
 /// Offramp Manager control plane
-pub(crate) enum ManagerMsg {
+pub enum ManagerMsg {
     /// register an offramp type with its corresponding builder
     Register {
         offramp_type: String,

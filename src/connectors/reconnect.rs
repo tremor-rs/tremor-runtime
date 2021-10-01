@@ -20,9 +20,52 @@ use async_std::channel::Sender;
 use async_std::task;
 use std::time::Duration;
 
+/// describing the number of previous connection attempts
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct Attempt {
+    overall: u64,
+    success: u64,
+    since_last_success: u64,
+}
+
+impl Attempt {
+    // reset to the state after a successful connection attempt
+    fn on_success(&mut self) {
+        self.overall += 1;
+        self.success += 1;
+        self.since_last_success = 0;
+    }
+
+    fn on_failure(&mut self) {
+        self.overall += 1;
+        self.since_last_success += 1;
+    }
+
+    /// Returns true if this is the very first attempt
+    pub fn is_first(&self) -> bool {
+        self.overall == 0
+    }
+
+    /// returns the number of previous successful connection attempts
+    pub fn success(&self) -> u64 {
+        self.success
+    }
+
+    /// returns the number of connection attempts since the last success
+    pub fn since_last_success(&self) -> u64 {
+        self.since_last_success
+    }
+
+    /// returns the overall connection attempts
+    pub fn overall(&self) -> u64 {
+        self.overall
+    }
+}
+
 /// Entity that executes the reconnect logic based upon the given `ReconnectConfig`
 pub(crate) struct Reconnect {
-    attempt: u64,
+    /// attempt since last successful connect, only the very first attempt will be 0
+    attempt: Attempt,
     interval_ms: u64,
     config: ReconnectConfig,
     addr: Addr,
@@ -53,7 +96,7 @@ impl Reconnect {
         Self {
             config,
             interval_ms,
-            attempt: 0,
+            attempt: Attempt::default(),
             addr: connector_addr.clone(),
         }
     }
@@ -67,7 +110,7 @@ impl Reconnect {
         connector: &mut dyn Connector,
         ctx: &ConnectorContext,
     ) -> Result<Connectivity> {
-        match connector.connect(ctx).await {
+        match connector.connect(ctx, &self.attempt).await {
             Ok(true) => {
                 self.reset();
                 Ok(Connectivity::Connected)
@@ -80,7 +123,7 @@ impl Reconnect {
 
             Err(e) => {
                 error!(
-                    "[Connector::{}] Reconnect Error (Attempt {}): {}",
+                    "[Connector::{}] Reconnect Error (Attempt {:?}): {}",
                     &ctx.url, self.attempt, e
                 );
                 self.update_and_retry()?;
@@ -100,18 +143,17 @@ impl Reconnect {
     fn update_and_retry(&mut self) -> Result<()> {
         // update internal state
         if let Some(max_retries) = self.config.max_retry {
-            if self.attempt >= max_retries {
+            if self.attempt.since_last_success() >= max_retries {
                 return Err(ErrorKind::MaxRetriesExceeded(max_retries).into());
             }
         }
-        self.attempt += 1;
+        self.attempt.on_failure();
         // TODO: trait out next interval computation, to support different strategies
         self.interval_ms = (self.interval_ms as f64 * self.config.growth_rate) as u64;
 
         // spawn retry
         // ALLOW: we are not interested in fractions here
         let duration = Duration::from_millis(self.interval_ms as u64);
-        // TODO: meh, clones. But then again: *shrug*
         let sender = self.addr.sender.clone();
         let url = self.addr.url.clone();
         task::spawn(async move {
@@ -128,7 +170,33 @@ impl Reconnect {
 
     /// reset internal state after successful connect attempt
     fn reset(&mut self) {
-        self.attempt = 0;
+        self.attempt.on_success();
+
         self.interval_ms = self.config.interval_ms;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn attempt() -> Result<()> {
+        let mut attempt = Attempt::default();
+        assert_eq!(0, attempt.since_last_success());
+        assert_eq!(0, attempt.overall());
+        assert_eq!(0, attempt.success());
+
+        attempt.on_success();
+        assert_eq!(0, attempt.since_last_success());
+        assert_eq!(1, attempt.overall());
+        assert_eq!(1, attempt.success());
+
+        attempt.on_failure();
+        assert_eq!(1, attempt.since_last_success());
+        assert_eq!(2, attempt.overall());
+        assert_eq!(1, attempt.success());
+
+        Ok(())
     }
 }
