@@ -66,7 +66,9 @@ pub(crate) mod offramp;
 /// onramp stuff
 pub(crate) mod onramp;
 pub(crate) mod permge;
-pub(crate) mod pipeline;
+
+/// pipelines
+pub mod pipeline;
 /// Onramp Preprocessors
 pub mod postprocessor;
 /// Offramp Postprocessors

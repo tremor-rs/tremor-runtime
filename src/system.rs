@@ -101,11 +101,16 @@ pub enum ShutdownMode {
 }
 
 /// This is control plane
-pub(crate) enum ManagerMsg {
+pub enum ManagerMsg {
+    /// msg to the pipeline manager
     Pipeline(pipeline::ManagerMsg),
+    /// msg to the onramp manager
     Onramp(onramp::ManagerMsg),
+    /// msg to the offramp manager
     Offramp(offramp::ManagerMsg),
+    /// msg to the connector manager
     Connector(connectors::ManagerMsg),
+    /// stop this manager
     Stop,
 }
 

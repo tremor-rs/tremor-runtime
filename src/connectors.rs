@@ -35,7 +35,8 @@ pub(crate) mod otel;
 /// protobuf helpers
 pub(crate) mod pb;
 
-pub(crate) mod file;
+/// file connector implementation
+pub mod file;
 
 /// tcp server and client connector impls
 pub(crate) mod tcp;
@@ -199,8 +200,10 @@ pub struct StatusReport {
 /// msg used for connector creation
 #[derive(Debug)]
 pub struct Create {
-    servant_id: TremorUrl,
-    config: ConnectorConfig,
+    /// instance id
+    pub servant_id: TremorUrl,
+    /// config
+    pub config: ConnectorConfig,
 }
 
 impl Create {
