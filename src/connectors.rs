@@ -85,7 +85,7 @@ use tremor_common::ids::ConnectorIdGen;
 
 use self::metrics::MetricsSender;
 use self::quiescence::QuiescenceBeacon;
-use self::reconnect::{Attempt, Reconnect};
+use self::reconnect::{Attempt, ReconnectRuntime};
 
 /// sender for connector manager messages
 pub type ManagerSender = Sender<ManagerMsg>;
@@ -458,7 +458,7 @@ impl Manager {
             sink,
         };
 
-        let mut reconnect: Reconnect = Reconnect::new(&addr, config.reconnect);
+        let mut reconnect: ReconnectRuntime = ReconnectRuntime::new(&addr, config.reconnect);
         let notifier = reconnect.notifier();
 
         let ctx = ConnectorContext {
