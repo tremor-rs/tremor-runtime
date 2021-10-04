@@ -170,11 +170,20 @@ impl Connector for File {
         })
     }
 
-    async fn connect(&mut self, ctx: &ConnectorContext) -> Result<bool> {
+    async fn connect(&mut self, ctx: &ConnectorContext, attempt: &Attempt) -> Result<bool> {
         // SINK PART: open write file
         if let Some(sink_runtime) = self.sink_runtime.as_ref() {
+            let mode = if attempt.is_first() || attempt.success() == 0 {
+                &self.config.mode
+            } else {
+                // if we have already opened the file successfully once
+                // we should not truncate it again or overwrite, but indeed append
+                // otherwise the reconnect logic will lead to unwanted effects
+                // e.g. if a simple write failed temporarily
+                &Mode::Append
+            };
             let write_file =
-                file::open_with(&self.config.path, &mut self.config.mode.as_open_options()).await?;
+                file::open_with(&self.config.path, &mut mode.as_open_options()).await?;
             let writer = FileWriter::new(write_file, ctx.url.clone());
             sink_runtime.register_stream_writer(DEFAULT_STREAM_ID, ctx, writer);
         }
@@ -275,7 +284,9 @@ impl StreamReader for FileReader {
             }
         }
 
-        StreamDone::ConnectorClosed
+        // we do not use ConnectorClosed - as we don't want to trigger a reconnect
+        // which would read the whole file again
+        StreamDone::StreamClosed
     }
 }
 
@@ -304,6 +315,10 @@ impl StreamWriter for FileWriter {
         if let Err(e) = self.file.sync_all().await {
             error!("[Connector::{}] Error flushing file: {}", &self.url, e);
         }
+        // if we cannot write to the given file anymore
+        // something wen't really wrong, a reconnect might help here
+        // this wont lead to overwriting stuff or re-truncating a file or so
+        // as we always use `Append` in that case
         Ok(StreamDone::ConnectorClosed)
     }
 }
