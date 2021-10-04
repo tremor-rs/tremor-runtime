@@ -13,12 +13,66 @@
 // limitations under the License.
 
 /// reconnect logic and execution for connectors
-use crate::config::Reconnect as ReconnectConfig;
+use crate::config::ReconnectConfig;
 use crate::connectors::{Addr, Connectivity, Connector, ConnectorContext, Msg};
-use crate::errors::{ErrorKind, Result};
+use crate::errors::Result;
+use crate::url::TremorUrl;
 use async_std::channel::Sender;
 use async_std::task;
+use std::fmt::Display;
 use std::time::Duration;
+
+#[derive(Debug, PartialEq, Clone)]
+enum ShouldRetry {
+    Yes,
+    No(String),
+}
+
+trait ReconnectStrategy: std::marker::Send {
+    fn next_interval(&mut self, current: Option<u64>, attempt: &Attempt) -> u64;
+    /// should we actually do a reconnect attempt?
+    ///
+    /// will throw a `MaxRetriesExceeded` error
+    fn should_retry(&mut self, attempt: &Attempt) -> ShouldRetry;
+}
+
+struct FailFast {}
+impl ReconnectStrategy for FailFast {
+    fn next_interval(&mut self, current: Option<u64>, _attempt: &Attempt) -> u64 {
+        current.unwrap_or(0)
+    }
+
+    fn should_retry(&mut self, _attempt: &Attempt) -> ShouldRetry {
+        ShouldRetry::No("`None` Reconnect strategy.".to_string())
+    }
+}
+
+struct SimpleBackoff {
+    start_interval: u64,
+    growth_rate: f64,
+    max_retries: u64,
+}
+impl ReconnectStrategy for SimpleBackoff {
+    #[allow(
+        clippy::cast_precision_loss,
+        clippy::cast_sign_loss,
+        clippy::cast_possible_truncation
+    )]
+    fn next_interval(&mut self, current: Option<u64>, _attempt: &Attempt) -> u64 {
+        match current {
+            Some(interval) => (interval as f64 * self.growth_rate) as u64,
+            None => self.start_interval,
+        }
+    }
+
+    fn should_retry(&mut self, attempt: &Attempt) -> ShouldRetry {
+        if attempt.since_last_success() < self.max_retries {
+            ShouldRetry::Yes
+        } else {
+            ShouldRetry::No(format!("Max retries exceeded: {}", self.max_retries))
+        }
+    }
+}
 
 /// describing the number of previous connection attempts
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -62,13 +116,24 @@ impl Attempt {
     }
 }
 
-/// Entity that executes the reconnect logic based upon the given `ReconnectConfig`
-pub(crate) struct Reconnect {
+impl Display for Attempt {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Attempt #{} (overall: #{})",
+            self.since_last_success, self.overall
+        )
+    }
+}
+
+/// Entity that executes the reconnect logic based upon the given `ReconnectConfig` -> `ReconnectStrategy`
+pub(crate) struct ReconnectRuntime {
     /// attempt since last successful connect, only the very first attempt will be 0
     attempt: Attempt,
-    interval_ms: u64,
-    config: ReconnectConfig,
-    addr: Addr,
+    interval_ms: Option<u64>,
+    strategy: Box<dyn ReconnectStrategy>,
+    sender: Sender<Msg>,
+    connector_url: TremorUrl,
 }
 
 /// Notifier that connector implementations
@@ -86,18 +151,37 @@ impl ConnectionLostNotifier {
     }
 }
 
-impl Reconnect {
+impl ReconnectRuntime {
     pub(crate) fn notifier(&self) -> ConnectionLostNotifier {
-        ConnectionLostNotifier(self.addr.sender.clone())
+        ConnectionLostNotifier(self.sender.clone())
     }
     /// constructor
     pub(crate) fn new(connector_addr: &Addr, config: ReconnectConfig) -> Self {
-        let interval_ms = config.interval_ms;
-        Self {
+        Self::inner(
+            connector_addr.sender.clone(),
+            connector_addr.url.clone(),
             config,
-            interval_ms,
+        )
+    }
+    fn inner(sender: Sender<Msg>, connector_url: TremorUrl, config: ReconnectConfig) -> Self {
+        let strategy: Box<dyn ReconnectStrategy> = match config {
+            ReconnectConfig::None => Box::new(FailFast {}),
+            ReconnectConfig::Custom {
+                interval_ms,
+                growth_rate,
+                max_retries,
+            } => Box::new(SimpleBackoff {
+                start_interval: interval_ms,
+                growth_rate,
+                max_retries: max_retries.unwrap_or(u64::MAX),
+            }),
+        };
+        Self {
             attempt: Attempt::default(),
-            addr: connector_addr.clone(),
+            interval_ms: None,
+            strategy,
+            sender,
+            connector_url,
         }
     }
 
@@ -123,7 +207,7 @@ impl Reconnect {
 
             Err(e) => {
                 error!(
-                    "[Connector::{}] Reconnect Error (Attempt {:?}): {}",
+                    "[Connector::{}] Reconnect Error ({}): {}",
                     &ctx.url, self.attempt, e
                 );
                 self.update_and_retry()?;
@@ -135,36 +219,40 @@ impl Reconnect {
 
     /// update internal state for the current failed connect attempt
     /// and spawn a retry task
-    #[allow(
-        clippy::cast_precision_loss,
-        clippy::cast_sign_loss,
-        clippy::cast_possible_truncation
-    )]
     fn update_and_retry(&mut self) -> Result<()> {
         // update internal state
-        if let Some(max_retries) = self.config.max_retry {
-            if self.attempt.since_last_success() >= max_retries {
-                return Err(ErrorKind::MaxRetriesExceeded(max_retries).into());
-            }
-        }
         self.attempt.on_failure();
-        // TODO: trait out next interval computation, to support different strategies
-        self.interval_ms = (self.interval_ms as f64 * self.config.growth_rate) as u64;
+        // check if we can retry according to strategy
+        if let ShouldRetry::No(msg) = self.strategy.should_retry(&self.attempt) {
+            error!(
+                "[Connector::{}] Not reconnecting: {}",
+                &self.connector_url, msg
+            );
+        } else {
+            // compute next interval
+            let interval = self.strategy.next_interval(self.interval_ms, &self.attempt);
+            info!(
+                "[Connector::{}] Reconnecting after {} ms",
+                &self.connector_url, interval
+            );
+            self.interval_ms = Some(interval);
 
-        // spawn retry
-        // ALLOW: we are not interested in fractions here
-        let duration = Duration::from_millis(self.interval_ms as u64);
-        let sender = self.addr.sender.clone();
-        let url = self.addr.url.clone();
-        task::spawn(async move {
-            task::sleep(duration).await;
-            if sender.send(Msg::Reconnect).await.is_err() {
-                error!(
-                    "[Connector::{}] Error sending reconnect msg to connector.",
-                    &url
-                );
-            }
-        });
+            // spawn retry
+            // ALLOW: we are not interested in fractions here
+            let duration = Duration::from_millis(interval);
+            let sender = self.sender.clone();
+            let url = self.connector_url.clone();
+            task::spawn(async move {
+                task::sleep(duration).await;
+                if sender.send(Msg::Reconnect).await.is_err() {
+                    error!(
+                        "[Connector::{}] Error sending reconnect msg to connector.",
+                        &url
+                    );
+                }
+            });
+        }
+
         Ok(())
     }
 
@@ -172,13 +260,30 @@ impl Reconnect {
     fn reset(&mut self) {
         self.attempt.on_success();
 
-        self.interval_ms = self.config.interval_ms;
+        self.interval_ms = None;
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::connectors::quiescence::QuiescenceBeacon;
+
     use super::*;
+
+    /// does not connect
+    struct FakeConnector {
+        answer: Option<bool>,
+    }
+    #[async_trait::async_trait]
+    impl Connector for FakeConnector {
+        async fn connect(&mut self, _ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
+            self.answer.ok_or("Blergh!".into())
+        }
+
+        fn default_codec(&self) -> &str {
+            "json"
+        }
+    }
 
     #[test]
     fn attempt() -> Result<()> {
@@ -196,6 +301,108 @@ mod tests {
         assert_eq!(1, attempt.since_last_success());
         assert_eq!(2, attempt.overall());
         assert_eq!(1, attempt.success());
+
+        Ok(())
+    }
+
+    #[test]
+    fn failfast_strategy() -> Result<()> {
+        let mut strategy = FailFast {};
+        let mut attempt = Attempt::default();
+        assert_eq!(
+            ShouldRetry::No("`None` Reconnect strategy.".to_string()),
+            strategy.should_retry(&attempt)
+        );
+        assert_eq!(0, strategy.next_interval(None, &attempt));
+        attempt.on_failure();
+        assert_eq!(0, strategy.next_interval(Some(0), &attempt));
+        assert_eq!(
+            ShouldRetry::No("`None` Reconnect strategy.".to_string()),
+            strategy.should_retry(&attempt)
+        );
+        attempt.on_failure();
+        assert_eq!(
+            ShouldRetry::No("`None` Reconnect strategy.".to_string()),
+            strategy.should_retry(&attempt)
+        );
+        attempt.on_success();
+        Ok(())
+    }
+
+    #[async_std::test]
+    async fn failfast_runtime() -> Result<()> {
+        let (tx, rx) = async_std::channel::bounded(1);
+        let url = TremorUrl::from_connector_instance("test", "test")?;
+        let config = ReconnectConfig::None;
+        let mut runtime = ReconnectRuntime::inner(tx, url.clone(), config);
+        let mut connector = FakeConnector {
+            answer: Some(false),
+        };
+        let qb = QuiescenceBeacon::new();
+        let ctx = ConnectorContext {
+            uid: 1,
+            url,
+            quiescence_beacon: qb,
+            notifier: runtime.notifier(),
+        };
+        // failing attempt
+        assert_eq!(
+            Connectivity::Disconnected,
+            runtime.attempt(&mut connector, &ctx).await?
+        );
+        async_std::task::sleep(Duration::from_millis(100)).await;
+        assert!(rx.is_empty()); // no reconnect attempt has been made
+        Ok(())
+    }
+
+    #[async_std::test]
+    async fn backoff_runtime() -> Result<()> {
+        let (tx, rx) = async_std::channel::bounded(1);
+        let url = TremorUrl::from_connector_instance("test", "test")?;
+        let config = ReconnectConfig::Custom {
+            interval_ms: 10,
+            growth_rate: 2.0,
+            max_retries: Some(3),
+        };
+        let mut runtime = ReconnectRuntime::inner(tx, url.clone(), config);
+        let mut connector = FakeConnector {
+            answer: Some(false),
+        };
+        let qb = QuiescenceBeacon::new();
+        let ctx = ConnectorContext {
+            uid: 1,
+            url,
+            quiescence_beacon: qb,
+            notifier: runtime.notifier(),
+        };
+        // 1st failing attempt
+        assert!(matches!(
+            runtime.attempt(&mut connector, &ctx).await?,
+            Connectivity::Disconnected
+        ));
+        async_std::task::sleep(Duration::from_millis(20)).await;
+
+        assert_eq!(1, rx.len()); // 1 reconnect attempt has been made
+        assert!(matches!(rx.try_recv()?, Msg::Reconnect));
+
+        // 2nd failing attempt
+        assert!(matches!(
+            runtime.attempt(&mut connector, &ctx).await?,
+            Connectivity::Disconnected
+        ));
+        async_std::task::sleep(Duration::from_millis(30)).await;
+
+        assert_eq!(1, rx.len()); // 1 reconnect attempt has been made
+        assert!(matches!(rx.try_recv()?, Msg::Reconnect));
+
+        // 3rd failing attempt
+        assert!(matches!(
+            runtime.attempt(&mut connector, &ctx).await?,
+            Connectivity::Disconnected
+        ));
+        async_std::task::sleep(Duration::from_millis(50)).await;
+
+        assert!(rx.is_empty()); // no reconnect attempt has been made
 
         Ok(())
     }
