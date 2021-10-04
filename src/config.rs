@@ -121,7 +121,7 @@ pub struct OffRamp {
 /// possible reconnect strategies for controlling if and how to reconnect
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(untagged, rename_all = "lowercase", deny_unknown_fields)]
-pub enum ReconnectConfig {
+pub enum Reconnect {
     /// do not reconnect
     None,
     // TODO: RandomizedBackoff
@@ -137,7 +137,7 @@ pub enum ReconnectConfig {
     },
 }
 
-impl Default for ReconnectConfig {
+impl Default for Reconnect {
     fn default() -> Self {
         Self::None
     }
@@ -226,7 +226,7 @@ pub struct Connector {
     pub(crate) postprocessors: Option<Vec<String>>,
 
     #[serde(default)]
-    pub(crate) reconnect: ReconnectConfig,
+    pub(crate) reconnect: Reconnect,
 
     //#[serde(default)]
     //pub(crate) on_pause: PauseBehaviour,

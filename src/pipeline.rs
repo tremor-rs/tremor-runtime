@@ -44,6 +44,7 @@ pub struct Addr {
 
 impl Addr {
     /// creates a new address
+    #[must_use]
     pub fn new(
         addr: Sender<Msg>,
         cf_addr: Sender<CfMsg>,
@@ -60,12 +61,20 @@ impl Addr {
 
     /// number of events in the pipelines channel
     #[cfg(not(tarpaulin_include))]
+    #[must_use]
     pub fn len(&self) -> usize {
         self.addr.len()
     }
 
+    /// true, if there are no events to be received at the moment
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.addr.is_empty()
+    }
+
     /// pipeline instance id
     #[cfg(not(tarpaulin_include))]
+    #[must_use]
     pub fn id(&self) -> &ServantId {
         &self.id
     }
@@ -174,6 +183,9 @@ pub enum Dest {
 
 impl Dest {
     /// send an event out to this destination
+    ///
+    /// # Errors
+    ///  * when sending the event via the dest channel fails
     pub async fn send_event(&mut self, input: Cow<'static, str>, event: Event) -> Result<()> {
         match self {
             Self::Offramp(addr) => addr.send(offramp::Msg::Event { input, event }).await?,
@@ -187,6 +199,9 @@ impl Dest {
         Ok(())
     }
     /// send a signal out to this destination
+    ///
+    /// # Errors
+    ///  * when sending the signal via the dest channel fails
     pub async fn send_signal(&mut self, signal: Event) -> Result<()> {
         match self {
             Self::Offramp(addr) => addr.send(offramp::Msg::Signal(signal)).await?,

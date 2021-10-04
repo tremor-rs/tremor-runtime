@@ -13,7 +13,7 @@
 // limitations under the License.
 
 /// reconnect logic and execution for connectors
-use crate::config::ReconnectConfig;
+use crate::config::Reconnect;
 use crate::connectors::{Addr, Connectivity, Connector, ConnectorContext, Msg};
 use crate::errors::Result;
 use crate::url::TremorUrl;
@@ -156,23 +156,23 @@ impl ReconnectRuntime {
         ConnectionLostNotifier(self.sender.clone())
     }
     /// constructor
-    pub(crate) fn new(connector_addr: &Addr, config: ReconnectConfig) -> Self {
+    pub(crate) fn new(connector_addr: &Addr, config: &Reconnect) -> Self {
         Self::inner(
             connector_addr.sender.clone(),
             connector_addr.url.clone(),
             config,
         )
     }
-    fn inner(sender: Sender<Msg>, connector_url: TremorUrl, config: ReconnectConfig) -> Self {
+    fn inner(sender: Sender<Msg>, connector_url: TremorUrl, config: &Reconnect) -> Self {
         let strategy: Box<dyn ReconnectStrategy> = match config {
-            ReconnectConfig::None => Box::new(FailFast {}),
-            ReconnectConfig::Custom {
+            Reconnect::None => Box::new(FailFast {}),
+            Reconnect::Custom {
                 interval_ms,
                 growth_rate,
                 max_retries,
             } => Box::new(SimpleBackoff {
-                start_interval: interval_ms,
-                growth_rate,
+                start_interval: *interval_ms,
+                growth_rate: *growth_rate,
                 max_retries: max_retries.unwrap_or(u64::MAX),
             }),
         };
@@ -200,7 +200,7 @@ impl ReconnectRuntime {
                 Ok(Connectivity::Connected)
             }
             Ok(false) => {
-                self.update_and_retry()?;
+                self.update_and_retry();
 
                 Ok(Connectivity::Disconnected)
             }
@@ -210,7 +210,7 @@ impl ReconnectRuntime {
                     "[Connector::{}] Reconnect Error ({}): {}",
                     &ctx.url, self.attempt, e
                 );
-                self.update_and_retry()?;
+                self.update_and_retry();
 
                 Ok(Connectivity::Disconnected)
             }
@@ -219,7 +219,7 @@ impl ReconnectRuntime {
 
     /// update internal state for the current failed connect attempt
     /// and spawn a retry task
-    fn update_and_retry(&mut self) -> Result<()> {
+    fn update_and_retry(&mut self) {
         // update internal state
         self.attempt.on_failure();
         // check if we can retry according to strategy
@@ -252,8 +252,6 @@ impl ReconnectRuntime {
                 }
             });
         }
-
-        Ok(())
     }
 
     /// reset internal state after successful connect attempt
@@ -333,12 +331,12 @@ mod tests {
     async fn failfast_runtime() -> Result<()> {
         let (tx, rx) = async_std::channel::bounded(1);
         let url = TremorUrl::from_connector_instance("test", "test")?;
-        let config = ReconnectConfig::None;
-        let mut runtime = ReconnectRuntime::inner(tx, url.clone(), config);
+        let config = Reconnect::None;
+        let mut runtime = ReconnectRuntime::inner(tx, url.clone(), &config);
         let mut connector = FakeConnector {
             answer: Some(false),
         };
-        let qb = QuiescenceBeacon::new();
+        let qb = QuiescenceBeacon::default();
         let ctx = ConnectorContext {
             uid: 1,
             url,
@@ -359,16 +357,16 @@ mod tests {
     async fn backoff_runtime() -> Result<()> {
         let (tx, rx) = async_std::channel::bounded(1);
         let url = TremorUrl::from_connector_instance("test", "test")?;
-        let config = ReconnectConfig::Custom {
+        let config = Reconnect::Custom {
             interval_ms: 10,
             growth_rate: 2.0,
             max_retries: Some(3),
         };
-        let mut runtime = ReconnectRuntime::inner(tx, url.clone(), config);
+        let mut runtime = ReconnectRuntime::inner(tx, url.clone(), &config);
         let mut connector = FakeConnector {
             answer: Some(false),
         };
-        let qb = QuiescenceBeacon::new();
+        let qb = QuiescenceBeacon::default();
         let ctx = ConnectorContext {
             uid: 1,
             url,
