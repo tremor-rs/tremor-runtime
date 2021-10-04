@@ -81,11 +81,11 @@ use crate::url::TremorUrl;
 use crate::OpConfig;
 use async_std::channel::{bounded, Sender};
 use halfbrown::{Entry, HashMap};
-use reconnect::Reconnect;
 use tremor_common::ids::ConnectorIdGen;
 
 use self::metrics::MetricsSender;
 use self::quiescence::QuiescenceBeacon;
+use self::reconnect::{Attempt, Reconnect};
 
 /// sender for connector manager messages
 pub type ManagerSender = Sender<ManagerMsg>;
@@ -973,9 +973,13 @@ pub trait Connector: Send {
     /// Call `notifier.notify().await` as the last thing when you notice the connection is lost.
     /// This is well suited when handling the connection in another task.
     ///
+    /// The attempt is the number of the connection attempt, the number this method has been called on this connector.
+    /// The very first attempt to establish a connection will be `0`.
+    /// All further attempts will be
+    ///
     /// To know when to stop reading new data from the external connection, the `quiescence` beacon
     /// can be used. Call `.reading()` and `.writing()` to see if you should continue doing so, if not, just stop and rest.
-    async fn connect(&mut self, ctx: &ConnectorContext) -> Result<bool>;
+    async fn connect(&mut self, ctx: &ConnectorContext, attempt: &Attempt) -> Result<bool>;
 
     /// called once when the connector is started
     /// `connect` will be called after this for the first time, leave connection attempts in `connect`.

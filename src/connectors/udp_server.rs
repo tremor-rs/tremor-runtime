@@ -95,7 +95,7 @@ impl StreamReader for UdpReader {
 
 #[async_trait::async_trait()]
 impl Connector for UdpServer {
-    async fn connect(&mut self, ctx: &ConnectorContext) -> Result<bool> {
+    async fn connect(&mut self, ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
         let reader = UdpReader {
             socket: UdpSocket::bind((self.config.host.as_str(), self.config.port)).await?,
             origin_uri: self.origin_uri.clone(),
