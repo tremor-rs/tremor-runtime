@@ -43,6 +43,8 @@ use super::metrics::SourceReporter;
 use super::quiescence::QuiescenceBeacon;
 use super::{ConnectorContext, StreamDone};
 
+const DEFAULT_POLL_INTERVAL: u64 = 10;
+
 /// Messages a Source can receive
 pub enum SourceMsg {
     /// connect a pipeline
@@ -280,7 +282,7 @@ impl Source for ChannelSource {
             Ok(reply) => Ok(reply),
             Err(TryRecvError::Empty) => {
                 // TODO: configure pull interval in connector config?
-                Ok(SourceReply::Empty(10))
+                Ok(SourceReply::Empty(DEFAULT_POLL_INTERVAL))
             }
             Err(e) => Err(e.into()),
         }
