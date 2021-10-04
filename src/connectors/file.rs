@@ -101,6 +101,7 @@ pub struct Builder {
 
 impl Builder {
     /// constructor
+    #[must_use]
     pub fn new(world: &World) -> Self {
         Self {
             world: world.clone(),

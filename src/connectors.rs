@@ -229,8 +229,8 @@ impl StreamIdGen {
 
 /// How should we treat a stream being done
 ///
-/// * StreamClosed -> Only this stream is closed
-/// * ConnectorClosed -> The entire connector is closed, notify that we are disconnected
+/// * `StreamClosed` -> Only this stream is closed
+/// * `ConnectorClosed` -> The entire connector is closed, notify that we are disconnected, reconnect according to chosen reconnect config
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum StreamDone {
     /// Only this stream is closed, (only one of many)
@@ -411,7 +411,7 @@ impl Manager {
         let (msg_tx, msg_rx) = bounded(self.qsize);
 
         let mut connectivity = Connectivity::Disconnected;
-        let mut quiescence_beacon = QuiescenceBeacon::new();
+        let mut quiescence_beacon = QuiescenceBeacon::default();
 
         let source_metrics_reporter = SourceReporter::new(
             url.clone(),
@@ -458,7 +458,7 @@ impl Manager {
             sink,
         };
 
-        let mut reconnect: ReconnectRuntime = ReconnectRuntime::new(&addr, config.reconnect);
+        let mut reconnect: ReconnectRuntime = ReconnectRuntime::new(&addr, &config.reconnect);
         let notifier = reconnect.notifier();
 
         let ctx = ConnectorContext {
