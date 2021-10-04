@@ -448,7 +448,7 @@ where
     }
     #[allow(clippy::too_many_lines)]
     async fn run(mut self) -> Result<()> {
-        use SinkState::*;
+        use SinkState::{Drained, Draining, Initialized, Paused, Running, Stopped};
         let from_sink = self.reply_rx.map(SinkMsgWrapper::FromSink);
         let to_sink = self.rx.map(SinkMsgWrapper::ToSink);
         let mut from_and_to_sink_channel = PriorityMerge::new(from_sink, to_sink);
