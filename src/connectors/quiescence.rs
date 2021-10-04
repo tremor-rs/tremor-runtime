@@ -17,20 +17,22 @@ use std::sync::Arc;
 
 /// use this beacon to check if tasks reading or writing from external connections should stop
 #[derive(Clone, Debug)]
+#[allow(clippy::module_name_repetitions)]
 pub struct QuiescenceBeacon {
     read: Arc<AtomicBool>,
     write: Arc<AtomicBool>,
 }
 
-impl QuiescenceBeacon {
-    /// constructor
-    pub fn new() -> Self {
+impl Default for QuiescenceBeacon {
+    fn default() -> Self {
         Self {
             read: Arc::new(AtomicBool::new(true)),
             write: Arc::new(AtomicBool::new(true)),
         }
     }
+}
 
+impl QuiescenceBeacon {
     /// returns `true` if consumers should continue reading
     /// doesn't return untill the beacon is unpaused
     pub async fn continue_reading(&self) -> bool {
@@ -49,7 +51,7 @@ impl QuiescenceBeacon {
 
     /// notify consumers of this beacon that reading should be stopped
     pub fn stop_reading(&mut self) {
-        self.read.store(false, Ordering::Relaxed)
+        self.read.store(false, Ordering::Relaxed);
     }
 
     /// notify consumers of this beacon that reading and writing should be stopped
