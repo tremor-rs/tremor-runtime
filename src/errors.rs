@@ -325,10 +325,6 @@ error_chain! {
             description("Invalid Disonnect attempt")
                 display("Invalid Disconnect of {} from {} via port {}", entity, target, port)
         }
-        MaxRetriesExceeded(max_retries: u64) {
-            description("Max reconnect retries exceeded")
-                display("Max reconnect retries ({}) exceeded", max_retries)
-        }
         InvalidMetricsData {
             description("Invalid Metrics data")
                 display("Invalid Metrics data")

@@ -121,7 +121,7 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-async fn run(mut app: App<'_>, cmd: &ArgMatches) -> Result<()> {
+async fn run(app: App<'_>, cmd: &ArgMatches) -> Result<()> {
     let format = match &cmd.value_of("format") {
         Some("json") => FormatKind::Json,
         _ => FormatKind::Yaml,
