@@ -206,7 +206,7 @@ impl Connector for File {
                 None
             };
             // TODO: remove this special case and add xz support to preprocessors
-            if let Some("xz") = self.config.path.extension().and_then(OsStr::as_str) {
+            if let Some("xz") = self.config.path.extension().and_then(OsStr::to_str) {
                 let reader = FileReader::xz(
                     read_file,
                     self.config.chunk_size,
