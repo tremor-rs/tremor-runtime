@@ -409,39 +409,31 @@ impl TremorAggrFn for Stdev {
     }
 }
 
+#[derive(Clone)]
 struct Dds {
-    histo: Option<DDSketch>,
+    sketch: Option<DDSketch>,
     cache: Vec<f64>,
     percentiles: Vec<(String, f64)>,
     percentiles_set: bool,
-    //    digits_significant_precision: usize,
 }
 
-impl std::clone::Clone for Dds {
-    // DDSKetch does not implement clone
-    fn clone(&self) -> Self {
-        Self {
-            histo: match &self.histo {
-                Some(dds) => {
-                    let config = DDSketchConfig::defaults();
-                    let mut histo = DDSketch::new(config);
-                    histo.merge(&dds).ok();
-                    Some(histo)
-                }
-                None => None,
-            },
-            cache: self.cache.clone(),
-            percentiles: self.percentiles.clone(),
-            percentiles_set: self.percentiles_set,
-            //            digits_significant_precision: 2,
+impl Dds {
+    fn switch_to_sketch(&mut self, mut sketch: DDSketch) {
+        for v in self.cache.drain(..) {
+            sketch.add(v);
         }
+        self.sketch = Some(sketch);
+    }
+
+    fn new_sketch() -> DDSketch {
+        DDSketch::new(DDSketchConfig::defaults())
     }
 }
 
 impl std::default::Default for Dds {
     fn default() -> Self {
         Self {
-            histo: None,
+            sketch: None,
             cache: Vec::with_capacity(HIST_INITIAL_CACHE_SIZE),
             percentiles: vec![
                 ("0.5".to_string(), 0.5),
@@ -453,7 +445,6 @@ impl std::default::Default for Dds {
                 ("0.99999".to_string(), 0.99999),
             ],
             percentiles_set: false,
-            //            digits_significant_precision: 2,
         }
     }
 }
@@ -461,6 +452,8 @@ impl std::default::Default for Dds {
 impl TremorAggrFn for Dds {
     fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
         if !self.percentiles_set {
+            // either we have a second argument (which overwrites the defaults)
+            // or we use the defaults
             if let Some(vals) = args.get(1).as_array() {
                 let percentiles: FResult<Vec<(String, f64)>> = vals
                     .iter()
@@ -474,21 +467,18 @@ impl TremorAggrFn for Dds {
                     })
                     .collect();
                 self.percentiles = percentiles?;
-                self.percentiles_set = true
             }
+            self.percentiles_set = true;
         }
         if let Some(v) = args.first().cast_f64() {
             if v < 0.0 {
                 return Ok(());
-            } else if let Some(ref mut histo) = self.histo {
-                histo.add(v);
+            } else if let Some(ref mut sketch) = self.sketch {
+                sketch.add(v);
             } else {
                 self.cache.push(v);
                 if self.cache.len() == HIST_MAX_CACHE_SIZE {
-                    let mut histo: DDSketch = DDSketch::new(DDSketchConfig::defaults());
-                    for v in self.cache.drain(..) {
-                        histo.add(v);
-                    }
+                    self.switch_to_sketch(Self::new_sketch());
                 }
             }
         }
@@ -506,23 +496,16 @@ impl TremorAggrFn for Dds {
             }
         }
         let mut p = Value::object_with_capacity(self.percentiles.len() + 3);
-        let histo = if let Some(histo) = self.histo.as_ref() {
-            histo
-        } else {
-            let mut histo: DDSketch = DDSketch::new(DDSketchConfig::defaults());
-            for v in self.cache.drain(..) {
-                histo.add(v);
-            }
-            self.histo = Some(histo);
-            if let Some(histo) = self.histo.as_ref() {
-                histo
-            } else {
-                // ALLOW: we just set it, we know it exists
-                unreachable!()
-            }
-        };
 
-        let count = histo.count();
+        // ensure sketch
+        if self.sketch.is_none() {
+            self.switch_to_sketch(Self::new_sketch());
+        }
+        let sketch = self
+            .sketch
+            .as_ref()
+            .ok_or_else(|| err(&"Internal DDSketch not available"))?;
+        let count = sketch.count();
         let (min, max, sum) = if count == 0 {
             for (pcn, _percentile) in &self.percentiles {
                 p.try_insert(pcn.clone(), 0.0);
@@ -530,31 +513,34 @@ impl TremorAggrFn for Dds {
             (0_f64, 0_f64, 0_f64)
         } else {
             for (pcn, percentile) in &self.percentiles {
-                let quantile = histo.quantile(*percentile).ok().flatten().ok_or_else(|| {
+                let quantile = sketch.quantile(*percentile).ok().flatten().ok_or_else(|| {
                     err(&format!("Unable to calculate percentile '{}'", *percentile))
                 })?;
                 let quantile_dsp = ceil(quantile, 1); // Round for equiv with HDR ( 2 digits )
                 p.try_insert(pcn.clone(), quantile_dsp);
             }
             (
-                histo.min().ok_or_else(|| err(&"Unable to calculate min"))?,
-                histo.max().ok_or_else(|| err(&"Unable to calculate max"))?,
-                histo.sum().ok_or_else(|| err(&"Unable to calculate sum"))?,
+                sketch
+                    .min()
+                    .ok_or_else(|| err(&"Unable to calculate min"))?,
+                sketch
+                    .max()
+                    .ok_or_else(|| err(&"Unable to calculate max"))?,
+                sketch
+                    .sum()
+                    .ok_or_else(|| err(&"Unable to calculate sum"))?,
             )
         };
-        let mut res = Value::object_with_capacity(5);
-        res.try_insert("count", count);
-        res.try_insert("min", min);
-        res.try_insert("max", max);
-        res.try_insert("mean", sum / count as f64);
-        res.try_insert("percentiles", p);
+        let res = literal!({
+            "count": count,
+            "sum": sum,
+            "min": min,
+            "max": max,
+            "mean": sum / count as f64,
+            "percentiles": p
+        });
         Ok(res)
     }
-
-    // fn compensate<'event>(&mut self, _args: &[&Value<'event>]) -> FResult<()> {
-    //     // TODO there's no facility for this with dds histogram, punt for now
-    //     Ok(())
-    // }
 
     fn merge(&mut self, src: &dyn TremorAggrFn) -> FResult<()> {
         let other: Option<&Self> = src.downcast_ref::<Self>();
@@ -564,46 +550,33 @@ impl TremorAggrFn for Dds {
                 self.percentiles_set = true;
             };
 
-            if let Some(ref mut histo) = self.histo {
-                //  If this is a histogram and we merge
-                if let Some(ref other) = other.histo {
-                    // If the other was also a histogram merge them
-                    histo.merge(other).ok();
-                } else {
-                    // if the other was still a cache add it's values
+            match (&mut self.sketch, &other.sketch) {
+                (Some(sketch), Some(other)) => {
+                    sketch.merge(other).ok();
+                }
+                (Some(sketch), None) => {
                     for v in &other.cache {
-                        histo.add(*v);
+                        sketch.add(*v);
                     }
                 }
-            } else {
-                // If we were a cache
-                match other.histo {
-                    Some(ref other) => {
-                        // If the other was a histogram clone it and empty our values
-                        let mut histo: DDSketch = DDSketch::new(DDSketchConfig::defaults());
-                        histo.merge(other).ok();
-                        for v in self.cache.drain(..) {
-                            histo.add(v);
-                        }
-                        self.histo = Some(histo)
+                (None, Some(other)) => {
+                    // only other is actually a sketch
+                    self.switch_to_sketch(other.clone());
+                }
+                (None, None) if self.cache.len() + other.cache.len() > HIST_MAX_CACHE_SIZE => {
+                    // If the cache size exceeds our maximal cache size drain them into a histogram
+                    let mut sketch: DDSketch = DDSketch::new(DDSketchConfig::defaults());
+                    for v in self.cache.drain(..) {
+                        sketch.add(v);
                     }
-                    None => {
-                        // If both are caches
-                        if self.cache.len() + other.cache.len() > HIST_MAX_CACHE_SIZE {
-                            // If the cache size exceeds our maximal cache size drain them into a histogram
-                            let mut histo: DDSketch = DDSketch::new(DDSketchConfig::defaults());
-                            for v in self.cache.drain(..) {
-                                histo.add(v);
-                            }
-                            for v in &other.cache {
-                                histo.add(*v);
-                            }
-                            self.histo = Some(histo);
-                        } else {
-                            // If not append it's cache
-                            self.cache.extend(&other.cache);
-                        }
+                    for v in &other.cache {
+                        sketch.add(*v);
                     }
+                    self.sketch = Some(sketch);
+                }
+                (None, None) => {
+                    // If not append it's cache
+                    self.cache.extend(&other.cache);
                 }
             }
         }
@@ -611,7 +584,7 @@ impl TremorAggrFn for Dds {
     }
 
     fn init(&mut self) {
-        self.histo = None;
+        self.sketch = None;
         self.cache.clear();
     }
     #[cfg(not(tarpaulin_include))]
@@ -637,7 +610,6 @@ const HIST_INITIAL_CACHE_SIZE: usize = 128;
 impl std::default::Default for Hdr {
     fn default() -> Self {
         Self {
-            //ALLOW: this values have been tested so an error can never be returned
             histo: None,
             cache: Vec::with_capacity(HIST_INITIAL_CACHE_SIZE),
             percentiles: vec![
@@ -1159,6 +1131,7 @@ mod test {
         use crate::Value;
 
         let mut a = Dds::default();
+        assert_eq!(a.arity(), 1..=2);
         a.init();
 
         assert!(a
@@ -1176,9 +1149,10 @@ mod test {
         }
 
         let e = literal!({
+            "count": 100,
+            "sum": 5050.0,
             "min": 1.0,
             "max": 100.0,
-            "count": 100,
             "mean": 50.5,
             "percentiles": {
                 "0.5": 50.0,
@@ -1196,8 +1170,55 @@ mod test {
         b.merge(&a)?;
         assert_eq!(b.emit()?, e);
 
-        assert_eq!(a.arity(), 1..=2);
-
         Ok(())
+    }
+
+    use crate::errors::Error;
+    use proptest::prelude::*;
+
+    use proptest::collection::vec;
+    use proptest::num::f64::POSITIVE;
+
+    proptest! {
+        #[test]
+        fn dds_prop(vec1 in vec(POSITIVE, 0..(HIST_MAX_CACHE_SIZE * 2)),
+                    vec2 in vec(POSITIVE, 0..(HIST_MAX_CACHE_SIZE * 2))) {
+            let mut a = Dds::default();
+            a.init();
+            for v in &vec1 {
+                a.accumulate(&[
+                    &Value::from(*v),
+                    &literal!([0.5])
+                ]).map_err(|fe| Error::from(format!("{:?}", fe)))?;
+            }
+
+            let mut b = Dds::default();
+            b.init();
+            for v in &vec2 {
+                b.accumulate(&[
+                    &Value::from(*v),
+                    &literal!([0.5])
+                ]).map_err(|fe| Error::from(format!("{:?}", fe)))?;
+            }
+
+            a.merge(&b).map_err(|fe| Error::from(format!("{:?}", fe)))?;
+
+            let value = a.emit().map_err(|fe| Error::from(format!("{:?}", fe)))?;
+            let count = value.get_u64("count").unwrap();
+            let sum = value.get_f64("sum").unwrap();
+            let min = value.get_f64("min").unwrap();
+            let max = value.get_f64("max").unwrap();
+
+            // validate min, max, sum, count against the input
+            let input: Vec<f64> = vec1.iter().chain(vec2.iter()).copied().collect::<Vec<_>>();
+            prop_assert_eq!(input.len() as u64, count);
+            let iter_sum: f64 = input.iter().sum();
+            prop_assert_eq!(iter_sum, sum);
+
+            let iter_min = input.iter().copied().reduce(f64::min).unwrap_or(0.0_f64);
+            prop_assert_eq!(iter_min, min);
+            let iter_max = input.iter().copied().reduce(f64::max).unwrap_or(0.0_f64);
+            prop_assert_eq!(iter_max, max);
+        }
     }
 }
