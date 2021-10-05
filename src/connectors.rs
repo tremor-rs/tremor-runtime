@@ -82,6 +82,8 @@ use crate::OpConfig;
 use async_std::channel::{bounded, Sender};
 use halfbrown::{Entry, HashMap};
 use tremor_common::ids::ConnectorIdGen;
+use tremor_value::Value;
+use value_trait::{Builder, Mutable};
 
 use self::metrics::MetricsSender;
 use self::quiescence::QuiescenceBeacon;
@@ -464,6 +466,7 @@ impl Manager {
         let ctx = ConnectorContext {
             uid,
             url: url.clone(),
+            type_name: config.binding_type.clone(),
             quiescence_beacon: quiescence_beacon.clone(),
             notifier: notifier.clone(),
         };
@@ -911,10 +914,25 @@ pub struct ConnectorContext {
     pub uid: u64,
     /// url of the connector
     pub url: TremorUrl,
+    /// type name of the connector
+    pub type_name: String,
     /// The Quiescence Beacon
     pub quiescence_beacon: QuiescenceBeacon,
     /// Notifier
     pub notifier: reconnect::ConnectionLostNotifier,
+}
+
+impl ConnectorContext {
+    /// enclose the given meta in the right connector namespace
+    ///
+    /// Namespace: "connector.<connector-type>"
+    pub fn meta(&self, inner: Value<'static>) -> Value<'static> {
+        let mut map = Value::object_with_capacity(1);
+        let mut type_map = Value::object_with_capacity(1);
+        type_map.try_insert(self.type_name.clone(), inner);
+        map.try_insert("connector", type_map);
+        map
+    }
 }
 
 /// describes connectivity state of the connector
