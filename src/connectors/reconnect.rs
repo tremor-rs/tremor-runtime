@@ -340,6 +340,7 @@ mod tests {
         let ctx = ConnectorContext {
             uid: 1,
             url,
+            type_name: "fake".to_string(),
             quiescence_beacon: qb,
             notifier: runtime.notifier(),
         };
@@ -370,6 +371,7 @@ mod tests {
         let ctx = ConnectorContext {
             uid: 1,
             url,
+            type_name: "fake".to_string(),
             quiescence_beacon: qb,
             notifier: runtime.notifier(),
         };

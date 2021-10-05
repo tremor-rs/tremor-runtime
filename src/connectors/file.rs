@@ -12,14 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::{path::PathBuf, time::Duration};
+use std::{ffi::OsStr, path::PathBuf, time::Duration};
 
 use crate::{
     connectors::prelude::*,
     system::{ShutdownMode, World},
 };
-use async_std::fs::{File as FSFile, OpenOptions};
-use futures::{AsyncReadExt, AsyncWriteExt};
+use async_compression::futures::bufread::XzDecoder;
+use async_std::{
+    fs::{File as FSFile, OpenOptions},
+    io::BufReader,
+};
+use futures::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use tremor_common::asy::file;
 use tremor_value::{literal, Value};
 
@@ -191,9 +195,9 @@ impl Connector for File {
         // SOURCE PART: open file for reading
         // open in read-only mode, without creating a new one - will fail if the file is not available
         if let Some(source_runtime) = self.source_runtime.as_ref() {
-            let meta = literal!({
+            let meta = ctx.meta(literal!({
                 "path": self.config.path.display().to_string()
-            });
+            }));
             let read_file =
                 file::open_with(&self.config.path, &mut self.config.mode.as_open_options()).await?;
             let world = if self.config.close_on_done {
@@ -201,15 +205,28 @@ impl Connector for File {
             } else {
                 None
             };
-            let reader = FileReader::new(
-                read_file,
-                self.config.chunk_size,
-                ctx.url.clone(),
-                self.origin_uri.clone(),
-                meta,
-                world,
-            );
-            source_runtime.register_stream_reader(DEFAULT_STREAM_ID, ctx, reader);
+            // TODO: remove this special case and add xz support to preprocessors
+            if let Some("xz") = self.config.path.extension().and_then(OsStr::as_str) {
+                let reader = FileReader::xz(
+                    read_file,
+                    self.config.chunk_size,
+                    ctx.url.clone(),
+                    self.origin_uri.clone(),
+                    meta,
+                    world,
+                );
+                source_runtime.register_stream_reader(DEFAULT_STREAM_ID, ctx, reader);
+            } else {
+                let reader = FileReader::new(
+                    read_file,
+                    self.config.chunk_size,
+                    ctx.url.clone(),
+                    self.origin_uri.clone(),
+                    meta,
+                    world,
+                );
+                source_runtime.register_stream_reader(DEFAULT_STREAM_ID, ctx, reader);
+            };
         }
 
         Ok(true)
@@ -220,8 +237,12 @@ impl Connector for File {
     }
 }
 
-struct FileReader {
-    file: FSFile,
+struct FileReader<R>
+where
+    R: AsyncRead + Send + Unpin,
+{
+    reader: R,
+    underlying_file: FSFile,
     buf: Vec<u8>,
     url: TremorUrl,
     origin_uri: EventOriginUri,
@@ -229,7 +250,7 @@ struct FileReader {
     world: Option<World>,
 }
 
-impl FileReader {
+impl FileReader<FSFile> {
     fn new(
         file: FSFile,
         chunk_size: usize,
@@ -239,7 +260,29 @@ impl FileReader {
         world: Option<World>,
     ) -> Self {
         Self {
-            file,
+            reader: file.clone(),
+            underlying_file: file,
+            buf: vec![0; chunk_size],
+            url,
+            origin_uri,
+            meta,
+            world,
+        }
+    }
+}
+
+impl FileReader<XzDecoder<BufReader<FSFile>>> {
+    fn xz(
+        file: FSFile,
+        chunk_size: usize,
+        url: TremorUrl,
+        origin_uri: EventOriginUri,
+        meta: Value<'static>,
+        world: Option<World>,
+    ) -> Self {
+        Self {
+            reader: XzDecoder::new(BufReader::new(file.clone())),
+            underlying_file: file,
             buf: vec![0; chunk_size],
             url,
             origin_uri,
@@ -250,9 +293,12 @@ impl FileReader {
 }
 
 #[async_trait::async_trait]
-impl StreamReader for FileReader {
+impl<R> StreamReader for FileReader<R>
+where
+    R: AsyncRead + Send + Unpin,
+{
     async fn read(&mut self, stream: u64) -> Result<SourceReply> {
-        let bytes_read = self.file.read(&mut self.buf).await?;
+        let bytes_read = self.reader.read(&mut self.buf).await?;
         Ok(if bytes_read == 0 {
             trace!("[Connector::{}] EOF", &self.url);
             SourceReply::EndStream(stream)
@@ -267,7 +313,7 @@ impl StreamReader for FileReader {
     }
 
     async fn on_done(&mut self, _stream: u64) -> StreamDone {
-        if let Err(e) = self.file.close().await {
+        if let Err(e) = self.underlying_file.close().await {
             error!("[Connector::{}] Error closing file: {}", &self.url, e);
         }
         // CLOSE ON DONE
