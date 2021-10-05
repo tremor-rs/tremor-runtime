@@ -120,7 +120,7 @@ pub struct OffRamp {
 
 /// possible reconnect strategies for controlling if and how to reconnect
 #[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(untagged, rename_all = "lowercase", deny_unknown_fields)]
+#[serde(rename_all = "lowercase", deny_unknown_fields)]
 pub enum Reconnect {
     /// do not reconnect
     None,
@@ -243,4 +243,39 @@ pub struct Binding {
     #[serde(default = "Default::default")]
     pub(crate) description: String,
     pub(crate) links: BindingMap, // is this right? this should be url to url?
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::errors::Result;
+
+    #[test]
+    fn test_reconnect_serde() -> Result<()> {
+        assert_eq!(
+            "---\n\
+            none\n",
+            serde_yaml::to_string(&Reconnect::None)?
+        );
+        let none_strategy = r#"
+        none
+        "#;
+        let reconnect = serde_yaml::from_str::<Reconnect>(none_strategy)?;
+        assert!(matches!(reconnect, Reconnect::None));
+        let custom = r#"
+        custom:
+          interval_ms: 123
+          growth_rate: 1.234567
+        "#;
+        let reconnect = serde_yaml::from_str::<Reconnect>(custom)?;
+        assert!(matches!(
+            reconnect,
+            Reconnect::Custom {
+                interval_ms: 123,
+                growth_rate: _,
+                max_retries: None
+            }
+        ));
+        Ok(())
+    }
 }

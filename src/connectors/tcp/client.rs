@@ -151,14 +151,14 @@ impl Connector for TcpClient {
                 )
                 .await?;
             let (read, write) = tls_stream.split();
-            let meta = literal!({
+            let meta = ctx.meta(literal!({
                 "tls": true,
                 // TODO: what to put into meta here?
                 "peer": {
                     "host": self.config.host.clone(),
                     "port": self.config.port
                 }
-            });
+            }));
             // register reader
             let tls_reader = TcpReader::tls_client(
                 read,
@@ -175,14 +175,14 @@ impl Connector for TcpClient {
             sink_runtime.register_stream_writer(DEFAULT_STREAM_ID, ctx, tls_writer);
         } else {
             // plain TCP
-            let meta = literal!({
+            let meta = ctx.meta(literal!({
                 "tls": false,
                 // TODO: what to put into meta here?
                 "peer": {
                     "host": self.config.host.clone(),
                     "port": self.config.port
                 }
-            });
+            }));
             // register reader
             let reader = TcpReader::new(
                 stream.clone(),
