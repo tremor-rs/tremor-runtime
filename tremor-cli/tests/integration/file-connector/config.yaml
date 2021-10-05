@@ -1,0 +1,29 @@
+connector:
+  - id: in_file
+    type: file
+    codec: json
+    preprocessors:
+      - lines-no-buffer
+    config:
+      path: "in.json"
+      mode: read
+      close_on_done: true
+  - id: out_file
+    type: file
+    codec: json
+    postprocessors:
+      - lines
+    config:
+      path: "out.log"
+      mode: truncate
+
+binding:
+  - id: files
+    links:
+      "/connector/in_file/{instance}/out":
+        - "/pipeline/system::passthrough/{instance}/in"
+      "/pipeline/system::passthrough/{instance}/out":
+        - "/connector/out_file/{instance}/in"
+mapping:
+  /binding/files/01:
+    instance: 01
