@@ -73,6 +73,7 @@
 - Kafka onramp: Remove failing metadata fetch in order to verify topic existance. Instead detect subscription errors and stop the onramp in that case.
 - Unix offramp: Add the missing StartStream message
 - tremor-script: Add more details about Unicode in the documentation of the `string` module
+- Fix `hdr` and `dds` aggregation function losing events when aggregating > 8192 events
 
 ### Breaking Changes
 

@@ -18,3 +18,4 @@ rebar.lock
 rebar3.crashdump
 priv
 eqc/.rebar3
+proptest-regressions/
