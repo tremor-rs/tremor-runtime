@@ -46,9 +46,9 @@ impl Before {
     pub(crate) fn spawn(&self, base: &PathBuf) -> Result<Option<TargetProcess>> {
         let cmd = job::which(&self.cmd)?;
         // interpret `dir` as relative to `base`
-        eprintln!("Before spawn CWD: {}", base.join(&self.dir).display());
         let cwd = base.join(&self.dir).canonicalize()?;
         let process = job::TargetProcess::new_in_dir(&cmd, &self.args, &self.env, &cwd)?;
+        debug!("Spawning before: {}", self.cmdline());
         self.block_on()?;
         Ok(Some(process))
     }
