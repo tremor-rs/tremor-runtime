@@ -52,6 +52,7 @@
 - Fix argument order in test cases
 - Fix gcs go-auth token refresh
 - Fix `create script` syntax for aliased scripts with overridden `params`
+- Fix `hdr` and `dds` aggregation function losing events when aggregating > 8192 events
 
 ## 0.11.4
 
