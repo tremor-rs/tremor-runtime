@@ -1191,6 +1191,7 @@ mod test {
     use proptest::num;
 
     proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
         #[test]
         fn dds_prop(vec1 in vec(num::f64::POSITIVE, 0..(HIST_MAX_CACHE_SIZE * 2)),
                     vec2 in vec(num::f64::POSITIVE, 0..(HIST_MAX_CACHE_SIZE * 2))) {
@@ -1231,7 +1232,6 @@ mod test {
             let iter_max = input.iter().copied().reduce(f64::max).unwrap_or(0.0_f64);
             prop_assert_eq!(iter_max, max);
         }
-
         #[test]
         fn hdr_prop(vec1 in vec(0_u64..100_u64, 0..(HIST_MAX_CACHE_SIZE * 2)),
                     vec2 in vec(0_u64..100_u64, 0..(HIST_MAX_CACHE_SIZE * 2))) {
