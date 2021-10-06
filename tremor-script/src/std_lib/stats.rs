@@ -530,12 +530,13 @@ impl TremorAggrFn for Dds {
                     .ok_or_else(|| err(&"Unable to calculate sum"))?,
             )
         };
+        let mean = if count == 0 { 0.0 } else { sum / count as f64 };
         let res = literal!({
             "count": count,
             "sum": sum,
             "min": min,
             "max": max,
-            "mean": sum / count as f64,
+            "mean": mean,
             "percentiles": p
         });
         Ok(res)
@@ -1081,6 +1082,33 @@ mod test {
     }
 
     #[test]
+    fn hdr_empty() -> Result<()> {
+        let mut histo = Hdr::default();
+        histo.init();
+        assert_eq!(
+            literal!({
+                "count": 0_u64,
+                "min": 0_u64,
+                "max": 0_u64,
+                "mean": 0.0,
+                "stdev": 0.0,
+                "var": 0.0,
+                "percentiles": {
+                    "0.5": 0_u64,
+                    "0.9": 0_u64,
+                    "0.95": 0_u64,
+                    "0.99": 0_u64,
+                    "0.999": 0_u64,
+                    "0.9999": 0_u64,
+                    "0.99999": 0_u64,
+                }
+            }),
+            histo.emit()?
+        );
+        Ok(())
+    }
+
+    #[test]
     fn dds() -> Result<()> {
         use crate::Value;
 
@@ -1124,6 +1152,33 @@ mod test {
         b.merge(&a)?;
         assert_eq!(b.emit()?, e);
 
+        Ok(())
+    }
+
+    #[test]
+    fn dds_empty() -> Result<()> {
+        let mut dds = Dds::default();
+        dds.init();
+        let value = dds.emit()?;
+        assert_eq!(
+            literal!({
+                "count": 0,
+                "sum": 0.0,
+                "min": 0.0,
+                "max": 0.0,
+                "mean": 0.0,
+                "percentiles": {
+                    "0.5": 0.0,
+                    "0.9": 0.0,
+                    "0.95": 0.0,
+                    "0.99": 0.0,
+                    "0.999": 0.0,
+                    "0.9999": 0.0,
+                    "0.99999": 0.0
+                }
+            }),
+            value
+        );
         Ok(())
     }
 
