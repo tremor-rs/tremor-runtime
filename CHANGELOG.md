@@ -56,6 +56,7 @@
 - Fix argument order in test cases
 - Fix gcs go-auth token refresh
 - Fix `create script` syntax for aliased scripts with overridden `params`
+- Add benchmark names to benchmark tags
 
 ## 0.11.4
 

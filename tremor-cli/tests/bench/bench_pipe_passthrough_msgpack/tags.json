@@ -1,5 +1,6 @@
 [
     "pipeline",
     "passthrough",
-    "msgpack"
+    "msgpack",
+    "bench_pipe_passthrough_msgpack"
 ]
