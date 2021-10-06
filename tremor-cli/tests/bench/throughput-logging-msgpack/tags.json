@@ -1,5 +1,6 @@
 [
     "throughput",
     "logging",
-    "msgpack"
+    "msgpack",
+    "throughput-logging-msgpack"
 ]

@@ -1,5 +1,6 @@
 [
     "throughput",
     "logging",
-    "json"
+    "json",
+    "throughput-logging-json"
 ]

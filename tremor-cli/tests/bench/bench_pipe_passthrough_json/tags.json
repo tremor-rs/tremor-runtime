@@ -1,5 +1,6 @@
 [
     "pipeline",
     "passthrough",
-    "json"
+    "json",
+    "bench_pipe_passthrough_json"
 ]
