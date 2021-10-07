@@ -61,7 +61,7 @@ pub fn load(registry: &mut Registry) {
             other => Err(to_runtime_error(format!("Onlay arrays that consist of tuples (arrays of two elements) can be turned into records but this array contained: {:?}", other)))
         }).collect();
         Ok(Value::from(r?))
-        })).insert(tremor_const_fn!(record|select(_context, _input: Object, _keys: Array) {
+        })).insert(tremor_const_fn!(record|extract(_context, _input: Object, _keys: Array) {
         let keys: Vec<_> = _keys.iter().filter_map(ValueAccess::as_str).collect();
         let r: Object =_input.iter().filter_map(|(k, v)| {
             let k: &str = k;
@@ -73,7 +73,7 @@ pub fn load(registry: &mut Registry) {
         }).collect();
         Ok(Value::from(r))
     }))
-        .insert(tremor_const_fn!(record|merge(_context, _left: Object, _right: Object) {
+        .insert(tremor_const_fn!(record|combine(_context, _left: Object, _right: Object) {
         Ok(Value::from(_left.iter().chain(_right.iter()).map(|(k, v)| (k.clone(), v.clone())).collect::<Object>()))
         })).insert(tremor_const_fn!(record|rename(_context, _target: Object, _renameings: Object) {
             Ok(Value::from(_target.iter().map(|(k, v)| if let Some(Value::String(k1)) = _renameings.get(k) {
@@ -177,8 +177,9 @@ mod test {
     }
 
     #[test]
-    fn select() {
-        let f = fun("record", "select");
+    fn extract() {
+        // used to be called "select"
+        let f = fun("record", "extract");
         let v1 = Value::from(hashmap! {
             "this".into() => Value::from("is"),
             "a".into() => Value::from("test")
@@ -192,8 +193,8 @@ mod test {
         );
     }
     #[test]
-    fn merge() {
-        let f = fun("record", "merge");
+    fn combine() {
+        let f = fun("record", "combine");
         let v1 = Value::from(hashmap! {
             "this".into() => Value::from("is"),
             "a".into() => Value::from("test")
