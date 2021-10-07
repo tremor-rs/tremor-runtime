@@ -194,6 +194,7 @@ mod test {
     }
     #[test]
     fn combine() {
+        // used to be called "merge"
         let f = fun("record", "combine");
         let v1 = Value::from(hashmap! {
             "this".into() => Value::from("is"),
