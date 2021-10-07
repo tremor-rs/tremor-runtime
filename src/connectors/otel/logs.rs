@@ -44,7 +44,7 @@ fn affirm_severity_number_valid(severity_number: i32) -> Result<i32> {
         Ok(severity_number)
     } else {
         Err(format!(
-            "The `severity_number` is in the valid range 0 <= {} <= 24",
+            "The `severity_number` is NOT in the valid range 0 <= {} <= 24",
             severity_number
         )
         .into())
