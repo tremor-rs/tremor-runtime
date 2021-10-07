@@ -62,6 +62,10 @@
 - Fix `create script` syntax for aliased scripts with overridden `params`
 - Add benchmark names to benchmark tags
 
+### Breaking Changes
+
+- changed naming for `record` object to avoid keywords like `select` and `merge`. New names are `record.extract` and `record.combine`.
+
 ## 0.11.4
 
 ### New features
