@@ -335,12 +335,12 @@ test::suite({
       "test": test::assert("record from array 2", record::from_array([["a", 1]]), {"a": 1})
     }),
     test::test({
-      "name": "record select 1",
-      "test": test::assert("record select 1", record::extract({"a": 1}, ["c"]), {})
+      "name": "record extract 1",
+      "test": test::assert("record extract 1", record::extract({"a": 1}, ["c"]), {})
     }),
     test::test({
-      "name": "record select 2",
-      "test": test::assert("record select 2", record::extract({"a": 1}, ["a"]), {"a": 1})
+      "name": "record extract 2",
+      "test": test::assert("record extract 2", record::extract({"a": 1}, ["a"]), {"a": 1})
     }),
     test::test({
       "name": "record combine 1",
