@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.11.8
 
 ### Fixes
 
