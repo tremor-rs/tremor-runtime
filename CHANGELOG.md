@@ -33,6 +33,7 @@
 
 ### Fixes
 
+- Make otel severity_number optional: #1248
 - Don't allow duplicate stream names: #1212
 - Fix memory safety issue when using `merge` or `patch` with `state` as target and reassigning the resulting value to `state` [#1217](https://github.com/tremor-rs/tremor-runtime/pull/1217)
 - Fix delayed event re-execution in case of errors in a branched pipeline
