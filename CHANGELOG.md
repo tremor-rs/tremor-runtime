@@ -5,6 +5,7 @@
 ### Fixes
 
 - Fix `hdr` and `dds` aggregation function losing events when aggregating > 8192 events
+- Make otel severity_number optional: #1248
 
 ### New Features
 

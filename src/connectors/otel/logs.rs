@@ -39,11 +39,12 @@ fn affirm_traceflags_valid(traceflags: u32) -> Result<u32> {
 }
 
 fn affirm_severity_number_valid(severity_number: i32) -> Result<i32> {
-    if severity_number > 0 && severity_number <= 24 {
+    if (0..=24).contains(&severity_number) {
+        // NOTE `0` implies unspecified severity
         Ok(severity_number)
     } else {
         Err(format!(
-            "The `severity_number` is in the valid range 0 < {} <= 24",
+            "The `severity_number` is in the valid range 0 <= {} <= 24",
             severity_number
         )
         .into())
@@ -314,6 +315,79 @@ mod tests {
         });
 
         assert_eq!(expected, json);
+        assert_eq!(pb.resource_logs, back_again);
+
+        Ok(())
+    }
+
+    #[test]
+    fn resource_logs_severity_unspecified_regression() -> Result<()> {
+        let nanos = tremor_common::time::nanotime();
+        let span_id_pb = id::random_span_id_bytes(nanos);
+        let span_id_json = id::test::pb_span_id_to_json(&span_id_pb);
+        let trace_id_json = id::random_trace_id_value(nanos);
+        let trace_id_pb = id::test::json_trace_id_to_pb(Some(&trace_id_json))?;
+
+        let pb = ExportLogsServiceRequest {
+            resource_logs: vec![ResourceLogs {
+                schema_url: "schema_url".into(),
+                resource: Some(Resource {
+                    attributes: vec![],
+                    dropped_attributes_count: 8,
+                }),
+                instrumentation_library_logs: vec![InstrumentationLibraryLogs {
+                    schema_url: "schema_url".into(),
+                    instrumentation_library: Some(InstrumentationLibrary {
+                        name: "name".into(),
+                        version: "v0.1.2".into(),
+                    }), // TODO For now its an error for this to be None - may need to revisit
+                    logs: vec![LogRecord {
+                        time_unix_nano: 0,
+                        severity_number: 0,
+                        severity_text: "".into(),
+                        name: "test".into(),
+                        body: Some(AnyValue {
+                            value: Some(any_value::Value::StringValue("snot".into())),
+                        }), // TODO For now its an error for this to be None - may need to revisit
+                        attributes: vec![],
+                        dropped_attributes_count: 100,
+                        flags: 128,
+                        span_id: span_id_pb.clone(),
+                        trace_id: trace_id_pb,
+                    }],
+                }],
+            }],
+        };
+        let json = resource_logs_to_json(pb.clone())?;
+        let back_again = resource_logs_to_pb(&json)?;
+        let expected: Value = literal!({
+            "logs": [
+                {
+                    "resource": { "attributes": {}, "dropped_attributes_count": 8 },
+                    "schema_url": "schema_url",
+                    "instrumentation_library_logs": [
+                        {
+                            "instrumentation_library": { "name": "name", "version": "v0.1.2" },
+                            "schema_url": "schema_url",
+                            "logs": [{
+                                "severity_number": 0,
+                                "flags": 128,
+                                "span_id": span_id_json,
+                                "trace_id": trace_id_json,
+                                "dropped_attributes_count": 100,
+                                "time_unix_nano": 0,
+                                "severity_text": "",
+                                "name": "test",
+                                "attributes": {},
+                                "body": "snot"
+                            }]
+                        }
+                    ]
+                }
+            ]
+        });
+
+        assert_eq!(sorted_serialize(&expected)?, sorted_serialize(&json)?);
         assert_eq!(pb.resource_logs, back_again);
 
         Ok(())
