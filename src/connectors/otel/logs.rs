@@ -195,6 +195,7 @@ mod tests {
         common::v1::{any_value, AnyValue, InstrumentationLibrary},
         resource::v1::Resource,
     };
+    use tremor_script::utils::sorted_serialize;
 
     use super::*;
 
@@ -330,13 +331,11 @@ mod tests {
 
         let pb = ExportLogsServiceRequest {
             resource_logs: vec![ResourceLogs {
-                schema_url: "schema_url".into(),
                 resource: Some(Resource {
                     attributes: vec![],
                     dropped_attributes_count: 8,
                 }),
                 instrumentation_library_logs: vec![InstrumentationLibraryLogs {
-                    schema_url: "schema_url".into(),
                     instrumentation_library: Some(InstrumentationLibrary {
                         name: "name".into(),
                         version: "v0.1.2".into(),
@@ -364,11 +363,9 @@ mod tests {
             "logs": [
                 {
                     "resource": { "attributes": {}, "dropped_attributes_count": 8 },
-                    "schema_url": "schema_url",
                     "instrumentation_library_logs": [
                         {
                             "instrumentation_library": { "name": "name", "version": "v0.1.2" },
-                            "schema_url": "schema_url",
                             "logs": [{
                                 "severity_number": 0,
                                 "flags": 128,
