@@ -146,16 +146,6 @@ impl Event {
         e
     }
 
-    /// allows to iterate over the values and metadatas
-    /// in an event, if it is batched this can be multiple
-    /// otherwise it's a singular event
-    #[must_use]
-    pub fn value_meta_iter(&self) -> ValueMetaIter {
-        ValueMetaIter {
-            event: self,
-            idx: 0,
-        }
-    }
     /// Creates a new event to restore a CB
     #[must_use]
     pub fn cb_restore(ingest_ns: u64) -> Self {
@@ -323,12 +313,68 @@ impl Event {
     }
 }
 
+impl Event {
+    /// allows to iterate over the values and metadatas
+    /// in an event, if it is batched this can be multiple
+    /// otherwise it's a singular event
+    #[must_use]
+    pub fn value_meta_iter(&self) -> ValueMetaIter {
+        ValueMetaIter {
+            event: self,
+            idx: 0,
+        }
+    }
+}
 /// Iterator over the event value and metadata
 /// if the event is a batch this will allow iterating
 /// over all the batched events
 pub struct ValueMetaIter<'value> {
     event: &'value Event,
     idx: usize,
+}
+
+impl<'value> ValueMetaIter<'value> {
+    fn extract_batched_value_meta(
+        batched_value: &'value Value<'value>,
+    ) -> Option<(&'value Value<'value>, &'value Value<'value>)> {
+        batched_value
+            .get("data")
+            .and_then(|last_data| last_data.get("value").zip(last_data.get("meta")))
+    }
+
+    /// Split off the last value and meta in this iter and return all previous values and metas inside a slice.
+    /// Returns `None` if there are no values in this Event, which shouldn't happen, tbh.
+    ///
+    /// This is efficient because all the values are in a slice already.
+    pub fn split_last(
+        &mut self,
+    ) -> Option<(
+        (&'value Value<'value>, &'value Value<'value>),
+        impl Iterator<Item = (&'value Value<'value>, &'value Value<'value>)>,
+    )> {
+        if self.event.is_batch {
+            self.event
+                .data
+                .suffix()
+                .value()
+                .as_array()
+                .and_then(|vec| vec.split_last())
+                .and_then(|(last, rest)| {
+                    let last_option = Self::extract_batched_value_meta(last);
+                    let rest_option =
+                        Some(rest.iter().filter_map(Self::extract_batched_value_meta));
+                    last_option.zip(rest_option)
+                })
+        } else {
+            let v = self.event.data.suffix();
+            let vs: &[Value<'value>] = &[];
+            Some((
+                (v.value(), v.meta()),
+                // only use the extract method to end up with the same type as the if branch above
+                vs.iter().filter_map(Self::extract_batched_value_meta),
+            ))
+        }
+    }
 }
 
 // TODO: descend recursively into batched events in batched events ...
@@ -342,10 +388,7 @@ impl<'value> Iterator for ValueMetaIter<'value> {
                 .suffix()
                 .value()
                 .get_idx(self.idx)
-                .and_then(|e| {
-                    let data = e.get("data")?;
-                    Some((data.get("value")?, data.get("meta")?))
-                });
+                .and_then(Self::extract_batched_value_meta);
             self.idx += 1;
             r
         } else if self.idx == 0 {
@@ -377,6 +420,45 @@ pub struct ValueIter<'value> {
     idx: usize,
 }
 
+impl<'value> ValueIter<'value> {
+    fn extract_batched_value(
+        batched_value: &'value Value<'value>,
+    ) -> Option<&'value Value<'value>> {
+        batched_value
+            .get("data")
+            .and_then(|last_data| last_data.get("value"))
+    }
+    /// Split off the last value in this iter and return all previous values inside an iterator.
+    /// Returns `None` if there are no values in this Event, which shouldn't happen, tbh.
+    ///
+    /// This is useful if we don't want to clone stuff on the last value.
+    pub fn split_last(
+        &mut self,
+    ) -> Option<(
+        &'value Value<'value>,
+        impl Iterator<Item = &'value Value<'value>>,
+    )> {
+        if self.event.is_batch {
+            self.event
+                .data
+                .suffix()
+                .value()
+                .as_array()
+                .and_then(|vec| vec.split_last())
+                .and_then(|(last, rest)| {
+                    let last_option = Self::extract_batched_value(last);
+                    let rest_option = Some(rest.iter().filter_map(Self::extract_batched_value));
+                    last_option.zip(rest_option)
+                })
+        } else {
+            let v = self.event.data.suffix().value();
+            let vs: &[Value<'value>] = &[];
+            // only use the extract method to end up with the same type as the if branch above
+            Some((v, vs.iter().filter_map(Self::extract_batched_value)))
+        }
+    }
+}
+
 impl<'value> Iterator for ValueIter<'value> {
     type Item = &'value Value<'value>;
     fn next(&mut self) -> Option<Self::Item> {
@@ -387,11 +469,11 @@ impl<'value> Iterator for ValueIter<'value> {
                 .suffix()
                 .value()
                 .get_idx(self.idx)
-                .and_then(|e| e.get("data")?.get("value"));
+                .and_then(Self::extract_batched_value);
             self.idx += 1;
             r
         } else if self.idx == 0 {
-            let v = &self.event.data.suffix().value();
+            let v = self.event.data.suffix().value();
             self.idx += 1;
             Some(v)
         } else {
@@ -462,6 +544,77 @@ mod test {
         assert_eq!(vmi.next().unwrap(), (&1.into(), &2.into()));
         assert_eq!(vmi.next().unwrap(), (&3.into(), &4.into()));
         assert!(vmi.next().is_none());
+    }
+
+    #[test]
+    fn value_iters_split_last() {
+        let mut b = Event {
+            data: (Value::array(), 2).into(),
+            is_batch: true,
+            ..Event::default()
+        };
+
+        assert!(b.value_iter().split_last().is_none());
+        assert!(b.value_meta_iter().split_last().is_none());
+
+        let e1 = Event {
+            data: (1, 2).into(),
+            ..Event::default()
+        };
+        {
+            let splitted = e1.value_iter().split_last();
+            assert!(splitted.is_some());
+            let (last, mut rest) = splitted.unwrap();
+            assert_eq!(last, &1);
+            assert!(rest.next().is_none());
+
+            let splitted_meta = e1.value_meta_iter().split_last();
+            assert!(splitted_meta.is_some());
+            let ((last_value, last_meta), mut rest) = splitted_meta.unwrap();
+            assert_eq!(last_value, &1);
+            assert_eq!(last_meta, &2);
+            assert!(rest.next().is_none());
+        }
+        assert!(b.data.consume(e1.data, merge).is_ok());
+        {
+            let splitted = b.value_iter().split_last();
+            assert!(splitted.is_some());
+            let (last, mut rest) = splitted.unwrap();
+            assert_eq!(last, &1);
+            assert!(rest.next().is_none());
+
+            let splitted_meta = b.value_meta_iter().split_last();
+            assert!(splitted_meta.is_some());
+            let ((last_value, last_meta), mut rest) = splitted_meta.unwrap();
+            assert_eq!(last_value, &1);
+            assert_eq!(last_meta, &2);
+            assert!(rest.next().is_none());
+        }
+        let e2 = Event {
+            data: (3, 4).into(),
+            ..Event::default()
+        };
+        assert!(b.data.consume(e2.data, merge).is_ok());
+        {
+            let splitted = b.value_iter().split_last();
+            assert!(splitted.is_some());
+            let (last, mut rest) = splitted.unwrap();
+            assert_eq!(last, &3);
+            let first = rest.next();
+            assert!(first.is_some());
+            assert_eq!(first.unwrap(), &1);
+
+            let splitted_meta = b.value_meta_iter().split_last();
+            assert!(splitted_meta.is_some());
+            let ((last_value, last_meta), mut rest) = splitted_meta.unwrap();
+            assert_eq!(last_value, &3);
+            assert_eq!(last_meta, &4);
+            let first = rest.next();
+            assert!(first.is_some());
+            let (value, meta) = first.unwrap();
+            assert_eq!(value, &1);
+            assert_eq!(meta, &2);
+        }
     }
 
     #[test]

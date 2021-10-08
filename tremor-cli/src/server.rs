@@ -19,7 +19,7 @@ use crate::{
 };
 use async_std::stream::StreamExt;
 use futures::future;
-use signal_hook::consts::signal::*;
+use signal_hook::consts::signal::{SIGINT, SIGQUIT, SIGTERM};
 use signal_hook::low_level::signal_name;
 use signal_hook_async_std::Signals;
 use std::io::Write;
@@ -28,6 +28,13 @@ use tremor_api as api;
 use tremor_common::file;
 use tremor_runtime::system::{self, ShutdownMode, World};
 use tremor_runtime::{self, version};
+
+macro_rules! log_and_print_error {
+    ($($arg:tt)*) => {
+        eprintln!($($arg)*);
+        error!($($arg)*);
+    };
+}
 
 impl ServerCommand {
     pub(crate) async fn run(&self) {
@@ -40,11 +47,18 @@ impl ServerRun {
     pub(crate) async fn run(&self) {
         version::print();
         if let Err(ref e) = self.run_dun().await {
-            error!("error: {}", e);
-            for e in e.iter().skip(1) {
-                error!("error: {}", e);
+            match e {
+                Error(ErrorKind::AnyhowError(anyhow_e), _) => {
+                    log_and_print_error!("{:?}", anyhow_e);
+                }
+                e => {
+                    log_and_print_error!("Error: {}", e);
+                    for e in e.iter().skip(1) {
+                        eprintln!("Caused by: {}", e);
+                    }
+                }
             }
-            error!("We are SHUTTING DOWN due to errors during initialization!");
+            log_and_print_error!("We are SHUTTING DOWN due to errors during initialization!");
 
             // ALLOW: main.rs
             ::std::process::exit(1);

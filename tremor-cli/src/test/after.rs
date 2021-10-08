@@ -32,8 +32,9 @@ impl After {
     pub(crate) fn spawn(&self, base: &Path) -> Result<Option<TargetProcess>> {
         let cmd = job::which(&self.cmd)?;
         // interpret `dir` as relative to `base`
-        let cwd = base.join(&self.dir).canonicalize()?;
-        let mut process = job::TargetProcess::new_in_dir(&cmd, &self.args, &self.env, &cwd)?;
+        let current_dir = base.join(&self.dir).canonicalize()?;
+        let mut process =
+            job::TargetProcess::new_in_dir(&cmd, &self.args, &self.env, &current_dir)?;
         process.wait_with_output()?;
         Ok(Some(process))
     }

@@ -12,12 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::{ffi::OsStr, path::PathBuf, time::Duration};
+use std::{ffi::OsStr, path::PathBuf};
 
-use crate::{
-    connectors::prelude::*,
-    system::{ShutdownMode, World},
-};
+use crate::connectors::prelude::*;
 use async_compression::futures::bufread::XzDecoder;
 use async_std::{
     fs::{File as FSFile, OpenOptions},
@@ -77,9 +74,6 @@ pub struct Config {
     /// chunk_size to read from the file
     #[serde(default = "default_chunk_size")]
     pub chunk_size: usize,
-    /// shutdown the runtime when the file is completely read
-    #[serde(default = "Default::default")]
-    pub close_on_done: bool,
 }
 
 fn default_chunk_size() -> usize {
@@ -95,23 +89,13 @@ pub struct File {
     origin_uri: EventOriginUri,
     source_runtime: Option<ChannelSourceRuntime>,
     sink_runtime: Option<SingleStreamSinkRuntime>,
-    world: World,
 }
 
 /// builder for file connector
-pub struct Builder {
-    world: World,
-}
+#[derive(Default)]
+pub struct Builder {}
 
-impl Builder {
-    /// constructor
-    #[must_use]
-    pub fn new(world: &World) -> Self {
-        Self {
-            world: world.clone(),
-        }
-    }
-}
+impl Builder {}
 
 #[async_trait::async_trait]
 impl ConnectorBuilder for Builder {
@@ -133,7 +117,6 @@ impl ConnectorBuilder for Builder {
                 origin_uri,
                 source_runtime: None,
                 sink_runtime: None,
-                world: self.world.clone(),
             }))
         } else {
             let mut id = id.clone();
@@ -200,12 +183,8 @@ impl Connector for File {
             }));
             let read_file =
                 file::open_with(&self.config.path, &mut self.config.mode.as_open_options()).await?;
-            let world = if self.config.close_on_done {
-                Some(self.world.clone())
-            } else {
-                None
-            };
-            // TODO: remove this special case and add xz support to preprocessors
+            // TODO: instead of looking for an extension
+            // check the magic bytes at the beginning of the file to determine the compression applied
             if let Some("xz") = self.config.path.extension().and_then(OsStr::to_str) {
                 let reader = FileReader::xz(
                     read_file,
@@ -213,7 +192,6 @@ impl Connector for File {
                     ctx.url.clone(),
                     self.origin_uri.clone(),
                     meta,
-                    world,
                 );
                 source_runtime.register_stream_reader(DEFAULT_STREAM_ID, ctx, reader);
             } else {
@@ -223,7 +201,6 @@ impl Connector for File {
                     ctx.url.clone(),
                     self.origin_uri.clone(),
                     meta,
-                    world,
                 );
                 source_runtime.register_stream_reader(DEFAULT_STREAM_ID, ctx, reader);
             };
@@ -247,7 +224,6 @@ where
     url: TremorUrl,
     origin_uri: EventOriginUri,
     meta: Value<'static>,
-    world: Option<World>,
 }
 
 impl FileReader<FSFile> {
@@ -257,7 +233,6 @@ impl FileReader<FSFile> {
         url: TremorUrl,
         origin_uri: EventOriginUri,
         meta: Value<'static>,
-        world: Option<World>,
     ) -> Self {
         Self {
             reader: file.clone(),
@@ -266,7 +241,6 @@ impl FileReader<FSFile> {
             url,
             origin_uri,
             meta,
-            world,
         }
     }
 }
@@ -278,7 +252,6 @@ impl FileReader<XzDecoder<BufReader<FSFile>>> {
         url: TremorUrl,
         origin_uri: EventOriginUri,
         meta: Value<'static>,
-        world: Option<World>,
     ) -> Self {
         Self {
             reader: XzDecoder::new(BufReader::new(file.clone())),
@@ -287,7 +260,6 @@ impl FileReader<XzDecoder<BufReader<FSFile>>> {
             url,
             origin_uri,
             meta,
-            world,
         }
     }
 }
@@ -317,21 +289,6 @@ where
         if let Err(e) = self.underlying_file.close().await {
             error!("[Connector::{}] Error closing file: {}", &self.url, e);
         }
-        // CLOSE ON DONE
-        if let Some(world) = self.world.as_ref() {
-            if let Err(e) = world
-                .stop(ShutdownMode::Graceful {
-                    timeout: Duration::from_secs(2),
-                })
-                .await
-            {
-                error!(
-                    "[Connector::{}] Error stopping the runtime: {}",
-                    &self.url, e
-                );
-            }
-        }
-
         // we do not use ConnectorClosed - as we don't want to trigger a reconnect
         // which would read the whole file again
         StreamDone::StreamClosed

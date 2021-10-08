@@ -1,5 +1,5 @@
 status: 0
-name: file connector
+name: tcp tls connectors
 asserts:
-  - source: out.log
+  - source: output.log
     equals_file: expected.json
