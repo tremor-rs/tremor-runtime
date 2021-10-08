@@ -754,6 +754,7 @@ pub struct WindowDeclRaw<'script> {
     pub(crate) id: String,
     pub(crate) kind: WindowKind,
     pub(crate) params: Params<'script>,
+    pub(crate) named_script: Option<(IdentRaw<'script>, ScriptRaw<'script>)>,
     pub(crate) script: Option<ScriptRaw<'script>>,
     pub(crate) doc: Option<Vec<Cow<'script, str>>>,
 }
@@ -765,11 +766,23 @@ impl<'script> Upable<'script> for WindowDeclRaw<'script> {
 
         // warn params if `emit_empty_windows` is defined, but neither `max_groups` nor `evicition_period` is defined
 
+        let tick_script = self
+            .named_script
+            .map(|(i, s)| {
+                if i != "tick" {
+                    Err("Only `tick` scripts are supported by windows".into())
+                } else {
+                    s.up_script(helper)
+                }
+            })
+            .transpose()?;
+
         let window_decl = WindowDecl {
             mid: helper.add_meta_w_name(self.start, self.end, &self.id),
             node_id: NodeId::new(self.id, helper.module.clone()),
             kind: self.kind,
             params: self.params.up(helper)?,
+            tick_script,
             script: maybe_script,
         };
 

@@ -201,7 +201,7 @@ pub trait ImutExprVisitor<'script> {
     ///
     /// # Errors
     /// if the walker function fails
-    fn visit_record(&mut self, _record: &mut Record<'script>) -> Result<VisitRes> {
+    fn expr(&mut self, _e: &mut Expr<'script>) -> Result<VisitRes> {
         Ok(Walk)
     }
 
@@ -217,7 +217,7 @@ pub trait ImutExprVisitor<'script> {
     ///
     /// # Errors
     /// if the walker function fails
-    fn visit_list(&mut self, _list: &mut List<'script>) -> Result<VisitRes> {
+    fn emit(&mut self, _emit: &mut EmitExpr<'script>) -> Result<VisitRes> {
         Ok(Walk)
     }
 

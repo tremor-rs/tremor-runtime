@@ -346,6 +346,12 @@ impl<'script> ToString for IdentRaw<'script> {
     }
 }
 
+impl<'script, 'str> PartialEq<&'str str> for IdentRaw<'script> {
+    fn eq(&self, other: &&'str str) -> bool {
+        self.id == *other
+    }
+}
+
 impl<'script> Upable<'script> for IdentRaw<'script> {
     type Target = Ident<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {

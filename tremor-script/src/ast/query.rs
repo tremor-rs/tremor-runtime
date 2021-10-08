@@ -275,6 +275,8 @@ pub struct WindowDecl<'script> {
     pub params: HashMap<String, Value<'script>>,
     /// The script of the window
     pub script: Option<Script<'script>>,
+    /// The script of the window during ticks
+    pub tick_script: Option<Script<'script>>,
 }
 impl_expr_mid!(WindowDecl);
 impl_fqn!(WindowDecl);

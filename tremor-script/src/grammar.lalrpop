@@ -183,16 +183,32 @@ GroupDefs_: Vec<GroupByRaw<'input>> = {
     <Sep<GroupDefs_, GroupDef, ",">> => <>
 }
 
-MaybeEmbeddedScript: Option<ScriptRaw<'input>> = {
-    ("script" <EmbeddedScriptContent>)? => <>?,
+
+NamedScript: (IdentRaw<'input>, ScriptRaw<'input>) = {
+    "script" "from" <name:Ident> <script:EmbeddedScriptContent> => (name, script)
 }
 
-EmbeddedScriptContent: Option<ScriptRaw<'input>> = {
-    <Exprs> => Some(ScriptRaw::new(<>, None)),
+MaybeNamedScript: Option<(IdentRaw<'input>, ScriptRaw<'input>)> = {
+    (<NamedScript>)? => <>
 }
 
-MaybeScriptWithClause: (WithExprsRaw<'input>, Option<ScriptRaw<'input>>) = {
-    "with" <with:WithExprs> <script:MaybeEmbeddedScript> "end" => (with, script),
+EmbeddedWindowScript: (Option<(IdentRaw<'input>, ScriptRaw<'input>)>, ScriptRaw<'input>) = {
+    "script" "from" <name:Ident> <named:EmbeddedScriptContent>  "script" <script:EmbeddedScriptContent> => (Some((name, named)), script),
+    "script" <script:EmbeddedScriptContent> => (None, script)
+}
+
+
+
+MaybeEmbeddedWindowScript: Option<(Option<(IdentRaw<'input>, ScriptRaw<'input>)>, ScriptRaw<'input>)> = {
+    (<EmbeddedWindowScript>)? => <>,
+}
+
+EmbeddedScriptContent: ScriptRaw<'input> = {
+    <Exprs> => ScriptRaw::new(<>, None),
+}
+
+MaybeScriptWithClause: (WithExprsRaw<'input>, Option<(Option<(IdentRaw<'input>, ScriptRaw<'input>)>, ScriptRaw<'input>)>) = {
+    "with" <with:WithExprs> <script:MaybeEmbeddedWindowScript> "end" => (with, script),
 }
 
 WithClause: WithExprsRaw<'input> = {
@@ -298,8 +314,15 @@ CreateScript: StmtRaw<'input> = {
 
 DefineWindow: StmtRaw<'input> = {
     <doc:DocComment> <start:@L> "define" <kind:WindowKind> "window" <id:Ident> <params:MaybeScriptWithClause> <end:@L> => {
-        StmtRaw::WindowDecl(WindowDeclRaw { start, end, id: id.to_string(), kind, params: params.0.into(), script: params.1, doc })
-    }
+        let (params, scripts) = params;
+        let (script, named_script) = if let Some((named_script, script)) = scripts {
+            (Some(script), named_script)
+        } else {
+            (None, None)
+        };
+        StmtRaw::WindowDecl(WindowDeclRaw { start, end, id: id.to_string(), kind, params: params.into(), script, named_script, doc})
+    },
+
 }
 
 ///////////////////////////////////////
