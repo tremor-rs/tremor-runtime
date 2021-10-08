@@ -30,6 +30,7 @@
 - Allow functions, constants and expressions as roots for path lookups
 - Add the `unix-socket` source
 - Enabale automatic benchmakrs
+- Add the `csv` codec
 
 ### Fixes
 
