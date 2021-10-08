@@ -1,0 +1,3 @@
+Error: 
+    5 |   event + 1
+      |   ^^^^^^^^^ `event` isn't accessible in this context

@@ -36,7 +36,8 @@ pub mod visitors;
 
 /// docs
 pub mod docs;
-/// collection of AST visitors
+
+/// collection of AST walkers (for impl'ing)
 pub mod walkers;
 
 pub use self::helper::Helper;
@@ -283,6 +284,18 @@ pub struct Script<'script> {
     pub docs: docs::Docs,
 }
 impl_expr!(Script);
+
+impl Default for Script<'static> {
+    fn default() -> Self {
+        Self {
+            exprs: Vec::new(),
+            locals: 0,
+            docs: docs::Docs::default(),
+            mid: NodeMeta::new_box(Location::default(), Location::default()),
+            state: None,
+        }
+    }
+}
 
 impl<'script> Script<'script> {
     /// Runs the script and evaluates to a resulting event.

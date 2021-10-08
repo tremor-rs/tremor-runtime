@@ -134,4 +134,6 @@ test_cases!(
     binary_operators_and_right,
     binary_operators_xor_left,
     binary_operators_xor_right,
+    bad_vec_state_window_return,
+    bad_state_window_return,
 );

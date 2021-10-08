@@ -14,8 +14,8 @@
 use pretty_assertions::assert_eq;
 use std::io::prelude::*;
 use tremor_common::{file, ids::OperatorIdGen, ports::IN};
-use tremor_pipeline::query::Query;
 use tremor_pipeline::ExecutableGraph;
+use tremor_pipeline::{query::Query, EventOriginUri};
 use tremor_pipeline::{Event, EventId};
 use tremor_script::FN_REGISTRY;
 
@@ -61,11 +61,21 @@ macro_rules! test_cases {
                 out_json.reverse();
 
                 let mut results = Vec::new();
+
+                let origin_uri = EventOriginUri {
+                    scheme: "tremor".into(),
+                    host: "localhost".into(),
+                    port: None,
+                    path: vec!["test".into()],
+                };
+
+
                 for (id, json) in in_json.into_iter().enumerate() {
                     let event = Event {
                         id: EventId::new(0, 0, (id as u64), (id as u64)),
                         data: json.clone_static().into(),
                         ingest_ns: id as u64,
+                        origin_uri: Some(origin_uri.clone()),
                         ..Event::default()
                     };
                     let mut r = vec![];
@@ -117,6 +127,7 @@ test_cases!(
     where_filter,
     window_by_two_scripted,
     window_by_two,
+    window_state_by_two,
     window_size_tilted,
     pp_win,
     pp_script,
@@ -139,6 +150,7 @@ test_cases!(
     args_nesting_redefine,
     pipeline_nested_pipeline,
     pipeline_passthrough,
+    window_state_by_two_vec,
     alias_script_params_overwrite,
     cardinality,
     window_mixed_2,

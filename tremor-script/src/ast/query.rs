@@ -344,6 +344,10 @@ pub struct WindowDefinition<'script> {
     pub params: CreationalWith<'script>,
     /// The script of the window
     pub script: Option<Script<'script>>,
+    /// The script of the window during ticks
+    pub tick_script: Option<Script<'script>>,
+    /// initial state of the window
+    pub state: Option<Value<'script>>,
 }
 impl_expr!(WindowDefinition);
 

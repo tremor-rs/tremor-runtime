@@ -27,16 +27,20 @@ use super::{
     ScriptCreate, ScriptDefinition, Select, SelectStmt, Serialize, Stmt, StreamCreate, Upable,
     WindowDefinition, WindowKind,
 };
+use crate::ast::{
+    node_id::NodeId,
+    visitors::{
+        windows::{NoEventAccess, OnlyMutState},
+        GroupByExprExtractor, TargetEventRef,
+    },
+    Ident,
+};
+use crate::errors::{err_generic, Error};
 use crate::{ast::optimizer::Optimizer, prelude::Ranged};
 use crate::{ast::NodeMeta, impl_expr};
 use crate::{
-    ast::{
-        node_id::NodeId,
-        raw::UseRaw,
-        visitors::{GroupByExprExtractor, TargetEventRef},
-        Consts, Ident,
-    },
-    errors::{Error, Kind as ErrorKind},
+    ast::{raw::UseRaw, Consts},
+    errors::Kind as ErrorKind,
     impl_expr_no_lt,
     module::Manager,
 };
@@ -445,24 +449,56 @@ pub struct WindowDefinitionRaw<'script> {
     // Yes it is odd that we use the `creational` here but windows are not crates
     // and defined like other constructs - perhaps we should revisit this?
     pub(crate) params: CreationalWithRaw<'script>,
+    pub(crate) named_script: Option<(IdentRaw<'script>, ScriptRaw<'script>)>,
     pub(crate) script: Option<ScriptRaw<'script>>,
     pub(crate) doc: Option<Vec<Cow<'script, str>>>,
     pub(crate) mid: Box<NodeMeta>,
+    pub(crate) state: Option<ImutExprRaw<'script>>,
 }
 impl_expr!(WindowDefinitionRaw);
 
 impl<'script> Upable<'script> for WindowDefinitionRaw<'script> {
     type Target = WindowDefinition<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        let maybe_script = self.script.map(|s| s.up_script(helper)).transpose()?;
+        let maybe_script = self
+            .script
+            .map(|s| -> Result<_> {
+                let mut s = s.up_script(helper)?;
+                for expr in &mut s.exprs {
+                    OnlyMutState::validate(expr).map_err(|e| err_generic(expr, expr, &e))?;
+                }
+                Ok(s)
+            })
+            .transpose()?;
 
         // warn params if `emit_empty_windows` is defined, but neither `max_groups` nor `evicition_period` is defined
-
+        let tick_script = self
+            .named_script
+            .map(|(i, s)| {
+                if i == "tick" {
+                    let mut s = s.up_script(helper)?;
+                    for expr in &mut s.exprs {
+                        OnlyMutState::validate(expr).map_err(|e| err_generic(expr, expr, &e))?;
+                        NoEventAccess::validate(expr).map_err(|e| err_generic(expr, expr, &e))?;
+                    }
+                    Ok(s)
+                } else {
+                    Err(Error::from("Only `tick` scripts are supported by windows"))
+                }
+            })
+            .transpose()?;
+        let state = self
+            .state
+            .up(helper)?
+            .map(|h| h.try_into_value(helper))
+            .transpose()?;
         let window_defn = WindowDefinition {
             mid: self.mid.box_with_name(&self.id),
             id: self.id,
             kind: self.kind,
             params: self.params.up(helper)?,
+            state,
+            tick_script,
             script: maybe_script,
         };
 

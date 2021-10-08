@@ -1,0 +1,8 @@
+define window w from tumbling
+state
+  null
+script
+  let event = 42;
+end;
+
+select event from in into out;
