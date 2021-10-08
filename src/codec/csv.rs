@@ -45,27 +45,23 @@ impl Codec for Csv {
     }
 
     fn encode(&self, data: &Value) -> Result<Vec<u8>> {
-        match data {
-            Value::Array(values) => {
-                let mut fields = vec![];
-                for value in values {
-                    fields.push(format!("{}", value));
-                }
+        if let Some(values) = data.as_array() {
+            let fields:Vec<String> = values.iter().map(ToString::to_string).collect();
 
-                let mut result = vec![];
-                let mut writer = csv::Writer::from_writer(&mut result);
-                writer.write_record(&fields)?;
-                writer.flush()?;
-                drop(writer);
+            let mut result = vec![];
+            let mut writer = csv::Writer::from_writer(&mut result);
+            writer.write_record(&fields)?;
+            writer.flush()?;
+            drop(writer);
 
-                Ok(result
-                    .iter()
-                    .take_while(|c| **c != b'\n' && **c != b'\r')
-                    .copied()
-                    .collect())
+            while result.last() == Some(&b'\n') || result.last() == Some(&b'\r') {
+                result.pop();
             }
-            v => Err(crate::errors::ErrorKind::NotCSVSerializableValue(format!("{}", v)).into()),
+
+            return Ok(result);
         }
+
+        Err(crate::errors::ErrorKind::NotCSVSerializableValue(format!("{:?}", data.value_type())).into())
     }
 
     fn boxed_clone(&self) -> Box<dyn Codec> {
