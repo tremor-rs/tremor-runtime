@@ -43,13 +43,14 @@ pub(crate) struct Before {
 }
 
 impl Before {
-    pub(crate) fn spawn(&self, base: &PathBuf) -> Result<Option<TargetProcess>> {
+    pub(crate) fn spawn(&self, base: &Path) -> Result<Option<TargetProcess>> {
         let cmd = job::which(&self.cmd)?;
         // interpret `dir` as relative to `base`
-        let cwd = base.join(&self.dir).canonicalize()?;
-        let process = job::TargetProcess::new_in_dir(&cmd, &self.args, &self.env, &cwd)?;
+        let current_working_dir = base.join(&self.dir).canonicalize()?;
+        let mut process =
+            job::TargetProcess::new_in_dir(&cmd, &self.args, &self.env, &current_working_dir)?;
         debug!("Spawning before: {}", self.cmdline());
-        self.block_on()?;
+        self.block_on(&mut process, base)?;
         Ok(Some(process))
     }
 
@@ -66,7 +67,7 @@ impl Before {
         )
     }
 
-    pub(crate) fn block_on(&self) -> Result<()> {
+    pub(crate) fn block_on(&self, process: &mut job::TargetProcess, base: &Path) -> Result<()> {
         let start = Instant::now();
         if let Some(conditions) = &self.conditionals {
             loop {
@@ -107,6 +108,23 @@ impl Before {
                                 Err(_) => false,
                             }
                         }
+                    }
+                    if "file-exists" == k.as_str() {
+                        let base_dir = base.join(&self.dir);
+                        for f in v {
+                            if let Ok(path) = base_dir.join(f).canonicalize() {
+                                debug!("Checking for existence of {}", path.display());
+                                success &= path.exists();
+                            }
+                        }
+                    }
+                    if "status" == k.as_str() {
+                        let code = process.wait_with_output()?.code().unwrap_or(0);
+                        success &= v
+                            .first()
+                            .and_then(|code| code.parse::<i32>().ok())
+                            .map(|expected_code| expected_code == code)
+                            .unwrap_or_default();
                     }
                 }
                 if success {
@@ -159,7 +177,7 @@ impl BeforeController {
         if before_path.exists() {
             let before_json = load_before(&before_path);
             match before_json {
-                Ok(before_json) => before_json.spawn(&root),
+                Ok(before_json) => before_json.spawn(root),
                 Err(Error(ErrorKind::Common(tremor_common::Error::FileOpen(_, _)), _)) => {
                     // no before json found, all good
                     Ok(None)

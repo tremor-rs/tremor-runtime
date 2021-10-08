@@ -73,29 +73,11 @@ impl From<bool> for SinkReply {
     }
 }
 
-/// some basic Event data needed for generating correct contraflow messages
-#[derive(Clone, Debug)]
-pub struct EventCfData {
-    event_id: EventId,
-    ingest_ns: u64,
-    op_meta: OpMeta,
-}
-
-impl From<&Event> for EventCfData {
-    fn from(event: &Event) -> Self {
-        Self {
-            event_id: event.id.clone(),
-            ingest_ns: event.ingest_ns,
-            op_meta: event.op_meta.clone(),
-        }
-    }
-}
-
 /// Possible replies from asynchronous sinks via `reply_channel` from event or signal handling
 pub enum AsyncSinkReply {
-    Ack(EventCfData, u64),
-    Fail(EventCfData),
-    CB(EventCfData, CbAction),
+    Ack(ContraflowData, u64),
+    Fail(ContraflowData),
+    CB(ContraflowData, CbAction),
 }
 
 /// Result for a sink function that may provide insights or response.
@@ -228,6 +210,7 @@ pub enum SinkMsg {
 
 /// Wrapper around all possible sink messages
 /// handled in the Sink task
+#[allow(clippy::large_enum_variant)] // TODO: should we box SinkMsg here?
 enum SinkMsgWrapper {
     FromSink(AsyncSinkReply),
     ToSink(SinkMsg),
@@ -559,7 +542,7 @@ where
                             send_contraflow(&self.pipelines, &self.ctx.url, cf).await;
                         }
                         SinkMsg::Event { event, port } => {
-                            let cf_builder = ContraflowBuilder::from(&event);
+                            let cf_builder = ContraflowData::from(&event);
 
                             self.metrics_reporter.increment_in();
                             if let Some(t) = self.metrics_reporter.periodic_flush(event.ingest_ns) {
@@ -625,7 +608,7 @@ where
                                     }
 
                                     // send a cb Drained contraflow message back
-                                    let cf = ContraflowBuilder::from(&signal)
+                                    let cf = ContraflowData::from(&signal)
                                         .into_cb(CbAction::Drained(source_uid));
                                     send_contraflow(&self.pipelines, &self.ctx.url, cf).await;
                                 }
@@ -635,7 +618,7 @@ where
                                 _ => {} // ignore
                             }
                             // hand it over to the sink impl
-                            let cf_builder = ContraflowBuilder::from(&signal);
+                            let cf_builder = ContraflowData::from(&signal);
                             let start = nanotime();
                             let res = self
                                 .sink
@@ -690,13 +673,15 @@ where
     }
 }
 
-pub(crate) struct ContraflowBuilder {
+#[derive(Clone, Debug)]
+/// basic data to build contraflow messages
+pub struct ContraflowData {
     event_id: EventId,
     ingest_ns: u64,
     op_meta: OpMeta,
 }
 
-impl ContraflowBuilder {
+impl ContraflowData {
     fn ack(&self, duration: u64) -> Event {
         Event::cb_ack_with_timing(
             self.ingest_ns,
@@ -727,9 +712,9 @@ impl ContraflowBuilder {
     }
 }
 
-impl From<&Event> for ContraflowBuilder {
+impl From<&Event> for ContraflowData {
     fn from(event: &Event) -> Self {
-        ContraflowBuilder {
+        ContraflowData {
             event_id: event.id.clone(),
             ingest_ns: event.ingest_ns,
             op_meta: event.op_meta.clone(), // TODO: mem::swap here?
@@ -765,7 +750,7 @@ async fn send_contraflow(
 async fn handle_replies(
     replies: Vec<SinkReply>,
     duration: u64,
-    cf_builder: ContraflowBuilder,
+    cf_builder: ContraflowData,
     pipelines: &[(TremorUrl, pipeline::Addr)],
     connector_url: &TremorUrl,
     send_auto_ack: bool,

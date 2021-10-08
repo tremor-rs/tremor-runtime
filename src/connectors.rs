@@ -766,7 +766,7 @@ impl Manager {
                                 .send(SourceMsg::Drain(addr.sender.clone()))
                                 .await?;
                         } else {
-                            // proceed to the next step
+                            // proceed to the next step, even without source
                             addr.send(Msg::SourceDrained).await?;
                         }
 
@@ -781,7 +781,8 @@ impl Manager {
                         }
                         drainage = Some(d);
                     }
-                    Msg::SourceDrained => {
+                    Msg::SourceDrained if connector_state == ConnectorState::Draining => {
+                        debug!("[Connector::{}] Source-part is drained.", &addr.url);
                         if let Some(drainage) = drainage.as_mut() {
                             drainage.set_source_drained();
                             if drainage.all_drained() {
@@ -796,11 +797,15 @@ impl Manager {
                                 // flush all events until we received a drain signal from all inputs
                                 if let Some(sink) = addr.sink.as_ref() {
                                     sink.addr.send(SinkMsg::Drain(addr.sender.clone())).await?;
+                                } else {
+                                    // proceed to the next step, even without sink
+                                    addr.send(Msg::SinkDrained).await?;
                                 }
                             }
                         }
                     }
-                    Msg::SinkDrained => {
+                    Msg::SinkDrained if connector_state == ConnectorState::Draining => {
+                        debug!("[Connector::{}] Sink-part is drained.", &addr.url);
                         if let Some(drainage) = drainage.as_mut() {
                             drainage.set_sink_drained();
                             if drainage.all_drained() {
@@ -812,6 +817,18 @@ impl Manager {
                                 }
                             }
                         }
+                    }
+                    Msg::SourceDrained => {
+                        info!(
+                            "[Connector::{}] Ignoring SourceDrained Msg. Current state: {}",
+                            &addr.url, &connector_state
+                        );
+                    }
+                    Msg::SinkDrained => {
+                        info!(
+                            "[Connector::{}] Ignoring SourceDrained Msg. Current state: {}",
+                            &addr.url, &connector_state
+                        );
                     }
                     Msg::Stop => {
                         info!("[Connector::{}] Stopping...", &addr.url);
@@ -937,6 +954,7 @@ impl ConnectorContext {
     /// enclose the given meta in the right connector namespace
     ///
     /// Namespace: "connector.<connector-type>"
+    #[must_use]
     pub fn meta(&self, inner: Value<'static>) -> Value<'static> {
         let mut map = Value::object_with_capacity(1);
         let mut type_map = Value::object_with_capacity(1);
@@ -1064,7 +1082,7 @@ pub async fn register_builtin_connector_types(world: &World) -> Result<()> {
         .register_builtin_connector_type("exit", Box::new(exit::Builder::new(world)))
         .await?;
     world
-        .register_builtin_connector_type("file", Box::new(file::Builder::new(world)))
+        .register_builtin_connector_type("file", Box::new(file::Builder::default()))
         .await?;
     world
         .register_builtin_connector_type("metrics", Box::new(metrics::Builder::default()))
