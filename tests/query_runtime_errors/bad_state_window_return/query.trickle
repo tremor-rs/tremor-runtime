@@ -1,0 +1,8 @@
+define window snot from tumbling
+state
+  null
+script
+  "snot"
+end;
+
+select 1 from in[snot] into out;

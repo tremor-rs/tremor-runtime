@@ -14,6 +14,9 @@
 
 pub use crate::ast::base_expr::BaseExpr;
 pub(crate) use crate::ast::eq::AstEq;
+pub(crate) use crate::ast::visitors::{
+    self, DeployVisitor, ExprVisitor, GroupByVisitor, ImutExprVisitor, QueryVisitor, VisitRes,
+};
 pub(crate) use crate::ast::walkers::{self, DeployWalker, ExprWalker, ImutExprWalker, QueryWalker};
 pub(crate) use crate::ast::{
     ArgsExpr, ArrayPattern, ArrayPredicatePattern, BinExpr, Bytes, BytesPart, ClauseGroup,
@@ -26,9 +29,5 @@ pub(crate) use crate::ast::{
     RecordPattern, Recur, ReservedPath, Script, ScriptCreate, ScriptDefinition, Segment, Select,
     SelectStmt, StatePath, Stmt, StrLitElement, StreamCreate, StringLit, TestExpr, TuplePattern,
     UnaryExpr, WindowDefinition, WithExpr,
-};
-
-pub(crate) use crate::ast::visitors::{
-    self, DeployVisitor, ExprVisitor, GroupByVisitor, ImutExprVisitor, QueryVisitor, VisitRes,
 };
 pub(crate) use crate::errors::Result;

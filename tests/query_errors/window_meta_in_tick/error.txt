@@ -1,0 +1,3 @@
+Error: 
+    5 |   $ + 1
+      |   ^^^^^ `$` isn't accessible in this context

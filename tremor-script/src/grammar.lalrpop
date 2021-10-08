@@ -327,8 +327,8 @@ Stmt: StmtRaw<'input> = {
 //// DEFINEs
 
 DefineWindow: WindowDefinitionRaw<'input> = {
-    <doc:(DocComment)?> <start:@L> "define" "window" <id:Ident> "from"  <kind:WindowKind> <params:CreationWith> <script:(EmbeddedScriptImut)?> "end" <end:@L> => {
-        WindowDefinitionRaw { mid: NodeMeta::new_box(start, end), id: id.to_string(), kind, params, script, doc }
+    <doc:(DocComment)?> <start:@L> "define" "window" <id:Ident> "from"  <kind:WindowKind> <params:CreationWith> <state:(ScriptState)?> <named_script:(NamedScript)?> <script:(EmbeddedScriptContent)?> "end" <end:@L> => {
+        WindowDefinitionRaw { mid: NodeMeta::new_box(start, end), id: id.to_string(), kind, params, script, doc, named_script, state }
     }
 }
 
@@ -485,10 +485,10 @@ GroupDefs_: Vec<GroupByRaw<'input>> = {
 }
 
 EmbeddedScriptImut: ScriptRaw<'input> = {
-    "script" <EmbeddedScriptContent> => <>,
+    "script" <EmbeddedScriptContentImut> => <>,
 }
 
-EmbeddedScriptContent: ScriptRaw<'input> = {
+EmbeddedScriptContentImut: ScriptRaw<'input> = {
     <start:@L> <expr:ExprImut> <end:@L> => ScriptRaw::new(NodeMeta::new_box(start, end), vec![TopLevelExprRaw::Expr(ExprRaw::Imut(expr))], None),
 }
 
@@ -501,8 +501,12 @@ OperatorKind: OperatorKindRaw = {
     <start:@L> <module:Ident> "::" <oper:Ident> <end:@L> => OperatorKindRaw { mid: NodeMeta::new_box(start, end), module:  module.id.to_string(), operation: oper.id.to_string() }
 }
 
+
 EmbeddedScript: ScriptRaw<'input> = {
-    "script" <start:@L> <exprs:TopLevelExprs> <end:@L> "end" => ScriptRaw::new(NodeMeta::new_box(start, end), exprs, None),
+    <EmbeddedScriptContent> "end" => <>,
+}
+EmbeddedScriptContent: ScriptRaw<'input> = {
+    "script" <start:@L> <exprs:TopLevelExprs> <end:@L> => ScriptRaw::new(NodeMeta::new_box(start, end), exprs, None),
 }
 
 Pipeline: (ConfigRaw<'input>, StmtsRaw<'input>) = {

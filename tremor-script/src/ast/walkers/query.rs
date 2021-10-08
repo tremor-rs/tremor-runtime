@@ -110,6 +110,9 @@ pub trait Walker<'script>: ExprWalker<'script> + QueryVisitor<'script> {
         if let Some(script) = defn.script.as_mut() {
             self.walk_script(script)?;
         }
+        if let Some(script) = defn.tick_script.as_mut() {
+            self.walk_script(script)?;
+        }
         self.leave_window_defn(defn)
     }
 
