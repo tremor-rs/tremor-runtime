@@ -14,11 +14,11 @@
 
 use crate::{Event, EventId, EventIdGenerator, OpMeta};
 use beef::Cow;
-use std::borrow::Cow as SCow;
+use std::{borrow::Cow as SCow, convert::TryFrom};
 use tremor_common::stry;
 use tremor_script::{
     self,
-    ast::{AggrSlice, Aggregates, Consts, NodeMetas, RunConsts, Select, WindowDecl},
+    ast::{AggrSlice, Aggregates, Consts, NodeMetas, RunConsts, Script, Select, WindowDecl},
     errors::Result,
     interpreter::{Env, LocalStack},
     prelude::*,
@@ -198,7 +198,7 @@ impl GroupWindow {
         &mut self,
         ctx: &mut SelectCtx,
         consts: RunConsts,
-        data: &ValueAndMeta,
+        data: &mut ValueAndMeta,
         events: &mut Vec<(Cow<'static, str>, Event)>,
         prev: Option<(bool, &Aggregates<'static>)>,
         mut can_remove: bool,
@@ -326,7 +326,7 @@ impl Group {
         &mut self,
         mut ctx: SelectCtx,
         consts: &mut Consts,
-        data: &ValueAndMeta,
+        data: &mut ValueAndMeta,
         events: &mut Vec<(Cow<'static, str>, Event)>,
     ) -> Result<bool> {
         // Set the group value for the exeuction
@@ -359,7 +359,7 @@ impl Group {
 pub trait Trait: std::fmt::Debug {
     fn on_event(
         &mut self,
-        data: &ValueAndMeta,
+        data: &mut ValueAndMeta,
         ingest_ns: u64,
         origin_uri: &Option<EventOriginUri>,
     ) -> Result<Actions>;
@@ -397,6 +397,7 @@ impl Window {
 pub enum Impl {
     TumblingCountBased(TumblingOnNumber),
     TumblingTimeBased(TumblingOnTime),
+    TumblingStateBased(TumblingOnState),
 }
 
 impl Impl {
@@ -408,6 +409,7 @@ impl Impl {
         match self {
             Self::TumblingTimeBased(w) => w.reset(),
             Self::TumblingCountBased(w) => w.reset(),
+            Self::TumblingStateBased(w) => w.reset(),
         }
     }
 }
@@ -415,13 +417,14 @@ impl Impl {
 impl Trait for Impl {
     fn on_event(
         &mut self,
-        data: &ValueAndMeta,
+        data: &mut ValueAndMeta,
         ingest_ns: u64,
         origin_uri: &Option<EventOriginUri>,
     ) -> Result<Actions> {
         match self {
             Self::TumblingTimeBased(w) => w.on_event(data, ingest_ns, origin_uri),
             Self::TumblingCountBased(w) => w.on_event(data, ingest_ns, origin_uri),
+            Self::TumblingStateBased(w) => w.on_event(data, ingest_ns, origin_uri),
         }
     }
 
@@ -429,6 +432,7 @@ impl Trait for Impl {
         match self {
             Self::TumblingTimeBased(w) => w.on_tick(ns),
             Self::TumblingCountBased(w) => w.on_tick(ns),
+            Self::TumblingStateBased(w) => w.on_tick(ns),
         }
     }
 
@@ -436,6 +440,7 @@ impl Trait for Impl {
         match self {
             Self::TumblingTimeBased(w) => w.max_groups(),
             Self::TumblingCountBased(w) => w.max_groups(),
+            Self::TumblingStateBased(w) => w.max_groups(),
         }
     }
 }
@@ -448,6 +453,12 @@ impl From<TumblingOnNumber> for Impl {
 impl From<TumblingOnTime> for Impl {
     fn from(w: TumblingOnTime) -> Self {
         Self::TumblingTimeBased(w)
+    }
+}
+
+impl From<TumblingOnState> for Impl {
+    fn from(w: TumblingOnState) -> Self {
+        Self::TumblingStateBased(w)
     }
 }
 
@@ -477,7 +488,7 @@ pub struct No {}
 impl Trait for No {
     fn on_event(
         &mut self,
-        _data: &ValueAndMeta,
+        _data: &mut ValueAndMeta,
         _ingest_ns: u64,
         _origin_uri: &Option<EventOriginUri>,
     ) -> Result<Actions> {
@@ -485,6 +496,103 @@ impl Trait for No {
     }
     fn max_groups(&self) -> usize {
         usize::MAX
+    }
+}
+
+impl<'v> TryFrom<&Value<'v>> for Actions {
+    type Error = tremor_script::errors::Error;
+    fn try_from(v: &Value<'v>) -> std::result::Result<Self, Self::Error> {
+        if let Some(emit) = v.as_bool() {
+            if emit {
+                Ok(Actions::all_true())
+            } else {
+                Ok(Actions::all_false())
+            }
+        } else if let Some(r) = v
+            .as_array()
+            .and_then(|a| a.iter().map(Value::as_bool).collect::<Option<Vec<bool>>>())
+        {
+            if let &[emit, include] = r.as_slice() {
+                Ok(Actions { include, emit })
+            } else {
+                Err("A array return needs to be a two element array of booleans with the form `[emit, include]`".into())
+            }
+        } else {
+            Err(format!("can't convert {} to Action", v).into())
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct TumblingOnState {
+    pub(crate) initial_state: Value<'static>,
+    pub(crate) max_groups: usize,
+    pub(crate) script: Script<'static>,
+    pub(crate) state: Value<'static>,
+}
+
+impl TumblingOnState {
+    pub(crate) fn reset(&mut self) {
+        self.state = self.initial_state.clone();
+    }
+    pub fn from_stmt(state: Value<'static>, max_groups: usize, script: Script<'static>) -> Self {
+        Self {
+            initial_state: state.clone(),
+            max_groups,
+            script,
+            state,
+        }
+    }
+}
+
+impl Trait for TumblingOnState {
+    fn max_groups(&self) -> usize {
+        self.max_groups
+    }
+    fn on_event(
+        &mut self,
+        data: &mut ValueAndMeta,
+        ingest_ns: u64,
+        origin_uri: &Option<EventOriginUri>,
+    ) -> Result<Actions> {
+        let context = EventContext::new(ingest_ns, origin_uri.as_ref());
+        let (unwind_event, event_meta) = data.parts_mut();
+        // FIXME: deal with mutability!
+        let value = stry!(self.script.run(
+            &context,
+            AggrType::Emit,
+            unwind_event,    // event
+            &mut self.state, // state for the window
+            event_meta,      // $
+        ));
+        match value {
+            Return::Emit { value, .. } => Actions::try_from(&value),
+            Return::EmitEvent { .. } => Actions::try_from(&*unwind_event),
+            Return::Drop { .. } => Err("State based window didn't provide a boolean return".into()),
+        }
+    }
+
+    fn on_tick(&mut self, ns: u64) -> Actions {
+        let context = EventContext::new(ns, None);
+        let mut unwind_event = Value::const_null();
+        let mut event_meta = Value::const_null();
+        // FIXME: this could alter event, that's bad!
+        let value = self.script.run(
+            &context,
+            AggrType::Emit,
+            &mut unwind_event, // event
+            &mut self.state,   // state for the window
+            &mut event_meta,   // $
+        );
+        match value {
+            Ok(Return::Emit { value, .. }) => Actions::try_from(&value).unwrap_or_default(),
+            Ok(Return::EmitEvent { .. }) => Actions::try_from(&unwind_event).unwrap_or_default(),
+            Ok(Return::Drop { .. }) => Actions::all_false(),
+            Err(e) => {
+                error!("Failed to execute window script: {}", e);
+                Actions::all_false()
+            }
+        }
     }
 }
 
@@ -496,6 +604,7 @@ pub struct TumblingOnTime {
     pub(crate) interval: u64,
     pub(crate) script: Option<WindowDecl<'static>>,
 }
+
 impl TumblingOnTime {
     pub(crate) fn reset(&mut self) {
         self.next_window = None;
@@ -535,7 +644,7 @@ impl Trait for TumblingOnTime {
     }
     fn on_event(
         &mut self,
-        data: &ValueAndMeta,
+        data: &mut ValueAndMeta,
         ingest_ns: u64,
         origin_uri: &Option<EventOriginUri>,
     ) -> Result<Actions> {
@@ -605,7 +714,7 @@ impl Trait for TumblingOnNumber {
     }
     fn on_event(
         &mut self,
-        data: &ValueAndMeta,
+        data: &mut ValueAndMeta,
         ingest_ns: u64,
         origin_uri: &Option<EventOriginUri>,
     ) -> Result<Actions> {

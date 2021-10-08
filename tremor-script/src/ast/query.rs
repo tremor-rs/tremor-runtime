@@ -288,6 +288,8 @@ impl<'script> WindowDecl<'script> {
     pub const INTERVAL: &'static str = "interval";
     /// `size` setting
     pub const SIZE: &'static str = "size";
+    /// `state` setting
+    pub const STATE: &'static str = "state";
 }
 
 /// A select statement

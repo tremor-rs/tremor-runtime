@@ -121,7 +121,7 @@ impl From<(Location, Location, usize)> for NodeMeta {
     }
 }
 /// Information about node metadata
-#[derive(Serialize, Clone, Debug, PartialEq)]
+#[derive(Serialize, Clone, Debug, PartialEq, Default)]
 pub struct NodeMetas {
     nodes: Vec<NodeMeta>,
     #[serde(skip)]
@@ -725,6 +725,22 @@ pub struct Script<'script> {
     #[serde(skip)]
     /// Documentation from the script
     pub docs: Docs,
+}
+
+impl Default for Script<'static> {
+    fn default() -> Self {
+        Self {
+            imports: Default::default(),
+            exprs: Default::default(),
+            consts: Default::default(),
+            aggregates: Default::default(),
+            windows: HashMap::new(),
+            functions: Default::default(),
+            locals: Default::default(),
+            node_meta: Default::default(),
+            docs: Default::default(),
+        }
+    }
 }
 
 impl<'script> Script<'script> {

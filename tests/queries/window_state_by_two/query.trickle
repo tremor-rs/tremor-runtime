@@ -1,0 +1,12 @@
+define tumbling window by_two
+with
+  state = 0
+script
+  use tremor::origin;
+  match origin::scheme() of
+    case null => drop
+    case _ => let state = state + 1, state % 2 == 0
+  end
+end;
+
+select aggr::win::collect_flattened(event) from in[by_two] into out;

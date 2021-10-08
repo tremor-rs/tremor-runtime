@@ -370,7 +370,7 @@ impl Operator for Select {
             } = stmt;
             let mut res = EventAndInsights::default();
 
-            let data: ValueAndMeta = (Value::const_null(), Value::object()).into();
+            let mut data: ValueAndMeta = (Value::const_null(), Value::object()).into();
             let op_meta = OpMeta::default();
             let local_stack = tremor_script::interpreter::LocalStack::with_size(*locals);
 
@@ -430,7 +430,7 @@ impl Operator for Select {
                             can_remove = next.on_event(
                                 &mut ctx,
                                 run,
-                                &data,
+                                &mut data,
                                 &mut res.events,
                                 Some((w.holds_data, &w.aggrs)),
                                 can_remove,

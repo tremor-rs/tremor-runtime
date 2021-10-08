@@ -779,7 +779,7 @@ fn tumbling_window_on_time_emit() -> Result<()> {
         window::Impl::DEFAULT_MAX_GROUPS,
         None,
     );
-    let vm = literal!({
+    let mut vm = literal!({
        "h2g2" : 42,
     })
     .into();
@@ -788,25 +788,25 @@ fn tumbling_window_on_time_emit() -> Result<()> {
             include: false,
             emit: false
         },
-        window.on_event(&vm, ingest_ns(5), &None)?
+        window.on_event(&mut vm, ingest_ns(5), &None)?
     );
     assert_eq!(
         Actions::all_false(),
-        window.on_event(&vm, ingest_ns(10), &None)?
+        window.on_event(&mut vm, ingest_ns(10), &None)?
     );
     assert_eq!(
         Actions {
             include: false,
             emit: true
         },
-        window.on_event(&vm, ingest_ns(15), &None)? // exactly on time
+        window.on_event(&mut vm, ingest_ns(15), &None)? // exactly on time
     );
     assert_eq!(
         Actions {
             include: false,
             emit: true
         },
-        window.on_event(&vm, ingest_ns(26), &None)? // exactly on time
+        window.on_event(&mut vm, ingest_ns(26), &None)? // exactly on time
     );
     Ok(())
 }
@@ -848,7 +848,7 @@ fn tumbling_window_on_time_from_script_emit() -> Result<()> {
         window::Impl::DEFAULT_MAX_GROUPS,
         Some(&window_decl),
     );
-    let json1 = literal!({
+    let mut json1 = literal!({
         "timestamp": 1_000_000_000
     })
     .into();
@@ -857,14 +857,14 @@ fn tumbling_window_on_time_from_script_emit() -> Result<()> {
             include: false,
             emit: false
         },
-        window.on_event(&json1, 1, &None)?
+        window.on_event(&mut json1, 1, &None)?
     );
-    let json2 = literal!({
+    let mut json2 = literal!({
         "timestamp": 1_999_999_999
     })
     .into();
-    assert_eq!(Actions::all_false(), window.on_event(&json2, 2, &None)?);
-    let json3 = literal!({
+    assert_eq!(Actions::all_false(), window.on_event(&mut json2, 2, &None)?);
+    let mut json3 = literal!({
         "timestamp": 2_000_000_000
     })
     .into();
@@ -875,7 +875,7 @@ fn tumbling_window_on_time_from_script_emit() -> Result<()> {
             include: false,
             emit: true
         },
-        window.on_event(&json3, 3, &None)?
+        window.on_event(&mut json3, 3, &None)?
     );
     Ok(())
 }
@@ -898,10 +898,8 @@ fn tumbling_window_on_time_on_tick() -> Result<()> {
         },
         window.on_tick(100)
     );
-    assert_eq!(
-        Actions::all_false(),
-        window.on_event(&ValueAndMeta::default(), 101, &None)?
-    );
+    let mut v = ValueAndMeta::default();
+    assert_eq!(Actions::all_false(), window.on_event(&mut v, 101, &None)?);
     assert_eq!(Actions::all_false(), window.on_tick(102));
     assert_eq!(
         Actions {
@@ -931,10 +929,8 @@ fn tumbling_window_on_time_emit_empty_windows() -> Result<()> {
         },
         window.on_tick(100)
     );
-    assert_eq!(
-        Actions::all_false(),
-        window.on_event(&ValueAndMeta::default(), 101, &None)?
-    );
+    let mut v = ValueAndMeta::default();
+    assert_eq!(Actions::all_false(), window.on_event(&mut v, 101, &None)?);
     assert_eq!(Actions::all_false(), window.on_tick(102));
     assert_eq!(
         Actions {
@@ -951,19 +947,19 @@ fn tumbling_window_on_time_emit_empty_windows() -> Result<()> {
 fn no_window_emit() -> Result<()> {
     let mut window = window::No::default();
 
-    let vm = literal!({
+    let mut vm = literal!({
        "h2g2" : 42,
     })
     .into();
 
     assert_eq!(
         Actions::all_true(),
-        window.on_event(&vm, ingest_ns(0), &None)?
+        window.on_event(&mut vm, ingest_ns(0), &None)?
     );
     assert_eq!(Actions::all_false(), window.on_tick(0));
     assert_eq!(
         Actions::all_true(),
-        window.on_event(&vm, ingest_ns(1), &None)?
+        window.on_event(&mut vm, ingest_ns(1), &None)?
     );
     assert_eq!(Actions::all_false(), window.on_tick(1));
     Ok(())
@@ -973,7 +969,7 @@ fn no_window_emit() -> Result<()> {
 fn tumbling_window_on_number_emit() -> Result<()> {
     let mut window = window::TumblingOnNumber::from_stmt(3, window::Impl::DEFAULT_MAX_GROUPS, None);
 
-    let vm = literal!({
+    let mut vm = literal!({
        "h2g2" : 42,
     })
     .into();
@@ -981,24 +977,24 @@ fn tumbling_window_on_number_emit() -> Result<()> {
     // do not emit yet
     assert_eq!(
         Actions::all_false(),
-        window.on_event(&vm, ingest_ns(0), &None)?
+        window.on_event(&mut vm, ingest_ns(0), &None)?
     );
     assert_eq!(Actions::all_false(), window.on_tick(1_000_000_000));
     // do not emit yet
     assert_eq!(
         Actions::all_false(),
-        window.on_event(&vm, ingest_ns(1), &None)?
+        window.on_event(&mut vm, ingest_ns(1), &None)?
     );
     assert_eq!(Actions::all_false(), window.on_tick(2_000_000_000));
     // emit and open on the third event
     assert_eq!(
         Actions::all_true(),
-        window.on_event(&vm, ingest_ns(2), &None)?
+        window.on_event(&mut vm, ingest_ns(2), &None)?
     );
     // no emit here, next window
     assert_eq!(
         Actions::all_false(),
-        window.on_event(&vm, ingest_ns(3), &None)?
+        window.on_event(&mut vm, ingest_ns(3), &None)?
     );
 
     Ok(())

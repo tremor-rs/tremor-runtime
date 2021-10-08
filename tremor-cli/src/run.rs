@@ -249,8 +249,15 @@ fn run_tremor_source(matches: &ArgMatches, src: String) -> Result<()> {
                 &move |runnable, _id, egress, state, at, event| {
                     let mut global_map = Value::object();
                     let mut event = event.clone_static();
+                    let origin_uri = EventOriginUri {
+                        uid: 0,
+                        scheme: "tremor".into(),
+                        host: "localhost".into(),
+                        port: None,
+                        path: vec!["stdin".into()],
+                    };
                     match runnable.run(
-                        &EventContext::new(at, None),
+                        &EventContext::new(at, Some(&origin_uri)),
                         AggrType::Tick,
                         &mut event,
                         state,
@@ -345,12 +352,21 @@ fn run_trickle_source(matches: &ArgMatches, src: String) -> Result<()> {
 
             let mut continuation = vec![];
 
+            let origin_uri = EventOriginUri {
+                uid: 0,
+                scheme: "tremor".into(),
+                host: "localhost".into(),
+                port: None,
+                path: vec!["stdin".into()],
+            };
+
             if let Err(e) = runnable.enqueue(
                 "in",
                 Event {
                     id: EventId::new(0, 0, *id),
                     data: value.clone(),
                     ingest_ns: at,
+                    origin_uri: Some(origin_uri.clone()),
                     ..Event::default()
                 },
                 &mut continuation,

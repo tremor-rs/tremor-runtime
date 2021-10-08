@@ -18,7 +18,7 @@ use crate::{
     op::{
         self,
         identity::PassthroughFactory,
-        prelude::{ERR, IN, METRICS, OUT},
+        prelude::{trickle::window::TumblingOnState, ERR, IN, METRICS, OUT},
         trickle::{
             operator::TrickleOperator, script::Script, select::Select, simple_select::SimpleSelect,
             window,
@@ -102,18 +102,29 @@ pub(crate) fn window_decl_to_impl(d: &WindowDecl) -> Result<window::Impl> {
             match (
                 d.params.get(WindowDecl::INTERVAL).and_then(Value::as_u64),
                 d.params.get(WindowDecl::SIZE).and_then(Value::as_u64),
+                d.params.get(WindowDecl::STATE),
             ) {
-                (Some(interval), None) => Ok(window::Impl::from(TumblingOnTime::from_stmt(
+                (Some(interval), None, None) => Ok(window::Impl::from(TumblingOnTime::from_stmt(
                     interval, max_groups, script,
                 ))),
-                (None, Some(size)) => Ok(window::Impl::from(TumblingOnNumber::from_stmt(
+                (None, Some(size), None) => Ok(window::Impl::from(TumblingOnNumber::from_stmt(
                     size, max_groups, script,
                 ))),
-                (Some(_), Some(_)) => Err(Error::from(
-                    "Bad window configuration, only one of `size` or `interval` is allowed.",
+
+                (None, None, Some(state)) => {
+                    if let Some(script) = script.and_then(|w| w.script.as_ref()) {
+                        Ok(window::Impl::from(TumblingOnState::from_stmt(state.clone_static(), max_groups, script.clone().into_static())))
+                    } else {
+                        Err(Error::from(
+                            "Script is required for `state` type windows",
+                        ))
+                    }
+                    },
+                (None, None, None) => Err(Error::from(
+                    "Bad window configuration, either `size`, `interval`, or `state` is required.",
                 )),
-                (None, None) => Err(Error::from(
-                    "Bad window configuration, either `size` or `interval` is required.",
+                _ => Err(Error::from(
+                    "Bad window configuration, only one of `size`, `interval`, or `state` is allowed.",
                 )),
             }
         }

@@ -18,7 +18,7 @@ use tremor_common::{file, ids::OperatorIdGen};
 use tremor_pipeline::query::Query;
 use tremor_pipeline::ExecutableGraph;
 use tremor_pipeline::FN_REGISTRY;
-use tremor_pipeline::{Event, EventId};
+use tremor_pipeline::{Event, EventId, EventOriginUri};
 
 use tremor_runtime::errors::*;
 use tremor_script::path::ModulePath;
@@ -66,11 +66,22 @@ macro_rules! test_cases {
                 out_json.reverse();
 
                 let mut results = Vec::new();
+
+                let origin_uri = EventOriginUri {
+                    uid: 0,
+                    scheme: "tremor".into(),
+                    host: "localhost".into(),
+                    port: None,
+                    path: vec!["test".into()],
+                };
+
+
                 for (id, json) in in_json.into_iter().enumerate() {
                     let event = Event {
                         id: EventId::new(0, 0, (id as u64)),
                         data: json.clone_static().into(),
                         ingest_ns: id as u64,
+                        origin_uri: Some(origin_uri.clone()),
                         ..Event::default()
                     };
                     let mut r = Vec::new();
@@ -119,6 +130,7 @@ test_cases!(
     where_filter,
     window_by_two_scripted,
     window_by_two,
+    window_state_by_two,
     window_size_tilted,
     // Preprocessor + modules
     pp_win,
