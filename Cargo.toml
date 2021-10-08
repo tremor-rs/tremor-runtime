@@ -51,6 +51,7 @@ beef = { version = "0.5", features = ["impl_serde"] }
 byteorder = "1"
 bytes = "1.1"
 chrono = "0.4"
+csv="1.1"
 either = { version = "1.6", features = ["serde"] }
 elastic = "0.21.0-pre.5"
 error-chain = "0.12"

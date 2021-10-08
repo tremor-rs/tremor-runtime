@@ -167,6 +167,7 @@ error_chain! {
         TonicStatusError(tonic::Status);
         RustlsError(rustls::TLSError);
         Hex(hex::FromHexError);
+        CsvError(csv::Error);
     }
 
     errors {
@@ -204,6 +205,11 @@ error_chain! {
         BindFailedKeyNotExists(key: String) {
             description("Failed to bind non existand artefact")
                 display("Failed to bind non existand {}.", key)
+        }
+
+        NotCSVSerializableValue(value: String) {
+            description("The value cannot be serialized to CSV. Expected an array.")
+            display("The value {} cannot be serialized to CSV. Expected an array.", value)
         }
 
         // TODO: Old errors, verify if needed

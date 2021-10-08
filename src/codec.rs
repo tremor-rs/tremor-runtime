@@ -16,6 +16,7 @@ use crate::errors::Result;
 use tremor_script::Value;
 pub(crate) mod binary;
 pub(crate) mod binflux;
+pub(crate) mod csv;
 pub(crate) mod influx;
 pub(crate) mod json;
 pub(crate) mod msgpack;
@@ -110,6 +111,7 @@ pub fn lookup(name: &str) -> Result<Box<dyn Codec>> {
         "yaml" => Ok(Box::new(yaml::Yaml {})),
         "binary" => Ok(Box::new(binary::Binary {})),
         "syslog" => Ok(Box::new(syslog::Syslog::utcnow())),
+        "csv" => Ok(Box::new(csv::Csv {})),
         _ => Err(format!("Codec '{}' not found.", name).into()),
     }
 }
