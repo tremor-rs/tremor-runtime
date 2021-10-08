@@ -101,25 +101,25 @@ impl TargetProcess {
         cmd: S,
         args: &[String],
         env: &HashMap<String, String>,
-        cwd: P,
+        dir: P,
     ) -> Result<Self>
     where
         S: AsRef<OsStr>,
         P: AsRef<Path>,
     {
-        TargetProcess::new(cmd, args, env, cwd)
+        TargetProcess::new(cmd, args, env, dir)
     }
 
     /// Spawn target process and pipe IO
-    fn new<S, P>(cmd: S, args: &[String], env: &HashMap<String, String>, cwd: P) -> Result<Self>
+    fn new<S, P>(cmd: S, args: &[String], env: &HashMap<String, String>, dir: P) -> Result<Self>
     where
         S: AsRef<OsStr>,
         P: AsRef<Path>,
     {
         let cmd: &OsStr = cmd.as_ref();
 
-        let cwd = {
-            let tmp = cwd.as_ref();
+        let current_dir = {
+            let tmp = dir.as_ref();
             if tmp.is_relative() {
                 std::env::current_dir()?.join(tmp)
             } else {
@@ -129,7 +129,7 @@ impl TargetProcess {
         };
         let mut target_cmd = Command::new(cmd)
             .args(args)
-            .current_dir(cwd)
+            .current_dir(current_dir)
             .envs(env)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())

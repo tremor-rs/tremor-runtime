@@ -650,7 +650,7 @@ impl Hdr {
         Ok(histo)
     }
 
-    fn err<E: std::error::Error, S: ToString>(msg: S) -> impl FnOnce(E) -> FunctionError {
+    fn err<E: std::error::Error, S: ToString + ?Sized>(msg: &S) -> impl FnOnce(E) -> FunctionError {
         let msg = msg.to_string();
         move |e: E| FunctionError::RuntimeError {
             mfa: mfa("stats", "hdr", 2),
