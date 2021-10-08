@@ -250,7 +250,7 @@ impl Sink for KvSink {
                         if let Err(e) = self.tx.send((OUT, e)).await {
                             error!("[Sink::{}], Faild to send to source: {}", self.url, e);
                         };
-                        r.push(SinkReply::Ack)
+                        r.push(SinkReply::Ack);
                     }
                 }
                 Err((op, key, e)) => {
@@ -271,7 +271,7 @@ impl Sink for KvSink {
                         error!("[Sink::{}], Faild to send to source: {}", self.url, e);
                     };
 
-                    r.push(SinkReply::Fail)
+                    r.push(SinkReply::Fail);
                 }
             }
         }
