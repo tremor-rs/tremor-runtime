@@ -5482,12 +5482,11 @@ dependencies = [
 
 [[package]]
 name = "snmalloc-sys"
-version = "0.2.26"
+version = "0.2.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "73c59324cc36b140b6b46b1379f379eaa7ee9cfb06ec5d7dd0a650de35b9b902"
+checksum = "35a7e6e7d5fe756bee058ddedefc7e0a9f9c8dbaa9401b48ed3c17d6578e40b5"
 dependencies = [
  "cmake",
- "libc",
 ]
 
 [[package]]
