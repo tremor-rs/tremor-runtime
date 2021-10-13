@@ -28,7 +28,7 @@ macro_rules! literal_internal_vec {
 #[macro_export]
 #[doc(hidden)]
 macro_rules! value_unexpected {
-() => {};
+    () => {};
 }
 
 /// Convenience to generate tremor-value from json literals
@@ -100,12 +100,6 @@ macro_rules! literal {
     };
 }
 
-
-// Rocket relies on this because they export their own `json!` with a different
-// doc comment than ours, and various Rust bugs prevent them from calling our
-// `json!` from their `json!` so they call `json_internal!` directly. Check with
-// @SergioBenitez before making breaking changes to this macro.
-//
 // Changes are fine as long as `json_internal!` does not call any new helper
 // macros and can still be invoked as `json_internal!($($json)+)`.
 #[macro_export(local_inner_macros)]
@@ -170,7 +164,7 @@ macro_rules! literal_internal {
 
     // Unexpected token after most recent element.
     (@array [$($elems:expr),*] $unexpected:tt $($rest:tt)*) => {
-        json_unexpected!($unexpected)
+        value_unexpected!($unexpected)
     };
 
     //////////////////////////////////////////////////////////////////////////
@@ -200,6 +194,7 @@ macro_rules! literal_internal {
         let len = literal_internal!(@object @count [@entries $(($value:expr => $($key:tt)+))*]);
         $object = $crate::Object::with_capacity(len);
         $(
+            // ALLOW: this is a macro, we don't care about the return value
             let _ = $object.insert(($($key)+).into(), $value);
         )*
     };
@@ -221,7 +216,7 @@ macro_rules! literal_internal {
 
     // Current entry followed by unexpected token.
     (@object $object:ident [@entries $($entries:tt)*] [$($key:tt)+] ($value:expr) $unexpected:tt $($rest:tt)*) => {
-        json_unexpected!($unexpected);
+        value_unexpected!($unexpected);
     };
 
 
@@ -276,13 +271,13 @@ macro_rules! literal_internal {
     // Misplaced colon. Trigger a reasonable error message.
     (@object $object:ident [@entries $($entries:tt)*] () (: $($rest:tt)*) ($colon:tt $($copy:tt)*)) => {
         // Takes no arguments so "no rules expected the token `:`".
-        json_unexpected!($colon);
+        value_unexpected!($colon);
     };
 
     // Found a comma inside a key. Trigger a reasonable error message.
     (@object $object:ident [@entries $($entries:tt)*] ($($key:tt)*) (, $($rest:tt)*) ($comma:tt $($copy:tt)*)) => {
         // Takes no arguments so "no rules expected the token `,`".
-        json_unexpected!($comma);
+        value_unexpected!($comma);
     };
 
     // Key is fully parenthesized. This avoids clippy double_parens false
