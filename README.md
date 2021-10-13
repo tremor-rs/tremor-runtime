@@ -39,7 +39,7 @@
 
 In short, Tremor is an event processing system. It was originally designed as a replacement for software such as [Logstash](https://www.elastic.co/products/logstash) or [Telegraf](https://www.influxdata.com/time-series-platform/telegraf/). However tremor has outgrown this singular use case by supporting more complex workflows such as aggregation, rollups, an ETL language, and a query language.
 
-More about the [history](https://docs.tremor.rs/history/) and [architecture](dochttps://docs.tremor.rs/overview/) can be found in [the documentation](https://docs.tremor.rs/).
+More about the [history](https://www.tremor.rs/docs/history) and [architecture](https://www.tremor.rs/docs/overview) can be found in [the documentation](https://www.tremor.rs/docs).
 
 ## Audience
 
