@@ -79,6 +79,8 @@ pub struct Config {
     /// This should not be used when you expect persistent errors (e.g. if the message content is malformed and will lead to repeated errors)
     #[serde(default = "default_retry_failed_events")]
     pub retry_failed_events: bool,
+    #[serde(default = "default_check_topic_metadata")]
+    pub check_topic_metadata: bool,
 
     /// Optional rdkafka configuration
     ///
@@ -96,6 +98,11 @@ pub struct Config {
 /// defaults to `true` to keep backwards compatibility
 fn default_retry_failed_events() -> bool {
     true
+}
+
+/// defaults to `true` to keep backwards compatibility
+fn default_check_topic_metadata() -> bool {
+    false
 }
 
 impl ConfigImpl for Config {}
@@ -554,30 +561,40 @@ impl Source for Int {
 
         let mut good_topics = Vec::new();
         for topic in topics {
-            match consumer.fetch_metadata(Some(topic), Duration::from_secs(1)) {
-                Ok(m) => {
-                    let errors: Vec<_> = m
-                        .topics()
-                        .iter()
-                        .map(rdkafka::metadata::MetadataTopic::error)
-                        .collect();
-                    match errors.as_slice() {
-                        [None] => good_topics.push(topic),
-                        [Some(e)] => error!(
-                            "[Source::{}] Kafka error for topic '{}': {:?}. Not subscribing!",
-                            self.onramp_id, topic, e
-                        ),
-                        _ => error!(
-                            "[Source::{}] Unknown kafka error for topic '{}'. Not subscribing!",
-                            self.onramp_id, topic
-                        ),
+            if self.config.check_topic_metadata {
+                // Unless explicitly configured otherwise - we preserve the legacy behaviour
+                // - We disabuse topic metadata to validate topic existance which isn't ideal
+                // - At the time of writing - Oct 2021 - this is currently manifesting as a production
+                //   issue that is affecting our systems and we are bypassing this check as a countermeasure
+                //
+                match consumer.fetch_metadata(Some(topic), Duration::from_secs(1)) {
+                    Ok(m) => {
+                        let errors: Vec<_> = m
+                            .topics()
+                            .iter()
+                            .map(rdkafka::metadata::MetadataTopic::error)
+                            .collect();
+                        match errors.as_slice() {
+                            [None] => good_topics.push(topic),
+                            [Some(e)] => error!(
+                                "[Source::{}] Kafka error for topic '{}': {:?}. Not subscribing!",
+                                self.onramp_id, topic, e
+                            ),
+                            _ => error!(
+                                "[Source::{}] Unknown kafka error for topic '{}'. Not subscribing!",
+                                self.onramp_id, topic
+                            ),
+                        }
                     }
-                }
-                Err(e) => error!(
-                    "[Source::{}] Kafka error for topic '{}': {}. Not subscribing!",
-                    self.onramp_id, topic, e
-                ),
-            };
+                    Err(e) => error!(
+                        "[Source::{}] Kafka error for topic '{}': {}. Not subscribing!",
+                        self.onramp_id, topic, e
+                    ),
+                };
+            } else {
+                // By configuration, we presume topics are good
+                good_topics.push(topic);
+            }
         }
 
         // bail out if there is no topic left to subscribe to
