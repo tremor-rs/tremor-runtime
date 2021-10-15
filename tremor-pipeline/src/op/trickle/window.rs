@@ -557,7 +557,6 @@ impl Trait for TumblingOnState {
     ) -> Result<Actions> {
         let context = EventContext::new(ingest_ns, origin_uri.as_ref());
         let (unwind_event, event_meta) = data.parts_mut();
-        // FIXME: deal with mutability!
         let value = stry!(self.script.run(
             &context,
             AggrType::Emit,
@@ -576,7 +575,8 @@ impl Trait for TumblingOnState {
         let context = EventContext::new(ns, None);
         let mut unwind_event = Value::const_null();
         let mut event_meta = Value::const_null();
-        // FIXME: this could alter event, that's bad!
+        // We protect against altering event by ensuring event and meta
+        // arent accessed during 'compile' time
         let value = self.script.run(
             &context,
             AggrType::Emit,
