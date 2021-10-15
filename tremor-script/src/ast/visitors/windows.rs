@@ -12,7 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::*;
+use super::{
+    Expr, ExprVisitor, ExprWalker, ImutExprVisitor, ImutExprWalker, Path, Result, VisitRes, Walk,
+};
 
 #[derive(Debug, Default, Clone, Copy)]
 pub(crate) struct OnlyMutState {}
@@ -41,9 +43,8 @@ impl<'script> ImutExprWalker<'script> for OnlyMutState {}
 
 impl<'script> ExprVisitor<'script> for OnlyMutState {
     fn expr(&mut self, e: &mut Expr<'script>) -> Result<VisitRes> {
-        match e {
-            Expr::Assign { path, .. } => Self::validate_path(path)?,
-            _ => (),
+        if let Expr::Assign { path, .. } = e {
+            Self::validate_path(path)?;
         }
         Ok(Walk)
     }

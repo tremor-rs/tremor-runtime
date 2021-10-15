@@ -112,14 +112,11 @@ pub(crate) fn window_decl_to_impl(d: &WindowDecl) -> Result<window::Impl> {
                 ))),
 
                 (None, None, Some(state)) => {
-                    if let Some(script) = script.and_then(|w| w.script.as_ref()) {
-                        Ok(window::Impl::from(TumblingOnState::from_stmt(state.clone_static(), max_groups, script.clone().into_static())))
-                    } else {
-                        Err(Error::from(
-                            "Script is required for `state` type windows",
-                        ))
-                    }
-                    },
+                    script.and_then(|w| w.script.as_ref())
+                    .map_or_else(
+                        || Err(Error::from("Script is required for `state` type windows")),
+                        |script| Ok(window::Impl::from(TumblingOnState::from_stmt(state.clone_static(), max_groups, script.clone().into_static()))))
+                },
                 (None, None, None) => Err(Error::from(
                     "Bad window configuration, either `size`, `interval`, or `state` is required.",
                 )),

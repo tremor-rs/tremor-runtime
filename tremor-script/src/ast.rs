@@ -730,15 +730,15 @@ pub struct Script<'script> {
 impl Default for Script<'static> {
     fn default() -> Self {
         Self {
-            imports: Default::default(),
-            exprs: Default::default(),
-            consts: Default::default(),
-            aggregates: Default::default(),
+            imports: Vec::new(),
+            exprs: Vec::new(),
+            consts: Consts::default(),
+            aggregates: Vec::new(),
             windows: HashMap::new(),
-            functions: Default::default(),
-            locals: Default::default(),
-            node_meta: Default::default(),
-            docs: Default::default(),
+            functions: Vec::new(),
+            locals: 0,
+            node_meta: NodeMetas::default(),
+            docs: Docs::default(),
         }
     }
 }

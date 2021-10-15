@@ -366,7 +366,7 @@ fn run_trickle_source(matches: &ArgMatches, src: String) -> Result<()> {
                     id: EventId::new(0, 0, *id),
                     data: value.clone(),
                     ingest_ns: at,
-                    origin_uri: Some(origin_uri.clone()),
+                    origin_uri: Some(origin_uri),
                     ..Event::default()
                 },
                 &mut continuation,

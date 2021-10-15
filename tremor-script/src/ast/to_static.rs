@@ -997,6 +997,7 @@ impl<'script> InvokeAggrFn<'script> {
 
 impl<'script> Script<'script> {
     /// Turns the script into a static lifetime
+    #[must_use]
     pub fn into_static(self) -> Script<'static> {
         let Script {
             imports,

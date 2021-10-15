@@ -395,9 +395,9 @@ impl Window {
 
 #[derive(Debug, Clone)]
 pub enum Impl {
-    TumblingCountBased(TumblingOnNumber),
-    TumblingTimeBased(TumblingOnTime),
-    TumblingStateBased(TumblingOnState),
+    Count(TumblingOnNumber),
+    Time(TumblingOnTime),
+    State(TumblingOnState),
 }
 
 impl Impl {
@@ -407,9 +407,9 @@ impl Impl {
 
     pub(crate) fn reset(&mut self) {
         match self {
-            Self::TumblingTimeBased(w) => w.reset(),
-            Self::TumblingCountBased(w) => w.reset(),
-            Self::TumblingStateBased(w) => w.reset(),
+            Self::Time(w) => w.reset(),
+            Self::Count(w) => w.reset(),
+            Self::State(w) => w.reset(),
         }
     }
 }
@@ -422,43 +422,43 @@ impl Trait for Impl {
         origin_uri: &Option<EventOriginUri>,
     ) -> Result<Actions> {
         match self {
-            Self::TumblingTimeBased(w) => w.on_event(data, ingest_ns, origin_uri),
-            Self::TumblingCountBased(w) => w.on_event(data, ingest_ns, origin_uri),
-            Self::TumblingStateBased(w) => w.on_event(data, ingest_ns, origin_uri),
+            Self::Time(w) => w.on_event(data, ingest_ns, origin_uri),
+            Self::Count(w) => w.on_event(data, ingest_ns, origin_uri),
+            Self::State(w) => w.on_event(data, ingest_ns, origin_uri),
         }
     }
 
     fn on_tick(&mut self, ns: u64) -> Actions {
         match self {
-            Self::TumblingTimeBased(w) => w.on_tick(ns),
-            Self::TumblingCountBased(w) => w.on_tick(ns),
-            Self::TumblingStateBased(w) => w.on_tick(ns),
+            Self::Time(w) => w.on_tick(ns),
+            Self::Count(w) => w.on_tick(ns),
+            Self::State(w) => w.on_tick(ns),
         }
     }
 
     fn max_groups(&self) -> usize {
         match self {
-            Self::TumblingTimeBased(w) => w.max_groups(),
-            Self::TumblingCountBased(w) => w.max_groups(),
-            Self::TumblingStateBased(w) => w.max_groups(),
+            Self::Time(w) => w.max_groups(),
+            Self::Count(w) => w.max_groups(),
+            Self::State(w) => w.max_groups(),
         }
     }
 }
 
 impl From<TumblingOnNumber> for Impl {
     fn from(w: TumblingOnNumber) -> Self {
-        Self::TumblingCountBased(w)
+        Self::Count(w)
     }
 }
 impl From<TumblingOnTime> for Impl {
     fn from(w: TumblingOnTime) -> Self {
-        Self::TumblingTimeBased(w)
+        Self::Time(w)
     }
 }
 
 impl From<TumblingOnState> for Impl {
     fn from(w: TumblingOnState) -> Self {
-        Self::TumblingStateBased(w)
+        Self::State(w)
     }
 }
 
@@ -512,7 +512,7 @@ impl<'v> TryFrom<&Value<'v>> for Actions {
             .as_array()
             .and_then(|a| a.iter().map(Value::as_bool).collect::<Option<Vec<bool>>>())
         {
-            if let &[emit, include] = r.as_slice() {
+            if let [emit, include] = *r.as_slice() {
                 Ok(Actions { include, emit })
             } else {
                 Err("A array return needs to be a two element array of booleans with the form `[emit, include]`".into())
