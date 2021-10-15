@@ -1,0 +1,3 @@
+Error: 
+    5 |   let $snot = 42;
+      |       ^^^^^^^^^^ Can not assign to `$` here

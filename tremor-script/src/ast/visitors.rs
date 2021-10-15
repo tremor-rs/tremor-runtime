@@ -19,6 +19,7 @@ pub(crate) mod args_rewriter;
 pub(crate) mod expr_reducer;
 pub(crate) mod group_by_extractor;
 pub(crate) mod target_event_ref;
+pub(crate) mod windows;
 
 pub(crate) use args_rewriter::ArgsRewriter;
 pub(crate) use expr_reducer::ExprReducer;

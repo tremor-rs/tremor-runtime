@@ -77,6 +77,7 @@ extern crate serde_derive;
 
 pub use crate::ast::query::SelectType;
 pub use crate::ctx::{EventContext, EventOriginUri};
+pub use crate::errors::{Error, Result};
 pub use crate::query::Query;
 pub use crate::registry::{
     aggr as aggr_registry, registry, Aggr as AggrRegistry, CustomFn, Registry, TremorAggrFn,

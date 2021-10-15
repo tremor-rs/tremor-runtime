@@ -26,10 +26,14 @@ use super::{
 };
 use crate::ast::{
     node_id::NodeId,
-    visitors::{ArgsRewriter, ExprReducer, GroupByExprExtractor, TargetEventRef},
-    Ident,
+    visitors::{
+        windows::{NoEventAccess, OnlyMutState},
+        ArgsRewriter, ExprReducer, GroupByExprExtractor, TargetEventRef,
+    },
+    Ident, InvokeAggrFn,
 };
-use crate::{ast::InvokeAggrFn, impl_expr};
+use crate::errors::{err_generic, Error};
+use crate::impl_expr;
 use beef::Cow;
 use std::iter::FromIterator;
 
@@ -762,7 +766,17 @@ pub struct WindowDeclRaw<'script> {
 impl<'script> Upable<'script> for WindowDeclRaw<'script> {
     type Target = WindowDecl<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        let maybe_script = self.script.map(|s| s.up_script(helper)).transpose()?;
+        let maybe_script = self
+            .script
+            .map(|s| -> Result<_> {
+                let mut s = s.up_script(helper)?;
+                for expr in &mut s.exprs {
+                    OnlyMutState::validate(expr)
+                        .map_err(|e| err_generic(expr, expr, &e, &helper.meta))?;
+                }
+                Ok(s)
+            })
+            .transpose()?;
 
         // warn params if `emit_empty_windows` is defined, but neither `max_groups` nor `evicition_period` is defined
 
@@ -770,9 +784,16 @@ impl<'script> Upable<'script> for WindowDeclRaw<'script> {
             .named_script
             .map(|(i, s)| {
                 if i != "tick" {
-                    Err("Only `tick` scripts are supported by windows".into())
+                    Err(Error::from("Only `tick` scripts are supported by windows"))
                 } else {
-                    s.up_script(helper)
+                    let mut s = s.up_script(helper)?;
+                    for expr in &mut s.exprs {
+                        OnlyMutState::validate(expr)
+                            .map_err(|e| err_generic(expr, expr, &e, &helper.meta))?;
+                        NoEventAccess::validate(expr)
+                            .map_err(|e| err_generic(expr, expr, &e, &helper.meta))?;
+                    }
+                    Ok(s)
                 }
             })
             .transpose()?;

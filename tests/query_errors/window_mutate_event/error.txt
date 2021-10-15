@@ -1,0 +1,3 @@
+Error: 
+    5 |   let event = 42;
+      |       ^^^^^^^^^^ Can not assign to `event` here
