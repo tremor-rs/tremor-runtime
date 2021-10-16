@@ -20,7 +20,7 @@ Please fill out the checklist below.
 If an RFC is required and not submitted yet the PR will be tagged as RFC required and blocked
 until the RFC is submitted and approved.
 
-As a rule of thumb, bugfixes or minimal additions that have no backwords impact and are fully
+As a rule of thumb, bugfixes or minimal additions that have no backwards impact and are fully
 self-contained usually do not require an RFC. Larger changes, changes to behavior, breaking changes
 usually do. If in doubt, please open a ticket for a PR first to discuss the issue.
 
