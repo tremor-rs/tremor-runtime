@@ -104,7 +104,7 @@ If you are not comfortable with managing library packages on your system or don'
 
 For local builds, tremor requires rust 2018 (version `1.31` or later), along with all the tools needed to build rust programs. Eg: for CentOS, the packages `gcc`, `make`, `cmake`, `clang`, `openssl`, and `libstdc++` are required. For different distributions or operating systems, please install the packages accordingly.
 **NOTE** AVX2, SSE4.2 or NEON are needed to build [simd-json](https://github.com/simd-lite/simd-json#cpu-target) used by tremor. So if you are building in vm, check which processor instruction are passed to it. Like `lscpu | grep Flags`
-For a more detailed guide on local builds, please refer to the [tremor development docs](https://www.tremor.rs/community/getting-started/getting-started).
+For a more detailed guide on local builds, please refer to the [tremor development docs](https://www.tremor.rs/community/development/quick-start).
 
 ## Running locally
 
@@ -239,3 +239,4 @@ to run and compile with neon use:
 ```bash
 RUSTCFLAGS="-C cpu-target=native" cargo +nightly build --features neon --all
 ```
+
