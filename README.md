@@ -239,4 +239,3 @@ to run and compile with neon use:
 ```bash
 RUSTCFLAGS="-C cpu-target=native" cargo +nightly build --features neon --all
 ```
-
