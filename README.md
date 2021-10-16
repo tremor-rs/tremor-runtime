@@ -39,7 +39,7 @@
 
 In short, Tremor is an event processing system. It was originally designed as a replacement for software such as [Logstash](https://www.elastic.co/products/logstash) or [Telegraf](https://www.influxdata.com/time-series-platform/telegraf/). However tremor has outgrown this singular use case by supporting more complex workflows such as aggregation, rollups, an ETL language, and a query language.
 
-More about the [history](https://www.tremor.rs/docs/history) and [architecture](https://www.tremor.rs/docs/overview) can be found in [the documentation](https://www.tremor.rs/docs).
+More about the [history](https://www.tremor.rs/docs/history) and [architecture](https://www.tremor.rs/docs/overview) can be found in [the documentation](https://www.tremor.rs/docs/index).
 
 ## Audience
 
@@ -70,8 +70,8 @@ We currently do not recommend tremor where:
 
 - Your event structure is not mappable to a JSON-like data structures.
   - If in doubt, please reach out and create a ticket so we can assist and advice
-  - In many cases ( textual formats ) a [preprocessor](https://docs.tremor.rs/artefacts/preprocessors/), [postprocessor](https://docs.tremor.rs/artefacts/postprocessors/) or [codec](https://docs.tremor.rs/artefacts/codecs/) is sufficient and these are relatively easy to contribute.
-- You need connectivity to a system, protocol or technology that is not currently supported directly or indirectly by the set existing set of [onramps](https://docs.tremor.rs/artefacts/onramps) and [offramps](https://docs.tremor.rs/artefacts/offramps/).
+  - In many cases ( textual formats ) a [preprocessor](https://www.tremor.rs/docs/artefacts/preprocessors/), [postprocessor](https://www.tremor.rs/docs/artefacts/postprocessors/) or [codec](https://www.tremor.rs/docs/artefacts/codecs/) is sufficient and these are relatively easy to contribute.
+- You need connectivity to a system, protocol or technology that is not currently supported directly or indirectly by the set existing set of [onramps](https://www.tremor.rs/docs/artefacts/onramps) and [offramps](https://www.tremor.rs/docs/artefacts/offramps/).
   - If in doubt, please reach out and create a ticket so we can assist and advise.
 
 We accept and encourage contributions no matter how small so if tremor is compelling for your use case or project, then please get in touch, reach out, raise a ticket and we're happy to collaborate and guide contributions and contributors.
@@ -104,7 +104,7 @@ If you are not comfortable with managing library packages on your system or don'
 
 For local builds, tremor requires rust 2018 (version `1.31` or later), along with all the tools needed to build rust programs. Eg: for CentOS, the packages `gcc`, `make`, `cmake`, `clang`, `openssl`, and `libstdc++` are required. For different distributions or operating systems, please install the packages accordingly.
 **NOTE** AVX2, SSE4.2 or NEON are needed to build [simd-json](https://github.com/simd-lite/simd-json#cpu-target) used by tremor. So if you are building in vm, check which processor instruction are passed to it. Like `lscpu | grep Flags`
-For a more detailed guide on local builds, please refer to the [tremor development docs](https://docs.tremor.rs/development/quick-start/).
+For a more detailed guide on local builds, please refer to the [tremor development docs](https://www.tremor.rs/community/getting-started/getting-started).
 
 ## Running locally
 
@@ -136,15 +136,15 @@ docker exec -it 838f22d9cb98 sh
 
 ## Configuration file
 
-Tremor uses YAML, or [tremor-query](https://docs.tremor.rs/tremor-query/) to configure pipelines. For use in docker those should be mounted to `/etc/tremor/config`.
+Tremor uses YAML, or [tremor-query](https://www.tremor.rs/docs/tremor-query/index) to configure pipelines. For use in docker those should be mounted to `/etc/tremor/config`.
 
-Custom [tremor-script](https://docs.tremor.rs/tremor-script) and [tremor-query](https://docs.tremor.rs/tremor-query/) modules and libraries should be mounted to `/usr/local/share/tremor`.
+Custom [tremor-script](https://www.tremor.rs/docs/tremor-script/index) and [tremor-query](https://www.tremor.rs/docs/tremor-query/index) modules and libraries should be mounted to `/usr/local/share/tremor`.
 
 ### Operations
 
 Tremor works by chaining operations that have inputs, outputs, and additional configuration. OnRamps - the operations that ingest data - take a unique role in this.
 
-The documentation for different operations can found in the [docs](https://docs.tremor.rs/operations/). The `onramps` and `op` modules hold the relevant information.
+The documentation for different operations can found in the [docs](https://www.tremor.rs/docs/operations/cli). The `onramps` and `op` modules hold the relevant information.
 
 For each operation, the `Config` struct defines the parameters that can be passed to configure it, and the description holds additional details and examples.
 
