@@ -312,3 +312,5 @@ error_chain! {
         }
     }
 }
+
+pub type RResult<T> = abi_stable::std_types::RResult<T, Error>;

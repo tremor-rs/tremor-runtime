@@ -23,6 +23,10 @@ members = [
   "tremor-value",
 ]
 
+exclude = [
+  "plugins"
+]
+
 [profile.release]
 debug = true
 lto = "thin"
@@ -87,6 +91,9 @@ value-trait = "0.2"
 zstd = "0.9"
 
 mapr = "0.8"
+
+# plugin system
+abi_stable = "0.10"
 
 # blaster / blackhole
 hdrhistogram = "7"
