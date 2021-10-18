@@ -1,6 +1,6 @@
 //! Defines the interface between the plugins and the runtime.
 
-use super::Connector_TO;
+use crate::connectors::RawConnector_TO;
 
 use abi_stable::{
     declare_root_module_statics, library::RootModule, package_version_strings,
@@ -11,7 +11,7 @@ use abi_stable::{
 #[derive(StableAbi)]
 #[sabi(kind(Prefix))]
 pub struct ConnectorMod {
-    pub new: extern "C" fn() -> Connector_TO<'static, RBox<()>>,
+    pub new: extern "C" fn() -> RawConnector_TO<'static, RBox<()>>,
 }
 
 // Marking `MinMod` as the main module in this plugin. Note that `MinMod_Ref` is

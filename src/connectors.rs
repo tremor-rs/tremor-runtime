@@ -12,9 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/// quality of service utilities
-pub(crate) mod qos;
-
 /// prelude with commonly needed stuff imported
 pub(crate) mod prelude;
 /// Sink part of a connector
@@ -35,6 +32,11 @@ pub(crate) mod metrics;
 // pub(crate) mod exit;
 /// quiescence stuff
 pub(crate) mod quiescence;
+
+/// opentelemetry
+pub(crate) mod otel;
+/// protobuf helpers
+pub(crate) mod pb;
 
 pub mod plugins;
 
@@ -627,7 +629,7 @@ impl Manager {
                     Msg::Reconnect => {
                         // reconnect if we are below max_retries, otherwise bail out and fail the connector
                         info!("[Connector::{}] Connecting...", &addr.url);
-                        let new = reconnect.attempt(connector.as_mut(), &ctx).await?;
+                        let new = reconnect.attempt(&mut connector, &ctx).await?;
                         match (&connectivity, &new) {
                             (Connectivity::Disconnected, Connectivity::Connected) => {
                                 info!("[Connector::{}] Connected.", &addr.url);
@@ -1031,7 +1033,7 @@ impl Connector {
     pub async fn connect(
         &mut self,
         ctx: &ConnectorContext,
-        notifier: reconnect::ConnectionLostNotifier,
+        notifier: &Attempt,
     ) -> Result<bool> {
         self.0.connect(ctx, notifier).into()
     }

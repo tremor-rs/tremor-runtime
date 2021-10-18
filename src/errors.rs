@@ -21,38 +21,7 @@ use crate::async_sink;
 use beef::Cow;
 use error_chain::error_chain;
 
-use hdrhistogram::{self, serialization as hdr_s};
 use tremor_influx as influx;
-
-impl From<sled::transaction::TransactionError<()>> for Error {
-    fn from(e: sled::transaction::TransactionError<()>) -> Self {
-        Self::from(format!("Sled Transaction Error: {:?}", e))
-    }
-}
-
-impl From<hdr_s::DeserializeError> for Error {
-    fn from(e: hdr_s::DeserializeError) -> Self {
-        Self::from(format!("{:?}", e))
-    }
-}
-
-impl From<hdrhistogram::errors::CreationError> for Error {
-    fn from(e: hdrhistogram::errors::CreationError) -> Self {
-        Self::from(format!("{:?}", e))
-    }
-}
-
-impl From<hdrhistogram::RecordError> for Error {
-    fn from(e: hdrhistogram::RecordError) -> Self {
-        Self::from(format!("{:?}", e))
-    }
-}
-
-impl From<hdrhistogram::serialization::V2SerializeError> for Error {
-    fn from(e: hdrhistogram::serialization::V2SerializeError) -> Self {
-        Self::from(format!("{:?}", e))
-    }
-}
 
 impl From<http_types::Error> for Error {
     fn from(e: http_types::Error) -> Self {

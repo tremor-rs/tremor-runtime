@@ -93,6 +93,14 @@ zstd = "0.9"
 mapr = "0.8"
 xz2 = "0.1"
 
+# opentelemetry
+port_scanner = "0.1.5"
+tonic = { version = "0.5.2", default-features = false, features = [
+  "transport",
+  "tls",
+] }
+tremor-otelapis = { version = "0.2.2" }
+
 # plugin system
 abi_stable = "0.10"
 
