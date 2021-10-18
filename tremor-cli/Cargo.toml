@@ -23,7 +23,7 @@ pretty_assertions = "1.0.0"
 anyhow = "1"
 async-std = { version = "1.10", features = ["unstable"] }
 clap = { version = "3.0.0-beta.2", features = ["yaml", "color"] }
-clap_generate = "3.0.0-beta.2"
+clap_generate = "3.0.0-beta.5"
 difference = "2"
 dirs-next = "2"
 env_logger = "0.9.0"
