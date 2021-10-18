@@ -16,20 +16,22 @@ use crate::errors::{Error, Result};
 use std::default;
 use std::fmt;
 use url::Url;
+use abi_stable::{StableAbi, std_types::{RString, ROption, RVec}};
 
 /// Event origin URI
+#[repr(C)]
 #[derive(
-    Debug, Clone, PartialEq, Eq, Hash, simd_json_derive::Serialize, simd_json_derive::Deserialize,
+    Debug, Clone, PartialEq, Eq, Hash, simd_json_derive::Serialize, simd_json_derive::Deserialize, StableAbi
 )]
 pub struct EventOriginUri {
     /// schema part
-    pub scheme: String,
+    pub scheme: RString,
     /// host part
-    pub host: String,
+    pub host: RString,
     /// port part
-    pub port: Option<u16>,
+    pub port: ROption<u16>,
     /// path part
-    pub path: Vec<String>,
+    pub path: RVec<RString>,
     // implement query params if we find a good usecase for it
     //pub query: Hashmap<String, String>
 }

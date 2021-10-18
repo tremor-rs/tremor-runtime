@@ -25,6 +25,7 @@ use tremor_pipeline::{CbAction, Event, EventOriginUri, DEFAULT_STREAM_ID};
 use tremor_script::utils::hostname;
 use tremor_script::EventPayload;
 use tremor_value::prelude::*;
+use abi_stable::{StableAbi, std_types::ROption};
 
 const MEASUREMENT: Cow<'static, str> = Cow::const_str("measurement");
 const TAGS: Cow<'static, str> = Cow::const_str("tags");
@@ -59,9 +60,10 @@ impl MetricsChannel {
         self.rx.clone()
     }
 }
-#[derive(Debug, Clone)]
+#[repr(C)]
+#[derive(Debug, Clone, StableAbi)]
 pub struct Msg {
-    payload: EventPayload,
+    payload: EventPayload, // TODO
     origin_uri: Option<EventOriginUri>,
 }
 
@@ -75,12 +77,13 @@ impl Msg {
 }
 
 /// metrics reporter for connector sources
+#[repr(C)]
 pub struct SourceReporter {
     artefact_url: TremorUrl,
     metrics_out: u64,
     metrics_err: u64,
     tx: Sender<Msg>,
-    flush_interval_ns: Option<u64>,
+    flush_interval_ns: ROption<u64>,
     last_flush_ns: u64,
 }
 

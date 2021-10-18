@@ -38,6 +38,7 @@ use tremor_pipeline::{
 };
 use tremor_value::{literal, Value};
 use value_trait::Builder;
+use abi_stable::StableAbi;
 
 use super::metrics::SourceReporter;
 use super::quiescence::QuiescenceBeacon;
@@ -296,14 +297,15 @@ impl Source for ChannelSource {
 
 // TODO make fields private and add some nice methods
 /// context for a source
-#[derive(Clone)]
+#[repr(C)]
+#[derive(Clone, StableAbi)]
 pub struct SourceContext {
     /// connector uid
     pub uid: u64,
     /// connector url
     pub url: TremorUrl,
     /// The Quiescence Beacon
-    pub quiescence_beacon: QuiescenceBeacon,
+    pub quiescence_beacon: QuiescenceBeacon, // TODO
 }
 
 /// address of a source
@@ -314,6 +316,8 @@ pub struct SourceAddr {
 }
 
 #[allow(clippy::module_name_repetitions)]
+#[repr(C)]
+#[derive(StableAbi)]
 pub struct SourceManagerBuilder {
     qsize: usize,
     streams: Streams,
@@ -366,6 +370,8 @@ pub fn builder(
 
 /// maintaining stream state
 // TODO: there is optimization potential here for reusing codec and preprocessors after a stream got ended
+#[repr(C)]
+#[derive(StableAbi)]
 struct Streams {
     uid: u64,
     codec_config: Either<String, CodecConfig>,

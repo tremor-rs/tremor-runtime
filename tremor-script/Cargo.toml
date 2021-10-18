@@ -61,6 +61,9 @@ url = "2"
 value-trait = "0.2"
 xz2 = "0.1"
 
+# plugin system
+abi_stable = "0.10"
+
 [build-dependencies]
 lalrpop = "0.19"
 

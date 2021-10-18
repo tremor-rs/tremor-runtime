@@ -14,10 +14,12 @@
 
 use crate::errors::{Error, ErrorKind, Result};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use abi_stable::{StableAbi, std_types::{RString, ROption}};
 use std::fmt;
 
 /// The type or resource the url references
-#[derive(Clone, Copy, Eq, PartialEq, Hash, Debug)]
+#[repr(C)]
+#[derive(Clone, Copy, Eq, PartialEq, Hash, Debug, StableAbi)]
 pub enum ResourceType {
     /// This is a pipeline
     Pipeline,
@@ -32,7 +34,8 @@ pub enum ResourceType {
 }
 
 /// The scrope of the URL
-#[derive(Clone, Copy, Eq, PartialEq, Hash, Debug)]
+#[repr(C)]
+#[derive(Clone, Copy, Eq, PartialEq, Hash, Debug, StableAbi)]
 pub enum Scope {
     /// This URL identifies a specific port
     Port,
@@ -64,14 +67,15 @@ pub mod ports {
 /// A tremor URL identifying an entity in tremor
 
 #[allow(clippy::module_name_repetitions)]
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[repr(C)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, StableAbi)]
 pub struct TremorUrl {
     scope: Scope,
-    host: String,
-    resource_type: Option<ResourceType>,
-    artefact: Option<String>,
-    instance: Option<String>,
-    instance_port: Option<String>,
+    host: RString,
+    resource_type: ROption<ResourceType>,
+    artefact: ROption<RString>,
+    instance: ROption<RString>,
+    instance_port: ROption<RString>,
 }
 
 fn decode_type(t: &str) -> Result<ResourceType> {

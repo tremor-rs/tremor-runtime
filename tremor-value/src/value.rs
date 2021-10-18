@@ -28,13 +28,14 @@ use std::{
     cmp::Ordering,
     ops::{Index, IndexMut},
 };
+use abi_stable::{StableAbi, std_types::{RCow, RBox, RHashMap, RVec}, rvec};
 
 pub use crate::serde::to_value;
 
 /// Representation of a JSON object
-pub type Object<'value> = HashMap<Cow<'value, str>, Value<'value>>;
+pub type Object<'value> = RHashMap<RCow<'value, str>, Value<'value>>;
 /// Bytes
-pub type Bytes<'value> = Cow<'value, [u8]>;
+pub type Bytes<'value> = RCow<'value, [u8]>;
 
 /// Parses a slice of bytes into a Value dom. This function will
 /// rewrite the slice to de-escape strings.
@@ -72,16 +73,17 @@ pub fn parse_to_value_with_buffers<'value>(
 
 /// Borrowed JSON-DOM Value, consider using the `ValueTrait`
 /// to access its content
-#[derive(Debug, Clone)]
+#[repr(C)]
+#[derive(Debug, Clone, StableAbi)]
 pub enum Value<'value> {
     /// Static values
     Static(StaticNode),
     /// string type
-    String(Cow<'value, str>),
+    String(RCow<'value, str>),
     /// array type
-    Array(Vec<Value<'value>>),
+    Array(RVec<Value<'value>>),
     /// object type
-    Object(Box<Object<'value>>),
+    Object(RBox<Object<'value>>),
     /// A binary type
     Bytes(Bytes<'value>),
 }
@@ -92,7 +94,7 @@ impl<'value> Value<'value> {
     /// Creates an empty array value
     #[must_use]
     pub const fn array() -> Self {
-        Value::Array(vec![])
+        Value::Array(rvec![])
     }
 
     /// Creates an empty array value

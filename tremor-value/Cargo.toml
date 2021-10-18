@@ -20,6 +20,9 @@ simd-json = "0.4.7"
 simd-json-derive = "0.2"
 value-trait = { version="0.2", features=["custom-types"] }
 
+# plugin system
+abi_stable = "0.10"
+
 [dev-dependencies]
 float-cmp = "0.9"
 getopts = "0.2"
