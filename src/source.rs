@@ -38,27 +38,8 @@ use tremor_script::prelude::*;
 
 use self::prelude::OnrampConfig;
 
-pub(crate) mod amqp;
-pub(crate) mod blaster;
-pub(crate) mod cb;
-pub(crate) mod crononome;
-pub(crate) mod discord;
-pub(crate) mod env;
-pub(crate) mod file;
-pub(crate) mod gsub;
-pub(crate) mod kafka;
-pub(crate) mod metronome;
-pub(crate) mod nats;
-pub(crate) mod otel;
-pub(crate) mod postgres;
 /// prelude full of useful stuff
 pub(crate) mod prelude;
-pub(crate) mod rest;
-pub(crate) mod sse;
-pub(crate) mod stdin;
-pub(crate) mod tcp;
-pub(crate) mod udp;
-pub(crate) mod ws;
 
 struct StaticValue(Value<'static>);
 

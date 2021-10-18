@@ -20,30 +20,8 @@ use crate::url::TremorUrl;
 use async_std::channel::Sender;
 use halfbrown::HashMap;
 
-pub(crate) mod amqp;
-pub(crate) mod blackhole;
-pub(crate) mod cb;
-pub(crate) mod debug;
-pub(crate) mod dns;
-pub(crate) mod elastic;
-pub(crate) mod exit;
-pub(crate) mod file;
-pub(crate) mod gcs;
-pub(crate) mod gpub;
-pub(crate) mod kafka;
-pub(crate) mod kv;
-pub(crate) mod nats;
-pub(crate) mod newrelic;
-pub(crate) mod otel;
-pub(crate) mod postgres;
 /// lots of useful stuff in there
 pub(crate) mod prelude;
-pub(crate) mod rest;
-pub(crate) mod stderr;
-pub(crate) mod stdout;
-pub(crate) mod tcp;
-pub(crate) mod udp;
-pub(crate) mod ws;
 
 /// reply from a sink
 #[derive(Debug)]

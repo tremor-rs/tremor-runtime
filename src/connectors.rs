@@ -36,9 +36,6 @@ pub(crate) mod metrics;
 /// quiescence stuff
 pub(crate) mod quiescence;
 
-/// collection of TLS utilities and configs
-pub(crate) mod tls;
-
 pub mod plugins;
 
 use std::fmt::Display;
@@ -411,7 +408,7 @@ impl Manager {
             config.metrics_interval_s,
         );
 
-        let default_codec = connector.default_codec();
+        let default_codec = connector.default_codec().into();
         let source_builder = source::builder(
             uid,
             &config,
