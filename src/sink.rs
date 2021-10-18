@@ -324,72 +324,7 @@ where
 /// register buitlin sink types
 #[cfg(not(tarpaulin_include))]
 pub async fn register_builtin_sinks(world: &World) -> Result<()> {
-    world
-        .register_builtin_offramp_type("amqp", Box::new(amqp::Builder {}))
-        .await?;
-    world
-        .register_builtin_offramp_type("blackhole", Box::new(blackhole::Builder {}))
-        .await?;
-    world
-        .register_builtin_offramp_type("cb", Box::new(cb::Builder {}))
-        .await?;
-    world
-        .register_builtin_offramp_type("debug", Box::new(debug::Builder {}))
-        .await?;
-    world
-        .register_builtin_offramp_type("dns", Box::new(dns::Builder {}))
-        .await?;
-    world
-        .register_builtin_offramp_type("elastic", Box::new(elastic::Builder {}))
-        .await?;
-    world
-        .register_builtin_offramp_type("exit", Box::new(exit::Builder {}))
-        .await?;
-    world
-        .register_builtin_offramp_type("file", Box::new(file::Builder {}))
-        .await?;
-    world
-        .register_builtin_offramp_type("gcs", Box::new(gcs::Builder {}))
-        .await?;
-    world
-        .register_builtin_offramp_type("gpub", Box::new(gpub::Builder {}))
-        .await?;
-    world
-        .register_builtin_offramp_type("kafka", Box::new(kafka::Builder {}))
-        .await?;
-    world
-        .register_builtin_offramp_type("kv", Box::new(kv::Builder {}))
-        .await?;
-    world
-        .register_builtin_offramp_type("nats", Box::new(nats::Builder {}))
-        .await?;
-    world
-        .register_builtin_offramp_type("newrelic", Box::new(newrelic::Builder {}))
-        .await?;
-    world
-        .register_builtin_offramp_type("otel", Box::new(otel::Builder {}))
-        .await?;
-    world
-        .register_builtin_offramp_type("postgres", Box::new(postgres::Builder {}))
-        .await?;
-    world
-        .register_builtin_offramp_type("rest", Box::new(rest::Builder {}))
-        .await?;
-    world
-        .register_builtin_offramp_type("stderr", Box::new(stderr::Builder {}))
-        .await?;
-    world
-        .register_builtin_offramp_type("stdout", Box::new(stdout::Builder {}))
-        .await?;
-    world
-        .register_builtin_offramp_type("tcp", Box::new(tcp::Builder {}))
-        .await?;
-    world
-        .register_builtin_offramp_type("udp", Box::new(udp::Builder {}))
-        .await?;
-    world
-        .register_builtin_offramp_type("ws", Box::new(ws::Builder {}))
-        .await?;
+    // TODO load dynamically
     Ok(())
 }
 

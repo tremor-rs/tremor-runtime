@@ -91,6 +91,7 @@ value-trait = "0.2"
 zstd = "0.9"
 
 mapr = "0.8"
+xz2 = "0.1"
 
 # plugin system
 abi_stable = "0.10"

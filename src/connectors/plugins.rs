@@ -1,8 +1,11 @@
 //! Defines the interface between the plugins and the runtime.
 
-use super::{Connector_TO};
+use super::Connector_TO;
 
-use abi_stable::{std_types::RBox, package_version_strings, declare_root_module_statics, StableAbi, library::RootModule, sabi_types::VersionStrings};
+use abi_stable::{
+    declare_root_module_statics, library::RootModule, package_version_strings,
+    sabi_types::VersionStrings, std_types::RBox, StableAbi,
+};
 
 #[repr(C)]
 #[derive(StableAbi)]

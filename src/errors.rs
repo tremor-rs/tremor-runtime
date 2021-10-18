@@ -134,40 +134,28 @@ error_chain! {
         Base64Error(base64::DecodeError);
         ChannelReceiveError(std::sync::mpsc::RecvError);
         Common(tremor_common::Error);
-        CronError(cron::error::Error);
         DateTimeParseError(chrono::ParseError);
-        DnsError(async_std_resolver::ResolveError);
-        ElasticError(elastic::Error);
         FromUtf8Error(std::string::FromUtf8Error);
-        GoogleAuthError(gouth::Error);
-        HttpHeaderError(http::header::InvalidHeaderValue);
         InfluxEncoderError(influx::EncoderError);
         Io(std::io::Error);
         JsonAccessError(value_trait::AccessError);
         JsonError(simd_json::Error);
-        KafkaError(rdkafka::error::KafkaError);
         MsgPackDecoderError(rmp_serde::decode::Error);
         MsgPackEncoderError(rmp_serde::encode::Error);
         ParseIntError(std::num::ParseIntError);
         ParseFloatError(std::num::ParseFloatError);
-        Postgres(postgres::Error);
         RegexError(regex::Error);
-        ReqwestError(reqwest::Error);
-        RustlsError(rustls::TLSError);
         Hex(hex::FromHexError);
         SinkDequeueError(async_sink::SinkDequeueError);
         SinkEnqueueError(async_sink::SinkEnqueueError);
-        Sled(sled::Error);
         SnappyError(snap::Error);
         Timeout(async_std::future::TimeoutError);
-        TonicStatusError(tonic::Status);
-        TonicTransportError(tonic::transport::Error);
         TryFromIntError(std::num::TryFromIntError);
         UrlParserError(url::ParseError);
         Utf8Error(std::str::Utf8Error);
         ValueError(tremor_value::Error);
-        WsError(async_tungstenite::tungstenite::Error);
         YamlError(serde_yaml::Error) #[doc = "Error during yaml parsing"];
+        // TODO PluginError
     }
 
     errors {

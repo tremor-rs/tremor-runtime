@@ -4587,6 +4587,7 @@ dependencies = [
  "tremor-value",
  "url",
  "value-trait",
+ "xz2",
  "zstd",
 ]
 

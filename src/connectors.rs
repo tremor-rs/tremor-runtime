@@ -47,7 +47,7 @@ use crate::config::Connector as ConnectorConfig;
 use crate::connectors::metrics::{MetricsSinkReporter, SourceReporter};
 use crate::connectors::sink::{SinkAddr, SinkContext, SinkMsg};
 use crate::connectors::source::{SourceAddr, SourceContext, SourceMsg};
-use crate::errors::{Error, ErrorKind, Result, RResult};
+use crate::errors::{Error, ErrorKind, RResult, Result};
 use crate::pipeline;
 use crate::system::World;
 use crate::url::ports::{ERR, IN, OUT};
@@ -71,7 +71,7 @@ use abi_stable::{
     std_types::{
         RBox,
         ROption::{self, RNone},
-        RResult::ROk,
+        RResult::{RErr, ROk},
         RStr, RString,
     },
 };
@@ -392,7 +392,7 @@ impl Manager {
         &self,
         addr_tx: Sender<Result<Addr>>,
         url: TremorUrl,
-        mut connector: Box<dyn Connector>,
+        mut connector: Connector,
         config: ConnectorConfig,
         uid: u64,
     ) -> Result<()> {
@@ -649,7 +649,7 @@ impl Manager {
                     Msg::Start if connector_state == ConnectorState::Initialized => {
                         info!("[Connector::{}] Starting...", &addr.url);
                         // start connector
-                        connector_state = match connector.on_start(&ctx) {
+                        connector_state = match connector.on_start(&ctx).await {
                             Ok(new_state) => new_state,
                             Err(e) => {
                                 error!("[Connector::{}] on_start Error: {}", &addr.url, e);
@@ -681,7 +681,7 @@ impl Manager {
                         //       issue a warning/error message
                         //       e.g. UDP, TCP, Rest
                         //
-                        connector.on_pause(&ctx);
+                        connector.on_pause(&ctx).await;
                         connector_state = ConnectorState::Paused;
 
                         addr.send_source(SourceMsg::Pause).await?;
@@ -697,7 +697,7 @@ impl Manager {
                     }
                     Msg::Resume if connector_state == ConnectorState::Paused => {
                         info!("[Connector::{}] Resuming...", &addr.url);
-                        connector.on_resume(&ctx);
+                        connector.on_resume(&ctx).await;
                         connector_state = ConnectorState::Running;
 
                         addr.send_source(SourceMsg::Resume).await?;
@@ -732,7 +732,7 @@ impl Manager {
                         quiescence_beacon.stop_reading();
                         // FIXME: add stop_writing()
                         // let connector stop emitting anything to its source part - if possible here
-                        connector.on_drain(&ctx);
+                        connector.on_drain(&ctx).await;
                         connector_state = ConnectorState::Draining;
 
                         // notify source to drain the source channel and then send the drain signal
@@ -791,7 +791,7 @@ impl Manager {
                     }
                     Msg::Stop => {
                         info!("[Connector::{}] Stopping...", &addr.url);
-                        connector.on_stop(&ctx);
+                        connector.on_stop(&ctx).await;
                         connector_state = ConnectorState::Stopped;
 
                         addr.send_source(SourceMsg::Stop).await?;
@@ -932,26 +932,13 @@ pub enum Connectivity {
     Disconnected,
 }
 
-/// A Connector connects the tremor runtime to the outside world.
-///
-/// It can be a source of events, as such it is polled for new data.
-/// It can also be a sink for events, as such events are sent to it from pipelines.
-/// A connector can act as sink and source or just as one of those.
-///
-/// A connector encapsulates the establishment and maintenance of connections to the outside world,
-/// such as tcp connections, file handles etc. etc.
-///
-/// It is a meta entity on top of the sink and source part.
-/// The connector has its own control plane and is an artefact in the tremor repository.
-/// It controls the sink and source parts which are connected to the rest of the runtime via links to pipelines.
+// The low-level connector interface used for the plugins
 #[abi_stable::sabi_trait]
-pub trait Connector: Send {
+pub trait RawConnector: Send {
     /// create a source part for this connector if applicable
     ///
     /// This function is called exactly once upon connector creation.
     /// If this connector does not act as a source, return `Ok(None)`.
-    ///
-    /// TODO: add async back
     fn create_source(
         &mut self,
         _source_context: SourceContext,
@@ -964,8 +951,6 @@ pub trait Connector: Send {
     ///
     /// This function is called exactly once upon connector creation.
     /// If this connector does not act as a sink, return `Ok(None)`.
-    ///
-    /// TODO: add async back
     fn create_sink(
         &mut self,
         _sink_context: SinkContext,
@@ -988,42 +973,98 @@ pub trait Connector: Send {
     ///
     /// To know when to stop reading new data from the external connection, the `quiescence` beacon
     /// can be used. Call `.reading()` and `.writing()` to see if you should continue doing so, if not, just stop and rest.
-    ///
-    /// TODO: add async back
     fn connect(&mut self, ctx: &ConnectorContext, attempt: &Attempt) -> RResult<bool>;
 
     /// called once when the connector is started
     /// `connect` will be called after this for the first time, leave connection attempts in `connect`.
-    ///
-    /// TODO: add async back
     fn on_start(&mut self, _ctx: &ConnectorContext) -> RResult<ConnectorState> {
         ROk(ConnectorState::Running)
     }
 
     /// called when the connector pauses
-    ///
-    /// TODO: add async back
     fn on_pause(&mut self, _ctx: &ConnectorContext) {}
     /// called when the connector resumes
-    ///
-    /// TODO: add async back
     fn on_resume(&mut self, _ctx: &ConnectorContext) {}
 
     /// Drain
     ///
     /// Ensure no new events arrive at the source part of this connector when this function returns
     /// So we can safely send the `Drain` signal.
-    ///
-    /// TODO: add async back
     fn on_drain(&mut self, _ctx: &ConnectorContext) {}
 
     /// called when the connector is stopped
-    ///
-    /// TODO: add async back
     fn on_stop(&mut self, _ctx: &ConnectorContext) {}
 
     /// returns the default codec for this connector
     fn default_codec<'a>(&'a self) -> RStr<'a>;
+}
+
+// The higher level connector interface, which wraps the raw connector from the
+// plugin.
+pub struct Connector(pub RawConnector_TO<'static, RBox<()>>);
+impl Connector {
+    #[inline]
+    pub async fn create_source(
+        &mut self,
+        source_context: SourceContext,
+        builder: source::SourceManagerBuilder,
+    ) -> Result<Option<source::SourceAddr>> {
+        match self.0.create_source(source_context, builder) {
+            ROk(source) => Ok(source.into()),
+            RErr(err) => Err(err),
+        }
+    }
+
+    #[inline]
+    pub async fn create_sink(
+        &mut self,
+        sink_context: SinkContext,
+        builder: sink::SinkManagerBuilder,
+    ) -> Result<Option<sink::SinkAddr>> {
+        match self.0.create_sink(sink_context, builder) {
+            ROk(sink) => Ok(sink.into()),
+            RErr(err) => Err(err),
+        }
+    }
+
+    #[inline]
+    pub async fn connect(
+        &mut self,
+        ctx: &ConnectorContext,
+        notifier: reconnect::ConnectionLostNotifier,
+    ) -> Result<bool> {
+        self.0.connect(ctx, notifier).into()
+    }
+
+    #[inline]
+    pub async fn on_start(&mut self, ctx: &ConnectorContext) -> Result<ConnectorState> {
+        self.0.on_start(ctx).into()
+    }
+
+    #[inline]
+    pub async fn on_pause(&mut self, ctx: &ConnectorContext) {
+        self.0.on_pause(ctx)
+    }
+
+    #[inline]
+    pub async fn on_resume(&mut self, ctx: &ConnectorContext) {
+        self.0.on_resume(ctx)
+    }
+
+    #[inline]
+    pub async fn on_drain(&mut self, ctx: &ConnectorContext) {
+        self.0.on_drain(ctx)
+    }
+
+    #[inline]
+    pub async fn on_stop(&mut self, ctx: &ConnectorContext) {
+        self.0.on_stop(ctx)
+    }
+
+    #[inline]
+    pub fn default_codec(&self) -> &str {
+        self.0.default_codec().into()
+    }
 }
 
 /// something that is able to create a connector instance
@@ -1033,11 +1074,7 @@ pub trait ConnectorBuilder: Sync + Send {
     ///
     /// # Errors
     ///  * If the config is invalid for the connector
-    async fn from_config(
-        &self,
-        id: &TremorUrl,
-        config: &Option<OpConfig>,
-    ) -> Result<Box<dyn Connector>>;
+    async fn from_config(&self, id: &TremorUrl, config: &Option<OpConfig>) -> Result<Connector>;
 }
 
 /// registering builtin connector types
@@ -1047,29 +1084,5 @@ pub trait ConnectorBuilder: Sync + Send {
 #[cfg(not(tarpaulin_include))]
 pub async fn register_builtin_connector_types(world: &World) -> Result<()> {
     // TODO: load dynamically
-    // world
-    //     .register_builtin_connector_type("exit", Box::new(exit::Builder::new(world)))
-    //     .await?;
-    // world
-    //     .register_builtin_connector_type("file", Box::new(file::Builder::new(world)))
-    //     .await?;
-    // world
-    //     .register_builtin_connector_type("metrics", Box::new(metrics::Builder::default()))
-    //     .await?;
-    // world
-    //     .register_builtin_connector_type("std_stream", Box::new(std_streams::Builder::default()))
-    //     .await?;
-    // world
-    //     .register_builtin_connector_type("tcp_client", Box::new(tcp::client::Builder::default()))
-    //     .await?;
-    // world
-    //     .register_builtin_connector_type("tcp_server", Box::new(tcp::server::Builder::default()))
-    //     .await?;
-    // world
-    //     .register_builtin_connector_type("udp_client", Box::new(udp_client::Builder::default()))
-    //     .await?;
-    // world
-    //     .register_builtin_connector_type("udp_server", Box::new(udp_server::Builder::default()))
-    //     .await?;
     Ok(())
 }

@@ -13,4 +13,3 @@
 // limitations under the License.
 
 pub(crate) mod mmap;
-pub(crate) mod postgres;
