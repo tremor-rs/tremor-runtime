@@ -151,6 +151,7 @@ test_cases!(
     module_in_subquery,
     subquery_nested_subquery,
     subquery_passthrough,
+    window_state_by_two_vec,
     alias_script_params_overwrite,
     cardinality,
     mod_def,

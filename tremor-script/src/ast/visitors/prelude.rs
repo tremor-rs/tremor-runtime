@@ -14,7 +14,7 @@
 
 pub use crate::ast::base_expr::BaseExpr;
 pub(crate) use crate::ast::eq::AstEq;
-pub(crate) use crate::ast::walkers::ImutExprWalker;
+pub(crate) use crate::ast::walkers::{ExprWalker, ImutExprWalker};
 pub(crate) use crate::ast::{
     ArrayPattern, ArrayPredicatePattern, BinExpr, Bytes, ClauseGroup, Comprehension, DefaultCase,
     EmitExpr, EventPath, Expr, ExprPath, GroupBy, GroupByInt, Helper, IfElse, ImutExpr,
@@ -24,5 +24,5 @@ pub(crate) use crate::ast::{
     TuplePattern, UnaryExpr,
 };
 
-pub(crate) use super::{GroupByVisitor, ImutExprVisitor, VisitRes};
+pub(crate) use super::{ExprVisitor, GroupByVisitor, ImutExprVisitor, VisitRes};
 pub(crate) use crate::errors::Result;

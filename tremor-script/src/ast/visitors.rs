@@ -13,13 +13,13 @@
 // limitations under the License.
 
 pub(crate) mod prelude;
+pub(crate) mod windows;
 use prelude::*;
 
 pub(crate) mod args_rewriter;
 pub(crate) mod expr_reducer;
 pub(crate) mod group_by_extractor;
 pub(crate) mod target_event_ref;
-pub(crate) mod windows;
 
 pub(crate) use args_rewriter::ArgsRewriter;
 pub(crate) use expr_reducer::ExprReducer;
@@ -202,7 +202,7 @@ pub trait ImutExprVisitor<'script> {
     ///
     /// # Errors
     /// if the walker function fails
-    fn expr(&mut self, _e: &mut Expr<'script>) -> Result<VisitRes> {
+    fn visit_record(&mut self, _record: &mut Record<'script>) -> Result<VisitRes> {
         Ok(Walk)
     }
 
@@ -218,7 +218,7 @@ pub trait ImutExprVisitor<'script> {
     ///
     /// # Errors
     /// if the walker function fails
-    fn emit(&mut self, _emit: &mut EmitExpr<'script>) -> Result<VisitRes> {
+    fn visit_list(&mut self, _list: &mut List<'script>) -> Result<VisitRes> {
         Ok(Walk)
     }
 

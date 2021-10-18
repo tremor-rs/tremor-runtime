@@ -518,7 +518,11 @@ impl<'v> TryFrom<&Value<'v>> for Actions {
                 Err("A array return needs to be a two element array of booleans with the form `[emit, include]`".into())
             }
         } else {
-            Err(format!("can't convert {} to Action", v).into())
+            Err(format!(
+                "Window returned `{}` this can't be used as a window reply",
+                v.encode()
+            )
+            .into())
         }
     }
 }

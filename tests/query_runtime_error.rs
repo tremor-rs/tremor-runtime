@@ -132,4 +132,6 @@ macro_rules! test_cases {
 test_cases!(
     branch_error_then_ok,
     // INSERT
+    bad_vec_state_window_return,
+    bad_state_window_return,
 );

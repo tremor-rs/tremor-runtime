@@ -12,9 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::{
-    Expr, ExprVisitor, ExprWalker, ImutExprVisitor, ImutExprWalker, Path, Result, VisitRes, Walk,
-};
+use crate::ast::visitors::prelude::*;
 
 #[derive(Debug, Default, Clone, Copy)]
 pub(crate) struct OnlyMutState {}
@@ -42,11 +40,11 @@ impl<'script> ExprWalker<'script> for OnlyMutState {}
 impl<'script> ImutExprWalker<'script> for OnlyMutState {}
 
 impl<'script> ExprVisitor<'script> for OnlyMutState {
-    fn expr(&mut self, e: &mut Expr<'script>) -> Result<VisitRes> {
+    fn visit_expr(&mut self, e: &mut Expr<'script>) -> Result<VisitRes> {
         if let Expr::Assign { path, .. } = e {
             Self::validate_path(path)?;
         }
-        Ok(Walk)
+        Ok(VisitRes::Walk)
     }
 }
 impl<'script> ImutExprVisitor<'script> for OnlyMutState {}
@@ -67,7 +65,7 @@ impl<'script> ImutExprWalker<'script> for NoEventAccess {}
 
 impl<'script> ExprVisitor<'script> for NoEventAccess {}
 impl<'script> ImutExprVisitor<'script> for NoEventAccess {
-    fn path(&mut self, p: &mut Path<'script>) -> Result<VisitRes> {
+    fn visit_path(&mut self, p: &mut Path<'script>) -> Result<VisitRes> {
         match p {
             Path::Event(_) => Err("`even` isn't accessible in this context".into()),
             Path::Meta(_) => Err("`$` isn't accessible in this context".into()),
@@ -75,7 +73,7 @@ impl<'script> ImutExprVisitor<'script> for NoEventAccess {
             | Path::Local(_)
             | Path::State(_)
             | Path::Expr(_)
-            | Path::Reserved(_) => Ok(Walk),
+            | Path::Reserved(_) => Ok(VisitRes::Walk),
         }
     }
 }
