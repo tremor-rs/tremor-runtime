@@ -4615,9 +4615,9 @@ dependencies = [
 
 [[package]]
 name = "rdkafka-sys"
-version = "4.0.0+1.6.1"
+version = "4.1.0+1.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "54f24572851adfeb525fdc4a1d51185898e54fed4e8d8dba4fadb90c6b4f0422"
+checksum = "e212ccf56a2d4e0b9f874a1cad295495769e0cdbabe60e02b4f654d369a2d6a1"
 dependencies = [
  "cmake",
  "libc",
