@@ -92,6 +92,7 @@ pub mod version;
 
 /// Tremor connector extensions
 pub mod connectors;
+pub mod connectors_pdk;
 
 pub(crate) mod common;
 

@@ -28,41 +28,18 @@ pub(crate) mod reconnect;
 /// home for connector specific function
 pub(crate) mod functions;
 
-/// google cloud pubsub/storage/auth
-pub(crate) mod gcp;
-/// opentelemetry
-pub(crate) mod otel;
-/// protobuf helpers
-pub(crate) mod pb;
-
-/// file connector implementation
-pub mod file;
-
-/// tcp server and client connector impls
-pub(crate) mod tcp;
-
-/// udp server connector impl
-pub(crate) mod udp_server;
-
-/// udp server connector impl
-pub(crate) mod udp_client;
-
-/// std streams connector (stdout, stderr, stdin)
-pub(crate) mod std_streams;
-
 /// Home of the famous metrics collector
 pub(crate) mod metrics;
 
-/// Metronome
-pub(crate) mod metronome;
-
 /// Exit Connector
-pub(crate) mod exit;
+// pub(crate) mod exit;
 /// quiescence stuff
 pub(crate) mod quiescence;
 
 /// collection of TLS utilities and configs
 pub(crate) mod tls;
+
+pub mod plugins;
 
 use std::fmt::Display;
 
@@ -73,7 +50,7 @@ use crate::config::Connector as ConnectorConfig;
 use crate::connectors::metrics::{MetricsSinkReporter, SourceReporter};
 use crate::connectors::sink::{SinkAddr, SinkContext, SinkMsg};
 use crate::connectors::source::{SourceAddr, SourceContext, SourceMsg};
-use crate::errors::{Error, ErrorKind, Result};
+use crate::errors::{Error, ErrorKind, Result, RResult};
 use crate::pipeline;
 use crate::system::World;
 use crate::url::ports::{ERR, IN, OUT};
@@ -88,6 +65,19 @@ use value_trait::{Builder, Mutable};
 use self::metrics::MetricsSender;
 use self::quiescence::QuiescenceBeacon;
 use self::reconnect::{Attempt, ReconnectRuntime};
+
+use abi_stable::{
+    declare_root_module_statics,
+    library::RootModule,
+    package_version_strings,
+    sabi_types::VersionStrings,
+    std_types::{
+        RBox,
+        ROption::{self, RNone},
+        RResult::ROk,
+        RStr, RString,
+    },
+};
 
 /// sender for connector manager messages
 pub type ManagerSender = Sender<ManagerMsg>;
@@ -662,7 +652,7 @@ impl Manager {
                     Msg::Start if connector_state == ConnectorState::Initialized => {
                         info!("[Connector::{}] Starting...", &addr.url);
                         // start connector
-                        connector_state = match connector.on_start(&ctx).await {
+                        connector_state = match connector.on_start(&ctx) {
                             Ok(new_state) => new_state,
                             Err(e) => {
                                 error!("[Connector::{}] on_start Error: {}", &addr.url, e);
@@ -694,7 +684,7 @@ impl Manager {
                         //       issue a warning/error message
                         //       e.g. UDP, TCP, Rest
                         //
-                        connector.on_pause(&ctx).await;
+                        connector.on_pause(&ctx);
                         connector_state = ConnectorState::Paused;
 
                         addr.send_source(SourceMsg::Pause).await?;
@@ -710,7 +700,7 @@ impl Manager {
                     }
                     Msg::Resume if connector_state == ConnectorState::Paused => {
                         info!("[Connector::{}] Resuming...", &addr.url);
-                        connector.on_resume(&ctx).await;
+                        connector.on_resume(&ctx);
                         connector_state = ConnectorState::Running;
 
                         addr.send_source(SourceMsg::Resume).await?;
@@ -745,7 +735,7 @@ impl Manager {
                         quiescence_beacon.stop_reading();
                         // FIXME: add stop_writing()
                         // let connector stop emitting anything to its source part - if possible here
-                        connector.on_drain(&ctx).await;
+                        connector.on_drain(&ctx);
                         connector_state = ConnectorState::Draining;
 
                         // notify source to drain the source channel and then send the drain signal
@@ -804,7 +794,7 @@ impl Manager {
                     }
                     Msg::Stop => {
                         info!("[Connector::{}] Stopping...", &addr.url);
-                        connector.on_stop(&ctx).await;
+                        connector.on_stop(&ctx);
                         connector_state = ConnectorState::Stopped;
 
                         addr.send_source(SourceMsg::Stop).await?;
@@ -957,30 +947,34 @@ pub enum Connectivity {
 /// It is a meta entity on top of the sink and source part.
 /// The connector has its own control plane and is an artefact in the tremor repository.
 /// It controls the sink and source parts which are connected to the rest of the runtime via links to pipelines.
-#[async_trait::async_trait]
+#[abi_stable::sabi_trait]
 pub trait Connector: Send {
     /// create a source part for this connector if applicable
     ///
     /// This function is called exactly once upon connector creation.
     /// If this connector does not act as a source, return `Ok(None)`.
-    async fn create_source(
+    ///
+    /// TODO: add async back
+    fn create_source(
         &mut self,
         _source_context: SourceContext,
         _builder: source::SourceManagerBuilder,
-    ) -> Result<Option<source::SourceAddr>> {
-        Ok(None)
+    ) -> RResult<ROption<source::SourceAddr>> {
+        ROk(RNone)
     }
 
     /// Create a sink part for this connector if applicable
     ///
     /// This function is called exactly once upon connector creation.
     /// If this connector does not act as a sink, return `Ok(None)`.
-    async fn create_sink(
+    ///
+    /// TODO: add async back
+    fn create_sink(
         &mut self,
         _sink_context: SinkContext,
         _builder: sink::SinkManagerBuilder,
-    ) -> Result<Option<sink::SinkAddr>> {
-        Ok(None)
+    ) -> RResult<ROption<sink::SinkAddr>> {
+        ROk(RNone)
     }
 
     /// Attempt to connect to the outside world.
@@ -997,30 +991,42 @@ pub trait Connector: Send {
     ///
     /// To know when to stop reading new data from the external connection, the `quiescence` beacon
     /// can be used. Call `.reading()` and `.writing()` to see if you should continue doing so, if not, just stop and rest.
-    async fn connect(&mut self, ctx: &ConnectorContext, attempt: &Attempt) -> Result<bool>;
+    ///
+    /// TODO: add async back
+    fn connect(&mut self, ctx: &ConnectorContext, attempt: &Attempt) -> RResult<bool>;
 
     /// called once when the connector is started
     /// `connect` will be called after this for the first time, leave connection attempts in `connect`.
-    async fn on_start(&mut self, _ctx: &ConnectorContext) -> Result<ConnectorState> {
-        Ok(ConnectorState::Running)
+    ///
+    /// TODO: add async back
+    fn on_start(&mut self, _ctx: &ConnectorContext) -> RResult<ConnectorState> {
+        ROk(ConnectorState::Running)
     }
 
     /// called when the connector pauses
-    async fn on_pause(&mut self, _ctx: &ConnectorContext) {}
+    ///
+    /// TODO: add async back
+    fn on_pause(&mut self, _ctx: &ConnectorContext) {}
     /// called when the connector resumes
-    async fn on_resume(&mut self, _ctx: &ConnectorContext) {}
+    ///
+    /// TODO: add async back
+    fn on_resume(&mut self, _ctx: &ConnectorContext) {}
 
     /// Drain
     ///
     /// Ensure no new events arrive at the source part of this connector when this function returns
     /// So we can safely send the `Drain` signal.
-    async fn on_drain(&mut self, _ctx: &ConnectorContext) {}
+    ///
+    /// TODO: add async back
+    fn on_drain(&mut self, _ctx: &ConnectorContext) {}
 
     /// called when the connector is stopped
-    async fn on_stop(&mut self, _ctx: &ConnectorContext) {}
+    ///
+    /// TODO: add async back
+    fn on_stop(&mut self, _ctx: &ConnectorContext) {}
 
     /// returns the default codec for this connector
-    fn default_codec(&self) -> &str;
+    fn default_codec<'a>(&'a self) -> RStr<'a>;
 }
 
 /// something that is able to create a connector instance
@@ -1043,29 +1049,30 @@ pub trait ConnectorBuilder: Sync + Send {
 ///  * If a builtin connector couldn't be registered
 #[cfg(not(tarpaulin_include))]
 pub async fn register_builtin_connector_types(world: &World) -> Result<()> {
-    world
-        .register_builtin_connector_type("exit", Box::new(exit::Builder::new(world)))
-        .await?;
-    world
-        .register_builtin_connector_type("file", Box::new(file::Builder::new(world)))
-        .await?;
-    world
-        .register_builtin_connector_type("metrics", Box::new(metrics::Builder::default()))
-        .await?;
-    world
-        .register_builtin_connector_type("std_stream", Box::new(std_streams::Builder::default()))
-        .await?;
-    world
-        .register_builtin_connector_type("tcp_client", Box::new(tcp::client::Builder::default()))
-        .await?;
-    world
-        .register_builtin_connector_type("tcp_server", Box::new(tcp::server::Builder::default()))
-        .await?;
-    world
-        .register_builtin_connector_type("udp_client", Box::new(udp_client::Builder::default()))
-        .await?;
-    world
-        .register_builtin_connector_type("udp_server", Box::new(udp_server::Builder::default()))
-        .await?;
+    // TODO: load dynamically
+    // world
+    //     .register_builtin_connector_type("exit", Box::new(exit::Builder::new(world)))
+    //     .await?;
+    // world
+    //     .register_builtin_connector_type("file", Box::new(file::Builder::new(world)))
+    //     .await?;
+    // world
+    //     .register_builtin_connector_type("metrics", Box::new(metrics::Builder::default()))
+    //     .await?;
+    // world
+    //     .register_builtin_connector_type("std_stream", Box::new(std_streams::Builder::default()))
+    //     .await?;
+    // world
+    //     .register_builtin_connector_type("tcp_client", Box::new(tcp::client::Builder::default()))
+    //     .await?;
+    // world
+    //     .register_builtin_connector_type("tcp_server", Box::new(tcp::server::Builder::default()))
+    //     .await?;
+    // world
+    //     .register_builtin_connector_type("udp_client", Box::new(udp_client::Builder::default()))
+    //     .await?;
+    // world
+    //     .register_builtin_connector_type("udp_server", Box::new(udp_server::Builder::default()))
+    //     .await?;
     Ok(())
 }

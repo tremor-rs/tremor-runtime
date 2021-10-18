@@ -6,7 +6,7 @@ use abi_stable::{
     std_types::{RBox, RStr, RResult::ROk},
 };
 
-use tremor_runtime::connectors_pdk::{
+use tremor_runtime::connectors::{
     reconnect, Connector, ConnectorContext, ConnectorMod, ConnectorMod_Ref, ConnectorState,
     Connector_TO,
     RResult,
