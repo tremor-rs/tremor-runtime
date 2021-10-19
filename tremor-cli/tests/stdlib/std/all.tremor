@@ -335,20 +335,20 @@ test::suite({
       "test": test::assert("record from array 2", record::from_array([["a", 1]]), {"a": 1})
     }),
     test::test({
-      "name": "record extract 1",
-      "test": test::assert("record extract 1", record::extract({"a": 1}, ["c"]), {})
+      "name": "record select 1",
+      "test": test::assert("record select 1", record::`extract`({"a": 1}, ["c"]), {})
     }),
     test::test({
-      "name": "record extract 2",
-      "test": test::assert("record extract 2", record::extract({"a": 1}, ["a"]), {"a": 1})
+      "name": "record select 2",
+      "test": test::assert("record select 2", record::`extract`({"a": 1}, ["a"]), {"a": 1})
     }),
     test::test({
       "name": "record combine 1",
-      "test": test::assert("record combine 1", record::combine({"a": 1}, {"a": 2}), {"a": 2})
+      "test": test::assert("record combine 1", record::`combine`({"a": 1}, {"a": 2}), {"a": 2})
     }),
     test::test({
       "name": "record combine 2",
-      "test": test::assert("record combine 2", record::combine({"a": 1}, {"b": 2}), {"a": 1, "b": 2})
+      "test": test::assert("record combine 2", record::`combine`({"a": 1}, {"b": 2}), {"a": 1, "b": 2})
     }),
     test::test({
       "name": "record rename 1",
