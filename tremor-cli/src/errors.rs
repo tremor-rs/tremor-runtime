@@ -61,8 +61,7 @@ error_chain! {
         TestFailures(stats: crate::test::stats::Stats) {
             description("Some tests failed")
                 display("{} out of {} tests failed.\nFailed tests: {}",
-                  stats.fail, stats.fail + stats.skip + stats.pass, stats.get_failed_test_names())
-                // TODO: display test names
+                  stats.fail, stats.fail + stats.skip + stats.pass, stats.print_failed_test_names())
         }
         FileLoadError(file: String, error: tremor_runtime::errors::Error) {
             description("Failed to load config file")

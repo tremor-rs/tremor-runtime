@@ -21,7 +21,7 @@ pub struct Stats {
     pub(crate) fail: u32,
     pub(crate) skip: u32,
     pub(crate) assert: u32,
-    failed_test_names: String,
+    pub(crate) failed_test_names: Vec<String>,
 }
 
 impl Stats {
@@ -40,7 +40,7 @@ impl Stats {
             fail: 0,
             skip: 0,
             assert: 0,
-            failed_test_names: "".to_string(),
+            failed_test_names: vec![],
         }
     }
 
@@ -50,10 +50,7 @@ impl Stats {
 
     pub(crate) fn fail(&mut self, test_name: &str) {
         self.fail += 1;
-        if self.failed_test_names.chars().count() > 0 {
-            self.failed_test_names.push_str(", ");
-        }
-        self.failed_test_names.push_str(test_name);
+        self.failed_test_names.push(test_name.to_string());
     }
 
     pub(crate) fn skip(&mut self) {
@@ -77,15 +74,18 @@ impl Stats {
         self.fail += other.fail;
         self.skip += other.skip;
         self.assert += other.assert;
-        let other_failed_test_names = other.get_failed_test_names();
-        if self.failed_test_names.chars().count() > 0 && other_failed_test_names.chars().count() > 0
-        {
-            self.failed_test_names.push_str(", ");
-        }
-        self.failed_test_names.push_str(&other_failed_test_names);
+        self.failed_test_names
+            .append(&mut other.failed_test_names.clone());
     }
 
-    pub(crate) fn get_failed_test_names(&self) -> String {
-        self.failed_test_names.clone()
+    pub(crate) fn print_failed_test_names(&self) -> String {
+        self.failed_test_names
+            .iter()
+            .fold("".to_string(), |acc, item| {
+                if acc.chars().count() > 0 {
+                    return format!("{}, {}", acc, item);
+                }
+                item.clone()
+            })
     }
 }
