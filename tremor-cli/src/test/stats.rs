@@ -78,8 +78,9 @@ impl Stats {
         self.skip += other.skip;
         self.assert += other.assert;
         let other_failed_test_names = other.get_failed_test_names();
-        if self.failed_test_names.chars().count() > 0 && other_failed_test_names.chars().count() > 0 {
-          self.failed_test_names.push_str(", ");
+        if self.failed_test_names.chars().count() > 0 && other_failed_test_names.chars().count() > 0
+        {
+            self.failed_test_names.push_str(", ");
         }
         self.failed_test_names.push_str(&other_failed_test_names);
     }
