@@ -79,6 +79,6 @@ impl Stats {
     }
 
     pub(crate) fn print_failed_test_names(&self) -> String {
-        self.failed_test_names.join(", "  )
+        self.failed_test_names.join(", ")
     }
 }
