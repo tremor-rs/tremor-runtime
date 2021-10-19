@@ -57,7 +57,12 @@ fn eval_suite_entrypoint(
         elements.append(&mut e);
         stats.merge(&s);
     } else {
-        stats.fail();
+        stats.fail(
+            suite_spec
+                .get_literal("name")
+                .and_then(Value::as_str)
+                .unwrap_or_default(),
+        );
     }
 
     Ok((stats, elements))
@@ -148,7 +153,7 @@ fn eval_suite_tests(
                 };
 
                 let prefix = if success { "(+)" } else { "(-)" };
-                let report = stats.report(success);
+                let report = stats.report(success, &test_name);
 
                 let hidden = config.quiet && success;
                 if !hidden {
@@ -291,7 +296,7 @@ pub(crate) fn run_suite(
             }
         }
         Err(e) => {
-            stats.fail();
+            stats.fail(&script);
             let mut h = TermHighlighter::default();
             if let Err(e) = tremor_script::Script::format_error_from_script(&raw, &mut h, &e) {
                 eprintln!("Error: {}", e);

@@ -155,7 +155,13 @@ pub(crate) fn run_process(
             // TODO It would be nicer if there was something like a status::err() that would print
             // the errors in a nicer way
             println!("ERROR: \n{}", &slurp_string(&fg_err_file)?);
-            stats.fail();
+            stats.fail(
+                bench_root
+                    .file_name()
+                    .ok_or("unable to find the benchmark name")?
+                    .to_str()
+                    .unwrap_or_default()
+            );
         };
         report.insert(
             "bench".to_string(),

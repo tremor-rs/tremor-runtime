@@ -173,7 +173,7 @@ pub(crate) fn suite_command(
                             "Failed {} / {} since the case command could not be parsed",
                             suite.name, case.name
                         );
-                        casex.fail();
+                        casex.fail(&case.name);
                         casex.assert += 1;
                     }
                 }
@@ -237,7 +237,7 @@ fn process_testcase(
             hidden: false,
             keyword: report::KeywordKind::Predicate,
             result: report::ResultKind {
-                status: stat_s.report(success),
+                status: stat_s.report(success, &spec.name.trim()),
                 duration,
             },
         });
