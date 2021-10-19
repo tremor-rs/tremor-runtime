@@ -40,11 +40,7 @@ impl Stats {
             fail: 0,
             skip: 0,
             assert: 0,
-<<<<<<< HEAD
             failed_test_names: vec![],
-=======
-            failed_test_names: "".to_string(),
->>>>>>> ddf65f7b (show names of failing tests)
         }
     }
 
@@ -54,14 +50,7 @@ impl Stats {
 
     pub(crate) fn fail(&mut self, test_name: &str) {
         self.fail += 1;
-<<<<<<< HEAD
         self.failed_test_names.push(test_name.to_string());
-=======
-        if self.failed_test_names.chars().count() > 0 {
-            self.failed_test_names.push_str(", ");
-        }
-        self.failed_test_names.push_str(test_name);
->>>>>>> ddf65f7b (show names of failing tests)
     }
 
     pub(crate) fn skip(&mut self) {
@@ -85,17 +74,8 @@ impl Stats {
         self.fail += other.fail;
         self.skip += other.skip;
         self.assert += other.assert;
-<<<<<<< HEAD
         self.failed_test_names
             .append(&mut other.failed_test_names.clone());
-=======
-        let other_failed_test_names = other.get_failed_test_names();
-        if self.failed_test_names.chars().count() > 0 && other_failed_test_names.chars().count() > 0
-        {
-            self.failed_test_names.push_str(", ");
-        }
-        self.failed_test_names.push_str(&other_failed_test_names);
->>>>>>> 18bbe35c (format)
     }
 
     pub(crate) fn print_failed_test_names(&self) -> String {
