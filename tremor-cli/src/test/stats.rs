@@ -21,11 +21,7 @@ pub struct Stats {
     pub(crate) fail: u32,
     pub(crate) skip: u32,
     pub(crate) assert: u32,
-<<<<<<< HEAD
     pub(crate) failed_test_names: Vec<String>,
-=======
-    failed_test_names: String,
->>>>>>> ddf65f7b (show names of failing tests)
 }
 
 impl Stats {
@@ -89,8 +85,17 @@ impl Stats {
         self.fail += other.fail;
         self.skip += other.skip;
         self.assert += other.assert;
+<<<<<<< HEAD
         self.failed_test_names
             .append(&mut other.failed_test_names.clone());
+=======
+        let other_failed_test_names = other.get_failed_test_names();
+        if self.failed_test_names.chars().count() > 0 && other_failed_test_names.chars().count() > 0
+        {
+            self.failed_test_names.push_str(", ");
+        }
+        self.failed_test_names.push_str(&other_failed_test_names);
+>>>>>>> 18bbe35c (format)
     }
 
     pub(crate) fn print_failed_test_names(&self) -> String {
