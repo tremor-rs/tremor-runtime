@@ -79,13 +79,6 @@ impl Stats {
     }
 
     pub(crate) fn print_failed_test_names(&self) -> String {
-        self.failed_test_names
-            .iter()
-            .fold("".to_string(), |acc, item| {
-                if acc.chars().count() > 0 {
-                    return format!("{}, {}", acc, item);
-                }
-                item.clone()
-            })
+        self.failed_test_names.join(", "  )
     }
 }
