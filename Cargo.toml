@@ -165,7 +165,7 @@ googapis = { version = "0.5", default-features = false, features = [
 ] }
 gouth = { version = "0.2" }
 http = "0.2.5"
-reqwest = "0.11.5"
+reqwest = "0.11.6"
 
 [dependencies.tungstenite]
 default-features = false
