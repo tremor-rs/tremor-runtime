@@ -86,6 +86,6 @@ impl Stats {
     }
 
     pub(crate) fn get_failed_test_names(&self) -> String {
-        return self.failed_test_names.clone();
+        self.failed_test_names.clone()
     }
 }
