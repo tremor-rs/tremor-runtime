@@ -8,6 +8,8 @@
 - Add `check_topic_metadata` configuration flag to kafka source to bypass topic metadata fetch
 - port `json!` improvements to `literal!`
 - print names of failing tests
+- Add `check_topic_metadata` configuration flag to kafka source to bypass topic metadata fetch
+- port `json!` improvements to `literal!`
 - Add support for `FLOAT4` and `FLOAT8` serialization/deserialization to postgres connectors
 - Add `std::path::try_default` fn
 - Experimental ARM support
