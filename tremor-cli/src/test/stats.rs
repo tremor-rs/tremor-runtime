@@ -21,11 +21,7 @@ pub struct Stats {
     pub(crate) fail: u32,
     pub(crate) skip: u32,
     pub(crate) assert: u32,
-<<<<<<< HEAD
     pub(crate) failed_test_names: Vec<String>,
-=======
-    failed_test_names: String,
->>>>>>> ddf65f7b (show names of failing tests)
 }
 
 impl Stats {
@@ -44,11 +40,7 @@ impl Stats {
             fail: 0,
             skip: 0,
             assert: 0,
-<<<<<<< HEAD
             failed_test_names: vec![],
-=======
-            failed_test_names: "".to_string(),
->>>>>>> ddf65f7b (show names of failing tests)
         }
     }
 
