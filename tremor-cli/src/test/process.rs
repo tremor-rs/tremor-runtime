@@ -160,7 +160,7 @@ pub(crate) fn run_process(
                     .file_name()
                     .ok_or("unable to find the benchmark name")?
                     .to_str()
-                    .unwrap_or_default()
+                    .unwrap_or_default(),
             );
         };
         report.insert(
