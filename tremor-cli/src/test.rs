@@ -80,7 +80,7 @@ fn suite_bench(
                 if test_report.stats.is_pass() {
                     stats.pass();
                 } else {
-                    stats.fail();
+                    stats.fail(&bench_root);
                 }
                 suite.push(test_report);
             } else {
@@ -141,7 +141,7 @@ fn suite_integration(
                 if test_report.stats.is_pass() {
                     stats.pass();
                 } else {
-                    stats.fail();
+                    stats.fail(&bench_root);
                 }
                 stats.assert += &test_report.stats.assert;
 

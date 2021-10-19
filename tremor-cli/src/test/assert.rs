@@ -174,7 +174,7 @@ pub(crate) fn process(
                     s.pass();
                     report::StatusKind::Passed
                 } else {
-                    s.fail();
+                    s.fail(&spec.name);
                     report::StatusKind::Failed
                 },
                 duration: 0,
@@ -225,7 +225,7 @@ fn process_contains(
         stats.assert();
         *counter += 1;
         let condition = file_contains(file, &[c.to_string()], base)?;
-        stats.report(condition);
+        stats.report(condition, file);
         total_condition &= condition;
         status::assert_has(
             prefix,
@@ -272,7 +272,7 @@ fn process_doesnt_contain(
                 .map(|line| line.contains(c.trim()))
                 .unwrap_or_default()
         });
-        stats.report(condition);
+        stats.report(condition, file);
         total_condition &= condition;
         status::assert_has(
             prefix,
@@ -327,7 +327,7 @@ fn process_equals_file(
         hidden: false,
         keyword: report::KeywordKind::Predicate,
         result: report::ResultKind {
-            status: stats.report(condition),
+            status: stats.report(condition, file),
             duration: 0,
         },
     })

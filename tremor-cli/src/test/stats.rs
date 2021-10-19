@@ -21,15 +21,16 @@ pub struct Stats {
     pub(crate) fail: u32,
     pub(crate) skip: u32,
     pub(crate) assert: u32,
+    failed_test_names: String,
 }
 
 impl Stats {
-    pub(crate) fn report(&mut self, status: bool) -> StatusKind {
+    pub(crate) fn report(&mut self, status: bool, name: &str) -> StatusKind {
         if status {
             self.pass();
             StatusKind::Passed
         } else {
-            self.fail();
+            self.fail(name);
             StatusKind::Failed
         }
     }
@@ -39,6 +40,7 @@ impl Stats {
             fail: 0,
             skip: 0,
             assert: 0,
+            failed_test_names: "".to_string(),
         }
     }
 
@@ -46,8 +48,12 @@ impl Stats {
         self.pass += 1;
     }
 
-    pub(crate) fn fail(&mut self) {
+    pub(crate) fn fail(&mut self, test_name: &str) {
         self.fail += 1;
+        if self.failed_test_names.chars().count() > 0 {
+            self.failed_test_names.push_str(", ");
+        }
+        self.failed_test_names.push_str(test_name);
     }
 
     pub(crate) fn skip(&mut self) {
@@ -71,5 +77,14 @@ impl Stats {
         self.fail += other.fail;
         self.skip += other.skip;
         self.assert += other.assert;
+        let other_failed_test_names = other.get_failed_test_names();
+        if self.failed_test_names.chars().count() > 0 && other_failed_test_names.chars().count() > 0 {
+          self.failed_test_names.push_str(", ");
+        }
+        self.failed_test_names.push_str(&other_failed_test_names);
+    }
+
+    pub(crate) fn get_failed_test_names(&self) -> String {
+        return self.failed_test_names.clone();
     }
 }
