@@ -635,7 +635,10 @@ where
                             self.source.fail(original_id);
                         }
                     }
-                    Ok(SourceReply::StateChange(SourceState::Disconnected)) => return Ok(()),
+                    Ok(SourceReply::StateChange(SourceState::Disconnected)) => {
+                        warn!("[Source::{}] Disconnected.", self.source_id);
+                        return Ok(());
+                    }
                     Ok(SourceReply::StateChange(SourceState::Connected)) => (),
                     Ok(SourceReply::Empty(sleep_ms)) => {
                         task::sleep(Duration::from_millis(sleep_ms)).await;

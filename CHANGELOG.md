@@ -65,6 +65,8 @@
 - Fix gcs go-auth token refresh
 - Fix `create script` syntax for aliased scripts with overridden `params`
 - Add benchmark names to benchmark tags
+- Kafka onramp: Remove failing metadata fetch in order to verify topic existance. Instead detect subscription errors and stop the onramp in that case.
+
 
 ## 0.11.4
 
