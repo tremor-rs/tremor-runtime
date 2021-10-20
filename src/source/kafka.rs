@@ -16,6 +16,7 @@
 use crate::errors::Result;
 use crate::source::prelude::*;
 
+use async_std::channel::{bounded, Receiver, Sender};
 //NOTE: This is required for StreamHandlers stream
 use async_std::future::timeout;
 use futures::{future, StreamExt};
@@ -33,6 +34,7 @@ use rdkafka::{
     util::AsyncRuntime,
     Message, Offset, TopicPartitionList,
 };
+use rdkafka_sys::RDKafkaErrorCode;
 use std::collections::{BTreeMap, HashMap as StdMap};
 use std::future::Future;
 use std::mem;
@@ -202,6 +204,8 @@ pub struct Int {
     origin_uri: EventOriginUri,
     auto_commit: bool,
     messages: BTreeMap<u64, MsgOffset>,
+    // if it receives anything, we error out, and log the message
+    err_rx: Option<Receiver<KafkaError>>,
 }
 
 impl std::fmt::Debug for Int {
@@ -267,6 +271,7 @@ impl Int {
             origin_uri,
             auto_commit,
             messages: BTreeMap::new(),
+            err_rx: None,
         }
     }
 }
@@ -289,9 +294,26 @@ impl onramp::Impl for Kafka {
 // offsets are committed
 pub struct LoggingConsumerContext {
     onramp_id: TremorUrl,
+    err_tx: Sender<KafkaError>,
 }
 
-impl ClientContext for LoggingConsumerContext {}
+impl ClientContext for LoggingConsumerContext {
+    fn error(&self, error: KafkaError, reason: &str) {
+        error!(
+            "[Source::{}] Kafka Error {}: {}",
+            self.onramp_id, error, reason
+        );
+        // check for errors that manifest a non-working consumer, so we bail out
+        if let e @ (KafkaError::Subscription(_)
+            | KafkaError::ClientConfig(_, _, _, _)
+            | KafkaError::ClientCreation(_)
+            // TODO: what else?
+            | KafkaError::Global(RDKafkaErrorCode::UnknownTopicOrPartition | RDKafkaErrorCode::UnknownTopic)) = error {
+                let tx = self.err_tx.clone();
+                async_std::task::spawn(async move { tx.send(e).await });
+            }
+    }
+}
 
 impl ConsumerContext for LoggingConsumerContext {
     fn post_rebalance(&self, rebalance: &Rebalance) {
@@ -377,7 +399,20 @@ impl Source for Int {
     fn id(&self) -> &TremorUrl {
         &self.onramp_id
     }
+    #[allow(clippy::too_many_lines)]
     async fn pull_event(&mut self, id: u64) -> Result<SourceReply> {
+        if let Some(err_rx) = self.err_rx.as_ref() {
+            if !err_rx.is_empty() {
+                if let Ok(err) = err_rx.try_recv() {
+                    error!(
+                        "[Source::{}] Kafka consumer errored, Stopping: {:?}",
+                        self.onramp_id, err
+                    );
+                    self.stream = None; // clean it out so we don't accidentally re-use it at some later point
+                    return Ok(SourceReply::StateChange(SourceState::Disconnected));
+                }
+            }
+        }
         if let Self {
             stream: Some(stream),
             onramp_id,
@@ -393,74 +428,96 @@ impl Source for Int {
             };
             let r = match r {
                 Ok(r) => r,
-                Err(_) => return Ok(SourceReply::Empty(0)),
+                Err(_) => return Ok(SourceReply::Empty(0)), // timeout error
             };
-            if let Some(Ok(m)) = r {
-                debug!(
-                    "[Source::{}] EventId: {} Offset: {}",
-                    onramp_id,
-                    id,
-                    m.offset()
-                );
-                if let Some(Ok(data)) = m.payload_view::<[u8]>() {
-                    let mut origin_uri = origin_uri.clone();
-                    origin_uri.path = vec![
-                        m.topic().to_string(),
-                        m.partition().to_string(),
-                        m.offset().to_string(),
-                    ];
-                    let data = data.to_vec();
-                    let mut kafka_meta_data = Value::object_with_capacity(1);
-                    let mut meta_key = None;
-                    if let Some(key) = m.key() {
-                        meta_key = Some(key);
-                    }
-                    let mut meta_headers = None;
-                    if let Some(headers) = m.headers() {
-                        let mut key_val = Value::object_with_capacity(headers.count());
-                        for i in 0..headers.count() {
-                            if let Some(header) = headers.get(i) {
-                                let key = String::from(header.0);
-                                let val = Value::Bytes(Vec::from(header.1).into());
-                                key_val.insert(key, val)?;
-                            }
-                        }
-                        meta_headers = Some(key_val);
-                    }
-                    let mut meta_data = Value::object_with_capacity(6);
-                    if let Some(meta_key) = meta_key {
-                        meta_data.insert("key", Value::Bytes(Vec::from(meta_key).into()))?;
-                    }
-                    if let Some(meta_headers) = meta_headers {
-                        meta_data.insert("headers", meta_headers)?;
-                    }
-                    meta_data.insert("topic", m.topic().to_string())?;
-                    meta_data.insert("offset", m.offset())?;
-                    meta_data.insert("partition", m.partition())?;
-                    if let Some(t) = m.timestamp().to_millis() {
-                        meta_data.insert("timestamp", t)?;
-                    }
-                    kafka_meta_data.insert("kafka", meta_data)?;
-
-                    if !*auto_commit {
-                        messages.insert(id, MsgOffset::from(m));
-                    }
-                    Ok(SourceReply::Data {
-                        origin_uri,
-                        data,
-                        meta: Some(kafka_meta_data),
-                        codec_override: None,
-                        stream: 0,
-                    })
-                } else {
-                    error!(
-                        "[Source::{}] Failed to fetch kafka message.",
-                        self.onramp_id
+            match r {
+                Some(Ok(m)) => {
+                    debug!(
+                        "[Source::{}] EventId: {} Offset: {}",
+                        onramp_id,
+                        id,
+                        m.offset()
                     );
-                    Ok(SourceReply::Empty(0))
+                    if let Some(Ok(data)) = m.payload_view::<[u8]>() {
+                        let mut origin_uri = origin_uri.clone();
+                        origin_uri.path = vec![
+                            m.topic().to_string(),
+                            m.partition().to_string(),
+                            m.offset().to_string(),
+                        ];
+                        let data = data.to_vec();
+                        let mut kafka_meta_data = Value::object_with_capacity(1);
+                        let mut meta_key = None;
+                        if let Some(key) = m.key() {
+                            meta_key = Some(key);
+                        }
+                        let mut meta_headers = None;
+                        if let Some(headers) = m.headers() {
+                            let mut key_val = Value::object_with_capacity(headers.count());
+                            for i in 0..headers.count() {
+                                if let Some(header) = headers.get(i) {
+                                    let key = String::from(header.0);
+                                    let val = Value::Bytes(Vec::from(header.1).into());
+                                    key_val.insert(key, val)?;
+                                }
+                            }
+                            meta_headers = Some(key_val);
+                        }
+                        let mut meta_data = Value::object_with_capacity(6);
+                        if let Some(meta_key) = meta_key {
+                            meta_data.try_insert("key", Value::Bytes(Vec::from(meta_key).into()));
+                        }
+                        if let Some(meta_headers) = meta_headers {
+                            meta_data.try_insert("headers", meta_headers);
+                        }
+                        meta_data.try_insert("topic", m.topic().to_string());
+                        meta_data.try_insert("offset", m.offset());
+                        meta_data.try_insert("partition", m.partition());
+                        if let Some(t) = m.timestamp().to_millis() {
+                            meta_data.try_insert("timestamp", t);
+                        }
+                        kafka_meta_data.try_insert("kafka", meta_data);
+
+                        if !*auto_commit {
+                            messages.insert(id, MsgOffset::from(m));
+                        }
+                        Ok(SourceReply::Data {
+                            origin_uri,
+                            data,
+                            meta: Some(kafka_meta_data),
+                            codec_override: None,
+                            stream: 0,
+                        })
+                    } else {
+                        error!(
+                            "[Source::{}] Failed to convert kafka message payload to byte array.",
+                            self.onramp_id
+                        );
+                        Ok(SourceReply::Empty(0))
+                    }
                 }
-            } else {
-                Ok(SourceReply::Empty(0))
+                Some(Err(e)) => match e {
+                    // it is always MessageConsumption at this point
+                    KafkaError::MessageConsumption(
+                        e
+                        @
+                        (RDKafkaErrorCode::UnknownTopicOrPartition
+                        | RDKafkaErrorCode::TopicAuthorizationFailed
+                        | RDKafkaErrorCode::UnknownTopic),
+                    ) => {
+                        error!(
+                            "[Source::{}] Subscription failed: {}. Stopping.",
+                            self.onramp_id, e
+                        );
+                        Ok(SourceReply::StateChange(SourceState::Disconnected))
+                    }
+                    err => {
+                        // only debug, to not pollute the logs in normal execution
+                        debug!("[Source::{}] {}", self.onramp_id, err);
+                        Ok(SourceReply::Empty(0))
+                    }
+                },
+                None => Ok(SourceReply::Empty(0)),
             }
         } else {
             Ok(SourceReply::StateChange(SourceState::Disconnected))
@@ -469,8 +526,12 @@ impl Source for Int {
 
     #[allow(clippy::too_many_lines)]
     async fn init(&mut self) -> Result<SourceState> {
+        // channel for receiving global errors from the kafka client global error callback
+        let (err_tx, err_rx) = bounded(1);
+        self.err_rx = Some(err_rx);
         let context = LoggingConsumerContext {
             onramp_id: self.onramp_id.clone(),
+            err_tx,
         };
         let mut client_config = ClientConfig::new();
         let tid = task::current().id();
@@ -549,74 +610,10 @@ impl Source for Int {
             .collect();
         info!("[Source::{}] Subscribing to: {:?}", self.onramp_id, topics);
 
-        // This is terribly ugly, thank you rdkafka!
-        // We need to do this because:
-        // - subscribing to a topic that does not exist will brick the whole consumer
-        // - subscribing to a topic that does not exist will claim to succeed
-        // - getting the metadata of a topic that does not exist will claim to succeed
-        // - The only indication of it missing is in the metadata, in the topics list
-        //   in the errors ...
-        //
-        // This is terrible :/
-
-        let mut good_topics = Vec::new();
-        for topic in topics {
-            if self.config.check_topic_metadata {
-                // Unless explicitly configured otherwise - we preserve the legacy behaviour
-                // - We disabuse topic metadata to validate topic existance which isn't ideal
-                // - At the time of writing - Oct 2021 - this is currently manifesting as a production
-                //   issue that is affecting our systems and we are bypassing this check as a countermeasure
-                //
-                match consumer.fetch_metadata(Some(topic), Duration::from_secs(1)) {
-                    Ok(m) => {
-                        let errors: Vec<_> = m
-                            .topics()
-                            .iter()
-                            .map(rdkafka::metadata::MetadataTopic::error)
-                            .collect();
-                        match errors.as_slice() {
-                            [None] => good_topics.push(topic),
-                            [Some(e)] => error!(
-                                "[Source::{}] Kafka error for topic '{}': {:?}. Not subscribing!",
-                                self.onramp_id, topic, e
-                            ),
-                            _ => error!(
-                                "[Source::{}] Unknown kafka error for topic '{}'. Not subscribing!",
-                                self.onramp_id, topic
-                            ),
-                        }
-                    }
-                    Err(e) => error!(
-                        "[Source::{}] Kafka error for topic '{}': {}. Not subscribing!",
-                        self.onramp_id, topic, e
-                    ),
-                };
-            } else {
-                // By configuration, we presume topics are good
-                good_topics.push(topic);
-            }
-        }
-
-        // bail out if there is no topic left to subscribe to
-        if good_topics.len() < self.config.topics.len() {
-            return Err(format!(
-                "[Source::{}] Unable to subscribe to all configured topics: {}",
-                self.onramp_id,
-                self.config.topics.join(", ")
-            )
-            .into());
-        }
-
-        match consumer.subscribe(&good_topics) {
-            Ok(()) => info!(
-                "[Source::{}] Subscribed to topics: {:?}",
-                self.onramp_id, good_topics
-            ),
+        match consumer.subscribe(&topics) {
+            Ok(()) => info!("[Source::{}] Subscription initiated...", self.onramp_id),
             Err(e) => {
-                error!(
-                    "[Source::{}] Kafka error for topics '{:?}': {}",
-                    self.onramp_id, good_topics, e
-                );
+                error!("[Source::{}] Error subscribing: {}", self.onramp_id, e);
                 return Err(e.into());
             }
         };
