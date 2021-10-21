@@ -120,7 +120,10 @@ links:
 
     std::thread::sleep(std::time::Duration::from_millis(1000));
 
-    assert_eq!(0o777, std::fs::metadata(socket_path).unwrap().permissions().mode() & 0o777);
+    assert_eq!(
+        0o777,
+        std::fs::metadata(socket_path).unwrap().permissions().mode() & 0o777
+    );
 
     let mut stream = UnixStream::connect(socket_path).unwrap();
     writeln!(stream, "{}", "{\"a\" : 0}").unwrap();
