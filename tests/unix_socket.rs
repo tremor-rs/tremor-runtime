@@ -18,6 +18,7 @@ use tremor_runtime::url::TremorUrl;
 use hashbrown::HashMap;
 use pretty_assertions::assert_eq;
 use std::io::prelude::*;
+use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::UnixStream;
 use std::path::Path;
 
@@ -38,7 +39,8 @@ pub async fn unix_socket() -> Result<()> {
         "codec": "json",
         "preprocessors": [ "lines" ],
         "config": {
-            "path": socket_path
+            "path": socket_path,
+            "permissions": 0o777
         }
     });
     let onramp: tremor_runtime::config::OnRamp =
@@ -117,6 +119,8 @@ links:
     world.link_binding(&id, mapping[&id].clone()).await?;
 
     std::thread::sleep(std::time::Duration::from_millis(1000));
+
+    assert_eq!(0o777, std::fs::metadata(socket_path).unwrap().permissions().mode() & 0o777);
 
     let mut stream = UnixStream::connect(socket_path).unwrap();
     writeln!(stream, "{}", "{\"a\" : 0}").unwrap();
