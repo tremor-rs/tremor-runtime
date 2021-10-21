@@ -75,6 +75,7 @@ impl Source for Metronome {
                 origin_uri: self.origin_uri.clone(),
                 payload: data.into(),
                 stream: DEFAULT_STREAM_ID,
+                port: None,
             })
         } else {
             Ok(SourceReply::Empty(self.next - now))
@@ -87,6 +88,10 @@ impl Source for Metronome {
 }
 #[async_trait::async_trait()]
 impl Connector for Metronome {
+    fn is_structured(&self) -> bool {
+        true
+    }
+
     async fn connect(&mut self, _ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
         Ok(true)
     }
