@@ -1,3 +1,4 @@
+use std::os::unix::fs::PermissionsExt;
 // Copyright 2020-2021, The Tremor Team
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,6 +21,7 @@ use std::path::PathBuf;
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct Config {
     pub path: String,
+    pub permissions: Option<u32>
 }
 
 impl ConfigImpl for Config {}
@@ -101,7 +103,12 @@ impl Source for Int {
         if path.exists() {
             std::fs::remove_file(&path)?;
         }
-        let stream = UnixListener::bind(path).await?;
+        let stream = UnixListener::bind(&path).await?;
+        if let Some(mode) = self.config.permissions {
+            let mut permissions = std::fs::metadata(&path)?.permissions();
+            permissions.set_mode(mode);
+            std::fs::set_permissions(&path, permissions)?;
+        }
         let mut stream_id = 0;
         let (tx, rx) = bounded(crate::QSIZE);
 
@@ -203,6 +210,7 @@ mod tests {
             TremorUrl::from_onramp_id("test").unwrap(),
             &Config {
                 path: "/tmp/test.sock".to_string(),
+                permissions: None
             },
         );
 
