@@ -21,7 +21,7 @@ use std::path::PathBuf;
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct Config {
     pub path: String,
-    pub permissions: Option<u32>
+    pub permissions: Option<u32>,
 }
 
 impl ConfigImpl for Config {}
@@ -210,7 +210,7 @@ mod tests {
             TremorUrl::from_onramp_id("test").unwrap(),
             &Config {
                 path: "/tmp/test.sock".to_string(),
-                permissions: None
+                permissions: None,
             },
         );
 
