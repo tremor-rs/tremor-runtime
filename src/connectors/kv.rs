@@ -117,13 +117,18 @@ impl<'v> Command<'v> {
     }
 }
 
-fn ok(k: Vec<u8>, v: Value<'static>) -> Value<'static> {
-    literal!({
-        "ok": {
-            "key": Value::Bytes(k.into()),
-            "value": v
-        }
-    })
+fn ok(k: Vec<u8>, v: Value<'static>) -> (Value<'static>, Value<'static>) {
+    (
+        v,
+        literal!({
+            "kv": {
+                "ok": Value::Bytes(k.into())
+            }
+        }),
+    )
+}
+fn oks(k: Vec<u8>, v: Value<'static>) -> Vec<(Value<'static>, Value<'static>)> {
+    vec![ok(k, v)]
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -210,42 +215,39 @@ impl Sink for KvSink {
                     let name = cmd.op_name();
                     let key = cmd.key();
                     self.execute(cmd, v, ingest_ns)
-                        .map(|res| (name, res))
                         .map_err(|e| (Some(name), key, e))
                 }
                 Err(e) => Err((None, None, e)),
             };
             match executed {
-                Ok((op, data)) => {
-                    let mut id = self.idgen.next_id();
-                    id.track(&event.id);
+                Ok(res) => {
+                    for (data, mut meta) in res {
+                        let mut id = self.idgen.next_id();
+                        id.track(&event.id);
 
-                    let mut meta = Value::object_with_capacity(2);
-                    meta.try_insert("kv", literal!({ "op": op }));
-                    if let Some(correlation) = correlation {
-                        meta.try_insert("correlation", correlation.clone_static());
+                        if let Some(correlation) = correlation {
+                            meta.try_insert("correlation", correlation.clone_static());
+                        }
+
+                        let e = (data, meta).into();
+                        if let Err(e) = self.tx.send((OUT, e)).await {
+                            error!("[Sink::{}], Faild to send to source: {}", self.url, e);
+                        };
+                        r.push(SinkReply::Ack)
                     }
-                    let e = (data, meta).into();
-                    if let Err(e) = self.tx.send((OUT, e)).await {
-                        error!("[Sink::{}], Faild to send to source: {}", self.url, e);
-                    };
-                    r.push(SinkReply::Ack)
                 }
                 Err((op, key, e)) => {
                     // send ERR response and log err
                     let mut id = self.idgen.next_id();
                     id.track(&event.id);
-                    let data = literal!({
-                        "key": key.map_or_else(Value::null, |v| Value::Bytes(v.into())),
-                        "error": e.to_string(),
-                    });
                     let mut meta = Value::object_with_capacity(3);
-                    meta.try_insert("kv", literal!({ "op": op }));
                     meta.try_insert("error", e.to_string());
+                    meta.try_insert("kv", op.map(|op| literal!({ "op": op, "key": key })));
+
                     if let Some(correlation) = correlation {
                         meta.try_insert("correlation", correlation.clone_static());
                     }
-                    let e = (data, meta).into();
+                    let e = ((), meta).into();
                     if let Err(e) = self.tx.send((ERR, e)).await {
                         error!("[Sink::{}], Faild to send to source: {}", self.url, e);
                     };
@@ -297,31 +299,36 @@ impl KvSink {
     fn encode(&self, v: &Value) -> Result<Vec<u8>> {
         self.codec.encode(v)
     }
-    fn execute(&mut self, cmd: Command, value: &Value, ingest_ns: u64) -> Result<Value<'static>> {
+    fn execute(
+        &mut self,
+        cmd: Command,
+        value: &Value,
+        ingest_ns: u64,
+    ) -> Result<Vec<(Value<'static>, Value<'static>)>> {
         match cmd {
             Command::Get { key } => self
                 .decode(self.db.get(&key)?, ingest_ns)
-                .map(|v| ok(key, v)),
+                .map(|v| oks(key, v)),
             Command::Put { key } => self
                 .decode(self.db.insert(&key, self.encode(value)?)?, ingest_ns)
-                .map(|v| ok(key, v)),
+                .map(|v| oks(key, v)),
             Command::Delete { key } => self
                 .decode(self.db.remove(&key)?, ingest_ns)
-                .map(|v| ok(key, v)),
+                .map(|v| oks(key, v)),
             Command::Cas { key, old } => {
                 if let Err(CompareAndSwapError { current, proposed }) = self.db.compare_and_swap(
                     &key,
                     old.map(|v| self.encode(v)).transpose()?,
                     Some(self.encode(value)?),
                 )? {
-                    Ok(literal!({
-                        "key": Value::Bytes(key.into()),
-                        "error": {
-                            "current": self.decode(current, ingest_ns)?,
-                            "proposed": self.decode(proposed, ingest_ns)?                        }
-                    }))
+                    Err(format!(
+                        "CAS error: expected {} but found {}.",
+                        self.decode(proposed, ingest_ns)?,
+                        self.decode(current, ingest_ns)?,
+                    )
+                    .into())
                 } else {
-                    Ok(ok(key, Value::null()))
+                    Ok(oks(key, Value::null()))
                 }
             }
             Command::Scan { start, end } => {
@@ -329,17 +336,14 @@ impl KvSink {
                     None => self.db.range(start..),
                     Some(end) => self.db.range(start..end),
                 };
-                let mut res = Vec::with_capacity(32);
+                let mut res = Vec::with_capacity(i.size_hint().0);
                 for e in i {
                     let (key, e) = e?;
                     let key: &[u8] = &key;
-                    let value = literal!({
-                        "key": Value::Bytes(key.to_vec().into()),
-                        "value": self.decode(Some(e), ingest_ns)?
-                    });
-                    res.push(value);
+
+                    res.push(ok(key.to_vec(), self.decode(Some(e), ingest_ns)?));
                 }
-                Ok(literal!({ "ok": res }))
+                Ok(res)
             }
         }
     }
