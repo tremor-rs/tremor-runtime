@@ -134,7 +134,8 @@ impl Connector for TcpServer {
         ctx: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
-        let sink = ChannelSink::new(builder.qsize(), resolve_connection_meta, builder.reply_tx());
+        let sink =
+            ChannelSink::new_no_meta(builder.qsize(), resolve_connection_meta, builder.reply_tx());
         self.sink_runtime = Some(sink.runtime());
         let addr = builder.spawn(sink, ctx)?;
         Ok(Some(addr))

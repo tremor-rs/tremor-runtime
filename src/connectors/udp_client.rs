@@ -102,7 +102,7 @@ struct UdpWriter {
 
 #[async_trait::async_trait]
 impl StreamWriter for UdpWriter {
-    async fn write(&mut self, data: Vec<Vec<u8>>) -> Result<()> {
+    async fn write(&mut self, data: Vec<Vec<u8>>, _meta: Option<SinkMeta>) -> Result<()> {
         for data in data {
             self.socket.send(&data).await?;
         }
@@ -130,12 +130,14 @@ impl Connector for UdpClient {
     fn default_codec(&self) -> &str {
         "json"
     }
+
     async fn create_sink(
         &mut self,
         ctx: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
-        let sink = ChannelSink::new(builder.qsize(), resolve_connection_meta, builder.reply_tx());
+        let sink =
+            ChannelSink::new_no_meta(builder.qsize(), resolve_connection_meta, builder.reply_tx());
         // FIXME: rename sender
         self.sink_runtime = Some(sink.runtime());
         let addr = builder.spawn(sink, ctx)?;

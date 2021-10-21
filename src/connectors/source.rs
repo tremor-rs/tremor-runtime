@@ -43,7 +43,8 @@ use super::metrics::SourceReporter;
 use super::quiescence::QuiescenceBeacon;
 use super::{ConnectorContext, StreamDone};
 
-const DEFAULT_POLL_INTERVAL: u64 = 10;
+/// The default poll interval for try_recv on channels in connectors
+pub const DEFAULT_POLL_INTERVAL: u64 = 10;
 
 /// Messages a Source can receive
 pub enum SourceMsg {
@@ -92,18 +93,24 @@ pub enum SourceReply {
         meta: Option<Value<'static>>,
         /// stream id of the data
         stream: u64,
+        /// Port to send to, defaults to `out`
+        port: Option<Cow<'static, str>>,
     },
     // an already structured event payload
     Structured {
         origin_uri: EventOriginUri,
         payload: EventPayload,
         stream: u64,
+        /// Port to send to, defaults to `out`
+        port: Option<Cow<'static, str>>,
     },
     // a bunch of separated `Vec<u8>` with optional metadata
     // for when the source knows where boundaries are, maybe because it receives chunks already
     BatchData {
         origin_uri: EventOriginUri,
         batch_data: Vec<(Vec<u8>, Option<Value<'static>>)>,
+        /// Port to send to, defaults to `out`
+        port: Option<Cow<'static, str>>,
         stream: u64,
     },
     /// A stream is opened
@@ -811,6 +818,7 @@ where
                         data,
                         meta,
                         stream,
+                        port,
                     }) => {
                         let mut ingest_ns = nanotime();
                         let stream_state = self.streams.get_or_create_stream(stream)?; // we fail if we cannot create a stream (due to misconfigured codec, preprocessors, ...) (should not happen)
@@ -820,6 +828,7 @@ where
                             &mut ingest_ns,
                             pull_counter,
                             origin_uri,
+                            port.as_ref(),
                             data,
                             &meta.unwrap_or_else(Value::object),
                             self.is_transactional,
@@ -846,6 +855,7 @@ where
                         origin_uri,
                         batch_data,
                         stream,
+                        port,
                     }) => {
                         let mut ingest_ns = nanotime();
                         let stream_state = self.streams.get_or_create_stream(stream)?; // we only error here due to misconfigured codec etc
@@ -859,6 +869,7 @@ where
                                 &mut ingest_ns,
                                 pull_counter,
                                 origin_uri.clone(), // TODO: use split_last on batch_data to avoid last clone
+                                port.as_ref(),
                                 data,
                                 &meta.unwrap_or_else(Value::object),
                                 self.is_transactional,
@@ -887,6 +898,7 @@ where
                         origin_uri,
                         payload,
                         stream,
+                        port,
                     }) => {
                         let ingest_ns = nanotime();
                         let stream_state = self.streams.get_or_create_stream(stream)?;
@@ -898,7 +910,7 @@ where
                             origin_uri,
                             self.is_transactional,
                         );
-                        let error = self.route_events(vec![(OUT, event)]).await;
+                        let error = self.route_events(vec![(port.unwrap_or(OUT), event)]).await;
                         if error {
                             self.source.fail(stream, pull_counter).await;
                         }
@@ -953,6 +965,7 @@ fn build_events(
     ingest_ns: &mut u64,
     pull_id: u64,
     origin_uri: EventOriginUri,
+    port: Option<&Cow<'static, str>>,
     data: Vec<u8>,
     meta: &Value<'static>,
     is_transactional: bool,
@@ -977,7 +990,7 @@ fn build_events(
                     }
                 });
                 let (port, payload) = match line_value {
-                    Ok(decoded) => (OUT, decoded),
+                    Ok(decoded) => (port.unwrap_or(&OUT).clone(), decoded),
                     Err(None) => continue,
                     Err(Some(e)) => (ERR, make_error(url, &e, stream_state.stream_id, pull_id)),
                 };
