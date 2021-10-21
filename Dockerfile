@@ -1,4 +1,4 @@
-FROM rust:1.55.0 as builder
+FROM rust:1.55-bullseye as builder
 
 # Avoid warnings by switching to noninteractive
 ENV DEBIAN_FRONTEND=noninteractive
@@ -43,7 +43,7 @@ RUN cat /proc/cpuinfo
 RUN cargo build --release --all --verbose
 RUN strip target/release/tremor
 
-FROM debian:buster-slim
+FROM debian:bullseye-slim
 
 RUN useradd -ms /bin/bash tremor
 
