@@ -242,6 +242,10 @@ impl ConnectorBuilder for Builder {
 
 #[async_trait::async_trait()]
 impl Connector for MetricsConnector {
+    fn is_structured(&self) -> bool {
+        true
+    }
+
     async fn connect(&mut self, _ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
         Ok(!self.tx.is_closed())
     }
@@ -302,6 +306,7 @@ impl Source for MetricsSource {
                 payload: msg.payload,
                 origin_uri: msg.origin_uri.unwrap_or_else(|| self.origin_uri.clone()),
                 stream: DEFAULT_STREAM_ID,
+                port: None,
             }),
             Err(TryRecvError::Closed) => Err(TryRecvError::Closed.into()),
             Err(TryRecvError::Empty) => Ok(SourceReply::Empty(10)),

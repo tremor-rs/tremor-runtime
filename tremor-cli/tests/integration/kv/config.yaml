@@ -1,0 +1,70 @@
+connector:
+  - id: input
+    type: file
+    codec: json
+    preprocessors:
+      - lines
+    config:
+      path: in.json
+      mode: read
+  - id: output
+    type: file
+    codec: json-sorted
+    postprocessors:
+      - lines
+    config:
+      path: out.log
+      mode: write
+  - id: error_output
+    type: file
+    codec: json-sorted
+    config:
+      path: err.log
+      mode: write
+  - id: exit
+    type: exit
+  - id: kv
+    type: kv
+    config:
+      dir: data
+
+binding:
+  - id: kv
+    links:
+      # "/connector/input/{instance}/out":
+      #   - "/pipeline/in/{instance}/in"
+      # "/pipeline/system::passthrough/{instance}/out":
+      #   - "/offramp/system::stdout/{instance}/in"
+      # "/pipeline/in/{instance}/out":
+      #   - "/offramp/system::stdout/{instance}/in"
+
+      # "/pipeline/in/{instance}/err":
+      #   - "/offramp/system::stdout/{instance}/in"
+
+      "/connector/input/{instance}/out":
+        - "/pipeline/in/{instance}/in"
+      "/pipeline/in/{instance}/out":
+        - "/connector/kv/{instance}/in"
+        - "/connector/exit/{instance}/in"
+        - "/offramp/system::stdout/{instance}/in"
+      "/connector/kv/{instance}/out":
+        - "/pipeline/out/{instance}/in"
+      "/pipeline/out/{instance}/out":
+        - "/offramp/system::stdout/{instance}/in"
+        - "/connector/output/{instance}/in"
+
+      # error handling
+      "/pipeline/in/{instance}/err":
+        - "/connector/error_output/{instance}/in"
+      "/connector/kv/{instance}/err":
+        - "/pipeline/err/{instance}/in"
+      "/pipeline/err/{instance}/out":
+        - "/connector/error_output/{instance}/in"
+      "/pipeline/out/{instance}/exit":
+        - "/connector/exit/{instance}/in"
+      "/pipeline/out/{instance}/err":
+        - "/connector/error_output/{instance}/in"
+
+mapping:
+  /binding/kv/01:
+    instance: "01"

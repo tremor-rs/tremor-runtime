@@ -133,6 +133,7 @@ impl Source for StdStreamSource {
                 data,
                 meta: None,
                 stream: DEFAULT_STREAM_ID,
+                port: None,
             }),
             Err(TryRecvError::Closed) => Err(TryRecvError::Closed.into()),
             Err(TryRecvError::Empty) => Ok(SourceReply::Empty(10)),

@@ -1,0 +1,10 @@
+use std::string;
+select {
+  "event": event,
+  "meta": match $ of
+      case %{connector ~= %{kv ~= %{present ok}}} => patch $ of merge "connector" => {"kv": {"ok": string::from_utf8_lossy($connector.kv.ok)}} end
+      case _ => $
+    end
+} from in where event != "exit" into out;
+
+select event from in where event == "exit" into out/exit;
