@@ -25,7 +25,7 @@ use super::{
     StreamStmt, SubqueryDecl, SubqueryStmt, Upable, Value, WindowDecl, WindowKind,
 };
 use crate::ast::{
-    visitors::{ArgsRewriter, ExprReducer, GroupByExprExtractor, TargetEventRefVisitor},
+    visitors::{ArgsRewriter, ExprReducer, GroupByExprExtractor, TargetEventRef},
     Ident,
 };
 use crate::{ast::InvokeAggrFn, impl_expr};
@@ -867,8 +867,7 @@ impl<'script> Upable<'script> for SelectRaw<'script> {
         if !windows.is_empty() {
             // if we have windows we need to forbid free event references in the target if they are not
             // inside an aggregate function or can be rewritten to a group reference
-            TargetEventRefVisitor::new(group_by_expressions, &helper.meta)
-                .rewrite_target(&mut target)?;
+            TargetEventRef::new(group_by_expressions, &helper.meta).rewrite_target(&mut target)?;
         }
 
         let from = match self.from {

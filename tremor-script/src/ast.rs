@@ -28,6 +28,9 @@ mod upable;
 /// collection of AST visitors
 pub mod visitors;
 
+/// collection of AST visitors
+pub mod walkers;
+
 pub use crate::lexer::CompilationUnit;
 use crate::{
     ast::{
