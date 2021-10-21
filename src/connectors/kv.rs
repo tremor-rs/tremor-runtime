@@ -84,7 +84,7 @@ impl<'v> TryFrom<&'v Value<'v>> for Command<'v> {
             })
         } else if let Some(key) = v.get_bytes("delete").map(|v| v.to_vec()) {
             Ok(Command::Delete { key })
-        } else if let Some(start) = v.get_bytes("start").map(|v| v.to_vec()) {
+        } else if let Some(start) = v.get_bytes("scan").map(|v| v.to_vec()) {
             Ok(Command::Scan {
                 start,
                 end: v.get_bytes("end").map(|v| v.to_vec()),
@@ -385,7 +385,7 @@ impl Connector for Kv {
         builder.spawn(s, sink_context).map(Some)
     }
     async fn connect(&mut self, _ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
-        Ok(false)
+        Ok(true)
     }
 
     fn default_codec(&self) -> &str {

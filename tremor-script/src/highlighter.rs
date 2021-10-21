@@ -348,7 +348,7 @@ pub trait Highlighter {
                     token,
                 }) = &error
                 {
-                    if !printed_error && end.line() == line - 1 {
+                    if !printed_error && end.line() == line.saturating_sub(1) {
                         printed_error = true;
                         // TODO This isn't perfect, there are cases in trickle where more specific
                         // hygienic errors would be preferable ( eg: for-locals integration test )
