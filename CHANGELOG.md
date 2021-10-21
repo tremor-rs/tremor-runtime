@@ -37,6 +37,7 @@
 - Add the `unix-socket` source
 - Enabale automatic benchmakrs
 - Add the `csv` codec
+- Add the `permissions` option for setting the file mode for the `unix-socket` source
 
 ### Fixes
 
