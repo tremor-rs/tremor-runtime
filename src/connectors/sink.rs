@@ -45,6 +45,8 @@ use tremor_script::EventPayload;
 
 use tremor_value::Value;
 
+pub use self::channel_sink::SinkMeta;
+
 use super::metrics::MetricsSinkReporter;
 
 /// stuff a sink replies back upon an event or a signal
@@ -166,7 +168,7 @@ pub trait Sink: Send {
 
 #[async_trait::async_trait]
 pub trait StreamWriter: Send + Sync {
-    async fn write(&mut self, data: Vec<Vec<u8>>) -> Result<()>;
+    async fn write(&mut self, data: Vec<Vec<u8>>, meta: Option<SinkMeta>) -> Result<()>;
     async fn on_done(&self, _stream: u64) -> Result<StreamDone> {
         Ok(StreamDone::StreamClosed)
     }
