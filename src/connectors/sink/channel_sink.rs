@@ -27,6 +27,7 @@ use bimap::BiMap;
 use either::Either;
 use hashbrown::HashMap;
 use std::hash::Hash;
+use std::marker::PhantomData;
 use std::sync::atomic::Ordering;
 use tremor_common::time::nanotime;
 use tremor_pipeline::{CbAction, Event, SignalKind};
@@ -35,23 +36,41 @@ use value_trait::ValueAccess;
 
 use super::{ResultVec, Sink, SinkContext};
 
+/// Behavioral trait for defining if a Channel Sink needs metadata or not
+pub trait SinkMetaBehaviour: Send + Sync {
+    /// Does this channel sink need metadata
+    const NEEDS_META: bool;
+}
+
+pub struct NoMeta {}
+impl SinkMetaBehaviour for NoMeta {
+    const NEEDS_META: bool = false;
+}
+pub struct WithMeta {}
+impl SinkMetaBehaviour for WithMeta {
+    const NEEDS_META: bool = true;
+}
+
 /// messages a channel sink can receive
-pub enum ChannelSinkMsg<T>
+pub enum ChannelSinkMsg<M>
 where
-    T: Hash + Eq + Send + 'static,
+    M: Hash + Eq + Send + 'static,
 {
     /// add a new stream
     NewStream {
         /// the id of the stream
         stream_id: u64,
         /// stream metadata used for resolving a stream
-        meta: Option<T>,
+        meta: Option<M>,
         /// sender to the actual stream handling data
         sender: Sender<SinkData>,
     },
     /// remove the stream
     RemoveStream(u64),
 }
+
+/// Metadata for a sink message
+pub type SinkMeta = Value<'static>;
 
 /// some data for a `ChannelSink` stream
 #[derive(Clone, Debug)]
@@ -60,29 +79,56 @@ pub struct SinkData {
     pub data: Vec<Vec<u8>>,
     /// async reply utils (if required)
     pub contraflow: Option<(EventCfData, Sender<AsyncSinkReply>)>,
+    /// Metadata for this request
+    pub meta: Option<SinkMeta>,
     /// timestamp of processing start
     pub start: u64,
 }
 
 /// tracking 1 channel per stream
-pub struct ChannelSink<T, F>
+pub struct ChannelSink<M, F, B>
+where
+    M: Hash + Eq + Send + 'static,
+    F: Fn(&Value<'_>) -> Option<M>,
+    B: SinkMetaBehaviour,
+{
+    _b: PhantomData<B>,
+    streams_meta: BiMap<M, u64>,
+    streams: HashMap<u64, Sender<SinkData>>,
+    resolver: F,
+    tx: Sender<ChannelSinkMsg<M>>,
+    rx: Receiver<ChannelSinkMsg<M>>,
+    reply_tx: Sender<AsyncSinkReply>,
+}
+
+impl<T, F> ChannelSink<T, F, NoMeta>
 where
     T: Hash + Eq + Send + 'static,
     F: Fn(&Value<'_>) -> Option<T>,
 {
-    streams_meta: BiMap<T, u64>,
-    streams: HashMap<u64, Sender<SinkData>>,
-    resolver: F,
-    tx: Sender<ChannelSinkMsg<T>>,
-    rx: Receiver<ChannelSinkMsg<T>>,
-    reply_tx: Sender<AsyncSinkReply>,
+    /// constructor
+    pub fn new_no_meta(qsize: usize, resolver: F, reply_tx: Sender<AsyncSinkReply>) -> Self {
+        ChannelSink::new(qsize, resolver, reply_tx)
+    }
 }
 
+// impl<T, F> ChannelSink<T, F, WithMeta>
+// where
+//     T: Hash + Eq + Send + 'static,
+//     F: Fn(&Value<'_>) -> Option<T>,
+// {
+//     /// constructor
+//     pub fn new_with_meta(qsize: usize, resolver: F, reply_tx: Sender<AsyncSinkReply>) -> Self {
+//         ChannelSink::new(qsize, resolver, reply_tx)
+//     }
+// }
+
 // FIXME: implement PauseBehaviour correctly
-impl<T, F> ChannelSink<T, F>
+impl<T, F, B> ChannelSink<T, F, B>
 where
     T: Hash + Eq + Send + 'static,
     F: Fn(&Value<'_>) -> Option<T>,
+    B: SinkMetaBehaviour,
 {
     /// constructor
     pub fn new(qsize: usize, resolver: F, reply_tx: Sender<AsyncSinkReply>) -> Self {
@@ -96,6 +142,7 @@ where
             tx,
             rx,
             reply_tx,
+            _b: PhantomData::default(),
         }
     }
 
@@ -202,6 +249,7 @@ where
                 true,
                 Ok(SinkData {
                     data,
+                    meta,
                     contraflow,
                     start,
                 }),
@@ -209,7 +257,7 @@ where
                 ctx.quiescence_beacon.continue_writing().await,
                 stream_rx.recv().await,
             ) {
-                let failed = writer.write(data).await.is_err();
+                let failed = writer.write(data, meta).await.is_err();
 
                 // send asyn contraflow insights if requested (only if event.transactional)
                 if let Some((cf_data, sender)) = contraflow {
@@ -267,10 +315,11 @@ fn get_sink_meta<'lt, 'value>(
 }
 
 #[async_trait::async_trait()]
-impl<T, F> Sink for ChannelSink<T, F>
+impl<T, F, B> Sink for ChannelSink<T, F, B>
 where
     T: Hash + Eq + Send + Sync,
     F: (Fn(&Value<'_>) -> Option<T>) + Send + Sync,
+    B: SinkMetaBehaviour + Send + Sync,
 {
     /// FIXME: use reply_channel to only ack delivery once it is successfully sent via TCP
     async fn on_event(
@@ -323,7 +372,13 @@ where
             for (stream_id, sender) in streams {
                 trace!("[Sink::{}] Send to stream {}.", &ctx.url, stream_id);
                 let data = serializer.serialize_for_stream(value, ingest_ns, *stream_id)?;
+                let meta = if B::NEEDS_META {
+                    Some(meta.clone_static())
+                } else {
+                    None
+                };
                 let sink_data = SinkData {
+                    meta,
                     data,
                     contraflow: contraflow_utils.clone(),
                     start,

@@ -100,7 +100,7 @@ impl Connector for TcpClient {
         sink_context: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
-        let sink = SingleStreamSink::new(builder.qsize(), builder.reply_tx());
+        let sink = SingleStreamSink::new_no_meta(builder.qsize(), builder.reply_tx());
         self.sink_runtime = Some(sink.runtime());
         let addr = builder.spawn(sink, sink_context)?;
         Ok(Some(addr))

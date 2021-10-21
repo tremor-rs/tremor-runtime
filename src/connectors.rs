@@ -58,6 +58,10 @@ pub(crate) mod metronome;
 
 /// Exit Connector
 pub(crate) mod exit;
+
+/// KV
+pub(crate) mod kv;
+
 /// quiescence stuff
 pub(crate) mod quiescence;
 
@@ -422,6 +426,13 @@ impl Manager {
         );
 
         let default_codec = connector.default_codec();
+        if connector.is_structured() && (config.codec.is_some() || config.codec_map.is_some()) {
+            return Err(format!(
+                "[Connector::{}] is a structured connector and can't be configured with a codec",
+                url
+            )
+            .into());
+        }
         let source_builder = source::builder(
             uid,
             &config,
@@ -959,6 +970,12 @@ pub enum Connectivity {
 /// It controls the sink and source parts which are connected to the rest of the runtime via links to pipelines.
 #[async_trait::async_trait]
 pub trait Connector: Send {
+    /// This connector works with structured data and does not allow the use
+    /// of codecs.
+    fn is_structured(&self) -> bool {
+        false
+    }
+
     /// create a source part for this connector if applicable
     ///
     /// This function is called exactly once upon connector creation.
@@ -1066,6 +1083,9 @@ pub async fn register_builtin_connector_types(world: &World) -> Result<()> {
         .await?;
     world
         .register_builtin_connector_type("udp_server", Box::new(udp_server::Builder::default()))
+        .await?;
+    world
+        .register_builtin_connector_type("kv", Box::new(kv::Builder::default()))
         .await?;
     Ok(())
 }

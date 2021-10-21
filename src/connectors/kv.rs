@@ -1,0 +1,390 @@
+// Copyright 2021, The Tremor Team
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#![cfg(not(tarpaulin_include))]
+use crate::{
+    codec::{
+        json::{Json, Sorted},
+        Codec,
+    },
+    connectors::prelude::*,
+    url::ports::{ERR, OUT},
+};
+use async_std::channel::{bounded, Receiver, Sender, TryRecvError};
+use beef::Cow;
+use serde::Deserialize;
+use sled::{CompareAndSwapError, Db, IVec};
+use std::{boxed::Box, convert::TryFrom};
+use tremor_pipeline::EventIdGenerator;
+use tremor_script::EventPayload;
+use tremor_value::prelude::*;
+
+#[derive(Debug)]
+enum Command<'v> {
+    /// ```json
+    /// {"get": "the-key"}
+    /// ```
+    Get { key: Vec<u8> },
+    /// ```json
+    /// {"put": "the-key"}
+    /// ```
+    /// new data: event payload
+    Put { key: Vec<u8> },
+    /// ```json
+    /// {"delete": "the-key"}
+    /// ```
+    Delete { key: Vec<u8> },
+    /// ```json
+    /// {
+    ///    "start": "key1",
+    ///    "end": "key2",
+    /// }
+    /// ```
+    Scan {
+        start: Vec<u8>,
+        end: Option<Vec<u8>>,
+    },
+    /// ```json
+    /// {
+    ///    "cas": "key",
+    ///    "old": "<value|null|not-set>",
+    /// }
+    /// ```
+    /// new date: event payload
+    Cas {
+        key: Vec<u8>,
+        old: Option<&'v Value<'v>>,
+    },
+}
+
+impl<'v> TryFrom<&'v Value<'v>> for Command<'v> {
+    type Error = crate::Error;
+
+    fn try_from(v: &'v Value<'v>) -> Result<Self> {
+        let v = v.get("kv").ok_or("Missing `kv` field for commands")?;
+        if let Some(key) = v.get_bytes("get").map(|v| v.to_vec()) {
+            Ok(Command::Get { key })
+        } else if let Some(key) = v.get_bytes("put").map(|v| v.to_vec()) {
+            Ok(Command::Put { key })
+        } else if let Some(key) = v.get_bytes("cas").map(|v| v.to_vec()) {
+            Ok(Command::Cas {
+                key,
+                old: v.get("old"),
+            })
+        } else if let Some(key) = v.get_bytes("delete").map(|v| v.to_vec()) {
+            Ok(Command::Delete { key })
+        } else if let Some(start) = v.get_bytes("start").map(|v| v.to_vec()) {
+            Ok(Command::Scan {
+                start,
+                end: v.get_bytes("end").map(|v| v.to_vec()),
+            })
+        } else {
+            Err(format!("Invalid KV command: {}", v).into())
+        }
+    }
+}
+
+impl<'v> Command<'v> {
+    fn op_name(&self) -> &'static str {
+        match self {
+            Command::Get { .. } => "get",
+            Command::Put { .. } => "put",
+            Command::Delete { .. } => "delete",
+            Command::Scan { .. } => "scan",
+            Command::Cas { .. } => "cas",
+        }
+    }
+
+    fn key(&self) -> Option<Vec<u8>> {
+        match self {
+            Command::Get { key, .. }
+            | Command::Put { key, .. }
+            | Command::Delete { key }
+            | Command::Cas { key, .. } => Some(key.clone()),
+            Command::Scan { .. } => None,
+        }
+    }
+}
+
+fn ok(k: Vec<u8>, v: Value<'static>) -> Value<'static> {
+    literal!({
+        "ok": {
+            "key": Value::Bytes(k.into()),
+            "value": v
+        }
+    })
+}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct Config {
+    dir: String,
+}
+
+impl ConfigImpl for Config {}
+
+pub struct Kv {
+    sink_url: TremorUrl,
+    event_origin_uri: EventOriginUri,
+    config: Config,
+    rx: Receiver<KvMesssage>,
+    tx: Sender<KvMesssage>,
+}
+
+#[derive(Debug, Default)]
+pub(crate) struct Builder {}
+
+#[async_trait::async_trait]
+impl ConnectorBuilder for Builder {
+    async fn from_config(
+        &self,
+        id: &TremorUrl,
+        config: &Option<OpConfig>,
+    ) -> Result<Box<dyn Connector>> {
+        if let Some(config) = config {
+            let config: Config = Config::new(config)?;
+
+            let event_origin_uri = EventOriginUri {
+                scheme: "tremor-kv".to_string(),
+                host: "localhost".to_string(),
+                port: None,
+                path: config.dir.split('/').map(ToString::to_string).collect(),
+            };
+            // dummy
+            let (tx, rx) = bounded(64);
+            Ok(Box::new(Kv {
+                sink_url: id.clone(),
+                event_origin_uri,
+                config,
+                tx,
+                rx,
+            }))
+        } else {
+            Err("[KV Offramp] Offramp requires a config".into())
+        }
+    }
+}
+
+type KvMesssage = (Cow<'static, str>, EventPayload);
+
+struct KvSink {
+    tx: Sender<KvMesssage>,
+    db: Db,
+    idgen: EventIdGenerator,
+    codec: Json<Sorted>,
+    url: TremorUrl,
+}
+
+struct KvSource {
+    rx: Receiver<KvMesssage>,
+    origin_uri: EventOriginUri,
+}
+
+#[async_trait::async_trait()]
+impl Sink for KvSink {
+    async fn on_event(
+        &mut self,
+        _input: &str,
+        event: Event,
+        _ctx: &SinkContext,
+        _serializer: &mut EventSerializer,
+        _start: u64,
+    ) -> ResultVec {
+        let ingest_ns = tremor_common::time::nanotime();
+
+        let mut r = Vec::with_capacity(8);
+        for (v, m) in event.value_meta_iter() {
+            let correlation = m.get("correlation");
+            let executed = match Command::try_from(m) {
+                Ok(cmd) => {
+                    let name = cmd.op_name();
+                    let key = cmd.key();
+                    self.execute(cmd, v, ingest_ns)
+                        .map(|res| (name, res))
+                        .map_err(|e| (Some(name), key, e))
+                }
+                Err(e) => Err((None, None, e)),
+            };
+            match executed {
+                Ok((op, data)) => {
+                    let mut id = self.idgen.next_id();
+                    id.track(&event.id);
+
+                    let mut meta = Value::object_with_capacity(2);
+                    meta.try_insert("kv", literal!({ "op": op }));
+                    if let Some(correlation) = correlation {
+                        meta.try_insert("correlation", correlation.clone_static());
+                    }
+                    let e = (data, meta).into();
+                    if let Err(e) = self.tx.send((OUT, e)).await {
+                        error!("[Sink::{}], Faild to send to source: {}", self.url, e);
+                    };
+                    r.push(SinkReply::Ack)
+                }
+                Err((op, key, e)) => {
+                    // send ERR response and log err
+                    let mut id = self.idgen.next_id();
+                    id.track(&event.id);
+                    let data = literal!({
+                        "key": key.map_or_else(Value::null, |v| Value::Bytes(v.into())),
+                        "error": e.to_string(),
+                    });
+                    let mut meta = Value::object_with_capacity(3);
+                    meta.try_insert("kv", literal!({ "op": op }));
+                    meta.try_insert("error", e.to_string());
+                    if let Some(correlation) = correlation {
+                        meta.try_insert("correlation", correlation.clone_static());
+                    }
+                    let e = (data, meta).into();
+                    if let Err(e) = self.tx.send((ERR, e)).await {
+                        error!("[Sink::{}], Faild to send to source: {}", self.url, e);
+                    };
+
+                    r.push(SinkReply::Fail)
+                }
+            }
+        }
+        Ok(r)
+    }
+    fn auto_ack(&self) -> bool {
+        false
+    }
+}
+
+#[async_trait::async_trait()]
+impl Source for KvSource {
+    async fn pull_data(&mut self, _pull_id: u64, _ctx: &SourceContext) -> Result<SourceReply> {
+        match self.rx.try_recv() {
+            Ok((port, payload)) => Ok(SourceReply::Structured {
+                origin_uri: self.origin_uri.clone(),
+                stream: 0,
+                payload,
+                port: Some(port),
+            }),
+            Err(TryRecvError::Empty) => {
+                // TODO: configure pull interval in connector config?
+                Ok(SourceReply::Empty(DEFAULT_POLL_INTERVAL))
+            }
+            Err(e) => Err(e.into()),
+        }
+    }
+}
+
+impl KvSink {
+    fn decode(&mut self, mut v: Option<IVec>, ingest_ns: u64) -> Result<Value<'static>> {
+        if let Some(v) = v.as_mut() {
+            let data: &mut [u8] = v;
+            // TODO: We could optimize this
+            Ok(self
+                .codec
+                .decode(data, ingest_ns)?
+                .unwrap_or_default()
+                .into_static())
+        } else {
+            Ok(Value::null())
+        }
+    }
+    fn encode(&self, v: &Value) -> Result<Vec<u8>> {
+        self.codec.encode(v)
+    }
+    fn execute(&mut self, cmd: Command, value: &Value, ingest_ns: u64) -> Result<Value<'static>> {
+        match cmd {
+            Command::Get { key } => self
+                .decode(self.db.get(&key)?, ingest_ns)
+                .map(|v| ok(key, v)),
+            Command::Put { key } => self
+                .decode(self.db.insert(&key, self.encode(value)?)?, ingest_ns)
+                .map(|v| ok(key, v)),
+            Command::Delete { key } => self
+                .decode(self.db.remove(&key)?, ingest_ns)
+                .map(|v| ok(key, v)),
+            Command::Cas { key, old } => {
+                if let Err(CompareAndSwapError { current, proposed }) = self.db.compare_and_swap(
+                    &key,
+                    old.map(|v| self.encode(v)).transpose()?,
+                    Some(self.encode(value)?),
+                )? {
+                    Ok(literal!({
+                        "key": Value::Bytes(key.into()),
+                        "error": {
+                            "current": self.decode(current, ingest_ns)?,
+                            "proposed": self.decode(proposed, ingest_ns)?                        }
+                    }))
+                } else {
+                    Ok(ok(key, Value::null()))
+                }
+            }
+            Command::Scan { start, end } => {
+                let i = match end {
+                    None => self.db.range(start..),
+                    Some(end) => self.db.range(start..end),
+                };
+                let mut res = Vec::with_capacity(32);
+                for e in i {
+                    let (key, e) = e?;
+                    let key: &[u8] = &key;
+                    let value = literal!({
+                        "key": Value::Bytes(key.to_vec().into()),
+                        "value": self.decode(Some(e), ingest_ns)?
+                    });
+                    res.push(value);
+                }
+                Ok(literal!({ "ok": res }))
+            }
+        }
+    }
+}
+
+#[async_trait::async_trait()]
+impl Connector for Kv {
+    fn is_structured(&self) -> bool {
+        true
+    }
+
+    async fn create_source(
+        &mut self,
+        source_context: SourceContext,
+        builder: SourceManagerBuilder,
+    ) -> Result<Option<SourceAddr>> {
+        let s = KvSource {
+            rx: self.rx.clone(),
+            origin_uri: self.event_origin_uri.clone(),
+        };
+        builder.spawn(s, source_context).map(Some)
+    }
+
+    async fn create_sink(
+        &mut self,
+        sink_context: SinkContext,
+        builder: SinkManagerBuilder,
+    ) -> Result<Option<SinkAddr>> {
+        let db = sled::open(&self.config.dir)?;
+        let idgen = EventIdGenerator::default();
+        let codec = Json::default();
+        let s = KvSink {
+            db,
+            tx: self.tx.clone(),
+            idgen,
+            codec,
+            url: self.sink_url.clone(),
+        };
+        builder.spawn(s, sink_context).map(Some)
+    }
+    async fn connect(&mut self, _ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
+        Ok(false)
+    }
+
+    fn default_codec(&self) -> &str {
+        "json-sorted"
+    }
+}
