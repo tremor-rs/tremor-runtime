@@ -153,7 +153,7 @@ impl Connector for File {
         Ok(if self.config.mode == Mode::Read {
             None
         } else {
-            let sink = SingleStreamSink::new(builder.qsize(), builder.reply_tx());
+            let sink = SingleStreamSink::new_no_meta(builder.qsize(), builder.reply_tx());
             self.sink_runtime = Some(sink.runtime());
             let addr = builder.spawn(sink, sink_context)?;
             Some(addr)
@@ -308,6 +308,7 @@ where
                 stream,
                 meta: Some(self.meta.clone()),
                 data: self.buf[0..bytes_read].to_vec(),
+                port: None,
             }
         })
     }
@@ -350,7 +351,7 @@ impl FileWriter {
 
 #[async_trait::async_trait]
 impl StreamWriter for FileWriter {
-    async fn write(&mut self, data: Vec<Vec<u8>>) -> Result<()> {
+    async fn write(&mut self, data: Vec<Vec<u8>>, _meta: Option<SinkMeta>) -> Result<()> {
         for chunk in data {
             self.file.write_all(&chunk).await?;
         }
