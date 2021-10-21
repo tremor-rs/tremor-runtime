@@ -67,7 +67,9 @@
 - Add benchmark names to benchmark tags
 - Kafka onramp: Remove failing metadata fetch in order to verify topic existance. Instead detect subscription errors and stop the onramp in that case.
 
+### Breaking CHhanges
 
+- changed naming for `record` object to avoid keywords like `select` and `merge`. New names are `record.extract` and `record.combine`.
 ## 0.11.4
 
 ### New features
