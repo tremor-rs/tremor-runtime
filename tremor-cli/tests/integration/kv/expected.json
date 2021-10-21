@@ -1,0 +1,17 @@
+{"event":null,"meta":{"correlation":"1","kv":{"ok":"snot"}}}
+{"event":null,"meta":{"correlation":"\"badger\"","kv":{"ok":"snot"}}}
+{"event":"badger","meta":{"correlation":"3","kv":{"ok":"snot"}}}
+{"event":null,"meta":{"correlation":"\"ketchup\"","kv":{"ok":"heinz"}}}
+{"event":"ketchup","meta":{"correlation":"5","kv":{"ok":"heinz"}}}
+{"event":"ketchup","meta":{"correlation":"6","kv":{"ok":"heinz"}}}
+{"event":"badger","meta":{"correlation":"6","kv":{"ok":"snot"}}}
+{"event":"badger","meta":{"correlation":"7","kv":{"ok":"snot"}}}
+{"event":"ketchup","meta":{"correlation":"8","kv":{"ok":"heinz"}}}
+{"event":null,"meta":{"correlation":"\"gies\"","kv":{"ok":"heinz"}}}
+{"event":null,"meta":{"correlation":"12","kv":{"ok":"matthias"}}}
+{"event":null,"meta":{"correlation":"13","kv":{"ok":"matthias"}}}
+{"event":"gies","meta":{"correlation":"14","kv":{"ok":"heinz"}}}
+{"event":null,"meta":{"correlation":"15","kv":{"ok":"heinz"}}}
+{"event":"badger","meta":{"correlation":"16","kv":{"ok":"snot"}}}
+{"event":null,"meta":{"correlation":"17","kv":{"ok":"snot"}}}
+{"event":null,"meta":{"correlation":"\"exit\"","kv":{"ok":"exit"}}}
