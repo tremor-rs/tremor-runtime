@@ -583,16 +583,31 @@ mod tests {
     fn test_visitor_walking() -> Result<()> {
         test_walk(
             r#"
+            for event of
+              case (a, b) => let event = 5
+              case (a, b) when a == 7 => drop
+              case (a, b) => emit event
+            end;
+            match event.foo of
+              case %{ field == " #{42 + event.foo} ", present foo, absent bar } => event.bar
+              case %[42] => event.snake
+              case a = %(42, ...) => let event = a
+              default => let a = 7, let b = 9, event + a + b
+            end;
+            match event.foo of          
+              case a = %(42, ...) => let event = a
+              case _ => null
+            end;
             fn hide_the_42(x) with
-                x + 1
+              x + 1
             end;
             hide_the_42(
-                match event.foo of
-                  case %{ field == " #{42 + event.foo} ", present foo, absent bar } => event.bar
-                  case %[42] => event.snake
-                  case a = %(42, ...) => a
-                  default => event.snot
-                end
+              match event.foo of
+                case %{ field == " #{42 + event.foo} ", present foo, absent bar } => event.bar
+                case %[42] => event.snake
+                case a = %(42, ...) => a
+                default => event.snot
+              end
             );
         "#,
             3,
