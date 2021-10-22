@@ -27,10 +27,10 @@ use tremor_runtime::errors::*;
 use simd_json::json;
 use tremor_runtime::repository::BindingArtefact;
 
-#[async_std::test]
-pub async fn unix_socket() -> Result<()> {
-    let socket_path = "/tmp/test-unix-socket-onramp.sock";
+const SOCKET_PATH: &'static str = "/tmp/test-unix-socket-onramp.sock";
 
+#[async_std::test]
+pub async fn unix_socket_default_permissions() -> Result<()> {
     let (world, _handle) = system::World::start(50, None).await?;
     let onramp_url = TremorUrl::from_onramp_id("test").expect("");
     let onramp_config = json!({
@@ -39,7 +39,32 @@ pub async fn unix_socket() -> Result<()> {
         "codec": "json",
         "preprocessors": [ "lines" ],
         "config": {
-            "path": socket_path,
+            "path": SOCKET_PATH
+        }
+    });
+    let onramp: tremor_runtime::config::OnRamp =
+        serde_yaml::from_value(serde_yaml::to_value(onramp_config).expect("")).expect("");
+
+    world
+        .repo
+        .publish_onramp(&onramp_url, false, onramp)
+        .await
+        .unwrap();
+
+    Ok(())
+}
+
+#[async_std::test]
+pub async fn unix_socket() -> Result<()> {
+    let (world, _handle) = system::World::start(50, None).await?;
+    let onramp_url = TremorUrl::from_onramp_id("test").expect("");
+    let onramp_config = json!({
+        "id": "test",
+        "type": "unix-socket",
+        "codec": "json",
+        "preprocessors": [ "lines" ],
+        "config": {
+            "path": SOCKET_PATH,
             "permissions": "=777"
         }
     });
@@ -122,10 +147,10 @@ links:
 
     assert_eq!(
         0o777,
-        std::fs::metadata(socket_path).unwrap().permissions().mode() & 0o777
+        std::fs::metadata(SOCKET_PATH).unwrap().permissions().mode() & 0o777
     );
 
-    let mut stream = UnixStream::connect(socket_path).unwrap();
+    let mut stream = UnixStream::connect(SOCKET_PATH).unwrap();
     writeln!(stream, "{}", "{\"a\" : 0}").unwrap();
     writeln!(stream, "{}", "{\"b\" : 1}").unwrap();
     writeln!(stream, "{}", "{\"c\" : 2}").unwrap();
