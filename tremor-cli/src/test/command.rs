@@ -57,10 +57,10 @@ pub(crate) struct CommandTest {
 
 #[allow(clippy::too_many_lines)]
 pub(crate) fn suite_command(
-    base: &Path,
     root: &Path,
     config: &TestConfig,
 ) -> Result<(stats::Stats, Vec<report::TestReport>)> {
+    let base = config.base_directory.as_path();
     let api_suites = GlobWalkerBuilder::new(root, "**/command.yml")
         .case_insensitive(true)
         .file_type(FileType::FILE)
