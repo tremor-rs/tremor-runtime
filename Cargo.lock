@@ -1829,6 +1829,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "file-mode"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "773ea145485772b8d354624b32adbe20e776353d3e48c7b03ef44e3455e9815c"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "filetime"
 version = "0.2.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6702,6 +6711,7 @@ dependencies = [
  "elastic",
  "env_logger 0.9.0",
  "error-chain 0.12.4",
+ "file-mode",
  "futures 0.3.17",
  "glob",
  "googapis",

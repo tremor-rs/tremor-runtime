@@ -168,6 +168,7 @@ error_chain! {
         RustlsError(rustls::TLSError);
         Hex(hex::FromHexError);
         CsvError(csv::Error);
+        ModeParseError(file_mode::ModeParseError);
     }
 
     errors {

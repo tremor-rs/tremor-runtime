@@ -40,7 +40,7 @@ pub async fn unix_socket() -> Result<()> {
         "preprocessors": [ "lines" ],
         "config": {
             "path": socket_path,
-            "permissions": 0o777
+            "permissions": "=777"
         }
     });
     let onramp: tremor_runtime::config::OnRamp =

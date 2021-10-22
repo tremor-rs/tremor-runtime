@@ -1,4 +1,3 @@
-use std::os::unix::fs::PermissionsExt;
 // Copyright 2020-2021, The Tremor Team
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,7 +20,7 @@ use std::path::PathBuf;
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct Config {
     pub path: String,
-    pub permissions: Option<u32>,
+    pub permissions: Option<String>,
 }
 
 impl ConfigImpl for Config {}
@@ -104,10 +103,10 @@ impl Source for Int {
             std::fs::remove_file(&path)?;
         }
         let stream = UnixListener::bind(&path).await?;
-        if let Some(mode) = self.config.permissions {
-            let mut permissions = std::fs::metadata(&path)?.permissions();
-            permissions.set_mode(mode);
-            std::fs::set_permissions(&path, permissions)?;
+        if let Some(ref mode_description) = self.config.permissions {
+            let mut mode = file_mode::Mode::empty();
+            mode.set_str_umask(mode_description, 0)?;
+            mode.set_mode_path(&path)?;
         }
         let mut stream_id = 0;
         let (tx, rx) = bounded(crate::QSIZE);
