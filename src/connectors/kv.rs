@@ -12,6 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+/*
+
+meta = {}
+event = {"put": {"key": "snot", "value": "badger"}}
+
+meta = {"kv": {"put": "snot"}}
+event = "badger"
+
+*/
+
 #![cfg(not(tarpaulin_include))]
 use crate::{
     codec::{
@@ -72,7 +82,12 @@ impl<'v> TryFrom<&'v Value<'v>> for Command<'v> {
     type Error = crate::Error;
 
     fn try_from(v: &'v Value<'v>) -> Result<Self> {
-        let v = v.get("kv").ok_or("Missing `kv` field for commands")?;
+        let v = v
+            .get("connector")
+            .ok_or("Missing `connectorv` field for commands")?;
+        let v = v
+            .get("kv")
+            .ok_or("Missing `connector.kv` field for commands")?;
         if let Some(key) = v.get_bytes("get").map(|v| v.to_vec()) {
             Ok(Command::Get { key })
         } else if let Some(key) = v.get_bytes("put").map(|v| v.to_vec()) {
@@ -121,8 +136,10 @@ fn ok(k: Vec<u8>, v: Value<'static>) -> (Value<'static>, Value<'static>) {
     (
         v,
         literal!({
-            "kv": {
+            "connector": {
+                "kv": {
                 "ok": Value::Bytes(k.into())
+                }
             }
         }),
     )
@@ -240,10 +257,12 @@ impl Sink for KvSink {
                     // send ERR response and log err
                     let mut id = self.idgen.next_id();
                     id.track(&event.id);
-                    let mut meta = Value::object_with_capacity(3);
-                    meta.try_insert("error", e.to_string());
-                    meta.try_insert("kv", op.map(|op| literal!({ "op": op, "key": key })));
-
+                    let mut meta = literal!({
+                        "error": e.to_string(),
+                        "connector": {
+                            "kv": op.map(|op| literal!({ "op": op, "key": key }))
+                        }
+                    });
                     if let Some(correlation) = correlation {
                         meta.try_insert("correlation", correlation.clone_static());
                     }
