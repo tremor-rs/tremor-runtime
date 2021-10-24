@@ -61,7 +61,7 @@ impl<'script, 'registry, 'meta> ImutExprWalker<'script>
 impl<'script, 'registry, 'meta> ImutExprVisitor<'script>
     for ArgsRewriter<'script, 'registry, 'meta>
 {
-    fn path(&mut self, path: &mut Path<'script>) -> Result<VisitRes> {
+    fn visit_path(&mut self, path: &mut Path<'script>) -> Result<VisitRes> {
         if let Path::Reserved(ReservedPath::Args { segments, mid }) = path {
             let new = ExprPath {
                 expr: Box::new(self.args.clone()),
