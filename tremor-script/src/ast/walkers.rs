@@ -25,9 +25,9 @@ use crate::errors::Result;
 use super::visitors::{ExprVisitor, ImutExprVisitor, VisitRes};
 
 macro_rules! stop {
-    ($e:expr) => {
+    ($e:expr, $leave_fn:expr) => {
         if $e? == VisitRes::Stop {
-            return Ok(());
+            return $leave_fn;
         }
     };
 }
@@ -45,20 +45,36 @@ pub trait ExprWalker<'script>:
     /// # Errors
     /// if the walker function fails
     fn walk_expr(&mut self, e: &mut Expr<'script>) -> Result<()> {
-        stop!(ExprVisitor::expr(self, e));
+        stop!(
+            ExprVisitor::visit_expr(self, e),
+            ExprVisitor::leave_expr(self, e)
+        );
         match e {
-            Expr::Match(mmatch) => ExprWalker::walk_match(self, mmatch.as_mut()),
-            Expr::IfElse(ifelse) => self.walk_ifelse(ifelse.as_mut()),
+            Expr::Match(mmatch) => {
+                ExprWalker::walk_match(self, mmatch.as_mut())?;
+            }
+            Expr::IfElse(ifelse) => {
+                self.walk_ifelse(ifelse.as_mut())?;
+            }
             Expr::Assign { path, expr, .. } => {
                 self.walk_path(path)?;
-                ExprWalker::walk_expr(self, expr.as_mut())
+                ExprWalker::walk_expr(self, expr.as_mut())?;
             }
-            Expr::AssignMoveLocal { path, .. } => self.walk_path(path),
-            Expr::Comprehension(c) => ExprWalker::walk_comprehension(self, c.as_mut()),
-            Expr::Drop { .. } => Ok(()),
-            Expr::Emit(e) => self.walk_emit(e.as_mut()),
-            Expr::Imut(e) => ImutExprWalker::walk_expr(self, e),
+            Expr::AssignMoveLocal { path, .. } => {
+                self.walk_path(path)?;
+            }
+            Expr::Comprehension(c) => {
+                ExprWalker::walk_comprehension(self, c.as_mut())?;
+            }
+            Expr::Drop { .. } => {}
+            Expr::Emit(e) => {
+                self.walk_emit(e.as_mut())?;
+            }
+            Expr::Imut(e) => {
+                ImutExprWalker::walk_expr(self, e)?;
+            }
         }
+        ExprVisitor::leave_expr(self, e)
     }
 
     /// walk a comprehension
@@ -69,7 +85,10 @@ pub trait ExprWalker<'script>:
         &mut self,
         comp: &mut Comprehension<'script, Expr<'script>>,
     ) -> Result<()> {
-        stop!(ExprVisitor::comprehension(self, comp));
+        stop!(
+            ExprVisitor::visit_comprehension(self, comp),
+            ExprVisitor::leave_comprehension(self, comp)
+        );
         for comp_case in &mut comp.cases {
             if let Some(guard) = &mut comp_case.guard {
                 ImutExprWalker::walk_expr(self, guard)?;
@@ -79,7 +98,8 @@ pub trait ExprWalker<'script>:
             }
             ExprWalker::walk_expr(self, &mut comp_case.last_expr)?;
         }
-        ImutExprWalker::walk_expr(self, &mut comp.target)
+        ImutExprWalker::walk_expr(self, &mut comp.target)?;
+        ExprVisitor::leave_comprehension(self, comp)
     }
 
     /// walk a emit expr
@@ -87,11 +107,12 @@ pub trait ExprWalker<'script>:
     /// # Errors
     /// if the walker function fails
     fn walk_emit(&mut self, emit: &mut EmitExpr<'script>) -> Result<()> {
-        stop!(self.emit(emit));
+        stop!(self.visit_emit(emit), self.leave_emit(emit));
         if let Some(port) = emit.port.as_mut() {
             ImutExprWalker::walk_expr(self, port)?;
         }
-        ImutExprWalker::walk_expr(self, &mut emit.expr)
+        ImutExprWalker::walk_expr(self, &mut emit.expr)?;
+        self.leave_emit(emit)
     }
 
     /// walk a ifelse expr
@@ -99,10 +120,11 @@ pub trait ExprWalker<'script>:
     /// # Errors
     /// if the walker function fails
     fn walk_ifelse(&mut self, ifelse: &mut IfElse<'script, Expr<'script>>) -> Result<()> {
-        stop!(self.ifelse(ifelse));
+        stop!(self.visit_ifelse(ifelse), self.leave_ifelse(ifelse));
         ImutExprWalker::walk_expr(self, &mut ifelse.target)?;
         ExprWalker::walk_predicate_clause(self, &mut ifelse.if_clause)?;
-        self.walk_default_case(&mut ifelse.else_clause)
+        self.walk_default_case(&mut ifelse.else_clause)?;
+        self.leave_ifelse(ifelse)
     }
 
     /// walk a `DefaultCase`
@@ -110,17 +132,23 @@ pub trait ExprWalker<'script>:
     /// # Errors
     /// if the walker function fails
     fn walk_default_case(&mut self, mdefault: &mut DefaultCase<Expr<'script>>) -> Result<()> {
-        stop!(self.default_case(mdefault));
+        stop!(
+            self.visit_default_case(mdefault),
+            self.leave_default_case(mdefault)
+        );
         match mdefault {
-            DefaultCase::None | DefaultCase::Null => Ok(()),
+            DefaultCase::None | DefaultCase::Null => {}
             DefaultCase::Many { exprs, last_expr } => {
                 for e in exprs {
                     ExprWalker::walk_expr(self, e)?;
                 }
-                ExprWalker::walk_expr(self, last_expr)
+                ExprWalker::walk_expr(self, last_expr)?;
             }
-            DefaultCase::One(last_expr) => ExprWalker::walk_expr(self, last_expr),
+            DefaultCase::One(last_expr) => {
+                ExprWalker::walk_expr(self, last_expr)?;
+            }
         }
+        self.leave_default_case(mdefault)
     }
 
     /// walk a match expr
@@ -128,11 +156,15 @@ pub trait ExprWalker<'script>:
     /// # Errors
     /// if the walker function fails
     fn walk_match(&mut self, mmatch: &mut Match<'script, Expr<'script>>) -> Result<()> {
-        stop!(ExprVisitor::mmatch(self, mmatch));
+        stop!(
+            ExprVisitor::visit_mmatch(self, mmatch),
+            ExprVisitor::leave_mmatch(self, mmatch)
+        );
         for group in &mut mmatch.patterns {
             ExprWalker::walk_clause_group(self, group)?;
         }
-        ImutExprWalker::walk_expr(self, &mut mmatch.target)
+        ImutExprWalker::walk_expr(self, &mut mmatch.target)?;
+        ExprVisitor::leave_mmatch(self, mmatch)
     }
 
     /// Walks a clause group
@@ -140,7 +172,10 @@ pub trait ExprWalker<'script>:
     /// # Errors
     /// if the walker function fails
     fn walk_clause_group(&mut self, group: &mut ClauseGroup<'script, Expr<'script>>) -> Result<()> {
-        stop!(ExprVisitor::clause_group(self, group));
+        stop!(
+            ExprVisitor::visit_clause_group(self, group),
+            ExprVisitor::leave_clause_group(self, group)
+        );
         match group {
             ClauseGroup::Single {
                 precondition,
@@ -192,7 +227,7 @@ pub trait ExprWalker<'script>:
                 }
             }
         }
-        Ok(())
+        ExprVisitor::leave_clause_group(self, group)
     }
 
     /// Walks a predicate clause
@@ -203,7 +238,10 @@ pub trait ExprWalker<'script>:
         &mut self,
         predicate: &mut PredicateClause<'script, Expr<'script>>,
     ) -> Result<()> {
-        stop!(ExprVisitor::predicate_clause(self, predicate));
+        stop!(
+            ExprVisitor::visit_predicate_clause(self, predicate),
+            ExprVisitor::leave_predicate_clause(self, predicate)
+        );
         self.walk_match_pattern(&mut predicate.pattern)?;
         if let Some(guard) = &mut predicate.guard {
             ImutExprWalker::walk_expr(self, guard)?;
@@ -211,7 +249,8 @@ pub trait ExprWalker<'script>:
         for expr in &mut predicate.exprs {
             ExprWalker::walk_expr(self, expr)?;
         }
-        ExprWalker::walk_expr(self, &mut predicate.last_expr)
+        ExprWalker::walk_expr(self, &mut predicate.last_expr)?;
+        ExprVisitor::leave_predicate_clause(self, predicate)
     }
 }
 
@@ -226,12 +265,12 @@ pub trait ImutExprWalker<'script>: ImutExprVisitor<'script> {
     /// # Errors
     /// if the walker function fails
     fn walk_record(&mut self, record: &mut Record<'script>) -> Result<()> {
-        stop!(self.record(record));
+        stop!(self.visit_record(record), self.leave_record(record));
         for field in &mut record.fields {
             self.walk_string(&mut field.name)?;
             self.walk_expr(&mut field.value)?;
         }
-        Ok(())
+        self.leave_record(record)
     }
 
     /// walk a list
@@ -239,12 +278,11 @@ pub trait ImutExprWalker<'script>: ImutExprVisitor<'script> {
     /// # Errors
     /// if the walker function fails
     fn walk_list(&mut self, list: &mut List<'script>) -> Result<()> {
-        stop!(self.list(list));
+        stop!(self.visit_list(list), self.leave_list(list));
         for element in &mut list.exprs {
             self.walk_expr(&mut element.0)?;
         }
-
-        Ok(())
+        self.leave_list(list)
     }
 
     /// walk a binary
@@ -252,9 +290,10 @@ pub trait ImutExprWalker<'script>: ImutExprVisitor<'script> {
     /// # Errors
     /// if the walker function fails
     fn walk_binary(&mut self, binary: &mut BinExpr<'script>) -> Result<()> {
-        stop!(self.binary(binary));
+        stop!(self.visit_binary(binary), self.leave_binary(binary));
         self.walk_expr(&mut binary.lhs)?;
-        self.walk_expr(&mut binary.rhs)
+        self.walk_expr(&mut binary.rhs)?;
+        self.leave_binary(binary)
     }
 
     /// walk a unary
@@ -262,8 +301,9 @@ pub trait ImutExprWalker<'script>: ImutExprVisitor<'script> {
     /// # Errors
     /// if the walker function fails
     fn walk_unary(&mut self, unary: &mut UnaryExpr<'script>) -> Result<()> {
-        stop!(self.unary(unary));
-        self.walk_expr(&mut unary.expr)
+        stop!(self.visit_unary(unary), self.leave_unary(unary));
+        self.walk_expr(&mut unary.expr)?;
+        self.leave_unary(unary)
     }
 
     /// walk a `Patch`
@@ -271,11 +311,12 @@ pub trait ImutExprWalker<'script>: ImutExprVisitor<'script> {
     /// # Errors
     /// if the walker function fails
     fn walk_patch(&mut self, patch: &mut Patch<'script>) -> Result<()> {
-        stop!(self.patch(patch));
+        stop!(self.visit_patch(patch), self.leave_patch(patch));
         for op in &mut patch.operations {
             self.walk_patch_operation(op)?;
         }
-        self.walk_expr(&mut patch.target)
+        self.walk_expr(&mut patch.target)?;
+        self.leave_patch(patch)
     }
 
     /// walk a `Patch`
@@ -283,7 +324,10 @@ pub trait ImutExprWalker<'script>: ImutExprVisitor<'script> {
     /// # Errors
     /// if the walker function fails
     fn walk_patch_operation(&mut self, op: &mut PatchOperation<'script>) -> Result<()> {
-        stop!(self.patch_operation(op));
+        stop!(
+            self.visit_patch_operation(op),
+            self.leave_patch_operation(op)
+        );
         match op {
             PatchOperation::Insert { ident, expr }
             | PatchOperation::Default { ident, expr }
@@ -291,17 +335,20 @@ pub trait ImutExprWalker<'script>: ImutExprVisitor<'script> {
             | PatchOperation::Update { ident, expr }
             | PatchOperation::Upsert { ident, expr } => {
                 self.walk_string(ident)?;
-                self.walk_expr(expr)
+                self.walk_expr(expr)?;
             }
             PatchOperation::Copy { from, to } | PatchOperation::Move { from, to } => {
                 self.walk_string(from)?;
-                self.walk_string(to)
+                self.walk_string(to)?;
             }
-            PatchOperation::Erase { ident } => self.walk_string(ident),
+            PatchOperation::Erase { ident } => {
+                self.walk_string(ident)?;
+            }
             PatchOperation::DefaultRecord { expr } | PatchOperation::MergeRecord { expr } => {
-                self.walk_expr(expr)
+                self.walk_expr(expr)?;
             }
         }
+        self.leave_patch_operation(op)
     }
 
     /// Walks a `ClausePreCondition`
@@ -312,11 +359,14 @@ pub trait ImutExprWalker<'script>: ImutExprVisitor<'script> {
         &mut self,
         precondition: &mut super::ClausePreCondition<'script>,
     ) -> Result<()> {
-        stop!(self.precondition(precondition));
+        stop!(
+            self.visit_precondition(precondition),
+            self.leave_precondition(precondition)
+        );
         for segment in precondition.path.segments_mut() {
             self.walk_segment(segment)?;
         }
-        Ok(())
+        self.leave_precondition(precondition)
     }
 
     /// walk a `Match`
@@ -324,11 +374,12 @@ pub trait ImutExprWalker<'script>: ImutExprVisitor<'script> {
     /// # Errors
     /// if the walker function fails
     fn walk_match(&mut self, mmatch: &mut Match<'script, ImutExprInt<'script>>) -> Result<()> {
-        stop!(self.mmatch(mmatch));
+        stop!(self.visit_mmatch(mmatch), self.leave_mmatch(mmatch));
         for group in &mut mmatch.patterns {
             self.walk_clause_group(group)?;
         }
-        self.walk_expr(&mut mmatch.target)
+        self.walk_expr(&mut mmatch.target)?;
+        self.leave_mmatch(mmatch)
     }
 
     /// Walks a `PredicateClause`
@@ -339,7 +390,10 @@ pub trait ImutExprWalker<'script>: ImutExprVisitor<'script> {
         &mut self,
         predicate: &mut PredicateClause<'script, ImutExprInt<'script>>,
     ) -> Result<()> {
-        stop!(self.predicate_clause(predicate));
+        stop!(
+            self.visit_predicate_clause(predicate),
+            self.leave_predicate_clause(predicate)
+        );
         self.walk_match_pattern(&mut predicate.pattern)?;
         if let Some(guard) = &mut predicate.guard {
             self.walk_expr(guard)?;
@@ -347,7 +401,8 @@ pub trait ImutExprWalker<'script>: ImutExprVisitor<'script> {
         for expr in &mut predicate.exprs {
             self.walk_expr(expr)?;
         }
-        self.walk_expr(&mut predicate.last_expr)
+        self.walk_expr(&mut predicate.last_expr)?;
+        self.leave_predicate_clause(predicate)
     }
 
     /// Walks a `ClauseGroup`
@@ -358,7 +413,10 @@ pub trait ImutExprWalker<'script>: ImutExprVisitor<'script> {
         &mut self,
         group: &mut ClauseGroup<'script, ImutExprInt<'script>>,
     ) -> Result<()> {
-        stop!(self.clause_group(group));
+        stop!(
+            self.visit_clause_group(group),
+            self.leave_clause_group(group)
+        );
         match group {
             ClauseGroup::Single {
                 precondition,
@@ -410,7 +468,7 @@ pub trait ImutExprWalker<'script>: ImutExprVisitor<'script> {
                 }
             }
         }
-        Ok(())
+        self.leave_clause_group(group)
     }
 
     /// walk match `Pattern`
@@ -418,28 +476,47 @@ pub trait ImutExprWalker<'script>: ImutExprVisitor<'script> {
     /// # Errors
     /// if the walker function fails
     fn walk_match_pattern(&mut self, pattern: &mut Pattern<'script>) -> Result<()> {
-        stop!(self.match_pattern(pattern));
+        stop!(
+            self.visit_match_pattern(pattern),
+            self.leave_match_pattern(pattern)
+        );
         match pattern {
-            Pattern::Record(record_pat) => self.walk_record_pattern(record_pat),
-            Pattern::Array(array_pat) => self.walk_array_pattern(array_pat),
-            Pattern::Expr(expr) => self.walk_expr(expr),
-            Pattern::Assign(ap) => self.walk_match_pattern(ap.pattern.as_mut()),
-            Pattern::Tuple(tuple_pattern) => self.walk_tuple_pattern(tuple_pattern),
-            Pattern::Extract(e) => self.walk_test_expr(e.as_mut()),
-            Pattern::DoNotCare | Pattern::Default => Ok(()),
+            Pattern::Record(record_pat) => {
+                self.walk_record_pattern(record_pat)?;
+            }
+            Pattern::Array(array_pat) => {
+                self.walk_array_pattern(array_pat)?;
+            }
+            Pattern::Expr(expr) => {
+                self.walk_expr(expr)?;
+            }
+            Pattern::Assign(ap) => {
+                self.walk_match_pattern(ap.pattern.as_mut())?;
+            }
+            Pattern::Tuple(tuple_pattern) => {
+                self.walk_tuple_pattern(tuple_pattern)?;
+            }
+            Pattern::Extract(e) => {
+                self.walk_test_expr(e.as_mut())?;
+            }
+            Pattern::DoNotCare | Pattern::Default => {}
         }
+        self.leave_match_pattern(pattern)
     }
     /// walk `TuplePattern`
     ///
     /// # Errors
     /// if the walker function fails
     fn walk_tuple_pattern(&mut self, pattern: &mut TuplePattern<'script>) -> Result<()> {
-        stop!(self.tuple_pattern(pattern));
+        stop!(
+            self.visit_tuple_pattern(pattern),
+            self.leave_tuple_pattern(pattern)
+        );
         for elem in &mut pattern.exprs {
             self.walk_array_predicate_pattern(elem)?;
         }
 
-        Ok(())
+        self.leave_tuple_pattern(pattern)
     }
 
     /// walk `ArrayPredicatePattern`
@@ -450,22 +527,32 @@ pub trait ImutExprWalker<'script>: ImutExprVisitor<'script> {
         &mut self,
         pattern: &mut ArrayPredicatePattern<'script>,
     ) -> Result<()> {
-        stop!(self.array_predicate_pattern(pattern));
+        stop!(
+            self.visit_array_predicate_pattern(pattern),
+            self.leave_array_predicate_pattern(pattern)
+        );
         match pattern {
-            ArrayPredicatePattern::Expr(expr) => self.walk_expr(expr),
-            ArrayPredicatePattern::Record(rp) => self.walk_record_pattern(rp),
-            ArrayPredicatePattern::Tilde(e) => self.walk_test_expr(e.as_mut()),
-            ArrayPredicatePattern::Ignore => Ok(()),
+            ArrayPredicatePattern::Expr(expr) => {
+                self.walk_expr(expr)?;
+            }
+            ArrayPredicatePattern::Record(rp) => {
+                self.walk_record_pattern(rp)?;
+            }
+            ArrayPredicatePattern::Tilde(e) => {
+                self.walk_test_expr(e.as_mut())?;
+            }
+            ArrayPredicatePattern::Ignore => {}
         }
+        self.leave_array_predicate_pattern(pattern)
     }
 
-    /// walk `TuplePattern`
+    /// walk `TestExpr`
     ///
     /// # Errors
     /// if the walker function fails
     fn walk_test_expr(&mut self, e: &mut TestExpr) -> Result<()> {
-        self.test_expr(e)?;
-        Ok(())
+        self.visit_test_expr(e)?;
+        self.leave_test_expr(e)
     }
 
     /// walk a `RecordPattern`
@@ -473,11 +560,14 @@ pub trait ImutExprWalker<'script>: ImutExprVisitor<'script> {
     /// # Errors
     /// if the walker function fails
     fn walk_record_pattern(&mut self, record_pattern: &mut RecordPattern<'script>) -> Result<()> {
-        stop!(self.record_pattern(record_pattern));
+        stop!(
+            self.visit_record_pattern(record_pattern),
+            self.leave_record_pattern(record_pattern)
+        );
         for pattern in &mut record_pattern.fields {
             self.walk_predicate_pattern(pattern)?;
         }
-        Ok(())
+        self.leave_record_pattern(record_pattern)
     }
 
     /// walk a `PredicatePattern`
@@ -485,14 +575,26 @@ pub trait ImutExprWalker<'script>: ImutExprVisitor<'script> {
     /// # Errors
     /// if the walker function fails
     fn walk_predicate_pattern(&mut self, pattern: &mut PredicatePattern<'script>) -> Result<()> {
-        stop!(self.predicate_pattern(pattern));
+        stop!(
+            self.visit_predicate_pattern(pattern),
+            self.leave_predicate_pattern(pattern)
+        );
         match pattern {
-            PredicatePattern::RecordPatternEq { pattern, .. } => self.walk_record_pattern(pattern),
-            PredicatePattern::Bin { rhs, .. } => self.walk_expr(rhs),
-            PredicatePattern::ArrayPatternEq { pattern, .. } => self.walk_array_pattern(pattern),
-            PredicatePattern::TildeEq { test, .. } => self.walk_test_expr(test.as_mut()),
-            PredicatePattern::FieldPresent { .. } | PredicatePattern::FieldAbsent { .. } => Ok(()),
+            PredicatePattern::RecordPatternEq { pattern, .. } => {
+                self.walk_record_pattern(pattern)?;
+            }
+            PredicatePattern::Bin { rhs, .. } => {
+                self.walk_expr(rhs)?;
+            }
+            PredicatePattern::ArrayPatternEq { pattern, .. } => {
+                self.walk_array_pattern(pattern)?;
+            }
+            PredicatePattern::TildeEq { test, .. } => {
+                self.walk_test_expr(test.as_mut())?;
+            }
+            PredicatePattern::FieldPresent { .. } | PredicatePattern::FieldAbsent { .. } => {}
         }
+        self.leave_predicate_pattern(pattern)
     }
 
     /// walk an `ArrayPattern`
@@ -500,12 +602,15 @@ pub trait ImutExprWalker<'script>: ImutExprVisitor<'script> {
     /// # Errors
     /// if the walker function fails
     fn walk_array_pattern(&mut self, array_pattern: &mut ArrayPattern<'script>) -> Result<()> {
-        stop!(self.array_pattern(array_pattern));
+        stop!(
+            self.visit_array_pattern(array_pattern),
+            self.leave_array_pattern(array_pattern)
+        );
         for elem in &mut array_pattern.exprs {
             self.walk_array_predicate_pattern(elem)?;
         }
 
-        Ok(())
+        self.leave_array_pattern(array_pattern)
     }
 
     /// walk a `Comprehension`
@@ -516,7 +621,10 @@ pub trait ImutExprWalker<'script>: ImutExprVisitor<'script> {
         &mut self,
         comp: &mut Comprehension<'script, ImutExprInt<'script>>,
     ) -> Result<()> {
-        stop!(self.comprehension(comp));
+        stop!(
+            self.visit_comprehension(comp),
+            self.leave_comprehension(comp)
+        );
         for comp_case in &mut comp.cases {
             if let Some(guard) = &mut comp_case.guard {
                 self.walk_expr(guard)?;
@@ -526,7 +634,8 @@ pub trait ImutExprWalker<'script>: ImutExprVisitor<'script> {
             }
             self.walk_expr(&mut comp_case.last_expr)?;
         }
-        self.walk_expr(&mut comp.target)
+        self.walk_expr(&mut comp.target)?;
+        self.leave_comprehension(comp)
     }
 
     /// walk a `Merge`
@@ -534,9 +643,10 @@ pub trait ImutExprWalker<'script>: ImutExprVisitor<'script> {
     /// # Errors
     /// if the walker function fails
     fn walk_merge(&mut self, merge: &mut Merge<'script>) -> Result<()> {
-        stop!(self.merge(merge));
+        stop!(self.visit_merge(merge), self.leave_merge(merge));
         self.walk_expr(&mut merge.target)?;
-        self.walk_expr(&mut merge.expr)
+        self.walk_expr(&mut merge.expr)?;
+        self.leave_merge(merge)
     }
 
     /// walk a path `Segment`
@@ -544,15 +654,16 @@ pub trait ImutExprWalker<'script>: ImutExprVisitor<'script> {
     /// # Errors
     /// if the walker function fails
     fn walk_segment(&mut self, segment: &mut Segment<'script>) -> Result<()> {
-        stop!(self.segment(segment));
+        stop!(self.visit_segment(segment), self.leave_segment(segment));
         match segment {
-            Segment::Element { expr, .. } => self.walk_expr(expr),
+            Segment::Element { expr, .. } => self.walk_expr(expr)?,
             Segment::Range { start, end, .. } => {
                 self.walk_expr(start.as_mut())?;
-                self.walk_expr(end.as_mut())
+                self.walk_expr(end.as_mut())?;
             }
-            Segment::Id { .. } | Segment::Idx { .. } => Ok(()),
+            Segment::Id { .. } | Segment::Idx { .. } => (),
         }
+        self.leave_segment(segment)
     }
 
     /// walk a `Path`
@@ -560,16 +671,31 @@ pub trait ImutExprWalker<'script>: ImutExprVisitor<'script> {
     /// # Errors
     /// if the walker function fails
     fn walk_path(&mut self, path: &mut Path<'script>) -> Result<()> {
-        stop!(self.path(path));
+        stop!(self.visit_path(path), self.leave_path(path));
         match path {
-            Path::Expr(p) => self.walk_expr_path(p),
-            Path::Const(p) => self.walk_const_path(p),
-            Path::Local(p) => self.walk_local_path(p),
-            Path::Event(p) => self.walk_event_path(p),
-            Path::State(p) => self.walk_state_path(p),
-            Path::Meta(p) => self.walk_meta_path(p),
-            Path::Reserved(p) => self.walk_reserved_path(p),
+            Path::Expr(p) => {
+                self.walk_expr_path(p)?;
+            }
+            Path::Const(p) => {
+                self.walk_const_path(p)?;
+            }
+            Path::Local(p) => {
+                self.walk_local_path(p)?;
+            }
+            Path::Event(p) => {
+                self.walk_event_path(p)?;
+            }
+            Path::State(p) => {
+                self.walk_state_path(p)?;
+            }
+            Path::Meta(p) => {
+                self.walk_meta_path(p)?;
+            }
+            Path::Reserved(p) => {
+                self.walk_reserved_path(p)?;
+            }
         }
+        self.leave_path(path)
     }
 
     /// walk a `ExprPath`
@@ -577,9 +703,10 @@ pub trait ImutExprWalker<'script>: ImutExprVisitor<'script> {
     /// # Errors
     /// if the walker function fails
     fn walk_expr_path(&mut self, path: &mut ExprPath<'script>) -> Result<()> {
-        stop!(self.expr_path(path));
-        self.expr(&mut path.expr)?;
-        self.walk_segments(&mut path.segments)
+        stop!(self.visit_expr_path(path), self.leave_expr_path(path));
+        self.visit_expr(&mut path.expr)?;
+        self.walk_segments(&mut path.segments)?;
+        self.leave_expr_path(path)
     }
 
     /// walk a `ConstPath` (represented as `LocalPath` in the AST)
@@ -587,8 +714,9 @@ pub trait ImutExprWalker<'script>: ImutExprVisitor<'script> {
     /// # Errors
     /// if the walker function fails
     fn walk_const_path(&mut self, path: &mut LocalPath<'script>) -> Result<()> {
-        stop!(self.const_path(path));
-        self.walk_segments(&mut path.segments)
+        stop!(self.visit_const_path(path), self.leave_const_path(path));
+        self.walk_segments(&mut path.segments)?;
+        self.leave_const_path(path)
     }
 
     /// walk a local path
@@ -596,8 +724,9 @@ pub trait ImutExprWalker<'script>: ImutExprVisitor<'script> {
     /// # Errors
     /// if the walker function fails
     fn walk_local_path(&mut self, path: &mut LocalPath<'script>) -> Result<()> {
-        stop!(self.local_path(path));
-        self.walk_segments(&mut path.segments)
+        stop!(self.visit_local_path(path), self.leave_local_path(path));
+        self.walk_segments(&mut path.segments)?;
+        self.leave_local_path(path)
     }
 
     /// walk a event path
@@ -605,8 +734,9 @@ pub trait ImutExprWalker<'script>: ImutExprVisitor<'script> {
     /// # Errors
     /// if the walker function fails
     fn walk_event_path(&mut self, path: &mut EventPath<'script>) -> Result<()> {
-        stop!(self.event_path(path));
-        self.walk_segments(&mut path.segments)
+        stop!(self.visit_event_path(path), self.leave_event_path(path));
+        self.walk_segments(&mut path.segments)?;
+        self.leave_event_path(path)
     }
 
     /// walk a event path
@@ -614,8 +744,9 @@ pub trait ImutExprWalker<'script>: ImutExprVisitor<'script> {
     /// # Errors
     /// if the walker function fails
     fn walk_state_path(&mut self, path: &mut StatePath<'script>) -> Result<()> {
-        stop!(self.state_path(path));
-        self.walk_segments(&mut path.segments)
+        stop!(self.visit_state_path(path), self.leave_state_path(path));
+        self.walk_segments(&mut path.segments)?;
+        self.leave_state_path(path)
     }
 
     /// walk a metadata path
@@ -623,8 +754,9 @@ pub trait ImutExprWalker<'script>: ImutExprVisitor<'script> {
     /// # Errors
     /// if the walker function fails
     fn walk_meta_path(&mut self, path: &mut MetadataPath<'script>) -> Result<()> {
-        stop!(self.meta_path(path));
-        self.walk_segments(&mut path.segments)
+        stop!(self.visit_meta_path(path), self.leave_meta_path(path));
+        self.walk_segments(&mut path.segments)?;
+        self.leave_meta_path(path)
     }
 
     /// walk a reserved path
@@ -632,8 +764,12 @@ pub trait ImutExprWalker<'script>: ImutExprVisitor<'script> {
     /// # Errors
     /// if the walker function fails
     fn walk_reserved_path(&mut self, path: &mut ReservedPath<'script>) -> Result<()> {
-        stop!(self.reserved_path(path));
-        self.walk_segments(path.segments_mut())
+        stop!(
+            self.visit_reserved_path(path),
+            self.leave_reserved_path(path)
+        );
+        self.walk_segments(path.segments_mut())?;
+        self.leave_reserved_path(path)
     }
 
     /// walks a segments
@@ -641,11 +777,11 @@ pub trait ImutExprWalker<'script>: ImutExprVisitor<'script> {
     /// # Errors
     /// if the walker function fails
     fn walk_segments(&mut self, segments: &mut Vec<Segment<'script>>) -> Result<()> {
-        stop!(self.segments(segments));
-        for segment in segments {
+        stop!(self.visit_segments(segments), self.leave_segments(segments));
+        for segment in segments.iter_mut() {
             self.walk_segment(segment)?;
         }
-        Ok(())
+        self.leave_segments(segments)
     }
 
     /// walks a cow
@@ -653,8 +789,8 @@ pub trait ImutExprWalker<'script>: ImutExprVisitor<'script> {
     /// # Errors
     /// if the walker function fails
     fn walk_string_lit(&mut self, cow: &mut beef::Cow<'script, str>) -> Result<()> {
-        stop!(self.string_lit(cow));
-        Ok(())
+        self.visit_string_lit(cow)?;
+        self.leave_string_lit(cow)
     }
 
     /// walk a string
@@ -662,12 +798,12 @@ pub trait ImutExprWalker<'script>: ImutExprVisitor<'script> {
     /// # Errors
     /// if the walker function fails
     fn walk_string(&mut self, string: &mut StringLit<'script>) -> Result<()> {
-        stop!(self.string(string));
+        stop!(self.visit_string(string), self.leave_string(string));
         for element in &mut string.elements {
             self.walk_string_element(element)?;
         }
 
-        Ok(())
+        self.leave_string(string)
     }
 
     /// walk a string element
@@ -676,11 +812,19 @@ pub trait ImutExprWalker<'script>: ImutExprVisitor<'script> {
     /// if the walker function fails
 
     fn walk_string_element(&mut self, element: &mut StrLitElement<'script>) -> Result<()> {
-        stop!(self.string_element(element));
+        stop!(
+            self.visit_string_element(element),
+            self.leave_string_element(element)
+        );
         match element {
-            StrLitElement::Lit(l) => self.walk_string_lit(l),
-            StrLitElement::Expr(expr) => self.walk_expr(expr),
+            StrLitElement::Lit(l) => {
+                self.walk_string_lit(l)?;
+            }
+            StrLitElement::Expr(expr) => {
+                self.walk_expr(expr)?;
+            }
         }
+        self.leave_string_element(element)
     }
 
     /// walks a local
@@ -688,8 +832,8 @@ pub trait ImutExprWalker<'script>: ImutExprVisitor<'script> {
     /// # Errors
     /// if the walker function fails
     fn walk_local(&mut self, local_idx: &mut usize) -> Result<()> {
-        self.local(local_idx)?;
-        Ok(())
+        self.visit_local(local_idx)?;
+        self.leave_local(local_idx)
     }
 
     /// walk an invoke expr
@@ -697,11 +841,11 @@ pub trait ImutExprWalker<'script>: ImutExprVisitor<'script> {
     /// # Errors
     /// if the walker function fails
     fn walk_invoke(&mut self, invoke: &mut Invoke<'script>) -> Result<()> {
-        stop!(self.invoke(invoke));
+        stop!(self.visit_invoke(invoke), self.leave_invoke(invoke));
         for arg in &mut invoke.args {
             self.walk_expr(&mut arg.0)?;
         }
-        Ok(())
+        self.leave_invoke(invoke)
     }
 
     /// walk an invoke1 expr
@@ -709,11 +853,11 @@ pub trait ImutExprWalker<'script>: ImutExprVisitor<'script> {
     /// # Errors
     /// if the walker function fails
     fn walk_invoke1(&mut self, invoke: &mut Invoke<'script>) -> Result<()> {
-        stop!(self.invoke1(invoke));
+        stop!(self.visit_invoke1(invoke), self.leave_invoke1(invoke));
         for arg in &mut invoke.args {
             self.walk_expr(&mut arg.0)?;
         }
-        Ok(())
+        self.leave_invoke1(invoke)
     }
 
     /// walk an invoke expr
@@ -721,11 +865,11 @@ pub trait ImutExprWalker<'script>: ImutExprVisitor<'script> {
     /// # Errors
     /// if the walker function fails
     fn walk_invoke2(&mut self, invoke: &mut Invoke<'script>) -> Result<()> {
-        stop!(self.invoke2(invoke));
+        stop!(self.visit_invoke2(invoke), self.leave_invoke2(invoke));
         for arg in &mut invoke.args {
             self.walk_expr(&mut arg.0)?;
         }
-        Ok(())
+        self.leave_invoke2(invoke)
     }
 
     /// walk an invoke expr
@@ -733,11 +877,11 @@ pub trait ImutExprWalker<'script>: ImutExprVisitor<'script> {
     /// # Errors
     /// if the walker function fails
     fn walk_invoke3(&mut self, invoke: &mut Invoke<'script>) -> Result<()> {
-        stop!(self.invoke3(invoke));
+        stop!(self.visit_invoke3(invoke), self.leave_invoke3(invoke));
         for arg in &mut invoke.args {
             self.walk_expr(&mut arg.0)?;
         }
-        Ok(())
+        self.leave_invoke3(invoke)
     }
 
     /// walk an invoke expr
@@ -745,8 +889,8 @@ pub trait ImutExprWalker<'script>: ImutExprVisitor<'script> {
     /// # Errors
     /// if the walker function fails
     fn walk_invoke_aggr(&mut self, invoke_aggr: &mut InvokeAggr) -> Result<()> {
-        stop!(self.invoke_aggr(invoke_aggr));
-        Ok(())
+        self.visit_invoke_aggr(invoke_aggr)?;
+        self.leave_invoke_aggr(invoke_aggr)
     }
 
     /// walk a recur expr
@@ -754,22 +898,22 @@ pub trait ImutExprWalker<'script>: ImutExprVisitor<'script> {
     /// # Errors
     /// if the walker function fails
     fn walk_recur(&mut self, recur: &mut Recur<'script>) -> Result<()> {
-        stop!(self.recur(recur));
+        stop!(self.visit_recur(recur), self.leave_recur(recur));
         for expr in &mut recur.exprs {
             self.walk_expr(&mut expr.0)?;
         }
-        Ok(())
+        self.leave_recur(recur)
     }
 
     /// walk bytes
     /// # Errors
     /// if the walker function fails
     fn walk_bytes(&mut self, bytes: &mut Bytes<'script>) -> Result<()> {
-        stop!(self.bytes(bytes));
+        stop!(self.visit_bytes(bytes), self.leave_bytes(bytes));
         for part in &mut bytes.value {
             self.walk_expr(&mut part.data.0)?;
         }
-        Ok(())
+        self.leave_bytes(bytes)
     }
 
     /// walks a literal
@@ -777,8 +921,8 @@ pub trait ImutExprWalker<'script>: ImutExprVisitor<'script> {
     /// # Errors
     /// if the walker function fails
     fn walk_literal(&mut self, literal: &mut Literal<'script>) -> Result<()> {
-        stop!(self.literal(literal));
-        Ok(())
+        self.visit_literal(literal)?;
+        self.leave_literal(literal)
     }
 
     /// entry point into this visitor - call this to start visiting the given expression `e`
@@ -786,27 +930,66 @@ pub trait ImutExprWalker<'script>: ImutExprVisitor<'script> {
     /// # Errors
     /// if the walker function fails
     fn walk_expr(&mut self, e: &mut ImutExprInt<'script>) -> Result<()> {
-        stop!(self.expr(e));
+        stop!(self.visit_expr(e), self.leave_expr(e));
         match e {
-            ImutExprInt::Record(record) => self.walk_record(record),
-            ImutExprInt::List(list) => self.walk_list(list),
-            ImutExprInt::Binary(binary) => self.walk_binary(binary.as_mut()),
-            ImutExprInt::Unary(unary) => self.walk_unary(unary.as_mut()),
-            ImutExprInt::Patch(patch) => self.walk_patch(patch.as_mut()),
-            ImutExprInt::Match(mmatch) => self.walk_match(mmatch.as_mut()),
-            ImutExprInt::Comprehension(comp) => self.walk_comprehension(comp.as_mut()),
-            ImutExprInt::Merge(merge) => self.walk_merge(merge.as_mut()),
-            ImutExprInt::String(string) => self.walk_string(string),
-            ImutExprInt::Local { idx, .. } => self.walk_local(idx),
-            ImutExprInt::Path(path) | ImutExprInt::Present { path, .. } => self.walk_path(path),
-            ImutExprInt::Invoke(invoke) => self.walk_invoke(invoke),
-            ImutExprInt::Invoke1(invoke1) => self.walk_invoke1(invoke1),
-            ImutExprInt::Invoke2(invoke2) => self.walk_invoke2(invoke2),
-            ImutExprInt::Invoke3(invoke3) => self.walk_invoke3(invoke3),
-            ImutExprInt::InvokeAggr(invoke_aggr) => self.walk_invoke_aggr(invoke_aggr),
-            ImutExprInt::Recur(recur) => self.walk_recur(recur),
-            ImutExprInt::Bytes(bytes) => self.walk_bytes(bytes),
-            ImutExprInt::Literal(lit) => self.walk_literal(lit),
+            ImutExprInt::Record(record) => {
+                self.walk_record(record)?;
+            }
+            ImutExprInt::List(list) => {
+                self.walk_list(list)?;
+            }
+            ImutExprInt::Binary(binary) => {
+                self.walk_binary(binary.as_mut())?;
+            }
+            ImutExprInt::Unary(unary) => {
+                self.walk_unary(unary.as_mut())?;
+            }
+            ImutExprInt::Patch(patch) => {
+                self.walk_patch(patch.as_mut())?;
+            }
+            ImutExprInt::Match(mmatch) => {
+                self.walk_match(mmatch.as_mut())?;
+            }
+            ImutExprInt::Comprehension(comp) => {
+                self.walk_comprehension(comp.as_mut())?;
+            }
+            ImutExprInt::Merge(merge) => {
+                self.walk_merge(merge.as_mut())?;
+            }
+            ImutExprInt::String(string) => {
+                self.walk_string(string)?;
+            }
+            ImutExprInt::Local { idx, .. } => {
+                self.walk_local(idx)?;
+            }
+            ImutExprInt::Path(path) | ImutExprInt::Present { path, .. } => {
+                self.walk_path(path)?;
+            }
+            ImutExprInt::Invoke(invoke) => {
+                self.walk_invoke(invoke)?;
+            }
+            ImutExprInt::Invoke1(invoke1) => {
+                self.walk_invoke1(invoke1)?;
+            }
+            ImutExprInt::Invoke2(invoke2) => {
+                self.walk_invoke2(invoke2)?;
+            }
+            ImutExprInt::Invoke3(invoke3) => {
+                self.walk_invoke3(invoke3)?;
+            }
+            ImutExprInt::InvokeAggr(invoke_aggr) => {
+                self.walk_invoke_aggr(invoke_aggr)?;
+            }
+            ImutExprInt::Recur(recur) => {
+                self.walk_recur(recur)?;
+            }
+            ImutExprInt::Bytes(bytes) => {
+                self.walk_bytes(bytes)?;
+            }
+            ImutExprInt::Literal(lit) => {
+                self.walk_literal(lit)?;
+            }
         }
+        self.leave_expr(e)
     }
 }

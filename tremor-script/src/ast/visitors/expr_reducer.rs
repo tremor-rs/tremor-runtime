@@ -41,7 +41,7 @@ impl<'script, 'registry, 'meta> ImutExprWalker<'script> for ExprReducer<'script,
 impl<'script, 'registry, 'meta> ImutExprVisitor<'script>
     for ExprReducer<'script, 'registry, 'meta>
 {
-    fn expr(&mut self, e: &mut ImutExprInt<'script>) -> Result<VisitRes> {
+    fn visit_expr(&mut self, e: &mut ImutExprInt<'script>) -> Result<VisitRes> {
         self.visits += 1;
         *e = e.clone().try_reduce(self.helper)?;
         Ok(VisitRes::Walk)

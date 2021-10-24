@@ -45,7 +45,7 @@ impl<'script, 'meta> TargetEventRef<'script, 'meta> {
 }
 impl<'script, 'meta> ImutExprWalker<'script> for TargetEventRef<'script, 'meta> {}
 impl<'script, 'meta> ImutExprVisitor<'script> for TargetEventRef<'script, 'meta> {
-    fn expr(&mut self, e: &mut ImutExprInt<'script>) -> Result<VisitRes> {
+    fn visit_expr(&mut self, e: &mut ImutExprInt<'script>) -> Result<VisitRes> {
         for (idx, group_expr) in self.group_expressions.iter().enumerate() {
             // check if we have an equivalent expression :)
             if e.ast_eq(group_expr) {
@@ -61,7 +61,7 @@ impl<'script, 'meta> ImutExprVisitor<'script> for TargetEventRef<'script, 'meta>
         }
         Ok(VisitRes::Walk)
     }
-    fn path(&mut self, path: &mut Path<'script>) -> Result<VisitRes> {
+    fn visit_path(&mut self, path: &mut Path<'script>) -> Result<VisitRes> {
         match path {
             // these are the only exprs that can get a hold of the event payload or its metadata
             Path::Event(_) | Path::Meta(_) => {
