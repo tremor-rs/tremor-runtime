@@ -46,73 +46,149 @@ pub trait ExprVisitor<'script> {
     ///
     /// # Errors
     /// if the walker function fails
-    fn expr(&mut self, _e: &mut Expr<'script>) -> Result<VisitRes> {
+    fn visit_expr(&mut self, _e: &mut Expr<'script>) -> Result<VisitRes> {
         Ok(Walk)
+    }
+
+    /// leave a generic `Expr` (this is called after the concrete `leave_*` method)
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn leave_expr(&mut self, _e: &mut Expr<'script>) -> Result<()> {
+        Ok(())
     }
 
     /// visit a comprehension
     ///
     /// # Errors
     /// if the walker function fails
-    fn comprehension(
+    fn visit_comprehension(
         &mut self,
         _comp: &mut Comprehension<'script, Expr<'script>>,
     ) -> Result<VisitRes> {
         Ok(Walk)
     }
 
+    /// leave a comprehension
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn leave_comprehension(
+        &mut self,
+        _comp: &mut Comprehension<'script, Expr<'script>>,
+    ) -> Result<()> {
+        Ok(())
+    }
+
     /// visit a `EmitExpr`
     ///
     /// # Errors
     /// if the walker function fails
-    fn emit(&mut self, _emit: &mut EmitExpr<'script>) -> Result<VisitRes> {
+    fn visit_emit(&mut self, _emit: &mut EmitExpr<'script>) -> Result<VisitRes> {
         Ok(Walk)
+    }
+
+    /// leave a `EmitExpr`
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn leave_emit(&mut self, _emit: &mut EmitExpr<'script>) -> Result<()> {
+        Ok(())
     }
 
     /// visit a `IfElse`
     ///
     /// # Errors
     /// if the walker function fails
-    fn ifelse(&mut self, _mifelse: &mut IfElse<'script, Expr<'script>>) -> Result<VisitRes> {
+    fn visit_ifelse(&mut self, _mifelse: &mut IfElse<'script, Expr<'script>>) -> Result<VisitRes> {
         Ok(Walk)
+    }
+
+    /// leave a `IfElse`
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn leave_ifelse(&mut self, _mifelse: &mut IfElse<'script, Expr<'script>>) -> Result<()> {
+        Ok(())
     }
 
     /// visit a `DefaultCase`
     ///
     /// # Errors
     /// if the walker function fails
-    fn default_case(&mut self, _mdefault: &mut DefaultCase<Expr<'script>>) -> Result<VisitRes> {
+    fn visit_default_case(
+        &mut self,
+        _mdefault: &mut DefaultCase<Expr<'script>>,
+    ) -> Result<VisitRes> {
         Ok(Walk)
+    }
+
+    /// leave a `DefaultCase`
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn leave_default_case(&mut self, _mdefault: &mut DefaultCase<Expr<'script>>) -> Result<()> {
+        Ok(())
     }
 
     /// visit a `Match`
     ///
     /// # Errors
     /// if the walker function fails
-    fn mmatch(&mut self, _mmatch: &mut Match<'script, Expr<'script>>) -> Result<VisitRes> {
+    fn visit_mmatch(&mut self, _mmatch: &mut Match<'script, Expr<'script>>) -> Result<VisitRes> {
         Ok(Walk)
+    }
+
+    /// leave a `Match`
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn leave_mmatch(&mut self, _mmatch: &mut Match<'script, Expr<'script>>) -> Result<()> {
+        Ok(())
     }
 
     /// visit a `ClauseGroup`
     ///
     /// # Errors
     /// if the walker function fails
-    fn clause_group(
+    fn visit_clause_group(
         &mut self,
         _group: &mut ClauseGroup<'script, Expr<'script>>,
     ) -> Result<VisitRes> {
         Ok(Walk)
     }
 
+    /// leave a `ClauseGroup`
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn leave_clause_group(
+        &mut self,
+        _group: &mut ClauseGroup<'script, Expr<'script>>,
+    ) -> Result<()> {
+        Ok(())
+    }
+
     /// visit a `PredicateClause`
     ///
     /// # Errors
     /// if the walker function fails
-    fn predicate_clause(
+    fn visit_predicate_clause(
         &mut self,
-        _group: &mut PredicateClause<'script, Expr<'script>>,
+        _predicate: &mut PredicateClause<'script, Expr<'script>>,
     ) -> Result<VisitRes> {
         Ok(Walk)
+    }
+
+    /// leave a `PredicateClause`
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn leave_predicate_clause(
+        &mut self,
+        _predicate: &mut PredicateClause<'script, Expr<'script>>,
+    ) -> Result<()> {
+        Ok(())
     }
 }
 
@@ -125,365 +201,736 @@ pub trait ImutExprVisitor<'script> {
     ///
     /// # Errors
     /// if the walker function fails
-    fn record(&mut self, _record: &mut Record<'script>) -> Result<VisitRes> {
+    fn visit_record(&mut self, _record: &mut Record<'script>) -> Result<VisitRes> {
         Ok(Walk)
+    }
+
+    /// leave a `Record`
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn leave_record(&mut self, _record: &mut Record<'script>) -> Result<()> {
+        Ok(())
     }
 
     /// visit a list
     ///
     /// # Errors
     /// if the walker function fails
-    fn list(&mut self, _list: &mut List<'script>) -> Result<VisitRes> {
+    fn visit_list(&mut self, _list: &mut List<'script>) -> Result<VisitRes> {
         Ok(Walk)
+    }
+
+    /// leave a list
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn leave_list(&mut self, _list: &mut List<'script>) -> Result<()> {
+        Ok(())
     }
 
     /// visit a binary
     ///
     /// # Errors
     /// if the walker function fails
-    fn binary(&mut self, _binary: &mut BinExpr<'script>) -> Result<VisitRes> {
+    fn visit_binary(&mut self, _binary: &mut BinExpr<'script>) -> Result<VisitRes> {
         Ok(Walk)
+    }
+
+    /// leave a binary
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn leave_binary(&mut self, _binary: &mut BinExpr<'script>) -> Result<()> {
+        Ok(())
     }
 
     /// visit a `UnaryExpr`
     ///
     /// # Errors
     /// if the walker function fails
-    fn unary(&mut self, _unary: &mut UnaryExpr<'script>) -> Result<VisitRes> {
+    fn visit_unary(&mut self, _unary: &mut UnaryExpr<'script>) -> Result<VisitRes> {
         Ok(Walk)
+    }
+
+    /// leave a `UnaryExpr`
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn leave_unary(&mut self, _unary: &mut UnaryExpr<'script>) -> Result<()> {
+        Ok(())
     }
 
     /// visit a `Patch`
     ///
     /// # Errors
     /// if the walker function fails
-    fn patch(&mut self, _patch: &mut Patch<'script>) -> Result<VisitRes> {
+    fn visit_patch(&mut self, _patch: &mut Patch<'script>) -> Result<VisitRes> {
         Ok(Walk)
+    }
+
+    /// leave a `Patch`
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn leave_patch(&mut self, _patch: &mut Patch<'script>) -> Result<()> {
+        Ok(())
     }
 
     /// visit a `PatchOperation`
     ///
     /// # Errors
     /// if the walker function fails
-    fn patch_operation(&mut self, _patch: &mut PatchOperation<'script>) -> Result<VisitRes> {
+    fn visit_patch_operation(&mut self, _patch: &mut PatchOperation<'script>) -> Result<VisitRes> {
         Ok(Walk)
+    }
+
+    /// leave a `PatchOperation`
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn leave_patch_operation(&mut self, _patch: &mut PatchOperation<'script>) -> Result<()> {
+        Ok(())
     }
 
     /// visit a match expr
     ///
     /// # Errors
     /// if the walker function fails
-    fn precondition(
+    fn visit_precondition(
         &mut self,
         _precondition: &mut super::ClausePreCondition<'script>,
     ) -> Result<VisitRes> {
         Ok(Walk)
     }
 
+    /// leave a match expr
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn leave_precondition(
+        &mut self,
+        _precondition: &mut super::ClausePreCondition<'script>,
+    ) -> Result<()> {
+        Ok(())
+    }
+
     /// visit a `Match`
     ///
     /// # Errors
     /// if the walker function fails
-    fn mmatch(&mut self, _mmatch: &mut Match<'script, ImutExprInt>) -> Result<VisitRes> {
+    fn visit_mmatch(&mut self, _mmatch: &mut Match<'script, ImutExprInt>) -> Result<VisitRes> {
         Ok(Walk)
+    }
+
+    /// leave a `Match`
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn leave_mmatch(&mut self, _mmatch: &mut Match<'script, ImutExprInt>) -> Result<()> {
+        Ok(())
     }
 
     /// visit a `PredicateClause`
     ///
     /// # Errors
     /// if the walker function fails
-    fn predicate_clause(
+    fn visit_predicate_clause(
         &mut self,
         _predicate: &mut PredicateClause<'script, ImutExprInt<'script>>,
     ) -> Result<VisitRes> {
         Ok(Walk)
     }
 
+    /// leave a `PredicateClause`
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn leave_predicate_clause(
+        &mut self,
+        _predicate: &mut PredicateClause<'script, ImutExprInt<'script>>,
+    ) -> Result<()> {
+        Ok(())
+    }
+
     /// visit a `ClauseGroup`
     ///
     /// # Errors
     /// if the walker function fails
-    fn clause_group(
+    fn visit_clause_group(
         &mut self,
         _group: &mut ClauseGroup<'script, ImutExprInt<'script>>,
     ) -> Result<VisitRes> {
         Ok(Walk)
     }
 
+    /// leave a `ClauseGroup`
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn leave_clause_group(
+        &mut self,
+        _group: &mut ClauseGroup<'script, ImutExprInt<'script>>,
+    ) -> Result<()> {
+        Ok(())
+    }
+
     /// visit a `Pattern`
     ///
     /// # Errors
     /// if the walker function fails
-    fn match_pattern(&mut self, _pattern: &mut Pattern<'script>) -> Result<VisitRes> {
+    fn visit_match_pattern(&mut self, _pattern: &mut Pattern<'script>) -> Result<VisitRes> {
         Ok(Walk)
+    }
+
+    /// leave a `Pattern`
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn leave_match_pattern(&mut self, _pattern: &mut Pattern<'script>) -> Result<()> {
+        Ok(())
     }
 
     /// visit a `RecordPattern`
     ///
     /// # Errors
     /// if the walker function fails
-    fn record_pattern(&mut self, _record_pattern: &mut RecordPattern<'script>) -> Result<VisitRes> {
+    fn visit_record_pattern(
+        &mut self,
+        _record_pattern: &mut RecordPattern<'script>,
+    ) -> Result<VisitRes> {
         Ok(Walk)
+    }
+
+    /// leave a `RecordPattern`
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn leave_record_pattern(&mut self, _record_pattern: &mut RecordPattern<'script>) -> Result<()> {
+        Ok(())
     }
 
     /// visit a `PredicatePattern`
     ///
     /// # Errors
     /// if the walker function fails
-    fn predicate_pattern(
+    fn visit_predicate_pattern(
         &mut self,
         _record_pattern: &mut PredicatePattern<'script>,
     ) -> Result<VisitRes> {
         Ok(Walk)
     }
 
+    /// leave a `PredicatePattern`
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn leave_predicate_pattern(
+        &mut self,
+        _record_pattern: &mut PredicatePattern<'script>,
+    ) -> Result<()> {
+        Ok(())
+    }
+
     /// visit a `ArrayPattern`
     ///
     /// # Errors
     /// if the walker function fails
-    fn array_pattern(&mut self, _array_pattern: &mut ArrayPattern<'script>) -> Result<VisitRes> {
+    fn visit_array_pattern(
+        &mut self,
+        _array_pattern: &mut ArrayPattern<'script>,
+    ) -> Result<VisitRes> {
         Ok(Walk)
+    }
+
+    /// leave a `ArrayPattern`
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn leave_array_pattern(&mut self, _array_pattern: &mut ArrayPattern<'script>) -> Result<()> {
+        Ok(())
     }
 
     /// visit a `TuplePattern`
     ///
     /// # Errors
     /// if the walker function fails
-    fn tuple_pattern(&mut self, _pattern: &mut TuplePattern<'script>) -> Result<VisitRes> {
+    fn visit_tuple_pattern(&mut self, _pattern: &mut TuplePattern<'script>) -> Result<VisitRes> {
         Ok(Walk)
+    }
+
+    /// leave a `TuplePattern`
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn leave_tuple_pattern(&mut self, _pattern: &mut TuplePattern<'script>) -> Result<()> {
+        Ok(())
     }
 
     /// visit a `ArrayPredicatePattern`
     ///
     /// # Errors
     /// if the walker function fails
-    fn array_predicate_pattern(
+    fn visit_array_predicate_pattern(
         &mut self,
         _pattern: &mut ArrayPredicatePattern<'script>,
     ) -> Result<VisitRes> {
         Ok(Walk)
     }
 
+    /// leave a `ArrayPredicatePattern`
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn leave_array_predicate_pattern(
+        &mut self,
+        _pattern: &mut ArrayPredicatePattern<'script>,
+    ) -> Result<()> {
+        Ok(())
+    }
+
     /// visit a `TestExpr`
     ///
     /// # Errors
     /// if the walker function fails
-    fn test_expr(&mut self, _expr: &mut TestExpr) -> Result<VisitRes> {
+    fn visit_test_expr(&mut self, _expr: &mut TestExpr) -> Result<VisitRes> {
         Ok(Walk)
     }
+
+    /// leave a `TestExpr`
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn leave_test_expr(&mut self, _expr: &mut TestExpr) -> Result<()> {
+        Ok(())
+    }
+
     /// visit a comprehension
     ///
     /// # Errors
     /// if the walker function fails
-    fn comprehension(
+    fn visit_comprehension(
         &mut self,
         _comp: &mut Comprehension<'script, ImutExprInt<'script>>,
     ) -> Result<VisitRes> {
         Ok(Walk)
     }
 
-    /// visit a merge expr
+    /// leave a comprehension
     ///
     /// # Errors
     /// if the walker function fails
-    fn merge(&mut self, _merge: &mut Merge<'script>) -> Result<VisitRes> {
-        Ok(Walk)
+    fn leave_comprehension(
+        &mut self,
+        _comp: &mut Comprehension<'script, ImutExprInt<'script>>,
+    ) -> Result<()> {
+        Ok(())
     }
 
     /// visit a merge expr
     ///
     /// # Errors
     /// if the walker function fails
-    fn segment(&mut self, _segment: &mut Segment<'script>) -> Result<VisitRes> {
+    fn visit_merge(&mut self, _merge: &mut Merge<'script>) -> Result<VisitRes> {
         Ok(Walk)
+    }
+
+    /// leave a merge expr
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn leave_merge(&mut self, _merge: &mut Merge<'script>) -> Result<()> {
+        Ok(())
+    }
+
+    /// visit a merge expr
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn visit_segment(&mut self, _segment: &mut Segment<'script>) -> Result<VisitRes> {
+        Ok(Walk)
+    }
+
+    /// leave a merge expr
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn leave_segment(&mut self, _segment: &mut Segment<'script>) -> Result<()> {
+        Ok(())
     }
 
     /// visit a path
     ///
     /// # Errors
     /// if the walker function fails
-    fn path(&mut self, _path: &mut Path<'script>) -> Result<VisitRes> {
+    fn visit_path(&mut self, _path: &mut Path<'script>) -> Result<VisitRes> {
         Ok(Walk)
+    }
+
+    /// leave a path
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn leave_path(&mut self, _path: &mut Path<'script>) -> Result<()> {
+        Ok(())
     }
 
     /// visit a cow
     ///
     /// # Errors
     /// if the walker function fails
-    fn string_lit(&mut self, _cow: &mut beef::Cow<'script, str>) -> Result<VisitRes> {
+    fn visit_string_lit(&mut self, _cow: &mut beef::Cow<'script, str>) -> Result<VisitRes> {
         Ok(Walk)
+    }
+
+    /// leave a cow
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn leave_string_lit(&mut self, _cow: &mut beef::Cow<'script, str>) -> Result<()> {
+        Ok(())
     }
 
     /// visit a string
     ///
     /// # Errors
     /// if the walker function fails
-    fn string(&mut self, _string: &mut StringLit<'script>) -> Result<VisitRes> {
+    fn visit_string(&mut self, _string: &mut StringLit<'script>) -> Result<VisitRes> {
         Ok(Walk)
+    }
+
+    /// leave a string
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn leave_string(&mut self, _string: &mut StringLit<'script>) -> Result<()> {
+        Ok(())
     }
 
     /// visit a `StrLitElement`
     ///
     /// # Errors
     /// if the walker function fails
-    fn string_element(&mut self, _string: &mut StrLitElement<'script>) -> Result<VisitRes> {
+    fn visit_string_element(&mut self, _string: &mut StrLitElement<'script>) -> Result<VisitRes> {
         Ok(Walk)
+    }
+
+    /// leave a `StrLitElement`
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn leave_string_element(&mut self, _string: &mut StrLitElement<'script>) -> Result<()> {
+        Ok(())
     }
 
     /// visit a local
     ///
     /// # Errors
     /// if the walker function fails
-    fn local(&mut self, _local_idx: &mut usize) -> Result<VisitRes> {
+    fn visit_local(&mut self, _local_idx: &mut usize) -> Result<VisitRes> {
         Ok(Walk)
+    }
+
+    /// leave a local
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn leave_local(&mut self, _local_idx: &mut usize) -> Result<()> {
+        Ok(())
     }
 
     /// visit a present expr
     ///
     /// # Errors
     /// if the walker function fails
-    fn present(&mut self, _path: &mut Path<'script>) -> Result<VisitRes> {
+    fn visit_present(&mut self, _path: &mut Path<'script>) -> Result<VisitRes> {
         Ok(Walk)
+    }
+
+    /// leave a present expr
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn leave_present(&mut self, _path: &mut Path<'script>) -> Result<()> {
+        Ok(())
     }
 
     /// visit an invoke expr
     ///
     /// # Errors
     /// if the walker function fails
-    fn invoke(&mut self, _invoke: &mut Invoke<'script>) -> Result<VisitRes> {
+    fn visit_invoke(&mut self, _invoke: &mut Invoke<'script>) -> Result<VisitRes> {
         Ok(Walk)
+    }
+
+    /// leave an invoke expr
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn leave_invoke(&mut self, _invoke: &mut Invoke<'script>) -> Result<()> {
+        Ok(())
     }
 
     /// visit an invoke1 expr
     ///
     /// # Errors
     /// if the walker function fails
-    fn invoke1(&mut self, _invoke: &mut Invoke<'script>) -> Result<VisitRes> {
+    fn visit_invoke1(&mut self, _invoke: &mut Invoke<'script>) -> Result<VisitRes> {
         Ok(Walk)
+    }
+
+    /// leave an invoke1 expr
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn leave_invoke1(&mut self, _invoke: &mut Invoke<'script>) -> Result<()> {
+        Ok(())
     }
 
     /// visit an invoke2 expr
     ///
     /// # Errors
     /// if the walker function fails
-    fn invoke2(&mut self, _invoke: &mut Invoke<'script>) -> Result<VisitRes> {
+    fn visit_invoke2(&mut self, _invoke: &mut Invoke<'script>) -> Result<VisitRes> {
         Ok(Walk)
+    }
+
+    /// leave an invoke2 expr
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn leave_invoke2(&mut self, _invoke: &mut Invoke<'script>) -> Result<()> {
+        Ok(())
     }
 
     /// visit an invoke3 expr
     ///
     /// # Errors
     /// if the walker function fails
-    fn invoke3(&mut self, _invoke: &mut Invoke<'script>) -> Result<VisitRes> {
+    fn visit_invoke3(&mut self, _invoke: &mut Invoke<'script>) -> Result<VisitRes> {
         Ok(Walk)
     }
+
+    /// leave an invoke3 expr
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn leave_invoke3(&mut self, _invoke: &mut Invoke<'script>) -> Result<()> {
+        Ok(())
+    }
+
     /// visit an `invoke_aggr` expr
     ///
     /// # Errors
     /// if the walker function fails
-    fn invoke_aggr(&mut self, _invoke_aggr: &mut InvokeAggr) -> Result<VisitRes> {
+    fn visit_invoke_aggr(&mut self, _invoke_aggr: &mut InvokeAggr) -> Result<VisitRes> {
         Ok(Walk)
+    }
+
+    /// leave an `invoke_aggr` expr
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn leave_invoke_aggr(&mut self, _invoke_aggr: &mut InvokeAggr) -> Result<()> {
+        Ok(())
     }
 
     /// visit a recur expr
     ///
     /// # Errors
     /// if the walker function fails
-    fn recur(&mut self, _recur: &mut Recur<'script>) -> Result<VisitRes> {
+    fn visit_recur(&mut self, _recur: &mut Recur<'script>) -> Result<VisitRes> {
         Ok(Walk)
+    }
+
+    /// leave a recur expr
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn leave_recur(&mut self, _recur: &mut Recur<'script>) -> Result<()> {
+        Ok(())
     }
 
     /// visit bytes
     ///
     /// # Errors
     /// if the walker function fails
-    fn bytes(&mut self, _bytes: &mut Bytes<'script>) -> Result<VisitRes> {
+    fn visit_bytes(&mut self, _bytes: &mut Bytes<'script>) -> Result<VisitRes> {
         Ok(Walk)
+    }
+
+    /// leave bytes
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn leave_bytes(&mut self, _bytes: &mut Bytes<'script>) -> Result<()> {
+        Ok(())
     }
 
     /// visit a literal
     ///
     /// # Errors
     /// if the walker function fails
-    fn literal(&mut self, _literal: &mut Literal<'script>) -> Result<VisitRes> {
+    fn visit_literal(&mut self, _literal: &mut Literal<'script>) -> Result<VisitRes> {
         Ok(Walk)
+    }
+
+    /// leave a literal
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn leave_literal(&mut self, _literal: &mut Literal<'script>) -> Result<()> {
+        Ok(())
     }
 
     /// visit a generic `ImutExprInt` (this is called before the concrete `visit_*` method)
     ///
     /// # Errors
     /// if the walker function fails
-    fn expr(&mut self, _e: &mut ImutExprInt<'script>) -> Result<VisitRes> {
+    fn visit_expr(&mut self, _e: &mut ImutExprInt<'script>) -> Result<VisitRes> {
         Ok(Walk)
     }
 
-    /// visit a `StatePath`
+    /// leave a generic `ImutExprInt` (this is called after the concrete `leave_*` method)
     ///
     /// # Errors
     /// if the walker function fails
-    fn segments(&mut self, _e: &mut Vec<Segment<'script>>) -> Result<VisitRes> {
+    fn leave_expr(&mut self, _e: &mut ImutExprInt<'script>) -> Result<()> {
+        Ok(())
+    }
+
+    /// visit segments
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn visit_segments(&mut self, _e: &mut Vec<Segment<'script>>) -> Result<VisitRes> {
         Ok(Walk)
     }
+
+    /// leave segments
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn leave_segments(&mut self, _e: &mut Vec<Segment<'script>>) -> Result<()> {
+        Ok(())
+    }
+
     /// visit a `ExprPath`
     ///
     /// # Errors
     /// if the walker function fails
-    fn expr_path(&mut self, _e: &mut ExprPath<'script>) -> Result<VisitRes> {
+    fn visit_expr_path(&mut self, _e: &mut ExprPath<'script>) -> Result<VisitRes> {
         Ok(Walk)
+    }
+
+    /// leave a `ExprPath`
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn leave_expr_path(&mut self, _e: &mut ExprPath<'script>) -> Result<()> {
+        Ok(())
     }
 
     /// visit a const path (uses the `LocalPath` ast node)
     ///
     /// # Errors
     /// if the walker function fails
-    fn const_path(&mut self, _e: &mut LocalPath<'script>) -> Result<VisitRes> {
+    fn visit_const_path(&mut self, _e: &mut LocalPath<'script>) -> Result<VisitRes> {
         Ok(Walk)
+    }
+
+    /// leave a const path (uses the `LocalPath` ast node)
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn leave_const_path(&mut self, _e: &mut LocalPath<'script>) -> Result<()> {
+        Ok(())
     }
 
     /// visit a `LocalPath`
     ///
     /// # Errors
     /// if the walker function fails
-    fn local_path(&mut self, _e: &mut LocalPath<'script>) -> Result<VisitRes> {
+    fn visit_local_path(&mut self, _e: &mut LocalPath<'script>) -> Result<VisitRes> {
         Ok(Walk)
+    }
+
+    /// leave a `LocalPath`
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn leave_local_path(&mut self, _e: &mut LocalPath<'script>) -> Result<()> {
+        Ok(())
     }
 
     /// visit a `EventPath`
     ///
     /// # Errors
     /// if the walker function fails
-    fn event_path(&mut self, _e: &mut EventPath<'script>) -> Result<VisitRes> {
+    fn visit_event_path(&mut self, _e: &mut EventPath<'script>) -> Result<VisitRes> {
         Ok(Walk)
+    }
+
+    /// leave a `EventPath`
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn leave_event_path(&mut self, _e: &mut EventPath<'script>) -> Result<()> {
+        Ok(())
     }
 
     /// visit a `StatePath`
     ///
     /// # Errors
     /// if the walker function fails
-    fn state_path(&mut self, _e: &mut StatePath<'script>) -> Result<VisitRes> {
+    fn visit_state_path(&mut self, _e: &mut StatePath<'script>) -> Result<VisitRes> {
         Ok(Walk)
+    }
+
+    /// leave a `StatePath`
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn leave_state_path(&mut self, _e: &mut StatePath<'script>) -> Result<()> {
+        Ok(())
     }
 
     /// visit a `MetadataPath`
     ///
     /// # Errors
     /// if the walker function fails
-    fn meta_path(&mut self, _e: &mut MetadataPath<'script>) -> Result<VisitRes> {
+    fn visit_meta_path(&mut self, _e: &mut MetadataPath<'script>) -> Result<VisitRes> {
         Ok(Walk)
     }
+
+    /// leave a `MetadataPath`
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn leave_meta_path(&mut self, _e: &mut MetadataPath<'script>) -> Result<()> {
+        Ok(())
+    }
+
     /// visit a `ReservedPath`
     ///
     /// # Errors
     /// if the walker function fails
-    fn reserved_path(&mut self, _e: &mut ReservedPath<'script>) -> Result<VisitRes> {
+    fn visit_reserved_path(&mut self, _e: &mut ReservedPath<'script>) -> Result<VisitRes> {
         Ok(Walk)
+    }
+
+    /// leave a `ReservedPath`
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn leave_reserved_path(&mut self, _e: &mut ReservedPath<'script>) -> Result<()> {
+        Ok(())
     }
 }
 
 /// Visitor for `GroupBy`
 pub(crate) trait GroupByVisitor<'script> {
-    /// visits an expression
-    fn visit_expr(&mut self, expr: &ImutExprInt<'script>);
+    fn visit_expr(&mut self, _expr: &ImutExprInt<'script>);
 
     /// Walks an expression
     fn walk_group_by(&mut self, group_by: &GroupByInt<'script>) {
@@ -515,7 +962,7 @@ mod tests {
     impl<'script> ExprWalker<'script> for Find42Visitor {}
     impl<'script> ExprVisitor<'script> for Find42Visitor {}
     impl<'script> ImutExprVisitor<'script> for Find42Visitor {
-        fn literal(&mut self, literal: &mut Literal<'script>) -> Result<VisitRes> {
+        fn visit_literal(&mut self, literal: &mut Literal<'script>) -> Result<VisitRes> {
             if let Some(42) = literal.value.as_u64() {
                 self.found += 1;
                 return Ok(VisitRes::Stop);
