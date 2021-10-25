@@ -47,9 +47,9 @@ impl Before {
         let cmd = job::which(&self.cmd)?;
         // interpret `dir` as relative to `base`
         let cwd = base.join(&self.dir).canonicalize()?;
-        let process = job::TargetProcess::new_in_dir(&cmd, &self.args, &self.env, &cwd)?;
+        let mut process = job::TargetProcess::new_in_dir(&cmd, &self.args, &self.env, &cwd)?;
         debug!("Spawning before: {}", self.cmdline());
-        self.block_on()?;
+        self.block_on(&mut process, base)?;
         Ok(Some(process))
     }
 
@@ -66,7 +66,7 @@ impl Before {
         )
     }
 
-    pub(crate) fn block_on(&self) -> Result<()> {
+    pub(crate) fn block_on(&self, process: &mut job::TargetProcess, base: &PathBuf) -> Result<()> {
         let start = Instant::now();
         if let Some(conditions) = &self.conditionals {
             loop {
@@ -107,6 +107,23 @@ impl Before {
                                 Err(_) => false,
                             }
                         }
+                    }
+                    if "file-exists" == k.as_str() {
+                        let base_dir = base.join(&self.dir);
+                        for f in v {
+                            if let Ok(path) = base_dir.join(f).canonicalize() {
+                                debug!("Checking for existence of {}", path.display());
+                                success &= path.exists();
+                            }
+                        }
+                    }
+                    if "status" == k.as_str() {
+                        let code = process.wait_with_output()?.code().unwrap_or(0);
+                        success &= v
+                            .first()
+                            .and_then(|code| code.parse::<i32>().ok())
+                            .map(|expected_code| expected_code == code)
+                            .unwrap_or_default();
                     }
                 }
                 if success {

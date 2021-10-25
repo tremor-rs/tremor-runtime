@@ -99,6 +99,8 @@ fn suite_bench(
     }
 }
 
+///
+/// run integration tests in `root`, discovering them recursively
 fn suite_integration(
     base: &Path,
     root: &Path,

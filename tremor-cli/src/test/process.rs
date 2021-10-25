@@ -28,17 +28,21 @@ use std::path::Path;
 use std::process::ExitStatus;
 use tremor_common::{file::canonicalize, time::nanotime};
 
+/// run the process
+///
+/// `tests_root_dir`: the base path in which we discovered this test.
+/// `test_dir`: directory of the current test
 #[allow(clippy::too_many_lines)]
 pub(crate) fn run_process(
     kind: &str,
-    _test_root: &Path,
-    bench_root: &Path,
+    _tests_root_dir: &Path,
+    test_dir: &Path,
     _by_tag: &tag::TagFilter,
 ) -> Result<report::TestReport> {
     let mut evidence = HashMap::new();
 
     let mut artefacts = GlobWalkerBuilder::from_patterns(
-        canonicalize(bench_root)?,
+        canonicalize(test_dir)?,
         &["*.{yaml,tremor,trickle}", "!assert.yaml", "!logger.yaml"],
     )
     .case_insensitive(true)
@@ -53,7 +57,7 @@ pub(crate) fn run_process(
     if artefacts.peek().is_none() {
         return Err(Error::from(format!(
             "No tremor artefacts found in '{}'.",
-            bench_root.to_string_lossy()
+            test_dir.to_string_lossy()
         )));
     }
     let args: Vec<String> = vec!["server", "run", "-n", "-f"]
@@ -64,23 +68,23 @@ pub(crate) fn run_process(
 
     let process_start = nanotime();
 
-    let mut before = before::BeforeController::new(bench_root);
+    let mut before = before::BeforeController::new(test_dir);
     let before_process = before.spawn()?;
 
-    let bench_rootx = bench_root.to_path_buf();
+    let test_dir_buf = test_dir.to_path_buf();
 
     // enable info level logging
     let mut env = HashMap::with_capacity(1);
     env.insert(String::from("RUST_LOG"), String::from("info"));
 
-    let mut process = job::TargetProcess::new_in_current_dir(job::which("tremor")?, &args, &env)?;
+    let mut process = job::TargetProcess::new_in_dir(job::which("tremor")?, &args, &env, test_dir)?;
     let process_status = process.wait_with_output()?;
 
-    let fg_out_file = bench_rootx.join("fg.out.log");
-    let fg_err_file = bench_rootx.join("fg.err.log");
+    let fg_out_file = test_dir_buf.join("fg.out.log");
+    let fg_err_file = test_dir_buf.join("fg.err.log");
     let fg = std::thread::spawn(move || -> Result<ExitStatus> {
-        let fg_out_file = bench_rootx.join("fg.out.log");
-        let fg_err_file = bench_rootx.join("fg.err.log");
+        let fg_out_file = test_dir_buf.join("fg.out.log");
+        let fg_err_file = test_dir_buf.join("fg.err.log");
         process.tail(&fg_out_file, &fg_err_file)?;
         process.wait_with_output()
     });
@@ -96,14 +100,14 @@ pub(crate) fn run_process(
         Err(_) => return Err("Failed to join test foreground thread/process error".into()),
     };
 
-    before::update_evidence(bench_root, &mut evidence)?;
+    before::update_evidence(test_dir, &mut evidence)?;
 
     // As our primary process is finished, check for after hooks
-    let mut after = after::AfterController::new(bench_root);
+    let mut after = after::AfterController::new(test_dir);
     after.spawn()?;
-    after::update_evidence(bench_root, &mut evidence)?;
+    after::update_evidence(test_dir, &mut evidence)?;
     // Assertions
-    let assert_path = bench_root.join("assert.yaml");
+    let assert_path = test_dir.join("assert.yaml");
     let report = if (&assert_path).is_file() {
         let assert_yaml = assert::load_assert(&assert_path)?;
         Some(assert::process(
@@ -160,7 +164,7 @@ pub(crate) fn run_process(
         report.insert(
             "bench".to_string(),
             report::TestSuite {
-                name: bench_root
+                name: test_dir
                     .file_name()
                     .ok_or("unable to find the benchmark name")?
                     .to_string_lossy()
