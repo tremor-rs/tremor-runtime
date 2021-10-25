@@ -2,4 +2,4 @@ status: 0
 name: file connector
 asserts:
   - source: out.log
-    equals_file: in.json
+    equals_file: expected.json
