@@ -934,7 +934,7 @@ where
                             // if we get a disconnect in between we might never receive every drain CB
                             // but we will stop everything forcefully after a certain timeout at some point anyways
                             // TODO: account for all connector uids that sent some Cb to us upon startup or so, to get the real number to wait for
-                            // otherwise there are cases (branching etc. where quiescence also would be to quick)
+                            // otherwise there are cases (branching etc. where quiescence also would be too quick)
                             self.expected_drained =
                                 self.pipelines_err.len() + self.pipelines_out.len();
                         } else {

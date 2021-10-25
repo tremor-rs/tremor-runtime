@@ -842,6 +842,7 @@ impl Artefact for Binding {
                 )
                 .await?;
         }
+        info!("[Binding::{}] Binding successfully linked.", id);
 
         res.mapping = Some(vec![(id.clone(), mappings)].into_iter().collect());
         Ok(res)

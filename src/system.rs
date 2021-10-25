@@ -84,7 +84,7 @@ lazy_static! {
 }
 
 /// default graceful shutdown timeout
-pub const DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(2);
+pub const DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Debug, PartialEq)]
 /// shutdown mode - controls how we shutdown Tremor
@@ -140,6 +140,7 @@ impl Manager {
                     ManagerMsg::Offramp(msg) => self.offramp.send(msg).await?,
                     ManagerMsg::Connector(msg) => self.connector.send(msg).await?,
                     ManagerMsg::Stop => {
+                        info!("Stopping Manager ...");
                         self.offramp.send(offramp::ManagerMsg::Stop).await?;
                         self.pipeline.send(pipeline::ManagerMsg::Stop).await?;
                         self.onramp.send(onramp::ManagerMsg::Stop).await?;
@@ -148,6 +149,10 @@ impl Manager {
                                 reason: "Global Manager Stop".to_string(),
                             })
                             .await?;
+                        self.offramp_h.cancel().await;
+                        self.pipeline_h.cancel().await;
+                        self.onramp_h.cancel().await;
+                        self.connector_h.cancel().await;
                         break;
                     }
                 }

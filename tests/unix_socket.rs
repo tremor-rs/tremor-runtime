@@ -161,7 +161,11 @@ links:
 
     std::thread::sleep(std::time::Duration::from_millis(1000));
 
-    world.stop().await?;
+    world
+        .stop(system::ShutdownMode::Graceful {
+            timeout: std::time::Duration::from_millis(1000),
+        })
+        .await?;
 
     let actual_output = std::fs::read_to_string(output_file).unwrap();
     let mut actual_output: Vec<_> = actual_output.trim().split("\n").collect();
