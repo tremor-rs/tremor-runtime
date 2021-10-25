@@ -66,6 +66,7 @@ use self::quiescence::QuiescenceBeacon;
 use self::reconnect::{Attempt, ReconnectRuntime};
 
 use abi_stable::{
+    StableAbi,
     declare_root_module_statics,
     library::RootModule,
     package_version_strings,
@@ -866,7 +867,8 @@ impl Drainage {
 }
 
 /// state of a connector
-#[derive(Debug, PartialEq, Serialize, Deserialize, Copy, Clone)]
+#[repr(C)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Copy, Clone, StableAbi)]
 #[serde(rename_all = "lowercase")]
 pub enum ConnectorState {
     /// connector has been initialized, but not yet started
@@ -897,7 +899,8 @@ impl Display for ConnectorState {
 }
 
 /// connector context
-#[derive(Clone)]
+#[repr(C)]
+#[derive(Clone, StableAbi)]
 pub struct ConnectorContext {
     /// unique identifier
     pub uid: u64,
@@ -908,7 +911,7 @@ pub struct ConnectorContext {
     /// The Quiescence Beacon
     pub quiescence_beacon: QuiescenceBeacon,
     /// Notifier
-    pub notifier: reconnect::ConnectionLostNotifier,
+    pub notifier: reconnect::ConnectionLostNotifier, // TODO: StableAbi
 }
 
 impl ConnectorContext {
@@ -945,7 +948,7 @@ pub trait RawConnector: Send {
         &mut self,
         _source_context: SourceContext,
         _builder: source::SourceManagerBuilder,
-    ) -> RResult<ROption<source::SourceAddr>> {
+    ) -> RResult<ROption<source::SourceAddr>> { // TODO derive StableAbi
         ROk(RNone)
     }
 
@@ -957,7 +960,7 @@ pub trait RawConnector: Send {
         &mut self,
         _sink_context: SinkContext,
         _builder: sink::SinkManagerBuilder,
-    ) -> RResult<ROption<sink::SinkAddr>> {
+    ) -> RResult<ROption<sink::SinkAddr>> { // TODO derive StableAbi
         ROk(RNone)
     }
 

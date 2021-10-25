@@ -14,20 +14,22 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use abi_stable::{StableAbi, std_types::RArc};
 
 /// use this beacon to check if tasks reading or writing from external connections should stop
-#[derive(Clone, Debug)]
+#[repr(C)]
+#[derive(Clone, Debug, StableAbi)]
 #[allow(clippy::module_name_repetitions)]
 pub struct QuiescenceBeacon {
-    read: Arc<AtomicBool>,
-    write: Arc<AtomicBool>,
+    read: RArc<AtomicBool>,
+    write: RArc<AtomicBool>,
 }
 
 impl Default for QuiescenceBeacon {
     fn default() -> Self {
         Self {
-            read: Arc::new(AtomicBool::new(true)),
-            write: Arc::new(AtomicBool::new(true)),
+            read: RArc::new(AtomicBool::new(true)),
+            write: RArc::new(AtomicBool::new(true)),
         }
     }
 }

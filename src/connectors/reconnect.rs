@@ -22,6 +22,8 @@ use async_std::task;
 use std::fmt::Display;
 use std::time::Duration;
 
+use abi_stable::StableAbi;
+
 #[derive(Debug, PartialEq, Clone)]
 enum ShouldRetry {
     Yes,
@@ -75,7 +77,8 @@ impl ReconnectStrategy for SimpleBackoff {
 }
 
 /// describing the number of previous connection attempts
-#[derive(Debug, Default, PartialEq, Eq)]
+#[repr(C)]
+#[derive(Debug, Default, PartialEq, Eq, StableAbi)]
 pub struct Attempt {
     overall: u64,
     success: u64,

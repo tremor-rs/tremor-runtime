@@ -60,8 +60,7 @@ impl MetricsChannel {
         self.rx.clone()
     }
 }
-#[repr(C)]
-#[derive(Debug, Clone, StableAbi)]
+#[derive(Debug, Clone)]
 pub struct Msg {
     payload: EventPayload, // TODO
     origin_uri: Option<EventOriginUri>,
@@ -77,7 +76,6 @@ impl Msg {
 }
 
 /// metrics reporter for connector sources
-#[repr(C)]
 pub struct SourceReporter {
     artefact_url: TremorUrl,
     metrics_out: u64,

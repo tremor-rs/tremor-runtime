@@ -4969,7 +4969,6 @@ dependencies = [
 name = "tremor-script"
 version = "0.11.4"
 dependencies = [
- "abi_stable",
  "atty",
  "base64 0.13.0",
  "beef",
@@ -5021,7 +5020,6 @@ dependencies = [
 name = "tremor-value"
 version = "0.3.2"
 dependencies = [
- "abi_stable",
  "base64 0.13.0",
  "beef",
  "float-cmp 0.9.0",

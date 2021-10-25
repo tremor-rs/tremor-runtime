@@ -43,6 +43,8 @@ use tremor_common::time::nanotime;
 use tremor_pipeline::{CbAction, Event, EventId, OpMeta, SignalKind, DEFAULT_STREAM_ID};
 use tremor_script::EventPayload;
 
+use abi_stable::StableAbi;
+
 use tremor_value::Value;
 
 use super::metrics::MetricsSinkReporter;
@@ -172,6 +174,8 @@ pub trait StreamWriter: Send + Sync {
     }
 }
 /// context for the connector sink
+#[repr(C)]
+#[derive(StableAbi)]
 pub struct SinkContext {
     /// the connector unique identifier
     pub uid: u64,
@@ -238,6 +242,8 @@ pub struct SinkAddr {
     pub addr: Sender<SinkMsg>,
 }
 
+#[repr(C)]
+#[derive(StableAbi)]
 pub struct SinkManagerBuilder {
     qsize: usize,
     serializer: EventSerializer,

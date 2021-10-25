@@ -26,7 +26,7 @@ use tremor_script::{EventPayload, ValueAndMeta};
 use crate::codec::{self, Codec};
 use crate::config::{Codec as CodecConfig, Connector as ConnectorConfig};
 use crate::connectors::Msg;
-use crate::errors::{Error, Result};
+use crate::errors::{Error, Result, RResult};
 use crate::pipeline;
 use crate::preprocessor::{make_preprocessors, preprocess, Preprocessors};
 use crate::url::ports::{ERR, OUT};
@@ -38,7 +38,7 @@ use tremor_pipeline::{
 };
 use tremor_value::{literal, Value};
 use value_trait::Builder;
-use abi_stable::StableAbi;
+use abi_stable::{StableAbi, std_types::{RString, RVec, ROption}, RTuple};
 
 use super::metrics::SourceReporter;
 use super::quiescence::QuiescenceBeacon;
@@ -81,16 +81,18 @@ pub enum SourceMsg {
 }
 
 /// reply from `Source::on_event`
-#[derive(Debug)]
+#[repr(C)]
+#[derive(Debug, StableAbi)]
+#[sabi(unsafe_allow_type_macros)]
 pub enum SourceReply {
     /// A normal data event with a `Vec<u8>` for data
     Data {
         /// origin uri
         origin_uri: EventOriginUri,
         /// the data
-        data: Vec<u8>,
+        data: RVec<u8>,
         /// metadata associated with this data
-        meta: Option<Value<'static>>,
+        meta: ROption<Value<'static>>,
         /// stream id of the data
         stream: u64,
     },
@@ -104,7 +106,7 @@ pub enum SourceReply {
     // for when the source knows where boundaries are, maybe because it receives chunks already
     BatchData {
         origin_uri: EventOriginUri,
-        batch_data: Vec<(Vec<u8>, Option<Value<'static>>)>,
+        batch_data: RVec<RTuple!(RVec<u8>, ROption<Value<'static>>)>,
         stream: u64,
     },
     /// A stream is opened
@@ -117,6 +119,75 @@ pub enum SourceReply {
 
 // sender for source reply
 pub type SourceReplySender = Sender<SourceReply>;
+
+/// source part of a connector
+#[abi_stable::sabi_trait]
+pub trait RawSource: Send {
+    /// Pulls an event from the source if one exists
+    /// `idgen` is passed in so the source can inspect what event id it would get if it was producing 1 event from the pulled data
+    fn pull_data(&mut self, pull_id: u64, ctx: &SourceContext) -> RResult<SourceReply>;
+    /// This callback is called when the data provided from
+    /// pull_event did not create any events, this is needed for
+    /// linked sources that require a 1:1 mapping between requests
+    /// and responses, we're looking at you REST
+    fn on_no_events(
+        &mut self,
+        _pull_id: u64,
+        _stream: u64,
+        _ctx: &SourceContext,
+    ) -> RResult<()> {
+        Ok(())
+    }
+
+    /// Pulls custom metrics from the source
+    fn metrics(&mut self, _timestamp: u64) -> RVec<EventPayload> {
+        vec![]
+    }
+
+    ///////////////////////////
+    /// lifecycle callbacks ///
+    ///////////////////////////
+
+    /// called when the source is started. This happens only once in the whole source lifecycle, before any other callbacks
+    fn on_start(&mut self, _ctx: &mut SourceContext) {}
+    /// called when the source is explicitly paused as result of a user/operator interaction
+    /// in contrast to `on_cb_close` which happens automatically depending on downstream pipeline or sink connector logic.
+    fn on_pause(&mut self, _ctx: &mut SourceContext) {}
+    /// called when the source is explicitly resumed from being paused
+    fn on_resume(&mut self, _ctx: &mut SourceContext) {}
+    /// called when the source is stopped. This happens only once in the whole source lifecycle, as the very last callback
+    fn on_stop(&mut self, _ctx: &mut SourceContext) {}
+
+    // circuit breaker callbacks
+    /// called when we receive a `close` Circuit breaker event from any connected pipeline
+    /// Expected reaction is to pause receiving messages, which is handled automatically by the runtime
+    /// Source implementations might want to close connections or signal a pause to the upstream entity it connects to if not done in the connector (the default)
+    // TODO: add info of Cb event origin (port, origin_uri)?
+    fn on_cb_close(&mut self, _ctx: &mut SourceContext) {}
+    /// Called when we receive a `open` Circuit breaker event from any connected pipeline
+    /// This means we can start/continue polling this source for messages
+    /// Source implementations might want to start establishing connections if not done in the connector (the default)
+    fn on_cb_open(&mut self, _ctx: &mut SourceContext) {}
+
+    // guaranteed delivery callbacks
+    /// an event has been acknowledged and can be considered delivered
+    /// multiple acks for the same set of ids are always possible
+    fn ack(&mut self, _stream_id: u64, _pull_id: u64) {}
+    /// an event has failed along its way and can be considered failed
+    /// multiple fails for the same set of ids are always possible
+    fn fail(&mut self, _stream_id: u64, _pull_id: u64) {}
+
+    // connectivity stuff
+    /// called when connector lost connectivity
+    fn on_connection_lost(&mut self, _ctx: &mut SourceContext) {}
+    /// called when connector re-established connectivity
+    fn on_connection_established(&mut self, _ctx: &mut SourceContext) {}
+
+    /// Is this source transactional or can acks/fails be ignored
+    fn is_transactional(&self) -> bool {
+        false
+    }
+}
 
 /// source part of a connector
 #[async_trait::async_trait]
@@ -305,14 +376,14 @@ pub struct SourceContext {
     /// connector url
     pub url: TremorUrl,
     /// The Quiescence Beacon
-    pub quiescence_beacon: QuiescenceBeacon, // TODO
+    pub quiescence_beacon: QuiescenceBeacon,
 }
 
 /// address of a source
 #[derive(Clone, Debug)]
 pub struct SourceAddr {
     /// the actual address
-    pub addr: Sender<SourceMsg>,
+    pub addr: Sender<SourceMsg>, // TODO
 }
 
 #[allow(clippy::module_name_repetitions)]
@@ -370,8 +441,6 @@ pub fn builder(
 
 /// maintaining stream state
 // TODO: there is optimization potential here for reusing codec and preprocessors after a stream got ended
-#[repr(C)]
-#[derive(StableAbi)]
 struct Streams {
     uid: u64,
     codec_config: Either<String, CodecConfig>,
