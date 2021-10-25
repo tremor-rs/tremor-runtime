@@ -8,9 +8,9 @@
     "before.pid",
     "-n",
     "-f",
-    "before/ws.trickle",
-    "before/config.yaml",
-    "before/server.yaml"
+    "ws.trickle",
+    "config.yaml",
+    "server.yaml"
   ],
   "await": {
     "port-open": [

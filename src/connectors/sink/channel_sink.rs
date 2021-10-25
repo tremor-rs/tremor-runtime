@@ -15,7 +15,7 @@
 //! Sink implementation that keeps track of multiple streams and keeps channels to send to each stream
 
 use crate::connectors::sink::{
-    AsyncSinkReply, EventCfData, EventSerializer, SinkReply, StreamWriter,
+    AsyncSinkReply, ContraflowData, EventSerializer, SinkReply, StreamWriter,
 };
 use crate::connectors::{ConnectorContext, StreamDone};
 use crate::errors::Result;
@@ -78,7 +78,7 @@ pub struct SinkData {
     /// data to send
     pub data: Vec<Vec<u8>>,
     /// async reply utils (if required)
-    pub contraflow: Option<(EventCfData, Sender<AsyncSinkReply>)>,
+    pub contraflow: Option<(ContraflowData, Sender<AsyncSinkReply>)>,
     /// Metadata for this request
     pub meta: Option<SinkMeta>,
     /// timestamp of processing start
@@ -344,20 +344,19 @@ where
         trace!("[Sink::{}] on_event stream_ids: {:?}", &ctx.url, stream_ids);
 
         let contraflow_utils = if event.transactional {
-            Some((EventCfData::from(&event), self.reply_tx.clone()))
+            Some((ContraflowData::from(&event), self.reply_tx.clone()))
         } else {
             None
         };
 
-        let mut res = Vec::with_capacity(event.len());
+        let mut remove_streams = vec![];
+        let mut reply = SinkReply::None;
         for (value, meta) in event.value_meta_iter() {
             let mut errored = false;
             let mut found = false;
-            let mut remove_streams = vec![];
             // route based on stream id present in event metadata or in event id (trackign the event origin)
             // resolve by checking meta for sink specific metadata
             // fallback: get all tracked stream_ids for the current connector uid
-            //
             let streams = self.resolve_stream_from_meta(meta, ctx).map_or_else(
                 || {
                     Either::Right(
@@ -393,21 +392,17 @@ where
                     errored = true;
                 }
             }
-
-            res.push(if errored || !found {
-                SinkReply::Fail
-            } else {
-                // ack is sent when channel has delivered serialized event asynchronously
-                SinkReply::None
-            });
-            for stream_id in remove_streams {
-                trace!("[Sink::{}] Removing stream {}", &ctx.url, stream_id);
-                self.remove_stream(stream_id);
-                serializer.drop_stream(stream_id);
-                // TODO: stream based CB
+            if errored || !found {
+                reply = SinkReply::Fail;
             }
         }
-        Ok(res)
+        for stream_id in remove_streams {
+            trace!("[Sink::{}] Removing stream {}", &ctx.url, stream_id);
+            self.remove_stream(stream_id);
+            serializer.drop_stream(stream_id);
+            // TODO: stream based CB
+        }
+        Ok(vec![reply]) // empty vec in case of success
     }
 
     async fn on_signal(

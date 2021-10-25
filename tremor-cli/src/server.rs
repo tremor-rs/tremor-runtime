@@ -268,6 +268,7 @@ macro_rules! log_and_print_error {
 }
 
 async fn server_run(matches: &ArgMatches) {
+    dbg!(std::env::current_dir().unwrap());
     version::print();
     if let Err(ref e) = run_dun(matches).await {
         match e {
