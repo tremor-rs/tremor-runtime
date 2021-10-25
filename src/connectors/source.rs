@@ -383,7 +383,7 @@ pub struct SourceContext {
 #[derive(Clone, Debug)]
 pub struct SourceAddr {
     /// the actual address
-    pub addr: Sender<SourceMsg>, // TODO
+    pub addr: Sender<SourceMsg>,
 }
 
 #[allow(clippy::module_name_repetitions)]
