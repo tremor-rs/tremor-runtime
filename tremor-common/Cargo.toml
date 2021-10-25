@@ -2,7 +2,7 @@
 authors = ["The Tremor Team"]
 description = "Tremor common functions"
 documentation = "https://docs.rs/tremor-commons"
-edition = "2018"
+edition = "2021"
 license = "Apache-2.0"
 name = "tremor-common"
 readme = "README.md"
@@ -10,4 +10,4 @@ version = "0.11.4"
 
 [dependencies]
 async-std = "1"
-rand = {version = "0.8", features = ["small_rng"]}
+rand = { version = "0.8", features = ["small_rng"] }

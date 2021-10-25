@@ -41,7 +41,7 @@ macro_rules! value_unexpected {
 ///
 /// Create a value literal of the form:
 ///
-/// ```edition2018
+/// ```edition2021
 /// # use tremor_value::{literal, Value};
 /// #
 /// let value: Value = literal!({
@@ -64,7 +64,7 @@ macro_rules! value_unexpected {
 /// interpolated type decides to fail, or if the interpolated type contains a
 /// map with non-string keys, the `literal!` macro will panic.
 ///
-/// ```edition2018
+/// ```edition2021
 /// # use tremor_value::literal;
 /// #
 /// let code = 200;
@@ -81,7 +81,7 @@ macro_rules! value_unexpected {
 ///
 /// Trailing commas are allowed inside both arrays and objects.
 ///
-/// ```edition2018
+/// ```edition2021
 /// # use tremor_value::literal;
 /// #
 /// let value = literal!([
