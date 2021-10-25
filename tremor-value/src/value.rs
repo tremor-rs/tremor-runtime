@@ -28,7 +28,7 @@ use std::{
     cmp::Ordering,
     ops::{Index, IndexMut},
 };
-use abi_stable::{StableAbi, rvec, std_types::{RCow, RVec, RBox, RSlice, RHashMap}};
+use abi_stable::{StableAbi, rvec, std_types::{RCow, RVec, RBox, RHashMap, RString}};
 
 pub use crate::serde::to_value;
 
@@ -237,8 +237,8 @@ fn cmp_map(left: &Object, right: &Object) -> Ordering {
     };
 
     // compare keyspace (sorted keys cmp)
-    let mut keys_left: Vec<_> = left.keys().collect();
-    let mut keys_right: Vec<_> = right.keys().collect();
+    let mut keys_left: RVec<_> = left.keys().collect();
+    let mut keys_right: RVec<_> = right.keys().collect();
     keys_left.sort();
     keys_right.sort();
 
@@ -277,14 +277,14 @@ impl<'value> Value<'value> {
     #[must_use]
     pub fn into_static(self) -> Value<'static> {
         match self {
-            Self::String(s) => Value::String(RCow::owned(s.to_string())),
+            Self::String(s) => Value::String(RCow::Owned(s.into_owned())),
             Self::Array(arr) => arr.into_iter().map(Value::into_static).collect(),
             Self::Object(obj) => obj
                 .into_iter()
-                .map(|(k, v)| (RCow::owned(k.to_string()), v.into_static()))
+                .map(|tuple| (RCow::Owned(tuple.0.into_owned()), tuple.1.into_static()))
                 .collect(),
             Self::Static(s) => Value::Static(s),
-            Self::Bytes(b) => Value::Bytes(RCow::owned(b.to_vec())),
+            Self::Bytes(b) => Value::Bytes(RCow::Owned(b.into_owned())),
         }
     }
 
@@ -294,14 +294,14 @@ impl<'value> Value<'value> {
     #[must_use]
     pub fn clone_static(&self) -> Value<'static> {
         match self {
-            Self::String(s) => Value::String(RCow::owned(s.to_string())),
+            Self::String(s) => Value::String(RCow::Owned(s.into_owned())),
             Self::Array(arr) => arr.iter().map(Value::clone_static).collect(),
             Self::Object(obj) => obj
                 .iter()
-                .map(|(k, v)| (RCow::owned(k.to_string()), v.clone_static()))
+                .map(|tuple| (RCow::Owned(tuple.0.into_owned()), tuple.1.clone_static()))
                 .collect(),
             Self::Static(s) => Value::Static(*s),
-            Self::Bytes(b) => Value::Bytes(RCow::owned(b.to_vec())),
+            Self::Bytes(b) => Value::Bytes(RCow::Owned(b.into_owned())),
         }
     }
 
@@ -366,19 +366,19 @@ impl<'value> Builder<'value> for Value<'value> {
     #[inline]
     #[must_use]
     fn array_with_capacity(capacity: usize) -> Self {
-        Self::Array(Vec::with_capacity(capacity))
+        Self::Array(RVec::with_capacity(capacity))
     }
     #[inline]
     #[must_use]
     fn object_with_capacity(capacity: usize) -> Self {
-        Self::Object(Box::new(Object::with_capacity(capacity)))
+        Self::Object(RBox::new(Object::with_capacity(capacity)))
     }
 }
 
 impl<'value> Mutable for Value<'value> {
     #[inline]
     #[must_use]
-    fn as_array_mut(&mut self) -> Option<&mut Vec<Value<'value>>> {
+    fn as_array_mut(&mut self) -> Option<&mut RVec<Value<'value>>> {
         match self {
             Self::Array(a) => Some(a),
             _ => None,
@@ -386,7 +386,7 @@ impl<'value> Mutable for Value<'value> {
     }
     #[inline]
     #[must_use]
-    fn as_object_mut(&mut self) -> Option<&mut HashMap<<Self as ValueAccess>::Key, Self>> {
+    fn as_object_mut(&mut self) -> Option<&mut RHashMap<<Self as ValueAccess>::Key, Self>> {
         match self {
             Self::Object(m) => Some(m),
             _ => None,
@@ -396,8 +396,8 @@ impl<'value> Mutable for Value<'value> {
 impl<'value> ValueAccess for Value<'value> {
     type Target = Self;
     type Key = RCow<'value, str>;
-    type Array = Vec<Self>;
-    type Object = HashMap<Self::Key, Self>;
+    type Array = RVec<Self>;
+    type Object = RHashMap<Self::Key, Self>;
 
     #[inline]
     #[must_use]
@@ -477,7 +477,7 @@ impl<'value> ValueAccess for Value<'value> {
 
     #[inline]
     #[must_use]
-    fn as_array(&self) -> Option<&Vec<Value<'value>>> {
+    fn as_array(&self) -> Option<&RVec<Value<'value>>> {
         match self {
             Self::Array(a) => Some(a),
             _ => None,
@@ -486,7 +486,7 @@ impl<'value> ValueAccess for Value<'value> {
 
     #[inline]
     #[must_use]
-    fn as_object(&self) -> Option<&HashMap<Self::Key, Self>> {
+    fn as_object(&self) -> Option<&RHashMap<Self::Key, Self>> {
         match self {
             Self::Object(m) => Some(m),
             _ => None,
@@ -602,7 +602,7 @@ impl<'de> ValueDeserializer<'de> {
         // Rust doesn't optimize the normal loop away here
         // so we write our own avoiding the length
         // checks during push
-        let mut res = Vec::with_capacity(len);
+        let mut res = RVec::with_capacity(len);
         unsafe {
             res.set_len(len);
             for i in 0..len {
@@ -619,7 +619,7 @@ impl<'de> ValueDeserializer<'de> {
         for _ in 0..len {
             // We know the tape is sane
             if let Node::String(key) = unsafe { self.0.next_() } {
-                res.insert_nocheck(key.into(), self.parse());
+                res.insert(key.into(), self.parse());
             } else {
                 // ALLOW: we guarantee this in the tape
                 unreachable!();

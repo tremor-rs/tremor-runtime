@@ -17,6 +17,7 @@ use simd_json::prelude::*;
 use simd_json::BorrowedValue;
 use simd_json::OwnedValue;
 use abi_stable::{rvec, std_types::RCow};
+use std::collections::HashMap;
 
 #[allow(clippy::cast_sign_loss, clippy::default_trait_access)]
 impl<'value> PartialEq for Value<'value> {
@@ -72,7 +73,7 @@ impl<'value> PartialEq<BorrowedValue<'value>> for Value<'value> {
         match (self, other) {
             (Self::Static(s1), BorrowedValue::Static(s2)) => s1 == s2,
             (Self::String(v1), BorrowedValue::String(v2)) => v1.as_ref().eq(v2.as_ref()),
-            (Self::Array(v1), BorrowedValue::Array(v2)) => v1.eq(v2),
+            (Self::Array(v1), BorrowedValue::Array(v2)) => v1.eq(v2.into()),
             (Self::Object(v1), BorrowedValue::Object(v2)) => {
                 if v1.len() != v2.len() {
                     return false;

@@ -17,6 +17,7 @@ use serde_ext::ser::{
     self, Serialize, SerializeMap as SerializeMapTrait, SerializeSeq as SerializeSeqTrait,
 };
 use simd_json::{stry, StaticNode};
+use abi_stable::std_types::RVec;
 
 type Impossible<T> = ser::Impossible<T, Error>;
 
@@ -45,9 +46,9 @@ impl<'value> Serialize for Value<'value> {
             }
             Value::Object(m) => {
                 let mut map = serializer.serialize_map(Some(m.len()))?;
-                for (k, v) in m.iter() {
-                    let k: &str = k;
-                    map.serialize_entry(k, v)?;
+                for tuple in m.iter() {
+                    let k: &str = tuple.0;
+                    map.serialize_entry(k, tuple.1)?;
                 }
                 map.end()
             }
@@ -155,7 +156,7 @@ impl serde::Serializer for Serializer {
     }
 
     fn serialize_bytes(self, value: &[u8]) -> Result<Value<'static>> {
-        Ok(Value::Bytes(Bytes::owned(value.to_vec())))
+        Ok(Value::Bytes(Bytes::Owned(RVec::from(value))))
     }
 
     #[inline]
@@ -220,7 +221,7 @@ impl serde::Serializer for Serializer {
 
     fn serialize_seq(self, len: Option<usize>) -> Result<Self::SerializeSeq> {
         Ok(SerializeVec {
-            vec: Vec::with_capacity(len.unwrap_or(0)),
+            vec: RVec::with_capacity(len.unwrap_or(0)),
         })
     }
 
@@ -245,7 +246,7 @@ impl serde::Serializer for Serializer {
     ) -> Result<Self::SerializeTupleVariant> {
         Ok(SerializeTupleVariant {
             name: variant.to_owned(),
-            vec: Vec::with_capacity(len),
+            vec: RVec::with_capacity(len),
         })
     }
 
@@ -275,12 +276,12 @@ impl serde::Serializer for Serializer {
 }
 
 pub struct SerializeVec {
-    vec: Vec<Value<'static>>,
+    vec: RVec<Value<'static>>,
 }
 
 pub struct SerializeTupleVariant {
     name: String,
-    vec: Vec<Value<'static>>,
+    vec: RVec<Value<'static>>,
 }
 
 pub enum SerializeMap {
@@ -668,8 +669,8 @@ mod tests {
     use super::*;
     use crate::prelude::*;
 
-    use beef::Cow;
     use serde_ext::Serialize;
+    use abi_stable::{std_types::RCow, rslice};
     #[derive(Serialize)]
     enum Snot {
         Struct { badger: String, snot: Option<u64> },
@@ -1004,7 +1005,7 @@ mod tests {
 
     #[test]
     fn serialize_value_bytes() -> Result<()> {
-        let bytes = Value::Bytes(Cow::borrowed(&[1, 2, 3]));
+        let bytes = Value::Bytes(RCow::Borrowed(rslice![1, 2, 3]));
         let serialized = bytes.serialize(Serializer::default());
         assert!(serialized.is_ok());
 

@@ -18,6 +18,7 @@ use halfbrown::RawEntryMut;
 use std::fmt;
 use std::hash::{BuildHasher, Hash, Hasher};
 use value_trait::{Mutable, Value as ValueTrait, ValueAccess, ValueType};
+use abi_stable::std_types::{RHashMap, RCow};
 
 /// Well known key that can be looked up in a `Value` faster.
 /// It achives this by memorizing the hash.
@@ -110,11 +111,17 @@ impl<'key> KnownKey<'key> {
     #[must_use]
     pub fn map_lookup<'target, 'value>(
         &self,
-        map: &'target halfbrown::HashMap<Cow<'value, str>, Value<'value>>,
+        map: &'target RHashMap<RCow<'value, str>, Value<'value>>,
     ) -> Option<&'target Value<'value>>
     where
         'value: 'target,
     {
+        // TODO: there's no raw_entry in the HashMap for `std` nor `abi_stable`,
+        // so this doesn't make sense at all :(
+        //
+        // The only way would be to convert the hashbrown::HashMap into
+        // std::collections::HashMap and then into RHashMap, but if this whole
+        // thing is intended to optimize, this conversion might be too much.
         map.raw_entry()
             .from_key_hashed_nocheck(self.hash, self.key())
             .map(|kv| kv.1)
@@ -175,12 +182,13 @@ impl<'key> KnownKey<'key> {
     #[inline]
     pub fn map_lookup_mut<'target, 'value>(
         &self,
-        map: &'target mut halfbrown::HashMap<Cow<'value, str>, Value<'value>>,
+        map: &'target mut RHashMap<RCow<'value, str>, Value<'value>>,
     ) -> Option<&'target mut Value<'value>>
     where
         'key: 'value,
         'value: 'target,
     {
+        // TODO: same here, no `raw_entry_mut`
         match map
             .raw_entry_mut()
             .from_key_hashed_nocheck(self.hash, &self.key)
@@ -272,7 +280,7 @@ impl<'key> KnownKey<'key> {
     #[inline]
     pub fn map_lookup_or_insert_mut<'target, 'value, F>(
         &self,
-        map: &'target mut halfbrown::HashMap<Cow<'value, str>, Value<'value>>,
+        map: &'target mut RHashMap<RCow<'value, str>, Value<'value>>,
         with: F,
     ) -> &'target mut Value<'value>
     where
@@ -280,6 +288,7 @@ impl<'key> KnownKey<'key> {
         'value: 'target,
         F: FnOnce() -> Value<'value>,
     {
+        // TODO: same here, no `raw_entry_mut`
         let key: &str = &self.key;
         map.raw_entry_mut()
             .from_key_hashed_nocheck(self.hash, key)
@@ -360,13 +369,14 @@ impl<'key> KnownKey<'key> {
     #[inline]
     pub fn map_insert<'target, 'value>(
         &self,
-        map: &'target mut halfbrown::HashMap<Cow<'value, str>, Value<'value>>,
+        map: &'target mut RHashMap<RCow<'value, str>, Value<'value>>,
         value: Value<'value>,
     ) -> Option<Value<'value>>
     where
         'key: 'value,
         'value: 'target,
     {
+        // TODO: same, `raw_entry_mut` doesn't exist...
         match map
             .raw_entry_mut()
             .from_key_hashed_nocheck(self.hash, self.key())

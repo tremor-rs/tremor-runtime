@@ -13,13 +13,13 @@
 // limitations under the License.
 
 use crate::{Error, Object, Value};
-use beef::Cow;
 use serde_ext::de::{
     self, Deserialize, DeserializeSeed, Deserializer, MapAccess, SeqAccess, Visitor,
 };
 use serde_ext::forward_to_deserialize_any;
 use simd_json::StaticNode;
 use std::fmt;
+use abi_stable::std_types::{RVec, RCow};
 
 impl<'de> de::Deserializer<'de> for Value<'de> {
     type Error = Error;
@@ -42,10 +42,9 @@ impl<'de> de::Deserializer<'de> for Value<'de> {
             Self::Static(StaticNode::U128(n)) => visitor.visit_u128(n),
             Value::Static(StaticNode::F64(n)) => visitor.visit_f64(n),
             Value::String(s) => {
-                if s.is_borrowed() {
-                    visitor.visit_borrowed_str(s.unwrap_borrowed())
-                } else {
-                    visitor.visit_string(s.into_owned())
+                match s {
+                    RCow::Borrowed(s) => visitor.visit_borrowed_str(s.into()),
+                    RCow::Owned(s) => visitor.visit_string(s.into())
                 }
             }
             Value::Array(a) => visitor.visit_seq(Array(a.iter())),
@@ -116,7 +115,7 @@ impl<'de, 'value> SeqAccess<'de> for Array<'value, 'de> {
 }
 
 struct ObjectAccess<'de, 'value: 'de> {
-    i: halfbrown::Iter<'de, Cow<'value, str>, Value<'value>>,
+    i: abi_stable::std_types::map::Iter<'de, RCow<'value, str>, Value<'value>>,
     v: &'de Value<'value>,
 }
 
@@ -129,9 +128,9 @@ impl<'de, 'value> MapAccess<'de> for ObjectAccess<'value, 'de> {
     where
         K: DeserializeSeed<'de>,
     {
-        if let Some((k, v)) = self.i.next() {
-            self.v = v;
-            seed.deserialize(Value::String(k.clone())).map(Some)
+        if let Some(tuple) = self.i.next() {
+            self.v = tuple.1;
+            seed.deserialize(Value::String(tuple.0.clone())).map(Some)
         } else {
             Ok(None)
         }
@@ -386,7 +385,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
     {
         let size = seq.size_hint().unwrap_or_default();
 
-        let mut v = Vec::with_capacity(size);
+        let mut v = RVec::with_capacity(size);
         while let Some(e) = seq.next_element()? {
             v.push(e);
         }

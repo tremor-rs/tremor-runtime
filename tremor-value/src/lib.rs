@@ -101,7 +101,7 @@ impl<'input, 'tape> ValueDeser<'input, 'tape> {
             // ALLOW: we know the values will be OK
             if let Node::String(key) = self.0.next().unwrap() {
                 // ALLOW: we know it will parse correctly
-                res.insert_nocheck(key.into(), self.parse().unwrap());
+                res.insert(key.into(), self.parse().unwrap()); // NOTE: no insert_nocheck
             } else {
                 // ALLOW: We check against this in tape
                 unreachable!();
