@@ -13,11 +13,11 @@
 // limitations under the License.
 
 use crate::{value::Bytes, Error, Object, Result, Value};
+use abi_stable::std_types::RVec;
 use serde_ext::ser::{
     self, Serialize, SerializeMap as SerializeMapTrait, SerializeSeq as SerializeSeqTrait,
 };
 use simd_json::{stry, StaticNode};
-use abi_stable::std_types::RVec;
 
 type Impossible<T> = ser::Impossible<T, Error>;
 
@@ -669,8 +669,8 @@ mod tests {
     use super::*;
     use crate::prelude::*;
 
+    use abi_stable::{rslice, std_types::RCow};
     use serde_ext::Serialize;
-    use abi_stable::{std_types::RCow, rslice};
     #[derive(Serialize)]
     enum Snot {
         Struct { badger: String, snot: Option<u64> },

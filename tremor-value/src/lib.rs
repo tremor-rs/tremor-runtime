@@ -46,10 +46,10 @@ pub use simd_json::{json, json_typed, AlignedBuf, StaticNode};
 pub use value::from::*;
 pub use value::{parse_to_value, parse_to_value_with_buffers, to_value, Object, Value};
 
+use abi_stable::std_types::RVec;
 use simd_json::Node;
 use simd_json_derive::{Deserialize, Serialize, Tape};
 use value_trait::Writable;
-use abi_stable::std_types::RVec;
 
 impl<'value> Serialize for Value<'value> {
     fn json_write<W>(&self, writer: &mut W) -> std::io::Result<()>

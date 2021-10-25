@@ -19,6 +19,7 @@
 // https://github.com/maciejhirsz/json-rust/blob/master/src/codegen.rs
 
 use super::{Object, Value};
+use abi_stable::std_types::Tuple2;
 use simd_json::prelude::*;
 use simd_json::{stry, StaticNode};
 use std::io;
@@ -26,7 +27,6 @@ use std::io::Write;
 use value_trait::generator::{
     BaseGenerator, DumpGenerator, PrettyGenerator, PrettyWriterGenerator, WriterGenerator,
 };
-use abi_stable::std_types::Tuple2;
 
 //use util::print_dec;
 

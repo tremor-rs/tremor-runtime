@@ -13,12 +13,13 @@
 // limitations under the License.
 
 use crate::Value;
+use abi_stable::std_types::{RCow, RHashMap};
 use beef::Cow;
+// TODO: no raw entry in std or abi_stable :(
 use halfbrown::RawEntryMut;
 use std::fmt;
 use std::hash::{BuildHasher, Hash, Hasher};
 use value_trait::{Mutable, Value as ValueTrait, ValueAccess, ValueType};
-use abi_stable::std_types::{RHashMap, RCow};
 
 /// Well known key that can be looked up in a `Value` faster.
 /// It achives this by memorizing the hash.
@@ -51,7 +52,7 @@ where
 {
     fn from(key: S) -> Self {
         let key = Cow::from(key);
-        let hash_builder = halfbrown::DefaultHashBuilder::default();
+        let hash_builder = std::collections::hash_map::RandomState::default();
         let mut hasher = hash_builder.build_hasher();
         key.hash(&mut hasher);
         Self {
@@ -119,7 +120,7 @@ impl<'key> KnownKey<'key> {
         // TODO: there's no raw_entry in the HashMap for `std` nor `abi_stable`,
         // so this doesn't make sense at all :(
         //
-        // The only way would be to convert the hashbrown::HashMap into
+        // The only way would be to convert the halfbrown::HashMap into
         // std::collections::HashMap and then into RHashMap, but if this whole
         // thing is intended to optimize, this conversion might be too much.
         map.raw_entry()

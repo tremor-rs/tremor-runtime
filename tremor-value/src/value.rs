@@ -17,9 +17,12 @@ mod cmp;
 pub mod from;
 mod serialize;
 
-// TODO: we don't use beef::Cow anymore, can we remove it from the dependencies?
 use crate::{Error, Result};
-use halfbrown::HashMap;
+use abi_stable::{
+    rvec,
+    std_types::{RBox, RCow, RHashMap, RVec},
+    StableAbi,
+};
 use simd_json::prelude::*;
 use simd_json::{AlignedBuf, Deserializer, Node, StaticNode};
 use std::{borrow::Borrow, convert::TryInto, fmt};
@@ -28,7 +31,6 @@ use std::{
     cmp::Ordering,
     ops::{Index, IndexMut},
 };
-use abi_stable::{StableAbi, rvec, std_types::{RCow, RVec, RBox, RHashMap, RString}};
 
 pub use crate::serde::to_value;
 
@@ -619,7 +621,7 @@ impl<'de> ValueDeserializer<'de> {
         for _ in 0..len {
             // We know the tape is sane
             if let Node::String(key) = unsafe { self.0.next_() } {
-                res.insert(key.into(), self.parse());
+                res.insert(key.into(), self.parse()); // NOTE: no `insert_nocheck`
             } else {
                 // ALLOW: we guarantee this in the tape
                 unreachable!();

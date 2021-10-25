@@ -13,11 +13,10 @@
 // limitations under the License.
 
 use super::Value;
+use abi_stable::std_types::RCow;
 use simd_json::prelude::*;
 use simd_json::BorrowedValue;
 use simd_json::OwnedValue;
-use abi_stable::{rvec, std_types::RCow};
-use std::collections::HashMap;
 
 #[allow(clippy::cast_sign_loss, clippy::default_trait_access)]
 impl<'value> PartialEq for Value<'value> {
@@ -306,6 +305,7 @@ where
 #[cfg(test)]
 mod test {
     use crate::{literal, Value};
+    use abi_stable::rvec;
 
     #[test]
     fn diff_types() {

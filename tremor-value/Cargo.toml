@@ -13,8 +13,9 @@ version = "0.3.2"
 
 [dependencies]
 base64 = "0.13"
+# NOTE: we can remove `beef` as a dependency if it's ok to remove from
+# known_key.rs and just use `std`'s version for that. 
 beef = "0.5"
-halfbrown = { version="0.1", features=["fxhash"] }
 serde = "1.0"
 simd-json = "0.4.7"
 simd-json-derive = "0.2"

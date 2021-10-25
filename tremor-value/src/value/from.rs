@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use super::{Object, Value};
-use abi_stable::std_types::{RCow, RBox};
+use abi_stable::std_types::{RBox, RCow};
 use simd_json::{BorrowedValue, OwnedValue, StaticNode};
 use std::iter::FromIterator;
 
