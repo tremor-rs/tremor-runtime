@@ -148,7 +148,6 @@ impl Source for Int {
                             Err(_e) => {
                                 if let Err(e) = tx.send(SourceReply::EndStream(stream_id)).await {
                                     error!("TCP Error: {}", e);
-                                    return;
                                 }
                             }
                         }
