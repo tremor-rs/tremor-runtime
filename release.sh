@@ -26,11 +26,17 @@ tremor-script\
 "
 old=$1
 new=$2
+branch=$3
 
 if [ -z "${old}" ] || [ -z "${new}" ]
 then
-    echo "please run: $0 <old version> <new version>"
+    echo "please run: $0 <old version> <new version> [<base branch>]"
     exit 1
+fi
+
+if [ -z "${branch}" ]
+then
+  branch="main"
 fi
 
 if [ "$(git status --porcelain=v1 2>/dev/null | wc -l)" -ne 0 ]
@@ -110,12 +116,12 @@ echo "Please open the following pull request we'll wait here continue when it is
 echo
 echo "  >> https://github.com/tremor-rs/tremor-runtime/pull/new/release-v${new} <<"
 echo
-echo "Once you continue we'll generate and push the release tag with the latest 'main'"
+echo "Once you continue we'll generate and push the release tag with the latest '${branch}'"
 read -r answer
 
 echo "Generating release tag v${new}"
 
-git checkout main
+git checkout "${branch}"
 git pull
 git tag -a -m"Release v${new}" "v${new}"
 git push --tags
@@ -163,12 +169,12 @@ echo "Please open the following pull request we'll wait here continue when it is
 echo
 echo "  >> https://github.com/tremor-rs/tremor-www-docs/pull/new/release-v${new} <<"
 echo
-echo "Once you continue we'll generate and push the release tag with the latest 'main'"
+echo "Once you continue we'll generate and push the release tag with the latest '${branch}'"
 read -r answer
 
 echo "Generating release tag v${new}"
 
-git checkout main
+git checkout "${branch}"
 git pull
 git tag -a -m"Release v${new}" "v${new}"
 git push --tags
@@ -229,12 +235,12 @@ echo "Please open the following pull request we'll wait here continue when it is
 echo
 echo "  >> https://github.com/tremor-rs/tremor-language-server/pull/new/release-v${new} <<"
 echo
-echo "Once you continue we'll generate and push the release tag with the latest 'main'"
+echo "Once you continue we'll generate and push the release tag with the latest '${branch}'"
 read -r answer
 
 echo "Generating release tag v${new}"
 
-git checkout main
+git checkout "${branch}"
 git pull
 git tag -a -m"Release v${new}" "v${new}"
 git push --tags
