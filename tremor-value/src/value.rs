@@ -17,8 +17,8 @@ mod cmp;
 pub mod from;
 mod serialize;
 
+// TODO: we don't use beef::Cow anymore, can we remove it from the dependencies?
 use crate::{Error, Result};
-use beef::Cow;
 use halfbrown::HashMap;
 use simd_json::prelude::*;
 use simd_json::{AlignedBuf, Deserializer, Node, StaticNode};
@@ -28,13 +28,14 @@ use std::{
     cmp::Ordering,
     ops::{Index, IndexMut},
 };
+use abi_stable::{StableAbi, rvec, std_types::{RCow, RVec, RBox, RSlice, RHashMap}};
 
 pub use crate::serde::to_value;
 
 /// Representation of a JSON object
-pub type Object<'value> = HashMap<Cow<'value, str>, Value<'value>>;
+pub type Object<'value> = RHashMap<RCow<'value, str>, Value<'value>>;
 /// Bytes
-pub type Bytes<'value> = Cow<'value, [u8]>;
+pub type Bytes<'value> = RCow<'value, [u8]>; // TODO: not sure if this will work
 
 /// Parses a slice of bytes into a Value dom. This function will
 /// rewrite the slice to de-escape strings.
@@ -72,7 +73,8 @@ pub fn parse_to_value_with_buffers<'value>(
 
 /// Borrowed JSON-DOM Value, consider using the `ValueTrait`
 /// to access its content
-#[derive(Debug, Clone)]
+#[repr(C)]
+#[derive(Debug, Clone, StableAbi)]
 pub enum Value<'value> {
     /// Static values
     Static(StaticNode),
@@ -92,7 +94,7 @@ impl<'value> Value<'value> {
     /// Creates an empty array value
     #[must_use]
     pub const fn array() -> Self {
-        Value::Array(vec![])
+        Value::Array(rvec![])
     }
 
     /// Creates an empty array value
@@ -275,14 +277,14 @@ impl<'value> Value<'value> {
     #[must_use]
     pub fn into_static(self) -> Value<'static> {
         match self {
-            Self::String(s) => Value::String(Cow::owned(s.to_string())),
+            Self::String(s) => Value::String(RCow::owned(s.to_string())),
             Self::Array(arr) => arr.into_iter().map(Value::into_static).collect(),
             Self::Object(obj) => obj
                 .into_iter()
-                .map(|(k, v)| (Cow::owned(k.to_string()), v.into_static()))
+                .map(|(k, v)| (RCow::owned(k.to_string()), v.into_static()))
                 .collect(),
             Self::Static(s) => Value::Static(s),
-            Self::Bytes(b) => Value::Bytes(Cow::owned(b.to_vec())),
+            Self::Bytes(b) => Value::Bytes(RCow::owned(b.to_vec())),
         }
     }
 
@@ -292,14 +294,14 @@ impl<'value> Value<'value> {
     #[must_use]
     pub fn clone_static(&self) -> Value<'static> {
         match self {
-            Self::String(s) => Value::String(Cow::owned(s.to_string())),
+            Self::String(s) => Value::String(RCow::owned(s.to_string())),
             Self::Array(arr) => arr.iter().map(Value::clone_static).collect(),
             Self::Object(obj) => obj
                 .iter()
-                .map(|(k, v)| (Cow::owned(k.to_string()), v.clone_static()))
+                .map(|(k, v)| (RCow::owned(k.to_string()), v.clone_static()))
                 .collect(),
             Self::Static(s) => Value::Static(*s),
-            Self::Bytes(b) => Value::Bytes(Cow::owned(b.to_vec())),
+            Self::Bytes(b) => Value::Bytes(RCow::owned(b.to_vec())),
         }
     }
 
@@ -319,7 +321,7 @@ impl<'value> Value<'value> {
     #[must_use]
     pub fn get_bytes<Q: ?Sized>(&self, k: &Q) -> Option<&[u8]>
     where
-        Cow<'value, str>: Borrow<Q> + Hash + Eq,
+        RCow<'value, str>: Borrow<Q> + Hash + Eq,
         Q: Hash + Eq + Ord,
     {
         self.get(k).and_then(Self::as_bytes)
@@ -348,7 +350,7 @@ impl<'value> Value<'value> {
     #[must_use]
     pub fn get_char<Q: ?Sized>(&self, k: &Q) -> Option<char>
     where
-        Cow<'value, str>: Borrow<Q> + Hash + Eq,
+        RCow<'value, str>: Borrow<Q> + Hash + Eq,
         Q: Hash + Eq + Ord,
     {
         self.get(k).and_then(Self::as_char)
@@ -393,7 +395,7 @@ impl<'value> Mutable for Value<'value> {
 }
 impl<'value> ValueAccess for Value<'value> {
     type Target = Self;
-    type Key = Cow<'value, str>;
+    type Key = RCow<'value, str>;
     type Array = Vec<Self>;
     type Object = HashMap<Self::Key, Self>;
 
@@ -1316,7 +1318,7 @@ mod test {
             any::<u64>()
                 .prop_map(StaticNode::U64)
                 .prop_map(Value::Static),
-            any::<Vec<u8>>().prop_map(Cow::from).prop_map(Value::Bytes),
+            any::<Vec<u8>>().prop_map(RCow::from).prop_map(Value::Bytes),
             any::<f64>()
                 .prop_map(StaticNode::F64)
                 .prop_map(Value::Static),
@@ -1330,7 +1332,7 @@ mod test {
                 prop_oneof![
                     // Take the inner strategy and make the two recursive cases.
                     prop::collection::vec(inner.clone(), 0..10).prop_map(Value::Array),
-                    prop::collection::hash_map(".*".prop_map(Cow::from), inner, 0..10)
+                    prop::collection::hash_map(".*".prop_map(RCow::from), inner, 0..10)
                         .prop_map(|m| m.into_iter().collect()),
                 ]
             },
@@ -1363,7 +1365,7 @@ mod test {
                 prop_oneof![
                     // Take the inner strategy and make the two recursive cases.
                     prop::collection::vec(inner.clone(), 0..10).prop_map(Value::Array),
-                    prop::collection::hash_map(".*".prop_map(Cow::from), inner, 0..10)
+                    prop::collection::hash_map(".*".prop_map(RCow::from), inner, 0..10)
                         .prop_map(|m| m.into_iter().collect()),
                 ]
             },

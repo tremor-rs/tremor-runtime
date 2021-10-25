@@ -49,6 +49,7 @@ pub use value::{parse_to_value, parse_to_value_with_buffers, to_value, Object, V
 use simd_json::Node;
 use simd_json_derive::{Deserialize, Serialize, Tape};
 use value_trait::Writable;
+use abi_stable::std_types::RVec;
 
 impl<'value> Serialize for Value<'value> {
     fn json_write<W>(&self, writer: &mut W) -> std::io::Result<()>
@@ -78,7 +79,7 @@ impl<'input, 'tape> ValueDeser<'input, 'tape> {
         // Rust doesn't optimize the normal loop away here
         // so we write our own avoiding the length
         // checks during push
-        let mut res = Vec::with_capacity(len);
+        let mut res = RVec::with_capacity(len);
         unsafe {
             res.set_len(len);
             for i in 0..len {

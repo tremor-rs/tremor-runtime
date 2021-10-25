@@ -19,6 +19,11 @@ serde = "1.0"
 simd-json = "0.4.7"
 simd-json-derive = "0.2"
 value-trait = { version="0.2", features=["custom-types"] }
+# TODO: temporary until it's upstreamed
+# value-trait = { version="0.2", features=["custom-types"], path = "../../value-trait" }
+# abi_stable = "0.10"
+# TODO: temporary until it's upstreamed
+abi_stable = { version = "0.10", path = "../../abi_stable_crates/abi_stable" }
 
 [dev-dependencies]
 float-cmp = "0.9"

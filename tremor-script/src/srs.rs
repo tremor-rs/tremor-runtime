@@ -19,6 +19,8 @@ use crate::{
 };
 use std::{fmt::Debug, mem, pin::Pin, sync::Arc};
 
+use abi_stable::StableAbi;
+
 ///! Thisn file includes our self referential structs
 
 /// A script and it's attached source.
@@ -404,10 +406,11 @@ impl Select {
 /// They **must** remain private. All interactions with them have to be guarded
 /// by the implementation logic to ensure they remain sane.
 ///
-#[derive(Clone, Default)]
+#[repr(C)]
+#[derive(Clone, Default, StableAbi)]
 pub struct EventPayload {
     /// The vector of raw input values
-    raw: Vec<Arc<Pin<Vec<u8>>>>,
+    raw: Vec<Arc<Pin<Vec<u8>>>>, // TODO: Pin?
     data: ValueAndMeta<'static>,
 }
 
@@ -735,8 +738,9 @@ impl<'input> simd_json_derive::Deserialize<'input> for EventPayload {
 */
 
 /// Combined struct for an event value and metadata
+#[repr(C)]
 #[derive(
-    Clone, Debug, PartialEq, Serialize, simd_json_derive::Serialize, simd_json_derive::Deserialize,
+    Clone, Debug, PartialEq, Serialize, simd_json_derive::Serialize, simd_json_derive::Deserialize, StableAbi
 )]
 pub struct ValueAndMeta<'event> {
     v: Value<'event>,

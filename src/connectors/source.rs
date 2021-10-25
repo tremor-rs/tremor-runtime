@@ -38,7 +38,7 @@ use tremor_pipeline::{
 };
 use tremor_value::{literal, Value};
 use value_trait::Builder;
-use abi_stable::{StableAbi, std_types::{RString, RVec, ROption}, RTuple};
+use abi_stable::{StableAbi, std_types::{RString, RVec, ROption, Tuple2}};
 
 use super::metrics::SourceReporter;
 use super::quiescence::QuiescenceBeacon;
@@ -83,7 +83,6 @@ pub enum SourceMsg {
 /// reply from `Source::on_event`
 #[repr(C)]
 #[derive(Debug, StableAbi)]
-#[sabi(unsafe_allow_type_macros)]
 pub enum SourceReply {
     /// A normal data event with a `Vec<u8>` for data
     Data {
@@ -106,7 +105,7 @@ pub enum SourceReply {
     // for when the source knows where boundaries are, maybe because it receives chunks already
     BatchData {
         origin_uri: EventOriginUri,
-        batch_data: RVec<RTuple!(RVec<u8>, ROption<Value<'static>>)>,
+        batch_data: RVec<Tuple2<RVec<u8>, ROption<Value<'static>>>>,
         stream: u64,
     },
     /// A stream is opened

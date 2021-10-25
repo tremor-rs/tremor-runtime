@@ -5,11 +5,30 @@ version = 3
 [[package]]
 name = "abi_stable"
 version = "0.10.2"
+dependencies = [
+ "abi_stable_derive 0.10.2",
+ "abi_stable_shared 0.10.2",
+ "core_extensions",
+ "crossbeam-channel",
+ "generational-arena",
+ "libloading",
+ "lock_api",
+ "parking_lot",
+ "repr_offset",
+ "rustc_version 0.4.0",
+ "serde",
+ "serde_derive",
+ "serde_json",
+]
+
+[[package]]
+name = "abi_stable"
+version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "709308333aa82687b93e978aeec6c60688cdecd7bd7d0378a9825227145878c4"
 dependencies = [
- "abi_stable_derive",
- "abi_stable_shared",
+ "abi_stable_derive 0.10.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "abi_stable_shared 0.10.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "core_extensions",
  "crossbeam-channel",
  "generational-arena",
@@ -26,17 +45,38 @@ dependencies = [
 [[package]]
 name = "abi_stable_derive"
 version = "0.10.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "178bbfd075531f3af85296ca9839f71d923406682819b595353d73fe4d853643"
 dependencies = [
- "abi_stable_shared",
- "as_derive_utils",
+ "abi_stable_shared 0.10.2",
+ "as_derive_utils 0.10.2",
  "core_extensions",
  "proc-macro2",
  "quote",
  "rustc_version 0.2.3",
  "syn",
  "typed-arena",
+]
+
+[[package]]
+name = "abi_stable_derive"
+version = "0.10.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "178bbfd075531f3af85296ca9839f71d923406682819b595353d73fe4d853643"
+dependencies = [
+ "abi_stable_shared 0.10.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "as_derive_utils 0.10.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "core_extensions",
+ "proc-macro2",
+ "quote",
+ "rustc_version 0.2.3",
+ "syn",
+ "typed-arena",
+]
+
+[[package]]
+name = "abi_stable_shared"
+version = "0.10.2"
+dependencies = [
+ "core_extensions",
 ]
 
 [[package]]
@@ -190,6 +230,16 @@ name = "arrayvec"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "23b62fc65de8e4e7f52534fb52b0f3ed04746ae267519eef2a83941e8085068b"
+
+[[package]]
+name = "as_derive_utils"
+version = "0.10.2"
+dependencies = [
+ "core_extensions",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
 
 [[package]]
 name = "as_derive_utils"
@@ -4905,7 +4955,7 @@ dependencies = [
 name = "tremor-runtime"
 version = "0.11.4"
 dependencies = [
- "abi_stable",
+ "abi_stable 0.10.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "anyhow",
  "async-broadcast",
  "async-compat",
@@ -5020,6 +5070,7 @@ dependencies = [
 name = "tremor-value"
 version = "0.3.2"
 dependencies = [
+ "abi_stable 0.10.2",
  "base64 0.13.0",
  "beef",
  "float-cmp 0.9.0",

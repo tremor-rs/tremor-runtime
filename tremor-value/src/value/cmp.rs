@@ -16,6 +16,7 @@ use super::Value;
 use simd_json::prelude::*;
 use simd_json::BorrowedValue;
 use simd_json::OwnedValue;
+use abi_stable::{rvec, std_types::RCow};
 
 #[allow(clippy::cast_sign_loss, clippy::default_trait_access)]
 impl<'value> PartialEq for Value<'value> {
@@ -107,7 +108,7 @@ impl<'value> From<Value<'value>> for BorrowedValue<'value> {
             Value::String(s) => BorrowedValue::from(s.to_string()),
             Value::Array(a) => a.into_iter().collect(),
             Value::Object(m) => m.into_iter().collect(),
-            Value::Bytes(b) => BorrowedValue::from(base64::encode(b)),
+            Value::Bytes(b) => BorrowedValue::from(base64::encode(b.into())),
         }
     }
 }
@@ -128,10 +129,10 @@ impl<'v> PartialEq<bool> for Value<'v> {
     }
 }
 
-impl<'v> PartialEq<beef::Cow<'v, str>> for Value<'v> {
+impl<'v> PartialEq<RCow<'v, str>> for Value<'v> {
     #[inline]
     #[must_use]
-    fn eq(&self, other: &beef::Cow<str>) -> bool {
+    fn eq(&self, other: &RCow<str>) -> bool {
         self.as_str().map(|t| t.eq(other)).unwrap_or_default()
     }
 }
@@ -326,8 +327,8 @@ mod test {
 
     #[test]
     fn bytes() {
-        let v1 = vec![1_u8, 2, 3];
-        let v2 = vec![1_u8, 2, 3, 4];
+        let v1 = rvec![1_u8, 2, 3];
+        let v2 = rvec![1_u8, 2, 3, 4];
         assert_eq!(
             Value::Bytes(v1.clone().into()),
             Value::Bytes(v1.clone().into())
