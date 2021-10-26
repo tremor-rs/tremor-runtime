@@ -13,20 +13,14 @@ version = "0.3.2"
 
 [dependencies]
 base64 = "0.13"
-# NOTE: we can remove `beef` as a dependency if it's ok to remove from
+# FIXME: we can remove `beef` as a dependency if it's ok to remove from
 # known_key.rs and just use `std`'s version for that. 
 beef = "0.5"
 serde = "1.0"
 simd-json = "0.4.7"
 simd-json-derive = "0.2"
-# value-trait = { version="0.2", features=["custom-types"] }
-# TODO: temporary until it's upstreamed
-# (https://github.com/simd-lite/value-trait/pull/14)
-value-trait = { version="0.2.9-alpha.0", features=["custom-types"], git = "https://github.com/marioortizmanero/value-trait.git", branch = "abi-stable" }
-# TODO: temporary until it's upstreamed
-# (https://github.com/rodrimati1992/abi_stable_crates/pull/58)
-abi_stable = { version = "0.10", git = "https://github.com/rodrimati1992/abi_stable_crates.git" }
-# abi_stable = "0.10"
+value-trait = { version="0.2", features=["custom-types", "c-abi"] }
+abi_stable = "0.10"
 
 [dev-dependencies]
 float-cmp = "0.9"

@@ -117,7 +117,7 @@ impl<'key> KnownKey<'key> {
     where
         'value: 'target,
     {
-        // TODO: there's no raw_entry in the HashMap for `std` nor `abi_stable`,
+        // FIXME: there's no raw_entry in the HashMap for `std` nor `abi_stable`,
         // so this doesn't make sense at all :(
         //
         // The only way would be to convert the halfbrown::HashMap into
@@ -189,7 +189,7 @@ impl<'key> KnownKey<'key> {
         'key: 'value,
         'value: 'target,
     {
-        // TODO: same here, no `raw_entry_mut`
+        // FIXME: same here, no `raw_entry_mut`
         match map
             .raw_entry_mut()
             .from_key_hashed_nocheck(self.hash, &self.key)
@@ -289,7 +289,7 @@ impl<'key> KnownKey<'key> {
         'value: 'target,
         F: FnOnce() -> Value<'value>,
     {
-        // TODO: same here, no `raw_entry_mut`
+        // FIXME: same here, no `raw_entry_mut`
         let key: &str = &self.key;
         map.raw_entry_mut()
             .from_key_hashed_nocheck(self.hash, key)
@@ -377,7 +377,7 @@ impl<'key> KnownKey<'key> {
         'key: 'value,
         'value: 'target,
     {
-        // TODO: same, `raw_entry_mut` doesn't exist...
+        // FIXME: same, `raw_entry_mut` doesn't exist...
         match map
             .raw_entry_mut()
             .from_key_hashed_nocheck(self.hash, self.key())

@@ -621,7 +621,7 @@ impl<'de> ValueDeserializer<'de> {
         for _ in 0..len {
             // We know the tape is sane
             if let Node::String(key) = unsafe { self.0.next_() } {
-                res.insert(key.into(), self.parse()); // NOTE: no `insert_nocheck`
+                res.insert(key.into(), self.parse()); // FIXME: no `insert_nocheck`
             } else {
                 // ALLOW: we guarantee this in the tape
                 unreachable!();
