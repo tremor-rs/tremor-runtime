@@ -126,10 +126,6 @@ rust_tokenizers = { git = 'https://github.com/mfelsche/rust-tokenizers.git', rev
 # FIXME: temporary until it's upstreamed
 # (https://github.com/simd-lite/value-trait/pull/14)
 value-trait = { path = "../value-trait" }
-# FIXME: temporary until it's upstreamed
-# (https://github.com/rodrimati1992/abi_stable_crates/pull/58)
-# (https://github.com/rodrimati1992/abi_stable_crates/pull/61)
-abi_stable = { git = "https://github.com/marioortizmanero/abi_stable_crates.git" }
 
 # for use during debian packaging, via cargo-deb
 # https://github.com/mmstick/cargo-deb#packagemetadatadeb-options
