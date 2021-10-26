@@ -16,4 +16,5 @@ if test -f before.pid; then
     kill -9 $( cat before.pid )
     # Remove pid file
     rm -f before.pid
+    echo "Hard killed via pidfile"
 fi

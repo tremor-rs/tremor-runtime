@@ -1,5 +1,6 @@
 [{"connector": {"kv": {"get": "snot"}}}, 1]
 [{"connector": {"kv": {"put": "snot"}}}, "badger"]
+[{"connector": {"kv": {"swap": "snot"}}}, "velociraptor"]
 [{"connector": {"kv": {"get": "snot"}}, "batch": true}, 3]
 [{"connector": {"kv": {"put": "heinz"}}, "batch": true}, "ketchup"]
 [{"connector": {"kv": {"get": "heinz"}}}, 5]
