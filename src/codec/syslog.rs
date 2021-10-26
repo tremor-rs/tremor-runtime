@@ -265,19 +265,14 @@ where
 
     fn encode(&self, data: &Value) -> Result<Vec<u8>> {
         let protocol = match (data.get_str("protocol"), data.get_u32("protocol_version")) {
-            (Some("RFC3164"), _) => Protocol::RFC3164,
-            (Some("RFC5424"), Some(version)) => Protocol::RFC5424(version),
-            (Some("RFC5424"), None) => {
-                return Err(ErrorKind::InvalidSyslogData("Missing protocol version").into())
-            }
-            (None, Some(_)) => {
-                return Err(ErrorKind::InvalidSyslogData("Missing protocol type").into())
-            }
-            (Some(&_), _) => {
-                return Err(ErrorKind::InvalidSyslogData("invalid protocol type").into())
-            }
-            (None, None) => Protocol::RFC5424(1_u32),
-        };
+            (Some("RFC3164"), _) => Ok(Protocol::RFC3164),
+            (Some("RFC5424"), Some(version)) => Ok(Protocol::RFC5424(version)),
+            (Some("RFC5424"), None) => Err("Missing protocol version"),
+            (None, Some(_)) => Err("Missing protocol type"),
+            (Some(&_), _) => Err("Invalid protocol type"),
+            (None, None) => Ok(Protocol::RFC5424(1_u32)),
+        }
+        .map_err(ErrorKind::InvalidSyslogData)?;
         let result = match protocol {
             Protocol::RFC3164 => self.encode_rfc3164(data)?,
             Protocol::RFC5424(version) => Self::encode_rfc5424(data, version)?,
@@ -442,6 +437,80 @@ mod test {
     }
 
     #[test]
+    fn encode_invalid_facility() -> Result<()> {
+        let codec = test_codec();
+        let msg = literal!({
+            "severity": "notice",
+            "facility": "snot",
+            "msg": "test message",
+            "protocol": "RFC5424",
+            "protocol_version": 1,
+            "timestamp": 0_u64
+        });
+        assert!(codec.encode(&msg).is_err());
+
+        Ok(())
+    }
+
+    #[test]
+    fn encode_invalid_severity() -> Result<()> {
+        let codec = test_codec();
+        let msg = literal!({
+            "severity": "snot",
+            "facility": "local4",
+            "msg": "test message",
+            "protocol": "RFC5424",
+            "protocol_version": 1,
+            "timestamp": 0_u64
+        });
+        assert!(codec.encode(&msg).is_err());
+
+        Ok(())
+    }
+
+    #[test]
+    fn encode_rfc5424_missing_version() -> Result<()> {
+        let codec = test_codec();
+        let msg = literal!({
+            "severity": "debug",
+            "facility": "local5",
+            "msg": "test message",
+            "protocol": "RFC5424",
+            "timestamp": 0_u64
+        });
+        assert!(codec.encode(&msg).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn encode_missing_protocol() -> Result<()> {
+        let codec = test_codec();
+        let msg = literal!({
+            "severity": "notice",
+            "facility": "local6",
+            "msg": "test message",
+            "protocol_version": 1,
+            "timestamp": 0_u64
+        });
+        assert!(codec.encode(&msg).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn encode_invalid_protocol() -> Result<()> {
+        let codec = test_codec();
+        let msg = literal!({
+            "severity": "notice",
+            "facility": "local7",
+            "msg": "test message",
+            "protocol": "snot",
+            "timestamp": 0_u64
+        });
+        assert!(codec.encode(&msg).is_err());
+        Ok(())
+    }
+
+    #[test]
     fn encode_empty_rfc3164() -> Result<()> {
         let codec = test_codec();
         let msg = Value::from(simd_json::json!({
@@ -548,26 +617,20 @@ mod test {
 
     // date formatting is a bit different
     #[test_case("<34>1 2003-10-11T22:14:15.003Z mymachine.example.com su - ID47 - \u{FEFF}'su root' failed for lonvick on /dev/pts/8",
-           Some("<34>1 2003-10-11T22:14:15.003+00:00 mymachine.example.com su - ID47 - \u{feff}'su root' failed for lonvick on /dev/pts/8") => Ok(()); "Example 1")]
+           "<34>1 2003-10-11T22:14:15.003+00:00 mymachine.example.com su - ID47 - \u{feff}'su root' failed for lonvick on /dev/pts/8" => Ok(()); "Example 1")]
     // we always parse to UTC date - so encoding a decoded msg will always give UTC
     #[test_case(r#"<165>1 2003-08-24T05:14:15.000003-07:00 192.0.2.1 myproc 8710 - - %% It's time to make the do-nuts."#,
-           Some(r#"<165>1 2003-08-24T12:14:15.000003+00:00 192.0.2.1 myproc 8710 - - %% It's time to make the do-nuts."#) => Ok(()); "Example 2")]
+           r#"<165>1 2003-08-24T12:14:15.000003+00:00 192.0.2.1 myproc 8710 - - %% It's time to make the do-nuts."# => Ok(()); "Example 2")]
     #[test_case("<165>1 2003-10-11T22:14:15.003Z mymachine.example.com evntslog - ID47 [exampleSDID@32473 iut=\"3\" eventSource=\"Application\" eventID=\"1011\"] \u{FEFF}An application event log entry...",
-           Some("<165>1 2003-10-11T22:14:15.003+00:00 mymachine.example.com evntslog - ID47 [exampleSDID@32473 iut=\"3\" eventSource=\"Application\" eventID=\"1011\"] \u{feff}An application event log entry...") => Ok(()); "Example 3")]
+           "<165>1 2003-10-11T22:14:15.003+00:00 mymachine.example.com evntslog - ID47 [exampleSDID@32473 iut=\"3\" eventSource=\"Application\" eventID=\"1011\"] \u{feff}An application event log entry..." => Ok(()); "Example 3")]
     #[test_case(r#"<165>1 2003-10-11T22:14:15.003Z mymachine.example.com evntslog - ID47 [exampleSDID@32473 iut="3" eventSource="Application" eventID="1011"][examplePriority@32473 class="high"]"#,
-           Some(r#"<165>1 2003-10-11T22:14:15.003+00:00 mymachine.example.com evntslog - ID47 [exampleSDID@32473 iut="3" eventSource="Application" eventID="1011"][examplePriority@32473 class="high"]"#) => Ok(()); "Example 4")]
-    fn rfc5424_examples(sample: &'static str, expected: Option<&'static str>) -> Result<()> {
+           r#"<165>1 2003-10-11T22:14:15.003+00:00 mymachine.example.com evntslog - ID47 [exampleSDID@32473 iut="3" eventSource="Application" eventID="1011"][examplePriority@32473 class="high"]"# => Ok(()); "Example 4")]
+    fn rfc5424_examples(sample: &'static str, expected: &'static str) -> Result<()> {
         let mut codec = test_codec();
         let mut vec = sample.as_bytes().to_vec();
         let decoded = codec.decode(&mut vec, 0)?.unwrap();
         let a = codec.encode(&decoded)?;
-        if let Some(expected) = expected {
-            // compare against expected output
-            assert_eq!(expected, std::str::from_utf8(&a)?);
-        } else {
-            // compare against sample
-            assert_eq!(sample, std::str::from_utf8(&a)?);
-        }
+        assert_eq!(expected, std::str::from_utf8(&a)?);
         Ok(())
     }
 }
