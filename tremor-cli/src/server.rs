@@ -18,7 +18,7 @@ use anyhow::Context;
 use async_std::stream::StreamExt;
 use clap::{App, ArgMatches};
 use futures::future;
-use signal_hook::consts::signal::*;
+use signal_hook::consts::signal::{SIGINT, SIGQUIT, SIGTERM};
 use signal_hook::low_level::signal_name;
 use signal_hook_async_std::Signals;
 use std::io::Write;
@@ -134,6 +134,7 @@ async fn handle_signals(signals: Signals, world: World) {
 }
 
 #[cfg(not(tarpaulin_include))]
+#[allow(clippy::too_many_lines)]
 pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
     // Logging
     if let Some(logger_config) = matches.value_of("logger-config") {
@@ -213,7 +214,12 @@ pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
         }
     }
 
-    let api_handle = if !matches.is_present("no-api") {
+    let api_handle = if matches.is_present("no-api") {
+        // dummy task never finishing
+        async_std::task::spawn(async move {
+            future::pending::<()>().await;
+        })
+    } else {
         let host = matches
             .value_of("api-host")
             .map(ToString::to_string)
@@ -228,9 +234,6 @@ pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
             }
             warn!("API stopped.");
         })
-    } else {
-        // dummy task never finishing
-        async_std::task::spawn(async move { future::pending().await })
     };
     // waiting for either
     match future::select(handle, api_handle).await {
@@ -268,7 +271,6 @@ macro_rules! log_and_print_error {
 }
 
 async fn server_run(matches: &ArgMatches) {
-    dbg!(std::env::current_dir().unwrap());
     version::print();
     if let Err(ref e) = run_dun(matches).await {
         match e {

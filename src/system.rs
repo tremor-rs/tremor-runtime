@@ -105,7 +105,7 @@ pub enum ManagerMsg {
     /// msg to the pipeline manager
     Pipeline(pipeline::ManagerMsg),
     /// msg to the onramp manager
-    Onramp(onramp::ManagerMsg),
+    Onramp(Box<onramp::ManagerMsg>),
     /// msg to the offramp manager
     Offramp(offramp::ManagerMsg),
     /// msg to the connector manager
@@ -136,7 +136,7 @@ impl Manager {
             while let Ok(msg) = rx.recv().await {
                 match msg {
                     ManagerMsg::Pipeline(msg) => self.pipeline.send(msg).await?,
-                    ManagerMsg::Onramp(msg) => self.onramp.send(msg).await?,
+                    ManagerMsg::Onramp(msg) => self.onramp.send(*msg).await?,
                     ManagerMsg::Offramp(msg) => self.offramp.send(msg).await?,
                     ManagerMsg::Connector(msg) => self.connector.send(msg).await?,
                     ManagerMsg::Stop => {
@@ -183,11 +183,11 @@ impl World {
         builder: Box<dyn onramp::Builder>,
     ) -> Result<()> {
         self.system
-            .send(ManagerMsg::Onramp(onramp::ManagerMsg::Register {
+            .send(ManagerMsg::Onramp(Box::new(onramp::ManagerMsg::Register {
                 onramp_type: type_name.to_string(),
                 builder,
                 builtin: true,
-            }))
+            })))
             .await?;
         Ok(())
     }
@@ -202,11 +202,11 @@ impl World {
         builder: Box<dyn onramp::Builder>,
     ) -> Result<()> {
         self.system
-            .send(ManagerMsg::Onramp(onramp::ManagerMsg::Register {
+            .send(ManagerMsg::Onramp(Box::new(onramp::ManagerMsg::Register {
                 onramp_type: type_name.to_string(),
                 builder,
                 builtin: false,
-            }))
+            })))
             .await?;
         Ok(())
     }
@@ -217,8 +217,8 @@ impl World {
     ///  * If the system is unavailable
     pub async fn unregister_onramp_type(&self, type_name: String) -> Result<()> {
         self.system
-            .send(ManagerMsg::Onramp(onramp::ManagerMsg::Unregister(
-                type_name,
+            .send(ManagerMsg::Onramp(Box::new(
+                onramp::ManagerMsg::Unregister(type_name),
             )))
             .await?;
         Ok(())
@@ -231,8 +231,8 @@ impl World {
     pub async fn has_onramp_type(&self, type_name: String) -> Result<bool> {
         let (tx, rx) = bounded(1);
         self.system
-            .send(ManagerMsg::Onramp(onramp::ManagerMsg::TypeExists(
-                type_name, tx,
+            .send(ManagerMsg::Onramp(Box::new(
+                onramp::ManagerMsg::TypeExists(type_name, tx),
             )))
             .await?;
         Ok(rx.recv().await?)
@@ -1342,7 +1342,7 @@ type: stderr
             config,
             sender: tx,
         };
-        self.system.send(ManagerMsg::Onramp(msg)).await?;
+        self.system.send(ManagerMsg::Onramp(Box::new(msg))).await?;
         async_std::future::timeout(timeout, rx.recv()).await??
     }
 }

@@ -43,7 +43,7 @@ use super::metrics::SourceReporter;
 use super::quiescence::QuiescenceBeacon;
 use super::{ConnectorContext, StreamDone};
 
-/// The default poll interval for try_recv on channels in connectors
+/// The default poll interval for `try_recv` on channels in connectors
 pub const DEFAULT_POLL_INTERVAL: u64 = 10;
 
 /// Messages a Source can receive
