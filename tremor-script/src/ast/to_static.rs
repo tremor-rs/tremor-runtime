@@ -753,14 +753,14 @@ impl<'script> Segment<'script> {
                 lower_mid,
                 upper_mid,
                 mid,
-                range_start,
-                range_end,
+                start,
+                end,
             } => Segment::Range {
                 lower_mid,
                 upper_mid,
                 mid,
-                range_start: Box::new(range_start.into_static()),
-                range_end: Box::new(range_end.into_static()),
+                start: Box::new(start.into_static()),
+                end: Box::new(end.into_static()),
             },
         }
     }

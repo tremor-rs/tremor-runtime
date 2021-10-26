@@ -42,9 +42,9 @@ use crate::{
         UnaryOpKind,
     },
     errors::{
-        error_array_out_of_bound, error_bad_array_index, error_bad_key, error_bad_key_err,
-        error_decreasing_range, error_guard_not_bool, error_invalid_binary, error_invalid_bitshift,
-        error_need_arr, error_need_int, error_need_obj, error_need_obj_err, error_need_str,
+        err_need_obj, error_array_out_of_bound, error_bad_array_index, error_bad_key,
+        error_bad_key_err, error_decreasing_range, error_guard_not_bool, error_invalid_binary,
+        error_invalid_bitshift, error_need_arr, error_need_int, error_need_obj, error_need_str,
         error_oops, error_oops_err, error_patch_key_exists, error_patch_merge_type_conflict,
         error_patch_update_key_missing, Result,
     },
@@ -579,6 +579,7 @@ where
     Expr: BaseExpr,
     'event: 'run,
 {
+    use Segment::Range;
     // Resolve the targeted value by applying all path segments
     let mut subrange: Option<&[Value<'event>]> = None;
     // The current value
@@ -591,7 +592,7 @@ where
 
                 current = stry!(key.lookup(current).ok_or_else(|| {
                     current.as_object().map_or_else(
-                        || error_need_obj_err(outer, segment, current.value_type(), env.meta),
+                        || err_need_obj(outer, segment, current.value_type(), env.meta),
                         |o| {
                             let key = env.meta.name_dflt(*mid).to_string();
                             let options = o.keys().map(ToString::to_string).collect();
@@ -622,28 +623,23 @@ where
                 return error_need_arr(outer, segment, current.value_type(), env.meta);
             }
             // Next segment is an index range: index into `current`, if it's an array
-            Segment::Range {
-                range_start,
-                range_end,
-                ..
-            } => {
+            Range { start, end, .. } => {
                 if let Some(a) = current.as_array() {
                     let array = subrange.unwrap_or_else(|| a.as_slice());
-                    let start_idx = stry!(range_start
+                    let start = stry!(start
                         .eval_to_index(outer, opts, env, event, state, meta, local, path, array));
-                    let end_idx = stry!(range_end
-                        .eval_to_index(outer, opts, env, event, state, meta, local, path, array));
+                    let end = stry!(
+                        end.eval_to_index(outer, opts, env, event, state, meta, local, path, array)
+                    );
 
-                    if end_idx < start_idx {
-                        return error_decreasing_range(
-                            outer, segment, path, start_idx, end_idx, env.meta,
-                        );
-                    } else if end_idx > array.len() {
-                        let r = start_idx..end_idx;
+                    if end < start {
+                        return error_decreasing_range(outer, segment, path, start, end, env.meta);
+                    } else if end > array.len() {
+                        let r = start..end;
                         let l = array.len();
                         return error_array_out_of_bound(outer, segment, path, r, l, env.meta);
                     }
-                    subrange = array.get(start_idx..end_idx);
+                    subrange = array.get(start..end);
                     continue;
                 };
                 return error_need_arr(outer, segment, current.value_type(), env.meta);
@@ -747,21 +743,21 @@ where
 ///
 enum PreEvaluatedPatchOperation<'event, 'run> {
     Insert {
-        ident: beef::Cow<'event, str>,
-        ident_expr: &'run StringLit<'event>,
+        cow: beef::Cow<'event, str>,
+        ident: &'run StringLit<'event>,
         value: Value<'event>,
     },
     Update {
-        ident: beef::Cow<'event, str>,
-        ident_expr: &'run StringLit<'event>,
+        cow: beef::Cow<'event, str>,
+        ident: &'run StringLit<'event>,
         value: Value<'event>,
     },
     Upsert {
-        ident: beef::Cow<'event, str>,
+        cow: beef::Cow<'event, str>,
         value: Value<'event>,
     },
     Erase {
-        ident: beef::Cow<'event, str>,
+        cow: beef::Cow<'event, str>,
     },
     Copy {
         from: beef::Cow<'event, str>,
@@ -772,15 +768,15 @@ enum PreEvaluatedPatchOperation<'event, 'run> {
         to: beef::Cow<'event, str>,
     },
     Merge {
-        ident: beef::Cow<'event, str>,
-        ident_expr: &'run StringLit<'event>,
-        merge_value: Value<'event>,
+        cow: beef::Cow<'event, str>,
+        ident: &'run StringLit<'event>,
+        mvalue: Value<'event>,
     },
     MergeRecord {
-        merge_value: Value<'event>,
+        mvalue: Value<'event>,
     },
     Default {
-        ident: beef::Cow<'event, str>,
+        cow: beef::Cow<'event, str>,
         expr: &'run ImutExprInt<'event>,
     },
     DefaultRecord {
@@ -801,21 +797,21 @@ impl<'event, 'run> PreEvaluatedPatchOperation<'event, 'run> {
     ) -> Result<Self> {
         Ok(match patch_op {
             PatchOperation::Insert { ident, expr } => PreEvaluatedPatchOperation::Insert {
-                ident: stry!(ident.run(opts, env, event, state, meta, local)),
-                ident_expr: ident,
+                cow: stry!(ident.run(opts, env, event, state, meta, local)),
+                ident,
                 value: stry!(expr.run(opts, env, event, state, meta, local)).into_owned(),
             },
             PatchOperation::Update { ident, expr } => PreEvaluatedPatchOperation::Update {
-                ident: stry!(ident.run(opts, env, event, state, meta, local)),
-                ident_expr: ident,
+                cow: stry!(ident.run(opts, env, event, state, meta, local)),
+                ident,
                 value: stry!(expr.run(opts, env, event, state, meta, local)).into_owned(),
             },
             PatchOperation::Upsert { ident, expr } => PreEvaluatedPatchOperation::Upsert {
-                ident: stry!(ident.run(opts, env, event, state, meta, local)),
+                cow: stry!(ident.run(opts, env, event, state, meta, local)),
                 value: stry!(expr.run(opts, env, event, state, meta, local)).into_owned(),
             },
             PatchOperation::Erase { ident } => PreEvaluatedPatchOperation::Erase {
-                ident: stry!(ident.run(opts, env, event, state, meta, local)),
+                cow: stry!(ident.run(opts, env, event, state, meta, local)),
             },
             PatchOperation::Copy { from, to } => PreEvaluatedPatchOperation::Copy {
                 from: stry!(from.run(opts, env, event, state, meta, local)),
@@ -826,15 +822,15 @@ impl<'event, 'run> PreEvaluatedPatchOperation<'event, 'run> {
                 to: stry!(to.run(opts, env, event, state, meta, local)),
             },
             PatchOperation::Merge { ident, expr } => PreEvaluatedPatchOperation::Merge {
-                ident: stry!(ident.run(opts, env, event, state, meta, local)),
-                ident_expr: ident,
-                merge_value: stry!(expr.run(opts, env, event, state, meta, local)).into_owned(),
+                cow: stry!(ident.run(opts, env, event, state, meta, local)),
+                ident,
+                mvalue: stry!(expr.run(opts, env, event, state, meta, local)).into_owned(),
             },
             PatchOperation::MergeRecord { expr } => PreEvaluatedPatchOperation::MergeRecord {
-                merge_value: stry!(expr.run(opts, env, event, state, meta, local)).into_owned(),
+                mvalue: stry!(expr.run(opts, env, event, state, meta, local)).into_owned(),
             },
             PatchOperation::Default { ident, expr } => PreEvaluatedPatchOperation::Default {
-                ident: stry!(ident.run(opts, env, event, state, meta, local)),
+                cow: stry!(ident.run(opts, env, event, state, meta, local)),
                 // PERF: this is slow, we might not need to evaluate it
                 expr,
             },
@@ -857,113 +853,99 @@ fn patch_value<'run, 'event>(
     target: &mut Value<'event>,
     expr: &Patch<'event>,
 ) -> Result<()> {
+    use PreEvaluatedPatchOperation::{
+        self as Pepo, Copy, Default, DefaultRecord, Erase, Insert, Merge, MergeRecord, Move,
+        Update, Upsert,
+    };
     let patch_expr = expr;
-    let mut evaluated: Vec<PreEvaluatedPatchOperation> = Vec::with_capacity(expr.operations.len());
+    let mut evaluated: Vec<_> = Vec::with_capacity(expr.operations.len());
     // first pass over the operations, evaluating them
     // and (IMPORTANT) get it into an owned, possibly cloned value, so we reference
     // the target value in the state before any patch operation has been executed.
     for op in &expr.operations {
-        evaluated.push(stry!(PreEvaluatedPatchOperation::from(
-            op, opts, env, event, state, meta, local,
-        )));
+        evaluated.push(stry!(Pepo::from(op, opts, env, event, state, meta, local,)));
     }
 
     // second pass over pre-evaluated operations
     // executing them against the actual target value
     for const_op in evaluated {
         // moved inside the loop as we need to borrow it mutably in the tuple-merge case
-        if let Some(obj) = target.as_object_mut() {
-            match const_op {
-                PreEvaluatedPatchOperation::Insert {
-                    ident,
-                    ident_expr,
-                    value,
-                } => {
-                    if obj.contains_key(&ident) {
-                        let key = ident.to_string();
-                        return error_patch_key_exists(patch_expr, ident_expr, key, env.meta);
-                    };
-                    obj.insert(ident, value);
-                }
-                PreEvaluatedPatchOperation::Update {
-                    ident,
-                    ident_expr,
-                    value,
-                } => {
-                    if obj.contains_key(&ident) {
-                        obj.insert(ident, value);
-                    } else {
-                        let key = ident.to_string();
-                        return error_patch_update_key_missing(
-                            patch_expr, ident_expr, key, env.meta,
-                        );
-                    }
-                }
-                PreEvaluatedPatchOperation::Upsert { ident, value } => {
-                    obj.insert(ident, value);
-                }
-                PreEvaluatedPatchOperation::Erase { ident } => {
-                    obj.remove(&ident);
-                }
-                PreEvaluatedPatchOperation::Copy { from, to } => {
-                    if obj.contains_key(&to) {
-                        return error_patch_key_exists(patch_expr, expr, to.to_string(), env.meta);
-                    }
-                    if let Some(old) = obj.get(&from) {
-                        let old = old.clone();
-                        obj.insert(to, old);
-                    }
-                }
-                PreEvaluatedPatchOperation::Move { from, to } => {
-                    if obj.contains_key(&to) {
-                        return error_patch_key_exists(patch_expr, expr, to.to_string(), env.meta);
-                    }
-                    if let Some(old) = obj.remove(&from) {
-                        obj.insert(to, old);
-                    }
-                }
-                PreEvaluatedPatchOperation::Merge {
-                    ident,
-                    ident_expr,
-                    merge_value,
-                } => match obj.get_mut(&ident) {
-                    Some(value @ Value::Object(_)) => {
-                        stry!(merge_values(patch_expr, expr, value, &merge_value));
-                    }
-                    Some(other) => {
-                        let key = ident.to_string();
-                        return error_patch_merge_type_conflict(
-                            patch_expr, ident_expr, key, other, env.meta,
-                        );
-                    }
-                    None => {
-                        let mut new_value = Value::object();
-                        stry!(merge_values(patch_expr, expr, &mut new_value, &merge_value));
-                        obj.insert(ident, new_value);
-                    }
-                },
-                PreEvaluatedPatchOperation::MergeRecord { merge_value } => {
-                    stry!(merge_values(patch_expr, expr, target, &merge_value));
-                }
-                PreEvaluatedPatchOperation::Default {
-                    ident, expr: inner, ..
-                } => {
-                    if !obj.contains_key(&ident) {
-                        let default_value = stry!(inner.run(opts, env, event, state, meta, local));
-                        obj.insert(ident, default_value.into_owned());
-                    };
-                }
-                PreEvaluatedPatchOperation::DefaultRecord { expr: inner } => {
-                    let default_value = stry!(inner.run(opts, env, event, state, meta, local));
-                    if let Some(dflt) = default_value.as_object() {
-                        apply_default(obj, dflt);
-                    } else {
-                        return error_need_obj(expr, inner, default_value.value_type(), env.meta);
-                    }
+        let t = target.value_type();
+        let obj = target
+            .as_object_mut()
+            .ok_or_else(|| err_need_obj(patch_expr, &expr.target, t, env.meta))?;
+        match const_op {
+            Insert { cow, ident, value } => {
+                if obj.contains_key(&cow) {
+                    let key = cow.to_string();
+                    return error_patch_key_exists(patch_expr, ident, key, env.meta);
+                };
+                obj.insert(cow, value);
+            }
+            Update { cow, ident, value } => {
+                if obj.contains_key(&cow) {
+                    obj.insert(cow, value);
+                } else {
+                    let key = cow.to_string();
+                    return error_patch_update_key_missing(patch_expr, ident, key, env.meta);
                 }
             }
-        } else {
-            return error_need_obj(patch_expr, &expr.target, target.value_type(), env.meta);
+            Upsert { cow, value } => {
+                obj.insert(cow, value);
+            }
+            Erase { cow } => {
+                obj.remove(&cow);
+            }
+            Copy { from, to } => {
+                if obj.contains_key(&to) {
+                    return error_patch_key_exists(patch_expr, expr, to.to_string(), env.meta);
+                }
+                if let Some(old) = obj.get(&from) {
+                    let old = old.clone();
+                    obj.insert(to, old);
+                }
+            }
+            Move { from, to } => {
+                if obj.contains_key(&to) {
+                    return error_patch_key_exists(patch_expr, expr, to.to_string(), env.meta);
+                }
+                if let Some(old) = obj.remove(&from) {
+                    obj.insert(to, old);
+                }
+            }
+            Merge { cow, ident, mvalue } => match obj.get_mut(&cow) {
+                Some(value @ Value::Object(_)) => {
+                    stry!(merge_values(patch_expr, expr, value, &mvalue));
+                }
+                Some(other) => {
+                    let key = cow.to_string();
+                    return error_patch_merge_type_conflict(
+                        patch_expr, ident, key, other, env.meta,
+                    );
+                }
+                None => {
+                    let mut new_value = Value::object();
+                    stry!(merge_values(patch_expr, expr, &mut new_value, &mvalue));
+                    obj.insert(cow, new_value);
+                }
+            },
+            MergeRecord { mvalue } => {
+                stry!(merge_values(patch_expr, expr, target, &mvalue));
+            }
+            Default { cow, expr, .. } => {
+                if !obj.contains_key(&cow) {
+                    let default_value = stry!(expr.run(opts, env, event, state, meta, local));
+                    obj.insert(cow, default_value.into_owned());
+                };
+            }
+            DefaultRecord { expr: inner } => {
+                let default_value = stry!(inner.run(opts, env, event, state, meta, local));
+                if let Some(dflt) = default_value.as_object() {
+                    apply_default(obj, dflt);
+                } else {
+                    return error_need_obj(expr, inner, default_value.value_type(), env.meta);
+                }
+            }
         }
     }
     Ok(())
@@ -1044,11 +1026,8 @@ where
         Pattern::DoNotCare => test_guard(outer, opts, env, event, state, meta, local, guard),
         Pattern::Tuple(ref tp) => {
             let opts_wo = opts.without_result();
-            if stry!(match_tp_expr(
-                outer, opts_wo, env, event, state, meta, local, target, tp,
-            ))
-            .is_some()
-            {
+            let res = match_tp_expr(outer, opts_wo, env, event, state, meta, local, target, tp);
+            if stry!(res).is_some() {
                 test_guard(outer, opts, env, event, state, meta, local, guard)
             } else {
                 Ok(false)
@@ -1056,11 +1035,8 @@ where
         }
         Pattern::Record(ref rp) => {
             let opts_wo = opts.without_result();
-            if stry!(match_rp_expr(
-                outer, opts_wo, env, event, state, meta, local, target, rp,
-            ))
-            .is_some()
-            {
+            let res = match_rp_expr(outer, opts_wo, env, event, state, meta, local, target, rp);
+            if stry!(res).is_some() {
                 test_guard(outer, opts, env, event, state, meta, local, guard)
             } else {
                 Ok(false)
@@ -1068,11 +1044,8 @@ where
         }
         Pattern::Array(ref ap) => {
             let opts_wo = opts.without_result();
-            if stry!(match_ap_expr(
-                outer, opts_wo, env, event, state, meta, local, target, ap,
-            ))
-            .is_some()
-            {
+            let res = match_ap_expr(outer, opts_wo, env, event, state, meta, local, target, ap);
+            if stry!(res).is_some() {
                 test_guard(outer, opts, env, event, state, meta, local, guard)
             } else {
                 Ok(false)
@@ -1088,7 +1061,7 @@ where
             }
         }
         Pattern::Assign(ref a) => {
-            let opts_w = opts.with_result();
+            let o_w = opts.with_result();
 
             match *a.pattern {
                 Pattern::Extract(ref test) => {
@@ -1111,10 +1084,8 @@ where
                     test_guard(outer, opts, env, event, state, meta, local, guard)
                 }
                 Pattern::Array(ref ap) => {
-                    stry!(match_ap_expr(
-                        outer, opts_w, env, event, state, meta, local, target, ap,
-                    ))
-                    .map_or(Ok(false), |v| {
+                    let res = match_ap_expr(outer, o_w, env, event, state, meta, local, target, ap);
+                    stry!(res).map_or(Ok(false), |v| {
                         // we need to assign prior to the guard so we can check
                         // against the pattern expressions
                         stry!(set_local_shadow(outer, local, env.meta, a.idx, v));
@@ -1123,10 +1094,8 @@ where
                     })
                 }
                 Pattern::Record(ref rp) => {
-                    stry!(match_rp_expr(
-                        outer, opts_w, env, event, state, meta, local, target, rp,
-                    ))
-                    .map_or(Ok(false), |v| {
+                    let res = match_rp_expr(outer, o_w, env, event, state, meta, local, target, rp);
+                    stry!(res).map_or(Ok(false), |v| {
                         // we need to assign prior to the guard so we can check
                         // against the pattern expressions
                         stry!(set_local_shadow(outer, local, env.meta, a.idx, v));
@@ -1149,10 +1118,8 @@ where
                     }
                 }
                 Pattern::Tuple(ref tp) => {
-                    stry!(match_tp_expr(
-                        outer, opts_w, env, event, state, meta, local, target, tp,
-                    ))
-                    .map_or(Ok(false), |v| {
+                    let res = match_tp_expr(outer, o_w, env, event, state, meta, local, target, tp);
+                    stry!(res).map_or(Ok(false), |v| {
                         // we need to assign prior to the guard so we can cehck
                         // against the pattern expressions
                         stry!(set_local_shadow(outer, local, env.meta, a.idx, v));

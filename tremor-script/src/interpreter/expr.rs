@@ -17,8 +17,8 @@ use super::{
     LocalStack, NULL,
 };
 use crate::errors::{
-    error_assign_array, error_assign_to_const, error_bad_key_err, error_invalid_assign_target,
-    error_need_obj_err, error_no_clause_hit, Result,
+    err_need_obj, error_assign_array, error_assign_to_const, error_bad_key_err,
+    error_invalid_assign_target, error_no_clause_hit, Result,
 };
 use crate::prelude::*;
 use crate::registry::RECUR_PTR;
@@ -377,18 +377,13 @@ impl<'script> Expr<'script> {
                             unsafe { mem::transmute::<&Value, &mut Value>(current) },
                             || Value::object_with_capacity(halfbrown::VEC_LIMIT_UPPER),
                         )
-                        .map_err(|_| error_need_obj_err(
-                            self,
-                            segment,
-                            current.value_type(),
-                            env.meta
-                        )));
+                        .map_err(|_| err_need_obj(self, segment, current.value_type(), env.meta)));
                 }
                 Segment::Element { expr, .. } => {
                     let id = stry!(expr.eval_to_string(opts, env, event, state, meta, local));
                     // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1033
                     let v: &mut Value<'event> = unsafe { mem::transmute(current) };
-                    let map = stry!(v.as_object_mut().ok_or_else(|| error_need_obj_err(
+                    let map = stry!(v.as_object_mut().ok_or_else(|| err_need_obj(
                         self,
                         segment,
                         current.value_type(),
