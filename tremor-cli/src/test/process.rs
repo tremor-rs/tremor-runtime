@@ -78,7 +78,10 @@ pub(crate) fn run_process(
 
     // enable info level logging
     let mut env = HashMap::with_capacity(1);
-    env.insert(String::from("RUST_LOG"), String::from("info"));
+    env.insert(
+        String::from("RUST_LOG"),
+        std::env::var("RUST_LOG").unwrap_or(String::from("info")),
+    );
 
     let mut process = job::TargetProcess::new_in_dir(job::which("tremor")?, &args, &env, test_dir)?;
     let process_status = process.wait_with_output()?;

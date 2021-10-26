@@ -1,1 +1,1 @@
-select {"exit": 0, "delay": 1000, "event": event} from in into out;
+select {"error": true, "meta": $, "event": event} from in into out;
