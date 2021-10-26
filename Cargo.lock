@@ -5,10 +5,30 @@ version = 3
 [[package]]
 name = "abi_stable"
 version = "0.10.2"
+source = "git+https://github.com/marioortizmanero/abi_stable_crates.git?branch=floating-point#fd4021c5900a91c4823059db3ebb250dd86cdec2"
+dependencies = [
+ "abi_stable_derive 0.10.2 (git+https://github.com/marioortizmanero/abi_stable_crates.git?branch=floating-point)",
+ "abi_stable_shared 0.10.2 (git+https://github.com/marioortizmanero/abi_stable_crates.git?branch=floating-point)",
+ "core_extensions",
+ "crossbeam-channel",
+ "generational-arena",
+ "libloading",
+ "lock_api",
+ "parking_lot",
+ "repr_offset",
+ "rustc_version 0.4.0",
+ "serde",
+ "serde_derive",
+ "serde_json",
+]
+
+[[package]]
+name = "abi_stable"
+version = "0.10.2"
 source = "git+https://github.com/marioortizmanero/abi_stable_crates.git#6f72d49a91e1c2934b7e742fbc9104268fe5810b"
 dependencies = [
- "abi_stable_derive",
- "abi_stable_shared",
+ "abi_stable_derive 0.10.2 (git+https://github.com/marioortizmanero/abi_stable_crates.git)",
+ "abi_stable_shared 0.10.2 (git+https://github.com/marioortizmanero/abi_stable_crates.git)",
  "core_extensions",
  "crossbeam-channel",
  "generational-arena",
@@ -25,16 +45,39 @@ dependencies = [
 [[package]]
 name = "abi_stable_derive"
 version = "0.10.2"
-source = "git+https://github.com/marioortizmanero/abi_stable_crates.git#6f72d49a91e1c2934b7e742fbc9104268fe5810b"
+source = "git+https://github.com/marioortizmanero/abi_stable_crates.git?branch=floating-point#fd4021c5900a91c4823059db3ebb250dd86cdec2"
 dependencies = [
- "abi_stable_shared",
- "as_derive_utils",
+ "abi_stable_shared 0.10.2 (git+https://github.com/marioortizmanero/abi_stable_crates.git?branch=floating-point)",
+ "as_derive_utils 0.10.2 (git+https://github.com/marioortizmanero/abi_stable_crates.git?branch=floating-point)",
  "core_extensions",
  "proc-macro2",
  "quote",
  "rustc_version 0.2.3",
  "syn",
  "typed-arena",
+]
+
+[[package]]
+name = "abi_stable_derive"
+version = "0.10.2"
+source = "git+https://github.com/marioortizmanero/abi_stable_crates.git#6f72d49a91e1c2934b7e742fbc9104268fe5810b"
+dependencies = [
+ "abi_stable_shared 0.10.2 (git+https://github.com/marioortizmanero/abi_stable_crates.git)",
+ "as_derive_utils 0.10.2 (git+https://github.com/marioortizmanero/abi_stable_crates.git)",
+ "core_extensions",
+ "proc-macro2",
+ "quote",
+ "rustc_version 0.2.3",
+ "syn",
+ "typed-arena",
+]
+
+[[package]]
+name = "abi_stable_shared"
+version = "0.10.2"
+source = "git+https://github.com/marioortizmanero/abi_stable_crates.git?branch=floating-point#fd4021c5900a91c4823059db3ebb250dd86cdec2"
+dependencies = [
+ "core_extensions",
 ]
 
 [[package]]
@@ -187,6 +230,17 @@ name = "arrayvec"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "23b62fc65de8e4e7f52534fb52b0f3ed04746ae267519eef2a83941e8085068b"
+
+[[package]]
+name = "as_derive_utils"
+version = "0.10.2"
+source = "git+https://github.com/marioortizmanero/abi_stable_crates.git?branch=floating-point#fd4021c5900a91c4823059db3ebb250dd86cdec2"
+dependencies = [
+ "core_extensions",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
 
 [[package]]
 name = "as_derive_utils"
@@ -1483,15 +1537,6 @@ dependencies = [
  "crc32fast",
  "libc",
  "miniz_oxide",
-]
-
-[[package]]
-name = "float-cmp"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e1267f4ac4f343772758f7b1bdcbe767c218bbab93bb432acbf5162bbf85a6c4"
-dependencies = [
- "num-traits",
 ]
 
 [[package]]
@@ -4747,7 +4792,7 @@ dependencies = [
  "dirs-next",
  "env_logger 0.9.0",
  "error-chain",
- "float-cmp 0.9.0",
+ "float-cmp",
  "futures",
  "globwalk",
  "halfbrown",
@@ -4859,7 +4904,7 @@ dependencies = [
 name = "tremor-runtime"
 version = "0.11.4"
 dependencies = [
- "abi_stable",
+ "abi_stable 0.10.2 (git+https://github.com/marioortizmanero/abi_stable_crates.git)",
  "anyhow",
  "async-broadcast",
  "async-compat",
@@ -4935,7 +4980,7 @@ dependencies = [
  "distance",
  "downcast-rs",
  "error-chain",
- "float-cmp 0.9.0",
+ "float-cmp",
  "fxhash",
  "glob",
  "grok",
@@ -4974,10 +5019,9 @@ dependencies = [
 name = "tremor-value"
 version = "0.3.2"
 dependencies = [
- "abi_stable",
+ "abi_stable 0.10.2 (git+https://github.com/marioortizmanero/abi_stable_crates.git)",
  "base64 0.13.0",
- "beef",
- "float-cmp 0.9.0",
+ "float-cmp",
  "getopts",
  "proptest",
  "serde",
@@ -5146,11 +5190,10 @@ dependencies = [
 
 [[package]]
 name = "value-trait"
-version = "0.2.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4b637f98040dfa411b01a85b238a8cadbd797b303c23007157dee4bbbd3a72af"
+version = "0.2.9"
 dependencies = [
- "float-cmp 0.8.0",
+ "abi_stable 0.10.2 (git+https://github.com/marioortizmanero/abi_stable_crates.git?branch=floating-point)",
+ "float-cmp",
  "halfbrown",
  "itoa",
  "ryu",
@@ -5508,8 +5551,3 @@ dependencies = [
  "cc",
  "libc",
 ]
-
-[[patch.unused]]
-name = "value-trait"
-version = "0.2.9-alpha.0"
-source = "git+https://github.com/marioortizmanero/value-trait.git?rev=4921435#4921435496d5934d9ed41536a02af5044642d472"

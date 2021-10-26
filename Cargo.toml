@@ -125,7 +125,7 @@ rust-bert = { git = 'https://github.com/mfelsche/rust-bert.git', rev = '1140989'
 rust_tokenizers = { git = 'https://github.com/mfelsche/rust-tokenizers.git', rev = '5a7860d' }
 # FIXME: temporary until it's upstreamed
 # (https://github.com/simd-lite/value-trait/pull/14)
-value-trait = { git = 'https://github.com/marioortizmanero/value-trait.git', rev = '4921435' }
+value-trait = { path = "../value-trait" }
 # FIXME: temporary until it's upstreamed
 # (https://github.com/rodrimati1992/abi_stable_crates/pull/58)
 # (https://github.com/rodrimati1992/abi_stable_crates/pull/61)

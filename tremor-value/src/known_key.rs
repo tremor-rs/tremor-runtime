@@ -14,7 +14,6 @@
 
 use crate::Value;
 use abi_stable::std_types::{RCow, RHashMap, map::REntry};
-use beef::Cow;
 use std::fmt;
 use std::hash::{BuildHasher, Hash, Hasher};
 use value_trait::{Mutable, Value as ValueTrait, ValueAccess, ValueType};
@@ -23,7 +22,7 @@ use value_trait::{Mutable, Value as ValueTrait, ValueAccess, ValueType};
 /// It achives this by memorizing the hash.
 #[derive(Debug, Clone, PartialEq)]
 pub struct KnownKey<'key> {
-    key: Cow<'key, str>,
+    key: RCow<'key, str>,
     hash: u64,
 }
 
@@ -46,10 +45,10 @@ impl std::error::Error for Error {}
 
 impl<'key, S> From<S> for KnownKey<'key>
 where
-    Cow<'key, str>: From<S>,
+    RCow<'key, str>: From<S>,
 {
     fn from(key: S) -> Self {
-        let key = Cow::from(key);
+        let key = RCow::from(key);
         let hash_builder = std::collections::hash_map::RandomState::default();
         let mut hasher = hash_builder.build_hasher();
         key.hash(&mut hasher);
@@ -121,9 +120,10 @@ impl<'key> KnownKey<'key> {
         // map.raw_entry()
         //     .from_key_hashed_nocheck(self.hash, self.key())
         //     .map(|kv| kv.1)
-        map.entry()
-            .from_key_hashed_nocheck(self.hash, self.key())
-            .map(|kv| kv.1)
+        match map.entry(self.key) {
+            REntry::Occupied(e) => Some(e.get()),
+            REntry::Vacant(e) => None
+        }
     }
 
     /// Looks up this key in a `Value`, returns None if the
@@ -293,12 +293,16 @@ impl<'key> KnownKey<'key> {
         'value: 'target,
         F: FnOnce() -> Value<'value>,
     {
-        // FIXME: same here, no `raw_entry_mut`
-        let key: &str = &self.key;
-        map.raw_entry_mut()
-            .from_key_hashed_nocheck(self.hash, key)
-            .or_insert_with(|| (self.key.clone(), with()))
-            .1
+        // FIXME: no `raw_entry_mut`, this optimization is not possible right
+        // now:
+        //
+        // let key: &str = &self.key;
+        // map.raw_entry_mut()
+        //     .from_key_hashed_nocheck(self.hash, key)
+        //     .or_insert_with(|| (self.key.clone(), with()))
+        //     .1
+        map.entry(self.key)
+            .or_insert_with(|| with())
     }
 
     /// Inserts a value key into  `Value`, returns None if the
@@ -394,10 +398,10 @@ impl<'key> KnownKey<'key> {
         //         None
         //     }
         // }
-        match map.entry(self.key()) {
+        match map.entry(self.key) {
             REntry::Occupied(mut e) => Some(e.insert(value)),
             REntry::Vacant(e) => {
-                e.insert_hashed_nocheck(self.hash, self.key.clone(), value);
+                e.insert(value);
                 None
             }
         }
