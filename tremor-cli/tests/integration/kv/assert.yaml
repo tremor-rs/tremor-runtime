@@ -1,4 +1,4 @@
-name: kv linked
+name: kv
 status: 0
 asserts:
   - source: out.log

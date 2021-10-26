@@ -5,7 +5,7 @@
     "server",
     "run",
     "-p",
-    "before.pid",
+    "../before.pid",
     "-n",
     "ws.trickle",
     "config.yaml",

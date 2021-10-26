@@ -16,7 +16,7 @@ mod connectors;
 
 use async_std::path::Path;
 use async_std::task;
-use connectors::TestHarness;
+use connectors::ConnectorHarness;
 use std::time::Duration;
 use tremor_runtime::errors::Result;
 
@@ -25,7 +25,7 @@ extern crate log;
 
 #[async_std::test]
 async fn file_connector() -> Result<()> {
-    env_logger::init();
+    let _ = env_logger::try_init();
 
     let input_path = Path::new(file!())
         .parent()
@@ -45,7 +45,7 @@ config:
 "#,
         input_path.display()
     );
-    let harness = TestHarness::new(connector_yaml).await?;
+    let harness = ConnectorHarness::new(connector_yaml).await?;
     harness.start().await?;
     task::sleep(Duration::from_millis(100)).await;
 

@@ -707,6 +707,7 @@ impl Manager {
                         //
                         connector.on_pause(&ctx).await;
                         connector_state = ConnectorState::Paused;
+                        quiescence_beacon.pause();
 
                         addr.send_source(SourceMsg::Pause).await?;
                         addr.send_sink(SinkMsg::Pause).await?;
@@ -723,6 +724,7 @@ impl Manager {
                         info!("[Connector::{}] Resuming...", &addr.url);
                         connector.on_resume(&ctx).await;
                         connector_state = ConnectorState::Running;
+                        quiescence_beacon.resume();
 
                         addr.send_source(SourceMsg::Resume).await?;
                         addr.send_sink(SinkMsg::Resume).await?;
@@ -808,6 +810,7 @@ impl Manager {
                         debug!("[Connector::{}] Sink-part is drained.", &addr.url);
                         if let Some(drainage) = drainage.as_mut() {
                             drainage.set_sink_drained();
+                            quiescence_beacon.full_stop(); // TODO: maybe this should be done in the SinkManager?
                             if drainage.all_drained() {
                                 if let Err(e) = drainage.send_all_drained().await {
                                     error!(
@@ -834,6 +837,7 @@ impl Manager {
                         info!("[Connector::{}] Stopping...", &addr.url);
                         connector.on_stop(&ctx).await;
                         connector_state = ConnectorState::Stopped;
+                        quiescence_beacon.full_stop();
 
                         addr.send_source(SourceMsg::Stop).await?;
                         addr.send_sink(SinkMsg::Stop).await?;
