@@ -1,0 +1,42 @@
+connector:
+  - id: in
+    type: file
+    config:
+      mode: read
+      path: "in.json"
+    codec: json
+    preprocessors:
+      - lines-no-buffer
+  - id: out
+    type: file
+    config:
+      mode: truncate
+      path: "out.log"
+    codec: json
+    postprocessors:
+      - lines
+  - id: exit
+    type: exit
+
+binding:
+  - id: quiescence
+    links:
+      "/connector/in/{instance}/out":
+        - "/pipeline/main/{instance}/in"
+      # error debugging
+      "/connector/in/{instance}/err":
+        - "/pipeline/system::passthrough/{instance}_debug/in"
+      "/pipeline/system::passthrough/{instance}_debug/out":
+        - "/connector/system::stdout/{instance}/in"
+      # connect main pipeline to next one
+      "/pipeline/main/{instance}/out":
+        - "/pipeline/system::passthrough/{instance}/in"
+      # connect main pipeline to exit connector
+      "/pipeline/main/{instance}/exit":
+        - "/connector/exit/{instance}/in"
+      # connect next pipeline to out connector
+      "/pipeline/system::passthrough/{instance}/out":
+        - "/connector/out/{instance}/in"
+mapping:
+  /binding/quiescence/01:
+    instance: "01"

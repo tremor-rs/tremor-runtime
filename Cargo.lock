@@ -6841,6 +6841,7 @@ dependencies = [
  "either",
  "elastic",
  "error-chain 0.12.4",
+ "event-listener",
  "file-mode",
  "futures 0.3.21",
  "glob",

@@ -519,6 +519,7 @@ where
                             if self.drains_received.is_superset(&self.starts_received) {
                                 // we are all drained
                                 self.state = Drained;
+
                                 if let Some(sender) = self.drain_channel.take() {
                                     if sender.send(Msg::SourceDrained).await.is_err() {
                                         error!(

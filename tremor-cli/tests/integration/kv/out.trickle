@@ -1,10 +1,23 @@
 use std::string;
+
+mod helpers with
+  use std::string;
+  # checks if the event is the successful response of a put command for the key "exit" with the value "exit"
+  fn is_put_exit(payload, meta) with
+    let meta_ok = match meta of
+      case %{connector ~= %{kv ~= %{op == "put", ok == string::into_binary("exit")}}} => true
+      default => false
+    end;
+    meta_ok and payload == "exit"
+  end;
+end;
+
 select {
   "event": event,
   "meta": match $ of
       case %{connector ~= %{kv ~= %{present ok}}} => patch $ of merge "connector" => {"kv": {"ok": string::from_utf8_lossy($connector.kv.ok)}} end
       case _ => $
     end
-} from in where event != "exit" into out;
+} from in where !helpers::is_put_exit(event, $) into out;
 
-select event from in where event == "exit" into out/exit;
+select event from in where helpers::is_put_exit(event, $) into out/exit;
