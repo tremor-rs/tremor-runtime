@@ -13,10 +13,8 @@
 // limitations under the License.
 
 use crate::Value;
-use abi_stable::std_types::{RCow, RHashMap};
+use abi_stable::std_types::{RCow, RHashMap, map::REntry};
 use beef::Cow;
-// TODO: no raw entry in std or abi_stable :(
-use halfbrown::RawEntryMut;
 use std::fmt;
 use std::hash::{BuildHasher, Hash, Hasher};
 use value_trait::{Mutable, Value as ValueTrait, ValueAccess, ValueType};
@@ -118,12 +116,12 @@ impl<'key> KnownKey<'key> {
         'value: 'target,
     {
         // FIXME: there's no raw_entry in the HashMap for `std` nor `abi_stable`,
-        // so this doesn't make sense at all :(
+        // so this optimization won't work until then:
         //
-        // The only way would be to convert the halfbrown::HashMap into
-        // std::collections::HashMap and then into RHashMap, but if this whole
-        // thing is intended to optimize, this conversion might be too much.
-        map.raw_entry()
+        // map.raw_entry()
+        //     .from_key_hashed_nocheck(self.hash, self.key())
+        //     .map(|kv| kv.1)
+        map.entry()
             .from_key_hashed_nocheck(self.hash, self.key())
             .map(|kv| kv.1)
     }
@@ -189,13 +187,19 @@ impl<'key> KnownKey<'key> {
         'key: 'value,
         'value: 'target,
     {
-        // FIXME: same here, no `raw_entry_mut`
-        match map
-            .raw_entry_mut()
-            .from_key_hashed_nocheck(self.hash, &self.key)
-        {
-            RawEntryMut::Occupied(e) => Some(e.into_mut()),
-            RawEntryMut::Vacant(_e) => None,
+        // FIXME: no `raw_entry_mut`, this optimization is not possible right
+        // now:
+        //
+        // match map
+        //     .raw_entry_mut()
+        //     .from_key_hashed_nocheck(self.hash, &self.key)
+        // {
+        //     RawEntryMut::Occupied(e) => Some(e.into_mut()),
+        //     RawEntryMut::Vacant(_e) => None,
+        // }
+        match map.entry(self.key) {
+            REntry::Occupied(e) => Some(e.into_mut()),
+            REntry::Vacant(_e) => None,
         }
     }
 
@@ -377,13 +381,22 @@ impl<'key> KnownKey<'key> {
         'key: 'value,
         'value: 'target,
     {
-        // FIXME: same, `raw_entry_mut` doesn't exist...
-        match map
-            .raw_entry_mut()
-            .from_key_hashed_nocheck(self.hash, self.key())
-        {
-            RawEntryMut::Occupied(mut e) => Some(e.insert(value)),
-            RawEntryMut::Vacant(e) => {
+        // FIXME: no `raw_entry_mut`, this optimization is not possible right
+        // now:
+        //
+        // match map
+        //     .raw_entry_mut()
+        //     .from_key_hashed_nocheck(self.hash, self.key())
+        // {
+        //     RawEntryMut::Occupied(mut e) => Some(e.insert(value)),
+        //     RawEntryMut::Vacant(e) => {
+        //         e.insert_hashed_nocheck(self.hash, self.key.clone(), value);
+        //         None
+        //     }
+        // }
+        match map.entry(self.key()) {
+            REntry::Occupied(mut e) => Some(e.insert(value)),
+            REntry::Vacant(e) => {
                 e.insert_hashed_nocheck(self.hash, self.key.clone(), value);
                 None
             }

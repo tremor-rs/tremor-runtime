@@ -19,7 +19,9 @@ beef = "0.5"
 serde = "1.0"
 simd-json = "0.4.7"
 simd-json-derive = "0.2"
-value-trait = { version="0.2", features=["custom-types", "c-abi"] }
+# FIXME: how to use `c-abi`'s feature??
+# value-trait = { version="0.2", features=["custom-types"] }
+value-trait = { git = 'https://github.com/marioortizmanero/value-trait.git', version="0.2.9-alpha.0", features=["custom-types"] }
 abi_stable = "0.10"
 
 [dev-dependencies]
