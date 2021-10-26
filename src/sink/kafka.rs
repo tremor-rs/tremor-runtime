@@ -130,6 +130,9 @@ impl offramp::Impl for Kafka {
     }
 }
 
+// We allow this to make it possible to track what we've matched against.
+// We have to have the `_` case since librdkafka-rs forces us to have it :(
+#[allow(clippy::match_same_arms)]
 fn is_fatal(e: &KafkaError) -> bool {
     match e {
         // Generic fatal errors
@@ -148,18 +151,18 @@ fn is_fatal(e: &KafkaError) -> bool {
         // Check if it is a fatal transaction error
         KafkaError::Transaction(e) => e.is_fatal(),
         // Creational errors, this should never apear during send
-        KafkaError::AdminOpCreation(_) => false,
-        KafkaError::ClientCreation(_) => false,
-        KafkaError::ClientConfig(_, _, _, _) => false,
-        KafkaError::Subscription(_) => false,
+        KafkaError::AdminOpCreation(_)
+        | KafkaError::ClientCreation(_)
+        | KafkaError::ClientConfig(_, _, _, _)
+        | KafkaError::Subscription(_)
         // Consumer error - we never seek on a producer
-        KafkaError::PartitionEOF(_) => false,
-        KafkaError::Seek(_) => false,
+        | KafkaError::PartitionEOF(_)
+        | KafkaError::Seek(_)
         // Not sure what this exactly does - verify
-        KafkaError::Canceled => false,
-        KafkaError::NoMessageReceived => false,
+        | KafkaError::Canceled
+        | KafkaError::NoMessageReceived
         // is not fatal might want to look into this for an enhancement later
-        KafkaError::PauseResume(_) => false,
+        | KafkaError::PauseResume(_) => false,
         // This is required due to `KafkaError` being mared as `#[non_exhaustive]`
         _ => false,
     }
