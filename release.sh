@@ -131,120 +131,86 @@ echo "Publishing packages"
 for pkg in ${PACKAGES}
 do
     cd "$pkg"
-    cargo test && cargo publish
+    if ! cargo test && cargo publish
+    then
+        echo "Package $pkg failed to publish - this could be OK if there was no change."
+        echo "Do you want to Continue or Abort? [c/A]"
+        read -r answer
+        case "${answer}" in
+            C*|c*)
+                ;;
+            *)
+                exit1
+                ;;
+        esac;
+
+    fi
     cd ..
 done
 
-echo "Preparing docs"
-
-mkdir -p temp
-cd temp
-git clone git@github.com:tremor-rs/tremor-www-docs.git
-
-cd tremor-www-docs
-
-echo "Updating Makefile"
-sed -e "s/^TREMOR_VSN=v${old}$/TREMOR_VSN=v${new}/" -i.release "Makefile"
-
-echo "Please review the following changes. (return to continue)"
-read -r answer
-
-echo "Do you want to Continue or Rollback? [c/R]"
-read -r answer
-
-case "${answer}" in
-    C*|c*)
-        git checkout -b "release-v${new}"
-        git commit -sa -m "Rlease v${new}"
-        git push --set-upstream origin "release-v${new}"
-        ;;
-    *)
-        git checkout .
-        cd ../..
-        exit
-        ;;
-esac;
-
-echo "Please open the following pull request we'll wait here continue when it is merged."
-echo
-echo "  >> https://github.com/tremor-rs/tremor-www-docs/pull/new/release-v${new} <<"
-echo
-echo "Once you continue we'll generate and push the release tag with the latest '${branch}'"
-read -r answer
-
-echo "Generating release tag v${new}"
-
-git checkout "${branch}"
-git pull
-git tag -a -m"Release v${new}" "v${new}"
-git push --tags
-
-cd ../..
-
 echo "Preparing TLS"
 
-mkdir -p temp
-cd temp
-git clone git@github.com:tremor-rs/tremor-language-server.git
-
-cd tremor-language-server
-
-git submodule update --init
-
-echo Updationg submodule
-
-cd tremor-www-docs
-
-git checkout "v${new}"
-
-cd ..
-
-toml="Cargo.toml"
-echo -n "Updating TOML files:"
-echo -n " ${toml}"
-sed -e "s/^version = \"${old}\"$/version = \"${new}\"/" -e "s/^tremor-script = \"${old}\"$/tremor-script = \"${new}\"/" -i.release "${toml}"
-echo "."
-
-echo "Running tests"
-cargo test --all
-
-
-echo "Please review the following changes. (return to continue)"
+echo "Do you want to update the Language Server?"
+echo "Skip TLS or Update it? [s/U]"
 read -r answer
-
-git diff
-
-echo "Do you want to Continue or Rollback? [c/R]"
-read -r answer
-
 case "${answer}" in
-    C*|c*)
-        git checkout -b "release-v${new}"
-        git commit -sa -m "Rlease v${new}"
-        git push --set-upstream origin "release-v${new}"
+    U*|u*)
+        mkdir -p temp
+        cd temp
+        git clone git@github.com:tremor-rs/tremor-language-server.git
+
+        cd tremor-language-server
+
+        toml="Cargo.toml"
+        echo -n "Updating TOML files:"
+        echo -n " ${toml}"
+        sed -e "s/^version = \"${old}\"$/version = \"${new}\"/" -e "s/^tremor-script = \"${old}\"$/tremor-script = \"${new}\"/" -i.release "${toml}"
+        echo "."
+
+        echo "Running tests"
+        cargo test --all
+
+
+        echo "Please review the following changes. (return to continue)"
+        read -r answer
+
+        git diff
+
+        echo "Do you want to Continue or Rollback? [c/R]"
+        read -r answer
+
+        case "${answer}" in
+            C*|c*)
+                git checkout -b "release-v${new}"
+                git commit -sa -m "Rlease v${new}"
+                git push --set-upstream origin "release-v${new}"
+                ;;
+            *)
+                git checkout .
+                cd ../..
+                exit
+                ;;
+        esac;
+
+        echo "Please open the following pull request we'll wait here continue when it is merged."
+        echo
+        echo "  >> https://github.com/tremor-rs/tremor-language-server/pull/new/release-v${new} <<"
+        echo
+        echo "Once you continue we'll generate and push the release tag with the latest '${branch}'"
+        read -r answer
+
+        echo "Generating release tag v${new}"
+
+        git checkout "${branch}"
+        git pull
+        git tag -a -m"Release v${new}" "v${new}"
+        git push --tags
+
+        cd ../..            
         ;;
     *)
-        git checkout .
-        cd ../..
-        exit
+        exit1
         ;;
 esac;
-
-
-echo "Please open the following pull request we'll wait here continue when it is merged."
-echo
-echo "  >> https://github.com/tremor-rs/tremor-language-server/pull/new/release-v${new} <<"
-echo
-echo "Once you continue we'll generate and push the release tag with the latest '${branch}'"
-read -r answer
-
-echo "Generating release tag v${new}"
-
-git checkout "${branch}"
-git pull
-git tag -a -m"Release v${new}" "v${new}"
-git push --tags
-
-cd ../..
 
 echo "Congrats release v${new} is done!"

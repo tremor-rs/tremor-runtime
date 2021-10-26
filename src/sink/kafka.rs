@@ -27,10 +27,11 @@ use async_channel::{bounded, Receiver, Sender};
 use halfbrown::HashMap;
 use rdkafka::config::ClientConfig;
 use rdkafka::{
-    error::{KafkaError, RDKafkaError},
+    error::KafkaError,
     message::OwnedHeaders,
     producer::{FutureProducer, FutureRecord, Producer},
 };
+use rdkafka_sys::RDKafkaErrorCode;
 use std::{
     fmt,
     time::{Duration, Instant},
@@ -94,8 +95,8 @@ pub struct Kafka {
     producer: FutureProducer,
     postprocessors: Postprocessors,
     reply_tx: Sender<sink::Reply>,
-    error_rx: Receiver<RDKafkaError>,
-    error_tx: Sender<RDKafkaError>,
+    error_rx: Receiver<KafkaError>,
+    error_tx: Sender<KafkaError>,
 }
 
 impl fmt::Debug for Kafka {
@@ -129,6 +130,41 @@ impl offramp::Impl for Kafka {
     }
 }
 
+fn is_fatal(e: &KafkaError) -> bool {
+    match e {
+        // Generic fatal errors
+        KafkaError::AdminOp(code)
+        | KafkaError::ConsumerCommit(code)
+        | KafkaError::Global(code)
+        | KafkaError::GroupListFetch(code)
+        | KafkaError::MessageConsumption(code)
+        | KafkaError::MessageProduction(code)
+        | KafkaError::MetadataFetch(code)
+        | KafkaError::OffsetFetch(code)
+        | KafkaError::SetPartitionOffset(code)
+        | KafkaError::StoreOffset(code) => matches!(code, RDKafkaErrorCode::Fatal),
+        // FFI error this is very bad
+        KafkaError::Nul(_) => true,
+        // Check if it is a fatal transaction error
+        KafkaError::Transaction(e) => e.is_fatal(),
+        // Creational errors, this should never apear during send
+        KafkaError::AdminOpCreation(_) => false,
+        KafkaError::ClientCreation(_) => false,
+        KafkaError::ClientConfig(_, _, _, _) => false,
+        KafkaError::Subscription(_) => false,
+        // Consumer error - we never seek on a producer
+        KafkaError::PartitionEOF(_) => false,
+        KafkaError::Seek(_) => false,
+        // Not sure what this exactly does - verify
+        KafkaError::Canceled => false,
+        KafkaError::NoMessageReceived => false,
+        // is not fatal might want to look into this for an enhancement later
+        KafkaError::PauseResume(_) => false,
+        // This is required due to `KafkaError` being mared as `#[non_exhaustive]`
+        _ => false,
+    }
+}
+
 /// Waits for actual delivery to kafka cluster and sends ack or fail.
 /// Also sends fatal errors for handling in offramp task.
 #[allow(clippy::cast_possible_truncation)]
@@ -138,18 +174,19 @@ async fn wait_for_delivery(
     processing_start: Instant,
     maybe_event: Option<Event>,
     reply_tx: Sender<sink::Reply>,
-    error_tx: Sender<RDKafkaError>,
+    error_tx: Sender<KafkaError>,
 ) -> Result<()> {
     let cb = match futures::future::try_join_all(futures).await {
         Ok(results) => {
-            if let Some((KafkaError::Transaction(rd_error), _)) =
-                results.into_iter().find_map(std::result::Result::err)
-            {
+            let mut res = CbAction::Ack;
+
+            for rd_error in results.into_iter().filter_map(|e| e.err().map(|(e, _)| e)) {
+                res = CbAction::Fail;
                 error!(
                     "[Sink::{}] Error delivering kafka record: {}",
                     sink_url, &rd_error
                 );
-                if rd_error.is_fatal() {
+                if is_fatal(&rd_error) {
                     let err_msg = format!("{}", &rd_error);
                     if error_tx.send(rd_error).await.is_err() {
                         error!(
@@ -158,11 +195,9 @@ async fn wait_for_delivery(
                         )
                     }
                 }
-                CbAction::Fail
-            } else {
-                // all good. send ack
-                CbAction::Ack
             }
+
+            res
         }
         Err(e) => {
             error!(
@@ -205,13 +240,8 @@ impl Kafka {
         Ok(())
     }
 
-    fn handle_fatal_error(&mut self, fatal_error: &RDKafkaError) -> Result<()> {
-        error!(
-            "[Sink::{}] Fatal Error({:?}): {}",
-            &self.sink_url,
-            fatal_error.code(),
-            fatal_error.string()
-        );
+    fn handle_fatal_error(&mut self, fatal_error: &KafkaError) -> Result<()> {
+        error!("[Sink::{}] Fatal Error: {}", &self.sink_url, fatal_error);
         error!("[Sink::{}] Reinitiating client...", &self.sink_url);
         self.producer = self.config.producer()?;
         error!("[Sink::{}] Client reinitiated.", &self.sink_url);
@@ -277,11 +307,10 @@ impl Sink for Kafka {
                             "[Sink::{}] failed to enqueue message: {}",
                             &self.sink_url, e
                         );
-                        if let KafkaError::Transaction(e) = e {
-                            if e.is_fatal() {
-                                // handle fatal errors right here, without enqueueing
-                                self.handle_fatal_error(&e)?;
-                            }
+
+                        if is_fatal(&e) {
+                            // handle fatal errors right here, without enqueueing
+                            self.handle_fatal_error(&e)?;
                         }
                         // bail out with a CB fail on enqueue error
                         if event.transactional {
