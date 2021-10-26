@@ -294,7 +294,6 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
     let found: Vec<_> = found.filter_map(std::result::Result::ok).collect();
     let start = nanotime();
 
-    // TODO: This is ugly.
     if found.is_empty() {
         // No meta.json was found, therefore we might have the path to a
         // specific folder. Let's apply some heuristics to see if we have
