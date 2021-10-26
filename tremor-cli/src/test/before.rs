@@ -43,11 +43,12 @@ pub(crate) struct Before {
 }
 
 impl Before {
-    pub(crate) fn spawn(&self, base: &PathBuf) -> Result<Option<TargetProcess>> {
+    pub(crate) fn spawn(&self, base: &Path) -> Result<Option<TargetProcess>> {
         let cmd = job::which(&self.cmd)?;
         // interpret `dir` as relative to `base`
-        let cwd = base.join(&self.dir).canonicalize()?;
-        let mut process = job::TargetProcess::new_in_dir(&cmd, &self.args, &self.env, &cwd)?;
+        let current_working_dir = base.join(&self.dir).canonicalize()?;
+        let mut process =
+            job::TargetProcess::new_in_dir(&cmd, &self.args, &self.env, &current_working_dir)?;
         debug!("Spawning before: {}", self.cmdline());
         self.block_on(&mut process, base)?;
         Ok(Some(process))
@@ -66,7 +67,7 @@ impl Before {
         )
     }
 
-    pub(crate) fn block_on(&self, process: &mut job::TargetProcess, base: &PathBuf) -> Result<()> {
+    pub(crate) fn block_on(&self, process: &mut job::TargetProcess, base: &Path) -> Result<()> {
         let start = Instant::now();
         if let Some(conditions) = &self.conditionals {
             loop {
@@ -176,7 +177,7 @@ impl BeforeController {
         if before_path.exists() {
             let before_json = load_before(&before_path);
             match before_json {
-                Ok(before_json) => before_json.spawn(&root),
+                Ok(before_json) => before_json.spawn(root),
                 Err(Error(ErrorKind::Common(tremor_common::Error::FileOpen(_, _)), _)) => {
                     // no before json found, all good
                     Ok(None)

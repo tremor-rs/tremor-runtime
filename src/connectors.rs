@@ -954,6 +954,7 @@ impl ConnectorContext {
     /// enclose the given meta in the right connector namespace
     ///
     /// Namespace: "connector.<connector-type>"
+    #[must_use]
     pub fn meta(&self, inner: Value<'static>) -> Value<'static> {
         let mut map = Value::object_with_capacity(1);
         let mut type_map = Value::object_with_capacity(1);

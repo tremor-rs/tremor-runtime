@@ -106,14 +106,14 @@ impl Instance for BindingArtefact {
             .iter()
             .flat_map(|(_from, tos)| tos.iter())
             .map(TremorUrl::to_instance)
-            .filter(|c| c.is_connector())
+            .filter(TremorUrl::is_connector)
             .collect();
         let source_connectors: HashSet<TremorUrl> = self
             .binding
             .links
             .iter()
             .map(|(from, _tos)| from.to_instance())
-            .filter(|c| c.is_connector())
+            .filter(TremorUrl::is_connector)
             .collect();
 
         // starting connectors without source first, so they are ready when stuff arrives
@@ -147,7 +147,7 @@ impl Instance for BindingArtefact {
             .links
             .iter()
             .flat_map(|(_from, tos)| tos.iter())
-            .filter(|url| url.is_connector())
+            .filter(|url| (*url).is_connector())
             .map(TremorUrl::to_instance)
             .collect();
         let sources: HashSet<TremorUrl> = self
@@ -155,7 +155,7 @@ impl Instance for BindingArtefact {
             .links
             .iter()
             .map(|(from, _tos)| from.to_instance())
-            .filter(|url| url.is_connector())
+            .filter(TremorUrl::is_connector)
             .collect();
 
         let start_points = sources.difference(&sinks);
@@ -233,14 +233,14 @@ impl Instance for BindingArtefact {
             .iter()
             .flat_map(|(_from, tos)| tos.iter())
             .map(TremorUrl::to_instance)
-            .filter(|c| c.is_connector())
+            .filter(TremorUrl::is_connector)
             .collect();
         let sources: HashSet<TremorUrl> = self
             .binding
             .links
             .iter()
             .map(|(from, _tos)| from.to_instance())
-            .filter(|c| c.is_connector())
+            .filter(TremorUrl::is_connector)
             .collect();
         let pipelines: HashSet<TremorUrl> = self
             .binding
@@ -248,7 +248,7 @@ impl Instance for BindingArtefact {
             .iter()
             .flat_map(|(from, tos)| std::iter::once(from).chain(tos.iter()))
             .map(TremorUrl::to_instance)
-            .filter(|url| url.is_pipeline())
+            .filter(TremorUrl::is_pipeline)
             .collect();
 
         for source in sources.difference(&sinks) {
@@ -275,14 +275,14 @@ impl Instance for BindingArtefact {
             .iter()
             .flat_map(|(_from, tos)| tos.iter())
             .map(TremorUrl::to_instance)
-            .filter(|c| c.is_connector())
+            .filter(TremorUrl::is_connector)
             .collect();
         let sources: HashSet<TremorUrl> = self
             .binding
             .links
             .iter()
             .map(|(from, _tos)| from.to_instance())
-            .filter(|c| c.is_connector())
+            .filter(TremorUrl::is_connector)
             .collect();
         let pipelines: HashSet<TremorUrl> = self
             .binding

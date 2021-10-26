@@ -210,6 +210,7 @@ pub enum SinkMsg {
 
 /// Wrapper around all possible sink messages
 /// handled in the Sink task
+#[allow(clippy::large_enum_variant)] // TODO: should we box SinkMsg here?
 enum SinkMsgWrapper {
     FromSink(AsyncSinkReply),
     ToSink(SinkMsg),

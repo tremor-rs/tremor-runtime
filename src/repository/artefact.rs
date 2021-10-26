@@ -421,19 +421,21 @@ impl Artefact for OnrampArtefact {
 
         world
             .system
-            .send(system::ManagerMsg::Onramp(onramp::ManagerMsg::Create(
-                tx,
-                Box::new(onramp::Create {
-                    id: servant_id,
-                    preprocessors,
-                    postprocessors,
-                    codec,
-                    codec_map,
-                    stream,
-                    metrics_reporter,
-                    is_linked: self.is_linked,
-                    err_required: self.err_required,
-                }),
+            .send(system::ManagerMsg::Onramp(Box::new(
+                onramp::ManagerMsg::Create(
+                    tx,
+                    Box::new(onramp::Create {
+                        id: servant_id,
+                        preprocessors,
+                        postprocessors,
+                        codec,
+                        codec_map,
+                        stream,
+                        metrics_reporter,
+                        is_linked: self.is_linked,
+                        err_required: self.err_required,
+                    }),
+                ),
             )))
             .await?;
         rx.recv().await?

@@ -337,11 +337,9 @@ impl<'value> ValueMetaIter<'value> {
     fn extract_batched_value_meta(
         batched_value: &'value Value<'value>,
     ) -> Option<(&'value Value<'value>, &'value Value<'value>)> {
-        if let Some(last_data) = batched_value.get("data") {
-            last_data.get("value").zip(last_data.get("meta"))
-        } else {
-            None
-        }
+        batched_value
+            .get("data")
+            .and_then(|last_data| last_data.get("value").zip(last_data.get("meta")))
     }
 
     /// Split off the last value and meta in this iter and return all previous values and metas inside a slice.
@@ -426,11 +424,9 @@ impl<'value> ValueIter<'value> {
     fn extract_batched_value(
         batched_value: &'value Value<'value>,
     ) -> Option<&'value Value<'value>> {
-        if let Some(last_data) = batched_value.get("data") {
-            last_data.get("value")
-        } else {
-            None
-        }
+        batched_value
+            .get("data")
+            .and_then(|last_data| last_data.get("value"))
     }
     /// Split off the last value in this iter and return all previous values inside an iterator.
     /// Returns `None` if there are no values in this Event, which shouldn't happen, tbh.
