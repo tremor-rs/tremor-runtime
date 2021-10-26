@@ -27,7 +27,7 @@ extern crate log;
 
 #[async_std::test]
 async fn file_connector_xz() -> Result<()> {
-    env_logger::init();
+    let _ = env_logger::try_init();
 
     let input_path = Path::new(file!())
         .parent()
