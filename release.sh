@@ -140,7 +140,7 @@ do
             C*|c*)
                 ;;
             *)
-                exit1
+                exit 1
                 ;;
         esac;
 
@@ -209,7 +209,6 @@ case "${answer}" in
         cd ../..            
         ;;
     *)
-        exit1
         ;;
 esac;
 
