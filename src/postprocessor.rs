@@ -15,7 +15,7 @@
 mod gelf;
 pub(crate) use gelf::Gelf;
 
-use crate::errors::{Error, Result};
+use crate::errors::Result;
 use byteorder::{BigEndian, WriteBytesExt};
 use std::default::Default;
 use tremor_common::time::nanotime;
@@ -86,12 +86,10 @@ pub fn postprocess(
     for pp in postprocessors {
         data1.clear();
         for d in &data {
-            match pp.process(ingres_ns, egress_ns, d) {
-                Ok(mut r) => data1.append(&mut r),
-                Err(e) => {
-                    return Err(format!("Postprocessor error {}", e).into());
-                }
-            }
+            let mut r = pp
+                .process(ingres_ns, egress_ns, d)
+                .map_err(|e| format!("Postprocessor error {}", e))?;
+            data1.append(&mut r);
         }
         mem::swap(&mut data, &mut data1);
     }
@@ -192,7 +190,7 @@ impl Postprocessor for Snappy {
         writer.write_all(data)?;
         let compressed = writer
             .into_inner()
-            .map_err(|e| Error::from(format!("Snappy compression postprocessor error: {}", e)))?;
+            .map_err(|e| format!("Snappy compression postprocessor error: {}", e))?;
         Ok(vec![compressed])
     }
 }

@@ -1075,10 +1075,7 @@ impl<'script> Expression for Expr<'script> {
     }
 
     fn null_lit() -> Self {
-        Expr::Imut(ImutExprInt::Literal(Literal {
-            value: Value::null(),
-            mid: 0,
-        }))
+        Expr::Imut(ImutExprInt::Literal(Literal::default()))
     }
 }
 
@@ -1698,6 +1695,7 @@ impl<'script, Ex: Expression + 'script> ClauseGroup<'script, Ex> {
         *(self.precondition_mut()) = None;
     }
 
+    #[cfg(not(tarpaulin_include))] // this is a simple asccessor
     pub(crate) fn precondition(&self) -> Option<&ClausePreCondition<'script>> {
         match self {
             ClauseGroup::Single { precondition, .. }
@@ -1707,6 +1705,7 @@ impl<'script, Ex: Expression + 'script> ClauseGroup<'script, Ex> {
         }
     }
 
+    #[cfg(not(tarpaulin_include))] // this is a simple asccessor
     pub(crate) fn precondition_mut(&mut self) -> &mut Option<ClausePreCondition<'script>> {
         match self {
             ClauseGroup::Single { precondition, .. }
@@ -2276,8 +2275,10 @@ impl<'script> PredicatePattern<'script> {
             (_l, _r) => false,
         }
     }
+
     /// Get key
     #[must_use]
+    #[cfg(not(tarpaulin_include))] // this is a simple asccessor
     pub fn key(&self) -> &KnownKey<'script> {
         use PredicatePattern::{
             ArrayPatternEq, Bin, FieldAbsent, FieldPresent, RecordPatternEq, TildeEq,
@@ -2292,6 +2293,7 @@ impl<'script> PredicatePattern<'script> {
         }
     }
 
+    #[cfg(not(tarpaulin_include))] // this is a simple asccessor
     fn lhs(&self) -> &Cow<'script, str> {
         use PredicatePattern::{
             ArrayPatternEq, Bin, FieldAbsent, FieldPresent, RecordPatternEq, TildeEq,
@@ -2423,6 +2425,7 @@ impl<'script> Path<'script> {
 
     /// Get segments as slice
     #[must_use]
+    #[cfg(not(tarpaulin_include))] // this is a simple asccessor
     pub fn segments_mut(&mut self) -> &mut Segments<'script> {
         match self {
             Path::Const(path) | Path::Local(path) => &mut path.segments,
@@ -2723,6 +2726,7 @@ pub enum ReservedPath<'script> {
 }
 
 impl<'script> ReservedPath<'script> {
+    #[cfg(not(tarpaulin_include))] // this is a simple asccessor
     fn segments(&self) -> &Segments<'script> {
         match self {
             ReservedPath::Args { segments, .. }
@@ -2730,6 +2734,7 @@ impl<'script> ReservedPath<'script> {
             | ReservedPath::Group { segments, .. } => segments,
         }
     }
+    #[cfg(not(tarpaulin_include))] // this is a simple asccessor
     fn segments_mut(&mut self) -> &mut Segments<'script> {
         match self {
             ReservedPath::Args { segments, .. }
@@ -2740,6 +2745,7 @@ impl<'script> ReservedPath<'script> {
 }
 
 impl<'script> BaseExpr for ReservedPath<'script> {
+    #[cfg(not(tarpaulin_include))] // this is a simple asccessor
     fn mid(&self) -> usize {
         match self {
             ReservedPath::Args { mid, .. }

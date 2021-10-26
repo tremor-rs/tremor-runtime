@@ -31,6 +31,7 @@ pub enum SinkEnqueueError {
 }
 impl error::Error for SinkEnqueueError {}
 
+#[cfg(not(tarpaulin_include))]
 impl fmt::Display for SinkEnqueueError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self)
@@ -44,6 +45,7 @@ pub enum SinkDequeueError {
 }
 impl error::Error for SinkDequeueError {}
 
+#[cfg(not(tarpaulin_include))]
 impl fmt::Display for SinkDequeueError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self)
@@ -70,13 +72,14 @@ impl<T> AsyncSink<T> {
     pub fn dequeue(&mut self) -> result::Result<Result<T>, SinkDequeueError> {
         match self.queue.pop_front() {
             None => Err(SinkDequeueError::Empty),
-            Some(rx) => match rx.try_recv() {
-                Err(_) => {
+            Some(rx) => {
+                if let Ok(result) = rx.try_recv() {
+                    Ok(result)
+                } else {
                     self.queue.push_front(rx);
                     Err(SinkDequeueError::NotReady)
                 }
-                Ok(result) => Ok(result),
-            },
+            }
         }
     }
 
@@ -100,21 +103,33 @@ mod test {
     async fn full_cycle() {
         let mut q: AsyncSink<u8> = AsyncSink::new(2);
         let (tx1, rx) = bounded(1);
+        assert!(q.has_capacity());
         assert!(q.enqueue(rx).is_ok());
+
         let (tx2, rx) = bounded(1);
+        assert!(q.has_capacity());
         assert!(q.enqueue(rx).is_ok());
+
         let (_tx3, rx) = bounded(1);
+        assert!(!q.has_capacity());
         assert_eq!(q.enqueue(rx).err(), Some(SinkEnqueueError::AtCapacity));
+
         assert_eq!(q.dequeue(), Err(SinkDequeueError::NotReady));
         assert!(tx1.send(Ok(1)).await.is_ok());
         assert_eq!(q.dequeue(), Ok(Ok(1)));
+
         let (tx4, rx) = bounded(1);
+        assert!(q.has_capacity());
         assert!(q.enqueue(rx).is_ok());
+
         let (_tx5, rx) = bounded(1);
+        assert!(!q.has_capacity());
         assert_eq!(q.enqueue(rx).err(), Some(SinkEnqueueError::AtCapacity));
+
         assert_eq!(q.dequeue(), Err(SinkDequeueError::NotReady));
         assert!(tx2.send(Ok(2)).await.is_ok());
         assert_eq!(q.dequeue(), Ok(Ok(2)));
+        assert!(q.has_capacity());
         assert!(tx4.send(Ok(4)).await.is_ok());
         assert_eq!(q.dequeue(), Ok(Ok(4)));
         assert_eq!(q.dequeue(), Err(SinkDequeueError::Empty));
