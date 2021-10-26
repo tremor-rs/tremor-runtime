@@ -24,8 +24,9 @@ use super::{
     Query, Registry, Result, ScriptDecl, ScriptStmt, Select, SelectStmt, Serialize, Stmt,
     StreamStmt, SubqueryDecl, SubqueryStmt, Upable, Value, WindowDecl, WindowKind,
 };
-use crate::ast::visitors::{
-    ArgsRewriter, ExprReducer, GroupByExprExtractor, TargetEventRefVisitor,
+use crate::ast::{
+    visitors::{ArgsRewriter, ExprReducer, GroupByExprExtractor, TargetEventRefVisitor},
+    Ident,
 };
 use crate::{ast::InvokeAggrFn, impl_expr};
 use beef::Cow;
@@ -224,19 +225,25 @@ pub struct SubqueryDeclRaw<'script> {
 }
 impl_expr!(SubqueryDeclRaw);
 
+impl<'script> SubqueryDeclRaw<'script> {
+    fn dflt_in_ports<'ident>() -> Vec<Ident<'ident>> {
+        vec!["in".into()]
+    }
+    fn dflt_out_ports<'ident>() -> Vec<Ident<'ident>> {
+        vec!["out".into(), "err".into()]
+    }
+}
+
 impl<'script> Upable<'script> for SubqueryDeclRaw<'script> {
     type Target = SubqueryDecl<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        let from = self.from.up(helper)?.unwrap_or_else(|| vec!["in".into()]);
-        let into = self
-            .into
-            .up(helper)?
-            .unwrap_or_else(|| vec!["out".into(), "err".into()]);
+        let from = self.from.up(helper)?.unwrap_or_else(Self::dflt_in_ports);
+        let into = self.into.up(helper)?.unwrap_or_else(Self::dflt_out_ports);
 
         let ports_set: HashSet<_> = from
             .iter()
             .chain(into.iter())
-            .map(std::string::ToString::to_string)
+            .map(ToString::to_string)
             .collect();
         for stmt in &self.subquery {
             if let StmtRaw::Stream(stream_raw) = stmt {
