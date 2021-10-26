@@ -25,7 +25,7 @@ impl ConfigImpl for Config {}
 
 #[derive(Clone, Debug)]
 pub struct Metronome {
-    interval: u64,
+    interval_ns: u64,
     next: u64,
     origin_uri: EventOriginUri,
 }
@@ -50,7 +50,7 @@ impl ConnectorBuilder for Builder {
             };
 
             Ok(Box::new(Metronome {
-                interval: config.interval,
+                interval_ns: config.interval * 1_000_000_000,
                 next: 0,
                 origin_uri,
             }))
@@ -65,7 +65,7 @@ impl Source for Metronome {
     async fn pull_data(&mut self, pull_id: u64, _ctx: &SourceContext) -> Result<SourceReply> {
         let now = nanotime();
         if self.next < now {
-            self.next = now + self.interval;
+            self.next = now + self.interval_ns;
             let data = literal!({
                 "onramp": "metronome",
                 "ingest_ns": now,
