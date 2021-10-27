@@ -166,7 +166,7 @@ impl Source for Int {
                         };
                     }
                 });
-                stream_id += 1;
+                stream_id = stream_id.wrapping_add(1);
             }
         });
 
