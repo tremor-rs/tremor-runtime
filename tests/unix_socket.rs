@@ -123,7 +123,7 @@ links:
     writeln!(stream, "{}", "{\"b\" : 1}").unwrap();
     writeln!(stream, "{}", "{\"c\" : 2}").unwrap();
 
-    let mut stream2 = UnixStream::connect(SOCKET_PATH).unwrap();
+    let mut stream2 = UnixStream::connect(socket_path).unwrap();
     writeln!(stream2, "{}", "{\"d\" : 3}").unwrap();
     writeln!(stream2, "{}", "{\"e\" : 4}").unwrap();
 
