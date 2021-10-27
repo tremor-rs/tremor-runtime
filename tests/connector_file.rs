@@ -16,7 +16,7 @@ mod connectors;
 
 use async_std::path::Path;
 use async_std::task;
-use connectors::TestHarness;
+use connectors::ConnectorHarness;
 use simd_json::ValueAccess;
 use std::time::Duration;
 use tremor_runtime::errors::Result;
@@ -48,7 +48,7 @@ config:
         input_path.display()
     );
 
-    let harness = TestHarness::new(connector_yaml).await?;
+    let harness = ConnectorHarness::new(connector_yaml).await?;
     harness.start().await?;
 
     // give it some time to read the file
