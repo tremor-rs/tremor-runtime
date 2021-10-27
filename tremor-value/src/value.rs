@@ -36,7 +36,7 @@ pub use crate::serde::to_value;
 /// Representation of a JSON object
 pub type Object<'value> = RHashMap<RCow<'value, str>, Value<'value>>;
 /// Bytes
-pub type Bytes<'value> = RCow<'value, [u8]>; // TODO: not sure if this will work
+pub type Bytes<'value> = RCow<'value, [u8]>;
 
 /// Parses a slice of bytes into a Value dom. This function will
 /// rewrite the slice to de-escape strings.
