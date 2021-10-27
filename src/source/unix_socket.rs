@@ -144,6 +144,11 @@ impl Source for Int {
                 let origin_uri = origin_uri.clone();
 
                 task::spawn(async move {
+                    if let Err(e) = tx.send(SourceReply::StartStream(stream_id)).await {
+                        error!("Unix Socket Error: {}", e);
+                        return;
+                    };
+
                     while let Ok(n) = connection.read(&mut buffer).await {
                         if n == 0 {
                             if let Err(e) = tx.send(SourceReply::EndStream(stream_id)).await {
@@ -167,7 +172,7 @@ impl Source for Int {
                         };
                     }
                 });
-                stream_id += 1;
+                stream_id = stream_id.wrapping_add(1);
             }
         });
 
