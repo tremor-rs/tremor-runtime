@@ -81,13 +81,10 @@ impl<'key> KnownKey<'key> {
     /// ```
     #[inline]
     #[must_use]
-    pub fn lookup<'target, 'value>(
+    pub fn lookup<'target>(
         &self,
-        target: &'target Value<'value>,
-    ) -> Option<&'target Value<'value>>
-    where
-        'value: 'target,
-    {
+        target: &'target Value<'key>,
+    ) -> Option<&'target Value<'key>> {
         target.as_object().and_then(|m| self.map_lookup(m))
     }
     /// Looks up this key in a `HashMap<<Cow<'value, str>, Value<'value>>` the inner representation of an object `Value`, returns None if the
@@ -107,13 +104,10 @@ impl<'key> KnownKey<'key> {
 
     #[inline]
     #[must_use]
-    pub fn map_lookup<'target, 'value>(
+    pub fn map_lookup<'target>(
         &self,
-        map: &'target RHashMap<RCow<'value, str>, Value<'value>>,
-    ) -> Option<&'target Value<'value>>
-    where
-        'value: 'target,
-    {
+        map: &'target RHashMap<RCow<'key, str>, Value<'key>>,
+    ) -> Option<&'target Value<'key>> {
         // FIXME: there's no raw_entry in the HashMap for `std` nor `abi_stable`,
         // so this optimization won't work until then:
         //
@@ -146,13 +140,12 @@ impl<'key> KnownKey<'key> {
     /// assert_eq!(object["answer"], 42);
     /// ```
     #[inline]
-    pub fn lookup_mut<'target, 'value>(
+    pub fn lookup_mut<'target>(
         &self,
-        target: &'target mut Value<'value>,
-    ) -> Option<&'target mut Value<'value>>
+        target: &'target mut Value<'key>,
+    ) -> Option<&'target mut Value<'key>>
     where
-        'key: 'value,
-        'value: 'target,
+        'key: 'target,
     {
         target.as_object_mut().and_then(|m| self.map_lookup_mut(m))
     }
@@ -179,13 +172,12 @@ impl<'key> KnownKey<'key> {
     ///
     /// ```
     #[inline]
-    pub fn map_lookup_mut<'target, 'value>(
+    pub fn map_lookup_mut<'target>(
         &self,
-        map: &'target mut RHashMap<RCow<'value, str>, Value<'value>>,
-    ) -> Option<&'target mut Value<'value>>
+        map: &'target mut RHashMap<RCow<'key, str>, Value<'key>>,
+    ) -> Option<&'target mut Value<'key>>
     where
-        'key: 'value,
-        'value: 'target,
+        'key: 'target,
     {
         // FIXME: no `raw_entry_mut`, this optimization is not possible right
         // now:
@@ -235,15 +227,14 @@ impl<'key> KnownKey<'key> {
     /// assert_eq!(object["also the answer"], 42);
     /// ```
     #[inline]
-    pub fn lookup_or_insert_mut<'target, 'value, F>(
+    pub fn lookup_or_insert_mut<'target, F>(
         &self,
-        target: &'target mut Value<'value>,
+        target: &'target mut Value<'key>,
         with: F,
-    ) -> Result<&'target mut Value<'value>, Error>
+    ) -> Result<&'target mut Value<'key>, Error>
     where
-        'key: 'value,
-        'value: 'target,
-        F: FnOnce() -> Value<'value>,
+        'key: 'target,
+        F: FnOnce() -> Value<'key>,
     {
         // we make use of internals here, but this is the fastest way, only requiring one match
         match target {
@@ -283,15 +274,14 @@ impl<'key> KnownKey<'key> {
     /// assert_eq!(object["also the answer"], 42);
     /// ```
     #[inline]
-    pub fn map_lookup_or_insert_mut<'target, 'value, F>(
+    pub fn map_lookup_or_insert_mut<'target, F>(
         &self,
-        map: &'target mut RHashMap<RCow<'value, str>, Value<'value>>,
+        map: &'target mut RHashMap<RCow<'key, str>, Value<'key>>,
         with: F,
-    ) -> &'target mut Value<'value>
+    ) -> &'target mut Value<'key>
     where
-        'key: 'value,
-        'value: 'target,
-        F: FnOnce() -> Value<'value>,
+        'key: 'target,
+        F: FnOnce() -> Value<'key>,
     {
         // FIXME: no `raw_entry_mut`, this optimization is not possible right
         // now:
@@ -332,14 +322,13 @@ impl<'key> KnownKey<'key> {
     /// assert_eq!(object["also the answer"], 42);
     /// ```
     #[inline]
-    pub fn insert<'target, 'value>(
+    pub fn insert<'target>(
         &self,
-        target: &'target mut Value<'value>,
-        value: Value<'value>,
-    ) -> Result<Option<Value<'value>>, Error>
+        target: &'target mut Value<'key>,
+        value: Value<'key>,
+    ) -> Result<Option<Value<'key>>, Error>
     where
-        'key: 'value,
-        'value: 'target,
+        'key: 'target,
     {
         target
             .as_object_mut()
@@ -376,14 +365,13 @@ impl<'key> KnownKey<'key> {
     /// assert_eq!(object["also the answer"], 42);
     /// ```
     #[inline]
-    pub fn map_insert<'target, 'value>(
+    pub fn map_insert<'target>(
         &self,
-        map: &'target mut RHashMap<RCow<'value, str>, Value<'value>>,
-        value: Value<'value>,
-    ) -> Option<Value<'value>>
+        map: &'target mut RHashMap<RCow<'key, str>, Value<'key>>,
+        value: Value<'key>,
+    ) -> Option<Value<'key>>
     where
-        'key: 'value,
-        'value: 'target,
+        'key: 'target,
     {
         // FIXME: no `raw_entry_mut`, this optimization is not possible right
         // now:
@@ -424,15 +412,14 @@ impl<'script> KnownKey<'script> {
 mod tests {
     #![allow(clippy::unnecessary_operation, clippy::non_ascii_literal)]
     use super::*;
-    use beef::Cow;
     use value_trait::Builder;
 
     #[test]
     fn known_key() {
         let mut v = Value::object();
         v.try_insert("key", 1);
-        let key1 = KnownKey::from(Cow::from("key"));
-        let key2 = KnownKey::from(Cow::from("cake"));
+        let key1 = KnownKey::from(RCow::from("key"));
+        let key2 = KnownKey::from(RCow::from("cake"));
 
         assert!(key1.lookup(&Value::null()).is_none());
         assert!(key2.lookup(&Value::null()).is_none());
@@ -446,8 +433,8 @@ mod tests {
     fn known_key_insert() {
         let mut v = Value::object();
         v.try_insert("key", 1);
-        let key1 = KnownKey::from(Cow::from("key"));
-        let key2 = KnownKey::from(Cow::from("cake"));
+        let key1 = KnownKey::from(RCow::from("key"));
+        let key2 = KnownKey::from(RCow::from("cake"));
 
         let mut v1 = Value::null();
         assert!(key1.insert(&mut v1, 2.into()).is_err());
@@ -462,8 +449,8 @@ mod tests {
     fn lookup_or_insert_mut() {
         let mut v = Value::object();
         v.try_insert("key", 1);
-        let key1 = KnownKey::from(Cow::from("key"));
-        let key2 = KnownKey::from(Cow::from("cake"));
+        let key1 = KnownKey::from(RCow::from("key"));
+        let key2 = KnownKey::from(RCow::from("cake"));
 
         let mut v1 = Value::null();
         assert!(key1.lookup_or_insert_mut(&mut v1, || 2.into()).is_err());
@@ -482,8 +469,8 @@ mod tests {
     fn known_key_map() {
         let mut v = Value::object_with_capacity(128);
         v.try_insert("key", 1);
-        let key1 = KnownKey::from(Cow::from("key"));
-        let key2 = KnownKey::from(Cow::from("cake"));
+        let key1 = KnownKey::from(RCow::from("key"));
+        let key2 = KnownKey::from(RCow::from("cake"));
 
         assert!(key1.lookup(&Value::null()).is_none());
         assert!(key2.lookup(&Value::null()).is_none());
@@ -495,8 +482,8 @@ mod tests {
     fn known_key_insert_map() {
         let mut v = Value::object_with_capacity(128);
         v.try_insert("key", 1);
-        let key1 = KnownKey::from(Cow::from("key"));
-        let key2 = KnownKey::from(Cow::from("cake"));
+        let key1 = KnownKey::from(RCow::from("key"));
+        let key2 = KnownKey::from(RCow::from("cake"));
 
         let mut v1 = Value::null();
 
