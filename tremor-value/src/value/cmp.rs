@@ -93,7 +93,13 @@ impl<'value> From<Value<'value>> for OwnedValue {
             Value::Static(s) => OwnedValue::from(s),
             Value::String(s) => OwnedValue::from(s.to_string()),
             Value::Array(a) => a.into_iter().collect(),
-            Value::Object(m) => m.into_iter().collect(),
+            Value::Object(m) => {
+                // FIXME: this may affect performance
+                let m = m.into_iter()
+                        .map(|tuple| (tuple.0.to_string(), OwnedValue::from(tuple.1)))
+                        .collect();
+                OwnedValue::Object(Box::new(m))
+            }
             Value::Bytes(b) => OwnedValue::from(base64::encode(b)),
         }
     }
@@ -107,8 +113,14 @@ impl<'value> From<Value<'value>> for BorrowedValue<'value> {
             Value::Static(s) => BorrowedValue::from(s),
             Value::String(s) => BorrowedValue::from(s.to_string()),
             Value::Array(a) => a.into_iter().collect(),
-            Value::Object(m) => m.into_iter().collect(),
-            Value::Bytes(b) => BorrowedValue::from(base64::encode(b.into())),
+            Value::Object(m) => {
+                // FIXME: this may affect performance
+                let m = m.into_iter()
+                        .map(|tuple| (tuple.0.into(), BorrowedValue::from(tuple.1)))
+                        .collect();
+                BorrowedValue::Object(Box::new(m))
+            }
+            Value::Bytes(b) => BorrowedValue::from(base64::encode(b)),
         }
     }
 }

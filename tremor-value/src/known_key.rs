@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::Value;
-use abi_stable::std_types::{RCow, RHashMap, map::REntry};
+use abi_stable::std_types::{map::REntry, RCow, RHashMap};
 use std::fmt;
 use std::hash::{BuildHasher, Hash, Hasher};
 use value_trait::{Mutable, Value as ValueTrait, ValueAccess, ValueType};
@@ -81,10 +81,7 @@ impl<'key> KnownKey<'key> {
     /// ```
     #[inline]
     #[must_use]
-    pub fn lookup<'target>(
-        &self,
-        target: &'target Value<'key>,
-    ) -> Option<&'target Value<'key>> {
+    pub fn lookup<'target>(&self, target: &'target Value<'key>) -> Option<&'target Value<'key>> {
         target.as_object().and_then(|m| self.map_lookup(m))
     }
     /// Looks up this key in a `HashMap<<Cow<'value, str>, Value<'value>>` the inner representation of an object `Value`, returns None if the
@@ -116,7 +113,7 @@ impl<'key> KnownKey<'key> {
         //     .map(|kv| kv.1)
         match map.entry(self.key) {
             REntry::Occupied(e) => Some(e.get()),
-            REntry::Vacant(e) => None
+            REntry::Vacant(e) => None,
         }
     }
 
@@ -291,8 +288,7 @@ impl<'key> KnownKey<'key> {
         //     .from_key_hashed_nocheck(self.hash, key)
         //     .or_insert_with(|| (self.key.clone(), with()))
         //     .1
-        map.entry(self.key)
-            .or_insert_with(|| with())
+        map.entry(self.key).or_insert_with(|| with())
     }
 
     /// Inserts a value key into  `Value`, returns None if the

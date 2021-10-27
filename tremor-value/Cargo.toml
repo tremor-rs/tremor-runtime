@@ -23,7 +23,7 @@ value-trait = { version="0.2", features=["custom-types", "c-abi"] }
 # FIXME: temporary until it's upstreamed
 # (https://github.com/rodrimati1992/abi_stable_crates/pull/58)
 # (https://github.com/rodrimati1992/abi_stable_crates/pull/61)
-abi_stable = { version = "0.10", git = "https://github.com/marioortizmanero/abi_stable_crates.git", branch = "floating-point" }
+abi_stable = { version = "0.10", git = "https://github.com/marioortizmanero/abi_stable_crates.git", branch = "floating-point", default-features = false }
 
 [dev-dependencies]
 float-cmp = "0.9"

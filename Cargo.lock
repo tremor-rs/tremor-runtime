@@ -31,7 +31,6 @@ dependencies = [
  "abi_stable_derive 0.10.2 (git+https://github.com/marioortizmanero/abi_stable_crates.git?branch=floating-point)",
  "abi_stable_shared 0.10.2 (git+https://github.com/marioortizmanero/abi_stable_crates.git?branch=floating-point)",
  "core_extensions",
- "crossbeam-channel",
  "generational-arena",
  "libloading",
  "lock_api",
@@ -40,7 +39,6 @@ dependencies = [
  "rustc_version 0.4.0",
  "serde",
  "serde_derive",
- "serde_json",
 ]
 
 [[package]]
