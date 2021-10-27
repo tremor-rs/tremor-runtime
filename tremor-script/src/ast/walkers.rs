@@ -123,7 +123,7 @@ pub trait ExprWalker<'script>:
         stop!(self.visit_ifelse(ifelse), self.leave_ifelse(ifelse));
         ImutExprWalker::walk_expr(self, &mut ifelse.target)?;
         ExprWalker::walk_predicate_clause(self, &mut ifelse.if_clause)?;
-        self.walk_default_case(&mut ifelse.else_clause)?;
+        ExprWalker::walk_default_case(self, &mut ifelse.else_clause)?;
         self.leave_ifelse(ifelse)
     }
 
@@ -133,8 +133,8 @@ pub trait ExprWalker<'script>:
     /// if the walker function fails
     fn walk_default_case(&mut self, mdefault: &mut DefaultCase<Expr<'script>>) -> Result<()> {
         stop!(
-            self.visit_default_case(mdefault),
-            self.leave_default_case(mdefault)
+            ExprVisitor::visit_default_case(self, mdefault),
+            ExprVisitor::leave_default_case(self, mdefault)
         );
         match mdefault {
             DefaultCase::None | DefaultCase::Null => {}
@@ -148,7 +148,7 @@ pub trait ExprWalker<'script>:
                 ExprWalker::walk_expr(self, last_expr)?;
             }
         }
-        self.leave_default_case(mdefault)
+        ExprVisitor::leave_default_case(self, mdefault)
     }
 
     /// walk a match expr
@@ -160,10 +160,11 @@ pub trait ExprWalker<'script>:
             ExprVisitor::visit_mmatch(self, mmatch),
             ExprVisitor::leave_mmatch(self, mmatch)
         );
+        ImutExprWalker::walk_expr(self, &mut mmatch.target)?;
         for group in &mut mmatch.patterns {
             ExprWalker::walk_clause_group(self, group)?;
         }
-        ImutExprWalker::walk_expr(self, &mut mmatch.target)?;
+        ExprWalker::walk_default_case(self, &mut mmatch.default)?;
         ExprVisitor::leave_mmatch(self, mmatch)
     }
 
@@ -369,16 +370,44 @@ pub trait ImutExprWalker<'script>: ImutExprVisitor<'script> {
         self.leave_precondition(precondition)
     }
 
+    /// walk a `DefaultCase`
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn walk_default_case(
+        &mut self,
+        mdefault: &mut DefaultCase<ImutExprInt<'script>>,
+    ) -> Result<()> {
+        stop!(
+            self.visit_default_case(mdefault),
+            self.leave_default_case(mdefault)
+        );
+        match mdefault {
+            DefaultCase::None | DefaultCase::Null => {}
+            DefaultCase::Many { exprs, last_expr } => {
+                for e in exprs {
+                    self.walk_expr(e)?;
+                }
+                self.walk_expr(last_expr)?;
+            }
+            DefaultCase::One(last_expr) => {
+                self.walk_expr(last_expr)?;
+            }
+        }
+        self.leave_default_case(mdefault)
+    }
+
     /// walk a `Match`
     ///
     /// # Errors
     /// if the walker function fails
     fn walk_match(&mut self, mmatch: &mut Match<'script, ImutExprInt<'script>>) -> Result<()> {
         stop!(self.visit_mmatch(mmatch), self.leave_mmatch(mmatch));
+        self.walk_expr(&mut mmatch.target)?;
         for group in &mut mmatch.patterns {
             self.walk_clause_group(group)?;
         }
-        self.walk_expr(&mut mmatch.target)?;
+        self.walk_default_case(&mut mmatch.default)?;
         self.leave_mmatch(mmatch)
     }
 

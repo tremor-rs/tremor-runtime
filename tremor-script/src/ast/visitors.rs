@@ -315,6 +315,28 @@ pub trait ImutExprVisitor<'script> {
         Ok(())
     }
 
+    /// visit a `DefaultCase`
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn visit_default_case(
+        &mut self,
+        _mdefault: &mut DefaultCase<ImutExprInt<'script>>,
+    ) -> Result<VisitRes> {
+        Ok(Walk)
+    }
+
+    /// leave a `DefaultCase`
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn leave_default_case(
+        &mut self,
+        _mdefault: &mut DefaultCase<ImutExprInt<'script>>,
+    ) -> Result<()> {
+        Ok(())
+    }
+
     /// visit a `Match`
     ///
     /// # Errors
@@ -995,25 +1017,46 @@ mod tests {
     fn test_visitor_walking() -> Result<()> {
         test_walk(
             r#"
-            for event of
+            const c = {"badger": 23};
+            for c[event]["s"].badger[42] of
               case (a, b) => let event = 5
               case (a, b) when a == 7 => drop
               case (a, b) => emit event
             end;
             match event.foo of
               case %{ field == " #{42 + event.foo} ", present foo, absent bar, snot ~= re|badger| } => event.bar
-              case 7 => event.snot
+              case present snot => event.snot
+              case absent badger => 42
+              case %{ a ==  1 } => event.snot
+              case %{ a ==  2 } => event.snot
+              case %{ a ==  3 } => event.snot
+              case %{ a ==  4 } => event.snot
+              case %{ a ==  5 } => event.snot
+              case %{ a ==  6 } => event.snot
+              case %{ a ==  7 } => event.snot
+              case %{ a ==  8 } => event.snot
+              case %{ a ==  9 } => event.snot
+              case %{ a == 10 } => event.snot
+              case %{ a == 11 } => event.snot
+              case %{ a == 12 } => event.snot
+              case %{ a == 13 } => event.snot
+              case %{ a == 14 } => event.snot
+              case %{ a == 15 } => event.snot
+              case %{ a == 16 } => event.snot
+              case %{ a == 17 } => event.snot
+              case %{ a == 18 } => event.snot
+              case %{ a == 19 } => event.snot
               case %[42] => event.snake
-              case a = %(42, ...) => let event = a
+              case a = %(42, _, ...) => let event = a
               default => let a = 7, let b = 9, event + a + b
             end;
-            match event.foo of          
-              case a = %(42, ...) => let event = a
+            match $meta.foo of          
+              case 1 => let event = a
               case _ => null
             end;
             fn hide_the_42(x) with
               let x = x + 42;
-              x
+              recur(x)
             end;
             drop;
             emit event => " #{42 + event} ";
@@ -1021,8 +1064,9 @@ mod tests {
               match event.foo of
                 case %{ field == " #{42 + event.foo} ", present foo, absent bar, badger ~= %("snot", ~ re|snot|, _) } => event.bar
                 case 7 => event.snot
-                case %[42] => event.snake
+                case %[42, _, %{}] => event.snake
                 case a = %(42, ...) => a
+                case ~ re|snot| => b
                 default => event.snot
               end
             );
@@ -1069,8 +1113,9 @@ mod tests {
         test_walk(
             r#"
             for group[0] of
-                case (i, e) =>
-                  let event = 42 + i
+                case (i, e) when i == 0 =>
+                  let event = 42 + i,
+                  event + 7
               end;
             (for group[0] of
                case (i, e) =>
