@@ -283,12 +283,7 @@ impl<'value> Value<'value> {
             Self::Object(obj) => (&*obj)
                 .clone()
                 .into_iter()
-                .map(|Tuple2(key, value)| {
-                    (
-                        RCow::Owned(key.into_owned()),
-                        value.into_static()
-                    )
-                })
+                .map(|Tuple2(key, value)| (RCow::Owned(key.into_owned()), value.into_static()))
                 .collect(),
             Self::Static(s) => Value::Static(s),
             Self::Bytes(b) => Value::Bytes(RCow::Owned(b.into_owned())),
@@ -301,14 +296,16 @@ impl<'value> Value<'value> {
     #[must_use]
     pub fn clone_static(&self) -> Value<'static> {
         match self {
-            Self::String(s) => Value::String(RCow::Owned(s.into_owned())),
+            Self::String(s) => Value::String(RCow::Owned(s.to_string().into())),
             Self::Array(arr) => arr.iter().map(Value::clone_static).collect(),
             Self::Object(obj) => obj
                 .iter()
-                .map(|Tuple2(key, value)| (RCow::Owned(key.into_owned()), value.clone_static()))
+                .map(|Tuple2(key, value)| {
+                    (RCow::Owned(key.to_string().into()), value.clone_static())
+                })
                 .collect(),
             Self::Static(s) => Value::Static(*s),
-            Self::Bytes(b) => Value::Bytes(RCow::Owned(b.into_owned())),
+            Self::Bytes(b) => Value::Bytes(RCow::Owned(b.to_vec().into())),
         }
     }
 

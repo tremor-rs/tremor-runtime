@@ -93,13 +93,12 @@ impl<'value> From<Value<'value>> for OwnedValue {
             Value::Static(s) => OwnedValue::from(s),
             Value::String(s) => OwnedValue::from(s.to_string()),
             Value::Array(a) => a.into_iter().collect(),
-            Value::Object(m) => {
-                // FIXME: this may affect performance
-                let m = m.into_iter()
-                        .map(|Tuple2(key, value)| (key.to_string(), OwnedValue::from(value)))
-                        .collect();
-                OwnedValue::Object(Box::new(m))
-            }
+            // FIXME: this will affect performance, not sure how to avoid the
+            // clone.
+            Value::Object(m) => (&*m)
+                .into_iter()
+                .map(|Tuple2(key, value)| (key, value.clone()))
+                .collect(),
             Value::Bytes(b) => OwnedValue::from(base64::encode(b)),
         }
     }
@@ -113,13 +112,15 @@ impl<'value> From<Value<'value>> for BorrowedValue<'value> {
             Value::Static(s) => BorrowedValue::from(s),
             Value::String(s) => BorrowedValue::from(s.to_string()),
             Value::Array(a) => a.into_iter().collect(),
-            Value::Object(m) => {
-                // FIXME: this may affect performance
-                let m = m.into_iter()
-                        .map(|Tuple2(key, value)| (key.into(), BorrowedValue::from(value)))
-                        .collect();
-                BorrowedValue::Object(Box::new(m))
-            }
+            // FIXME: this will affect performance, not sure how to avoid the
+            // clones.
+            Value::Object(m) => (&*m)
+                .into_iter()
+                .map(|Tuple2(key, value)| {
+                    let key: std::borrow::Cow<'_, str> = key.clone().into();
+                    (key, value.clone())
+                })
+                .collect(),
             Value::Bytes(b) => BorrowedValue::from(base64::encode(b)),
         }
     }
