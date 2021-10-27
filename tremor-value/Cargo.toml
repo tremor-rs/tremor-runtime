@@ -17,8 +17,8 @@ serde = "1.0"
 simd-json = "0.4.7"
 simd-json-derive = "0.2"
 # FIXME: This won't work with the `0.2.9-alpha.0` version because it has to be
-# picked manually for being alpha. If I change the crate locally to `0.2.9`
-# locally it does work just fine.
+# picked manually for being alpha. If I change the crate to `0.2.9` in my fork
+# it does work just fine.
 value-trait = { version="0.2", features=["custom-types", "c-abi"] }
 # FIXME: temporary until it's upstreamed
 # (https://github.com/rodrimati1992/abi_stable_crates/pull/58)
