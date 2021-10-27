@@ -6732,6 +6732,7 @@ dependencies = [
  "elastic",
  "env_logger 0.9.0",
  "error-chain 0.12.4",
+ "event-listener",
  "file-mode",
  "futures 0.3.17",
  "glob",
