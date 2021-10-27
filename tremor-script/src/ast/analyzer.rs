@@ -78,6 +78,7 @@ impl<'script> Costly for PredicatePattern<'script> {
             PredicatePattern::TildeEq { test, .. } => test.cost(),
             PredicatePattern::RecordPatternEq { pattern, .. } => pattern.cost(),
             PredicatePattern::ArrayPatternEq { pattern, .. } => pattern.cost(),
+            PredicatePattern::TuplePatternEq { pattern, .. } => pattern.cost(),
         }
     }
 }

@@ -946,6 +946,13 @@ impl<'script> PredicatePattern<'script> {
                     pattern: pattern.into_static(),
                 }
             }
+            PredicatePattern::TuplePatternEq { lhs, key, pattern } => {
+                PredicatePattern::TuplePatternEq {
+                    lhs: Cow::owned(lhs.to_string()),
+                    key: key.into_static(),
+                    pattern: pattern.into_static(),
+                }
+            }
             PredicatePattern::FieldPresent { lhs, key } => PredicatePattern::FieldPresent {
                 lhs: Cow::owned(lhs.to_string()),
                 key: key.into_static(),

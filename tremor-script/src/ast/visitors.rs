@@ -971,57 +971,22 @@ mod tests {
         }
     }
 
-    fn test_walk<'script>(script: &'script str, expected_42s: usize) -> Result<()> {
-        test_walk_imut(script, expected_42s)?;
-        test_walk_mut(script, expected_42s)?;
-        Ok(())
-    }
-
-    fn test_walk_imut<'script>(script: &'script str, expected_42s: usize) -> Result<()> {
+    fn test_walk<'script>(input: &'script str, expected_42s: usize) -> Result<()> {
         let module_path = ModulePath::load();
         let mut registry = registry();
         crate::std_lib::load(&mut registry);
         let script_script: crate::script::Script =
-            crate::script::Script::parse(&module_path, "test", script.to_owned(), &registry)?;
+            crate::script::Script::parse(&module_path, "test", input.to_owned(), &registry)?;
         let script: &crate::ast::Script = script_script.script.suffix();
-        let mut imut_expr = script
-            .exprs
-            .iter()
-            .filter_map(|e| {
-                if let Expr::Imut(expr) = e {
-                    Some(expr)
-                } else {
-                    None
-                }
-            })
-            .cloned()
-            .last()
-            .unwrap()
-            .into_static();
         let mut visitor = Find42Visitor::default();
-        ImutExprWalker::walk_expr(&mut visitor, &mut imut_expr)?;
+        for expr in &script.exprs {
+            let mut expr = expr.clone();
+            ExprWalker::walk_expr(&mut visitor, &mut expr)?;
+        }
         assert_eq!(
             expected_42s, visitor.found,
-            "Did not find {} 42s in {:?}, only {}",
-            expected_42s, imut_expr, visitor.found
-        );
-        Ok(())
-    }
-
-    fn test_walk_mut<'script>(script: &'script str, expected_42s: usize) -> Result<()> {
-        let module_path = ModulePath::load();
-        let mut registry = registry();
-        crate::std_lib::load(&mut registry);
-        let script_script: crate::script::Script =
-            crate::script::Script::parse(&module_path, "test", script.to_owned(), &registry)?;
-        let script: &crate::ast::Script = script_script.script.suffix();
-        let mut imut_expr = script.exprs.last().cloned().unwrap().into_static();
-        let mut visitor = Find42Visitor::default();
-        ExprWalker::walk_expr(&mut visitor, &mut imut_expr)?;
-        assert_eq!(
-            expected_42s, visitor.found,
-            "Did not find {} 42s in {:?}, only {}",
-            expected_42s, imut_expr, visitor.found
+            "Did not find {} 42s only {} in: {}",
+            expected_42s, visitor.found, input
         );
         Ok(())
     }
@@ -1036,7 +1001,8 @@ mod tests {
               case (a, b) => emit event
             end;
             match event.foo of
-              case %{ field == " #{42 + event.foo} ", present foo, absent bar } => event.bar
+              case %{ field == " #{42 + event.foo} ", present foo, absent bar, snot ~= re|badger| } => event.bar
+              case 7 => event.snot
               case %[42] => event.snake
               case a = %(42, ...) => let event = a
               default => let a = 7, let b = 9, event + a + b
@@ -1046,18 +1012,22 @@ mod tests {
               case _ => null
             end;
             fn hide_the_42(x) with
-              x + 1
+              let x = x + 42;
+              x
             end;
+            drop;
+            emit event => " #{42 + event} ";
             hide_the_42(
               match event.foo of
-                case %{ field == " #{42 + event.foo} ", present foo, absent bar } => event.bar
+                case %{ field == " #{42 + event.foo} ", present foo, absent bar, badger ~= %("snot", ~ re|snot|, _) } => event.bar
+                case 7 => event.snot
                 case %[42] => event.snake
                 case a = %(42, ...) => a
                 default => event.snot
               end
             );
         "#,
-            3,
+            8,
         )
     }
 
@@ -1073,6 +1043,8 @@ mod tests {
         [
             -event.foo,
             (patch event of
+                default => {"snot": 42 - zero},
+                default "key" => {"snot": 42 +  zero},
                 insert "snot" => 42,
                 merge => {"snot": 42 - zero},
                 merge "badger" => {"snot": 42 - zero},
@@ -1088,7 +1060,7 @@ mod tests {
             <<event.foo:8/unsigned>>
         ]
         "#,
-            6,
+            8,
         )
     }
 
@@ -1096,13 +1068,16 @@ mod tests {
     fn test_walk_comprehension() -> Result<()> {
         test_walk(
             r#"
+            for group[0] of
+                case (i, e) =>
+                  let event = 42 + i
+              end;
             (for group[0] of
-              case (i, e) =>
-                42 + i
-            end
-            )
+               case (i, e) =>
+                 42 + i
+            end)
         "#,
-            1,
+            2,
         )
     }
 }

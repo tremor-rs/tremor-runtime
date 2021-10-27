@@ -1500,6 +1500,13 @@ pub enum PredicatePatternRaw<'script> {
         pattern: ArrayPatternRaw<'script>,
     },
     /// we're forced to make this pub because of lalrpop
+    TuplePatternEq {
+        /// we're forced to make this pub because of lalrpop
+        lhs: Cow<'script, str>,
+        /// we're forced to make this pub because of lalrpop
+        pattern: TuplePatternRaw<'script>,
+    },
+    /// we're forced to make this pub because of lalrpop
     FieldPresent {
         /// we're forced to make this pub because of lalrpop
         lhs: Cow<'script, str>,
@@ -1516,6 +1523,7 @@ impl<'script> Upable<'script> for PredicatePatternRaw<'script> {
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         use PredicatePatternRaw::{
             ArrayPatternEq, Bin, FieldAbsent, FieldPresent, RecordPatternEq, TildeEq,
+            TuplePatternEq,
         };
         Ok(match self {
             TildeEq { assign, lhs, test } => PredicatePattern::TildeEq {
@@ -1536,6 +1544,11 @@ impl<'script> Upable<'script> for PredicatePatternRaw<'script> {
                 pattern: pattern.up(helper)?,
             },
             ArrayPatternEq { lhs, pattern } => PredicatePattern::ArrayPatternEq {
+                key: KnownKey::from(lhs.clone()),
+                lhs,
+                pattern: pattern.up(helper)?,
+            },
+            TuplePatternEq { lhs, pattern } => PredicatePattern::TuplePatternEq {
                 key: KnownKey::from(lhs.clone()),
                 lhs,
                 pattern: pattern.up(helper)?,

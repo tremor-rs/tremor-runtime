@@ -2178,6 +2178,16 @@ pub enum PredicatePattern<'script> {
         /// Predicate
         pattern: ArrayPattern<'script>,
     },
+    /// Array search pattern
+    TuplePatternEq {
+        /// Lhs
+        lhs: Cow<'script, str>,
+        /// Key
+        #[serde(skip)]
+        key: KnownKey<'script>,
+        /// Predicate
+        pattern: TuplePattern<'script>,
+    },
     /// Field presence
     FieldPresent {
         /// Lhs
@@ -2291,12 +2301,14 @@ impl<'script> PredicatePattern<'script> {
     pub fn key(&self) -> &KnownKey<'script> {
         use PredicatePattern::{
             ArrayPatternEq, Bin, FieldAbsent, FieldPresent, RecordPatternEq, TildeEq,
+            TuplePatternEq,
         };
         match self {
             TildeEq { key, .. }
             | Bin { key, .. }
             | RecordPatternEq { key, .. }
             | ArrayPatternEq { key, .. }
+            | TuplePatternEq { key, .. }
             | FieldPresent { key, .. }
             | FieldAbsent { key, .. } => key,
         }
@@ -2306,12 +2318,14 @@ impl<'script> PredicatePattern<'script> {
     fn lhs(&self) -> &Cow<'script, str> {
         use PredicatePattern::{
             ArrayPatternEq, Bin, FieldAbsent, FieldPresent, RecordPatternEq, TildeEq,
+            TuplePatternEq,
         };
         match self {
             TildeEq { lhs, .. }
             | Bin { lhs, .. }
             | RecordPatternEq { lhs, .. }
             | ArrayPatternEq { lhs, .. }
+            | TuplePatternEq { lhs, .. }
             | FieldPresent { lhs, .. }
             | FieldAbsent { lhs, .. } => lhs,
         }
