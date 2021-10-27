@@ -1254,6 +1254,27 @@ where
                         return Ok(None);
                     }
                 }
+                PredicatePattern::TuplePatternEq { pattern, .. } => {
+                    let testee = if let Some(v) = known_key.map_lookup(record) {
+                        v
+                    } else {
+                        return Ok(None);
+                    };
+
+                    if testee.is_array() {
+                        if let Some(r) = stry!(match_tp_expr(
+                            outer, opts, env, event, state, meta, local, testee, pattern,
+                        )) {
+                            if opts.result_needed {
+                                known_key.insert(&mut acc, r)?;
+                            };
+                        } else {
+                            return Ok(None);
+                        }
+                    } else {
+                        return Ok(None);
+                    }
+                }
             }
         }
         Some(acc)

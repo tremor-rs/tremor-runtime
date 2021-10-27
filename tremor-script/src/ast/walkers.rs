@@ -589,6 +589,9 @@ pub trait ImutExprWalker<'script>: ImutExprVisitor<'script> {
             PredicatePattern::ArrayPatternEq { pattern, .. } => {
                 self.walk_array_pattern(pattern)?;
             }
+            PredicatePattern::TuplePatternEq { pattern, .. } => {
+                self.walk_tuple_pattern(pattern)?;
+            }
             PredicatePattern::TildeEq { test, .. } => {
                 self.walk_test_expr(test.as_mut())?;
             }

@@ -1161,6 +1161,7 @@ PredicateFieldPattern: PredicatePatternRaw<'input> = {
 
     <start:@L> <lhs:Ident> <op:"~="> <rp:RecordPattern> <end:@L> => PredicatePatternRaw::RecordPatternEq { lhs: lhs.id, pattern: rp },
     <start:@L> <lhs:Ident> <op:"~="> <ap:ArrayPattern> <end:@L> => PredicatePatternRaw::ArrayPatternEq { lhs: lhs.id, pattern: ap },
+    <start:@L> <lhs:Ident> <op:"~="> <ap:TuplePattern> <end:@L> => PredicatePatternRaw::TuplePatternEq { lhs: lhs.id, pattern: ap },
     <start:@L> "present" <lhs:Ident> <end:@L> => PredicatePatternRaw::FieldPresent { lhs: lhs.id },
     <start:@L> "absent" <lhs:Ident> <end:@L> => PredicatePatternRaw::FieldAbsent { lhs: lhs.id },
     <lhs:Ident> <kind:BinCmpEq> <expr:ComplexExprImut> => PredicatePatternRaw::Bin { lhs: lhs.id, rhs: expr, kind },
