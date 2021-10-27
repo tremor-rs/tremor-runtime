@@ -27,7 +27,7 @@ use metadata::Meta;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tag::TagFilter;
 use tremor_common::file;
 use tremor_common::time::nanotime;
@@ -44,7 +44,6 @@ pub mod tag;
 mod unit;
 
 fn suite_bench(
-    base: &Path,
     root: &Path,
     config: &TestConfig,
 ) -> Result<(stats::Stats, Vec<report::TestReport>)> {
@@ -61,35 +60,11 @@ fn suite_bench(
         status::h0("Framework", "Finding benchmark test scenarios")?;
 
         for bench in benches {
-            let root = bench.path();
-            let bench_root = root.to_string_lossy();
-            let tags = tag::resolve(base, root)?;
+            let (s, t) = run_bench(bench.path(), config, stats)?;
 
-            let (matched, is_match) = config.matches(&tags);
-            if is_match {
-                status::h1("Benchmark", &format!("Running {}", &basename(&bench_root)))?;
-                let cwd = std::env::current_dir()?;
-                std::env::set_current_dir(Path::new(&root))?;
-                status::tags(&tags, Some(&matched), Some(&config.excludes))?;
-                let test_report = process::run_process("bench", base, root, &tags)?;
-
-                // Restore cwd
-                file::set_current_dir(&cwd)?;
-
-                status::duration(test_report.duration, "  ")?;
-                if test_report.stats.is_pass() {
-                    stats.pass();
-                } else {
-                    stats.fail(&bench_root);
-                }
-                suite.push(test_report);
-            } else {
-                stats.skip();
-                status::h1(
-                    "  Benchmark",
-                    &format!("Skipping {}", &basename(&bench_root)),
-                )?;
-                status::tags(&tags, Some(&matched), Some(&config.excludes))?;
+            stats = s;
+            if let Some(report) = t {
+                suite.push(report);
             }
         }
 
@@ -99,8 +74,49 @@ fn suite_bench(
     }
 }
 
+fn run_bench(
+    root: &Path,
+    config: &TestConfig,
+    mut stats: stats::Stats,
+) -> Result<(stats::Stats, Option<report::TestReport>)> {
+    let bench_root = root.to_string_lossy();
+    let tags = tag::resolve(config.base_directory.as_path(), root)?;
+
+    let (matched, is_match) = config.matches(&tags);
+    if is_match {
+        status::h1("Benchmark", &format!("Running {}", &basename(&bench_root)))?;
+        let cwd = std::env::current_dir()?;
+        std::env::set_current_dir(Path::new(&root))?;
+        status::tags(&tags, Some(&matched), Some(&config.excludes))?;
+        let test_report = process::run_process(
+            "bench",
+            config.base_directory.as_path(),
+            &cwd.join(root),
+            &tags,
+        )?;
+
+        // Restore cwd
+        file::set_current_dir(&cwd)?;
+
+        status::duration(test_report.duration, "  ")?;
+        if test_report.stats.is_pass() {
+            stats.pass();
+        } else {
+            stats.fail(&bench_root);
+        }
+        Ok((stats, Some(test_report)))
+    } else {
+        stats.skip();
+        status::h1(
+            "  Benchmark",
+            &format!("Skipping {}", &basename(&bench_root)),
+        )?;
+        status::tags(&tags, Some(&matched), Some(&config.excludes))?;
+        Ok((stats, None))
+    }
+}
+
 fn suite_integration(
-    base: &Path,
     root: &Path,
     config: &TestConfig,
 ) -> Result<(stats::Stats, Vec<report::TestReport>)> {
@@ -117,44 +133,11 @@ fn suite_integration(
         status::h0("Framework", "Finding integration test scenarios")?;
 
         for test in tests {
-            let root = test.path();
-            let bench_root = root.to_string_lossy();
-            let tags = tag::resolve(base, root)?;
+            let (s, t) = run_integration(test.path(), config, stats)?;
 
-            let (matched, is_match) = config.matches(&tags);
-            if is_match {
-                status::h1(
-                    "Integration",
-                    &format!("Running {}", &basename(&bench_root)),
-                )?;
-                // Set cwd to test root
-                let cwd = std::env::current_dir()?;
-                std::env::set_current_dir(&root)?;
-                status::tags(&tags, Some(&matched), Some(&config.excludes))?;
-
-                // Run integration tests
-                let test_report = process::run_process("integration", base, root, &tags)?;
-
-                // Restore cwd
-                file::set_current_dir(&cwd)?;
-
-                if test_report.stats.is_pass() {
-                    stats.pass();
-                } else {
-                    stats.fail(&bench_root);
-                }
-                stats.assert += &test_report.stats.assert;
-
-                status::stats(&test_report.stats, "  ")?;
-                status::duration(test_report.duration, "    ")?;
-                suite.push(test_report);
-            } else {
-                stats.skip();
-                status::h1(
-                    "Integration",
-                    &format!("Skipping {}", &basename(&bench_root)),
-                )?;
-                status::tags(&tags, Some(&matched), Some(&config.excludes))?;
+            stats = s;
+            if let Some(report) = t {
+                suite.push(report);
             }
         }
 
@@ -166,11 +149,55 @@ fn suite_integration(
     }
 }
 
-fn suite_unit(
-    base: &Path,
+fn run_integration(
     root: &Path,
-    conf: &TestConfig,
-) -> Result<(stats::Stats, Vec<report::TestReport>)> {
+    config: &TestConfig,
+    mut stats: stats::Stats,
+) -> Result<(stats::Stats, Option<report::TestReport>)> {
+    let base = config.base_directory.as_path();
+    let bench_root = root.to_string_lossy();
+    let tags = tag::resolve(base, root)?;
+
+    let (matched, is_match) = config.matches(&tags);
+    if is_match {
+        status::h1(
+            "Integration",
+            &format!("Running {}", &basename(&bench_root)),
+        )?;
+        // Set cwd to test root
+        let cwd = std::env::current_dir()?;
+        std::env::set_current_dir(&root)?;
+        status::tags(&tags, Some(&matched), Some(&config.excludes))?;
+
+        // Run integration tests
+        let test_report = process::run_process("integration", base, root, &tags)?;
+
+        // Restore cwd
+        file::set_current_dir(&cwd)?;
+
+        if test_report.stats.is_pass() {
+            stats.pass();
+        } else {
+            stats.fail(&bench_root);
+        }
+        stats.assert += &test_report.stats.assert;
+
+        status::stats(&test_report.stats, "  ")?;
+        status::duration(test_report.duration, "    ")?;
+        Ok((stats, Some(test_report)))
+    } else {
+        stats.skip();
+        status::h1(
+            "Integration",
+            &format!("Skipping {}", &basename(&bench_root)),
+        )?;
+        status::tags(&tags, Some(&matched), Some(&config.excludes))?;
+        Ok((stats, None))
+    }
+}
+
+fn suite_unit(root: &Path, conf: &TestConfig) -> Result<(stats::Stats, Vec<report::TestReport>)> {
+    let base = conf.base_directory.as_path();
     let suites = GlobWalkerBuilder::new(root, "all.tremor")
         .case_insensitive(true)
         .file_type(FileType::FILE)
@@ -206,6 +233,7 @@ pub(crate) struct TestConfig {
     pub(crate) includes: Vec<String>,
     pub(crate) excludes: Vec<String>,
     pub(crate) meta: Meta,
+    pub(crate) base_directory: PathBuf,
 }
 impl TestConfig {
     fn matches(&self, filter: &TagFilter) -> (Vec<String>, bool) {
@@ -241,6 +269,7 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
     } else {
         vec![]
     };
+    let base_directory = tremor_common::file::canonicalize(&path)?;
     let mut config = TestConfig {
         quiet,
         verbose,
@@ -248,9 +277,10 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
         excludes,
         sys_filter: &[],
         meta: Meta::default(),
+        base_directory,
     };
 
-    let found = GlobWalkerBuilder::new(tremor_common::file::canonicalize(&path)?, "meta.json")
+    let found = GlobWalkerBuilder::new(&config.base_directory, "meta.json")
         .case_insensitive(true)
         .build()
         .map_err(|e| Error::from(format!("failed to walk directory `{}`: {}", path, e)))?;
@@ -260,55 +290,128 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
     let mut unit_stats = stats::Stats::new();
     let mut cmd_stats = stats::Stats::new();
     let mut integration_stats = stats::Stats::new();
-    let mut elapsed = 0;
 
-    let cwd = std::env::current_dir()?;
-    let base = cwd.join(path);
-    let found = found.filter_map(std::result::Result::ok);
+    let found: Vec<_> = found.filter_map(std::result::Result::ok).collect();
     let start = nanotime();
-    for meta in found {
-        if let Some(root) = meta.path().parent() {
-            let mut meta_str = slurp_string(&meta.path())?;
-            let meta: Meta = simd_json::from_str(meta_str.as_mut_str())?;
-            config.meta = meta;
 
-            if config.meta.kind == Kind::All {
-                config.includes.push("all".into());
-            }
+    if found.is_empty() {
+        // No meta.json was found, therefore we might have the path to a
+        // specific folder. Let's apply some heuristics to see if we have
+        // something runnable.
+        let files = GlobWalkerBuilder::from_patterns(
+            &config.base_directory,
+            &["*.{yaml,tremor,trickle}", "!assert.yaml", "!logger.yaml"],
+        )
+        .case_insensitive(true)
+        .max_depth(1)
+        .build()?
+        .filter_map(std::result::Result::ok);
 
-            if !(kind == Kind::All || kind == config.meta.kind) {
-                continue;
-            }
-
-            let test_reports = match config.meta.kind {
+        if files.count() >= 1 {
+            let stats = stats::Stats::new();
+            // Use CLI kind instead of default kind, since we don't have a
+            // meta.json to override the default with.
+            config.meta.kind = kind;
+            let test_report = match config.meta.kind {
                 Kind::Bench => {
-                    let (s, t) = suite_bench(&base, root, &config)?;
-                    bench_stats.merge(&s);
-                    t
+                    let (s, t) = run_bench(PathBuf::from(path).as_path(), &config, stats)?;
+                    match t {
+                        Some(x) => {
+                            bench_stats.merge(&s);
+                            vec![x]
+                        }
+                        None => {
+                            return Err(Error::from(
+                                "Specified test folder is excluded from running.",
+                            ))
+                        }
+                    }
                 }
                 Kind::Integration => {
-                    let (s, t) = suite_integration(&base, root, &config)?;
-                    integration_stats.merge(&s);
-                    t
+                    let (s, t) = run_integration(PathBuf::from(path).as_path(), &config, stats)?;
+                    match t {
+                        Some(x) => {
+                            integration_stats.merge(&s);
+                            vec![x]
+                        }
+                        None => {
+                            return Err(Error::from(
+                                "Specified test folder is excluded from running.",
+                            ))
+                        }
+                    }
                 }
+                // Command tests are their own beast, one singular folder might
+                // well result in many tests run
                 Kind::Command => {
-                    let (s, t) = suite_command(&base, root, &config)?;
+                    let (s, t) = command::suite_command(PathBuf::from(path).as_path(), &config)?;
                     cmd_stats.merge(&s);
                     t
                 }
                 Kind::Unit => {
-                    let (s, t) = suite_unit(&base, root, &config)?;
+                    let (s, t) = suite_unit(&PathBuf::from("/"), &config)?;
                     unit_stats.merge(&s);
                     t
                 }
-                Kind::All | Kind::Unknown(_) => continue,
+                Kind::All => {
+                    eprintln!("No tests run: Don't know how to run test of kind All");
+                    Vec::new()
+                }
+                Kind::Unknown(ref x) => {
+                    eprintln!("No tests run: Unknown kind of test: {}", x);
+                    Vec::new()
+                }
             };
-            reports.insert(config.meta.kind.to_string(), test_reports);
-            status::hr();
+            reports.insert(config.meta.kind.to_string(), test_report);
+        } else {
+            return Err(Error::from(
+                "Specified folder does not contain a runnable test",
+            ));
         }
+    } else {
+        for meta in found {
+            if let Some(root) = meta.path().parent() {
+                let mut meta_str = slurp_string(&meta.path())?;
+                let meta: Meta = simd_json::from_str(meta_str.as_mut_str())?;
+                config.meta = meta;
 
-        elapsed = nanotime() - start;
+                if config.meta.kind == Kind::All {
+                    config.includes.push("all".into());
+                }
+
+                if !(kind == Kind::All || kind == config.meta.kind) {
+                    continue;
+                }
+
+                let test_reports = match config.meta.kind {
+                    Kind::Bench => {
+                        let (s, t) = suite_bench(root, &config)?;
+                        bench_stats.merge(&s);
+                        t
+                    }
+                    Kind::Integration => {
+                        let (s, t) = suite_integration(root, &config)?;
+                        integration_stats.merge(&s);
+                        t
+                    }
+                    Kind::Command => {
+                        let (s, t) = suite_command(root, &config)?;
+                        cmd_stats.merge(&s);
+                        t
+                    }
+                    Kind::Unit => {
+                        let (s, t) = suite_unit(root, &config)?;
+                        unit_stats.merge(&s);
+                        t
+                    }
+                    Kind::All | Kind::Unknown(_) => continue,
+                };
+                reports.insert(config.meta.kind.to_string(), test_reports);
+                status::hr();
+            }
+        }
     }
+    let elapsed = nanotime() - start;
 
     status::hr();
     status::hr();
