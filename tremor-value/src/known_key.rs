@@ -414,7 +414,7 @@ impl<'script> KnownKey<'script> {
     pub fn into_static(self) -> KnownKey<'static> {
         let KnownKey { key, hash } = self;
         KnownKey {
-            key: Cow::owned(key.to_string()),
+            key: RCow::Owned(key.into_owned()),
             hash,
         }
     }
