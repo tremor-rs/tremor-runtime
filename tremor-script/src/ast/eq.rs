@@ -545,14 +545,10 @@ impl<'script> AstEq for Segment<'script> {
             (Self::Element { expr: e1, .. }, Self::Element { expr: e2, .. }) => e1.ast_eq(e2),
             (
                 Self::Range {
-                    range_start: s1,
-                    range_end: e1,
-                    ..
+                    start: s1, end: e1, ..
                 },
                 Self::Range {
-                    range_start: s2,
-                    range_end: e2,
-                    ..
+                    start: s2, end: e2, ..
                 },
             ) => s1.ast_eq(s2.as_ref()) && e1.ast_eq(e2.as_ref()),
             _ => false,

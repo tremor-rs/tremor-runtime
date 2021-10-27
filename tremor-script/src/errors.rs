@@ -997,10 +997,10 @@ pub(crate) fn error_need_obj<T, O: BaseExpr, I: BaseExpr>(
     got: ValueType,
     meta: &NodeMetas,
 ) -> Result<T> {
-    Err(error_need_obj_err(outer, inner, got, meta))
+    Err(err_need_obj(outer, inner, got, meta))
 }
 
-pub(crate) fn error_need_obj_err<O: BaseExpr, I: BaseExpr>(
+pub(crate) fn err_need_obj<O: BaseExpr, I: BaseExpr>(
     outer: &O,
     inner: &I,
     got: ValueType,

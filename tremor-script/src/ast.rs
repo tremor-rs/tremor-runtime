@@ -36,9 +36,9 @@ use crate::{
         raw::{BytesDataType, Endian},
     },
     errors::{
-        error_array_out_of_bound, error_bad_key_err, error_decreasing_range, error_generic,
-        error_need_arr, error_need_int, error_need_obj_err, error_no_consts, error_no_locals,
-        ErrorKind, Result,
+        err_need_obj, error_array_out_of_bound, error_bad_key_err, error_decreasing_range,
+        error_generic, error_need_arr, error_need_int, error_no_consts, error_no_locals, ErrorKind,
+        Result,
     },
     impl_expr_ex_mid, impl_expr_mid,
     interpreter::{exec_binary, exec_unary, AggrType, Cont, Env, ExecOpts, LocalStack},
@@ -1075,10 +1075,7 @@ impl<'script> Expression for Expr<'script> {
     }
 
     fn null_lit() -> Self {
-        Expr::Imut(ImutExprInt::Literal(Literal {
-            value: Value::null(),
-            mid: 0,
-        }))
+        Expr::Imut(ImutExprInt::Literal(Literal::default()))
     }
 }
 
@@ -1231,6 +1228,12 @@ impl<'script> ImutExprInt<'script> {
             | ImutExprInt::Invoke(i) => i.try_reduce(helper),
             other => Ok(other),
         }
+    }
+    pub(crate) fn try_reduce_into_value(
+        self,
+        helper: &Helper<'script, '_>,
+    ) -> Result<Value<'script>> {
+        self.try_reduce(helper)?.try_into_value(helper)
     }
 }
 
@@ -1698,6 +1701,7 @@ impl<'script, Ex: Expression + 'script> ClauseGroup<'script, Ex> {
         *(self.precondition_mut()) = None;
     }
 
+    #[cfg(not(tarpaulin_include))] // this is a simple asccessor
     pub(crate) fn precondition(&self) -> Option<&ClausePreCondition<'script>> {
         match self {
             ClauseGroup::Single { precondition, .. }
@@ -1707,6 +1711,7 @@ impl<'script, Ex: Expression + 'script> ClauseGroup<'script, Ex> {
         }
     }
 
+    #[cfg(not(tarpaulin_include))] // this is a simple asccessor
     pub(crate) fn precondition_mut(&mut self) -> &mut Option<ClausePreCondition<'script>> {
         match self {
             ClauseGroup::Single { precondition, .. }
@@ -2276,8 +2281,10 @@ impl<'script> PredicatePattern<'script> {
             (_l, _r) => false,
         }
     }
+
     /// Get key
     #[must_use]
+    #[cfg(not(tarpaulin_include))] // this is a simple asccessor
     pub fn key(&self) -> &KnownKey<'script> {
         use PredicatePattern::{
             ArrayPatternEq, Bin, FieldAbsent, FieldPresent, RecordPatternEq, TildeEq,
@@ -2292,6 +2299,7 @@ impl<'script> PredicatePattern<'script> {
         }
     }
 
+    #[cfg(not(tarpaulin_include))] // this is a simple asccessor
     fn lhs(&self) -> &Cow<'script, str> {
         use PredicatePattern::{
             ArrayPatternEq, Bin, FieldAbsent, FieldPresent, RecordPatternEq, TildeEq,
@@ -2423,6 +2431,7 @@ impl<'script> Path<'script> {
 
     /// Get segments as slice
     #[must_use]
+    #[cfg(not(tarpaulin_include))] // this is a simple asccessor
     pub fn segments_mut(&mut self) -> &mut Segments<'script> {
         match self {
             Path::Const(path) | Path::Local(path) => &mut path.segments,
@@ -2466,7 +2475,7 @@ impl<'script> Path<'script> {
                                 current = key.lookup(current).ok_or_else(|| {
                                     current.as_object().map_or_else(
                                         || {
-                                            error_need_obj_err(
+                                            err_need_obj(
                                                 &*path.expr,
                                                 segment,
                                                 current.value_type(),
@@ -2521,29 +2530,19 @@ impl<'script> Path<'script> {
                                 );
                             }
                             // Next segment is an index range: index into `current`, if it's an array
-                            Segment::Range {
-                                range_start,
-                                range_end,
-                                ..
-                            } => {
+                            Segment::Range { start, end, .. } => {
                                 if let Some(a) = current.as_array() {
                                     let array = subrange.unwrap_or_else(|| a.as_slice());
-                                    let start_idx = range_start
-                                        .clone()
-                                        .try_reduce(helper)?
-                                        .try_into_value(helper);
-                                    let end_idx = range_end
-                                        .clone()
-                                        .try_reduce(helper)?
-                                        .try_into_value(helper);
+                                    let start = start.clone().try_reduce_into_value(helper);
+                                    let end = end.clone().try_reduce_into_value(helper);
 
-                                    // start_idx or end_idx couldn't be reduced
+                                    // start or idx couldn't be reduced
                                     // so the ExprPath can't be reduced
-                                    if start_idx.is_err() || end_idx.is_err() {
+                                    if start.is_err() || end.is_err() {
                                         return Ok(ImutExprInt::Path(Path::Expr(path)));
                                     }
 
-                                    let start_idx = match start_idx.as_usize() {
+                                    let start = match start.as_usize() {
                                         Some(id) => id,
                                         None => {
                                             return error_need_int(
@@ -2554,7 +2553,7 @@ impl<'script> Path<'script> {
                                             )
                                         }
                                     };
-                                    let end_idx = match end_idx.as_usize() {
+                                    let end = match end.as_usize() {
                                         Some(id) => id,
                                         None => {
                                             return error_need_int(
@@ -2566,17 +2565,17 @@ impl<'script> Path<'script> {
                                         }
                                     };
 
-                                    if end_idx < start_idx {
+                                    if end < start {
                                         return error_decreasing_range(
                                             &*path.expr,
                                             segment,
                                             &Path::Expr(path.clone()),
-                                            start_idx,
-                                            end_idx,
+                                            start,
+                                            end,
                                             &helper.meta,
                                         );
-                                    } else if end_idx > array.len() {
-                                        let r = start_idx..end_idx;
+                                    } else if end > array.len() {
+                                        let r = start..end;
                                         let l = array.len();
                                         return error_array_out_of_bound(
                                             &*path.expr,
@@ -2587,7 +2586,7 @@ impl<'script> Path<'script> {
                                             &helper.meta,
                                         );
                                     }
-                                    subrange = array.get(start_idx..end_idx);
+                                    subrange = array.get(start..end);
                                     continue;
                                 };
                                 return error_need_arr(
@@ -2656,9 +2655,9 @@ pub enum Segment<'script> {
         /// Id
         mid: usize,
         /// Start of range value expression
-        range_start: Box<ImutExprInt<'script>>,
+        start: Box<ImutExprInt<'script>>,
         /// End of range value expression
-        range_end: Box<ImutExprInt<'script>>,
+        end: Box<ImutExprInt<'script>>,
     },
 }
 
@@ -2723,6 +2722,7 @@ pub enum ReservedPath<'script> {
 }
 
 impl<'script> ReservedPath<'script> {
+    #[cfg(not(tarpaulin_include))] // this is a simple asccessor
     fn segments(&self) -> &Segments<'script> {
         match self {
             ReservedPath::Args { segments, .. }
@@ -2730,6 +2730,7 @@ impl<'script> ReservedPath<'script> {
             | ReservedPath::Group { segments, .. } => segments,
         }
     }
+    #[cfg(not(tarpaulin_include))] // this is a simple asccessor
     fn segments_mut(&mut self) -> &mut Segments<'script> {
         match self {
             ReservedPath::Args { segments, .. }
@@ -2740,6 +2741,7 @@ impl<'script> ReservedPath<'script> {
 }
 
 impl<'script> BaseExpr for ReservedPath<'script> {
+    #[cfg(not(tarpaulin_include))] // this is a simple asccessor
     fn mid(&self) -> usize {
         match self {
             ReservedPath::Args { mid, .. }

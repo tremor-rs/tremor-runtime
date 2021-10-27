@@ -34,12 +34,7 @@ impl Operator for Counter {
         if state.is_null() {
             *state = Value::from(1_u64);
         } else {
-            *state = Value::from(
-                state
-                    .as_u64()
-                    .ok_or_else(|| Error::from("Expected Some not None for state"))?
-                    + 1,
-            );
+            *state = Value::from(state.as_u64().ok_or("Expected number for state")? + 1);
         }
 
         event.data.rent_mut(|data| {

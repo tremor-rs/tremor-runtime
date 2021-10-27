@@ -387,13 +387,9 @@ pub trait ImutExprIntVisitor<'script> {
     fn walk_segment(&mut self, segment: &mut Segment<'script>) -> Result<()> {
         match segment {
             Segment::Element { expr, .. } => self.walk_expr(expr),
-            Segment::Range {
-                range_start,
-                range_end,
-                ..
-            } => {
-                self.walk_expr(range_start.as_mut())?;
-                self.walk_expr(range_end.as_mut())
+            Segment::Range { start, end, .. } => {
+                self.walk_expr(start.as_mut())?;
+                self.walk_expr(end.as_mut())
             }
             _ => Ok(()),
         }

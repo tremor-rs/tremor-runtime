@@ -558,17 +558,13 @@ impl<'script> ImutExprInt<'script> {
                     return Ok(Cow::Borrowed(&FALSE));
                 }
                 // Next segment is an index range: index into `current`, if it's an array
-                Segment::Range {
-                    range_start,
-                    range_end,
-                    ..
-                } => {
+                Segment::Range { start, end, .. } => {
                     if let Some(a) = current.as_array() {
                         let array = subrange.unwrap_or_else(|| a.as_slice());
-                        let start_idx = stry!(range_start.eval_to_index(
+                        let start_idx = stry!(start.eval_to_index(
                             self, opts, env, event, state, meta, local, path, array,
                         ));
-                        let end_idx = stry!(range_end.eval_to_index(
+                        let end_idx = stry!(end.eval_to_index(
                             self, opts, env, event, state, meta, local, path, array,
                         ));
 

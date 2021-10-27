@@ -156,17 +156,15 @@ impl Gelf {
                 Entry::Occupied(mut o) => {
                     let m = o.get_mut();
                     if let Some(None) = m.segments.get(idx) {
+                        let bytes = msg.data.len();
                         if let Some(d) = m.segments.get_mut(idx) {
-                            m.bytes += msg.data.len();
+                            m.bytes += bytes;
                             m.stored += 1;
                             *d = Some(msg.data);
                         } else {
                             warn!(
                                 "Discarding out of range chunk {}/{} for {} ({} bytes)",
-                                idx,
-                                m.count,
-                                key,
-                                msg.data.len()
+                                idx, m.count, key, bytes
                             );
                             return None;
                         };
@@ -183,21 +181,20 @@ impl Gelf {
                     }
                 }
                 Entry::Vacant(_v_last) => {
+                    let count = msg.count;
+                    let bytes = msg.data.len();
                     let mut m = GelfMsgs {
-                        bytes: msg.data.len(),
-                        count: msg.count,
+                        bytes,
+                        count,
                         stored: 1,
-                        segments: vec![None; msg.count as usize],
+                        segments: vec![None; count as usize],
                     };
                     if let Some(d) = m.segments.get_mut(idx) {
                         *d = Some(msg.data);
                     } else {
                         warn!(
                             "Discarding out of range chunk {}/{} for {} ({} bytes)",
-                            idx,
-                            m.count,
-                            key,
-                            msg.data.len()
+                            idx, count, key, bytes
                         );
                         return None;
                     };
@@ -212,17 +209,15 @@ impl Gelf {
             Entry::Occupied(mut o) => {
                 let m = o.get_mut();
                 if let Some(None) = m.segments.get(idx) {
+                    let bytes = msg.data.len();
                     if let Some(d) = m.segments.get_mut(idx) {
-                        m.bytes += msg.data.len();
+                        m.bytes += bytes;
                         m.stored += 1;
                         *d = Some(msg.data);
                     } else {
                         warn!(
                             "Discarding out of range chunk {}/{} for {} ({} bytes)",
-                            idx,
-                            m.count,
-                            key,
-                            msg.data.len()
+                            idx, m.count, key, bytes
                         );
                         return None;
                     };

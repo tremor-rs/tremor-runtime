@@ -75,8 +75,7 @@ impl<'script> ScriptRaw<'script> {
                     let name_v = vec![name.to_string()];
                     let r = Range::from((start, end));
 
-                    let expr = expr.up(&mut helper)?.try_reduce(helper)?;
-                    let v = expr.try_into_value(helper)?;
+                    let v = expr.up(&mut helper)?.try_reduce_into_value(helper)?;
                     let value_type = v.value_type();
 
                     let idx = helper.consts.insert(name_v, v).map_err(|_old| {
@@ -1786,8 +1785,8 @@ impl<'script> Upable<'script> for SegmentRangeRaw<'script> {
         Ok(Segment::Range {
             lower_mid,
             upper_mid,
-            range_start: Box::new(range_start.up(helper)?),
-            range_end: Box::new(range_end.up(helper)?),
+            start: Box::new(range_start.up(helper)?),
+            end: Box::new(range_end.up(helper)?),
             mid,
         })
     }
