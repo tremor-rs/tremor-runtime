@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use super::{Object, Value};
-use abi_stable::std_types::{RBox, RCow};
+use abi_stable::std_types::{RBox, RCow, ROption, RString, RVec};
 use simd_json::{BorrowedValue, OwnedValue, StaticNode};
 use std::iter::FromIterator;
 
@@ -61,6 +61,17 @@ where
         s.map_or(Value::Static(StaticNode::Null), Value::from)
     }
 }
+
+impl<'value, T> From<ROption<T>> for Value<'value>
+where
+    Value<'value>: From<T>,
+{
+    #[inline]
+    #[must_use]
+    fn from(s: ROption<T>) -> Self {
+        s.map_or(Value::Static(StaticNode::Null), Value::from)
+    }
+}
 /********* str_ **********/
 impl<'value> From<&'value str> for Value<'value> {
     #[inline]
@@ -90,6 +101,14 @@ impl<'value> From<String> for Value<'value> {
     #[inline]
     #[must_use]
     fn from(s: String) -> Self {
+        Self::String(s.into())
+    }
+}
+
+impl<'value> From<RString> for Value<'value> {
+    #[inline]
+    #[must_use]
+    fn from(s: RString) -> Self {
         Self::String(s.into())
     }
 }
@@ -227,6 +246,17 @@ where
     #[inline]
     #[must_use]
     fn from(v: Vec<S>) -> Self {
+        v.into_iter().collect()
+    }
+}
+
+impl<'value, S> From<RVec<S>> for Value<'value>
+where
+    Value<'value>: From<S>,
+{
+    #[inline]
+    #[must_use]
+    fn from(v: RVec<S>) -> Self {
         v.into_iter().collect()
     }
 }

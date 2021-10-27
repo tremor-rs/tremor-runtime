@@ -314,7 +314,7 @@ macro_rules! literal {
 #[cfg(test)]
 mod tests {
     use crate::Value;
-    use abi_stable::std_types::rvec;
+    use abi_stable::rvec;
 
     #[test]
     fn value_macro() {
