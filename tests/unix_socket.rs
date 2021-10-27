@@ -164,15 +164,16 @@ links:
     world.stop().await?;
 
     let actual_output = std::fs::read_to_string(output_file).unwrap();
-    assert_eq!(
-        r#"{"a":0}
-{"b":1}
-{"c":2}
-{"d":3}
-{"e":4}
-"#,
-        actual_output
-    );
+    let mut actual_output: Vec<_> = actual_output.trim().split("\n").collect();
+    actual_output.sort();
+    let expected_output = vec![
+        r#"{"a":0}"#,
+        r#"{"b":1}"#,
+        r#"{"c":2}"#,
+        r#"{"d":3}"#,
+        r#"{"e":4}"#,
+    ];
+    assert_eq!(expected_output, actual_output);
 
     Ok(())
 }
