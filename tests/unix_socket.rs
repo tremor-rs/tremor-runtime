@@ -122,8 +122,10 @@ links:
     writeln!(stream, "{}", "{\"a\" : 0}").unwrap();
     writeln!(stream, "{}", "{\"b\" : 1}").unwrap();
     writeln!(stream, "{}", "{\"c\" : 2}").unwrap();
-    writeln!(stream, "{}", "{\"d\" : 3}").unwrap();
-    writeln!(stream, "{}", "{\"e\" : 4}").unwrap();
+
+    let mut stream2 = UnixStream::connect(SOCKET_PATH).unwrap();
+    writeln!(stream2, "{}", "{\"d\" : 3}").unwrap();
+    writeln!(stream2, "{}", "{\"e\" : 4}").unwrap();
 
     std::thread::sleep(std::time::Duration::from_millis(1000));
 
