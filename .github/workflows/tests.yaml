@@ -21,13 +21,8 @@ jobs:
       - name: Run tests and validate lockfile
         env:
           PROPTEST_CASES: 2500
-          RUSTFLAGS: -D warnings
+          RUSTFLAGS: -D warnings -C target-feature=+avx,+avx2,+sse4.2
         run: cargo test --all --locked
-      - name: Run bin tests and validate lockfile
-        env:
-          PROPTEST_CASES: 2500
-          RUSTFLAGS: -D warnings
-        run: cargo test -p tremor-cli --bin tremor --all --locked
   code-coverage:
     runs-on: ubuntu-latest
     steps:
