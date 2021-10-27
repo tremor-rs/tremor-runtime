@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.11.12
+- Unix onramp: Add the missing StartStream message
+
 ## 0.11.10
 
 ### Fixes
@@ -11,7 +14,7 @@
 ### Fixes
 
 - Kafka onramp: Remove failing metadata fetch in order to verify topic existance. Instead detect subscription errors and stop the onramp in that case.
-- Unix offramp: Add the missing StartStream message
+
 
 ## 0.11.8
 
