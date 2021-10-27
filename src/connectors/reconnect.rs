@@ -22,8 +22,6 @@ use async_std::task;
 use std::fmt::Display;
 use std::time::Duration;
 
-use abi_stable::StableAbi;
-
 #[derive(Debug, PartialEq, Clone)]
 enum ShouldRetry {
     Yes,
@@ -77,8 +75,7 @@ impl ReconnectStrategy for SimpleBackoff {
 }
 
 /// describing the number of previous connection attempts
-#[repr(C)]
-#[derive(Debug, Default, PartialEq, Eq, StableAbi)]
+#[derive(Debug, Default, PartialEq, Eq)]
 pub struct Attempt {
     overall: u64,
     success: u64,
@@ -194,7 +191,7 @@ impl ReconnectRuntime {
     /// asynchronously and send a `connector::Msg::Reconnect` to the connector identified by `addr`.
     pub(crate) async fn attempt(
         &mut self,
-        connector: &mut Connector,
+        connector: &mut dyn Connector,
         ctx: &ConnectorContext,
     ) -> Result<Connectivity> {
         match connector.connect(ctx, &self.attempt).await {

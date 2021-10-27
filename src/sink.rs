@@ -20,8 +20,30 @@ use crate::url::TremorUrl;
 use async_std::channel::Sender;
 use halfbrown::HashMap;
 
+pub(crate) mod amqp;
+pub(crate) mod blackhole;
+pub(crate) mod cb;
+pub(crate) mod debug;
+pub(crate) mod dns;
+pub(crate) mod elastic;
+pub(crate) mod exit;
+pub(crate) mod file;
+pub(crate) mod gcs;
+pub(crate) mod gpub;
+pub(crate) mod kafka;
+pub(crate) mod kv;
+pub(crate) mod nats;
+pub(crate) mod newrelic;
+pub(crate) mod otel;
+pub(crate) mod postgres;
 /// lots of useful stuff in there
 pub(crate) mod prelude;
+pub(crate) mod rest;
+pub(crate) mod stderr;
+pub(crate) mod stdout;
+pub(crate) mod tcp;
+pub(crate) mod udp;
+pub(crate) mod ws;
 
 /// reply from a sink
 #[derive(Debug)]
@@ -324,7 +346,72 @@ where
 /// register buitlin sink types
 #[cfg(not(tarpaulin_include))]
 pub async fn register_builtin_sinks(world: &World) -> Result<()> {
-    // TODO load dynamically
+    world
+        .register_builtin_offramp_type("amqp", Box::new(amqp::Builder {}))
+        .await?;
+    world
+        .register_builtin_offramp_type("blackhole", Box::new(blackhole::Builder {}))
+        .await?;
+    world
+        .register_builtin_offramp_type("cb", Box::new(cb::Builder {}))
+        .await?;
+    world
+        .register_builtin_offramp_type("debug", Box::new(debug::Builder {}))
+        .await?;
+    world
+        .register_builtin_offramp_type("dns", Box::new(dns::Builder {}))
+        .await?;
+    world
+        .register_builtin_offramp_type("elastic", Box::new(elastic::Builder {}))
+        .await?;
+    world
+        .register_builtin_offramp_type("exit", Box::new(exit::Builder {}))
+        .await?;
+    world
+        .register_builtin_offramp_type("file", Box::new(file::Builder {}))
+        .await?;
+    world
+        .register_builtin_offramp_type("gcs", Box::new(gcs::Builder {}))
+        .await?;
+    world
+        .register_builtin_offramp_type("gpub", Box::new(gpub::Builder {}))
+        .await?;
+    world
+        .register_builtin_offramp_type("kafka", Box::new(kafka::Builder {}))
+        .await?;
+    world
+        .register_builtin_offramp_type("kv", Box::new(kv::Builder {}))
+        .await?;
+    world
+        .register_builtin_offramp_type("nats", Box::new(nats::Builder {}))
+        .await?;
+    world
+        .register_builtin_offramp_type("newrelic", Box::new(newrelic::Builder {}))
+        .await?;
+    world
+        .register_builtin_offramp_type("otel", Box::new(otel::Builder {}))
+        .await?;
+    world
+        .register_builtin_offramp_type("postgres", Box::new(postgres::Builder {}))
+        .await?;
+    world
+        .register_builtin_offramp_type("rest", Box::new(rest::Builder {}))
+        .await?;
+    world
+        .register_builtin_offramp_type("stderr", Box::new(stderr::Builder {}))
+        .await?;
+    world
+        .register_builtin_offramp_type("stdout", Box::new(stdout::Builder {}))
+        .await?;
+    world
+        .register_builtin_offramp_type("tcp", Box::new(tcp::Builder {}))
+        .await?;
+    world
+        .register_builtin_offramp_type("udp", Box::new(udp::Builder {}))
+        .await?;
+    world
+        .register_builtin_offramp_type("ws", Box::new(ws::Builder {}))
+        .await?;
     Ok(())
 }
 

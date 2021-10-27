@@ -17,22 +17,19 @@ use std::default;
 use std::fmt;
 use url::Url;
 
-use abi_stable::{StableAbi, std_types::{RString, ROption, RVec}};
-
 /// Event origin URI
-#[repr(C)]
 #[derive(
-    Debug, Clone, PartialEq, Eq, Hash, simd_json_derive::Serialize, simd_json_derive::Deserialize, StableAbi
+    Debug, Clone, PartialEq, Eq, Hash, simd_json_derive::Serialize, simd_json_derive::Deserialize,
 )]
 pub struct EventOriginUri {
     /// schema part
-    pub scheme: RString,
+    pub scheme: String,
     /// host part
-    pub host: RString,
+    pub host: String,
     /// port part
-    pub port: ROption<u16>,
+    pub port: Option<u16>,
     /// path part
-    pub path: RVec<RString>,
+    pub path: Vec<String>,
     // implement query params if we find a good usecase for it
     //pub query: Hashmap<String, String>
 }

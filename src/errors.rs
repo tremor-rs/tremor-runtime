@@ -21,7 +21,38 @@ use crate::async_sink;
 use beef::Cow;
 use error_chain::error_chain;
 
+use hdrhistogram::{self, serialization as hdr_s};
 use tremor_influx as influx;
+
+impl From<sled::transaction::TransactionError<()>> for Error {
+    fn from(e: sled::transaction::TransactionError<()>) -> Self {
+        Self::from(format!("Sled Transaction Error: {:?}", e))
+    }
+}
+
+impl From<hdr_s::DeserializeError> for Error {
+    fn from(e: hdr_s::DeserializeError) -> Self {
+        Self::from(format!("{:?}", e))
+    }
+}
+
+impl From<hdrhistogram::errors::CreationError> for Error {
+    fn from(e: hdrhistogram::errors::CreationError) -> Self {
+        Self::from(format!("{:?}", e))
+    }
+}
+
+impl From<hdrhistogram::RecordError> for Error {
+    fn from(e: hdrhistogram::RecordError) -> Self {
+        Self::from(format!("{:?}", e))
+    }
+}
+
+impl From<hdrhistogram::serialization::V2SerializeError> for Error {
+    fn from(e: hdrhistogram::serialization::V2SerializeError) -> Self {
+        Self::from(format!("{:?}", e))
+    }
+}
 
 impl From<http_types::Error> for Error {
     fn from(e: http_types::Error) -> Self {
@@ -103,28 +134,40 @@ error_chain! {
         Base64Error(base64::DecodeError);
         ChannelReceiveError(std::sync::mpsc::RecvError);
         Common(tremor_common::Error);
+        CronError(cron::error::Error);
         DateTimeParseError(chrono::ParseError);
+        DnsError(async_std_resolver::ResolveError);
+        ElasticError(elastic::Error);
         FromUtf8Error(std::string::FromUtf8Error);
+        GoogleAuthError(gouth::Error);
+        HttpHeaderError(http::header::InvalidHeaderValue);
         InfluxEncoderError(influx::EncoderError);
         Io(std::io::Error);
         JsonAccessError(value_trait::AccessError);
         JsonError(simd_json::Error);
+        KafkaError(rdkafka::error::KafkaError);
         MsgPackDecoderError(rmp_serde::decode::Error);
         MsgPackEncoderError(rmp_serde::encode::Error);
         ParseIntError(std::num::ParseIntError);
         ParseFloatError(std::num::ParseFloatError);
+        Postgres(postgres::Error);
         RegexError(regex::Error);
+        ReqwestError(reqwest::Error);
+        RustlsError(rustls::TLSError);
         Hex(hex::FromHexError);
         SinkDequeueError(async_sink::SinkDequeueError);
         SinkEnqueueError(async_sink::SinkEnqueueError);
+        Sled(sled::Error);
         SnappyError(snap::Error);
         Timeout(async_std::future::TimeoutError);
+        TonicStatusError(tonic::Status);
+        TonicTransportError(tonic::transport::Error);
         TryFromIntError(std::num::TryFromIntError);
         UrlParserError(url::ParseError);
         Utf8Error(std::str::Utf8Error);
         ValueError(tremor_value::Error);
+        WsError(async_tungstenite::tungstenite::Error);
         YamlError(serde_yaml::Error) #[doc = "Error during yaml parsing"];
-        // TODO PluginError
     }
 
     errors {
@@ -269,5 +312,3 @@ error_chain! {
         }
     }
 }
-
-pub type RResult<T> = abi_stable::std_types::RResult<T, Error>;

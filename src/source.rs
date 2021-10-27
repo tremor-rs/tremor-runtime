@@ -38,8 +38,27 @@ use tremor_script::prelude::*;
 
 use self::prelude::OnrampConfig;
 
+pub(crate) mod amqp;
+pub(crate) mod blaster;
+pub(crate) mod cb;
+pub(crate) mod crononome;
+pub(crate) mod discord;
+pub(crate) mod env;
+pub(crate) mod file;
+pub(crate) mod gsub;
+pub(crate) mod kafka;
+pub(crate) mod metronome;
+pub(crate) mod nats;
+pub(crate) mod otel;
+pub(crate) mod postgres;
 /// prelude full of useful stuff
 pub(crate) mod prelude;
+pub(crate) mod rest;
+pub(crate) mod sse;
+pub(crate) mod stdin;
+pub(crate) mod tcp;
+pub(crate) mod udp;
+pub(crate) mod ws;
 
 struct StaticValue(Value<'static>);
 
@@ -647,7 +666,63 @@ where
 /// register builtin source types
 #[cfg(not(tarpaulin_include))]
 pub async fn register_builtin_sources(world: &World) -> Result<()> {
-    // TODO load dynamically
+    world
+        .register_builtin_onramp_type("amqp", Box::new(amqp::Builder {}))
+        .await?;
+    world
+        .register_builtin_onramp_type("blaster", Box::new(blaster::Builder {}))
+        .await?;
+    world
+        .register_builtin_onramp_type("cb", Box::new(cb::Builder {}))
+        .await?;
+    world
+        .register_builtin_onramp_type("crononome", Box::new(crononome::Builder {}))
+        .await?;
+    world
+        .register_builtin_onramp_type("discord", Box::new(discord::Builder {}))
+        .await?;
+    world
+        .register_builtin_onramp_type("env", Box::new(env::Builder {}))
+        .await?;
+    world
+        .register_builtin_onramp_type("file", Box::new(file::Builder {}))
+        .await?;
+    world
+        .register_builtin_onramp_type("gsub", Box::new(gsub::Builder {}))
+        .await?;
+    world
+        .register_builtin_onramp_type("kafka", Box::new(kafka::Builder {}))
+        .await?;
+    world
+        .register_builtin_onramp_type("metronome", Box::new(metronome::Builder {}))
+        .await?;
+    world
+        .register_builtin_onramp_type("nats", Box::new(nats::Builder {}))
+        .await?;
+    world
+        .register_builtin_onramp_type("otel", Box::new(otel::Builder {}))
+        .await?;
+    world
+        .register_builtin_onramp_type("postgres", Box::new(postgres::Builder {}))
+        .await?;
+    world
+        .register_builtin_onramp_type("rest", Box::new(rest::Builder {}))
+        .await?;
+    world
+        .register_builtin_onramp_type("sse", Box::new(sse::Builder {}))
+        .await?;
+    world
+        .register_builtin_onramp_type("stdin", Box::new(stdin::Builder {}))
+        .await?;
+    world
+        .register_builtin_onramp_type("tcp", Box::new(tcp::Builder {}))
+        .await?;
+    world
+        .register_builtin_onramp_type("udp", Box::new(udp::Builder {}))
+        .await?;
+    world
+        .register_builtin_onramp_type("ws", Box::new(ws::Builder {}))
+        .await?;
     Ok(())
 }
 
