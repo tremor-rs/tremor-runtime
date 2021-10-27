@@ -230,7 +230,7 @@ impl<'value> Ord for Value<'value> {
         }
     }
 }
-fn cmp_map(left: &Object, right: &Object) -> Ordering {
+fn cmp_map<'a>(left: &Object<'a>, right: &Object<'a>) -> Ordering {
     // Compare length first
 
     match left.len().cmp(&right.len()) {

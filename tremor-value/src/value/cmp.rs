@@ -68,7 +68,7 @@ impl<'value> PartialEq<OwnedValue> for Value<'value> {
 impl<'value> PartialEq<BorrowedValue<'value>> for Value<'value> {
     #[inline]
     #[must_use]
-    fn eq(&self, other: &BorrowedValue) -> bool {
+    fn eq(&self, other: &BorrowedValue<'value>) -> bool {
         match (self, other) {
             (Self::Static(s1), BorrowedValue::Static(s2)) => s1 == s2,
             (Self::String(v1), BorrowedValue::String(v2)) => v1.as_ref().eq(v2.as_ref()),
