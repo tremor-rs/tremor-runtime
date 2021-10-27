@@ -19,8 +19,7 @@ mod serialize;
 
 use crate::{Error, Result};
 use abi_stable::{
-    rvec,
-    std_types::{RBox, RCow, RHashMap, RVec},
+    std_types::{RBox, RCow, RHashMap, RVec, Tuple2},
     StableAbi,
 };
 use simd_json::prelude::*;
@@ -96,7 +95,7 @@ impl<'value> Value<'value> {
     /// Creates an empty array value
     #[must_use]
     pub const fn array() -> Self {
-        Value::Array(rvec![])
+        Value::Array(RVec::new())
     }
 
     /// Creates an empty array value
@@ -281,9 +280,15 @@ impl<'value> Value<'value> {
         match self {
             Self::String(s) => Value::String(RCow::Owned(s.into_owned())),
             Self::Array(arr) => arr.into_iter().map(Value::into_static).collect(),
-            Self::Object(obj) => obj
+            Self::Object(obj) => (&*obj)
+                .clone()
                 .into_iter()
-                .map(|tuple| (RCow::Owned(tuple.0.into_owned()), tuple.1.into_static()))
+                .map(|Tuple2(key, value)| {
+                    (
+                        RCow::Owned(key.into_owned()),
+                        value.into_static()
+                    )
+                })
                 .collect(),
             Self::Static(s) => Value::Static(s),
             Self::Bytes(b) => Value::Bytes(RCow::Owned(b.into_owned())),
@@ -300,7 +305,7 @@ impl<'value> Value<'value> {
             Self::Array(arr) => arr.iter().map(Value::clone_static).collect(),
             Self::Object(obj) => obj
                 .iter()
-                .map(|tuple| (RCow::Owned(tuple.0.into_owned()), tuple.1.clone_static()))
+                .map(|Tuple2(key, value)| (RCow::Owned(key.into_owned()), value.clone_static()))
                 .collect(),
             Self::Static(s) => Value::Static(*s),
             Self::Bytes(b) => Value::Bytes(RCow::Owned(b.into_owned())),

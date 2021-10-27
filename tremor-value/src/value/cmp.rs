@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use super::Value;
-use abi_stable::std_types::RCow;
+use abi_stable::std_types::{RCow, Tuple2};
 use simd_json::prelude::*;
 use simd_json::BorrowedValue;
 use simd_json::OwnedValue;
@@ -96,7 +96,7 @@ impl<'value> From<Value<'value>> for OwnedValue {
             Value::Object(m) => {
                 // FIXME: this may affect performance
                 let m = m.into_iter()
-                        .map(|tuple| (tuple.0.to_string(), OwnedValue::from(tuple.1)))
+                        .map(|Tuple2(key, value)| (key.to_string(), OwnedValue::from(value)))
                         .collect();
                 OwnedValue::Object(Box::new(m))
             }
@@ -116,7 +116,7 @@ impl<'value> From<Value<'value>> for BorrowedValue<'value> {
             Value::Object(m) => {
                 // FIXME: this may affect performance
                 let m = m.into_iter()
-                        .map(|tuple| (tuple.0.into(), BorrowedValue::from(tuple.1)))
+                        .map(|Tuple2(key, value)| (key.into(), BorrowedValue::from(value)))
                         .collect();
                 BorrowedValue::Object(Box::new(m))
             }

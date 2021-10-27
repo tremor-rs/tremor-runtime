@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::{value::Bytes, Error, Object, Result, Value};
-use abi_stable::std_types::RVec;
+use abi_stable::std_types::{RVec, Tuple2};
 use serde_ext::ser::{
     self, Serialize, SerializeMap as SerializeMapTrait, SerializeSeq as SerializeSeqTrait,
 };
@@ -46,9 +46,8 @@ impl<'value> Serialize for Value<'value> {
             }
             Value::Object(m) => {
                 let mut map = serializer.serialize_map(Some(m.len()))?;
-                for tuple in m.iter() {
-                    let k: &str = tuple.0;
-                    map.serialize_entry(k, tuple.1)?;
+                for Tuple2(key, value) in m.iter() {
+                    map.serialize_entry(key, value)?;
                 }
                 map.end()
             }

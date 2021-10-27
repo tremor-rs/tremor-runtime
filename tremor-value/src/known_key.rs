@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::Value;
-use abi_stable::std_types::{map::REntry, RCow, RHashMap};
+use abi_stable::std_types::{RCow, RHashMap};
 use std::fmt;
 use std::hash::{BuildHasher, Hash, Hasher};
 use value_trait::{Mutable, Value as ValueTrait, ValueAccess, ValueType};
@@ -111,10 +111,7 @@ impl<'key> KnownKey<'key> {
         // map.raw_entry()
         //     .from_key_hashed_nocheck(self.hash, self.key())
         //     .map(|kv| kv.1)
-        match map.entry(self.key) {
-            REntry::Occupied(e) => Some(e.get()),
-            REntry::Vacant(e) => None,
-        }
+        map.get(&self.key)
     }
 
     /// Looks up this key in a `Value`, returns None if the
@@ -186,10 +183,7 @@ impl<'key> KnownKey<'key> {
         //     RawEntryMut::Occupied(e) => Some(e.into_mut()),
         //     RawEntryMut::Vacant(_e) => None,
         // }
-        match map.entry(self.key) {
-            REntry::Occupied(e) => Some(e.into_mut()),
-            REntry::Vacant(_e) => None,
-        }
+        map.get_mut(&self.key).into()
     }
 
     /// Looks up this key in a `Value`, inserts `with` when the key
@@ -288,7 +282,7 @@ impl<'key> KnownKey<'key> {
         //     .from_key_hashed_nocheck(self.hash, key)
         //     .or_insert_with(|| (self.key.clone(), with()))
         //     .1
-        map.entry(self.key).or_insert_with(|| with())
+        map.entry(self.key.clone()).or_insert_with(|| with())
     }
 
     /// Inserts a value key into  `Value`, returns None if the
@@ -382,13 +376,7 @@ impl<'key> KnownKey<'key> {
         //         None
         //     }
         // }
-        match map.entry(self.key) {
-            REntry::Occupied(mut e) => Some(e.insert(value)),
-            REntry::Vacant(e) => {
-                e.insert(value);
-                None
-            }
-        }
+        map.insert(self.key.clone(), value).into()
     }
 }
 

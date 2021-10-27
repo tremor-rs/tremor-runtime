@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::{Error, Object, Value};
-use abi_stable::std_types::{RCow, RVec};
+use abi_stable::std_types::{RCow, RVec, Tuple2};
 use serde_ext::de::{
     self, Deserialize, DeserializeSeed, Deserializer, MapAccess, SeqAccess, Visitor,
 };
@@ -126,9 +126,9 @@ impl<'de, 'value> MapAccess<'de> for ObjectAccess<'value, 'de> {
     where
         K: DeserializeSeed<'de>,
     {
-        if let Some(tuple) = self.i.next() {
-            self.v = tuple.1;
-            seed.deserialize(Value::String(tuple.0.clone())).map(Some)
+        if let Some(Tuple2(key, value)) = self.i.next() {
+            self.v = value;
+            seed.deserialize(Value::String(key.clone())).map(Some)
         } else {
             Ok(None)
         }
