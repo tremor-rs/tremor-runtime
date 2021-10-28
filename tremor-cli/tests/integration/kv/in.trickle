@@ -15,7 +15,6 @@ script
   # direct some events to batch, some not
   let port = match $ of
     case %{ batch == true } => emit event => "batch"
-    case %{ exit == true } => emit event => "exit"
     default => emit event => "out"
   end;
 end;
@@ -36,7 +35,5 @@ select event from process/err into out/err;
 
 select event from diverge/batch into batch;
 select event from batch into out;
-
-select event from diverge/exit into out/exit;
 
 select event from diverge/out into out;
