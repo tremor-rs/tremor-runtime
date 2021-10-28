@@ -2178,7 +2178,7 @@ pub enum PredicatePattern<'script> {
         /// Predicate
         pattern: ArrayPattern<'script>,
     },
-    /// Array search pattern
+    /// Tuple pattern - sensitive to order of elements
     TuplePatternEq {
         /// Lhs
         lhs: Cow<'script, str>,
