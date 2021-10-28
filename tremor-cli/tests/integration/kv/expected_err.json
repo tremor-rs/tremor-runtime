@@ -1,1 +1,1 @@
-{"delay":1000,"event":null,"exit":0}
+{"error":true,"event":null,"meta":{"connector":{"kv":{"key":[104,101,105,110,122],"op":"cas"}},"correlation":"\"ketchup\"","error":"CAS error: expected ketchup but found ketchup."}}
