@@ -14,6 +14,7 @@
 
 use super::prelude::*;
 
+/// extracts all expressions used within a tremor-query `group by` clause into field `expressions`
 pub(crate) struct GroupByExprExtractor<'script> {
     pub(crate) expressions: Vec<ImutExprInt<'script>>,
 }
