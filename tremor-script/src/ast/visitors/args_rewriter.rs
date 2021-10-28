@@ -15,6 +15,9 @@
 use super::prelude::*;
 use crate::Value;
 
+/// Rewrites a path to `args` or an element of `args` inside a script/query
+/// into an expression referencing the concrete `args` values
+/// in order to not leak the current `args` into other scopes upon nesting modules or subqueries, all referencing `args`
 pub(crate) struct ArgsRewriter<'script, 'registry, 'meta> {
     args: ImutExprInt<'script>,
     helper: &'meta mut Helper<'script, 'registry>,
