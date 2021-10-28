@@ -45,13 +45,14 @@ binding:
         - "/pipeline/in/{instance}/in"
       "/pipeline/in/{instance}/out":
         - "/connector/kv/{instance}/in"
-        - "/connector/exit/{instance}/in"
         - "/offramp/system::stdout/{instance}/in"
       "/connector/kv/{instance}/out":
         - "/pipeline/out/{instance}/in"
       "/pipeline/out/{instance}/out":
         - "/offramp/system::stdout/{instance}/in"
         - "/connector/output/{instance}/in"
+      "/pipeline/out/{instance}/exit":
+        - "/connector/exit/{instance}/in"
 
       # error handling
       "/pipeline/in/{instance}/err":
@@ -60,8 +61,6 @@ binding:
         - "/pipeline/err/{instance}/in"
       "/pipeline/err/{instance}/out":
         - "/connector/error_output/{instance}/in"
-      "/pipeline/out/{instance}/exit":
-        - "/connector/exit/{instance}/in"
       "/pipeline/out/{instance}/err":
         - "/connector/error_output/{instance}/in"
 

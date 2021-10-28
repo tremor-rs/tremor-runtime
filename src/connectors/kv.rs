@@ -42,36 +42,59 @@ use tremor_value::prelude::*;
 
 #[derive(Debug)]
 enum Command<'v> {
+    /// Format:
     /// ```json
     /// {"get": "the-key"}
     /// ```
+    ///
+    /// Response: the value behing "the-key" or `null`
     Get { key: Vec<u8> },
+    /// Format:
     /// ```json
     /// {"put": "the-key"}
     /// ```
-    /// new data: event payload
+    /// Event Payload: data to put here
+    /// Response: the putted value if successful
     Put { key: Vec<u8> },
+    /// Format:
+    /// ```json
+    /// {"swap": "the-key"}
+    /// ```
+    /// Event Payload: data to put here
+    ///
+    /// Response: the old value or `null` is there was no previous value for this key
+    Swap { key: Vec<u8> },
+
+    /// Format:
     /// ```json
     /// {"delete": "the-key"}
     /// ```
+    ///
+    /// Response: the old value
     Delete { key: Vec<u8> },
+    /// Format:
     /// ```json
     /// {
     ///    "start": "key1",
     ///    "end": "key2",
     /// }
     /// ```
+    ///
+    /// Response: 1 event for each value in the scanned range
     Scan {
         start: Vec<u8>,
         end: Option<Vec<u8>>,
     },
-    /// ```json
+    /// Format:
+    ///  ```json
     /// {
     ///    "cas": "key",
     ///    "old": "<value|null|not-set>",
     /// }
     /// ```
-    /// new date: event payload
+    /// EventPayload: event payload
+    ///
+    /// Response: `null` if the operation succeeded, an event on `err` if it failed
     Cas {
         key: Vec<u8>,
         old: Option<&'v Value<'v>>,
@@ -92,6 +115,8 @@ impl<'v> TryFrom<&'v Value<'v>> for Command<'v> {
             Ok(Command::Get { key })
         } else if let Some(key) = v.get_bytes("put").map(|v| v.to_vec()) {
             Ok(Command::Put { key })
+        } else if let Some(key) = v.get_bytes("swap").map(|v| v.to_vec()) {
+            Ok(Command::Swap { key })
         } else if let Some(key) = v.get_bytes("cas").map(|v| v.to_vec()) {
             Ok(Command::Cas {
                 key,
@@ -115,6 +140,7 @@ impl<'v> Command<'v> {
         match self {
             Command::Get { .. } => "get",
             Command::Put { .. } => "put",
+            Command::Swap { .. } => "swap",
             Command::Delete { .. } => "delete",
             Command::Scan { .. } => "scan",
             Command::Cas { .. } => "cas",
@@ -125,6 +151,7 @@ impl<'v> Command<'v> {
         match self {
             Command::Get { key, .. }
             | Command::Put { key, .. }
+            | Command::Swap { key, .. }
             | Command::Delete { key }
             | Command::Cas { key, .. } => Some(key.clone()),
             Command::Scan { .. } => None,
@@ -132,20 +159,25 @@ impl<'v> Command<'v> {
     }
 }
 
-fn ok(k: Vec<u8>, v: Value<'static>) -> (Value<'static>, Value<'static>) {
+fn ok(op_name: &'static str, k: Vec<u8>, v: Value<'static>) -> (Value<'static>, Value<'static>) {
     (
         v,
         literal!({
             "connector": {
                 "kv": {
-                "ok": Value::Bytes(k.into())
+                    "op": op_name,
+                    "ok": Value::Bytes(k.into())
                 }
             }
         }),
     )
 }
-fn oks(k: Vec<u8>, v: Value<'static>) -> Vec<(Value<'static>, Value<'static>)> {
-    vec![ok(k, v)]
+fn oks(
+    op_name: &'static str,
+    k: Vec<u8>,
+    v: Value<'static>,
+) -> Vec<(Value<'static>, Value<'static>)> {
+    vec![ok(op_name, k, v)]
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -192,7 +224,7 @@ impl ConnectorBuilder for Builder {
                 rx,
             }))
         } else {
-            Err("[KV Offramp] Offramp requires a config".into())
+            Err(ErrorKind::MissingConfiguration(id.to_string()).into())
         }
     }
 }
@@ -231,7 +263,7 @@ impl Sink for KvSink {
                 Ok(cmd) => {
                     let name = cmd.op_name();
                     let key = cmd.key();
-                    self.execute(cmd, v, ingest_ns)
+                    self.execute(cmd, name, v, ingest_ns)
                         .map_err(|e| (Some(name), key, e))
                 }
                 Err(e) => Err((None, None, e)),
@@ -321,19 +353,23 @@ impl KvSink {
     fn execute(
         &mut self,
         cmd: Command,
+        op_name: &'static str,
         value: &Value,
         ingest_ns: u64,
     ) -> Result<Vec<(Value<'static>, Value<'static>)>> {
         match cmd {
             Command::Get { key } => self
                 .decode(self.db.get(&key)?, ingest_ns)
-                .map(|v| oks(key, v)),
+                .map(|v| oks(op_name, key, v)),
             Command::Put { key } => self
                 .decode(self.db.insert(&key, self.encode(value)?)?, ingest_ns)
-                .map(|v| oks(key, v)),
+                .map(|_old_value| oks(op_name, key, value.clone_static())), // return the new value
+            Command::Swap { key } => self
+                .decode(self.db.insert(&key, self.encode(value)?)?, ingest_ns)
+                .map(|old_value| oks(op_name, key, old_value)), // return the old value
             Command::Delete { key } => self
                 .decode(self.db.remove(&key)?, ingest_ns)
-                .map(|v| oks(key, v)),
+                .map(|v| oks(op_name, key, v)),
             Command::Cas { key, old } => {
                 if let Err(CompareAndSwapError { current, proposed }) = self.db.compare_and_swap(
                     &key,
@@ -347,7 +383,7 @@ impl KvSink {
                     )
                     .into())
                 } else {
-                    Ok(oks(key, Value::null()))
+                    Ok(oks(op_name, key, Value::null()))
                 }
             }
             Command::Scan { start, end } => {
@@ -360,7 +396,7 @@ impl KvSink {
                     let (key, e) = e?;
                     let key: &[u8] = &key;
 
-                    res.push(ok(key.to_vec(), self.decode(Some(e), ingest_ns)?));
+                    res.push(ok(op_name, key.to_vec(), self.decode(Some(e), ingest_ns)?));
                 }
                 Ok(res)
             }
