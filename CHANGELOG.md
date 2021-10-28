@@ -4,6 +4,7 @@
 
 ### New featues
 
+- Add support for `tuple patterns` inside of record patterns.
 - Refactor visitors to seperate walker and visitor and visit all nodes.
 - Add support for modular subqueries in Trickle
 - Add `check_topic_metadata` configuration flag to kafka source to bypass topic metadata fetch
