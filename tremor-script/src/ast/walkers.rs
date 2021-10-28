@@ -32,11 +32,10 @@ macro_rules! stop {
     };
 }
 
-/// Visitor for traversing all `Exprs`s within the given `Exprs`
+/// Walker for traversing all `Exprs`s within the given `Exprs`
 ///
-/// Implement your custom expr visiting logic by overwriting the visit_* methods.
-/// You do not need to traverse further down. This is done by the provided `walk_*` methods.
-/// The walk_* methods implement walking the expression tree, those do not need to be changed.
+/// You only need to impl this without overwriting any functions. It is a helper trait
+/// for the `ExprVisitor`, to handle any processing on the nodes please use that trait.
 pub trait ExprWalker<'script>:
     ImutExprVisitor<'script> + ExprVisitor<'script> + ImutExprWalker<'script>
 {
