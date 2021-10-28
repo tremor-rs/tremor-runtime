@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::test::kind::Kind;
 use crate::test::stats;
 use std::collections::HashMap;
 
@@ -24,7 +25,7 @@ pub(crate) struct TestRun {
     pub(crate) includes: Vec<String>,
     pub(crate) excludes: Vec<String>,
     pub(crate) reports: HashMap<String, Vec<TestReport>>,
-    pub(crate) stats: HashMap<String, stats::Stats>,
+    pub(crate) stats: HashMap<Kind, stats::Stats>,
 }
 
 /// A test report is the collection of test suites that

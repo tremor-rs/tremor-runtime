@@ -96,9 +96,12 @@ subcommands:
             about: One of `all`, `api`, `bench`, `command`, `integration`, `rest`, or `unit`
             takes_value: true
             default_value: "all"
+            index: 1
         - PATH:
             about: The root test path
+            takes_value: true
             default_value: "tests"
+            index: 2
         - REPORT:
             about: Should generate a test report to specified path
             short: o

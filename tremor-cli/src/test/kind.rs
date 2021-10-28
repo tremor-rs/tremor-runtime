@@ -14,7 +14,7 @@
 
 use std::{convert::TryFrom, error::Error, fmt::Debug, fmt::Display};
 /// Specifies a kind of test framework, or a composite `all` to capture all framework variants
-#[derive(Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Hash, Eq)]
 pub(crate) enum Kind {
     Bench,
     Integration,
