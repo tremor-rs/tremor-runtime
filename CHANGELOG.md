@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.11.12
 ### Fixes
 - Unix onramp: Add the missing StartStream message to handle multiple connections correctly
 
