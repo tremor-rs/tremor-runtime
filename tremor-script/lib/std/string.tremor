@@ -33,14 +33,14 @@ intrinsic fn format(format, ...) as string::format;
 ## Returns a `bool`
 intrinsic fn is_empty(input) as string::is_empty;
 
-## Returns the length of the input string (counted as utf8 characters not
+## Returns the length of the input string (counted as utf8 codepoints, not
 ## bytes!).
 ##
 ## Returns an `integer`
 intrinsic fn len(input) as string::len;
 
 ## Returns the number of bytes composing the input string (may not be equivalent
-## to the number of characters!).
+## to the number of codepoints!).
 ##
 ## Returns an `integer`
 intrinsic fn bytes(input) as string::bytes;
@@ -50,27 +50,27 @@ intrinsic fn bytes(input) as string::bytes;
 ## Returns a `string`
 intrinsic fn replace(input, `from`, `to`) as string::replace;
 
-## Trims whitespaces both at the start and end of the input string.
+## Trims whitespaces both at the start and end of the input string. All codepoints with the unicode property `White_Space` are considered whitespace here.
 ##
 ## Returns a `string`
 intrinsic fn trim(input) as string::trim;
 
-## Trims whitespaces at the start of the input string.
+## Trims whitespaces at the start of the input string. All codepoints with the unicode property `White_Space` are considered whitespace here.
 ##
 ## Returns a `string`
 intrinsic fn trim_start(input) as string::trim_start;
 
-## Trims whitespaces at the end of the input string.
+## Trims whitespaces at the end of the input string. All codepoints with the unicode property `White_Space` are considered whitespace here.
 ##
 ## Returns a `string`
 intrinsic fn trim_end(input) as string::trim_end;
 
-## Turns all characters in the input string to lower case.
+## Turns all characters in the input string to lower case, based on the Unicode `Lowercase` property.
 ##
 ## Returns a `string`
 intrinsic fn lowercase(input) as string::lowercase;
 
-## Turns all characters in the input string to upper case.
+## Turns all characters in the input string to upper case, based on the Unicode `Uppercase` property
 ##
 ## Returns a `string`
 intrinsic fn uppercase(input) as string::uppercase;
@@ -81,7 +81,7 @@ intrinsic fn uppercase(input) as string::uppercase;
 ## Returns a `string`
 intrinsic fn capitalize(input) as string::capitalize;
 
-## Get all characters from index start to end-1.
+## Get all codepoints from index start to end-1.
 ##
 ## Returns a `string`
 intrinsic fn substr(input, start, `end`) as string::substr;
