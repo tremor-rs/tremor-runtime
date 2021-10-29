@@ -71,6 +71,7 @@
 - Add benchmark names to benchmark tags
 - Kafka onramp: Remove failing metadata fetch in order to verify topic existance. Instead detect subscription errors and stop the onramp in that case.
 - Unix offramp: Add the missing StartStream message
+- tremor-script: Add more details about Unicode in the documentation of the `string` module
 
 ### Breaking CHhanges
 
