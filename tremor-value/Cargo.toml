@@ -16,14 +16,8 @@ base64 = "0.13"
 serde = "1.0"
 simd-json = "0.4.7"
 simd-json-derive = "0.2"
-# FIXME: This won't work with the `0.2.9-alpha.0` version because it has to be
-# picked manually for being alpha. If I change the crate to `0.2.9` in my fork
-# it does work just fine.
-value-trait = { version="0.2", features=["custom-types", "c-abi"] }
-# FIXME: temporary until it's upstreamed
-# (https://github.com/rodrimati1992/abi_stable_crates/pull/58)
-# (https://github.com/rodrimati1992/abi_stable_crates/pull/61)
-abi_stable = { version = "0.10", git = "https://github.com/marioortizmanero/abi_stable_crates.git", branch = "floating-point", default-features = false }
+value-trait = { version="0.2.9", features=["custom-types", "c-abi"] }
+abi_stable = { version = "0.10.3", default-features = false }
 
 [dev-dependencies]
 float-cmp = "0.9"
