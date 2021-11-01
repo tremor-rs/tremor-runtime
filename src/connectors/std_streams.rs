@@ -185,7 +185,7 @@ where
             }
         }
         self.stream.flush().await?;
-        Ok(vec![])
+        Ok(vec![SinkReply::Ack])
     }
 
     fn auto_ack(&self) -> bool {
