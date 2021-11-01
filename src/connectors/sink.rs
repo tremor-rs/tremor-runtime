@@ -94,6 +94,7 @@ pub type ResultVec = Result<Vec<SinkReply>>;
 #[async_trait::async_trait]
 pub trait Sink: Send {
     /// called when receiving an event
+    /// FIXME: Why are we returning a Vec but the elements don't allow to correlate what was acked
     async fn on_event(
         &mut self,
         input: &str,
