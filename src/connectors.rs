@@ -62,6 +62,9 @@ pub(crate) mod exit;
 /// KV
 pub(crate) mod kv;
 
+/// Write Ahead Log
+pub(crate) mod wal;
+
 /// quiescence stuff
 pub(crate) mod quiescence;
 
@@ -1108,6 +1111,9 @@ pub async fn register_builtin_connector_types(world: &World) -> Result<()> {
         .await?;
     world
         .register_builtin_connector_type("kv", Box::new(kv::Builder::default()))
+        .await?;
+    world
+        .register_builtin_connector_type("wal", Box::new(wal::Builder::default()))
         .await?;
     Ok(())
 }

@@ -203,9 +203,9 @@ dependencies = [
 
 [[package]]
 name = "async-broadcast"
-version = "0.3.3"
+version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "186fa9af996163d0d446775d084df32f2f5b195bcfebb0d49d0bf18e2eec528c"
+checksum = "90622698a1218e0b2fb846c97b5f19a0831f6baddee73d9454156365ccfa473b"
 dependencies = [
  "easy-parallel",
  "event-listener",
@@ -958,6 +958,16 @@ dependencies = [
  "serde",
  "time 0.1.43",
  "winapi 0.3.9",
+]
+
+[[package]]
+name = "ciborium"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "de6836a1b6197d8acdaac74a01af077a26aa6953d2e9251eef061c646b0d432c"
+dependencies = [
+ "half",
+ "serde",
 ]
 
 [[package]]
@@ -4395,6 +4405,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "qwal"
+version = "0.1.0"
+source = "git+https://github.com/tremor-rs/qwal#38c5d3085d893d7ed2c0d954587d07511bab677f"
+dependencies = [
+ "async-std",
+ "byteorder",
+]
+
+[[package]]
 name = "rand"
 version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6709,7 +6728,7 @@ dependencies = [
  "env_logger 0.9.0",
  "error-chain 0.12.4",
  "float-cmp",
- "futures 0.3.19",
+ "futures 0.3.21",
  "globwalk",
  "halfbrown",
  "http-types",
@@ -6836,6 +6855,7 @@ dependencies = [
  "byteorder",
  "bytes 1.1.0",
  "chrono",
+ "ciborium",
  "cron",
  "csv",
  "either",
@@ -6869,6 +6889,7 @@ dependencies = [
  "postgres-protocol",
  "pretty_assertions",
  "proptest",
+ "qwal",
  "rand 0.8.5",
  "rdkafka",
  "rdkafka-sys",
