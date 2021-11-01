@@ -75,6 +75,7 @@ rmp-serde = "0.15"
 serde = "1"
 serde_derive = "1"
 serde_yaml = "0.8"
+ciborium = "0.1"
 simd-json = { version = "0.4", features = ["known-key"] }
 simd-json-derive = "0.2"
 snap = "1"
@@ -180,6 +181,9 @@ gouth = { version = "0.2" }
 
 http = "0.2.5"
 reqwest = "0.11.6"
+
+# wal
+qwal = { git = "https://github.com/tremor-rs/qwal" }
 
 [dev-dependencies]
 matches = "0.1"
