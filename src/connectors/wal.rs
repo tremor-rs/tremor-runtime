@@ -107,6 +107,10 @@ impl Source for WalSource {
         dbg!(stream_id);
         self.wal.lock().await.ack(stream_id).await.unwrap()
     }
+
+    fn is_transactional(&self) -> bool {
+        true
+    }
 }
 
 struct WalSink {
