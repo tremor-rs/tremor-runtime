@@ -12,16 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/*
-
-meta = {}
-event = {"put": {"key": "snot", "value": "badger"}}
-
-meta = {"kv": {"put": "snot"}}
-event = "badger"
-
-*/
-
 #![cfg(not(tarpaulin_include))]
 use crate::{
     codec::{
@@ -214,8 +204,7 @@ impl ConnectorBuilder for Builder {
                 port: None,
                 path: config.dir.split('/').map(ToString::to_string).collect(),
             };
-            // dummy
-            let (tx, rx) = bounded(64);
+            let (tx, rx) = bounded(128);
             Ok(Box::new(Kv {
                 sink_url: id.clone(),
                 event_origin_uri,
@@ -242,76 +231,6 @@ struct KvSink {
 struct KvSource {
     rx: Receiver<KvMesssage>,
     origin_uri: EventOriginUri,
-}
-
-#[async_trait::async_trait()]
-impl Sink for KvSink {
-    async fn on_event(
-        &mut self,
-        _input: &str,
-        event: Event,
-        _ctx: &SinkContext,
-        _serializer: &mut EventSerializer,
-        _start: u64,
-    ) -> ResultVec {
-        let ingest_ns = tremor_common::time::nanotime();
-
-        let mut r = Vec::with_capacity(8);
-        for (v, m) in event.value_meta_iter() {
-            let correlation = m.get("correlation");
-            let executed = match Command::try_from(m) {
-                Ok(cmd) => {
-                    let name = cmd.op_name();
-                    let key = cmd.key();
-                    self.execute(cmd, name, v, ingest_ns)
-                        .map_err(|e| (Some(name), key, e))
-                }
-                Err(e) => Err((None, None, e)),
-            };
-            match executed {
-                Ok(res) => {
-                    for (data, mut meta) in res {
-                        let mut id = self.idgen.next_id();
-                        id.track(&event.id);
-
-                        if let Some(correlation) = correlation {
-                            meta.try_insert("correlation", correlation.clone_static());
-                        }
-
-                        let e = (data, meta).into();
-                        if let Err(e) = self.tx.send((OUT, e)).await {
-                            error!("[Sink::{}], Faild to send to source: {}", self.url, e);
-                        };
-                        r.push(SinkReply::Ack);
-                    }
-                }
-                Err((op, key, e)) => {
-                    // send ERR response and log err
-                    let mut id = self.idgen.next_id();
-                    id.track(&event.id);
-                    let mut meta = literal!({
-                        "error": e.to_string(),
-                        "connector": {
-                            "kv": op.map(|op| literal!({ "op": op, "key": key }))
-                        }
-                    });
-                    if let Some(correlation) = correlation {
-                        meta.try_insert("correlation", correlation.clone_static());
-                    }
-                    let e = ((), meta).into();
-                    if let Err(e) = self.tx.send((ERR, e)).await {
-                        error!("[Sink::{}], Faild to send to source: {}", self.url, e);
-                    };
-
-                    r.push(SinkReply::Fail);
-                }
-            }
-        }
-        Ok(r)
-    }
-    fn auto_ack(&self) -> bool {
-        false
-    }
 }
 
 #[async_trait::async_trait()]
@@ -404,7 +323,77 @@ impl KvSink {
     }
 }
 
-#[async_trait::async_trait()]
+#[async_trait::async_trait]
+impl Sink for KvSink {
+    async fn on_event(
+        &mut self,
+        _input: &str,
+        event: Event,
+        _ctx: &SinkContext,
+        _serializer: &mut EventSerializer,
+        _start: u64,
+    ) -> ResultVec {
+        let ingest_ns = tremor_common::time::nanotime();
+
+        let mut r = Vec::with_capacity(8);
+        for (v, m) in event.value_meta_iter() {
+            let correlation = m.get("correlation");
+            let executed = match Command::try_from(m) {
+                Ok(cmd) => {
+                    let name = cmd.op_name();
+                    let key = cmd.key();
+                    self.execute(cmd, name, v, ingest_ns)
+                        .map_err(|e| (Some(name), key, e))
+                }
+                Err(e) => Err((None, None, e)),
+            };
+            match executed {
+                Ok(res) => {
+                    for (data, mut meta) in res {
+                        let mut id = self.idgen.next_id();
+                        id.track(&event.id);
+
+                        if let Some(correlation) = correlation {
+                            meta.try_insert("correlation", correlation.clone_static());
+                        }
+
+                        let e = (data, meta).into();
+                        if let Err(e) = self.tx.send((OUT, e)).await {
+                            error!("[Sink::{}], Faild to send to source: {}", self.url, e);
+                        };
+                        r.push(SinkReply::Ack);
+                    }
+                }
+                Err((op, key, e)) => {
+                    // send ERR response and log err
+                    let mut id = self.idgen.next_id();
+                    id.track(&event.id);
+                    let mut meta = literal!({
+                        "error": e.to_string(),
+                        "connector": {
+                            "kv": op.map(|op| literal!({ "op": op, "key": key }))
+                        }
+                    });
+                    if let Some(correlation) = correlation {
+                        meta.try_insert("correlation", correlation.clone_static());
+                    }
+                    let e = ((), meta).into();
+                    if let Err(e) = self.tx.send((ERR, e)).await {
+                        error!("[Sink::{}], Faild to send to source: {}", self.url, e);
+                    };
+
+                    r.push(SinkReply::Fail);
+                }
+            }
+        }
+        Ok(r)
+    }
+    fn auto_ack(&self) -> bool {
+        false
+    }
+}
+
+#[async_trait::async_trait]
 impl Connector for Kv {
     fn is_structured(&self) -> bool {
         true
@@ -439,6 +428,7 @@ impl Connector for Kv {
         };
         builder.spawn(s, sink_context).map(Some)
     }
+
     async fn connect(&mut self, _ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
         Ok(true)
     }

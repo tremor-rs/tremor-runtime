@@ -168,6 +168,7 @@ error_chain! {
         ValueError(tremor_value::Error);
         WsError(async_tungstenite::tungstenite::Error);
         YamlError(serde_yaml::Error) #[doc = "Error during yaml parsing"];
+        Wal(qwal::Error);
     }
 
     errors {
