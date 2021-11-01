@@ -18,6 +18,7 @@ use either::Either;
 use tremor_script::Value;
 pub(crate) mod binary;
 pub(crate) mod binflux;
+pub(crate) mod cbor;
 pub(crate) mod csv;
 pub(crate) mod influx;
 pub(crate) mod json;
@@ -111,6 +112,7 @@ pub fn lookup_with_config(config: &CodecConfig) -> Result<Box<dyn Codec>> {
         "string" => Ok(Box::new(string::String {})),
         "statsd" => Ok(Box::new(statsd::StatsD {})),
         "yaml" => Ok(Box::new(yaml::Yaml {})),
+        "cbor" => Ok(Box::new(cbor::Cbor {})),
         "binary" => Ok(Box::new(binary::Binary {})),
         "syslog" => Ok(Box::new(syslog::Syslog::utcnow())),
         "csv" => Ok(Box::new(csv::Csv {})),
