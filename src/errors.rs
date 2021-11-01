@@ -184,6 +184,7 @@ error_chain! {
         Utf8Error(std::str::Utf8Error);
         WsError(async_tungstenite::tungstenite::Error);
         YamlError(serde_yaml::Error) #[doc = "Error during yaml parsing"];
+        Wal(qwal::Error);
     }
 
     errors {
