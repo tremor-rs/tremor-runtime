@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::{Error, ErrorKind, Result};
+use crate::codec;
 use crate::metrics::RampReporter;
 use crate::onramp;
 use crate::pipeline;
@@ -21,8 +21,11 @@ use crate::registry::ServantId;
 use crate::system::{self, World};
 use crate::url::ports::IN;
 use crate::url::{ResourceType, TremorUrl};
-use crate::{codec, pipeline::ConnectTarget};
 use crate::{connectors, offramp, url};
+use crate::{
+    errors::{Error, ErrorKind, Result},
+    pipeline::ConnectOutputTarget,
+};
 use beef::Cow;
 use hashbrown::HashMap;
 use std::collections::HashSet;
@@ -144,21 +147,10 @@ impl Artefact for Pipeline {
             let mut msgs = Vec::with_capacity(mappings.len());
             for (from, to) in mappings {
                 let target = match to.resource_type() {
-                    Some(ResourceType::Offramp) => {
-                        if let Some(offramp) = system.reg.find_offramp(&to).await? {
-                            ConnectTarget::Offramp(offramp)
-                        } else {
-                            return Err(ErrorKind::InstanceNotFound(
-                                "offramp".to_string(),
-                                to.to_string(),
-                            )
-                            .into());
-                        }
-                    }
                     Some(ResourceType::Pipeline) => {
                         // TODO: connect both ways?
                         if let Some(p) = system.reg.find_pipeline(&to).await? {
-                            ConnectTarget::Pipeline(Box::new(p))
+                            ConnectOutputTarget::Pipeline(Box::new(p))
                         } else {
                             return Err(ErrorKind::InstanceNotFound(
                                 "pipeline".to_string(),
@@ -167,20 +159,11 @@ impl Artefact for Pipeline {
                             .into());
                         }
                     }
-                    Some(ResourceType::Onramp) => {
-                        if let Some(onramp) = system.reg.find_onramp(&to).await? {
-                            ConnectTarget::Onramp(onramp)
-                        } else {
-                            return Err(ErrorKind::InstanceNotFound(
-                                "onramp".to_string(),
-                                to.to_string(),
-                            )
-                            .into());
-                        }
-                    }
                     Some(ResourceType::Connector) => {
-                        if let Some(connector) = system.reg.find_connector(&to).await? {
-                            ConnectTarget::Connector(connector)
+                        if let Some(connector) =
+                            system.reg.find_connector(&to).await?.and_then(|c| c.sink)
+                        {
+                            ConnectOutputTarget::Sink(connector)
                         } else {
                             return Err(ErrorKind::InstanceNotFound(
                                 "connector".to_string(),
@@ -548,6 +531,8 @@ impl Artefact for ConnectorArtefact {
 
     /// wire up pipelines to this connector
     /// pipelines to connect need to be findable in the registry for this to work
+    ///
+    /// snot: badger
     async fn link(
         &self,
         system: &World,

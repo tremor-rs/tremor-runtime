@@ -167,7 +167,7 @@ where
         _ctx: &SinkContext,
         serializer: &mut EventSerializer,
         _start: u64,
-    ) -> ResultVec {
+    ) -> Result<SinkReply> {
         for (value, _meta) in event.value_meta_iter() {
             let data = serializer.serialize(value, event.ingest_ns)?;
             for chunk in data {
@@ -185,7 +185,7 @@ where
             }
         }
         self.stream.flush().await?;
-        Ok(vec![SinkReply::Ack])
+        Ok(SinkReply::ACK)
     }
 
     fn auto_ack(&self) -> bool {

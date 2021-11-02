@@ -49,21 +49,80 @@ pub use self::channel_sink::SinkMeta;
 
 use super::metrics::MetricsSinkReporter;
 
+/// Result for a sink function that may provide insights or response.
+///
+///
+/// An insight is a contraflowevent containing control information for the runtime like
+/// circuit breaker events, guaranteed delivery events, etc.
+///
+/// A response is an event generated from the sink delivery.
+#[derive(Clone, Debug, Default, Copy)]
+pub struct SinkReply {
+    pub ack: SinkAck,
+    pub cb: CbAction,
+}
+
+impl SinkReply {
+    /// Acknowledges
+
+    pub const ACK: SinkReply = SinkReply {
+        ack: SinkAck::Ack,
+        cb: CbAction::None,
+    };
+    /// Fails
+    pub const FAIL: SinkReply = SinkReply {
+        ack: SinkAck::Fail,
+        cb: CbAction::None,
+    };
+    /// None
+    pub const NONE: SinkReply = SinkReply {
+        ack: SinkAck::None,
+        cb: CbAction::None,
+    };
+
+    /// Acknowledges
+    pub fn ack() -> Self {
+        SinkReply {
+            ack: SinkAck::Ack,
+            ..SinkReply::default()
+        }
+    }
+    /// Fails
+    pub fn fail() -> Self {
+        SinkReply {
+            ack: SinkAck::Fail,
+            ..SinkReply::default()
+        }
+    }
+}
+impl From<bool> for SinkReply {
+    fn from(ok: bool) -> Self {
+        SinkReply {
+            ack: SinkAck::from(ok),
+            ..SinkReply::default()
+        }
+    }
+}
+
 /// stuff a sink replies back upon an event or a signal
 /// to the calling sink/connector manager
-#[derive(Clone, Debug)]
-pub enum SinkReply {
+#[derive(Clone, Debug, Copy)]
+pub enum SinkAck {
     /// no reply - maybe no reply yet, maybe replies come asynchronously...
     None,
     /// everything went smoothly, chill
     Ack,
     /// shit hit the fan, but only for this event, nothing big
     Fail,
-    /// the whole sink became unavailable or available again
-    CB(CbAction),
 }
 
-impl From<bool> for SinkReply {
+impl Default for SinkAck {
+    fn default() -> Self {
+        Self::None
+    }
+}
+
+impl From<bool> for SinkAck {
     fn from(ok: bool) -> Self {
         if ok {
             Self::Ack
@@ -80,16 +139,6 @@ pub enum AsyncSinkReply {
     CB(ContraflowData, CbAction),
 }
 
-/// Result for a sink function that may provide insights or response.
-///
-/// It can return None or Some(vec![]) if no insights/response were generated.
-///
-/// An insight is a contraflowevent containing control information for the runtime like
-/// circuit breaker events, guaranteed delivery events, etc.
-///
-/// A response is an event generated from the sink delivery.
-pub type ResultVec = Result<Vec<SinkReply>>;
-
 /// connector sink - receiving events
 #[async_trait::async_trait]
 pub trait Sink: Send {
@@ -102,15 +151,15 @@ pub trait Sink: Send {
         ctx: &SinkContext,
         serializer: &mut EventSerializer,
         start: u64,
-    ) -> ResultVec;
+    ) -> Result<SinkReply>;
     /// called when receiving a signal
     async fn on_signal(
         &mut self,
         _signal: Event,
         _ctx: &SinkContext,
         _serializer: &mut EventSerializer,
-    ) -> ResultVec {
-        Ok(vec![])
+    ) -> Result<SinkReply> {
+        Ok(SinkReply::default())
     }
 
     /// Pull metrics from the sink
@@ -138,9 +187,7 @@ pub trait Sink: Send {
     /// Such sinks should return SinkReply::None from on_event or SinkReply::Fail if they fail immediately.
     ///
     /// if `false` events need to be acked/failed manually by the sink impl
-    fn auto_ack(&self) -> bool {
-        true
-    }
+    fn auto_ack(&self) -> bool;
 
     /// if true events are sent asynchronously, not necessarily when `on_event` returns.
     /// if false events can be considered delivered once `on_event` returns.
@@ -222,6 +269,15 @@ enum SinkMsgWrapper {
 pub struct SinkAddr {
     /// the actual sender
     pub addr: Sender<SinkMsg>,
+}
+impl SinkAddr {
+    /// send a message
+    ///
+    /// # Errors
+    ///  * If sending failed
+    pub async fn send(&self, msg: SinkMsg) -> Result<()> {
+        Ok(self.addr.send(msg).await?)
+    }
 }
 
 pub struct SinkManagerBuilder {
@@ -684,19 +740,8 @@ pub struct ContraflowData {
 }
 
 impl ContraflowData {
-    fn ack(&self, duration: u64) -> Event {
-        Event::cb_ack_with_timing(
-            self.ingest_ns,
-            self.event_id.clone(),
-            self.op_meta.clone(),
-            duration,
-        )
-    }
     fn into_ack(self, duration: u64) -> Event {
         Event::cb_ack_with_timing(self.ingest_ns, self.event_id, self.op_meta, duration)
-    }
-    fn fail(&self) -> Event {
-        Event::cb_fail(self.ingest_ns, self.event_id.clone(), self.op_meta.clone())
     }
     fn into_fail(self) -> Event {
         Event::cb_fail(self.ingest_ns, self.event_id, self.op_meta)
@@ -730,9 +775,8 @@ async fn send_contraflow(
     connector_url: &TremorUrl,
     contraflow: Event,
 ) {
-    let mut iter = pipelines.iter();
-    if let Some((first_url, first_addr)) = iter.next() {
-        for (url, addr) in iter {
+    if let Some(((last_url, last_addr), rest)) = pipelines.split_last() {
+        for (url, addr) in rest {
             if let Err(e) = addr.send_insight(contraflow.clone()).await {
                 error!(
                     "[Connector::{}] Error sending contraflow to {}: {}",
@@ -740,60 +784,40 @@ async fn send_contraflow(
                 );
             }
         }
-        if let Err(e) = first_addr.send_insight(contraflow).await {
+        if let Err(e) = last_addr.send_insight(contraflow).await {
             error!(
                 "[Connector::{}] Error sending contraflow to {}: {}",
-                &connector_url, first_url, e
+                &connector_url, last_url, e
             );
         }
     }
 }
 
 async fn handle_replies(
-    replies: Vec<SinkReply>,
+    reply: SinkReply,
     duration: u64,
     cf_builder: ContraflowData,
     pipelines: &[(TremorUrl, pipeline::Addr)],
     connector_url: &TremorUrl,
     send_auto_ack: bool,
 ) {
-    let mut reply_iter = replies.into_iter();
-    if let Some(first) = reply_iter.next() {
-        for reply in reply_iter {
-            let contraflow = match reply {
-                SinkReply::Ack => cf_builder.ack(duration),
-                SinkReply::Fail => cf_builder.fail(),
-                SinkReply::CB(cb) => {
-                    // we do not maintain a merged op_meta here, to avoid the cost
-                    // the downside is, only operators which this event passed get to know this CB event
-                    // but worst case is, 1 or 2 more events are lost - totally worth it
-                    cf_builder.cb(cb)
-                }
-                SinkReply::None => {
-                    continue;
-                }
-            };
-            send_contraflow(pipelines, connector_url, contraflow).await;
+    if reply.cb != CbAction::None {
+        // we do not maintain a merged op_meta here, to avoid the cost
+        // the downside is, only operators which this event passed get to know this CB event
+        // but worst case is, 1 or 2 more events are lost - totally worth it
+        send_contraflow(pipelines, connector_url, cf_builder.cb(reply.cb)).await;
+    }
+    match reply.ack {
+        SinkAck::Ack => {
+            send_contraflow(pipelines, connector_url, cf_builder.into_ack(duration)).await;
         }
-        match first {
-            SinkReply::Ack => {
+        SinkAck::Fail => {
+            send_contraflow(pipelines, connector_url, cf_builder.into_fail()).await;
+        }
+        SinkAck::None => {
+            if send_auto_ack {
                 send_contraflow(pipelines, connector_url, cf_builder.into_ack(duration)).await;
             }
-            SinkReply::Fail => {
-                send_contraflow(pipelines, connector_url, cf_builder.into_fail()).await;
-            }
-            SinkReply::CB(cb) => {
-                // we do not maintain a merged op_meta here, to avoid the cost
-                // the downside is, only operators which this event passed get to know this CB event
-                // but worst case is, 1 or 2 more events are lost - totally worth it
-                send_contraflow(pipelines, connector_url, cf_builder.into_cb(cb)).await;
-            }
-            SinkReply::None => {
-                if send_auto_ack {
-                    let cf = cf_builder.into_ack(duration);
-                    send_contraflow(pipelines, connector_url, cf).await;
-                }
-            }
-        };
+        }
     }
 }
