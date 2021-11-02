@@ -28,7 +28,6 @@ use async_std::stream::StreamExt; // for .next() on PriorityMerge
 use async_std::task::{self, JoinHandle};
 use beef::Cow;
 use halfbrown::{Entry, HashMap};
-use pipeline::ConnectTarget;
 use std::borrow::{Borrow, BorrowMut};
 use std::fmt;
 use tremor_common::ids::OfframpIdGen;
@@ -365,17 +364,17 @@ impl Manager {
                                     }
                                     offramp.add_dest_pipeline(port, id.clone(), (*addr).clone());
 
-                                    // send connectInput msg to pipeline
-                                    if let Err(e) = addr
-                                        .send_mgmt(pipeline::MgmtMsg::ConnectInput {
-                                            input_url: offramp_url.clone(),
-                                            target: ConnectTarget::Offramp(offramp_addr.clone()),
-                                            transactional: false, // TODO: Linked Offramps do not support insights yet
-                                        })
-                                        .await
-                                    {
-                                        error!("[Offramp::{}] Error connecting this offramp as input to pipeline {}: {}", offramp_url, &id, e);
-                                    }
+                                    // // send connectInput msg to pipeline
+                                    // if let Err(e) = addr
+                                    //     .send_mgmt(pipeline::MgmtMsg::ConnectInput {
+                                    //         input_url: offramp_url.clone(),
+                                    //         target: ConnectTarget::Offramp(offramp_addr.clone()),
+                                    //         transactional: false, // TODO: Linked Offramps do not support insights yet
+                                    //     })
+                                    //     .await
+                                    // {
+                                    //     error!("[Offramp::{}] Error connecting this offramp as input to pipeline {}: {}", offramp_url, &id, e);
+                                    // }
 
                                     // send a CB restore/break if we have both an input an an output connected
                                     // to all the connected inputs

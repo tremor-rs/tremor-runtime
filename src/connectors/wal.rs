@@ -95,7 +95,7 @@ impl Source for WalSource {
             Ok(SourceReply::Structured {
                 origin_uri: self.origin_uri.clone(),
                 payload: event.data,
-                stream: 0,
+                stream: DEFAULT_STREAM_ID,
                 port: None,
             })
         } else {
@@ -106,9 +106,7 @@ impl Source for WalSource {
     async fn ack(&mut self, _stream_id: u64, pull_id: u64) {
         // FIXME: this is a dirty hack until we can define the pull_id for a connector
         // FIXME: we should allow returning errors
-        // FIXME: why is this never being called
         if let Some(id) = self.pull_id_map.remove(&pull_id) {
-            dbg!(id);
             self.wal.lock().await.ack(id).await.unwrap();
         }
     }
@@ -129,6 +127,10 @@ struct WalSink {
 
 #[async_trait::async_trait]
 impl Sink for WalSink {
+    fn auto_ack(&self) -> bool {
+        false
+    }
+
     async fn on_event(
         &mut self,
         _input: &str,
@@ -136,9 +138,9 @@ impl Sink for WalSink {
         _ctx: &SinkContext,
         _serializer: &mut EventSerializer,
         _start: u64,
-    ) -> ResultVec {
+    ) -> Result<SinkReply> {
         self.wal.lock().await.push(Payload(event)).await?;
-        Ok(vec![SinkReply::Ack])
+        Ok(SinkReply::ACK)
     }
 }
 
@@ -177,6 +179,8 @@ impl Connector for Wal {
     async fn on_start(&mut self, _ctx: &ConnectorContext) -> Result<ConnectorState> {
         Ok(ConnectorState::Running)
     }
+
+    async fn on_stop(&mut self, _ctx: &ConnectorContext) {}
 
     async fn connect(&mut self, _ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
         Ok(true)
