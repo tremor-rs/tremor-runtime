@@ -90,7 +90,7 @@ impl qwal::Entry for Payload {
 impl Source for WalSource {
     async fn pull_data(&mut self, pull_id: u64, _ctx: &SourceContext) -> Result<SourceReply> {
         if let Some((id, event)) = self.wal.lock().await.pop::<Payload>().await? {
-            // FIXME: this is a dirty hack untill we can define the pull_id
+            // FIXME: this is a dirty hack untill we can define the pull_id / event ID
             self.pull_id_map.insert(pull_id, id);
             Ok(SourceReply::Structured {
                 origin_uri: self.origin_uri.clone(),
