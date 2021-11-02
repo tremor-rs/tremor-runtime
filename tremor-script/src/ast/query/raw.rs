@@ -615,8 +615,7 @@ pub struct ModuleStmtRaw<'script> {
 impl_expr!(ModuleStmtRaw);
 
 impl<'script> ModuleStmtRaw<'script> {
-    // TODO FIXME - this is a misleading error, rephrase
-    const BAD_STMT: &'static str = "Can't have statements inside of query modules";
+    const BAD_STMT: &'static str = "Unsupported statement type inside of query module";
     pub(crate) fn define<'registry>(
         self,
         reg: &'registry Registry,
@@ -650,12 +649,10 @@ impl<'script> ModuleStmtRaw<'script> {
                 StmtRaw::WindowDecl(stmt) => {
                     let w = stmt.up(&mut helper)?;
                     helper.windows.insert(w.fqwn(&helper.module), w);
-                    // stmt.up(&mut helper)?;
                 }
                 StmtRaw::ScriptDecl(stmt) => {
                     let s = stmt.up(&mut helper)?;
                     helper.scripts.insert(s.fqsn(&helper.module), s);
-                    // stmt.up(&mut helper)?;
                 }
                 StmtRaw::SubqueryDecl(stmt) => {
                     let o = stmt.up(&mut helper)?;

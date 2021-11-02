@@ -10,12 +10,11 @@ suites:
         command: tremor
         tags:
           - help
-        status: 0
+        status: 2
         expects:
           - source: stderr
             contains:
               - USAGE
-              - FLAGS
               - OPTIONS
               - SUBCOMMANDS
       - name: |
@@ -28,7 +27,6 @@ suites:
           - source: stdout
             contains:
               - USAGE
-              - FLAGS
               - OPTIONS
               - SUBCOMMANDS
       - name: |
@@ -41,7 +39,6 @@ suites:
           - source: stdout
             contains:
               - USAGE
-              - FLAGS
               - OPTIONS
               - SUBCOMMANDS
       - name: |
@@ -54,7 +51,6 @@ suites:
           - source: stdout
             contains:
               - USAGE
-              - FLAGS
               - OPTIONS
               - SUBCOMMANDS
               - api
