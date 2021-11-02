@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::codec::{self, Codec};
 use crate::errors::Error;
 use crate::metrics::RampReporter;
 use crate::onramp;
@@ -20,10 +21,6 @@ use crate::preprocessor::{make_preprocessors, preprocess, Preprocessors};
 use crate::system::World;
 use crate::url::ports::{ERR, METRICS, OUT};
 use crate::url::TremorUrl;
-use crate::{
-    codec::{self, Codec},
-    pipeline::ConnectTarget,
-};
 
 use crate::Result;
 use async_std::channel::{unbounded, Receiver};
@@ -200,7 +197,6 @@ where
     source_id: TremorUrl,
     source: T,
     rx: Receiver<onramp::Msg>,
-    onramp_addr: onramp::Addr,
     pp_template: Vec<String>,
     preprocessors: BTreeMap<usize, Preprocessors>,
     codec: Box<dyn Codec>,
@@ -329,12 +325,12 @@ where
                                 )
                                 .into());
                             };
-                            let msg = pipeline::MgmtMsg::ConnectInput {
-                                input_url: self.source_id.clone(),
-                                target: ConnectTarget::Onramp(self.onramp_addr.clone()),
-                                transactional: self.is_transactional,
-                            };
-                            p.1.send_mgmt(msg).await?;
+                            // let msg = pipeline::MgmtMsg::ConnectInput {
+                            //     input_url: self.source_id.clone(),
+                            //     target: ConnectTarget::Onramp(self.onramp_addr.clone()),
+                            //     transactional: self.is_transactional,
+                            // };
+                            // p.1.send_mgmt(msg).await?;
                             pipelines.push(p);
                         }
                     }
@@ -518,7 +514,6 @@ where
                 pp_template,
                 source,
                 rx,
-                onramp_addr: onramp_addr.clone(),
                 preprocessors,
                 //postprocessors,
                 codec,

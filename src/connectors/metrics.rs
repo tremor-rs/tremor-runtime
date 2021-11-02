@@ -26,6 +26,8 @@ use tremor_script::utils::hostname;
 use tremor_script::EventPayload;
 use tremor_value::prelude::*;
 
+use super::sink::SinkAck;
+
 const MEASUREMENT: Cow<'static, str> = Cow::const_str("measurement");
 const TAGS: Cow<'static, str> = Cow::const_str("tags");
 const FIELDS: Cow<'static, str> = Cow::const_str("fields");
@@ -357,6 +359,10 @@ pub(crate) fn verify_metrics_value(value: &Value<'_>) -> Result<()> {
 /// passing events through to the source channel
 #[async_trait::async_trait()]
 impl Sink for MetricsSink {
+    fn auto_ack(&self) -> bool {
+        true
+    }
+
     /// entrypoint for custom metrics events
     async fn on_event(
         &mut self,
@@ -365,14 +371,13 @@ impl Sink for MetricsSink {
         _ctx: &SinkContext,
         _serializer: &mut EventSerializer,
         _start: u64,
-    ) -> ResultVec {
+    ) -> Result<SinkReply> {
         // verify event format
         for (value, _meta) in event.value_meta_iter() {
             // if it fails here an error event is sent to the ERR port of this connector
             verify_metrics_value(value)?;
         }
 
-        let mut res = Vec::with_capacity(1);
         let Event {
             origin_uri, data, ..
         } = event;
@@ -381,15 +386,15 @@ impl Sink for MetricsSink {
         let ack_or_fail = match self.tx.try_broadcast(metrics_msg) {
             Err(TrySendError::Closed(_)) => {
                 // channel is closed
-                res.push(SinkReply::CB(CbAction::Close));
-                SinkReply::Fail
+                SinkReply {
+                    ack: SinkAck::Fail,
+                    cb: CbAction::Close,
+                }
             }
-            Err(TrySendError::Full(_)) => SinkReply::Fail,
-            _ => SinkReply::Ack,
+            Err(TrySendError::Full(_)) => SinkReply::FAIL,
+            _ => SinkReply::ACK,
         };
-        if event.transactional {
-            res.push(ack_or_fail);
-        }
-        Ok(res)
+
+        Ok(ack_or_fail)
     }
 }
