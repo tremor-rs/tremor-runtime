@@ -70,6 +70,9 @@ impl Exit {
 
 #[async_trait::async_trait()]
 impl Sink for Exit {
+    fn auto_ack(&self) -> bool {
+        true
+    }
     async fn on_event(
         &mut self,
         _input: &str,
@@ -77,7 +80,7 @@ impl Sink for Exit {
         _ctx: &SinkContext,
         _serializer: &mut EventSerializer,
         _start: u64,
-    ) -> ResultVec {
+    ) -> Result<SinkReply> {
         for (value, _meta) in event.value_meta_iter() {
             if let Some(delay) = value.get_u64(Self::DELAY) {
                 async_std::task::sleep(Duration::from_millis(delay)).await;
@@ -93,7 +96,7 @@ impl Sink for Exit {
             // this should stop the whole server process
             self.world.stop(mode).await?;
         }
-        Ok(vec![])
+        Ok(SinkReply::default())
     }
 }
 

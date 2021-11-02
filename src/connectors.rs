@@ -107,7 +107,7 @@ pub struct Addr {
     pub url: TremorUrl,
     sender: Sender<Msg>,
     source: Option<SourceAddr>,
-    sink: Option<SinkAddr>,
+    pub(crate) sink: Option<SinkAddr>,
 }
 
 impl Addr {
@@ -461,20 +461,21 @@ impl Manager {
             url: url.clone(),
         };
         // create source instance
-        let source = connector.create_source(source_ctx, source_builder).await?;
+        let source_addr = connector.create_source(source_ctx, source_builder).await?;
 
         // create sink instance
-        let sink = connector.create_sink(sink_ctx, sink_builder).await?;
+        let sink_addr = connector.create_sink(sink_ctx, sink_builder).await?;
 
-        let addr = Addr {
+        let connector_addr = Addr {
             uid,
             url: url.clone(),
             sender: msg_tx,
-            source,
-            sink,
+            source: source_addr,
+            sink: sink_addr,
         };
 
-        let mut reconnect: ReconnectRuntime = ReconnectRuntime::new(&addr, &config.reconnect);
+        let mut reconnect: ReconnectRuntime =
+            ReconnectRuntime::new(&connector_addr, &config.reconnect);
         let notifier = reconnect.notifier();
 
         let ctx = ConnectorContext {
@@ -485,20 +486,22 @@ impl Manager {
             notifier: notifier.clone(),
         };
 
-        let send_addr = addr.clone();
+        let send_addr = connector_addr.clone();
         let mut connector_state = ConnectorState::Initialized;
         let mut drainage = None;
         // TODO: add connector metrics reporter (e.g. for reconnect attempts, cb's received, uptime, etc.)
         task::spawn::<_, Result<()>>(async move {
             // typical 1 pipeline connected to IN, OUT, ERR
-            let mut pipelines: HashMap<Cow<'static, str>, Vec<(TremorUrl, pipeline::Addr)>> =
-                HashMap::with_capacity(3);
+            let mut connected_pipelines: HashMap<
+                Cow<'static, str>,
+                Vec<(TremorUrl, pipeline::Addr)>,
+            > = HashMap::with_capacity(3);
             // connector control plane loop
             while let Ok(msg) = msg_rx.recv().await {
                 match msg {
                     Msg::Report(tx) => {
                         // request a status report from this connector
-                        let pipes: HashMap<Cow<'static, str>, Vec<TremorUrl>> = pipelines
+                        let pipes: HashMap<Cow<'static, str>, Vec<TremorUrl>> = connected_pipelines
                             .iter()
                             .map(|(port, connected)| {
                                 (
@@ -525,65 +528,68 @@ impl Manager {
                     }
                     Msg::Link {
                         port,
-                        pipelines: mut mapping,
+                        pipelines: pipelines_to_link,
                         result_tx,
                     } => {
-                        for (url, _) in &mapping {
+                        for (url, _) in &pipelines_to_link {
                             info!(
                                 "[Connector::{}] Connecting {} via port {}",
                                 &url, &url, port
                             );
                         }
-                        if let Some(port_pipes) = pipelines.get_mut(&port) {
-                            port_pipes.append(&mut mapping);
+
+                        if let Some(port_pipes) = connected_pipelines.get_mut(&port) {
+                            port_pipes.extend(pipelines_to_link.iter().cloned());
                         } else {
-                            pipelines.insert(port.clone(), mapping.clone());
+                            connected_pipelines.insert(port.clone(), pipelines_to_link.clone());
                         }
                         let res = if port.eq_ignore_ascii_case(IN.as_ref()) {
                             // connect to sink part
-                            match addr.sink.as_ref() {
-                                Some(sink) => sink
-                                    .addr
+                            if let Some(sink) = connector_addr.sink.as_ref() {
+                                sink.addr
                                     .send(SinkMsg::Connect {
                                         port,
-                                        pipelines: mapping,
+                                        pipelines: pipelines_to_link,
                                     })
                                     .await
-                                    .map_err(|e| e.into()),
-                                None => Err(ErrorKind::InvalidConnect(
-                                    addr.url.to_string(),
+                                    .map_err(|e| e.into())
+                            } else {
+                                Err(ErrorKind::InvalidConnect(
+                                    connector_addr.url.to_string(),
                                     port.clone(),
                                 )
-                                .into()),
+                                .into())
                             }
                         } else if port.eq_ignore_ascii_case(OUT.as_ref())
                             || port.eq_ignore_ascii_case(ERR.as_ref())
                         {
                             // connect to source part
-                            match addr.source.as_ref() {
-                                Some(source) => source
+                            if let Some(source) = connector_addr.source.as_ref() {
+                                source
                                     .addr
                                     .send(SourceMsg::Link {
                                         port,
-                                        pipelines: mapping,
+                                        pipelines: pipelines_to_link,
                                     })
                                     .await
-                                    .map_err(|e| e.into()),
-                                None => Err(ErrorKind::InvalidConnect(
-                                    addr.url.to_string(),
+                                    .map_err(|e| e.into())
+                            } else {
+                                Err(ErrorKind::InvalidConnect(
+                                    connector_addr.url.to_string(),
                                     port.clone(),
                                 )
-                                .into()),
+                                .into())
                             }
                         } else {
                             error!(
                                 "[Connector::{}] Tried to connect to unsupported port: {}",
-                                &addr.url, &port
+                                &connector_addr.url, &port
                             );
-                            Err(
-                                ErrorKind::InvalidConnect(addr.url.to_string(), port.clone())
-                                    .into(),
+                            Err(ErrorKind::InvalidConnect(
+                                connector_addr.url.to_string(),
+                                port.clone(),
                             )
+                            .into())
                         };
                         // send back the connect result
                         if let Err(e) = result_tx.send(res).await {
@@ -591,24 +597,27 @@ impl Manager {
                         }
                     }
                     Msg::Unlink { port, id, tx } => {
-                        let delete = pipelines.get_mut(&port).map_or(false, |port_pipes| {
-                            port_pipes.retain(|(url, _)| url != &id);
-                            port_pipes.is_empty()
-                        });
+                        let delete =
+                            connected_pipelines
+                                .get_mut(&port)
+                                .map_or(false, |port_pipes| {
+                                    port_pipes.retain(|(url, _)| url != &id);
+                                    port_pipes.is_empty()
+                                });
                         // make sure we can simply use `is_empty` for checking for emptiness
                         if delete {
-                            pipelines.remove(&port);
+                            connected_pipelines.remove(&port);
                         }
                         let res: Result<()> = if port.eq_ignore_ascii_case(IN.as_ref()) {
                             // disconnect from source part
-                            match addr.source.as_ref() {
+                            match connector_addr.source.as_ref() {
                                 Some(source) => source
                                     .addr
                                     .send(SourceMsg::Unlink { port, id })
                                     .await
                                     .map_err(Error::from),
                                 None => Err(ErrorKind::InvalidDisconnect(
-                                    addr.url.to_string(),
+                                    connector_addr.url.to_string(),
                                     id.to_string(),
                                     port.clone(),
                                 )
@@ -616,14 +625,14 @@ impl Manager {
                             }
                         } else {
                             // disconnect from sink part
-                            match addr.sink.as_ref() {
+                            match connector_addr.sink.as_ref() {
                                 Some(sink) => sink
                                     .addr
                                     .send(SinkMsg::Disconnect { port, id })
                                     .await
                                     .map_err(Error::from),
                                 None => Err(ErrorKind::InvalidDisconnect(
-                                    addr.url.to_string(),
+                                    connector_addr.url.to_string(),
                                     id.to_string(),
                                     port.clone(),
                                 )
@@ -631,7 +640,7 @@ impl Manager {
                             }
                         };
                         // TODO: work out more fine grained "empty" semantics
-                        tx.send(res.map(|_| pipelines.is_empty())).await?;
+                        tx.send(res.map(|_| connected_pipelines.is_empty())).await?;
                     }
                     Msg::ConnectionLost => {
                         // FIXME: we don't always want to reconnect - add a flag that determines if a reconnect is appropriate
@@ -641,68 +650,82 @@ impl Manager {
                         // TODO: this might lead to very fast retry loops if the connection is established as connector.connect returns successful
                         //       but in the next instant fails and sends this message.
                         connectivity = Connectivity::Disconnected;
-                        info!("[Connector::{}] Disconnected.", &addr.url);
-                        addr.send_sink(SinkMsg::ConnectionLost).await?;
-                        addr.send_source(SourceMsg::ConnectionLost).await?;
+                        info!("[Connector::{}] Disconnected.", &connector_addr.url);
+                        connector_addr.send_sink(SinkMsg::ConnectionLost).await?;
+                        connector_addr
+                            .send_source(SourceMsg::ConnectionLost)
+                            .await?;
 
                         // reconnect if running - wait with reconnect if paused (until resume)
                         if connector_state == ConnectorState::Running {
-                            info!("[Connector::{}] Triggering reconnect.", &addr.url);
-                            addr.sender.send(Msg::Reconnect).await?;
+                            info!("[Connector::{}] Triggering reconnect.", &connector_addr.url);
+                            connector_addr.sender.send(Msg::Reconnect).await?;
                         }
                     }
                     Msg::Reconnect => {
                         // reconnect if we are below max_retries, otherwise bail out and fail the connector
-                        info!("[Connector::{}] Connecting...", &addr.url);
+                        info!("[Connector::{}] Connecting...", &connector_addr.url);
                         let new = reconnect.attempt(connector.as_mut(), &ctx).await?;
                         match (&connectivity, &new) {
                             (Connectivity::Disconnected, Connectivity::Connected) => {
-                                info!("[Connector::{}] Connected.", &addr.url);
+                                info!("[Connector::{}] Connected.", &connector_addr.url);
                                 // notify sink
-                                addr.send_sink(SinkMsg::ConnectionEstablished).await?;
-                                addr.send_source(SourceMsg::ConnectionEstablished).await?;
+                                connector_addr
+                                    .send_sink(SinkMsg::ConnectionEstablished)
+                                    .await?;
+                                connector_addr
+                                    .send_source(SourceMsg::ConnectionEstablished)
+                                    .await?;
                             }
                             (Connectivity::Connected, Connectivity::Disconnected) => {
-                                info!("[Connector::{}] Disconnected.", &addr.url);
-                                addr.send_sink(SinkMsg::ConnectionLost).await?;
-                                addr.send_source(SourceMsg::ConnectionLost).await?;
+                                info!("[Connector::{}] Disconnected.", &connector_addr.url);
+                                connector_addr.send_sink(SinkMsg::ConnectionLost).await?;
+                                connector_addr
+                                    .send_source(SourceMsg::ConnectionLost)
+                                    .await?;
                             }
                             _ => {
-                                debug!("[Connector::{}] No change: {:?}", &addr.url, &new);
+                                debug!(
+                                    "[Connector::{}] No change: {:?}",
+                                    &connector_addr.url, &new
+                                );
                             }
                         }
                         connectivity = new;
                     }
                     Msg::Start if connector_state == ConnectorState::Initialized => {
-                        info!("[Connector::{}] Starting...", &addr.url);
+                        info!("[Connector::{}] Starting...", &connector_addr.url);
                         // start connector
                         connector_state = match connector.on_start(&ctx).await {
                             Ok(new_state) => new_state,
                             Err(e) => {
-                                error!("[Connector::{}] on_start Error: {}", &addr.url, e);
+                                error!(
+                                    "[Connector::{}] on_start Error: {}",
+                                    &connector_addr.url, e
+                                );
                                 ConnectorState::Failed
                             }
                         };
                         info!(
                             "[Connector::{}] Started. New state: {:?}",
-                            &addr.url, &connector_state
+                            &connector_addr.url, &connector_state
                         );
                         // forward to source/sink if available
-                        addr.send_source(SourceMsg::Start).await?;
-                        addr.send_sink(SinkMsg::Start).await?;
+                        connector_addr.send_source(SourceMsg::Start).await?;
+                        connector_addr.send_sink(SinkMsg::Start).await?;
 
                         // initiate connect asynchronously
-                        addr.sender.send(Msg::Reconnect).await?;
+                        connector_addr.sender.send(Msg::Reconnect).await?;
                     }
                     Msg::Start => {
                         info!(
                             "[Connector::{}] Ignoring Start Msg. Current state: {:?}",
-                            &addr.url, &connector_state
+                            &connector_addr.url, &connector_state
                         );
                     }
 
                     Msg::Pause if connector_state == ConnectorState::Running => {
-                        info!("[Connector::{}] Pausing...", &addr.url);
+                        info!("[Connector::{}] Pausing...", &connector_addr.url);
 
                         // TODO: in implementations that don't really support pausing
                         //       issue a warning/error message
@@ -712,50 +735,50 @@ impl Manager {
                         connector_state = ConnectorState::Paused;
                         quiescence_beacon.pause();
 
-                        addr.send_source(SourceMsg::Pause).await?;
-                        addr.send_sink(SinkMsg::Pause).await?;
+                        connector_addr.send_source(SourceMsg::Pause).await?;
+                        connector_addr.send_sink(SinkMsg::Pause).await?;
 
-                        info!("[Connector::{}] Paused.", &addr.url);
+                        info!("[Connector::{}] Paused.", &connector_addr.url);
                     }
                     Msg::Pause => {
                         info!(
                             "[Connector::{}] Ignoring Pause Msg. Current state: {:?}",
-                            &addr.url, &connector_state
+                            &connector_addr.url, &connector_state
                         );
                     }
                     Msg::Resume if connector_state == ConnectorState::Paused => {
-                        info!("[Connector::{}] Resuming...", &addr.url);
+                        info!("[Connector::{}] Resuming...", &connector_addr.url);
                         connector.on_resume(&ctx).await;
                         connector_state = ConnectorState::Running;
                         quiescence_beacon.resume();
 
-                        addr.send_source(SourceMsg::Resume).await?;
-                        addr.send_sink(SinkMsg::Resume).await?;
+                        connector_addr.send_source(SourceMsg::Resume).await?;
+                        connector_addr.send_sink(SinkMsg::Resume).await?;
 
                         if connectivity == Connectivity::Disconnected {
                             info!(
                                 "[Connector::{}] Triggering reconnect as part of resume.",
-                                &addr.url
+                                &connector_addr.url
                             );
-                            addr.send(Msg::Reconnect).await?;
+                            connector_addr.send(Msg::Reconnect).await?;
                         }
 
-                        info!("[Connector::{}] Resumed.", &addr.url);
+                        info!("[Connector::{}] Resumed.", &connector_addr.url);
                     }
                     Msg::Resume => {
                         info!(
                             "[Connector::{}] Ignoring Resume Msg. Current state: {:?}",
-                            &addr.url, &connector_state
+                            &connector_addr.url, &connector_state
                         );
                     }
                     Msg::Drain(_) if connector_state == ConnectorState::Draining => {
                         info!(
                             "[Connector::{}] Ignoring Drain Msg. Current state: {:?}",
-                            &addr.url, &connector_state
+                            &connector_addr.url, &connector_state
                         );
                     }
                     Msg::Drain(tx) => {
-                        info!("[Connector::{}] Draining...", &addr.url);
+                        info!("[Connector::{}] Draining...", &connector_addr.url);
 
                         // notify connector that it should stop reading - so no more new events arrive at its source part
                         quiescence_beacon.stop_reading();
@@ -765,52 +788,57 @@ impl Manager {
                         connector_state = ConnectorState::Draining;
 
                         // notify source to drain the source channel and then send the drain signal
-                        if let Some(source) = addr.source.as_ref() {
+                        if let Some(source) = connector_addr.source.as_ref() {
                             source
                                 .addr
-                                .send(SourceMsg::Drain(addr.sender.clone()))
+                                .send(SourceMsg::Drain(connector_addr.sender.clone()))
                                 .await?;
                         } else {
                             // proceed to the next step, even without source
-                            addr.send(Msg::SourceDrained).await?;
+                            connector_addr.send(Msg::SourceDrained).await?;
                         }
 
-                        let d = Drainage::new(&addr, tx);
+                        let d = Drainage::new(&connector_addr, tx);
                         if d.all_drained() {
                             if let Err(e) = d.send_all_drained().await {
                                 error!(
                                     "[Connector::{}] error signalling being fully drained: {}",
-                                    &addr.url, e
+                                    &connector_addr.url, e
                                 );
                             }
                         }
                         drainage = Some(d);
                     }
                     Msg::SourceDrained if connector_state == ConnectorState::Draining => {
-                        debug!("[Connector::{}] Source-part is drained.", &addr.url);
+                        debug!(
+                            "[Connector::{}] Source-part is drained.",
+                            &connector_addr.url
+                        );
                         if let Some(drainage) = drainage.as_mut() {
                             drainage.set_source_drained();
                             if drainage.all_drained() {
                                 if let Err(e) = drainage.send_all_drained().await {
                                     error!(
                                         "[Connector::{}] Error signalling being fully drained: {}",
-                                        &addr.url, e
+                                        &connector_addr.url, e
                                     );
                                 }
                             } else {
                                 // notify sink to go into DRAIN state
                                 // flush all events until we received a drain signal from all inputs
-                                if let Some(sink) = addr.sink.as_ref() {
-                                    sink.addr.send(SinkMsg::Drain(addr.sender.clone())).await?;
+                                if let Some(sink) = connector_addr.sink.as_ref() {
+                                    sink.addr
+                                        .send(SinkMsg::Drain(connector_addr.sender.clone()))
+                                        .await?;
                                 } else {
                                     // proceed to the next step, even without sink
-                                    addr.send(Msg::SinkDrained).await?;
+                                    connector_addr.send(Msg::SinkDrained).await?;
                                 }
                             }
                         }
                     }
                     Msg::SinkDrained if connector_state == ConnectorState::Draining => {
-                        debug!("[Connector::{}] Sink-part is drained.", &addr.url);
+                        debug!("[Connector::{}] Sink-part is drained.", &connector_addr.url);
                         if let Some(drainage) = drainage.as_mut() {
                             drainage.set_sink_drained();
                             quiescence_beacon.full_stop(); // TODO: maybe this should be done in the SinkManager?
@@ -818,7 +846,7 @@ impl Manager {
                                 if let Err(e) = drainage.send_all_drained().await {
                                     error!(
                                         "[Connector::{}] Error signalling being fully drained: {}",
-                                        &addr.url, e
+                                        &connector_addr.url, e
                                     );
                                 }
                             }
@@ -827,32 +855,32 @@ impl Manager {
                     Msg::SourceDrained => {
                         info!(
                             "[Connector::{}] Ignoring SourceDrained Msg. Current state: {}",
-                            &addr.url, &connector_state
+                            &connector_addr.url, &connector_state
                         );
                     }
                     Msg::SinkDrained => {
                         info!(
                             "[Connector::{}] Ignoring SourceDrained Msg. Current state: {}",
-                            &addr.url, &connector_state
+                            &connector_addr.url, &connector_state
                         );
                     }
                     Msg::Stop => {
-                        info!("[Connector::{}] Stopping...", &addr.url);
+                        info!("[Connector::{}] Stopping...", &connector_addr.url);
                         connector.on_stop(&ctx).await;
                         connector_state = ConnectorState::Stopped;
                         quiescence_beacon.full_stop();
 
-                        addr.send_source(SourceMsg::Stop).await?;
-                        addr.send_sink(SinkMsg::Stop).await?;
+                        connector_addr.send_source(SourceMsg::Stop).await?;
+                        connector_addr.send_sink(SinkMsg::Stop).await?;
 
-                        info!("[Connector::{}] Stopped.", &addr.url);
+                        info!("[Connector::{}] Stopped.", &connector_addr.url);
                         break;
                     }
                 } // match
             } // while
             info!(
                 "[Connector::{}] Connector Stopped. Reason: {:?}",
-                &addr.url, &connector_state
+                &connector_addr.url, &connector_state
             );
             // TODO: inform registry that this instance is gone now
             Ok(())
