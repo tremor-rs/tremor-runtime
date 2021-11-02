@@ -7,7 +7,6 @@ settings:
   - ArgRequiredElseHelp
   - SubcommandRequiredElseHelp
   - PropagateVersion
-  - ColorAlways
 args:
   - verbose:
       short: v
@@ -233,16 +232,15 @@ subcommands:
             long: port
             short: p
             about: selects the port to pull output
-            help: selects the port to pull output
         - ARGS_FILE:
             long: args
             takes_value: true
-            help: optional arguments - via json record file
+            about: optional arguments - via json record file
         - arg:
             long: arg
             short: a
-            help: arguments to be passed to the runtime
-            multiple: true
+            about: arguments to be passed to the runtime
+            multiple_occurrences: true
             takes_value: true
   - doc:
       about: >
