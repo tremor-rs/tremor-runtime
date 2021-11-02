@@ -15,9 +15,9 @@
 pub use crate::connectors::quiescence::QuiescenceBeacon;
 pub use crate::connectors::reconnect::{Attempt, ConnectionLostNotifier};
 pub use crate::connectors::sink::{
-    ChannelSink, ChannelSinkRuntime, EventSerializer, ResultVec, SingleStreamSink,
-    SingleStreamSinkRuntime, Sink, SinkAddr, SinkContext, SinkManagerBuilder, SinkMeta, SinkReply,
-    StreamWriter,
+    AsyncSinkReply, ChannelSink, ChannelSinkRuntime, ContraflowData, EventSerializer,
+    SingleStreamSink, SingleStreamSinkRuntime, Sink, SinkAck, SinkAddr, SinkContext,
+    SinkManagerBuilder, SinkMeta, SinkReply, StreamWriter,
 };
 pub use crate::connectors::source::{
     ChannelSource, ChannelSourceRuntime, Source, SourceAddr, SourceContext, SourceManagerBuilder,
