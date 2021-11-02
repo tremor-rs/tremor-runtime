@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-fn get_git_branch() -> String {
+fn get_git_branch() -> std::io::Result<String> {
     use std::process::Command;
 
     let branch = Command::new("git")
@@ -20,19 +20,17 @@ fn get_git_branch() -> String {
         .arg("--abbrev-ref")
         .arg("HEAD")
         .output();
-    if let Ok(branch_output) = branch {
+    branch.map(|branch_output| {
         let branch_string = String::from_utf8_lossy(&branch_output.stdout);
-        return branch_string
+        branch_string
             .lines()
             .next()
             .unwrap_or("unknown_branch")
-            .to_string();
-    } else {
-        String::from("empty")
-    }
+            .to_string()
+    })
 }
 
-fn get_git_commit() -> String {
+fn get_git_commit() -> std::io::Result<String> {
     use std::process::Command;
 
     let commit = Command::new("git")
@@ -41,20 +39,22 @@ fn get_git_commit() -> String {
         .arg("HEAD")
         .output();
 
-    if let Ok(commit_output) = commit {
-        let commit_string = String::from_utf8_lossy(&commit_output.stdout);
-        return commit_string
+    commit.map(|commit| {
+        let commit_string = String::from_utf8_lossy(&commit.stdout);
+        commit_string
             .lines()
             .next()
             .unwrap_or("unknown_hash")
-            .to_string();
-    } else {
-        String::from("000")
-    }
+            .to_string()
+    })
 }
 
 fn main() {
     println!("cargo:rerun-if-changed=.git");
-    println!("cargo:rustc-env=VERSION_BRANCH={}", get_git_branch());
-    println!("cargo:rustc-env=VERSION_HASH={}", get_git_commit());
+    if let Ok(branch) = get_git_branch() {
+        println!("cargo:rustc-env=VERSION_BRANCH={}", branch);
+    }
+    if let Ok(commit) = get_git_commit() {
+        println!("cargo:rustc-env=VERSION_HASH={}", commit);
+    }
 }
