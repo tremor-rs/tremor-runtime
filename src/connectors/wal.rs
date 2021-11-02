@@ -180,7 +180,11 @@ impl Connector for Wal {
         Ok(ConnectorState::Running)
     }
 
-    async fn on_stop(&mut self, _ctx: &ConnectorContext) {}
+    async fn on_stop(&mut self, _ctx: &ConnectorContext) {
+        // FIXME this isn't called
+        dbg!("preserving ack");
+        self.wal.lock().await.preserve_ack().await.unwrap();
+    }
 
     async fn connect(&mut self, _ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
         Ok(true)

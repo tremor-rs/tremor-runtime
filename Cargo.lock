@@ -4301,7 +4301,7 @@ dependencies = [
 [[package]]
 name = "qwal"
 version = "0.1.0"
-source = "git+https://github.com/tremor-rs/qwal#c740fbe121482a755538072850343a326fdd5034"
+source = "git+https://github.com/tremor-rs/qwal#3a257f1561e35bb9e5efa5d5a948f3bf66f20d62"
 dependencies = [
  "async-std",
  "byteorder",
