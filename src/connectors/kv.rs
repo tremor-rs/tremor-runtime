@@ -235,6 +235,9 @@ struct KvSource {
 
 #[async_trait::async_trait()]
 impl Source for KvSource {
+    fn is_transactional(&self) -> bool {
+        false
+    }
     async fn pull_data(&mut self, _pull_id: u64, _ctx: &SourceContext) -> Result<SourceReply> {
         match self.rx.try_recv() {
             Ok((port, payload)) => Ok(SourceReply::Structured {
@@ -332,10 +335,10 @@ impl Sink for KvSink {
         _ctx: &SinkContext,
         _serializer: &mut EventSerializer,
         _start: u64,
-    ) -> ResultVec {
+    ) -> Result<SinkReply> {
         let ingest_ns = tremor_common::time::nanotime();
 
-        let mut r = Vec::with_capacity(8);
+        let mut r = SinkReply::ACK;
         for (v, m) in event.value_meta_iter() {
             let correlation = m.get("correlation");
             let executed = match Command::try_from(m) {
@@ -361,7 +364,6 @@ impl Sink for KvSink {
                         if let Err(e) = self.tx.send((OUT, e)).await {
                             error!("[Sink::{}], Faild to send to source: {}", self.url, e);
                         };
-                        r.push(SinkReply::Ack);
                     }
                 }
                 Err((op, key, e)) => {
@@ -382,7 +384,7 @@ impl Sink for KvSink {
                         error!("[Sink::{}], Faild to send to source: {}", self.url, e);
                     };
 
-                    r.push(SinkReply::Fail);
+                    r = SinkReply::FAIL;
                 }
             }
         }

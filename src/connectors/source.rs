@@ -23,7 +23,6 @@ use std::time::Duration;
 use tremor_common::time::nanotime;
 use tremor_script::{EventPayload, ValueAndMeta};
 
-use crate::codec::{self, Codec};
 use crate::config::{Codec as CodecConfig, Connector as ConnectorConfig};
 use crate::connectors::Msg;
 use crate::errors::{Error, Result};
@@ -31,6 +30,10 @@ use crate::pipeline;
 use crate::preprocessor::{make_preprocessors, preprocess, Preprocessors};
 use crate::url::ports::{ERR, OUT};
 use crate::url::TremorUrl;
+use crate::{
+    codec::{self, Codec},
+    pipeline::ConnectInputTarget,
+};
 use async_std::channel::{bounded, Receiver, Sender, TryRecvError};
 use beef::Cow;
 use tremor_pipeline::{
@@ -46,6 +49,7 @@ use super::{ConnectorContext, StreamDone};
 /// The default poll interval for `try_recv` on channels in connectors
 pub const DEFAULT_POLL_INTERVAL: u64 = 10;
 
+#[derive(Debug)]
 /// Messages a Source can receive
 pub enum SourceMsg {
     /// connect a pipeline
@@ -188,9 +192,7 @@ pub trait Source: Send {
     async fn on_connection_established(&mut self, _ctx: &mut SourceContext) {}
 
     /// Is this source transactional or can acks/fails be ignored
-    fn is_transactional(&self) -> bool {
-        false
-    }
+    fn is_transactional(&self) -> bool;
 }
 
 /// A source that receives `SourceReply` messages via a channel.
@@ -320,6 +322,16 @@ pub struct SourceAddr {
     pub addr: Sender<SourceMsg>,
 }
 
+impl SourceAddr {
+    /// send a message
+    ///
+    /// # Errors
+    ///  * If sending failed
+    pub async fn send(&self, msg: SourceMsg) -> Result<()> {
+        Ok(self.addr.send(msg).await?)
+    }
+}
+
 #[allow(clippy::module_name_repetitions)]
 pub struct SourceManagerBuilder {
     qsize: usize,
@@ -339,11 +351,12 @@ impl SourceManagerBuilder {
         let qsize = self.qsize;
         let name = ctx.url.short_id("c-src"); // connector source
         let (source_tx, source_rx) = bounded(qsize);
-        let manager = SourceManager::new(source, ctx, self, source_rx);
+        let source_addr = SourceAddr { addr: source_tx };
+        let manager = SourceManager::new(source, ctx, self, source_rx, source_addr.clone());
         // spawn manager task
         task::Builder::new().name(name).spawn(manager.run())?;
 
-        Ok(SourceAddr { addr: source_tx })
+        Ok(source_addr)
     }
 }
 
@@ -491,6 +504,7 @@ where
     source: S,
     ctx: SourceContext,
     rx: Receiver<SourceMsg>,
+    addr: SourceAddr,
     pipelines_out: Vec<(TremorUrl, pipeline::Addr)>,
     pipelines_err: Vec<(TremorUrl, pipeline::Addr)>,
     streams: Streams,
@@ -513,6 +527,7 @@ where
         ctx: SourceContext,
         builder: SourceManagerBuilder,
         rx: Receiver<SourceMsg>,
+        addr: SourceAddr,
     ) -> Self {
         let SourceManagerBuilder {
             streams,
@@ -525,6 +540,7 @@ where
             source,
             ctx,
             rx,
+            addr,
             streams,
             metrics_reporter: source_metrics_reporter,
             pipelines_out: Vec::with_capacity(1),
@@ -571,6 +587,15 @@ where
                             );
                             continue;
                         };
+                        for (_, p) in &pipelines {
+                            p.send_mgmt(pipeline::MgmtMsg::ConnectInput {
+                                input_url: self.ctx.url.clone(),
+                                target: ConnectInputTarget::Source(self.addr.clone()),
+                                transactional: self.is_transactional,
+                            })
+                            .await?;
+                        }
+
                         pipes.append(&mut pipelines);
                     }
                     SourceMsg::Unlink { id, port } => {
@@ -580,7 +605,7 @@ where
                             &mut self.pipelines_err
                         } else {
                             error!(
-                                "[Source::{}] Tried to connect to invalid port: {}",
+                                "[Source::{}] Tried to disconnect from an invalid port: {}",
                                 &self.ctx.url, &port
                             );
                             continue;
@@ -806,6 +831,7 @@ where
         // it is not unique per stream only, but per source
         let mut pull_counter: u64 = 0;
         loop {
+            // FIXME: change reply from true/false to something descriptive like enum {Stop Continue} or the rust controlflow thingy
             if self.control_plane().await? {
                 // source has been stopped, lets stop running here
                 return Ok(());

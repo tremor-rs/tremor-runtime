@@ -14,9 +14,7 @@
 
 //! Sink implementation that keeps track of multiple streams and keeps channels to send to each stream
 
-use crate::connectors::sink::{
-    AsyncSinkReply, ContraflowData, EventSerializer, SinkReply, StreamWriter,
-};
+use crate::connectors::prelude::*;
 use crate::connectors::{ConnectorContext, StreamDone};
 use crate::errors::Result;
 use crate::QSIZE;
@@ -33,8 +31,6 @@ use tremor_common::time::nanotime;
 use tremor_pipeline::{CbAction, Event, SignalKind};
 use tremor_value::Value;
 use value_trait::ValueAccess;
-
-use super::{ResultVec, Sink, SinkContext};
 
 /// Behavioral trait for defining if a Channel Sink needs metadata or not
 pub trait SinkMetaBehaviour: Send + Sync {
@@ -329,14 +325,17 @@ where
         ctx: &SinkContext,
         serializer: &mut EventSerializer,
         start: u64,
-    ) -> ResultVec {
+    ) -> Result<SinkReply> {
         // clean up
         // make sure channels for the given event are added to avoid stupid errors
         // due to channels not yet handled
         let empty = self.handle_channels_quickly(serializer);
         if empty {
             // no streams available :sob:
-            return Ok(vec![SinkReply::Fail, SinkReply::CB(CbAction::Close)]);
+            return Ok(SinkReply {
+                ack: SinkAck::Fail,
+                cb: CbAction::Close,
+            });
         }
 
         let ingest_ns = event.ingest_ns;
@@ -350,7 +349,7 @@ where
         };
 
         let mut remove_streams = vec![];
-        let mut reply = SinkReply::None;
+        let mut reply = SinkReply::default();
         for (value, meta) in event.value_meta_iter() {
             let mut errored = false;
             let mut found = false;
@@ -393,7 +392,7 @@ where
                 }
             }
             if errored || !found {
-                reply = SinkReply::Fail;
+                reply = SinkReply::FAIL;
             }
         }
         for stream_id in remove_streams {
@@ -402,7 +401,7 @@ where
             serializer.drop_stream(stream_id);
             // TODO: stream based CB
         }
-        Ok(vec![reply]) // empty vec in case of success
+        Ok(reply) // empty vec in case of success
     }
 
     async fn on_signal(
@@ -410,11 +409,11 @@ where
         signal: Event,
         _ctx: &SinkContext,
         serializer: &mut EventSerializer,
-    ) -> ResultVec {
+    ) -> Result<SinkReply> {
         if let Some(SignalKind::Tick) = signal.kind {
             self.handle_channels(serializer, true);
         }
-        Ok(vec![])
+        Ok(SinkReply::default())
     }
 
     fn asynchronous(&self) -> bool {

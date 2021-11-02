@@ -27,9 +27,7 @@ use async_std::{
 use tremor_common::time::nanotime;
 
 use super::channel_sink::{NoMeta, SinkMeta, SinkMetaBehaviour};
-use super::{
-    AsyncSinkReply, ContraflowData, EventSerializer, ResultVec, Sink, SinkContext, StreamWriter,
-};
+use super::{AsyncSinkReply, ContraflowData, EventSerializer, Sink, SinkContext, StreamWriter};
 
 pub struct SingleStreamSink<B>
 where
@@ -163,14 +161,14 @@ where
         ctx: &SinkContext,
         serializer: &mut EventSerializer,
         start: u64,
-    ) -> ResultVec {
+    ) -> Result<SinkReply> {
         let ingest_ns = event.ingest_ns;
         let contraflow = if event.transactional {
             Some(ContraflowData::from(&event))
         } else {
             None
         };
-        let reply = if let Some(((last_value, last_meta), value_meta_iter)) =
+        if let Some(((last_value, last_meta), value_meta_iter)) =
             event.value_meta_iter().split_last()
         {
             // handle first couple of items (if batched)
@@ -189,7 +187,7 @@ where
                 };
                 if self.tx.send(sink_data).await.is_err() {
                     error!("[Sink::{}] Error sending to closed stream: 0", &ctx.url);
-                    return Ok(vec![SinkReply::Fail]);
+                    return Ok(SinkReply::FAIL);
                 }
             }
             // handle last item
@@ -207,15 +205,14 @@ where
             };
             if self.tx.send(sink_data).await.is_err() {
                 error!("[Sink::{}] Error sending to closed stream: 0", &ctx.url);
-                SinkReply::Fail
+                Ok(SinkReply::FAIL)
             } else {
-                SinkReply::None
+                Ok(SinkReply::NONE)
             }
         } else {
             // no values inside the event, let's ack it, as we never go asynchronous
-            SinkReply::Ack
-        };
-        Ok(vec![reply])
+            Ok(SinkReply::ACK)
+        }
     }
 
     fn asynchronous(&self) -> bool {
