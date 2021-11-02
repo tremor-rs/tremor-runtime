@@ -289,7 +289,7 @@ pub struct EventId {
     stream_id: u64,
     event_id: u64,
     pull_id: u64,
-    tracked_event_ids: Vec<TrackedPullIds>,
+    tracked_pull_ids: Vec<TrackedPullIds>,
 }
 
 /// default stream id if streams dont make sense
@@ -306,7 +306,7 @@ impl EventId {
             stream_id,
             event_id,
             pull_id,
-            tracked_event_ids: Vec::with_capacity(0),
+            tracked_pull_ids: Vec::with_capacity(0),
         }
     }
 
@@ -374,17 +374,17 @@ impl EventId {
             other.pull_id,
         );
 
-        for other_tracked in &other.tracked_event_ids {
+        for other_tracked in &other.tracked_pull_ids {
             match self
-                .tracked_event_ids
+                .tracked_pull_ids
                 .binary_search_by(|probe| probe.compare(other_tracked))
             {
                 Ok(idx) => {
                     // ALLOW: binary_search_by verified this idx exists
-                    unsafe { self.tracked_event_ids.get_unchecked_mut(idx) }
+                    unsafe { self.tracked_pull_ids.get_unchecked_mut(idx) }
                         .track_ids(other_tracked.min_pull_id, other_tracked.max_pull_id);
                 }
-                Err(idx) => self.tracked_event_ids.insert(idx, other_tracked.clone()),
+                Err(idx) => self.tracked_pull_ids.insert(idx, other_tracked.clone()),
             }
         }
     }
@@ -396,23 +396,23 @@ impl EventId {
 
     fn track_ids(&mut self, source_id: u64, stream_id: u64, min_pull_id: u64, max_pull_id: u64) {
         // track our own id upon first track call, so we can keep resolving min and max simpler
-        if self.tracked_event_ids.is_empty() {
-            self.tracked_event_ids.push(TrackedPullIds::new(
+        if self.tracked_pull_ids.is_empty() {
+            self.tracked_pull_ids.push(TrackedPullIds::new(
                 self.source_id,
                 self.stream_id,
-                self.event_id,
-                self.event_id,
+                self.pull_id,
+                self.pull_id,
             ));
         }
         match self
-            .tracked_event_ids
+            .tracked_pull_ids
             .binary_search_by(|probe| probe.compare_ids(source_id, stream_id))
         {
             Ok(idx) => {
-                unsafe { self.tracked_event_ids.get_unchecked_mut(idx) }
+                unsafe { self.tracked_pull_ids.get_unchecked_mut(idx) }
                     .track_ids(min_pull_id, max_pull_id);
             }
-            Err(idx) => self.tracked_event_ids.insert(
+            Err(idx) => self.tracked_pull_ids.insert(
                 idx,
                 TrackedPullIds::new(source_id, stream_id, min_pull_id, max_pull_id),
             ),
@@ -424,13 +424,13 @@ impl EventId {
     ///
     /// This also always checks the actual eventId, not only the tracked ones, this way we can save allocations when used within insights
     pub fn get_min_by_stream(&self, source_id: u64, stream_id: u64) -> Option<u64> {
-        if self.tracked_event_ids.is_empty()
+        if self.tracked_pull_ids.is_empty()
             && self.source_id == source_id
             && self.stream_id == stream_id
         {
-            Some(self.event_id)
+            Some(self.pull_id)
         } else {
-            self.tracked_event_ids.iter().find_map(|teid| {
+            self.tracked_pull_ids.iter().find_map(|teid| {
                 if (source_id, stream_id) == (teid.source_id, teid.stream_id) {
                     Some(teid.min_pull_id)
                 } else {
@@ -446,33 +446,34 @@ impl EventId {
     pub fn is_tracking(&self, event_id: &EventId) -> bool {
         let is_same = self.source_id() == event_id.source_id()
             && self.stream_id() == event_id.stream_id()
-            && self.event_id() == event_id.event_id();
+            && self.pull_id == event_id.pull_id
+            && self.event_id == event_id.event_id;
         is_same
-            || match self.tracked_event_ids.binary_search_by(|probe| {
+            || match self.tracked_pull_ids.binary_search_by(|probe| {
                 probe.compare_ids(event_id.source_id(), event_id.stream_id())
             }) {
                 Ok(idx) => {
-                    let entry = unsafe { self.tracked_event_ids.get_unchecked(idx) };
+                    let entry = unsafe { self.tracked_pull_ids.get_unchecked(idx) };
                     // this is only a heuristic, but is good enough for now
-                    (entry.min_pull_id <= event_id.event_id)
-                        && (event_id.event_id <= entry.max_pull_id)
+                    (entry.min_pull_id <= event_id.pull_id)
+                        && (event_id.pull_id <= entry.max_pull_id)
                 }
                 Err(_) => false,
             }
     }
 
     #[must_use]
-    /// get maximum event id for a given source and stream if we have it here
+    /// get maximum pull id for a given source and stream if we have it here
     ///
     /// This also always checks the actual eventId, not only the tracked ones
     pub fn get_max_by_stream(&self, source_id: u64, stream_id: u64) -> Option<u64> {
-        if self.tracked_event_ids.is_empty()
+        if self.tracked_pull_ids.is_empty()
             && self.source_id == source_id
             && self.stream_id == stream_id
         {
-            Some(self.event_id)
+            Some(self.pull_id)
         } else {
-            self.tracked_event_ids.iter().find_map(|teid| {
+            self.tracked_pull_ids.iter().find_map(|teid| {
                 if (source_id, stream_id) == (teid.source_id, teid.stream_id) {
                     Some(teid.max_pull_id)
                 } else {
@@ -483,16 +484,16 @@ impl EventId {
     }
 
     #[must_use]
-    /// get the minimum tracked (`stream_id`, `event_id`)
+    /// get the minimum tracked (`stream_id`, `pull_id`)
     /// by chosing events with smaller stream id
     ///
     /// This also always checks the actual eventId, not only the tracked ones
     pub fn get_min_by_source(&self, source_id: u64) -> Option<(u64, u64)> {
         // TODO: change the return type to an iterator, so we make sure to return all values for all streams
-        if self.tracked_event_ids.is_empty() && self.source_id == source_id {
-            Some((self.stream_id, self.event_id))
+        if self.tracked_pull_ids.is_empty() && self.source_id == source_id {
+            Some((self.stream_id, self.pull_id))
         } else {
-            self.tracked_event_ids
+            self.tracked_pull_ids
                 .iter()
                 .filter(|teid| teid.source_id == source_id)
                 .min_by(|teid1, teid2| teid1.stream_id.cmp(&teid2.stream_id))
@@ -501,16 +502,16 @@ impl EventId {
     }
 
     #[must_use]
-    /// get the maximum tracked (`stream_id`, `event_id`)
+    /// get the maximum tracked (`stream_id`, `pull_id`)
     /// by chosing events with bigger stream id
     ///
     /// This also always checks the actual eventId, not only the tracked ones
     pub fn get_max_by_source(&self, source_id: u64) -> Option<(u64, u64)> {
         // TODO: change the return type to an iterator, so we make sure to return all values for all streams
-        if self.tracked_event_ids.is_empty() && self.source_id == source_id {
-            Some((self.stream_id, self.event_id))
+        if self.tracked_pull_ids.is_empty() && self.source_id == source_id {
+            Some((self.stream_id, self.pull_id))
         } else {
-            self.tracked_event_ids
+            self.tracked_pull_ids
                 .iter()
                 .filter(|teid| teid.source_id == source_id)
                 .max_by(|teid1, teid2| teid1.stream_id.cmp(&teid2.stream_id))
@@ -526,7 +527,7 @@ impl EventId {
             v.insert(self.stream_id);
         }
         let iter = self
-            .tracked_event_ids
+            .tracked_pull_ids
             .iter()
             .filter(|tids| tids.source_id == source_id)
             .map(|tids| tids.stream_id);
@@ -541,7 +542,7 @@ impl EventId {
         if self.source_id == source_id {
             Some(self.stream_id)
         } else {
-            self.tracked_event_ids
+            self.tracked_pull_ids
                 .iter()
                 .find(|tids| tids.source_id == source_id)
                 .map(|tids| tids.stream_id)
@@ -563,9 +564,13 @@ impl From<(u64, u64, u64, u64)> for EventId {
 
 impl fmt::Display for EventId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}:{}:{}", self.source_id, self.stream_id, self.event_id)?;
-        if !self.tracked_event_ids.is_empty() {
-            let mut iter = self.tracked_event_ids.iter();
+        write!(
+            f,
+            "{}:{}:{}:{}",
+            self.source_id, self.stream_id, self.event_id, self.pull_id
+        )?;
+        if !self.tracked_pull_ids.is_empty() {
+            let mut iter = self.tracked_pull_ids.iter();
             if let Some(ids) = iter.next() {
                 write!(f, " {}", ids)?;
             }
@@ -609,7 +614,7 @@ impl TrackedPullIds {
     }
 
     #[must_use]
-    /// create tracked ids from a single `event_id`
+    /// create tracked ids from a single `pull_id`
     pub fn from_id(source_id: u64, stream_id: u64, pull_id: u64) -> Self {
         Self {
             source_id,
@@ -650,12 +655,12 @@ impl TrackedPullIds {
                 "incompatible stream ids"
             );
         }
-        self.track_ids(event_id.event_id, event_id.event_id);
+        self.track_ids(event_id.pull_id, event_id.pull_id);
     }
 
     /// track a single event id
-    pub fn track_id(&mut self, event_id: u64) {
-        self.track_ids(event_id, event_id);
+    pub fn track_id(&mut self, pull_id: u64) {
+        self.track_ids(pull_id, pull_id);
     }
 
     /// track a min and max event id
@@ -678,7 +683,7 @@ impl TrackedPullIds {
 
 impl From<&EventId> for TrackedPullIds {
     fn from(e: &EventId) -> Self {
-        Self::from_id(e.source_id, e.stream_id, e.event_id)
+        Self::from_id(e.source_id, e.stream_id, e.pull_id)
     }
 }
 
