@@ -53,7 +53,7 @@ pub(crate) mod kv;
 pub(crate) mod wal;
 
 /// connector for checking guaranteed delivery and circuit breaker logic
-//pub(crate) mod cb;
+pub(crate) mod cb;
 
 /// quiescence stuff
 pub(crate) mod quiescence;
