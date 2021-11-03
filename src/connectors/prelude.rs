@@ -32,6 +32,8 @@ pub use crate::utils::hostname;
 pub use crate::{Event, OpConfig, QSIZE};
 pub use std::sync::atomic::Ordering;
 pub use tremor_pipeline::{ConfigImpl, EventOriginUri, DEFAULT_STREAM_ID};
+
+/// default buf size used for reading from files and streams (sockets etc)
 pub(crate) fn default_buf_size() -> usize {
     8192
 }

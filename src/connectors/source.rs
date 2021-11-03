@@ -32,7 +32,7 @@ use crate::url::ports::{ERR, OUT};
 use crate::url::TremorUrl;
 use crate::{
     codec::{self, Codec},
-    pipeline::ConnectInputTarget,
+    pipeline::InputTarget,
 };
 use async_std::channel::{bounded, Receiver, Sender, TryRecvError};
 use beef::Cow;
@@ -590,8 +590,8 @@ where
                         for (_, p) in &pipelines {
                             p.send_mgmt(pipeline::MgmtMsg::ConnectInput {
                                 input_url: self.ctx.url.clone(),
-                                target: ConnectInputTarget::Source(self.addr.clone()),
-                                transactional: self.is_transactional,
+                                target: InputTarget::Source(self.addr.clone()),
+                                is_transactional: self.is_transactional,
                             })
                             .await?;
                         }
@@ -706,13 +706,22 @@ where
                         self.state = Running;
                     }
                     SourceMsg::Cb(CbAction::Drained(uid), _id) => {
+                        debug!("[Source::{}] Drained request for {}", self.ctx.url, uid);
                         // only account for Drained CF which we caused
                         // as CF is sent back the DAG to all destinations
                         if uid == self.ctx.uid {
                             self.expected_drained -= 1;
+                            debug!(
+                                "[Source::{}] Drained this is us! we still have {} drains to go",
+                                self.ctx.url, self.expected_drained
+                            );
                             if self.expected_drained == 0 {
                                 // we received 1 drain CB event per connected pipeline (hopefully)
                                 if let Some(connector_channel) = self.connector_channel.as_ref() {
+                                    debug!(
+                                        "[Source::{}] Drain compleltet, sending data now!",
+                                        self.ctx.url
+                                    );
                                     if connector_channel.send(Msg::SourceDrained).await.is_err() {
                                         error!("[Source::{}] Error sending SourceDrained message to Connector", &self.ctx.url);
                                     }
@@ -963,6 +972,10 @@ where
                             // otherwise there are cases (branching etc. where quiescence also would be too quick)
                             self.expected_drained =
                                 self.pipelines_err.len() + self.pipelines_out.len();
+                            debug!(
+                                "[Source::{}] We are looking to drain {} connections.",
+                                self.ctx.url, self.expected_drained
+                            );
                         } else {
                             // wait for the given ms
                             task::sleep(Duration::from_millis(wait_ms)).await;
