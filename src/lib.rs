@@ -93,6 +93,9 @@ pub mod version;
 /// Tremor connector extensions
 pub mod connectors;
 
+/// For the Plugin Development Kit
+pub mod pdk;
+
 pub(crate) mod common;
 
 use std::sync::atomic::AtomicUsize;
