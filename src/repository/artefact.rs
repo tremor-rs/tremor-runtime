@@ -12,16 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::codec;
-use crate::metrics::RampReporter;
-use crate::onramp;
 use crate::pipeline;
 use crate::registry::Instance;
 use crate::registry::ServantId;
 use crate::system::{self, World};
 use crate::url::ports::IN;
 use crate::url::{ResourceType, TremorUrl};
-use crate::{connectors, offramp, url};
+use crate::{connectors, url};
 use crate::{
     errors::{Error, ErrorKind, Result},
     pipeline::OutputTarget,
@@ -33,8 +30,6 @@ use std::time::Duration;
 use tremor_pipeline::query;
 pub(crate) type Id = TremorUrl;
 pub(crate) use crate::Connector as ConnectorArtefact;
-pub(crate) use crate::OffRamp as OfframpArtefact;
-pub(crate) use crate::OnRamp as OnrampArtefact;
 use async_std::channel::bounded;
 use async_trait::async_trait;
 
@@ -204,12 +199,7 @@ impl Artefact for Pipeline {
         if let Some(pipeline) = system.reg.find_pipeline(id).await? {
             for (from, to) in mappings {
                 match to.resource_type() {
-                    Some(
-                        ResourceType::Offramp
-                        | ResourceType::Pipeline
-                        | ResourceType::Onramp
-                        | ResourceType::Connector,
-                    ) => {
+                    Some(ResourceType::Pipeline | ResourceType::Connector) => {
                         pipeline
                             .send_mgmt(pipeline::MgmtMsg::DisconnectOutput(from.clone().into(), to))
                             .await
@@ -224,276 +214,6 @@ impl Artefact for Pipeline {
             Ok(true)
         } else {
             Err(format!("Pipeline {:?} not found", id).into())
-        }
-    }
-}
-
-#[async_trait]
-impl Artefact for OfframpArtefact {
-    type SpawnResult = offramp::Addr;
-    type LinkResult = bool;
-    type LinkLHS = TremorUrl;
-    type LinkRHS = TremorUrl;
-
-    fn resource_type() -> url::ResourceType {
-        url::ResourceType::Offramp
-    }
-
-    async fn spawn(&self, world: &World, servant_id: ServantId) -> Result<Self::SpawnResult> {
-        // TODO: make duration configurable
-        let timeout = Duration::from_secs(2);
-        let offramp = world
-            .instantiate_offramp(self.binding_type.clone(), self.config.clone(), timeout)
-            .await?;
-        // lookup codecs already here
-        // this will bail out early if something is mistyped or so
-        let codec = if let Some(codec) = &self.codec {
-            codec::lookup(codec)?
-        } else {
-            codec::lookup(offramp.default_codec())?
-        };
-        let mut resolved_codec_map = codec::builtin_codec_map();
-        // override the builtin map
-        if let Some(codec_map) = &self.codec_map {
-            for (k, v) in codec_map {
-                resolved_codec_map.insert(k.to_string(), codec::lookup(v.as_str())?);
-            }
-        }
-
-        let preprocessors = if let Some(preprocessors) = &self.preprocessors {
-            preprocessors.clone()
-        } else {
-            vec![]
-        };
-
-        let postprocessors = if let Some(postprocessors) = &self.postprocessors {
-            postprocessors.clone()
-        } else {
-            vec![]
-        };
-        let metrics_reporter = RampReporter::new(servant_id.clone(), self.metrics_interval_s);
-
-        let (tx, rx) = bounded(1);
-
-        // start the offramp
-        // TODO: postpone to later
-        world
-            .system
-            .send(system::ManagerMsg::Offramp(offramp::ManagerMsg::Create(
-                tx,
-                Box::new(offramp::Create {
-                    id: servant_id,
-                    codec,
-                    codec_map: resolved_codec_map,
-                    offramp,
-                    preprocessors,
-                    postprocessors,
-                    metrics_reporter,
-                    is_linked: self.is_linked,
-                }),
-            )))
-            .await?;
-        rx.recv().await?
-    }
-
-    async fn link(
-        &self,
-        system: &World,
-        id: &TremorUrl,
-        mappings: HashMap<Self::LinkLHS, Self::LinkRHS>,
-    ) -> Result<Self::LinkResult> {
-        info!("Linking offramp {} ..", id);
-        if let Some(offramp) = system.reg.find_offramp(id).await? {
-            for (pipeline_id, this) in mappings {
-                let port = Cow::from(this.instance_port_required()?.to_string());
-                info!("Linking offramp {} to {}", this, pipeline_id);
-                if let Some(pipeline) = system.reg.find_pipeline(&pipeline_id).await? {
-                    offramp
-                        .send(offramp::Msg::Connect {
-                            port,
-                            id: pipeline_id,
-                            addr: Box::new(pipeline),
-                        })
-                        .await?;
-                };
-            }
-            Ok(true)
-        } else {
-            Err(format!("Offramp {} not found for linking,", id).into())
-        }
-    }
-
-    async fn unlink(
-        &self,
-        system: &World,
-        id: &TremorUrl,
-        mappings: HashMap<Self::LinkLHS, Self::LinkRHS>,
-    ) -> Result<Self::LinkResult> {
-        info!("Unlinking offramp {} ..", id);
-        if let Some(offramp) = system.reg.find_offramp(id).await? {
-            let (tx, rx) = bounded(mappings.len());
-            let mut expect_answers = mappings.len();
-            for (from, to) in mappings {
-                let (this, pipeline_id) = match (from.resource_type(), to.resource_type()) {
-                    (Some(ResourceType::Offramp), Some(ResourceType::Pipeline)) => (from, to),
-                    (Some(ResourceType::Pipeline), Some(ResourceType::Offramp)) => (to, from),
-                    _ => return Err(format!("Invalid mapping for Offramp {}.", id).into()),
-                };
-                let port = Cow::from(this.instance_port_required()?.to_string());
-                offramp
-                    .send(offramp::Msg::Disconnect {
-                        port,
-                        id: pipeline_id,
-                        tx: tx.clone(),
-                    })
-                    .await?;
-            }
-            let mut empty = false;
-            while expect_answers > 0 {
-                empty |= rx.recv().await?;
-                expect_answers -= 1;
-            }
-            Ok(empty)
-        } else {
-            Err(format!("Offramp {} not found for unlinking,", id).into())
-        }
-    }
-}
-#[async_trait]
-impl Artefact for OnrampArtefact {
-    type SpawnResult = onramp::Addr;
-    type LinkResult = bool;
-    type LinkLHS = String;
-    type LinkRHS = TremorUrl;
-
-    fn resource_type() -> url::ResourceType {
-        url::ResourceType::Onramp
-    }
-
-    async fn spawn(&self, world: &World, servant_id: ServantId) -> Result<Self::SpawnResult> {
-        let timeout = Duration::from_secs(2); // TODO: make configurable
-        let stream = world
-            .instantiate_onramp(
-                self.binding_type.clone(),
-                servant_id.clone(),
-                self.config.clone(),
-                timeout,
-            )
-            .await?;
-        let codec = self.codec.as_ref().map_or_else(
-            || stream.default_codec().to_string(),
-            std::clone::Clone::clone,
-        );
-        let codec_map = self
-            .codec_map
-            .clone()
-            .unwrap_or_else(|| halfbrown::HashMap::with_capacity(0));
-        let preprocessors = if let Some(preprocessors) = &self.preprocessors {
-            preprocessors.clone()
-        } else {
-            vec![]
-        };
-        let postprocessors = if let Some(postprocessors) = &self.postprocessors {
-            postprocessors.clone()
-        } else {
-            vec![]
-        };
-
-        let metrics_reporter = RampReporter::new(servant_id.clone(), self.metrics_interval_s);
-        let (tx, rx) = bounded(1);
-
-        world
-            .system
-            .send(system::ManagerMsg::Onramp(Box::new(
-                onramp::ManagerMsg::Create(
-                    tx,
-                    Box::new(onramp::Create {
-                        id: servant_id,
-                        preprocessors,
-                        postprocessors,
-                        codec,
-                        codec_map,
-                        stream,
-                        metrics_reporter,
-                        is_linked: self.is_linked,
-                        err_required: self.err_required,
-                    }),
-                ),
-            )))
-            .await?;
-        rx.recv().await?
-    }
-
-    async fn link(
-        &self,
-        system: &World,
-        id: &TremorUrl,
-        mappings: HashMap<Self::LinkLHS, Self::LinkRHS>,
-    ) -> Result<Self::LinkResult> {
-        // check if we have the right onramp
-        if let Some(artefact) = id.artefact() {
-            if self.id.as_str() != artefact {
-                return Err(format!(
-                    "Onramp for linking ({}) is not from this artifact: {}.",
-                    id, self.id
-                )
-                .into());
-            }
-        }
-        if let Some(onramp) = system.reg.find_onramp(id).await? {
-            let mut msgs = Vec::with_capacity(mappings.len());
-            for (from, to) in mappings {
-                // TODO: validate that `from` - the port name - is valid (OUT, ERR, METRICS)
-                if let Some(ResourceType::Pipeline) = to.resource_type() {
-                    if let Some(pipeline) = system.reg.find_pipeline(&to).await? {
-                        msgs.push(onramp::Msg::Connect(
-                            from.into(),
-                            vec![(to.clone(), pipeline)],
-                        ));
-                    } else {
-                        return Err(format!("Pipeline {:?} not found", to).into());
-                    }
-                } else {
-                    return Err("Destination isn't a Pipeline".into());
-                }
-            }
-            for msg in msgs {
-                onramp.send(msg).await?;
-            }
-            Ok(true)
-        } else {
-            Err(format!("Pipeline {:?} not found", id).into())
-        }
-    }
-
-    async fn unlink(
-        &self,
-        system: &World,
-        id: &TremorUrl,
-        mappings: HashMap<Self::LinkLHS, Self::LinkRHS>,
-    ) -> Result<bool> {
-        info!("Unlinking onramp {} ..", id);
-        if let Some(onramp) = system.reg.find_onramp(id).await? {
-            let (tx, rx) = bounded(mappings.len());
-            let mut expect_answers = mappings.len();
-            for (_port, pipeline_id) in mappings {
-                onramp
-                    .send(onramp::Msg::Disconnect {
-                        id: pipeline_id,
-                        tx: tx.clone(),
-                    })
-                    .await?;
-            }
-            let mut empty = false;
-            while expect_answers > 0 {
-                empty |= rx.recv().await?;
-                expect_answers -= 1;
-            }
-
-            info!("Onramp {} unlinked.", id);
-            Ok(empty)
-        } else {
-            Err(format!("Unlinking failed Onramp {} not found ", id).into())
         }
     }
 }
@@ -678,10 +398,8 @@ impl Artefact for Binding {
         id: &TremorUrl,
         mappings: HashMap<Self::LinkLHS, Self::LinkRHS>,
     ) -> Result<Self::LinkResult> {
-        use ResourceType::{Connector, Offramp, Onramp, Pipeline};
+        use ResourceType::{Connector, Pipeline};
         let mut pipelines: Vec<(TremorUrl, TremorUrl)> = Vec::new(); // pipeline -> {onramp, offramp, pipeline, connector}
-        let mut onramps: Vec<(TremorUrl, TremorUrl)> = Vec::new(); // onramp -> pipeline
-        let mut linked_offramps: Vec<(TremorUrl, TremorUrl)> = Vec::new(); // linked offramps -> pipeline
         let mut connectors: Vec<(TremorUrl, TremorUrl)> = Vec::new(); // connector -> pipeline
 
         let mut res = self.clone();
@@ -712,18 +430,10 @@ impl Artefact for Binding {
                         to.set_instance(&instance);
                         tos.push(to.clone());
                         match (from.resource_type(), to.resource_type()) {
-                            (Some(Onramp), Some(Pipeline)) => {
-                                onramps.push((from.clone(), to));
-                            }
-                            (Some(Pipeline), Some(Offramp | Pipeline | Onramp | Connector)) => {
+                            (Some(Pipeline), Some(Pipeline | Connector)) => {
                                 pipelines.push((from.clone(), to));
                             }
-                            // for linked offramps
-                            // TODO improve this process: this should really be treated as onramps,
-                            // or as a separate resource
-                            (Some(Offramp), Some(Pipeline)) => {
-                                linked_offramps.push((from.clone(), to));
-                            }
+
                             // handling connectors as source
                             (Some(Connector), Some(Pipeline)) => {
                                 connectors.push((from.clone(), to));
@@ -736,21 +446,10 @@ impl Artefact for Binding {
             }
         }
 
-        // first link (and thus start) the linked offramps
-        for (from, to) in linked_offramps {
-            system.ensure_pipeline(&to).await?;
-            system.ensure_offramp(&from).await?;
-            system
-                .link_offramp(&from, vec![(to, from.clone())].into_iter().collect())
-                .await?;
-        }
-
         for (from_pipeline, to) in &pipelines {
             info!("Binding {} to {}", from_pipeline, to);
             match to.resource_type() {
-                Some(Offramp) => system.ensure_offramp(to).await?,
                 Some(Pipeline) => system.ensure_pipeline(to).await?,
-                Some(Onramp) => system.ensure_onramp(to).await?,
                 Some(Connector) => system.ensure_connector(to).await?,
                 _ => (),
             };
@@ -767,16 +466,6 @@ impl Artefact for Binding {
                 )
                 .await?;
             match to.resource_type() {
-                Some(Offramp) => {
-                    system
-                        .link_offramp(
-                            to,
-                            vec![(from_pipeline.clone(), to.clone())]
-                                .into_iter()
-                                .collect(),
-                        )
-                        .await?;
-                }
                 Some(Pipeline) => {
                     // notify the pipeline we connect to that a pipeline has been connected to its 'in' port
                     warn!("Linking pipelines is highly experimental! You are on your own, watch your steps!");
@@ -797,19 +486,6 @@ impl Artefact for Binding {
                 }
                 _ => (),
             }
-        }
-
-        for (from, to) in onramps {
-            system.ensure_pipeline(&to).await?;
-            system.ensure_onramp(&from).await?;
-            system
-                .link_onramp(
-                    &from,
-                    vec![(from.instance_port_required()?.to_string(), to)]
-                        .into_iter()
-                        .collect(),
-                )
-                .await?;
         }
 
         // link source connectors
@@ -868,22 +544,9 @@ impl Artefact for Binding {
                         }
                         system.unlink_pipeline(from, mappings).await?;
                     }
-                    Some(ResourceType::Onramp) => {
-                        let mut mappings = HashMap::new();
-                        let port = from.instance_port_required()?.to_string();
-                        for to in tos {
-                            mappings.insert(port.clone(), to.clone());
-                        }
-                        system.unlink_onramp(from, mappings).await?;
+                    Some(ResourceType::Binding) => {
+                        return Err(format!("Cannot unlink binding: {}", from).into())
                     }
-                    Some(ResourceType::Offramp) => {
-                        let mut mappings = HashMap::new();
-                        for to in tos {
-                            mappings.insert(to.clone(), from.clone());
-                        }
-                        system.unlink_offramp(from, mappings).await?;
-                    }
-                    Some(_) => return Err(format!("Cannot unlink {}", from).into()),
                     None => {
                         return Err(ErrorKind::InvalidTremorUrl(
                             "Missing resource type".to_string(),
@@ -907,25 +570,10 @@ impl Artefact for Binding {
                         let mut mappings = HashMap::new();
                         mappings.insert(from.instance_port_required()?.to_string(), to.clone());
                         system.unlink_pipeline(from, mappings).await?;
-                        match to.resource_type() {
-                            Some(ResourceType::Offramp) => {
-                                let mut mappings = HashMap::new();
-                                mappings.insert(to.clone(), from.clone());
-                                system.unlink_offramp(to, mappings).await?;
-                            }
-                            Some(ResourceType::Connector) => {
-                                let mut mappings = HashMap::new();
-                                mappings
-                                    .insert(to.instance_port_required()?.to_string(), from.clone());
-                                system.unlink_connector(to, mappings).await?;
-                            }
-                            Some(ResourceType::Onramp) => {
-                                let mut mappings = HashMap::new();
-                                mappings
-                                    .insert(to.instance_port_required()?.to_string(), from.clone());
-                                system.unlink_onramp(to, mappings).await?;
-                            }
-                            _ => {}
+                        if to.resource_type() == Some(ResourceType::Connector) {
+                            let mut mappings = HashMap::new();
+                            mappings.insert(to.instance_port_required()?.to_string(), from.clone());
+                            system.unlink_connector(to, mappings).await?;
                         }
                     }
                     unlinked.insert(from_instance);

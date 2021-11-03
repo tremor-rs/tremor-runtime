@@ -17,8 +17,6 @@ use either::Either;
 use hashbrown::HashMap;
 
 pub(crate) type Id = String;
-pub(crate) type OnRampVec = Vec<OnRamp>;
-pub(crate) type OffRampVec = Vec<OffRamp>;
 pub(crate) type ConnectorVec = Vec<Connector>;
 pub(crate) type BindingVec = Vec<Binding>;
 pub(crate) type BindingMap = HashMap<TremorUrl, Vec<TremorUrl>>;
@@ -29,93 +27,11 @@ pub(crate) type MappingMap = HashMap<TremorUrl, HashMap<String, String>>;
 #[serde(deny_unknown_fields)]
 pub struct Config {
     #[serde(default = "Default::default")]
-    pub(crate) onramp: OnRampVec,
-    #[serde(default = "Default::default")]
-    pub(crate) offramp: OffRampVec,
-    #[serde(default = "Default::default")]
     pub(crate) connector: ConnectorVec,
     #[serde(default = "Default::default")]
     pub(crate) binding: Vec<Binding>,
     #[serde(default = "Default::default")]
     pub(crate) mapping: MappingMap,
-}
-
-/// Configuration for an onramp
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct OnRamp {
-    /// ID of the onramp
-    pub id: Id,
-    #[serde(rename = "type")]
-    pub(crate) binding_type: String,
-    #[serde(default = "Default::default")]
-    pub(crate) description: String,
-    /// whether to enable linked transport
-    #[serde(rename = "linked", default = "Default::default")]
-    // TODO validate that this is turned on only for supported onramps (rest, ws)
-    pub(crate) is_linked: bool,
-    #[serde(default = "Default::default")]
-    pub(crate) err_required: bool,
-    #[serde(default = "Default::default", skip_serializing_if = "Option::is_none")]
-    pub(crate) codec: Option<String>,
-    /// mapping from mime-type to codec used to handle requests/responses
-    /// with this mime-type
-    ///
-    /// e.g.:
-    ///       codec_map:
-    ///         "application/json": "json"
-    ///         "text/plain": "string"
-    ///
-    /// A default builtin codec mapping is defined
-    /// for msgpack, json, yaml and plaintext codecs with the common mime-types
-    #[serde(default = "Default::default", skip_serializing_if = "Option::is_none")]
-    pub(crate) codec_map: Option<halfbrown::HashMap<String, String>>,
-    #[serde(default = "Default::default", skip_serializing_if = "Option::is_none")]
-    pub(crate) preprocessors: Option<Vec<String>>,
-    #[serde(default = "Default::default", skip_serializing_if = "Option::is_none")]
-    pub(crate) postprocessors: Option<Vec<String>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) metrics_interval_s: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) config: tremor_pipeline::ConfigMap,
-}
-
-/// Configuration of an offramp
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct OffRamp {
-    /// ID of the offramp
-    pub id: Id,
-    #[serde(rename = "type")]
-    pub(crate) binding_type: String,
-    #[serde(default = "Default::default")]
-    pub(crate) description: String,
-    /// whether to enable linked transport
-    #[serde(rename = "linked", default = "Default::default")]
-    // TODO validate that this is turned on only for supported offramps (rest, ws)
-    pub(crate) is_linked: bool,
-    #[serde(default = "Default::default", skip_serializing_if = "Option::is_none")]
-    pub(crate) codec: Option<String>,
-    /// mapping from mime-type to codec used to handle requests/responses
-    /// with this mime-type
-    ///
-    /// e.g.:
-    ///       codec_map:
-    ///         "application/json": "json"
-    ///         "text/plain": "string"
-    ///
-    /// A default builtin codec mapping is defined
-    /// for msgpack, json, yaml and plaintext codecs with the common mime-types
-    #[serde(default = "Default::default", skip_serializing_if = "Option::is_none")]
-    pub(crate) codec_map: Option<halfbrown::HashMap<String, String>>,
-    #[serde(default = "Default::default", skip_serializing_if = "Option::is_none")]
-    pub(crate) preprocessors: Option<Vec<String>>,
-    #[serde(default = "Default::default", skip_serializing_if = "Option::is_none")]
-    pub(crate) postprocessors: Option<Vec<String>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) metrics_interval_s: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) config: tremor_pipeline::ConfigMap,
 }
 
 /// possible reconnect strategies for controlling if and how to reconnect
