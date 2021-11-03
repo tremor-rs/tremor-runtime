@@ -124,8 +124,4 @@ impl Connector for UdpServer {
         let addr = builder.spawn(source, source_context)?;
         Ok(Some(addr))
     }
-
-    async fn on_resume(&mut self, _ctx: &ConnectorContext) {}
-
-    async fn on_stop(&mut self, _ctx: &ConnectorContext) {}
 }
