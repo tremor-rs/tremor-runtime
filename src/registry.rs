@@ -484,7 +484,7 @@ impl Registries {
         let ids = rx.recv().await?;
         if !ids.is_empty() {
             info!(
-                "Stopping Bindings: {}",
+                "Draining Bindings: {}",
                 ids.iter()
                     .map(ToString::to_string)
                     .collect::<Vec<_>>()
