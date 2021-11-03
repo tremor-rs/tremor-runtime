@@ -21,9 +21,10 @@ use hashbrown::HashSet;
 
 use crate::errors::Result;
 use crate::repository::BindingArtefact;
-use crate::system::World;
+use crate::system::{World, DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT};
 use crate::url::TremorUrl;
 use crate::{connectors, pipeline};
+use async_std::prelude::FutureExt;
 
 /// Representing an artefact instance and
 /// encapsulates specializations of state transitions
@@ -171,14 +172,20 @@ impl Instance for BindingArtefact {
         }
         // wait for 5 secs for all drain futures
         // it might be this binding represents a topology that doesn't support proper quiescence
-        let results = futures::future::join_all(drain_futures).await;
-        // report some errors if any
-        info!("[Binding::{}] Drained.", id);
-        for r in results {
-            if let Err(e) = r {
-                error!("[Binding::{}] Error during Draining: {}", id, e);
+        let res = futures::future::join_all(drain_futures)
+            .timeout(DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT)
+            .await;
+        if let Ok(results) = res {
+            info!("[Binding::{}] Drained.", id);
+            for r in results {
+                if let Err(e) = r {
+                    error!("[Binding::{}] Error during Draining: {}", id, e);
+                }
             }
+        } else {
+            info!("[Binding::{}] Timeout during Draining.", id);
         }
+
         Ok(())
     }
 
