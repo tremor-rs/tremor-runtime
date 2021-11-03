@@ -272,10 +272,6 @@ impl Connector for MetricsConnector {
         Ok(Some(addr))
     }
 
-    async fn on_start(&mut self, _ctx: &ConnectorContext) -> Result<ConnectorState> {
-        Ok(ConnectorState::Running)
-    }
-
     fn default_codec(&self) -> &str {
         "json"
     }
