@@ -91,6 +91,7 @@ impl Source for WalSource {
     async fn pull_data(&mut self, pull_id: u64, _ctx: &SourceContext) -> Result<SourceReply> {
         if let Some((id, event)) = self.wal.lock().await.pop::<Payload>().await? {
             // FIXME: this is a dirty hack untill we can define the pull_id / event ID
+            // if this is the only place we might not want to change this however
             self.pull_id_map.insert(pull_id, id);
             Ok(SourceReply::Structured {
                 origin_uri: self.origin_uri.clone(),
@@ -103,17 +104,19 @@ impl Source for WalSource {
         }
     }
 
-    async fn ack(&mut self, _stream_id: u64, pull_id: u64) {
+    async fn ack(&mut self, _stream_id: u64, pull_id: u64) -> Result<()> {
         // FIXME: this is a dirty hack until we can define the pull_id for a connector
         // FIXME: we should allow returning errors
         if let Some(id) = self.pull_id_map.remove(&pull_id) {
-            self.wal.lock().await.ack(id).await.unwrap();
+            self.wal.lock().await.ack(id).await?;
         }
+        Ok(())
     }
 
-    async fn fail(&mut self, _stream_id: u64, _pull_id: u64) {
+    async fn fail(&mut self, _stream_id: u64, _pull_id: u64) -> Result<()> {
         // FIXME: we should allow returning errors
-        self.wal.lock().await.revert().await.unwrap()
+        self.wal.lock().await.revert().await?;
+        Ok(())
     }
 
     fn is_transactional(&self) -> bool {
@@ -182,7 +185,6 @@ impl Connector for Wal {
 
     async fn on_stop(&mut self, _ctx: &ConnectorContext) {
         // FIXME this isn't called
-        dbg!("preserving ack");
         self.wal.lock().await.preserve_ack().await.unwrap();
     }
 
@@ -193,3 +195,178 @@ impl Connector for Wal {
         "json"
     }
 }
+
+// struct ThingyBuilder();
+// #[async_trait::async_trait]
+// impl ConnectorBuilder for ThingyBuilder {
+//     async fn from_config(
+//         &self,
+//         _id: &TremorUrl,
+//         config: &Option<OpConfig>,
+//     ) -> Result<Box<dyn Connector>> {
+//         if let Some(config) = config {
+//             let config: Config = Config::new(config)?;
+
+//             let origin_uri = EventOriginUri {
+//                 scheme: "tremor-kv".to_string(),
+//                 host: "localhost".to_string(),
+//                 port: None,
+//                 path: config.dir.split('/').map(ToString::to_string).collect(),
+//             };
+//             let wal = qwal::Wal::open(&config.dir, config.chunk_size, config.max_chunks).await?;
+
+//             Ok(Box::new(WalThingy {
+//                 origin_uri,
+//                 config,
+//                 wal: None,
+//                 pull_id_map: HashMap::new(),
+//             }))
+//         } else {
+//             Err("[WAL Offramp] Offramp requires a config".into())
+//         }
+//     }
+// }
+
+// struct WalThingy {
+//     config: Config,
+//     origin_uri: EventOriginUri,
+//     wal: Option<qwal::Wal>,
+//     pull_id_map: HashMap<u64, u64>, // FIXME: this is terrible :(
+// }
+
+// #[async_trait::async_trait]
+// impl Connector for Arc<Mutex<WalThingy>> {
+//     async fn create_source(
+//         &mut self,
+//         source_context: SourceContext,
+//         builder: SourceManagerBuilder,
+//     ) -> Result<Option<SourceAddr>> {
+//         builder.spawn(self.clone(), source_context).map(Some)
+//     }
+
+//     async fn create_sink(
+//         &mut self,
+//         sink_context: SinkContext,
+//         builder: SinkManagerBuilder,
+//     ) -> Result<Option<SinkAddr>> {
+//         let _idgen = EventIdGenerator::default();
+
+//         let s = WalSink {
+//             wal: self.wal.clone(),
+//         };
+//         builder.spawn(self.clone(), sink_context).map(Some)
+//     }
+
+//     fn is_structured(&self) -> bool {
+//         true
+//     }
+
+//     async fn on_start(&mut self, _ctx: &ConnectorContext) -> Result<ConnectorState> {
+//         Ok(ConnectorState::Running)
+//     }
+
+//     async fn on_stop(&mut self, _ctx: &ConnectorContext) {
+//         // FIXME this isn't called
+//         dbg!("preserving ack");
+//         self.wal.lock().await.preserve_ack().await.unwrap();
+//     }
+
+//     async fn connect(&mut self, _ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
+//         if self.wal.is_none() {}
+//         Ok(true)
+//     }
+//     fn default_codec(&self) -> &str {
+//         "json"
+//     }
+// }
+
+// impl WalThingy {
+//     async fn pull_data(&mut self, pull_id: u64, _ctx: &SourceContext) -> Result<SourceReply> {
+//         if let Some((id, event)) = self.wal.unwrap().pop::<Payload>().await? {
+//             // FIXME: this is a dirty hack untill we can define the pull_id / event ID
+//             // if this is the only place we might not want to change this however
+//             self.pull_id_map.insert(pull_id, id);
+//             Ok(SourceReply::Structured {
+//                 origin_uri: self.origin_uri.clone(),
+//                 payload: event.data,
+//                 stream: DEFAULT_STREAM_ID,
+//                 port: None,
+//             })
+//         } else {
+//             Ok(SourceReply::Empty(DEFAULT_POLL_INTERVAL))
+//         }
+//     }
+
+//     async fn ack(&mut self, _stream_id: u64, pull_id: u64) -> Result<()> {
+//         // FIXME: this is a dirty hack until we can define the pull_id for a connector
+//         // FIXME: we should allow returning errors
+//         if let Some(id) = self.pull_id_map.remove(&pull_id) {
+//             self.wal.unwrap().ack(id).await?;
+//         }
+//         Ok(())
+//     }
+
+//     async fn fail(&mut self, _stream_id: u64, _pull_id: u64) -> Result<()> {
+//         // FIXME: we should allow returning errors
+//         self.wal.unwrap().await.revert().await?;
+//         Ok(())
+//     }
+
+//     async fn on_event(
+//         &mut self,
+//         _input: &str,
+//         event: Event,
+//         _ctx: &SinkContext,
+//         _serializer: &mut EventSerializer,
+//         _start: u64,
+//     ) -> Result<SinkReply> {
+//         self.wal.unwrap().push(Payload(event)).await?;
+//         Ok(SinkReply::ACK)
+//     }
+// }
+
+// #[async_trait::async_trait]
+// impl Source for Arc<Mutex<WalThingy>> {
+//     async fn pull_data(&mut self, pull_id: u64, _ctx: &SourceContext) -> Result<SourceReply> {
+//         self.lock().await.pull_data(pull_id, ctx).await
+//     }
+
+//     async fn ack(&mut self, _stream_id: u64, pull_id: u64) -> Result<()> {
+//         // FIXME: this is a dirty hack until we can define the pull_id for a connector
+//         // FIXME: we should allow returning errors
+//         if let Some(id) = self.pull_id_map.remove(&pull_id) {
+//             self.wal.lock().await.ack(id).await?;
+//             Ok(())
+//         }
+//     }
+
+//     async fn fail(&mut self, stream_id: u64, pull_id: u64) -> Result<()> {
+//         // FIXME: we should allow returning errors
+//         self.lock().await.fail(strea_id, pull_id).await?
+//     }
+
+//     fn is_transactional(&self) -> bool {
+//         true
+//     }
+// }
+
+// #[async_trait::async_trait]
+// impl Sink for Arc<Mutex<WalThingy>> {
+//     fn auto_ack(&self) -> bool {
+//         false
+//     }
+
+//     async fn on_event(
+//         &mut self,
+//         input: &str,
+//         event: Event,
+//         ctx: &SinkContext,
+//         serializer: &mut EventSerializer,
+//         start: u64,
+//     ) -> Result<SinkReply> {
+//         self.lock()
+//             .await
+//             .on_event(input, event, ctx, serializer, start)
+//             .await
+//     }
+// }

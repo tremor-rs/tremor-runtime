@@ -23,7 +23,7 @@ use crate::errors::Result;
 use crate::repository::BindingArtefact;
 use crate::system::{World, DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT};
 use crate::url::TremorUrl;
-use crate::{connectors, offramp, onramp, pipeline};
+use crate::{connectors, pipeline};
 
 /// Representing an artefact instance and
 /// encapsulates specializations of state transitions
@@ -44,19 +44,6 @@ pub trait Instance: Send {
     }
     /// Paused -> Running
     async fn resume(&mut self, _world: &World, _id: &TremorUrl) -> Result<()> {
-        Ok(())
-    }
-}
-
-/// onramp instance
-#[async_trait::async_trait()]
-impl Instance for onramp::Addr {}
-
-/// offramp instance
-#[async_trait::async_trait()]
-impl Instance for offramp::Addr {
-    async fn stop(&mut self, _world: &World, _id: &TremorUrl) -> Result<()> {
-        self.send(offramp::Msg::Terminate).await?;
         Ok(())
     }
 }

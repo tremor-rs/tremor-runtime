@@ -87,11 +87,6 @@ impl Addr {
         Ok(self.addr.send(msg).await?)
     }
 
-    #[cfg(not(tarpaulin_include))]
-    pub(crate) fn try_send(&self, msg: Msg) -> Result<()> {
-        Ok(self.addr.try_send(msg)?)
-    }
-
     pub(crate) async fn send_mgmt(&self, msg: MgmtMsg) -> Result<()> {
         Ok(self.mgmt_addr.send(msg).await?)
     }
@@ -288,9 +283,8 @@ async fn handle_insight(
     if insight.cb != CbAction::None {
         let mut input_iter = inputs.iter();
         let first = input_iter.next();
-        let always_deliver = insight.cb.always_deliver();
         for (url, (input_is_transactional, input)) in input_iter {
-            if always_deliver || *input_is_transactional {
+            if *input_is_transactional {
                 if let Err(e) = input.send_insight(insight.clone()).await {
                     error!(
                         "[Pipeline::{}] failed to send insight to input: {} {}",
@@ -300,7 +294,7 @@ async fn handle_insight(
             }
         }
         if let Some((url, (input_is_transactional, input))) = first {
-            if always_deliver || *input_is_transactional {
+            if *input_is_transactional {
                 if let Err(e) = input.send_insight(insight).await {
                     error!(
                         "[Pipeline::{}] failed to send insight to input: {} {}",

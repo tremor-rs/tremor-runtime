@@ -19,9 +19,6 @@ use halfbrown::HashMap;
 use tremor_pipeline::Event;
 use tremor_script::prelude::*;
 
-/// Metrics instance name
-pub static mut INSTANCE: &str = "tremor";
-
 #[derive(Debug)]
 pub(crate) struct Ramp {
     r#in: u64,
