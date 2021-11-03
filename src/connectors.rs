@@ -61,6 +61,8 @@ pub(crate) mod quiescence;
 /// collection of TLS utilities and configs
 pub(crate) mod tls;
 
+pub(crate) mod bench;
+
 use std::fmt::Display;
 
 use async_std::task::{self, JoinHandle};
@@ -1146,6 +1148,9 @@ pub async fn register_builtin_connector_types(world: &World) -> Result<()> {
         .await?;
     world
         .register_builtin_connector_type("wal", Box::new(wal::Builder::default()))
+        .await?;
+    world
+        .register_builtin_connector_type("bench", Box::new(bench::Builder::default()))
         .await?;
     Ok(())
 }
