@@ -52,17 +52,18 @@ lazy_static! {
 pub enum StdStream {
     Stdout,
     Stderr,
-    Stdin,
+    None,
+}
+impl Default for StdStream {
+    fn default() -> Self {
+        Self::Stdout
+    }
 }
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Config {
-    stream: StdStream, //FIXME should std_Stream be stdio + err depending on port?
     #[serde(default = "Default::default")]
-    prefix: String,
-    /// print non-string payloads as raw bytes, not in debug formatting
-    #[serde(default = "Default::default")]
-    raw: bool,
+    output: StdStream, //FIXME should std_Stream be stdio + err depending on port?
 }
 
 impl ConfigImpl for Config {}
@@ -70,8 +71,6 @@ impl ConfigImpl for Config {}
 /// connector handling 1 std stream (stdout, stderr or stdin)
 pub struct StdStreamConnector {
     stream: StdStream,
-    prefix: String,
-    raw: bool,
 }
 
 #[derive(Debug, Default)]
@@ -87,9 +86,7 @@ impl ConnectorBuilder for Builder {
         if let Some(raw) = raw_config {
             let config = Config::new(raw)?;
             Ok(Box::new(StdStreamConnector {
-                stream: config.stream,
-                prefix: config.prefix,
-                raw: config.raw,
+                stream: config.output,
             }))
         } else {
             Err(ErrorKind::MissingConfiguration(String::from("std_stream")).into())
@@ -151,8 +148,6 @@ where
     T: Write + std::marker::Unpin + Send,
 {
     stream: T,
-    prefix: String,
-    raw: bool,
 }
 
 #[async_trait::async_trait()]
@@ -171,17 +166,7 @@ where
         for (value, _meta) in event.value_meta_iter() {
             let data = serializer.serialize(value, event.ingest_ns)?;
             for chunk in data {
-                self.stream.write_all(self.prefix.as_bytes()).await?;
-                if self.raw {
-                    self.stream.write_all(&chunk).await?;
-                } else if let Ok(s) = std::str::from_utf8(&chunk) {
-                    self.stream.write_all(s.as_bytes()).await?;
-                } else {
-                    self.stream
-                        .write_all(format!("{:?}", &chunk).as_bytes())
-                        .await?;
-                }
-                self.stream.write_all(b"\n").await?;
+                self.stream.write_all(&chunk).await?;
             }
         }
         self.stream.flush().await?;
@@ -207,22 +192,14 @@ impl Connector for StdStreamConnector {
     ) -> Result<Option<SinkAddr>> {
         let addr = match self.stream {
             StdStream::Stdout => {
-                let sink: StdStreamSink<Stdout> = StdStreamSink {
-                    stream: stdout(),
-                    prefix: self.prefix.clone(),
-                    raw: self.raw,
-                };
+                let sink: StdStreamSink<Stdout> = StdStreamSink { stream: stdout() };
                 builder.spawn(sink, sink_context)?
             }
             StdStream::Stderr => {
-                let sink: StdStreamSink<Stderr> = StdStreamSink {
-                    stream: stderr(),
-                    prefix: self.prefix.clone(),
-                    raw: self.raw,
-                };
+                let sink: StdStreamSink<Stderr> = StdStreamSink { stream: stderr() };
                 builder.spawn(sink, sink_context)?
             }
-            StdStream::Stdin => return Ok(None),
+            StdStream::None => return Ok(None),
         };
         Ok(Some(addr))
     }

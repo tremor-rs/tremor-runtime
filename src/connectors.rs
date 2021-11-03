@@ -48,7 +48,7 @@ pub(crate) mod udp_server;
 pub(crate) mod udp_client;
 
 /// std streams connector (stdout, stderr, stdin)
-pub(crate) mod std_streams;
+pub(crate) mod stdio;
 
 /// Home of the famous metrics collector
 pub(crate) mod metrics;
@@ -1126,7 +1126,7 @@ pub async fn register_builtin_connector_types(world: &World) -> Result<()> {
         .register_builtin_connector_type("metrics", Box::new(metrics::Builder::default()))
         .await?;
     world
-        .register_builtin_connector_type("std_stream", Box::new(std_streams::Builder::default()))
+        .register_builtin_connector_type("stdio", Box::new(stdio::Builder::default()))
         .await?;
     world
         .register_builtin_connector_type("tcp_client", Box::new(tcp::client::Builder::default()))
