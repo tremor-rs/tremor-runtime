@@ -27,6 +27,8 @@ pub enum InstanceState {
     Running,
     /// Paused, not consuming/producing/handling events
     Paused,
+    /// Drained - flushing out all the pending events
+    Drained,
     /// Stopped, final state
     Stopped,
 }
@@ -39,8 +41,7 @@ impl InstanceState {
     }
 }
 
-//
-//         Start
+//           Start
 //       ┌────────────────────┐
 //       │                    │
 // ┌─────┤ Initialized        │
@@ -56,16 +57,24 @@ impl InstanceState {
 // │     │                    │◄──────────┤                    │
 // │     └─────────┬──────────┘           └───┬────────────────┘
 // │               │                          │
-// │               │ stop                     │ stop
+// │               │                          │
+// │               │ drain                    │
 // │               │                          │
 // │               │                          │
 // │               ▼                          │
-// │     ┌───────────────────┐                │
-// │     │                   │                │
-// └────►│ Stopped           │◄───────────────┘
-//       │                   │
-//       └───────────────────┘
-//         End
+// │     ┌────────────────────┐               │
+// ├────►│                    │    drain      │
+// │     │ Draining           │◄──────────────┤
+// │     │                    │               │
+// │     └─────────┬──────────┘               │
+// │               │                          │
+// │               │ stop                     │
+// │               ▼                          │
+// │     ┌────────────────────┐               │
+// │     │                    │    stop       │
+// └────►│ Stopped            │◄──────────────┘
+//       │                    │
+//       └────────────────────┘
 /// Instance lifecycle FSM
 #[derive(Clone)]
 pub struct InstanceLifecycleFsm<A: Artefact> {
@@ -122,6 +131,11 @@ impl<A: Artefact> InstanceLifecycleFsm<A> {
         self.instance.resume(&self.world, &self.id).await
     }
 
+    /// _ -> Drained
+    async fn on_drain(&mut self) -> Result<()> {
+        self.instance.drain(&self.world, &self.id).await
+    }
+
     /// _ -> Stopped
     async fn on_stop(&mut self) -> Result<()> {
         self.instance.stop(&self.world, &self.id).await
@@ -161,16 +175,28 @@ impl<A: Artefact> InstanceLifecycleFsm<A> {
         self.transition(InstanceState::Running).await
     }
 
+    /// Transition from * -> Drained
+    ///
+    /// # Errors
+    ///   * if we can't transition
+    pub async fn drain(&mut self) -> Result<&mut Self> {
+        self.transition(InstanceState::Drained).await
+    }
+
     /// Transition from the current state to the next one
     ///
     /// # Errors
     ///   * if we can't transition
     pub async fn transition(&mut self, to: InstanceState) -> Result<&mut Self> {
-        use InstanceState::{Initialized, Paused, Running, Stopped};
+        use InstanceState::{Drained, Initialized, Paused, Running, Stopped};
         match (&self.state, &to) {
             (Initialized, Running) => {
                 self.state = Running;
                 self.on_start().await?;
+            }
+            (_, Drained) => {
+                self.state = Drained;
+                self.on_drain().await?;
             }
             (_, Stopped) => {
                 self.state = Stopped;

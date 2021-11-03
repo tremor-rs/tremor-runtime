@@ -26,6 +26,7 @@ use crate::QSIZE;
 use async_std::channel::bounded;
 use async_std::io::prelude::*;
 use async_std::path::Path;
+use async_std::prelude::*;
 use async_std::task::{self, JoinHandle};
 use hashbrown::HashMap;
 use std::sync::atomic::Ordering;
@@ -473,14 +474,8 @@ impl World {
         }
     }
 
-    pub(crate) async fn drain_connector(&self, id: &TremorUrl) -> Result<()> {
-        if let Some(instance) = self.reg.find_connector(id).await? {
-            let (tx, rx) = async_std::channel::bounded(1);
-            instance.send(connectors::Msg::Drain(tx)).await?;
-            rx.recv().await?
-        } else {
-            Err(ErrorKind::InstanceNotFound("connector".to_string(), id.to_string()).into())
-        }
+    pub(crate) async fn drain_connector(&self, id: &TremorUrl) -> Result<InstanceState> {
+        self.reg.drain_connector(id).await
     }
 
     pub(crate) async fn bind_binding_a(
@@ -734,13 +729,14 @@ impl World {
         match mode {
             ShutdownMode::Graceful { timeout } => {
                 // quiesce and stop all the bindings
-                if let Err(_err) =
-                    async_std::future::timeout(timeout, self.reg.stop_all_bindings()).await
-                {
+                if let Err(_err) = self.reg.drain_all_bindings().timeout(timeout).await {
                     warn!("Timeout waiting for all bindings to stop.");
                 }
             }
             ShutdownMode::Forceful => {}
+        }
+        if let Err(e) = self.reg.stop_all_bindings().await {
+            error!("Error stopping all bindings: {}", e);
         }
         Ok(self.system.send(ManagerMsg::Stop).await?)
     }
