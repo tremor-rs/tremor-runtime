@@ -69,18 +69,6 @@ fn api_server(world: &World) -> tide::Server<api::State> {
     app.at("/pipeline/:aid")
         .get(|r| handle_api_request(r, api::pipeline::get_artefact))
         .delete(|r| handle_api_request(r, api::pipeline::unpublish_artefact));
-    app.at("/onramp")
-        .get(|r| handle_api_request(r, api::onramp::list_artefact))
-        .post(|r| handle_api_request(r, api::onramp::publish_artefact));
-    app.at("/onramp/:aid")
-        .get(|r| handle_api_request(r, api::onramp::get_artefact))
-        .delete(|r| handle_api_request(r, api::onramp::unpublish_artefact));
-    app.at("/offramp")
-        .get(|r| handle_api_request(r, api::offramp::list_artefact))
-        .post(|r| handle_api_request(r, api::offramp::publish_artefact));
-    app.at("/offramp/:aid")
-        .get(|r| handle_api_request(r, api::offramp::get_artefact))
-        .delete(|r| handle_api_request(r, api::offramp::unpublish_artefact));
     // connectors api
     app.at("/connector")
         .get(|r| handle_api_request(r, api::connector::list_artefacts))

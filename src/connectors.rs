@@ -12,9 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/// quality of service utilities
-pub(crate) mod qos;
-
 /// prelude with commonly needed stuff imported
 pub(crate) mod prelude;
 /// Sink part of a connector
@@ -24,16 +21,6 @@ pub(crate) mod source;
 
 /// reconnect logic for connectors
 pub(crate) mod reconnect;
-
-/// home for connector specific function
-pub(crate) mod functions;
-
-/// google cloud pubsub/storage/auth
-pub(crate) mod gcp;
-/// opentelemetry
-pub(crate) mod otel;
-/// protobuf helpers
-pub(crate) mod pb;
 
 /// file connector implementation
 pub mod file;

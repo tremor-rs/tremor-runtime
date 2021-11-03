@@ -24,7 +24,6 @@ use tremor_script::tremor_fn;
 ///  * if we can't load the registry
 pub fn load() -> Result<()> {
     let mut reg = FN_REGISTRY.lock()?;
-    crate::connectors::functions::load(&mut reg);
     install(&mut reg)
 }
 

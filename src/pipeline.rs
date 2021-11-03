@@ -87,11 +87,6 @@ impl Addr {
         Ok(self.addr.send(msg).await?)
     }
 
-    #[cfg(not(tarpaulin_include))]
-    pub(crate) fn try_send(&self, msg: Msg) -> Result<()> {
-        Ok(self.addr.try_send(msg)?)
-    }
-
     pub(crate) async fn send_mgmt(&self, msg: MgmtMsg) -> Result<()> {
         Ok(self.mgmt_addr.send(msg).await?)
     }

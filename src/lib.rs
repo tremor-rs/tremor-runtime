@@ -35,9 +35,6 @@ extern crate log;
 #[macro_use]
 extern crate lazy_static;
 
-#[macro_use]
-extern crate rental;
-
 #[cfg(test)]
 #[macro_use]
 extern crate pretty_assertions;
@@ -47,7 +44,6 @@ extern crate test_case;
 
 #[macro_use]
 pub(crate) mod macros;
-pub(crate) mod async_sink;
 /// Tremor codecs
 pub mod codec;
 /// Tremor runtime configuration
@@ -59,12 +55,6 @@ pub mod functions;
 
 /// entities capturing artefact instance lifecycle
 pub mod lifecycle;
-/// Runtime metrics helper
-pub mod metrics;
-/// offramp stuff
-pub(crate) mod offramp;
-/// onramp stuff
-pub(crate) mod onramp;
 pub(crate) mod permge;
 
 /// pipelines
@@ -77,10 +67,6 @@ pub mod preprocessor;
 pub mod registry;
 /// The tremor repository
 pub mod repository;
-/// sink stuff
-pub(crate) mod sink;
-/// source stuff
-pub(crate) mod source;
 /// Tremor runtime system
 pub mod system;
 /// Tremor URI
@@ -93,14 +79,15 @@ pub mod version;
 /// Tremor connector extensions
 pub mod connectors;
 
-pub(crate) mod common;
+/// Metrics instance name
+pub static mut INSTANCE: &str = "tremor";
 
 use std::sync::atomic::AtomicUsize;
 use std::{io::BufReader, path::Path};
 
 use crate::errors::{Error, Result};
 
-pub(crate) use crate::config::{Binding, Connector, OffRamp, OnRamp};
+pub(crate) use crate::config::{Binding, Connector};
 use crate::repository::BindingArtefact;
 use crate::url::TremorUrl;
 pub use serde_yaml::Value as OpConfig;
@@ -179,19 +166,6 @@ pub async fn load_cfg_file(world: &World, file_name: &str) -> Result<usize> {
         let id = TremorUrl::from_connector_id(&c.id)?;
         info!("Loading {} from file {}.", id, file_name);
         world.repo.publish_connector(&id, false, c).await?;
-        count += 1;
-    }
-    for o in config.offramp {
-        let id = TremorUrl::from_offramp_id(&o.id)?;
-        info!("Loading {} from file {}.", id, file_name);
-        world.repo.publish_offramp(&id, false, o).await?;
-        count += 1;
-    }
-
-    for o in config.onramp {
-        let id = TremorUrl::from_onramp_id(&o.id)?;
-        info!("Loading {} from file {}.", id, file_name);
-        world.repo.publish_onramp(&id, false, o).await?;
         count += 1;
     }
     for binding in config.binding {
