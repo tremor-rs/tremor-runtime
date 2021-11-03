@@ -24,7 +24,7 @@ use crate::url::{ResourceType, TremorUrl};
 use crate::{connectors, offramp, url};
 use crate::{
     errors::{Error, ErrorKind, Result},
-    pipeline::ConnectOutputTarget,
+    pipeline::OutputTarget,
 };
 use beef::Cow;
 use hashbrown::HashMap;
@@ -150,7 +150,7 @@ impl Artefact for Pipeline {
                     Some(ResourceType::Pipeline) => {
                         // TODO: connect both ways?
                         if let Some(p) = system.reg.find_pipeline(&to).await? {
-                            ConnectOutputTarget::Pipeline(Box::new(p))
+                            OutputTarget::Pipeline(Box::new(p))
                         } else {
                             return Err(ErrorKind::InstanceNotFound(
                                 "pipeline".to_string(),
@@ -163,7 +163,7 @@ impl Artefact for Pipeline {
                         if let Some(connector) =
                             system.reg.find_connector(&to).await?.and_then(|c| c.sink)
                         {
-                            ConnectOutputTarget::Sink(connector)
+                            OutputTarget::Sink(connector)
                         } else {
                             return Err(ErrorKind::InstanceNotFound(
                                 "connector".to_string(),

@@ -811,11 +811,11 @@ mod tests {
         match answer {
             pipeline::MgmtMsg::ConnectInput {
                 input_url,
-                transactional,
+                is_transactional,
                 ..
             } => {
                 assert_eq!(input_url, onramp_url);
-                assert_eq!(transactional, false);
+                assert_eq!(is_transactional, false);
             }
             _ => return Err("Invalid Pipeline connect answer.".into()),
         }
