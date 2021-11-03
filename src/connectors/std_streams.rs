@@ -232,12 +232,8 @@ impl Connector for StdStreamConnector {
         source_context: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
-        if let StdStream::Stdin = self.stream {
-            let source = StdStreamSource::new();
-            builder.spawn(source, source_context).map(Some)
-        } else {
-            Ok(None)
-        }
+        let source = StdStreamSource::new();
+        builder.spawn(source, source_context).map(Some)
     }
 
     async fn on_start(&mut self, _ctx: &ConnectorContext) -> Result<ConnectorState> {

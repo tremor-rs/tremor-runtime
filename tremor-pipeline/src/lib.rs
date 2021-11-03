@@ -261,15 +261,20 @@ impl From<bool> for CbAction {
 }
 
 impl CbAction {
+    /// This message should always be delivered and not filtered out
+    #[must_use]
+    pub fn always_deliver(self) -> bool {
+        self.is_cb() || matches!(self, CbAction::Drained(_))
+    }
     /// This is a Circuit Breaker related message
     #[must_use]
     pub fn is_cb(self) -> bool {
-        self == CbAction::Close || self == CbAction::Open
+        matches!(self, CbAction::Close | CbAction::Open)
     }
     /// This is a Guaranteed Delivery related message
     #[must_use]
     pub fn is_gd(self) -> bool {
-        self == CbAction::Ack || self == CbAction::Fail
+        matches!(self, CbAction::Ack | CbAction::Fail)
     }
 }
 
