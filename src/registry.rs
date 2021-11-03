@@ -395,6 +395,12 @@ impl Registries {
         stop_connector,
         InstanceState::Stopped
     );
+    transition_instance!(
+        /// drain a connector - start the draining process for this connector
+        connector,
+        drain_connector,
+        InstanceState::Drained
+    );
 
     /// Finds a binding
     ///
@@ -460,9 +466,40 @@ impl Registries {
         stop_binding,
         InstanceState::Stopped
     );
+    transition_instance!(
+        /// drain a binding
+        binding,
+        drain_binding,
+        InstanceState::Drained
+    );
+
+    /// drain all bindings in the binding registry
+    /// thereby starting the quiescence process
+    ///
+    /// # Errors
+    ///   * If we can't drain all the bindings
+    pub async fn drain_all_bindings(&self) -> Result<()> {
+        let (tx, rx) = bounded(1);
+        self.binding.send(Msg::ListServants(tx)).await?;
+        let ids = rx.recv().await?;
+        if !ids.is_empty() {
+            info!(
+                "Stopping Bindings: {}",
+                ids.iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+            let res = futures::future::join_all(ids.iter().map(|id| self.drain_binding(id))).await;
+            for r in res {
+                r?;
+            }
+        }
+
+        Ok(())
+    }
 
     /// stop all bindings in the binding registry
-    /// thereby starting the quiescence process
     ///
     /// # Errors
     ///   * If we can't stop all bindings
