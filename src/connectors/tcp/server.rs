@@ -110,11 +110,12 @@ fn resolve_connection_meta(meta: &Value) -> Option<ConnectionMeta> {
 
 #[async_trait::async_trait()]
 impl Connector for TcpServer {
-    async fn on_stop(&mut self, _ctx: &ConnectorContext) {
+    async fn on_stop(&mut self, _ctx: &ConnectorContext) -> Result<()> {
         if let Some(accept_task) = self.accept_task.take() {
             // stop acceptin' new connections
             accept_task.cancel().await;
         }
+        Ok(())
     }
 
     async fn create_source(
