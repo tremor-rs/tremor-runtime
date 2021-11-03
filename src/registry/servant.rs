@@ -13,19 +13,13 @@
 // limitations under the License.
 
 use crate::lifecycle::InstanceLifecycleFsm;
-use crate::repository::{
-    BindingArtefact, ConnectorArtefact, OfframpArtefact, OnrampArtefact, PipelineArtefact,
-};
+use crate::repository::{BindingArtefact, ConnectorArtefact, PipelineArtefact};
 use crate::url::TremorUrl;
 
 /// A servant ID
 pub type Id = TremorUrl;
 /// A pipeline servant
 pub type Pipeline = InstanceLifecycleFsm<PipelineArtefact>;
-/// An onramp servant
-pub type Onramp = InstanceLifecycleFsm<OnrampArtefact>;
-/// An offramp servant
-pub type Offramp = InstanceLifecycleFsm<OfframpArtefact>;
 /// A binding servant
 pub type Binding = InstanceLifecycleFsm<BindingArtefact>;
 /// A connector servant

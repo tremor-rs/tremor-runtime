@@ -39,8 +39,7 @@
 use crate::errors::{ErrorKind, Result};
 use crate::lifecycle::{InstanceLifecycleFsm, InstanceState};
 use crate::repository::{
-    Artefact, ArtefactId, BindingArtefact, ConnectorArtefact, OfframpArtefact, OnrampArtefact,
-    PipelineArtefact,
+    Artefact, ArtefactId, BindingArtefact, ConnectorArtefact, PipelineArtefact,
 };
 use crate::url::{ResourceType, TremorUrl};
 use crate::QSIZE;
@@ -58,7 +57,7 @@ mod servant;
 
 pub use servant::{
     Binding as BindingServant, Connector as ConnectorServant, Id as ServantId,
-    Offramp as OfframpServant, Onramp as OnrampServant, Pipeline as PipelineServant,
+    Pipeline as PipelineServant,
 };
 
 pub use instance::Instance;
@@ -197,8 +196,6 @@ where
 #[derive(Clone)]
 pub struct Registries {
     pipeline: Sender<Msg<PipelineArtefact>>,
-    onramp: Sender<Msg<OnrampArtefact>>,
-    offramp: Sender<Msg<OfframpArtefact>>,
     connector: Sender<Msg<ConnectorArtefact>>,
     binding: Sender<Msg<BindingArtefact>>,
 }
@@ -247,8 +244,6 @@ impl Registries {
         Self {
             binding: Registry::new(ResourceType::Binding).start(),
             pipeline: Registry::new(ResourceType::Pipeline).start(),
-            onramp: Registry::new(ResourceType::Onramp).start(),
-            offramp: Registry::new(ResourceType::Offramp).start(),
             connector: Registry::new(ResourceType::Connector).start(),
         }
     }
@@ -333,111 +328,6 @@ impl Registries {
         stop_pipeline,
         InstanceState::Stopped
     );
-
-    /// Finds an onramp
-    ///
-    /// # Errors
-    ///  * if we can't find a onramp
-    pub async fn find_onramp(
-        &self,
-        id: &TremorUrl,
-    ) -> Result<Option<<OnrampArtefact as Artefact>::SpawnResult>> {
-        let (tx, rx) = bounded(1);
-        self.onramp.send(Msg::FindServant(tx, id.clone())).await?;
-        rx.recv().await?
-    }
-    /// Publishes an onramp
-    ///
-    /// # Errors
-    ///  * if we can't publish the onramp
-    pub async fn publish_onramp(
-        &self,
-        id: &TremorUrl,
-        servant: OnrampServant,
-    ) -> Result<InstanceState> {
-        let (tx, rx) = bounded(1);
-        self.onramp
-            .send(Msg::PublishServant(tx, id.clone(), servant))
-            .await?;
-        wait(rx.recv()).await??
-    }
-    /// Usnpublishes an onramp
-    ///
-    /// # Errors
-    ///  * if we can't unpublish an onramp
-    pub async fn unpublish_onramp(&self, id: &TremorUrl) -> Result<OnrampServant> {
-        let (tx, rx) = bounded(1);
-        self.onramp
-            .send(Msg::UnpublishServant(tx, id.clone()))
-            .await?;
-        wait(rx.recv()).await??
-    }
-
-    #[cfg(test)]
-    pub async fn transition_onramp(
-        &self,
-        id: &TremorUrl,
-        new_state: InstanceState,
-    ) -> Result<InstanceState> {
-        let (tx, rx) = bounded(1);
-        self.onramp
-            .send(Msg::Transition(tx, id.clone(), new_state))
-            .await?;
-        wait(rx.recv()).await??
-    }
-
-    /// Finds an onramp
-    ///
-    /// # Errors
-    ///  * if we can't find an offramp
-    pub async fn find_offramp(
-        &self,
-        id: &TremorUrl,
-    ) -> Result<Option<<OfframpArtefact as Artefact>::SpawnResult>> {
-        let (tx, rx) = bounded(1);
-        self.offramp.send(Msg::FindServant(tx, id.clone())).await?;
-        rx.recv().await?
-    }
-
-    /// Publishes an offramp
-    ///
-    /// # Errors
-    ///  * if we can't pubish an offramp
-    pub async fn publish_offramp(
-        &self,
-        id: &TremorUrl,
-        servant: OfframpServant,
-    ) -> Result<InstanceState> {
-        let (tx, rx) = bounded(1);
-        self.offramp
-            .send(Msg::PublishServant(tx, id.clone(), servant))
-            .await?;
-        rx.recv().await?
-    }
-    /// Unpublishes an offramp - stops it first
-    ///
-    /// # Errors
-    ///  * if we can't unpublish an offramp
-    pub async fn unpublish_offramp(&self, id: &TremorUrl) -> Result<OfframpServant> {
-        let (tx, rx) = bounded(1);
-        self.offramp
-            .send(Msg::UnpublishServant(tx, id.clone()))
-            .await?;
-        wait(rx.recv()).await??
-    }
-
-    #[cfg(test)]
-    pub async fn transition_offramp(
-        &self,
-        id: &TremorUrl,
-        new_state: InstanceState,
-    ) -> Result<InstanceState> {
-        let (tx, rx) = bounded(1);
-        self.offramp
-            .send(Msg::Transition(tx, id.clone(), new_state))
-            .await?;
-        rx.recv().await?
-    }
 
     /// Finds a connector
     ///

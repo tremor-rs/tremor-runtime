@@ -21,10 +21,6 @@ use std::fmt;
 pub enum ResourceType {
     /// This is a pipeline
     Pipeline,
-    /// This is an onramp
-    Onramp,
-    /// This is an offramp
-    Offramp,
     /// connector
     Connector,
     /// This is a binding
@@ -77,8 +73,6 @@ pub struct TremorUrl {
 fn decode_type(t: &str) -> Result<ResourceType> {
     match t {
         "pipeline" => Ok(ResourceType::Pipeline),
-        "onramp" => Ok(ResourceType::Onramp),
-        "offramp" => Ok(ResourceType::Offramp),
         "binding" => Ok(ResourceType::Binding),
         "connector" => Ok(ResourceType::Connector),
         other => Err(format!("Bad Resource type: {}", other).into()),
@@ -89,8 +83,6 @@ impl fmt::Display for ResourceType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::Pipeline => write!(f, "pipeline"),
-            Self::Onramp => write!(f, "onramp"),
-            Self::Offramp => write!(f, "offramp"),
             Self::Connector => write!(f, "connector"),
             Self::Binding => write!(f, "binding"),
         }
@@ -159,8 +151,6 @@ impl TremorUrl {
         Self::parse(&format!("/{}/{}", resource, artefact_id))
     }
 
-    from_artefact_id!(from_onramp_id, ResourceType::Onramp);
-    from_artefact_id!(from_offramp_id, ResourceType::Offramp);
     from_artefact_id!(from_binding_id, ResourceType::Binding);
     from_artefact_id!(from_pipeline_id, ResourceType::Pipeline);
     from_artefact_id!(from_connector_id, ResourceType::Connector);
@@ -178,8 +168,6 @@ impl TremorUrl {
     }
 
     from_instance_id!(from_binding_instance, ResourceType::Binding);
-    from_instance_id!(from_onramp_instance, ResourceType::Onramp);
-    from_instance_id!(from_offramp_instance, ResourceType::Offramp);
     from_instance_id!(from_connector_instance, ResourceType::Connector);
     from_instance_id!(from_pipeline_instance, ResourceType::Pipeline);
 
@@ -473,22 +461,6 @@ mod test {
     }
 
     #[test]
-    fn from_onramp_id() -> Result<()> {
-        let url = TremorUrl::from_onramp_id("test")?;
-        assert_eq!(Some(ResourceType::Onramp), url.resource_type());
-        assert_eq!(Some("test"), url.artefact());
-        Ok(())
-    }
-
-    #[test]
-    fn from_offramp_id() -> Result<()> {
-        let url = TremorUrl::from_offramp_id("test")?;
-        assert_eq!(Some(ResourceType::Offramp), url.resource_type());
-        assert_eq!(Some("test"), url.artefact());
-        Ok(())
-    }
-
-    #[test]
     fn from_connector_id() -> Result<()> {
         let url = TremorUrl::from_connector_id("test")?;
         assert_eq!(Some(ResourceType::Connector), url.resource_type());
@@ -533,20 +505,6 @@ mod test {
         assert_eq!(Scope::Port, url.scope());
         assert_eq!(Some(ResourceType::Binding), url.resource_type());
         assert_eq!(Some("pipe"), url.artefact());
-        assert_eq!(Some("01"), url.instance());
-        assert_eq!(Some(ports::IN.as_ref()), url.instance_port());
-
-        let url = TremorUrl::parse("onramp/id/01/out")?;
-        assert_eq!(Scope::Port, url.scope());
-        assert_eq!(Some(ResourceType::Onramp), url.resource_type());
-        assert_eq!(Some("id"), url.artefact());
-        assert_eq!(Some("01"), url.instance());
-        assert_eq!(Some(ports::OUT.as_ref()), url.instance_port());
-
-        let url = TremorUrl::parse("offramp/id/01/in")?;
-        assert_eq!(Scope::Port, url.scope());
-        assert_eq!(Some(ResourceType::Offramp), url.resource_type());
-        assert_eq!(Some("id"), url.artefact());
         assert_eq!(Some("01"), url.instance());
         assert_eq!(Some(ports::IN.as_ref()), url.instance_port());
 

@@ -21,8 +21,6 @@ use tremor_runtime::url::TremorUrl;
 
 pub mod binding;
 pub mod connector;
-pub mod offramp;
-pub mod onramp;
 pub mod pipeline;
 pub mod prelude;
 pub mod version;
