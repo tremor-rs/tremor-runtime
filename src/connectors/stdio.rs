@@ -215,10 +215,6 @@ impl Connector for StdStreamConnector {
         builder.spawn(source, source_context).map(Some)
     }
 
-    async fn on_start(&mut self, _ctx: &ConnectorContext) -> Result<ConnectorState> {
-        Ok(ConnectorState::Running)
-    }
-
     fn default_codec(&self) -> &str {
         "json"
     }

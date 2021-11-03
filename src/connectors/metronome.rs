@@ -96,10 +96,6 @@ impl Connector for Metronome {
         Ok(true)
     }
 
-    async fn on_start(&mut self, _ctx: &ConnectorContext) -> Result<ConnectorState> {
-        Ok(ConnectorState::Running)
-    }
-
     fn default_codec(&self) -> &str {
         "json"
     }

@@ -52,10 +52,6 @@ impl Connector for Exit {
         Ok(Some(builder.spawn(sink, sink_context)?))
     }
 
-    async fn on_start(&mut self, _ctx: &ConnectorContext) -> Result<ConnectorState> {
-        Ok(ConnectorState::Running)
-    }
-
     fn default_codec(&self) -> &str {
         "null"
     }

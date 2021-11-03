@@ -272,6 +272,12 @@ pub struct Manager {
     metrics_sender: MetricsSender,
 }
 
+fn error<T>(url: &TremorUrl, result: Result<T>) {
+    if let Err(error) = result {
+        error!("[Connector::{}] Error: {}", url, error)
+    }
+}
+
 impl Manager {
     /// constructor
     #[must_use]
@@ -687,7 +693,7 @@ impl Manager {
                         info!("[Connector::{}] Starting...", &connector_addr.url);
                         // start connector
                         connector_state = match connector.on_start(&ctx).await {
-                            Ok(new_state) => new_state,
+                            Ok(()) => ConnectorState::Running,
                             Err(e) => {
                                 error!(
                                     "[Connector::{}] on_start Error: {}",
@@ -721,7 +727,7 @@ impl Manager {
                         //       issue a warning/error message
                         //       e.g. UDP, TCP, Rest
                         //
-                        connector.on_pause(&ctx).await;
+                        error(&url, connector.on_pause(&ctx).await);
                         connector_state = ConnectorState::Paused;
                         quiescence_beacon.pause();
 
@@ -738,7 +744,7 @@ impl Manager {
                     }
                     Msg::Resume if connector_state == ConnectorState::Paused => {
                         info!("[Connector::{}] Resuming...", &connector_addr.url);
-                        connector.on_resume(&ctx).await;
+                        error(&url, connector.on_resume(&ctx).await);
                         connector_state = ConnectorState::Running;
                         quiescence_beacon.resume();
 
@@ -774,7 +780,7 @@ impl Manager {
                         quiescence_beacon.stop_reading();
                         // FIXME: add stop_writing()
                         // let connector stop emitting anything to its source part - if possible here
-                        connector.on_drain(&ctx).await;
+                        error(&url, connector.on_drain(&ctx).await);
                         connector_state = ConnectorState::Draining;
 
                         // notify source to drain the source channel and then send the drain signal
@@ -856,7 +862,7 @@ impl Manager {
                     }
                     Msg::Stop => {
                         info!("[Connector::{}] Stopping...", &connector_addr.url);
-                        connector.on_stop(&ctx).await;
+                        error(&url, connector.on_stop(&ctx).await);
                         connector_state = ConnectorState::Stopped;
                         quiescence_beacon.full_stop();
 
@@ -1061,23 +1067,31 @@ pub trait Connector: Send {
 
     /// called once when the connector is started
     /// `connect` will be called after this for the first time, leave connection attempts in `connect`.
-    async fn on_start(&mut self, _ctx: &ConnectorContext) -> Result<ConnectorState> {
-        Ok(ConnectorState::Running)
+    async fn on_start(&mut self, _ctx: &ConnectorContext) -> Result<()> {
+        Ok(())
     }
 
     /// called when the connector pauses
-    async fn on_pause(&mut self, _ctx: &ConnectorContext) {}
+    async fn on_pause(&mut self, _ctx: &ConnectorContext) -> Result<()> {
+        Ok(())
+    }
     /// called when the connector resumes
-    async fn on_resume(&mut self, _ctx: &ConnectorContext) {}
+    async fn on_resume(&mut self, _ctx: &ConnectorContext) -> Result<()> {
+        Ok(())
+    }
 
     /// Drain
     ///
     /// Ensure no new events arrive at the source part of this connector when this function returns
     /// So we can safely send the `Drain` signal.
-    async fn on_drain(&mut self, _ctx: &ConnectorContext) {}
+    async fn on_drain(&mut self, _ctx: &ConnectorContext) -> Result<()> {
+        Ok(())
+    }
 
     /// called when the connector is stopped
-    async fn on_stop(&mut self, _ctx: &ConnectorContext) {}
+    async fn on_stop(&mut self, _ctx: &ConnectorContext) -> Result<()> {
+        Ok(())
+    }
 
     /// returns the default codec for this connector
     fn default_codec(&self) -> &str;
