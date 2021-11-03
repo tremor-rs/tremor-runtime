@@ -21,7 +21,7 @@ pub trait BaseRef: Clone {
     fn fqsn(&self, module_path: &[String]) -> String;
 }
 
-/// Implements the BaseRef trait providing a default / generic implementation
+/// Implements the `BaseRef` trait providing a default / generic implementation
 #[macro_export]
 macro_rules! impl_fqsn {
     ($name:ident) => {
