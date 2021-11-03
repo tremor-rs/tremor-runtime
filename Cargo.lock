@@ -2931,11 +2931,11 @@ dependencies = [
 
 [[package]]
 name = "jumphash"
-version = "0.1.6"
+version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "11be33dab24333149ccdac60a8774d7268f9c28595788247b16eb15d65e551b2"
+checksum = "d6cb1d4856e6c1b02aea6b85073b45daa15af1ba17f1750f8ca8772068915da0"
 dependencies = [
- "rand 0.7.3",
+ "rand 0.8.4",
  "siphasher",
 ]
 
