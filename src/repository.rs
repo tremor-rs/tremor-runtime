@@ -33,8 +33,6 @@ pub use crate::registry::ServantId;
 /// A binding artefact
 pub use artefact::Binding as BindingArtefact;
 pub(crate) use artefact::ConnectorArtefact;
-pub(crate) use artefact::OfframpArtefact;
-pub(crate) use artefact::OnrampArtefact;
 /// A pipeline artefact
 pub use artefact::Pipeline as PipelineArtefact;
 pub(crate) use artefact::{Artefact, Id as ArtefactId};
@@ -211,8 +209,6 @@ impl<A: Artefact + Send + Sync + 'static> Repository<A> {
 #[derive(Clone)]
 pub struct Repositories {
     pipeline: Sender<Msg<PipelineArtefact>>,
-    onramp: Sender<Msg<OnrampArtefact>>,
-    offramp: Sender<Msg<OfframpArtefact>>,
     connector: Sender<Msg<ConnectorArtefact>>,
     binding: Sender<Msg<BindingArtefact>>,
 }
@@ -237,8 +233,6 @@ impl Repositories {
     pub fn new() -> Self {
         Self {
             pipeline: Repository::new().start(),
-            onramp: Repository::new().start(),
-            offramp: Repository::new().start(),
             connector: Repository::new().start(),
             binding: Repository::new().start(),
         }
@@ -327,175 +321,6 @@ impl Repositories {
     pub async fn unbind_pipeline(&self, id: &TremorUrl) -> Result<PipelineArtefact> {
         let (tx, rx) = bounded(1);
         self.pipeline
-            .send(Msg::UnregisterInstance(tx, id.clone(), id.clone()))
-            .await?;
-        rx.recv().await?
-    }
-
-    /// List onramps
-    ///
-    /// # Errors
-    ///  * if we can't list onramps
-    pub async fn list_onramps(&self) -> Result<Vec<ArtefactId>> {
-        let (tx, rx) = bounded(1);
-        self.onramp.send(Msg::ListArtefacts(tx)).await?;
-        Ok(rx.recv().await?)
-    }
-
-    /// serializes onramps
-    ///
-    /// # Errors
-    ///  * if we can't serialize onramp
-    pub async fn serialize_onramps(&self) -> Result<Vec<OnrampArtefact>> {
-        let (tx, rx) = bounded(1);
-        self.onramp.send(Msg::SerializeArtefacts(tx)).await?;
-        Ok(rx.recv().await?)
-    }
-
-    /// find an onramp
-    ///
-    /// # Errors
-    ///  * if we can't find an onramp
-    pub async fn find_onramp(&self, id: &TremorUrl) -> Result<Option<RepoWrapper<OnrampArtefact>>> {
-        let (tx, rx) = bounded(1);
-        self.onramp.send(Msg::FindArtefact(tx, id.clone())).await?;
-        rx.recv().await?
-    }
-
-    /// Publish onramp
-    ///
-    /// # Errors
-    ///  * if we can't publish the onramp
-    pub async fn publish_onramp(
-        &self,
-        id: &TremorUrl,
-        system: bool,
-        artefact: OnrampArtefact,
-    ) -> Result<OnrampArtefact> {
-        let (tx, rx) = bounded(1);
-        self.onramp
-            .send(Msg::PublishArtefact(tx, id.clone(), system, artefact))
-            .await?;
-        rx.recv().await?
-    }
-
-    /// Unpublish an onramp
-    ///
-    /// # Errors
-    ///  * if we can't unpublish the onramp
-    pub async fn unpublish_onramp(&self, id: &TremorUrl) -> Result<OnrampArtefact> {
-        let (tx, rx) = bounded(1);
-        self.onramp
-            .send(Msg::UnpublishArtefact(tx, id.clone()))
-            .await?;
-        rx.recv().await?
-    }
-
-    /// Binds an onramp
-    ///
-    /// # Errors
-    ///  * if we can't bind the onrampo
-    pub async fn bind_onramp(&self, id: &TremorUrl) -> Result<OnrampArtefact> {
-        let (tx, rx) = bounded(1);
-        self.onramp
-            .send(Msg::RegisterInstance(tx, id.clone(), id.clone()))
-            .await?;
-        rx.recv().await?
-    }
-
-    /// Unbinds an onramp
-    ///
-    /// # Errors
-    ///  * if we can't unbind the onramp
-    pub async fn unbind_onramp(&self, id: &TremorUrl) -> Result<OnrampArtefact> {
-        let (tx, rx) = bounded(1);
-        self.onramp
-            .send(Msg::UnregisterInstance(tx, id.clone(), id.clone()))
-            .await?;
-        rx.recv().await?
-    }
-
-    /// List offramps
-    ///
-    /// # Errors
-    ///  * if we can't list offramp
-    pub async fn list_offramps(&self) -> Result<Vec<ArtefactId>> {
-        let (tx, rx) = bounded(1);
-        self.offramp.send(Msg::ListArtefacts(tx)).await?;
-        Ok(rx.recv().await?)
-    }
-
-    /// Serialises offramps
-    ///
-    /// # Errors
-    ///  * if we cna't serialize a offramp
-    pub async fn serialize_offramps(&self) -> Result<Vec<OfframpArtefact>> {
-        let (tx, rx) = bounded(1);
-        self.offramp.send(Msg::SerializeArtefacts(tx)).await?;
-        Ok(rx.recv().await?)
-    }
-
-    /// Find an offramp
-    ///
-    /// # Errors
-    ///  * if we can't find an offramp
-    pub async fn find_offramp(
-        &self,
-        id: &TremorUrl,
-    ) -> Result<Option<RepoWrapper<OfframpArtefact>>> {
-        let (tx, rx) = bounded(1);
-        self.offramp.send(Msg::FindArtefact(tx, id.clone())).await?;
-        rx.recv().await?
-    }
-
-    /// Publishes an offramp
-    ///
-    /// # Errors
-    ///  * if we can't publish a offramp
-    pub async fn publish_offramp(
-        &self,
-        id: &TremorUrl,
-        system: bool,
-        artefact: OfframpArtefact,
-    ) -> Result<OfframpArtefact> {
-        let (tx, rx) = bounded(1);
-        self.offramp
-            .send(Msg::PublishArtefact(tx, id.clone(), system, artefact))
-            .await?;
-        rx.recv().await?
-    }
-
-    /// Unpublishes an offramp
-    ///
-    /// # Errors
-    ///  * if we can't unpublish an onramp
-    pub async fn unpublish_offramp(&self, id: &TremorUrl) -> Result<OfframpArtefact> {
-        let (tx, rx) = bounded(1);
-        self.offramp
-            .send(Msg::UnpublishArtefact(tx, id.clone()))
-            .await?;
-        rx.recv().await?
-    }
-
-    /// Binds an offramp
-    ///
-    /// # Errors
-    ///  * if we can't bind an oframp
-    pub async fn bind_offramp(&self, id: &TremorUrl) -> Result<OfframpArtefact> {
-        let (tx, rx) = bounded(1);
-        self.offramp
-            .send(Msg::RegisterInstance(tx, id.clone(), id.clone()))
-            .await?;
-        rx.recv().await?
-    }
-
-    /// Unbinds an offramp
-    ///
-    /// # Errors
-    ///  * if we can't unbind the offramp
-    pub async fn unbind_offramp(&self, id: &TremorUrl) -> Result<OfframpArtefact> {
-        let (tx, rx) = bounded(1);
-        self.offramp
             .send(Msg::UnregisterInstance(tx, id.clone(), id.clone()))
             .await?;
         rx.recv().await?

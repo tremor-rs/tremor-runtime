@@ -12,28 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::time::Duration;
-
-use crate::config::{BindingVec, Config, MappingMap, OffRampVec, OnRampVec};
+use crate::config::{BindingVec, Config, MappingMap};
 use crate::connectors::metrics::METRICS_CHANNEL;
 use crate::errors::{Error, Kind as ErrorKind, Result};
 use crate::lifecycle::{InstanceLifecycleFsm, InstanceState};
 use crate::registry::{Instance, Registries, ServantId};
 use crate::repository::{
-    Artefact, BindingArtefact, ConnectorArtefact, OfframpArtefact, OnrampArtefact,
-    PipelineArtefact, Repositories,
+    Artefact, BindingArtefact, ConnectorArtefact, PipelineArtefact, Repositories,
 };
 use crate::url::ports::METRICS;
 use crate::url::TremorUrl;
-use crate::{OpConfig, QSIZE};
+use crate::QSIZE;
 use async_std::channel::bounded;
 use async_std::task::{self, JoinHandle};
 use hashbrown::HashMap;
-use std::sync::atomic::Ordering;
+use std::{sync::atomic::Ordering, time::Duration};
 
 pub(crate) use crate::connectors;
-pub(crate) use crate::offramp;
-pub(crate) use crate::onramp;
 pub(crate) use crate::pipeline;
 
 lazy_static! {
@@ -101,10 +96,6 @@ pub enum ShutdownMode {
 pub enum ManagerMsg {
     /// msg to the pipeline manager
     Pipeline(pipeline::ManagerMsg),
-    /// msg to the onramp manager
-    Onramp(Box<onramp::ManagerMsg>),
-    /// msg to the offramp manager
-    Offramp(offramp::ManagerMsg),
     /// msg to the connector manager
     Connector(connectors::ManagerMsg),
     /// stop this manager
@@ -116,12 +107,8 @@ pub(crate) type Sender = async_std::channel::Sender<ManagerMsg>;
 #[derive(Debug)]
 pub(crate) struct Manager {
     pub connector: connectors::ManagerSender,
-    pub offramp: offramp::ManagerSender,
-    pub onramp: onramp::ManagerSender,
     pub pipeline: pipeline::ManagerSender,
     pub connector_h: JoinHandle<Result<()>>,
-    pub offramp_h: JoinHandle<Result<()>>,
-    pub onramp_h: JoinHandle<Result<()>>,
     pub pipeline_h: JoinHandle<Result<()>>,
     pub qsize: usize,
 }
@@ -133,22 +120,16 @@ impl Manager {
             while let Ok(msg) = rx.recv().await {
                 match msg {
                     ManagerMsg::Pipeline(msg) => self.pipeline.send(msg).await?,
-                    ManagerMsg::Onramp(msg) => self.onramp.send(*msg).await?,
-                    ManagerMsg::Offramp(msg) => self.offramp.send(msg).await?,
                     ManagerMsg::Connector(msg) => self.connector.send(msg).await?,
                     ManagerMsg::Stop => {
                         info!("Stopping Manager ...");
-                        self.offramp.send(offramp::ManagerMsg::Stop).await?;
                         self.pipeline.send(pipeline::ManagerMsg::Stop).await?;
-                        self.onramp.send(onramp::ManagerMsg::Stop).await?;
                         self.connector
                             .send(connectors::ManagerMsg::Stop {
                                 reason: "Global Manager Stop".to_string(),
                             })
                             .await?;
-                        self.offramp_h.cancel().await;
                         self.pipeline_h.cancel().await;
-                        self.onramp_h.cancel().await;
                         self.connector_h.cancel().await;
                         break;
                     }
@@ -172,133 +153,6 @@ pub struct World {
 }
 
 impl World {
-    /// Registers the given builtin onramp type with `type_name` and the corresponding `builder` to instantiate new onramps
-    pub(crate) async fn register_builtin_onramp_type(
-        &self,
-        type_name: &'static str,
-        builder: Box<dyn onramp::Builder>,
-    ) -> Result<()> {
-        self.system
-            .send(ManagerMsg::Onramp(Box::new(onramp::ManagerMsg::Register {
-                onramp_type: type_name.to_string(),
-                builder,
-                builtin: true,
-            })))
-            .await?;
-        Ok(())
-    }
-
-    /// Registers the given onramp type with `type_name` and the corresponding `builder` to instantiate new onramps
-    ///
-    /// # Errors
-    ///  * If the system is unavailable
-    pub async fn register_onramp_type(
-        &self,
-        type_name: &'static str,
-        builder: Box<dyn onramp::Builder>,
-    ) -> Result<()> {
-        self.system
-            .send(ManagerMsg::Onramp(Box::new(onramp::ManagerMsg::Register {
-                onramp_type: type_name.to_string(),
-                builder,
-                builtin: false,
-            })))
-            .await?;
-        Ok(())
-    }
-
-    /// unregister onramp type
-    ///
-    /// # Errors
-    ///  * If the system is unavailable
-    pub async fn unregister_onramp_type(&self, type_name: String) -> Result<()> {
-        self.system
-            .send(ManagerMsg::Onramp(Box::new(
-                onramp::ManagerMsg::Unregister(type_name),
-            )))
-            .await?;
-        Ok(())
-    }
-
-    /// returns true if the runtime currently supports the given onramp type
-    ///
-    /// # Errors
-    ///  * If the system is unavailable
-    pub async fn has_onramp_type(&self, type_name: String) -> Result<bool> {
-        let (tx, rx) = bounded(1);
-        self.system
-            .send(ManagerMsg::Onramp(Box::new(
-                onramp::ManagerMsg::TypeExists(type_name, tx),
-            )))
-            .await?;
-        Ok(rx.recv().await?)
-    }
-
-    /// Registers the given builtin offramp type with `type_name` and the corresponding `builder` to instantiate new offramps
-    ///
-    /// # Errors
-    ///  * If the system is unavailable
-    pub(crate) async fn register_builtin_offramp_type(
-        &self,
-        type_name: &'static str,
-        builder: Box<dyn offramp::Builder>,
-    ) -> Result<()> {
-        self.system
-            .send(ManagerMsg::Offramp(offramp::ManagerMsg::Register {
-                offramp_type: type_name.to_string(),
-                builder,
-                builtin: true,
-            }))
-            .await?;
-        Ok(())
-    }
-
-    /// Registers the given offramp type with `type_name` and the corresponding `builder` to instantiate new offramps
-    ///
-    /// # Errors
-    ///  * If the system is unavailable
-    pub async fn register_offramp_type(
-        &self,
-        type_name: &'static str,
-        builder: Box<dyn offramp::Builder>,
-    ) -> Result<()> {
-        self.system
-            .send(ManagerMsg::Offramp(offramp::ManagerMsg::Register {
-                offramp_type: type_name.to_string(),
-                builder,
-                builtin: false,
-            }))
-            .await?;
-        Ok(())
-    }
-
-    /// unregister offramp type
-    ///
-    /// # Errors
-    ///  * If the system is unavailable
-    pub async fn unregister_offramp_type(&self, type_name: String) -> Result<()> {
-        self.system
-            .send(ManagerMsg::Offramp(offramp::ManagerMsg::Unregister(
-                type_name,
-            )))
-            .await?;
-        Ok(())
-    }
-
-    /// returns true if the runtime currently supports the given offramp type
-    ///
-    /// # Errors
-    ///  * If the system is unavailable
-    pub async fn has_offramp_type(&self, type_name: String) -> Result<bool> {
-        let (tx, rx) = bounded(1);
-        self.system
-            .send(ManagerMsg::Offramp(offramp::ManagerMsg::TypeExists(
-                type_name, tx,
-            )))
-            .await?;
-        Ok(rx.recv().await?)
-    }
-
     /// Registers the given connector type with `type_name` and the corresponding `builder`
     ///
     /// # Errors
@@ -349,39 +203,6 @@ impl World {
         Ok(())
     }
 
-    /// Ensures the existance of an onramp instance, creating it if required.
-    ///
-    /// # Errors
-    ///  * if we can't ensure the onramp is bound
-    pub async fn ensure_onramp(&self, id: &TremorUrl) -> Result<()> {
-        if self.reg.find_onramp(id).await?.is_none() {
-            info!(
-                "Onramp not found during binding process, binding {} to create a new instance.",
-                &id
-            );
-            self.bind_onramp(id).await?;
-        } else {
-            info!("Existing onramp {} found", id);
-        }
-        Ok(())
-    }
-
-    /// Ensures the existance of an offramp instance, creating it if required.
-    ///
-    /// # Errors
-    ///  * if we can't ensure the offramp is bound
-    pub async fn ensure_offramp(&self, id: &TremorUrl) -> Result<()> {
-        if self.reg.find_offramp(id).await?.is_none() {
-            info!(
-                "Offramp not found during binding process, binding {} to create a new instance.",
-                &id
-            );
-            self.bind_offramp(id).await?;
-        } else {
-            info!("Existing offramp {} found", id);
-        }
-        Ok(())
-    }
     /// Ensures the existance of a pipeline instance, creating it if required.
     ///
     /// # Errors
@@ -538,224 +359,6 @@ impl World {
     ) -> Result<InstanceState> {
         self.repo.publish_pipeline(id, false, artefact).await?;
         self.bind_pipeline(id).await
-    }
-    /// Bind an onramp
-    ///
-    /// # Errors
-    ///  * if the id isn't a onramp instance or the onramp can't be bound
-    pub async fn bind_onramp(&self, id: &TremorUrl) -> Result<InstanceState> {
-        info!("Binding onramp {}", id);
-        match (&self.repo.find_onramp(id).await?, &id.instance()) {
-            (Some(artefact), Some(_instance_id)) => {
-                let servant =
-                    InstanceLifecycleFsm::new(self.clone(), artefact.artefact.clone(), id.clone())
-                        .await?;
-                self.repo.bind_onramp(id).await?;
-                // We link to the metrics pipeline
-                let res = self.reg.publish_onramp(id, servant).await?;
-                let mut id = id.clone();
-                id.set_port(&METRICS);
-                let m = vec![(METRICS.to_string(), METRICS_PIPELINE.clone())]
-                    .into_iter()
-                    .collect();
-                self.link_existing_onramp(&id, m).await?;
-                Ok(res)
-            }
-            (None, _) => Err(ErrorKind::ArtefactNotFound(id.to_string()).into()),
-            (_, None) => Err(ErrorKind::InvalidInstanceUrl(id.to_string()).into()),
-        }
-    }
-    /// Unbind an onramp instance - remove from registry, repo and stop instance
-    ///
-    /// # Errors
-    ///  * if the id isn't an onramp or the onramp can't be unbound
-    pub async fn unbind_onramp(&self, id: &TremorUrl) -> Result<InstanceState> {
-        info!("Unbinding onramp {}", id);
-        match (&self.reg.find_onramp(id).await?, id.instance()) {
-            (Some(_instance), Some(_instance_id)) => {
-                // remove from registry
-                let mut fsm = self.reg.unpublish_onramp(id).await?;
-                // stop instance
-                let state = fsm.stop().await?.state;
-                // remove instance from repo
-                self.repo.unbind_onramp(id).await?;
-                Ok(state)
-            }
-            (None, _) => {
-                Err(ErrorKind::InstanceNotFound("onramp".to_string(), id.to_string()).into())
-            }
-            (_, None) => Err(ErrorKind::InvalidInstanceUrl(id.to_string()).into()),
-        }
-    }
-
-    /// Link an onramp
-    ///
-    /// # Errors
-    ///  * if the id isn't an onramp or the onramp can't be linked
-    pub async fn link_onramp(
-        &self,
-        id: &TremorUrl,
-        mappings: HashMap<
-            <OnrampArtefact as Artefact>::LinkLHS,
-            <OnrampArtefact as Artefact>::LinkRHS,
-        >,
-    ) -> Result<<OnrampArtefact as Artefact>::LinkResult> {
-        if let Some(onramp_a) = self.repo.find_onramp(id).await? {
-            if self.reg.find_onramp(id).await?.is_none() {
-                self.bind_onramp(id).await?;
-            };
-            onramp_a.artefact.link(self, id, mappings).await
-        } else {
-            Err(ErrorKind::ArtefactNotFound(id.to_string()).into())
-        }
-    }
-
-    async fn link_existing_onramp(
-        &self,
-        id: &TremorUrl,
-        mappings: HashMap<
-            <OnrampArtefact as Artefact>::LinkLHS,
-            <OnrampArtefact as Artefact>::LinkRHS,
-        >,
-    ) -> Result<<OnrampArtefact as Artefact>::LinkResult> {
-        if let Some(onramp_a) = self.repo.find_onramp(id).await? {
-            onramp_a.artefact.link(self, id, mappings).await
-        } else {
-            Err(ErrorKind::ArtefactNotFound(id.to_string()).into())
-        }
-    }
-
-    /// Unlink an onramp
-    ///
-    /// # Errors
-    ///  * if the id isn't a onramp or it cna't be unlinked
-    pub async fn unlink_onramp(
-        &self,
-        id: &TremorUrl,
-        mappings: HashMap<
-            <OnrampArtefact as Artefact>::LinkLHS,
-            <OnrampArtefact as Artefact>::LinkRHS,
-        >,
-    ) -> Result<<OnrampArtefact as Artefact>::LinkResult> {
-        if let Some(onramp_a) = self.repo.find_onramp(id).await? {
-            let r = onramp_a.artefact.unlink(self, id, mappings).await?;
-            if r {
-                self.unbind_onramp(id).await?;
-            };
-            Ok(r)
-        } else {
-            Err(ErrorKind::ArtefactNotFound(id.to_string()).into())
-        }
-    }
-
-    /// Bind an offramp
-    ///
-    /// # Errors
-    ///  * if the id isn't a offramp instance or it can't be bound
-    pub async fn bind_offramp(&self, id: &TremorUrl) -> Result<InstanceState> {
-        info!("Binding offramp {}", id);
-        match (&self.repo.find_offramp(id).await?, &id.instance()) {
-            (Some(artefact), Some(_instance_id)) => {
-                let servant =
-                    InstanceLifecycleFsm::new(self.clone(), artefact.artefact.clone(), id.clone())
-                        .await?;
-                self.repo.bind_offramp(id).await?;
-                // We link to the metrics pipeline
-                let res = self.reg.publish_offramp(id, servant).await?;
-                let mut metrics_id = id.clone();
-                metrics_id.set_port(&METRICS);
-                let m = vec![(METRICS_PIPELINE.clone(), metrics_id.clone())]
-                    .into_iter()
-                    .collect();
-                self.link_existing_offramp(id, m).await?;
-                Ok(res)
-            }
-            (None, _) => Err(ErrorKind::ArtefactNotFound(id.to_string()).into()),
-            (_, None) => Err(ErrorKind::InvalidInstanceUrl(id.to_string()).into()),
-        }
-    }
-
-    /// Unbind an offramp
-    ///
-    /// # Errors
-    ///  * if the id isn't an offramp instance or the offramp can't be unbound
-    pub async fn unbind_offramp(&self, id: &TremorUrl) -> Result<InstanceState> {
-        info!("Unbinding offramp {} ..", id);
-        match (&self.reg.find_offramp(id).await?, id.instance()) {
-            (Some(_instance), Some(_instance_id)) => {
-                // remove from registry
-                let mut fsm = self.reg.unpublish_offramp(id).await?;
-                // stop instance
-                let state = fsm.stop().await?.state;
-                // remove instance from repo
-                self.repo.unbind_offramp(id).await?;
-                Ok(state)
-            }
-            (None, _) => {
-                Err(ErrorKind::InstanceNotFound("offramp".to_string(), id.to_string()).into())
-            }
-            (_, None) => Err(ErrorKind::InvalidInstanceUrl(id.to_string()).into()),
-        }
-    }
-
-    /// Link an offramp
-    ///
-    /// # Errors
-    ///  * if the id isn't an offramp or can't be linked
-    pub async fn link_offramp(
-        &self,
-        id: &TremorUrl,
-        mappings: HashMap<
-            <OfframpArtefact as Artefact>::LinkLHS,
-            <OfframpArtefact as Artefact>::LinkRHS,
-        >,
-    ) -> Result<<OfframpArtefact as Artefact>::LinkResult> {
-        if let Some(offramp_a) = self.repo.find_offramp(id).await? {
-            if self.reg.find_offramp(id).await?.is_none() {
-                self.bind_offramp(id).await?;
-            };
-            offramp_a.artefact.link(self, id, mappings).await
-        } else {
-            Err(ErrorKind::ArtefactNotFound(id.to_string()).into())
-        }
-    }
-
-    async fn link_existing_offramp(
-        &self,
-        id: &TremorUrl,
-        mappings: HashMap<
-            <OfframpArtefact as Artefact>::LinkLHS,
-            <OfframpArtefact as Artefact>::LinkRHS,
-        >,
-    ) -> Result<<OfframpArtefact as Artefact>::LinkResult> {
-        if let Some(offramp_a) = self.repo.find_offramp(id).await? {
-            offramp_a.artefact.link(self, id, mappings).await
-        } else {
-            Err(ErrorKind::ArtefactNotFound(id.to_string()).into())
-        }
-    }
-
-    /// Unlink an offramp
-    ///
-    /// # Errors
-    ///  * if the id isn't an offramp or it cna't be unlinked
-    pub async fn unlink_offramp(
-        &self,
-        id: &TremorUrl,
-        mappings: HashMap<
-            <OfframpArtefact as Artefact>::LinkLHS,
-            <OfframpArtefact as Artefact>::LinkRHS,
-        >,
-    ) -> Result<<OfframpArtefact as Artefact>::LinkResult> {
-        if let Some(offramp_a) = self.repo.find_offramp(id).await? {
-            let r = offramp_a.artefact.unlink(self, id, mappings).await?;
-            if r {
-                self.unbind_offramp(id).await?;
-            };
-            Ok(r)
-        } else {
-            Err(ErrorKind::ArtefactNotFound(id.to_string()).into())
-        }
     }
 
     /// Bind a connector - create an instance and stick it into the registry
@@ -1028,8 +631,6 @@ impl World {
     /// # Errors
     ///  * If the systems configuration can't be stored
     pub async fn to_config(&self) -> Result<Config> {
-        let onramp: OnRampVec = self.repo.serialize_onramps().await?;
-        let offramp: OffRampVec = self.repo.serialize_offramps().await?;
         let binding: BindingVec = self
             .repo
             .serialize_bindings()
@@ -1039,8 +640,6 @@ impl World {
             .collect();
         let mapping: MappingMap = self.reg.serialize_mappings().await?;
         let config = crate::config::Config {
-            onramp,
-            offramp,
             connector: vec![],
             binding,
             mapping,
@@ -1063,18 +662,12 @@ impl World {
         let (connector_h, connector) =
             connectors::Manager::new(qsize, METRICS_CHANNEL.tx()).start();
         // TODO: use metrics channel for pipelines as well
-        let (onramp_h, onramp) = onramp::Manager::new(qsize).start();
-        let (offramp_h, offramp) = offramp::Manager::new(qsize).start();
         let (pipeline_h, pipeline) = pipeline::Manager::new(qsize).start();
 
         let (system_h, system) = Manager {
             connector,
-            offramp,
-            onramp,
             pipeline,
             connector_h,
-            offramp_h,
-            onramp_h,
             pipeline_h,
             qsize,
         }
@@ -1084,8 +677,6 @@ impl World {
         let reg = Registries::new();
         let mut world = Self { system, repo, reg };
 
-        crate::sink::register_builtin_sinks(&world).await?;
-        crate::source::register_builtin_sources(&world).await?;
         crate::connectors::register_builtin_connector_types(&world).await?;
 
         world.register_system().await?;
@@ -1167,10 +758,11 @@ type: metrics
             .await?;
 
         // Register stdout connector - do not start yet
+        // FIXME: how to name this
         let stdout_artefact: ConnectorArtefact = serde_yaml::from_str(
             r#"
-id: system::stdout
-type: std_stream
+id: system::stdio
+type: stdio
 config:
   stream: stdout
             "#,
@@ -1188,7 +780,7 @@ config:
         let stderr_artefact: ConnectorArtefact = serde_yaml::from_str(
             r#"
 id: system::stderr
-type: std_stream
+type: stdio
 config:
   stream: stderr
             "#,
@@ -1201,56 +793,6 @@ config:
             .find_connector(&STDERR_CONNECTOR)
             .await?
             .ok_or_else(|| Error::from("Failed to initialize system::stderr connector"))?;
-
-        // Register stdin connector - do not start yet
-        let stdin_artefact: ConnectorArtefact = serde_yaml::from_str(
-            r#"
-id: system::stdin
-type: std_stream
-config:
-  stream: stdin
-            "#,
-        )?;
-        self.repo
-            .publish_connector(&STDIN_CONNECTOR, true, stdin_artefact)
-            .await?;
-        self.bind_connector(&STDIN_CONNECTOR).await?;
-        self.reg
-            .find_connector(&STDIN_CONNECTOR)
-            .await?
-            .ok_or_else(|| Error::from("Failed to initialize system::stdin connector"))?;
-
-        // Register stdout offramp
-        let artefact: OfframpArtefact = serde_yaml::from_str(
-            r#"
-id: system::stdout
-type: stdout
-"#,
-        )?;
-        self.repo
-            .publish_offramp(&STDOUT_OFFRAMP, true, artefact)
-            .await?;
-        self.bind_offramp(&STDOUT_OFFRAMP).await?;
-        self.reg
-            .find_offramp(&STDOUT_OFFRAMP)
-            .await?
-            .ok_or_else(|| Error::from("Failed to initialize stdout offramp."))?;
-
-        // Register stderr offramp
-        let artefact: OfframpArtefact = serde_yaml::from_str(
-            r#"
-id: system::stderr
-type: stderr
-"#,
-        )?;
-        self.repo
-            .publish_offramp(&STDERR_OFFRAMP, true, artefact)
-            .await?;
-        self.bind_offramp(&STDERR_OFFRAMP).await?;
-        self.reg
-            .find_offramp(&STDERR_OFFRAMP)
-            .await?
-            .ok_or_else(|| Error::from("Failed to initialize stderr offramp."))?;
 
         Ok(())
     }
@@ -1268,40 +810,5 @@ type: stderr
             )))
             .await?;
         rx.recv().await?
-    }
-
-    /// convenience wrapper for instantiating an offramp from a given config
-    pub(crate) async fn instantiate_offramp(
-        &self,
-        offramp_type: String,
-        config: Option<OpConfig>,
-        timeout: Duration,
-    ) -> Result<Box<dyn offramp::Offramp>> {
-        let (tx, rx) = bounded(1);
-        let msg = offramp::ManagerMsg::Instantiate {
-            offramp_type,
-            config,
-            sender: tx,
-        };
-        self.system.send(ManagerMsg::Offramp(msg)).await?;
-        async_std::future::timeout(timeout, rx.recv()).await??
-    }
-
-    pub(crate) async fn instantiate_onramp(
-        &self,
-        onramp_type: String,
-        url: TremorUrl,
-        config: Option<OpConfig>,
-        timeout: Duration,
-    ) -> Result<Box<dyn onramp::Onramp>> {
-        let (tx, rx) = bounded(1);
-        let msg = onramp::ManagerMsg::Instantiate {
-            onramp_type,
-            url,
-            config,
-            sender: tx,
-        };
-        self.system.send(ManagerMsg::Onramp(Box::new(msg))).await?;
-        async_std::future::timeout(timeout, rx.recv()).await??
     }
 }

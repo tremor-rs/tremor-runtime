@@ -17,7 +17,6 @@
 #![allow(missing_docs)]
 #![allow(clippy::large_enum_variant)]
 
-use crate::async_sink;
 use beef::Cow;
 use error_chain::error_chain;
 use hdrhistogram::{self, serialization as hdr_s};
@@ -173,8 +172,6 @@ error_chain! {
         RegexError(regex::Error);
         ReqwestError(reqwest::Error);
         RustlsError(rustls::TLSError);
-        SinkDequeueError(async_sink::SinkDequeueError);
-        SinkEnqueueError(async_sink::SinkEnqueueError);
         Sled(sled::Error);
         SnappyError(snap::Error);
         Timeout(async_std::future::TimeoutError);
