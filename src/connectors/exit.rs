@@ -23,7 +23,7 @@
 //!
 //! * delay: milliseconds to wait before stopping the process
 use crate::connectors::prelude::*;
-use crate::system::{ShutdownMode, World, DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT};
+use crate::system::{ShutdownMode, World};
 use std::time::Duration;
 
 use simd_json::ValueAccess;
@@ -59,7 +59,6 @@ impl Connector for Exit {
 
 impl Exit {
     const DELAY: &'static str = "delay";
-    const TIMEOUT: &'static str = "timeout";
     const GRACEFUL: &'static str = "graceful";
 }
 
@@ -81,10 +80,7 @@ impl Sink for Exit {
                 async_std::task::sleep(Duration::from_millis(delay)).await;
             }
             let mode = if value.get_bool(Self::GRACEFUL).unwrap_or(true) {
-                let timeout = value
-                    .get_u64(Self::TIMEOUT)
-                    .map_or(DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT, Duration::from_millis);
-                ShutdownMode::Graceful { timeout }
+                ShutdownMode::Graceful
             } else {
                 ShutdownMode::Forceful
             };
