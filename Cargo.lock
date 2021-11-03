@@ -6562,7 +6562,6 @@ dependencies = [
  "tremor-runtime",
  "tremor-script",
  "tremor-value",
- "value-trait",
 ]
 
 [[package]]

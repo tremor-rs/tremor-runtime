@@ -24,4 +24,4 @@ tremor-pipeline = {path = "../tremor-pipeline"}
 tremor-runtime = {path = "../"}
 tremor-script = {path = "../tremor-script"}
 tremor-value = {path = "../tremor-value"}
-value-trait = "0.2"
+# value-trait = "0.2"
