@@ -38,6 +38,9 @@ pub struct Config {
     #[serde(default = "Default::default")]
     pub base64: bool,
 
+    #[serde(default = "Default::default")]
+    pub is_transactional: bool,
+
     /// Number of seconds to collect data before the system is stopped.
     pub stop_after_secs: u64,
     /// Significant figures for the histogram
@@ -139,6 +142,7 @@ impl Connector for Bench {
         let s = Blaster {
             acc: self.acc.clone(),
             origin_uri: self.origin_uri.clone(),
+            is_transactional: self.config.is_transactional,
         };
         builder.spawn(s, source_context).map(Some)
     }
@@ -162,6 +166,7 @@ impl Connector for Bench {
 struct Blaster {
     acc: Acc,
     origin_uri: EventOriginUri,
+    is_transactional: bool,
 }
 
 #[async_trait::async_trait]
@@ -177,7 +182,7 @@ impl Source for Blaster {
     }
 
     fn is_transactional(&self) -> bool {
-        true
+        self.is_transactional
     }
 }
 
