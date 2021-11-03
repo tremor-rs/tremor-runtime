@@ -2,18 +2,12 @@
 # and connect both the pass and the overflow output to the
 # blackhole to acount for the data
 ---
-onramp:
-  - id: blaster
-    type: blaster
+connector:
+  - id: bench
+    type: bench
     codec: json
     config:
       source: ./demo/data/data.json.xz
-
-offramp:
-  - id: blackhole
-    type: blackhole
-    codec: json
-    config:
       warmup_secs: 10
       stop_after_secs: 100
       significant_figures: 2
@@ -21,5 +15,5 @@ offramp:
 binding:
   - id: bench
     links:
-      "/onramp/blaster/{instance}/out": ["/pipeline/main/{instance}/in"]
-      "/pipeline/main/{instance}/out": ["/offramp/blackhole/{instance}/in"]
+      "/connector/bench/{instance}/out": ["/pipeline/main/{instance}/in"]
+      "/pipeline/main/{instance}/out": ["/connector/bench/{instance}/in"]
