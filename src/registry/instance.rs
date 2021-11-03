@@ -21,7 +21,7 @@ use hashbrown::HashSet;
 
 use crate::errors::Result;
 use crate::repository::BindingArtefact;
-use crate::system::{World, DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT};
+use crate::system::World;
 use crate::url::TremorUrl;
 use crate::{connectors, pipeline};
 
@@ -31,6 +31,11 @@ use crate::{connectors, pipeline};
 pub trait Instance: Send {
     /// Initialized -> Running
     async fn start(&mut self, _world: &World, _id: &TremorUrl) -> Result<()> {
+        Ok(())
+    }
+
+    /// * -> Draining
+    async fn drain(&mut self, _world: &World, _id: &TremorUrl) -> Result<()> {
         Ok(())
     }
     /// * -> Stopped
@@ -53,6 +58,12 @@ pub trait Instance: Send {
 impl Instance for connectors::Addr {
     async fn start(&mut self, _world: &World, _id: &TremorUrl) -> Result<()> {
         self.send(connectors::Msg::Start).await
+    }
+
+    async fn drain(&mut self, _world: &World, _id: &TremorUrl) -> Result<()> {
+        let (tx, rx) = async_std::channel::bounded(1);
+        self.send(connectors::Msg::Drain(tx)).await?;
+        rx.recv().await?
     }
 
     async fn stop(&mut self, _world: &World, _id: &TremorUrl) -> Result<()> {
@@ -118,17 +129,13 @@ impl Instance for BindingArtefact {
         Ok(())
     }
 
-    async fn stop(&mut self, world: &World, id: &TremorUrl) -> Result<()> {
+    async fn drain(&mut self, world: &World, id: &TremorUrl) -> Result<()> {
         // QUIESCENCE
         // - send drain msg to all connectors
         // - wait until
         //   a) all connectors are drained (means all pipelines in between are also drained) or
         //   b) we timed out
-        // - call stop on all instances
-        info!("[Binding::{}] Starting Quiescence Process", id);
-        // - we ignore onramps and offramps
-        // - we try to go from source connectors to sink connectors, this is not always possible
-
+        info!("[Binding::{}] Draining...", id);
         let sinks: HashSet<TremorUrl> = self
             .binding
             .links
@@ -164,27 +171,33 @@ impl Instance for BindingArtefact {
         }
         // wait for 5 secs for all drain futures
         // it might be this binding represents a topology that doesn't support proper quiescence
-        let res = async_std::future::timeout(
-            DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT,
-            futures::future::join_all(drain_futures),
-        )
-        .await;
+        let results = futures::future::join_all(drain_futures).await;
         // report some errors if any
-        if let Ok(results) = res {
-            info!("[Binding::{}] Drained.", id);
-            for r in results {
-                if let Err(e) = r {
-                    error!("[Binding::{}] Error during Quiescence Process: {}", id, e);
-                }
+        info!("[Binding::{}] Drained.", id);
+        for r in results {
+            if let Err(e) = r {
+                error!("[Binding::{}] Error during Draining: {}", id, e);
             }
-        } else {
-            info!("[Binding::{}] Timeout during Quiescence Process.", id);
         }
-        info!("[Binding::{}] Stopping all linked instances...", id);
+        Ok(())
+    }
 
+    async fn stop(&mut self, world: &World, id: &TremorUrl) -> Result<()> {
+        // - call stop on all instances
+        // - we ignore onramps and offramps
+        // - we try to go from source connectors to sink connectors, this is not always possible
+        info!("[Binding::{}] Stopping...", id);
+        let connectors: HashSet<TremorUrl> = self
+            .binding
+            .links
+            .iter()
+            .flat_map(|(from, tos)| tos.iter().chain(std::iter::once(from)))
+            .filter(|url| (*url).is_connector())
+            .map(TremorUrl::to_instance)
+            .collect();
         // actually stop everything
         // connectors
-        for connector_url in sources.union(&sinks) {
+        for connector_url in &connectors {
             if let Err(e) = world.reg.stop_connector(connector_url).await {
                 error!(
                     "[Binding::{}] Error while stopping {}: {}",
