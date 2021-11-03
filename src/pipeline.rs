@@ -30,8 +30,8 @@ use tremor_pipeline::{CbAction, Event, ExecutableGraph, SignalKind};
 
 const TICK_MS: u64 = 100;
 pub(crate) type ManagerSender = Sender<ManagerMsg>;
-type Inputs = halfbrown::HashMap<TremorUrl, (bool, ConnectInputTarget)>;
-type Dests = halfbrown::HashMap<Cow<'static, str>, Vec<(TremorUrl, ConnectOutputTarget)>>;
+type Inputs = halfbrown::HashMap<TremorUrl, (bool, InputTarget)>;
+type Dests = halfbrown::HashMap<Cow<'static, str>, Vec<(TremorUrl, OutputTarget)>>;
 type Eventset = Vec<(Cow<'static, str>, Event)>;
 /// Address for a pipeline
 #[derive(Clone)]
@@ -113,16 +113,25 @@ pub enum CfMsg {
 
 /// Input targets
 #[derive(Debug)]
-pub enum ConnectInputTarget {
+pub enum InputTarget {
     /// another pipeline
     Pipeline(Box<Addr>),
     /// a connector
     Source(connectors::source::SourceAddr),
 }
 
+impl InputTarget {
+    async fn send_insight(&self, insight: Event) -> Result<()> {
+        match self {
+            InputTarget::Pipeline(addr) => addr.send_insight(insight).await,
+            InputTarget::Source(addr) => addr.send(SourceMsg::Cb(insight.cb, insight.id)).await,
+        }
+    }
+}
+
 /// Output targets
 #[derive(Debug)]
-pub enum ConnectOutputTarget {
+pub enum OutputTarget {
     /// another pipeline
     Pipeline(Box<Addr>),
     /// a connector
@@ -137,9 +146,9 @@ pub enum MgmtMsg {
         /// url of the input to connect
         input_url: TremorUrl,
         /// the target that connects to the `in` port
-        target: ConnectInputTarget,
+        target: InputTarget,
         /// should we send insights to this input
-        transactional: bool,
+        is_transactional: bool,
     },
     /// connect a target to an output port
     ConnectOutput {
@@ -148,7 +157,7 @@ pub enum MgmtMsg {
         /// the url of the output instance
         output_url: TremorUrl,
         /// the actual target addr
-        target: ConnectOutputTarget,
+        target: OutputTarget,
     },
     /// disconnect an output
     DisconnectOutput(Cow<'static, str>, TremorUrl),
@@ -173,7 +182,7 @@ pub enum Msg {
     Signal(Event),
 }
 
-impl ConnectOutputTarget {
+impl OutputTarget {
     /// send an event out to this destination
     ///
     /// # Errors
@@ -279,34 +288,23 @@ async fn handle_insight(
     if insight.cb != CbAction::None {
         let mut input_iter = inputs.iter();
         let first = input_iter.next();
-        for (url, (send, input)) in input_iter {
-            let is_cb = insight.cb.is_cb();
-            if *send || is_cb {
-                if let Err(e) = match input {
-                    ConnectInputTarget::Pipeline(addr) => addr.send_insight(insight.clone()).await,
-                    ConnectInputTarget::Source(addr) => {
-                        addr.send(SourceMsg::Cb(insight.cb, insight.id.clone()))
-                            .await
-                    }
-                } {
+        let always_deliver = insight.cb.always_deliver();
+        for (url, (input_is_transactional, input)) in input_iter {
+            if always_deliver || *input_is_transactional {
+                if let Err(e) = input.send_insight(insight.clone()).await {
                     error!(
                         "[Pipeline::{}] failed to send insight to input: {} {}",
-                        &pipeline.id, e, url
+                        pipeline.id, e, url
                     );
                 }
             }
         }
-        if let Some((url, (send, input))) = first {
-            if *send || insight.cb.is_cb() {
-                if let Err(e) = match input {
-                    ConnectInputTarget::Pipeline(addr) => addr.send_insight(insight).await,
-                    ConnectInputTarget::Source(addr) => {
-                        addr.send(SourceMsg::Cb(insight.cb, insight.id)).await
-                    }
-                } {
+        if let Some((url, (input_is_transactional, input))) = first {
+            if always_deliver || *input_is_transactional {
+                if let Err(e) = input.send_insight(insight).await {
                     error!(
                         "[Pipeline::{}] failed to send insight to input: {} {}",
-                        &pipeline.id, e, &url
+                        pipeline.id, e, url
                     );
                 }
             }
@@ -428,10 +426,10 @@ async fn pipeline_task(
             M::M(MgmtMsg::ConnectInput {
                 input_url,
                 target,
-                transactional,
+                is_transactional,
             }) => {
                 info!("[Pipeline::{}] Connecting input {} to 'in'", pid, input_url);
-                inputs.insert(input_url, (transactional, target.into()));
+                inputs.insert(input_url, (is_transactional, target.into()));
             }
             M::M(MgmtMsg::ConnectOutput {
                 port,
@@ -443,7 +441,7 @@ async fn pipeline_task(
                     pid, &port, &output_url
                 );
                 // notify other pipeline about a new input
-                if let ConnectOutputTarget::Pipeline(pipe) = &target {
+                if let OutputTarget::Pipeline(pipe) = &target {
                     // avoid linking the same pipeline as input to itself
                     // as this will create a nasty circle filling up queues.
                     // In general this does not avoid cycles via more complex constructs.
@@ -455,8 +453,8 @@ async fn pipeline_task(
                         if let Err(e) = pipe
                             .send_mgmt(MgmtMsg::ConnectInput {
                                 input_url: pid.clone(),
-                                target: ConnectInputTarget::Pipeline(Box::new(addr.clone())),
-                                transactional: true,
+                                target: InputTarget::Pipeline(Box::new(addr.clone())),
+                                is_transactional: true,
                             })
                             .await
                         {
@@ -483,7 +481,7 @@ async fn pipeline_task(
                 let mut remove = false;
                 if let Some(output_vec) = dests.get_mut(&port) {
                     while let Some(index) = output_vec.iter().position(|(k, _)| k == &to_delete) {
-                        if let (delete_url, ConnectOutputTarget::Pipeline(pipe)) =
+                        if let (delete_url, OutputTarget::Pipeline(pipe)) =
                             output_vec.swap_remove(index)
                         {
                             if let Err(e) =
@@ -674,7 +672,7 @@ mod tests {
         addr.send_mgmt(MgmtMsg::ConnectInput {
             input_url: onramp_url.clone(),
             target: ConnectTarget::Onramp(onramp_addr), // clone avoids the channel to be closed on disconnect below
-            transactional: true,
+            is_transactional: true,
         })
         .await?;
 
@@ -684,7 +682,7 @@ mod tests {
         addr.send_mgmt(MgmtMsg::ConnectInput {
             input_url: onramp2_url.clone(),
             target: ConnectTarget::Onramp(onramp::Addr(onramp2_tx.clone())),
-            transactional: false,
+            is_transactional: false,
         })
         .await?;
         manager_fence(&addr).await?;

@@ -30,7 +30,6 @@ use simd_json::ValueAccess;
 
 #[derive(Clone)]
 pub struct Exit {
-    url: TremorUrl,
     world: World,
 }
 
@@ -116,11 +115,10 @@ impl Builder {
 impl ConnectorBuilder for Builder {
     async fn from_config(
         &self,
-        id: &TremorUrl,
+        _id: &TremorUrl,
         _config: &Option<OpConfig>,
     ) -> Result<Box<dyn Connector>> {
         Ok(Box::new(Exit {
-            url: id.clone(),
             world: self.world.clone(),
         }))
     }
