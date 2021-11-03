@@ -730,7 +730,7 @@ impl World {
             ShutdownMode::Graceful { timeout } => {
                 // quiesce and stop all the bindings
                 if let Err(_err) = self.reg.drain_all_bindings().timeout(timeout).await {
-                    warn!("Timeout waiting for all bindings to stop.");
+                    warn!("Timeout waiting for all bindings to drain.");
                 }
             }
             ShutdownMode::Forceful => {}
