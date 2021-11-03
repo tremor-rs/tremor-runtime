@@ -65,6 +65,9 @@ pub(crate) mod kv;
 /// Write Ahead Log
 pub(crate) mod wal;
 
+/// connector for checking guaranteed delivery and circuit breaker logic
+//pub(crate) mod cb;
+
 /// quiescence stuff
 pub(crate) mod quiescence;
 
@@ -810,7 +813,7 @@ impl Manager {
                         drainage = Some(d);
                     }
                     Msg::SourceDrained if connector_state == ConnectorState::Draining => {
-                        debug!(
+                        info!(
                             "[Connector::{}] Source-part is drained.",
                             &connector_addr.url
                         );
@@ -838,7 +841,7 @@ impl Manager {
                         }
                     }
                     Msg::SinkDrained if connector_state == ConnectorState::Draining => {
-                        debug!("[Connector::{}] Sink-part is drained.", &connector_addr.url);
+                        info!("[Connector::{}] Sink-part is drained.", &connector_addr.url);
                         if let Some(drainage) = drainage.as_mut() {
                             drainage.set_sink_drained();
                             quiescence_beacon.full_stop(); // TODO: maybe this should be done in the SinkManager?

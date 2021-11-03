@@ -235,7 +235,7 @@ macro_rules! transition_instance {
             self.$registry
                 .send(Msg::Transition(tx, id.clone(), $new_state))
                 .await?;
-            wait(rx.recv()).await??
+            rx.recv().await?
         }
     };
 }
