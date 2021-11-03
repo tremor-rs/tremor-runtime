@@ -49,6 +49,15 @@ use super::{ConnectorContext, StreamDone};
 /// The default poll interval for `try_recv` on channels in connectors
 pub const DEFAULT_POLL_INTERVAL: u64 = 10;
 
+//FIXME: add url
+macro_rules! eat_error {
+    ($e:expr) => {
+        if let Err(e) = $e {
+            error!("ERROR: {}", e)
+        }
+    };
+}
+
 #[derive(Debug)]
 /// Messages a Source can receive
 pub enum SourceMsg {
@@ -157,39 +166,59 @@ pub trait Source: Send {
     ///////////////////////////
 
     /// called when the source is started. This happens only once in the whole source lifecycle, before any other callbacks
-    async fn on_start(&mut self, _ctx: &mut SourceContext) {}
+    async fn on_start(&mut self, _ctx: &mut SourceContext) -> Result<()> {
+        Ok(())
+    }
     /// called when the source is explicitly paused as result of a user/operator interaction
     /// in contrast to `on_cb_close` which happens automatically depending on downstream pipeline or sink connector logic.
-    async fn on_pause(&mut self, _ctx: &mut SourceContext) {}
+    async fn on_pause(&mut self, _ctx: &mut SourceContext) -> Result<()> {
+        Ok(())
+    }
     /// called when the source is explicitly resumed from being paused
-    async fn on_resume(&mut self, _ctx: &mut SourceContext) {}
+    async fn on_resume(&mut self, _ctx: &mut SourceContext) -> Result<()> {
+        Ok(())
+    }
     /// called when the source is stopped. This happens only once in the whole source lifecycle, as the very last callback
-    async fn on_stop(&mut self, _ctx: &mut SourceContext) {}
+    async fn on_stop(&mut self, _ctx: &mut SourceContext) -> Result<()> {
+        Ok(())
+    }
 
     // circuit breaker callbacks
     /// called when we receive a `close` Circuit breaker event from any connected pipeline
     /// Expected reaction is to pause receiving messages, which is handled automatically by the runtime
     /// Source implementations might want to close connections or signal a pause to the upstream entity it connects to if not done in the connector (the default)
     // TODO: add info of Cb event origin (port, origin_uri)?
-    async fn on_cb_close(&mut self, _ctx: &mut SourceContext) {}
+    async fn on_cb_close(&mut self, _ctx: &mut SourceContext) -> Result<()> {
+        Ok(())
+    }
     /// Called when we receive a `open` Circuit breaker event from any connected pipeline
     /// This means we can start/continue polling this source for messages
     /// Source implementations might want to start establishing connections if not done in the connector (the default)
-    async fn on_cb_open(&mut self, _ctx: &mut SourceContext) {}
+    async fn on_cb_open(&mut self, _ctx: &mut SourceContext) -> Result<()> {
+        Ok(())
+    }
 
     // guaranteed delivery callbacks
     /// an event has been acknowledged and can be considered delivered
     /// multiple acks for the same set of ids are always possible
-    async fn ack(&mut self, _stream_id: u64, _pull_id: u64) {}
+    async fn ack(&mut self, _stream_id: u64, _pull_id: u64) -> Result<()> {
+        Ok(())
+    }
     /// an event has failed along its way and can be considered failed
     /// multiple fails for the same set of ids are always possible
-    async fn fail(&mut self, _stream_id: u64, _pull_id: u64) {}
+    async fn fail(&mut self, _stream_id: u64, _pull_id: u64) -> Result<()> {
+        Ok(())
+    }
 
     // connectivity stuff
     /// called when connector lost connectivity
-    async fn on_connection_lost(&mut self, _ctx: &mut SourceContext) {}
+    async fn on_connection_lost(&mut self, _ctx: &mut SourceContext) -> Result<()> {
+        Ok(())
+    }
     /// called when connector re-established connectivity
-    async fn on_connection_established(&mut self, _ctx: &mut SourceContext) {}
+    async fn on_connection_established(&mut self, _ctx: &mut SourceContext) -> Result<()> {
+        Ok(())
+    }
 
     /// Is this source transactional or can acks/fails be ignored
     fn is_transactional(&self) -> bool;
@@ -612,13 +641,13 @@ where
                         };
                         pipelines.retain(|(url, _)| url == &id);
                         if self.pipelines_out.is_empty() && self.pipelines_err.is_empty() {
-                            self.source.on_stop(&mut self.ctx).await;
+                            eat_error!(self.source.on_stop(&mut self.ctx).await);
                             return Ok(true);
                         }
                     }
                     SourceMsg::Start if self.state == Initialized => {
                         self.state = Running;
-                        self.source.on_start(&mut self.ctx).await;
+                        eat_error!(self.source.on_start(&mut self.ctx).await);
 
                         if let Err(e) = self.send_signal(Event::signal_start(self.ctx.uid)).await {
                             error!(
@@ -635,7 +664,7 @@ where
                     }
                     SourceMsg::Resume if self.state == Paused => {
                         self.state = Running;
-                        self.source.on_resume(&mut self.ctx).await;
+                        eat_error!(self.source.on_resume(&mut self.ctx).await);
                     }
                     SourceMsg::Resume => {
                         info!(
@@ -646,7 +675,7 @@ where
                     SourceMsg::Pause if self.state == Running => {
                         // TODO: execute pause strategy chosen by source / connector / configured by user
                         self.state = Paused;
-                        self.source.on_pause(&mut self.ctx).await;
+                        eat_error!(self.source.on_pause(&mut self.ctx).await);
                     }
                     SourceMsg::Pause => {
                         info!(
@@ -656,7 +685,7 @@ where
                     }
                     SourceMsg::Stop => {
                         self.state = Stopped;
-                        self.source.on_stop(&mut self.ctx).await;
+                        eat_error!(self.source.on_stop(&mut self.ctx).await);
                         return Ok(true);
                     }
                     SourceMsg::Drain(_sender) if self.state == Draining => {
@@ -681,28 +710,28 @@ where
                         self.state = Draining;
                     }
                     SourceMsg::ConnectionLost => {
-                        self.source.on_connection_lost(&mut self.ctx).await;
+                        eat_error!(self.source.on_connection_lost(&mut self.ctx).await);
                     }
                     SourceMsg::ConnectionEstablished => {
-                        self.source.on_connection_established(&mut self.ctx).await;
+                        eat_error!(self.source.on_connection_established(&mut self.ctx).await);
                     }
                     SourceMsg::Cb(CbAction::Fail, id) => {
                         if let Some((stream_id, id)) = id.get_min_by_source(self.ctx.uid) {
-                            self.source.fail(stream_id, id).await;
+                            eat_error!(self.source.fail(stream_id, id).await);
                         }
                     }
                     SourceMsg::Cb(CbAction::Ack, id) => {
                         if let Some((stream_id, id)) = id.get_max_by_source(self.ctx.uid) {
-                            self.source.ack(stream_id, id).await;
+                            eat_error!(self.source.ack(stream_id, id).await);
                         }
                     }
                     SourceMsg::Cb(CbAction::Close, _id) => {
                         // TODO: execute pause strategy chosen by source / connector / configured by user
-                        self.source.on_cb_close(&mut self.ctx).await;
+                        eat_error!(self.source.on_cb_close(&mut self.ctx).await);
                         self.state = Paused;
                     }
                     SourceMsg::Cb(CbAction::Open, _id) => {
-                        self.source.on_cb_open(&mut self.ctx).await;
+                        eat_error!(self.source.on_cb_open(&mut self.ctx).await);
                         self.state = Running;
                     }
                     SourceMsg::Cb(CbAction::Drained(uid), _id) => {
@@ -882,7 +911,7 @@ where
                         } else {
                             let error = self.route_events(results).await;
                             if error {
-                                self.source.fail(stream, pull_counter).await;
+                                eat_error!(self.source.fail(stream, pull_counter).await);
                             }
                         }
                     }
@@ -925,7 +954,7 @@ where
                         } else {
                             let error = self.route_events(results).await;
                             if error {
-                                self.source.fail(stream, pull_counter).await;
+                                eat_error!(self.source.fail(stream, pull_counter).await);
                             }
                         }
                     }
@@ -947,7 +976,7 @@ where
                         );
                         let error = self.route_events(vec![(port.unwrap_or(OUT), event)]).await;
                         if error {
-                            self.source.fail(stream, pull_counter).await;
+                            eat_error!(self.source.fail(stream, pull_counter).await);
                         }
                     }
                     Ok(SourceReply::StartStream(stream_id)) => {
