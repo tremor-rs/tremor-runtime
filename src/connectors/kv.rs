@@ -171,6 +171,7 @@ fn oks(
 }
 
 #[derive(Deserialize, Debug, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct Config {
     dir: String,
 }

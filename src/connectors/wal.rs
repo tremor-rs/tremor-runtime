@@ -22,6 +22,7 @@ use simd_json_derive::{Deserialize, Serialize};
 use tremor_pipeline::EventIdGenerator;
 
 #[derive(serde::Deserialize, Debug, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct Config {
     dir: String,
     chunk_size: u64,
