@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-use crate::connectors::{self, source::SourceMsg};
+use crate::connectors::{self, sink::SinkMsg, source::SourceMsg};
 use crate::errors::Result;
 use crate::permge::{PriorityMerge, M};
 use crate::registry::ServantId;
@@ -36,7 +36,7 @@ type Eventset = Vec<(Cow<'static, str>, Event)>;
 /// Address for a pipeline
 #[derive(Clone)]
 pub struct Addr {
-    addr: Sender<Msg>,
+    addr: Sender<Box<Msg>>,
     cf_addr: Sender<CfMsg>,
     mgmt_addr: Sender<MgmtMsg>,
     id: ServantId,
@@ -46,7 +46,7 @@ impl Addr {
     /// creates a new address
     #[must_use]
     pub fn new(
-        addr: Sender<Msg>,
+        addr: Sender<Box<Msg>>,
         cf_addr: Sender<CfMsg>,
         mgmt_addr: Sender<MgmtMsg>,
         id: ServantId,
@@ -83,7 +83,7 @@ impl Addr {
         Ok(self.cf_addr.send(CfMsg::Insight(event)).await?)
     }
 
-    pub(crate) async fn send(&self, msg: Msg) -> Result<()> {
+    pub(crate) async fn send(&self, msg: Box<Msg>) -> Result<()> {
         Ok(self.addr.send(msg).await?)
     }
 
@@ -184,10 +184,10 @@ impl OutputTarget {
     ///  * when sending the event via the dest channel fails
     pub async fn send_event(&mut self, input: Cow<'static, str>, event: Event) -> Result<()> {
         match self {
-            Self::Pipeline(addr) => addr.send(Msg::Event { input, event }).await?,
+            Self::Pipeline(addr) => addr.send(Box::new(Msg::Event { input, event })).await?,
             Self::Sink(addr) => {
                 addr.addr
-                    .send(connectors::sink::SinkMsg::Event { event, port: input })
+                    .send(SinkMsg::Event { event, port: input })
                     .await?;
             }
         }
@@ -203,13 +203,11 @@ impl OutputTarget {
                 // Each pipeline has their own ticks, we don't
                 // want to propagate them
                 if signal.kind != Some(SignalKind::Tick) {
-                    addr.send(Msg::Signal(signal)).await?;
+                    addr.send(Box::new(Msg::Signal(signal))).await?;
                 }
             }
             Self::Sink(addr) => {
-                addr.addr
-                    .send(connectors::sink::SinkMsg::Signal { signal })
-                    .await?;
+                addr.addr.send(SinkMsg::Signal { signal }).await?;
             }
         }
         Ok(())
@@ -317,9 +315,9 @@ async fn handle_insights(pipeline: &mut ExecutableGraph, onramps: &Inputs) {
     }
 }
 
-async fn tick(tick_tx: Sender<Msg>) {
+async fn tick(tick_tx: Sender<Box<Msg>>) {
     let mut e = Event::signal_tick();
-    while tick_tx.send(Msg::Signal(e.clone())).await.is_ok() {
+    while tick_tx.send(Box::new(Msg::Signal(e.clone()))).await.is_ok() {
         task::sleep(Duration::from_millis(TICK_MS)).await;
         e.ingest_ns = nanotime();
     }
@@ -344,7 +342,7 @@ async fn pipeline_task(
     id: TremorUrl,
     mut pipeline: ExecutableGraph,
     addr: Addr,
-    rx: Receiver<Msg>,
+    rx: Receiver<Box<Msg>>,
     cf_rx: Receiver<CfMsg>,
     mgmt_rx: Receiver<MgmtMsg>,
 ) -> Result<()> {
@@ -358,7 +356,7 @@ async fn pipeline_task(
 
     info!("[Pipeline:{}] starting task.", id);
 
-    let ff = rx.map(M::F);
+    let ff = rx.map(|e| M::F(*e));
     let cf = cf_rx.map(M::C);
     let mf = mgmt_rx.map(M::M);
 
@@ -552,7 +550,7 @@ impl Manager {
 
         let id = req.id.clone();
 
-        let (tx, rx) = bounded::<Msg>(self.qsize);
+        let (tx, rx) = bounded::<Box<Msg>>(self.qsize);
         // We use a unbounded channel for counterflow, while an unbounded channel seems dangerous
         // there is soundness to this.
         // The unbounded channel ensures that on counterflow we never have to block, or in other
