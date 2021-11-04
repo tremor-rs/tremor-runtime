@@ -544,12 +544,6 @@ impl SourceState {
     }
 }
 
-#[derive(Debug, PartialEq)]
-enum ControlPlaneResult {
-    Continue,
-    Stop,
-}
-
 /// entity driving the source task
 /// and keeping the source state around
 pub(crate) struct SourceManager<S>
@@ -708,6 +702,7 @@ where
             }
             SourceMsg::Pause if self.state == Running => {
                 // TODO: execute pause strategy chosen by source / connector / configured by user
+                info!("[Source::{}] Paused.", self.ctx.url);
                 self.state = Paused;
                 eat_error!(self.source.on_pause(&mut self.ctx).await);
                 Ok(Control::Continue)
@@ -770,11 +765,13 @@ where
             }
             SourceMsg::Cb(CbAction::Close, _id) => {
                 // TODO: execute pause strategy chosen by source / connector / configured by user
+                info!("[Source::{}] Circuit Breaker: Close.", self.ctx.url);
                 eat_error!(self.source.on_cb_close(&mut self.ctx).await);
                 self.state = Paused;
                 Ok(Control::Continue)
             }
             SourceMsg::Cb(CbAction::Open, _id) => {
+                info!("[Source::{}] Circuit Breaker: Open.", self.ctx.url);
                 eat_error!(self.source.on_cb_open(&mut self.ctx).await);
                 self.state = Running;
                 Ok(Control::Continue)
