@@ -1,4 +1,4 @@
-define snot::badger connector fake
+define snot_badger connector fake
 end;
 
 deploy fake
