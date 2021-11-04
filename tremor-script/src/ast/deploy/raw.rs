@@ -537,7 +537,7 @@ pub struct ConnectorDeclRaw<'script> {
     pub(crate) start: Location,
     pub(crate) end: Location,
     pub(crate) id: String,
-    pub(crate) kind: (Vec<IdentRaw<'script>>, IdentRaw<'script>),
+    pub(crate) kind: IdentRaw<'script>,
     pub(crate) args: WithArgsRaw<'script>,
     pub(crate) params: Option<DeployWithExprsRaw<'script>>,
     pub(crate) docs: Option<Vec<Cow<'script, str>>>,
@@ -560,16 +560,7 @@ impl<'script> Upable<'script> for ConnectorDeclRaw<'script> {
         let query_decl = ConnectorDecl {
             mid: helper.add_meta_w_name(self.start, self.end, &self.id),
             module: helper.module.clone(),
-            builtin_kind: format!(
-                "{}::{}",
-                self.kind
-                    .0
-                    .iter()
-                    .map(|x| x.id.to_string())
-                    .collect::<Vec<String>>()
-                    .join("::"),
-                self.kind.1.id.to_string()
-            ),
+            builtin_kind: self.kind.to_string(),
             id: self.id,
             spec: spec.clone(),
             args,

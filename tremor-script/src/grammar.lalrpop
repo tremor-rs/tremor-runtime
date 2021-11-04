@@ -72,8 +72,8 @@ ArgFinalizationClause: Option<DeployWithExprsRaw<'input>> = {
     <params:DeployWithClause> "end" => Some(params),
 }
 
-ConnectorKind: (Vec<IdentRaw<'input>>, IdentRaw<'input>) = {
-    <mt:ModularTarget> => <>,
+ConnectorKind: IdentRaw<'input> = {
+    <Ident> => <>,
 }
 
 DeployArgs: WithArgsRaw<'input> = {
