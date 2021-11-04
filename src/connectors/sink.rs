@@ -570,7 +570,7 @@ where
                             }
                         }
                         SinkMsg::Drain(sender) => {
-                            // send message back if we received Drain signal from all input pipelines
+                            // send message back if we already received Drain signal from all input pipelines
                             self.state = Draining;
                             self.drain_channel = Some(sender);
                             if self.drains_received.is_superset(&self.starts_received) {
