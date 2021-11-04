@@ -23,6 +23,7 @@ use std::{
     process,
 };
 use tremor_common::{file, time::nanotime};
+use tremor_script::prelude::*;
 use xz2::read::XzDecoder;
 
 // FIXME: enable structured writing
@@ -40,6 +41,9 @@ pub struct Config {
 
     #[serde(default = "Default::default")]
     pub is_transactional: bool,
+
+    #[serde(default = "Default::default")]
+    pub structured: bool,
 
     /// Number of seconds to collect data before the system is stopped.
     pub stop_after_secs: u64,
@@ -196,6 +200,7 @@ struct Blackhole {
     run_secs: f64,
     bytes: usize,
     count: u64,
+    structured: bool,
     buf: Vec<u8>,
 }
 
@@ -209,6 +214,7 @@ impl Blackhole {
             stop_after: now_ns + (config.stop_after_secs + config.warmup_secs) * 1_000_000_000,
             warmup: now_ns + config.warmup_secs * 1_000_000_000,
             has_stop_limit: config.stop_after_secs != 0,
+            structured: config.structured,
             delivered: Histogram::new_with_bounds(
                 1,
                 100_000_000_000,
@@ -237,14 +243,11 @@ impl Sink for Blackhole {
     ) -> Result<SinkReply> {
         let now_ns = nanotime();
         if self.has_stop_limit && now_ns > self.stop_after {
-            if write_text(&self.delivered, stdout(), 5, 2).is_ok() {
-                println!(
-                    "\n\nThroughput   (data): {:.1} MB/s\nThroughput (events): {:.1}k events/s",
-                    (self.bytes as f64 / self.run_secs) / (1024.0 * 1024.0),
-                    (self.count as f64 / self.run_secs) / 1000.0
-                );
+            if self.structured {
+                let v = self.to_value(2)?;
+                v.write(&mut stdout())?;
             } else {
-                eprintln!("Failed to serialize histogram");
+                self.write_text(stdout(), 5, 2)?;
             }
             // ALLOW: This is on purpose, we use blackhole for benchmarking, so we want it to terminate the process when done
             process::exit(0);
@@ -267,87 +270,129 @@ impl Sink for Blackhole {
     }
 }
 
-fn write_text<W: Write>(
-    hist: &Histogram<u64>,
-    mut writer: W,
-    quantile_precision: usize,
-    ticks_per_half: u32,
-) -> Result<()> {
-    fn write_extra_data<T1: Display, T2: Display, W: Write>(
-        writer: &mut W,
-        label1: &str,
-        data1: T1,
-        label2: &str,
-        data2: T2,
-    ) -> std::io::Result<()> {
+impl Blackhole {
+    fn write_text<W: Write>(
+        &self,
+        mut writer: W,
+        quantile_precision: usize,
+        ticks_per_half: u32,
+    ) -> Result<()> {
+        fn write_extra_data<T1: Display, T2: Display, W: Write>(
+            writer: &mut W,
+            label1: &str,
+            data1: T1,
+            label2: &str,
+            data2: T2,
+        ) -> std::io::Result<()> {
+            writer.write_all(
+                format!(
+                    "#[{:10} = {:12.2}, {:14} = {:12.2}]\n",
+                    label1, data1, label2, data2
+                )
+                .as_ref(),
+            )
+        }
         writer.write_all(
             format!(
-                "#[{:10} = {:12.2}, {:14} = {:12.2}]\n",
-                label1, data1, label2, data2
+                "{:>10} {:>quantile_precision$} {:>10} {:>14}\n\n",
+                "Value",
+                "Percentile",
+                "TotalCount",
+                "1/(1-Percentile)",
+                quantile_precision = quantile_precision + 2 // + 2 from leading "0." for numbers
             )
             .as_ref(),
-        )
-    }
-
-    writer.write_all(
-        format!(
-            "{:>10} {:>quantile_precision$} {:>10} {:>14}\n\n",
-            "Value",
-            "Percentile",
-            "TotalCount",
-            "1/(1-Percentile)",
-            quantile_precision = quantile_precision + 2 // + 2 from leading "0." for numbers
-        )
-        .as_ref(),
-    )?;
-    let mut sum = 0;
-    for v in hist.iter_quantiles(ticks_per_half) {
-        sum += v.count_since_last_iteration();
-        if v.quantile_iterated_to() < 1.0 {
-            writer.write_all(
-                format!(
-                    "{:12} {:1.*} {:10} {:14.2}\n",
-                    v.value_iterated_to(),
-                    quantile_precision,
-                    //                        v.quantile(),
-                    //                        quantile_precision,
-                    v.quantile_iterated_to(),
-                    sum,
-                    1_f64 / (1_f64 - v.quantile_iterated_to()),
-                )
-                .as_ref(),
-            )?;
-        } else {
-            writer.write_all(
-                format!(
-                    "{:12} {:1.*} {:10} {:>14}\n",
-                    v.value_iterated_to(),
-                    quantile_precision,
-                    //                        v.quantile(),
-                    //                        quantile_precision,
-                    v.quantile_iterated_to(),
-                    sum,
-                    "inf"
-                )
-                .as_ref(),
-            )?;
+        )?;
+        let mut sum = 0;
+        for v in self.delivered.iter_quantiles(ticks_per_half) {
+            sum += v.count_since_last_iteration();
+            if v.quantile_iterated_to() < 1.0 {
+                writer.write_all(
+                    format!(
+                        "{:12} {:1.*} {:10} {:14.2}\n",
+                        v.value_iterated_to(),
+                        quantile_precision,
+                        //                        v.quantile(),
+                        //                        quantile_precision,
+                        v.quantile_iterated_to(),
+                        sum,
+                        1_f64 / (1_f64 - v.quantile_iterated_to()),
+                    )
+                    .as_ref(),
+                )?;
+            } else {
+                writer.write_all(
+                    format!(
+                        "{:12} {:1.*} {:10} {:>14}\n",
+                        v.value_iterated_to(),
+                        quantile_precision,
+                        //                        v.quantile(),
+                        //                        quantile_precision,
+                        v.quantile_iterated_to(),
+                        sum,
+                        "inf"
+                    )
+                    .as_ref(),
+                )?;
+            }
         }
-    }
-    write_extra_data(
-        &mut writer,
-        "Mean",
-        hist.mean(),
-        "StdDeviation",
-        hist.stdev(),
-    )?;
-    write_extra_data(&mut writer, "Max", hist.max(), "Total count", hist.len())?;
-    write_extra_data(
-        &mut writer,
-        "Buckets",
-        hist.buckets(),
-        "SubBuckets",
-        hist.distinct_values(),
-    )?;
+        write_extra_data(
+            &mut writer,
+            "Mean",
+            self.delivered.mean(),
+            "StdDeviation",
+            self.delivered.stdev(),
+        )?;
+        write_extra_data(
+            &mut writer,
+            "Max",
+            self.delivered.max(),
+            "Total count",
+            self.delivered.len(),
+        )?;
+        write_extra_data(
+            &mut writer,
+            "Buckets",
+            self.delivered.buckets(),
+            "SubBuckets",
+            self.delivered.distinct_values(),
+        )?;
+        println!(
+            "\n\nThroughput   (data): {:.1} MB/s\nThroughput (events): {:.1}k events/s",
+            (self.bytes as f64 / self.run_secs) / (1024.0 * 1024.0),
+            (self.count as f64 / self.run_secs) / 1000.0
+        );
 
-    Ok(())
+        Ok(())
+    }
+
+    fn to_value(&self, ticks_per_half: u32) -> Result<Value<'static>> {
+        let quantiles: Value = self
+            .delivered
+            .iter_quantiles(ticks_per_half)
+            .map(|v| {
+                literal!({
+                    "value": v.value_iterated_to(),
+                    "quantile": v.quantile(),
+                    "quantile_to": v.quantile_iterated_to()
+
+                })
+            })
+            .collect();
+        Ok(literal!({
+            "mean": self.delivered.mean(),
+            "stdev": self.delivered.stdev(),
+            "max": self.delivered.max(),
+            "count": self.delivered.len(),
+            "buckets": self.delivered.buckets(),
+            "subbuckets": self.delivered.distinct_values(),
+            "bytes": self.bytes,
+            "throughput": {
+                "events_per_second": (self.count as f64 / self.run_secs),
+                "bytes_per_second": (self.bytes as f64 / self.run_secs)
+            },
+            "quantiles": quantiles
+
+        }))
+    }
 }
