@@ -28,6 +28,7 @@ use tremor_value::literal;
 const URL_SCHEME: &str = "tremor-tcp-client";
 
 #[derive(Deserialize, Debug)]
+#[serde(deny_unknown_fields)]
 pub struct Config {
     host: String,
     port: u16,

@@ -17,6 +17,7 @@ use crate::connectors::prelude::*;
 use value_trait::ValueAccess;
 
 #[derive(Deserialize, Debug, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct Config {
     /// path to file to load data from
     path: Option<String>,

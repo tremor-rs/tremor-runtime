@@ -17,6 +17,7 @@ use std::mem::swap;
 use tremor_script::prelude::*;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct Config {
     /// Name of the event history ( path ) to track
     pub count: usize,
