@@ -63,6 +63,7 @@ impl Default for StdStream {
 }
 
 #[derive(Deserialize, Debug, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct Config {
     #[serde(default = "Default::default")]
     output: StdStream, //FIXME should std_Stream be stdio + err depending on port?

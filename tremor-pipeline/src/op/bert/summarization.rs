@@ -24,6 +24,7 @@ use rust_bert::pipelines::summarization::{SummarizationConfig, SummarizationMode
 use tremor_script::prelude::*;
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct Config {
     #[serde(default = "Default::default")]
     file: String, // just a stupid placeholder

@@ -19,6 +19,7 @@ use async_std::net::UdpSocket;
 use super::source::StreamReader;
 
 #[derive(Deserialize, Debug, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct Config {
     /// The port to listen on.
     pub port: u16,
