@@ -170,7 +170,7 @@ reqwest = "0.11.6"
 
 [dependencies.tungstenite]
 default-features = false
-version = "0.15"
+version = "0.16"
 
 [dev-dependencies]
 matches = "0.1"
