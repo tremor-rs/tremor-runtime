@@ -14,8 +14,8 @@
 
 #![allow(clippy::module_name_repetitions)]
 
-use async_std::future::timeout;
 use async_std::task;
+use async_std::{channel::unbounded, future::timeout};
 use either::Either;
 use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
@@ -377,9 +377,29 @@ impl SourceManagerBuilder {
     where
         S: Source + Send + 'static,
     {
-        let qsize = self.qsize;
+        // We use a unbounded channel for counterflow, while an unbounded channel seems dangerous
+        // there is soundness to this.
+        // The unbounded channel ensures that on counterflow we never have to block, or in other
+        // words that sinks or pipelines sending data backwards always can progress past
+        // the sending.
+        // This prevents a deadlock where the pipeline is waiting for a full channel to send data to
+        // the source and the source is waiting for a full channel to send data to the pipeline.
+        // We prevent unbounded growth by two mechanisms:
+        // 1) counterflow is ALWAYS and ONLY created in response to a message
+        // 2) we always process counterflow prior to forward flow
+        //
+        // As long as we have counterflow messages to process, and channel size is growing we do
+        // not process any forward flow. Without forward flow we stave the counterflow ensuring that
+        // the counterflow channel is always bounded by the forward flow in a 1:N relationship where
+        // N is the maximum number of counterflow events a single event can trigger.
+        // N is normally < 1.
+        //
+        // In other words, DO NOT REMOVE THE UNBOUNDED QUEUE, it will lead to deadlocks where
+        // the pipeline is waiting for the source to process contraflow and the source waits for
+        // the pipeline to process forward flow.
+
         let name = ctx.url.short_id("c-src"); // connector source
-        let (source_tx, source_rx) = bounded(qsize);
+        let (source_tx, source_rx) = unbounded();
         let source_addr = SourceAddr { addr: source_tx };
         let manager = SourceManager::new(source, ctx, self, source_rx, source_addr.clone());
         // spawn manager task
@@ -1059,6 +1079,10 @@ where
 
             if self.state.should_pull_data() && !self.pipelines_out.is_empty() {
                 let data = self.source.pull_data(self.pull_counter, &self.ctx).await;
+                self.pull_counter += 1;
+                // if self.pull_counter % 10_000 == 0 {
+                //     dbg!(self.pull_counter);
+                // }
                 self.handle_data(data).await?;
             };
         }

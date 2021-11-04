@@ -193,6 +193,7 @@ impl OutputTarget {
         }
         Ok(())
     }
+
     /// send a signal out to this destination
     ///
     /// # Errors
