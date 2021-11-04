@@ -47,6 +47,7 @@ impl Default for Method {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Config {
     /// The maximum allowed timeout before backoff is applied in ms
     pub timeout: f64,

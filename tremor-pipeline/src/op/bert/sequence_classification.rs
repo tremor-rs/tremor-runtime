@@ -27,6 +27,7 @@ use tremor_script::prelude::*;
 use url::Url;
 
 #[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 struct Config {
     #[serde(default = "dflt_config")]
     config_file: String,

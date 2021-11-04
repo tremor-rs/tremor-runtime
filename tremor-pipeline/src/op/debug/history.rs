@@ -17,6 +17,7 @@ use crate::ConfigImpl;
 use tremor_script::prelude::*;
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Config {
     /// Name of the event history ( path ) to track
     pub op: String,
