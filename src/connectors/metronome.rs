@@ -16,6 +16,7 @@ use tremor_common::time::nanotime;
 use tremor_script::literal;
 
 #[derive(Deserialize, Debug, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct Config {
     /// Interval in milliseconds
     pub interval: u64,

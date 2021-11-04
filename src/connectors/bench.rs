@@ -28,6 +28,7 @@ use xz2::read::XzDecoder;
 
 // FIXME: enable structured writing
 #[derive(Deserialize, Debug, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct Config {
     /// source file to read data from, it will be iterated over repeatedly,
     /// can be xz compressed
