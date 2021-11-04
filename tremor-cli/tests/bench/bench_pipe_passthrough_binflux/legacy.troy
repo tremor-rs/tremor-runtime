@@ -1,4 +1,4 @@
-define onramp::blaster connector ingress
+define blaster connector ingress
 args
   type = "blaster",
   id =  "ingress",
@@ -10,7 +10,7 @@ args
   }
 end;
 
-define offramp::blackhole connector egress
+define blackhole connector egress
 args
   type = "blackhole",
   id =  "egress",

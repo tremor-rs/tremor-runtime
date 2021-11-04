@@ -515,7 +515,7 @@ fn run_troy_source(_matches: &ArgMatches, src: &str, args: &Value) -> Result<()>
         // Next - we deploy the connectors - no interconnection so quiescent at this juncture
         for (name, connector) in connectors {
             match connector.builtin_kind.as_str() {
-                "onramp::blaster" => {
+                "blaster" => {
                     let url = TremorUrl::parse(&format!("/onramp/{}/01", &name)).unwrap();
                     let yaml = serde_yaml::to_string(&connector.args).unwrap();
                     let config: tremor_runtime::config::OnRamp =
@@ -526,7 +526,7 @@ fn run_troy_source(_matches: &ArgMatches, src: &str, args: &Value) -> Result<()>
                         .await
                         .unwrap();
                 }
-                "offramp::blackhole" => {
+                "blackhole" => {
                     let url = TremorUrl::parse(&format!("/offramp/{}/01", &name)).unwrap();
                     let yaml = serde_yaml::to_string(&connector.args).unwrap();
                     let config: tremor_runtime::config::OffRamp =
@@ -537,7 +537,7 @@ fn run_troy_source(_matches: &ArgMatches, src: &str, args: &Value) -> Result<()>
                         .await
                         .unwrap();
                 }
-                "system::stdin" => {
+                "stdin" => {
                     let url = TremorUrl::parse(&format!("/onramp/{}/01", &name)).unwrap();
                     let yaml = serde_yaml::to_string(&connector.args).unwrap();
                     let config: tremor_runtime::config::OnRamp =
@@ -548,7 +548,7 @@ fn run_troy_source(_matches: &ArgMatches, src: &str, args: &Value) -> Result<()>
                         .await
                         .unwrap();
                 }
-                "system::stdout" => {
+                "stdout" => {
                     let url = TremorUrl::parse(&format!("/offramp/{}/01", &name)).unwrap();
                     let yaml = serde_yaml::to_string(&connector.args).unwrap();
                     let config: tremor_runtime::config::OffRamp =
