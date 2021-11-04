@@ -436,7 +436,6 @@ fn run_trickle_query(
 
 #[allow(clippy::too_many_lines, clippy::unwrap_used)]
 fn run_troy_source(_matches: &ArgMatches, src: &str, args: &Value) -> Result<()> {
-    use tremor_script::ast;
     use tremor_script::srs;
 
     env_logger::init();
@@ -473,9 +472,9 @@ fn run_troy_source(_matches: &ArgMatches, src: &str, args: &Value) -> Result<()>
     // TODO refactor remove indirection
     let unit = deployable.deploy.as_deployment_unit()?;
 
-    let mut connectors: HashMap<String, ast::ConnectorDecl> = HashMap::new();
+    let mut connectors: HashMap<String, srs::ConnectorDecl> = HashMap::new();
     let mut pipelines: HashMap<String, srs::PipelineDecl> = HashMap::new();
-    let mut flows: HashMap<String, ast::FlowDecl> = HashMap::new();
+    let mut flows: HashMap<String, srs::FlowDecl> = HashMap::new();
 
     for (name, stmt) in unit.instances {
         if let srs::AtomOfDeployment::Pipeline(ref pipe) = &stmt.atom {
@@ -514,7 +513,7 @@ fn run_troy_source(_matches: &ArgMatches, src: &str, args: &Value) -> Result<()>
 
         // Next - we deploy the connectors - no interconnection so quiescent at this juncture
         for (name, connector) in connectors {
-            match connector.builtin_kind.as_str() {
+            match connector.kind.as_str() {
                 "blaster" => {
                     let url = TremorUrl::parse(&format!("/onramp/{}/01", &name)).unwrap();
                     let yaml = serde_yaml::to_string(&connector.args).unwrap();
