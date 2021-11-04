@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/// FIXME - remove and complete refactoring after connector and troy branches are merged
+/// TODO - remove and complete refactoring after connector and troy branches are merged
 
 /// Deprecated - Alias for `tremor_common::url::ResourceType`
 pub type ResourceType = tremor_common::url::ResourceType;

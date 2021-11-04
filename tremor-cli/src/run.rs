@@ -470,7 +470,7 @@ fn run_troy_source(_matches: &ArgMatches, src: &str, args: &Value) -> Result<()>
         }
     };
 
-    // FIXME TODO refactor remove indirection
+    // TODO refactor remove indirection
     let unit = deployable.deploy.as_deployment_unit()?;
 
     let mut connectors: HashMap<String, ast::ConnectorDecl> = HashMap::new();
@@ -641,7 +641,7 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
             for arg in overags {
                 let kv: Vec<String> = arg.split('=').map(ToString::to_string).collect();
                 if kv.len() != 2 {
-                    // FIXME TODO output a nicer error
+                    // TODO output a nicer error
                 }
                 let key = kv.get(0);
                 let value = kv.get(1);
