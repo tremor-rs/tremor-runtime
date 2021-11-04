@@ -34,6 +34,7 @@ impl Default for Host {
 }
 
 #[derive(Deserialize, Debug, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct Config {
     /// Host to use as source
     host: String,

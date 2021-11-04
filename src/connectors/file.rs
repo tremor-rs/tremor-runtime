@@ -66,6 +66,7 @@ impl Mode {
 
 /// File connector config
 #[derive(Deserialize, Debug, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct Config {
     /// path to the file
     pub path: PathBuf,

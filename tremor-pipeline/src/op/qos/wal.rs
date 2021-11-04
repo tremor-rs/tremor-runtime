@@ -111,6 +111,7 @@ impl From<&Idx> for IVec {
 }
 
 #[derive(Debug, Clone, Deserialize, serde::Deserialize, serde::Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct Config {
     /// Maximum number of events to read per tick/event when filling
     /// up from the persistant storage

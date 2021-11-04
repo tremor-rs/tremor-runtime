@@ -28,6 +28,7 @@ use tremor_value::prelude::*;
 const URL_SCHEME: &str = "tremor-tcp-server";
 
 #[derive(Deserialize, Debug)]
+#[serde(deny_unknown_fields)]
 pub struct Config {
     // kept as a str, so it is re-resolved upon each connect
     host: String,
