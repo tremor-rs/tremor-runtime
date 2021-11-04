@@ -97,7 +97,7 @@ DeployLinks: DeployLinksRaw<'input> = {
 }
 
 DeployLinks_: DeployLinksRaw<'input> = {
-    // TODO FIXME - The troy grammar uses ',' for with, config and args rules
+    // TODO  The troy grammar uses ',' for with, config and args rules
     // so from one perspective ',' is more consistent than ';' which is what
     // is documented in the rfc. Erring for the RFC for now - we'll revisit
     // when `troy` and `connectors` are merged and we have a working set
@@ -108,7 +108,7 @@ DeployLinks_: DeployLinksRaw<'input> = {
 }
 
 DeployLink: DeployLinkRaw<'input> = {
-    // FIXME TODO TBD
+    // TODO TBD - requires connetors branch changes before completing
     <start:@L> "connect" <from:DeployEndpoint> "to" <to:DeployEndpoint> <end:@L> => DeployLinkRaw { from, to }
     // <start:@L> <name:Ident> => ArgumentDeclRaw::Required(name),
     // <start:@L> <name:Ident> "=" <default_value:ExprImut> => ArgumentDeclRaw::Optional(name, default_value)

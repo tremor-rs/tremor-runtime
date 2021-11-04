@@ -78,7 +78,6 @@ pub fn run_script<'script, 'registry>(
 
     match expr.run(&ctx, AggrType::Emit, &mut event, &mut state, &mut meta) {
         Ok(Return::Emit { value, .. }) => Ok(value),
-        // FIXME this deserves a proper error
         _otherwise => error_generic(
             expr,
             expr,
@@ -121,7 +120,6 @@ pub(crate) fn run_expr<'script, 'registry>(
     match got {
         Ok(Cont::Emit(value, _port)) => Ok(value),
         Ok(Cont::Cont(value)) => Ok(value.into_owned()),
-        // FIXME this deserves a proper error
         _otherwise => error_generic(
             expr,
             expr,
@@ -420,7 +418,8 @@ fn arg_spec_resolver<'script, 'registry>(
         for (name, value) in params_spec {
             let moo = Cow::owned(name);
             if !spec.contains(&moo) {
-                // FIXME TODO consider duplicate argument specification - ok or ko?
+                // TODO consider duplicate argument specification - ok or ko?
+                // For now we override and replace
                 spec.push(moo.clone());
             }
             let up_value = value;
@@ -480,7 +479,7 @@ fn arg_resolver<'script, 'registry>(
         for name in spec.iter() {
             let cow_name = Cow::owned(name.to_string());
             if !args_as_params.contains_key(&cow_name) {
-                // FIXME Add extra args hygienic error
+                // TODO Add extra args hygienic error
                 return Err(ErrorKind::DeployRequiredArgDoesNotResolve(
                     outer.extent(&helper.meta),
                     outer.extent(&helper.meta),
@@ -614,7 +613,7 @@ type ModularTarget<'script> = (Vec<IdentRaw<'script>>, IdentRaw<'script>);
 /// we're forced to make this pub because of lalrpop
 pub enum DeployEndpointRaw<'script> {
     Legacy(StringLitRaw<'script>),
-    // FIXME TODO modular target with optional port specification
+    // TODO modular target with optional port specification - await connectors before revising
     Troy(ModularTarget<'script>),
 }
 
@@ -641,7 +640,7 @@ impl<'script> Upable<'script> for FlowDeclRaw<'script> {
                     TremorUrl::parse(&raw_url?.to_string())?
                 }
                 DeployEndpointRaw::Troy(_modular_target) => {
-                    // TODO FIXME modular url target resolution and validation
+                    // TODO modular url target resolution and validation - await connectors branch merge
                     TremorUrl::parse("fake-it")?
                 }
             };
@@ -652,7 +651,7 @@ impl<'script> Upable<'script> for FlowDeclRaw<'script> {
                     TremorUrl::parse(&raw_url?.to_string())?
                 }
                 DeployEndpointRaw::Troy(_modular_target) => {
-                    // TODO FIXME modular url target resolution and validation
+                    // TODO modular url target resolution and validation
                     TremorUrl::parse("fake-it")?
                 }
             };
