@@ -19,6 +19,7 @@ use crate::{
 };
 use halfbrown::HashMap;
 use std::{fmt::Debug, mem, pin::Pin, sync::Arc};
+use tremor_common::url::TremorUrl;
 
 /// A fully resolved deployable artefact
 #[derive(Clone, Debug, PartialEq)]
@@ -26,9 +27,9 @@ pub enum AtomOfDeployment {
     /// A deployable pipeline instance
     Pipeline(PipelineDecl),
     /// A deployable connector instance
-    Connector(ast::ConnectorDecl<'static>),
+    Connector(ConnectorDecl),
     /// A deployable flow instance
-    Flow(ast::FlowDecl<'static>),
+    Flow(FlowDecl),
 }
 
 ///! This file includes our self referential structs
@@ -137,10 +138,10 @@ impl Deploy {
                         AtomOfDeployment::Pipeline(PipelineDecl::new_from_deploy(self, &atom.id)?)
                     }
                     ast::deploy::AtomOfDeployment::Connector(atom) => {
-                        AtomOfDeployment::Connector(atom.clone())
+                        AtomOfDeployment::Connector(ConnectorDecl::new_from_deploy(self, &atom.id)?)
                     }
                     ast::deploy::AtomOfDeployment::Flow(atom) => {
-                        AtomOfDeployment::Flow(atom.clone())
+                        AtomOfDeployment::Flow(FlowDecl::new_from_deploy(self, &atom.id)?)
                     }
                 };
                 // let atom = CreateStmt::new_from_stmt(self, &stmt)?;
@@ -557,7 +558,6 @@ pub struct PipelineDecl {
     /// The identity of this pipeline
     pub id: String,
     raw: Vec<Arc<Pin<Vec<u8>>>>,
-    //    ast: ast::PipelineDecl<'static>,
     query: Query,
 }
 
@@ -617,6 +617,110 @@ impl PipelineDecl {
         } else {
             Err("Trying to turn something into script create that isn't a script create".into())
         }
+    }
+}
+
+/*
+=========================================================================
+*/
+
+/// A connector declaration
+#[derive(Clone, PartialEq)]
+pub struct ConnectorDecl {
+    /// The identity of this connector
+    pub id: String,
+    raw: Vec<Arc<Pin<Vec<u8>>>>,
+    /// Arguments for this connector definition
+    pub args: Value<'static>,
+    /// The type of connector
+    pub kind: String,
+}
+
+#[cfg(not(tarpaulin_include))] // this is a simple Debug implementation
+impl Debug for ConnectorDecl {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.kind.fmt(f)
+    }
+}
+
+impl ConnectorDecl {
+    /// Creates a new `ConnectorDecl` with a pre-existing connecotr sourced from a troy
+    /// deployment
+    /// # Errors
+    /// If the self-referential struct cannot be created safely from the deployment provided
+    pub fn new_from_deploy(origin: &Deploy, id: &str) -> std::result::Result<Self, CompilerError> {
+        let connector = origin
+            .script
+            .connectors
+            .values()
+            .find(|connector| id == connector.id)
+            .ok_or_else(|| CompilerError {
+                error: Error::from(format!("Invalid connector for deployment {}", &id).as_str()),
+                cus: vec![],
+            })?;
+
+        Ok(Self {
+            /// We capture the origin - so that the pinned raw memory is cached
+            /// with our own self-reference composing a self-referential struct
+            /// by composition - by tracking the origin with the embedded query
+            /// of interest referential safety should be preserved
+            raw: origin.raw.clone(),
+            id: id.to_string(),
+            args: connector.args.clone_static(),
+            kind: connector.builtin_kind.clone(),
+        })
+    }
+}
+
+/*
+=========================================================================
+*/
+
+/// A flow declaration
+#[derive(Clone, PartialEq)]
+pub struct FlowDecl {
+    /// The identity of this connector
+    pub id: String,
+    raw: Vec<Arc<Pin<Vec<u8>>>>,
+    /// Arguments for this flow definition
+    pub args: Value<'static>,
+    /// Link specifications
+    pub links: HashMap<TremorUrl, TremorUrl>,
+}
+
+#[cfg(not(tarpaulin_include))] // this is a simple Debug implementation
+impl Debug for FlowDecl {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.id.fmt(f)
+    }
+}
+
+impl FlowDecl {
+    /// Creates a new `FlowDecl` with a pre-existing connecotr sourced from a troy
+    /// deployment
+    /// # Errors
+    /// If the self-referential struct cannot be created safely from the deployment provided
+    pub fn new_from_deploy(origin: &Deploy, id: &str) -> std::result::Result<Self, CompilerError> {
+        let flow = origin
+            .script
+            .flows
+            .values()
+            .find(|flow| id == flow.id)
+            .ok_or_else(|| CompilerError {
+                error: Error::from(format!("Invalid flow for deployment {}", &id).as_str()),
+                cus: vec![],
+            })?;
+
+        Ok(Self {
+            /// We capture the origin - so that the pinned raw memory is cached
+            /// with our own self-reference composing a self-referential struct
+            /// by composition - by tracking the origin with the embedded query
+            /// of interest referential safety should be preserved
+            raw: origin.raw.clone(),
+            id: id.to_string(),
+            args: flow.args.clone_static(),
+            links: flow.links.clone(),
+        })
     }
 }
 
