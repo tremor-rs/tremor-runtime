@@ -602,7 +602,7 @@ impl PipelineDecl {
         self.raw.extend_from_slice(&stmt.raw);
 
         if let ast::deploy::DeployStmt::PipelineDecl(_instance) = &stmt.structured {
-            // FIXME add support for params
+            // TODO add support for params once troy+connectors branches have merged merged
             // if let Some(map) = &instance.params {
             //     for (name, value) in map {
             //         // We can not clone here since we do not bind Script to node_rentwrapped's lifetime

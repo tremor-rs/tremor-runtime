@@ -748,7 +748,7 @@ type: metrics
             Vec::new(),
             &*tremor_pipeline::FN_REGISTRY.lock()?,
             &aggr_reg,
-            &literal!({}), // FIXME runtime args
+            &literal!({}),  // TODO add support for runtime args once troy+connectors branches have merged
         )?;
         self.repo
             .publish_pipeline(&PASSTHROUGH_PIPELINE, true, artefact_passthrough)
