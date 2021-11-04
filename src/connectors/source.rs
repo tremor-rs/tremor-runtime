@@ -767,7 +767,8 @@ where
     /// send a signal to all connected pipelines
     async fn send_signal(&mut self, signal: Event) -> Result<()> {
         for (_url, addr) in self.pipelines_out.iter().chain(self.pipelines_err.iter()) {
-            addr.send(pipeline::Msg::Signal(signal.clone())).await?;
+            addr.send(Box::new(pipeline::Msg::Signal(signal.clone())))
+                .await?;
         }
         Ok(())
     }
@@ -801,10 +802,10 @@ where
                 for (pipe_url, addr) in pipelines {
                     if let Some(input) = pipe_url.instance_port() {
                         if let Err(e) = addr
-                            .send(pipeline::Msg::Event {
+                            .send(Box::new(pipeline::Msg::Event {
                                 input: input.to_string().into(),
                                 event: event.clone(),
-                            })
+                            }))
                             .await
                         {
                             error!(
@@ -826,10 +827,10 @@ where
                 if let Some(input) = last.0.instance_port() {
                     if let Err(e) = last
                         .1
-                        .send(pipeline::Msg::Event {
+                        .send(Box::new(pipeline::Msg::Event {
                             input: input.to_string().into(),
                             event,
-                        })
+                        }))
                         .await
                     {
                         error!(
