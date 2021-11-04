@@ -181,7 +181,7 @@ pub async fn load_query_file(world: &World, file_name: &str) -> Result<usize> {
         vec![],
         &*FN_REGISTRY.lock()?,
         &aggr_reg,
-        &literal!({}), // TODO FIXME runtime args
+        &literal!({}), // TODO add support for runtime args once troy+connectors branches have merged
     );
     let query = match query {
         Ok(query) => query,
