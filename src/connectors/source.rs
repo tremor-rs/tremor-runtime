@@ -544,6 +544,12 @@ impl SourceState {
     }
 }
 
+#[derive(Debug, PartialEq)]
+enum ControlPlaneResult {
+    Continue,
+    Stop,
+}
+
 /// entity driving the source task
 /// and keeping the source state around
 pub(crate) struct SourceManager<S>
@@ -787,7 +793,7 @@ where
                         // we received 1 drain CB event per connected pipeline (hopefully)
                         if let Some(connector_channel) = self.connector_channel.as_ref() {
                             debug!(
-                                "[Source::{}] Drain compleltet, sending data now!",
+                                "[Source::{}] Drain completed, sending data now!",
                                 self.ctx.url
                             );
                             if connector_channel.send(Msg::SourceDrained).await.is_err() {
