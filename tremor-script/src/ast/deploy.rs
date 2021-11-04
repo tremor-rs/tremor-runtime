@@ -30,7 +30,7 @@ pub(crate) mod raw;
 /// A Tremor deployment
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Deploy<'script> {
-    // TODO FIXME handle configuration directives for troy definitions
+    // TODO handle configuration directives for troy definitions
     /// Configuration directives
     pub directives: HashMap<String, Value<'script>>,
     /// Statements
@@ -51,7 +51,7 @@ impl<'script> Deploy<'script> {
     #[must_use]
     #[allow(clippy::unused_self)]
     pub fn dot(&self) -> String {
-        "todo".to_string() // TODO FIXME convert to graphviz dot file
+        "todo".to_string() // TODO convert to graphviz dot file
     }
 }
 

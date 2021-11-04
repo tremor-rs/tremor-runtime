@@ -48,7 +48,7 @@ pub async fn publish_artefact(mut req: Request) -> Result<Response> {
                 vec![],
                 &*FN_REGISTRY.lock()?,
                 &aggr_reg,
-                &literal!({}), // FIXME runtime args
+                &literal!({}), // TODO add deployment time args support when connectors branch is merged
             )?;
 
             let id = query.id().ok_or_else(|| {
