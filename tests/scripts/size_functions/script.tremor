@@ -1,0 +1,6 @@
+use std;
+
+{
+    "mebi": std::math::round(std::size::mebi(event)),
+    "kibi": std::math::round(std::size::kibi(event)),
+}
