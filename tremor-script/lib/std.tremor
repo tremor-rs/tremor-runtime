@@ -33,3 +33,4 @@ use std::string;
 use std::test;
 use std::type;
 use std::url;
+use std::size;

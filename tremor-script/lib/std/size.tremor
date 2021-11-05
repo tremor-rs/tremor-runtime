@@ -1,0 +1,7 @@
+fn kibi(size) with
+    size * 1024
+end;
+
+fn mebi(size) with
+  kibi(1024*size)
+end;
