@@ -137,7 +137,6 @@ pub(crate) fn ident_to_token(ident: &str) -> Token {
         "use" => Token::Use,
         "as" => Token::As,
         "recur" => Token::Recur,
-        "query" => Token::Subquery,
         "pipeline" => Token::Pipeline,
         "connector" => Token::Connector,
         "connect" => Token::Connect,
@@ -145,7 +144,6 @@ pub(crate) fn ident_to_token(ident: &str) -> Token {
         "links" => Token::Links,
         "to" => Token::To,
         "deploy" => Token::Deploy,
-        "config" => Token::Config,
         src => Token::Ident(src.into(), false),
     }
 }
@@ -401,8 +399,6 @@ pub enum Token<'input> {
     LineDirective(Location, Cow<'input, str>),
     /// Config Directive
     ConfigDirective,
-    /// Subquery Keyword
-    Subquery,
     /// The `pipeline` keyword
     Pipeline,
     /// The `connector` keyword
@@ -494,7 +490,6 @@ impl<'input> Token<'input> {
                 | Token::Where
                 | Token::Window
                 | Token::With
-                | Token::Subquery
                 | Token::Pipeline
                 | Token::Connector
                 | Token::Flow
@@ -781,7 +776,6 @@ impl<'input> fmt::Display for Token<'input> {
             Token::Recur => write!(f, "recur"),
             // Preprocessor
             Token::ConfigDirective => write!(f, "#!config "),
-            Token::Subquery => write!(f, "query"),
             Token::LineDirective(l, file) => write!(
                 f,
                 "#!line {} {} {} {} {}",

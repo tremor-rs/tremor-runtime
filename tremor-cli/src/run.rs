@@ -472,20 +472,10 @@ fn run_troy_source(_matches: &ArgMatches, src: &str, args: &Value) -> Result<()>
     // TODO refactor remove indirection
     let unit = deployable.deploy.as_deployment_unit()?;
 
-    let mut connectors: HashMap<String, srs::ConnectorDecl> = HashMap::new();
-    let mut pipelines: HashMap<String, srs::PipelineDecl> = HashMap::new();
     let mut flows: HashMap<String, srs::FlowDecl> = HashMap::new();
 
     for (name, stmt) in unit.instances {
-        if let srs::AtomOfDeployment::Pipeline(ref pipe) = &stmt.atom {
-            pipelines.insert(name.clone(), pipe.clone());
-        }
-        if let srs::AtomOfDeployment::Connector(ref connector) = stmt.atom {
-            connectors.insert(name.clone(), connector.clone());
-        }
-        if let srs::AtomOfDeployment::Flow(ref flow) = stmt.atom {
-            flows.insert(name.clone(), flow.clone());
-        }
+        flows.insert(name.clone(), stmt.atom.clone());
     }
 
     let storage_directory = Some("./storage".to_string());
@@ -495,74 +485,6 @@ fn run_troy_source(_matches: &ArgMatches, src: &str, args: &Value) -> Result<()>
             .await
             .unwrap();
         // Pipelines are inert until they are interconnected so we can deploy these quiescently
-        for (name, pipeline) in pipelines {
-            let url = TremorUrl::parse(&format!("/pipeline/{}/yellow", name)).unwrap();
-            world
-                .repo
-                .publish_pipeline(
-                    &url,
-                    false,
-                    tremor_pipeline::query::Query(
-                        tremor_script::Query::from_troy(&raw, &deployable.deploy, &pipeline)
-                            .unwrap(),
-                    ),
-                )
-                .await
-                .unwrap();
-        }
-
-        // Next - we deploy the connectors - no interconnection so quiescent at this juncture
-        for (name, connector) in connectors {
-            match connector.kind.as_str() {
-                "blaster" => {
-                    let url = TremorUrl::parse(&format!("/onramp/{}/01", &name)).unwrap();
-                    let yaml = serde_yaml::to_string(&connector.args).unwrap();
-                    let config: tremor_runtime::config::OnRamp =
-                        serde_yaml::from_str(&yaml).unwrap();
-                    world
-                        .repo
-                        .publish_onramp(&url, false, config)
-                        .await
-                        .unwrap();
-                }
-                "blackhole" => {
-                    let url = TremorUrl::parse(&format!("/offramp/{}/01", &name)).unwrap();
-                    let yaml = serde_yaml::to_string(&connector.args).unwrap();
-                    let config: tremor_runtime::config::OffRamp =
-                        serde_yaml::from_str(&yaml).unwrap();
-                    world
-                        .repo
-                        .publish_offramp(&url, false, config)
-                        .await
-                        .unwrap();
-                }
-                "stdin" => {
-                    let url = TremorUrl::parse(&format!("/onramp/{}/01", &name)).unwrap();
-                    let yaml = serde_yaml::to_string(&connector.args).unwrap();
-                    let config: tremor_runtime::config::OnRamp =
-                        serde_yaml::from_str(&yaml).unwrap();
-                    world
-                        .repo
-                        .publish_onramp(&url, false, config)
-                        .await
-                        .unwrap();
-                }
-                "stdout" => {
-                    let url = TremorUrl::parse(&format!("/offramp/{}/01", &name)).unwrap();
-                    let yaml = serde_yaml::to_string(&connector.args).unwrap();
-                    let config: tremor_runtime::config::OffRamp =
-                        serde_yaml::from_str(&yaml).unwrap();
-                    world
-                        .repo
-                        .publish_offramp(&url, false, config)
-                        .await
-                        .unwrap();
-                }
-                otherwise => {
-                    dbg!("Ignoring ", otherwise);
-                }
-            }
-        }
 
         // Finally we process our flows - this is where the interconnections and
         // we effectively go live in the legacy ( yaml ) based runtime

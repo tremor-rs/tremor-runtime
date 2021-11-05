@@ -21,17 +21,6 @@ use halfbrown::HashMap;
 use std::{fmt::Debug, mem, pin::Pin, sync::Arc};
 use tremor_common::url::TremorUrl;
 
-/// A fully resolved deployable artefact
-#[derive(Clone, Debug, PartialEq)]
-pub enum AtomOfDeployment {
-    /// A deployable pipeline instance
-    Pipeline(PipelineDecl),
-    /// A deployable connector instance
-    Connector(ConnectorDecl),
-    /// A deployable flow instance
-    Flow(FlowDecl),
-}
-
 ///! This file includes our self referential structs
 
 /// A deployment ( troy ) and it's attached source.
@@ -133,17 +122,7 @@ impl Deploy {
 
         for stmt in &self.script.stmts {
             if let StmtKind::CreateStmt(ref stmt) = stmt {
-                let atom = match &stmt.atom {
-                    ast::deploy::AtomOfDeployment::Pipeline(atom) => {
-                        AtomOfDeployment::Pipeline(PipelineDecl::new_from_deploy(self, &atom.id)?)
-                    }
-                    ast::deploy::AtomOfDeployment::Connector(atom) => {
-                        AtomOfDeployment::Connector(ConnectorDecl::new_from_deploy(self, &atom.id)?)
-                    }
-                    ast::deploy::AtomOfDeployment::Flow(atom) => {
-                        AtomOfDeployment::Flow(FlowDecl::new_from_deploy(self, &atom.id)?)
-                    }
-                };
+                let atom = FlowDecl::new_from_deploy(self, &stmt.atom.id)?;
                 // let atom = CreateStmt::new_from_stmt(self, &stmt)?;
                 instances.insert(
                     stmt.id.to_string(),
@@ -172,41 +151,7 @@ pub struct CreateStmt {
     /// Identity
     pub id: String,
     /// Atomic unit of deployment
-    pub atom: AtomOfDeployment,
-}
-
-impl CreateStmt {
-    // #[must_use]
-    // pub fn new_from_stmt(
-    //     origin: &Deploy,
-    //     stmt: &ast::CreateStmt,
-    // ) -> std::result::Result<Self, CompilerError> {
-    //     let atom = match &stmt.atom {
-    //         ast::deploy::AtomOfDeployment::Pipeline(atom) => AtomOfDeployment::Pipeline(
-    //             PipelineDecl::new_from_deploy(origin, atom.id.to_string())?,
-    //         ),
-    //         ast::deploy::AtomOfDeployment::Connector(atom) => {
-    //             let atom = unsafe {
-    //                 mem::transmute::<ast::ConnectorDecl<'_>, ast::ConnectorDecl<'static>>(
-    //                     atom.clone(),
-    //                 )
-    //             };
-    //             AtomOfDeployment::Connector(atom)
-    //         }
-
-    //         ast::deploy::AtomOfDeployment::Flow(atom) => {
-    //             let atom = unsafe {
-    //                 mem::transmute::<ast::FlowDecl<'_>, ast::FlowDecl<'static>>(atom.clone())
-    //             };
-    //             AtomOfDeployment::Flow(atom)
-    //         }
-    //     };
-
-    //     Ok(CreateStmt {
-    //         id: stmt.id.clone(),
-    //         atom,
-    //     })
-    // }
+    pub atom: FlowDecl,
 }
 
 /*
@@ -307,7 +252,13 @@ impl Query {
     /// deployment where the query is embedded in pipeline statements
     /// # Errors
     /// If the query self-referential struct cannot be safely created by id from the deployment provided
-    pub fn new_from_deploy(origin: &Deploy, id: &str) -> std::result::Result<Self, CompilerError> {
+    ///
+    /// FIXME: is passing in the helper here sound? This probably needs to be a clojure here to
+    ///        ensure lifetimes
+    pub fn new_from_deploy<'script, 'registry>(
+        origin: &Deploy,
+        id: &str,
+    ) -> std::result::Result<Self, CompilerError> {
         let resolved = origin
             .script
             .pipelines
@@ -545,78 +496,6 @@ impl Stmt {
         let structured = unsafe { mem::transmute::<Stmt<'_>, Stmt<'static>>(structured) };
 
         Ok(Self { raw, structured })
-    }
-}
-
-/*
-=========================================================================
-*/
-
-/// A query declaration
-#[derive(Clone, PartialEq)]
-pub struct PipelineDecl {
-    /// The identity of this pipeline
-    pub id: String,
-    raw: Vec<Arc<Pin<Vec<u8>>>>,
-    query: Query,
-}
-
-#[cfg(not(tarpaulin_include))] // this is a simple Debug implementation
-impl Debug for PipelineDecl {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.query.fmt(f)
-    }
-}
-
-impl PipelineDecl {
-    /// Access to the raw part of the script
-    #[must_use]
-    pub fn raw(&self) -> &[Arc<Pin<Vec<u8>>>] {
-        &self.raw
-    }
-
-    /// Creates a new Pipeline with a pre-existing query sourced from a troy
-    /// deployment where the query is embedded in pipeline statements
-    /// # Errors
-    /// If the self-referential struct cannot be created safely from the deployment provided
-    pub fn new_from_deploy(origin: &Deploy, id: &str) -> std::result::Result<Self, CompilerError> {
-        let query = Query::new_from_deploy(origin, id)?;
-        Ok(Self {
-            /// We capture the origin - so that the pinned raw memory is cached
-            /// with our own self-reference composing a self-referential struct
-            /// by composition - by tracking the origin with the embedded query
-            /// of interest referential safety should be preserved
-            raw: origin.raw.clone(),
-            id: id.to_string(),
-            query,
-        })
-    }
-
-    /// Applies a statment to the decl
-    ///
-    /// # Errors
-    /// if stmt is ot a Script
-    pub fn apply_stmt(&mut self, stmt: &DeployStmt) -> Result<()> {
-        // We append first in the case that some data already moved into self.structured by the time
-        // that the join_f fails
-        self.raw.extend_from_slice(&stmt.raw);
-
-        if let ast::deploy::DeployStmt::PipelineDecl(_instance) = &stmt.structured {
-            // TODO add support for params once troy+connectors branches have merged merged
-            // if let Some(map) = &instance.params {
-            //     for (name, value) in map {
-            //         // We can not clone here since we do not bind Script to node_rentwrapped's lifetime
-            //         self.script
-            //             .scripts
-            //             .consts
-            //             .args
-            //             .try_insert(name.clone(), value.clone());
-            //     }
-            // }
-            Ok(())
-        } else {
-            Err("Trying to turn something into script create that isn't a script create".into())
-        }
     }
 }
 
