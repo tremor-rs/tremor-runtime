@@ -42,16 +42,21 @@ DeployStmts: DeployStmtsRaw<'input> = {
   <item:DeployStmt> ";"? => vec![item],
 }
 
+
 DeployStmt: DeployStmtRaw<'input> = {
     DeployModuleStmt => DeployStmtRaw::ModuleStmt(<>),
-    DefinePipeline => <>,
+    DefinePipeline => DeployStmtRaw::PipelineDecl(<>),
     DefineConnector => <>,
     DefineFlow => <>,
+    DeployDeployStmt => <>,
+}
 
+DeployDeployStmt: DeployStmtRaw<'input> = {
     <start:@L> <docs:DocComment> "deploy" <id:Ident> "from" <target:ModularTarget> <args:ArgFinalizationClause> <end:@L> => DeployStmtRaw::CreateStmt(CreateStmtRaw { start, end, id, module: target.0, target: target.1, params: args, docs }),
     <start:@L> <docs:DocComment> "deploy" <id:Ident> "from" <target:ModularTarget> <end:@L> => DeployStmtRaw::CreateStmt(CreateStmtRaw { start, end, id: id.clone(),  module: target.0, target: target.1, params: None, docs }),
     <start:@L> <docs:DocComment> "deploy" <id:Ident> <args:ArgFinalizationClause> <end:@L> => DeployStmtRaw::CreateStmt(CreateStmtRaw { start, end, id: id.clone(),  module: vec![], target: id, params: args, docs }),
     <start:@L> <docs:DocComment> "deploy" <id:Ident>  <end:@L> => DeployStmtRaw::CreateStmt(CreateStmtRaw { start, end, id: id.clone(), module: vec![], target: id, params: None, docs }),
+
 }
 
 // Allows arguments to be specified and defaults to be provided and overridden in definitions
@@ -136,16 +141,11 @@ DefineFlow: DeployStmtRaw<'input> = {
     <start:@L> <docs:DocComment> "define" "flow" <id:Ident> <links:WithDeployLinks> "end" <end:@L> => DeployStmtRaw::FlowDecl(FlowDeclRaw { start, end, id: id.to_string(), args: vec![], params: None, links, docs }),
 }
 
-DefinePipeline: DeployStmtRaw<'input> = {
-    // Pipelines - these define parameterized queries for deployment
-    <start:@L> <docs:DocComment> "define" "pipeline" <id:Ident> <args:ArgSpecificationClause> <query:EmbeddedQuery> <end:@L> => DeployStmtRaw::PipelineDecl(PipelineDeclRaw { start, end, id: id.to_string(), query, args: args.0, params: args.1, docs }),
-    <start:@L> <docs:DocComment> "define" "pipeline" <id:Ident> <query:EmbeddedQuery> <end:@L> => DeployStmtRaw::PipelineDecl(PipelineDeclRaw { start, end, id: id.to_string(), query, args: vec![], params: None, docs }),
-}
 
  // In case we need to limit the content of deploy stmt
 DeployModuleInnerStmt: DeployStmtRaw<'input> = {
     DeployModuleStmt => DeployStmtRaw::ModuleStmt(<>),
-    DefinePipeline => <>,
+    DefinePipeline => DeployStmtRaw::PipelineDecl(<>),
     DefineConnector => <>,
     DefineFlow => <>,
     // Allow imports of tremor-script definitions
@@ -260,7 +260,7 @@ ModuleInnerStmt: StmtRaw<'input> = {
     DefineWindow => <>,
     DefineOperator => <>,
     DefineScript => <>,
-    DefineSubquery => <>,
+    DefinePipeline => StmtRaw::PipelineDecl(<>),
 
     // Allow imports of tremor-script definitions
     Const => StmtRaw::Expr(Box::new(<>)),
@@ -285,8 +285,8 @@ Stmt: StmtRaw<'input> = {
     DefineScript => <>,
     CreateScript => <>,
 
-    DefineSubquery => <>,
-    CreateSubquery => <>,
+    DefinePipeline => StmtRaw::PipelineDecl(<>),
+    CreatePipeline => <>,
 
     <start:@L> "create" "stream" <id:Ident> <end:@L> => StmtRaw::Stream(StreamStmtRaw { start, end, id: id.to_string() }),
 
@@ -411,11 +411,11 @@ EmbeddedScript: ScriptRaw<'input> = {
     "script" <exprs:Exprs> "end" => ScriptRaw::new(exprs, None),
 }
 
-Subquery: StmtsRaw<'input> = {
-    "query" <inner_stmts:SubqueryStmtInner> "end" => inner_stmts,
+Pipeline: StmtsRaw<'input> = {
+    "pipeline" <inner_stmts:PipelineStmtInner> "end" => inner_stmts,
 }
 
-SubqueryStmtInner : StmtsRaw<'input> = {
+PipelineStmtInner : StmtsRaw<'input> = {
     <stmt:Stmt> ";" <list:Stmts> => {
         let mut list = list;
         list.insert(0,stmt);
@@ -424,19 +424,19 @@ SubqueryStmtInner : StmtsRaw<'input> = {
     <item:Stmt> ";"? => vec![item],
 }
 
-DefineSubquery: StmtRaw<'input> = {
-    <doc:DocComment> <start:@L> "define" "query" <id:Ident> <from:("from" <Ports>)?> <into:("into" <Ports>)?> <params:(<ScriptWithClause>)?> <subquery:Subquery> <end:@L> => {
-        StmtRaw::SubqueryDecl(SubqueryDeclRaw { start, end, id: id.to_string(), subquery, params: params.map(|params| params.into()), from, into, doc })
+DefinePipeline: PipelineDeclRaw<'input> = {
+    <doc:DocComment> <start:@L> "define" "pipeline" <id:Ident> <from:("from" <Ports>)?> <into:("into" <Ports>)?> <params:(<ScriptWithClause>)?> <pipeline:Pipeline> <end:@L> => {
+        PipelineDeclRaw { start, end, id: id.to_string(), pipeline, params: params.map(|params| params.into()), from, into, doc }
     }
 }
 
-CreateSubquery: StmtRaw<'input> = {
-    <start:@L> "create" "query" <id:Ident> <params:(<WithClause>)?> <end:@L>  => {
-        StmtRaw::SubqueryStmt(SubqueryStmtRaw { start, end, module: vec![], id: id.to_string(), target: id.to_string(), params: params.map(|params| params.into()) })
+CreatePipeline: StmtRaw<'input> = {
+    <start:@L> "create" "pipeline" <id:Ident> <params:(<WithClause>)?> <end:@L>  => {
+        StmtRaw::PipelineStmt(PipelineStmtRaw { start, end, module: vec![], id: id.to_string(), target: id.to_string(), params: params.map(|params| params.into()) })
     },
     // With ModulartTarget
-    <start:@L> "create" "query" <id:Ident> "from" <target:ModularTarget> <params:(<WithClause>)?> <end:@L> => {
-        StmtRaw::SubqueryStmt(SubqueryStmtRaw { start, end, module: target.0, id: id.to_string(), target: target.1.id.to_string(), params: params.map(|params| params.into()) })
+    <start:@L> "create" "pipeline" <id:Ident> "from" <target:ModularTarget> <params:(<WithClause>)?> <end:@L> => {
+        StmtRaw::PipelineStmt(PipelineStmtRaw { start, end, module: target.0, id: id.to_string(), target: target.1.id.to_string(), params: params.map(|params| params.into()) })
     }
 }
 
@@ -1167,8 +1167,7 @@ Patch: PatchRaw<'input> = {
 
 PatchOperations: PatchOperationsRaw<'input> = {
     <e:PatchOperationClause> => vec![e],
-    // FIXME: since 12 is breaking we should move the `,` to `;` to be consistent with the rest of tremor - this works now in the grammer!
-    <v:PatchOperations> "," <e:PatchOperationClause> => {
+    <v:PatchOperations> ";" <e:PatchOperationClause> => {
     let mut v = v;
     v.push(e);
     v
@@ -1271,8 +1270,7 @@ Effectors: ExprsRaw<'input> = {
 /// The effectors for a case statement
 Block: ExprsRaw<'input> = {
     <e:Expr> => vec![e],
-    // FIXME: since 12 is breaking we should move the `,` to `;` to be consistent with the rest of tremor - this works now in the grammer!    
-    <v:Block> "," <e:Expr> => {
+    <v:Block> ";" <e:Expr> => {
         let mut v = v;
         v.push(e);
         v
@@ -1641,7 +1639,6 @@ extern {
         "define" => Token::Define,
         "args" => Token::Args,
         "recur" => Token::Recur,
-        "query" => Token::Subquery,
 
         "set" => Token::Set,
         "each" => Token::Each,

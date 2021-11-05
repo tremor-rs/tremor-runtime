@@ -1,8 +1,0 @@
-define query out
-query
-  select event from in into out;
-end;
-
-create query out;
-select event from in into out;
-select event from out into out;

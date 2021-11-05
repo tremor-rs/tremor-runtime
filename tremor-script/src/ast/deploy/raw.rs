@@ -19,27 +19,12 @@ use super::BaseExpr;
 use super::ConnectorDecl;
 use super::CreateStmt;
 use super::FlowDecl;
-use super::PipelineDecl;
 use super::Value;
-use crate::ast::error_generic;
-use crate::ast::query::raw::QueryRaw;
-use crate::ast::raw::ExprRaw;
-use crate::ast::raw::IdentRaw;
-use crate::ast::raw::ModuleRaw;
-use crate::ast::raw::StringLitRaw;
-use crate::ast::raw::WithExprsRaw;
-use crate::ast::AggrRegistry;
-use crate::ast::BaseRef;
-use crate::ast::Deploy;
-use crate::ast::DeployStmt;
-use crate::ast::Expr;
-use crate::ast::Helper;
-use crate::ast::ModDoc;
-use crate::ast::NodeMetas;
-use crate::ast::Registry;
-use crate::ast::Script;
-use crate::ast::StringLit;
-use crate::ast::Upable;
+use crate::ast::raw::{ExprRaw, IdentRaw, ModuleRaw, StringLitRaw, WithExprsRaw};
+use crate::ast::{
+    error_generic, query::raw::PipelineDeclRaw, AggrRegistry, BaseRef, Deploy, DeployStmt, Expr,
+    Helper, ModDoc, NodeMetas, PipelineDecl, Registry, Script, StringLit, Upable,
+};
 use crate::errors::ErrorKind;
 use crate::errors::Result;
 use crate::impl_expr;
@@ -369,18 +354,6 @@ impl<'script> DeployModuleStmtRaw<'script> {
     }
 }
 
-/// we're forced to make this pub because of lalrpop
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct PipelineDeclRaw<'script> {
-    pub(crate) start: Location,
-    pub(crate) end: Location,
-    pub(crate) id: String,
-    pub(crate) args: WithArgsRaw<'script>,
-    pub(crate) params: Option<DeployWithExprsRaw<'script>>,
-    pub(crate) query: QueryRaw<'script>,
-    pub(crate) docs: Option<Vec<Cow<'script, str>>>,
-}
-
 fn arg_spec_resolver<'script, 'registry>(
     args_spec: WithArgsRaw<'script>,
     params_spec: &Option<DeployWithExprsRaw<'script>>,
@@ -491,42 +464,6 @@ fn arg_resolver<'script, 'registry>(
     }
 
     Ok(args)
-}
-
-impl<'script> Upable<'script> for PipelineDeclRaw<'script> {
-    type Target = PipelineDecl<'script>;
-    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        // NOTE As we can have module aliases and/or nested modules within script definitions
-        // that are private to or inline with the script - multiple script definitions in the
-        // same module scope can share the same relative function/const module paths.
-        //
-        // We add the script name to the scope as a means to distinguish these orthogonal
-        // definitions. This is achieved with the push/pop pointcut around the up() call
-        // below. The actual function registration occurs in the up() call in the usual way.
-        //
-        helper.module.push(self.id.clone());
-        let (spec, args) = arg_spec_resolver(self.args, &self.params, helper)?;
-        let query = self.query.clone().up_script(helper)?;
-
-        let query_decl = PipelineDecl {
-            mid: helper.add_meta_w_name(self.start, self.end, &self.id),
-            module: helper.module.clone(),
-            id: self.id,
-            spec: spec.clone(),
-            args,
-            query_raw: self.query.clone(),
-            query, // The runnable is redefined by `deploy` statements which complete/finalize and seal the runtime arguments
-            docs: self
-                .docs
-                .map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n")),
-        };
-        helper.module.pop();
-        let script_name = query_decl.fqsn(&helper.module);
-        helper
-            .pipeline_defns
-            .insert(script_name, query_decl.clone());
-        Ok(query_decl)
-    }
 }
 
 pub type DeployStmtsRaw<'script> = Vec<DeployStmtRaw<'script>>;
@@ -693,17 +630,6 @@ pub struct CreateStmtRaw<'script> {
 }
 impl_expr!(CreateStmtRaw);
 
-/// A fully resolved deployable artefact
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub enum AtomOfDeployment<'script> {
-    /// A deployable pipeline instance
-    Pipeline(PipelineDecl<'script>),
-    /// A deployable connector instance
-    Connector(ConnectorDecl<'script>),
-    /// A deployable flow instance
-    Flow(FlowDecl<'script>),
-}
-
 impl<'script> Upable<'script> for CreateStmtRaw<'script> {
     type Target = CreateStmt<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
@@ -729,28 +655,7 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
 
         let mut h2 = helper.clone(); // Clone to save some accounting/tracking & cleanup
         h2.module = vec![];
-        let atom = if let Some(artefact) = helper.pipeline_defns.get(&fqsn) {
-            let mut args = arg_resolver(
-                self.extent(&helper.meta),
-                &artefact.spec,
-                &artefact.args,
-                &self.params,
-                &mut h2,
-            )?;
-
-            // We use our now resolved compile time arguments to compile
-            // the script to its interpretable and runnable final form with
-            // the resolved arguments provides as the arguments to the underlying
-            // pipeline.
-            let mut h3 = h2.clone();
-            h3.module = vec![];
-            std::mem::swap(&mut h2.consts.args, &mut args);
-            let mut query = artefact.query_raw.clone().up_script(&mut h3)?;
-            let mut artefact = artefact.clone();
-            std::mem::swap(&mut artefact.query, &mut query);
-
-            AtomOfDeployment::Pipeline(artefact)
-        } else if let Some(artefact) = helper.connector_defns.get(&fqsn) {
+        let atom = if let Some(artefact) = helper.flow_defns.get(&fqsn) {
             let args = arg_resolver(
                 self.extent(&helper.meta),
                 &artefact.spec,
@@ -760,18 +665,7 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
             )?;
             let mut artefact = artefact.clone();
             artefact.args = args;
-            AtomOfDeployment::Connector(artefact)
-        } else if let Some(artefact) = helper.flow_defns.get(&fqsn) {
-            let args = arg_resolver(
-                self.extent(&helper.meta),
-                &artefact.spec,
-                &artefact.args,
-                &self.params,
-                &mut h2,
-            )?;
-            let mut artefact = artefact.clone();
-            artefact.args = args;
-            AtomOfDeployment::Flow(artefact)
+            artefact
         } else {
             let inner = if target_module.is_empty() {
                 self.id.extent(&helper.meta)

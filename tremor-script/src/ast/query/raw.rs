@@ -21,8 +21,8 @@ use super::super::raw::{ExprRaw, IdentRaw, ImutExprRaw, ModuleRaw, ScriptRaw, Wi
 use super::{
     error_generic, error_no_consts, error_no_locals, AggrRegistry, BaseExpr, GroupBy, GroupByInt,
     HashMap, Helper, ImutExpr, Location, NodeMetas, OperatorDecl, OperatorKind, OperatorStmt,
-    Query, Registry, Result, ScriptDecl, ScriptStmt, Select, SelectStmt, Serialize, Stmt,
-    StreamStmt, SubqueryDecl, SubqueryStmt, Upable, Value, WindowDecl, WindowKind,
+    PipelineDecl, PipelineStmt, Query, Registry, Result, ScriptDecl, ScriptStmt, Select,
+    SelectStmt, Serialize, Stmt, StreamStmt, Upable, Value, WindowDecl, WindowKind,
 };
 use crate::ast::base_ref::BaseRef;
 use crate::ast::{
@@ -39,6 +39,11 @@ use std::iter::FromIterator;
 pub enum Params<'script> {
     Raw(WithExprsRaw<'script>),
     Processed(HashMap<String, Value<'script>>),
+}
+impl<'script> Default for Params<'script> {
+    fn default() -> Self {
+        Params::Raw(Vec::new())
+    }
 }
 impl<'script> From<WithExprsRaw<'script>> for Params<'script> {
     fn from(raw: WithExprsRaw<'script>) -> Self {
@@ -86,16 +91,16 @@ impl<'script> QueryRaw<'script> {
                 StmtRaw::ModuleStmt(m) => {
                     m.define(helper.reg, helper.aggr_reg, &mut vec![], &mut helper)?;
                 }
-                StmtRaw::SubqueryStmt(sq_stmt_raw) => {
+                StmtRaw::PipelineStmt(sq_stmt_raw) => {
                     let create_stmt_index = stmts.len();
                     // Inlines all statements inside the subq inside `stmts`
-                    // and returns the subquery stmt
+                    // and returns the pipeline stmt
                     let sq_stmt = sq_stmt_raw.inline(&mut stmts, &mut helper)?;
 
-                    // Insert the subquery stmt *before* the inlined stmts.
+                    // Insert the pipeline stmt *before* the inlined stmts.
                     // In case of duplicate subqs, this makes sure dupe subq err
                     // is triggered before dupe err from any of the inlined stmt
-                    stmts.insert(create_stmt_index, Stmt::SubqueryStmt(sq_stmt));
+                    stmts.insert(create_stmt_index, Stmt::PipelineStmt(sq_stmt));
                 }
                 other => {
                     stmts.push(other.up(&mut helper)?);
@@ -125,9 +130,9 @@ pub enum StmtRaw<'script> {
     /// we're forced to make this pub because of lalrpop
     ScriptDecl(ScriptDeclRaw<'script>),
     /// we're forced to make this pub because of lalrpop
-    SubqueryDecl(SubqueryDeclRaw<'script>),
+    PipelineDecl(PipelineDeclRaw<'script>),
     /// we're forced to make this pub because of lalrpop
-    SubqueryStmt(SubqueryStmtRaw<'script>),
+    PipelineStmt(PipelineStmtRaw<'script>),
     /// we're forced to make this pub because of lalrpop
     Stream(StreamStmtRaw),
     /// we're forced to make this pub because of lalrpop
@@ -144,7 +149,7 @@ pub enum StmtRaw<'script> {
 impl<'script> StmtRaw<'script> {
     const BAD_MODULE: &'static str = "Module in wrong place error";
     const BAD_EXPR: &'static str = "Expression in wrong place error";
-    const BAD_SUBQ: &'static str = "Subquery Stmt in wrong place error";
+    const BAD_SUBQ: &'static str = "Pipeline Stmt in wrong place error";
 }
 
 impl<'script> Upable<'script> for StmtRaw<'script> {
@@ -186,14 +191,14 @@ impl<'script> Upable<'script> for StmtRaw<'script> {
                 Ok(Stmt::ScriptDecl(Box::new(stmt)))
             }
             StmtRaw::Script(stmt) => Ok(Stmt::Script(stmt.up(helper)?)),
-            StmtRaw::SubqueryDecl(stmt) => Ok(Stmt::SubqueryDecl(stmt.up(helper)?)),
+            StmtRaw::PipelineDecl(stmt) => Ok(Stmt::PipelineDecl(stmt.up(helper)?)),
             StmtRaw::WindowDecl(stmt) => {
                 let stmt: WindowDecl<'script> = stmt.up(helper)?;
                 helper.windows.insert(stmt.fqwn(&stmt.module), stmt.clone());
                 Ok(Stmt::WindowDecl(Box::new(stmt)))
             }
             StmtRaw::ModuleStmt(ref m) => error_generic(m, m, &Self::BAD_MODULE, &helper.meta),
-            StmtRaw::SubqueryStmt(ref sq) => error_generic(sq, sq, &Self::BAD_SUBQ, &helper.meta),
+            StmtRaw::PipelineStmt(ref sq) => error_generic(sq, sq, &Self::BAD_SUBQ, &helper.meta),
             StmtRaw::Expr(m) => error_generic(&*m, &*m, &Self::BAD_EXPR, &helper.meta),
         }
     }
@@ -229,19 +234,19 @@ impl<'script> Upable<'script> for OperatorDeclRaw<'script> {
 
 /// we're forced to make this pub because of lalrpop
 #[derive(Debug, PartialEq, Serialize, Clone)]
-pub struct SubqueryDeclRaw<'script> {
+pub struct PipelineDeclRaw<'script> {
     pub(crate) start: Location,
     pub(crate) end: Location,
     pub(crate) id: String,
     pub(crate) params: Option<Params<'script>>,
-    pub(crate) subquery: StmtsRaw<'script>,
+    pub(crate) pipeline: StmtsRaw<'script>,
     pub(crate) from: Option<Vec<IdentRaw<'script>>>,
     pub(crate) into: Option<Vec<IdentRaw<'script>>>,
     pub(crate) doc: Option<Vec<Cow<'script, str>>>,
 }
-impl_expr!(SubqueryDeclRaw);
+impl_expr!(PipelineDeclRaw);
 
-impl<'script> SubqueryDeclRaw<'script> {
+impl<'script> PipelineDeclRaw<'script> {
     fn dflt_in_ports<'ident>() -> Vec<Ident<'ident>> {
         vec!["in".into()]
     }
@@ -250,9 +255,19 @@ impl<'script> SubqueryDeclRaw<'script> {
     }
 }
 
-impl<'script> Upable<'script> for SubqueryDeclRaw<'script> {
-    type Target = SubqueryDecl<'script>;
+impl<'script> Upable<'script> for PipelineDeclRaw<'script> {
+    type Target = PipelineDecl<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+        let config = if let Params::Raw(r) = self.params.clone().unwrap_or_default() {
+            r
+        } else {
+            return Err("Invalid SubQuery".into());
+        };
+        let query = QueryRaw {
+            config,
+            stmts: self.pipeline.clone(),
+        }
+        .up_script(helper)?;
         let from = self.from.up(helper)?.unwrap_or_else(Self::dflt_in_ports);
         let into = self.into.up(helper)?.unwrap_or_else(Self::dflt_out_ports);
 
@@ -261,7 +276,7 @@ impl<'script> Upable<'script> for SubqueryDeclRaw<'script> {
             .chain(into.iter())
             .map(ToString::to_string)
             .collect();
-        for stmt in &self.subquery {
+        for stmt in &self.pipeline {
             if let StmtRaw::Stream(stream_raw) = stmt {
                 if ports_set.contains(&stream_raw.id) {
                     let stream = stream_raw.clone().up(helper)?;
@@ -271,31 +286,32 @@ impl<'script> Upable<'script> for SubqueryDeclRaw<'script> {
             }
         }
 
-        let subquery_decl = SubqueryDecl {
+        let pipeline_decl = PipelineDecl {
             mid: helper.add_meta_w_name(self.start, self.end, &self.id),
             node_id: NodeId::new(self.id, helper.module.clone()),
             params: self.params.map(|raw| raw.up(helper)).transpose()?,
-            raw_stmts: self.subquery,
+            raw_stmts: self.pipeline,
             from,
             into,
+            query,
         };
-        let subquery_name = subquery_decl.fqn();
-        if helper.subquery_defns.contains_key(&subquery_name) {
-            let err_str = format! {"Can't define the query `{}` twice", subquery_name};
-            return error_generic(&subquery_decl, &subquery_decl, &err_str, &helper.meta);
+        let pipeline_name = pipeline_decl.fqn();
+        if helper.pipeline_defns.contains_key(&pipeline_name) {
+            let err_str = format! {"Can't define the pipeline `{}` twice", pipeline_name};
+            return error_generic(&pipeline_decl, &pipeline_decl, &err_str, &helper.meta);
         }
 
         helper
-            .subquery_defns
-            .insert(subquery_name, subquery_decl.clone());
-        helper.add_query_decl_doc(&subquery_decl.node_id.id(), self.doc);
-        Ok(subquery_decl)
+            .pipeline_defns
+            .insert(pipeline_name, pipeline_decl.clone());
+        helper.add_query_decl_doc(&pipeline_decl.id, self.doc);
+        Ok(pipeline_decl)
     }
 }
 
 /// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct SubqueryStmtRaw<'script> {
+pub struct PipelineStmtRaw<'script> {
     pub(crate) start: Location,
     pub(crate) end: Location,
     pub(crate) id: String,
@@ -303,9 +319,9 @@ pub struct SubqueryStmtRaw<'script> {
     pub(crate) module: Vec<IdentRaw<'script>>,
     pub(crate) params: Option<Params<'script>>,
 }
-impl_expr!(SubqueryStmtRaw);
+impl_expr!(PipelineStmtRaw);
 
-impl<'script> SubqueryStmtRaw<'script> {
+impl<'script> PipelineStmtRaw<'script> {
     fn mangle_id(&self, id: &str) -> String {
         format! {"__SUBQ__{}_{}",self.id, id}
     }
@@ -378,30 +394,30 @@ impl<'script> SubqueryStmtRaw<'script> {
         self,
         mut query_stmts: &mut Vec<Stmt<'script>>,
         mut helper: &mut Helper<'script, 'registry>,
-    ) -> Result<SubqueryStmt> {
-        // Calculate the fully qualified name for the subquery declaration.
-        let fq_subquery_defn = if self.module.is_empty() {
+    ) -> Result<PipelineStmt> {
+        // Calculate the fully qualified name for the pipeline declaration.
+        let fq_pipeline_defn = if self.module.is_empty() {
             self.target.clone()
         } else {
             let module: Vec<String> = self.module.iter().map(ToString::to_string).collect();
             format!("{}::{}", module.join("::"), self.target.clone())
         };
 
-        match helper.subquery_defns.get(&fq_subquery_defn) {
+        match helper.pipeline_defns.get(&fq_pipeline_defn) {
             None => error_generic(
                 &self,
                 &self,
-                &format!("query `{}` not found", fq_subquery_defn),
+                &format!("query `{}` not found", fq_pipeline_defn),
                 &helper.meta,
             ),
-            Some(subquery_decl) => {
-                let mut subquery_stmts = vec![];
+            Some(pipeline_decl) => {
+                let mut pipeline_stmts = vec![];
 
                 let mut ports_set: HashSet<_> = HashSet::new();
-                // Map of subquery -> {ports->internal_stream}
-                let mut subquery_stream_map: HashMap<String, String> = HashMap::new();
+                // Map of pipeline -> {ports->internal_stream}
+                let mut pipeline_stream_map: HashMap<String, String> = HashMap::new();
 
-                let ports = subquery_decl.from.iter().chain(subquery_decl.into.iter());
+                let ports = pipeline_decl.from.iter().chain(pipeline_decl.into.iter());
                 for port in ports {
                     let stream_stmt = StmtRaw::Stream(StreamStmtRaw {
                         start: port.s(&helper.meta),
@@ -409,29 +425,29 @@ impl<'script> SubqueryStmtRaw<'script> {
                         id: port.id.to_string(),
                     });
                     ports_set.insert(port.id.to_string());
-                    subquery_stmts.push(stream_stmt);
+                    pipeline_stmts.push(stream_stmt);
                 }
 
-                subquery_stmts.extend(subquery_decl.raw_stmts.clone());
+                pipeline_stmts.extend(pipeline_decl.raw_stmts.clone());
                 let subq_module = &self.mangle_id(&self.id);
                 helper.module.push(subq_module.clone());
 
-                let decl_params = subquery_decl.params.clone();
+                let decl_params = pipeline_decl.params.clone();
                 let stmt_params = self.params.clone().map(|raw| raw.up(helper)).transpose()?;
                 let subq_args = self.get_args_map(&decl_params, stmt_params, helper)?;
 
-                for stmt in subquery_stmts {
+                for stmt in pipeline_stmts {
                     match stmt {
                         StmtRaw::ModuleStmt(m) => {
                             m.define(helper.reg, helper.aggr_reg, &mut vec![], &mut helper)?;
                         }
-                        StmtRaw::SubqueryStmt(mut s) => {
+                        StmtRaw::PipelineStmt(mut s) => {
                             let unmangled_id = s.id.clone();
                             s.id = self.mangle_id(&s.id);
                             s.params = s
                                 .params
                                 .map(|raw| {
-                                    SubqueryStmtRaw::inline_params(raw, &subq_args, &mut helper)
+                                    PipelineStmtRaw::inline_params(raw, &subq_args, &mut helper)
                                 })
                                 .transpose()?
                                 .map(|hash_map| hash_map.into());
@@ -447,7 +463,7 @@ impl<'script> SubqueryStmtRaw<'script> {
                             if let Some(meta) = helper.meta.nodes.get_mut(s_up.mid) {
                                 meta.name = Some(unmangled_id);
                             }
-                            query_stmts.push(Stmt::SubqueryStmt(s_up));
+                            query_stmts.push(Stmt::PipelineStmt(s_up));
                         }
                         StmtRaw::Operator(mut o) => {
                             let unmangled_id = o.id.clone();
@@ -455,7 +471,7 @@ impl<'script> SubqueryStmtRaw<'script> {
                             o.params = o
                                 .params
                                 .map(|raw| {
-                                    SubqueryStmtRaw::inline_params(raw, &subq_args, &mut helper)
+                                    PipelineStmtRaw::inline_params(raw, &subq_args, &mut helper)
                                 })
                                 .transpose()?
                                 .map(|hash_map| hash_map.into());
@@ -473,7 +489,7 @@ impl<'script> SubqueryStmtRaw<'script> {
                             s.params = s
                                 .params
                                 .map(|raw| {
-                                    SubqueryStmtRaw::inline_params(raw, &subq_args, &mut helper)
+                                    PipelineStmtRaw::inline_params(raw, &subq_args, &mut helper)
                                 })
                                 .transpose()?
                                 .map(|hash_map| hash_map.into());
@@ -491,7 +507,7 @@ impl<'script> SubqueryStmtRaw<'script> {
                             // Add the internal stream.id to the map of port->stream_id
                             // if the stream.id matches a port_name.
                             if let Some(port_name) = ports_set.get(&unmangled_id) {
-                                subquery_stream_map.insert(port_name.clone(), s.id.clone());
+                                pipeline_stream_map.insert(port_name.clone(), s.id.clone());
                             }
 
                             // Store the unmangled name in the meta
@@ -552,7 +568,7 @@ impl<'script> SubqueryStmtRaw<'script> {
                             s.params = s
                                 .params
                                 .map(|raw| {
-                                    SubqueryStmtRaw::inline_params(raw, &subq_args, &mut helper)
+                                    PipelineStmtRaw::inline_params(raw, &subq_args, &mut helper)
                                 })
                                 .transpose()?
                                 .map(|hash_map| hash_map.into());
@@ -562,26 +578,26 @@ impl<'script> SubqueryStmtRaw<'script> {
                             o.params = o
                                 .params
                                 .map(|raw| {
-                                    SubqueryStmtRaw::inline_params(raw, &subq_args, &mut helper)
+                                    PipelineStmtRaw::inline_params(raw, &subq_args, &mut helper)
                                 })
                                 .transpose()?
                                 .map(|hash_map| hash_map.into());
                             query_stmts.push(StmtRaw::OperatorDecl(o).up(&mut helper)?);
                         }
-                        StmtRaw::SubqueryDecl(mut s) => {
-                            // Inline the parent subquery's `args` in the child's `with` clause, if any.
+                        StmtRaw::PipelineDecl(mut s) => {
+                            // Inline the parent pipeline's `args` in the child's `with` clause, if any.
                             s.params = s
                                 .params
                                 .map(|raw| {
-                                    SubqueryStmtRaw::inline_params(raw, &subq_args, &mut helper)
+                                    PipelineStmtRaw::inline_params(raw, &subq_args, &mut helper)
                                 })
                                 .transpose()?
                                 .map(|hash_map| hash_map.into());
-                            query_stmts.push(StmtRaw::SubqueryDecl(s).up(&mut helper)?);
+                            query_stmts.push(StmtRaw::PipelineDecl(s).up(&mut helper)?);
                         }
                         StmtRaw::WindowDecl(mut w) => {
                             w.params =
-                                SubqueryStmtRaw::inline_params(w.params, &subq_args, &mut helper)?
+                                PipelineStmtRaw::inline_params(w.params, &subq_args, &mut helper)?
                                     .into();
                             query_stmts.push(StmtRaw::WindowDecl(w).up(&mut helper)?);
                         }
@@ -592,13 +608,13 @@ impl<'script> SubqueryStmtRaw<'script> {
                 }
                 helper.module.pop();
 
-                let subquery_stmt = SubqueryStmt {
+                let pipeline_stmt = PipelineStmt {
                     mid: helper.add_meta_w_name(self.start, self.end, &self.id),
                     module: helper.module.clone(),
                     id: self.id,
-                    port_stream_map: subquery_stream_map,
+                    port_stream_map: pipeline_stream_map,
                 };
-                Ok(subquery_stmt)
+                Ok(pipeline_stmt)
             }
         }
     }
@@ -654,9 +670,9 @@ impl<'script> ModuleStmtRaw<'script> {
                     let s = stmt.up(&mut helper)?;
                     helper.scripts.insert(s.fqsn(&helper.module), s);
                 }
-                StmtRaw::SubqueryDecl(stmt) => {
+                StmtRaw::PipelineDecl(stmt) => {
                     let o = stmt.up(&mut helper)?;
-                    helper.subquery_defns.insert(o.fqsqn(&helper.module), o);
+                    helper.pipeline_defns.insert(o.fqsn(&helper.module), o);
                 }
                 StmtRaw::OperatorDecl(stmt) => {
                     let o = stmt.up(&mut helper)?;

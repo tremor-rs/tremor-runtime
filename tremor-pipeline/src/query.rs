@@ -33,13 +33,13 @@ use petgraph::algo::is_cyclic_directed;
 use tremor_common::ids::OperatorIdGen;
 use tremor_script::{
     ast::{
-        self, BaseExpr, CompilationUnit, Ident, NodeMetas, SelectType, Stmt, SubqueryStmt,
+        self, BaseExpr, CompilationUnit, Ident, NodeMetas, PipelineStmt, SelectType, Stmt,
         WindowDecl, WindowKind,
     },
     errors::{
-        query_node_duplicate_name_err, query_node_reserved_name_err,
-        query_stream_duplicate_name_err, query_stream_not_defined_err,
-        subquery_stmt_duplicate_name_err, subquery_unknown_port_err, CompilerError,
+        pipeline_stmt_duplicate_name_err, pipeline_unknown_port_err, query_node_duplicate_name_err,
+        query_node_reserved_name_err, query_stream_duplicate_name_err,
+        query_stream_not_defined_err, CompilerError,
     },
     highlighter::{Dumb, Highlighter},
     path::ModulePath,
@@ -203,8 +203,8 @@ impl Query {
         let mut links: IndexMap<OutputPort, Vec<InputPort>> = IndexMap::new();
         let mut inputs = HashMap::new();
         let mut outputs: Vec<petgraph::graph::NodeIndex> = Vec::new();
-        // Used to rewrite `subquery/port` to `internal_stream`
-        let mut subqueries: HashMap<String, SubqueryStmt> = HashMap::new();
+        // Used to rewrite `pipeline/port` to `internal_stream`
+        let mut subqueries: HashMap<String, PipelineStmt> = HashMap::new();
 
         let metric_interval = query
             .config
@@ -259,7 +259,7 @@ impl Query {
         for (i, stmt) in stmts.into_iter().enumerate() {
             match stmt.suffix() {
                 Stmt::Select(ref select) => {
-                    // Rewrite subquery/port to their internal streams
+                    // Rewrite pipeline/port to their internal streams
                     let mut select_rewrite = select.clone();
                     for select_io in
                         vec![&mut select_rewrite.stmt.from, &mut select_rewrite.stmt.into]
@@ -271,7 +271,7 @@ impl Query {
                                 select_io.0.id = internal_stream.clone().into();
                             } else {
                                 let sio = select_io.clone();
-                                return Err(subquery_unknown_port_err(
+                                return Err(pipeline_unknown_port_err(
                                     &select_rewrite,
                                     &sio.0,
                                     sio.0.to_string(),
@@ -438,10 +438,10 @@ impl Query {
                 Stmt::WindowDecl(_)
                 | Stmt::ScriptDecl(_)
                 | Stmt::OperatorDecl(_)
-                | Stmt::SubqueryDecl(_) => {}
-                Stmt::SubqueryStmt(s) => {
+                | Stmt::PipelineDecl(_) => {}
+                Stmt::PipelineStmt(s) => {
                     if subqueries.contains_key(&s.id) {
-                        return Err(subquery_stmt_duplicate_name_err(
+                        return Err(pipeline_stmt_duplicate_name_err(
                             s,
                             s,
                             s.id.to_string(),

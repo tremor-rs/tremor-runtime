@@ -1,6 +1,6 @@
 define pipeline identity
-args
-  snot,
+with
+  snot = "badger",
 pipeline
   select args.snot from in into out;
 end;
