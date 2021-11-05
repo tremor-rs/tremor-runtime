@@ -3,7 +3,7 @@
 ###
 
 define pipeline passthrough
-config
+with
   snot = "badger"
 pipeline
   select args.snot from in into out;

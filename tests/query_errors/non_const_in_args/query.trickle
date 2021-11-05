@@ -1,7 +1,7 @@
-define query add
+define pipeline add
 with
   add = [1,2,3],
-query
+pipeline
   use std::random;
   define script rand
   with
@@ -15,4 +15,4 @@ query
   select event from rand into out;
 end;
 
-create query add;
+create pipeline add;
