@@ -43,16 +43,10 @@ DeployStmts: DeployStmtsRaw<'input> = {
 }
 
 DeployStmt: DeployStmtRaw<'input> = {
-    <m:DeployModuleStmt> => DeployStmtRaw::ModuleStmt(m),
-    // Pipelines - these define parameterized queries for deployment
-    <start:@L> <docs:DocComment> "define" "pipeline" <id:Ident> <args:ArgSpecificationClause> <query:EmbeddedQuery> <end:@L> => DeployStmtRaw::PipelineDecl(PipelineDeclRaw { start, end, id: id.to_string(), query, args: args.0, params: args.1, docs }),
-    <start:@L> <docs:DocComment> "define" "pipeline" <id:Ident> <query:EmbeddedQuery> <end:@L> => DeployStmtRaw::PipelineDecl(PipelineDeclRaw { start, end, id: id.to_string(), query, args: vec![], params: None, docs }),
-    // Connectors - these define connectors for deployment
-    <start:@L> <docs:DocComment> "define" <kind:ConnectorKind> "connector" <id:Ident> <args:ArgSpecificationClause> "end" <end:@L> => DeployStmtRaw::ConnectorDecl(ConnectorDeclRaw { start, end, id: id.to_string(), kind, args: args.0, params: args.1, docs }),
-    <start:@L> <docs:DocComment> "define" <kind:ConnectorKind> "connector" <id:Ident> "end" <end:@L> => DeployStmtRaw::ConnectorDecl(ConnectorDeclRaw { start, end, id: id.to_string(), kind, args: vec![], params: None, docs }),
-    // Flow - these define how pipelines and connectors are interconnected to form a unit deployment graph
-    <start:@L> <docs:DocComment> "define" "flow" <id:Ident> <args:ArgSpecificationClause> <links:WithDeployLinks> "end" <end:@L> => DeployStmtRaw::FlowDecl(FlowDeclRaw { start, end, id: id.to_string(), args: args.0, params: args.1, links, docs }),
-    <start:@L> <docs:DocComment> "define" "flow" <id:Ident> <links:WithDeployLinks> "end" <end:@L> => DeployStmtRaw::FlowDecl(FlowDeclRaw { start, end, id: id.to_string(), args: vec![], params: None, links, docs }),
+    DeployModuleStmt => DeployStmtRaw::ModuleStmt(<>),
+    DefinePipeline => <>,
+    DefineConnector => <>,
+    DefineFlow => <>,
 
     <start:@L> <docs:DocComment> "deploy" <id:Ident> "from" <target:ModularTarget> <args:ArgFinalizationClause> <end:@L> => DeployStmtRaw::CreateStmt(CreateStmtRaw { start, end, id, module: target.0, target: target.1, params: args, docs }),
     <start:@L> <docs:DocComment> "deploy" <id:Ident> "from" <target:ModularTarget> <end:@L> => DeployStmtRaw::CreateStmt(CreateStmtRaw { start, end, id: id.clone(),  module: target.0, target: target.1, params: None, docs }),
@@ -104,7 +98,6 @@ DeployLinks_: DeployLinksRaw<'input> = {
     // of migrated deployments in benchmarks, integration tests and tutorials
     // allowing us to pick the "better" alternative
     <Sep<DeployLinks_, DeployLink, ";">> => <>
-//    <Sep<DeployLinks_, DeployLink, ",">> => <>
 }
 
 DeployLink: DeployLinkRaw<'input> = {
@@ -130,19 +123,31 @@ DeployModuleStmts: DeployStmtsRaw<'input> = {
  }
 
 
-// In case we need to limit the content of deploy stmt
-DeployModuleInnerStmt: DeployStmtRaw<'input> = {
-    <m:DeployModuleStmt> => DeployStmtRaw::ModuleStmt(m),
-    // Pipelines - these define parameterized queries for deployment
-    <start:@L> <docs:DocComment> "define" "pipeline" <id:Ident> <args:ArgSpecificationClause> <query:EmbeddedQuery> <end:@L> => DeployStmtRaw::PipelineDecl(PipelineDeclRaw { start, end, id: id.to_string(), query, args: args.0, params: args.1, docs }),
-    <start:@L> <docs:DocComment> "define" "pipeline" <id:Ident> <query:EmbeddedQuery> <end:@L> => DeployStmtRaw::PipelineDecl(PipelineDeclRaw { start, end, id: id.to_string(), query, args: vec![], params: None, docs }),
+
+ DefineConnector: DeployStmtRaw<'input> =  {
     // Connectors - these define connectors for deployment
     <start:@L> <docs:DocComment> "define" <kind:ConnectorKind> "connector" <id:Ident> <args:ArgSpecificationClause> "end" <end:@L> => DeployStmtRaw::ConnectorDecl(ConnectorDeclRaw { start, end, id: id.to_string(), kind, args: args.0, params: args.1, docs }),
     <start:@L> <docs:DocComment> "define" <kind:ConnectorKind> "connector" <id:Ident> "end" <end:@L> => DeployStmtRaw::ConnectorDecl(ConnectorDeclRaw { start, end, id: id.to_string(), kind, args: vec![], params: None, docs }),
+ }
+
+DefineFlow: DeployStmtRaw<'input> = {
     // Flow - these define how pipelines and connectors are interconnected to form a unit deployment graph
     <start:@L> <docs:DocComment> "define" "flow" <id:Ident> <args:ArgSpecificationClause> <links:WithDeployLinks> "end" <end:@L> => DeployStmtRaw::FlowDecl(FlowDeclRaw { start, end, id: id.to_string(), args: args.0, params: args.1, links, docs }),
     <start:@L> <docs:DocComment> "define" "flow" <id:Ident> <links:WithDeployLinks> "end" <end:@L> => DeployStmtRaw::FlowDecl(FlowDeclRaw { start, end, id: id.to_string(), args: vec![], params: None, links, docs }),
+}
 
+DefinePipeline: DeployStmtRaw<'input> = {
+    // Pipelines - these define parameterized queries for deployment
+    <start:@L> <docs:DocComment> "define" "pipeline" <id:Ident> <args:ArgSpecificationClause> <query:EmbeddedQuery> <end:@L> => DeployStmtRaw::PipelineDecl(PipelineDeclRaw { start, end, id: id.to_string(), query, args: args.0, params: args.1, docs }),
+    <start:@L> <docs:DocComment> "define" "pipeline" <id:Ident> <query:EmbeddedQuery> <end:@L> => DeployStmtRaw::PipelineDecl(PipelineDeclRaw { start, end, id: id.to_string(), query, args: vec![], params: None, docs }),
+}
+
+ // In case we need to limit the content of deploy stmt
+DeployModuleInnerStmt: DeployStmtRaw<'input> = {
+    DeployModuleStmt => DeployStmtRaw::ModuleStmt(<>),
+    DefinePipeline => <>,
+    DefineConnector => <>,
+    DefineFlow => <>,
     // Allow imports of tremor-script definitions
     Const => DeployStmtRaw::Expr(Box::new(<>)),
     FnDecl => DeployStmtRaw::Expr(Box::new(ExprRaw::FnDecl(<>))),
@@ -1162,6 +1167,7 @@ Patch: PatchRaw<'input> = {
 
 PatchOperations: PatchOperationsRaw<'input> = {
     <e:PatchOperationClause> => vec![e],
+    // FIXME: since 12 is breaking we should move the `,` to `;` to be consistent with the rest of tremor - this works now in the grammer!
     <v:PatchOperations> "," <e:PatchOperationClause> => {
     let mut v = v;
     v.push(e);
@@ -1265,6 +1271,7 @@ Effectors: ExprsRaw<'input> = {
 /// The effectors for a case statement
 Block: ExprsRaw<'input> = {
     <e:Expr> => vec![e],
+    // FIXME: since 12 is breaking we should move the `,` to `;` to be consistent with the rest of tremor - this works now in the grammer!    
     <v:Block> "," <e:Expr> => {
         let mut v = v;
         v.push(e);
