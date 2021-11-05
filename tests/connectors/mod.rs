@@ -110,11 +110,7 @@ impl ConnectorHarness {
     }
 
     pub(crate) async fn stop(self, timeout_s: u64) -> Result<(Vec<Event>, Vec<Event>)> {
-        self.world
-            .stop(ShutdownMode::Graceful {
-                timeout: Duration::from_secs(timeout_s),
-            })
-            .await?;
+        self.world.stop(ShutdownMode::Graceful).await?;
         self.handle.cancel().await;
         let out_events = self.out_pipeline.get_events()?;
         let err_events = self.err_pipeline.get_events()?;

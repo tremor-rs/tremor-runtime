@@ -51,9 +51,9 @@ pub const DEFAULT_POLL_INTERVAL: u64 = 10;
 
 //FIXME: add url
 macro_rules! eat_error {
-    ($e:expr) => {
+    ($e:expr, $url:expr) => {
         if let Err(e) = $e {
-            error!("ERROR: {}", e)
+            error!("[Source::{}] ERROR: {}", $url, e)
         }
     };
 }
@@ -664,14 +664,14 @@ where
                 };
                 pipelines.retain(|(url, _)| url == &id);
                 if self.pipelines_out.is_empty() && self.pipelines_err.is_empty() {
-                    eat_error!(self.source.on_stop(&mut self.ctx).await);
+                    eat_error!(self.source.on_stop(&mut self.ctx).await, &self.ctx.url);
                     return Ok(Control::Terminate);
                 }
                 Ok(Control::Continue)
             }
             SourceMsg::Start if self.state == Initialized => {
                 self.state = Running;
-                eat_error!(self.source.on_start(&mut self.ctx).await);
+                eat_error!(self.source.on_start(&mut self.ctx).await, &self.ctx.url);
 
                 if let Err(e) = self.send_signal(Event::signal_start(self.ctx.uid)).await {
                     error!(
@@ -690,7 +690,7 @@ where
             }
             SourceMsg::Resume if self.state == Paused => {
                 self.state = Running;
-                eat_error!(self.source.on_resume(&mut self.ctx).await);
+                eat_error!(self.source.on_resume(&mut self.ctx).await, &self.ctx.url);
                 Ok(Control::Continue)
             }
             SourceMsg::Resume => {
@@ -704,7 +704,7 @@ where
                 // TODO: execute pause strategy chosen by source / connector / configured by user
                 info!("[Source::{}] Paused.", self.ctx.url);
                 self.state = Paused;
-                eat_error!(self.source.on_pause(&mut self.ctx).await);
+                eat_error!(self.source.on_pause(&mut self.ctx).await, &self.ctx.url);
                 Ok(Control::Continue)
             }
             SourceMsg::Pause => {
@@ -716,7 +716,7 @@ where
             }
             SourceMsg::Stop => {
                 self.state = Stopped;
-                eat_error!(self.source.on_stop(&mut self.ctx).await);
+                eat_error!(self.source.on_stop(&mut self.ctx).await, &self.ctx.url);
                 Ok(Control::Terminate)
             }
             SourceMsg::Drain(_sender) if self.state == Draining => {
@@ -739,40 +739,51 @@ where
                 // At this point the connector has advised all reading from external connections to stop via the `QuiescenceBeacon`
                 // We change the source state to `Draining` and wait for `SourceReply::Empty` as we drain out everything that might be in flight
                 // when reached the `Empty` point, we emit the `Drain` signal and wait for the CB answer (one for each connected pipeline)
-                self.connector_channel = Some(drained_sender);
-                self.state = Draining;
+                if self.pipelines_out.is_empty() && self.pipelines_err.is_empty() {
+                    eat_error!(drained_sender.send(Msg::SourceDrained).await, &self.ctx.url);
+                    self.state = Drained;
+                } else {
+                    self.connector_channel = Some(drained_sender);
+                    self.state = Draining;
+                }
                 Ok(Control::Continue)
             }
             SourceMsg::ConnectionLost => {
-                eat_error!(self.source.on_connection_lost(&mut self.ctx).await);
+                eat_error!(
+                    self.source.on_connection_lost(&mut self.ctx).await,
+                    &self.ctx.url
+                );
                 Ok(Control::Continue)
             }
             SourceMsg::ConnectionEstablished => {
-                eat_error!(self.source.on_connection_established(&mut self.ctx).await);
+                eat_error!(
+                    self.source.on_connection_established(&mut self.ctx).await,
+                    &self.ctx.url
+                );
                 Ok(Control::Continue)
             }
             SourceMsg::Cb(CbAction::Fail, id) => {
                 if let Some((stream_id, id)) = id.get_min_by_source(self.ctx.uid) {
-                    eat_error!(self.source.fail(stream_id, id).await);
+                    eat_error!(self.source.fail(stream_id, id).await, &self.ctx.url);
                 }
                 Ok(Control::Continue)
             }
             SourceMsg::Cb(CbAction::Ack, id) => {
                 if let Some((stream_id, id)) = id.get_max_by_source(self.ctx.uid) {
-                    eat_error!(self.source.ack(stream_id, id).await);
+                    eat_error!(self.source.ack(stream_id, id).await, &self.ctx.url);
                 }
                 Ok(Control::Continue)
             }
             SourceMsg::Cb(CbAction::Close, _id) => {
                 // TODO: execute pause strategy chosen by source / connector / configured by user
                 info!("[Source::{}] Circuit Breaker: Close.", self.ctx.url);
-                eat_error!(self.source.on_cb_close(&mut self.ctx).await);
+                eat_error!(self.source.on_cb_close(&mut self.ctx).await, &self.ctx.url);
                 self.state = Paused;
                 Ok(Control::Continue)
             }
             SourceMsg::Cb(CbAction::Open, _id) => {
                 info!("[Source::{}] Circuit Breaker: Open.", self.ctx.url);
-                eat_error!(self.source.on_cb_open(&mut self.ctx).await);
+                eat_error!(self.source.on_cb_open(&mut self.ctx).await, &self.ctx.url);
                 self.state = Running;
                 Ok(Control::Continue)
             }
@@ -948,7 +959,10 @@ where
                 } else {
                     let error = self.route_events(results).await;
                     if error {
-                        eat_error!(self.source.fail(stream, self.pull_counter).await);
+                        eat_error!(
+                            self.source.fail(stream, self.pull_counter).await,
+                            &self.ctx.url
+                        );
                     }
                 }
             }
@@ -991,7 +1005,10 @@ where
                 } else {
                     let error = self.route_events(results).await;
                     if error {
-                        eat_error!(self.source.fail(stream, self.pull_counter).await);
+                        eat_error!(
+                            self.source.fail(stream, self.pull_counter).await,
+                            &self.ctx.url
+                        );
                     }
                 }
             }
@@ -1013,7 +1030,10 @@ where
                 );
                 let error = self.route_events(vec![(port.unwrap_or(OUT), event)]).await;
                 if error {
-                    eat_error!(self.source.fail(stream, self.pull_counter).await);
+                    eat_error!(
+                        self.source.fail(stream, self.pull_counter).await,
+                        &self.ctx.url
+                    );
                 }
             }
             SourceReply::StartStream(stream_id) => {

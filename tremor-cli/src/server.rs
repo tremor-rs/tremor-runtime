@@ -25,7 +25,7 @@ use std::io::Write;
 use std::sync::atomic::Ordering;
 use tremor_api as api;
 use tremor_common::file;
-use tremor_runtime::system::{self, ShutdownMode, World};
+use tremor_runtime::system::{ShutdownMode, World};
 use tremor_runtime::{self, version};
 
 async fn handle_api_request<
@@ -94,12 +94,7 @@ async fn handle_signals(signals: Signals, world: World) {
         );
         match signal {
             SIGINT | SIGTERM => {
-                if let Err(_e) = world
-                    .stop(ShutdownMode::Graceful {
-                        timeout: system::DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT,
-                    })
-                    .await
-                {
+                if let Err(_e) = world.stop(ShutdownMode::Graceful).await {
                     if let Err(e) = signal_hook::low_level::emulate_default_handler(signal) {
                         error!("Error handling signal {}: {}", signal, e);
                     }
@@ -234,12 +229,7 @@ pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
         }
         future::Either::Right((_api_res, manager_handle)) => {
             // api stopped
-            if let Err(e) = world
-                .stop(ShutdownMode::Graceful {
-                    timeout: system::DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT,
-                })
-                .await
-            {
+            if let Err(e) = world.stop(ShutdownMode::Graceful).await {
                 error!("Error shutting down gracefully: {}", e);
             }
             manager_handle.cancel().await;

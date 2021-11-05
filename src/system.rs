@@ -26,7 +26,6 @@ use crate::QSIZE;
 use async_std::channel::bounded;
 use async_std::io::prelude::*;
 use async_std::path::Path;
-use async_std::prelude::*;
 use async_std::task::{self, JoinHandle};
 use hashbrown::HashMap;
 use std::sync::atomic::Ordering;
@@ -88,12 +87,7 @@ pub const DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
 /// shutdown mode - controls how we shutdown Tremor
 pub enum ShutdownMode {
     /// shut down by stopping all binding instances and wait for quiescence
-    /// for the given timeout
-    Graceful {
-        /// How long to wait for graceful shutdown
-        /// Before shutting down the runtime completely.
-        timeout: Duration,
-    },
+    Graceful,
     /// Just stop everything and not wait
     Forceful,
 }
@@ -727,10 +721,10 @@ impl World {
     ///  * if the system failed to stop
     pub async fn stop(&self, mode: ShutdownMode) -> Result<()> {
         match mode {
-            ShutdownMode::Graceful { timeout } => {
+            ShutdownMode::Graceful => {
                 // quiesce and stop all the bindings
-                if let Err(_err) = self.reg.drain_all_bindings().timeout(timeout).await {
-                    warn!("Timeout waiting for all bindings to drain.");
+                if let Err(_err) = self.reg.drain_all_bindings().await {
+                    warn!("Error draining all bindings to drain.");
                 }
             }
             ShutdownMode::Forceful => {}
