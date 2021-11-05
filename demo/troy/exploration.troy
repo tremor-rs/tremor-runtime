@@ -1,0 +1,45 @@
+
+define stdio connector io
+  ...
+end;
+
+define pipeline snot
+pipeline
+
+	define script my_script
+	script
+		let key = match event of
+			case %{ present key } =>
+				event.key
+			default => "unknown"
+		end;
+		emit patch event of upsert "new_key" => key end;
+	end;
+
+	# auto-create
+	create script my_script;
+
+	select event from in where event.snot = "badger" into my_script;
+	select event from my_script into out;
+	select {"event": event, "foo": [1, 2, 3,]} from in into out;
+end;
+
+define flow my_flow
+flow
+
+	create connector kafka1 from kafka
+	args
+		brokers = ["snot1"]
+	end;
+
+	create connector kafka2 from kafka
+	args
+		brokers = ["snot2"]
+	end;
+	create pipeline foo from snot;
+
+	connect kafka1/port to foo;
+	connect foo to kafka2;
+end;
+
+deploy flow my_flow_instance from my_flow;
