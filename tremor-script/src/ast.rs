@@ -552,7 +552,6 @@ where
     windows: HashMap<String, WindowDecl<'script>>,
     scripts: HashMap<String, ScriptDecl<'script>>,
     operators: HashMap<String, OperatorDecl<'script>>,
-    subquery_defns: HashMap<String, SubqueryDecl<'script>>,
     /// Aggregates
     pub aggregates: Vec<InvokeAggrFn<'script>>,
     /// Warnings
@@ -651,7 +650,6 @@ where
             windows: HashMap::new(),
             scripts: HashMap::new(),
             operators: HashMap::new(),
-            subquery_defns: HashMap::new(),
             aggregates: Vec::new(),
             warnings: BTreeSet::new(),
             locals: HashMap::new(),

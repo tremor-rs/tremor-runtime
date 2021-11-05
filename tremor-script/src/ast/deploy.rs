@@ -15,12 +15,10 @@
 // We want to keep the names here
 #![allow(clippy::module_name_repetitions)]
 
-use super::query::raw::QueryRaw;
 use super::raw::BaseExpr;
+use super::PipelineDecl;
 use super::{Docs, HashMap, Value};
-pub use crate::ast::deploy::raw::AtomOfDeployment;
 use crate::ast::BaseRef;
-use crate::ast::Query;
 use crate::{impl_expr_mid, impl_fqsn};
 use beef::Cow;
 use tremor_common::url::TremorUrl;
@@ -116,29 +114,6 @@ impl_fqsn!(ConnectorDecl);
 
 type DeployStmts<'script> = Vec<DeployStmt<'script>>;
 
-/// A pipeline query declaration
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct PipelineDecl<'script> {
-    pub(crate) mid: usize,
-    /// Module of the query
-    pub module: Vec<String>,
-    /// ID of the query
-    pub id: String,
-    /// Resolved argument specification
-    pub spec: Vec<Cow<'script, str>>,
-    /// Resolved argument defaults
-    pub args: Value<'script>,
-    /// The pipeline query ( before arg injection )
-    pub query_raw: QueryRaw<'script>,
-    /// The pipeline query ( runnable with args injected )
-    pub query: Query<'script>,
-    /// Documentation comments
-    #[serde(skip)]
-    pub docs: Option<String>,
-}
-impl_expr_mid!(PipelineDecl);
-impl_fqsn!(PipelineDecl);
-
 /// A flow declaration
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct FlowDecl<'script> {
@@ -171,7 +146,7 @@ pub struct CreateStmt<'script> {
     /// Identifer for the creation
     pub id: String,
     /// Atomic unit of deployment
-    pub atom: AtomOfDeployment<'script>,
+    pub atom: FlowDecl<'script>,
     /// Documentation comments
     #[serde(skip)]
     pub docs: Option<String>,

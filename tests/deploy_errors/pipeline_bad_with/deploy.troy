@@ -1,5 +1,5 @@
 define pipeline passthrough
-args
+with
   snot,
   badger,
 config

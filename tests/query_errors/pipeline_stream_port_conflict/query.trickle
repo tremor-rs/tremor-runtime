@@ -1,0 +1,7 @@
+define pipeline passthrough
+from
+  input_stream
+pipeline
+  create stream input_stream;
+  select event from input_stream into out;
+end;

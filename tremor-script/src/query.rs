@@ -50,24 +50,6 @@ where
         self.query.suffix()
     }
 
-    /// Converts a troy embedded pipeline with resolved arguments to a runnable query
-    /// # Errors
-    ///   If the query fails to parse and convert correctly
-    pub fn from_troy(
-        src: &str,
-        deploy: &srs::Deploy,
-        query: &crate::srs::PipelineDecl,
-    ) -> std::result::Result<Self, CompilerError> {
-        let warnings = BTreeSet::new();
-        let locals = 0;
-        Ok(Self {
-            query: crate::srs::Query::new_from_deploy(deploy, &query.id)?,
-            source: src.to_string(),
-            warnings,
-            locals,
-        })
-    }
-
     /// Parses a string into a query
     ///
     /// # Errors
