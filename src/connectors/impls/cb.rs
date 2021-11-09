@@ -15,8 +15,6 @@ use crate::connectors::prelude::*;
 use async_std::fs::File;
 use async_std::io::ReadExt;
 use tremor_common::asy::file::open;
-use tremor_pipeline::CbAction;
-use value_trait::ValueAccess;
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
@@ -268,10 +266,15 @@ impl Source for CbSource {
                 } else {
                     self.config.timeout = self.config.timeout.saturating_sub(wait);
                 }
+                Ok(SourceReply::Empty(wait))
             } else {
                 self.finished = true;
+                Ok(SourceReply::EndStream {
+                    stream_id: DEFAULT_STREAM_ID,
+                    origin_uri: self.origin_uri.clone(),
+                    meta: None,
+                })
             }
-            Ok(SourceReply::Empty(wait))
         } else {
             self.num_sent += 1;
             self.last_sent = self.last_sent.max(pull_id);

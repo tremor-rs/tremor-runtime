@@ -45,8 +45,8 @@ impl Connector for Exit {
     async fn create_sink(
         &mut self,
         sink_context: SinkContext,
-        builder: super::sink::SinkManagerBuilder,
-    ) -> Result<Option<super::sink::SinkAddr>> {
+        builder: SinkManagerBuilder,
+    ) -> Result<Option<SinkAddr>> {
         let sink = self.clone();
 
         Ok(Some(builder.spawn(sink, sink_context)?))

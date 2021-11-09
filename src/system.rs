@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::config::{BindingVec, Config, MappingMap};
-use crate::connectors::metrics::METRICS_CHANNEL;
+use crate::connectors::utils::metrics::METRICS_CHANNEL;
 use crate::errors::{Error, Kind as ErrorKind, Result};
 use crate::lifecycle::{InstanceLifecycleFsm, InstanceState};
 use crate::registry::{Instance, Registries, ServantId};
