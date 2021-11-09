@@ -16,7 +16,7 @@
 - Add support for `FLOAT4` and `FLOAT8` serialization/deserialization to postgres connectors
 - Add `std::path::try_default` fn
 - Experimental ARM support
-- Add `default => {...}` and `default "key" => "value` to patch
+- Add `default => {...}` and `default "key" => "value"` to patch
 - Add `zstd` pre- and post-processors [#1100](https://github.com/tremor-rs/tremor-runtime/issues/1100)
 - Remove `rental` from `Event` [#1031](https://github.com/tremor-rs/tremor-runtime/issues/1031) [#1037](https://github.com/tremor-rs/tremor-runtime/issues/1037)
 - Put event raw payload into `Arc` to improve cloning perf
