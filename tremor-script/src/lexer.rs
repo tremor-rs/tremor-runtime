@@ -495,7 +495,6 @@ impl<'input> Token<'input> {
                 | Token::Connect
                 | Token::To
                 | Token::Deploy
-                | Token::Config,
         )
     }
 

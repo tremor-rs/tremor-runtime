@@ -755,25 +755,25 @@ mod tests {
             r#"
         let x = {"snot": $meta};
         patch x of
-          default => {"bla": "blubb"},
-          default "gna" => "gnubb",
-          insert "i" => event.foo,
-          upsert "snotty" => state.badger[1],
-          update "snot" => null,
-          erase "snot",
-          copy "snot" => "badger",
-          merge "beep" => {"fun": not false},
+          default => {"bla": "blubb"};
+          default "gna" => "gnubb";
+          insert "i" => event.foo;
+          upsert "snotty" => state.badger[1];
+          update "snot" => null;
+          erase "snot";
+          copy "snot" => "badger";
+          merge "beep" => {"fun": not false};
           merge => {"tuple": 4 * 12}
         end;
         patch x of
-          default => {"bla": "blubb"},
-          default "gna" => "gnubb",
-          insert "i" => event.foo,
-          upsert "snotty" => state.badger[1],
-          update "snot" => null,
-          erase "snot",
-          copy "snot" => "badger",
-          merge "beep" => {"fun": not false},
+          default => {"bla": "blubb"};
+          default "gna" => "gnubb";
+          insert "i" => event.foo;
+          upsert "snotty" => state.badger[1];
+          update "snot" => null;
+          erase "snot";
+          copy "snot" => "badger";
+          merge "beep" => {"fun": not false};
           merge => {"tuple": 4 * 12}
         end
         "#,
@@ -786,25 +786,25 @@ mod tests {
             r#"
         let x = {"snot": $meta};
         patch x of
-          default => {"bla": "blubb"},
-          default "gna" => "gnubb",
-          insert "i" => event.foo,
-          upsert "snotty" => state.badger[1],
-          update "snot" => null,
-          erase "snot",
-          copy "snot" => "badger",
-          merge "beep" => {"fun": not false},
+          default => {"bla": "blubb"};
+          default "gna" => "gnubb";
+          insert "i" => event.foo;
+          upsert "snotty" => state.badger[1];
+          update "snot" => null;
+          erase "snot";
+          copy "snot" => "badger";
+          merge "beep" => {"fun": not false};
           merge => {"tuple": 4 * 12}
         end;
         patch x of
-          default => {"bla": "blubb"},
-          default "gna" => "gnubb",
-          insert "i" => event.foo,
-          upsert "snotty" => state.badger[1],
-          erase "snot",
-          update "snot" => null, # order swapped
-          copy "snot" => "badger",
-          merge "beep" => {"fun": not false},
+          default => {"bla": "blubb"};
+          default "gna" => "gnubb";
+          insert "i" => event.foo;
+          upsert "snotty" => state.badger[1];
+          erase "snot";
+          update "snot" => null; # order swapped
+          copy "snot" => "badger";
+          merge "beep" => {"fun": not false};
           merge => {"tuple": 4 * 12}
         end
         "#,
