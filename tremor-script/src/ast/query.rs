@@ -14,13 +14,13 @@
 
 pub(crate) mod raw;
 use super::{
-    error_generic, error_no_consts, error_no_locals, AggrRegistry, EventPath, HashMap, Helper,
-    Ident, ImutExpr, ImutExprInt, InvokeAggrFn, Location, NodeMetas, Path, Registry, Result,
-    Script, Serialize, Stmts, Upable, Value,
+    error_generic, error_no_consts, error_no_locals, node_id::NodeId, AggrRegistry, EventPath,
+    HashMap, Helper, Ident, ImutExpr, ImutExprInt, InvokeAggrFn, Location, NodeMetas, Path,
+    Registry, Result, Script, Serialize, Stmts, Upable, Value,
 };
 use super::{raw::BaseExpr, Consts};
-use crate::ast::eq::AstEq;
 use crate::impl_expr_mid;
+use crate::{ast::eq::AstEq, impl_fqn};
 use raw::WindowDefnRaw;
 
 /// A Tremor query
@@ -164,40 +164,27 @@ impl BaseExpr for OperatorKind {
 /// An operator declaration
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct OperatorDecl<'script> {
+    /// The ID and Module of the Operator
+    pub node_id: NodeId,
+    /// metadata id
     pub(crate) mid: usize,
     /// Type of the operator
     pub kind: OperatorKind,
-    /// Module of the operator
-    pub module: Vec<String>,
-    /// Identifer for the operator
-    pub id: String,
     /// Parameters for the operator
     pub params: Option<HashMap<String, Value<'script>>>,
 }
 impl_expr_mid!(OperatorDecl);
-
-impl<'script> OperatorDecl<'script> {
-    /// Calculate the fully qualified name
-    #[must_use]
-    pub fn fqon(&self, module: &[String]) -> String {
-        if module.is_empty() {
-            self.id.clone()
-        } else {
-            format!("{}::{}", module.join("::"), self.id)
-        }
-    }
-}
+impl_fqn!(OperatorDecl);
 
 /// An operator creation
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct OperatorStmt<'script> {
+    /// The ID and Module of the Operator
+    pub node_id: NodeId,
+    /// metadata id
     pub(crate) mid: usize,
-    /// Id of the operator
-    pub id: String,
     /// Target of the operator
     pub target: String,
-    /// Module of the script
-    pub module: Vec<String>,
     /// parameters of the instance
     pub params: Option<HashMap<String, Value<'script>>>,
 }
@@ -207,10 +194,8 @@ impl_expr_mid!(OperatorStmt);
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ScriptDecl<'script> {
     pub(crate) mid: usize,
-    /// Module of the script
-    pub module: Vec<String>,
-    /// ID of the script
-    pub id: String,
+    /// The ID and Module of the Script
+    pub node_id: NodeId,
     /// Parameters of a script declaration
     pub params: Option<HashMap<String, Value<'script>>>,
     /// The script itself
@@ -218,41 +203,27 @@ pub struct ScriptDecl<'script> {
 }
 impl_expr_mid!(ScriptDecl);
 
-impl<'script> ScriptDecl<'script> {
-    /// Calculate the fully qualified name
-    #[must_use]
-    pub fn fqsn(&self, module: &[String]) -> String {
-        if module.is_empty() {
-            self.id.clone()
-        } else {
-            format!("{}::{}", module.join("::"), self.id)
-        }
-    }
-}
-
 /// A script creation
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ScriptStmt<'script> {
+    /// The ID and Module of the Script
+    pub node_id: NodeId,
+    /// metadata id
     pub(crate) mid: usize,
-    /// ID of the script
-    pub id: String,
     /// Target of the script
     pub target: String,
     /// Parameters of the script statement
     pub params: Option<HashMap<String, Value<'script>>>,
-    /// Module path of the script
-    pub module: Vec<String>,
 }
 impl_expr_mid!(ScriptStmt);
 
 /// A subquery declaration
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct SubqueryDecl<'script> {
+    /// The ID and Module of the SubqueryDecl
+    pub node_id: NodeId,
+    /// metadata id
     pub(crate) mid: usize,
-    /// Module of the subquery
-    pub module: Vec<String>,
-    /// ID of the subquery
-    pub id: String,
     /// Parameters of a subquery declaration
     pub params: Option<HashMap<String, Value<'script>>>,
     /// Input Ports
@@ -263,18 +234,7 @@ pub struct SubqueryDecl<'script> {
     pub raw_stmts: raw::StmtsRaw<'script>,
 }
 impl_expr_mid!(SubqueryDecl);
-
-impl<'script> SubqueryDecl<'script> {
-    /// Calculate the fully qualified name
-    #[must_use]
-    pub fn fqsqn(&self, module: &[String]) -> String {
-        if module.is_empty() {
-            self.id.clone()
-        } else {
-            format!("{}::{}", module.join("::"), self.id)
-        }
-    }
-}
+impl_fqn!(SubqueryDecl);
 
 /// A subquery creation
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -305,12 +265,10 @@ pub enum WindowKind {
 /// A window declaration
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct WindowDecl<'script> {
+    /// ID and Module of the Window
+    pub node_id: NodeId,
     /// metadata id
     pub(crate) mid: usize,
-    /// Module of the window declaration
-    pub module: Vec<String>,
-    /// Name of the window declaration
-    pub id: String,
     /// The type of window
     pub kind: WindowKind,
     /// Parameters passed to the window
@@ -319,6 +277,7 @@ pub struct WindowDecl<'script> {
     pub script: Option<Script<'script>>,
 }
 impl_expr_mid!(WindowDecl);
+impl_fqn!(WindowDecl);
 
 impl<'script> WindowDecl<'script> {
     /// `emit_empty_windows` setting
@@ -329,16 +288,6 @@ impl<'script> WindowDecl<'script> {
     pub const INTERVAL: &'static str = "interval";
     /// `size` setting
     pub const SIZE: &'static str = "size";
-
-    /// Calculate the fully qualified window name
-    #[must_use]
-    pub fn fqwn(&self, module: &[String]) -> String {
-        if module.is_empty() {
-            self.id.clone()
-        } else {
-            format!("{}::{}", module.join("::"), self.id)
-        }
-    }
 }
 
 /// A select statement
@@ -354,7 +303,6 @@ pub struct Select<'script> {
     pub target: ImutExpr<'script>,
     /// Where clause
     pub maybe_where: Option<ImutExpr<'script>>,
-
     /// Having clause
     pub maybe_having: Option<ImutExpr<'script>>,
     /// Group-By clause

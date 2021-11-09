@@ -25,6 +25,7 @@ use super::{
     StreamStmt, SubqueryDecl, SubqueryStmt, Upable, Value, WindowDecl, WindowKind,
 };
 use crate::ast::{
+    node_id::NodeId,
     visitors::{ArgsRewriter, ExprReducer, GroupByExprExtractor, TargetEventRef},
     Ident,
 };
@@ -198,15 +199,14 @@ impl<'script> Upable<'script> for OperatorDeclRaw<'script> {
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let operator_decl = OperatorDecl {
             mid: helper.add_meta_w_name(self.start, self.end, &self.id),
-            module: helper.module.clone(),
-            id: self.id,
+            node_id: NodeId::new(self.id, helper.module.clone()),
             kind: self.kind.up(helper)?,
             params: self.params.map(|raw| raw.up(helper)).transpose()?,
         };
         helper
             .operators
-            .insert(operator_decl.fqon(&helper.module), operator_decl.clone());
-        helper.add_query_decl_doc(&operator_decl.id, self.doc);
+            .insert(operator_decl.fqn(), operator_decl.clone());
+        helper.add_query_decl_doc(&operator_decl.node_id.id(), self.doc);
         Ok(operator_decl)
     }
 }
@@ -257,14 +257,13 @@ impl<'script> Upable<'script> for SubqueryDeclRaw<'script> {
 
         let subquery_decl = SubqueryDecl {
             mid: helper.add_meta_w_name(self.start, self.end, &self.id),
-            module: helper.module.clone(),
-            id: self.id,
+            node_id: NodeId::new(self.id, helper.module.clone()),
             params: self.params.map(|raw| raw.up(helper)).transpose()?,
             raw_stmts: self.subquery,
             from,
             into,
         };
-        let subquery_name = subquery_decl.fqsqn(&helper.module);
+        let subquery_name = subquery_decl.fqn();
         if helper.subquery_defns.contains_key(&subquery_name) {
             let err_str = format! {"Can't define the query `{}` twice", subquery_name};
             return error_generic(&subquery_decl, &subquery_decl, &err_str, &helper.meta);
@@ -273,7 +272,7 @@ impl<'script> Upable<'script> for SubqueryDeclRaw<'script> {
         helper
             .subquery_defns
             .insert(subquery_name, subquery_decl.clone());
-        helper.add_query_decl_doc(&subquery_decl.id, self.doc);
+        helper.add_query_decl_doc(&subquery_decl.node_id.id(), self.doc);
         Ok(subquery_decl)
     }
 }
@@ -449,7 +448,7 @@ impl<'script> SubqueryStmtRaw<'script> {
                                 meta.name = Some(unmangled_id);
                             }
                             // All `define`s inside the subq are inside `subq_module`
-                            o.module.insert(0, subq_module.clone());
+                            o.node_id.module_mut().insert(0, subq_module.clone());
                             query_stmts.push(Stmt::Operator(o));
                         }
                         StmtRaw::Script(mut s) => {
@@ -466,7 +465,7 @@ impl<'script> SubqueryStmtRaw<'script> {
                             if let Some(meta) = helper.meta.nodes.get_mut(s.mid) {
                                 meta.name = Some(unmangled_id);
                             }
-                            s.module.insert(0, subq_module.clone());
+                            s.node_id.module_mut().insert(0, subq_module.clone());
                             query_stmts.push(Stmt::Script(s));
                         }
                         StmtRaw::Stream(mut s) => {
@@ -671,8 +670,7 @@ impl<'script> Upable<'script> for OperatorStmtRaw<'script> {
         let module = self.module.iter().map(ToString::to_string).collect();
         Ok(OperatorStmt {
             mid: helper.add_meta_w_name(self.start, self.end, &self.id),
-            id: self.id,
-            module,
+            node_id: NodeId::new(self.id, module),
             target: self.target,
             params: self.params.map(|raw| raw.up(helper)).transpose()?,
         })
@@ -706,15 +704,20 @@ impl<'script> Upable<'script> for ScriptDeclRaw<'script> {
 
         let script_decl = ScriptDecl {
             mid: helper.add_meta_w_name(self.start, self.end, &self.id),
-            module: helper.module.clone(),
-            id: self.id,
+            node_id: NodeId::new(self.id, helper.module.clone()),
             params: self.params.map(|raw| raw.up(helper)).transpose()?,
             script,
         };
         helper.module.pop();
-        let script_name = script_decl.fqsn(&helper.module);
+
+        let script_name = if helper.module.is_empty() {
+            script_decl.node_id.id().to_string()
+        } else {
+            format!("{}::{}", helper.module.join("::"), script_decl.node_id.id())
+        };
+
         helper.scripts.insert(script_name, script_decl.clone());
-        helper.add_query_decl_doc(&script_decl.id, self.doc);
+        helper.add_query_decl_doc(&script_decl.node_id.id(), self.doc);
         Ok(script_decl)
     }
 }
@@ -736,10 +739,9 @@ impl<'script> Upable<'script> for ScriptStmtRaw<'script> {
         let module = self.module.iter().map(ToString::to_string).collect();
         Ok(ScriptStmt {
             mid: helper.add_meta_w_name(self.start, self.end, &self.id),
-            id: self.id,
+            node_id: NodeId::new(self.id, module),
             params: self.params.map(|raw| raw.up(helper)).transpose()?,
             target: self.target,
-            module,
         })
     }
 }
@@ -765,8 +767,7 @@ impl<'script> Upable<'script> for WindowDeclRaw<'script> {
 
         let window_decl = WindowDecl {
             mid: helper.add_meta_w_name(self.start, self.end, &self.id),
-            module: helper.module.clone(),
-            id: self.id,
+            node_id: NodeId::new(self.id, helper.module.clone()),
             kind: self.kind,
             params: self.params.up(helper)?,
             script: maybe_script,
@@ -774,8 +775,8 @@ impl<'script> Upable<'script> for WindowDeclRaw<'script> {
 
         helper
             .windows
-            .insert(window_decl.fqwn(&helper.module), window_decl.clone());
-        helper.add_query_decl_doc(&window_decl.id, self.doc);
+            .insert(window_decl.fqn(), window_decl.clone());
+        helper.add_query_decl_doc(&window_decl.node_id.id(), self.doc);
         Ok(window_decl)
     }
 }
