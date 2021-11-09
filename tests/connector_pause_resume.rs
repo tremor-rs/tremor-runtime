@@ -23,6 +23,7 @@ use value_trait::ValueAccess;
 use async_std::{
     io::WriteExt,
     net::{TcpListener, TcpStream, UdpSocket},
+    prelude::FutureExt,
 };
 use connectors::ConnectorHarness;
 use tremor_runtime::{connectors::ConnectorState, errors::Result};
@@ -46,7 +47,7 @@ id: my_udp_server
 type: udp_server
 codec: string
 preprocessors:
-  - lines-no-buffer
+  - lines
 config:
   host: "127.0.0.1"
   port: {}
@@ -62,16 +63,10 @@ config:
     let socket = UdpSocket::bind("127.0.0.1:0").await?;
     socket.connect(&server_addr).await?;
     // send data
-    let data: &str = "
-	Foo
-	Bar
-	Baz
-	Snot
-	Badger
-	";
+    let data: &str = "Foo\nBar\nBaz\nSnot\nBadger";
     socket.send(data.as_bytes()).await?;
     // expect data being received
-    for expected in data.split('\n') {
+    for expected in data.split('\n').take(4) {
         let event = harness.out().get_event().await?;
         let content = event.data.suffix().value().as_str().unwrap();
         assert_eq!(expected, content);
@@ -82,18 +77,7 @@ config:
         .wait_for_state(ConnectorState::Paused, Duration::from_secs(5))
         .await?;
     // send some more data
-    let data2 = "
-	Connectors
-	suck
-	who
-	the
-	hell
-	came
-	up
-	with
-	that
-	shit
-	";
+    let data2 = "Connectors\nsuck\nwho\nthe\nhell\ncame\nup\nwith\nthat\nshit\n";
     socket.send(data2.as_bytes()).await?;
 
     // ensure nothing is received (pause is actually doing the right thing)
@@ -108,12 +92,32 @@ config:
         .wait_for_state(ConnectorState::Running, Duration::from_secs(5))
         .await?;
     // receive the data sent during pause
-    for expected in data2.split('\n') {
+    // first line, continueing the stuff from last send
+    assert_eq!(
+        format!(
+            "{}{}",
+            data.split('\n').last().unwrap(),
+            data2.split('\n').next().unwrap()
+        )
+        .as_str(),
+        harness
+            .out()
+            .get_event()
+            .await?
+            .data
+            .suffix()
+            .value()
+            .as_str()
+            .unwrap()
+    );
+    for expected in data2[..data2.len() - 1].split('\n').skip(1) {
+        debug!("expecting '{}'", expected);
         let event = harness.out().get_event().await?;
         let content = event.data.suffix().value().as_str().unwrap();
+        debug!("got '{}'", content);
         assert_eq!(expected, content);
     }
-    let (_out, err) = harness.stop(1).await?;
+    let (_out, err) = harness.stop().await?;
     assert!(err.is_empty());
     Ok(())
 }
@@ -137,7 +141,7 @@ id: my_tcp_server
 type: tcp_server
 codec: string
 preprocessors:
-  - lines-no-buffer
+  - lines
 config:
   host: "127.0.0.1"
   port: {}
@@ -148,22 +152,22 @@ config:
     let harness = ConnectorHarness::new(connector_yaml).await?;
     harness.start().await?;
     harness.wait_for_connected(Duration::from_secs(5)).await?;
-
+    debug!("Connected.");
     // connect client socket
     let mut socket = TcpStream::connect(&server_addr).await?;
     // send data
-    let data: &str = "
-	Foo
-	Bar
-	Baz
-	Snot
-	Badger
-	";
+    let data: &str = "Foo\nBar\nBaz\nSnot\nBadger";
     socket.write_all(data.as_bytes()).await?;
-    // expect data being received
-    for expected in data.split('\n') {
-        let event = harness.out().get_event().await?;
+    // expect data being received, the last item is not received yet
+    for expected in data.split('\n').take(4) {
+        debug!("expecting: '{}'", expected);
+        let event = harness
+            .out()
+            .get_event()
+            .timeout(Duration::from_secs(2))
+            .await??;
         let content = event.data.suffix().value().as_str().unwrap();
+        debug!("received '{}'", content);
         assert_eq!(expected, content);
     }
     // pause connector
@@ -172,38 +176,52 @@ config:
         .wait_for_state(ConnectorState::Paused, Duration::from_secs(5))
         .await?;
     // send some more data
-    let data2 = "
-	Connectors
-	suck
-	who
-	the
-	hell
-	came
-	up
-	with
-	that
-	shit
-	";
+    let data2 = "Connectors\nsuck\nwho\nthe\nhell\ncame\nup\nwith\nthat\nshit\n";
     socket.write_all(data2.as_bytes()).await?;
 
     // ensure nothing is received (pause is actually doing the right thing)
-    assert!(
-        async_std::future::timeout(Duration::from_millis(500), harness.out().get_event())
-            .await
-            .is_err()
-    );
+    assert!(harness
+        .out()
+        .get_event()
+        .timeout(Duration::from_millis(500))
+        .await
+        .is_err());
     // resume connector
     harness.resume().await?;
     harness
         .wait_for_state(ConnectorState::Running, Duration::from_secs(5))
         .await?;
     // receive the data sent during pause
-    for expected in data2.split('\n') {
-        let event = harness.out().get_event().await?;
+    assert_eq!(
+        format!(
+            "{}{}",
+            data.split('\n').last().unwrap(),
+            data2.split('\n').next().unwrap()
+        )
+        .as_str(),
+        harness
+            .out()
+            .get_event()
+            .await?
+            .data
+            .suffix()
+            .value()
+            .as_str()
+            .unwrap()
+    );
+    drop(socket); // closing the socket, ensuring the last bits are flushed from preprocessors etc
+    for expected in data2[..data2.len() - 1].split('\n').skip(1) {
+        debug!("expecting: '{}'", expected);
+        let event = harness
+            .out()
+            .get_event()
+            .timeout(Duration::from_secs(2))
+            .await??;
         let content = event.data.suffix().value().as_str().unwrap();
+        debug!("received '{}'", content);
         assert_eq!(expected, content);
     }
-    let (_out, err) = harness.stop(1).await?;
+    let (_out, err) = harness.stop().await?;
     assert!(err.is_empty());
     Ok(())
 }

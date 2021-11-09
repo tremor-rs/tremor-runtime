@@ -56,8 +56,8 @@ impl ConnectorHarness {
 
         // connect a fake pipeline to OUT
         let out_pipeline_id =
-            TremorUrl::from_pipeline_instance("out_pipeline", "01")?.with_port(&IN);
-        let (link_tx, link_rx) = async_std::channel::bounded(1);
+            TremorUrl::from_pipeline_instance("TEST__out_pipeline", "01")?.with_port(&IN);
+        let (link_tx, link_rx) = async_std::channel::unbounded();
         let out_pipeline = TestPipeline::new(out_pipeline_id.clone());
         connector_addr
             .send(connectors::Msg::Link {
@@ -70,7 +70,7 @@ impl ConnectorHarness {
 
         // connect a fake pipeline to ERR
         let err_pipeline_id =
-            TremorUrl::from_pipeline_instance("err_pipeline", "01")?.with_port(&IN);
+            TremorUrl::from_pipeline_instance("TEST__err_pipeline", "01")?.with_port(&IN);
         let err_pipeline = TestPipeline::new(err_pipeline_id.clone());
         connector_addr
             .send(connectors::Msg::Link {
@@ -109,9 +109,9 @@ impl ConnectorHarness {
         Ok(self.addr.send(connectors::Msg::Resume).await?)
     }
 
-    pub(crate) async fn stop(self, timeout_s: u64) -> Result<(Vec<Event>, Vec<Event>)> {
+    pub(crate) async fn stop(self) -> Result<(Vec<Event>, Vec<Event>)> {
         self.world.stop(ShutdownMode::Graceful).await?;
-        self.handle.cancel().await;
+        //self.handle.cancel().await;
         let out_events = self.out_pipeline.get_events()?;
         let err_events = self.err_pipeline.get_events()?;
         Ok((out_events, err_events))
@@ -180,7 +180,9 @@ impl ConnectorHarness {
 }
 
 pub(crate) struct TestPipeline {
-    rx: Receiver<pipeline::Msg>,
+    rx: Receiver<Box<pipeline::Msg>>,
+    rx_cf: Receiver<pipeline::CfMsg>,
+    rx_mgmt: Receiver<pipeline::MgmtMsg>,
     addr: pipeline::Addr,
 }
 
@@ -188,19 +190,24 @@ impl TestPipeline {
     pub(crate) fn new(id: TremorUrl) -> Self {
         let qsize = QSIZE.load(Ordering::Relaxed);
         let (tx, rx) = bounded(qsize);
-        let (tx_cf, _rx_cf) = bounded(qsize);
-        let (tx_mgmt, _rx_mgmt) = bounded(qsize);
+        let (tx_cf, rx_cf) = bounded(qsize);
+        let (tx_mgmt, rx_mgmt) = bounded(qsize);
         let addr = pipeline::Addr::new(tx, tx_cf, tx_mgmt, id);
-        Self { rx, addr }
+        Self {
+            rx,
+            rx_cf,
+            rx_mgmt,
+            addr,
+        }
     }
 
-    // get all available events from the pipeline
+    // get all currently available events from the pipeline
     pub(crate) fn get_events(&self) -> Result<Vec<Event>> {
         let mut events = Vec::with_capacity(self.rx.len());
         while let Ok(msg) = self.rx.try_recv() {
-            match msg {
+            match *msg {
                 pipeline::Msg::Event { event, .. } => {
-                    events.push(event);
+                    events.push(event.clone());
                 }
                 pipeline::Msg::Signal(signal) => {
                     debug!("Received signal: {:?}", signal.kind)
@@ -213,7 +220,7 @@ impl TestPipeline {
     /// get a single event from the pipeline
     pub(crate) async fn get_event(&self) -> Result<Event> {
         loop {
-            match self.rx.recv().await? {
+            match *self.rx.recv().await? {
                 pipeline::Msg::Event { event, .. } => break Ok(event),
                 // filter out signals
                 pipeline::Msg::Signal(signal) => {

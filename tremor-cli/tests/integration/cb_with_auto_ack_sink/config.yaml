@@ -1,23 +1,25 @@
-onramp:
+connector:
   - id: cb_in
     type: cb
     codec: json
+    preprocessors:
+      - lines
     config:
-      source: in.json
-      timeout: 4000 # 4 seconds
-
-offramp:
+      path: in.json
+      timeout: 2000 # 2 seconds
   - id: std_out
-    type: stdout
+    type: stdio
     codec: json
+    postprocessors:
+      - lines
     config:
-      prefix: ">>> "
+      output: stdout
 
 binding:
   - id: cb
     links:
-      "/onramp/cb_in/{instance}/out": ["/pipeline/system::passthrough/{instance}/in"]
-      "/pipeline/system::passthrough/{instance}/out": ["/offramp/std_out/{instance}/in"]
+      "/connector/cb_in/{instance}/out": ["/pipeline/system::passthrough/{instance}/in"]
+      "/pipeline/system::passthrough/{instance}/out": ["/connector/std_out/{instance}/in"]
 
 mapping:
   /binding/cb/01:

@@ -233,7 +233,7 @@ impl<A: Artefact> InstanceLifecycleFsm<A> {
 mod test {
     use super::*;
     use crate::config;
-    use crate::system::World;
+    use crate::system::{ShutdownMode, World};
     use crate::url::TremorUrl;
     use std::io::BufReader;
     use tremor_common::file as cfile;
@@ -245,130 +245,60 @@ mod test {
     }
 
     #[async_std::test]
-    async fn onramp_activation_lifecycle() -> Result<()> {
-        let (world, _) = World::start().await?;
-
-        let mut config = slurp("tests/configs/ut.passthrough.yaml");
-        let artefact = config.onramp.pop().expect("artefact not found");
-        let id = TremorUrl::from_onramp_instance(&artefact.id, "snot")?;
-        assert!(world
-            .repo
-            .find_onramp(&id)
-            .await
-            .expect("failed to communicate to repository")
-            .is_none());
-
-        assert!(world
-            .repo
-            .publish_onramp(&id, false, artefact)
-            .await
-            .is_ok());
-
-        // Legal <initial> -> Running
-        assert_eq!(Ok(InstanceState::Initialized), world.bind_onramp(&id).await,);
-
-        // Legal Initialized -> Running
-        assert_eq!(
-            Ok(InstanceState::Running),
-            world
-                .reg
-                .transition_onramp(&id, InstanceState::Running)
-                .await
-        );
-        // Legal Running -> Paused
-        assert_eq!(
-            Ok(InstanceState::Paused),
-            world
-                .reg
-                .transition_onramp(&id, InstanceState::Paused)
-                .await
-        );
-
-        // Legal Paused -> Stopped
-        assert_eq!(
-            Ok(InstanceState::Stopped),
-            world
-                .reg
-                .transition_onramp(&id, InstanceState::Stopped)
-                .await
-        );
-
-        // stopped onramps cannot be transitioned back
-        assert_eq!(
-            Ok(InstanceState::Stopped),
-            world
-                .reg
-                .transition_onramp(&id, InstanceState::Running)
-                .await
-        );
-        Ok(())
-    }
-
-    #[async_std::test]
-    async fn offramp_activation_lifecycle() {
+    async fn connector_activation_lifecycle() {
         let (world, _) = World::start().await.expect("failed to start world");
 
         let mut config = slurp("tests/configs/ut.passthrough.yaml");
-        let artefact = config.offramp.pop().expect("artefact not found");
-        let id =
-            TremorUrl::from_offramp_instance(&artefact.id, "snot").expect("artefact not found");
+        let artefact = config.connector.pop().expect("connector not found");
+        let id = TremorUrl::from_connector_instance(&artefact.id, "snot")
+            .expect("invalid connector url");
         assert!(world
             .repo
-            .find_offramp(&id)
+            .find_connector(&id)
             .await
             .expect("failed to communicate to repository")
             .is_none());
 
         assert!(world
             .repo
-            .publish_offramp(&id, false, artefact)
+            .publish_connector(&id, false, artefact)
             .await
             .is_ok());
 
         // Legal <initial> -> Running
         assert_eq!(
             Ok(InstanceState::Initialized),
-            world.bind_offramp(&id).await
+            world.bind_connector(&id).await
         );
 
         // Legal Initialized -> Running
         assert_eq!(
             Ok(InstanceState::Running),
-            world
-                .reg
-                .transition_offramp(&id, InstanceState::Running)
-                .await
+            world.reg.start_connector(&id).await
         );
         // Legal Running -> Paused
         assert_eq!(
             Ok(InstanceState::Paused),
-            world
-                .reg
-                .transition_offramp(&id, InstanceState::Paused)
-                .await
+            world.reg.pause_connector(&id).await
         );
 
         // Legal Paused -> Stopped
         assert_eq!(
             Ok(InstanceState::Stopped),
-            world
-                .reg
-                .transition_offramp(&id, InstanceState::Stopped)
-                .await
+            world.reg.stop_connector(&id).await
         );
 
-        // Stopped offramps can't return from the dead
+        // Stopped connectors can't return from the dead
         assert_eq!(
             Ok(InstanceState::Stopped),
-            world
-                .reg
-                .transition_offramp(&id, InstanceState::Running)
-                .await
+            world.reg.start_connector(&id).await
         );
     }
 
     #[async_std::test]
-    async fn binding_activation_lifecycle() {
+    async fn binding_activation_lifecycle() -> Result<()> {
+        // FIXME: remove
+        let _ = env_logger::try_init();
         let (world, _) = World::start().await.expect("failed to start world");
 
         // -> Initialized -> Running
@@ -407,23 +337,15 @@ mod test {
             world.reg.start_binding(&id).await
         );
 
-        // TODO - full undeployment 'white-box' acceptance tests
-        //        println!("TODO {:?}", world.repo.unpublish_binding(&id));
         let _r = world.unbind_binding(&id).await;
-        //        assert!(world.repo.unpublish_binding(&id).is_ok());
-        println!(
-            "TODO {:?}",
-            world
-                .reg
-                .find_binding(&id)
-                .await
-                .expect("failed to communicate to registry")
-        );
+
         assert!(world
             .reg
             .find_binding(&id)
             .await
             .expect("failed to communicate to registry")
             .is_none());
+        world.stop(ShutdownMode::Forceful).await?;
+        Ok(())
     }
 }
