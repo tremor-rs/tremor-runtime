@@ -111,9 +111,13 @@ where
         if bytes_read == 0 {
             // EOF
             trace!("[Connector::{}] EOF", &self.url);
-            return Ok(SourceReply::EndStream(stream));
+            return Ok(SourceReply::EndStream {
+                origin_uri: self.origin_uri.clone(),
+                meta: Some(self.meta.clone()),
+                stream_id: stream,
+            });
         }
-        trace!("[Connector::{}] read {} bytes", &self.url, bytes_read);
+        debug!("[Connector::{}] read {} bytes", &self.url, bytes_read);
 
         // FIXME: meta needs to be wrapped in <RESOURCE_TYPE>.<ARTEFACT> by the source manager
         // this is only the connector specific part, without the path mentioned above

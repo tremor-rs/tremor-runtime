@@ -175,10 +175,9 @@ impl Connector for TcpServer {
                 ctx.quiescence_beacon.continue_reading().await,
                 listener.accept().await,
             ) {
-                trace!(
+                debug!(
                     "[Connector::{}] new connection from {}",
-                    &accept_url,
-                    peer_addr
+                    &accept_url, peer_addr
                 );
                 let stream_id: u64 = stream_id_gen.next_stream_id();
                 let connection_meta: ConnectionMeta = peer_addr.into();

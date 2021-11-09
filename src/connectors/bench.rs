@@ -157,10 +157,9 @@ impl Connector for Bench {
         sink_context: SinkContext,
         builder: super::sink::SinkManagerBuilder,
     ) -> Result<Option<super::sink::SinkAddr>> {
-        Ok(Some(builder.spawn(
-            Blackhole::from_config(&self.config),
-            sink_context,
-        )?))
+        builder
+            .spawn(Blackhole::from_config(&self.config), sink_context)
+            .map(Some)
     }
 
     fn default_codec(&self) -> &str {

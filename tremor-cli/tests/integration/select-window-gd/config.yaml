@@ -1,21 +1,20 @@
-onramp:
-  - id: input
+connector:
+  - id: cb
     type: cb
+    codec: json
+    preprocessors:
+      - lines
     config:
-      source: "in.json"
+      path: "in.json"
       timeout: 1000
       expect_batched: true
-
-offramp:
-  - id: output
-    type: cb
 
 binding:
   - id: gd
     links:
-      "/onramp/input/{instance}/out": ["/pipeline/main/{instance}/in"]
-      "/pipeline/main/{instance}/out": ["/offramp/output/{instance}/in"]
-      "/pipeline/main/{instance}/err": ["/offramp/system::stderr/{instance}/in"]
+      "/connector/cb/{instance}/out": ["/pipeline/main/{instance}/in"]
+      "/pipeline/main/{instance}/out": ["/connector/cb/{instance}/in"]
+      "/pipeline/main/{instance}/err": ["/connector/system::stderr/system/in"]
 
 mapping:
   /binding/gd/01:
