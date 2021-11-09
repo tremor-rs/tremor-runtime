@@ -15,12 +15,8 @@
 mod gelf;
 pub(crate) use gelf::Gelf;
 
-<<<<<<< HEAD
-use crate::errors::Result;
-=======
 use crate::config::Postprocessor as PostprocessorConfig;
-use crate::errors::{Error, Result};
->>>>>>> 8afb9914 (Make pre/postprocessors configurable, fix tests and some more quirks.)
+use crate::errors::Result;
 use byteorder::{BigEndian, WriteBytesExt};
 use std::default::Default;
 use tremor_common::time::nanotime;

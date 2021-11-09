@@ -16,8 +16,6 @@
 use crate::connectors::prelude::*;
 use async_std::net::UdpSocket;
 
-use super::source::StreamReader;
-
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
@@ -122,7 +120,7 @@ impl Connector for UdpServer {
     async fn create_source(
         &mut self,
         source_context: SourceContext,
-        builder: super::source::SourceManagerBuilder,
+        builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
         let source = ChannelSource::new(source_context.clone(), builder.qsize());
         self.src_runtime = Some(source.runtime());
