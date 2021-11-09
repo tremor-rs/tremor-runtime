@@ -31,6 +31,7 @@ use tremor_pipeline::query;
 pub(crate) type Id = TremorUrl;
 pub(crate) use crate::Connector as ConnectorArtefact;
 use async_std::channel::bounded;
+use async_std::prelude::FutureExt;
 use async_trait::async_trait;
 
 /// A Binding
@@ -302,7 +303,7 @@ impl Artefact for ConnectorArtefact {
             while expect > 0 {
                 // throw any error
                 // TODO: roll back previous linkings from this call in case of error
-                async_std::future::timeout(timeout, rx.recv()).await???;
+                rx.recv().timeout(timeout).await???;
                 expect -= 1;
             }
             Ok(true)

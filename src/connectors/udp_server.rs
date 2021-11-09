@@ -77,7 +77,11 @@ impl StreamReader for UdpReader {
     async fn read(&mut self, stream: u64) -> Result<SourceReply> {
         let bytes_read = self.socket.recv(&mut self.buffer).await?;
         if bytes_read == 0 {
-            Ok(SourceReply::EndStream(stream))
+            Ok(SourceReply::EndStream {
+                origin_uri: self.origin_uri.clone(),
+                meta: None,
+                stream_id: stream,
+            })
         } else {
             Ok(SourceReply::Data {
                 origin_uri: self.origin_uri.clone(),

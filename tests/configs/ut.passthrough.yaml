@@ -1,14 +1,9 @@
 ---
-onramp:
-  - id: blaster
-    type: blaster
+connector:
+  - id: bench
+    type: bench
     config:
       source: ./demo/data/data.json.xz
-
-offramp:
-  - id: blackhole
-    type: blackhole
-    config:
       warmup_secs: 10
       stop_after_secs: 40
       significant_figures: 2
@@ -16,8 +11,8 @@ offramp:
 binding:
   - id: test
     links:
-      /onramp/blaster/{instance}/: ["/pipeline/system::passthrough/{instance}/in"]
-      /pipeline/system::passthrough/{instance}/out: ["/offramp/blackhole/{instance}/in"]
+      /connector/bench/{instance}/out: ["/pipeline/system::passthrough/{instance}/in"]
+      /pipeline/system::passthrough/{instance}/out: ["/connector/bench/{instance}/in"]
 mapping:
   /binding/test/snot:
     instance: "snot"
