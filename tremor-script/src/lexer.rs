@@ -413,8 +413,6 @@ pub enum Token<'input> {
     To,
     /// The `deploy` keyword
     Deploy,
-    /// The `config` keyword
-    Config,
 }
 
 impl<'input> Default for Token<'input> {
@@ -793,7 +791,6 @@ impl<'input> fmt::Display for Token<'input> {
             Token::Connect => write!(f, "connect"),
             Token::To => write!(f, "to"),
             Token::Deploy => write!(f, "deploy"),
-            Token::Config => write!(f, "config"),
         }
     }
 }
