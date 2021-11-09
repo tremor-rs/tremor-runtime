@@ -1048,7 +1048,7 @@ mod tests {
               case %{ a == 19 } => event.snot
               case %[42] => event.snake
               case a = %(42, _, ...) => let event = a
-              default => let a = 7, let b = 9, event + a + b
+              default => let a = 7; let b = 9; event + a + b
             end;
             match $meta.foo of          
               case 1 => let event = a
@@ -1087,13 +1087,13 @@ mod tests {
         [
             -event.foo,
             (patch event of
-                default => {"snot": 42 - zero},
-                default "key" => {"snot": 42 +  zero},
-                insert "snot" => 42,
-                merge => {"snot": 42 - zero},
-                merge "badger" => {"snot": 42 - zero},
-                upsert "snot" => 42,
-                copy "snot" => "snotter",
+                default => {"snot": 42 - zero};
+                default "key" => {"snot": 42 +  zero};
+                insert "snot" => 42;
+                merge => {"snot": 42 - zero};
+                merge "badger" => {"snot": 42 - zero};
+                upsert "snot" => 42;
+                copy "snot" => "snotter";
                 erase "snotter"
             end),
             (merge event of {"foo": event[42:x]} end),
@@ -1114,7 +1114,7 @@ mod tests {
             r#"
             for group[0] of
                 case (i, e) when i == 0 =>
-                  let event = 42 + i,
+                  let event = 42 + i;
                   event + 7
               end;
             (for group[0] of
