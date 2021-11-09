@@ -547,4 +547,25 @@ mod test {
 
         Ok(())
     }
+
+    #[test]
+    fn test_leftovers() -> Result<()> {
+        let mut pp = Lines::new(DEFAULT_SEPARATOR, 10, true);
+        let mut ingest_ns = 0_u64;
+
+        let data = b"123\n456";
+        let mut r = pp.process(&mut ingest_ns, data)?;
+        assert_eq!(r.pop().unwrap(), b"123");
+        assert!(r.is_empty());
+
+        assert!(pp.process(&mut ingest_ns, b"7890")?.is_empty());
+        let mut r = pp.process(&mut ingest_ns, data)?;
+        assert_eq!(r.pop().unwrap(), b"4567890123");
+        assert!(r.is_empty());
+        let mut r = pp.finish(&[])?;
+        assert_eq!(r.pop().unwrap(), b"456");
+        assert!(r.is_empty());
+        assert!(pp.buffer.is_empty());
+        Ok(())
+    }
 }

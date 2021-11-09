@@ -19,16 +19,12 @@ use crate::{
         Codec,
     },
     connectors::prelude::*,
-    url::ports::{ERR, OUT},
 };
 use async_std::channel::{bounded, Receiver, Sender, TryRecvError};
 use beef::Cow;
 use serde::Deserialize;
 use sled::{CompareAndSwapError, Db, IVec};
 use std::{boxed::Box, convert::TryFrom};
-use tremor_pipeline::EventIdGenerator;
-use tremor_script::EventPayload;
-use tremor_value::prelude::*;
 
 #[derive(Debug)]
 enum Command<'v> {
