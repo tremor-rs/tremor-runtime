@@ -13,6 +13,7 @@
 // limitations under the License.
 
 pub(crate) mod raw;
+
 use super::{
     error_generic, error_no_consts, error_no_locals, node_id::NodeId, AggrRegistry, EventPath,
     HashMap, Helper, Ident, ImutExpr, ImutExprInt, InvokeAggrFn, Location, NodeMetas, Path,
@@ -236,7 +237,7 @@ pub struct PipelineDecl<'script> {
     /// The raw pipeline statements
     pub raw_stmts: raw::StmtsRaw<'script>,
     /// The query in it's runnable form
-    pub query: Query<'script>,
+    pub query: Option<Query<'script>>,
 }
 impl_expr_mid!(PipelineDecl);
 impl_fqn!(PipelineDecl);

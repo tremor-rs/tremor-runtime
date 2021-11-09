@@ -510,7 +510,7 @@ pub struct ConnectorDecl {
     pub id: String,
     raw: Vec<Arc<Pin<Vec<u8>>>>,
     /// Arguments for this connector definition
-    pub args: Value<'static>,
+    pub params: Option<HashMap<String, Value<'static>>>,
     /// The type of connector
     pub kind: String,
 }
@@ -545,7 +545,7 @@ impl ConnectorDecl {
             /// of interest referential safety should be preserved
             raw: origin.raw.clone(),
             id: id.to_string(),
-            args: connector.args.clone_static(),
+            params: connector.params.clone(),
             kind: connector.builtin_kind.clone(),
         })
     }
@@ -562,7 +562,7 @@ pub struct FlowDecl {
     pub id: String,
     raw: Vec<Arc<Pin<Vec<u8>>>>,
     /// Arguments for this flow definition
-    pub args: Value<'static>,
+    pub params: Option<HashMap<String, Value<'static>>>,
     /// Link specifications
     pub links: HashMap<TremorUrl, TremorUrl>,
 }
@@ -597,7 +597,7 @@ impl FlowDecl {
             /// of interest referential safety should be preserved
             raw: origin.raw.clone(),
             id: id.to_string(),
-            args: flow.args.clone_static(),
+            params: flow.params.clone(),
             links: flow.links.clone(),
         })
     }

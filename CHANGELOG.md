@@ -78,7 +78,10 @@
 ### Breaking CHhanges
 
 - changed naming for `record` object to avoid keywords like `select` and `merge`. New names are `record.extract` and `record.combine`.
+- command seperators are now unified, both `patch`, `match` and `for` now use `;` the same way the rest of the language does
+
 ## 0.11.4
+
 
 ### New features
 

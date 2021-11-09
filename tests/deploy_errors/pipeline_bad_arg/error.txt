@@ -1,3 +1,0 @@
-Error: 
-    8 | deploy passthrough;
-      | ^^^^^^^^^^^^^^^^^^ Argument `snot` is required, but no defaults are provided in the definition and no final values in the instance

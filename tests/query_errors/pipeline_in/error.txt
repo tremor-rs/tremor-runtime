@@ -1,7 +1,7 @@
 Error: 
     4 | end;
     5 | 
-    6 | create query in;
-      | ^^^^^^^^^^^^^^^ Name `in` is reserved for built-in nodes, please use another name.
+    6 | create pipeline in;
+      | ^^^^^^^^^^^^^^^^^^ Name `in` is reserved for built-in nodes, please use another name.
     7 | select event from in into in;
     8 | select event from in into out;

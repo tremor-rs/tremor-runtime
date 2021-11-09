@@ -20,7 +20,6 @@ use super::PipelineDecl;
 use super::{Docs, HashMap, Value};
 use crate::ast::BaseRef;
 use crate::{impl_expr_mid, impl_fqsn};
-use beef::Cow;
 use tremor_common::url::TremorUrl;
 
 pub(crate) mod raw;
@@ -30,7 +29,7 @@ pub(crate) mod raw;
 pub struct Deploy<'script> {
     // TODO handle configuration directives for troy definitions
     /// Configuration directives
-    pub directives: HashMap<String, Value<'script>>,
+    pub config: HashMap<String, Value<'script>>,
     /// Statements
     pub stmts: DeployStmts<'script>,
     /// Flow Definitions
@@ -99,10 +98,8 @@ pub struct ConnectorDecl<'script> {
     pub module: Vec<String>,
     /// Identifer for the connector
     pub id: String,
-    /// Resolved argument specification
-    pub spec: Vec<Cow<'script, str>>,
     /// Resolved argument defaults
-    pub args: Value<'script>,
+    pub params: Option<HashMap<String, Value<'script>>>,
     /// Internal / intrinsic builtin name
     pub builtin_kind: String,
     /// Documentation comments
@@ -122,10 +119,8 @@ pub struct FlowDecl<'script> {
     pub module: Vec<String>,
     /// Identifer for the connector
     pub id: String,
-    /// Resolved argument specification
-    pub spec: Vec<Cow<'script, str>>,
     /// Resolved argument defaults
-    pub args: Value<'script>,
+    pub params: Option<HashMap<String, Value<'script>>>,
     /// Links between artefacts in the flow
     pub links: HashMap<TremorUrl, TremorUrl>,
     /// Documentation comments
