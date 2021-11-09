@@ -49,7 +49,7 @@ use tremor_value::Value;
 
 pub use self::channel_sink::SinkMeta;
 
-use super::metrics::MetricsSinkReporter;
+use super::utils::metrics::SinkReporter;
 
 /// Result for a sink function that may provide insights or response.
 ///
@@ -286,7 +286,7 @@ pub struct SinkManagerBuilder {
     qsize: usize,
     serializer: EventSerializer,
     reply_channel: (Sender<AsyncSinkReply>, Receiver<AsyncSinkReply>),
-    metrics_reporter: MetricsSinkReporter,
+    metrics_reporter: SinkReporter,
 }
 
 impl SinkManagerBuilder {
@@ -326,7 +326,7 @@ pub(crate) fn builder(
     config: &ConnectorConfig,
     connector_default_codec: &str,
     qsize: usize,
-    metrics_reporter: MetricsSinkReporter,
+    metrics_reporter: SinkReporter,
 ) -> Result<SinkManagerBuilder> {
     // resolve codec and processors
     let postprocessor_configs: Vec<PostprocessorConfig> = config
@@ -455,7 +455,7 @@ where
     rx: Receiver<SinkMsg>,
     reply_rx: Receiver<AsyncSinkReply>,
     serializer: EventSerializer,
-    metrics_reporter: MetricsSinkReporter,
+    metrics_reporter: SinkReporter,
     /// tracking which operators incoming events visited
     merged_operator_meta: OpMeta,
     // pipelines connected to IN port

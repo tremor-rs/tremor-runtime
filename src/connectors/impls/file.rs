@@ -22,7 +22,6 @@ use async_std::{
 };
 use futures::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use tremor_common::asy::file;
-use tremor_value::{literal, Value};
 
 const URL_SCHEME: &str = "tremor-file";
 
@@ -125,8 +124,8 @@ impl Connector for File {
     async fn create_sink(
         &mut self,
         sink_context: SinkContext,
-        builder: super::sink::SinkManagerBuilder,
-    ) -> Result<Option<super::sink::SinkAddr>> {
+        builder: SinkManagerBuilder,
+    ) -> Result<Option<SinkAddr>> {
         Ok(if self.config.mode == Mode::Read {
             None
         } else {
@@ -140,8 +139,8 @@ impl Connector for File {
     async fn create_source(
         &mut self,
         source_context: SourceContext,
-        builder: super::source::SourceManagerBuilder,
-    ) -> Result<Option<super::source::SourceAddr>> {
+        builder: SourceManagerBuilder,
+    ) -> Result<Option<SourceAddr>> {
         Ok(if self.config.mode == Mode::Read {
             let source = ChannelSource::new(source_context.clone(), builder.qsize());
             self.source_runtime = Some(source.runtime());

@@ -11,9 +11,9 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+use super::{TcpReader, TcpWriter};
 use crate::connectors::prelude::*;
-use crate::connectors::tcp::{TcpReader, TcpWriter};
-use crate::connectors::tls::{load_server_config, TLSServerConfig};
+use crate::connectors::utils::tls::{load_server_config, TLSServerConfig};
 use async_std::net::TcpListener;
 use async_std::task::{self, JoinHandle};
 use async_tls::TlsAcceptor;
@@ -22,8 +22,6 @@ use rustls::ServerConfig;
 use simd_json::ValueAccess;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tremor_pipeline::EventOriginUri;
-use tremor_value::prelude::*;
 
 const URL_SCHEME: &str = "tremor-tcp-server";
 

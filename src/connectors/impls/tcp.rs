@@ -15,20 +15,12 @@
 pub(crate) mod client;
 pub(crate) mod server;
 
-use super::{
-    prelude::*,
-    source::{SourceReply, StreamReader},
-    StreamDone,
-};
-use crate::errors::Result;
-use crate::url::TremorUrl;
+use crate::connectors::prelude::*;
 use async_std::net::TcpStream;
 use futures::{
     io::{ReadHalf, WriteHalf},
     AsyncReadExt, AsyncWriteExt,
 };
-use tremor_pipeline::EventOriginUri;
-use tremor_value::Value;
 
 struct TcpReader<S>
 where
