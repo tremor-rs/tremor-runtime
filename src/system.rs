@@ -797,7 +797,7 @@ type: metrics
 id: system::stdio
 type: stdio
 config:
-  stream: stdout
+  output: stdout
             "#,
         )?;
         self.repo
@@ -815,7 +815,7 @@ config:
 id: system::stderr
 type: stdio
 config:
-  stream: stderr
+  output: stderr
             "#,
         )?;
         self.repo

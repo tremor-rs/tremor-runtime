@@ -1,22 +1,21 @@
-onramp:
-  - id: input
+connector:
+  - id: cb_check
     type: cb
     codec: json
+    preprocessors:
+      - lines
     config:
-      source: "in.json"
+      path: "in.json"
       timeout: 1000
-offramp:
-  - id: cb_out
-    type: cb
 binding:
   - id: p2p
     links:
-      "/onramp/input/{i}/out":
+      "/connector/cb_check/{i}/out":
         - "/pipeline/main1/{i}/in"
       "/pipeline/main1/{i}/out":
         - "/pipeline/main2/{i}/in"
       "/pipeline/main2/{i}/out":
-        - "/offramp/cb_out/{i}/in"
+        - "/connector/cb_check/{i}/in"
 mapping:
   /binding/p2p/01:
     i: "01"

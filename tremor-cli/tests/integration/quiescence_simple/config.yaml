@@ -6,7 +6,7 @@ connector:
       path: "in.json"
     codec: json
     preprocessors:
-      - lines-no-buffer
+      - lines
   - id: out
     type: file
     config:

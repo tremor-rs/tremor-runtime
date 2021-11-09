@@ -201,6 +201,7 @@ mod test {
     #[test]
     fn load_simple_deploys() {
         let config = slurp("tests/configs/deploy.simple.yaml");
+        assert_eq!(1, config.connector.len());
         assert_eq!(0, config.binding.len());
     }
 
