@@ -1575,7 +1575,6 @@ extern {
         "connect" => Token::Connect,
         "to" => Token::To,
         "deploy" => Token::Deploy,
-        "config" => Token::Config,
 
         "#!config" => Token::ConfigDirective,
     }
