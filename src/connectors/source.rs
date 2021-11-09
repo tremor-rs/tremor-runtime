@@ -23,11 +23,13 @@ use std::time::Duration;
 use tremor_common::time::nanotime;
 use tremor_script::{EventPayload, ValueAndMeta};
 
-use crate::config::{Codec as CodecConfig, Connector as ConnectorConfig};
+use crate::config::{
+    Codec as CodecConfig, Connector as ConnectorConfig, Preprocessor as PreprocessorConfig,
+};
 use crate::connectors::Msg;
 use crate::errors::{Error, Result};
 use crate::pipeline;
-use crate::preprocessor::{make_preprocessors, preprocess, Preprocessors};
+use crate::preprocessor::{finish, make_preprocessors, preprocess, Preprocessors};
 use crate::url::ports::{ERR, OUT};
 use crate::url::TremorUrl;
 use crate::{
@@ -51,6 +53,11 @@ pub const DEFAULT_POLL_INTERVAL: u64 = 10;
 
 //FIXME: add url
 macro_rules! eat_error {
+    ($e:expr, $msg:expr, $url:expr) => {
+        if let Err(e) = $e {
+            error!("[Source::{}] ERROR: {} {}", $url, $msg, e)
+        }
+    };
     ($e:expr, $url:expr) => {
         if let Err(e) = $e {
             error!("[Source::{}] ERROR: {}", $url, e)
@@ -129,7 +136,13 @@ pub enum SourceReply {
     /// A stream is opened
     StartStream(u64),
     /// A stream is closed
-    EndStream(u64),
+    /// This might result in additional events being flushed from
+    /// preprocessors, that is why we have `origin_uri` and `meta`
+    EndStream {
+        origin_uri: EventOriginUri,
+        stream_id: u64,
+        meta: Option<Value<'static>>,
+    },
     /// no new data/event, wait for the given ms
     Empty(u64),
 }
@@ -299,7 +312,7 @@ impl ChannelSourceRuntime {
                         break;
                     }
                 };
-                let last = matches!(&sc_data, SourceReply::EndStream(_));
+                let last = matches!(&sc_data, SourceReply::EndStream { .. });
                 if tx.send(sc_data).await.is_err() || last {
                     break;
                 };
@@ -419,12 +432,16 @@ pub fn builder(
     qsize: usize,
     source_metrics_reporter: SourceReporter,
 ) -> Result<SourceManagerBuilder> {
-    let preprocessor_names = config.preprocessors.clone().unwrap_or_else(Vec::new);
+    let preprocessor_configs: Vec<PreprocessorConfig> = config
+        .preprocessors
+        .as_ref()
+        .map(|ps| ps.iter().map(|p| p.into()).collect())
+        .unwrap_or_else(Vec::new);
     let codec_config = config
         .codec
         .clone()
         .unwrap_or_else(|| Either::Left(connector_default_codec.to_string()));
-    let streams = Streams::new(connector_uid, codec_config, preprocessor_names)?;
+    let streams = Streams::new(connector_uid, codec_config, preprocessor_configs)?;
 
     Ok(SourceManagerBuilder {
         qsize,
@@ -438,8 +455,7 @@ pub fn builder(
 struct Streams {
     uid: u64,
     codec_config: Either<String, CodecConfig>,
-    preprocessor_names: Vec<String>,
-    default: StreamState,
+    preprocessor_configs: Vec<PreprocessorConfig>,
     states: BTreeMap<u64, StreamState>,
 }
 
@@ -447,20 +463,21 @@ impl Streams {
     fn new(
         uid: u64,
         codec_config: Either<String, CodecConfig>,
-        preprocessor_names: Vec<String>,
+        preprocessor_configs: Vec<PreprocessorConfig>,
     ) -> Result<Self> {
         let default = Self::build_stream(
             uid,
             DEFAULT_STREAM_ID,
             &codec_config,
-            preprocessor_names.as_slice(),
+            preprocessor_configs.as_slice(),
         )?;
+        let mut states = BTreeMap::new();
+        states.insert(DEFAULT_STREAM_ID, default);
         Ok(Self {
             uid,
             codec_config,
-            preprocessor_names,
-            default,
-            states: BTreeMap::new(),
+            preprocessor_configs,
+            states,
         })
     }
 
@@ -472,45 +489,40 @@ impl Streams {
                 self.uid,
                 stream_id,
                 &self.codec_config,
-                self.preprocessor_names.as_slice(),
+                self.preprocessor_configs.as_slice(),
             )?;
             e.insert(state);
         }
         Ok(())
     }
 
-    fn end_stream(&mut self, stream_id: u64) {
-        self.states.remove(&stream_id);
+    fn end_stream(&mut self, stream_id: u64) -> Option<StreamState> {
+        self.states.remove(&stream_id)
     }
 
     fn get_or_create_stream(&mut self, stream_id: u64) -> Result<&mut StreamState> {
-        let state = if stream_id == DEFAULT_STREAM_ID {
-            &mut self.default
-        } else {
-            match self.states.entry(stream_id) {
-                Entry::Occupied(e) => e.into_mut(),
-                Entry::Vacant(e) => {
-                    let state = Self::build_stream(
-                        self.uid,
-                        stream_id,
-                        &self.codec_config,
-                        &self.preprocessor_names,
-                    )?;
-                    e.insert(state)
-                }
+        Ok(match self.states.entry(stream_id) {
+            Entry::Occupied(e) => e.into_mut(),
+            Entry::Vacant(e) => {
+                let state = Self::build_stream(
+                    self.uid,
+                    stream_id,
+                    &self.codec_config,
+                    &self.preprocessor_configs,
+                )?;
+                e.insert(state)
             }
-        };
-        Ok(state)
+        })
     }
 
     fn build_stream(
         connector_uid: u64,
         stream_id: u64,
         codec_config: &Either<String, CodecConfig>,
-        preprocessor_names: &[String],
+        preprocessor_configs: &[PreprocessorConfig],
     ) -> Result<StreamState> {
         let codec = codec::resolve(codec_config)?;
-        let preprocessors = make_preprocessors(preprocessor_names)?;
+        let preprocessors = make_preprocessors(preprocessor_configs)?;
         let idgen = EventIdGenerator::with_stream(connector_uid, stream_id);
         Ok(StreamState {
             stream_id,
@@ -639,13 +651,17 @@ where
                     );
                     return Ok(Control::Continue);
                 };
-                for (_, p) in &pipelines {
-                    p.send_mgmt(pipeline::MgmtMsg::ConnectInput {
-                        input_url: self.ctx.url.clone(),
-                        target: InputTarget::Source(self.addr.clone()),
-                        is_transactional: self.is_transactional,
-                    })
-                    .await?;
+                for (pipeline_url, p) in &pipelines {
+                    eat_error!(
+                        p.send_mgmt(pipeline::MgmtMsg::ConnectInput {
+                            input_url: self.ctx.url.clone(),
+                            target: InputTarget::Source(self.addr.clone()),
+                            is_transactional: self.is_transactional,
+                        })
+                        .await,
+                        format!("Failed sending ConnectInput to pipeline {}", pipeline_url),
+                        &self.ctx.url
+                    );
                 }
                 pipes.append(&mut pipelines);
                 Ok(Control::Continue)
@@ -664,14 +680,22 @@ where
                 };
                 pipelines.retain(|(url, _)| url == &id);
                 if self.pipelines_out.is_empty() && self.pipelines_err.is_empty() {
-                    eat_error!(self.source.on_stop(&mut self.ctx).await, &self.ctx.url);
+                    eat_error!(
+                        self.source.on_stop(&mut self.ctx).await,
+                        "on_stop after unlinking failed",
+                        &self.ctx.url
+                    );
                     return Ok(Control::Terminate);
                 }
                 Ok(Control::Continue)
             }
             SourceMsg::Start if self.state == Initialized => {
                 self.state = Running;
-                eat_error!(self.source.on_start(&mut self.ctx).await, &self.ctx.url);
+                eat_error!(
+                    self.source.on_start(&mut self.ctx).await,
+                    "on_start failed",
+                    &self.ctx.url
+                );
 
                 if let Err(e) = self.send_signal(Event::signal_start(self.ctx.uid)).await {
                     error!(
@@ -690,7 +714,11 @@ where
             }
             SourceMsg::Resume if self.state == Paused => {
                 self.state = Running;
-                eat_error!(self.source.on_resume(&mut self.ctx).await, &self.ctx.url);
+                eat_error!(
+                    self.source.on_resume(&mut self.ctx).await,
+                    "on_resume failed",
+                    &self.ctx.url
+                );
                 Ok(Control::Continue)
             }
             SourceMsg::Resume => {
@@ -704,7 +732,11 @@ where
                 // TODO: execute pause strategy chosen by source / connector / configured by user
                 info!("[Source::{}] Paused.", self.ctx.url);
                 self.state = Paused;
-                eat_error!(self.source.on_pause(&mut self.ctx).await, &self.ctx.url);
+                eat_error!(
+                    self.source.on_pause(&mut self.ctx).await,
+                    "on_pause failed",
+                    &self.ctx.url
+                );
                 Ok(Control::Continue)
             }
             SourceMsg::Pause => {
@@ -716,7 +748,11 @@ where
             }
             SourceMsg::Stop => {
                 self.state = Stopped;
-                eat_error!(self.source.on_stop(&mut self.ctx).await, &self.ctx.url);
+                eat_error!(
+                    self.source.on_stop(&mut self.ctx).await,
+                    "on_stop failed",
+                    &self.ctx.url
+                );
                 Ok(Control::Terminate)
             }
             SourceMsg::Drain(_sender) if self.state == Draining => {
@@ -740,7 +776,11 @@ where
                 // We change the source state to `Draining` and wait for `SourceReply::Empty` as we drain out everything that might be in flight
                 // when reached the `Empty` point, we emit the `Drain` signal and wait for the CB answer (one for each connected pipeline)
                 if self.pipelines_out.is_empty() && self.pipelines_err.is_empty() {
-                    eat_error!(drained_sender.send(Msg::SourceDrained).await, &self.ctx.url);
+                    eat_error!(
+                        drained_sender.send(Msg::SourceDrained).await,
+                        "sending SourceDrained message failed",
+                        &self.ctx.url
+                    );
                     self.state = Drained;
                 } else {
                     self.connector_channel = Some(drained_sender);
@@ -751,6 +791,7 @@ where
             SourceMsg::ConnectionLost => {
                 eat_error!(
                     self.source.on_connection_lost(&mut self.ctx).await,
+                    "on_connection_lost failed",
                     &self.ctx.url
                 );
                 Ok(Control::Continue)
@@ -758,32 +799,49 @@ where
             SourceMsg::ConnectionEstablished => {
                 eat_error!(
                     self.source.on_connection_established(&mut self.ctx).await,
+                    "on_connection_established failed",
                     &self.ctx.url
                 );
                 Ok(Control::Continue)
             }
             SourceMsg::Cb(CbAction::Fail, id) => {
                 if let Some((stream_id, id)) = id.get_min_by_source(self.ctx.uid) {
-                    eat_error!(self.source.fail(stream_id, id).await, &self.ctx.url);
+                    eat_error!(
+                        self.source.fail(stream_id, id).await,
+                        "fail failed",
+                        &self.ctx.url
+                    );
                 }
                 Ok(Control::Continue)
             }
             SourceMsg::Cb(CbAction::Ack, id) => {
                 if let Some((stream_id, id)) = id.get_max_by_source(self.ctx.uid) {
-                    eat_error!(self.source.ack(stream_id, id).await, &self.ctx.url);
+                    eat_error!(
+                        self.source.ack(stream_id, id).await,
+                        "ack failed",
+                        &self.ctx.url
+                    );
                 }
                 Ok(Control::Continue)
             }
             SourceMsg::Cb(CbAction::Close, _id) => {
                 // TODO: execute pause strategy chosen by source / connector / configured by user
                 info!("[Source::{}] Circuit Breaker: Close.", self.ctx.url);
-                eat_error!(self.source.on_cb_close(&mut self.ctx).await, &self.ctx.url);
+                eat_error!(
+                    self.source.on_cb_close(&mut self.ctx).await,
+                    "on_cb_close failed",
+                    &self.ctx.url
+                );
                 self.state = Paused;
                 Ok(Control::Continue)
             }
             SourceMsg::Cb(CbAction::Open, _id) => {
                 info!("[Source::{}] Circuit Breaker: Open.", self.ctx.url);
-                eat_error!(self.source.on_cb_open(&mut self.ctx).await, &self.ctx.url);
+                eat_error!(
+                    self.source.on_cb_open(&mut self.ctx).await,
+                    "on_cb_open failed",
+                    &self.ctx.url
+                );
                 self.state = Running;
                 Ok(Control::Continue)
             }
@@ -961,6 +1019,7 @@ where
                     if error {
                         eat_error!(
                             self.source.fail(stream, self.pull_counter).await,
+                            "fail upon error sending events from data source reply failed",
                             &self.ctx.url
                         );
                     }
@@ -1007,6 +1066,7 @@ where
                     if error {
                         eat_error!(
                             self.source.fail(stream, self.pull_counter).await,
+                            "fail upon error sending events from batched data source reply failed",
                             &self.ctx.url
                         );
                     }
@@ -1032,14 +1092,56 @@ where
                 if error {
                     eat_error!(
                         self.source.fail(stream, self.pull_counter).await,
+                        "fail upon error sending events from structured data source reply failed",
                         &self.ctx.url
                     );
                 }
             }
             SourceReply::StartStream(stream_id) => {
-                self.streams.start_stream(stream_id)?;
-            } // failing here only due to misconfig, in that case, bail out, #yolo
-            SourceReply::EndStream(stream_id) => self.streams.end_stream(stream_id),
+                debug!("[Source::{}] Starting stream {}", &self.ctx.url, stream_id);
+                self.streams.start_stream(stream_id)?; // failing here only due to misconfig, in that case, bail out, #yolo
+            }
+            SourceReply::EndStream {
+                origin_uri,
+                meta,
+                stream_id,
+            } => {
+                debug!("[Source::{}] Ending stream {}", &self.ctx.url, stream_id);
+                let mut ingest_ns = nanotime();
+                if let Some(mut stream_state) = self.streams.end_stream(stream_id) {
+                    let results = build_last_events(
+                        &self.ctx.url,
+                        &mut stream_state,
+                        &mut ingest_ns,
+                        self.pull_counter,
+                        origin_uri,
+                        None,
+                        &meta.unwrap_or_else(Value::object),
+                        self.is_transactional,
+                    );
+                    if results.is_empty() {
+                        if let Err(e) = self
+                            .source
+                            .on_no_events(self.pull_counter, stream_id, &self.ctx)
+                            .await
+                        {
+                            error!(
+                                "[Source::{}] Error on no events callback: {}",
+                                &self.ctx.url, e
+                            );
+                        }
+                    } else {
+                        let error = self.route_events(results).await;
+                        if error {
+                            eat_error!(
+                                self.source.fail(stream_id, self.pull_counter).await,
+                                "fail upon error sending events from endstream source reply failed",
+                                &self.ctx.url
+                            );
+                        }
+                    }
+                }
+            }
             SourceReply::Empty(wait_ms) => {
                 if self.state == SourceState::Draining {
                     // this source has been fully drained
@@ -1097,6 +1199,7 @@ where
             // FIXME: change reply from true/false to something descriptive like enum {Stop Continue} or the rust controlflow thingy
             if self.control_plane().await? == Control::Terminate {
                 // source has been stopped, lets stop running here
+                debug!("[Source::{}] Terminating source task...", self.ctx.url);
                 return Ok(());
             }
 
@@ -1134,6 +1237,66 @@ fn build_events(
         data,
         url,
     ) {
+        Ok(processed) => {
+            let mut res = Vec::with_capacity(processed.len());
+            for chunk in processed {
+                let line_value = EventPayload::try_new::<Option<Error>, _>(chunk, |mut_data| {
+                    match stream_state.codec.decode(mut_data, *ingest_ns) {
+                        Ok(None) => Err(None),
+                        Err(e) => Err(Some(e)),
+                        Ok(Some(decoded)) => {
+                            Ok(ValueAndMeta::from_parts(decoded, meta.clone()))
+                            // TODO: avoid clone on last iterator element
+                        }
+                    }
+                });
+                let (port, payload) = match line_value {
+                    Ok(decoded) => (port.unwrap_or(&OUT).clone(), decoded),
+                    Err(None) => continue,
+                    Err(Some(e)) => (ERR, make_error(url, &e, stream_state.stream_id, pull_id)),
+                };
+                let event = build_event(
+                    stream_state,
+                    pull_id,
+                    *ingest_ns,
+                    payload,
+                    origin_uri.clone(), // TODO: use split_last to avoid this clone for the last item
+                    is_transactional,
+                );
+                res.push((port, event));
+            }
+            res
+        }
+        Err(e) => {
+            // preprocessor error
+            let err_payload = make_error(url, &e, stream_state.stream_id, pull_id);
+            let event = build_event(
+                stream_state,
+                pull_id,
+                *ingest_ns,
+                err_payload,
+                origin_uri,
+                is_transactional,
+            );
+            vec![(ERR, event)]
+        }
+    }
+}
+
+/// build any number of `Event`s from a given Source Transport Unit (`data`)
+/// preprocessor or codec errors are turned into events to the ERR port of the source/connector
+#[allow(clippy::too_many_arguments)]
+fn build_last_events(
+    url: &TremorUrl,
+    stream_state: &mut StreamState,
+    ingest_ns: &mut u64,
+    pull_id: u64,
+    origin_uri: EventOriginUri,
+    port: Option<&Cow<'static, str>>,
+    meta: &Value<'static>,
+    is_transactional: bool,
+) -> Vec<(Cow<'static, str>, Event)> {
+    match finish(stream_state.preprocessors.as_mut_slice(), url) {
         Ok(processed) => {
             let mut res = Vec::with_capacity(processed.len());
             for chunk in processed {

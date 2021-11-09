@@ -1,2 +1,0 @@
-#! metrics_interval_s = 1
-select event from in into out;

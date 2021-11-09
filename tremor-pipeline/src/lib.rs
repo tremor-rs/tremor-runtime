@@ -557,7 +557,7 @@ impl EventId {
 
 impl From<(u64, u64, u64)> for EventId {
     fn from(x: (u64, u64, u64)) -> Self {
-        EventId::new(x.0, x.1, x.2, DEFAULT_PULL_ID)
+        EventId::new(x.0, x.1, x.2, x.2)
     }
 }
 

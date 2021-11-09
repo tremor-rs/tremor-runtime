@@ -21,7 +21,9 @@ pub mod channel_sink;
 pub mod single_stream_sink;
 
 use crate::codec::{self, Codec};
-use crate::config::{Codec as CodecConfig, Connector as ConnectorConfig};
+use crate::config::{
+    Codec as CodecConfig, Connector as ConnectorConfig, Postprocessor as PostprocessorConfig,
+};
 use crate::connectors::{Msg, StreamDone};
 use crate::errors::Result;
 use crate::permge::PriorityMerge;
@@ -327,11 +329,15 @@ pub(crate) fn builder(
     metrics_reporter: MetricsSinkReporter,
 ) -> Result<SinkManagerBuilder> {
     // resolve codec and processors
-    let postprocessor_names = config.postprocessors.clone().unwrap_or_else(Vec::new);
+    let postprocessor_configs: Vec<PostprocessorConfig> = config
+        .postprocessors
+        .as_ref()
+        .map(|ps| ps.iter().map(|p| p.into()).collect())
+        .unwrap_or_else(Vec::new);
     let serializer = EventSerializer::build(
         config.codec.clone(),
         connector_default_codec,
-        postprocessor_names,
+        postprocessor_configs,
     )?;
     // the incoming channels for events are all bounded, so we can safely be unbounded here
     // TODO: actually we could have lots of CB events not bound to events here
@@ -354,7 +360,7 @@ pub struct EventSerializer {
     postprocessors: Postprocessors,
     // creation templates for stream handling
     codec_config: Either<String, CodecConfig>,
-    postprocessor_names: Vec<String>,
+    postprocessor_configs: Vec<PostprocessorConfig>,
     // stream data
     // TODO: clear out state from codec, postprocessors and enable reuse
     streams: BTreeMap<u64, (Box<dyn Codec>, Postprocessors)>,
@@ -364,16 +370,16 @@ impl EventSerializer {
     fn build(
         codec_config: Option<Either<String, CodecConfig>>,
         default_codec: &str,
-        postprocessor_names: Vec<String>,
+        postprocessor_configs: Vec<PostprocessorConfig>,
     ) -> Result<Self> {
         let codec_config = codec_config.unwrap_or_else(|| Either::Left(default_codec.to_string()));
         let codec = codec::resolve(&codec_config)?;
-        let postprocessors = make_postprocessors(postprocessor_names.as_slice())?;
+        let postprocessors = make_postprocessors(postprocessor_configs.as_slice())?;
         Ok(Self {
             codec,
             postprocessors,
             codec_config,
-            postprocessor_names,
+            postprocessor_configs,
             streams: BTreeMap::new(),
         })
     }
@@ -420,7 +426,7 @@ impl EventSerializer {
                 }
                 Entry::Vacant(entry) => {
                     let codec = codec::resolve(&self.codec_config)?;
-                    let pps = make_postprocessors(self.postprocessor_names.as_slice())?;
+                    let pps = make_postprocessors(self.postprocessor_configs.as_slice())?;
                     // insert data for a new stream
                     let (c, pps2) = entry.insert((codec, pps));
                     postprocess(pps2, ingest_ns, c.encode(value)?)

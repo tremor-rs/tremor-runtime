@@ -315,6 +315,10 @@ error_chain! {
             description("Missing Configuration")
                 display("Missing Configuration for {}", s)
         }
+        InvalidConfiguration(configured_thing: String, msg: String) {
+            description("Invalid Configuration")
+                display("Invalid Configuration for {}: {}", configured_thing, msg)
+        }
         InvalidConnect(target: String, port: Cow<'static, str>) {
             description("Invalid Connect attempt")
                 display("Invalid Connect to {} via port {}", target, port)

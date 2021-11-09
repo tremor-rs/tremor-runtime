@@ -73,13 +73,8 @@ pub struct Config {
     /// how to interface with the file
     pub mode: Mode, // whether we read or write (in various forms)
     /// chunk_size to read from the file
-    #[serde(default = "default_chunk_size")]
+    #[serde(default = "default_buf_size")]
     pub chunk_size: usize,
-}
-
-fn default_chunk_size() -> usize {
-    // equals default chunk size for BufReader
-    8 * 1024
 }
 
 impl ConfigImpl for Config {}
@@ -120,9 +115,7 @@ impl ConnectorBuilder for Builder {
                 sink_runtime: None,
             }))
         } else {
-            let mut id = id.clone();
-            id.trim_to_instance();
-            Err(ErrorKind::MissingConfiguration(id.to_string()).into())
+            Err(ErrorKind::MissingConfiguration(id.to_instance().to_string()).into())
         }
     }
 }
@@ -274,7 +267,11 @@ where
         let bytes_read = self.reader.read(&mut self.buf).await?;
         Ok(if bytes_read == 0 {
             trace!("[Connector::{}] EOF", &self.url);
-            SourceReply::EndStream(stream)
+            SourceReply::EndStream {
+                origin_uri: self.origin_uri.clone(),
+                stream_id: stream,
+                meta: Some(self.meta.clone()),
+            }
         } else {
             SourceReply::Data {
                 origin_uri: self.origin_uri.clone(),
