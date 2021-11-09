@@ -20,15 +20,14 @@ use super::ConnectorDecl;
 use super::CreateStmt;
 use super::FlowDecl;
 use super::Value;
-use crate::ast::raw::{ExprRaw, IdentRaw, ModuleRaw, StringLitRaw, WithExprsRaw};
+use crate::ast::raw::{ExprRaw, IdentRaw, ModuleRaw, StringLitRaw};
 use crate::ast::{
-    error_generic, query::raw::PipelineDeclRaw, AggrRegistry, BaseRef, Deploy, DeployStmt, Expr,
-    Helper, ModDoc, NodeMetas, PipelineDecl, Registry, Script, StringLit, Upable,
+    error_generic, query::raw::PipelineDeclRaw, raw::WithExprsRaw, AggrRegistry, BaseRef, Deploy,
+    DeployStmt, Helper, ModDoc, NodeMetas, PipelineDecl, Registry, Script, StringLit, Upable,
 };
 use crate::errors::ErrorKind;
 use crate::errors::Result;
 use crate::impl_expr;
-use crate::interpreter::Cont;
 use crate::pos::Location;
 use crate::AggrType;
 use crate::EventContext;
@@ -37,15 +36,12 @@ use halfbrown::HashMap;
 use tremor_common::time::nanotime;
 use tremor_common::url::TremorUrl;
 use tremor_value::literal;
-use value_trait::Mutable;
 
 // For compile time interpretation support
 use crate::interpreter::Env;
 use crate::interpreter::ExecOpts;
 use crate::interpreter::LocalStack;
 use crate::Return;
-
-pub type DeployWithExprsRaw<'script> = Vec<(IdentRaw<'script>, ExprRaw<'script>)>;
 
 /// Evaluate a script expression at compile time with an empty state context
 /// for use during compile time reduction
@@ -67,48 +63,6 @@ pub fn run_script<'script, 'registry>(
             expr,
             expr,
             &"Failed to evaluate script at compile time".to_string(),
-            &helper.meta,
-        ),
-    }
-}
-
-/// Evaluate an expression at compile time with an empty state context
-/// for use during compile time reduction
-/// # Errors
-/// If evaluation of the expression fails, or a legal value cannot be evaluated by result
-pub(crate) fn run_expr<'script, 'registry>(
-    helper: &Helper<'script, 'registry>,
-    expr: &Expr<'script>,
-) -> Result<Value<'script>> {
-    // We duplicate these here as it simplifies use of the macro externally
-    let eo = ExecOpts {
-        aggr: AggrType::Emit,
-        result_needed: true,
-    };
-    let ctx = EventContext::new(nanotime(), None);
-    let mut event = literal!({}).into_static();
-    let mut state = literal!({}).into_static();
-    let mut meta = literal!({}).into_static();
-
-    let mut local = LocalStack::with_size(0);
-
-    let run_consts = helper.consts.clone();
-    let run_consts = run_consts.run();
-    let env = Env {
-        context: &ctx,
-        consts: run_consts,
-        aggrs: &helper.aggregates.clone(),
-        meta: &helper.meta.clone(),
-        recursion_limit: 1024, // I'm feeling lucky in a power of two kind of way - shoot me
-    };
-    let got = expr.run(eo, &env, &mut event, &mut state, &mut meta, &mut local);
-    match got {
-        Ok(Cont::Emit(value, _port)) => Ok(value),
-        Ok(Cont::Cont(value)) => Ok(value.into_owned()),
-        _otherwise => error_generic(
-            expr,
-            expr,
-            &"Illegal `with` parameter value specified".to_string(),
             &helper.meta,
         ),
     }
@@ -145,41 +99,6 @@ pub(crate) fn run_lit_str<'script, 'registry>(
     literal.run(eo, &env, &event, &state, &meta, &local)
 }
 
-pub(crate) fn up_params<'script, 'registry>(
-    params: &[(IdentRaw<'script>, ExprRaw<'script>)],
-    helper: &mut Helper<'script, 'registry>,
-) -> Result<HashMap<String, Value<'script>>> {
-    let mut mapped = HashMap::new();
-    for (name, value) in params {
-        let name = name.clone().up(helper)?.to_string();
-        let expr = value.clone().up(helper)?;
-        let value = run_expr(helper, &expr)?.clone_static();
-        mapped.insert(name, value);
-    }
-
-    Ok(mapped)
-}
-
-pub(crate) fn up_maybe_params<'script, 'registry>(
-    params: &Option<DeployWithExprsRaw<'script>>,
-    helper: &mut Helper<'script, 'registry>,
-) -> Result<Option<HashMap<String, Value<'script>>>> {
-    params
-        .as_ref()
-        .map(|params| up_params(params, helper))
-        .transpose()
-}
-
-fn up_config_directive_params<'script, 'registry>(
-    params: WithExprsRaw<'script>,
-    helper: &mut Helper<'script, 'registry>,
-) -> Result<HashMap<String, Value<'script>>> {
-    params
-        .into_iter()
-        .map(|(name, value)| Ok((name.to_string(), value.up(helper)?.try_into_value(helper)?)))
-        .collect()
-}
-
 #[derive(Debug, PartialEq, Serialize)]
 #[allow(clippy::module_name_repetitions)]
 pub struct DeployRaw<'script> {
@@ -212,7 +131,7 @@ impl<'script> DeployRaw<'script> {
         });
 
         Ok(Deploy {
-            directives: up_config_directive_params(self.config, helper)?,
+            config: self.config.up(helper)?,
             stmts,
             connectors: helper.connector_defns.clone(),
             pipelines: helper.pipeline_defns.clone(),
@@ -250,7 +169,7 @@ impl<'script> Upable<'script> for DeployStmtRaw<'script> {
                 let stmt: PipelineDecl<'script> = stmt.up(helper)?;
                 helper
                     .pipeline_defns
-                    .insert(stmt.fqsn(&stmt.module), stmt.clone());
+                    .insert(dbg!(stmt.fqsn(&stmt.module)), stmt.clone());
                 Ok(DeployStmt::PipelineDecl(Box::new(stmt)))
             }
             DeployStmtRaw::ConnectorDecl(stmt) => {
@@ -354,118 +273,6 @@ impl<'script> DeployModuleStmtRaw<'script> {
     }
 }
 
-fn arg_spec_resolver<'script, 'registry>(
-    args_spec: WithArgsRaw<'script>,
-    params_spec: &Option<DeployWithExprsRaw<'script>>,
-    helper: &mut Helper<'script, 'registry>,
-) -> Result<(Vec<Cow<'script, str>>, Value<'script>)> {
-    let mut args: HashMap<Cow<str>, Value<'script>> = HashMap::new();
-    let mut spec = vec![];
-
-    let upper_args = helper.consts.args.clone();
-
-    // Process explicitly declared required/optional arguments
-    for arg_spec in args_spec {
-        match arg_spec {
-            ArgumentDeclRaw::Required(name) => {
-                let moo = name.to_string();
-                let moo: Cow<str> = Cow::owned(moo);
-                spec.push(moo.clone());
-            }
-            ArgumentDeclRaw::Optional(name, value) => {
-                let moo = name.to_string();
-                let moo: Cow<str> = Cow::owned(moo);
-                spec.push(moo.clone());
-                let value = value.up(helper)?;
-                let value = run_expr(helper, &value)?;
-                args.insert(moo, value);
-            }
-        }
-    }
-    // We inject the args here so that our `with` clause can override based on
-    // our specificational arguments and their defaults
-    helper.consts.args = Value::Object(Box::new(args.clone()));
-
-    // Process defaulted arguments via `with` expressions
-    if let Some(params_spec) = up_maybe_params(params_spec, helper)? {
-        for (name, value) in params_spec {
-            let moo = Cow::owned(name);
-            if !spec.contains(&moo) {
-                // TODO consider duplicate argument specification - ok or ko?
-                // For now we override and replace
-                spec.push(moo.clone());
-            }
-            let up_value = value;
-            args.insert(moo, up_value.clone_static());
-        }
-        // We inject the args here so that our `script` clause can override based on
-        // our `with` specificational argument overrides and their defaults
-        helper.consts.args = Value::Object(Box::new(args.clone()));
-    }
-
-    // NOTE We don't check for `extra args` here - this is deferred to the resolution in `arg_resolver`
-    helper.consts.args = upper_args.clone();
-    Ok((spec, Value::Object(Box::new(args))))
-}
-
-fn arg_resolver<'script, 'registry>(
-    outer: crate::pos::Range,
-    spec: &[Cow<'script, str>],
-    args_as_params: &Value<'script>,
-    params_spec: &Option<DeployWithExprsRaw<'script>>,
-    helper: &mut Helper<'script, 'registry>,
-) -> Result<Value<'script>> {
-    let mut args = args_as_params.clone();
-    // Process defaulted arguments via `with` expressions
-    helper.consts.args = args_as_params.clone();
-    if let Value::Object(args_as_params) = args_as_params {
-        if let Some(params_spec) = up_maybe_params(params_spec, helper)? {
-            for (name, value) in params_spec {
-                let moo = Cow::owned(name);
-                if spec.contains(&moo) {
-                    args.insert(moo, value.clone_static())?;
-                } else {
-                    return Err(ErrorKind::DeployArgNotSpecified(
-                        outer.extent(&helper.meta),
-                        outer.extent(&helper.meta),
-                        moo.to_string(),
-                    )
-                    .into());
-                }
-            }
-        }
-
-        // We iterate over the definitional arguments known / specified
-        for (name, _value) in args_as_params.iter() {
-            let cow_name = Cow::owned(name.to_string());
-            if !spec.contains(&cow_name) {
-                return Err(ErrorKind::DeployRequiredArgDoesNotResolve(
-                    outer.extent(&helper.meta),
-                    outer.extent(&helper.meta),
-                    name.to_string(),
-                )
-                .into());
-            }
-        }
-
-        // We iterate over the deployment parameters and filter/ban unknown arguments
-        for name in spec.iter() {
-            let cow_name = Cow::owned(name.to_string());
-            if !args_as_params.contains_key(&cow_name) {
-                // TODO Add extra args hygienic error
-                return Err(ErrorKind::DeployRequiredArgDoesNotResolve(
-                    outer.extent(&helper.meta),
-                    outer.extent(&helper.meta),
-                    name.to_string(),
-                )
-                .into());
-            }
-        }
-    }
-
-    Ok(args)
-}
-
 pub type DeployStmtsRaw<'script> = Vec<DeployStmtRaw<'script>>;
 
 /// we're forced to make this pub because of lalrpop
@@ -475,37 +282,24 @@ pub struct ConnectorDeclRaw<'script> {
     pub(crate) end: Location,
     pub(crate) id: String,
     pub(crate) kind: IdentRaw<'script>,
-    pub(crate) args: WithArgsRaw<'script>,
-    pub(crate) params: Option<DeployWithExprsRaw<'script>>,
+    pub(crate) params: Option<WithExprsRaw<'script>>,
     pub(crate) docs: Option<Vec<Cow<'script, str>>>,
 }
 
 impl<'script> Upable<'script> for ConnectorDeclRaw<'script> {
     type Target = ConnectorDecl<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        // NOTE As we can have module aliases and/or nested modules within script definitions
-        // that are private to or inline with the script - multiple script definitions in the
-        // same module scope can share the same relative function/const module paths.
-        //
-        // We add the script name to the scope as a means to distinguish these orthogonal
-        // definitions. This is achieved with the push/pop pointcut around the up() call
-        // below. The actual function registration occurs in the up() call in the usual way.
-        //
-        helper.module.push(self.id.clone());
-        let (spec, args) = arg_spec_resolver(self.args, &self.params, helper)?;
-
         let query_decl = ConnectorDecl {
             mid: helper.add_meta_w_name(self.start, self.end, &self.id),
+            params: self.params.up(helper)?,
             module: helper.module.clone(),
             builtin_kind: self.kind.to_string(),
             id: self.id,
-            spec: spec.clone(),
-            args,
             docs: self
                 .docs
                 .map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n")),
         };
-        helper.module.pop();
+
         let script_name = query_decl.fqsn(&helper.module);
         helper
             .connector_defns
@@ -514,23 +308,13 @@ impl<'script> Upable<'script> for ConnectorDeclRaw<'script> {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
-#[allow(clippy::large_enum_variant)]
-pub enum ArgumentDeclRaw<'script> {
-    Required(IdentRaw<'script>),
-    Optional(IdentRaw<'script>, ExprRaw<'script>),
-}
-
-pub type WithArgsRaw<'script> = Vec<ArgumentDeclRaw<'script>>;
-
 /// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct FlowDeclRaw<'script> {
     pub(crate) start: Location,
     pub(crate) end: Location,
     pub(crate) id: String,
-    pub(crate) args: WithArgsRaw<'script>,
-    pub(crate) params: Option<DeployWithExprsRaw<'script>>,
+    pub(crate) params: Option<WithExprsRaw<'script>>,
     pub(crate) links: DeployLinksRaw<'script>,
     pub(crate) docs: Option<Vec<Cow<'script, str>>>,
 }
@@ -557,7 +341,6 @@ impl<'script> Upable<'script> for FlowDeclRaw<'script> {
         // below. The actual function registration occurs in the up() call in the usual way.
         //
         helper.module.push(self.id.clone());
-        let (spec, args) = arg_spec_resolver(self.args, &self.params, helper)?;
 
         let mut links = HashMap::new();
         for link in self.links {
@@ -590,8 +373,7 @@ impl<'script> Upable<'script> for FlowDeclRaw<'script> {
             mid: helper.add_meta_w_name(self.start, self.end, &self.id),
             module: helper.module.clone(),
             id: self.id,
-            spec: spec.clone(),
-            args,
+            params: self.params.up(helper)?,
             links,
             docs: self
                 .docs
@@ -621,7 +403,7 @@ pub struct CreateStmtRaw<'script> {
     pub(crate) start: Location,
     pub(crate) end: Location,
     pub(crate) id: IdentRaw<'script>,
-    pub(crate) params: Option<DeployWithExprsRaw<'script>>,
+    pub(crate) params: Option<WithExprsRaw<'script>>,
     /// Id of the definition
     pub target: IdentRaw<'script>,
     /// Module of the definition
@@ -656,16 +438,7 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
         let mut h2 = helper.clone(); // Clone to save some accounting/tracking & cleanup
         h2.module = vec![];
         let atom = if let Some(artefact) = helper.flow_defns.get(&fqsn) {
-            let args = arg_resolver(
-                self.extent(&helper.meta),
-                &artefact.spec,
-                &artefact.args,
-                &self.params,
-                &mut h2,
-            )?;
-            let mut artefact = artefact.clone();
-            artefact.args = args;
-            artefact
+            artefact.clone()
         } else {
             let inner = if target_module.is_empty() {
                 self.id.extent(&helper.meta)

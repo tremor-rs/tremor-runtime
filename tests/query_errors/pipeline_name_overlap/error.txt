@@ -1,7 +1,7 @@
 Error: 
     8 |   select event + 1 from in into out;
     9 | end;
-   10 | create query add;
-      | ^^^^^^^^^^^^^^^^ Name `add` is already in use for another node, please use another name.
+   10 | create pipeline add;
+      | ^^^^^^^^^^^^^^^^^^^ Name `add` is already in use for another node, please use another name.
    11 | create script add;
    12 |

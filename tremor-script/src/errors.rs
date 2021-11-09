@@ -715,7 +715,7 @@ error_chain! {
         }
         DoublePipelineStmt(expr: Range, inner: Range, name: String) {
             description("Can't create a query twice")
-                display("Can't create the query `{}` twice", name)
+                display("Can't create the pipeline `{}` twice", name)
         }
         AssignToConst(expr: Range, inner: Range, name: String) {
             description("Can't assign to a constant")
