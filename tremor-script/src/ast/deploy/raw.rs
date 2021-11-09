@@ -100,7 +100,6 @@ pub(crate) fn run_lit_str<'script, 'registry>(
 }
 
 #[derive(Debug, PartialEq, Serialize)]
-#[allow(clippy::module_name_repetitions)]
 pub struct DeployRaw<'script> {
     pub(crate) config: WithExprsRaw<'script>,
     pub(crate) stmts: DeployStmtsRaw<'script>,
@@ -169,7 +168,7 @@ impl<'script> Upable<'script> for DeployStmtRaw<'script> {
                 let stmt: PipelineDecl<'script> = stmt.up(helper)?;
                 helper
                     .pipeline_defns
-                    .insert(dbg!(stmt.fqsn(&stmt.module)), stmt.clone());
+                    .insert(stmt.fqsn(&stmt.module), stmt.clone());
                 Ok(DeployStmt::PipelineDecl(Box::new(stmt)))
             }
             DeployStmtRaw::ConnectorDecl(stmt) => {
@@ -380,8 +379,8 @@ impl<'script> Upable<'script> for FlowDeclRaw<'script> {
                 .map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n")),
         };
         helper.module.pop();
-        let script_name = flow_decl.fqsn(&helper.module);
-        helper.flow_defns.insert(script_name, flow_decl.clone());
+        let flow_name = flow_decl.fqsn(&helper.module);
+        helper.flow_defns.insert(flow_name, flow_decl.clone());
         Ok(flow_decl)
     }
 }
@@ -415,16 +414,6 @@ impl_expr!(CreateStmtRaw);
 impl<'script> Upable<'script> for CreateStmtRaw<'script> {
     type Target = CreateStmt<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        // NOTE As we can have module aliases and/or nested modules within script definitions
-        // that are private to or inline with the script - multiple script definitions in the
-        // same module scope can share the same relative function/const module paths.
-        //
-        // We add the script name to the scope as a means to distinguish these orthogonal
-        // definitions. This is achieved with the push/pop pointcut around the up() call
-        // below. The actual function registration occurs in the up() call in the usual way.
-        //
-        helper.module.push(self.id.to_string());
-
         // TODO check that names across pipeline/flow/connector definitions are unique or else hygienic error
 
         let target_module = self
@@ -435,8 +424,6 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
             .join("");
         let fqsn = format!("{}{}", target_module, self.target.to_string());
 
-        let mut h2 = helper.clone(); // Clone to save some accounting/tracking & cleanup
-        h2.module = vec![];
         let atom = if let Some(artefact) = helper.flow_defns.get(&fqsn) {
             artefact.clone()
         } else {
@@ -466,7 +453,6 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
         };
         let script_name = create_stmt.fqsn(&helper.module);
         helper.instances.insert(script_name, create_stmt.clone());
-        helper.module.pop();
 
         Ok(create_stmt)
     }
