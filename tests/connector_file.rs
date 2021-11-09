@@ -40,7 +40,7 @@ id: my_file
 type: file
 codec: string
 preprocessors:
-  - lines-no-buffer
+  - lines
 config:
   path: "{}"
   mode: read
@@ -51,13 +51,16 @@ config:
     let harness = ConnectorHarness::new(connector_yaml).await?;
     harness.start().await?;
 
+    task::yield_now().await;
     // give it some time to read the file
     task::sleep(Duration::from_millis(100)).await;
 
-    let (mut out_events, err_events) = harness.stop(2).await?;
+    println!("stopping the harness...");
+    let (mut out_events, err_events) = harness.stop().await?;
     // check the out and err channels
-    assert!(
-        out_events.len() == 2,
+    assert_eq!(
+        2,
+        out_events.len(),
         "didn't receive 2 events on out, but {:?}",
         out_events
     );

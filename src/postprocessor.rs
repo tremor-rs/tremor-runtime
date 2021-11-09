@@ -15,7 +15,12 @@
 mod gelf;
 pub(crate) use gelf::Gelf;
 
+<<<<<<< HEAD
 use crate::errors::Result;
+=======
+use crate::config::Postprocessor as PostprocessorConfig;
+use crate::errors::{Error, Result};
+>>>>>>> 8afb9914 (Make pre/postprocessors configurable, fix tests and some more quirks.)
 use byteorder::{BigEndian, WriteBytesExt};
 use std::default::Default;
 use tremor_common::time::nanotime;
@@ -36,15 +41,27 @@ pub trait Postprocessor: Send + Sync {
     ///
     ///   * Errors if the data could not be processed
     fn process(&mut self, ingres_ns: u64, egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>>;
+
+    /// Finish execution of this postprocessor.
+    ///
+    /// `data` is the result of the previous preprocessors `finish` execution if any,
+    /// otherwise it is an empty slice.
+    ///
+    /// # Errors
+    ///   * if the postprocessor could not be finished correctly
+    fn finish(&mut self, _data: &[u8]) -> Result<Vec<Vec<u8>>> {
+        Ok(vec![])
+    }
 }
 
-/// Lookup a postprocessor via its unique id
+/// Lookup a postprocessor via its config
+///
 /// # Errors
 ///
 ///   * Errors if the postprocessor is not known
 #[cfg(not(tarpaulin_include))]
-pub fn lookup(name: &str) -> Result<Box<dyn Postprocessor>> {
-    match name {
+pub fn lookup_with_config(config: &PostprocessorConfig) -> Result<Box<dyn Postprocessor>> {
+    match config.name.as_str() {
         "lines" => Ok(Box::new(Lines::default())),
         "base64" => Ok(Box::new(Base64::default())),
         "gzip" => Ok(Box::new(Gzip::default())),
@@ -57,8 +74,17 @@ pub fn lookup(name: &str) -> Result<Box<dyn Postprocessor>> {
         "gelf-chunking" => Ok(Box::new(Gelf::default())),
         "textual-length-prefix" => Ok(Box::new(TextualLength::default())),
         "zstd" => Ok(Box::new(Zstd::default())),
-        _ => Err(format!("Postprocessor '{}' not found.", name).into()),
+        name => Err(format!("Postprocessor '{}' not found.", name).into()),
     }
+}
+
+/// Lookup a postprocessor implementation via its unique name.
+/// Only for backwards compatibility.
+///
+/// # Errors
+///   * if the postprocessor with `name` is not known
+pub fn lookup(name: &str) -> Result<Box<dyn Postprocessor>> {
+    lookup_with_config(&PostprocessorConfig::from(name))
 }
 
 /// Given the slice of postprocessor names: Lookup each of them and return them as `Postprocessors`
@@ -66,8 +92,11 @@ pub fn lookup(name: &str) -> Result<Box<dyn Postprocessor>> {
 /// # Errors
 ///
 ///   * If any postprocessor is not known.
-pub fn make_postprocessors(postprocessors: &[String]) -> Result<Postprocessors> {
-    postprocessors.iter().map(|n| lookup(n)).collect()
+pub fn make_postprocessors(postprocessors: &[PostprocessorConfig]) -> Result<Postprocessors> {
+    postprocessors
+        .iter()
+        .map(|n| lookup_with_config(n))
+        .collect()
 }
 
 /// canonical way to process encoded data passed from a `Codec`

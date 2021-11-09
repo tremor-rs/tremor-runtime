@@ -38,7 +38,7 @@ id: my_file
 type: file
 codec: string
 preprocessors:
-  - lines-no-buffer
+  - lines
 config:
   path: "{}"
   mode: read
@@ -49,7 +49,7 @@ config:
     harness.start().await?;
     task::sleep(Duration::from_millis(100)).await;
 
-    let (out_events, err_events) = harness.stop(2).await?;
+    let (out_events, err_events) = harness.stop().await?;
     assert!(out_events.is_empty());
     assert!(err_events.is_empty());
     Ok(())

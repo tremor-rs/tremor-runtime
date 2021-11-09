@@ -466,7 +466,7 @@ impl Manager {
 
         let connector_addr = Addr {
             uid,
-            url: url.clone(),
+            url: url.to_instance(),
             sender: msg_tx,
             source: source_addr,
             sink: sink_addr,
@@ -532,7 +532,7 @@ impl Manager {
                         for (url, _) in &pipelines_to_link {
                             info!(
                                 "[Connector::{}] Connecting {} via port {}",
-                                &url, &url, port
+                                &connector_addr.url, &url, port
                             );
                         }
 
@@ -580,7 +580,7 @@ impl Manager {
                             }
                         } else {
                             error!(
-                                "[Connector::{}] Tried to connect to unsupported port: {}",
+                                "[Connector::{}] Tried to connect to unsupported port: \"{}\"",
                                 &connector_addr.url, &port
                             );
                             Err(ErrorKind::InvalidConnect(
@@ -591,7 +591,10 @@ impl Manager {
                         };
                         // send back the connect result
                         if let Err(e) = result_tx.send(res).await {
-                            error!("Error sending connect result: {}", e);
+                            error!(
+                                "[Connector::{}] Error sending connect result: {}",
+                                &connector_addr.url, e
+                            );
                         }
                     }
                     Msg::Unlink { port, id, tx } => {
@@ -1119,6 +1122,9 @@ pub trait ConnectorBuilder: Sync + Send {
 ///  * If a builtin connector couldn't be registered
 #[cfg(not(tarpaulin_include))]
 pub async fn register_builtin_connector_types(world: &World) -> Result<()> {
+    world
+        .register_builtin_connector_type("cb", Box::new(cb::Builder::default()))
+        .await?;
     world
         .register_builtin_connector_type("exit", Box::new(exit::Builder::new(world)))
         .await?;

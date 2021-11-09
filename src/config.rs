@@ -98,6 +98,43 @@ impl From<&str> for Codec {
     }
 }
 
+/// Pre- or Postprocessor name and config
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Processor {
+    pub(crate) name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) config: tremor_pipeline::ConfigMap,
+}
+
+impl From<&str> for Processor {
+    fn from(name: &str) -> Self {
+        Self {
+            name: name.to_string(),
+            config: None,
+        }
+    }
+}
+
+impl From<&ProcessorOrName> for Processor {
+    fn from(p: &ProcessorOrName) -> Self {
+        match &p.inner {
+            Either::Left(name) => name.as_str().into(),
+            Either::Right(config) => config.clone(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(transparent)]
+pub(crate) struct ProcessorOrName {
+    #[serde(with = "either::serde_untagged")]
+    inner: Either<String, Processor>,
+}
+
+pub(crate) type Preprocessor = Processor;
+pub(crate) type Postprocessor = Processor;
+
 /// Connector configuration - only the parts applicable to all connectors
 /// Specific parts are catched in the `config` map.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -121,7 +158,6 @@ pub struct Connector {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) config: tremor_pipeline::ConfigMap,
 
-    // TODO: interceptor chain or pre- and post-processors
     /// mapping from mime-type to codec used to handle requests/responses
     /// with this mime-type
     ///
@@ -137,9 +173,9 @@ pub struct Connector {
 
     // TODO: interceptors or configurable processors
     #[serde(default = "Default::default", skip_serializing_if = "Option::is_none")]
-    pub(crate) preprocessors: Option<Vec<String>>,
+    pub(crate) preprocessors: Option<Vec<ProcessorOrName>>,
     #[serde(default = "Default::default", skip_serializing_if = "Option::is_none")]
-    pub(crate) postprocessors: Option<Vec<String>>,
+    pub(crate) postprocessors: Option<Vec<ProcessorOrName>>,
 
     #[serde(default)]
     pub(crate) reconnect: Reconnect,

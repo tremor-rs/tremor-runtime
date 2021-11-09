@@ -34,6 +34,10 @@ pub use std::sync::atomic::Ordering;
 pub use tremor_pipeline::{ConfigImpl, EventOriginUri, DEFAULT_STREAM_ID};
 
 /// default buf size used for reading from files and streams (sockets etc)
+///
+/// equals default chunk size for BufReader
+pub(crate) const DEFAULT_BUF_SIZE: usize = 8 * 1024;
+/// default buf size used for reading from files and streams (sockets etc)
 pub(crate) fn default_buf_size() -> usize {
-    8192
+    DEFAULT_BUF_SIZE
 }
