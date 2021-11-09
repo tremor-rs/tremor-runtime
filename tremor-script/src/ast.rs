@@ -19,6 +19,7 @@ pub(crate) mod binary;
 /// custom equality definition - checking for equivalence of different AST nodes
 /// e.g. two different event paths with different metadata
 pub mod eq;
+mod node_id;
 /// Query AST
 pub mod query;
 pub(crate) mod raw;
