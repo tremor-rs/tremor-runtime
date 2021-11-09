@@ -2592,6 +2592,16 @@ pub type ImutComprehensionCasesRaw<'script> = Vec<ImutComprehensionCaseRaw<'scri
 pub type ArrayPredicatePatternsRaw<'script> = Vec<ArrayPredicatePatternRaw<'script>>;
 pub type WithExprsRaw<'script> = Vec<(IdentRaw<'script>, ImutExprRaw<'script>)>;
 
+impl<'script> Upable<'script> for Vec<(IdentRaw<'script>, ImutExprRaw<'script>)> {
+    type Target = HashMap<String, Value<'script>>;
+
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+        self.into_iter()
+            .map(|(name, value)| Ok((name.to_string(), value.up(helper)?.try_into_value(helper)?)))
+            .collect()
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;

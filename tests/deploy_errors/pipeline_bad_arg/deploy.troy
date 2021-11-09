@@ -1,8 +1,0 @@
-define pipeline passthrough
-with
-  snot
-pipeline
-   select { "#{args.snot}": "#{args.badger}" } from in into out;
-end;
-
-deploy passthrough;

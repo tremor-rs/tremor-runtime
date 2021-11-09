@@ -52,32 +52,16 @@ DeployStmt: DeployStmtRaw<'input> = {
 }
 
 DeployDeployStmt: DeployStmtRaw<'input> = {
-    <start:@L> <docs:DocComment> "deploy" <id:Ident> "from" <target:ModularTarget> <args:ArgFinalizationClause> <end:@L> => DeployStmtRaw::CreateStmt(CreateStmtRaw { start, end, id, module: target.0, target: target.1, params: args, docs }),
-    <start:@L> <docs:DocComment> "deploy" <id:Ident> "from" <target:ModularTarget> <end:@L> => DeployStmtRaw::CreateStmt(CreateStmtRaw { start, end, id: id.clone(),  module: target.0, target: target.1, params: None, docs }),
-    <start:@L> <docs:DocComment> "deploy" <id:Ident> <args:ArgFinalizationClause> <end:@L> => DeployStmtRaw::CreateStmt(CreateStmtRaw { start, end, id: id.clone(),  module: vec![], target: id, params: args, docs }),
-    <start:@L> <docs:DocComment> "deploy" <id:Ident>  <end:@L> => DeployStmtRaw::CreateStmt(CreateStmtRaw { start, end, id: id.clone(), module: vec![], target: id, params: None, docs }),
-
+    <start:@L> <docs:DocComment> "deploy" <id:Ident> "from" <target:ModularTarget> <params:(WithEndClause)?> <end:@L> => DeployStmtRaw::CreateStmt(CreateStmtRaw { start, end, id, module: target.0, target: target.1, params, docs }),
+    <start:@L> <docs:DocComment> "deploy" <id:Ident> <params:(WithEndClause)?> <end:@L> => DeployStmtRaw::CreateStmt(CreateStmtRaw { start, end, id: id.clone(),  module: vec![], target: id, params, docs }),
 }
 
-// Allows arguments to be specified and defaults to be provided and overridden in definitions
-ArgSpecificationClause: (WithArgsRaw<'input>, Option<DeployWithExprsRaw<'input>>) = {
-    <args:DeployArgs> <params:DeployConfigClause> => (args, Some(params)),
-    <args:DeployArgs> => (args, None),
-    <params:DeployConfigClause> => (vec![], Some(params)),
-}
 
-// Allows arguments to be consumed with defaults or overriden in deployment statements
-ArgFinalizationClause: Option<DeployWithExprsRaw<'input>> = {
-    <params:DeployWithClause> "end" => Some(params),
-}
 
 ConnectorKind: IdentRaw<'input> = {
     <Ident> => <>,
 }
 
-DeployArgs: WithArgsRaw<'input> = {
-    "args" <with:WithArgs> => <>,
-}
 
 DeployModuleStmt: DeployModuleStmtRaw<'input> = {
     <start:@L> "mod" <name:Ident> "with" <docs:ModComment> <stmts:DeployModuleStmts> "end" <end:@L> => DeployModuleStmtRaw{name, start, end, stmts, docs},
@@ -96,18 +80,12 @@ DeployLinks: DeployLinksRaw<'input> = {
 }
 
 DeployLinks_: DeployLinksRaw<'input> = {
-    // TODO  The troy grammar uses ',' for with, config and args rules
-    // so from one perspective ',' is more consistent than ';' which is what
-    // is documented in the rfc. Erring for the RFC for now - we'll revisit
-    // when `troy` and `connectors` are merged and we have a working set
-    // of migrated deployments in benchmarks, integration tests and tutorials
-    // allowing us to pick the "better" alternative
     <Sep<DeployLinks_, DeployLink, ";">> => <>
 }
 
 DeployLink: DeployLinkRaw<'input> = {
     // TODO TBD - requires connetors branch changes before completing
-    <start:@L> "connect" <from:DeployEndpoint> "to" <to:DeployEndpoint> <end:@L> => DeployLinkRaw { from, to }
+    <_start:@L> "connect" <from:DeployEndpoint> "to" <to:DeployEndpoint> <_end:@L> => DeployLinkRaw { from, to }
     // <start:@L> <name:Ident> => ArgumentDeclRaw::Required(name),
     // <start:@L> <name:Ident> "=" <default_value:ExprImut> => ArgumentDeclRaw::Optional(name, default_value)
 }
@@ -127,18 +105,14 @@ DeployModuleStmts: DeployStmtsRaw<'input> = {
      <item:DeployModuleInnerStmt> ";"? => vec![item],
  }
 
-
-
  DefineConnector: DeployStmtRaw<'input> =  {
     // Connectors - these define connectors for deployment
-    <start:@L> <docs:DocComment> "define" <kind:ConnectorKind> "connector" <id:Ident> <args:ArgSpecificationClause> "end" <end:@L> => DeployStmtRaw::ConnectorDecl(ConnectorDeclRaw { start, end, id: id.to_string(), kind, args: args.0, params: args.1, docs }),
-    <start:@L> <docs:DocComment> "define" <kind:ConnectorKind> "connector" <id:Ident> "end" <end:@L> => DeployStmtRaw::ConnectorDecl(ConnectorDeclRaw { start, end, id: id.to_string(), kind, args: vec![], params: None, docs }),
+    <start:@L> <docs:DocComment> "define" <kind:ConnectorKind> "connector" <id:Ident> <params:(WithClause)?> "end" <end:@L> => DeployStmtRaw::ConnectorDecl(ConnectorDeclRaw { start, end, id: id.to_string(), kind, params, docs }),
  }
 
 DefineFlow: DeployStmtRaw<'input> = {
     // Flow - these define how pipelines and connectors are interconnected to form a unit deployment graph
-    <start:@L> <docs:DocComment> "define" "flow" <id:Ident> <args:ArgSpecificationClause> <links:WithDeployLinks> "end" <end:@L> => DeployStmtRaw::FlowDecl(FlowDeclRaw { start, end, id: id.to_string(), args: args.0, params: args.1, links, docs }),
-    <start:@L> <docs:DocComment> "define" "flow" <id:Ident> <links:WithDeployLinks> "end" <end:@L> => DeployStmtRaw::FlowDecl(FlowDeclRaw { start, end, id: id.to_string(), args: vec![], params: None, links, docs }),
+    <start:@L> <docs:DocComment> "define" "flow" <id:Ident> <params:(WithClause)?> <links:WithDeployLinks> "end" <end:@L> => DeployStmtRaw::FlowDecl(FlowDeclRaw { start, end, id: id.to_string(), params, links, docs }),
 }
 
 
@@ -153,53 +127,6 @@ DeployModuleInnerStmt: DeployStmtRaw<'input> = {
     FnDecl => DeployStmtRaw::Expr(Box::new(ExprRaw::FnDecl(<>))),
     Intrinsic => DeployStmtRaw::Expr(Box::new(ExprRaw::FnDecl(<>))),
 }
-
-// TODO FIXME When Yatin's modular sub-query work is merged this production should be corrected accordingly
-EmbeddedQuery: QueryRaw<'input> = {
-    "pipeline" <stmts:Stmts> "end" => QueryRaw{config: vec![], stmts},
-}
-
-WithArgs: WithArgsRaw<'input> = {
-    <fields:WithArgs_> => {
-        let mut fields = fields;
-        fields.reverse();
-        fields
-    },
-}
-
-WithArgs_: WithArgsRaw<'input> = {
-    <Sep<WithArgs_, WithArg, ",">> => <>
-}
-
-WithArg: ArgumentDeclRaw<'input> = {
-    <start:@L> <name:Ident> => ArgumentDeclRaw::Required(name),
-    <start:@L> <name:Ident> "=" <default_value:Expr> => ArgumentDeclRaw::Optional(name, default_value)
-}
-
-DeployConfigClause: DeployWithExprsRaw<'input> = {
-    "config" <DeployWithExprs> => <>,
-}
-
-DeployWithClause: DeployWithExprsRaw<'input> = {
-    "with" <DeployWithExprs> => <>,
-}
-
-DeployWithExprs: DeployWithExprsRaw<'input> = {
-    <fields:DeployWithExprs_> => {
-        let mut fields = fields;
-        fields.reverse();
-        fields
-    },
-}
-
-DeployWithExprs_: DeployWithExprsRaw<'input> = {
-    <Sep<DeployWithExprs_, DeployWithExpr, ",">> => <>
-}
-
-DeployWithExpr: (IdentRaw<'input>, ExprRaw<'input>) = {
-    <start:@L> <name:Ident> "=" <expr:Expr> => (name, expr)
-}
-
 
 ////////////////////////////// Trickle statements //////////////////////////////
 // These statements for the root of the language.
@@ -374,11 +301,11 @@ WithScriptClause: (WithExprsRaw<'input>, Option<ScriptRaw<'input>>) = {
     "with" <with:WithExprs> <script:EmbeddedScriptImut> "end" => (with, script),
 }
 
-WithClause: WithExprsRaw<'input> = {
-    <ScriptWithClause> "end" => <>,
+WithEndClause: WithExprsRaw<'input> = {
+    <WithClause> "end" => <>,
 }
 
-ScriptWithClause: WithExprsRaw<'input> = {
+WithClause: WithExprsRaw<'input> = {
     "with" <WithExprs> => <>,
 }
 
@@ -395,7 +322,7 @@ WithExprs_: WithExprsRaw<'input> = {
 }
 
 WithExpr: (IdentRaw<'input>, ImutExprRaw<'input>) = {
-    <start:@L> <name:Ident> "=" <expr:ExprImut> => (name, expr)
+    <name:Ident> "=" <expr:ExprImut> => (name, expr)
 }
 
 
@@ -425,51 +352,51 @@ PipelineStmtInner : StmtsRaw<'input> = {
 }
 
 DefinePipeline: PipelineDeclRaw<'input> = {
-    <doc:DocComment> <start:@L> "define" "pipeline" <id:Ident> <from:("from" <Ports>)?> <into:("into" <Ports>)?> <params:(<ScriptWithClause>)?> <pipeline:Pipeline> <end:@L> => {
+    <doc:DocComment> <start:@L> "define" "pipeline" <id:Ident> <from:("from" <Ports>)?> <into:("into" <Ports>)?> <params:(<WithClause>)?> <pipeline:Pipeline> <end:@L> => {
         PipelineDeclRaw { start, end, id: id.to_string(), pipeline, params: params.map(|params| params.into()), from, into, doc }
     }
 }
 
 CreatePipeline: StmtRaw<'input> = {
-    <start:@L> "create" "pipeline" <id:Ident> <params:(<WithClause>)?> <end:@L>  => {
+    <start:@L> "create" "pipeline" <id:Ident> <params:(<WithEndClause>)?> <end:@L>  => {
         StmtRaw::PipelineStmt(PipelineStmtRaw { start, end, module: vec![], id: id.to_string(), target: id.to_string(), params: params.map(|params| params.into()) })
     },
     // With ModulartTarget
-    <start:@L> "create" "pipeline" <id:Ident> "from" <target:ModularTarget> <params:(<WithClause>)?> <end:@L> => {
+    <start:@L> "create" "pipeline" <id:Ident> "from" <target:ModularTarget> <params:(<WithEndClause>)?> <end:@L> => {
         StmtRaw::PipelineStmt(PipelineStmtRaw { start, end, module: target.0, id: id.to_string(), target: target.1.id.to_string(), params: params.map(|params| params.into()) })
     }
 }
 
 DefineOperator: StmtRaw<'input> = {
-    <doc:DocComment> <start:@L> "define" <kind:OperatorKind> "operator" <id:Ident> <params:(<WithClause>)?> <end:@L> =>  {
+    <doc:DocComment> <start:@L> "define" <kind:OperatorKind> "operator" <id:Ident> <params:(<WithEndClause>)?> <end:@L> =>  {
         StmtRaw::OperatorDecl(Box::new(OperatorDeclRaw { start, end, kind, id: id.to_string(), params: params.map(|params| params.into()), doc }))
     }
 }
 
 CreateOperator: StmtRaw<'input> = {
-    <start:@L> "create" "operator" <id:Ident> <params:(<WithClause>)?> <end:@L> => {
+    <start:@L> "create" "operator" <id:Ident> <params:(<WithEndClause>)?> <end:@L> => {
         StmtRaw::Operator(OperatorStmtRaw { start, end, id: id.to_string(), module: vec![], target: id.to_string(), params: params.map(|params| params.into()) })
     },
 
     // With ModulartTarget
-    <start:@L> "create" "operator" <id:Ident> "from" <target:ModularTarget> <params:(<WithClause>)?> <end:@L> => {
+    <start:@L> "create" "operator" <id:Ident> "from" <target:ModularTarget> <params:(<WithEndClause>)?> <end:@L> => {
         StmtRaw::Operator(OperatorStmtRaw { start, end, id: id.to_string(), module: target.0, target: target.1.id.to_string(), params: params.map(|params| params.into()) })
     }
 }
 
 DefineScript: StmtRaw<'input> = {
-    <doc:DocComment> <start:@L> "define" "script" <id:Ident> <params:(<ScriptWithClause>)?> <script:EmbeddedScript> <end:@L> => {
+    <doc:DocComment> <start:@L> "define" "script" <id:Ident> <params:(<WithClause>)?> <script:EmbeddedScript> <end:@L> => {
         StmtRaw::ScriptDecl(ScriptDeclRaw { start, end, id: id.to_string(), script, params: params.map(|params| params.into()), doc })
     }
 }
 
 CreateScript: StmtRaw<'input> = {
-    <start:@L> "create" "script" <id:Ident> <params:(<WithClause>)?> <end:@L> => {
+    <start:@L> "create" "script" <id:Ident> <params:(<WithEndClause>)?> <end:@L> => {
         StmtRaw::Script(ScriptStmtRaw { start, end, id: id.to_string(), module: vec![], target: id.to_string(), params: params.map(|params| params.into()) })
     },
 
     // With ModulartTarget
-    <start:@L> "create" "script" <id:Ident> "from" <target:ModularTarget> <params:(<WithClause>)?> <end:@L> => {
+    <start:@L> "create" "script" <id:Ident> "from" <target:ModularTarget> <params:(<WithEndClause>)?> <end:@L> => {
         StmtRaw::Script(ScriptStmtRaw { start, end, module: target.0, id: id.to_string(), target: target.1.id.to_string(), params: params.map(|params| params.into()) })
     }
 }
@@ -781,7 +708,7 @@ FnCases: Vec<PredicateClauseRaw<'input, ExprRaw<'input>>> = {
         cases.push(default);
         cases
     },
-    <start:@L> <default:FnCaseDefault> => {
+    <default:FnCaseDefault> => {
         let mut cases = Vec::new();
         cases.push(default);
         cases
@@ -846,7 +773,7 @@ Literal: LiteralRaw<'input> = {
 
 /// null
 Nil: Value<'input> = {
-    <literal:"nil">  => Value::null(),
+    <_literal:"nil">  => Value::null(),
 }
 
 /// booleans
@@ -1006,13 +933,11 @@ MetaPath: PathRaw<'input> = {
 
 /// A window/group path
 AggrPath: PathRaw<'input> = {
-    <start:@L> "group" <mid:@L> <segments:PathSegments> <end:@L> => {
-        let mut segments = segments;
+    <start:@L> "group" <segments:PathSegments> <end:@L> => {
         PathRaw::Reserved(ReservedPathRaw::Group { segments, start, end })
     },
     <start:@L> "group" <end:@L> => PathRaw::Reserved(ReservedPathRaw::Group { segments: vec![], start, end }),
-    <start:@L> "window" <mid:@L> <segments:PathSegments> <end:@L> => {
-        let mut segments = segments;
+    <start:@L> "window" <segments:PathSegments> <end:@L> => {
         PathRaw::Reserved(ReservedPathRaw::Window { segments, start, end })
     },
     <start:@L> "window" <end:@L> => PathRaw::Reserved(ReservedPathRaw::Window { segments: vec![], start, end }),
@@ -1020,8 +945,7 @@ AggrPath: PathRaw<'input> = {
 
 /// Arguments to a script or function
 ArgsPath: PathRaw<'input> = {
-    <start:@L> "args" <mid:@L> <segments:PathSegments> <end:@L> => {
-        let mut segments = segments;
+    <start:@L> "args" <segments:PathSegments> <end:@L> => {
         PathRaw::Reserved(ReservedPathRaw::Args { segments, start, end })
     },
     <start:@L> "args" <end:@L> => PathRaw::Reserved(ReservedPathRaw::Args { segments: vec![], start, end }),
@@ -1150,7 +1074,7 @@ Emit: ExprRaw<'input> = {
 
 /// Let expression to assign values
 Let: ExprRaw<'input> = {
-    <start:@L> "let" <expr:Assignment> <end:@L> => expr, // Expr::Let(Let { exprs: vec![expr], start, end }),
+    "let" <expr:Assignment> => expr, // Expr::Let(Let { exprs: vec![expr], start, end }),
 }
 
 Assignment: ExprRaw<'input> = {
@@ -1335,14 +1259,13 @@ WhenClause: Option<ImutExprRaw<'input>> = {
 
 /// Predicate Patterns (aka tests) for record pattrens
 PredicateFieldPattern: PredicatePatternRaw<'input> = {
-    <start:@L> <lhs:Ident> <op:"~="> <expr:TestExpr> <end:@L> => PredicatePatternRaw::TildeEq { assign: lhs.id.clone(), lhs: lhs.id, test: expr},
-    <start:@L> <assign:Ident> "=" <lhs:Ident> <op:"~="> <expr:TestExpr> <end:@L> => PredicatePatternRaw::TildeEq { assign: assign.id, lhs: lhs.id, test: expr} ,
-
-    <start:@L> <lhs:Ident> <op:"~="> <rp:RecordPattern> <end:@L> => PredicatePatternRaw::RecordPatternEq { lhs: lhs.id, pattern: rp },
-    <start:@L> <lhs:Ident> <op:"~="> <ap:ArrayPattern> <end:@L> => PredicatePatternRaw::ArrayPatternEq { lhs: lhs.id, pattern: ap },
-    <start:@L> <lhs:Ident> <op:"~="> <ap:TuplePattern> <end:@L> => PredicatePatternRaw::TuplePatternEq { lhs: lhs.id, pattern: ap },
-    <start:@L> "present" <lhs:Ident> <end:@L> => PredicatePatternRaw::FieldPresent { lhs: lhs.id },
-    <start:@L> "absent" <lhs:Ident> <end:@L> => PredicatePatternRaw::FieldAbsent { lhs: lhs.id },
+    <lhs:Ident> "~=" <expr:TestExpr> => PredicatePatternRaw::TildeEq { assign: lhs.id.clone(), lhs: lhs.id, test: expr},
+    <assign:Ident> "=" <lhs:Ident> "~=" <expr:TestExpr> => PredicatePatternRaw::TildeEq { assign: assign.id, lhs: lhs.id, test: expr} ,
+    <lhs:Ident> "~=" <rp:RecordPattern> => PredicatePatternRaw::RecordPatternEq { lhs: lhs.id, pattern: rp },
+    <lhs:Ident> "~=" <ap:ArrayPattern>  => PredicatePatternRaw::ArrayPatternEq { lhs: lhs.id, pattern: ap },
+    <lhs:Ident> "~=" <ap:TuplePattern>  => PredicatePatternRaw::TuplePatternEq { lhs: lhs.id, pattern: ap },
+    "present" <lhs:Ident> => PredicatePatternRaw::FieldPresent { lhs: lhs.id },
+    "absent" <lhs:Ident> => PredicatePatternRaw::FieldAbsent { lhs: lhs.id },
     <lhs:Ident> <kind:BinCmpEq> <expr:ComplexExprImut> => PredicatePatternRaw::Bin { lhs: lhs.id, rhs: expr, kind },
 }
 

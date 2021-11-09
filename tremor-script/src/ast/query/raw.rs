@@ -55,6 +55,7 @@ impl<'script> From<HashMap<String, Value<'script>>> for Params<'script> {
         Params::Processed(processed)
     }
 }
+
 impl<'script> Upable<'script> for Params<'script> {
     type Target = HashMap<String, Value<'script>>;
     fn up<'registry>(
@@ -62,12 +63,7 @@ impl<'script> Upable<'script> for Params<'script> {
         helper: &mut Helper<'script, 'registry>,
     ) -> Result<HashMap<String, Value<'script>>> {
         match self {
-            Params::Raw(params) => params
-                .into_iter()
-                .map(|(name, value)| {
-                    Ok((name.to_string(), value.up(helper)?.try_into_value(helper)?))
-                })
-                .collect(),
+            Params::Raw(params) => params.up(helper),
             Params::Processed(params) => Ok(params),
         }
     }
@@ -247,6 +243,7 @@ pub struct PipelineDeclRaw<'script> {
 impl_expr!(PipelineDeclRaw);
 
 impl<'script> PipelineDeclRaw<'script> {
+    const STREAM_PORT_CONFILCT: &'static str = "Streams cannot share names with from/into ports";
     fn dflt_in_ports<'ident>() -> Vec<Ident<'ident>> {
         vec!["in".into()]
     }
@@ -258,16 +255,20 @@ impl<'script> PipelineDeclRaw<'script> {
 impl<'script> Upable<'script> for PipelineDeclRaw<'script> {
     type Target = PipelineDecl<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        let config = if let Params::Raw(r) = self.params.clone().unwrap_or_default() {
-            r
+        let query = if let Params::Raw(config) = self.params.clone().unwrap_or_default() {
+            let mut helper1 = helper.clone();
+            QueryRaw {
+                config,
+                stmts: self.pipeline.clone(),
+            }
+            .up_script(&mut helper1)
+            .ok()
         } else {
-            return Err("Invalid SubQuery".into());
+            None
         };
-        let query = QueryRaw {
-            config,
-            stmts: self.pipeline.clone(),
-        }
-        .up_script(helper)?;
+
+        helper.module.push(self.id.clone());
+
         let from = self.from.up(helper)?.unwrap_or_else(Self::dflt_in_ports);
         let into = self.into.up(helper)?.unwrap_or_else(Self::dflt_out_ports);
 
@@ -280,8 +281,12 @@ impl<'script> Upable<'script> for PipelineDeclRaw<'script> {
             if let StmtRaw::Stream(stream_raw) = stmt {
                 if ports_set.contains(&stream_raw.id) {
                     let stream = stream_raw.clone().up(helper)?;
-                    let err_str = &"Streams cannot share names with from/into ports";
-                    return error_generic(&stream, &stream, &err_str, &helper.meta);
+                    return error_generic(
+                        &stream,
+                        &stream,
+                        &Self::STREAM_PORT_CONFILCT,
+                        &helper.meta,
+                    );
                 }
             }
         }
@@ -289,15 +294,17 @@ impl<'script> Upable<'script> for PipelineDeclRaw<'script> {
         let pipeline_decl = PipelineDecl {
             mid: helper.add_meta_w_name(self.start, self.end, &self.id),
             node_id: NodeId::new(self.id, helper.module.clone()),
-            params: self.params.map(|raw| raw.up(helper)).transpose()?,
+            params: self.params.up(helper)?,
             raw_stmts: self.pipeline,
             from,
             into,
             query,
         };
+        helper.module.pop();
+
         let pipeline_name = pipeline_decl.fqn();
         if helper.pipeline_defns.contains_key(&pipeline_name) {
-            let err_str = format! {"Can't define the pipeline `{}` twice", pipeline_name};
+            let err_str = format!("Can't define the pipeline `{}` twice", pipeline_name);
             return error_generic(&pipeline_decl, &pipeline_decl, &err_str, &helper.meta);
         }
 
@@ -323,7 +330,7 @@ impl_expr!(PipelineStmtRaw);
 
 impl<'script> PipelineStmtRaw<'script> {
     fn mangle_id(&self, id: &str) -> String {
-        format! {"__SUBQ__{}_{}",self.id, id}
+        format!("__PIP__id:{}_alias:{}", self.id, id)
     }
 
     fn get_args_map<'registry>(
@@ -356,7 +363,7 @@ impl<'script> PipelineStmtRaw<'script> {
                             stmt_param_set.difference(&decl_param_set).collect();
 
                         if let Some(param) = unknown_params.pop() {
-                            let err_str = format! {"Unknown parameter `{}`", param};
+                            let err_str = format!("Unknown parameter `{}`", param);
                             error_generic(self, self, &err_str, &helper.meta)
                         } else {
                             Ok(stmt_params)
@@ -382,7 +389,9 @@ impl<'script> PipelineStmtRaw<'script> {
                     let mut value_expr = value_expr.up(helper)?;
                     ArgsRewriter::new(sq_args.clone(), helper).rewrite_expr(&mut value_expr)?;
                     ExprReducer::new(helper).reduce(&mut value_expr)?;
+
                     let value = value_expr.try_into_value(helper)?;
+
                     Ok((name.to_string(), value))
                 })
                 .collect(),
@@ -407,7 +416,16 @@ impl<'script> PipelineStmtRaw<'script> {
             None => error_generic(
                 &self,
                 &self,
-                &format!("query `{}` not found", fq_pipeline_defn),
+                &format!(
+                    "pipeline `{}` not found in: {}",
+                    fq_pipeline_defn,
+                    helper
+                        .pipeline_defns
+                        .keys()
+                        .cloned()
+                        .collect::<Vec<_>>()
+                        .join(",")
+                ),
                 &helper.meta,
             ),
             Some(pipeline_decl) => {
@@ -658,9 +676,11 @@ impl<'script> ModuleStmtRaw<'script> {
                     // since `ModuleRaw::define` also prepends the module
                     // name we got to remove it prior to calling `define` and
                     // add it back later
-                    helper.module.pop();
+                    let old = helper.module.pop();
                     expr_m.define(helper)?;
-                    helper.module.push(self.name.to_string());
+                    if let Some(old) = old {
+                        helper.module.push(old);
+                    }
                 }
                 StmtRaw::WindowDecl(stmt) => {
                     let w = stmt.up(&mut helper)?;
@@ -672,6 +692,7 @@ impl<'script> ModuleStmtRaw<'script> {
                 }
                 StmtRaw::PipelineDecl(stmt) => {
                     let o = stmt.up(&mut helper)?;
+
                     helper.pipeline_defns.insert(o.fqsn(&helper.module), o);
                 }
                 StmtRaw::OperatorDecl(stmt) => {
@@ -704,11 +725,12 @@ impl<'script> Upable<'script> for OperatorStmtRaw<'script> {
     type Target = OperatorStmt<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let module = self.module.iter().map(ToString::to_string).collect();
+        let params = self.params.up(helper)?;
         Ok(OperatorStmt {
             mid: helper.add_meta_w_name(self.start, self.end, &self.id),
             node_id: NodeId::new(self.id, module),
             target: self.target,
-            params: self.params.map(|raw| raw.up(helper)).transpose()?,
+            params,
         })
     }
 }
@@ -737,11 +759,13 @@ impl<'script> Upable<'script> for ScriptDeclRaw<'script> {
         //
         helper.module.push(self.id.clone());
         let script = self.script.up_script(helper)?;
+        let params = self.params;
+        let params = params.up(helper)?;
 
         let script_decl = ScriptDecl {
             mid: helper.add_meta_w_name(self.start, self.end, &self.id),
             node_id: NodeId::new(self.id, helper.module.clone()),
-            params: self.params.map(|raw| raw.up(helper)).transpose()?,
+            params,
             script,
         };
         helper.module.pop();
@@ -773,10 +797,11 @@ impl<'script> Upable<'script> for ScriptStmtRaw<'script> {
     type Target = ScriptStmt<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let module = self.module.iter().map(ToString::to_string).collect();
+        let params = self.params.up(helper)?;
         Ok(ScriptStmt {
             mid: helper.add_meta_w_name(self.start, self.end, &self.id),
             node_id: NodeId::new(self.id, module),
-            params: self.params.map(|raw| raw.up(helper)).transpose()?,
+            params,
             target: self.target,
         })
     }
