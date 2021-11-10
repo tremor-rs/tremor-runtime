@@ -253,13 +253,17 @@ impl<'script> Upable<'script> for PipelineDeclRaw<'script> {
     type Target = PipelineDecl<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let query = if let Params::Raw(config) = self.params.clone().unwrap_or_default() {
-            let mut helper1 = helper.clone();
-            QueryRaw {
+            // We save `helper.modules` here in case `up_script` on `QueryRaw` fails and leaves helper
+            // in an inconsistant state regarding the module path.
+            let module = helper.module.clone();
+            let r = QueryRaw {
                 config,
                 stmts: self.pipeline.clone(),
             }
-            .up_script(&mut helper1)
-            .ok()
+            .up_script(helper)
+            .ok();
+            helper.module = module;
+            r
         } else {
             None
         };
