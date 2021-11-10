@@ -15,11 +15,10 @@
 // We want to keep the names here
 #![allow(clippy::module_name_repetitions)]
 
-use super::raw::BaseExpr;
-use super::PipelineDecl;
+use super::{node_id::BaseRef, raw::BaseExpr};
+use super::{node_id::NodeId, PipelineDecl};
 use super::{Docs, HashMap, Value};
-use crate::ast::BaseRef;
-use crate::{impl_expr_mid, impl_fqsn};
+use crate::{impl_expr_mid, impl_fqn};
 use tremor_common::url::TremorUrl;
 
 pub(crate) mod raw;
@@ -65,15 +64,15 @@ pub enum DeployStmt<'script> {
     CreateStmt(Box<CreateStmt<'script>>),
 }
 
-impl<'script> DeployStmt<'script> {
-    /// Returns the user provided `id` of this statement
+impl<'script> BaseRef for DeployStmt<'script> {
+    /// Returns the user provided `fqn` of this statement
     #[must_use]
-    pub fn id(&self) -> String {
+    fn fqn(&self) -> String {
         match self {
-            DeployStmt::FlowDecl(stmt) => stmt.id.clone(),
-            DeployStmt::PipelineDecl(stmt) => stmt.id.clone(),
-            DeployStmt::ConnectorDecl(stmt) => stmt.id.clone(),
-            DeployStmt::CreateStmt(stmt) => stmt.id.clone(),
+            DeployStmt::FlowDecl(stmt) => stmt.fqn(),
+            DeployStmt::PipelineDecl(stmt) => stmt.fqn(),
+            DeployStmt::ConnectorDecl(stmt) => stmt.fqn(),
+            DeployStmt::CreateStmt(stmt) => stmt.fqn(),
         }
     }
 }
@@ -94,10 +93,8 @@ impl<'script> BaseExpr for DeployStmt<'script> {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ConnectorDecl<'script> {
     pub(crate) mid: usize,
-    /// Module of the connector
-    pub module: Vec<String>,
     /// Identifer for the connector
-    pub id: String,
+    pub node_id: NodeId,
     /// Resolved argument defaults
     pub params: Option<HashMap<String, Value<'script>>>,
     /// Internal / intrinsic builtin name
@@ -107,7 +104,7 @@ pub struct ConnectorDecl<'script> {
     pub docs: Option<String>,
 }
 impl_expr_mid!(ConnectorDecl);
-impl_fqsn!(ConnectorDecl);
+impl_fqn!(ConnectorDecl);
 
 type DeployStmts<'script> = Vec<DeployStmt<'script>>;
 
@@ -115,10 +112,8 @@ type DeployStmts<'script> = Vec<DeployStmt<'script>>;
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct FlowDecl<'script> {
     pub(crate) mid: usize,
-    /// Module of the connector
-    pub module: Vec<String>,
     /// Identifer for the connector
-    pub id: String,
+    pub node_id: NodeId,
     /// Resolved argument defaults
     pub params: Option<HashMap<String, Value<'script>>>,
     /// Links between artefacts in the flow
@@ -128,18 +123,16 @@ pub struct FlowDecl<'script> {
     pub docs: Option<String>,
 }
 impl_expr_mid!(FlowDecl);
-impl_fqsn!(FlowDecl);
+impl_fqn!(FlowDecl);
 
 /// A create statement
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct CreateStmt<'script> {
     pub(crate) mid: usize,
-    /// Module of the artefact definition being deployed
-    pub module: Vec<String>,
     /// Target of the artefact definition being deployed
     pub target: String,
     /// Identifer for the creation
-    pub id: String,
+    pub node_id: NodeId,
     /// Atomic unit of deployment
     pub atom: FlowDecl<'script>,
     /// Documentation comments
@@ -147,4 +140,4 @@ pub struct CreateStmt<'script> {
     pub docs: Option<String>,
 }
 impl_expr_mid!(CreateStmt);
-impl_fqsn!(CreateStmt);
+impl_fqn!(CreateStmt);

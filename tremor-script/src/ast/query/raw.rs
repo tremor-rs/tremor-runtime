@@ -24,9 +24,8 @@ use super::{
     PipelineDecl, PipelineStmt, Query, Registry, Result, ScriptDecl, ScriptStmt, Select,
     SelectStmt, Serialize, Stmt, StreamStmt, Upable, Value, WindowDecl, WindowKind,
 };
-use crate::ast::base_ref::BaseRef;
 use crate::ast::{
-    node_id::NodeId,
+    node_id::{BaseRef, NodeId},
     visitors::{ArgsRewriter, ExprReducer, GroupByExprExtractor, TargetEventRef},
     Ident,
 };
@@ -175,22 +174,20 @@ impl<'script> Upable<'script> for StmtRaw<'script> {
             StmtRaw::Stream(stmt) => Ok(Stmt::Stream(stmt.up(helper)?)),
             StmtRaw::OperatorDecl(stmt) => {
                 let stmt: OperatorDecl<'script> = stmt.up(helper)?;
-                helper
-                    .operators
-                    .insert(stmt.fqsn(&stmt.module), stmt.clone());
+                helper.operators.insert(stmt.fqn(), stmt.clone());
                 Ok(Stmt::OperatorDecl(stmt))
             }
             StmtRaw::Operator(stmt) => Ok(Stmt::Operator(stmt.up(helper)?)),
             StmtRaw::ScriptDecl(stmt) => {
                 let stmt: ScriptDecl<'script> = stmt.up(helper)?;
-                helper.scripts.insert(stmt.fqsn(&stmt.module), stmt.clone());
+                helper.scripts.insert(stmt.fqn(), stmt.clone());
                 Ok(Stmt::ScriptDecl(Box::new(stmt)))
             }
             StmtRaw::Script(stmt) => Ok(Stmt::Script(stmt.up(helper)?)),
             StmtRaw::PipelineDecl(stmt) => Ok(Stmt::PipelineDecl(stmt.up(helper)?)),
             StmtRaw::WindowDecl(stmt) => {
                 let stmt: WindowDecl<'script> = stmt.up(helper)?;
-                helper.windows.insert(stmt.fqwn(&stmt.module), stmt.clone());
+                helper.windows.insert(stmt.fqn(), stmt.clone());
                 Ok(Stmt::WindowDecl(Box::new(stmt)))
             }
             StmtRaw::ModuleStmt(ref m) => error_generic(m, m, &Self::BAD_MODULE, &helper.meta),
@@ -291,16 +288,18 @@ impl<'script> Upable<'script> for PipelineDeclRaw<'script> {
             }
         }
 
+        let mid = helper.add_meta_w_name(self.start, self.end, &self.id);
+        let params = self.params.up(helper)?;
+        helper.module.pop();
         let pipeline_decl = PipelineDecl {
-            mid: helper.add_meta_w_name(self.start, self.end, &self.id),
+            mid,
             node_id: NodeId::new(self.id, helper.module.clone()),
-            params: self.params.up(helper)?,
+            params,
             raw_stmts: self.pipeline,
             from,
             into,
             query,
         };
-        helper.module.pop();
 
         let pipeline_name = pipeline_decl.fqn();
         if helper.pipeline_defns.contains_key(&pipeline_name) {
@@ -311,7 +310,7 @@ impl<'script> Upable<'script> for PipelineDeclRaw<'script> {
         helper
             .pipeline_defns
             .insert(pipeline_name, pipeline_decl.clone());
-        helper.add_query_decl_doc(&pipeline_decl.id, self.doc);
+        helper.add_query_decl_doc(&pipeline_decl.fqn(), self.doc);
         Ok(pipeline_decl)
     }
 }
@@ -684,20 +683,20 @@ impl<'script> ModuleStmtRaw<'script> {
                 }
                 StmtRaw::WindowDecl(stmt) => {
                     let w = stmt.up(&mut helper)?;
-                    helper.windows.insert(w.fqwn(&helper.module), w);
+                    helper.windows.insert(w.fqn(), w);
                 }
                 StmtRaw::ScriptDecl(stmt) => {
                     let s = stmt.up(&mut helper)?;
-                    helper.scripts.insert(s.fqsn(&helper.module), s);
+                    helper.scripts.insert(s.fqn(), s);
                 }
                 StmtRaw::PipelineDecl(stmt) => {
                     let o = stmt.up(&mut helper)?;
 
-                    helper.pipeline_defns.insert(o.fqsn(&helper.module), o);
+                    helper.pipeline_defns.insert(o.fqn(), o);
                 }
                 StmtRaw::OperatorDecl(stmt) => {
                     let o = stmt.up(&mut helper)?;
-                    helper.operators.insert(o.fqsn(&helper.module), o);
+                    helper.operators.insert(o.fqn(), o);
                 }
                 ref e => {
                     return error_generic(e, e, &Self::BAD_STMT, &helper.meta);
