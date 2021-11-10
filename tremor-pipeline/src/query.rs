@@ -520,11 +520,11 @@ impl Query {
                         );
                     }
 
-                    let fqsn = o.node_id.target_fqn(&o.target);
+                    let fqn = o.node_id.target_fqn(&o.target);
 
                     let stmt_srs =
                         srs::Stmt::try_new_from_query::<&'static str, _>(&self.0.query, |query| {
-                            let decl = query.scripts.get(&fqsn).ok_or("script not found")?.clone();
+                            let decl = query.scripts.get(&fqn).ok_or("script not found")?.clone();
                             let inner_stmt = Stmt::ScriptDecl(Box::new(decl));
                             Ok(inner_stmt)
                         })?;

@@ -20,10 +20,14 @@ use super::ConnectorDecl;
 use super::CreateStmt;
 use super::FlowDecl;
 use super::Value;
-use crate::ast::raw::{ExprRaw, IdentRaw, ModuleRaw, StringLitRaw};
 use crate::ast::{
-    error_generic, query::raw::PipelineDeclRaw, raw::WithExprsRaw, AggrRegistry, BaseRef, Deploy,
-    DeployStmt, Helper, ModDoc, NodeMetas, PipelineDecl, Registry, Script, StringLit, Upable,
+    error_generic, node_id::NodeId, query::raw::PipelineDeclRaw, raw::WithExprsRaw, AggrRegistry,
+    Deploy, DeployStmt, Helper, ModDoc, NodeMetas, PipelineDecl, Registry, Script, StringLit,
+    Upable,
+};
+use crate::ast::{
+    node_id::BaseRef,
+    raw::{ExprRaw, IdentRaw, ModuleRaw, StringLitRaw},
 };
 use crate::errors::ErrorKind;
 use crate::errors::Result;
@@ -166,30 +170,22 @@ impl<'script> Upable<'script> for DeployStmtRaw<'script> {
         match self {
             DeployStmtRaw::PipelineDecl(stmt) => {
                 let stmt: PipelineDecl<'script> = stmt.up(helper)?;
-                helper
-                    .pipeline_defns
-                    .insert(stmt.fqsn(&stmt.module), stmt.clone());
+                helper.pipeline_defns.insert(stmt.fqn(), stmt.clone());
                 Ok(DeployStmt::PipelineDecl(Box::new(stmt)))
             }
             DeployStmtRaw::ConnectorDecl(stmt) => {
                 let stmt: ConnectorDecl<'script> = stmt.up(helper)?;
-                helper
-                    .connector_defns
-                    .insert(stmt.fqsn(&stmt.module), stmt.clone());
+                helper.connector_defns.insert(stmt.fqn(), stmt.clone());
                 Ok(DeployStmt::ConnectorDecl(Box::new(stmt)))
             }
             DeployStmtRaw::FlowDecl(stmt) => {
                 let stmt: FlowDecl<'script> = stmt.up(helper)?;
-                helper
-                    .flow_defns
-                    .insert(stmt.fqsn(&stmt.module), stmt.clone());
+                helper.flow_defns.insert(stmt.fqn(), stmt.clone());
                 Ok(DeployStmt::FlowDecl(Box::new(stmt)))
             }
             DeployStmtRaw::CreateStmt(stmt) => {
                 let stmt: CreateStmt = stmt.up(helper)?;
-                helper
-                    .instances
-                    .insert(stmt.fqsn(&stmt.module), stmt.clone());
+                helper.instances.insert(stmt.fqn(), stmt.clone());
                 Ok(DeployStmt::CreateStmt(Box::new(stmt)))
             }
             DeployStmtRaw::ModuleStmt(ref m) => {
@@ -243,27 +239,19 @@ impl<'script> DeployModuleStmtRaw<'script> {
                 }
                 DeployStmtRaw::ConnectorDecl(stmt) => {
                     let stmt: ConnectorDecl<'script> = stmt.up(helper)?;
-                    helper
-                        .connector_defns
-                        .insert(stmt.fqsn(&stmt.module), stmt.clone());
+                    helper.connector_defns.insert(stmt.fqn(), stmt.clone());
                 }
                 DeployStmtRaw::FlowDecl(stmt) => {
                     let stmt: FlowDecl<'script> = stmt.up(helper)?;
-                    helper
-                        .flow_defns
-                        .insert(stmt.fqsn(&stmt.module), stmt.clone());
+                    helper.flow_defns.insert(stmt.fqn(), stmt.clone());
                 }
                 DeployStmtRaw::PipelineDecl(stmt) => {
                     let stmt: PipelineDecl<'script> = stmt.up(helper)?;
-                    helper
-                        .pipeline_defns
-                        .insert(stmt.fqsn(&stmt.module), stmt.clone());
+                    helper.pipeline_defns.insert(stmt.fqn(), stmt.clone());
                 }
                 DeployStmtRaw::CreateStmt(stmt) => {
                     let stmt: CreateStmt = stmt.up(helper)?;
-                    helper
-                        .instances
-                        .insert(stmt.fqsn(&stmt.module), stmt.clone());
+                    helper.instances.insert(stmt.fqn(), stmt.clone());
                 }
             }
         }
@@ -291,15 +279,14 @@ impl<'script> Upable<'script> for ConnectorDeclRaw<'script> {
         let query_decl = ConnectorDecl {
             mid: helper.add_meta_w_name(self.start, self.end, &self.id),
             params: self.params.up(helper)?,
-            module: helper.module.clone(),
             builtin_kind: self.kind.to_string(),
-            id: self.id,
+            node_id: NodeId::new(self.id, helper.module.clone()),
             docs: self
                 .docs
                 .map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n")),
         };
 
-        let script_name = query_decl.fqsn(&helper.module);
+        let script_name = query_decl.fqn();
         helper
             .connector_defns
             .insert(script_name, query_decl.clone());
@@ -370,8 +357,7 @@ impl<'script> Upable<'script> for FlowDeclRaw<'script> {
 
         let flow_decl = FlowDecl {
             mid: helper.add_meta_w_name(self.start, self.end, &self.id),
-            module: helper.module.clone(),
-            id: self.id,
+            node_id: NodeId::new(self.id, helper.module.clone()),
             params: self.params.up(helper)?,
             links,
             docs: self
@@ -379,7 +365,7 @@ impl<'script> Upable<'script> for FlowDeclRaw<'script> {
                 .map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n")),
         };
         helper.module.pop();
-        let flow_name = flow_decl.fqsn(&helper.module);
+        let flow_name = flow_decl.fqn();
         helper.flow_defns.insert(flow_name, flow_decl.clone());
         Ok(flow_decl)
     }
@@ -422,9 +408,9 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
             .map(|x| format!("{}::", x.to_string()))
             .collect::<Vec<String>>()
             .join("");
-        let fqsn = format!("{}{}", target_module, self.target.to_string());
+        let fqn = format!("{}{}", target_module, self.target.to_string());
 
-        let atom = if let Some(artefact) = helper.flow_defns.get(&fqsn) {
+        let atom = if let Some(artefact) = helper.flow_defns.get(&fqn) {
             artefact.clone()
         } else {
             let inner = if target_module.is_empty() {
@@ -435,23 +421,21 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
             return Err(ErrorKind::DeployArtefactNotDefined(
                 self.extent(&helper.meta),
                 inner.extent(&helper.meta),
-                fqsn,
+                fqn,
             )
             .into());
         };
 
-        let module = (&self.module).iter().map(ToString::to_string).collect();
         let create_stmt = CreateStmt {
             mid: helper.add_meta_w_name(self.start, self.end, &self.id),
-            id: self.id.to_string(),
-            module,
+            node_id: NodeId::new(self.id.to_string(), helper.module.clone()),
             target: self.target.to_string(),
             atom,
             docs: self
                 .docs
                 .map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n")),
         };
-        let script_name = create_stmt.fqsn(&helper.module);
+        let script_name = create_stmt.fqn();
         helper.instances.insert(script_name, create_stmt.clone());
 
         Ok(create_stmt)

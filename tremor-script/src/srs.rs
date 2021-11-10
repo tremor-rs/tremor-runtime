@@ -13,7 +13,8 @@
 // limitations under the License.
 
 use crate::{
-    ast::{self, query},
+    ast::BaseRef,
+    ast::{self, query, NodeId},
     errors::{Error, Result},
     prelude::*,
 };
@@ -122,12 +123,12 @@ impl Deploy {
 
         for stmt in &self.script.stmts {
             if let StmtKind::CreateStmt(ref stmt) = stmt {
-                let atom = FlowDecl::new_from_deploy(self, &stmt.atom.id)?;
+                let atom = FlowDecl::new_from_deploy(self, &stmt.atom.node_id)?;
                 // let atom = CreateStmt::new_from_stmt(self, &stmt)?;
                 instances.insert(
-                    stmt.id.to_string(),
+                    stmt.fqn(),
                     CreateStmt {
-                        id: stmt.id.clone(),
+                        node_id: stmt.node_id.clone(),
                         atom,
                     },
                 );
@@ -149,7 +150,7 @@ impl Deploy {
 ///
 pub struct CreateStmt {
     /// Identity
-    pub id: String,
+    pub node_id: NodeId,
     /// Atomic unit of deployment
     pub atom: FlowDecl,
 }
@@ -263,7 +264,7 @@ impl Query {
             .script
             .pipelines
             .values()
-            .find(|query| id == query.id)
+            .find(|query| id == query.fqn())
             .ok_or_else(|| CompilerError {
                 error: Error::from(format!("Invalid query for pipeline {}", &id).as_str()),
                 cus: vec![],
@@ -532,7 +533,7 @@ impl ConnectorDecl {
             .script
             .connectors
             .values()
-            .find(|connector| id == connector.id)
+            .find(|connector| id == connector.fqn())
             .ok_or_else(|| CompilerError {
                 error: Error::from(format!("Invalid connector for deployment {}", &id).as_str()),
                 cus: vec![],
@@ -579,12 +580,15 @@ impl FlowDecl {
     /// deployment
     /// # Errors
     /// If the self-referential struct cannot be created safely from the deployment provided
-    pub fn new_from_deploy(origin: &Deploy, id: &str) -> std::result::Result<Self, CompilerError> {
+    pub fn new_from_deploy(
+        origin: &Deploy,
+        id: &NodeId,
+    ) -> std::result::Result<Self, CompilerError> {
         let flow = origin
             .script
             .flows
             .values()
-            .find(|flow| id == flow.id)
+            .find(|flow| id == &flow.node_id)
             .ok_or_else(|| CompilerError {
                 error: Error::from(format!("Invalid flow for deployment {}", &id).as_str()),
                 cus: vec![],

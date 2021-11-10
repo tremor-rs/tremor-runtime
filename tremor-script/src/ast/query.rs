@@ -20,7 +20,6 @@ use super::{
     Registry, Result, Script, Serialize, Stmts, Upable, Value,
 };
 use super::{raw::BaseExpr, Consts};
-use crate::ast::base_ref::BaseRef;
 use crate::ast::eq::AstEq;
 use crate::{impl_expr_mid, impl_fqn};
 use raw::WindowDefnRaw;
@@ -206,6 +205,7 @@ pub struct ScriptDecl<'script> {
     pub script: Script<'script>,
 }
 impl_expr_mid!(ScriptDecl);
+impl_fqn!(ScriptDecl);
 
 /// A script creation
 #[derive(Clone, Debug, PartialEq, Serialize)]
