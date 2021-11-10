@@ -15,8 +15,6 @@ use crate::connectors::prelude::*;
 use async_std::fs::File;
 use async_std::io::ReadExt;
 use tremor_common::asy::file::open;
-use tremor_pipeline::CbAction;
-use value_trait::ValueAccess;
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]

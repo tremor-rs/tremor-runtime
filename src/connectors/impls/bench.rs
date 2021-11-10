@@ -23,7 +23,6 @@ use std::{
     process,
 };
 use tremor_common::{file, time::nanotime};
-use tremor_script::prelude::*;
 use xz2::read::XzDecoder;
 
 // FIXME: enable structured writing
@@ -155,8 +154,8 @@ impl Connector for Bench {
     async fn create_sink(
         &mut self,
         sink_context: SinkContext,
-        builder: super::sink::SinkManagerBuilder,
-    ) -> Result<Option<super::sink::SinkAddr>> {
+        builder: SinkManagerBuilder,
+    ) -> Result<Option<SinkAddr>> {
         builder
             .spawn(Blackhole::from_config(&self.config), sink_context)
             .map(Some)
