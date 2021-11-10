@@ -15,9 +15,6 @@
 
 use crate::connectors::prelude::*;
 use async_std::net::UdpSocket;
-use tremor_value::prelude::*;
-
-use super::sink::ChannelSinkRuntime;
 
 #[derive(Deserialize, Debug, Clone)]
 struct Host {

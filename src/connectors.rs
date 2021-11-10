@@ -12,81 +12,40 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+pub(crate) mod impls;
 /// prelude with commonly needed stuff imported
 pub(crate) mod prelude;
-/// Sink part of a connector
 pub(crate) mod sink;
-/// source part of a connector
 pub(crate) mod source;
-
-/// reconnect logic for connectors
-pub(crate) mod reconnect;
-
-/// file connector implementation
-pub mod file;
-
-/// tcp server and client connector impls
-pub(crate) mod tcp;
-
-/// udp server connector impl
-pub(crate) mod udp_server;
-
-/// udp server connector impl
-pub(crate) mod udp_client;
-
-/// std streams connector (stdout, stderr, stdin)
-pub(crate) mod stdio;
-
-/// Home of the famous metrics collector
-pub(crate) mod metrics;
-
-/// Metronome
-pub(crate) mod metronome;
-
-/// Exit Connector
-pub(crate) mod exit;
-
-/// KV
-pub(crate) mod kv;
-
-/// Write Ahead Log
-pub(crate) mod wal;
-
-/// connector for checking guaranteed delivery and circuit breaker logic
-pub(crate) mod cb;
+pub(crate) mod utils;
 
 /// quiescence stuff
-pub(crate) mod quiescence;
-
-/// collection of TLS utilities and configs
-pub(crate) mod tls;
-
-pub(crate) mod bench;
+pub(crate) use utils::{metrics, quiescence, reconnect};
 
 use std::fmt::Display;
 
 use async_std::task::{self, JoinHandle};
 use beef::Cow;
 
+use self::metrics::{MetricsSender, SinkReporter, SourceReporter};
+use self::sink::{SinkAddr, SinkContext, SinkMsg};
+use self::source::{SourceAddr, SourceContext, SourceMsg};
+use self::utils::quiescence::QuiescenceBeacon;
 use crate::config::Connector as ConnectorConfig;
-use crate::connectors::metrics::{MetricsSinkReporter, SourceReporter};
-use crate::connectors::sink::{SinkAddr, SinkContext, SinkMsg};
-use crate::connectors::source::{SourceAddr, SourceContext, SourceMsg};
 use crate::errors::{Error, ErrorKind, Result};
 use crate::pipeline;
 use crate::system::World;
-use crate::url::ports::{ERR, IN, OUT};
-use crate::url::TremorUrl;
+use crate::url::{
+    ports::{ERR, IN, OUT},
+    TremorUrl,
+};
 use crate::OpConfig;
 use async_std::channel::{bounded, Sender};
 use halfbrown::{Entry, HashMap};
 use tremor_common::ids::ConnectorIdGen;
 use tremor_value::Value;
+use utils::reconnect::{Attempt, ReconnectRuntime};
 use value_trait::{Builder, Mutable};
-
-use self::metrics::MetricsSender;
-use self::quiescence::QuiescenceBeacon;
-use self::reconnect::{Attempt, ReconnectRuntime};
 
 /// sender for connector manager messages
 pub type ManagerSender = Sender<ManagerMsg>;
@@ -447,7 +406,7 @@ impl Manager {
             quiescence_beacon: quiescence_beacon.clone(),
         };
 
-        let sink_metrics_reporter = MetricsSinkReporter::new(
+        let sink_metrics_reporter = SinkReporter::new(
             url.clone(),
             self.metrics_sender.clone(),
             config.metrics_interval_s,
@@ -1123,40 +1082,52 @@ pub trait ConnectorBuilder: Sync + Send {
 #[cfg(not(tarpaulin_include))]
 pub async fn register_builtin_connector_types(world: &World) -> Result<()> {
     world
-        .register_builtin_connector_type("cb", Box::new(cb::Builder::default()))
+        .register_builtin_connector_type("cb", Box::new(impls::cb::Builder::default()))
         .await?;
     world
-        .register_builtin_connector_type("exit", Box::new(exit::Builder::new(world)))
+        .register_builtin_connector_type("exit", Box::new(impls::exit::Builder::new(world)))
         .await?;
     world
-        .register_builtin_connector_type("file", Box::new(file::Builder::default()))
+        .register_builtin_connector_type("file", Box::new(impls::file::Builder::default()))
         .await?;
     world
-        .register_builtin_connector_type("metrics", Box::new(metrics::Builder::default()))
+        .register_builtin_connector_type("metrics", Box::new(impls::metrics::Builder::default()))
         .await?;
     world
-        .register_builtin_connector_type("stdio", Box::new(stdio::Builder::default()))
+        .register_builtin_connector_type("stdio", Box::new(impls::stdio::Builder::default()))
         .await?;
     world
-        .register_builtin_connector_type("tcp_client", Box::new(tcp::client::Builder::default()))
+        .register_builtin_connector_type(
+            "tcp_client",
+            Box::new(impls::tcp::client::Builder::default()),
+        )
         .await?;
     world
-        .register_builtin_connector_type("tcp_server", Box::new(tcp::server::Builder::default()))
+        .register_builtin_connector_type(
+            "tcp_server",
+            Box::new(impls::tcp::server::Builder::default()),
+        )
         .await?;
     world
-        .register_builtin_connector_type("udp_client", Box::new(udp_client::Builder::default()))
+        .register_builtin_connector_type(
+            "udp_client",
+            Box::new(impls::udp::client::Builder::default()),
+        )
         .await?;
     world
-        .register_builtin_connector_type("udp_server", Box::new(udp_server::Builder::default()))
+        .register_builtin_connector_type(
+            "udp_server",
+            Box::new(impls::udp::server::Builder::default()),
+        )
         .await?;
     world
-        .register_builtin_connector_type("kv", Box::new(kv::Builder::default()))
+        .register_builtin_connector_type("kv", Box::new(impls::kv::Builder::default()))
         .await?;
     world
-        .register_builtin_connector_type("wal", Box::new(wal::Builder::default()))
+        .register_builtin_connector_type("wal", Box::new(impls::wal::Builder::default()))
         .await?;
     world
-        .register_builtin_connector_type("bench", Box::new(bench::Builder::default()))
+        .register_builtin_connector_type("bench", Box::new(impls::bench::Builder::default()))
         .await?;
     Ok(())
 }

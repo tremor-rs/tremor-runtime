@@ -13,7 +13,6 @@
 // limitations under the License.
 use crate::connectors::prelude::*;
 use tremor_common::time::nanotime;
-use tremor_script::literal;
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
@@ -104,8 +103,8 @@ impl Connector for Metronome {
     async fn create_source(
         &mut self,
         source_context: SourceContext,
-        builder: super::source::SourceManagerBuilder,
-    ) -> Result<Option<super::source::SourceAddr>> {
+        builder: SourceManagerBuilder,
+    ) -> Result<Option<SourceAddr>> {
         builder.spawn(self.clone(), source_context).map(Some)
     }
 }

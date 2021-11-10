@@ -15,15 +15,13 @@
 //! TCP Client connector - maintains a connection to the configured upstream host
 #![allow(clippy::module_name_repetitions)]
 
+use super::{TcpReader, TcpWriter};
 use crate::connectors::prelude::*;
-
-use crate::connectors::tcp::{TcpReader, TcpWriter};
-use crate::connectors::tls::{tls_client_connector, TLSClientConfig};
+use crate::connectors::utils::tls::{tls_client_connector, TLSClientConfig};
 use async_std::net::TcpStream;
 use async_tls::TlsConnector;
 use either::Either;
 use futures::io::AsyncReadExt;
-use tremor_value::literal;
 
 const URL_SCHEME: &str = "tremor-tcp-client";
 
