@@ -527,7 +527,6 @@ pub type Warnings = std::collections::BTreeSet<Warning>;
 
 /// don't use
 #[allow(clippy::struct_excessive_bools)]
-#[derive(Clone)]
 pub struct Helper<'script, 'registry>
 where
     'script: 'registry,
