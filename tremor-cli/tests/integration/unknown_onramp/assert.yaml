@@ -1,7 +1,0 @@
-status: 1
-name: Crash on unknown onramp type
-asserts:
-  - source: STDERR
-    contains:
-      - |
-        Unknown onramp type bad_onramp

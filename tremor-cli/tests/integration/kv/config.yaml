@@ -45,11 +45,11 @@ binding:
         - "/pipeline/in/{instance}/in"
       "/pipeline/in/{instance}/out":
         - "/connector/kv/{instance}/in"
-        - "/offramp/system::stdout/{instance}/in"
+        - "/connector/system::stdout/{instance}/in"
       "/connector/kv/{instance}/out":
         - "/pipeline/out/{instance}/in"
       "/pipeline/out/{instance}/out":
-        - "/offramp/system::stdout/{instance}/in"
+        - "/connector/system::stdout/{instance}/in"
         - "/connector/output/{instance}/in"
       "/pipeline/out/{instance}/exit":
         - "/connector/exit/{instance}/in"
