@@ -30,7 +30,7 @@ use tremor_runtime::config::Binding;
 use tremor_runtime::postprocessor::Postprocessor;
 use tremor_runtime::preprocessor::Preprocessor;
 use tremor_runtime::repository::BindingArtefact;
-use tremor_script::ast::Helper;
+use tremor_script::ast::{DeployEndpoint, Helper};
 use tremor_script::deploy::Deploy;
 use tremor_script::highlighter::Error as HighlighterError;
 use tremor_script::highlighter::{Highlighter, Term as TermHighlighter};
@@ -440,6 +440,14 @@ fn run_troy_source(_matches: &ArgMatches, src: &str, args: &Value) -> Result<()>
 
     env_logger::init();
 
+    let target_stem = if let Some(stem) = std::path::Path::new(src).file_stem() {
+        stem.to_string_lossy().to_string()
+    } else {
+        eprintln!("Bad troy file, existing");
+        // ALLOW: main.rs
+        std::process::exit(1);
+    };
+
     let raw = slurp_string(&src);
     if let Err(e) = raw {
         eprintln!("Error processing file {}: {}", &src, e);
@@ -462,7 +470,7 @@ fn run_troy_source(_matches: &ArgMatches, src: &str, args: &Value) -> Result<()>
         Ok(deployable) => deployable,
         Err(e) => {
             if let Err(e) = Script::format_error_from_script(&raw, &mut h, &e) {
-                eprintln!("Error: {}", e);
+                eprintln!("Snot Error: {}", e);
             };
             // ALLOW: main.rs
             std::process::exit(1);
@@ -471,36 +479,234 @@ fn run_troy_source(_matches: &ArgMatches, src: &str, args: &Value) -> Result<()>
 
     // TODO refactor remove indirection
     let unit = deployable.deploy.as_deployment_unit()?;
-
-    let mut flows: HashMap<String, srs::FlowDecl> = HashMap::new();
+    let mut atoms: HashMap<String, srs::FlowDecl> = HashMap::new();
+    let mut links = Vec::new();
 
     for (name, stmt) in unit.instances {
-        flows.insert(name.clone(), stmt.atom.clone());
+        if let srs::AtomOfDeployment::Flow(ref flow) = stmt.atom {
+            atoms.insert(name.clone(), flow.clone());
+        }
     }
 
+    // TODO - this should be modularised the same way as with troy deployments
     let storage_directory = Some("./storage".to_string());
 
     block_on(async {
         let (world, _handle) = tremor_runtime::system::World::start(50, storage_directory)
             .await
             .unwrap();
-        // Pipelines are inert until they are interconnected so we can deploy these quiescently
 
-        // Finally we process our flows - this is where the interconnections and
-        // we effectively go live in the legacy ( yaml ) based runtime
+        let mut id = vec![target_stem.clone()];
+        let mut known_artefacts = HashMap::new();
+        for flow in &atoms {
+            let flow_name = flow.0;
+            for artefact in &flow.1.atoms {
+                match artefact {
+                    srs::AtomOfDeployment::Connector(stmt) => {
+                        let name = &stmt.id;
+                        id.push(name.clone());
+                        let instance = id.join("::").to_string();
+                        match stmt.kind.as_str() {
+                            "blaster" => {
+                                let url =
+                                    TremorUrl::parse(&format!("/onramp/{}/{}", name, instance))
+                                        .unwrap();
+                                let yaml = serde_yaml::to_string(&stmt.args).unwrap();
+                                let config: tremor_runtime::config::OnRamp =
+                                    serde_yaml::from_str(&yaml).unwrap();
+                                let artefact_id = stmt.id.clone();
+                                known_artefacts.insert(artefact_id, url.clone());
+                                world
+                                    .repo
+                                    .publish_onramp(&url, false, config)
+                                    .await
+                                    .unwrap();
+                            }
+                            "blackhole" => {
+                                let url =
+                                    TremorUrl::parse(&format!("/offramp/{}/{}", name, instance))
+                                        .unwrap();
+                                let yaml = serde_yaml::to_string(&stmt.args).unwrap();
+                                let config: tremor_runtime::config::OffRamp =
+                                    serde_yaml::from_str(&yaml).unwrap();
+                                let artefact_id = stmt.id.clone();
+                                known_artefacts.insert(artefact_id, url.clone());
+                                world
+                                    .repo
+                                    .publish_offramp(&url, false, config)
+                                    .await
+                                    .unwrap();
+                            }
+                            "stdin" => {
+                                let url =
+                                    TremorUrl::parse(&format!("/onramp/{}/{}", name, instance))
+                                        .unwrap();
+                                let yaml = serde_yaml::to_string(&stmt.args).unwrap();
+                                let config: tremor_runtime::config::OnRamp =
+                                    serde_yaml::from_str(&yaml).unwrap();
+                                let artefact_id = stmt.id.clone();
+                                known_artefacts.insert(artefact_id, url.clone());
+                                world
+                                    .repo
+                                    .publish_onramp(&url, false, config)
+                                    .await
+                                    .unwrap();
+                            }
+                            "stdout" => {
+                                let url =
+                                    TremorUrl::parse(&format!("/offramp/{}/{}", name, instance))
+                                        .unwrap();
+                                let yaml = serde_yaml::to_string(&stmt.args).unwrap();
+                                let config: tremor_runtime::config::OffRamp =
+                                    serde_yaml::from_str(&yaml).unwrap();
+                                let artefact_id = stmt.id.clone();
+                                known_artefacts.insert(artefact_id, url.clone());
+                                world
+                                    .repo
+                                    .publish_offramp(&url, false, config)
+                                    .await
+                                    .unwrap();
+                            }
+                            "metronome" => {
+                                let url =
+                                    TremorUrl::parse(&format!("/onramp/{}/{}", name, instance))
+                                        .unwrap();
+                                let yaml = serde_yaml::to_string(&stmt.args).unwrap();
+                                let config: tremor_runtime::config::OnRamp =
+                                    serde_yaml::from_str(&yaml).unwrap();
+                                let artefact_id = stmt.id.clone();
+                                known_artefacts.insert(artefact_id, url.clone());
+                                world
+                                    .repo
+                                    .publish_onramp(&url, false, config)
+                                    .await
+                                    .unwrap();
+                            }
+                            otherwise => {
+                                dbg!("Ignoring ", otherwise);
+                            }
+                        }
 
-        for (name, flow) in &flows {
-            let url = TremorUrl::parse(&format!("/binding/{}/01", name)).unwrap();
-            let mut links: hashbrown::HashMap<TremorUrl, Vec<TremorUrl>> =
-                hashbrown::HashMap::new();
-            for link in &flow.links {
-                links.insert(link.0.clone(), vec![link.1.clone()]);
+                        id.pop();
+                    }
+                    srs::AtomOfDeployment::Pipeline(stmt) => {
+                        id.push(stmt.id.clone());
+                        let instance = id.join("::").to_string();
+                        let url = TremorUrl::parse(&format!(
+                            "/pipeline/{}/{}",
+                            stmt.id.clone(),
+                            instance
+                        ))
+                        .unwrap();
+                        let artefact_id = stmt.id.clone();
+                        known_artefacts.insert(artefact_id, url.clone());
+                        world
+                            .repo
+                            .publish_pipeline(
+                                &url,
+                                false,
+                                tremor_pipeline::query::Query(
+                                    tremor_script::Query::from_troy(&raw, &deployable.deploy, stmt)
+                                        .unwrap(),
+                                ),
+                            )
+                            .await
+                            .unwrap();
+                        id.pop();
+                    }
+                    srs::AtomOfDeployment::Flow(stmt) => {
+                        // TODO once clone_into hits stable flow.links.clone_into(&mut links);
+                        for link in &stmt.links {
+                            links.push(link);
+                        }
+                    }
+                }
             }
+
+            /// TODO From here on were emulating tremor server run, but without the runtime
+            /// TODO We NEED hygienic errors for this step - which is an enhancement over the
+            ///      YAML days where we only got ERROR logs ...
+            /// 
+            
+            let mut binding_links = hashbrown::HashMap::new();
+            let instance = id.join("::").to_string();
+            let url = TremorUrl::parse(&format!("/binding/{}/{}", flow_name, &instance)).unwrap();
+            for link in &flow.1.links {
+                match (&link.from, &link.to) {
+                    (
+                        DeployEndpoint::Troy(origin, origin_port),
+                        DeployEndpoint::Troy(target, target_port),
+                    ) => match known_artefacts.get(origin) {
+                        Some(artefact) => {
+                            let mut from = artefact.clone();
+                            match origin_port {
+                                Some(port) => from.set_port(port),
+                                None => from.set_port("out"),
+                            }
+                            match known_artefacts.get(target) {
+                                Some(to) => {
+                                    let mut to = to.clone();
+                                    match target_port {
+                                        Some(port) => to.set_port(port),
+                                        None => to.set_port("in"),
+                                    }
+                                    dbg!(&from.to_string(), &to.to_string());
+                                    binding_links.insert(from, vec![to]);
+                                }
+                                None => {
+                                    dbg!("target not found error");
+                                }
+                            }
+                        }
+                        None => {
+                            dbg!("origin not found error");
+                        }
+                    },
+                    (DeployEndpoint::System(origin), DeployEndpoint::System(target)) => {
+                        let from = origin.clone();
+                        let to = target.clone();
+                        binding_links.insert(from, vec![to]);
+                    }
+                    (DeployEndpoint::System(origin), DeployEndpoint::Troy(target, port)) => {
+                        let from = origin.clone();
+                        match known_artefacts.get(target) {
+                            Some(to) => {
+                                let mut to = to.clone();
+                                match port {
+                                    Some(port) => to.set_port(port),
+                                    None => to.set_port("out"),
+                                }
+                                binding_links.insert(from, vec![to]);
+                            }
+                            None => {
+                                dbg!("target not found error");
+                            }
+                        }
+                    }
+                    (DeployEndpoint::Troy(origin, port), DeployEndpoint::System(target)) => {
+                        let to = target.clone();
+                        match known_artefacts.get(origin) {
+                            Some(from) => {
+                                let mut from = from.clone();
+                                match port {
+                                    Some(port) => from.set_port(port),
+                                    None => from.set_port("out"),
+                                }
+                                binding_links.insert(from, vec![to]);
+                            }
+                            None => {
+                                dbg!("target not found error");
+                            }
+                        }
+                    }
+                }
+            }
+
             let binding = BindingArtefact {
                 binding: Binding {
-                    id: name.clone(),
+                    id: flow_name.clone(),
                     description: "Troy managed binding".to_string(),
-                    links,
+                    links: binding_links,
                 },
                 mapping: None,
             };
@@ -509,8 +715,7 @@ fn run_troy_source(_matches: &ArgMatches, src: &str, args: &Value) -> Result<()>
                 .publish_binding(&url, false, binding)
                 .await
                 .unwrap();
-            let mut kv = hashbrown::HashMap::new();
-            kv.insert("troy".to_string(), "troy".to_string());
+            let kv = hashbrown::HashMap::new();
             world.link_binding(&url, kv).await.unwrap();
         }
 

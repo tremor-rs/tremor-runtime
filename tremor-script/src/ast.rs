@@ -665,6 +665,9 @@ where
         }
     }
 
+    // FIXME TODO This needs to be revisited so that an error is not propagated for troy, but is propagated otherwise for trickle/tremor and/or semantics reconsidered given troy needs
+    #[allow(clippy::unnecessary_wraps)] // FIXME TODO See above
+    #[allow(clippy::branches_sharing_code)] // FIXME TODO See above
     fn register_fun(&mut self, f: CustomFn<'script>) -> Result<usize> {
         let i = self.func_vec.len();
         let mut mf = self.module.clone();
@@ -674,7 +677,9 @@ where
             self.func_vec.push(f);
             Ok(i)
         } else {
-            Err(format!("function {} already defined.", f.name).into())
+            // TODO prevent duck typing !!!
+            // Err(format!("function {} already defined.", f.name).into())
+            Ok(i)
         }
     }
 
