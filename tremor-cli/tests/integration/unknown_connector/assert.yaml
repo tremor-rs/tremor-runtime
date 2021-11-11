@@ -1,0 +1,7 @@
+status: 1
+name: Crash on unknown connector type
+asserts:
+  - source: STDERR
+    contains:
+      - |
+        Connector Type 'bad_connector' unknown

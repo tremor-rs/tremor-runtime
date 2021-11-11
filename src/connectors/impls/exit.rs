@@ -24,9 +24,10 @@
 //! * delay: milliseconds to wait before stopping the process
 use crate::connectors::prelude::*;
 use crate::system::{ShutdownMode, World};
+use async_std::task;
 use std::time::Duration;
 
-use simd_json::ValueAccess;
+use value_trait::ValueAccess;
 
 #[derive(Clone)]
 pub struct Exit {
@@ -71,13 +72,13 @@ impl Sink for Exit {
         &mut self,
         _input: &str,
         event: tremor_pipeline::Event,
-        _ctx: &SinkContext,
+        ctx: &SinkContext,
         _serializer: &mut EventSerializer,
         _start: u64,
     ) -> Result<SinkReply> {
         for (value, _meta) in event.value_meta_iter() {
             if let Some(delay) = value.get_u64(Self::DELAY) {
-                async_std::task::sleep(Duration::from_millis(delay)).await;
+                task::sleep(Duration::from_millis(delay)).await;
             }
             let mode = if value.get_bool(Self::GRACEFUL).unwrap_or(true) {
                 ShutdownMode::Graceful
@@ -85,7 +86,14 @@ impl Sink for Exit {
                 ShutdownMode::Forceful
             };
             // this should stop the whole server process
-            self.world.stop(mode).await?;
+            let world = self.world.clone();
+            let url = ctx.url.clone();
+            // we spawn this out into another task, so we don't block the sink loop handling control plane messages
+            task::spawn(async move {
+                if let Err(e) = world.stop(mode).await {
+                    error!("[Sink::{}] Error stopping Tremor: {}", &url, e);
+                }
+            });
         }
         Ok(SinkReply::default())
     }

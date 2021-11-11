@@ -16,3 +16,4 @@
 {"event":"velociraptor","meta":{"connector":{"kv":{"ok":"snot","op":"delete"}},"correlation":"16"}}
 {"event":null,"meta":{"connector":{"kv":{"ok":"snot","op":"get"}},"correlation":"17"}}
 {"event":"exit","meta":{"connector":{"kv":{"ok":"exit","op":"put"}},"correlation":"\"exit\""}}
+{"event":"exit","meta":{"connector":{"kv":{"ok":"exit","op":"get"}},"correlation":"19"}}

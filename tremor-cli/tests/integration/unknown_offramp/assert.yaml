@@ -1,7 +1,0 @@
-status: 1
-name: Crash on unknown offramp type
-asserts:
-  - source: STDERR
-    contains:
-      - |
-        Unknown offramp type bad_offramp
