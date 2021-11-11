@@ -119,6 +119,13 @@ impl<P> From<std::sync::PoisonError<P>> for Error {
     }
 }
 
+impl<T: std::fmt::Debug> From<aws_sdk_s3::SdkError<T>> for Error {
+    // FIXME: dbg or display trait
+    fn from(e: aws_sdk_s3::SdkError<T>) -> Self {
+        Self::from(ErrorKind::S3Error(format!("{:?}", e)))
+    }
+}
+
 #[cfg(test)]
 impl PartialEq for Error {
     fn eq(&self, _other: &Self) -> bool {
@@ -176,11 +183,17 @@ error_chain! {
         UrlParserError(url::ParseError);
         Utf8Error(std::str::Utf8Error);
         WsError(async_tungstenite::tungstenite::Error);
+        EnvVarError(std::env::VarError);
         YamlError(serde_yaml::Error) #[doc = "Error during yaml parsing"];
         Wal(qwal::Error);
     }
 
     errors {
+        S3Error(n: String) {
+            description("S3 Error")
+            display("S3Error: {}", n)
+        }
+
         UnknownOp(n: String, o: String) {
             description("Unknown operator")
                 display("Unknown operator: {}::{}", n, o)
