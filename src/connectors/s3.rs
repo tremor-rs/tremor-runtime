@@ -104,35 +104,32 @@ impl Sink for S3Sink {
             // FIXME: ayyyyy
             // let operation = meta.get("operation").map(|value| value.to_string());
 
+            // FIXME: Handle not found case.
             let object_key = meta.get("key").map(|value| value.to_string());
 
             // Also handle aggreagtion here.
             // FIXME: what to do for multiple data??
-            let data: Vec<u8> = serializer
+            let data = serializer
                 .serialize(event, ingest_id)?
                 .into_iter()
-                .flatten()
-                .collect();
+                .flatten();
 
-            // self.upload_object(object_key.unwrap(), data[0].clone())
-            //     .await?;
+            self.buffer.extend(data);
 
-            if object_key.as_ref().unwrap() != &self.current_key {
+            if *object_key.as_ref().unwrap() != self.current_key {
                 // Complete the uploads for previous key.
                 self.set_new_key(object_key.unwrap()).await?;
             }
 
-            self.buffer.extend(data);
-
             // FIXME: Make a better aggregation logic.
-            if self.buffer.len() > 5 * 1024 * 1024 {
+            if self.buffer.len() > 6 * 1024 * 1024 {
                 self.upload_part().await?;
             }
 
             // FIXME: Identify errors which indicate whether the client failed.
             // then notify.
         }
-
+        // warn!("BufferSize: {}", self.buffer.len());
         Ok(SinkReply::default())
     }
 
@@ -151,8 +148,11 @@ impl Sink for S3Sink {
     }
 
     async fn on_stop(&mut self, _ctx: &mut SinkContext) {
+        warn!("Stopping S3 SINK");
         // Commit the final upload.
-        self.complete_multipart().await.unwrap();
+        if self.buffer.len() > 0 {
+            self.complete_multipart().await.unwrap();
+        }
     }
 
     fn asynchronous(&self) -> bool {
@@ -176,7 +176,6 @@ impl Connector for S3Connector {
     }
 
     /// Stream the events to the bucket
-    // Only runs once.
     async fn create_sink(
         &mut self,
         sink_context: SinkContext,
@@ -257,24 +256,6 @@ impl S3Sink {
         Ok(())
     }
 
-    // async fn upload_object(
-    //     &mut self,
-    //     key: String,
-    //     object_bytes: Vec<u8>,
-    // ) -> Result<s3::output::PutObjectOutput> {
-    //     let resp = self
-    //         .client
-    //         .as_ref()
-    //         .unwrap()
-    //         .put_object()
-    //         .bucket(self.bucket.clone())
-    //         .key(key)
-    //         .body(s3::ByteStream::from(object_bytes))
-    //         .send()
-    //         .await?;
-    //     Ok(resp)
-    // }
-
     async fn initiate_multipart(&mut self, key: String) -> Result<()> {
         self.current_key = key;
         self.part_number = 0; // Reset to new sequence.
@@ -292,6 +273,11 @@ impl S3Sink {
     }
 
     async fn upload_part(&mut self) -> Result<()> {
+        warn!(
+            "Uploading part {} with buffer size {}",
+            self.part_number,
+            self.buffer.len()
+        );
         let buf = mem::take(&mut self.buffer);
         self.part_number += 1;
         let resp = self
@@ -306,6 +292,7 @@ impl S3Sink {
             .key(self.current_key.clone())
             .send()
             .await?;
+        warn!("Completed part upload");
 
         // Insert into the list of parts to upload.
         self.parts.push(
@@ -319,10 +306,11 @@ impl S3Sink {
 
     async fn complete_multipart(&mut self) -> Result<()> {
         // Upload the last part if any.
-        if !self.buffer.is_empty() {
+        if self.buffer.len() > 0 {
             self.upload_part().await?;
         }
 
+        warn!("Completing Multipart Upload");
         let completed_parts = mem::take(&mut self.parts);
         self.client
             .as_ref()
@@ -338,6 +326,7 @@ impl S3Sink {
             )
             .send()
             .await?;
+        warn!("Completed Multipart Upload");
         Ok(())
     }
 }
