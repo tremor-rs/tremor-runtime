@@ -211,7 +211,11 @@ impl Source for Blaster {
         }
         if Some(self.acc.iterations) == self.iterations {
             self.finished = true;
-            return Ok(SourceReply::EndStream(DEFAULT_STREAM_ID));
+            return Ok(SourceReply::EndStream {
+                origin_uri: self.origin_uri.clone(),
+                stream_id: DEFAULT_STREAM_ID,
+                meta: None,
+            });
         };
         if self.finished {
             Ok(SourceReply::Empty(100))
