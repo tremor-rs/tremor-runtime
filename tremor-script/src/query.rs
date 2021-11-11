@@ -50,6 +50,25 @@ where
         self.query.suffix()
     }
 
+    /// Converts a troy embedded pipeline with resolved arguments to a runnable query
+    /// # Errors
+    ///   If the query fails to parse and convert correctly
+    // pub fn from_troy(
+    //     src: &str,
+    //     deploy: &srs::Deploy,
+    //     query: &crate::srs::PipelineDecl,
+    // ) -> std::result::Result<Self, CompilerError> {
+    //     let warnings = BTreeSet::new();
+    //     let locals = 0;
+    //     dbg!(&query.id);
+    //     Ok(Self {
+    //         query: crate::srs::Query::new_from_deploy(deploy, &query.id, &query.target)?,
+    //         source: src.to_string(),
+    //         warnings,
+    //         locals,
+    //     })
+    // }
+
     /// Parses a string into a query
     ///
     /// # Errors
@@ -96,30 +115,44 @@ where
 
         let mut include_stack = lexer::IncludeStack::default();
 
+        let target_name = std::path::Path::new(file_name)
+            .file_stem()
+            .ok_or(CompilerError {
+                error: "Snot".into(),
+                cus: lexer::IncludeStack::default().into_cus(),
+            })?
+            .to_string_lossy()
+            .to_string();
+
         let r = |include_stack: &mut lexer::IncludeStack| -> Result<Self> {
-            let query = srs::Query::try_new::<Error, _>(source.clone(), |src: &mut String| {
-                let mut helper = ast::Helper::new(reg, aggr_reg, cus);
-                helper.consts.args = args.clone_static();
-                let cu = include_stack.push(&file_name)?;
-                let lexemes: Vec<_> = lexer::Preprocessor::preprocess(
-                    module_path,
-                    file_name,
-                    src,
-                    cu,
-                    include_stack,
-                )?;
-                let filtered_tokens = lexemes
-                    .into_iter()
-                    .filter_map(Result::ok)
-                    .filter(|t| !t.value.is_ignorable());
-                let script_stage_1 = crate::parser::g::QueryParser::new().parse(filtered_tokens)?;
-                let script = script_stage_1.up_script(&mut helper)?;
+            let query = srs::Query::try_new::<Error, _>(
+                &target_name,
+                source.clone(),
+                |src: &mut String| {
+                    let mut helper = ast::Helper::new(reg, aggr_reg, cus);
+                    helper.consts.args = args.clone_static();
+                    let cu = include_stack.push(&file_name)?;
+                    let lexemes: Vec<_> = lexer::Preprocessor::preprocess(
+                        module_path,
+                        file_name,
+                        src,
+                        cu,
+                        include_stack,
+                    )?;
+                    let filtered_tokens = lexemes
+                        .into_iter()
+                        .filter_map(Result::ok)
+                        .filter(|t| !t.value.is_ignorable());
+                    let script_stage_1 =
+                        crate::parser::g::QueryParser::new().parse(filtered_tokens)?;
+                    let script = script_stage_1.up_script(&mut helper)?;
 
-                std::mem::swap(&mut warnings, &mut helper.warnings);
-                locals = helper.locals.len();
+                    std::mem::swap(&mut warnings, &mut helper.warnings);
+                    locals = helper.locals.len();
 
-                Ok(script)
-            })?;
+                    Ok(script)
+                },
+            )?;
 
             Ok(Self {
                 query,

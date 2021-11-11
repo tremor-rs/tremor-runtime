@@ -108,6 +108,23 @@ impl_fqn!(ConnectorDecl);
 
 type DeployStmts<'script> = Vec<DeployStmt<'script>>;
 
+/// A deployment link
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct DeployLink {
+    /// The instance we're connecting to
+    pub from: DeployEndpoint,
+    /// The instance being connected
+    pub to: DeployEndpoint,
+}
+/// A deployment endpoint
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize)]
+pub enum DeployEndpoint {
+    /// Refers to a builtin or pre-existing deployed artefact instance
+    System(TremorUrl),
+    /// Refers to a local artefact being deployed in a troy definition
+    Troy(String, Option<String>),
+}
+
 /// A flow declaration
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct FlowDecl<'script> {
@@ -117,7 +134,9 @@ pub struct FlowDecl<'script> {
     /// Resolved argument defaults
     pub params: Option<HashMap<String, Value<'script>>>,
     /// Links between artefacts in the flow
-    pub links: HashMap<TremorUrl, TremorUrl>,
+    pub links: Vec<DeployLink>,
+    /// Deployment atoms
+    pub atoms: Vec<DeployStmt<'script>>,
     /// Documentation comments
     #[serde(skip)]
     pub docs: Option<String>,
@@ -134,7 +153,7 @@ pub struct CreateStmt<'script> {
     /// Identifer for the creation
     pub node_id: NodeId,
     /// Atomic unit of deployment
-    pub atom: FlowDecl<'script>,
+    pub atom: DeployStmt<'script>,
     /// Documentation comments
     #[serde(skip)]
     pub docs: Option<String>,
