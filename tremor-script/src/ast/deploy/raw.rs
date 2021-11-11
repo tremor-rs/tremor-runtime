@@ -18,6 +18,8 @@
 use super::BaseExpr;
 use super::ConnectorDecl;
 use super::CreateStmt;
+use super::DeployEndpoint;
+use super::DeployLink;
 use super::FlowDecl;
 use super::Value;
 use crate::ast::{
@@ -36,7 +38,6 @@ use crate::pos::Location;
 use crate::AggrType;
 use crate::EventContext;
 use beef::Cow;
-use halfbrown::HashMap;
 use tremor_common::time::nanotime;
 use tremor_common::url::TremorUrl;
 use tremor_value::literal;
@@ -143,6 +144,7 @@ impl<'script> DeployRaw<'script> {
         })
     }
 }
+
 /// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum DeployStmtRaw<'script> {
@@ -151,9 +153,9 @@ pub enum DeployStmtRaw<'script> {
     /// we're forced to make this pub because of lalrpop
     FlowDecl(FlowDeclRaw<'script>),
     /// we're forced to make this pub because of lalrpop
-    PipelineDecl(PipelineDeclRaw<'script>),
-    /// we're forced to make this pub because of lalrpop
     ConnectorDecl(ConnectorDeclRaw<'script>),
+    /// we're forced to make this pub because of lalrpop
+    PipelineDecl(PipelineDeclRaw<'script>),
     /// we're forced to make this pub because of lalrpop
     ModuleStmt(DeployModuleStmtRaw<'script>),
     /// we're forced to make this pub because of lalrpop
@@ -184,6 +186,7 @@ impl<'script> Upable<'script> for DeployStmtRaw<'script> {
                 Ok(DeployStmt::FlowDecl(Box::new(stmt)))
             }
             DeployStmtRaw::CreateStmt(stmt) => {
+                // FIXME TODO constrain to flow create's for top level
                 let stmt: CreateStmt = stmt.up(helper)?;
                 helper.instances.insert(stmt.fqn(), stmt.clone());
                 Ok(DeployStmt::CreateStmt(Box::new(stmt)))
@@ -301,18 +304,16 @@ pub struct FlowDeclRaw<'script> {
     pub(crate) end: Location,
     pub(crate) id: String,
     pub(crate) params: Option<WithExprsRaw<'script>>,
-    pub(crate) links: DeployLinksRaw<'script>,
     pub(crate) docs: Option<Vec<Cow<'script, str>>>,
+    pub(crate) atoms: Vec<DeployLinkRaw<'script>>,
 }
-
-type ModularTarget<'script> = (Vec<IdentRaw<'script>>, IdentRaw<'script>);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// we're forced to make this pub because of lalrpop
 pub enum DeployEndpointRaw<'script> {
     Legacy(StringLitRaw<'script>),
     // TODO modular target with optional port specification - await connectors before revising
-    Troy(ModularTarget<'script>),
+    Troy(IdentRaw<'script>, Option<IdentRaw<'script>>),
 }
 
 impl<'script> Upable<'script> for FlowDeclRaw<'script> {
@@ -328,31 +329,38 @@ impl<'script> Upable<'script> for FlowDeclRaw<'script> {
         //
         helper.module.push(self.id.clone());
 
-        let mut links = HashMap::new();
-        for link in self.links {
-            let from = match link.from {
-                DeployEndpointRaw::Legacy(string_url) => {
-                    let literal = string_url.up(helper)?;
-                    let raw_url = run_lit_str(helper, &literal);
-                    TremorUrl::parse(&raw_url?.to_string())?
+        let mut links = Vec::new();
+        let mut atoms = Vec::new();
+        for link in self.atoms {
+            match link {
+                DeployLinkRaw::Link(from, to) => {
+                    let from = match from {
+                        DeployEndpointRaw::Legacy(string_url) => {
+                            let literal = string_url.up(helper)?;
+                            let raw_url = run_lit_str(helper, &literal);
+                            DeployEndpoint::System(TremorUrl::parse(&raw_url?.to_string())?)
+                        }
+                        DeployEndpointRaw::Troy(id, port) => {
+                            DeployEndpoint::Troy(id.to_string(), port.map(|port| port.to_string()))
+                        }
+                    };
+                    let to = match to {
+                        DeployEndpointRaw::Legacy(string_url) => {
+                            let literal = string_url.up(helper)?;
+                            let raw_url = run_lit_str(helper, &literal);
+                            DeployEndpoint::System(TremorUrl::parse(&raw_url?.to_string())?)
+                        }
+                        DeployEndpointRaw::Troy(id, port) => {
+                            DeployEndpoint::Troy(id.to_string(), port.map(|port| port.to_string()))
+                        }
+                    };
+                    links.push(DeployLink { from, to });
                 }
-                DeployEndpointRaw::Troy(_modular_target) => {
-                    // TODO modular url target resolution and validation - await connectors branch merge
-                    TremorUrl::parse("fake-it")?
+                DeployLinkRaw::Atom(stmt) => {
+                    let stmt: CreateStmt = stmt.up(helper)?;
+                    atoms.push(DeployStmt::CreateStmt(Box::new(stmt)));
                 }
-            };
-            let to = match link.to {
-                DeployEndpointRaw::Legacy(string_url) => {
-                    let literal = string_url.up(helper)?;
-                    let raw_url = run_lit_str(helper, &literal);
-                    TremorUrl::parse(&raw_url?.to_string())?
-                }
-                DeployEndpointRaw::Troy(_modular_target) => {
-                    // TODO modular url target resolution and validation
-                    TremorUrl::parse("fake-it")?
-                }
-            };
-            links.insert(from, to);
+            }
         }
 
         let flow_decl = FlowDecl {
@@ -360,6 +368,7 @@ impl<'script> Upable<'script> for FlowDeclRaw<'script> {
             node_id: NodeId::new(self.id, helper.module.clone()),
             params: self.params.up(helper)?,
             links,
+            atoms,
             docs: self
                 .docs
                 .map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n")),
@@ -375,11 +384,11 @@ pub type DeployLinksRaw<'script> = Vec<DeployLinkRaw<'script>>;
 
 /// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct DeployLinkRaw<'script> {
+pub enum DeployLinkRaw<'script> {
     /// we're forced to make this pub because of lalrpop
-    pub from: DeployEndpointRaw<'script>,
+    Link(DeployEndpointRaw<'script>, DeployEndpointRaw<'script>),
     /// we're forced to make this pub because of lalrpop
-    pub to: DeployEndpointRaw<'script>,
+    Atom(CreateStmtRaw<'script>),
 }
 
 /// we're forced to make this pub because of lalrpop
@@ -430,7 +439,7 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
             mid: helper.add_meta_w_name(self.start, self.end, &self.id),
             node_id: NodeId::new(self.id.to_string(), helper.module.clone()),
             target: self.target.to_string(),
-            atom,
+            atom: DeployStmt::FlowDecl(Box::new(atom)),
             docs: self
                 .docs
                 .map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n")),

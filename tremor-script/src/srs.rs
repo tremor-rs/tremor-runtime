@@ -14,13 +14,12 @@
 
 use crate::{
     ast::BaseRef,
-    ast::{self, query, NodeId},
+    ast::{self, query, NodeId, DeployLink},
     errors::{Error, Result},
     prelude::*,
 };
 use halfbrown::HashMap;
 use std::{fmt::Debug, mem, pin::Pin, sync::Arc};
-use tremor_common::url::TremorUrl;
 
 ///! This file includes our self referential structs
 
@@ -63,6 +62,17 @@ pub struct UnitOfDeployment {
     /// Instances for this deployment unit
     pub instances: HashMap<String, CreateStmt>,
 }
+
+ /// A fully resolved deployable artefact
+ #[derive(Clone, Debug, PartialEq)]
+ pub enum AtomOfDeployment {
+     /// A deployable pipeline instance
+     Pipeline(Query),
+     /// A deployable connector instance
+     Connector(ConnectorDecl),
+     /// A deployable flow instance
+     Flow(FlowDecl),
+ }
 
 impl Deploy {
     /// Provides a Graphviz dot representation of the deployment graph
@@ -123,8 +133,20 @@ impl Deploy {
 
         for stmt in &self.script.stmts {
             if let StmtKind::CreateStmt(ref stmt) = stmt {
-                let atom = FlowDecl::new_from_deploy(self, &stmt.atom.node_id)?;
-                // let atom = CreateStmt::new_from_stmt(self, &stmt)?;
+                // FIXME TODO Caching pre friday-design behaviour - until we verify the friday semantics
+//                let atom = FlowDecl::new_from_deploy(self, &stmt.atom.fqn())?;
+                let atom = match &stmt.atom {
+                    // StmtKind::PipelineDecl(atom) => AtomOfDeployment::Pipeline(
+                    //     PipelineDecl::new_from_deploy(self, &atom.fqn(), &atom.fqn())?,
+                    // ),
+                    // StmtKind::ConnectorDecl(atom) => {
+                    //     AtomOfDeployment::Connector(ConnectorDecl::new_from_deploy(self, &atom.fqn())?)
+                    // }
+                    StmtKind::FlowDecl(atom) => {
+                        FlowDecl::new_from_deploy(self, &atom.node_id)?
+                    }
+                    _otherwise => todo!(),
+                };
                 instances.insert(
                     stmt.fqn(),
                     CreateStmt {
@@ -153,6 +175,7 @@ pub struct CreateStmt {
     pub node_id: NodeId,
     /// Atomic unit of deployment
     pub atom: FlowDecl,
+//    pub atom: AtomOfDeployment,
 }
 
 /*
@@ -239,6 +262,8 @@ pub struct Query {
     /// The vector of raw input values
     raw: Vec<Arc<Pin<Vec<u8>>>>,
     query: ast::Query<'static>,
+    id: String,
+    target: String,
 }
 
 #[cfg(not(tarpaulin_include))] // this is a simple Debug implementation
@@ -253,18 +278,16 @@ impl Query {
     /// deployment where the query is embedded in pipeline statements
     /// # Errors
     /// If the query self-referential struct cannot be safely created by id from the deployment provided
-    ///
-    /// FIXME: is passing in the helper here sound? This probably needs to be a clojure here to
-    ///        ensure lifetimes
-    pub fn new_from_deploy<'script, 'registry>(
+    pub fn new_from_deploy(
         origin: &Deploy,
         id: &str,
+        target: &str,
     ) -> std::result::Result<Self, CompilerError> {
         let resolved = origin
             .script
             .pipelines
             .values()
-            .find(|query| id == query.fqn())
+            .find(|query| target == query.fqn())
             .ok_or_else(|| CompilerError {
                 error: Error::from(format!("Invalid query for pipeline {}", &id).as_str()),
                 cus: vec![],
@@ -277,6 +300,8 @@ impl Query {
             /// of interest referential safety should be preserved
             raw: origin.raw.clone(),
             query: unsafe { mem::transmute(query) },
+            id: id.to_string(),
+            target: resolved.fqn(),
         })
     }
 
@@ -297,7 +322,8 @@ impl Query {
     ///
     /// # Errors
     /// errors if the conversion function fails
-    pub fn try_new<E, F>(mut raw: String, f: F) -> std::result::Result<Self, E>
+    // FIXME TODO pass in filename of trickle or id of troy pipe definiton here
+    pub fn try_new<E, F>(_target: &str, mut raw: String, f: F) -> std::result::Result<Self, E>
     where
         F: for<'head> FnOnce(&'head mut String) -> std::result::Result<ast::Query<'head>, E>,
     {
@@ -318,6 +344,8 @@ impl Query {
         Ok(Self {
             raw,
             query: structured,
+            id: "id".to_string(),        // FIXME TODO fix
+            target: "query".to_string(), // FIXME TODO fix
         })
     }
 
@@ -565,7 +593,9 @@ pub struct FlowDecl {
     /// Arguments for this flow definition
     pub params: Option<HashMap<String, Value<'static>>>,
     /// Link specifications
-    pub links: HashMap<TremorUrl, TremorUrl>,
+    pub links: Vec<DeployLink>,
+    /// Artefacts to deploy with this flow
+    pub atoms: Vec<AtomOfDeployment>,
 }
 
 #[cfg(not(tarpaulin_include))] // this is a simple Debug implementation
@@ -594,6 +624,40 @@ impl FlowDecl {
                 cus: vec![],
             })?;
 
+        let mut srs_atoms = Vec::new();
+        for atom in &flow.atoms {
+            if let ast::DeployStmt::CreateStmt(stmt) = atom {
+                match &stmt.atom {
+                    ast::DeployStmt::ConnectorDecl(_instance) => {
+                        // TODO wire up args
+                        srs_atoms.push(AtomOfDeployment::Connector(
+                            ConnectorDecl::new_from_deploy(origin, &atom.fqn())?,
+                        ));
+                    }
+                    ast::DeployStmt::PipelineDecl(instance) => {
+                        // TODO wire up args
+                        srs_atoms.push(AtomOfDeployment::Pipeline(Query::new_from_deploy(
+                            origin,
+                            &atom.fqn(),
+                            &instance.fqn(),
+                        )?));
+                    }
+                    ast::DeployStmt::FlowDecl(_skip) => {
+                        // FIXME TODO We do not enable sub-flows within flows at this time
+                        //      Decision
+                        //          1 - Error ( cheap )
+                        //          2 - Or, allow sub-flows where they are self-describing and don't use the system connection type ( not so cheap, preferable )
+                        //
+                        // dbg!("Cannot deploy sub flows at this time");
+                        continue;
+                    }
+                    _otherwise => {
+                        // FIXME TODO Error otherwise
+                        continue;
+                    }
+                }
+            }
+        }
         Ok(Self {
             /// We capture the origin - so that the pinned raw memory is cached
             /// with our own self-reference composing a self-referential struct
@@ -603,6 +667,7 @@ impl FlowDecl {
             id: id.to_string(),
             params: flow.params.clone(),
             links: flow.links.clone(),
+            atoms: srs_atoms,
         })
     }
 }

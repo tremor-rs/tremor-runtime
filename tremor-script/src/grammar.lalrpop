@@ -42,7 +42,6 @@ DeployStmts: DeployStmtsRaw<'input> = {
   <item:DeployStmt> ";"? => vec![item],
 }
 
-
 DeployStmt: DeployStmtRaw<'input> = {
     DeployModuleStmt => DeployStmtRaw::ModuleStmt(<>),
     DefinePipeline => DeployStmtRaw::PipelineDecl(<>),
@@ -56,8 +55,6 @@ DeployDeployStmt: DeployStmtRaw<'input> = {
     <start:@L> <docs:DocComment> "deploy" <id:Ident> <params:(WithEndClause)?> <end:@L> => DeployStmtRaw::CreateStmt(CreateStmtRaw { start, end, id: id.clone(),  module: vec![], target: id, params, docs }),
 }
 
-
-
 ConnectorKind: IdentRaw<'input> = {
     <Ident> => <>,
 }
@@ -68,7 +65,7 @@ DeployModuleStmt: DeployModuleStmtRaw<'input> = {
 }
 
 WithDeployLinks: DeployLinksRaw<'input> = {
-    "links" <links:DeployLinks> => <>,
+    "flow" <links:DeployLinks> => <>,
 }
 
 DeployLinks: DeployLinksRaw<'input> = {
@@ -83,16 +80,27 @@ DeployLinks_: DeployLinksRaw<'input> = {
     <Sep<DeployLinks_, DeployLink, ";">> => <>
 }
 
+DeployCreateKind: String = {
+    // FIXME TODO wire kind into AST and check declared kind is referenced kind
+    "connector" => <>.to_string(),
+    "pipeline" => <>.to_string(),
+    "flow" => <>.to_string()
+}
+
 DeployLink: DeployLinkRaw<'input> = {
-    // TODO TBD - requires connetors branch changes before completing
-    <_start:@L> "connect" <from:DeployEndpoint> "to" <to:DeployEndpoint> <_end:@L> => DeployLinkRaw { from, to }
-    // <start:@L> <name:Ident> => ArgumentDeclRaw::Required(name),
-    // <start:@L> <name:Ident> "=" <default_value:ExprImut> => ArgumentDeclRaw::Optional(name, default_value)
+    <start:@L> <docs:DocComment> "create" <kind:DeployCreateKind?> <id:Ident> "from" <target:ModularTarget> <params:WithEndClause?> <end:@L> => DeployLinkRaw::Atom(CreateStmtRaw { start, end, id, module: target.0, target: target.1, params, docs }),
+    // <start:@L> <docs:DocComment> "create" <kind:DeployCreateKind?> <id:Ident> "from" <target:ModularTarget> <end:@L> => DeployLinkRaw::Atom(CreateStmtRaw { start, end, id: id.clone(),  module: target.0, target: target.1, params: None, docs }),
+    <start:@L> <docs:DocComment> "create" <kind:DeployCreateKind?> <id:Ident> <params:WithEndClause?> <end:@L> => DeployLinkRaw::Atom(CreateStmtRaw { start, end, id: id.clone(),  module: vec![], target: id, params, docs }),
+    // <start:@L> <docs:DocComment> "create" <kind:DeployCreateKind?> <id:Ident>  <end:@L> => DeployLinkRaw::Atom(CreateStmtRaw { start, end, id: id.clone(), module: vec![], target: id, params: None, docs }),
+
+    <start:@L> <docs:DocComment> "connect" <from:DeployEndpoint> "to" <to:DeployEndpoint> <end:@L> => DeployLinkRaw::Link(from, to),
 }
 
 DeployEndpoint: DeployEndpointRaw<'input> = {
+    /// TODO Consider locking down tremor url syntax to system artefacts only
     StringLiteral => DeployEndpointRaw::Legacy(<>),
-    ModularTarget => DeployEndpointRaw::Troy(<>),
+    <id:Ident> "/" <port:Ident> => DeployEndpointRaw::Troy(id, Some(port)),
+    <id:Ident> => DeployEndpointRaw::Troy(id, None),
 }
 
 /// List of expressions at the root of the script
@@ -112,9 +120,8 @@ DeployModuleStmts: DeployStmtsRaw<'input> = {
 
 DefineFlow: DeployStmtRaw<'input> = {
     // Flow - these define how pipelines and connectors are interconnected to form a unit deployment graph
-    <start:@L> <docs:DocComment> "define" "flow" <id:Ident> <params:(WithClause)?> <links:WithDeployLinks> "end" <end:@L> => DeployStmtRaw::FlowDecl(FlowDeclRaw { start, end, id: id.to_string(), params, links, docs }),
+    <start:@L> <docs:DocComment> "define" "flow" <id:Ident> <params:(WithClause)?> <atoms:WithDeployLinks> "end" <end:@L> => DeployStmtRaw::FlowDecl(FlowDeclRaw { start, end, id: id.to_string(), params, atoms, docs }),
 }
-
 
  // In case we need to limit the content of deploy stmt
 DeployModuleInnerStmt: DeployStmtRaw<'input> = {
@@ -1571,7 +1578,6 @@ extern {
         "pipeline" => Token::Pipeline,
         "connector" => Token::Connector,
         "flow" => Token::Flow,
-        "links" => Token::Links,
         "connect" => Token::Connect,
         "to" => Token::To,
         "deploy" => Token::Deploy,
