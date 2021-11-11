@@ -1164,5 +1164,11 @@ pub async fn register_builtin_connector_types(world: &World) -> Result<()> {
     world
         .register_builtin_connector_type("bench", Box::new(impls::bench::Builder::default()))
         .await?;
+    world
+        .register_builtin_connector_type(
+            "dns_cilent",
+            Box::new(impls::dns::client::Builder::default()),
+        )
+        .await?;
     Ok(())
 }
