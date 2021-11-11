@@ -14,7 +14,8 @@
 use crate::connectors::prelude::*;
 use crate::utils::hostname;
 use async_broadcast::{broadcast, Receiver, TryRecvError};
-use async_std::io::{stderr, stdin, stdout, ReadExt, Stderr, Stdout, Write};
+use async_std::io::{stderr, stdin, stdout, ReadExt, Stderr, Stdout};
+use beef::Cow;
 use futures::AsyncWriteExt;
 
 use tremor_pipeline::{EventOriginUri, DEFAULT_STREAM_ID};
@@ -49,32 +50,8 @@ lazy_static! {
     };
 }
 
-#[derive(Deserialize, Debug, Clone)]
-#[serde(rename_all = "lowercase")]
-pub enum StdStream {
-    Stdout,
-    Stderr,
-    None,
-}
-impl Default for StdStream {
-    fn default() -> Self {
-        Self::Stdout
-    }
-}
-
-#[derive(Deserialize, Debug, Clone)]
-#[serde(deny_unknown_fields)]
-pub struct Config {
-    #[serde(default = "Default::default")]
-    output: StdStream, //FIXME should std_Stream be stdio + err depending on port?
-}
-
-impl ConfigImpl for Config {}
-
 /// connector handling 1 std stream (stdout, stderr or stdin)
-pub struct StdStreamConnector {
-    stream: StdStream,
-}
+pub struct StdStreamConnector {}
 
 #[derive(Debug, Default)]
 pub(crate) struct Builder {}
@@ -84,16 +61,9 @@ impl ConnectorBuilder for Builder {
     async fn from_config(
         &self,
         _id: &TremorUrl,
-        raw_config: &Option<OpConfig>,
+        _raw_config: &Option<OpConfig>,
     ) -> Result<Box<dyn Connector>> {
-        if let Some(raw) = raw_config {
-            let config = Config::new(raw)?;
-            Ok(Box::new(StdStreamConnector {
-                stream: config.output,
-            }))
-        } else {
-            Err(ErrorKind::MissingConfiguration(String::from("std_stream")).into())
-        }
+        Ok(Box::new(StdStreamConnector {}))
     }
 }
 
@@ -146,21 +116,22 @@ impl Source for StdStreamSource {
 }
 
 /// stdstream sink
-pub struct StdStreamSink<T>
-where
-    T: Write + std::marker::Unpin + Send,
-{
-    stream: T,
+pub struct StdStreamSink {
+    stderr: Stderr,
+    stdout: Stdout,
+}
+
+impl StdStreamConnector {
+    const IN_PORTS: [Cow<'static, str>; 3] =
+        [IN, Cow::const_str("stdin"), Cow::const_str("stderr")];
+    const REF_IN_PORTS: &'static [Cow<'static, str>; 3] = &Self::IN_PORTS;
 }
 
 #[async_trait::async_trait()]
-impl<T> Sink for StdStreamSink<T>
-where
-    T: Write + std::marker::Unpin + Send,
-{
+impl Sink for StdStreamSink {
     async fn on_event(
         &mut self,
-        _input: &str,
+        input: &str,
         event: tremor_pipeline::Event,
         _ctx: &SinkContext,
         serializer: &mut EventSerializer,
@@ -169,10 +140,19 @@ where
         for (value, _meta) in event.value_meta_iter() {
             let data = serializer.serialize(value, event.ingest_ns)?;
             for chunk in data {
-                self.stream.write_all(&chunk).await?;
+                match input {
+                    "in" | "stdout" => self.stdout.write_all(&chunk).await?,
+                    "stderr" => self.stderr.write_all(&chunk).await?,
+                    _ => {
+                        return Err(
+                            "{} is not a valid port, use one of `in`, `stdout` or `stderr`".into(),
+                        )
+                    }
+                }
             }
         }
-        self.stream.flush().await?;
+        self.stdout.flush().await?;
+        self.stderr.flush().await?;
         Ok(SinkReply::ACK)
     }
 
@@ -183,6 +163,9 @@ where
 
 #[async_trait::async_trait()]
 impl Connector for StdStreamConnector {
+    fn input_ports(&self) -> &[Cow<'static, str>] {
+        Self::REF_IN_PORTS
+    }
     async fn connect(&mut self, _ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
         Ok(true)
     }
@@ -193,17 +176,11 @@ impl Connector for StdStreamConnector {
         sink_context: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
-        let addr = match self.stream {
-            StdStream::Stdout => {
-                let sink: StdStreamSink<Stdout> = StdStreamSink { stream: stdout() };
-                builder.spawn(sink, sink_context)?
-            }
-            StdStream::Stderr => {
-                let sink: StdStreamSink<Stderr> = StdStreamSink { stream: stderr() };
-                builder.spawn(sink, sink_context)?
-            }
-            StdStream::None => return Ok(None),
+        let sink = StdStreamSink {
+            stdout: stdout(),
+            stderr: stderr(),
         };
+        let addr = builder.spawn(sink, sink_context)?;
         Ok(Some(addr))
     }
 
