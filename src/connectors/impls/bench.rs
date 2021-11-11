@@ -17,6 +17,7 @@ use hdrhistogram::Histogram;
 use std::{
     fmt::Display,
     io::{BufRead as StdBufRead, BufReader, Read},
+    time::Duration,
 };
 use std::{
     io::{stdout, Write},
@@ -34,8 +35,11 @@ pub struct Config {
     pub source: String,
     /// Interval in nanoseconds for coordinated emission testing
     pub interval: Option<u64>,
-    /// Number of iterations to stop after
-    pub iters: Option<u64>,
+
+    /// if this is set, this doesnt split things into lines, but into chunks
+    pub chunk_size: Option<usize>,
+    /// Number of iterations through the whole source to stop after
+    pub iters: Option<usize>,
     #[serde(default = "Default::default")]
     pub base64: bool,
 
@@ -82,20 +86,38 @@ impl ConnectorBuilder for Builder {
                 port: None,
                 path: vec![config.source.clone()],
             };
-            let elements: Vec<Vec<u8>> = StdBufRead::lines(BufReader::new(data.as_slice()))
-                .map(|e| -> Result<Vec<u8>> {
-                    if config.base64 {
-                        Ok(base64::decode(&e?.as_bytes())?)
-                    } else {
-                        Ok(e?.as_bytes().to_vec())
-                    }
-                })
-                .collect::<Result<_>>()?;
-
+            let elements: Vec<Vec<u8>> = if let Some(chunk_size) = config.chunk_size {
+                // split into sized chunks
+                data.chunks(chunk_size)
+                    .map(|e| -> Result<Vec<u8>> {
+                        if config.base64 {
+                            Ok(base64::decode(e)?)
+                        } else {
+                            Ok(e.to_vec())
+                        }
+                    })
+                    .collect::<Result<_>>()?
+            } else {
+                // split into lines
+                BufReader::new(data.as_slice())
+                    .lines()
+                    .map(|e| -> Result<Vec<u8>> {
+                        if config.base64 {
+                            Ok(base64::decode(&e?.as_bytes())?)
+                        } else {
+                            Ok(e?.as_bytes().to_vec())
+                        }
+                    })
+                    .collect::<Result<_>>()?
+            };
             Ok(Box::new(Bench {
                 config,
                 data,
-                acc: Acc { elements, count: 0 },
+                acc: Acc {
+                    elements,
+                    count: 0,
+                    iterations: 0,
+                },
                 origin_uri,
                 onramp_id: id.clone(),
             }))
@@ -109,6 +131,7 @@ impl ConnectorBuilder for Builder {
 struct Acc {
     elements: Vec<Vec<u8>>,
     count: usize,
+    iterations: usize,
 }
 impl Acc {
     fn next(&mut self) -> Vec<u8> {
@@ -119,6 +142,7 @@ impl Acc {
                 .clone()
         };
         self.count += 1;
+        self.iterations = self.count / self.elements.len();
         next
     }
 }
@@ -147,6 +171,9 @@ impl Connector for Bench {
             acc: self.acc.clone(),
             origin_uri: self.origin_uri.clone(),
             is_transactional: self.config.is_transactional,
+            iterations: self.config.iters,
+            interval_ns: self.config.interval.map(Duration::from_nanos),
+            finished: false,
         };
         builder.spawn(s, source_context).map(Some)
     }
@@ -170,18 +197,33 @@ struct Blaster {
     acc: Acc,
     origin_uri: EventOriginUri,
     is_transactional: bool,
+    iterations: Option<usize>,
+    interval_ns: Option<Duration>,
+    finished: bool,
 }
 
 #[async_trait::async_trait]
 impl Source for Blaster {
     async fn pull_data(&mut self, _pull_id: u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        Ok(SourceReply::Data {
-            origin_uri: self.origin_uri.clone(),
-            data: self.acc.next(),
-            meta: None,
-            stream: DEFAULT_STREAM_ID,
-            port: None,
-        })
+        // TODO better sleep perhaps
+        if let Some(interval) = self.interval_ns {
+            async_std::task::sleep(interval).await;
+        }
+        if Some(self.acc.iterations) == self.iterations {
+            self.finished = true;
+            return Ok(SourceReply::EndStream(DEFAULT_STREAM_ID));
+        };
+        if self.finished {
+            Ok(SourceReply::Empty(100))
+        } else {
+            Ok(SourceReply::Data {
+                origin_uri: self.origin_uri.clone(),
+                data: self.acc.next(),
+                meta: None,
+                stream: DEFAULT_STREAM_ID,
+                port: None,
+            })
+        }
     }
 
     fn is_transactional(&self) -> bool {
@@ -210,8 +252,8 @@ impl Blackhole {
         Blackhole {
             // config: config.clone(),
             run_secs: config.stop_after_secs as f64,
-            stop_after: now_ns + (config.stop_after_secs + config.warmup_secs) * 1_000_000_000,
-            warmup: now_ns + config.warmup_secs * 1_000_000_000,
+            stop_after: now_ns + ((config.stop_after_secs + config.warmup_secs) * 1_000_000_000),
+            warmup: now_ns + (config.warmup_secs * 1_000_000_000),
             has_stop_limit: config.stop_after_secs != 0,
             structured: config.structured,
             delivered: Histogram::new_with_bounds(
