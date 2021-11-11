@@ -500,7 +500,7 @@ impl Manager {
                         } else {
                             connected_pipelines.insert(port.clone(), pipelines_to_link.clone());
                         }
-                        let res = if port.eq_ignore_ascii_case(IN.as_ref()) {
+                        let res = if connector.is_valid_input_port(&port) {
                             // connect to sink part
                             if let Some(sink) = connector_addr.sink.as_ref() {
                                 sink.addr
@@ -517,9 +517,7 @@ impl Manager {
                                 )
                                 .into())
                             }
-                        } else if port.eq_ignore_ascii_case(OUT.as_ref())
-                            || port.eq_ignore_ascii_case(ERR.as_ref())
-                        {
+                        } else if connector.is_valid_output_port(&port) {
                             // connect to source part
                             if let Some(source) = connector_addr.source.as_ref() {
                                 source
@@ -969,6 +967,11 @@ pub enum Connectivity {
     Disconnected,
 }
 
+const IN_PORTS: [Cow<'static, str>; 1] = [IN];
+const IN_PORTS_REF: &'static [Cow<'static, str>; 1] = &IN_PORTS;
+const OUT_PORTS: [Cow<'static, str>; 2] = [OUT, ERR];
+const OUT_PORTS_REF: &'static [Cow<'static, str>; 2] = &OUT_PORTS;
+
 /// A Connector connects the tremor runtime to the outside world.
 ///
 /// It can be a source of events, as such it is polled for new data.
@@ -981,8 +984,40 @@ pub enum Connectivity {
 /// It is a meta entity on top of the sink and source part.
 /// The connector has its own control plane and is an artefact in the tremor repository.
 /// It controls the sink and source parts which are connected to the rest of the runtime via links to pipelines.
+
 #[async_trait::async_trait]
 pub trait Connector: Send {
+    /// Valid input ports for the connector, by default this is `in`
+    fn input_ports(&self) -> &[Cow<'static, str>] {
+        IN_PORTS_REF
+    }
+    /// Valid output ports for the connector, by default this is `out` and `err`
+    fn output_ports(&self) -> &[Cow<'static, str>] {
+        OUT_PORTS_REF
+    }
+
+    /// Tests if a input port is valid, by default does a case insensitive search against
+    /// `self.input_ports()`
+    fn is_valid_input_port(&self, port: &str) -> bool {
+        for valid in self.input_ports() {
+            if port.eq_ignore_ascii_case(valid.as_ref()) {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Tests if a input port is valid, by default does a case insensitive search against
+    /// `self.output_ports()`
+    fn is_valid_output_port(&self, port: &str) -> bool {
+        for valid in self.output_ports() {
+            if port.eq_ignore_ascii_case(valid.as_ref()) {
+                return true;
+            }
+        }
+        false
+    }
+
     /// This connector works with structured data and does not allow the use
     /// of codecs.
     fn is_structured(&self) -> bool {
