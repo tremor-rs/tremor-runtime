@@ -850,7 +850,7 @@ where
                 // only account for Drained CF which we caused
                 // as CF is sent back the DAG to all destinations
                 if uid == self.ctx.uid {
-                    self.expected_drained -= 1;
+                    self.expected_drained = self.expected_drained.saturating_sub(1);
                     debug!(
                         "[Source::{}] Drained this is us! we still have {} drains to go",
                         self.ctx.url, self.expected_drained

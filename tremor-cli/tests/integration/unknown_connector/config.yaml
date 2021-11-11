@@ -1,0 +1,18 @@
+connector:
+  - id: in
+    type: file
+    config:
+      path: "in.json.xz"
+      mode: "read"
+  - id: out
+    type: bad_connector
+
+binding:
+  - id: test
+    links:
+      "/connector/in/{instance}/out": ["/pipeline/main/{instance}/in"]
+      "/pipeline/main/{instance}/out": ["/connector/out/{instance}/in"]
+
+mapping:
+  /binding/test/1:
+    instance: "1"

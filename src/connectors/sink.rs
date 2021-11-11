@@ -556,6 +556,7 @@ where
                             );
                         }
                         SinkMsg::Stop => {
+                            info!("[Sink::{}] Stopping...", &self.ctx.url);
                             self.sink.on_stop(&mut self.ctx).await;
                             self.state = Stopped;
                             // exit control plane
@@ -656,10 +657,15 @@ where
                             // special treatment
                             match signal.kind {
                                 Some(SignalKind::Drain(source_uid)) => {
+                                    debug!(
+                                        "[Sink::{}] Drain signal received from {}",
+                                        &self.ctx.url, source_uid
+                                    );
                                     // account for all received drains per source
                                     self.drains_received.insert(source_uid);
                                     // check if all "reachable sources" did send a `Drain` signal
                                     if self.drains_received.is_superset(&self.starts_received) {
+                                        debug!("[Sink::{}] Sink Drained.", &self.ctx.url);
                                         self.state = Drained;
                                         if let Some(sender) = self.drain_channel.take() {
                                             if sender.send(Msg::SinkDrained).await.is_err() {
@@ -677,6 +683,10 @@ where
                                     send_contraflow(&self.pipelines, &self.ctx.url, cf).await;
                                 }
                                 Some(SignalKind::Start(source_uid)) => {
+                                    debug!(
+                                        "[Sink::{}] Received Start signal from {}",
+                                        &self.ctx.url, source_uid
+                                    );
                                     self.starts_received.insert(source_uid);
                                 }
                                 _ => {} // ignore
@@ -733,6 +743,7 @@ where
             }
         }
         // sink has been stopped
+        info!("[Sink::{}] Terminating Sink Task.", &self.ctx.url);
         Ok(())
     }
 }

@@ -15,7 +15,6 @@ connector:
     config:
       path: "output.log"
       mode: truncate
-      close_after_events: 3
   - id: tcp_client
     type: tcp_client
     codec: json

@@ -263,7 +263,7 @@ impl Manager {
             loop {
                 match rx.recv().await {
                     Ok(ManagerMsg::Create { tx, create }) => {
-                        let url = create.servant_id.clone();
+                        let url = create.servant_id.to_instance();
                         // lookup and instantiate connector
                         let connector = if let Some((builder, _)) =
                             known_connectors.get(&create.config.binding_type)
@@ -296,7 +296,7 @@ impl Manager {
                         if let Err(e) = self
                             .connector_task(
                                 tx.clone(),
-                                create.servant_id,
+                                url.clone(),
                                 connector,
                                 create.config,
                                 connector_id_gen.next_id(),
@@ -758,6 +758,7 @@ impl Manager {
 
                         let d = Drainage::new(&connector_addr, tx);
                         if d.all_drained() {
+                            info!("[Connector::{}] Drained.", &connector_addr.url);
                             if let Err(e) = d.send_all_drained().await {
                                 error!(
                                     "[Connector::{}] error signalling being fully drained: {}",
@@ -775,6 +776,7 @@ impl Manager {
                         if let Some(drainage) = drainage.as_mut() {
                             drainage.set_source_drained();
                             if drainage.all_drained() {
+                                info!("[Connector::{}] Drained.", &connector_addr.url);
                                 if let Err(e) = drainage.send_all_drained().await {
                                     error!(
                                         "[Connector::{}] Error signalling being fully drained: {}",
@@ -801,6 +803,7 @@ impl Manager {
                             drainage.set_sink_drained();
                             quiescence_beacon.full_stop(); // TODO: maybe this should be done in the SinkManager?
                             if drainage.all_drained() {
+                                info!("[Connector::{}] Drained.", &connector_addr.url);
                                 if let Err(e) = drainage.send_all_drained().await {
                                     error!(
                                         "[Connector::{}] Error signalling being fully drained: {}",
