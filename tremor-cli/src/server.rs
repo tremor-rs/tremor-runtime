@@ -25,7 +25,7 @@ use std::io::Write;
 use std::sync::atomic::Ordering;
 use tremor_api as api;
 use tremor_common::file;
-use tremor_runtime::system::{ShutdownMode, World};
+use tremor_runtime::system::{ShutdownMode, World, WorldConfig};
 use tremor_runtime::{self, version};
 
 async fn handle_api_request<
@@ -161,10 +161,11 @@ pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
     // TODO: Allow configuring this for offramps and pipelines
     let config = WorldConfig {
         storage_directory,
-        debug_connectors: matches.is_present("debug-connectors")..WorldConfig::default(),
+        debug_connectors: matches.is_present("debug-connectors"),
+        ..WorldConfig::default()
     };
 
-    let (world, handle) = World::start(storage_directory).await?;
+    let (world, handle) = World::start(config).await?;
 
     // signal handling
     let signals = Signals::new(&[SIGTERM, SIGINT, SIGQUIT])?;
