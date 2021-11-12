@@ -163,6 +163,7 @@ pub(crate) struct Run {
     #[clap(long, default_value = "lines")]
     pub(crate) postprocessor: String,
     /// Specifies the port that is printed to the output
+
     #[clap(short, long)]
     pub(crate) port: Option<String>,
 }
@@ -239,6 +240,9 @@ pub(crate) struct ServerRun {
     /// Disable the API
     #[clap(short, long)]
     pub(crate) no_api: bool,
+    /// Loads the debug connectors
+    #[clap(short, long)]
+    pub(crate) debug_connectors: bool,
     /// The `host:port` to listen for the API
     #[clap(short, long, default_value = "0.0.0.0:9898")]
     pub(crate) api_host: String,

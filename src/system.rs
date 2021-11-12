@@ -75,6 +75,22 @@ lazy_static! {
     };
 }
 
+/// Configuration for the runtime
+pub struct WorldConfig {
+    /// default size for queues
+    pub qsize: usize,
+    /// if debug connectors should be loaded
+    pub debug_connectors: bool,
+}
+impl Default for WorldConfig {
+    fn default() -> Self {
+        Self {
+            qsize: QSIZE.load(Ordering::Relaxed),
+            debug_connectors: false,
+        }
+    }
+}
+
 /// default graceful shutdown timeout
 pub const DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -640,25 +656,18 @@ impl World {
     ///
     /// # Errors
     ///  * if the world manager can't be started
-    pub async fn start() -> Result<(Self, JoinHandle<Result<()>>)> {
-        Self::start_with_size(QSIZE.load(Ordering::Relaxed)).await
-    }
-    /// Starts the runtime system
-    ///
-    /// # Errors
-    ///  * if the world manager can't be started
-    pub async fn start_with_size(qsize: usize) -> Result<(Self, JoinHandle<Result<()>>)> {
+    pub async fn start(config: WorldConfig) -> Result<(Self, JoinHandle<Result<()>>)> {
         let (connector_h, connector) =
-            connectors::Manager::new(qsize, METRICS_CHANNEL.tx()).start();
+            connectors::Manager::new(config.qsize, METRICS_CHANNEL.tx()).start();
         // TODO: use metrics channel for pipelines as well
-        let (pipeline_h, pipeline) = pipeline::Manager::new(qsize).start();
+        let (pipeline_h, pipeline) = pipeline::Manager::new(config.qsize).start();
 
         let (system_h, system) = Manager {
             connector,
             pipeline,
             connector_h,
             pipeline_h,
-            qsize,
+            qsize: config.qsize,
         }
         .start();
 
@@ -667,7 +676,9 @@ impl World {
         let mut world = Self { system, repo, reg };
 
         crate::connectors::register_builtin_connector_types(&world).await?;
-
+        if config.debug_connectors {
+            crate::connectors::register_debug_connector_types(&world).await?;
+        }
         world.register_system().await?;
         Ok((world, system_h))
     }
