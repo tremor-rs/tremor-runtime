@@ -41,6 +41,7 @@
 - Add the `csv` codec
 - Add the `permissions` option for setting the file mode for the `unix-socket` source
 - Tests can be run without their suite. [#1238](https://github.com/tremor-rs/tremor-runtime/pull/1283)
+- Add the `std::size` module to convert sizes
 
 ### Fixes
 
