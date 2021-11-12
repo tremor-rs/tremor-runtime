@@ -1,6 +1,10 @@
 use std;
 
 {
-    "mebi": std::math::round(std::size::mebi(event)),
-    "kibi": std::math::round(std::size::kibi(event)),
+    "kiB": std::math::round(std::size::kiB(event)),
+    "MiB": std::math::round(std::size::MiB(event)),
+    "GiB": std::math::round(std::size::GiB(event)),
+    "TiB": std::math::round(std::size::TiB(event)),
+    "PiB": std::math::round(std::size::PiB(event)),
+    "EiB": std::math::round(std::size::EiB(event)),
 }

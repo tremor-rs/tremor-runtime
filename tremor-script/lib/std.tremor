@@ -16,6 +16,7 @@
 ### * [test](std/test.md) - test related functions
 ### * [type](std/type.md) - functions dealing with strings
 ### * [url](std/url.md) - url decoding/encoding functions
+### * [size](std/size.md) - functions for converting size units
 
 use std::array;
 use std::base64;
