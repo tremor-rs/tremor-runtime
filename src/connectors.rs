@@ -1169,7 +1169,7 @@ pub async fn register_builtin_connector_types(world: &World) -> Result<()> {
         .await?;
     world
         .register_builtin_connector_type(
-            "dns_cilent",
+            "dns_client",
             Box::new(impls::dns::client::Builder::default()),
         )
         .await?;
