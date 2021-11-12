@@ -21,7 +21,6 @@ use async_std::channel::Receiver;
 use async_std::task::JoinHandle;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
-use tremor_runtime::config;
 use tremor_runtime::connectors;
 use tremor_runtime::connectors::{Connectivity, ConnectorState, StatusReport};
 use tremor_runtime::errors::Result;
@@ -33,6 +32,7 @@ use tremor_runtime::url::ports::{ERR, IN, OUT};
 use tremor_runtime::url::TremorUrl;
 use tremor_runtime::Event;
 use tremor_runtime::QSIZE;
+use tremor_runtime::{config, system::WorldConfig};
 
 pub(crate) struct ConnectorHarness {
     connector_id: TremorUrl,
@@ -46,7 +46,7 @@ pub(crate) struct ConnectorHarness {
 
 impl ConnectorHarness {
     pub(crate) async fn new(config: String) -> Result<Self> {
-        let (world, handle) = World::start(None).await?;
+        let (world, handle) = World::start(WorldConfig::default()).await?;
         let raw_config = serde_yaml::from_slice::<config::Connector>(config.as_bytes())?;
         let id = TremorUrl::from_connector_instance(raw_config.id.as_str(), "test")?;
         let _connector_config = world.repo.publish_connector(&id, false, raw_config).await?;

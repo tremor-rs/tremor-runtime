@@ -322,7 +322,8 @@ mod test {
 
     macro_rules! rampercize {
         ($onramp_config:expr, $offramp_config:expr, $test:tt) => {
-            let (world, _handle) = system::World::start().await?;
+            let config = WorldConfig::default();
+            let (world, _handle) = system::World::start(config).await?;
             let config = serde_yaml::to_value($onramp_config).expect("json to yaml not ok");
 
             let onramp: crate::config::OnRamp = serde_yaml::from_value(config)?;
