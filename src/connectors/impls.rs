@@ -16,6 +16,8 @@
 pub(crate) mod bench;
 /// connector for checking guaranteed delivery and circuit breaker logic
 pub(crate) mod cb;
+/// Discord connector
+pub(crate) mod discord;
 /// DNS
 pub(crate) mod dns;
 /// Exit Connector

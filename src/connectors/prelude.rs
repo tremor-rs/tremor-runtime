@@ -39,7 +39,6 @@ pub use tremor_pipeline::{
 };
 pub use tremor_script::prelude::*;
 pub use tremor_value::prelude::*;
-
 /// default buf size used for reading from files and streams (sockets etc)
 ///
 /// equals default chunk size for BufReader
