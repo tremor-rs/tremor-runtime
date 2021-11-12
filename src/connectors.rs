@@ -1120,12 +1120,6 @@ pub trait ConnectorBuilder: Sync + Send {
 #[cfg(not(tarpaulin_include))]
 pub async fn register_builtin_connector_types(world: &World) -> Result<()> {
     world
-        .register_builtin_connector_type("cb", Box::new(impls::cb::Builder::default()))
-        .await?;
-    world
-        .register_builtin_connector_type("exit", Box::new(impls::exit::Builder::new(world)))
-        .await?;
-    world
         .register_builtin_connector_type("file", Box::new(impls::file::Builder::default()))
         .await?;
     world
@@ -1165,13 +1159,31 @@ pub async fn register_builtin_connector_types(world: &World) -> Result<()> {
         .register_builtin_connector_type("wal", Box::new(impls::wal::Builder::default()))
         .await?;
     world
-        .register_builtin_connector_type("bench", Box::new(impls::bench::Builder::default()))
-        .await?;
-    world
         .register_builtin_connector_type(
             "dns_client",
             Box::new(impls::dns::client::Builder::default()),
         )
+        .await?;
+    Ok(())
+}
+
+/// registering builtin connector types
+///
+/// # Errors
+///  * If a builtin connector couldn't be registered
+#[cfg(not(tarpaulin_include))]
+pub async fn register_debug_connector_types(world: &World) -> Result<()> {
+    world
+        .register_builtin_connector_type("cb", Box::new(impls::cb::Builder::default()))
+        .await?;
+    world
+        .register_builtin_connector_type("exit", Box::new(impls::exit::Builder::new(world)))
+        .await?;
+    world
+        .register_builtin_connector_type("file", Box::new(impls::file::Builder::default()))
+        .await?;
+    world
+        .register_builtin_connector_type("bench", Box::new(impls::bench::Builder::default()))
         .await?;
     Ok(())
 }

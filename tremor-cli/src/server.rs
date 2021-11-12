@@ -159,6 +159,11 @@ pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
         .value_of("storage-directory")
         .map(std::string::ToString::to_string);
     // TODO: Allow configuring this for offramps and pipelines
+    let config = WorldConfig {
+        storage_directory,
+        debug_connectors: matches.is_present("debug-connectors")..WorldConfig::default(),
+    };
+
     let (world, handle) = World::start(storage_directory).await?;
 
     // signal handling
