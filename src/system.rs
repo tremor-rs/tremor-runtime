@@ -43,18 +43,8 @@ lazy_static! {
         //ALLOW: We want this to panic, it only happens at startup time
         .expect("Failed to initialize id for metrics connector")
     };
-    pub(crate) static ref STDOUT_CONNECTOR: TremorUrl = {
-        TremorUrl::parse("/connector/system::stdout/system/in")
-            //ALLOW: We want this to panic, it only happens at startup time
-            .expect("Failed to initialize id for stdout connector")
-    };
-    pub(crate) static ref STDERR_CONNECTOR: TremorUrl = {
-        TremorUrl::parse("/connector/system::stderr/system/in")
-            //ALLOW: We want this to panic, it only happens at startup time
-            .expect("Failed to initialize id for stderr connector")
-    };
-    pub(crate) static ref STDIN_CONNECTOR: TremorUrl = {
-        TremorUrl::parse("/connector/system::stdin/system/out")
+    pub(crate) static ref STDIO_CONNECTOR: TremorUrl = {
+        TremorUrl::parse("/connector/system::stdio/system/in")
             //ALLOW: We want this to panic, it only happens at startup time
             .expect("Failed to initialize id for stderr connector")
     };
@@ -67,16 +57,6 @@ lazy_static! {
         TremorUrl::parse("/pipeline/system::passthrough/system/in")
             //ALLOW: We want this to panic, it only happens at startup time
             .expect("Failed to initialize id for metrics piepline")
-    };
-    pub(crate) static ref STDOUT_OFFRAMP: TremorUrl = {
-        TremorUrl::parse("/offramp/system::stdout/system/in")
-            //ALLOW: We want this to panic, it only happens at startup time
-            .expect("Failed to initialize id for stdout offramp")
-    };
-    pub(crate) static ref STDERR_OFFRAMP: TremorUrl = {
-        TremorUrl::parse("/offramp/system::stderr/system/in")
-            //ALLOW: We want this to panic, it only happens at startup time
-            .expect("Failed to initialize id for stderr offramp")
     };
 }
 
@@ -805,36 +785,16 @@ type: metrics
             r#"
 id: system::stdio
 type: stdio
-config:
-  output: stdout
             "#,
         )?;
         self.repo
-            .publish_connector(&STDOUT_CONNECTOR, true, stdout_artefact)
+            .publish_connector(&STDIO_CONNECTOR, true, stdout_artefact)
             .await?;
-        self.bind_connector(&STDOUT_CONNECTOR).await?;
+        self.bind_connector(&STDIO_CONNECTOR).await?;
         self.reg
-            .find_connector(&STDOUT_CONNECTOR)
+            .find_connector(&STDIO_CONNECTOR)
             .await?
             .ok_or_else(|| Error::from("Failed to initialize system::stdout connector"))?;
-
-        // Register stderr connector - do not start yet
-        let stderr_artefact: ConnectorArtefact = serde_yaml::from_str(
-            r#"
-id: system::stderr
-type: stdio
-config:
-  output: stderr
-            "#,
-        )?;
-        self.repo
-            .publish_connector(&STDERR_CONNECTOR, true, stderr_artefact)
-            .await?;
-        self.bind_connector(&STDERR_CONNECTOR).await?;
-        self.reg
-            .find_connector(&STDERR_CONNECTOR)
-            .await?
-            .ok_or_else(|| Error::from("Failed to initialize system::stderr connector"))?;
 
         Ok(())
     }
