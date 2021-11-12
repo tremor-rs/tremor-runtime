@@ -26,6 +26,7 @@ pub(crate) mod raw;
 mod support;
 mod to_static;
 mod upable;
+pub(crate) mod aggregate_fn;
 /// collection of AST visitors
 pub mod visitors;
 

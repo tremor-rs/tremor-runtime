@@ -138,6 +138,7 @@ pub(crate) fn ident_to_token(ident: &str) -> Token {
         "as" => Token::As,
         "recur" => Token::Recur,
         "query" => Token::Subquery,
+        "aggregate" => Token::Aggregate,
         src => Token::Ident(src.into(), false),
     }
 }
@@ -395,6 +396,10 @@ pub enum Token<'input> {
     ConfigDirective,
     /// Subquery Keyword
     Subquery,
+    /// The `aggregate` keyword
+    Aggregate,
+    /// The `init` keyword
+    Init
 }
 
 impl<'input> Default for Token<'input> {
@@ -758,6 +763,8 @@ impl<'input> fmt::Display for Token<'input> {
                 l.unit_id,
                 file
             ),
+            Token::Aggregate => write!(f, "aggregate"),
+            Token::Init => write!(f, "init"),
         }
     }
 }
