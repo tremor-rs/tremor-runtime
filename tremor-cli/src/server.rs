@@ -67,6 +67,8 @@ impl ServerRun {
 
     #[cfg(not(tarpaulin_include))]
     pub(crate) async fn run_dun(&self) -> Result<()> {
+        use tremor_runtime::system::WorldConfig;
+
         // Logging
         if let Some(logger_config) = &self.logger_config {
             log4rs::init_file(logger_config, log4rs::config::Deserializers::default())?;
@@ -98,8 +100,12 @@ impl ServerRun {
 
         tremor_script::RECURSION_LIMIT.store(self.recursion_limit, Ordering::Relaxed);
 
-        // TODO: Allow configuring this for offramps and pipelines
-        let (world, handle) = World::start().await?;
+        let config = WorldConfig {
+            debug_connectors: self.debug_connectors,
+            ..WorldConfig::default()
+        };
+
+        let (world, handle) = World::start(config).await?;
 
         // signal handling
         let signals = Signals::new(&[SIGTERM, SIGINT, SIGQUIT])?;

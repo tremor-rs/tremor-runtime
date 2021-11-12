@@ -232,9 +232,9 @@ impl<A: Artefact> InstanceLifecycleFsm<A> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::config;
     use crate::system::{ShutdownMode, World};
     use crate::url::TremorUrl;
+    use crate::{config, system::WorldConfig};
     use std::io::BufReader;
     use tremor_common::file as cfile;
 
@@ -246,7 +246,11 @@ mod test {
 
     #[async_std::test]
     async fn connector_activation_lifecycle() {
-        let (world, _) = World::start().await.expect("failed to start world");
+        let config = WorldConfig {
+            debug_connectors: true,
+            ..WorldConfig::default()
+        };
+        let (world, _) = World::start(config).await.expect("failed to start world");
 
         let mut config = slurp("tests/configs/ut.passthrough.yaml");
         let artefact = config.connector.pop().expect("connector not found");
@@ -297,9 +301,14 @@ mod test {
 
     #[async_std::test]
     async fn binding_activation_lifecycle() -> Result<()> {
+        let config = WorldConfig {
+            debug_connectors: true,
+            ..WorldConfig::default()
+        };
+
         // FIXME: remove
         let _ = env_logger::try_init();
-        let (world, _) = World::start().await.expect("failed to start world");
+        let (world, _) = World::start(config).await.expect("failed to start world");
 
         // -> Initialized -> Running
         crate::load_cfg_file(&world, "tests/configs/ut.passthrough.yaml")
