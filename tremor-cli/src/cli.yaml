@@ -45,6 +45,10 @@ subcommands:
         - run:
             about: Runs the tremor server process
             args:
+              - debug-connectors:
+                  about: Load debug connectors (exit, cb, bench, etc.)
+                  takes_value: false
+                  required: false
               - artefacts:
                   about: Paths to files containing pipelines, onramps, offramps to provision
                   short: f
