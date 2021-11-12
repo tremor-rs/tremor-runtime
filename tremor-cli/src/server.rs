@@ -119,6 +119,8 @@ async fn handle_signals(signals: Signals, world: World) {
 #[cfg(not(tarpaulin_include))]
 #[allow(clippy::too_many_lines)]
 pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
+    use tremor_runtime::system::WorldConfig;
+
     // Logging
     if let Some(logger_config) = matches.value_of("logger-config") {
         if let Err(e) = log4rs::init_file(logger_config, log4rs::config::Deserializers::default())
