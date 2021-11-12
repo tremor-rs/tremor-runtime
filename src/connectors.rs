@@ -1164,6 +1164,10 @@ pub async fn register_builtin_connector_types(world: &World) -> Result<()> {
             Box::new(impls::dns::client::Builder::default()),
         )
         .await?;
+    world
+        .register_builtin_connector_type("discord", Box::new(impls::discord::Builder::default()))
+        .await?;
+
     Ok(())
 }
 
