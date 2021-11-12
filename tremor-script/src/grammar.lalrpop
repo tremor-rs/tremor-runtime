@@ -581,17 +581,18 @@ ModuleExprs: ExprsRaw<'input> = {
 
 ModuleExpr: ExprRaw<'input> = {
     Const => <>,
+    AggregateFnDecl => ExprRaw::AggregateFnDecl(<>),
     FnDecl => ExprRaw::FnDecl(<>),
     Intrinsic => ExprRaw::FnDecl(<>),
     Module => ExprRaw::Module(<>),
 }
 
 AggregateFnDecl: AggregateFnDecl<'input> = {
-    <doc:DocComment> <start:@L> "aggregate" "fn" <name:Ident> "of" <body:AggregateFnBody> "end" <end:@L> => AggregateFnDecl::Normal{name, body}
+    <doc:DocComment> <start:@L> "aggregate" <name:Ident> "of" <body:AggregateFnBody> "end" <end:@L> => AggregateFnDecl::Normal{start, end, name, body}
 }
 
 AggregateFnBody: AggregateFnBody<'input> = {
-    <start:@L> "init" "(" ")" "=>" <init_body:Exprs> "aggregate" "(" <aggregate_args:FnArgs> ")" "=>" <aggregate_body:Exprs> "merge" "(" <merge_args:FnArgs> ")" "=>" <merge_body:Exprs> "emit" "(" <emit_args:FnArgs> ")" "=>" <emit_body:Exprs> <end:@L> => AggregateFnBody::Normal{init_body, aggregate_args, aggregate_body, merge_args, merge_body, emit_args, emit_body}
+    <start:@L> "init" "(" ")" "=>" <init_body:Exprs> "aggregate" "(" <aggregate_args:FnArgs> ")" <aggregate_body:Effectors> "mergein" "(" <merge_args:FnArgs> ")" <merge_body:Effectors> "emit" "(" <emit_args:FnArgs> ")" <emit_body:Effectors> <end:@L> => AggregateFnBody::Normal{start, end, init_body, aggregate_args, aggregate_body, merge_args, merge_body, emit_args, emit_body}
 }
 
 FnDecl: AnyFnRaw<'input> = {
@@ -1478,7 +1479,8 @@ extern {
 
         "#!config" => Token::ConfigDirective,
         "aggregate" => Token::Aggregate,
-        "init" => Token::Init
+        "init" => Token::Init,
+        "mergein" => Token::MergeIn
     }
 }
 

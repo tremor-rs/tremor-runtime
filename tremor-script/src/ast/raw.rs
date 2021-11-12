@@ -42,6 +42,7 @@ use beef::Cow;
 use halfbrown::HashMap;
 pub use query::*;
 use serde::Serialize;
+use crate::ast::aggregate_fn::AggregateFnDecl;
 
 /// A raw script we got to put this here because of silly lalrpoop focing it to be public
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -581,6 +582,8 @@ pub enum ExprRaw<'script> {
     FnDecl(AnyFnRaw<'script>),
     /// we're forced to make this pub because of lalrpop
     Imut(ImutExprRaw<'script>),
+    /// we're forced to make this pub because of lalrpop
+    AggregateFnDecl(AggregateFnDecl<'script>),
 }
 impl<'script> ExpressionRaw<'script> for ExprRaw<'script> {}
 
@@ -607,7 +610,7 @@ impl<'script> Upable<'script> for ExprRaw<'script> {
     type Target = Expr<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(match self {
-            ExprRaw::FnDecl(_) | ExprRaw::Const { .. } | ExprRaw::Module(ModuleRaw { .. }) => {
+            ExprRaw::FnDecl(_) | ExprRaw::Const { .. } | ExprRaw::Module(ModuleRaw { .. }) | ExprRaw::AggregateFnDecl(_) => {
                 // ALLOW: There is no code path that leads here,
                 unreachable!()
             }

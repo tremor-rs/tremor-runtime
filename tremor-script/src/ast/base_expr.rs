@@ -445,6 +445,7 @@ impl<'script> BaseExpr for ExprRaw<'script> {
             ExprRaw::Emit(e) => e.s(meta),
             ExprRaw::FnDecl(e) => e.s(meta),
             ExprRaw::Imut(e) => e.s(meta),
+            ExprRaw::AggregateFnDecl(e) => e.s(meta)
         }
     }
 
@@ -458,6 +459,7 @@ impl<'script> BaseExpr for ExprRaw<'script> {
             ExprRaw::Emit(e) => e.e(meta),
             ExprRaw::FnDecl(e) => e.e(meta),
             ExprRaw::Imut(e) => e.e(meta),
+            ExprRaw::AggregateFnDecl(e) => e.e(meta)
         }
     }
 }

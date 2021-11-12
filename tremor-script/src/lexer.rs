@@ -399,7 +399,9 @@ pub enum Token<'input> {
     /// The `aggregate` keyword
     Aggregate,
     /// The `init` keyword
-    Init
+    Init,
+    /// The `mergein` keyword
+    MergeIn
 }
 
 impl<'input> Default for Token<'input> {
@@ -765,6 +767,7 @@ impl<'input> fmt::Display for Token<'input> {
             ),
             Token::Aggregate => write!(f, "aggregate"),
             Token::Init => write!(f, "init"),
+            Token::MergeIn => write!(f, "mergein"),
         }
     }
 }
