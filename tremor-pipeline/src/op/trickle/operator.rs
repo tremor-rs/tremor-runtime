@@ -55,7 +55,7 @@ impl TrickleOperator {
             ast::Stmt::OperatorDecl(ref op) => {
                 let op = op.clone().into_static();
                 let config = mk_node_config(
-                    op.id,
+                    op.node_id.id().to_string(),
                     format!("{}::{}", op.kind.module, op.kind.operation),
                     op.params,
                 );

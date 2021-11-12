@@ -1052,17 +1052,15 @@ impl<'script> WindowDecl<'script> {
     #[must_use]
     pub fn into_static(self) -> WindowDecl<'static> {
         let WindowDecl {
+            node_id,
             mid,
-            module,
-            id,
             kind,
             params,
             script,
         } = self;
         WindowDecl {
+            node_id,
             mid,
-            module,
-            id,
             kind,
             params: params
                 .into_iter()
@@ -1079,17 +1077,15 @@ impl<'script> OperatorDecl<'script> {
     #[must_use]
     pub fn into_static(self) -> OperatorDecl<'static> {
         let OperatorDecl {
+            node_id,
             mid,
             kind,
-            module,
-            id,
             params,
         } = self;
         OperatorDecl {
+            node_id,
             mid,
             kind,
-            module,
-            id,
             params: params.map(|params| {
                 params
                     .into_iter()

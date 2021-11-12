@@ -426,24 +426,21 @@ impl Query {
                     subqueries.insert(s.id.clone(), s.clone());
                 }
                 Stmt::Operator(o) => {
-                    if nodes.contains_key(&common_cow(&o.id)) {
-                        let error_func = if has_builtin_node_name(&common_cow(&o.id)) {
+                    if nodes.contains_key(&common_cow(o.node_id.id())) {
+                        let error_func = if has_builtin_node_name(&common_cow(o.node_id.id())) {
                             query_node_reserved_name_err
                         } else {
                             query_node_duplicate_name_err
                         };
-                        return Err(error_func(o, o.id.clone(), &query.node_meta).into());
+                        return Err(
+                            error_func(o, o.node_id.id().to_string(), &query.node_meta).into()
+                        );
                     }
 
-                    let target = o.target.clone().to_string();
-                    let fqon = if o.module.is_empty() {
-                        target
-                    } else {
-                        format!("{}::{}", o.module.join("::"), target)
-                    };
+                    let fqon = o.node_id.target_fqn(&o.target);
 
                     let node = NodeConfig {
-                        id: o.id.clone(),
+                        id: o.node_id.id().to_string(),
                         kind: NodeKind::Operator,
                         op_type: "trickle::operator".to_string(),
                         ..NodeConfig::default()
@@ -482,25 +479,22 @@ impl Query {
                         None,
                     )?;
                     pipe_ops.insert(id, op);
-                    nodes.insert(common_cow(&o.id), id);
+                    nodes.insert(common_cow(o.node_id.id()), id);
                     outputs.push(id);
                 }
                 Stmt::Script(o) => {
-                    if nodes.contains_key(&common_cow(&o.id)) {
-                        let error_func = if has_builtin_node_name(&common_cow(&o.id)) {
+                    if nodes.contains_key(&common_cow(o.node_id.id())) {
+                        let error_func = if has_builtin_node_name(&common_cow(o.node_id.id())) {
                             query_node_reserved_name_err
                         } else {
                             query_node_duplicate_name_err
                         };
-                        return Err(error_func(o, o.id.clone(), &query.node_meta).into());
+                        return Err(
+                            error_func(o, o.node_id.id().to_string(), &query.node_meta).into()
+                        );
                     }
 
-                    let target = o.target.clone().to_string();
-                    let fqsn = if o.module.is_empty() {
-                        target
-                    } else {
-                        format!("{}::{}", o.module.join("::"), target)
-                    };
+                    let fqsn = o.node_id.target_fqn(&o.target);
 
                     let stmt_srs =
                         srs::Stmt::try_new_from_query::<&'static str, _>(&self.0.query, |query| {
@@ -524,7 +518,7 @@ impl Query {
                     let that_defn = stmt_srs;
 
                     let node = NodeConfig {
-                        id: o.id.clone(),
+                        id: o.node_id.id().to_string(),
                         kind: NodeKind::Script,
                         label,
                         op_type: "trickle::script".to_string(),
@@ -542,7 +536,7 @@ impl Query {
                         None,
                     )?;
                     pipe_ops.insert(id, op);
-                    nodes.insert(common_cow(&o.id), id);
+                    nodes.insert(common_cow(o.node_id.id()), id);
                     outputs.push(id);
                 }
             };
