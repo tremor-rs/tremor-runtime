@@ -67,7 +67,7 @@ pub struct UnitOfDeployment {
  #[derive(Clone, Debug, PartialEq)]
  pub enum AtomOfDeployment {
      /// A deployable pipeline instance
-     Pipeline(Query),
+     Pipeline(String,Query),
      /// A deployable connector instance
      Connector(ConnectorDecl),
      /// A deployable flow instance
@@ -262,8 +262,10 @@ pub struct Query {
     /// The vector of raw input values
     raw: Vec<Arc<Pin<Vec<u8>>>>,
     query: ast::Query<'static>,
-    id: String,
-    target: String,
+    /// NodeId of this declaration
+    pub node_id: NodeId,
+    /// NodeId of definition this declaration refers to
+    target_node_id: NodeId,
 }
 
 #[cfg(not(tarpaulin_include))] // this is a simple Debug implementation
@@ -280,29 +282,39 @@ impl Query {
     /// If the query self-referential struct cannot be safely created by id from the deployment provided
     pub fn new_from_deploy(
         origin: &Deploy,
-        id: &str,
-        target: &str,
+        id: &NodeId,
+        target: &NodeId,
     ) -> std::result::Result<Self, CompilerError> {
-        let resolved = origin
+        let pipeline_refutable = origin
             .script
-            .pipelines
+            .definitions
             .values()
-            .find(|query| target == query.fqn())
+            .find(|query| if let ast::deploy::DeployStmt::PipelineDecl(candidate) = query {
+                    target == &candidate.node_id
+                } else {
+                    false
+                }
+            )
             .ok_or_else(|| CompilerError {
                 error: Error::from(format!("Invalid query for pipeline {}", &id).as_str()),
                 cus: vec![],
             })?;
-        let query = resolved.query.clone();
-        Ok(Self {
-            /// We capture the origin - so that the pinned raw memory is cached
-            /// with our own self-reference composing a self-referential struct
-            /// by composition - by tracking the origin with the embedded query
-            /// of interest referential safety should be preserved
-            raw: origin.raw.clone(),
-            query: unsafe { mem::transmute(query) },
-            id: id.to_string(),
-            target: resolved.fqn(),
-        })
+
+        if let ast::deploy::DeployStmt::PipelineDecl(pipeline) = pipeline_refutable {
+            let query = pipeline.query.clone();
+            Ok(Self {
+                /// We capture the origin - so that the pinned raw memory is cached
+                /// with our own self-reference composing a self-referential struct
+                /// by composition - by tracking the origin with the embedded query
+                /// of interest referential safety should be preserved
+                raw: origin.raw.clone(),
+                query: unsafe { mem::transmute(query) },
+                node_id: id.clone(),
+                target_node_id: pipeline.node_id.clone(),
+            })
+        } else {
+            todo!() // TODO FIXME this needs a proper programmer error
+        }
     }
 
     /// borrows the query
@@ -323,7 +335,7 @@ impl Query {
     /// # Errors
     /// errors if the conversion function fails
     // FIXME TODO pass in filename of trickle or id of troy pipe definiton here
-    pub fn try_new<E, F>(_target: &str, mut raw: String, f: F) -> std::result::Result<Self, E>
+    pub fn try_new<E, F>(target: &str, mut raw: String, f: F) -> std::result::Result<Self, E>
     where
         F: for<'head> FnOnce(&'head mut String) -> std::result::Result<ast::Query<'head>, E>,
     {
@@ -344,8 +356,8 @@ impl Query {
         Ok(Self {
             raw,
             query: structured,
-            id: "id".to_string(),        // FIXME TODO fix
-            target: "query".to_string(), // FIXME TODO fix
+            node_id: NodeId::new(target.to_string(), vec![]),        // FIXME TODO fix
+            target_node_id: NodeId::new(target.to_string(), vec![]),
         })
     }
 
@@ -535,8 +547,10 @@ impl Stmt {
 /// A connector declaration
 #[derive(Clone, PartialEq)]
 pub struct ConnectorDecl {
-    /// The identity of this connector
-    pub id: String,
+    /// The local alias of this connector
+    pub alias: String,
+    /// The target identity of this connector
+    pub id: NodeId,
     raw: Vec<Arc<Pin<Vec<u8>>>>,
     /// Arguments for this connector definition
     pub params: Option<HashMap<String, Value<'static>>>,
@@ -552,31 +566,41 @@ impl Debug for ConnectorDecl {
 }
 
 impl ConnectorDecl {
-    /// Creates a new `ConnectorDecl` with a pre-existing connecotr sourced from a troy
+    /// Creates a new `ConnectorDecl` with a pre-existing connector sourced from a troy
     /// deployment
     /// # Errors
     /// If the self-referential struct cannot be created safely from the deployment provided
-    pub fn new_from_deploy(origin: &Deploy, id: &str) -> std::result::Result<Self, CompilerError> {
-        let connector = origin
+    pub fn new_from_deploy(origin: &Deploy, alias: String, id: &NodeId) -> std::result::Result<Self, CompilerError> {
+        let connector_refutable = origin
             .script
-            .connectors
+            .definitions
             .values()
-            .find(|connector| id == connector.fqn())
+            .find(|query| if let ast::deploy::DeployStmt::ConnectorDecl(target) = query {
+                id == &target.node_id
+            } else {
+                false
+            })
             .ok_or_else(|| CompilerError {
                 error: Error::from(format!("Invalid connector for deployment {}", &id).as_str()),
                 cus: vec![],
             })?;
 
-        Ok(Self {
-            /// We capture the origin - so that the pinned raw memory is cached
-            /// with our own self-reference composing a self-referential struct
-            /// by composition - by tracking the origin with the embedded query
-            /// of interest referential safety should be preserved
-            raw: origin.raw.clone(),
-            id: id.to_string(),
-            params: connector.params.clone(),
-            kind: connector.builtin_kind.clone(),
-        })
+        if let ast::deploy::DeployStmt::ConnectorDecl(connector) = connector_refutable {
+            // Irrefutable
+            Ok(Self {
+                /// We capture the origin - so that the pinned raw memory is cached
+                /// with our own self-reference composing a self-referential struct
+                /// by composition - by tracking the origin with the embedded query
+                /// of interest referential safety should be preserved
+                raw: origin.raw.clone(),
+                id: id.clone(),
+                alias: alias.clone(),
+                params: connector.params.clone(),
+                kind: connector.builtin_kind.clone(),
+            })
+        } else {
+            todo!() // TODO FIXME This shouldn't occur by construction but needs a programmer error
+        }
     }
 }
 
@@ -588,7 +612,7 @@ impl ConnectorDecl {
 #[derive(Clone, PartialEq)]
 pub struct FlowDecl {
     /// The identity of this connector
-    pub id: String,
+    pub node_id: NodeId,
     raw: Vec<Arc<Pin<Vec<u8>>>>,
     /// Arguments for this flow definition
     pub params: Option<HashMap<String, Value<'static>>>,
@@ -601,12 +625,12 @@ pub struct FlowDecl {
 #[cfg(not(tarpaulin_include))] // this is a simple Debug implementation
 impl Debug for FlowDecl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.id.fmt(f)
+        self.node_id.fmt(f)
     }
 }
 
 impl FlowDecl {
-    /// Creates a new `FlowDecl` with a pre-existing connecotr sourced from a troy
+    /// Creates a new `FlowDecl` with a pre-existing connector sourced from a troy
     /// deployment
     /// # Errors
     /// If the self-referential struct cannot be created safely from the deployment provided
@@ -614,32 +638,42 @@ impl FlowDecl {
         origin: &Deploy,
         id: &NodeId,
     ) -> std::result::Result<Self, CompilerError> {
-        let flow = origin
+        let flow_refutable = origin
             .script
-            .flows
+            .definitions
             .values()
-            .find(|flow| id == &flow.node_id)
+            .find(|flow| if let ast::deploy::DeployStmt::FlowDecl(flow) = flow {
+                id == &flow.node_id
+            } else {
+                false
+            })
             .ok_or_else(|| CompilerError {
                 error: Error::from(format!("Invalid flow for deployment {}", &id).as_str()),
                 cus: vec![],
             })?;
 
+        let flow = if let ast::deploy::DeployStmt::FlowDecl(flow) = flow_refutable {
+            flow
+        } else {
+            todo!() // FIXME TODO suitable rogrammer error - error by construction
+        };
+
         let mut srs_atoms = Vec::new();
         for atom in &flow.atoms {
             if let ast::DeployStmt::CreateStmt(stmt) = atom {
                 match &stmt.atom {
-                    ast::DeployStmt::ConnectorDecl(_instance) => {
+                    ast::DeployStmt::ConnectorDecl(instance) => {
                         // TODO wire up args
                         srs_atoms.push(AtomOfDeployment::Connector(
-                            ConnectorDecl::new_from_deploy(origin, &atom.fqn())?,
+                            ConnectorDecl::new_from_deploy(origin, stmt.alias.to_string(), &instance.node_id)?,
                         ));
                     }
                     ast::DeployStmt::PipelineDecl(instance) => {
                         // TODO wire up args
-                        srs_atoms.push(AtomOfDeployment::Pipeline(Query::new_from_deploy(
+                        srs_atoms.push(AtomOfDeployment::Pipeline(stmt.alias.to_string(), Query::new_from_deploy(
                             origin,
-                            &atom.fqn(),
-                            &instance.fqn(),
+                            &instance.node_id,
+                            &instance.node_id,
                         )?));
                     }
                     ast::DeployStmt::FlowDecl(_skip) => {
@@ -664,7 +698,7 @@ impl FlowDecl {
             /// by composition - by tracking the origin with the embedded query
             /// of interest referential safety should be preserved
             raw: origin.raw.clone(),
-            id: id.to_string(),
+            node_id: id.clone(),
             params: flow.params.clone(),
             links: flow.links.clone(),
             atoms: srs_atoms,

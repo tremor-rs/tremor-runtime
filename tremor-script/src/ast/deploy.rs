@@ -20,6 +20,7 @@ use super::{node_id::NodeId, PipelineDecl};
 use super::{Docs, HashMap, Value};
 use crate::{impl_expr_mid, impl_fqn};
 use tremor_common::url::TremorUrl;
+pub use crate::ast::deploy::raw::DeployCreateKind;
 
 pub(crate) mod raw;
 
@@ -31,12 +32,14 @@ pub struct Deploy<'script> {
     pub config: HashMap<String, Value<'script>>,
     /// Statements
     pub stmts: DeployStmts<'script>,
+    /// Definitions
+    pub definitions: HashMap<NodeId, DeployStmt<'script>>,
     /// Flow Definitions
-    pub flows: HashMap<String, FlowDecl<'script>>,
-    /// Connector Definitions
-    pub connectors: HashMap<String, ConnectorDecl<'script>>,
-    /// Pipeline Definitions
-    pub pipelines: HashMap<String, PipelineDecl<'script>>,
+    pub flows: HashMap<NodeId, FlowDecl<'script>>,
+    // /// Connector Definitions
+    // pub connectors: HashMap<NodeId, ConnectorDecl<'script>>,
+    // /// Pipeline Definitions
+    // pub pipelines: HashMap<NodeId, PipelineDecl<'script>>,
     #[serde(skip)]
     /// Documentation comments
     pub docs: Docs,
@@ -148,12 +151,16 @@ impl_fqn!(FlowDecl);
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct CreateStmt<'script> {
     pub(crate) mid: usize,
+    /// Alias or identify for this create statement
+    pub alias: String,
     /// Target of the artefact definition being deployed
     pub target: String,
-    /// Identifer for the creation
+    /// Target for creation
     pub node_id: NodeId,
     /// Atomic unit of deployment
     pub atom: DeployStmt<'script>,
+    /// The type of this connector
+    pub kind: Option<DeployCreateKind>,
     /// Documentation comments
     #[serde(skip)]
     pub docs: Option<String>,

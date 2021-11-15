@@ -28,7 +28,6 @@ use crate::ast::{
     Upable,
 };
 use crate::ast::{
-    node_id::BaseRef,
     raw::{ExprRaw, IdentRaw, ModuleRaw, StringLitRaw},
 };
 use crate::errors::ErrorKind;
@@ -38,6 +37,7 @@ use crate::pos::Location;
 use crate::AggrType;
 use crate::EventContext;
 use beef::Cow;
+use halfbrown::HashMap;
 use tremor_common::time::nanotime;
 use tremor_common::url::TremorUrl;
 use tremor_value::literal;
@@ -115,11 +115,26 @@ impl<'script> DeployRaw<'script> {
         self,
         mut helper: &mut Helper<'script, 'registry>,
     ) -> Result<Deploy<'script>> {
-        let mut stmts = vec![];
+        let mut stmts: Vec<DeployStmt<'script>> = vec![];
         for (_i, e) in self.stmts.into_iter().enumerate() {
             match e {
                 DeployStmtRaw::ModuleStmt(m) => {
                     m.define(helper.reg, helper.aggr_reg, &mut vec![], &mut helper)?;
+                }
+                DeployStmtRaw::PipelineDecl(stmt) => {
+                    let id = NodeId::new(stmt.id.clone(), helper.module.clone());
+                    let stmt = DeployStmt::PipelineDecl(Box::new(stmt.up(helper)?));
+                    helper.definitions.insert(id, stmt);
+                }
+                DeployStmtRaw::ConnectorDecl(stmt) => {
+                    let id = NodeId::new(stmt.id.clone(), helper.module.clone());
+                    let stmt = DeployStmt::ConnectorDecl(Box::new(stmt.up(helper)?));
+                    helper.definitions.insert(id, stmt);
+                }
+                DeployStmtRaw::FlowDecl(stmt) => {
+                    let id = NodeId::new(stmt.id.clone(), helper.module.clone());
+                    let stmt = DeployStmt::FlowDecl(Box::new(stmt.up(helper)?));
+                    helper.definitions.insert(id, stmt);
                 }
                 other => {
                     stmts.push(other.up(&mut helper)?);
@@ -137,9 +152,11 @@ impl<'script> DeployRaw<'script> {
         Ok(Deploy {
             config: self.config.up(helper)?,
             stmts,
-            connectors: helper.connector_defns.clone(),
-            pipelines: helper.pipeline_defns.clone(),
-            flows: helper.flow_defns.clone(),
+            definitions: helper.definitions.clone(),
+            // connectors: helper.connector_defns.clone(),
+            // pipelines: helper.pipeline_defns.clone(),
+            // flows: helper.flow_defns.clone(),
+            flows: HashMap::new(),
             docs: helper.docs.clone(),
         })
     }
@@ -172,23 +189,23 @@ impl<'script> Upable<'script> for DeployStmtRaw<'script> {
         match self {
             DeployStmtRaw::PipelineDecl(stmt) => {
                 let stmt: PipelineDecl<'script> = stmt.up(helper)?;
-                helper.pipeline_defns.insert(stmt.fqn(), stmt.clone());
+                helper.definitions.insert(stmt.node_id.clone(), DeployStmt::PipelineDecl(Box::new(stmt.clone())));
                 Ok(DeployStmt::PipelineDecl(Box::new(stmt)))
             }
             DeployStmtRaw::ConnectorDecl(stmt) => {
                 let stmt: ConnectorDecl<'script> = stmt.up(helper)?;
-                helper.connector_defns.insert(stmt.fqn(), stmt.clone());
+                helper.definitions.insert(stmt.node_id.clone(), DeployStmt::ConnectorDecl(Box::new(stmt.clone())));
                 Ok(DeployStmt::ConnectorDecl(Box::new(stmt)))
             }
             DeployStmtRaw::FlowDecl(stmt) => {
                 let stmt: FlowDecl<'script> = stmt.up(helper)?;
-                helper.flow_defns.insert(stmt.fqn(), stmt.clone());
+                helper.definitions.insert(stmt.node_id.clone(), DeployStmt::FlowDecl(Box::new(stmt.clone())));
                 Ok(DeployStmt::FlowDecl(Box::new(stmt)))
             }
             DeployStmtRaw::CreateStmt(stmt) => {
                 // FIXME TODO constrain to flow create's for top level
                 let stmt: CreateStmt = stmt.up(helper)?;
-                helper.instances.insert(stmt.fqn(), stmt.clone());
+                helper.instances.insert(stmt.node_id.clone(), stmt.clone());
                 Ok(DeployStmt::CreateStmt(Box::new(stmt)))
             }
             DeployStmtRaw::ModuleStmt(ref m) => {
@@ -242,19 +259,19 @@ impl<'script> DeployModuleStmtRaw<'script> {
                 }
                 DeployStmtRaw::ConnectorDecl(stmt) => {
                     let stmt: ConnectorDecl<'script> = stmt.up(helper)?;
-                    helper.connector_defns.insert(stmt.fqn(), stmt.clone());
+                    helper.definitions.insert(stmt.node_id.clone(), DeployStmt::ConnectorDecl(Box::new(stmt.clone())));
                 }
                 DeployStmtRaw::FlowDecl(stmt) => {
                     let stmt: FlowDecl<'script> = stmt.up(helper)?;
-                    helper.flow_defns.insert(stmt.fqn(), stmt.clone());
+                    helper.definitions.insert(stmt.node_id.clone(), DeployStmt::FlowDecl(Box::new(stmt.clone())));
                 }
                 DeployStmtRaw::PipelineDecl(stmt) => {
                     let stmt: PipelineDecl<'script> = stmt.up(helper)?;
-                    helper.pipeline_defns.insert(stmt.fqn(), stmt.clone());
+                    helper.definitions.insert(stmt.node_id.clone(), DeployStmt::PipelineDecl(Box::new(stmt.clone())));
                 }
                 DeployStmtRaw::CreateStmt(stmt) => {
                     let stmt: CreateStmt = stmt.up(helper)?;
-                    helper.instances.insert(stmt.fqn(), stmt.clone());
+                    helper.instances.insert(stmt.node_id.clone(), stmt.clone());
                 }
             }
         }
@@ -289,10 +306,6 @@ impl<'script> Upable<'script> for ConnectorDeclRaw<'script> {
                 .map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n")),
         };
 
-        let script_name = query_decl.fqn();
-        helper
-            .connector_defns
-            .insert(script_name, query_decl.clone());
         Ok(query_decl)
     }
 }
@@ -311,7 +324,7 @@ pub struct FlowDeclRaw<'script> {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// we're forced to make this pub because of lalrpop
 pub enum DeployEndpointRaw<'script> {
-    Legacy(StringLitRaw<'script>),
+    System(StringLitRaw<'script>),
     // TODO modular target with optional port specification - await connectors before revising
     Troy(IdentRaw<'script>, Option<IdentRaw<'script>>),
 }
@@ -333,9 +346,9 @@ impl<'script> Upable<'script> for FlowDeclRaw<'script> {
         let mut atoms = Vec::new();
         for link in self.atoms {
             match link {
-                DeployLinkRaw::Link(from, to) => {
+                DeployLinkRaw::Link(_start, _end, _docs, from, to) => {
                     let from = match from {
-                        DeployEndpointRaw::Legacy(string_url) => {
+                        DeployEndpointRaw::System(string_url) => {
                             let literal = string_url.up(helper)?;
                             let raw_url = run_lit_str(helper, &literal);
                             DeployEndpoint::System(TremorUrl::parse(&raw_url?.to_string())?)
@@ -345,7 +358,7 @@ impl<'script> Upable<'script> for FlowDeclRaw<'script> {
                         }
                     };
                     let to = match to {
-                        DeployEndpointRaw::Legacy(string_url) => {
+                        DeployEndpointRaw::System(string_url) => {
                             let literal = string_url.up(helper)?;
                             let raw_url = run_lit_str(helper, &literal);
                             DeployEndpoint::System(TremorUrl::parse(&raw_url?.to_string())?)
@@ -363,9 +376,10 @@ impl<'script> Upable<'script> for FlowDeclRaw<'script> {
             }
         }
 
+        let node_id = NodeId::new(self.id.clone(), helper.module.clone());
         let flow_decl = FlowDecl {
             mid: helper.add_meta_w_name(self.start, self.end, &self.id),
-            node_id: NodeId::new(self.id, helper.module.clone()),
+            node_id: node_id.clone(),
             params: self.params.up(helper)?,
             links,
             atoms,
@@ -374,8 +388,6 @@ impl<'script> Upable<'script> for FlowDeclRaw<'script> {
                 .map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n")),
         };
         helper.module.pop();
-        let flow_name = flow_decl.fqn();
-        helper.flow_defns.insert(flow_name, flow_decl.clone());
         Ok(flow_decl)
     }
 }
@@ -386,9 +398,20 @@ pub type DeployLinksRaw<'script> = Vec<DeployLinkRaw<'script>>;
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum DeployLinkRaw<'script> {
     /// we're forced to make this pub because of lalrpop
-    Link(DeployEndpointRaw<'script>, DeployEndpointRaw<'script>),
+    Link(Location, Location, Option<Vec<Cow<'script, str>>>, DeployEndpointRaw<'script>, DeployEndpointRaw<'script>),
     /// we're forced to make this pub because of lalrpop
     Atom(CreateStmtRaw<'script>),
+}
+
+/// we're forced to make this pub because of lalrpop
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub enum DeployCreateKind {
+    /// Reference to a connector definition
+    Connector,
+    /// Reference to a pipeline definition
+    Pipeline,
+    /// Reference to a flow definition
+    Flow
 }
 
 /// we're forced to make this pub because of lalrpop
@@ -401,6 +424,7 @@ pub struct CreateStmtRaw<'script> {
     /// Id of the definition
     pub target: IdentRaw<'script>,
     /// Module of the definition
+    pub(crate) kind: Option<DeployCreateKind>,
     pub(crate) module: Vec<IdentRaw<'script>>,
     pub(crate) docs: Option<Vec<Cow<'script, str>>>,
 }
@@ -414,38 +438,32 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
         let target_module = self
             .module
             .iter()
-            .map(|x| format!("{}::", x.to_string()))
-            .collect::<Vec<String>>()
-            .join("");
-        let fqn = format!("{}{}", target_module, self.target.to_string());
+            .map(|x| format!("{}", x.to_string()))
+            .collect::<Vec<String>>();
+        let node_id = NodeId::new(self.target.to_string(), target_module.clone());
 
-        let atom = if let Some(artefact) = helper.flow_defns.get(&fqn) {
-            artefact.clone()
+        let atom = if let Some(artefact) = helper.definitions.get(&node_id) {
+             artefact.clone()
         } else {
-            let inner = if target_module.is_empty() {
-                self.id.extent(&helper.meta)
-            } else {
-                crate::pos::Range(self.module[0].s(&helper.meta), self.target.e(&helper.meta))
-            };
             return Err(ErrorKind::DeployArtefactNotDefined(
                 self.extent(&helper.meta),
-                inner.extent(&helper.meta),
-                fqn,
-            )
-            .into());
+                self.id.extent(&helper.meta),
+                node_id.to_string(),
+            ).into())
         };
 
         let create_stmt = CreateStmt {
             mid: helper.add_meta_w_name(self.start, self.end, &self.id),
-            node_id: NodeId::new(self.id.to_string(), helper.module.clone()),
+            node_id: node_id.clone(),
+            alias: self.id.to_string(),
             target: self.target.to_string(),
-            atom: DeployStmt::FlowDecl(Box::new(atom)),
+            atom: atom,
+            kind: self.kind,
             docs: self
                 .docs
                 .map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n")),
         };
-        let script_name = create_stmt.fqn();
-        helper.instances.insert(script_name, create_stmt.clone());
+        helper.instances.insert(node_id, create_stmt.clone());
 
         Ok(create_stmt)
     }
