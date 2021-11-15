@@ -541,7 +541,7 @@ where
     can_emit: bool,
     is_in_aggr: bool,
     // Troy
-    instances: HashMap<NodeId, CreateStmt<'script>>,
+    instances: HashMap<NodeId, DeployFlow<'script>>,
     definitions: HashMap<NodeId, DeployStmt<'script>>,
     // flow_defns: HashMap<NodeId, FlowDecl<'script>>,
     // connector_defns: HashMap<NodeId, ConnectorDecl<'script>>,
