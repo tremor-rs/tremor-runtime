@@ -16,7 +16,8 @@ use std::time::Duration;
 
 use crate::api::prelude::*;
 use async_std::channel::bounded;
-use tremor_runtime::connectors::{ConnectorState, Msg, StatusReport};
+use tremor_runtime::connectors::{Msg, StatusReport};
+use tremor_runtime::registry::instance::InstanceState;
 
 #[derive(Serialize)]
 struct ConnectorAndInstances {
@@ -89,12 +90,12 @@ pub async fn get_instance(req: Request) -> Result<Response> {
 
 #[derive(Deserialize)]
 struct InstancePatch {
-    status: ConnectorState,
+    status: InstanceState,
 }
 
 /// this boils down to pause/resume/start/stop
 pub async fn patch_instance(req: Request) -> Result<Response> {
-    use ConnectorState::{Initialized, Paused, Running, Stopped};
+    use InstanceState::{Initialized, Paused, Running, Stopped};
     let (req, patch): (_, InstancePatch) = decode(req).await?;
     let a_id = req.param("aid")?;
     let s_id = req.param("sid")?;
@@ -128,7 +129,7 @@ pub async fn patch_instance(req: Request) -> Result<Response> {
         (_, Stopped) => {
             // stop - we need to return immediately here, as the
             // connector will be stopped and the addr is now invalid
-            system.unbind_connector(&instance.url).await?; // unbind will properly remove the instance and such
+            system.destroy_connector_instance(&instance.url).await?; // unbind will properly remove the instance and such
             let report = StatusReport {
                 status: Stopped,
                 ..current_state

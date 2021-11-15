@@ -15,19 +15,19 @@
 use crate::config::{BindingVec, Config, MappingMap};
 use crate::connectors::utils::metrics::METRICS_CHANNEL;
 use crate::errors::{Error, Kind as ErrorKind, Result};
-use crate::lifecycle::{InstanceLifecycleFsm, InstanceState};
-use crate::registry::{Instance, Registries, ServantId};
+use crate::registry::Registries;
 use crate::repository::{
     Artefact, BindingArtefact, ConnectorArtefact, PipelineArtefact, Repositories,
 };
-use crate::url::ports::METRICS;
-use crate::url::TremorUrl;
+use crate::url::{ResourceType, TremorUrl};
 use crate::QSIZE;
 use async_std::channel::bounded;
+use async_std::prelude::*;
 use async_std::task::{self, JoinHandle};
 use hashbrown::HashMap;
 use std::{sync::atomic::Ordering, time::Duration};
 
+pub(crate) use crate::binding;
 pub(crate) use crate::connectors;
 pub(crate) use crate::pipeline;
 
@@ -89,6 +89,8 @@ pub enum ManagerMsg {
     Pipeline(pipeline::ManagerMsg),
     /// msg to the connector manager
     Connector(connectors::ManagerMsg),
+    /// msg to the binding manager
+    Binding(binding::ManagerMsg),
     /// stop this manager
     Stop,
 }
@@ -99,8 +101,10 @@ pub(crate) type Sender = async_std::channel::Sender<ManagerMsg>;
 pub(crate) struct Manager {
     pub connector: connectors::ManagerSender,
     pub pipeline: pipeline::ManagerSender,
+    pub binding: binding::ManagerSender,
     pub connector_h: JoinHandle<Result<()>>,
     pub pipeline_h: JoinHandle<Result<()>>,
+    pub binding_h: JoinHandle<Result<()>>,
     pub qsize: usize,
 }
 
@@ -112,6 +116,7 @@ impl Manager {
                 match msg {
                     ManagerMsg::Pipeline(msg) => self.pipeline.send(msg).await?,
                     ManagerMsg::Connector(msg) => self.connector.send(msg).await?,
+                    ManagerMsg::Binding(msg) => self.binding.send(msg).await?,
                     ManagerMsg::Stop => {
                         info!("Stopping Manager ...");
                         self.pipeline.send(pipeline::ManagerMsg::Stop).await?;
@@ -120,8 +125,10 @@ impl Manager {
                                 reason: "Global Manager Stop".to_string(),
                             })
                             .await?;
+                        self.binding.send(binding::ManagerMsg::Stop).await?;
                         self.pipeline_h.cancel().await;
                         self.connector_h.cancel().await;
+                        self.binding_h.cancel().await;
                         break;
                     }
                 }
@@ -201,10 +208,10 @@ impl World {
     pub async fn ensure_pipeline(&self, id: &TremorUrl) -> Result<()> {
         if self.reg.find_pipeline(id).await?.is_none() {
             info!(
-                "Pipeline not found during binding process, binding {} to create a new instance.",
+                "Pipeline instance {} not found, create a new instance with that id.",
                 &id
             );
-            self.bind_pipeline(id).await?;
+            self.create_pipeline_instance(id).await?;
         } else {
             info!("Existing pipeline {} found", id);
         }
@@ -216,24 +223,17 @@ impl World {
     ///
     /// # Errors
     ///  * if the id isn't a pipeline instance or can't be bound
-    pub async fn bind_pipeline(&self, id: &TremorUrl) -> Result<InstanceState> {
-        info!("Binding pipeline {}", id);
+    pub async fn create_pipeline_instance(&self, id: &TremorUrl) -> Result<pipeline::Addr> {
+        info!("Creating pipeline instance {}", id);
         match (&self.repo.find_pipeline(id).await?, &id.instance()) {
             (Some(artefact), Some(_instance_id)) => {
-                let servant =
-                    InstanceLifecycleFsm::new(self.clone(), artefact.artefact.clone(), id.clone())
-                        .await?;
-                self.repo.bind_pipeline(id).await?;
-                let res = self.reg.publish_pipeline(id, servant).await?;
-
-                // We link to the metrics pipeline
-                let mut id = id.clone();
-                id.set_port(&METRICS);
-                let m = vec![(METRICS.to_string(), METRICS_PIPELINE.clone())]
-                    .into_iter()
-                    .collect();
-                self.link_existing_pipeline(&id, m).await?;
-                Ok(res)
+                let artefact = artefact.artefact.clone();
+                let instance = artefact.spawn(self, id.clone()).await?;
+                self.repo.register_pipeline_instance(id).await?;
+                self.reg
+                    .publish_pipeline(id, artefact, instance.clone())
+                    .await?;
+                Ok(instance)
             }
             (None, _) => Err(ErrorKind::ArtefactNotFound(id.to_string()).into()),
             (_, None) => Err(ErrorKind::InvalidInstanceUrl(id.to_string()).into()),
@@ -243,18 +243,18 @@ impl World {
     /// Remove a pipeline instance identified by `id` from registry and repo and stop the instance
     ///
     /// # Errors
-    ///  * if the id isn't an pipeline instance or the pipeline can't be unbound
-    pub async fn unbind_pipeline(&self, id: &TremorUrl) -> Result<InstanceState> {
-        info!("Unbinding pipeline {}", id);
+    ///  * if the id isn't an pipeline instance or the pipeline can't be unregistered
+    pub async fn destroy_pipeline_instance(&self, id: &TremorUrl) -> Result<()> {
+        info!("Destroying pipeline instance {}", id);
         match (&self.reg.find_pipeline(id).await?, id.instance()) {
             (Some(_instance), Some(_instance_id)) => {
                 // remove instance from registry
-                let mut r = self.reg.unpublish_pipeline(id).await?;
+                let addr = self.reg.unpublish_pipeline(id).await?;
                 // stop instance
-                let state = r.stop().await?.state;
+                addr.stop().await?;
                 // unregister instance from repo
-                self.repo.unbind_pipeline(id).await?;
-                Ok(state)
+                self.repo.unregister_pipeline_instance(id).await?;
+                Ok(())
             }
             (None, _) => {
                 Err(ErrorKind::InstanceNotFound("pipeline".to_string(), id.to_string()).into())
@@ -263,7 +263,7 @@ impl World {
         }
     }
 
-    /// Links a pipeline
+    /// Connects a pipeline according to the given `mappings`.
     ///
     /// # Errors
     ///  * if the id isn't a pipeline or the pipeline can't be linked
@@ -286,33 +286,8 @@ impl World {
         );
         if let Some(pipeline_a) = self.repo.find_pipeline(id).await? {
             if self.reg.find_pipeline(id).await?.is_none() {
-                self.bind_pipeline(id).await?;
+                self.create_pipeline_instance(id).await?;
             };
-            pipeline_a.artefact.link(self, id, mappings).await
-        } else {
-            Err(ErrorKind::ArtefactNotFound(id.to_string()).into())
-        }
-    }
-
-    /// Links a pipeline
-    async fn link_existing_pipeline(
-        &self,
-        id: &TremorUrl,
-        mappings: HashMap<
-            <PipelineArtefact as Artefact>::LinkLHS,
-            <PipelineArtefact as Artefact>::LinkRHS,
-        >,
-    ) -> Result<<PipelineArtefact as Artefact>::LinkResult> {
-        info!(
-            "Linking pipeline {}\n\t{}",
-            id,
-            mappings
-                .iter()
-                .map(|(port, url)| format!("{} -> {}", port, url))
-                .collect::<Vec<_>>()
-                .join("\n\t")
-        );
-        if let Some(pipeline_a) = self.repo.find_pipeline(id).await? {
             pipeline_a.artefact.link(self, id, mappings).await
         } else {
             Err(ErrorKind::ArtefactNotFound(id.to_string()).into())
@@ -334,7 +309,7 @@ impl World {
         if let Some(pipeline_a) = self.repo.find_pipeline(id).await? {
             let r = pipeline_a.artefact.unlink(self, id, mappings).await?;
             if r {
-                self.unbind_pipeline(id).await?;
+                self.destroy_pipeline_instance(id).await?;
             };
             Ok(r)
         } else {
@@ -342,55 +317,54 @@ impl World {
         }
     }
 
-    #[cfg(test)]
-    pub async fn bind_pipeline_from_artefact(
-        &self,
-        id: &TremorUrl,
-        artefact: PipelineArtefact,
-    ) -> Result<InstanceState> {
-        self.repo.publish_pipeline(id, false, artefact).await?;
-        self.bind_pipeline(id).await
-    }
-
-    /// Bind a connector - create an instance and stick it into the registry
+    /// Create a connector instance - create an instance and stick it into the registry
     ///
     /// # Errors
-    ///  * if the id isn't a connector instance or it can't be bound
-    pub async fn bind_connector(&self, id: &TremorUrl) -> Result<InstanceState> {
-        info!("Binding connector {}", id);
+    ///  * if the id isn't a connector instance or it can't be created
+    pub async fn create_connector_instance(&self, id: &TremorUrl) -> Result<connectors::Addr> {
+        info!("Creating connector instance {}", id);
         match (&self.repo.find_connector(id).await?, &id.instance()) {
             (Some(artefact), Some(_instance_id)) => {
-                let servant =
-                    InstanceLifecycleFsm::new(self.clone(), artefact.artefact.clone(), id.clone())
-                        .await?;
-                self.repo.bind_connector(id).await?;
-                let res = self.reg.publish_connector(id, servant).await?;
-                Ok(res)
+                let artefact = artefact.artefact.clone();
+                let instance = artefact.spawn(self, id.to_instance()).await?;
+                self.repo.register_connector_instance(id).await?;
+                self.reg
+                    .publish_connector(id, artefact, instance.clone())
+                    .await?;
+                Ok(instance)
             }
             (None, _) => Err(ErrorKind::ArtefactNotFound(id.to_string()).into()),
             (_, None) => Err(ErrorKind::InvalidInstanceUrl(id.to_string()).into()),
         }
     }
 
-    /// Unbind a connector - remove from registry, stop and unregister from repo
+    /// stop and remove a connector instance from the registry
     ///
     /// # Errors
-    ///  * if the id isn't a connector instance or it can't be found in the registry1
-    pub async fn unbind_connector(&self, id: &TremorUrl) -> Result<InstanceState> {
-        info!("Unbinding connector {}", id);
+    ///  * if the id isn't a connector instance or it can't be found in the registry or the process times out
+    pub async fn destroy_connector_instance(&self, id: &TremorUrl) -> Result<()> {
+        info!("Destroying connector instance {}", id);
         match (&self.reg.find_connector(id).await?, id.instance()) {
             (Some(_instance), Some(_instance_id)) => {
                 // remove from registry
-                let mut fsm = self.reg.unpublish_connector(id).await?;
-                // stop instance
-                let state = fsm.stop().await?.state;
+                let addr = self.reg.unpublish_connector(id).await?;
                 // remove instance from repo
-                self.repo.unbind_connector(id).await?;
-                Ok(state)
+                self.repo.unregister_connector_instance(id).await?;
+                // stop instance
+                let (tx, rx) = bounded(1);
+                addr.stop(tx).await?;
+                // we timeout the stop process here, so we won't hang forever
+                rx.recv()
+                    .timeout(DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT)
+                    .await??
+                    .res?;
+                Ok(())
             }
-            (None, _) => {
-                Err(ErrorKind::InstanceNotFound("connector".to_string(), id.to_string()).into())
-            }
+            (None, _) => Err(ErrorKind::InstanceNotFound(
+                ResourceType::Connector.to_string(),
+                id.to_string(),
+            )
+            .into()),
             (_, None) => Err(ErrorKind::InvalidInstanceUrl(id.to_string()).into()),
         }
     }
@@ -402,10 +376,10 @@ impl World {
     pub async fn ensure_connector(&self, id: &TremorUrl) -> Result<()> {
         if self.reg.find_connector(id).await?.is_none() {
             info!(
-                "Connector not found in registry, binding {} to create a new instance.",
+                "Connector instance {} not found in registry, creating a new instance.",
                 &id
             );
-            self.bind_connector(id).await?;
+            self.create_connector_instance(id).await?;
         } else {
             info!("Existing connector {} found", id);
         }
@@ -426,7 +400,7 @@ impl World {
     ) -> Result<<ConnectorArtefact as Artefact>::LinkResult> {
         if let Some(connector_a) = self.repo.find_connector(id).await? {
             if self.reg.find_connector(id).await?.is_none() {
-                self.bind_connector(id).await?;
+                self.create_connector_instance(id).await?;
             }
             connector_a.artefact.link(self, id, mappings).await
         } else {
@@ -450,7 +424,7 @@ impl World {
         if let Some(connector) = self.repo.find_connector(id).await? {
             let fully_disconnected = connector.artefact.unlink(self, id, mappings).await?;
             if fully_disconnected {
-                self.unbind_connector(id).await?;
+                self.destroy_connector_instance(id).await?;
             }
             Ok(fully_disconnected)
         } else {
@@ -458,38 +432,42 @@ impl World {
         }
     }
 
-    pub(crate) async fn drain_connector(&self, id: &TremorUrl) -> Result<InstanceState> {
-        self.reg.drain_connector(id).await
-    }
-
-    pub(crate) async fn bind_binding_a(
+    pub(crate) async fn create_binding_instance(
         &self,
         id: &TremorUrl,
         artefact: &BindingArtefact,
-    ) -> Result<InstanceState> {
-        info!("Binding binding {}", id);
+    ) -> Result<binding::Addr> {
+        info!("Creating Binding instance {}", id);
         match &id.instance() {
             Some(_instance_id) => {
-                let servant =
-                    InstanceLifecycleFsm::new(self.clone(), artefact.clone(), id.clone()).await?;
-                self.repo.bind_binding(id).await?;
-                self.reg.publish_binding(id, servant).await
+                let artefact = artefact.clone();
+                let instance = artefact.spawn(self, id.to_instance()).await?;
+                self.repo.register_binding_instance(id).await?;
+                self.reg
+                    .publish_binding(id, artefact, instance.clone())
+                    .await?;
+                Ok(instance)
             }
             None => Err(ErrorKind::InvalidInstanceUrl(id.to_string()).into()),
         }
     }
 
-    pub(crate) async fn unbind_binding(&self, id: &TremorUrl) -> Result<InstanceState> {
-        info!("Unbinding binding {}", id);
+    pub(crate) async fn destroy_binding_instance(&self, id: &TremorUrl) -> Result<()> {
+        info!("Destroying Binding instance {}", id);
         match &id.instance() {
             Some(_instance_id) => {
                 // remove from registry
-                let mut servant = self.reg.unpublish_binding(id).await?;
-                // stop instance
-                let state = servant.stop().await?.state;
+                let (addr, _artefact) = self.reg.unpublish_binding(id).await?;
                 // remove instance from repo
-                self.repo.unbind_binding(id).await?;
-                Ok(state)
+                self.repo.unregister_binding_instance(id).await?;
+                // stop instance
+                let (tx, rx) = bounded(1);
+                addr.stop(tx).await?;
+                rx.recv()
+                    .timeout(DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT)
+                    .await???;
+
+                Ok(())
             }
             None => Err(ErrorKind::InvalidInstanceUrl(id.to_string()).into()),
         }
@@ -515,54 +493,56 @@ impl World {
         }
         // find the artefact
         if let Some(artefact) = self.repo.find_binding(id).await? {
+            // link the config given the mappings
+            let linked = artefact.artefact.link(self, id, mappings).await?;
             // spawn an instance
-            let spawned = artefact.artefact.spawn(self, id.clone()).await?;
+            let spawned = linked.spawn(self, id.clone()).await?;
 
-            // link the instance given the mappings
-            let link_result = spawned.link(self, id, mappings).await?;
-
-            // create lifecycle FSM, register in repo, publish to registry
-            let servant =
-                InstanceLifecycleFsm::new(self.clone(), link_result.clone(), id.clone()).await?;
-            self.repo.bind_binding(id).await?;
-            self.reg.publish_binding(id, servant).await?;
+            // register in repo, publish to registry
+            self.repo.register_binding_instance(id).await?;
+            self.reg
+                .publish_binding(id, linked.clone(), spawned)
+                .await?;
 
             // start the instance -> thus starting all contained instances
             self.reg.start_binding(id).await?;
-            Ok(link_result)
+            Ok(linked)
         } else {
             Err(ErrorKind::ArtefactNotFound(id.to_string()).into())
         }
     }
 
-    /// Stop, unlink and unregister/unpublish the instance identified by `id`
+    /// Unpublish from registry, drain, unlin , unlink and unregister/unpublish the instance identified by `id`
     ///
     /// # Errors
     ///  * If the id is not a valid binding instance url
     ///  * If no binding with `id` is currently running, or no artefact could be found
     ///  * If for some reason stopping, unlinking unpublishing failed
     pub async fn destroy_binding(&self, id: &TremorUrl) -> Result<()> {
-        if let Some(mut instance) = self.reg.find_binding(id).await? {
-            let mappings = instance
-                .mapping
-                .as_ref()
-                .and_then(|mapping| mapping.get(id).cloned())
-                .unwrap_or_default();
+        let (instance, artefact) = self.reg.unpublish_binding(id).await?;
+        // unregister instance from repo
+        self.repo.unregister_binding_instance(id).await?;
 
-            instance.unlink(self, id, mappings).await?;
+        // Drain the binding
+        let (drain_tx, drain_rx) = bounded(1);
+        instance.send(binding::Msg::Drain(drain_tx)).await?;
+        // swallow draining error, this is just best effort
+        // this will include timeout errors
+        let _ = drain_rx.recv().await?;
 
-            // stop this instance - and thus all contained instances
-            instance.stop(self, id).await?;
+        // unlink all stopped instances
+        let dummy_mappings = HashMap::new();
+        artefact.unlink(self, id, dummy_mappings).await?;
 
-            // unregister from repository
-            self.repo.unbind_binding(id).await?;
-            // unpublish from registry
-            self.reg.unpublish_binding(id).await?;
+        // stop this instance - and thus all contained instances
+        // if we stop before we cannot actually unlink anymore
+        let (tx, rx) = bounded(1);
+        instance.stop(tx).await?;
+        rx.recv()
+            .timeout(DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT)
+            .await???;
 
-            Ok(())
-        } else {
-            Err(ErrorKind::InstanceNotFound("binding".to_string(), id.to_string()).into())
-        }
+        Ok(())
     }
 
     /// Instantiates a binding given the mapping in `mappings`
@@ -581,7 +561,7 @@ impl World {
         if let Some(binding_a) = self.repo.find_binding(id).await? {
             let r = binding_a.artefact.link(self, id, mappings).await?;
             if self.reg.find_binding(id).await?.is_none() {
-                self.bind_binding_a(id, &r).await?;
+                self.create_binding_instance(id, &r).await?;
             };
             Ok(r)
         } else {
@@ -601,11 +581,11 @@ impl World {
             <BindingArtefact as Artefact>::LinkRHS,
         >,
     ) -> Result<<BindingArtefact as Artefact>::LinkResult> {
-        if let Some(binding) = self.reg.find_binding(id).await? {
-            if binding.unlink(self, id, mappings).await? {
-                self.unbind_binding(id).await?;
+        if let Some((_addr, artefact)) = self.reg.find_binding(id).await? {
+            if artefact.unlink(self, id, mappings).await? {
+                self.destroy_binding_instance(id).await?;
             }
-            return Ok(binding);
+            return Ok(artefact);
         }
 
         Err(ErrorKind::ArtefactNotFound(id.to_string()).into())
@@ -637,22 +617,26 @@ impl World {
     /// # Errors
     ///  * if the world manager can't be started
     pub async fn start(config: WorldConfig) -> Result<(Self, JoinHandle<Result<()>>)> {
+        let repo = Repositories::new();
+        let reg = Registries::new();
+
         let (connector_h, connector) =
             connectors::Manager::new(config.qsize, METRICS_CHANNEL.tx()).start();
         // TODO: use metrics channel for pipelines as well
         let (pipeline_h, pipeline) = pipeline::Manager::new(config.qsize).start();
+        let (binding_h, binding) = binding::Manager::new(config.qsize, reg.clone()).start();
 
         let (system_h, system) = Manager {
             connector,
             pipeline,
+            binding,
             connector_h,
             pipeline_h,
+            binding_h,
             qsize: config.qsize,
         }
         .start();
 
-        let repo = Repositories::new();
-        let reg = Registries::new();
         let mut world = Self { system, repo, reg };
 
         crate::connectors::register_builtin_connector_types(&world).await?;
@@ -670,14 +654,22 @@ impl World {
     pub async fn stop(&self, mode: ShutdownMode) -> Result<()> {
         match mode {
             ShutdownMode::Graceful => {
-                // quiesce and stop all the bindings
-                if let Err(_err) = self.reg.drain_all_bindings().await {
+                // first drain all the bindings
+                if let Err(_err) = self
+                    .reg
+                    .drain_all_bindings(DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT)
+                    .await
+                {
                     warn!("Error draining all bindings to drain.");
                 }
             }
             ShutdownMode::Forceful => {}
         }
-        if let Err(e) = self.reg.stop_all_bindings().await {
+        if let Err(e) = self
+            .reg
+            .stop_all_bindings(DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT)
+            .await
+        {
             error!("Error stopping all bindings: {}", e);
         }
         Ok(self.system.send(ManagerMsg::Stop).await?)
@@ -695,7 +687,7 @@ type: metrics
         self.repo
             .publish_connector(&METRICS_CONNECTOR, true, artefact)
             .await?;
-        self.bind_connector(&METRICS_CONNECTOR).await?;
+        self.create_connector_instance(&METRICS_CONNECTOR).await?;
         self.reg
             .find_connector(&METRICS_CONNECTOR)
             .await?
@@ -704,26 +696,8 @@ type: metrics
         // before anything else is started, so we don't fill up the metrics_channel and thus lose messages
         self.reg.start_connector(&METRICS_CONNECTOR).await?;
 
-        // register metrics pipeline
         let module_path = &tremor_script::path::ModulePath { mounts: Vec::new() };
         let aggr_reg = tremor_script::aggr_registry();
-        let artefact_metrics = tremor_pipeline::query::Query::parse(
-            module_path,
-            "#!config id = \"system::metrics\"\nselect event from in into out;",
-            "<metrics>",
-            Vec::new(),
-            &*tremor_pipeline::FN_REGISTRY.lock()?,
-            &aggr_reg,
-        )?;
-        self.repo
-            .publish_pipeline(&METRICS_PIPELINE, true, artefact_metrics)
-            .await?;
-        self.bind_pipeline(&METRICS_PIPELINE).await?;
-
-        self.reg
-            .find_pipeline(&METRICS_PIPELINE)
-            .await?
-            .ok_or_else(|| Error::from("Failed to initialize metrics pipeline."))?;
 
         // register passthrough pipeline
         let artefact_passthrough = tremor_pipeline::query::Query::parse(
@@ -749,7 +723,7 @@ type: stdio
         self.repo
             .publish_connector(&STDIO_CONNECTOR, true, stdout_artefact)
             .await?;
-        self.bind_connector(&STDIO_CONNECTOR).await?;
+        self.create_connector_instance(&STDIO_CONNECTOR).await?;
         self.reg
             .find_connector(&STDIO_CONNECTOR)
             .await?
@@ -758,17 +732,52 @@ type: stdio
         Ok(())
     }
 
-    pub(crate) async fn instantiate_pipeline(
+    pub(crate) async fn spawn_pipeline(
         &self,
         config: PipelineArtefact,
-        id: ServantId,
+        instance_id: TremorUrl,
     ) -> Result<pipeline::Addr> {
         let (tx, rx) = bounded(1);
         self.system
             .send(ManagerMsg::Pipeline(pipeline::ManagerMsg::Create(
                 tx,
-                Box::new(pipeline::Create { config, id }),
+                Box::new(pipeline::Create {
+                    config,
+                    id: instance_id,
+                }),
             )))
+            .await?;
+        rx.recv().await?
+    }
+
+    pub(crate) async fn spawn_connector(
+        &self,
+        config: ConnectorArtefact,
+        instance_id: TremorUrl,
+    ) -> Result<connectors::Addr> {
+        let create = connectors::Create::new(instance_id.clone(), config);
+        let (tx, rx) = bounded(1);
+        self.system
+            .send(ManagerMsg::Connector(connectors::ManagerMsg::Create {
+                tx,
+                create: Box::new(create),
+            }))
+            .await?;
+        rx.recv().await?
+    }
+
+    pub(crate) async fn spawn_binding(
+        &self,
+        artefact_config: BindingArtefact,
+        instance_id: TremorUrl,
+    ) -> Result<binding::Addr> {
+        let create = binding::Create::new(instance_id.clone(), artefact_config);
+        let (tx, rx) = bounded(1);
+        self.system
+            .send(ManagerMsg::Binding(binding::ManagerMsg::Create {
+                tx,
+                create: Box::new(create),
+            }))
             .await?;
         rx.recv().await?
     }

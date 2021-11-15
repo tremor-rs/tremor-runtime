@@ -87,7 +87,7 @@ impl Sink for Exit {
             };
             // this should stop the whole server process
             let world = self.world.clone();
-            let url = ctx.url.clone();
+            let url = ctx.url().clone();
             // we spawn this out into another task, so we don't block the sink loop handling control plane messages
             task::spawn(async move {
                 if let Err(e) = world.stop(mode).await {
