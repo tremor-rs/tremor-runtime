@@ -1013,7 +1013,7 @@ impl<'input> Preprocessor {
                 return Ok((cu, path));
             }
         }
-        
+
         file.set_extension("trickle");
         if let Some(path) = module_path.resolve(&file) {
             if path.is_file() {

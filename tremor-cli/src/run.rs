@@ -36,10 +36,10 @@ use tremor_script::highlighter::{Highlighter, Term as TermHighlighter};
 use tremor_script::prelude::*;
 use tremor_script::query::Query;
 use tremor_script::script::{AggrType, Return, Script};
+use tremor_script::srs;
 use tremor_script::{ctx::EventContext, lexer::Tokenizer};
 use tremor_script::{EventPayload, Value, ValueAndMeta};
 use tremor_value::literal;
-use tremor_script::srs;
 
 struct Ingress {
     is_interactive: bool,
@@ -434,7 +434,7 @@ fn run_trickle_query(
     Ok(())
 }
 
-fn parse_troy_source(src: &str, args: &Value) -> Result<(String,srs::Deploy)> {
+fn parse_troy_source(src: &str, args: &Value) -> Result<(String, srs::Deploy)> {
     let target_stem = if let Some(stem) = std::path::Path::new(src).file_stem() {
         stem.to_string_lossy().to_string()
     } else {
@@ -470,16 +470,15 @@ fn parse_troy_source(src: &str, args: &Value) -> Result<(String,srs::Deploy)> {
             // ALLOW: main.rs
             std::process::exit(1);
         }
-    };    
+    };
 }
 
 async fn handle_troy_connector(
-    world: &tremor_runtime::system::World, 
-    _stem: &String, 
-    instance: &str, 
-    atom: &srs::ConnectorDecl
+    world: &tremor_runtime::system::World,
+    _stem: &str,
+    instance: &str,
+    atom: &srs::ConnectorDecl,
 ) -> Result<()> {
-
     let yaml = match &atom.params {
         Some(yaml) => serde_yaml::to_string(&yaml)?,
         None => serde_yaml::to_string(&literal!({}))?,
@@ -492,21 +491,15 @@ async fn handle_troy_connector(
             let ramp = serde_yaml::from_str::<tremor_runtime::config::OnRamp>(&yaml)?;
             let url = TremorUrl::parse(&format!("{}/{}/{}", stub, atom.kind.as_str(), instance))?;
             dbg!(&url.to_string());
-            world
-                .repo
-                .publish_onramp(&url, false, ramp)
-                .await?;
-            },
+            world.repo.publish_onramp(&url, false, ramp).await?;
+        }
         "blackhole" | "stdout" | "stderr" => {
             let stub = "/offramp";
             let ramp = serde_yaml::from_str::<tremor_runtime::config::OffRamp>(&yaml)?;
-            let url = TremorUrl::parse(&format!("{}/{}/{}", stub, atom.kind.as_str(), instance))?;            
-            world
-                .repo
-                .publish_offramp(&url, false, ramp)
-                .await?;
+            let url = TremorUrl::parse(&format!("{}/{}/{}", stub, atom.kind.as_str(), instance))?;
+            world.repo.publish_offramp(&url, false, ramp).await?;
             dbg!(&url.to_string());
-            },
+        }
         _otherwise => unimplemented!(),
     };
 
@@ -514,15 +507,14 @@ async fn handle_troy_connector(
 }
 
 async fn handle_troy_pipeline(
-    world: &tremor_runtime::system::World, 
+    world: &tremor_runtime::system::World,
     raw: &str,
     deploy: &srs::Deploy,
-    _stem: &String, 
-    instance: &str, 
-    _alias: &String,
-    atom: &srs::Query
-) -> Result<()>
-{
+    _stem: &str,
+    instance: &str,
+    _alias: &str,
+    atom: &srs::Query,
+) -> Result<()> {
     let name = &atom.node_id;
     let url = TremorUrl::parse(&format!("/pipeline/{}/{}", name.clone(), instance))?;
     world
@@ -531,8 +523,7 @@ async fn handle_troy_pipeline(
             &url,
             false,
             tremor_pipeline::query::Query(
-                tremor_script::Query::from_troy(&raw, &deploy, atom)
-                    .unwrap(),
+                tremor_script::Query::from_troy(raw, deploy, atom)?,
             ),
         )
         .await?;
@@ -540,11 +531,12 @@ async fn handle_troy_pipeline(
     Ok(())
 }
 
+#[allow(clippy::unnecessary_wraps)] // TODO This is a placeholder for now
 fn handle_troy_endpoint(_origin: &str, _port: &Option<String>) -> Result<TremorUrl> {
-    dbg!(&_origin, &_port);
     Ok(TremorUrl::parse("/")?)
 }
 
+#[allow(clippy::unnecessary_wraps)] // TODO this is a palceholder for now
 fn handle_system_endpoint(str_url: &TremorUrl) -> Result<TremorUrl> {
     Ok(str_url.clone())
 }
@@ -564,26 +556,55 @@ fn run_troy_source(_matches: &ArgMatches, src: &str, args: &Value) -> Result<()>
             .unwrap();
 
         for (_name, flow) in &unit.instances {
-            let binding_url = TremorUrl::parse(&format!("/binding/troy::deploy/snot")).unwrap();
+            let binding_url = TremorUrl::parse("/binding/troy::deploy/snot").unwrap();
 
             let flow_atoms = &flow.atom;
 
             for flow in &flow_atoms.atoms {
                 match flow {
                     srs::AtomOfDeployment::Connector(atom) => {
-                        handle_troy_connector(&world, &target_stem, binding_instance, atom).await.unwrap();
-                    } 
+                        handle_troy_connector(&world, &target_stem, binding_instance, atom)
+                            .await
+                            .unwrap();
+                    }
                     srs::AtomOfDeployment::Pipeline(alias, atom) => {
-                        handle_troy_pipeline(&world, "raw", &deployable, &target_stem, binding_instance, alias, atom).await.unwrap();
+                        handle_troy_pipeline(
+                            &world,
+                            "raw",
+                            &deployable,
+                            &target_stem,
+                            binding_instance,
+                            alias,
+                            atom,
+                        )
+                        .await
+                        .unwrap();
                     }
                     srs::AtomOfDeployment::Flow(atom) => {
                         for flow in &atom.atoms {
                             match flow {
                                 srs::AtomOfDeployment::Connector(atom) => {
-                                    handle_troy_connector(&world, &target_stem, binding_instance, atom).await.unwrap();
-                                } 
+                                    handle_troy_connector(
+                                        &world,
+                                        &target_stem,
+                                        binding_instance,
+                                        atom,
+                                    )
+                                    .await
+                                    .unwrap();
+                                }
                                 srs::AtomOfDeployment::Pipeline(alias, atom) => {
-                                    handle_troy_pipeline(&world, "raw", &deployable, &target_stem, binding_instance, alias, atom).await.unwrap();
+                                    handle_troy_pipeline(
+                                        &world,
+                                        "raw",
+                                        &deployable,
+                                        &target_stem,
+                                        binding_instance,
+                                        alias,
+                                        atom,
+                                    )
+                                    .await
+                                    .unwrap();
                                 }
                                 srs::AtomOfDeployment::Flow(_atom) => {
                                     continue;
@@ -594,37 +615,29 @@ fn run_troy_source(_matches: &ArgMatches, src: &str, args: &Value) -> Result<()>
                 }
             }
 
-            let mut links: hashbrown::HashMap<TremorUrl,Vec<TremorUrl>> = hashbrown::HashMap::new();
+            let mut links: hashbrown::HashMap<TremorUrl, Vec<TremorUrl>> =
+                hashbrown::HashMap::new();
             for link in &flow_atoms.links {
                 let (from, to) = match (&link.from, &link.to) {
                     (
                         DeployEndpoint::Troy(origin, origin_port),
-                        DeployEndpoint::Troy(target, target_port)      
+                        DeployEndpoint::Troy(target, target_port),
                     ) => {
                         let origin = handle_troy_endpoint(origin, origin_port).unwrap();
                         let target = handle_troy_endpoint(target, target_port).unwrap();
                         (origin, target)
-                    }          
-                    (
-                        DeployEndpoint::Troy(origin, origin_port),
-                        DeployEndpoint::System(target)      
-                    ) => {
+                    }
+                    (DeployEndpoint::Troy(origin, origin_port), DeployEndpoint::System(target)) => {
                         let origin = handle_troy_endpoint(origin, origin_port).unwrap();
                         let target = handle_system_endpoint(target).unwrap();
                         (origin, target)
                     }
-                    (
-                        DeployEndpoint::System(origin),
-                        DeployEndpoint::Troy(target, target_port)      
-                    ) => {
+                    (DeployEndpoint::System(origin), DeployEndpoint::Troy(target, target_port)) => {
                         let origin = handle_system_endpoint(origin).unwrap();
                         let target = handle_troy_endpoint(target, target_port).unwrap();
                         (origin, target)
                     }
-                    (
-                        DeployEndpoint::System(origin),
-                        DeployEndpoint::System(target)      
-                    ) => {
+                    (DeployEndpoint::System(origin), DeployEndpoint::System(target)) => {
                         let origin = handle_system_endpoint(origin).unwrap();
                         let target = handle_system_endpoint(target).unwrap();
                         (origin, target)
@@ -633,7 +646,7 @@ fn run_troy_source(_matches: &ArgMatches, src: &str, args: &Value) -> Result<()>
                 // Oversimplification for emulation purposes
                 links.insert(from, vec![to]);
             }
-            
+
             // This is the actual deployment of the flow
 
             let binding = BindingArtefact {
@@ -652,7 +665,7 @@ fn run_troy_source(_matches: &ArgMatches, src: &str, args: &Value) -> Result<()>
             let kv = hashbrown::HashMap::new();
             world.link_binding(&binding_url, kv).await.unwrap();
         }
-            
+
         // dbg!(world.repo.list_onramps().await.unwrap());
         // dbg!(world.repo.list_offramps().await.unwrap());
         // dbg!(world.repo.list_pipelines().await.unwrap());
