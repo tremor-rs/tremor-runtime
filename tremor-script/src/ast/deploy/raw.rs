@@ -412,13 +412,22 @@ pub enum DeployLinkRaw<'script> {
 
 /// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub enum DeployCreateKind {
+pub enum DeployKind {
+    /// Reference to a connector definition FIXME - delete this
+    Connector,
+    /// Reference to a pipeline definition FIXME - delete this
+    Pipeline,
+    /// Reference to a flow definition
+    Flow,
+}
+
+/// we're forced to make this pub because of lalrpop
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub enum CreateKind {
     /// Reference to a connector definition
     Connector,
     /// Reference to a pipeline definition
     Pipeline,
-    /// Reference to a flow definition
-    Flow,
 }
 
 /// we're forced to make this pub because of lalrpop
@@ -431,7 +440,7 @@ pub struct CreateStmtRaw<'script> {
     /// Id of the definition
     pub target: IdentRaw<'script>,
     /// Module of the definition
-    pub(crate) kind: Option<DeployCreateKind>,
+    pub(crate) kind: CreateKind,
     pub(crate) module: Vec<IdentRaw<'script>>,
     pub(crate) docs: Option<Vec<Cow<'script, str>>>,
 }
@@ -487,7 +496,7 @@ pub struct DeployFlowRaw<'script> {
     /// Id of the definition
     pub target: IdentRaw<'script>,
     /// Module of the definition - FIXME: we don't need the deploy kind here once it's merged
-    pub(crate) kind: Option<DeployCreateKind>,
+    pub(crate) kind: DeployKind,
     pub(crate) module: Vec<IdentRaw<'script>>,
     pub(crate) docs: Option<Vec<Cow<'script, str>>>,
 }
