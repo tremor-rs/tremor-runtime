@@ -80,7 +80,7 @@ impl Connector for Cb {
         source_context: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
-        let source = CbSource::from_config(&self.config, &source_context.url).await?;
+        let source = CbSource::from_config(&self.config, source_context.url()).await?;
         let source_addr = builder.spawn(source, source_context)?;
         Ok(Some(source_addr))
     }
