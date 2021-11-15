@@ -132,41 +132,12 @@ impl Deploy {
         let mut instances = HashMap::new();
 
         for stmt in &self.script.stmts {
-            if let StmtKind::CreateStmt(ref stmt) = stmt {
+            if let StmtKind::DeployFlowStmt(ref stmt) = stmt {
                 // FIXME TODO Caching pre friday-design behaviour - until we verify the friday semantics
                 //                let atom = FlowDecl::new_from_deploy(self, &stmt.atom.fqn())?;
                 let atom = match &stmt.atom {
                     StmtKind::FlowDecl(atom) => FlowDecl::new_from_deploy(self, &atom.node_id)?,
-                    StmtKind::ConnectorDecl(atom) => {
-                        return Err(Error::from(CompilerError {
-                            // FIXME TODO hygienic
-                            error: Error::from(
-                                format!("Invalid statement for deployment {}", &atom.node_id.fqn())
-                                    .as_str(),
-                            ),
-                            cus: vec![],
-                        }))
-                    }
-                    StmtKind::PipelineDecl(atom) => {
-                        return Err(Error::from(CompilerError {
-                            // FIXME TODO hygienic
-                            error: Error::from(
-                                format!("Invalid statement for deployment {}", &atom.node_id.fqn())
-                                    .as_str(),
-                            ),
-                            cus: vec![],
-                        }))
-                    }
-                    StmtKind::CreateStmt(atom) => {
-                        return Err(Error::from(CompilerError {
-                            // FIXME TODO hygienic
-                            error: Error::from(
-                                format!("Invalid statement for deployment {}", &atom.node_id.fqn())
-                                    .as_str(),
-                            ),
-                            cus: vec![],
-                        }))
-                    }
+                    _otherwise => todo!(),
                 };
                 instances.insert(
                     stmt.fqn(),
@@ -703,57 +674,54 @@ impl FlowDecl {
         };
 
         let mut srs_atoms = Vec::new();
-        for atom in &flow.atoms {
-            if let ast::DeployStmt::CreateStmt(stmt) = atom {
-                match &stmt.atom {
-                    ast::DeployStmt::ConnectorDecl(instance) => {
-                        // TODO wire up args
-                        srs_atoms.push(AtomOfDeployment::Connector(
-                            ConnectorDecl::new_from_deploy(
-                                origin,
-                                stmt.alias.to_string(),
-                                &instance.node_id,
-                            )?,
-                        ));
-                    }
-                    ast::DeployStmt::PipelineDecl(instance) => {
-                        // TODO wire up args
-                        srs_atoms.push(AtomOfDeployment::Pipeline(
-                            stmt.alias.to_string(),
-                            Query::new_from_deploy(origin, &instance.node_id, &instance.node_id)?,
-                        ));
-                    }
-                    ast::DeployStmt::FlowDecl(flow) => {
-                        // FIXME TODO We do not enable sub-flows within flows at this time
-                        //      Decision
-                        //          1 - Error ( cheap )
-                        //          2 - Or, allow sub-flows where they are self-describing and don't use the system connection type ( not so cheap, preferable )
-                        //
-                        return Err(CompilerError {
-                            // FIXME TODO hygienic
-                            error: Error::from(
-                                format!("Invalid statement for deployment {}", &flow.node_id.fqn())
-                                    .as_str(),
-                            ),
-                            cus: vec![],
-                        });
-                    }
-                    ast::DeployStmt::CreateStmt(create) => {
-                        return Err(CompilerError {
-                            // FIXME TODO hygienic
-                            error: Error::from(
-                                format!(
-                                    "Unexpected statement for flow statement {}",
-                                    &create.node_id.fqn()
-                                )
+        for stmt in &flow.atoms {
+            match &stmt.atom {
+                ast::DeployStmt::ConnectorDecl(instance) => {
+                    // TODO wire up args
+                    srs_atoms.push(AtomOfDeployment::Connector(ConnectorDecl::new_from_deploy(
+                        origin,
+                        stmt.alias.to_string(),
+                        &instance.node_id,
+                    )?));
+                }
+                ast::DeployStmt::PipelineDecl(instance) => {
+                    // TODO wire up args
+                    srs_atoms.push(AtomOfDeployment::Pipeline(
+                        stmt.alias.to_string(),
+                        Query::new_from_deploy(origin, &instance.node_id, &instance.node_id)?,
+                    ));
+                }
+                ast::DeployStmt::FlowDecl(flow) => {
+                    // FIXME TODO We do not enable sub-flows within flows at this time
+                    //      Decision
+                    //          1 - Error ( cheap )
+                    //          2 - Or, allow sub-flows where they are self-describing and don't use the system connection type ( not so cheap, preferable )
+                    //
+                    return Err(CompilerError {
+                        // FIXME TODO hygienic
+                        error: Error::from(
+                            format!("Invalid statement for deployment {}", &flow.node_id.fqn())
                                 .as_str(),
-                            ),
-                            cus: vec![],
-                        });
-                    }
+                        ),
+                        cus: vec![],
+                    });
+                }
+                ast::DeployStmt::DeployFlowStmt(create) => {
+                    return Err(CompilerError {
+                        // FIXME TODO hygienic
+                        error: Error::from(
+                            format!(
+                                "Unexpected statement for flow statement {}",
+                                &create.node_id.fqn()
+                            )
+                            .as_str(),
+                        ),
+                        cus: vec![],
+                    });
                 }
             }
         }
+
         Ok(Self {
             /// We capture the origin - so that the pinned raw memory is cached
             /// with our own self-reference composing a self-referential struct
