@@ -59,7 +59,7 @@ pub enum Stmt<'script> {
     /// A script creation
     Script(ScriptStmt<'script>),
     /// An pipeline declaration
-    PipelineDecl(PipelineDecl<'script>),
+    PipelineDecl(Box<PipelineDecl<'script>>),
     /// An pipeline creation
     PipelineStmt(PipelineStmt),
     /// A select statement

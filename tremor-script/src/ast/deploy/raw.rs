@@ -22,13 +22,11 @@ use super::DeployEndpoint;
 use super::DeployLink;
 use super::FlowDecl;
 use super::Value;
+use crate::ast::raw::{ExprRaw, IdentRaw, ModuleRaw, StringLitRaw};
 use crate::ast::{
     error_generic, node_id::NodeId, query::raw::PipelineDeclRaw, raw::WithExprsRaw, AggrRegistry,
     Deploy, DeployStmt, Helper, ModDoc, NodeMetas, PipelineDecl, Registry, Script, StringLit,
     Upable,
-};
-use crate::ast::{
-    raw::{ExprRaw, IdentRaw, ModuleRaw, StringLitRaw},
 };
 use crate::errors::ErrorKind;
 use crate::errors::Result;
@@ -189,17 +187,26 @@ impl<'script> Upable<'script> for DeployStmtRaw<'script> {
         match self {
             DeployStmtRaw::PipelineDecl(stmt) => {
                 let stmt: PipelineDecl<'script> = stmt.up(helper)?;
-                helper.definitions.insert(stmt.node_id.clone(), DeployStmt::PipelineDecl(Box::new(stmt.clone())));
+                helper.definitions.insert(
+                    stmt.node_id.clone(),
+                    DeployStmt::PipelineDecl(Box::new(stmt.clone())),
+                );
                 Ok(DeployStmt::PipelineDecl(Box::new(stmt)))
             }
             DeployStmtRaw::ConnectorDecl(stmt) => {
                 let stmt: ConnectorDecl<'script> = stmt.up(helper)?;
-                helper.definitions.insert(stmt.node_id.clone(), DeployStmt::ConnectorDecl(Box::new(stmt.clone())));
+                helper.definitions.insert(
+                    stmt.node_id.clone(),
+                    DeployStmt::ConnectorDecl(Box::new(stmt.clone())),
+                );
                 Ok(DeployStmt::ConnectorDecl(Box::new(stmt)))
             }
             DeployStmtRaw::FlowDecl(stmt) => {
                 let stmt: FlowDecl<'script> = stmt.up(helper)?;
-                helper.definitions.insert(stmt.node_id.clone(), DeployStmt::FlowDecl(Box::new(stmt.clone())));
+                helper.definitions.insert(
+                    stmt.node_id.clone(),
+                    DeployStmt::FlowDecl(Box::new(stmt.clone())),
+                );
                 Ok(DeployStmt::FlowDecl(Box::new(stmt)))
             }
             DeployStmtRaw::CreateStmt(stmt) => {
@@ -259,15 +266,24 @@ impl<'script> DeployModuleStmtRaw<'script> {
                 }
                 DeployStmtRaw::ConnectorDecl(stmt) => {
                     let stmt: ConnectorDecl<'script> = stmt.up(helper)?;
-                    helper.definitions.insert(stmt.node_id.clone(), DeployStmt::ConnectorDecl(Box::new(stmt.clone())));
+                    helper.definitions.insert(
+                        stmt.node_id.clone(),
+                        DeployStmt::ConnectorDecl(Box::new(stmt.clone())),
+                    );
                 }
                 DeployStmtRaw::FlowDecl(stmt) => {
                     let stmt: FlowDecl<'script> = stmt.up(helper)?;
-                    helper.definitions.insert(stmt.node_id.clone(), DeployStmt::FlowDecl(Box::new(stmt.clone())));
+                    helper.definitions.insert(
+                        stmt.node_id.clone(),
+                        DeployStmt::FlowDecl(Box::new(stmt.clone())),
+                    );
                 }
                 DeployStmtRaw::PipelineDecl(stmt) => {
                     let stmt: PipelineDecl<'script> = stmt.up(helper)?;
-                    helper.definitions.insert(stmt.node_id.clone(), DeployStmt::PipelineDecl(Box::new(stmt.clone())));
+                    helper.definitions.insert(
+                        stmt.node_id.clone(),
+                        DeployStmt::PipelineDecl(Box::new(stmt.clone())),
+                    );
                 }
                 DeployStmtRaw::CreateStmt(stmt) => {
                     let stmt: CreateStmt = stmt.up(helper)?;
@@ -379,7 +395,7 @@ impl<'script> Upable<'script> for FlowDeclRaw<'script> {
         let node_id = NodeId::new(self.id.clone(), helper.module.clone());
         let flow_decl = FlowDecl {
             mid: helper.add_meta_w_name(self.start, self.end, &self.id),
-            node_id: node_id.clone(),
+            node_id,
             params: self.params.up(helper)?,
             links,
             atoms,
@@ -398,7 +414,13 @@ pub type DeployLinksRaw<'script> = Vec<DeployLinkRaw<'script>>;
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum DeployLinkRaw<'script> {
     /// we're forced to make this pub because of lalrpop
-    Link(Location, Location, Option<Vec<Cow<'script, str>>>, DeployEndpointRaw<'script>, DeployEndpointRaw<'script>),
+    Link(
+        Location,
+        Location,
+        Option<Vec<Cow<'script, str>>>,
+        DeployEndpointRaw<'script>,
+        DeployEndpointRaw<'script>,
+    ),
     /// we're forced to make this pub because of lalrpop
     Atom(CreateStmtRaw<'script>),
 }
@@ -411,7 +433,7 @@ pub enum DeployCreateKind {
     /// Reference to a pipeline definition
     Pipeline,
     /// Reference to a flow definition
-    Flow
+    Flow,
 }
 
 /// we're forced to make this pub because of lalrpop
@@ -438,18 +460,19 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
         let target_module = self
             .module
             .iter()
-            .map(|x| format!("{}", x.to_string()))
+            .map(|x| x.to_string())
             .collect::<Vec<String>>();
-        let node_id = NodeId::new(self.target.to_string(), target_module.clone());
+        let node_id = NodeId::new(self.target.to_string(), target_module);
 
         let atom = if let Some(artefact) = helper.definitions.get(&node_id) {
-             artefact.clone()
+            artefact.clone()
         } else {
             return Err(ErrorKind::DeployArtefactNotDefined(
                 self.extent(&helper.meta),
                 self.id.extent(&helper.meta),
                 node_id.to_string(),
-            ).into())
+            )
+            .into());
         };
 
         let create_stmt = CreateStmt {
@@ -457,7 +480,7 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
             node_id: node_id.clone(),
             alias: self.id.to_string(),
             target: self.target.to_string(),
-            atom: atom,
+            atom,
             kind: self.kind,
             docs: self
                 .docs
