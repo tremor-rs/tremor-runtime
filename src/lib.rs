@@ -53,8 +53,6 @@ pub mod errors;
 /// Tremor function library
 pub mod functions;
 
-/// entities capturing artefact instance lifecycle
-pub mod lifecycle;
 pub(crate) mod permge;
 
 /// pipelines
@@ -76,6 +74,8 @@ pub mod utils;
 /// Tremor runtime version tools
 pub mod version;
 
+/// Bindings
+pub mod binding;
 /// Tremor connector extensions
 pub mod connectors;
 

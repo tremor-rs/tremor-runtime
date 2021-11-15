@@ -17,12 +17,13 @@ pub(crate) mod impls;
 pub(crate) mod prelude;
 pub(crate) mod sink;
 pub(crate) mod source;
+#[macro_use]
 pub(crate) mod utils;
+
+use std::fmt::Display;
 
 /// quiescence stuff
 pub(crate) use utils::{metrics, quiescence, reconnect};
-
-use std::fmt::Display;
 
 use async_std::task::{self, JoinHandle};
 use beef::Cow;
@@ -34,6 +35,7 @@ use self::utils::quiescence::QuiescenceBeacon;
 use crate::config::Connector as ConnectorConfig;
 use crate::errors::{Error, Kind as ErrorKind, Result};
 use crate::pipeline;
+use crate::registry::instance::InstanceState;
 use crate::system::World;
 use crate::url::{
     ports::{ERR, IN, OUT},
@@ -91,6 +93,10 @@ impl Addr {
     fn has_sink(&self) -> bool {
         self.sink.is_some()
     }
+
+    pub(crate) async fn stop(&self, sender: Sender<ConnectorResult<()>>) -> Result<()> {
+        self.send(Msg::Stop(sender)).await
+    }
 }
 
 /// Messages a Connector instance receives and acts upon
@@ -133,15 +139,91 @@ pub enum Msg {
     /// - stop reading events from external connections
     /// - decline events received via the sink part
     /// - wait for drainage to be finished
-    Drain(async_std::channel::Sender<Result<()>>),
+    Drain(Sender<ConnectorResult<()>>),
     /// notify this connector that its source part has been drained
     SourceDrained,
     /// notify this connector that its sink part has been drained
     SinkDrained,
     /// stop the connector
-    Stop,
+    Stop(Sender<ConnectorResult<()>>),
     /// request a status report
     Report(Sender<StatusReport>),
+}
+
+/// result of an async operation of the connector.
+/// bears a `url` to identify the connector who finished the operation
+pub struct ConnectorResult<T> {
+    /// the connector url
+    pub url: TremorUrl,
+    /// the actual result
+    pub res: Result<T>,
+}
+
+impl ConnectorResult<()> {
+    fn ok(ctx: &ConnectorContext) -> Self {
+        Self {
+            url: ctx.url.clone(),
+            res: Ok(()),
+        }
+    }
+}
+
+/// context for a Connector or its parts
+pub trait Context: Display {
+    /// provide the url of the connector
+    fn url(&self) -> &TremorUrl;
+
+    /// only log an error and swallow the result
+    fn log_err<T, E, M>(&self, expr: std::result::Result<T, E>, msg: &M)
+    where
+        E: std::error::Error,
+        M: Display + ?Sized,
+    {
+        if let Err(e) = expr {
+            error!("{} {}: {}", self, msg, e);
+        }
+    }
+}
+
+/// connector context
+#[derive(Clone)]
+pub struct ConnectorContext {
+    /// unique identifier
+    pub uid: u64,
+    /// url of the connector
+    pub url: TremorUrl,
+    /// type name of the connector
+    pub type_name: String,
+    /// The Quiescence Beacon
+    pub quiescence_beacon: QuiescenceBeacon,
+    /// Notifier
+    pub notifier: reconnect::ConnectionLostNotifier,
+}
+
+impl Display for ConnectorContext {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[Connector::{}]", &self.url)
+    }
+}
+
+impl Context for ConnectorContext {
+    fn url(&self) -> &TremorUrl {
+        &self.url
+    }
+}
+
+impl ConnectorContext {
+    /// enclose the given meta in the right connector namespace
+    ///
+    /// Namespace: "connector.<connector-type>"
+    #[must_use]
+    pub fn meta(&self, inner: Value<'static>) -> Value<'static> {
+        let mut map = Value::object_with_capacity(1);
+        let mut type_map = Value::object_with_capacity(1);
+        type_map.try_insert(self.type_name.clone(), inner);
+        map.try_insert("connector", type_map);
+        map
+    }
 }
 
 /// Connector instance status report
@@ -150,7 +232,7 @@ pub struct StatusReport {
     /// connector instance url
     pub url: TremorUrl,
     /// state of the connector
-    pub status: ConnectorState,
+    pub status: InstanceState,
     /// current connectivity
     pub connectivity: Connectivity,
     /// connected pipelines
@@ -231,12 +313,6 @@ pub enum ManagerMsg {
 pub struct Manager {
     qsize: usize,
     metrics_sender: MetricsSender,
-}
-
-fn error<T>(url: &TremorUrl, result: Result<T>) {
-    if let Err(error) = result {
-        error!("[Connector::{}] Error: {}", url, error)
-    }
 }
 
 impl Manager {
@@ -444,7 +520,7 @@ impl Manager {
         };
 
         let send_addr = connector_addr.clone();
-        let mut connector_state = ConnectorState::Initialized;
+        let mut connector_state = InstanceState::Initialized;
         let mut drainage = None;
         // TODO: add connector metrics reporter (e.g. for reconnect attempts, cb's received, uptime, etc.)
         task::spawn::<_, Result<()>>(async move {
@@ -615,7 +691,7 @@ impl Manager {
                             .await?;
 
                         // reconnect if running - wait with reconnect if paused (until resume)
-                        if connector_state == ConnectorState::Running {
+                        if connector_state == InstanceState::Running {
                             info!("[Connector::{}] Triggering reconnect.", &connector_addr.url);
                             connector_addr.sender.send(Msg::Reconnect).await?;
                         }
@@ -651,17 +727,17 @@ impl Manager {
                         }
                         connectivity = new;
                     }
-                    Msg::Start if connector_state == ConnectorState::Initialized => {
+                    Msg::Start if connector_state == InstanceState::Initialized => {
                         info!("[Connector::{}] Starting...", &connector_addr.url);
                         // start connector
                         connector_state = match connector.on_start(&ctx).await {
-                            Ok(()) => ConnectorState::Running,
+                            Ok(()) => InstanceState::Running,
                             Err(e) => {
                                 error!(
                                     "[Connector::{}] on_start Error: {}",
                                     &connector_addr.url, e
                                 );
-                                ConnectorState::Failed
+                                InstanceState::Failed
                             }
                         };
                         info!(
@@ -682,15 +758,15 @@ impl Manager {
                         );
                     }
 
-                    Msg::Pause if connector_state == ConnectorState::Running => {
+                    Msg::Pause if connector_state == InstanceState::Running => {
                         info!("[Connector::{}] Pausing...", &connector_addr.url);
 
                         // TODO: in implementations that don't really support pausing
                         //       issue a warning/error message
                         //       e.g. UDP, TCP, Rest
                         //
-                        error(&url, connector.on_pause(&ctx).await);
-                        connector_state = ConnectorState::Paused;
+                        ctx.log_err(connector.on_pause(&ctx).await, "Error during on_pause");
+                        connector_state = InstanceState::Paused;
                         quiescence_beacon.pause();
 
                         connector_addr.send_source(SourceMsg::Pause).await?;
@@ -704,10 +780,10 @@ impl Manager {
                             &connector_addr.url, &connector_state
                         );
                     }
-                    Msg::Resume if connector_state == ConnectorState::Paused => {
+                    Msg::Resume if connector_state == InstanceState::Paused => {
                         info!("[Connector::{}] Resuming...", &connector_addr.url);
-                        error(&url, connector.on_resume(&ctx).await);
-                        connector_state = ConnectorState::Running;
+                        ctx.log_err(connector.on_resume(&ctx).await, "Error during on_resume");
+                        connector_state = InstanceState::Running;
                         quiescence_beacon.resume();
 
                         connector_addr.send_source(SourceMsg::Resume).await?;
@@ -729,7 +805,7 @@ impl Manager {
                             &connector_addr.url, &connector_state
                         );
                     }
-                    Msg::Drain(_) if connector_state == ConnectorState::Draining => {
+                    Msg::Drain(_) if connector_state == InstanceState::Draining => {
                         info!(
                             "[Connector::{}] Ignoring Drain Msg. Current state: {:?}",
                             &connector_addr.url, &connector_state
@@ -742,8 +818,8 @@ impl Manager {
                         quiescence_beacon.stop_reading();
                         // FIXME: add stop_writing()
                         // let connector stop emitting anything to its source part - if possible here
-                        error(&url, connector.on_drain(&ctx).await);
-                        connector_state = ConnectorState::Draining;
+                        ctx.log_err(connector.on_drain(&ctx).await, "Error during on_drain");
+                        connector_state = InstanceState::Draining;
 
                         // notify source to drain the source channel and then send the drain signal
                         if let Some(source) = connector_addr.source.as_ref() {
@@ -768,7 +844,7 @@ impl Manager {
                         }
                         drainage = Some(d);
                     }
-                    Msg::SourceDrained if connector_state == ConnectorState::Draining => {
+                    Msg::SourceDrained if connector_state == InstanceState::Draining => {
                         info!(
                             "[Connector::{}] Source-part is drained.",
                             &connector_addr.url
@@ -797,7 +873,7 @@ impl Manager {
                             }
                         }
                     }
-                    Msg::SinkDrained if connector_state == ConnectorState::Draining => {
+                    Msg::SinkDrained if connector_state == InstanceState::Draining => {
                         info!("[Connector::{}] Sink-part is drained.", &connector_addr.url);
                         if let Some(drainage) = drainage.as_mut() {
                             drainage.set_sink_drained();
@@ -825,15 +901,34 @@ impl Manager {
                             &connector_addr.url, &connector_state
                         );
                     }
-                    Msg::Stop => {
-                        info!("[Connector::{}] Stopping...", &connector_addr.url);
-                        error(&url, connector.on_stop(&ctx).await);
-                        connector_state = ConnectorState::Stopped;
+                    Msg::Stop(sender) => {
+                        info!("{} Stopping...", &ctx);
+                        ctx.log_err(connector.on_stop(&ctx).await, "Error during on_stop");
+                        connector_state = InstanceState::Stopped;
                         quiescence_beacon.full_stop();
-
-                        connector_addr.send_source(SourceMsg::Stop).await?;
-                        connector_addr.send_sink(SinkMsg::Stop).await?;
-
+                        let (stop_tx, stop_rx) = bounded(2);
+                        let mut expect = 0_usize
+                            + connector_addr.has_source() as usize
+                            + connector_addr.has_sink() as usize;
+                        ctx.log_err(
+                            connector_addr
+                                .send_source(SourceMsg::Stop(stop_tx.clone()))
+                                .await,
+                            "Error sending Stop msg to Source",
+                        );
+                        ctx.log_err(
+                            connector_addr.send_sink(SinkMsg::Stop(stop_tx)).await,
+                            "Error sending Stop msg to Sink",
+                        );
+                        while expect > 0 {
+                            if let Err(e) = stop_rx.recv().await {
+                                error!("{} Error in stopping sink and source part: {}", &ctx, e);
+                            }
+                            expect -= 1;
+                        }
+                        if let Err(_) = sender.send(ConnectorResult::ok(&ctx)).await {
+                            error!("{} Error sending Stop result.", &ctx)
+                        }
                         info!("[Connector::{}] Stopped.", &connector_addr.url);
                         break;
                     }
@@ -859,15 +954,17 @@ enum DrainState {
 }
 
 struct Drainage {
-    tx: Sender<Result<()>>,
+    tx: Sender<ConnectorResult<()>>,
+    url: TremorUrl,
     source_drained: DrainState,
     sink_drained: DrainState,
 }
 
 impl Drainage {
-    fn new(addr: &Addr, tx: Sender<Result<()>>) -> Self {
+    fn new(addr: &Addr, tx: Sender<ConnectorResult<()>>) -> Self {
         Self {
             tx,
+            url: addr.url.clone(),
             source_drained: if addr.has_source() {
                 DrainState::Expect
             } else {
@@ -895,68 +992,13 @@ impl Drainage {
     }
 
     async fn send_all_drained(&self) -> Result<()> {
-        self.tx.send(Ok(())).await?;
+        self.tx
+            .send(ConnectorResult {
+                url: self.url.clone(),
+                res: Ok(()),
+            })
+            .await?;
         Ok(())
-    }
-}
-
-/// state of a connector
-#[derive(Debug, PartialEq, Serialize, Deserialize, Copy, Clone)]
-#[serde(rename_all = "lowercase")]
-pub enum ConnectorState {
-    /// connector has been initialized, but not yet started
-    Initialized,
-    /// connector is running
-    Running,
-    /// connector has been paused
-    Paused,
-    /// connector was stopped
-    Stopped,
-    /// Draining - getting rid of in-flight events and avoid emitting new ones
-    Draining,
-    /// connector failed to start
-    Failed,
-}
-
-impl Display for ConnectorState {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(match self {
-            Self::Initialized => "initialized",
-            Self::Running => "running",
-            Self::Paused => "paused",
-            Self::Stopped => "stopped",
-            Self::Draining => "draining",
-            Self::Failed => "failed",
-        })
-    }
-}
-
-/// connector context
-#[derive(Clone)]
-pub struct ConnectorContext {
-    /// unique identifier
-    pub uid: u64,
-    /// url of the connector
-    pub url: TremorUrl,
-    /// type name of the connector
-    pub type_name: String,
-    /// The Quiescence Beacon
-    pub quiescence_beacon: QuiescenceBeacon,
-    /// Notifier
-    pub notifier: reconnect::ConnectionLostNotifier,
-}
-
-impl ConnectorContext {
-    /// enclose the given meta in the right connector namespace
-    ///
-    /// Namespace: "connector.<connector-type>"
-    #[must_use]
-    pub fn meta(&self, inner: Value<'static>) -> Value<'static> {
-        let mut map = Value::object_with_capacity(1);
-        let mut type_map = Value::object_with_capacity(1);
-        type_map.try_insert(self.type_name.clone(), inner);
-        map.try_insert("connector", type_map);
-        map
     }
 }
 
