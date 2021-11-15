@@ -93,7 +93,7 @@ value-trait = "0.2"
 zstd = "0.9"
 
 async-tls = "0.11"
-rustls = "0.19"
+rustls = "0.20"
 
 mapr = "0.8"
 tempfile = { version = "3.2" }
