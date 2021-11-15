@@ -306,13 +306,13 @@ impl<'script> Upable<'script> for PipelineDeclRaw<'script> {
         };
 
         let pipeline_name = pipeline_decl.fqn();
-        if helper.pipeline_defns.contains_key(&pipeline_name) {
+        if helper.queries.contains_key(&pipeline_name) {
             let err_str = format!("Can't define the pipeline `{}` twice", pipeline_name);
             return error_generic(&pipeline_decl, &pipeline_decl, &err_str, &helper.meta);
         }
 
         helper
-            .pipeline_defns
+            .queries
             .insert(pipeline_name, pipeline_decl.clone());
         helper.add_query_decl_doc(&pipeline_decl.fqn(), self.doc);
         Ok(pipeline_decl)
@@ -415,7 +415,7 @@ impl<'script> PipelineStmtRaw<'script> {
             format!("{}::{}", module.join("::"), self.target.clone())
         };
 
-        match helper.pipeline_defns.get(&fq_pipeline_defn) {
+        match helper.queries.get(&fq_pipeline_defn) {
             None => error_generic(
                 &self,
                 &self,
@@ -423,7 +423,7 @@ impl<'script> PipelineStmtRaw<'script> {
                     "pipeline `{}` not found in: {}",
                     fq_pipeline_defn,
                     helper
-                        .pipeline_defns
+                        .queries
                         .keys()
                         .cloned()
                         .collect::<Vec<_>>()
@@ -695,8 +695,7 @@ impl<'script> ModuleStmtRaw<'script> {
                 }
                 StmtRaw::PipelineDecl(stmt) => {
                     let o = stmt.up(&mut helper)?;
-
-                    helper.pipeline_defns.insert(o.fqn(), o);
+                    helper.queries.insert(o.fqn(), o);
                 }
                 StmtRaw::OperatorDecl(stmt) => {
                     let o = stmt.up(&mut helper)?;

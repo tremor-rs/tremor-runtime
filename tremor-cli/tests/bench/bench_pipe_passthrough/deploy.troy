@@ -1,0 +1,42 @@
+
+mod snot with
+define blaster connector blaster_onramp
+with
+  type = "blaster",
+  id =  "ingress",
+  description = "redundant",
+  codec = "string",
+  `config` = {
+    "source": "../../../../demo/data/data.json.xz"
+  }
+end;
+
+define blackhole connector blackhole_offramp
+with
+  type = "blackhole",
+  id =  "egress",
+  codec = "string",
+  description = "redundant",
+  `config` = {
+    "stop_after_secs": 100,
+    "significant_figures": 2,
+    "warmup_secs": 10,
+  },
+end;
+
+define pipeline passthrough_pipeline
+pipeline
+  select event from in into out
+end;
+end;
+
+define flow my_flow
+flow
+  create connector ingress from snot::blaster_onramp;
+  create pipeline passthrough from snot::passthrough_pipeline;
+  create connector egress from snot::blackhole_offramp;
+  connect ingress to passthrough;
+  connect passthrough to egress;
+end;
+
+deploy my_flow;
