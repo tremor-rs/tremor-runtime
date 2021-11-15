@@ -26,7 +26,8 @@ use async_std::{
     prelude::FutureExt,
 };
 use connectors::ConnectorHarness;
-use tremor_runtime::{connectors::ConnectorState, errors::Result};
+use tremor_runtime::errors::Result;
+use tremor_runtime::registry::instance::InstanceState;
 
 #[async_std::test]
 async fn connector_udp_pause_resume() -> Result<()> {
@@ -74,7 +75,7 @@ config:
     // pause connector
     harness.pause().await?;
     harness
-        .wait_for_state(ConnectorState::Paused, Duration::from_secs(5))
+        .wait_for_state(InstanceState::Paused, Duration::from_secs(5))
         .await?;
     // send some more data
     let data2 = "Connectors\nsuck\nwho\nthe\nhell\ncame\nup\nwith\nthat\nshit\n";
@@ -89,7 +90,7 @@ config:
     // resume connector
     harness.resume().await?;
     harness
-        .wait_for_state(ConnectorState::Running, Duration::from_secs(5))
+        .wait_for_state(InstanceState::Running, Duration::from_secs(5))
         .await?;
     // receive the data sent during pause
     // first line, continueing the stuff from last send
@@ -173,7 +174,7 @@ config:
     // pause connector
     harness.pause().await?;
     harness
-        .wait_for_state(ConnectorState::Paused, Duration::from_secs(5))
+        .wait_for_state(InstanceState::Paused, Duration::from_secs(5))
         .await?;
     // send some more data
     let data2 = "Connectors\nsuck\nwho\nthe\nhell\ncame\nup\nwith\nthat\nshit\n";
@@ -189,7 +190,7 @@ config:
     // resume connector
     harness.resume().await?;
     harness
-        .wait_for_state(ConnectorState::Running, Duration::from_secs(5))
+        .wait_for_state(InstanceState::Running, Duration::from_secs(5))
         .await?;
     // receive the data sent during pause
     assert_eq!(

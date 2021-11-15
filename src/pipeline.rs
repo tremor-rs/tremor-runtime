@@ -13,8 +13,8 @@
 // limitations under the License.
 use crate::connectors::{self, sink::SinkMsg, source::SourceMsg};
 use crate::errors::Result;
-use crate::permge::{PriorityMerge, M};
-use crate::registry::ServantId;
+use crate::permge::PriorityMerge;
+use crate::registry::instance::InstanceState;
 use crate::repository::PipelineArtefact;
 use crate::url::TremorUrl;
 use async_std::channel::{bounded, unbounded, Receiver, Sender};
@@ -39,7 +39,7 @@ pub struct Addr {
     addr: Sender<Box<Msg>>,
     cf_addr: Sender<CfMsg>,
     mgmt_addr: Sender<MgmtMsg>,
-    id: ServantId,
+    id: TremorUrl,
 }
 
 impl Addr {
@@ -49,7 +49,7 @@ impl Addr {
         addr: Sender<Box<Msg>>,
         cf_addr: Sender<CfMsg>,
         mgmt_addr: Sender<MgmtMsg>,
-        id: ServantId,
+        id: TremorUrl,
     ) -> Self {
         Self {
             addr,
@@ -75,7 +75,7 @@ impl Addr {
     /// pipeline instance id
     #[cfg(not(tarpaulin_include))]
     #[must_use]
-    pub fn id(&self) -> &ServantId {
+    pub fn id(&self) -> &TremorUrl {
         &self.id
     }
 
@@ -89,6 +89,14 @@ impl Addr {
 
     pub(crate) async fn send_mgmt(&self, msg: MgmtMsg) -> Result<()> {
         Ok(self.mgmt_addr.send(msg).await?)
+    }
+
+    pub(crate) async fn stop(&self) -> Result<()> {
+        self.send_mgmt(MgmtMsg::Stop).await
+    }
+
+    pub(crate) async fn start(&self) -> Result<()> {
+        self.send_mgmt(MgmtMsg::Start).await
     }
 }
 
@@ -158,6 +166,17 @@ pub enum MgmtMsg {
     DisconnectOutput(Cow<'static, str>, TremorUrl),
     /// disconnect an input
     DisconnectInput(TremorUrl),
+
+    /// FIXME: messages for transitioning from one state to the other
+    /// start the pipeline
+    Start,
+    /// pause the pipeline - currently a no-op
+    Pause,
+    /// resume from pause - currently a no-op
+    Resume,
+    /// stop the pipeline
+    Stop,
+
     /// for testing - ensures we drain the channel up to this message
     #[cfg(test)]
     Echo(Sender<()>),
@@ -175,6 +194,14 @@ pub enum Msg {
     },
     /// a signal
     Signal(Event),
+}
+
+/// wrapper for all possible messages handled by the pipeline task
+#[derive(Debug)]
+pub(crate) enum M {
+    F(Msg),
+    C(CfMsg),
+    M(MgmtMsg),
 }
 
 impl OutputTarget {
@@ -220,7 +247,7 @@ pub struct Create {
     /// the pipeline config
     pub config: PipelineArtefact,
     /// the pipeline id
-    pub id: ServantId,
+    pub id: TremorUrl,
 }
 
 /// control plane message for pipeline manager
@@ -355,7 +382,9 @@ async fn pipeline_task(
     let mut inputs: Inputs = halfbrown::HashMap::new();
     let mut eventset: Eventset = Vec::new();
 
-    info!("[Pipeline:{}] starting task.", id);
+    let mut state: InstanceState = InstanceState::Initialized;
+
+    info!("[Pipeline:{}] Starting Pipeline.", id);
 
     let ff = rx.map(|e| M::F(*e));
     let cf = cf_rx.map(M::C);
@@ -439,10 +468,7 @@ async fn pipeline_task(
                     // as this will create a nasty circle filling up queues.
                     // In general this does not avoid cycles via more complex constructs.
                     //
-                    // Also don't connect anything as input to the metrics pipeline, as we dont want any contraflow to flow via the METRICS_PIPELINE
-                    if !pid.same_instance_as(&output_url)
-                        && !crate::system::METRICS_PIPELINE.same_instance_as(&output_url)
-                    {
+                    if !pid.same_instance_as(&output_url) {
                         if let Err(e) = pipe
                             .send_mgmt(MgmtMsg::ConnectInput {
                                 input_url: pid.clone(),
@@ -497,6 +523,40 @@ async fn pipeline_task(
                 info!("[Pipeline::{}] Disconnecting {} from 'in'", pid, &input_url);
                 inputs.remove(&input_url);
             }
+            M::M(MgmtMsg::Start) if state == InstanceState::Initialized => {
+                // No-op
+                state = InstanceState::Running;
+            }
+            M::M(MgmtMsg::Start) => {
+                info!(
+                    "[Pipeline::{}] Ignoring Start Msg. Current state: {}",
+                    &pid, &state
+                );
+            }
+            M::M(MgmtMsg::Pause) if state == InstanceState::Running => {
+                // No-op
+                state = InstanceState::Paused;
+            }
+            M::M(MgmtMsg::Pause) => {
+                info!(
+                    "[Pipeline::{}] Ignoring Pause Msg. Current state: {}",
+                    &pid, &state
+                );
+            }
+            M::M(MgmtMsg::Resume) if state == InstanceState::Paused => {
+                // No-op
+                state = InstanceState::Running;
+            }
+            M::M(MgmtMsg::Resume) => {
+                info!(
+                    "[Pipeline::{}] Ignoring Resume Msg. Current state: {}",
+                    &pid, &state
+                );
+            }
+            M::M(MgmtMsg::Stop) => {
+                info!("[Pipeline::{}] Stopping...", &pid);
+                break;
+            }
             #[cfg(test)]
             M::M(MgmtMsg::Echo(sender)) => {
                 if let Err(e) = sender.send(()).await {
@@ -509,7 +569,7 @@ async fn pipeline_task(
         }
     }
 
-    info!("[Pipeline:{}] stopping task.", id);
+    info!("[Pipeline:{}] Stopped.", id);
     Ok(())
 }
 
