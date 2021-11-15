@@ -15,10 +15,12 @@
 // We want to keep the names here
 #![allow(clippy::module_name_repetitions)]
 
+use self::raw::CreateKind;
+
 use super::{node_id::BaseRef, raw::BaseExpr};
 use super::{node_id::NodeId, PipelineDecl};
 use super::{Docs, HashMap, Value};
-pub use crate::ast::deploy::raw::DeployCreateKind;
+pub use crate::ast::deploy::raw::DeployKind;
 use crate::{impl_expr_mid, impl_fqn};
 use tremor_common::url::TremorUrl;
 
@@ -160,7 +162,7 @@ pub struct CreateStmt<'script> {
     /// Atomic unit of deployment
     pub atom: DeployStmt<'script>,
     /// The type of this connector
-    pub kind: Option<DeployCreateKind>,
+    pub kind: CreateKind,
     /// Documentation comments
     #[serde(skip)]
     pub docs: Option<String>,
@@ -181,7 +183,7 @@ pub struct DeployFlow<'script> {
     /// Atomic unit of deployment
     pub atom: DeployStmt<'script>,
     /// The type of this connector
-    pub kind: Option<DeployCreateKind>,
+    pub kind: DeployKind,
     /// Documentation comments
     #[serde(skip)]
     pub docs: Option<String>,
