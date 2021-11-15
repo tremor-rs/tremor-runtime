@@ -25,16 +25,19 @@ pub struct NodeId {
 
 impl NodeId {
     /// Create a new `NodeId` from an ID and Module list.
+    #[must_use]
     pub fn new(id: String, module: Vec<String>) -> Self {
         Self { id, module }
     }
 
     /// The node's id.
+    #[must_use]
     pub fn id(&self) -> &str {
         self.id.as_str()
     }
 
     /// The node's module.
+    #[must_use]
     pub fn module(&self) -> &[String] {
         &self.module
     }

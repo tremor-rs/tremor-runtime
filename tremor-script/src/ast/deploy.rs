@@ -18,9 +18,9 @@
 use super::{node_id::BaseRef, raw::BaseExpr};
 use super::{node_id::NodeId, PipelineDecl};
 use super::{Docs, HashMap, Value};
+pub use crate::ast::deploy::raw::DeployCreateKind;
 use crate::{impl_expr_mid, impl_fqn};
 use tremor_common::url::TremorUrl;
-pub use crate::ast::deploy::raw::DeployCreateKind;
 
 pub(crate) mod raw;
 
