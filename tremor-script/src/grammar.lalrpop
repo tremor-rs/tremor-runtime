@@ -51,8 +51,9 @@ DeployStmt: DeployStmtRaw<'input> = {
 }
 
 DeployDeployStmt: DeployStmtRaw<'input> = {
-    <start:@L> <docs:DocComment> "deploy" <kind:DeployCreateKind?> <id:Ident> "from" <target:ModularTarget> <params:(WithEndClause)?> <end:@L> => DeployStmtRaw::CreateStmt(CreateStmtRaw { start, end, id, module: target.0, target: target.1, params, kind, docs }),
-    <start:@L> <docs:DocComment> "deploy" <kind:DeployCreateKind?> <id:Ident> <params:(WithEndClause)?> <end:@L> => DeployStmtRaw::CreateStmt(CreateStmtRaw { start, end, id: id.clone(),  module: vec![], target: id, params, kind, docs }),
+    // FIXME: we don't need a deploy kind here once troy is merged
+    <start:@L> <docs:DocComment> "deploy" <kind:DeployCreateKind?> <id:Ident> "from" <target:ModularTarget> <params:(WithEndClause)?> <end:@L> => DeployStmtRaw::DeployFlowStmt(DeployFlowRaw { start, end, id, module: target.0, target: target.1, params, kind, docs }),
+    <start:@L> <docs:DocComment> "deploy" <kind:DeployCreateKind?> <id:Ident> <params:(WithEndClause)?> <end:@L> => DeployStmtRaw::DeployFlowStmt(DeployFlowRaw { start, end, id: id.clone(),  module: vec![], target: id, params, kind, docs }),
 }
 
 ConnectorKind: IdentRaw<'input> = {
