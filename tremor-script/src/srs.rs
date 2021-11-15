@@ -12,7 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::{ast::BaseRef, ast::{self, DeployLink, NodeId, query}, errors::{Error, Result}, prelude::*};
+use crate::{
+    ast::BaseRef,
+    ast::{self, query, DeployLink, NodeId},
+    errors::{Error, Result},
+    prelude::*,
+};
 use halfbrown::HashMap;
 use std::{fmt::Debug, mem, pin::Pin, sync::Arc};
 
@@ -132,21 +137,36 @@ impl Deploy {
                 //                let atom = FlowDecl::new_from_deploy(self, &stmt.atom.fqn())?;
                 let atom = match &stmt.atom {
                     StmtKind::FlowDecl(atom) => FlowDecl::new_from_deploy(self, &atom.node_id)?,
-                    StmtKind::ConnectorDecl(atom) => return Err(Error::from(CompilerError {
-                        // FIXME TODO hygienic
-                        error: Error::from(format!("Invalid statement for deployment {}", &atom.node_id.fqn()).as_str()),
-                        cus: vec![],
-                    })),
-                    StmtKind::PipelineDecl(atom) => return Err(Error::from(CompilerError {
-                        // FIXME TODO hygienic
-                        error: Error::from(format!("Invalid statement for deployment {}", &atom.node_id.fqn()).as_str()),
-                        cus: vec![],
-                    })),
-                    StmtKind::CreateStmt(atom) => return Err(Error::from(CompilerError {
-                        // FIXME TODO hygienic
-                        error: Error::from(format!("Invalid statement for deployment {}", &atom.node_id.fqn()).as_str()),
-                        cus: vec![],
-                    })),
+                    StmtKind::ConnectorDecl(atom) => {
+                        return Err(Error::from(CompilerError {
+                            // FIXME TODO hygienic
+                            error: Error::from(
+                                format!("Invalid statement for deployment {}", &atom.node_id.fqn())
+                                    .as_str(),
+                            ),
+                            cus: vec![],
+                        }))
+                    }
+                    StmtKind::PipelineDecl(atom) => {
+                        return Err(Error::from(CompilerError {
+                            // FIXME TODO hygienic
+                            error: Error::from(
+                                format!("Invalid statement for deployment {}", &atom.node_id.fqn())
+                                    .as_str(),
+                            ),
+                            cus: vec![],
+                        }))
+                    }
+                    StmtKind::CreateStmt(atom) => {
+                        return Err(Error::from(CompilerError {
+                            // FIXME TODO hygienic
+                            error: Error::from(
+                                format!("Invalid statement for deployment {}", &atom.node_id.fqn())
+                                    .as_str(),
+                            ),
+                            cus: vec![],
+                        }))
+                    }
                 };
                 instances.insert(
                     stmt.fqn(),
@@ -613,9 +633,11 @@ impl ConnectorDecl {
         } else {
             return Err(CompilerError {
                 // FIXME TODO hygienic
-                error: Error::from(format!("Expected a connector definition {}", id.fqn()).as_str()),
+                error: Error::from(
+                    format!("Expected a connector definition {}", id.fqn()).as_str(),
+                ),
                 cus: vec![],
-            });     
+            });
         }
     }
 }
@@ -677,7 +699,7 @@ impl FlowDecl {
                 // FIXME TODO hygienic
                 error: Error::from(format!("Expected a flow definition {}", id.fqn()).as_str()),
                 cus: vec![],
-            });        
+            });
         };
 
         let mut srs_atoms = Vec::new();
@@ -709,16 +731,25 @@ impl FlowDecl {
                         //
                         return Err(CompilerError {
                             // FIXME TODO hygienic
-                            error: Error::from(format!("Invalid statement for deployment {}", &flow.node_id.fqn()).as_str()),
+                            error: Error::from(
+                                format!("Invalid statement for deployment {}", &flow.node_id.fqn())
+                                    .as_str(),
+                            ),
                             cus: vec![],
-                        })
-                    },
+                        });
+                    }
                     ast::DeployStmt::CreateStmt(create) => {
                         return Err(CompilerError {
                             // FIXME TODO hygienic
-                            error: Error::from(format!("Unexpected statement for flow statement {}", &create.node_id.fqn()).as_str()),
+                            error: Error::from(
+                                format!(
+                                    "Unexpected statement for flow statement {}",
+                                    &create.node_id.fqn()
+                                )
+                                .as_str(),
+                            ),
                             cus: vec![],
-                        })
+                        });
                     }
                 }
             }
