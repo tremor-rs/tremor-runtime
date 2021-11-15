@@ -42,6 +42,15 @@ DeployStmts: DeployStmtsRaw<'input> = {
   <item:DeployStmt> ";"? => vec![item],
 }
 
+DefinitionArgsWithEnd: Option<WithExprsRaw<'input>> = {
+    <WithEndClause?> => <>
+}
+
+CreationArgsWithEnd: Option<WithExprsRaw<'input>> = {
+    <WithEndClause?> => <>
+}
+
+
 DeployStmt: DeployStmtRaw<'input> = {
     DeployModuleStmt => DeployStmtRaw::ModuleStmt(<>),
     DefinePipeline => DeployStmtRaw::PipelineDecl(<>),
@@ -52,8 +61,8 @@ DeployStmt: DeployStmtRaw<'input> = {
 
 DeployDeployStmt: DeployStmtRaw<'input> = {
     // FIXME: we don't need a deploy kind here once troy is merged
-    <start:@L> <docs:DocComment> "deploy" <kind:DeployKind> <id:Ident> "from" <target:ModularTarget> <params:(WithEndClause)?> <end:@L> => DeployStmtRaw::DeployFlowStmt(DeployFlowRaw { start, end, id, module: target.0, target: target.1, params, kind, docs }),
-    <start:@L> <docs:DocComment> "deploy" <kind:DeployKind> <id:Ident> <params:(WithEndClause)?> <end:@L> => DeployStmtRaw::DeployFlowStmt(DeployFlowRaw { start, end, id: id.clone(),  module: vec![], target: id, params, kind, docs }),
+    <start:@L> <docs:DocComment> "deploy" <kind:DeployKind> <id:Ident> "from" <target:ModularTarget> <params:CreationArgsWithEnd> <end:@L> => DeployStmtRaw::DeployFlowStmt(DeployFlowRaw { start, end, id, module: target.0, target: target.1, params, kind, docs }),
+    <start:@L> <docs:DocComment> "deploy" <kind:DeployKind> <id:Ident> <params:CreationArgsWithEnd> <end:@L> => DeployStmtRaw::DeployFlowStmt(DeployFlowRaw { start, end, id: id.clone(),  module: vec![], target: id, params, kind, docs }),
 }
 
 ConnectorKind: IdentRaw<'input> = {
@@ -96,8 +105,8 @@ DeployKind: DeployKind = {
 
 
 DeployLink: DeployLinkRaw<'input> = {
-    <start:@L> <docs:DocComment> "create" <kind:CreateKind> <id:Ident> "from" <target:ModularTarget> <params:WithEndClause?> <end:@L> => DeployLinkRaw::Atom(CreateStmtRaw { start, end, id, module: target.0, target: target.1, params, kind, docs }),
-    <start:@L> <docs:DocComment> "create" <kind:CreateKind> <id:Ident> <params:WithEndClause?> <end:@L> => DeployLinkRaw::Atom(CreateStmtRaw { start, end, id: id.clone(),  module: vec![], target: id, params, kind, docs }),
+    <start:@L> <docs:DocComment> "create" <kind:CreateKind> <id:Ident> "from" <target:ModularTarget> <params:CreationArgsWithEnd> <end:@L> => DeployLinkRaw::Atom(CreateStmtRaw { start, end, id, module: target.0, target: target.1, params, kind, docs }),
+    <start:@L> <docs:DocComment> "create" <kind:CreateKind> <id:Ident> <params:CreationArgsWithEnd> <end:@L> => DeployLinkRaw::Atom(CreateStmtRaw { start, end, id: id.clone(),  module: vec![], target: id, params, kind, docs }),
 
     <start:@L> <docs:DocComment> "connect" <from:DeployEndpoint> "to" <to:DeployEndpoint> <end:@L> => DeployLinkRaw::Link(start, end, docs, from, to),
 }
@@ -371,28 +380,28 @@ DefinePipeline: PipelineDeclRaw<'input> = {
 }
 
 CreatePipeline: StmtRaw<'input> = {
-    <start:@L> "create" "pipeline" <id:Ident> <params:(<WithEndClause>)?> <end:@L>  => {
+    <start:@L> "create" "pipeline" <id:Ident> <params:CreationArgsWithEnd> <end:@L>  => {
         StmtRaw::PipelineStmt(PipelineStmtRaw { start, end, module: vec![], id: id.to_string(), target: id.to_string(), params: params.map(|params| params.into()) })
     },
     // With ModulartTarget
-    <start:@L> "create" "pipeline" <id:Ident> "from" <target:ModularTarget> <params:(<WithEndClause>)?> <end:@L> => {
+    <start:@L> "create" "pipeline" <id:Ident> "from" <target:ModularTarget> <params:CreationArgsWithEnd> <end:@L> => {
         StmtRaw::PipelineStmt(PipelineStmtRaw { start, end, module: target.0, id: id.to_string(), target: target.1.id.to_string(), params: params.map(|params| params.into()) })
     }
 }
 
 DefineOperator: StmtRaw<'input> = {
-    <doc:DocComment> <start:@L> "define" <kind:OperatorKind> "operator" <id:Ident> <params:(<WithEndClause>)?> <end:@L> =>  {
+    <doc:DocComment> <start:@L> "define" <kind:OperatorKind> "operator" <id:Ident> <params:DefinitionArgsWithEnd> <end:@L> =>  {
         StmtRaw::OperatorDecl(Box::new(OperatorDeclRaw { start, end, kind, id: id.to_string(), params: params.map(|params| params.into()), doc }))
     }
 }
 
 CreateOperator: StmtRaw<'input> = {
-    <start:@L> "create" "operator" <id:Ident> <params:(<WithEndClause>)?> <end:@L> => {
+    <start:@L> "create" "operator" <id:Ident> <params:CreationArgsWithEnd> <end:@L> => {
         StmtRaw::Operator(OperatorStmtRaw { start, end, id: id.to_string(), module: vec![], target: id.to_string(), params: params.map(|params| params.into()) })
     },
 
     // With ModulartTarget
-    <start:@L> "create" "operator" <id:Ident> "from" <target:ModularTarget> <params:(<WithEndClause>)?> <end:@L> => {
+    <start:@L> "create" "operator" <id:Ident> "from" <target:ModularTarget> <params:CreationArgsWithEnd> <end:@L> => {
         StmtRaw::Operator(OperatorStmtRaw { start, end, id: id.to_string(), module: target.0, target: target.1.id.to_string(), params: params.map(|params| params.into()) })
     }
 }
@@ -404,12 +413,12 @@ DefineScript: StmtRaw<'input> = {
 }
 
 CreateScript: StmtRaw<'input> = {
-    <start:@L> "create" "script" <id:Ident> <params:(<WithEndClause>)?> <end:@L> => {
+    <start:@L> "create" "script" <id:Ident> <params:CreationArgsWithEnd> <end:@L> => {
         StmtRaw::Script(ScriptStmtRaw { start, end, id: id.to_string(), module: vec![], target: id.to_string(), params: params.map(|params| params.into()) })
     },
 
     // With ModulartTarget
-    <start:@L> "create" "script" <id:Ident> "from" <target:ModularTarget> <params:(<WithEndClause>)?> <end:@L> => {
+    <start:@L> "create" "script" <id:Ident> "from" <target:ModularTarget> <params:CreationArgsWithEnd> <end:@L> => {
         StmtRaw::Script(ScriptStmtRaw { start, end, module: target.0, id: id.to_string(), target: target.1.id.to_string(), params: params.map(|params| params.into()) })
     }
 }
