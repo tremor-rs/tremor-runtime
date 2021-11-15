@@ -522,9 +522,7 @@ async fn handle_troy_pipeline(
         .publish_pipeline(
             &url,
             false,
-            tremor_pipeline::query::Query(
-                tremor_script::Query::from_troy(raw, deploy, atom)?,
-            ),
+            tremor_pipeline::query::Query(tremor_script::Query::from_troy(raw, deploy, atom)?),
         )
         .await?;
 
