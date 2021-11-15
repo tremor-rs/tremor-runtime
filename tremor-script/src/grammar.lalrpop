@@ -51,8 +51,8 @@ DeployStmt: DeployStmtRaw<'input> = {
 }
 
 DeployDeployStmt: DeployStmtRaw<'input> = {
-    <start:@L> <docs:DocComment> "deploy" <id:Ident> "from" <target:ModularTarget> <params:(WithEndClause)?> <end:@L> => DeployStmtRaw::CreateStmt(CreateStmtRaw { start, end, id, module: target.0, target: target.1, params, docs }),
-    <start:@L> <docs:DocComment> "deploy" <id:Ident> <params:(WithEndClause)?> <end:@L> => DeployStmtRaw::CreateStmt(CreateStmtRaw { start, end, id: id.clone(),  module: vec![], target: id, params, docs }),
+    <start:@L> <docs:DocComment> "deploy" <kind:DeployCreateKind?> <id:Ident> "from" <target:ModularTarget> <params:(WithEndClause)?> <end:@L> => DeployStmtRaw::CreateStmt(CreateStmtRaw { start, end, id, module: target.0, target: target.1, params, kind, docs }),
+    <start:@L> <docs:DocComment> "deploy" <kind:DeployCreateKind?> <id:Ident> <params:(WithEndClause)?> <end:@L> => DeployStmtRaw::CreateStmt(CreateStmtRaw { start, end, id: id.clone(),  module: vec![], target: id, params, kind, docs }),
 }
 
 ConnectorKind: IdentRaw<'input> = {
@@ -80,25 +80,23 @@ DeployLinks_: DeployLinksRaw<'input> = {
     <Sep<DeployLinks_, DeployLink, ";">> => <>
 }
 
-DeployCreateKind: String = {
+DeployCreateKind: DeployCreateKind = {
     // FIXME TODO wire kind into AST and check declared kind is referenced kind
-    "connector" => <>.to_string(),
-    "pipeline" => <>.to_string(),
-    "flow" => <>.to_string()
+    "connector" => DeployCreateKind::Connector,
+    "pipeline" => DeployCreateKind::Pipeline,
+    "flow" => DeployCreateKind::Flow,
 }
 
 DeployLink: DeployLinkRaw<'input> = {
-    <start:@L> <docs:DocComment> "create" <kind:DeployCreateKind?> <id:Ident> "from" <target:ModularTarget> <params:WithEndClause?> <end:@L> => DeployLinkRaw::Atom(CreateStmtRaw { start, end, id, module: target.0, target: target.1, params, docs }),
-    // <start:@L> <docs:DocComment> "create" <kind:DeployCreateKind?> <id:Ident> "from" <target:ModularTarget> <end:@L> => DeployLinkRaw::Atom(CreateStmtRaw { start, end, id: id.clone(),  module: target.0, target: target.1, params: None, docs }),
-    <start:@L> <docs:DocComment> "create" <kind:DeployCreateKind?> <id:Ident> <params:WithEndClause?> <end:@L> => DeployLinkRaw::Atom(CreateStmtRaw { start, end, id: id.clone(),  module: vec![], target: id, params, docs }),
-    // <start:@L> <docs:DocComment> "create" <kind:DeployCreateKind?> <id:Ident>  <end:@L> => DeployLinkRaw::Atom(CreateStmtRaw { start, end, id: id.clone(), module: vec![], target: id, params: None, docs }),
+    <start:@L> <docs:DocComment> "create" <kind:DeployCreateKind?> <id:Ident> "from" <target:ModularTarget> <params:WithEndClause?> <end:@L> => DeployLinkRaw::Atom(CreateStmtRaw { start, end, id, module: target.0, target: target.1, params, kind, docs }),
+    <start:@L> <docs:DocComment> "create" <kind:DeployCreateKind?> <id:Ident> <params:WithEndClause?> <end:@L> => DeployLinkRaw::Atom(CreateStmtRaw { start, end, id: id.clone(),  module: vec![], target: id, params, kind, docs }),
 
-    <start:@L> <docs:DocComment> "connect" <from:DeployEndpoint> "to" <to:DeployEndpoint> <end:@L> => DeployLinkRaw::Link(from, to),
+    <start:@L> <docs:DocComment> "connect" <from:DeployEndpoint> "to" <to:DeployEndpoint> <end:@L> => DeployLinkRaw::Link(start, end, docs, from, to),
 }
 
 DeployEndpoint: DeployEndpointRaw<'input> = {
     /// TODO Consider locking down tremor url syntax to system artefacts only
-    StringLiteral => DeployEndpointRaw::Legacy(<>),
+    StringLiteral => DeployEndpointRaw::System(<>),
     <id:Ident> "/" <port:Ident> => DeployEndpointRaw::Troy(id, Some(port)),
     <id:Ident> => DeployEndpointRaw::Troy(id, None),
 }

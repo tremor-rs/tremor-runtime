@@ -440,6 +440,7 @@ impl Query {
                 | Stmt::OperatorDecl(_)
                 | Stmt::PipelineDecl(_) => {}
                 Stmt::PipelineStmt(s) => {
+                    // FIXME NOTE - This should really be using the node id with module
                     if subqueries.contains_key(&s.id) {
                         return Err(pipeline_stmt_duplicate_name_err(
                             s,
@@ -449,7 +450,7 @@ impl Query {
                         )
                         .into());
                     }
-                    subqueries.insert(s.id.clone(), s.clone());
+                    subqueries.insert(s.id.to_string(), s.clone());
                 }
                 Stmt::Operator(o) => {
                     if nodes.contains_key(&common_cow(o.node_id.id())) {
