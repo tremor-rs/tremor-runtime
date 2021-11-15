@@ -12,12 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::{
-    ast::BaseRef,
-    ast::{self, query, NodeId, DeployLink},
-    errors::{Error, Result},
-    prelude::*,
-};
+use crate::{ast::BaseRef, ast::{self, DeployLink, NodeId, query}, errors::{Error, Result}, prelude::*};
 use halfbrown::HashMap;
 use std::{fmt::Debug, mem, pin::Pin, sync::Arc};
 
@@ -63,16 +58,16 @@ pub struct UnitOfDeployment {
     pub instances: HashMap<String, CreateStmt>,
 }
 
- /// A fully resolved deployable artefact
- #[derive(Clone, Debug, PartialEq)]
- pub enum AtomOfDeployment {
-     /// A deployable pipeline instance
-     Pipeline(String,Query),
-     /// A deployable connector instance
-     Connector(ConnectorDecl),
-     /// A deployable flow instance
-     Flow(FlowDecl),
- }
+/// A fully resolved deployable artefact
+#[derive(Clone, Debug, PartialEq)]
+pub enum AtomOfDeployment {
+    /// A deployable pipeline instance
+    Pipeline(String, Query),
+    /// A deployable connector instance
+    Connector(ConnectorDecl),
+    /// A deployable flow instance
+    Flow(FlowDecl),
+}
 
 impl Deploy {
     /// Provides a Graphviz dot representation of the deployment graph
@@ -134,18 +129,24 @@ impl Deploy {
         for stmt in &self.script.stmts {
             if let StmtKind::CreateStmt(ref stmt) = stmt {
                 // FIXME TODO Caching pre friday-design behaviour - until we verify the friday semantics
-//                let atom = FlowDecl::new_from_deploy(self, &stmt.atom.fqn())?;
+                //                let atom = FlowDecl::new_from_deploy(self, &stmt.atom.fqn())?;
                 let atom = match &stmt.atom {
-                    // StmtKind::PipelineDecl(atom) => AtomOfDeployment::Pipeline(
-                    //     PipelineDecl::new_from_deploy(self, &atom.fqn(), &atom.fqn())?,
-                    // ),
-                    // StmtKind::ConnectorDecl(atom) => {
-                    //     AtomOfDeployment::Connector(ConnectorDecl::new_from_deploy(self, &atom.fqn())?)
-                    // }
-                    StmtKind::FlowDecl(atom) => {
-                        FlowDecl::new_from_deploy(self, &atom.node_id)?
-                    }
-                    _otherwise => todo!(),
+                    StmtKind::FlowDecl(atom) => FlowDecl::new_from_deploy(self, &atom.node_id)?,
+                    StmtKind::ConnectorDecl(atom) => return Err(Error::from(CompilerError {
+                        // FIXME TODO hygienic
+                        error: Error::from(format!("Invalid statement for deployment {}", &atom.node_id.fqn()).as_str()),
+                        cus: vec![],
+                    })),
+                    StmtKind::PipelineDecl(atom) => return Err(Error::from(CompilerError {
+                        // FIXME TODO hygienic
+                        error: Error::from(format!("Invalid statement for deployment {}", &atom.node_id.fqn()).as_str()),
+                        cus: vec![],
+                    })),
+                    StmtKind::CreateStmt(atom) => return Err(Error::from(CompilerError {
+                        // FIXME TODO hygienic
+                        error: Error::from(format!("Invalid statement for deployment {}", &atom.node_id.fqn()).as_str()),
+                        cus: vec![],
+                    })),
                 };
                 instances.insert(
                     stmt.fqn(),
@@ -175,7 +176,7 @@ pub struct CreateStmt {
     pub node_id: NodeId,
     /// Atomic unit of deployment
     pub atom: FlowDecl,
-//    pub atom: AtomOfDeployment,
+    //    pub atom: AtomOfDeployment,
 }
 
 /*
@@ -289,12 +290,13 @@ impl Query {
             .script
             .definitions
             .values()
-            .find(|query| if let ast::deploy::DeployStmt::PipelineDecl(candidate) = query {
+            .find(|query| {
+                if let ast::deploy::DeployStmt::PipelineDecl(candidate) = query {
                     target == &candidate.node_id
                 } else {
                     false
                 }
-            )
+            })
             .ok_or_else(|| CompilerError {
                 error: Error::from(format!("Invalid query for pipeline {}", &id).as_str()),
                 cus: vec![],
@@ -313,7 +315,11 @@ impl Query {
                 target_node_id: pipeline.node_id.clone(),
             })
         } else {
-            todo!() // TODO FIXME this needs a proper programmer error
+            return Err(CompilerError {
+                // FIXME TODO hygienic
+                error: Error::from(format!("Expected a pipeline definition {}", id.fqn()).as_str()),
+                cus: vec![],
+            });
         }
     }
 
@@ -356,7 +362,7 @@ impl Query {
         Ok(Self {
             raw,
             query: structured,
-            node_id: NodeId::new(target.to_string(), vec![]),        // FIXME TODO fix
+            node_id: NodeId::new(target.to_string(), vec![]), // FIXME TODO fix
             target_node_id: NodeId::new(target.to_string(), vec![]),
         })
     }
@@ -570,15 +576,21 @@ impl ConnectorDecl {
     /// deployment
     /// # Errors
     /// If the self-referential struct cannot be created safely from the deployment provided
-    pub fn new_from_deploy(origin: &Deploy, alias: String, id: &NodeId) -> std::result::Result<Self, CompilerError> {
+    pub fn new_from_deploy(
+        origin: &Deploy,
+        alias: String,
+        id: &NodeId,
+    ) -> std::result::Result<Self, CompilerError> {
         let connector_refutable = origin
             .script
             .definitions
             .values()
-            .find(|query| if let ast::deploy::DeployStmt::ConnectorDecl(target) = query {
-                id == &target.node_id
-            } else {
-                false
+            .find(|query| {
+                if let ast::deploy::DeployStmt::ConnectorDecl(target) = query {
+                    id == &target.node_id
+                } else {
+                    false
+                }
             })
             .ok_or_else(|| CompilerError {
                 error: Error::from(format!("Invalid connector for deployment {}", &id).as_str()),
@@ -594,12 +606,16 @@ impl ConnectorDecl {
                 /// of interest referential safety should be preserved
                 raw: origin.raw.clone(),
                 id: id.clone(),
-                alias: alias.clone(),
+                alias,
                 params: connector.params.clone(),
                 kind: connector.builtin_kind.clone(),
             })
         } else {
-            todo!() // TODO FIXME This shouldn't occur by construction but needs a programmer error
+            return Err(CompilerError {
+                // FIXME TODO hygienic
+                error: Error::from(format!("Expected a connector definition {}", id.fqn()).as_str()),
+                cus: vec![],
+            });     
         }
     }
 }
@@ -642,10 +658,12 @@ impl FlowDecl {
             .script
             .definitions
             .values()
-            .find(|flow| if let ast::deploy::DeployStmt::FlowDecl(flow) = flow {
-                id == &flow.node_id
-            } else {
-                false
+            .find(|flow| {
+                if let ast::deploy::DeployStmt::FlowDecl(flow) = flow {
+                    id == &flow.node_id
+                } else {
+                    false
+                }
             })
             .ok_or_else(|| CompilerError {
                 error: Error::from(format!("Invalid flow for deployment {}", &id).as_str()),
@@ -655,7 +673,11 @@ impl FlowDecl {
         let flow = if let ast::deploy::DeployStmt::FlowDecl(flow) = flow_refutable {
             flow
         } else {
-            todo!() // FIXME TODO suitable rogrammer error - error by construction
+            return Err(CompilerError {
+                // FIXME TODO hygienic
+                error: Error::from(format!("Expected a flow definition {}", id.fqn()).as_str()),
+                cus: vec![],
+            });        
         };
 
         let mut srs_atoms = Vec::new();
@@ -665,29 +687,38 @@ impl FlowDecl {
                     ast::DeployStmt::ConnectorDecl(instance) => {
                         // TODO wire up args
                         srs_atoms.push(AtomOfDeployment::Connector(
-                            ConnectorDecl::new_from_deploy(origin, stmt.alias.to_string(), &instance.node_id)?,
+                            ConnectorDecl::new_from_deploy(
+                                origin,
+                                stmt.alias.to_string(),
+                                &instance.node_id,
+                            )?,
                         ));
                     }
                     ast::DeployStmt::PipelineDecl(instance) => {
                         // TODO wire up args
-                        srs_atoms.push(AtomOfDeployment::Pipeline(stmt.alias.to_string(), Query::new_from_deploy(
-                            origin,
-                            &instance.node_id,
-                            &instance.node_id,
-                        )?));
+                        srs_atoms.push(AtomOfDeployment::Pipeline(
+                            stmt.alias.to_string(),
+                            Query::new_from_deploy(origin, &instance.node_id, &instance.node_id)?,
+                        ));
                     }
-                    ast::DeployStmt::FlowDecl(_skip) => {
+                    ast::DeployStmt::FlowDecl(flow) => {
                         // FIXME TODO We do not enable sub-flows within flows at this time
                         //      Decision
                         //          1 - Error ( cheap )
                         //          2 - Or, allow sub-flows where they are self-describing and don't use the system connection type ( not so cheap, preferable )
                         //
-                        // dbg!("Cannot deploy sub flows at this time");
-                        continue;
-                    }
-                    _otherwise => {
-                        // FIXME TODO Error otherwise
-                        continue;
+                        return Err(CompilerError {
+                            // FIXME TODO hygienic
+                            error: Error::from(format!("Invalid statement for deployment {}", &flow.node_id.fqn()).as_str()),
+                            cus: vec![],
+                        })
+                    },
+                    ast::DeployStmt::CreateStmt(create) => {
+                        return Err(CompilerError {
+                            // FIXME TODO hygienic
+                            error: Error::from(format!("Unexpected statement for flow statement {}", &create.node_id.fqn()).as_str()),
+                            cus: vec![],
+                        })
                     }
                 }
             }

@@ -184,7 +184,7 @@ impl<'script> Upable<'script> for StmtRaw<'script> {
                 Ok(Stmt::ScriptDecl(Box::new(stmt)))
             }
             StmtRaw::Script(stmt) => Ok(Stmt::Script(stmt.up(helper)?)),
-            StmtRaw::PipelineDecl(stmt) => Ok(Stmt::PipelineDecl(stmt.up(helper)?)),
+            StmtRaw::PipelineDecl(stmt) => Ok(Stmt::PipelineDecl(Box::new(stmt.up(helper)?))),
             StmtRaw::WindowDecl(stmt) => {
                 let stmt: WindowDecl<'script> = stmt.up(helper)?;
                 helper.windows.insert(stmt.fqn(), stmt.clone());
@@ -311,9 +311,7 @@ impl<'script> Upable<'script> for PipelineDeclRaw<'script> {
             return error_generic(&pipeline_decl, &pipeline_decl, &err_str, &helper.meta);
         }
 
-        helper
-            .queries
-            .insert(pipeline_name, pipeline_decl.clone());
+        helper.queries.insert(pipeline_name, pipeline_decl.clone());
         helper.add_query_decl_doc(&pipeline_decl.fqn(), self.doc);
         Ok(pipeline_decl)
     }
@@ -422,12 +420,7 @@ impl<'script> PipelineStmtRaw<'script> {
                 &format!(
                     "pipeline `{}` not found in: {}",
                     fq_pipeline_defn,
-                    helper
-                        .queries
-                        .keys()
-                        .cloned()
-                        .collect::<Vec<_>>()
-                        .join(",")
+                    helper.queries.keys().cloned().collect::<Vec<_>>().join(",")
                 ),
                 &helper.meta,
             ),
