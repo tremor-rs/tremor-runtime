@@ -19,6 +19,7 @@ use async_std::{channel::unbounded, future::timeout};
 use either::Either;
 use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
+use std::fmt::Display;
 use std::time::Duration;
 use tremor_common::time::nanotime;
 use tremor_script::{EventPayload, ValueAndMeta};
@@ -26,7 +27,9 @@ use tremor_script::{EventPayload, ValueAndMeta};
 use crate::config::{
     Codec as CodecConfig, Connector as ConnectorConfig, Preprocessor as PreprocessorConfig,
 };
-use crate::connectors::Msg;
+use crate::connectors::{
+    metrics::SourceReporter, ConnectorContext, Context, Msg, QuiescenceBeacon, StreamDone,
+};
 use crate::errors::{Error, Result};
 use crate::pipeline;
 use crate::preprocessor::{finish, make_preprocessors, preprocess, Preprocessors};
@@ -44,26 +47,8 @@ use tremor_pipeline::{
 use tremor_value::{literal, Value};
 use value_trait::Builder;
 
-use super::metrics::SourceReporter;
-use super::quiescence::QuiescenceBeacon;
-use super::{ConnectorContext, StreamDone};
-
 /// The default poll interval for `try_recv` on channels in connectors
 pub const DEFAULT_POLL_INTERVAL: u64 = 10;
-
-//FIXME: add url
-macro_rules! eat_error {
-    ($e:expr, $msg:expr, $url:expr) => {
-        if let Err(e) = $e {
-            error!("[Source::{}] ERROR: {} {}", $url, $msg, e)
-        }
-    };
-    ($e:expr, $url:expr) => {
-        if let Err(e) = $e {
-            error!("[Source::{}] ERROR: {}", $url, e)
-        }
-    };
-}
 
 #[derive(Debug)]
 /// Messages a Source can receive
@@ -95,7 +80,7 @@ pub enum SourceMsg {
     /// resume the source
     Resume,
     /// stop the source
-    Stop,
+    Stop(Sender<Result<()>>),
     /// drain the source - bears a sender for sending out a SourceDrained status notification
     Drain(Sender<Msg>),
 }
@@ -352,9 +337,21 @@ pub struct SourceContext {
     /// connector uid
     pub uid: u64,
     /// connector url
-    pub url: TremorUrl,
+    pub(crate) url: TremorUrl,
     /// The Quiescence Beacon
     pub quiescence_beacon: QuiescenceBeacon,
+}
+
+impl Display for SourceContext {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[Source::{}]", &self.url)
+    }
+}
+
+impl Context for SourceContext {
+    fn url(&self) -> &TremorUrl {
+        &self.url
+    }
 }
 
 /// address of a source
@@ -645,22 +642,18 @@ where
                 } else if port.eq_ignore_ascii_case(ERR.as_ref()) {
                     &mut self.pipelines_err
                 } else {
-                    error!(
-                        "[Source::{}] Tried to connect to invalid port: {}",
-                        &self.ctx.url, &port
-                    );
+                    error!("{} Tried to connect to invalid port: {}", &self.ctx, &port);
                     return Ok(Control::Continue);
                 };
                 for (pipeline_url, p) in &pipelines {
-                    eat_error!(
+                    self.ctx.log_err(
                         p.send_mgmt(pipeline::MgmtMsg::ConnectInput {
                             input_url: self.ctx.url.clone(),
                             target: InputTarget::Source(self.addr.clone()),
                             is_transactional: self.is_transactional,
                         })
                         .await,
-                        format!("Failed sending ConnectInput to pipeline {}", pipeline_url),
-                        &self.ctx.url
+                        &format!("Failed sending ConnectInput to pipeline {}", pipeline_url),
                     );
                 }
                 pipes.append(&mut pipelines);
@@ -680,22 +673,16 @@ where
                 };
                 pipelines.retain(|(url, _)| url == &id);
                 if self.pipelines_out.is_empty() && self.pipelines_err.is_empty() {
-                    eat_error!(
-                        self.source.on_stop(&mut self.ctx).await,
-                        "on_stop after unlinking failed",
-                        &self.ctx.url
-                    );
+                    let res = self.source.on_stop(&mut self.ctx).await;
+                    self.ctx.log_err(res, "on_stop after unlinking failed");
                     return Ok(Control::Terminate);
                 }
                 Ok(Control::Continue)
             }
             SourceMsg::Start if self.state == Initialized => {
                 self.state = Running;
-                eat_error!(
-                    self.source.on_start(&mut self.ctx).await,
-                    "on_start failed",
-                    &self.ctx.url
-                );
+                let res = self.source.on_start(&mut self.ctx).await;
+                self.ctx.log_err(res, "on_start failed");
 
                 if let Err(e) = self.send_signal(Event::signal_start(self.ctx.uid)).await {
                     error!(
@@ -714,11 +701,8 @@ where
             }
             SourceMsg::Resume if self.state == Paused => {
                 self.state = Running;
-                eat_error!(
-                    self.source.on_resume(&mut self.ctx).await,
-                    "on_resume failed",
-                    &self.ctx.url
-                );
+                let res = self.source.on_resume(&mut self.ctx).await;
+                self.ctx.log_err(res, "on_resume failed");
                 Ok(Control::Continue)
             }
             SourceMsg::Resume => {
@@ -732,11 +716,8 @@ where
                 // TODO: execute pause strategy chosen by source / connector / configured by user
                 info!("[Source::{}] Paused.", self.ctx.url);
                 self.state = Paused;
-                eat_error!(
-                    self.source.on_pause(&mut self.ctx).await,
-                    "on_pause failed",
-                    &self.ctx.url
-                );
+                let res = self.source.on_pause(&mut self.ctx).await;
+                self.ctx.log_err(res, "on_pause failed");
                 Ok(Control::Continue)
             }
             SourceMsg::Pause => {
@@ -746,13 +727,12 @@ where
                 );
                 Ok(Control::Continue)
             }
-            SourceMsg::Stop => {
+            SourceMsg::Stop(sender) => {
+                info!("{} Stopping...", &self.ctx);
                 self.state = Stopped;
-                eat_error!(
-                    self.source.on_stop(&mut self.ctx).await,
-                    "on_stop failed",
-                    &self.ctx.url
-                );
+                let res = self.source.on_stop(&mut self.ctx).await;
+                self.ctx
+                    .log_err(sender.send(res).await, "Error sending Stop reply");
                 Ok(Control::Terminate)
             }
             SourceMsg::Drain(_sender) if self.state == Draining => {
@@ -776,10 +756,9 @@ where
                 // We change the source state to `Draining` and wait for `SourceReply::Empty` as we drain out everything that might be in flight
                 // when reached the `Empty` point, we emit the `Drain` signal and wait for the CB answer (one for each connected pipeline)
                 if self.pipelines_out.is_empty() && self.pipelines_err.is_empty() {
-                    eat_error!(
+                    self.ctx.log_err(
                         drained_sender.send(Msg::SourceDrained).await,
                         "sending SourceDrained message failed",
-                        &self.ctx.url
                     );
                     self.state = Drained;
                 } else {
@@ -789,59 +768,41 @@ where
                 Ok(Control::Continue)
             }
             SourceMsg::ConnectionLost => {
-                eat_error!(
-                    self.source.on_connection_lost(&mut self.ctx).await,
-                    "on_connection_lost failed",
-                    &self.ctx.url
-                );
+                let res = self.source.on_connection_lost(&mut self.ctx).await;
+                self.ctx.log_err(res, "on_connection_lost failed");
                 Ok(Control::Continue)
             }
             SourceMsg::ConnectionEstablished => {
-                eat_error!(
-                    self.source.on_connection_established(&mut self.ctx).await,
-                    "on_connection_established failed",
-                    &self.ctx.url
-                );
+                let res = self.source.on_connection_established(&mut self.ctx).await;
+                self.ctx.log_err(res, "on_connection_established failed");
                 Ok(Control::Continue)
             }
             SourceMsg::Cb(CbAction::Fail, id) => {
                 if let Some((stream_id, id)) = id.get_min_by_source(self.ctx.uid) {
-                    eat_error!(
-                        self.source.fail(stream_id, id).await,
-                        "fail failed",
-                        &self.ctx.url
-                    );
+                    self.ctx
+                        .log_err(self.source.fail(stream_id, id).await, "fail failed");
                 }
                 Ok(Control::Continue)
             }
             SourceMsg::Cb(CbAction::Ack, id) => {
                 if let Some((stream_id, id)) = id.get_max_by_source(self.ctx.uid) {
-                    eat_error!(
-                        self.source.ack(stream_id, id).await,
-                        "ack failed",
-                        &self.ctx.url
-                    );
+                    self.ctx
+                        .log_err(self.source.ack(stream_id, id).await, "ack failed");
                 }
                 Ok(Control::Continue)
             }
             SourceMsg::Cb(CbAction::Close, _id) => {
                 // TODO: execute pause strategy chosen by source / connector / configured by user
                 info!("[Source::{}] Circuit Breaker: Close.", self.ctx.url);
-                eat_error!(
-                    self.source.on_cb_close(&mut self.ctx).await,
-                    "on_cb_close failed",
-                    &self.ctx.url
-                );
+                let res = self.source.on_cb_close(&mut self.ctx).await;
+                self.ctx.log_err(res, "on_cb_close failed");
                 self.state = Paused;
                 Ok(Control::Continue)
             }
             SourceMsg::Cb(CbAction::Open, _id) => {
                 info!("[Source::{}] Circuit Breaker: Open.", self.ctx.url);
-                eat_error!(
-                    self.source.on_cb_open(&mut self.ctx).await,
-                    "on_cb_open failed",
-                    &self.ctx.url
-                );
+                let res = self.source.on_cb_open(&mut self.ctx).await;
+                self.ctx.log_err(res, "on_cb_open failed");
                 self.state = Running;
                 Ok(Control::Continue)
             }
@@ -976,7 +937,7 @@ where
         let data = match data {
             Ok(d) => d,
             Err(e) => {
-                warn!("[Source::{}] Error pulling data: {}", &self.ctx.url, e);
+                warn!("{} Error pulling data: {}", &self.ctx, e);
                 // TODO: increment error metric
                 // FIXME: emit event to err port
                 return Ok(());
@@ -1017,10 +978,9 @@ where
                 } else {
                     let error = self.route_events(results).await;
                     if error {
-                        eat_error!(
+                        self.ctx.log_err(
                             self.source.fail(stream, self.pull_counter).await,
                             "fail upon error sending events from data source reply failed",
-                            &self.ctx.url
                         );
                     }
                 }
@@ -1064,10 +1024,9 @@ where
                 } else {
                     let error = self.route_events(results).await;
                     if error {
-                        eat_error!(
+                        self.ctx.log_err(
                             self.source.fail(stream, self.pull_counter).await,
                             "fail upon error sending events from batched data source reply failed",
-                            &self.ctx.url
                         );
                     }
                 }
@@ -1090,10 +1049,9 @@ where
                 );
                 let error = self.route_events(vec![(port.unwrap_or(OUT), event)]).await;
                 if error {
-                    eat_error!(
+                    self.ctx.log_err(
                         self.source.fail(stream, self.pull_counter).await,
                         "fail upon error sending events from structured data source reply failed",
-                        &self.ctx.url
                     );
                 }
             }
@@ -1133,10 +1091,9 @@ where
                     } else {
                         let error = self.route_events(results).await;
                         if error {
-                            eat_error!(
+                            self.ctx.log_err(
                                 self.source.fail(stream_id, self.pull_counter).await,
                                 "fail upon error sending events from endstream source reply failed",
-                                &self.ctx.url
                             );
                         }
                     }

@@ -17,6 +17,7 @@ pub(crate) mod impls;
 pub(crate) mod prelude;
 pub(crate) mod sink;
 pub(crate) mod source;
+#[macro_use]
 pub(crate) mod utils;
 
 /// quiescence stuff
@@ -826,13 +827,31 @@ impl Manager {
                         );
                     }
                     Msg::Stop => {
-                        info!("[Connector::{}] Stopping...", &connector_addr.url);
+                        info!("{} Stopping...", &ctx);
                         error(&url, connector.on_stop(&ctx).await);
                         connector_state = ConnectorState::Stopped;
                         quiescence_beacon.full_stop();
-
-                        connector_addr.send_source(SourceMsg::Stop).await?;
-                        connector_addr.send_sink(SinkMsg::Stop).await?;
+                        let (stop_tx, stop_rx) = bounded(2);
+                        // TODO: apply timeout for long running stop callbacks
+                        let mut expect = 0_usize
+                            + connector_addr.has_source() as usize
+                            + connector_addr.has_sink() as usize;
+                        ctx.log_err(
+                            connector_addr
+                                .send_source(SourceMsg::Stop(stop_tx.clone()))
+                                .await,
+                            "Error sending Stop msg to Source",
+                        );
+                        ctx.log_err(
+                            connector_addr.send_sink(SinkMsg::Stop(stop_tx)).await,
+                            "Error sending Stop msg to Sink",
+                        );
+                        while expect > 0 {
+                            if let Err(e) = stop_rx.recv().await {
+                                error!("{} Error in stopping sink and source part: {}", &ctx, e);
+                            }
+                            expect -= 1;
+                        }
 
                         info!("[Connector::{}] Stopped.", &connector_addr.url);
                         break;
@@ -931,6 +950,23 @@ impl Display for ConnectorState {
     }
 }
 
+/// context for a Connector or its parts
+pub trait Context: Display {
+    /// provide the url of the connector
+    fn url(&self) -> &TremorUrl;
+
+    /// only log an error and swallow the result
+    fn log_err<T, E, M>(&self, expr: std::result::Result<T, E>, msg: &M)
+    where
+        E: std::error::Error,
+        M: Display + ?Sized,
+    {
+        if let Err(e) = expr {
+            error!("{} {}: {}", self, msg, e);
+        }
+    }
+}
+
 /// connector context
 #[derive(Clone)]
 pub struct ConnectorContext {
@@ -944,6 +980,18 @@ pub struct ConnectorContext {
     pub quiescence_beacon: QuiescenceBeacon,
     /// Notifier
     pub notifier: reconnect::ConnectionLostNotifier,
+}
+
+impl Display for ConnectorContext {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[Connector::{}]", &self.url)
+    }
+}
+
+impl Context for ConnectorContext {
+    fn url(&self) -> &TremorUrl {
+        &self.url
+    }
 }
 
 impl ConnectorContext {
