@@ -64,7 +64,7 @@ pub enum DeployStmt<'script> {
     /// A connector declaration
     ConnectorDecl(Box<ConnectorDecl<'script>>),
     /// The create instance constructor
-    CreateStmt(Box<CreateStmt<'script>>),
+    DeployFlowStmt(Box<DeployFlow<'script>>),
 }
 
 impl<'script> BaseRef for DeployStmt<'script> {
@@ -75,7 +75,7 @@ impl<'script> BaseRef for DeployStmt<'script> {
             DeployStmt::FlowDecl(stmt) => stmt.fqn(),
             DeployStmt::PipelineDecl(stmt) => stmt.fqn(),
             DeployStmt::ConnectorDecl(stmt) => stmt.fqn(),
-            DeployStmt::CreateStmt(stmt) => stmt.fqn(),
+            DeployStmt::DeployFlowStmt(stmt) => stmt.fqn(),
         }
     }
 }
@@ -87,7 +87,7 @@ impl<'script> BaseExpr for DeployStmt<'script> {
             DeployStmt::PipelineDecl(s) => s.mid(),
             DeployStmt::ConnectorDecl(s) => s.mid(),
             DeployStmt::FlowDecl(s) => s.mid(),
-            DeployStmt::CreateStmt(s) => s.mid(),
+            DeployStmt::DeployFlowStmt(s) => s.mid(),
         }
     }
 }
@@ -139,7 +139,7 @@ pub struct FlowDecl<'script> {
     /// Links between artefacts in the flow
     pub links: Vec<DeployLink>,
     /// Deployment atoms
-    pub atoms: Vec<DeployStmt<'script>>,
+    pub atoms: Vec<CreateStmt<'script>>,
     /// Documentation comments
     #[serde(skip)]
     pub docs: Option<String>,
@@ -167,3 +167,24 @@ pub struct CreateStmt<'script> {
 }
 impl_expr_mid!(CreateStmt);
 impl_fqn!(CreateStmt);
+
+/// A create statement
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct DeployFlow<'script> {
+    pub(crate) mid: usize,
+    /// Alias or identify for this create statement
+    pub alias: String,
+    /// Target of the artefact definition being deployed
+    pub target: String,
+    /// Target for creation
+    pub node_id: NodeId,
+    /// Atomic unit of deployment
+    pub atom: DeployStmt<'script>,
+    /// The type of this connector
+    pub kind: Option<DeployCreateKind>,
+    /// Documentation comments
+    #[serde(skip)]
+    pub docs: Option<String>,
+}
+impl_expr_mid!(DeployFlow);
+impl_fqn!(DeployFlow);
