@@ -15,7 +15,7 @@ use std::fmt::Display;
 // limitations under the License.
 
 /// Identifies a node in the AST.
-#[derive(Clone, Debug, PartialEq, Serialize, Eq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Hash, Eq)]
 pub struct NodeId {
     /// The ID of the Node
     id: String,

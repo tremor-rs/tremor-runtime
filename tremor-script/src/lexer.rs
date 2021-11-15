@@ -1006,15 +1006,14 @@ impl<'input> Preprocessor {
         include_stack: &mut IncludeStack,
     ) -> Result<(usize, Box<Path>)> {
         let mut file = PathBuf::from(rel_module_path);
-        file.set_extension("tremor");
-
+        file.set_extension("troy");
         if let Some(path) = module_path.resolve(&file) {
             if path.is_file() {
                 let cu = include_stack.push(path.as_os_str())?;
                 return Ok((cu, path));
             }
         }
-
+        
         file.set_extension("trickle");
         if let Some(path) = module_path.resolve(&file) {
             if path.is_file() {
@@ -1023,7 +1022,8 @@ impl<'input> Preprocessor {
             }
         }
 
-        file.set_extension("troy");
+        file.set_extension("tremor");
+
         if let Some(path) = module_path.resolve(&file) {
             if path.is_file() {
                 let cu = include_stack.push(path.as_os_str())?;
