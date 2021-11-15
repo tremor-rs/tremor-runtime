@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::{Error, ErrorKind, Result};
+use crate::errors::{Error, Kind as ErrorKind, Result};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
 

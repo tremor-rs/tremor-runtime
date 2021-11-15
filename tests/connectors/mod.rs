@@ -22,10 +22,10 @@ use async_std::task::JoinHandle;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 use tremor_runtime::connectors;
-use tremor_runtime::connectors::{Connectivity, ConnectorState, StatusReport};
+use tremor_runtime::connectors::{Connectivity, StatusReport};
 use tremor_runtime::errors::Result;
-use tremor_runtime::lifecycle::InstanceState;
 use tremor_runtime::pipeline;
+use tremor_runtime::registry::instance::InstanceState;
 use tremor_runtime::system::ShutdownMode;
 use tremor_runtime::system::World;
 use tremor_runtime::url::ports::{ERR, IN, OUT};
@@ -50,9 +50,7 @@ impl ConnectorHarness {
         let raw_config = serde_yaml::from_slice::<config::Connector>(config.as_bytes())?;
         let id = TremorUrl::from_connector_instance(raw_config.id.as_str(), "test")?;
         let _connector_config = world.repo.publish_connector(&id, false, raw_config).await?;
-        let res = world.bind_connector(&id).await?;
-        let connector_addr = world.reg.find_connector(&id).await?.unwrap();
-        assert_eq!(InstanceState::Initialized, res);
+        let connector_addr = world.create_connector_instance(&id).await?;
 
         // connect a fake pipeline to OUT
         let out_pipeline_id =
@@ -94,11 +92,7 @@ impl ConnectorHarness {
 
     pub(crate) async fn start(&self) -> Result<()> {
         // start the connector
-        assert_eq!(
-            InstanceState::Running,
-            self.world.reg.start_connector(&self.connector_id).await?
-        );
-        Ok(())
+        self.world.reg.start_connector(&self.connector_id).await
     }
 
     pub(crate) async fn pause(&self) -> Result<()> {
@@ -151,7 +145,7 @@ impl ConnectorHarness {
     /// If communication with the connector fails or we time out without reaching the desired state
     pub(crate) async fn wait_for_state(
         &self,
-        state: ConnectorState,
+        state: InstanceState,
         timeout: Duration,
     ) -> Result<()> {
         let start = std::time::Instant::now();
