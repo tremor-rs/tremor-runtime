@@ -82,9 +82,7 @@ macro_rules! test_cases {
 
 test_cases!(
     module_not_found,
-    pipeline_not_found,
     pipeline_bad_query,
-    connector_not_found,
     connector_no_kind,
     connector_bad_kind,
     // TODO: rewrite to work with `create` in flow

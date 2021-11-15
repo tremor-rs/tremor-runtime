@@ -52,8 +52,8 @@ DeployStmt: DeployStmtRaw<'input> = {
 
 DeployDeployStmt: DeployStmtRaw<'input> = {
     // FIXME: we don't need a deploy kind here once troy is merged
-    <start:@L> <docs:DocComment> "deploy" <kind:DeployCreateKind?> <id:Ident> "from" <target:ModularTarget> <params:(WithEndClause)?> <end:@L> => DeployStmtRaw::DeployFlowStmt(DeployFlowRaw { start, end, id, module: target.0, target: target.1, params, kind, docs }),
-    <start:@L> <docs:DocComment> "deploy" <kind:DeployCreateKind?> <id:Ident> <params:(WithEndClause)?> <end:@L> => DeployStmtRaw::DeployFlowStmt(DeployFlowRaw { start, end, id: id.clone(),  module: vec![], target: id, params, kind, docs }),
+    <start:@L> <docs:DocComment> "deploy" <kind:DeployKind> <id:Ident> "from" <target:ModularTarget> <params:(WithEndClause)?> <end:@L> => DeployStmtRaw::DeployFlowStmt(DeployFlowRaw { start, end, id, module: target.0, target: target.1, params, kind, docs }),
+    <start:@L> <docs:DocComment> "deploy" <kind:DeployKind> <id:Ident> <params:(WithEndClause)?> <end:@L> => DeployStmtRaw::DeployFlowStmt(DeployFlowRaw { start, end, id: id.clone(),  module: vec![], target: id, params, kind, docs }),
 }
 
 ConnectorKind: IdentRaw<'input> = {
@@ -81,16 +81,23 @@ DeployLinks_: DeployLinksRaw<'input> = {
     <Sep<DeployLinks_, DeployLink, ";">> => <>
 }
 
-DeployCreateKind: DeployCreateKind = {
-    // FIXME TODO wire kind into AST and check declared kind is referenced kind
-    "connector" => DeployCreateKind::Connector,
-    "pipeline" => DeployCreateKind::Pipeline,
-    "flow" => DeployCreateKind::Flow,
+CreateKind: CreateKind = {
+    "connector" => CreateKind::Connector,
+    "pipeline" => CreateKind::Pipeline,
 }
 
+DeployKind: DeployKind = {
+    // FIXME renmve connector here
+    "connector" => DeployKind::Connector,
+    // FIXME renmve pipeline here
+    "pipeline" => DeployKind::Pipeline,
+    "flow" => DeployKind::Flow,
+}
+
+
 DeployLink: DeployLinkRaw<'input> = {
-    <start:@L> <docs:DocComment> "create" <kind:DeployCreateKind?> <id:Ident> "from" <target:ModularTarget> <params:WithEndClause?> <end:@L> => DeployLinkRaw::Atom(CreateStmtRaw { start, end, id, module: target.0, target: target.1, params, kind, docs }),
-    <start:@L> <docs:DocComment> "create" <kind:DeployCreateKind?> <id:Ident> <params:WithEndClause?> <end:@L> => DeployLinkRaw::Atom(CreateStmtRaw { start, end, id: id.clone(),  module: vec![], target: id, params, kind, docs }),
+    <start:@L> <docs:DocComment> "create" <kind:CreateKind> <id:Ident> "from" <target:ModularTarget> <params:WithEndClause?> <end:@L> => DeployLinkRaw::Atom(CreateStmtRaw { start, end, id, module: target.0, target: target.1, params, kind, docs }),
+    <start:@L> <docs:DocComment> "create" <kind:CreateKind> <id:Ident> <params:WithEndClause?> <end:@L> => DeployLinkRaw::Atom(CreateStmtRaw { start, end, id: id.clone(),  module: vec![], target: id, params, kind, docs }),
 
     <start:@L> <docs:DocComment> "connect" <from:DeployEndpoint> "to" <to:DeployEndpoint> <end:@L> => DeployLinkRaw::Link(start, end, docs, from, to),
 }
