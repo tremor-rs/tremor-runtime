@@ -2580,6 +2580,27 @@ impl<'script> Upable<'script> for TestExprRaw {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct CreationalWith<'script>(pub WithExprsRaw<'script>);
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct DefinitioalWith<'script>(pub WithExprsRaw<'script>);
+
+impl<'script> Upable<'script> for DefinitioalWith<'script> {
+    type Target = HashMap<String, Value<'script>>;
+
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+        self.0.up(helper)
+    }
+}
+
+impl<'script> Upable<'script> for CreationalWith<'script> {
+    type Target = HashMap<String, Value<'script>>;
+
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+        self.0.up(helper)
+    }
+}
+
 pub type ExprsRaw<'script> = Vec<ExprRaw<'script>>;
 pub type ImutExprsRaw<'script> = Vec<ImutExprRaw<'script>>;
 pub type FieldsRaw<'script> = Vec<FieldRaw<'script>>;
