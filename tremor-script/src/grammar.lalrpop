@@ -42,13 +42,21 @@ DeployStmts: DeployStmtsRaw<'input> = {
   <item:DeployStmt> ";"? => vec![item],
 }
 
-DefinitionArgsWithEnd: Option<WithExprsRaw<'input>> = {
-    <WithEndClause?> => <>
+DefinitionArgsWithEnd: Option<DefinitioalWith<'input>> = {
+    <WithEndClause?> => <>.map(DefinitioalWith)
+}
+DefinitionArgs: Option<DefinitioalWith<'input>> = {
+    <WithClause?> => <>.map(DefinitioalWith)
 }
 
-CreationArgsWithEnd: Option<WithExprsRaw<'input>> = {
-    <WithEndClause?> => <>
+
+CreationArgsWithEnd: Option<CreationalWith<'input>> = {
+    <WithEndClause?> => <>.map(CreationalWith)
 }
+CreationArgs: Option<CreationalWith<'input>> = {
+    <WithClause?> => <>.map(CreationalWith)
+}
+
 
 
 DeployStmt: DeployStmtRaw<'input> = {
@@ -130,12 +138,12 @@ DeployModuleStmts: DeployStmtsRaw<'input> = {
 
  DefineConnector: DeployStmtRaw<'input> =  {
     // Connectors - these define connectors for deployment
-    <start:@L> <docs:DocComment> "define" <kind:ConnectorKind> "connector" <id:Ident> <params:(WithClause)?> "end" <end:@L> => DeployStmtRaw::ConnectorDecl(ConnectorDeclRaw { start, end, id: id.to_string(), kind, params, docs }),
+    <start:@L> <docs:DocComment> "define" <kind:ConnectorKind> "connector" <id:Ident> <params:DefinitionArgsWithEnd> <end:@L> => DeployStmtRaw::ConnectorDecl(ConnectorDeclRaw { start, end, id: id.to_string(), kind, params, docs }),
  }
 
 DefineFlow: DeployStmtRaw<'input> = {
     // Flow - these define how pipelines and connectors are interconnected to form a unit deployment graph
-    <start:@L> <docs:DocComment> "define" "flow" <id:Ident> <params:(WithClause)?> <atoms:WithDeployLinks> "end" <end:@L> => DeployStmtRaw::FlowDecl(FlowDeclRaw { start, end, id: id.to_string(), params, atoms, docs }),
+    <start:@L> <docs:DocComment> "define" "flow" <id:Ident> <params:DefinitionArgs> <atoms:WithDeployLinks> "end" <end:@L> => DeployStmtRaw::FlowDecl(FlowDeclRaw { start, end, id: id.to_string(), params, atoms, docs }),
 }
 
  // In case we need to limit the content of deploy stmt
@@ -155,7 +163,7 @@ DeployModuleInnerStmt: DeployStmtRaw<'input> = {
 
 /// Root
 pub(crate) Query : QueryRaw<'input> = {
-    <config:ConfigDirectives> <stmts:Stmts> "<end-of-stream>"? => QueryRaw{config, stmts},
+    <config:ConfigDirectives> <stmts:Stmts> "<end-of-stream>"? => QueryRaw{config: config, stmts},
     <stmts:Stmts> "<end-of-stream>"? => QueryRaw{config: vec![], stmts},
 }
 
@@ -188,12 +196,6 @@ ModuleStmt: ModuleStmtRaw<'input> = {
 
 /// List of expressions at the root of the script
 ModuleStmts: StmtsRaw<'input> = {
-    //<stmt:Stmt> ";" <list:ModuleStmts> => {
-    //    let mut list = list;
-    //    list.insert(0,stmt);
-    //    list
-    // },
-    //<item:Stmt> ";"? => vec![item],
      <stmt:ModuleInnerStmt> ";" <list:ModuleStmts> => {
         let mut list = list;
         list.insert(0,stmt);
@@ -319,16 +321,18 @@ EmbeddedScriptContent: Option<ScriptRaw<'input>> = {
     <ExprImut> => Some(ScriptRaw::new(vec![ExprRaw::Imut(<>)], None)),
 }
 
-WithScriptClause: (WithExprsRaw<'input>, Option<ScriptRaw<'input>>) = {
-    "with" <with:WithExprs> <script:EmbeddedScriptImut> "end" => (with, script),
+WithScriptClause: (DefinitioalWith<'input>, Option<ScriptRaw<'input>>) = {
+    <with:WithClause> <script:EmbeddedScriptImut> "end" => (DefinitioalWith(with), script),
+}
+
+
+
+WithClause: WithExprsRaw<'input> = {
+    "with" <WithExprs> => <>,
 }
 
 WithEndClause: WithExprsRaw<'input> = {
     <WithClause> "end" => <>,
-}
-
-WithClause: WithExprsRaw<'input> = {
-    "with" <WithExprs> => <>,
 }
 
 WithExprs: WithExprsRaw<'input> = {
@@ -374,7 +378,7 @@ PipelineStmtInner : StmtsRaw<'input> = {
 }
 
 DefinePipeline: PipelineDeclRaw<'input> = {
-    <doc:DocComment> <start:@L> "define" "pipeline" <id:Ident> <from:("from" <Ports>)?> <into:("into" <Ports>)?> <params:(<WithClause>)?> <pipeline:Pipeline> <end:@L> => {
+    <doc:DocComment> <start:@L> "define" "pipeline" <id:Ident> <from:("from" <Ports>)?> <into:("into" <Ports>)?> <params:DefinitionArgs> <pipeline:Pipeline> <end:@L> => {
         PipelineDeclRaw { start, end, id: id.to_string(), pipeline, params: params.map(|params| params.into()), from, into, doc }
     }
 }
@@ -407,7 +411,7 @@ CreateOperator: StmtRaw<'input> = {
 }
 
 DefineScript: StmtRaw<'input> = {
-    <doc:DocComment> <start:@L> "define" "script" <id:Ident> <params:(<WithClause>)?> <script:EmbeddedScript> <end:@L> => {
+    <doc:DocComment> <start:@L> "define" "script" <id:Ident> <params:DefinitionArgs> <script:EmbeddedScript> <end:@L> => {
         StmtRaw::ScriptDecl(ScriptDeclRaw { start, end, id: id.to_string(), script, params: params.map(|params| params.into()), doc })
     }
 }
@@ -552,7 +556,6 @@ AndExprImut: ImutExprRaw<'input> = {
 
 /// Bitwise or
 BitOrExprImut: ImutExprRaw<'input> = {
-//    <o:BinOp<BinBitOr, BitOrExprImut, BitXorExprImut>> => <>,
     BitXorExprImut => <>,
 }
 
@@ -989,7 +992,6 @@ LocalPath: PathRaw<'input> = {
 ConstPath: PathRaw<'input> = {
     <start:@L> <module:ModPath> "::" <path:LocalPath> <end:@L> => {
         if let PathRaw::Local(LocalPathRaw { segments, .. }) = path {
-
             PathRaw::Const(ConstPathRaw { module, segments, start, end })
         } else {
             unreachable!()
@@ -1366,7 +1368,6 @@ Fields: FieldsRaw<'input> = {
         fields
     },
 }
-
 
 Fields_: FieldsRaw<'input> = {
     <fields:Sep<Fields_, Field, ",">> => fields,
