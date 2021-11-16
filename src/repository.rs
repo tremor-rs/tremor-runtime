@@ -28,8 +28,6 @@ use std::default::Default;
 use std::fmt;
 use std::sync::atomic::Ordering;
 
-/// A Servant ID
-pub use crate::registry::ServantId;
 /// A binding artefact
 pub use artefact::Binding as BindingArtefact;
 pub(crate) use artefact::ConnectorArtefact;
@@ -43,7 +41,7 @@ pub struct RepoWrapper<A: Artefact> {
     /// The artefact
     pub artefact: A,
     /// Instances of this artefact
-    pub instances: Vec<ServantId>,
+    pub instances: Vec<TremorUrl>,
     /// If this is a protected system artefact
     pub system: bool,
 }
@@ -118,7 +116,7 @@ impl<A: Artefact> Repository<A> {
     }
 
     /// Binds an artefact to a given servant
-    pub fn bind(&mut self, mut id: ArtefactId, mut sid: ServantId) -> Result<&A> {
+    pub fn bind(&mut self, mut id: ArtefactId, mut sid: TremorUrl) -> Result<&A> {
         id.trim_to_artefact();
         sid.trim_to_instance();
         match self.map.get_mut(&id) {
@@ -130,7 +128,7 @@ impl<A: Artefact> Repository<A> {
         }
     }
     /// Unbinds an artefact with a given servant
-    pub fn unbind(&mut self, mut id: ArtefactId, mut sid: ServantId) -> Result<&A> {
+    pub fn unbind(&mut self, mut id: ArtefactId, mut sid: TremorUrl) -> Result<&A> {
         id.trim_to_artefact();
         sid.trim_to_instance();
         match self.map.get_mut(&id) {
@@ -149,8 +147,8 @@ pub(crate) enum Msg<A: Artefact> {
     FindArtefact(Sender<Result<Option<RepoWrapper<A>>>>, ArtefactId),
     PublishArtefact(Sender<Result<A>>, ArtefactId, bool, A),
     UnpublishArtefact(Sender<Result<A>>, ArtefactId),
-    RegisterInstance(Sender<Result<A>>, ArtefactId, ServantId),
-    UnregisterInstance(Sender<Result<A>>, ArtefactId, ServantId),
+    RegisterInstance(Sender<Result<A>>, ArtefactId, TremorUrl),
+    UnregisterInstance(Sender<Result<A>>, ArtefactId, TremorUrl),
 }
 impl<A: Artefact + Send + Sync + 'static> Repository<A> {
     fn start(mut self) -> Sender<Msg<A>> {
@@ -180,7 +178,7 @@ impl<A: Artefact + Send + Sync + 'static> Repository<A> {
                     Msg::RegisterInstance(r, a_id, s_id) => {
                         r.send(
                             A::artefact_id(&a_id)
-                                .and_then(|aid| Ok((aid, A::servant_id(&s_id)?)))
+                                .and_then(|aid| Ok((aid, A::instance_id(&s_id)?)))
                                 .and_then(|(aid, sid)| {
                                     self.bind(aid, sid).map(std::clone::Clone::clone)
                                 }),
@@ -190,7 +188,7 @@ impl<A: Artefact + Send + Sync + 'static> Repository<A> {
                     Msg::UnregisterInstance(r, a_id, s_id) => {
                         r.send(
                             A::artefact_id(&a_id)
-                                .and_then(|a_id| Ok((a_id, A::servant_id(&s_id)?)))
+                                .and_then(|a_id| Ok((a_id, A::instance_id(&s_id)?)))
                                 .and_then(|(a_id, s_id)| {
                                     self.unbind(a_id, s_id).map(std::clone::Clone::clone)
                                 }),
@@ -273,10 +271,10 @@ impl Repositories {
         rx.recv().await?
     }
 
-    /// Publish a pipeline
+    /// Publish a pipeline artefact / config
     ///
     /// # Errors
-    ///  * if we can't publish a pipeline
+    ///  * if we can't publish a pipeline artefact
     pub async fn publish_pipeline(
         &self,
         id: &TremorUrl,
@@ -302,11 +300,11 @@ impl Repositories {
         rx.recv().await?
     }
 
-    /// Bind a pipeline
+    /// Register a pipeline instance
     ///
     /// # Errors
-    ///  * if we can't bind a pipeline
-    pub async fn bind_pipeline(&self, id: &TremorUrl) -> Result<PipelineArtefact> {
+    ///  * if we can't register a pipeline instance
+    pub async fn register_pipeline_instance(&self, id: &TremorUrl) -> Result<PipelineArtefact> {
         let (tx, rx) = bounded(1);
         self.pipeline
             .send(Msg::RegisterInstance(tx, id.clone(), id.clone()))
@@ -314,11 +312,11 @@ impl Repositories {
         rx.recv().await?
     }
 
-    /// Unbinds a pipeline
+    /// Unregisters a pipeline instance
     ///
     /// # Errors
-    ///  * if we can't unbound a pipeline
-    pub async fn unbind_pipeline(&self, id: &TremorUrl) -> Result<PipelineArtefact> {
+    ///  * if we can't unregister a pipeline instance
+    pub async fn unregister_pipeline_instance(&self, id: &TremorUrl) -> Result<PipelineArtefact> {
         let (tx, rx) = bounded(1);
         self.pipeline
             .send(Msg::UnregisterInstance(tx, id.clone(), id.clone()))
@@ -361,10 +359,10 @@ impl Repositories {
         rx.recv().await?
     }
 
-    /// Publishes a connector
+    /// Publishes a connector artefact
     ///
     /// # Errors
-    ///  * if we can't publish a connector
+    ///  * if we can't publish a connector artefact
     pub async fn publish_connector(
         &self,
         id: &TremorUrl,
@@ -378,10 +376,10 @@ impl Repositories {
         rx.recv().await?
     }
 
-    /// Unpublishes a connector
+    /// Unpublishes a connector artefact
     ///
     /// # Errors
-    ///  * if we can't unpublish a connector
+    ///  * if we can't unpublish a connector artefact
     pub async fn unpublish_connector(&self, id: &TremorUrl) -> Result<ConnectorArtefact> {
         let (tx, rx) = bounded(1);
         self.connector
@@ -390,11 +388,11 @@ impl Repositories {
         rx.recv().await?
     }
 
-    /// Binds a connector
+    /// Registers a connector instance
     ///
     /// # Errors
-    ///  * if we can't bind the connector
-    pub async fn bind_connector(&self, id: &TremorUrl) -> Result<ConnectorArtefact> {
+    ///  * if we can't register a connector instance
+    pub async fn register_connector_instance(&self, id: &TremorUrl) -> Result<ConnectorArtefact> {
         let (tx, rx) = bounded(1);
         self.connector
             .send(Msg::RegisterInstance(tx, id.clone(), id.clone()))
@@ -402,11 +400,11 @@ impl Repositories {
         rx.recv().await?
     }
 
-    /// Unbinds a connector
+    /// Unregisters a connector instance
     ///
     /// # Errors
-    ///  * if we can't unbind the connector
-    pub async fn unbind_connector(&self, id: &TremorUrl) -> Result<ConnectorArtefact> {
+    ///  * if we can't unregister the connector instance
+    pub async fn unregister_connector_instance(&self, id: &TremorUrl) -> Result<ConnectorArtefact> {
         let (tx, rx) = bounded(1);
         self.connector
             .send(Msg::UnregisterInstance(tx, id.clone(), id.clone()))
@@ -480,7 +478,7 @@ impl Repositories {
     ///
     /// # Errors
     ///  * if we can't bind the binding
-    pub async fn bind_binding(&self, id: &TremorUrl) -> Result<BindingArtefact> {
+    pub async fn register_binding_instance(&self, id: &TremorUrl) -> Result<BindingArtefact> {
         let (tx, rx) = bounded(1);
         self.binding
             .send(Msg::RegisterInstance(tx, id.clone(), id.clone()))
@@ -488,11 +486,11 @@ impl Repositories {
         rx.recv().await?
     }
 
-    /// Unbinds a binding
+    /// Unregisters a binding instance
     ///
     /// # Errors
-    ///  * if we can't unbound the binding
-    pub async fn unbind_binding(&self, id: &TremorUrl) -> Result<BindingArtefact> {
+    ///  * if we can't unrtegister the binding instance
+    pub async fn unregister_binding_instance(&self, id: &TremorUrl) -> Result<BindingArtefact> {
         let (tx, rx) = bounded(1);
         self.binding
             .send(Msg::UnregisterInstance(tx, id.clone(), id.clone()))

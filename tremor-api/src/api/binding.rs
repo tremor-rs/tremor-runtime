@@ -83,19 +83,18 @@ pub async fn get_artefact(req: Request) -> Result<Response> {
     reply(req, result, false, StatusCode::Ok).await
 }
 
-pub async fn get_servant(req: Request) -> Result<Response> {
+pub async fn get_instance(req: Request) -> Result<Response> {
     let a_id = req.param("aid").unwrap_or_default();
     let s_id = req.param("sid").unwrap_or_default();
     let url = TremorUrl::from_binding_instance(a_id, s_id)?;
 
     let registry = &req.state().world.reg;
-    let result = registry
+    let (_addr, artefact) = registry
         .find_binding(&url)
         .await?
-        .ok_or_else(Error::instance_not_found)?
-        .binding;
+        .ok_or_else(Error::instance_not_found)?;
 
-    reply(req, result, false, StatusCode::Ok).await
+    reply(req, artefact.binding, false, StatusCode::Ok).await
 }
 
 pub async fn spawn_instance(req: Request) -> Result<Response> {
@@ -107,14 +106,10 @@ pub async fn spawn_instance(req: Request) -> Result<Response> {
     let world = &req.state().world;
 
     // link and start binding
-    let result = world.link_binding(&url, decoded_data).await?.binding;
-    let state = world.reg.start_binding(&url).await?;
+    let result = world.launch_binding(&url, decoded_data).await?;
+    world.reg.start_binding(&url).await?;
 
-    if state.is_stopped() {
-        reply(req, result, true, StatusCode::InternalServerError).await
-    } else {
-        reply(req, result, true, StatusCode::Created).await
-    }
+    reply(req, result.binding, true, StatusCode::Created).await
 }
 
 pub async fn shutdown_instance(req: Request) -> Result<Response> {
@@ -123,7 +118,7 @@ pub async fn shutdown_instance(req: Request) -> Result<Response> {
     let url = TremorUrl::from_binding_instance(a_id, s_id)?;
 
     let world = &req.state().world;
-    let result = world.unlink_binding(&url, HashMap::new()).await?.binding;
+    let result = world.unlink_binding(&url, HashMap::new()).await?;
 
-    reply(req, result, true, StatusCode::NoContent).await
+    reply(req, result.binding, true, StatusCode::NoContent).await
 }
