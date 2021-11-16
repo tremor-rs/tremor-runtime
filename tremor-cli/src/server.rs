@@ -25,7 +25,7 @@ use std::io::Write;
 use std::sync::atomic::Ordering;
 use tremor_api as api;
 use tremor_common::file;
-use tremor_runtime::system::{ShutdownMode, World, WorldConfig};
+use tremor_runtime::system::{ShutdownMode, World};
 use tremor_runtime::{self, version};
 
 async fn handle_api_request<
