@@ -46,6 +46,7 @@ subcommands:
             about: Runs the tremor server process
             args:
               - debug-connectors:
+                  long: debug-connectors
                   about: Load debug connectors (exit, cb, bench, etc.)
                   takes_value: false
                   required: false
