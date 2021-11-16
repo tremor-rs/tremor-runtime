@@ -26,6 +26,7 @@ use super::{
 };
 use crate::ast::{
     node_id::{BaseRef, NodeId},
+    raw::{CreationalWith, DefinitioalWith},
     visitors::{ArgsRewriter, ExprReducer, GroupByExprExtractor, TargetEventRef},
     Ident,
 };
@@ -36,19 +37,26 @@ use std::iter::FromIterator;
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// we're forced to make this pub because of lalrpop
 pub enum Params<'script> {
-    Raw(WithExprsRaw<'script>),
+    Creational(CreationalWith<'script>),
+    Definitional(DefinitioalWith<'script>),
     Processed(HashMap<String, Value<'script>>),
 }
 impl<'script> Default for Params<'script> {
     fn default() -> Self {
-        Params::Raw(Vec::new())
+        Params::Definitional(DefinitioalWith(Vec::new()))
     }
 }
-impl<'script> From<WithExprsRaw<'script>> for Params<'script> {
-    fn from(raw: WithExprsRaw<'script>) -> Self {
-        Params::Raw(raw)
+impl<'script> From<DefinitioalWith<'script>> for Params<'script> {
+    fn from(raw: DefinitioalWith<'script>) -> Self {
+        Params::Definitional(raw)
     }
 }
+impl<'script> From<CreationalWith<'script>> for Params<'script> {
+    fn from(raw: CreationalWith<'script>) -> Self {
+        Params::Creational(raw)
+    }
+}
+
 impl<'script> From<HashMap<String, Value<'script>>> for Params<'script> {
     fn from(processed: HashMap<String, Value<'script>>) -> Self {
         Params::Processed(processed)
@@ -62,7 +70,8 @@ impl<'script> Upable<'script> for Params<'script> {
         helper: &mut Helper<'script, 'registry>,
     ) -> Result<HashMap<String, Value<'script>>> {
         match self {
-            Params::Raw(params) => params.up(helper),
+            Params::Creational(params) => params.up(helper),
+            Params::Definitional(params) => params.up(helper),
             Params::Processed(params) => Ok(params),
         }
     }
@@ -104,7 +113,7 @@ impl<'script> QueryRaw<'script> {
         }
 
         Ok(Query {
-            config: Params::Raw(self.config).up(helper)?,
+            config: Params::Definitional(DefinitioalWith(self.config)).up(helper)?,
             stmts,
             node_meta: helper.meta.clone(),
             windows: helper.windows.clone(),
@@ -252,12 +261,12 @@ impl<'script> PipelineDeclRaw<'script> {
 impl<'script> Upable<'script> for PipelineDeclRaw<'script> {
     type Target = PipelineDecl<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        let query = if let Params::Raw(config) = self.params.clone().unwrap_or_default() {
+        let query = if let Params::Definitional(config) = self.params.clone().unwrap_or_default() {
             // We save `helper.modules` here in case `up_script` on `QueryRaw` fails and leaves helper
             // in an inconsistant state regarding the module path.
             let module = helper.module.clone();
             let r = QueryRaw {
-                config,
+                config: config.0,
                 stmts: self.pipeline.clone(),
             }
             .up_script(helper)
@@ -384,7 +393,21 @@ impl<'script> PipelineStmtRaw<'script> {
         match params {
             // Subqueries inline params before up()-ing them, the `params` here must be Raw.
             Params::Processed(_) => Err("Can't inline processed params.".into()),
-            Params::Raw(params) => params
+            Params::Definitional(params) => params
+                .0
+                .into_iter()
+                .map(|(name, value_expr)| {
+                    let mut value_expr = value_expr.up(helper)?;
+                    ArgsRewriter::new(sq_args.clone(), helper).rewrite_expr(&mut value_expr)?;
+                    ExprReducer::new(helper).reduce(&mut value_expr)?;
+
+                    let value = value_expr.try_into_value(helper)?;
+
+                    Ok((name.to_string(), value))
+                })
+                .collect(),
+            Params::Creational(params) => params
+                .0
                 .into_iter()
                 .map(|(name, value_expr)| {
                     let mut value_expr = value_expr.up(helper)?;
