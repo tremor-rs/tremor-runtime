@@ -63,7 +63,7 @@ pub(crate) fn run_process(
             test_dir.to_string_lossy()
         );
     }
-    let args: Vec<String> = vec!["server", "run", "-n"]
+    let args: Vec<String> = vec!["server", "run", "-n", "--debug-connectors"]
         .iter()
         .map(|x| (*x).to_string())
         .chain(artefacts)
