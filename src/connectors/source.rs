@@ -164,20 +164,20 @@ pub trait Source: Send {
     ///////////////////////////
 
     /// called when the source is started. This happens only once in the whole source lifecycle, before any other callbacks
-    async fn on_start(&mut self, _ctx: &mut SourceContext) -> Result<()> {
+    async fn on_start(&mut self, _ctx: &SourceContext) -> Result<()> {
         Ok(())
     }
     /// called when the source is explicitly paused as result of a user/operator interaction
     /// in contrast to `on_cb_close` which happens automatically depending on downstream pipeline or sink connector logic.
-    async fn on_pause(&mut self, _ctx: &mut SourceContext) -> Result<()> {
+    async fn on_pause(&mut self, _ctx: &SourceContext) -> Result<()> {
         Ok(())
     }
     /// called when the source is explicitly resumed from being paused
-    async fn on_resume(&mut self, _ctx: &mut SourceContext) -> Result<()> {
+    async fn on_resume(&mut self, _ctx: &SourceContext) -> Result<()> {
         Ok(())
     }
     /// called when the source is stopped. This happens only once in the whole source lifecycle, as the very last callback
-    async fn on_stop(&mut self, _ctx: &mut SourceContext) -> Result<()> {
+    async fn on_stop(&mut self, _ctx: &SourceContext) -> Result<()> {
         Ok(())
     }
 
@@ -186,13 +186,13 @@ pub trait Source: Send {
     /// Expected reaction is to pause receiving messages, which is handled automatically by the runtime
     /// Source implementations might want to close connections or signal a pause to the upstream entity it connects to if not done in the connector (the default)
     // TODO: add info of Cb event origin (port, origin_uri)?
-    async fn on_cb_close(&mut self, _ctx: &mut SourceContext) -> Result<()> {
+    async fn on_cb_close(&mut self, _ctx: &SourceContext) -> Result<()> {
         Ok(())
     }
     /// Called when we receive a `open` Circuit breaker event from any connected pipeline
     /// This means we can start/continue polling this source for messages
     /// Source implementations might want to start establishing connections if not done in the connector (the default)
-    async fn on_cb_open(&mut self, _ctx: &mut SourceContext) -> Result<()> {
+    async fn on_cb_open(&mut self, _ctx: &SourceContext) -> Result<()> {
         Ok(())
     }
 
@@ -210,11 +210,11 @@ pub trait Source: Send {
 
     // connectivity stuff
     /// called when connector lost connectivity
-    async fn on_connection_lost(&mut self, _ctx: &mut SourceContext) -> Result<()> {
+    async fn on_connection_lost(&mut self, _ctx: &SourceContext) -> Result<()> {
         Ok(())
     }
     /// called when connector re-established connectivity
-    async fn on_connection_established(&mut self, _ctx: &mut SourceContext) -> Result<()> {
+    async fn on_connection_established(&mut self, _ctx: &SourceContext) -> Result<()> {
         Ok(())
     }
 
@@ -673,16 +673,18 @@ where
                 };
                 pipelines.retain(|(url, _)| url == &id);
                 if self.pipelines_out.is_empty() && self.pipelines_err.is_empty() {
-                    let res = self.source.on_stop(&mut self.ctx).await;
-                    self.ctx.log_err(res, "on_stop after unlinking failed");
+                    self.ctx.log_err(
+                        self.source.on_stop(&self.ctx).await,
+                        "on_stop after unlinking failed",
+                    );
                     return Ok(Control::Terminate);
                 }
                 Ok(Control::Continue)
             }
             SourceMsg::Start if self.state == Initialized => {
                 self.state = Running;
-                let res = self.source.on_start(&mut self.ctx).await;
-                self.ctx.log_err(res, "on_start failed");
+                self.ctx
+                    .log_err(self.source.on_start(&self.ctx).await, "on_start failed");
 
                 if let Err(e) = self.send_signal(Event::signal_start(self.ctx.uid)).await {
                     error!(
@@ -701,8 +703,8 @@ where
             }
             SourceMsg::Resume if self.state == Paused => {
                 self.state = Running;
-                let res = self.source.on_resume(&mut self.ctx).await;
-                self.ctx.log_err(res, "on_resume failed");
+                self.ctx
+                    .log_err(self.source.on_resume(&self.ctx).await, "on_resume failed");
                 Ok(Control::Continue)
             }
             SourceMsg::Resume => {
@@ -716,8 +718,8 @@ where
                 // TODO: execute pause strategy chosen by source / connector / configured by user
                 info!("[Source::{}] Paused.", self.ctx.url);
                 self.state = Paused;
-                let res = self.source.on_pause(&mut self.ctx).await;
-                self.ctx.log_err(res, "on_pause failed");
+                self.ctx
+                    .log_err(self.source.on_pause(&self.ctx).await, "on_pause failed");
                 Ok(Control::Continue)
             }
             SourceMsg::Pause => {
@@ -730,9 +732,10 @@ where
             SourceMsg::Stop(sender) => {
                 info!("{} Stopping...", &self.ctx);
                 self.state = Stopped;
-                let res = self.source.on_stop(&mut self.ctx).await;
-                self.ctx
-                    .log_err(sender.send(res).await, "Error sending Stop reply");
+                self.ctx.log_err(
+                    sender.send(self.source.on_stop(&self.ctx).await).await,
+                    "Error sending Stop reply",
+                );
                 Ok(Control::Terminate)
             }
             SourceMsg::Drain(_sender) if self.state == Draining => {
@@ -768,13 +771,17 @@ where
                 Ok(Control::Continue)
             }
             SourceMsg::ConnectionLost => {
-                let res = self.source.on_connection_lost(&mut self.ctx).await;
-                self.ctx.log_err(res, "on_connection_lost failed");
+                self.ctx.log_err(
+                    self.source.on_connection_lost(&self.ctx).await,
+                    "on_connection_lost failed",
+                );
                 Ok(Control::Continue)
             }
             SourceMsg::ConnectionEstablished => {
-                let res = self.source.on_connection_established(&mut self.ctx).await;
-                self.ctx.log_err(res, "on_connection_established failed");
+                self.ctx.log_err(
+                    self.source.on_connection_established(&self.ctx).await,
+                    "on_connection_established failed",
+                );
                 Ok(Control::Continue)
             }
             SourceMsg::Cb(CbAction::Fail, id) => {
@@ -794,15 +801,15 @@ where
             SourceMsg::Cb(CbAction::Close, _id) => {
                 // TODO: execute pause strategy chosen by source / connector / configured by user
                 info!("[Source::{}] Circuit Breaker: Close.", self.ctx.url);
-                let res = self.source.on_cb_close(&mut self.ctx).await;
+                let res = self.source.on_cb_close(&self.ctx).await;
                 self.ctx.log_err(res, "on_cb_close failed");
                 self.state = Paused;
                 Ok(Control::Continue)
             }
             SourceMsg::Cb(CbAction::Open, _id) => {
                 info!("[Source::{}] Circuit Breaker: Open.", self.ctx.url);
-                let res = self.source.on_cb_open(&mut self.ctx).await;
-                self.ctx.log_err(res, "on_cb_open failed");
+                self.ctx
+                    .log_err(self.source.on_cb_open(&self.ctx).await, "on_cb_open failed");
                 self.state = Running;
                 Ok(Control::Continue)
             }

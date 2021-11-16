@@ -289,11 +289,11 @@ impl Source for CbSource {
         }
     }
 
-    async fn on_cb_close(&mut self, _ctx: &mut SourceContext) -> Result<()> {
+    async fn on_cb_close(&mut self, _ctx: &SourceContext) -> Result<()> {
         self.received_cbs.trigger += 1;
         Ok(())
     }
-    async fn on_cb_open(&mut self, _ctx: &mut SourceContext) -> Result<()> {
+    async fn on_cb_open(&mut self, _ctx: &SourceContext) -> Result<()> {
         self.received_cbs.restore += 1;
         Ok(())
     }

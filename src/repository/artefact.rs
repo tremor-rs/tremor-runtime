@@ -12,11 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::binding;
 use crate::pipeline;
-use crate::registry::Instance;
-use crate::registry::ServantId;
-use crate::system::{self, World};
-use crate::url::ports::IN;
+use crate::system::World;
 use crate::url::{ResourceType, TremorUrl};
 use crate::{connectors, url};
 use crate::{
@@ -41,20 +39,13 @@ pub struct Binding {
     pub binding: crate::Binding,
     /// The mappings
     pub mapping: Option<crate::config::MappingMap>,
-
-    /// track spawned instances for better quiescence
-    spawned_instances: HashSet<TremorUrl>,
 }
 
 impl Binding {
     /// Constructor
     #[must_use]
     pub fn new(binding: crate::Binding, mapping: Option<crate::config::MappingMap>) -> Self {
-        Self {
-            binding,
-            mapping,
-            spawned_instances: HashSet::new(),
-        }
+        Self { binding, mapping }
     }
 }
 
@@ -64,13 +55,13 @@ pub type Pipeline = query::Query;
 #[async_trait]
 pub trait Artefact: Clone {
     //    type Configuration;
-    type SpawnResult: Clone + Instance + Send;
+    type SpawnResult: Clone + Send + core::fmt::Debug;
     type LinkResult: Clone;
     type LinkLHS: Clone;
     type LinkRHS: Clone;
 
     /// Move from Repository to Registry
-    async fn spawn(&self, system: &World, servant_id: ServantId) -> Result<Self::SpawnResult>;
+    async fn spawn(&self, system: &World, instance_id: TremorUrl) -> Result<Self::SpawnResult>;
     /// Move from Registry(instantiated) to Registry(Active) or from one form of active to another
     /// This acts differently on bindings and the rest. Where the binding takes a mapping of string
     /// replacements, the others take a from and to id
@@ -103,14 +94,13 @@ pub trait Artefact: Clone {
             .into()),
         }
     }
-    fn servant_id(id: &TremorUrl) -> Result<ServantId> {
-        let mut id = id.clone();
-        id.trim_to_instance();
+    fn instance_id(id: &TremorUrl) -> Result<TremorUrl> {
+        let id = id.to_instance();
         let rt = Self::resource_type();
         match (id.resource_type(), id.instance()) {
             (Some(id_rt), Some(_id)) if id_rt == rt => Ok(id),
             _ => Err(ErrorKind::InvalidTremorUrl(
-                format!("Url does not contain a {} servant id", rt),
+                format!("Url does not contain a {} instance id", rt),
                 id.to_string(),
             )
             .into()),
@@ -129,8 +119,8 @@ impl Artefact for Pipeline {
         url::ResourceType::Pipeline
     }
 
-    async fn spawn(&self, world: &World, servant_id: ServantId) -> Result<Self::SpawnResult> {
-        world.instantiate_pipeline(self.clone(), servant_id).await
+    async fn spawn(&self, world: &World, instance_id: TremorUrl) -> Result<Self::SpawnResult> {
+        world.spawn_pipeline(self.clone(), instance_id).await
     }
 
     async fn link(
@@ -235,19 +225,10 @@ impl Artefact for ConnectorArtefact {
 
     /// Here we only create an instance of the connector,
     /// we don't actually start it here, so it doesnt handle any events yet
-    async fn spawn(&self, world: &World, servant_id: ServantId) -> Result<Self::SpawnResult> {
-        let create = connectors::Create::new(servant_id.clone(), self.clone());
-        let (tx, rx) = bounded(1);
+    async fn spawn(&self, world: &World, instance_id: TremorUrl) -> Result<Self::SpawnResult> {
         world
-            .system
-            .send(system::ManagerMsg::Connector(
-                connectors::ManagerMsg::Create {
-                    tx,
-                    create: Box::new(create),
-                },
-            ))
-            .await?;
-        rx.recv().await?
+            .spawn_connector(self.clone(), instance_id.clone())
+            .await
     }
 
     /// wire up pipelines to this connector
@@ -355,7 +336,7 @@ impl Binding {
 
 #[async_trait]
 impl Artefact for Binding {
-    type SpawnResult = Self;
+    type SpawnResult = binding::Addr;
     type LinkResult = Self;
     type LinkLHS = String;
     type LinkRHS = String;
@@ -364,31 +345,8 @@ impl Artefact for Binding {
         url::ResourceType::Binding
     }
 
-    async fn spawn(&self, _: &World, _: ServantId) -> Result<Self::SpawnResult> {
-        // do some basic verification:
-        // - left side: IN port doesnt make sense
-        // - right side: should have IN port
-        for (from, tos) in &self.binding.links {
-            let port = from.instance_port_required()?;
-            if port.eq_ignore_ascii_case(IN.as_ref()) {
-                return Err(format!(
-                    "Invalid Binding {}. Cannot link from port {} in {}.",
-                    &self.binding.id, port, &from
-                )
-                .into());
-            }
-            for to in tos {
-                let port = to.instance_port_required()?;
-                if !port.eq_ignore_ascii_case(IN.as_ref()) {
-                    return Err(format!(
-                        "Invalid Binding {}. Cannot link to port {} in {}.",
-                        &self.binding.id, port, &to
-                    )
-                    .into());
-                }
-            }
-        }
-        Ok(self.clone())
+    async fn spawn(&self, world: &World, id: TremorUrl) -> Result<Self::SpawnResult> {
+        world.spawn_binding(self.clone(), id).await
     }
 
     /// apply mapping to this binding - the result is a binding with the mappings applied
@@ -518,46 +476,8 @@ impl Artefact for Binding {
         _: &TremorUrl,
         _: HashMap<Self::LinkLHS, Self::LinkRHS>,
     ) -> Result<bool> {
-        // here we assume quiescence is done if the DRAIN mechanism was executed on all connectors as is
-        // implemented in the Binding instance logic in `Instance::stop()`.
+        // here we assume quiescence is done if the DRAIN mechanism was executed on all connectors
         info!("Unlinking Binding {}", self.binding.id);
-
-        let links = self.binding.links.clone();
-
-        // collect incoming connections from external instances - and unlink them
-        for (from, tos) in links.iter() {
-            if !self.spawned_instances.contains(from) {
-                // unlink external resource
-                match from.resource_type() {
-                    Some(ResourceType::Connector) => {
-                        let mut mappings = HashMap::new();
-                        let port = from.instance_port_required()?.to_string();
-                        for to in tos {
-                            mappings.insert(port.clone(), to.clone());
-                        }
-                        system.unlink_connector(from, mappings).await?;
-                    }
-                    Some(ResourceType::Pipeline) => {
-                        let mut mappings = HashMap::new();
-                        let port = from.instance_port_required()?.to_string();
-                        for to in tos {
-                            mappings.insert(port.clone(), to.clone());
-                        }
-                        system.unlink_pipeline(from, mappings).await?;
-                    }
-                    Some(ResourceType::Binding) => {
-                        return Err(format!("Cannot unlink binding: {}", from).into())
-                    }
-                    None => {
-                        return Err(ErrorKind::InvalidTremorUrl(
-                            "Missing resource type".to_string(),
-                            from.to_string(),
-                        )
-                        .into())
-                    }
-                }
-            }
-        }
 
         // keep track of already handled pipelines, so we don't unlink twice and run into errors
         let mut unlinked = HashSet::with_capacity(self.binding.links.len());
