@@ -269,7 +269,7 @@ mod test {
         parse(
             r#"
 define script test
-with
+args
   beep = "beep"
 script
   { "beep": "{args.beep}" }

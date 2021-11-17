@@ -21,18 +21,17 @@ pub(crate) struct TrickleOperator {
     pub op: Box<dyn Operator>,
 }
 
-fn mk_node_config(
-    id: String,
-    op_type: String,
-    config: Option<HashMap<String, Value>>,
-) -> NodeConfig {
+fn mk_node_config(id: String, op_type: String, config: HashMap<String, Value>) -> NodeConfig {
     NodeConfig {
         id,
         kind: crate::NodeKind::Operator,
         op_type,
-        config: config.map(|v| {
-            serde_yaml::Value::from(
-                v.iter()
+        config: if config.is_empty() {
+            None
+        } else {
+            Some(serde_yaml::Value::from(
+                config
+                    .iter()
                     .filter_map(|(k, v)| {
                         let mut v = v.encode();
                         Some((
@@ -41,8 +40,8 @@ fn mk_node_config(
                         ))
                     })
                     .collect::<serde_yaml::Mapping>(),
-            )
-        }),
+            ))
+        },
         ..NodeConfig::default()
     }
 }

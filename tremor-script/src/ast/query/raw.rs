@@ -26,56 +26,13 @@ use super::{
 };
 use crate::ast::{
     node_id::{BaseRef, NodeId},
-    raw::{CreationalWith, DefinitioalWith},
+    raw::{ArgsClause, CreationalWith, DefinitioalArgs, DefinitioalArgsWith, WithClause},
     visitors::{ArgsRewriter, ExprReducer, GroupByExprExtractor, TargetEventRef},
     Ident,
 };
 use crate::{ast::InvokeAggrFn, impl_expr};
 use beef::Cow;
 use std::iter::FromIterator;
-
-#[derive(Clone, Debug, PartialEq, Serialize)]
-/// we're forced to make this pub because of lalrpop
-pub enum Params<'script> {
-    Creational(CreationalWith<'script>),
-    Definitional(DefinitioalWith<'script>),
-    Processed(HashMap<String, Value<'script>>),
-}
-impl<'script> Default for Params<'script> {
-    fn default() -> Self {
-        Params::Definitional(DefinitioalWith(Vec::new()))
-    }
-}
-impl<'script> From<DefinitioalWith<'script>> for Params<'script> {
-    fn from(raw: DefinitioalWith<'script>) -> Self {
-        Params::Definitional(raw)
-    }
-}
-impl<'script> From<CreationalWith<'script>> for Params<'script> {
-    fn from(raw: CreationalWith<'script>) -> Self {
-        Params::Creational(raw)
-    }
-}
-
-impl<'script> From<HashMap<String, Value<'script>>> for Params<'script> {
-    fn from(processed: HashMap<String, Value<'script>>) -> Self {
-        Params::Processed(processed)
-    }
-}
-
-impl<'script> Upable<'script> for Params<'script> {
-    type Target = HashMap<String, Value<'script>>;
-    fn up<'registry>(
-        self,
-        helper: &mut Helper<'script, 'registry>,
-    ) -> Result<HashMap<String, Value<'script>>> {
-        match self {
-            Params::Creational(params) => params.up(helper),
-            Params::Definitional(params) => params.up(helper),
-            Params::Processed(params) => Ok(params),
-        }
-    }
-}
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[allow(clippy::module_name_repetitions)]
@@ -113,7 +70,7 @@ impl<'script> QueryRaw<'script> {
         }
 
         Ok(Query {
-            config: Params::Definitional(DefinitioalWith(self.config)).up(helper)?,
+            config: self.config.up(helper)?,
             stmts,
             node_meta: helper.meta.clone(),
             windows: helper.windows.clone(),
@@ -213,7 +170,7 @@ pub struct OperatorDeclRaw<'script> {
     pub(crate) end: Location,
     pub(crate) kind: OperatorKindRaw,
     pub(crate) id: String,
-    pub(crate) params: Option<Params<'script>>,
+    pub(crate) params: DefinitioalArgsWith<'script>,
     pub(crate) doc: Option<Vec<Cow<'script, str>>>,
 }
 
@@ -224,7 +181,7 @@ impl<'script> Upable<'script> for OperatorDeclRaw<'script> {
             mid: helper.add_meta_w_name(self.start, self.end, &self.id),
             node_id: NodeId::new(self.id, helper.module.clone()),
             kind: self.kind.up(helper)?,
-            params: self.params.map(|raw| raw.up(helper)).transpose()?,
+            params: self.params.up(helper)?,
         };
         helper
             .operators
@@ -240,7 +197,7 @@ pub struct PipelineDeclRaw<'script> {
     pub(crate) start: Location,
     pub(crate) end: Location,
     pub(crate) id: String,
-    pub(crate) params: Option<Params<'script>>,
+    pub(crate) params: DefinitioalArgs<'script>,
     pub(crate) pipeline: StmtsRaw<'script>,
     pub(crate) from: Option<Vec<IdentRaw<'script>>>,
     pub(crate) into: Option<Vec<IdentRaw<'script>>>,
@@ -261,12 +218,16 @@ impl<'script> PipelineDeclRaw<'script> {
 impl<'script> Upable<'script> for PipelineDeclRaw<'script> {
     type Target = PipelineDecl<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        let query = if let Params::Definitional(config) = self.params.clone().unwrap_or_default() {
+        let query = if let ArgsClause::Raw(config) = self.params.args.clone() {
+            let config = config
+                .into_iter()
+                .map(|(k, v)| (k, v.expect("FIXME: put in an error here")))
+                .collect();
             // We save `helper.modules` here in case `up_script` on `QueryRaw` fails and leaves helper
             // in an inconsistant state regarding the module path.
             let module = helper.module.clone();
             let r = QueryRaw {
-                config: config.0,
+                config,
                 stmts: self.pipeline.clone(),
             }
             .up_script(helper)
@@ -334,7 +295,7 @@ pub struct PipelineStmtRaw<'script> {
     pub(crate) id: String,
     pub(crate) target: String,
     pub(crate) module: Vec<IdentRaw<'script>>,
-    pub(crate) params: Option<Params<'script>>,
+    pub(crate) params: CreationalWith<'script>,
 }
 impl_expr!(PipelineStmtRaw);
 
@@ -345,56 +306,39 @@ impl<'script> PipelineStmtRaw<'script> {
 
     fn get_args_map<'registry>(
         &self,
-        decl_params: &Option<HashMap<String, Value<'script>>>,
-        stmt_params: Option<HashMap<String, Value<'script>>>,
+        decl_params: &HashMap<String, Value<'script>>,
+        mut stmt_params: HashMap<String, Value<'script>>,
         helper: &Helper<'script, 'registry>,
     ) -> Result<Value<'script>> {
-        let args = match &decl_params {
-            // No params in the declaration
-            None => Ok(HashMap::new()),
-            Some(decl_params) => {
-                match stmt_params {
-                    // No params in the creation
-                    None => Ok(decl_params.clone()),
-                    // Merge elided params from the declaration.
-                    Some(mut stmt_params) => {
-                        for (param, value) in decl_params {
-                            if !stmt_params.contains_key(param) {
-                                stmt_params.insert(param.clone(), value.clone());
-                            }
-                        }
-
-                        // Make sure no new params were introduced in creation
-                        let stmt_param_set: HashSet<&String> =
-                            stmt_params.keys().into_iter().collect();
-                        let decl_param_set: HashSet<&String> =
-                            decl_params.keys().into_iter().collect();
-                        let mut unknown_params: Vec<&&String> =
-                            stmt_param_set.difference(&decl_param_set).collect();
-
-                        if let Some(param) = unknown_params.pop() {
-                            let err_str = format!("Unknown parameter `{}`", param);
-                            error_generic(self, self, &err_str, &helper.meta)
-                        } else {
-                            Ok(stmt_params)
-                        }
-                    }
-                }
+        for (param, value) in decl_params {
+            if !stmt_params.contains_key(param) {
+                stmt_params.insert(param.clone(), value.clone());
             }
-        }?;
-        Ok(Value::from_iter(args))
+        }
+
+        // Make sure no new params were introduced in creation
+        let stmt_param_set: HashSet<&String> = stmt_params.keys().into_iter().collect();
+        let decl_param_set: HashSet<&String> = decl_params.keys().into_iter().collect();
+        let mut unknown_params: Vec<&&String> =
+            stmt_param_set.difference(&decl_param_set).collect();
+
+        if let Some(param) = unknown_params.pop() {
+            let err_str = format!("Unknown parameter `{}`", param);
+            error_generic(self, self, &err_str, &helper.meta)
+        } else {
+            Ok(Value::from_iter(stmt_params))
+        }
     }
 
-    fn inline_params<'registry>(
-        params: Params<'script>,
+    fn inline_with<'registry>(
+        with: WithClause<'script>,
         sq_args: &Value<'script>,
         helper: &mut Helper<'script, 'registry>,
     ) -> Result<HashMap<String, Value<'script>>> {
-        match params {
+        match with {
             // Subqueries inline params before up()-ing them, the `params` here must be Raw.
-            Params::Processed(_) => Err("Can't inline processed params.".into()),
-            Params::Definitional(params) => params
-                .0
+            WithClause::Processed(_) => Err("Can't inline processed params.".into()),
+            WithClause::Raw(raw) => raw
                 .into_iter()
                 .map(|(name, value_expr)| {
                     let mut value_expr = value_expr.up(helper)?;
@@ -406,11 +350,22 @@ impl<'script> PipelineStmtRaw<'script> {
                     Ok((name.to_string(), value))
                 })
                 .collect(),
-            Params::Creational(params) => params
-                .0
+        }
+    }
+    fn inline_args<'registry>(
+        args: ArgsClause<'script>,
+        sq_args: &Value<'script>,
+        helper: &mut Helper<'script, 'registry>,
+    ) -> Result<HashMap<String, Value<'script>>> {
+        match args {
+            // Subqueries inline params before up()-ing them, the `params` here must be Raw.
+            ArgsClause::Processed(_) => Err("Can't inline processed params.".into()),
+            ArgsClause::Raw(raw) => raw
                 .into_iter()
                 .map(|(name, value_expr)| {
-                    let mut value_expr = value_expr.up(helper)?;
+                    let mut value_expr = value_expr
+                        .expect("FIXME: this needs to be handled")
+                        .up(helper)?;
                     ArgsRewriter::new(sq_args.clone(), helper).rewrite_expr(&mut value_expr)?;
                     ExprReducer::new(helper).reduce(&mut value_expr)?;
 
@@ -470,7 +425,7 @@ impl<'script> PipelineStmtRaw<'script> {
                 helper.module.push(subq_module.clone());
 
                 let decl_params = pipeline_decl.params.clone();
-                let stmt_params = self.params.clone().map(|raw| raw.up(helper)).transpose()?;
+                let stmt_params = self.params.clone().up(helper)?;
                 let subq_args = self.get_args_map(&decl_params, stmt_params, helper)?;
 
                 for stmt in pipeline_stmts {
@@ -481,13 +436,12 @@ impl<'script> PipelineStmtRaw<'script> {
                         StmtRaw::PipelineStmt(mut s) => {
                             let unmangled_id = s.id.clone();
                             s.id = self.mangle_id(&s.id);
-                            s.params = s
-                                .params
-                                .map(|raw| {
-                                    PipelineStmtRaw::inline_params(raw, &subq_args, &mut helper)
-                                })
-                                .transpose()?
-                                .map(|hash_map| hash_map.into());
+                            s.params.with = WithClause::Processed(PipelineStmtRaw::inline_with(
+                                s.params.with,
+                                &subq_args,
+                                &mut helper,
+                            )?);
+
                             // Create a IdentRaw because we need to insert it
                             // before .inline()-ing the stmt.
                             let subq_module = IdentRaw {
@@ -505,13 +459,11 @@ impl<'script> PipelineStmtRaw<'script> {
                         StmtRaw::Operator(mut o) => {
                             let unmangled_id = o.id.clone();
                             o.id = self.mangle_id(&o.id);
-                            o.params = o
-                                .params
-                                .map(|raw| {
-                                    PipelineStmtRaw::inline_params(raw, &subq_args, &mut helper)
-                                })
-                                .transpose()?
-                                .map(|hash_map| hash_map.into());
+                            o.params.with = WithClause::Processed(PipelineStmtRaw::inline_with(
+                                o.params.with,
+                                &subq_args,
+                                &mut helper,
+                            )?);
                             let mut o = o.up(helper)?;
                             if let Some(meta) = helper.meta.nodes.get_mut(o.mid) {
                                 meta.name = Some(unmangled_id);
@@ -523,13 +475,11 @@ impl<'script> PipelineStmtRaw<'script> {
                         StmtRaw::Script(mut s) => {
                             let unmangled_id = s.id.clone();
                             s.id = self.mangle_id(&s.id);
-                            s.params = s
-                                .params
-                                .map(|raw| {
-                                    PipelineStmtRaw::inline_params(raw, &subq_args, &mut helper)
-                                })
-                                .transpose()?
-                                .map(|hash_map| hash_map.into());
+                            s.params.with = WithClause::Processed(PipelineStmtRaw::inline_with(
+                                s.params.with,
+                                &subq_args,
+                                &mut helper,
+                            )?);
                             let mut s = s.up(helper)?;
                             if let Some(meta) = helper.meta.nodes.get_mut(s.mid) {
                                 meta.name = Some(unmangled_id);
@@ -602,40 +552,41 @@ impl<'script> PipelineStmtRaw<'script> {
                             query_stmts.push(select_up);
                         }
                         StmtRaw::ScriptDecl(mut s) => {
-                            s.params = s
-                                .params
-                                .map(|raw| {
-                                    PipelineStmtRaw::inline_params(raw, &subq_args, &mut helper)
-                                })
-                                .transpose()?
-                                .map(|hash_map| hash_map.into());
+                            s.params.args = ArgsClause::Processed(PipelineStmtRaw::inline_args(
+                                s.params.args,
+                                &subq_args,
+                                &mut helper,
+                            )?);
                             query_stmts.push(StmtRaw::ScriptDecl(s).up(&mut helper)?);
                         }
                         StmtRaw::OperatorDecl(mut o) => {
-                            o.params = o
-                                .params
-                                .map(|raw| {
-                                    PipelineStmtRaw::inline_params(raw, &subq_args, &mut helper)
-                                })
-                                .transpose()?
-                                .map(|hash_map| hash_map.into());
+                            o.params.args = ArgsClause::Processed(PipelineStmtRaw::inline_args(
+                                o.params.args,
+                                &subq_args,
+                                &mut helper,
+                            )?);
+                            o.params.with = WithClause::Processed(PipelineStmtRaw::inline_with(
+                                o.params.with,
+                                &subq_args,
+                                &mut helper,
+                            )?);
                             query_stmts.push(StmtRaw::OperatorDecl(o).up(&mut helper)?);
                         }
                         StmtRaw::PipelineDecl(mut s) => {
                             // Inline the parent pipeline's `args` in the child's `with` clause, if any.
-                            s.params = s
-                                .params
-                                .map(|raw| {
-                                    PipelineStmtRaw::inline_params(raw, &subq_args, &mut helper)
-                                })
-                                .transpose()?
-                                .map(|hash_map| hash_map.into());
+                            s.params.args = ArgsClause::Processed(PipelineStmtRaw::inline_args(
+                                s.params.args,
+                                &subq_args,
+                                &mut helper,
+                            )?);
                             query_stmts.push(StmtRaw::PipelineDecl(s).up(&mut helper)?);
                         }
                         StmtRaw::WindowDecl(mut w) => {
-                            w.params =
-                                PipelineStmtRaw::inline_params(w.params, &subq_args, &mut helper)?
-                                    .into();
+                            w.params.with = WithClause::Processed(PipelineStmtRaw::inline_with(
+                                w.params.with,
+                                &subq_args,
+                                &mut helper,
+                            )?);
                             query_stmts.push(StmtRaw::WindowDecl(w).up(&mut helper)?);
                         }
                         StmtRaw::Expr(e) => {
@@ -735,7 +686,7 @@ pub struct OperatorStmtRaw<'script> {
     pub(crate) module: Vec<IdentRaw<'script>>,
     pub(crate) id: String,
     pub(crate) target: String,
-    pub(crate) params: Option<Params<'script>>,
+    pub(crate) params: CreationalWith<'script>,
 }
 impl_expr!(OperatorStmtRaw);
 
@@ -759,7 +710,7 @@ pub struct ScriptDeclRaw<'script> {
     pub(crate) start: Location,
     pub(crate) end: Location,
     pub(crate) id: String,
-    pub(crate) params: Option<Params<'script>>,
+    pub(crate) params: DefinitioalArgs<'script>,
     pub(crate) script: ScriptRaw<'script>,
     pub(crate) doc: Option<Vec<Cow<'script, str>>>,
 }
@@ -808,7 +759,7 @@ pub struct ScriptStmtRaw<'script> {
     pub(crate) id: String,
     pub(crate) target: String,
     pub(crate) module: Vec<IdentRaw<'script>>,
-    pub(crate) params: Option<Params<'script>>,
+    pub(crate) params: CreationalWith<'script>,
 }
 
 impl<'script> Upable<'script> for ScriptStmtRaw<'script> {
@@ -832,7 +783,9 @@ pub struct WindowDeclRaw<'script> {
     pub(crate) end: Location,
     pub(crate) id: String,
     pub(crate) kind: WindowKind,
-    pub(crate) params: Params<'script>,
+    // FIXME / TODO: yes it is odd that we use the `creational` here but windows are not crates
+    // and defined like other constructs - perhaps we should revisit this?
+    pub(crate) params: CreationalWith<'script>,
     pub(crate) script: Option<ScriptRaw<'script>>,
     pub(crate) doc: Option<Vec<Cow<'script, str>>>,
 }

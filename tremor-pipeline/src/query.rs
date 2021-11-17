@@ -482,14 +482,8 @@ impl Query {
                                 .ok_or("operator not found")?
                                 .clone();
                             if let Some(Stmt::Operator(o)) = query.stmts.get(i) {
-                                if let Some(params) = &o.params {
-                                    if let Some(decl_params) = decl.params.as_mut() {
-                                        for (k, v) in params {
-                                            decl_params.insert(k.clone(), v.clone());
-                                        }
-                                    } else {
-                                        decl.params = Some(params.clone());
-                                    }
+                                for (k, v) in &o.params {
+                                    decl.params.insert(k.clone(), v.clone());
                                 }
                             };
                             let inner_stmt = Stmt::OperatorDecl(decl);

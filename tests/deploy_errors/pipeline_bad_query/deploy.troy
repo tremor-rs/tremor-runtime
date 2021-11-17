@@ -1,5 +1,5 @@
 define pipeline passthrough
-with
+args
   badger = "snot",
 pipeline
    dark horse

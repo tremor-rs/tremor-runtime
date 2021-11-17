@@ -79,6 +79,7 @@
 
 - changed naming for `record` object to avoid keywords like `select` and `merge`. New names are `record.extract` and `record.combine`.
 - command seperators are now unified, both `patch`, `match` and `for` now use `;` the same way the rest of the language does
+- in all definitial statements `args` now specifies interface arguments that are overwritable in the correspanding `create` statement, while `with` specifies non overwritable configuration in both `define` and `create` statements - this unifiers the use of `with`  and `args` between trickle and troy
 
 ## 0.11.4
 
