@@ -65,7 +65,7 @@ binding:
       "/connector/tcp_client/{instance}/err":
         - "/pipeline/system::passthrough/{instance}_debug/in"
       "/pipeline/system::passthrough/{instance}_debug/out":
-        - "/connector/system::stdout/{instance}/in"
+        - "/connector/system::stdio/{instance}/in"
 
       # flow from tcp_server to file
       "/connector/tcp_server/{instance}/out":
