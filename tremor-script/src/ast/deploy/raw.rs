@@ -23,7 +23,8 @@ use super::FlowDecl;
 use super::Value;
 use super::{BaseExpr, DeployFlow};
 use crate::ast::raw::{
-    CreationalWith, DefinitioalWith, ExprRaw, IdentRaw, ModuleRaw, StringLitRaw,
+    CreationalWith, DefinitioalArgs, DefinitioalArgsWith, ExprRaw, IdentRaw, ModuleRaw,
+    StringLitRaw,
 };
 use crate::ast::{
     error_generic, node_id::NodeId, query::raw::PipelineDeclRaw, raw::WithExprsRaw, AggrRegistry,
@@ -292,7 +293,7 @@ pub struct ConnectorDeclRaw<'script> {
     pub(crate) end: Location,
     pub(crate) id: String,
     pub(crate) kind: IdentRaw<'script>,
-    pub(crate) params: Option<DefinitioalWith<'script>>,
+    pub(crate) params: DefinitioalArgsWith<'script>,
     pub(crate) docs: Option<Vec<Cow<'script, str>>>,
 }
 
@@ -319,7 +320,7 @@ pub struct FlowDeclRaw<'script> {
     pub(crate) start: Location,
     pub(crate) end: Location,
     pub(crate) id: String,
-    pub(crate) params: Option<DefinitioalWith<'script>>,
+    pub(crate) params: DefinitioalArgs<'script>,
     pub(crate) docs: Option<Vec<Cow<'script, str>>>,
     pub(crate) atoms: Vec<DeployLinkRaw<'script>>,
 }
@@ -438,7 +439,7 @@ pub struct CreateStmtRaw<'script> {
     pub(crate) start: Location,
     pub(crate) end: Location,
     pub(crate) id: IdentRaw<'script>,
-    pub(crate) params: Option<CreationalWith<'script>>,
+    pub(crate) params: CreationalWith<'script>,
     /// Id of the definition
     pub target: IdentRaw<'script>,
     /// Module of the definition
@@ -494,7 +495,7 @@ pub struct DeployFlowRaw<'script> {
     pub(crate) start: Location,
     pub(crate) end: Location,
     pub(crate) id: IdentRaw<'script>,
-    pub(crate) params: Option<CreationalWith<'script>>,
+    pub(crate) params: CreationalWith<'script>,
     /// Id of the definition
     pub target: IdentRaw<'script>,
     /// Module of the definition - FIXME: we don't need the deploy kind here once it's merged

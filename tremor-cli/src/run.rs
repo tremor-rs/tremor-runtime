@@ -479,10 +479,7 @@ async fn handle_troy_connector(
     instance: &str,
     atom: &srs::ConnectorDecl,
 ) -> Result<()> {
-    let yaml = match &atom.params {
-        Some(yaml) => serde_yaml::to_string(&yaml)?,
-        None => serde_yaml::to_string(&literal!({}))?,
-    };
+    let yaml = serde_yaml::to_string(&atom.params)?;
 
     // Map kind to legacy artefact url format
     match atom.kind.as_str() {

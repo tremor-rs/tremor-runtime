@@ -1092,12 +1092,10 @@ impl<'script> OperatorDecl<'script> {
             node_id,
             mid,
             kind,
-            params: params.map(|params| {
-                params
-                    .into_iter()
-                    .map(|(k, v)| (k, v.into_static()))
-                    .collect()
-            }),
+            params: params
+                .into_iter()
+                .map(|(k, v)| (k, v.into_static()))
+                .collect(),
         }
     }
 }
