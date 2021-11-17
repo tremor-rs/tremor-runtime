@@ -682,6 +682,7 @@ where
                 Ok(Control::Continue)
             }
             SourceMsg::Start if self.state == Initialized => {
+                info!("{} Starting...", &self.ctx);
                 self.state = Running;
                 self.ctx
                     .log_err(self.source.on_start(&self.ctx).await, "on_start failed");
@@ -696,8 +697,8 @@ where
             }
             SourceMsg::Start => {
                 info!(
-                    "[Source::{}] Ignoring Start msg in {:?} state",
-                    &self.ctx.url, &self.state
+                    "{} Ignoring Start msg in {:?} state",
+                    &self.ctx, &self.state
                 );
                 Ok(Control::Continue)
             }
@@ -810,7 +811,11 @@ where
                 info!("[Source::{}] Circuit Breaker: Open.", self.ctx.url);
                 self.ctx
                     .log_err(self.source.on_cb_open(&self.ctx).await, "on_cb_open failed");
-                self.state = Running;
+                // avoid a race condition where the necessary start routine wasnt executed
+                // because a `CbAction::Open` was there first, and thus the `Start` msg was ignored
+                if self.state != Initialized {
+                    self.state = Running;
+                }
                 Ok(Control::Continue)
             }
             SourceMsg::Cb(CbAction::Drained(uid), _id) => {
