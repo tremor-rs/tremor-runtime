@@ -101,7 +101,7 @@ pub struct ConnectorDecl<'script> {
     /// Identifer for the connector
     pub node_id: NodeId,
     /// Resolved argument defaults
-    pub params: Option<HashMap<String, Value<'script>>>,
+    pub params: HashMap<String, Value<'script>>,
     /// Internal / intrinsic builtin name
     pub builtin_kind: String,
     /// Documentation comments
@@ -137,7 +137,7 @@ pub struct FlowDecl<'script> {
     /// Identifer for the connector
     pub node_id: NodeId,
     /// Resolved argument defaults
-    pub params: Option<HashMap<String, Value<'script>>>,
+    pub params: HashMap<String, Value<'script>>,
     /// Links between artefacts in the flow
     pub links: Vec<DeployLink>,
     /// Deployment atoms

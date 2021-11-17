@@ -550,7 +550,7 @@ pub struct ConnectorDecl {
     pub id: NodeId,
     raw: Vec<Arc<Pin<Vec<u8>>>>,
     /// Arguments for this connector definition
-    pub params: Option<HashMap<String, Value<'static>>>,
+    pub params: HashMap<String, Value<'static>>,
     /// The type of connector
     pub kind: String,
 }
@@ -624,7 +624,7 @@ pub struct FlowDecl {
     pub node_id: NodeId,
     raw: Vec<Arc<Pin<Vec<u8>>>>,
     /// Arguments for this flow definition
-    pub params: Option<HashMap<String, Value<'static>>>,
+    pub params: HashMap<String, Value<'static>>,
     /// Link specifications
     pub links: Vec<DeployLink>,
     /// Artefacts to deploy with this flow
@@ -773,16 +773,13 @@ impl ScriptDecl {
         };
         script.script.consts.args = Value::object();
 
-        if let Some(p) = &script.params {
-            // Set params from decl as meta vars
-            for (name, value) in p {
-                // We could clone here since we bind Script to defn_rentwrapped.stmt's lifetime
-                script
-                    .script
-                    .consts
-                    .args
-                    .try_insert(name.clone(), value.clone());
-            }
+        for (name, value) in &script.params {
+            // We could clone here since we bind Script to defn_rentwrapped.stmt's lifetime
+            script
+                .script
+                .consts
+                .args
+                .try_insert(name.clone(), value.clone());
         }
 
         Ok(Self { raw, script })
@@ -798,16 +795,15 @@ impl ScriptDecl {
         self.raw.extend_from_slice(&stmt.raw);
 
         if let query::Stmt::Script(instance) = &stmt.structured {
-            if let Some(map) = &instance.params {
-                for (name, value) in map {
-                    // We can not clone here since we do not bind Script to node_rentwrapped's lifetime
-                    self.script
-                        .script
-                        .consts
-                        .args
-                        .try_insert(name.clone(), value.clone());
-                }
+            for (name, value) in &instance.params {
+                // We can not clone here since we do not bind Script to node_rentwrapped's lifetime
+                self.script
+                    .script
+                    .consts
+                    .args
+                    .try_insert(name.clone(), value.clone());
             }
+
             Ok(())
         } else {
             Err("Trying to turn something into script create that isn't a script create".into())

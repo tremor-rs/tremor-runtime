@@ -2580,24 +2580,94 @@ impl<'script> Upable<'script> for TestExprRaw {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct CreationalWith<'script>(pub WithExprsRaw<'script>);
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct DefinitioalWith<'script>(pub WithExprsRaw<'script>);
+#[derive(Clone, Debug, PartialEq, Serialize, Default)]
+pub struct DefinitioalArgs<'script> {
+    pub args: ArgsClause<'script>,
+}
 
-impl<'script> Upable<'script> for DefinitioalWith<'script> {
+impl<'script> Upable<'script> for DefinitioalArgs<'script> {
     type Target = HashMap<String, Value<'script>>;
-
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        self.0.up(helper)
+        self.args.up(helper)
     }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct DefinitioalArgsWith<'script> {
+    pub args: ArgsClause<'script>,
+    pub with: WithClause<'script>,
+}
+
+impl<'script> Upable<'script> for DefinitioalArgsWith<'script> {
+    type Target = HashMap<String, Value<'script>>;
+    fn up<'registry>(self, _helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+        todo!()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct CreationalWith<'script> {
+    pub with: WithClause<'script>,
 }
 
 impl<'script> Upable<'script> for CreationalWith<'script> {
     type Target = HashMap<String, Value<'script>>;
-
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        self.0.up(helper)
+        self.with.up(helper)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub enum ArgsClause<'script> {
+    Raw(ArgsExprsRaw<'script>),
+    Processed(HashMap<String, Value<'script>>),
+}
+
+impl Default for ArgsClause<'_> {
+    fn default() -> Self {
+        ArgsClause::Raw(vec![])
+    }
+}
+
+impl<'script> Upable<'script> for ArgsClause<'script> {
+    type Target = HashMap<String, Value<'script>>;
+    fn up<'registry>(
+        self,
+        helper: &mut Helper<'script, 'registry>,
+    ) -> Result<HashMap<String, Value<'script>>> {
+        match self {
+            ArgsClause::Raw(params) => params
+                .into_iter()
+                .map(|(k, v)| (k, v.expect("FIXME: This is bad")))
+                .collect::<Vec<_>>()
+                .up(helper),
+            ArgsClause::Processed(params) => Ok(params),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub enum WithClause<'script> {
+    Raw(WithExprsRaw<'script>),
+    Processed(HashMap<String, Value<'script>>),
+}
+
+impl Default for WithClause<'_> {
+    fn default() -> Self {
+        WithClause::Raw(vec![])
+    }
+}
+
+impl<'script> Upable<'script> for WithClause<'script> {
+    type Target = HashMap<String, Value<'script>>;
+    fn up<'registry>(
+        self,
+        helper: &mut Helper<'script, 'registry>,
+    ) -> Result<HashMap<String, Value<'script>>> {
+        match self {
+            WithClause::Raw(params) => params.up(helper),
+            WithClause::Processed(params) => Ok(params),
+        }
     }
 }
 
@@ -2612,7 +2682,7 @@ pub type ComprehensionCasesRaw<'script, Ex> = Vec<ComprehensionCaseRaw<'script, 
 pub type ImutComprehensionCasesRaw<'script> = Vec<ImutComprehensionCaseRaw<'script>>;
 pub type ArrayPredicatePatternsRaw<'script> = Vec<ArrayPredicatePatternRaw<'script>>;
 pub type WithExprsRaw<'script> = Vec<(IdentRaw<'script>, ImutExprRaw<'script>)>;
-
+pub type ArgsExprsRaw<'script> = Vec<(IdentRaw<'script>, Option<ImutExprRaw<'script>>)>;
 impl<'script> Upable<'script> for Vec<(IdentRaw<'script>, ImutExprRaw<'script>)> {
     type Target = HashMap<String, Value<'script>>;
 
