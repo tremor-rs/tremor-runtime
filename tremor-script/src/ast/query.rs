@@ -174,7 +174,7 @@ pub struct OperatorDecl<'script> {
     /// Type of the operator
     pub kind: OperatorKind,
     /// Parameters for the operator
-    pub params: Option<HashMap<String, Value<'script>>>,
+    pub params: HashMap<String, Value<'script>>,
 }
 impl_expr_mid!(OperatorDecl);
 impl_fqn!(OperatorDecl);
@@ -189,7 +189,7 @@ pub struct OperatorStmt<'script> {
     /// Target of the operator
     pub target: String,
     /// parameters of the instance
-    pub params: Option<HashMap<String, Value<'script>>>,
+    pub params: HashMap<String, Value<'script>>,
 }
 impl_expr_mid!(OperatorStmt);
 
@@ -200,7 +200,7 @@ pub struct ScriptDecl<'script> {
     /// The ID and Module of the Script
     pub node_id: NodeId,
     /// Parameters of a script declaration
-    pub params: Option<HashMap<String, Value<'script>>>,
+    pub params: HashMap<String, Value<'script>>,
     /// The script itself
     pub script: Script<'script>,
 }
@@ -217,7 +217,7 @@ pub struct ScriptStmt<'script> {
     /// Target of the script
     pub target: String,
     /// Parameters of the script statement
-    pub params: Option<HashMap<String, Value<'script>>>,
+    pub params: HashMap<String, Value<'script>>,
 }
 impl_expr_mid!(ScriptStmt);
 
@@ -229,7 +229,7 @@ pub struct PipelineDecl<'script> {
     /// metadata id
     pub(crate) mid: usize,
     /// Parameters of a subquery declaration
-    pub params: Option<HashMap<String, Value<'script>>>,
+    pub params: HashMap<String, Value<'script>>,
     /// Input Ports
     pub from: Vec<Ident<'script>>,
     /// Output Ports

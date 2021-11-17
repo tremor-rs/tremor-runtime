@@ -1,5 +1,5 @@
 define script test
-with
+args
   beep = "beep"
 script
   { "beep": "{args.beep}" }

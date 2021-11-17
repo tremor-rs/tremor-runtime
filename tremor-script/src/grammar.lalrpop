@@ -24,6 +24,140 @@ use beef::Cow;
 
 grammar<'input>;
 
+////////////////////////////// Generic statements //////////////////////////////
+// Statements or partials shared between grammers
+
+
+ConfigDirectives: WithExprsRaw<'input> = {
+    <directive:ConfigDirective> <directives:ConfigDirectives> => {
+        let mut directives = directives;
+        directives.insert(0, directive);
+        directives
+    },
+    <directive:ConfigDirective> => vec![directive]
+}
+
+ConfigDirective: (IdentRaw<'input>, ImutExprRaw<'input>) = {
+    "#!config" <WithExpr> => <>
+}
+
+///
+/// args
+///  arg1,
+///  arg2 = 5
+/// with
+///  config = {},
+///  oops = args.arg1
+/// end;
+ArgsWithEnd: DefinitioalArgsWith<'input> = {
+    <args:ArgsClause?> <with:WithEndClause> => {
+        DefinitioalArgsWith {
+            args: args.unwrap_or_default(),
+            with: with
+        }
+    }
+}
+
+/// args
+///   arg1,
+///   arg2 = 5
+/// # something else
+DefinitionArgs: DefinitioalArgs<'input> = {
+    <args:ArgsClause?> => DefinitioalArgs {
+        args: args.unwrap_or_default(),
+    }
+}
+
+ArgsClause: ArgsClause<'input> = {
+    "args" <ArgsExprs> => <>,
+}
+
+ArgsEndClause: ArgsClause<'input> = {
+    <ArgsClause> "end" => <>,
+}
+
+ArgsExprs: ArgsClause<'input> = {
+    <fields:ArgsExprs_> => {
+        let mut fields = fields;
+        fields.reverse();
+        ArgsClause::Raw(fields)
+    },
+}
+
+ArgsExprs_: ArgsExprsRaw<'input> = {
+    <args:Sep<ArgsExprs_, ArgsExpr, ",">> => <>
+}
+
+ArgsExpr: (IdentRaw<'input>, Option<ImutExprRaw<'input>>) = {
+    <name:Ident> "=" <expr:ExprImut> => (name, Some(expr)),
+    <name:Ident> => (name, None)
+}
+
+/// with
+///   a = 5,
+///   b = args.xxx
+/// end
+CreationWithEnd: CreationalWith<'input> = {
+    <WithEndClause?> => CreationalWith{ with: <>.unwrap_or_default() }
+}
+
+CreationWith: CreationalWith<'input> = {
+    <WithClause?> => CreationalWith{ with: <>.unwrap_or_default() }
+}
+
+
+WithEndClause: WithClause<'input> = {
+    <WithClause> "end" => <>,
+}
+
+WithClause: WithClause<'input> = {
+    "with" <exprs:WithExprs> => {
+        let mut exprs = exprs;
+        exprs.reverse();
+        WithClause::Raw(exprs)
+    },
+}
+
+WithExprs: WithExprsRaw<'input> = {
+    <Sep<WithExprs, WithExpr, ",">> => <>
+}
+
+WithExpr: (IdentRaw<'input>, ImutExprRaw<'input>) = {
+    <name:Ident> "=" <expr:ExprImut> => (name, expr)
+}
+
+/// Module target
+ModularTarget: (Vec<IdentRaw<'input>>, IdentRaw<'input>) = {
+    <target:Ident> => (vec![], target),
+    <m:ModPath> "::" <target:Ident> => (m, target),
+}
+
+/// Comments
+DocComment: Option<Vec<Cow<'input, str>>> = {
+    (<DocComment_>)? => <>
+}
+DocComment_: Vec<Cow<'input, str>> = {
+    <c:"<doc-comment>"> => vec![c.into()],
+    <v:DocComment_> <c:"<doc-comment>"> => {
+        let mut v = v;
+        v.push(c.into());
+        v
+    },
+}
+  
+  ModComment: Option<Vec<Cow<'input, str>>> = {
+      (<ModComment_>)? => <>
+  }
+  
+  ModComment_: Vec<Cow<'input, str>> = {
+      <c:"<mod-comment>"> => vec![c.into()],
+      <v:ModComment_> <c:"<mod-comment>"> => {
+          let mut v = v;
+          v.push(c.into());
+          v
+      },
+  }
+
 ////////////////////////////// Troy statements //////////////////////////////
 // These statements for the root of the language.
 
@@ -42,20 +176,6 @@ DeployStmts: DeployStmtsRaw<'input> = {
   <item:DeployStmt> ";"? => vec![item],
 }
 
-DefinitionArgsWithEnd: Option<DefinitioalWith<'input>> = {
-    <WithEndClause?> => <>.map(DefinitioalWith)
-}
-DefinitionArgs: Option<DefinitioalWith<'input>> = {
-    <WithClause?> => <>.map(DefinitioalWith)
-}
-
-
-CreationArgsWithEnd: Option<CreationalWith<'input>> = {
-    <WithEndClause?> => <>.map(CreationalWith)
-}
-CreationArgs: Option<CreationalWith<'input>> = {
-    <WithClause?> => <>.map(CreationalWith)
-}
 
 
 
@@ -69,8 +189,8 @@ DeployStmt: DeployStmtRaw<'input> = {
 
 DeployDeployStmt: DeployStmtRaw<'input> = {
     // FIXME: we don't need a deploy kind here once troy is merged
-    <start:@L> <docs:DocComment> "deploy" <kind:DeployKind> <id:Ident> "from" <target:ModularTarget> <params:CreationArgsWithEnd> <end:@L> => DeployStmtRaw::DeployFlowStmt(DeployFlowRaw { start, end, id, module: target.0, target: target.1, params, kind, docs }),
-    <start:@L> <docs:DocComment> "deploy" <kind:DeployKind> <id:Ident> <params:CreationArgsWithEnd> <end:@L> => DeployStmtRaw::DeployFlowStmt(DeployFlowRaw { start, end, id: id.clone(),  module: vec![], target: id, params, kind, docs }),
+    <start:@L> <docs:DocComment> "deploy" <kind:DeployKind> <id:Ident> "from" <target:ModularTarget> <params:CreationWithEnd> <end:@L> => DeployStmtRaw::DeployFlowStmt(DeployFlowRaw { start, end, id, module: target.0, target: target.1, params, kind, docs }),
+    <start:@L> <docs:DocComment> "deploy" <kind:DeployKind> <id:Ident> <params:CreationWithEnd> <end:@L> => DeployStmtRaw::DeployFlowStmt(DeployFlowRaw { start, end, id: id.clone(),  module: vec![], target: id, params, kind, docs }),
 }
 
 ConnectorKind: IdentRaw<'input> = {
@@ -113,8 +233,8 @@ DeployKind: DeployKind = {
 
 
 DeployLink: DeployLinkRaw<'input> = {
-    <start:@L> <docs:DocComment> "create" <kind:CreateKind> <id:Ident> "from" <target:ModularTarget> <params:CreationArgsWithEnd> <end:@L> => DeployLinkRaw::Atom(CreateStmtRaw { start, end, id, module: target.0, target: target.1, params, kind, docs }),
-    <start:@L> <docs:DocComment> "create" <kind:CreateKind> <id:Ident> <params:CreationArgsWithEnd> <end:@L> => DeployLinkRaw::Atom(CreateStmtRaw { start, end, id: id.clone(),  module: vec![], target: id, params, kind, docs }),
+    <start:@L> <docs:DocComment> "create" <kind:CreateKind> <id:Ident> "from" <target:ModularTarget> <params:CreationWithEnd> <end:@L> => DeployLinkRaw::Atom(CreateStmtRaw { start, end, id, module: target.0, target: target.1, params, kind, docs }),
+    <start:@L> <docs:DocComment> "create" <kind:CreateKind> <id:Ident> <params:CreationWithEnd> <end:@L> => DeployLinkRaw::Atom(CreateStmtRaw { start, end, id: id.clone(),  module: vec![], target: id, params, kind, docs }),
 
     <start:@L> <docs:DocComment> "connect" <from:DeployEndpoint> "to" <to:DeployEndpoint> <end:@L> => DeployLinkRaw::Link(start, end, docs, from, to),
 }
@@ -138,7 +258,7 @@ DeployModuleStmts: DeployStmtsRaw<'input> = {
 
  DefineConnector: DeployStmtRaw<'input> =  {
     // Connectors - these define connectors for deployment
-    <start:@L> <docs:DocComment> "define" <kind:ConnectorKind> "connector" <id:Ident> <params:DefinitionArgsWithEnd> <end:@L> => DeployStmtRaw::ConnectorDecl(ConnectorDeclRaw { start, end, id: id.to_string(), kind, params, docs }),
+    <start:@L> <docs:DocComment> "define" <kind:ConnectorKind> "connector" <id:Ident> <params:ArgsWithEnd> <end:@L> => DeployStmtRaw::ConnectorDecl(ConnectorDeclRaw { start, end, id: id.to_string(), kind, params, docs }),
  }
 
 DefineFlow: DeployStmtRaw<'input> = {
@@ -165,29 +285,6 @@ DeployModuleInnerStmt: DeployStmtRaw<'input> = {
 pub(crate) Query : QueryRaw<'input> = {
     <config:ConfigDirectives> <stmts:Stmts> "<end-of-stream>"? => QueryRaw{config: config, stmts},
     <stmts:Stmts> "<end-of-stream>"? => QueryRaw{config: vec![], stmts},
-}
-
-ConfigDirectives: WithExprsRaw<'input> = {
-    <directive:ConfigDirective> <directives:ConfigDirectives> => {
-        let mut directives = directives;
-        directives.insert(0, directive);
-        directives
-    },
-    <directive:ConfigDirective> => vec![directive]
-}
-
-ConfigDirective: (IdentRaw<'input>, ImutExprRaw<'input>) = {
-    "#!config" <WithExpr> => <>
-}
-
-
-Stmts: StmtsRaw<'input> = {
-    <stmt:Stmt> ";" <list:Stmts> => {
-      let mut list = list;
-      list.insert(0,stmt);
-      list
-  },
-  <item:Stmt> ";"? => vec![item],
 }
 
 ModuleStmt: ModuleStmtRaw<'input> = {
@@ -220,50 +317,106 @@ ModuleInnerStmt: StmtRaw<'input> = {
 
 }
 
-WindowKind: WindowKind = {
-  "sliding" => WindowKind::Sliding,
-  "tumbling" => WindowKind::Tumbling,
+Stmts: StmtsRaw<'input> = {
+    <stmt:Stmt> ";" <list:Stmts> => {
+      let mut list = list;
+      list.insert(0,stmt);
+      list
+  },
+  <item:Stmt> ";"? => vec![item],
 }
 
 Stmt: StmtRaw<'input> = {
     <m:ModuleStmt> => StmtRaw::ModuleStmt(m),
 
     DefineWindow => <>,
-
     DefineOperator => <>,
-    CreateOperator => <>,
-
     DefineScript => <>,
-    CreateScript => <>,
-
     DefinePipeline => StmtRaw::PipelineDecl(<>),
+    
+    CreateOperator => <>,
+    CreateScript => <>,
     CreatePipeline => <>,
-
     <start:@L> "create" "stream" <id:Ident> <end:@L> => StmtRaw::Stream(StreamStmtRaw { start, end, id: id.to_string() }),
 
     <start:@L> "select" <target:ComplexExprImut> "from" <from:StreamPort> <windows:WindowClause> <maybe_where:WhereClause> <maybe_group_by:GroupByClause> "into" <into:StreamPort> <maybe_having:HavingClause> <end:@L> => StmtRaw::Select(Box::new(SelectRaw { start, end, from, into, target, maybe_where, maybe_having, windows, maybe_group_by})),
 }
 
-MaybePort: Option<IdentRaw<'input>> = {
-    ("/" <Ident>)? => <>,
+//// DEFINEs
+
+DefineWindow: StmtRaw<'input> = {
+    <doc:DocComment> <start:@L> "define" <kind:WindowKind> "window" <id:Ident> <params:CreationWith> <script:EmbeddedScriptImut> "end" <end:@L> => {
+        StmtRaw::WindowDecl(WindowDeclRaw { start, end, id: id.to_string(), kind, params, script, doc })
+    }
 }
 
-ModularTarget: (Vec<IdentRaw<'input>>, IdentRaw<'input>) = {
-    <target:Ident> => (vec![], target),
-    <m:ModPath> "::" <target:Ident> => (m, target),
+DefineOperator: StmtRaw<'input> = {
+    <doc:DocComment> <start:@L> "define" <kind:OperatorKind> "operator" <id:Ident> <params:ArgsWithEnd> <end:@L> =>  {
+        StmtRaw::OperatorDecl(Box::new(OperatorDeclRaw { start, end, kind, id: id.to_string(), params, doc }))
+    }
+}
+
+DefineScript: StmtRaw<'input> = {
+    <doc:DocComment> <start:@L> "define" "script" <id:Ident> <params:DefinitionArgs> <script:EmbeddedScript> <end:@L> => {
+        StmtRaw::ScriptDecl(ScriptDeclRaw { start, end, id: id.to_string(), script, params, doc })
+    }
+}
+
+DefinePipeline: PipelineDeclRaw<'input> = {
+    <doc:DocComment> <start:@L> "define" "pipeline" <id:Ident> <from:("from" <Ports>)?> <into:("into" <Ports>)?> <params:DefinitionArgs> <pipeline:Pipeline> <end:@L> => {
+        PipelineDeclRaw { start, end, id: id.to_string(), pipeline, params, from, into, doc }
+    }
+}
+
+//// CREATEs
+CreateScript: StmtRaw<'input> = {
+    <start:@L> "create" "script" <id:Ident> <params:CreationWithEnd> <end:@L> => {
+        StmtRaw::Script(ScriptStmtRaw { start, end, id: id.to_string(), module: vec![], target: id.to_string(), params })
+    },
+
+    // With ModulartTarget
+    <start:@L> "create" "script" <id:Ident> "from" <target:ModularTarget> <params:CreationWithEnd> <end:@L> => {
+        StmtRaw::Script(ScriptStmtRaw { start, end, module: target.0, id: id.to_string(), target: target.1.id.to_string(), params })
+    }
+}
+
+CreateOperator: StmtRaw<'input> = {
+    <start:@L> "create" "operator" <id:Ident> <params:CreationWithEnd> <end:@L> => {
+        StmtRaw::Operator(OperatorStmtRaw { start, end, id: id.to_string(), module: vec![], target: id.to_string(), params })
+    },
+
+    // With ModulartTarget
+    <start:@L> "create" "operator" <id:Ident> "from" <target:ModularTarget> <params:CreationWithEnd> <end:@L> => {
+        StmtRaw::Operator(OperatorStmtRaw { start, end, id: id.to_string(), module: target.0, target: target.1.id.to_string(), params })
+    }
+}
+
+CreatePipeline: StmtRaw<'input> = {
+    <start:@L> "create" "pipeline" <id:Ident> <params:CreationWithEnd> <end:@L>  => {
+        StmtRaw::PipelineStmt(PipelineStmtRaw { start, end, module: vec![], id: id.to_string(), target: id.to_string(), params })
+    },
+    // With ModulartTarget
+    <start:@L> "create" "pipeline" <id:Ident> "from" <target:ModularTarget> <params:CreationWithEnd> <end:@L> => {
+        StmtRaw::PipelineStmt(PipelineStmtRaw { start, end, module: target.0, id: id.to_string(), target: target.1.id.to_string(), params })
+    }
+}
+
+
+MaybePort: Option<IdentRaw<'input>> = {
+    ("/" <Ident>)? => <>,
 }
 
 StreamPort: (IdentRaw<'input>, Option<IdentRaw<'input>>) = {
     <op:Ident> <port:MaybePort> => (op, port),
 }
 
+WindowKind: WindowKind = {
+    "sliding" => WindowKind::Sliding,
+    "tumbling" => WindowKind::Tumbling,
+}
+    
 WindowClause: Option<Vec<WindowDefnRaw<'input>>> = {
     (<WindowDefn>)? => <>,
-}
-
-Window: WindowDefnRaw<'input> = {
-    <start:@L> <id:Ident> <end:@L> => WindowDefnRaw { start, end, module: vec![], id: id.to_string() },
-    <start:@L> <module:ModPath> "::" <id:Ident> <end:@L> => WindowDefnRaw { start, end, module, id: id.to_string() },
 }
 
 Windows: Vec<WindowDefnRaw<'input>> = {
@@ -278,6 +431,9 @@ Windows_: Vec<WindowDefnRaw<'input>> = {
     <Sep<Windows_, Window, ",">> => <>
 }
 
+Window: WindowDefnRaw<'input> = {
+    <start:@L> <target:ModularTarget> <end:@L> => WindowDefnRaw { start, end, module: target.0, id: target.1.to_string() },
+}
 
 WindowDefn: Vec<WindowDefnRaw<'input>>  = {
     "[" <windows:Windows> "]" => windows
@@ -321,36 +477,6 @@ EmbeddedScriptContent: Option<ScriptRaw<'input>> = {
     <ExprImut> => Some(ScriptRaw::new(vec![ExprRaw::Imut(<>)], None)),
 }
 
-WithScriptClause: (DefinitioalWith<'input>, Option<ScriptRaw<'input>>) = {
-    <with:WithClause> <script:EmbeddedScriptImut> "end" => (DefinitioalWith(with), script),
-}
-
-
-
-WithClause: WithExprsRaw<'input> = {
-    "with" <WithExprs> => <>,
-}
-
-WithEndClause: WithExprsRaw<'input> = {
-    <WithClause> "end" => <>,
-}
-
-WithExprs: WithExprsRaw<'input> = {
-    <fields:WithExprs_> => {
-        let mut fields = fields;
-        fields.reverse();
-        fields
-    },
-}
-
-WithExprs_: WithExprsRaw<'input> = {
-    <Sep<WithExprs_, WithExpr, ",">> => <>
-}
-
-WithExpr: (IdentRaw<'input>, ImutExprRaw<'input>) = {
-    <name:Ident> "=" <expr:ExprImut> => (name, expr)
-}
-
 
 Ports: Vec<IdentRaw<'input>> = {
     <Sep<Ports, <Ident>, ",">> => <>
@@ -377,80 +503,13 @@ PipelineStmtInner : StmtsRaw<'input> = {
     <item:Stmt> ";"? => vec![item],
 }
 
-DefinePipeline: PipelineDeclRaw<'input> = {
-    <doc:DocComment> <start:@L> "define" "pipeline" <id:Ident> <from:("from" <Ports>)?> <into:("into" <Ports>)?> <params:DefinitionArgs> <pipeline:Pipeline> <end:@L> => {
-        PipelineDeclRaw { start, end, id: id.to_string(), pipeline, params: params.map(|params| params.into()), from, into, doc }
-    }
-}
-
-CreatePipeline: StmtRaw<'input> = {
-    <start:@L> "create" "pipeline" <id:Ident> <params:CreationArgsWithEnd> <end:@L>  => {
-        StmtRaw::PipelineStmt(PipelineStmtRaw { start, end, module: vec![], id: id.to_string(), target: id.to_string(), params: params.map(|params| params.into()) })
-    },
-    // With ModulartTarget
-    <start:@L> "create" "pipeline" <id:Ident> "from" <target:ModularTarget> <params:CreationArgsWithEnd> <end:@L> => {
-        StmtRaw::PipelineStmt(PipelineStmtRaw { start, end, module: target.0, id: id.to_string(), target: target.1.id.to_string(), params: params.map(|params| params.into()) })
-    }
-}
-
-DefineOperator: StmtRaw<'input> = {
-    <doc:DocComment> <start:@L> "define" <kind:OperatorKind> "operator" <id:Ident> <params:DefinitionArgsWithEnd> <end:@L> =>  {
-        StmtRaw::OperatorDecl(Box::new(OperatorDeclRaw { start, end, kind, id: id.to_string(), params: params.map(|params| params.into()), doc }))
-    }
-}
-
-CreateOperator: StmtRaw<'input> = {
-    <start:@L> "create" "operator" <id:Ident> <params:CreationArgsWithEnd> <end:@L> => {
-        StmtRaw::Operator(OperatorStmtRaw { start, end, id: id.to_string(), module: vec![], target: id.to_string(), params: params.map(|params| params.into()) })
-    },
-
-    // With ModulartTarget
-    <start:@L> "create" "operator" <id:Ident> "from" <target:ModularTarget> <params:CreationArgsWithEnd> <end:@L> => {
-        StmtRaw::Operator(OperatorStmtRaw { start, end, id: id.to_string(), module: target.0, target: target.1.id.to_string(), params: params.map(|params| params.into()) })
-    }
-}
-
-DefineScript: StmtRaw<'input> = {
-    <doc:DocComment> <start:@L> "define" "script" <id:Ident> <params:DefinitionArgs> <script:EmbeddedScript> <end:@L> => {
-        StmtRaw::ScriptDecl(ScriptDeclRaw { start, end, id: id.to_string(), script, params: params.map(|params| params.into()), doc })
-    }
-}
-
-CreateScript: StmtRaw<'input> = {
-    <start:@L> "create" "script" <id:Ident> <params:CreationArgsWithEnd> <end:@L> => {
-        StmtRaw::Script(ScriptStmtRaw { start, end, id: id.to_string(), module: vec![], target: id.to_string(), params: params.map(|params| params.into()) })
-    },
-
-    // With ModulartTarget
-    <start:@L> "create" "script" <id:Ident> "from" <target:ModularTarget> <params:CreationArgsWithEnd> <end:@L> => {
-        StmtRaw::Script(ScriptStmtRaw { start, end, module: target.0, id: id.to_string(), target: target.1.id.to_string(), params: params.map(|params| params.into()) })
-    }
-}
-
-DefineWindow: StmtRaw<'input> = {
-    <doc:DocComment> <start:@L> "define" <kind:WindowKind> "window" <id:Ident> <params:WithScriptClause> <end:@L> => {
-        StmtRaw::WindowDecl(WindowDeclRaw { start, end, id: id.to_string(), kind, params: params.0.into(), script: params.1, doc })
-    }
-}
-
-///////////////////////////////////////
+////////////////////////////// Tremorscript statements //////////////////////////////
+// These statements for the root of the language.
 
 pub(crate) Script : ScriptRaw<'input> = {
-  <doc:ModComment> <exprs:Exprs> "<end-of-stream>"? => ScriptRaw::new(exprs, doc),
+    <doc:ModComment> <exprs:Exprs> "<end-of-stream>"? => ScriptRaw::new(exprs, doc),
 }
 
-ModComment: Option<Vec<Cow<'input, str>>> = {
-    (<ModComment_>)? => <>
-}
-
-ModComment_: Vec<Cow<'input, str>> = {
-    <c:"<mod-comment>"> => vec![c.into()],
-    <v:ModComment_> <c:"<mod-comment>"> => {
-        let mut v = v;
-        v.push(c.into());
-        v
-    },
-}
 
 /// List of expressions at the root of the script
 Exprs: ExprsRaw<'input> = {
@@ -475,17 +534,6 @@ Const: ExprRaw<'input> = {
     <comment:DocComment> <start:@L> "const" <name:Ident> @L "=" @R <expr:SimpleExprImut> <end:@L> => ExprRaw::Const{name: name.id, expr: expr, start, end, comment},
 }
 
-DocComment: Option<Vec<Cow<'input, str>>> = {
-    (<DocComment_>)? => <>
-}
-DocComment_: Vec<Cow<'input, str>> = {
-    <c:"<doc-comment>"> => vec![c.into()],
-    <v:DocComment_> <c:"<doc-comment>"> => {
-        let mut v = v;
-        v.push(c.into());
-        v
-    },
-}
 
 ////////////////////////////// Expr (mutable) //////////////////////////////
 // Expressions are the fundamental building block of the language
