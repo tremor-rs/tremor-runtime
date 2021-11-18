@@ -15,7 +15,11 @@
 pub(crate) mod impls;
 /// prelude with commonly needed stuff imported
 pub(crate) mod prelude;
-pub(crate) mod sink;
+
+/// sink parts
+pub mod sink;
+
+/// source parts
 pub(crate) mod source;
 #[macro_use]
 pub(crate) mod utils;
@@ -72,7 +76,12 @@ impl Addr {
         Ok(self.sender.send(msg).await?)
     }
 
-    pub(crate) async fn send_sink(&self, msg: SinkMsg) -> Result<()> {
+    /// send a message to the sink part of the connector.
+    /// Results in a no-op if the connector has no sink part.
+    ///
+    /// # Errors
+    ///   * if sending failed
+    pub async fn send_sink(&self, msg: SinkMsg) -> Result<()> {
         if let Some(sink) = self.sink.as_ref() {
             sink.addr.send(msg).await?;
         }
@@ -192,8 +201,8 @@ pub struct ConnectorContext {
     pub uid: u64,
     /// url of the connector
     pub url: TremorUrl,
-    /// type name of the connector
-    pub type_name: String,
+    /// type of the connector
+    pub connector_type: ConnectorType,
     /// The Quiescence Beacon
     pub quiescence_beacon: QuiescenceBeacon,
     /// Notifier
@@ -220,7 +229,7 @@ impl ConnectorContext {
     pub fn meta(&self, inner: Value<'static>) -> Value<'static> {
         let mut map = Value::object_with_capacity(1);
         let mut type_map = Value::object_with_capacity(1);
-        type_map.try_insert(self.type_name.clone(), inner);
+        type_map.try_insert(self.connector_type.to_string(), inner);
         map.try_insert("connector", type_map);
         map
     }
@@ -286,14 +295,14 @@ pub enum ManagerMsg {
     /// register a new connector type
     Register {
         /// the type of connector
-        connector_type: String,
+        connector_type: ConnectorType,
         /// the builder
         builder: Box<dyn ConnectorBuilder>,
         /// if this one is a builtin connector
         builtin: bool,
     },
     /// unregister a connector type
-    Unregister(String),
+    Unregister(ConnectorType),
     /// create a new connector
     Create {
         /// sender to send the create result to
@@ -333,7 +342,7 @@ impl Manager {
         let h = task::spawn(async move {
             info!("Connector manager started.");
             let mut connector_id_gen = ConnectorIdGen::new();
-            let mut known_connectors: HashMap<String, (Box<dyn ConnectorBuilder>, bool)> =
+            let mut known_connectors: HashMap<ConnectorType, (Box<dyn ConnectorBuilder>, bool)> =
                 HashMap::with_capacity(16);
 
             loop {
@@ -363,7 +372,7 @@ impl Manager {
                                 &create.config.binding_type
                             );
                             tx.send(Err(ErrorKind::UnknownConnectorType(
-                                create.config.binding_type,
+                                create.config.binding_type.to_string(),
                             )
                             .into()))
                                 .await?;
@@ -479,6 +488,7 @@ impl Manager {
         let source_ctx = SourceContext {
             uid,
             url: url.clone(),
+            connector_type: config.binding_type.clone(),
             quiescence_beacon: quiescence_beacon.clone(),
         };
 
@@ -492,6 +502,7 @@ impl Manager {
         let sink_ctx = SinkContext {
             uid,
             url: url.clone(),
+            connector_type: config.binding_type.clone(),
         };
         // create source instance
         let source_addr = connector.create_source(source_ctx, source_builder).await?;
@@ -514,7 +525,7 @@ impl Manager {
         let ctx = ConnectorContext {
             uid,
             url: url.clone(),
-            type_name: config.binding_type.clone(),
+            connector_type: config.binding_type.clone(),
             quiescence_beacon: quiescence_beacon.clone(),
             notifier: notifier.clone(),
         };
@@ -1141,9 +1152,43 @@ pub trait Connector: Send {
     fn default_codec(&self) -> &str;
 }
 
+/// the type of a connector
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct ConnectorType(String);
+
+impl From<ConnectorType> for String {
+    fn from(ct: ConnectorType) -> Self {
+        ct.0
+    }
+}
+
+impl Display for ConnectorType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.0.as_str())
+    }
+}
+
+impl From<String> for ConnectorType {
+    fn from(s: String) -> Self {
+        Self(s)
+    }
+}
+
+impl<T> From<&T> for ConnectorType
+where
+    T: ToString + ?Sized,
+{
+    fn from(s: &T) -> Self {
+        Self(s.to_string())
+    }
+}
+
 /// something that is able to create a connector instance
 #[async_trait::async_trait]
 pub trait ConnectorBuilder: Sync + Send {
+    /// the type of the connector
+    fn connector_type(&self) -> ConnectorType;
+
     /// create a connector from the given `id` and `config`
     ///
     /// # Errors
@@ -1162,52 +1207,37 @@ pub trait ConnectorBuilder: Sync + Send {
 #[cfg(not(tarpaulin_include))]
 pub async fn register_builtin_connector_types(world: &World) -> Result<()> {
     world
-        .register_builtin_connector_type("file", Box::new(impls::file::Builder::default()))
+        .register_builtin_connector_type(Box::new(impls::file::Builder::default()))
         .await?;
     world
-        .register_builtin_connector_type("metrics", Box::new(impls::metrics::Builder::default()))
+        .register_builtin_connector_type(Box::new(impls::metrics::Builder::default()))
         .await?;
     world
-        .register_builtin_connector_type("stdio", Box::new(impls::stdio::Builder::default()))
+        .register_builtin_connector_type(Box::new(impls::stdio::Builder::default()))
         .await?;
     world
-        .register_builtin_connector_type(
-            "tcp_client",
-            Box::new(impls::tcp::client::Builder::default()),
-        )
+        .register_builtin_connector_type(Box::new(impls::tcp::client::Builder::default()))
         .await?;
     world
-        .register_builtin_connector_type(
-            "tcp_server",
-            Box::new(impls::tcp::server::Builder::default()),
-        )
+        .register_builtin_connector_type(Box::new(impls::tcp::server::Builder::default()))
         .await?;
     world
-        .register_builtin_connector_type(
-            "udp_client",
-            Box::new(impls::udp::client::Builder::default()),
-        )
+        .register_builtin_connector_type(Box::new(impls::udp::client::Builder::default()))
         .await?;
     world
-        .register_builtin_connector_type(
-            "udp_server",
-            Box::new(impls::udp::server::Builder::default()),
-        )
+        .register_builtin_connector_type(Box::new(impls::udp::server::Builder::default()))
         .await?;
     world
-        .register_builtin_connector_type("kv", Box::new(impls::kv::Builder::default()))
+        .register_builtin_connector_type(Box::new(impls::kv::Builder::default()))
         .await?;
     world
-        .register_builtin_connector_type("wal", Box::new(impls::wal::Builder::default()))
+        .register_builtin_connector_type(Box::new(impls::wal::Builder::default()))
         .await?;
     world
-        .register_builtin_connector_type(
-            "dns_client",
-            Box::new(impls::dns::client::Builder::default()),
-        )
+        .register_builtin_connector_type(Box::new(impls::dns::client::Builder::default()))
         .await?;
     world
-        .register_builtin_connector_type("discord", Box::new(impls::discord::Builder::default()))
+        .register_builtin_connector_type(Box::new(impls::discord::Builder::default()))
         .await?;
 
     Ok(())
@@ -1220,16 +1250,16 @@ pub async fn register_builtin_connector_types(world: &World) -> Result<()> {
 #[cfg(not(tarpaulin_include))]
 pub async fn register_debug_connector_types(world: &World) -> Result<()> {
     world
-        .register_builtin_connector_type("cb", Box::new(impls::cb::Builder::default()))
+        .register_builtin_connector_type(Box::new(impls::cb::Builder::default()))
         .await?;
     world
-        .register_builtin_connector_type("exit", Box::new(impls::exit::Builder::new(world)))
+        .register_builtin_connector_type(Box::new(impls::exit::Builder::new(world)))
         .await?;
     world
-        .register_builtin_connector_type("file", Box::new(impls::file::Builder::default()))
+        .register_builtin_connector_type(Box::new(impls::file::Builder::default()))
         .await?;
     world
-        .register_builtin_connector_type("bench", Box::new(impls::bench::Builder::default()))
+        .register_builtin_connector_type(Box::new(impls::bench::Builder::default()))
         .await?;
     Ok(())
 }
