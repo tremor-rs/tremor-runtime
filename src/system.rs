@@ -167,12 +167,11 @@ impl World {
     ///  * If the system is unavailable
     pub(crate) async fn register_builtin_connector_type(
         &self,
-        type_name: &'static str,
         builder: Box<dyn connectors::ConnectorBuilder>,
     ) -> Result<()> {
         self.system
             .send(ManagerMsg::Connector(connectors::ManagerMsg::Register {
-                connector_type: type_name.to_string(),
+                connector_type: builder.connector_type(),
                 builder,
                 builtin: true,
             }))
@@ -185,12 +184,11 @@ impl World {
     ///  * If the system is unavailable
     pub async fn register_connector_type(
         &self,
-        type_name: &'static str,
         builder: Box<dyn connectors::ConnectorBuilder>,
     ) -> Result<()> {
         self.system
             .send(ManagerMsg::Connector(connectors::ManagerMsg::Register {
-                connector_type: type_name.to_string(),
+                connector_type: builder.connector_type(),
                 builder,
                 builtin: false,
             }))
@@ -205,7 +203,7 @@ impl World {
     pub async fn unregister_connector_type(&self, type_name: String) -> Result<()> {
         self.system
             .send(ManagerMsg::Connector(connectors::ManagerMsg::Unregister(
-                type_name,
+                type_name.into(),
             )))
             .await?;
         Ok(())
