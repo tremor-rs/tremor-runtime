@@ -101,6 +101,10 @@ pub(crate) struct Builder {}
 
 #[async_trait::async_trait()]
 impl ConnectorBuilder for Builder {
+    fn connector_type(&self) -> ConnectorType {
+        "cb".into()
+    }
+
     async fn from_config(
         &self,
         id: &TremorUrl,
