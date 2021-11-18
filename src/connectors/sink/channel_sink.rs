@@ -38,10 +38,13 @@ pub trait SinkMetaBehaviour: Send + Sync {
     const NEEDS_META: bool;
 }
 
+/// Marker that this sink doesn't need any metadata
 pub struct NoMeta {}
 impl SinkMetaBehaviour for NoMeta {
     const NEEDS_META: bool = false;
 }
+
+/// Marker that this sink needs metadata - and thus requires a clone
 pub struct WithMeta {}
 impl SinkMetaBehaviour for WithMeta {
     const NEEDS_META: bool = true;
@@ -197,7 +200,9 @@ where
         meta: &'lt Value<'value>,
         ctx: &SinkContext,
     ) -> Option<(&u64, &Sender<SinkData>)> {
-        get_sink_meta(meta, ctx)
+        let sink_meta = get_sink_meta(meta, ctx);
+        dbg!(sink_meta);
+        sink_meta
             .and_then(|sink_meta| (self.resolver)(sink_meta))
             .and_then(|stream_meta| self.streams_meta.get_by_left(&stream_meta))
             .and_then(|stream_id| {
@@ -208,6 +213,7 @@ where
     }
 }
 
+/// The runtime driving the part of the sink that is receiving data and writing it out
 #[derive(Clone)]
 pub struct ChannelSinkRuntime<T>
 where
@@ -303,11 +309,7 @@ fn get_sink_meta<'lt, 'value>(
     ctx.url
         .resource_type()
         .and_then(|rt| meta.get(&Cow::owned(rt.to_string())))
-        .and_then(|rt_meta| {
-            ctx.url
-                .artefact()
-                .and_then(|artefact| rt_meta.get(artefact))
-        })
+        .and_then(|rt_meta| rt_meta.get(ctx.connector_type.to_string().as_str()))
 }
 
 #[async_trait::async_trait()]
@@ -392,6 +394,7 @@ where
                 }
             }
             if errored || !found {
+                debug!("{} No stream found for event: {}", &ctx, &event.id);
                 reply = SinkReply::FAIL;
             }
         }

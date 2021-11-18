@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::url::TremorUrl;
+use crate::{connectors::ConnectorType, url::TremorUrl};
 use either::Either;
 use hashbrown::HashMap;
 
@@ -143,7 +143,7 @@ pub struct Connector {
     /// connector identifier
     pub id: Id,
     #[serde(rename = "type")]
-    pub(crate) binding_type: String,
+    pub(crate) binding_type: ConnectorType,
 
     #[serde(default = "Default::default")]
     pub(crate) description: String,

@@ -28,7 +28,8 @@ use crate::config::{
     Codec as CodecConfig, Connector as ConnectorConfig, Preprocessor as PreprocessorConfig,
 };
 use crate::connectors::{
-    metrics::SourceReporter, ConnectorContext, Context, Msg, QuiescenceBeacon, StreamDone,
+    metrics::SourceReporter, ConnectorContext, ConnectorType, Context, Msg, QuiescenceBeacon,
+    StreamDone,
 };
 use crate::errors::{Error, Result};
 use crate::pipeline;
@@ -338,6 +339,9 @@ pub struct SourceContext {
     pub uid: u64,
     /// connector url
     pub(crate) url: TremorUrl,
+
+    /// connector type
+    pub(crate) connector_type: ConnectorType,
     /// The Quiescence Beacon
     pub quiescence_beacon: QuiescenceBeacon,
 }

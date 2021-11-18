@@ -57,6 +57,9 @@ config:
         free_port
     );
     let harness = ConnectorHarness::new(connector_yaml).await?;
+    let out_pipeline = harness
+        .out()
+        .expect("No pipeline connected to 'out' port of udp_server");
     harness.start().await?;
     harness.wait_for_connected(Duration::from_secs(5)).await?;
 
@@ -68,7 +71,7 @@ config:
     socket.send(data.as_bytes()).await?;
     // expect data being received
     for expected in data.split('\n').take(4) {
-        let event = harness.out().get_event().await?;
+        let event = out_pipeline.get_event().await?;
         let content = event.data.suffix().value().as_str().unwrap();
         assert_eq!(expected, content);
     }
@@ -83,7 +86,7 @@ config:
 
     // ensure nothing is received (pause is actually doing the right thing)
     assert!(
-        async_std::future::timeout(Duration::from_millis(500), harness.out().get_event())
+        async_std::future::timeout(Duration::from_millis(500), out_pipeline.get_event())
             .await
             .is_err()
     );
@@ -101,8 +104,7 @@ config:
             data2.split('\n').next().unwrap()
         )
         .as_str(),
-        harness
-            .out()
+        out_pipeline
             .get_event()
             .await?
             .data
@@ -113,7 +115,7 @@ config:
     );
     for expected in data2[..data2.len() - 1].split('\n').skip(1) {
         debug!("expecting '{}'", expected);
-        let event = harness.out().get_event().await?;
+        let event = out_pipeline.get_event().await?;
         let content = event.data.suffix().value().as_str().unwrap();
         debug!("got '{}'", content);
         assert_eq!(expected, content);
@@ -151,6 +153,9 @@ config:
         free_port
     );
     let harness = ConnectorHarness::new(connector_yaml).await?;
+    let out_pipeline = harness
+        .out()
+        .expect("No pipeline connected to 'out' port of tcp_server connector");
     harness.start().await?;
     harness.wait_for_connected(Duration::from_secs(5)).await?;
     debug!("Connected.");
@@ -162,8 +167,7 @@ config:
     // expect data being received, the last item is not received yet
     for expected in data.split('\n').take(4) {
         debug!("expecting: '{}'", expected);
-        let event = harness
-            .out()
+        let event = out_pipeline
             .get_event()
             .timeout(Duration::from_secs(2))
             .await??;
@@ -181,8 +185,7 @@ config:
     socket.write_all(data2.as_bytes()).await?;
 
     // ensure nothing is received (pause is actually doing the right thing)
-    assert!(harness
-        .out()
+    assert!(out_pipeline
         .get_event()
         .timeout(Duration::from_millis(500))
         .await
@@ -200,8 +203,7 @@ config:
             data2.split('\n').next().unwrap()
         )
         .as_str(),
-        harness
-            .out()
+        out_pipeline
             .get_event()
             .await?
             .data
@@ -213,8 +215,7 @@ config:
     drop(socket); // closing the socket, ensuring the last bits are flushed from preprocessors etc
     for expected in data2[..data2.len() - 1].split('\n').skip(1) {
         debug!("expecting: '{}'", expected);
-        let event = harness
-            .out()
+        let event = out_pipeline
             .get_event()
             .timeout(Duration::from_secs(2))
             .await??;

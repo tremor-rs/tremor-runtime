@@ -126,7 +126,7 @@ where
     async fn on_done(&mut self, stream: u64) -> StreamDone {
         // THIS IS SHUTDOWN!
         if let Err(e) = self.underlying_stream.shutdown(std::net::Shutdown::Read) {
-            error!(
+            warn!(
                 "[Connector::{}] Error shutting down reading half of stream {}: {}",
                 &self.url, stream, e
             );

@@ -24,7 +24,7 @@ use crate::codec::{self, Codec};
 use crate::config::{
     Codec as CodecConfig, Connector as ConnectorConfig, Postprocessor as PostprocessorConfig,
 };
-use crate::connectors::{Context, Msg, StreamDone};
+use crate::connectors::{ConnectorType, Context, Msg, StreamDone};
 use crate::errors::Result;
 use crate::permge::PriorityMerge;
 use crate::pipeline;
@@ -61,13 +61,14 @@ use super::utils::metrics::SinkReporter;
 /// A response is an event generated from the sink delivery.
 #[derive(Clone, Debug, Default, Copy)]
 pub struct SinkReply {
+    /// guaranteed delivery response - did we sent the event successfully `SinkAck::Ack` or did it fail `SinkAck::Fail`
     pub ack: SinkAck,
+    /// circuit breaker action
     pub cb: CbAction,
 }
 
 impl SinkReply {
     /// Acknowledges
-
     pub const ACK: SinkReply = SinkReply {
         ack: SinkAck::Ack,
         cb: CbAction::None,
@@ -137,8 +138,11 @@ impl From<bool> for SinkAck {
 
 /// Possible replies from asynchronous sinks via `reply_channel` from event or signal handling
 pub enum AsyncSinkReply {
+    /// success
     Ack(ContraflowData, u64),
+    /// failure
     Fail(ContraflowData),
+    /// circuitbreaker shit
     CB(ContraflowData, CbAction),
 }
 
@@ -211,9 +215,12 @@ pub trait Sink: Send {
     }
 }
 
+/// handles writing to 1 stream (e.g. file or TCP connection)
 #[async_trait::async_trait]
 pub trait StreamWriter: Send + Sync {
+    /// write the given data out to the stream
     async fn write(&mut self, data: Vec<Vec<u8>>, meta: Option<SinkMeta>) -> Result<()>;
+    /// handle the stream being done, by error or
     async fn on_done(&self, _stream: u64) -> Result<StreamDone> {
         Ok(StreamDone::StreamClosed)
     }
@@ -224,6 +231,8 @@ pub struct SinkContext {
     pub uid: u64,
     /// the connector url
     pub(crate) url: TremorUrl,
+    /// the connector type
+    pub(crate) connector_type: ConnectorType,
 }
 
 impl Display for SinkContext {
@@ -307,6 +316,7 @@ impl SinkAddr {
     }
 }
 
+/// Builder for the sink manager
 pub struct SinkManagerBuilder {
     qsize: usize,
     serializer: EventSerializer,
@@ -409,6 +419,7 @@ impl EventSerializer {
         })
     }
 
+    /// drop a stream
     pub fn drop_stream(&mut self, stream_id: u64) {
         self.streams.remove(&stream_id);
     }

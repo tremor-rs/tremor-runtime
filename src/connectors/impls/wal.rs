@@ -41,6 +41,9 @@ pub(crate) struct Builder {}
 
 #[async_trait::async_trait]
 impl ConnectorBuilder for Builder {
+    fn connector_type(&self) -> ConnectorType {
+        "wal".into()
+    }
     async fn from_config(
         &self,
         _id: &TremorUrl,
@@ -196,6 +199,9 @@ impl Connector for Wal {
 struct ThingyBuilder();
 #[async_trait::async_trait]
 impl ConnectorBuilder for ThingyBuilder {
+    fn connector_type(&self) -> ConnectorType {
+        "wal_thingy".into()
+    }
     async fn from_config(
         &self,
         _id: &TremorUrl,
