@@ -40,6 +40,9 @@ pub(crate) struct Builder {}
 
 #[async_trait::async_trait]
 impl ConnectorBuilder for Builder {
+    fn connector_type(&self) -> ConnectorType {
+        "udp_server".into()
+    }
     async fn from_config(
         &self,
         _id: &TremorUrl,

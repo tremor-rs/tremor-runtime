@@ -83,7 +83,8 @@ impl Addr {
         Ok(self.cf_addr.send(CfMsg::Insight(event)).await?)
     }
 
-    pub(crate) async fn send(&self, msg: Box<Msg>) -> Result<()> {
+    /// send a data-plane message to the pipeline
+    pub async fn send(&self, msg: Box<Msg>) -> Result<()> {
         Ok(self.addr.send(msg).await?)
     }
 

@@ -125,6 +125,10 @@ impl ConnectorBuilder for Builder {
             Err("Missing config for blaster onramp".into())
         }
     }
+
+    fn connector_type(&self) -> ConnectorType {
+        "bench".into()
+    }
 }
 
 #[derive(Clone, Default)]

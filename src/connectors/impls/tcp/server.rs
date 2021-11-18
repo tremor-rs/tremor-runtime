@@ -69,6 +69,9 @@ pub(crate) struct Builder {}
 
 #[async_trait::async_trait]
 impl ConnectorBuilder for Builder {
+    fn connector_type(&self) -> ConnectorType {
+        "tcp_server".into()
+    }
     async fn from_config(
         &self,
         id: &TremorUrl,
@@ -97,8 +100,10 @@ impl ConnectorBuilder for Builder {
 }
 
 fn resolve_connection_meta(meta: &Value) -> Option<ConnectionMeta> {
-    meta.get_u16("port")
-        .zip(meta.get_str("host"))
+    dbg!(meta);
+    let peer = meta.get("peer");
+    peer.get_u16("port")
+        .zip(peer.get_str("host"))
         .map(|(port, host)| -> ConnectionMeta {
             ConnectionMeta {
                 host: host.to_string(),
@@ -194,13 +199,13 @@ impl Connector for TcpServer {
                 if let Some(acceptor) = tls_acceptor {
                     let tls_stream = acceptor.accept(stream.clone()).await?; // TODO: this should live in its own task, as it requires rome roundtrips :()
                     let (tls_read_stream, tls_write_sink) = tls_stream.split();
-                    let meta = literal!({
+                    let meta = ctx.meta(literal!({
                         "tls": true,
                         "peer": {
                             "host": peer_addr.ip().to_string(),
                             "port": peer_addr.port()
                         }
-                    });
+                    }));
                     let tls_reader = TcpReader::tls_server(
                         tls_read_stream,
                         stream.clone(),
@@ -218,13 +223,13 @@ impl Connector for TcpServer {
                         TcpWriter::tls_server(tls_write_sink, stream),
                     );
                 } else {
-                    let meta = literal!({
+                    let meta = ctx.meta(literal!({
                         "tls": false,
                         "peer": {
                             "host": peer_addr.ip().to_string(),
                             "port": peer_addr.port()
                         }
-                    });
+                    }));
                     let tcp_reader = TcpReader::new(
                         stream.clone(),
                         vec![0; buf_size],
