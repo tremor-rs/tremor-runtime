@@ -113,6 +113,10 @@ impl Builder {
 
 #[async_trait::async_trait]
 impl ConnectorBuilder for Builder {
+    fn connector_type(&self) -> ConnectorType {
+        "exit".into()
+    }
+
     async fn from_config(
         &self,
         _id: &TremorUrl,
