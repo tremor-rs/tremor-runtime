@@ -1,10 +1,10 @@
 define pipeline add
-with
+args
   add = [1,2,3],
 pipeline
   use std::random;
   define script rand
-  with
+  args
     invalid_val = args.add[random::integer(0, 3)]
   script
     event + args.invalid_val
