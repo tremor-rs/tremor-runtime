@@ -351,8 +351,8 @@ DefineWindow: StmtRaw<'input> = {
 }
 
 DefineOperator: StmtRaw<'input> = {
-    <doc:DocComment> <start:@L> "define" <kind:OperatorKind> "operator" <id:Ident> <params:ArgsWithEnd> <end:@L> =>  {
-        StmtRaw::OperatorDecl(Box::new(OperatorDeclRaw { start, end, kind, id: id.to_string(), params, doc }))
+    <doc:DocComment> <start:@L> "define" <kind:OperatorKind> "operator" <id:Ident> <params:ArgsWithEnd?> <end:@L> =>  {
+        StmtRaw::OperatorDecl(Box::new(OperatorDeclRaw { start, end, kind, id: id.to_string(), params: params.unwrap_or_default(), doc }))
     }
 }
 

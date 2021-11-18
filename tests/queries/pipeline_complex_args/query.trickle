@@ -1,5 +1,5 @@
 define pipeline subq
-with
+args
  param1 = 1,
  param2 = 42 + 5,
  param3 = 5 + -(-(-3)),
@@ -8,7 +8,7 @@ with
  param6 = "snot",
 pipeline
     define script foo
-    with
+    args
       p1 = -args.param1 + args.param2 + args.param3 - args.param4[5],
       p2 = args.param4[0:4],
       p3 = args.param6 + "badger"

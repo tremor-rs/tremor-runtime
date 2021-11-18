@@ -1,5 +1,5 @@
 define script badger
-with
+args
   value = "snot"
 script
   let event.badger = args.value;

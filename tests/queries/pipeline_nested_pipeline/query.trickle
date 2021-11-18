@@ -1,9 +1,9 @@
 define pipeline first
-with
+args
  min_aint = 20
 pipeline
   define pipeline second
-  with
+  args
     min_aint = 30
   pipeline
     select event from in where event.aint>args.min_aint into out;
