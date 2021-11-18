@@ -1,5 +1,5 @@
 define pipeline snot
-with
+args
   add = 42
 pipeline
   define pipeline badger

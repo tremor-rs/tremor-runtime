@@ -2592,7 +2592,7 @@ impl<'script> Upable<'script> for DefinitioalArgs<'script> {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Default)]
 pub struct DefinitioalArgsWith<'script> {
     pub args: ArgsClause<'script>,
     pub with: WithClause<'script>,
@@ -2600,8 +2600,9 @@ pub struct DefinitioalArgsWith<'script> {
 
 impl<'script> Upable<'script> for DefinitioalArgsWith<'script> {
     type Target = HashMap<String, Value<'script>>;
-    fn up<'registry>(self, _helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        todo!()
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+        // FIXME: this is wrong
+        self.with.up(helper)
     }
 }
 

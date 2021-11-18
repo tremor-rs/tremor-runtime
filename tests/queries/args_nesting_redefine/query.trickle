@@ -1,9 +1,9 @@
 define pipeline outer
-with
+args
   add = 42
 pipeline
   define pipeline inner
-  with
+  args
     add = args.add
   pipeline
     select args from in into out;
