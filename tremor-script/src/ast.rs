@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+pub(crate) mod aggregate_fn;
 pub(crate) mod analyzer;
 /// Base definition for expressions
 pub mod base_expr;
@@ -26,7 +27,6 @@ pub(crate) mod raw;
 mod support;
 mod to_static;
 mod upable;
-pub(crate) mod aggregate_fn;
 /// collection of AST visitors
 pub mod visitors;
 
@@ -34,6 +34,7 @@ pub mod visitors;
 pub mod walkers;
 
 pub use crate::lexer::CompilationUnit;
+use crate::registry::CustomAggregateFn;
 use crate::{
     ast::{
         binary::extend_bytes_from_value,
@@ -541,6 +542,7 @@ where
     pub warnings: Warnings,
     shadowed_vars: Vec<String>,
     func_vec: Vec<CustomFn<'script>>,
+    aggregate_vec: Vec<CustomAggregateFn<'script>>,
     pub(crate) locals: HashMap<String, usize>,
     pub(crate) functions: HashMap<Vec<String>, usize>,
     pub(crate) consts: Consts<'script>,
@@ -627,6 +629,7 @@ where
             operators: HashMap::new(),
             subquery_defns: HashMap::new(),
             aggregates: Vec::new(),
+            aggregate_vec: Vec::new(),
             warnings: BTreeSet::new(),
             locals: HashMap::new(),
             consts: Consts::default(),
@@ -655,6 +658,12 @@ where
         } else {
             Err(format!("function {} already defined.", f.name).into())
         }
+    }
+
+    fn register_aggregate_fun(&mut self, f: CustomAggregateFn<'script>) -> Result<()> {
+        self.aggregate_vec.push(f);
+
+        Ok(())
     }
 
     fn register_shadow_var(&mut self, id: &str) -> usize {
@@ -1523,6 +1532,15 @@ pub struct Recur<'script> {
 }
 impl_expr_mid!(Recur);
 
+#[derive(Clone)]
+/// An invocable aggregate expression form
+pub enum InvocableAggregate<'script> {
+    /// Reference to a builtin or intrinsic function
+    Intrinsic(TremorAggrFnWrapper),
+    /// A user defined or standard library function
+    Tremor(CustomAggregateFn<'script>),
+}
+
 #[derive(Clone, Serialize, PartialEq)]
 /// Encapsulates an Aggregate function invocation
 pub struct InvokeAggr {
@@ -1542,7 +1560,7 @@ pub struct InvokeAggrFn<'script> {
     pub(crate) mid: usize,
     /// The invocable function
     #[serde(skip)]
-    pub invocable: TremorAggrFnWrapper,
+    pub invocable: InvocableAggregate<'script>,
     pub(crate) module: String,
     pub(crate) fun: String,
     /// Arguments passed to the function

@@ -16,6 +16,7 @@ use crate::{Event, EventId, EventIdGenerator, OpMeta};
 use beef::Cow;
 use std::borrow::Cow as SCow;
 use tremor_common::stry;
+use tremor_script::ast::InvocableAggregate;
 use tremor_script::{
     self,
     ast::{AggrSlice, Aggregates, Consts, NodeMetas, RunConsts, Select, WindowDecl},
@@ -91,7 +92,10 @@ impl GroupWindow {
     /// Resets the aggregates and transactionality of this window
     pub(crate) fn reset(&mut self) {
         for aggr in &mut self.aggrs {
-            aggr.invocable.init();
+            match aggr.invocable {
+                InvocableAggregate::Intrinsic(ref mut x) => x.init(),
+                InvocableAggregate::Tremor(ref mut x) => x.init(),
+            }
         }
         self.transactional = false;
         self.holds_data = false;
@@ -156,12 +160,17 @@ impl GroupWindow {
             for arg in &argv {
                 argv1.push(arg);
             }
-            // now execute the fnctions
-            stry!(invocable.accumulate(argv1.as_slice()).map_err(|e| {
-                // TODO nice error
-                let r: Option<&Registry> = None;
-                e.into_err(aggr, aggr, r, node_meta)
-            }));
+            // now execute the functions
+            match invocable {
+                InvocableAggregate::Intrinsic(ref mut x) => {
+                    stry!(x.accumulate(argv1.as_slice()).map_err(|e| {
+                        // TODO nice error
+                        let r: Option<&Registry> = None;
+                        e.into_err(aggr, aggr, r, node_meta)
+                    }))
+                }
+                InvocableAggregate::Tremor(ref mut x) => x.aggregate(argv1.as_slice()),
+            }
         }
         Ok(())
     }
@@ -174,10 +183,19 @@ impl GroupWindow {
         self.holds_data = true;
         // Ingest the data
         for (this, prev) in self.aggrs.iter_mut().zip(prev.iter()) {
-            stry!(this.invocable.merge(&prev.invocable).map_err(|e| {
-                let r: Option<&Registry> = None;
-                e.into_err(prev, prev, r, ctx.node_meta)
-            }));
+            match this.invocable {
+                InvocableAggregate::Intrinsic(ref mut x) => match prev.invocable {
+                    InvocableAggregate::Intrinsic(ref y) => stry!(x.merge(y).map_err(|e| {
+                        let r: Option<&Registry> = None;
+                        e.into_err(prev, prev, r, ctx.node_meta)
+                    })),
+                    InvocableAggregate::Tremor(_) => unreachable!(), // fixme don't panic, return an Err
+                },
+                InvocableAggregate::Tremor(ref mut x) => match prev.invocable {
+                    InvocableAggregate::Intrinsic(_) => unreachable!(), // fixme don't panic, return an Err
+                    InvocableAggregate::Tremor(ref y) => x.merge(y),
+                },
+            };
         }
         Ok(())
     }

@@ -1,0 +1,22 @@
+define tumbling window by_two
+with
+  size = 2
+end;
+
+mod m with
+    aggregate collect_joined of
+        init ( ) =>
+            ""
+
+        aggregate(st, data) =>
+            state + data
+
+        mergein(st, other) =>
+            state + other
+
+        emit(st) =>
+            state
+    end
+end;
+
+select m::collect_joined(event) from in[by_two] into out;

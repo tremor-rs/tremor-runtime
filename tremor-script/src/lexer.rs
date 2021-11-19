@@ -83,6 +83,7 @@ pub(crate) fn ident_to_token(ident: &str) -> Token {
     match ident {
         "intrinsic" => Token::Intrinsic,
         "mod" => Token::Module,
+        "mergein" => Token::MergeIn,
         "const" => Token::Const,
         "let" => Token::Let,
         "match" => Token::Match,
@@ -139,6 +140,7 @@ pub(crate) fn ident_to_token(ident: &str) -> Token {
         "recur" => Token::Recur,
         "query" => Token::Subquery,
         "aggregate" => Token::Aggregate,
+        "init" => Token::Init,
         src => Token::Ident(src.into(), false),
     }
 }
@@ -401,7 +403,7 @@ pub enum Token<'input> {
     /// The `init` keyword
     Init,
     /// The `mergein` keyword
-    MergeIn
+    MergeIn,
 }
 
 impl<'input> Default for Token<'input> {
@@ -431,6 +433,7 @@ impl<'input> Token<'input> {
             *self,
             Token::Absent
                 | Token::Args
+                | Token::Aggregate
                 | Token::By
                 | Token::Case
                 | Token::Const
@@ -450,11 +453,13 @@ impl<'input> Token<'input> {
                 | Token::Group
                 | Token::Having
                 | Token::Insert
+                | Token::Init
                 | Token::Into
                 | Token::Intrinsic
                 | Token::Let
                 | Token::Match
                 | Token::Merge
+                | Token::MergeIn
                 | Token::Module
                 | Token::Move
                 | Token::Of

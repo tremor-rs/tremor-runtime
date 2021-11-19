@@ -93,6 +93,7 @@ macro_rules! test_cases {
 }
 
 test_cases!(
+    custom_aggregate,
     default_rule,
     dimensions,
     example_rule,

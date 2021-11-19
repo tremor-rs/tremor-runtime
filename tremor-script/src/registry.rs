@@ -12,7 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+mod custom_aggregate_fn;
 mod custom_fn;
+pub use self::custom_aggregate_fn::CustomAggregateFn;
 pub use self::custom_fn::CustomFn;
 pub(crate) use self::custom_fn::{RECUR_PTR, RECUR_REF};
 use crate::ast::{BaseExpr, NodeMetas};

@@ -35,6 +35,7 @@ use std::{
     borrow::{Borrow, Cow},
     iter, mem,
 };
+use crate::ast::InvocableAggregate;
 
 impl<'script> ImutExpr<'script> {
     /// Evaluates the expression
@@ -753,11 +754,17 @@ impl<'script> ImutExprInt<'script> {
         // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1035
         #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
         // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1035
-        let invocable: &mut TremorAggrFnWrapper = unsafe { mem::transmute(inv) };
-        let r = stry!(invocable.emit().map(Cow::Owned).map_err(|e| {
-            let r: Option<&Registry> = None;
-            e.into_err(self, self, r, env.meta)
-        }));
+        let invocable: &mut InvocableAggregate = unsafe { mem::transmute(inv) };
+        let r = match invocable {
+            InvocableAggregate::Intrinsic(ref mut x) => { x.emit() }
+            InvocableAggregate::Tremor(ref mut x) => { x.emit() }
+        };
+
+        let r = stry!(r.map(Cow::Owned).map_err(|e| {
+                let r: Option<&Registry> = None;
+                e.into_err(self, self, r, env.meta)
+
+            }));
         Ok(r)
     }
 

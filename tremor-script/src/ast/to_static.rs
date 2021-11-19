@@ -24,6 +24,8 @@ use super::{
     RecordPattern, Recur, ReservedPath, Script, Segment, StatePath, StrLitElement, StringLit,
     TuplePattern, UnaryExpr,
 };
+use crate::ast::InvocableAggregate;
+use crate::registry::CustomAggregateFn;
 use crate::CustomFn;
 use beef::Cow;
 use tremor_value::Value;
@@ -987,7 +989,7 @@ impl<'script> InvokeAggrFn<'script> {
         } = self;
         InvokeAggrFn {
             mid,
-            invocable,
+            invocable: invocable.into_static(),
             module,
             fun,
             args: args.into_iter().map(ImutExpr::into_static).collect(),
@@ -1092,6 +1094,44 @@ impl<'script> OperatorDecl<'script> {
                     .map(|(k, v)| (k, v.into_static()))
                     .collect()
             }),
+        }
+    }
+}
+
+impl<'script> InvocableAggregate<'script> {
+    pub(crate) fn into_static(self) -> InvocableAggregate<'static> {
+        match self {
+            InvocableAggregate::Intrinsic(x) => InvocableAggregate::Intrinsic(x),
+            InvocableAggregate::Tremor(x) => InvocableAggregate::Tremor(x.into_static()),
+        }
+    }
+}
+
+impl<'script> CustomAggregateFn<'script> {
+    pub(crate) fn into_static(self) -> CustomAggregateFn<'static> {
+        let CustomAggregateFn {
+            name,
+            init_body,
+            aggregate_args,
+            aggregate_body,
+            mergein_args,
+            mergein_body,
+            emit_args,
+            emit_body,
+        } = self;
+
+        CustomAggregateFn {
+            aggregate_args,
+            mergein_args,
+            emit_args,
+            name: Cow::owned(name.to_string()),
+            init_body: init_body.into_iter().map(|x| x.into_static()).collect(),
+            aggregate_body: aggregate_body
+                .into_iter()
+                .map(|x| x.into_static())
+                .collect(),
+            mergein_body: mergein_body.into_iter().map(|x| x.into_static()).collect(),
+            emit_body: emit_body.into_iter().map(|x| x.into_static()).collect(),
         }
     }
 }
