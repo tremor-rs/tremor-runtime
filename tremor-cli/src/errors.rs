@@ -20,12 +20,6 @@
 use crate::util::SourceKind;
 use error_chain::error_chain;
 
-impl From<tremor_value::Error> for Error {
-    fn from(e: tremor_value::Error) -> Self {
-        Self::from(format!("{}", e))
-    }
-}
-
 impl From<http_types::Error> for Error {
     fn from(e: http_types::Error) -> Self {
         Self::from(format!("{}", e))
@@ -51,6 +45,7 @@ error_chain! {
         Runtime(tremor_runtime::errors::Error, tremor_runtime::errors::ErrorKind);
     }
     foreign_links {
+        Value(tremor_value::Error);
         YamlError(serde_yaml::Error) #[doc = "Error during yaml parsing"];
         JsonError(simd_json::Error) #[doc = "Error during json parsing"];
         Io(std::io::Error) #[doc = "Error during std::io"];
