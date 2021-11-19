@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::{connectors::ConnectorType, url::TremorUrl};
+use crate::connectors::ConnectorType;
 use either::Either;
 use hashbrown::HashMap;
+use tremor_common::url::TremorUrl;
 
 pub(crate) type Id = String;
 pub(crate) type ConnectorVec = Vec<Connector>;

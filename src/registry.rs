@@ -43,7 +43,6 @@ use crate::connectors::{Addr as ConnectorAddr, ConnectorResult, Msg as Connector
 use crate::errors::{ErrorKind, Result};
 use crate::pipeline::MgmtMsg as PipelineMsg;
 use crate::repository::{Artefact, BindingArtefact, ConnectorArtefact, PipelineArtefact};
-use crate::url::{ResourceType, TremorUrl};
 use crate::{pipeline, QSIZE};
 use async_std::channel::{bounded, unbounded, Sender};
 use async_std::prelude::*;
@@ -53,6 +52,7 @@ use std::default::Default;
 use std::fmt;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
+use tremor_common::url::{ResourceType, TremorUrl};
 
 /// containing the InstanceState
 pub mod instance;

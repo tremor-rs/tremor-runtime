@@ -41,14 +41,14 @@ use crate::errors::{Error, ErrorKind, Result};
 use crate::pipeline;
 use crate::registry::instance::InstanceState;
 use crate::system::World;
-use crate::url::{
-    ports::{ERR, IN, OUT},
-    TremorUrl,
-};
 use crate::OpConfig;
 use async_std::channel::{bounded, Sender};
 use halfbrown::{Entry, HashMap};
 use tremor_common::ids::ConnectorIdGen;
+use tremor_common::url::{
+    ports::{ERR, IN, OUT},
+    TremorUrl,
+};
 use tremor_value::Value;
 use utils::reconnect::{Attempt, ReconnectRuntime};
 use value_trait::{Builder, Mutable};

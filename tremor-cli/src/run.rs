@@ -24,11 +24,14 @@ use tremor_common::time::nanotime;
 use tremor_common::url::TremorUrl;
 use tremor_common::{file, ids::OperatorIdGen};
 use tremor_pipeline::{Event, EventId};
-use tremor_runtime::codec::Codec;
-use tremor_runtime::config::Binding;
 use tremor_runtime::postprocessor::Postprocessor;
 use tremor_runtime::preprocessor::Preprocessor;
 use tremor_runtime::repository::BindingArtefact;
+use tremor_runtime::{
+    codec::Codec,
+    system::{World, WorldConfig},
+};
+use tremor_runtime::{config::Binding, system::ShutdownMode};
 use tremor_script::ast::{DeployEndpoint, Helper};
 use tremor_script::deploy::Deploy;
 use tremor_script::highlighter::Error as HighlighterError;
@@ -474,37 +477,37 @@ fn parse_troy_source(src: &str, args: &Value) -> Result<(String, srs::Deploy)> {
 }
 
 async fn handle_troy_connector(
-    world: &tremor_runtime::system::World,
+    world: &World,
     _stem: &str,
     instance: &str,
     atom: &srs::ConnectorDecl,
 ) -> Result<()> {
-    let yaml = serde_yaml::to_string(&atom.params)?;
+    // let yaml = serde_yaml::to_string(&atom.params)?;
 
-    // Map kind to legacy artefact url format
-    match atom.kind.as_str() {
-        "blaster" | "stdin" | "metronome" => {
-            let stub = "/onramp";
-            let ramp = serde_yaml::from_str::<tremor_runtime::config::OnRamp>(&yaml)?;
-            let url = TremorUrl::parse(&format!("{}/{}/{}", stub, atom.kind.as_str(), instance))?;
-            dbg!(&url.to_string());
-            world.repo.publish_onramp(&url, false, ramp).await?;
-        }
-        "blackhole" | "stdout" | "stderr" => {
-            let stub = "/offramp";
-            let ramp = serde_yaml::from_str::<tremor_runtime::config::OffRamp>(&yaml)?;
-            let url = TremorUrl::parse(&format!("{}/{}/{}", stub, atom.kind.as_str(), instance))?;
-            world.repo.publish_offramp(&url, false, ramp).await?;
-            dbg!(&url.to_string());
-        }
-        _otherwise => unimplemented!(),
-    };
+    // // Map kind to legacy artefact url format
+    // match atom.kind.as_str() {
+    //     "blaster" | "stdin" | "metronome" => {
+    //         let stub = "/onramp";
+    //         let ramp = serde_yaml::from_str::<tremor_runtime::config::OnRamp>(&yaml)?;
+    //         let url = TremorUrl::parse(&format!("{}/{}/{}", stub, atom.kind.as_str(), instance))?;
+    //         dbg!(&url.to_string());
+    //         world.repo.publish_onramp(&url, false, ramp).await?;
+    //     }
+    //     "blackhole" | "stdout" | "stderr" => {
+    //         let stub = "/offramp";
+    //         let ramp = serde_yaml::from_str::<tremor_runtime::config::OffRamp>(&yaml)?;
+    //         let url = TremorUrl::parse(&format!("{}/{}/{}", stub, atom.kind.as_str(), instance))?;
+    //         world.repo.publish_offramp(&url, false, ramp).await?;
+    //         dbg!(&url.to_string());
+    //     }
+    //     _otherwise => unimplemented!(),
+    // };
 
     Ok(())
 }
 
 async fn handle_troy_pipeline(
-    world: &tremor_runtime::system::World,
+    world: &World,
     raw: &str,
     deploy: &srs::Deploy,
     _stem: &str,
@@ -546,9 +549,12 @@ fn run_troy_source(_matches: &ArgMatches, src: &str, args: &Value) -> Result<()>
     let binding_instance = "snot";
 
     block_on(async {
-        let (world, _handle) = tremor_runtime::system::World::start(50, storage_directory)
-            .await
-            .unwrap();
+        let config = WorldConfig {
+            storage_directory,
+            debug_connectors: true,
+            ..WorldConfig::default()
+        };
+        let (world, _handle) = World::start(config).await.unwrap();
 
         for (_name, flow) in &unit.instances {
             let binding_url = TremorUrl::parse("/binding/troy::deploy/snot").unwrap();
@@ -668,7 +674,7 @@ fn run_troy_source(_matches: &ArgMatches, src: &str, args: &Value) -> Result<()>
 
         // At this point we could run a test framework of sorts
         std::thread::sleep(std::time::Duration::from_millis(150_000));
-        world.stop().await.unwrap();
+        world.stop(ShutdownMode::Graceful).await.unwrap();
     });
 
     Ok(())

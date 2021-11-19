@@ -18,11 +18,11 @@ pub(crate) mod lines;
 
 use crate::config::Preprocessor as PreprocessorConfig;
 use crate::errors::{Error, Result};
-use crate::url::TremorUrl;
 use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
 use bytes::buf::Buf;
 use bytes::BytesMut;
 use std::str;
+use tremor_common::url::TremorUrl;
 
 use std::io::{self, Read};
 

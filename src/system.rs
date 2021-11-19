@@ -20,7 +20,6 @@ use crate::repository::{
     Artefact, BindingArtefact, ConnectorArtefact, PipelineArtefact, Repositories,
 };
 
-use crate::url::{ResourceType, TremorUrl};
 use crate::QSIZE;
 use async_std::channel::bounded;
 use async_std::io::prelude::*;
@@ -32,6 +31,7 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 use tremor_common::asy::file;
 use tremor_common::time::nanotime;
+use tremor_common::url::{ResourceType, TremorUrl};
 use tremor_value::literal;
 
 pub(crate) use crate::binding;

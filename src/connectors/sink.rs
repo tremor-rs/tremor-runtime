@@ -29,8 +29,6 @@ use crate::errors::Result;
 use crate::permge::PriorityMerge;
 use crate::pipeline;
 use crate::postprocessor::{make_postprocessors, postprocess, Postprocessors};
-use crate::url::ports::IN;
-use crate::url::TremorUrl;
 use async_std::channel::{bounded, unbounded, Receiver, Sender};
 use async_std::stream::StreamExt; // for .next() on PriorityMerge
 use async_std::task;
@@ -43,6 +41,7 @@ use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, HashSet};
 use std::fmt::Display;
 use tremor_common::time::nanotime;
+use tremor_common::url::{ports::IN, TremorUrl};
 use tremor_pipeline::{CbAction, Event, EventId, OpMeta, SignalKind, DEFAULT_STREAM_ID};
 use tremor_script::EventPayload;
 
