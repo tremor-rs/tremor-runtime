@@ -10,8 +10,8 @@ pub type Object<'value> = RHashMap<RCow<'value, str>, Value<'value>>;
 pub type Bytes<'value> = RCow<'value, [u8]>;
 
 /// FFI-safe `Value` type to communicate with the plugins. It's meant to be
-/// converted to/from the original `tremor_value::Value` type and back so that
-/// it can be passed through the plugin interface.
+/// converted to/from the original `crate::Value` type and back so that it can
+/// be passed through the plugin interface.
 #[repr(C)]
 #[derive(StableAbi)]
 pub enum Value<'value> {
@@ -28,21 +28,21 @@ pub enum Value<'value> {
 }
 
 /// Easily converting the regular value into the PDK value and back.
-impl<'value> From<tremor_value::Value<'value>> for Value<'value> {
-    fn from(original: tremor_value::Value<'value>) -> Self {
+impl<'value> From<crate::Value<'value>> for Value<'value> {
+    fn from(original: crate::Value<'value>) -> Self {
         match original {
             // No conversion needed; `StaticNode` implements `StableAbi`
-            tremor_value::Value::Static(s) => Value::Static(s),
+            crate::Value::Static(s) => Value::Static(s),
             // This conversion is cheap
-            tremor_value::Value::String(s) => Value::String(conv_str(s)),
+            crate::Value::String(s) => Value::String(conv_str(s)),
             // This unfortunately requires iterating the array
-            tremor_value::Value::Array(a) => {
+            crate::Value::Array(a) => {
                 let a = a.into_iter().map(Into::into).collect();
                 Value::Array(a)
             }
             // This unfortunately requires iterating the map and a new
             // allocation
-            tremor_value::Value::Object(m) => {
+            crate::Value::Object(m) => {
                 let m = m
                     .into_iter()
                     .map(|(k, v)| (conv_str(k), v.into()))
@@ -50,7 +50,7 @@ impl<'value> From<tremor_value::Value<'value>> for Value<'value> {
                 Value::Object(RBox::new(m))
             }
             // This conversion is cheap
-            tremor_value::Value::Bytes(b) => Value::Bytes(conv_u8(b)),
+            crate::Value::Bytes(b) => Value::Bytes(conv_u8(b)),
         }
     }
 }

@@ -85,7 +85,7 @@ tremor-pipeline = { path = "tremor-pipeline" }
 tremor-script = { path = "tremor-script" }
 tremor-value = { path = "tremor-value" }
 url = "2.2"
-value-trait = { version = "0.2.9", features = ["c-abi"] }
+value-trait = "0.2.9"
 zstd = "0.9"
 
 mapr = "0.8"
@@ -181,9 +181,6 @@ reqwest = "0.11.4"
 
 # wal
 qwal = { git = "https://github.com/tremor-rs/qwal" }
-
-# plugin system
-abi_stable = "0.10.3"
 
 [dev-dependencies]
 matches = "0.1"
