@@ -15,9 +15,8 @@
 use crate::binding;
 use crate::pipeline;
 
+use crate::connectors;
 use crate::system::World;
-use crate::url::{ResourceType, TremorUrl};
-use crate::{connectors, url};
 use crate::{
     errors::{Error, ErrorKind, Result},
     pipeline::OutputTarget,
@@ -26,6 +25,7 @@ use beef::Cow;
 use hashbrown::HashMap;
 use std::collections::HashSet;
 use std::time::Duration;
+use tremor_common::url::{self, ResourceType, TremorUrl};
 use tremor_pipeline::query;
 pub(crate) type Id = TremorUrl;
 pub(crate) use crate::Connector as ConnectorArtefact;

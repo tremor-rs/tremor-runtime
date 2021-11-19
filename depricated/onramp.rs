@@ -16,7 +16,7 @@ use crate::metrics::RampReporter;
 use crate::pipeline;
 use crate::repository::ServantId;
 use crate::source::prelude::*;
-use crate::url::TremorUrl;
+use tremor_common::url::TremorUrl;
 use crate::OpConfig;
 use async_std::{
     channel::Sender,
@@ -274,7 +274,7 @@ mod test {
     use crate::config::MappingMap;
     use crate::repository::BindingArtefact;
     use crate::system;
-    use crate::url::TremorUrl;
+    use tremor_common::url::TremorUrl;
     use simd_json::json;
     use std::io::Write;
     use std::net::TcpListener;

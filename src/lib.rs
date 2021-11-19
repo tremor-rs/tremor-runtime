@@ -67,8 +67,6 @@ pub mod registry;
 pub mod repository;
 /// Tremor runtime system
 pub mod system;
-/// Tremor URI
-pub mod url;
 /// Utility functions
 pub mod utils;
 /// Tremor runtime version tools
@@ -89,9 +87,9 @@ use crate::errors::{Error, Result};
 
 pub(crate) use crate::config::{Binding, Connector};
 use crate::repository::BindingArtefact;
-use crate::url::TremorUrl;
 pub use serde_yaml::Value as OpConfig;
 use system::World;
+use tremor_common::url::TremorUrl;
 pub use tremor_pipeline::Event;
 use tremor_pipeline::{query::Query, FN_REGISTRY};
 use tremor_script::highlighter::Term as TermHighlighter;

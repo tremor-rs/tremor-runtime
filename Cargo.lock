@@ -6558,6 +6558,7 @@ dependencies = [
  "serde_yaml",
  "simd-json",
  "tide",
+ "tremor-common",
  "tremor-pipeline",
  "tremor-runtime",
  "tremor-script",

@@ -16,7 +16,7 @@
 use crate::pipeline;
 use crate::sink::prelude::*;
 use crate::system::World;
-use crate::url::TremorUrl;
+use tremor_common::url::TremorUrl;
 use async_std::channel::Sender;
 use halfbrown::HashMap;
 

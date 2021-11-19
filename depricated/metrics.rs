@@ -13,9 +13,9 @@
 // limitations under the License.
 
 use crate::pipeline;
-use crate::url::TremorUrl;
 use beef::Cow;
 use halfbrown::HashMap;
+use tremor_common::url::TremorUrl;
 use tremor_pipeline::Event;
 use tremor_script::prelude::*;
 

@@ -21,12 +21,12 @@ use crate::permge::PriorityMerge;
 use crate::registry::instance::InstanceState;
 use crate::registry::Registries;
 use crate::repository::BindingArtefact;
-use crate::url::TremorUrl;
 use async_std::channel::{bounded, unbounded, Sender};
 use async_std::task::{self, JoinHandle};
 use hashbrown::HashSet;
 use smol::stream::StreamExt;
 use tremor_common::ids::BindingIdGen;
+use tremor_common::url::TremorUrl;
 
 /// sender for sending mgmt messages to the Binding Manager
 pub type ManagerSender = Sender<ManagerMsg>;

@@ -13,6 +13,8 @@
 // limitations under the License.
 use std::fmt::Display;
 
+pub type Result<T> = std::result::Result<T, Error>;
+
 /// A shared error for common functions
 #[derive(Debug)]
 pub enum Error {
@@ -26,6 +28,8 @@ pub enum Error {
     Cwd(std::io::Error, String),
     /// Failed to parse URL
     UrlParseError(url::ParseError),
+    /// Invalid Tremor Url
+    InvalidTremorUrl(String, String),
     /// Generic untyped error message
     Generic(String),
 }
@@ -58,6 +62,9 @@ impl Display for Error {
             }
             Error::Cwd(e, f) => write!(w, "Failed to change working directory `{}`: {}", f, e),
             Error::UrlParseError(e) => write!(w, "Failed to parse URL `{}`", e),
+            Error::InvalidTremorUrl(reason, detail) => {
+                write!(w, "Invalid Tremor URL, {}: `{}`", reason, detail)
+            }
             Error::Generic(msg) => write!(w, "Error: {}", msg),
         }
     }

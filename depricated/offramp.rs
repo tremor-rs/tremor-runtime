@@ -21,7 +21,7 @@ use crate::registry::ServantId;
 use crate::sink::{self, handle_response};
 use crate::source::Processors;
 use crate::url::ports::{IN, METRICS};
-use crate::url::TremorUrl;
+use tremor_common::url::TremorUrl;
 use crate::{Event, OpConfig};
 use async_std::channel::{bounded, unbounded, Sender};
 use async_std::stream::StreamExt; // for .next() on PriorityMerge

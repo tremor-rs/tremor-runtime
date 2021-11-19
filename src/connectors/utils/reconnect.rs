@@ -16,11 +16,11 @@
 use crate::config::Reconnect;
 use crate::connectors::{Addr, Connectivity, Connector, ConnectorContext, Msg};
 use crate::errors::Result;
-use crate::url::TremorUrl;
 use async_std::channel::Sender;
 use async_std::task;
 use std::fmt::Display;
 use std::time::Duration;
+use tremor_common::url::TremorUrl;
 
 #[derive(Debug, PartialEq, Clone)]
 enum ShouldRetry {
